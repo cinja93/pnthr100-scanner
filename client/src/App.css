@@ -1,0 +1,363 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #efefef;
+  min-height: 100vh;
+  color: #212121;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  padding: 24px 0;
+}
+
+.header-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px;
+  text-align: center;
+}
+
+.title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #fcf000;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.logo {
+  height: 52px;
+  width: auto;
+  display: block;
+}
+
+.subtitle {
+  font-size: 16px;
+  color: #b4b4b4;
+  margin-bottom: 20px;
+}
+
+/* Primary scan actions: Scan Long + Scan Short, then Manage Stocks (secondary) */
+.scan-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 24px 0 16px 0;
+  flex-wrap: wrap;
+}
+
+.scan-btn {
+  padding: 12px 28px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scan-btn.scan-long {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e8f5e9;
+}
+
+.scan-btn.scan-long:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.scan-btn.scan-long.active {
+  background: #fcf000;
+  color: #000000;
+  border-color: #fcf000;
+}
+
+.scan-btn.scan-long.active:hover {
+  background: #e8d900;
+  border-color: #e8d900;
+}
+
+.scan-btn.scan-short {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffebee;
+}
+
+.scan-btn.scan-short:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.scan-btn.scan-short.active {
+  background: #fcf000;
+  color: #000000;
+  border-color: #fcf000;
+}
+
+.scan-btn.scan-short.active:hover {
+  background: #e8d900;
+  border-color: #e8d900;
+}
+
+.manage-link {
+  margin-left: 8px;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #9e9e9e;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.manage-link:hover {
+  color: #b4b4b4;
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Date Picker */
+.date-picker-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.date-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #b4b4b4;
+}
+
+.date-picker {
+  padding: 10px 16px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: border-color 0.2s;
+  min-width: 250px;
+}
+
+.date-picker option {
+  background: #1e2c4b;
+  color: #ffffff;
+}
+
+.date-picker:hover:not(:disabled) {
+  border-color: #fcf000;
+}
+
+.date-picker:focus {
+  outline: none;
+  border-color: #fcf000;
+}
+
+.date-picker:disabled {
+  background: rgba(255, 255, 255, 0.05);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.refresh-button {
+  background: #fcf000;
+  color: #000000;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+  margin-top: 20px;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background: #e8d900;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(252, 240, 0, 0.35);
+}
+
+.refresh-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Viewing Indicator */
+.viewing-indicator {
+  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
+  color: #fcf000;
+  padding: 12px 20px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(252, 240, 0, 0.3);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.main {
+  flex: 1;
+  max-width: 1400px;
+  width: 100%;
+  margin: 32px auto;
+  padding: 0 24px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  text-align: center;
+  border-top: 3px solid #1e2c4b;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #212121;
+  margin-bottom: 8px;
+}
+
+.stat-value.positive {
+  color: #b5d91d;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #b4b4b4;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.loading {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #efefef;
+  border-top: 4px solid #fcf000;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading p {
+  font-size: 18px;
+  color: #212121;
+  margin-bottom: 8px;
+}
+
+.loading-note {
+  font-size: 14px !important;
+  color: #b4b4b4 !important;
+}
+
+.error {
+  text-align: center;
+  padding: 40px;
+  background: #fee;
+  border: 2px solid #fcc;
+  border-radius: 12px;
+  color: #c33;
+}
+
+.error-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 16px;
+}
+
+.error p {
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.retry-button {
+  background: #670404;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.retry-button:hover {
+  background: #4a0303;
+}
+
+.footer {
+  background: #1e2c4b;
+  padding: 20px;
+  text-align: center;
+  color: #b4b4b4;
+  font-size: 14px;
+  border-top: 3px solid #fcf000;
+  margin-top: 32px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .title {
+    font-size: 24px;
+  }
+
+  .subtitle {
+    font-size: 14px;
+  }
+
+  .main {
+    padding: 0 16px;
+  }
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+}

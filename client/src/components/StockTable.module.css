@@ -1,0 +1,128 @@
+.tableContainer {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  font-size: 14px;
+}
+
+.table thead {
+  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.table th {
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.table th.sortable:hover {
+  background-color: rgba(252, 240, 0, 0.15);
+}
+
+.table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s;
+}
+
+.table tbody tr:hover {
+  background-color: #efefef;
+}
+
+.table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.table td {
+  padding: 14px 16px;
+  color: #212121;
+}
+
+.rankColumn {
+  width: 60px;
+  text-align: center !important;
+  font-weight: 600;
+  color: #b4b4b4;
+}
+
+.ticker {
+  font-weight: 700;
+  color: #1e2c4b;
+  font-size: 15px;
+  cursor: pointer;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.ticker:hover {
+  color: #000000;
+  background-color: #efefef;
+}
+
+.price {
+  font-weight: 500;
+  color: #212121;
+}
+
+.positive {
+  color: #b5d91d;
+  font-weight: 600;
+}
+
+.negative {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+/* Rank change styles - override .table td color so arrows and numbers are green/red */
+.table td.rankUp {
+  color: #16a34a;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.table td.rankDown {
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.rankNew {
+  color: #b4b4b4;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .table {
+    font-size: 12px;
+  }
+
+  .table th,
+  .table td {
+    padding: 10px 8px;
+  }
+
+  .table th {
+    font-size: 11px;
+  }
+}

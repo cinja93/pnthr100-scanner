@@ -1,11 +1,18 @@
 import { useState, useMemo } from 'react';
 import styles from './FilterBar.module.css';
 
+const LONG_SIGNALS = ['BUY', 'NEW_BUY', 'YELLOW_BUY', 'NEW_YELLOW_BUY', 'NONE'];
+const SHORT_SIGNALS = ['SELL', 'NEW_SELL', 'YELLOW_SELL', 'NEW_YELLOW_SELL', 'NONE'];
+
 const SIGNAL_LABELS = {
   BUY: 'Confirmed Buy',
+  NEW_BUY: 'New Confirmed Buy',
   YELLOW_BUY: 'Caution Buy',
+  NEW_YELLOW_BUY: 'New Caution Buy',
   SELL: 'Confirmed Sell',
+  NEW_SELL: 'New Confirmed Sell',
   YELLOW_SELL: 'Caution Sell',
+  NEW_YELLOW_SELL: 'New Caution Sell',
   NONE: 'No Signal',
 };
 
@@ -20,7 +27,7 @@ function countActiveFilters(filters) {
   return count;
 }
 
-export default function FilterBar({ stocks, filters, onChange }) {
+export default function FilterBar({ stocks, filters, onChange, scanType }) {
   const [expanded, setExpanded] = useState(true);
 
   // Derive unique sorted sectors and exchanges from current stock list
@@ -101,13 +108,13 @@ export default function FilterBar({ stocks, filters, onChange }) {
           <div className={styles.group}>
             <label className={styles.groupLabel}>Signal</label>
             <div className={styles.pills}>
-              {Object.entries(SIGNAL_LABELS).map(([value, label]) => (
+              {(scanType === 'short' ? SHORT_SIGNALS : LONG_SIGNALS).map(value => (
                 <button
                   key={value}
                   className={`${styles.pill} ${filters.signals.includes(value) ? styles.pillActive : ''} ${styles[`pill_${value}`] || ''}`}
                   onClick={() => togglePill('signals', value)}
                 >
-                  {label}
+                  {SIGNAL_LABELS[value]}
                 </button>
               ))}
             </div>

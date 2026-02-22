@@ -46,7 +46,10 @@ function App() {
       const riskDollar = stopPrice != null ? Math.abs(stock.currentPrice - stopPrice) : null;
       const riskPct = riskDollar != null ? (riskDollar / stock.currentPrice) * 100 : null;
 
-      if (filters.signals.length > 0 && !filters.signals.includes(signalData?.signal ?? 'NONE')) return false;
+      const signalKey = signalData
+        ? (signalData.isNewSignal ? `NEW_${signalData.signal}` : signalData.signal)
+        : 'NONE';
+      if (filters.signals.length > 0 && !filters.signals.includes(signalKey)) return false;
       if (filters.sectors.length > 0 && !filters.sectors.includes(stock.sector)) return false;
       if (filters.exchanges.length > 0 && !filters.exchanges.includes(stock.exchange)) return false;
       if (filters.minPrice !== '' && stock.currentPrice < +filters.minPrice) return false;
@@ -232,7 +235,7 @@ function App() {
                   </div>
                 )}
 
-                <FilterBar stocks={stocks} signals={signals} filters={filters} onChange={setFilters} />
+                <FilterBar stocks={stocks} signals={signals} filters={filters} onChange={setFilters} scanType={scanType} />
                 <StockTable stocks={filteredStocks} signals={signals} onTickerClick={handleTickerClick} />
               </>
             )}

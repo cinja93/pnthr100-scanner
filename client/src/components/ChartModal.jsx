@@ -91,8 +91,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
     if (filtered.length === 0) return;
 
     const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: 420,
+      autoSize: true,
       layout: { background: { color: '#ffffff' }, textColor: '#212121' },
       grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } },
       rightPriceScale: { borderColor: '#d4d4d4' },
@@ -125,15 +124,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
 
     chart.timeScale().fitContent();
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
-      }
-    };
-    window.addEventListener('resize', handleResize);
-
     return () => {
-      window.removeEventListener('resize', handleResize);
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;

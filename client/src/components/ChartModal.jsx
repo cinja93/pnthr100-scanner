@@ -57,20 +57,24 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
       setLoading(false);
       return;
     }
+    let cancelled = false;
     setLoading(true);
     setError(null);
     setAllWeeklyData([]);
     fetchChartData(ticker)
       .then(daily => {
+        if (cancelled) return;
         const weekly = aggregateToWeekly(daily);
         cacheRef.current[ticker] = weekly;
         setAllWeeklyData(weekly);
       })
       .catch(err => {
+        if (cancelled) return;
         console.error(err);
         setError('Failed to load chart data');
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [currentIndex]);
 
   // Build/rebuild chart when data, range, or stop price changes

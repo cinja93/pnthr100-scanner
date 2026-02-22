@@ -44,6 +44,10 @@
   transition: background-color 0.2s;
 }
 
+.table tbody tr:nth-child(even) {
+  background-color: #f7f8fa;
+}
+
 .clickableRow {
   cursor: pointer;
 }

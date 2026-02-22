@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { createChart } from 'lightweight-charts';
+import { createChart, CandlestickSeries, LineSeries } from 'lightweight-charts';
 import { fetchChartData } from '../services/api';
 import styles from './ChartModal.module.css';
 
@@ -23,6 +23,20 @@ function aggregateToWeekly(dailyData) {
     }
   }
   return [...weeksMap.values()];
+}
+
+// Calculate EMA over the full dataset for accuracy, then trim to display range
+function calculateEMA(weeklyData, period) {
+  if (weeklyData.length < period) return [];
+  const k = 2 / (period + 1);
+  const result = [];
+  let ema = weeklyData.slice(0, period).reduce((sum, d) => sum + d.close, 0) / period;
+  result.push({ time: weeklyData[period - 1].time, value: parseFloat(ema.toFixed(4)) });
+  for (let i = period; i < weeklyData.length; i++) {
+    ema = weeklyData[i].close * k + ema * (1 - k);
+    result.push({ time: weeklyData[i].time, value: parseFloat(ema.toFixed(4)) });
+  }
+  return result;
 }
 
 function filterByRange(weeklyData, range) {
@@ -100,7 +114,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
     });
     chartRef.current = chart;
 
-    const series = chart.addCandlestickSeries({
+    const series = chart.addSeries(CandlestickSeries, {
       upColor: '#16a34a',
       downColor: '#dc2626',
       borderUpColor: '#16a34a',
@@ -110,6 +124,23 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
     });
 
     series.setData(filtered);
+
+    // 21 EMA — calculated on full history so it's accurate in any display range
+    const ema21Full = calculateEMA(allWeeklyData, 21);
+    if (ema21Full.length > 0) {
+      const filteredTimes = new Set(filtered.map(d => d.time));
+      const ema21 = ema21Full.filter(d => filteredTimes.has(d.time));
+      if (ema21.length > 0) {
+        const emaSeries = chart.addSeries(LineSeries, {
+          color: '#2563eb',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        emaSeries.setData(ema21);
+      }
+    }
 
     if (stopPrice != null) {
       series.createPriceLine({

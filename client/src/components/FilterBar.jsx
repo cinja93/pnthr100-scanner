@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import styles from './FilterBar.module.css';
 
-const LONG_SIGNALS = ['BUY', 'NEW_BUY', 'YELLOW_BUY', 'NEW_YELLOW_BUY', 'NONE'];
-const SHORT_SIGNALS = ['SELL', 'NEW_SELL', 'YELLOW_SELL', 'NEW_YELLOW_SELL', 'NONE'];
+const LONG_SIGNALS = ['NEW_BUY', 'BUY', 'NEW_YELLOW_BUY', 'YELLOW_BUY', 'NONE'];
+const SHORT_SIGNALS = ['NEW_SELL', 'SELL', 'NEW_YELLOW_SELL', 'YELLOW_SELL', 'NONE'];
 
 const SIGNAL_LABELS = {
   BUY: 'Confirmed Buy',

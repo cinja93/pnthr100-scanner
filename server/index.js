@@ -1,13 +1,14 @@
 import express from 'express';
 import cors from 'cors';
-import { getTopStocks } from './stockService.js';
+import { getTopStocks, calculateStopPrices } from './stockService.js';
 import {
   getSupplementalStocks,
   addSupplementalStock,
   removeSupplementalStock,
   getAllRankings,
   getRankingByDate,
-  getStockHistory
+  getStockHistory,
+  getLatestSignals
 } from './database.js';
 
 const app = express();
@@ -16,6 +17,19 @@ const PORT = 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// API key authentication — protects all /api/* routes
+const API_KEY = process.env.API_KEY;
+if (!API_KEY) {
+  console.error('⚠️  API_KEY is not set in .env — all /api requests will be rejected');
+}
+app.use('/api', (req, res, next) => {
+  const key = req.headers['x-api-key'];
+  if (!key || key !== API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+});
 
 // Cache for stock data (refresh every 5 minutes)
 let cachedData = null;
@@ -164,6 +178,22 @@ app.get('/api/stock-history/:ticker', async (req, res) => {
   } catch (error) {
     console.error('Error fetching stock history:', error);
     res.status(500).json({ error: 'Failed to fetch stock history' });
+  }
+});
+
+// Get latest laser signals for a list of tickers (read-only from mobile app DB)
+app.post('/api/signals', async (req, res) => {
+  try {
+    const { tickers } = req.body;
+    if (!Array.isArray(tickers) || tickers.length === 0) {
+      return res.status(400).json({ error: 'tickers array is required' });
+    }
+    const signals = await getLatestSignals(tickers);
+    const signalsWithStops = await calculateStopPrices(signals);
+    res.json(signalsWithStops);
+  } catch (error) {
+    console.error('Error fetching signals:', error);
+    res.status(500).json({ error: 'Failed to fetch signals' });
   }
 });
 

@@ -134,7 +134,7 @@ Render will run your Node server 24/7 so the app can get stock data from anywher
    | **Branch** | `main` |
    | **Root Directory** | Click **Add** or the field and type: `server` |
    | **Runtime** | `Node` |
-   | **Build Command** | `npm install` |
+   | **Build Command** | `npm install` (use only this — do **not** add `npm run build`; the server has no build step) |
    | **Start Command** | `npm start` |
    | **Instance Type** | **Free** |
 
@@ -203,7 +203,7 @@ Vercel will host the React app and give you one link to share with your husband 
 ## 4.4 Wait for the deploy
 
 1. Vercel will build and deploy. Wait until you see **Congratulations!** and a link like **https://pnthr100-scanner-xxxx.vercel.app**.
-2. **Copy that link.** This is the **app URL** you give to your husband and others. Anyone who opens it can use the scanner from anywhere.
+2. **Use the app at** `https://pnthr100-scanner-xxxx.vercel.app/pnthr100/` (the path `/pnthr100/` is required). This is the **app URL** you give to your husband and others. Anyone who opens it can use the scanner from anywhere.
 
 ---
 
@@ -213,13 +213,46 @@ Vercel will host the React app and give you one link to share with your husband 
 2. You should see your PNTHR100 Scanner: Scan Long / Scan Short, date dropdown, table.  
    - If the page loads but the table never fills: wait 30–60 seconds (free Render can “sleep”; the first request wakes it). Then refresh.  
    - If you see a network or CORS error in the browser, tell me and we can add one CORS setting on the server.
-3. When it works, share **only the Vercel link** (e.g. `https://pnthr100-scanner-xxxx.vercel.app`) with your husband or anyone else. They don’t need a GitHub, Render, or Vercel account — just the link.
+3. When it works, share **only the Vercel link** (e.g. `https://pnthr100-scanner-xxxx.vercel.app/pnthr100/`) with your husband or anyone else. They don’t need a GitHub, Render, or Vercel account — just the link.
+
+---
+
+# Part 6 — Custom domain (pnthrfunds.com/pnthr100)
+
+The app is built to run at **/pnthr100/** so you can serve it at **https://pnthrfunds.com/pnthr100**.
+
+## 6.1 Add the domain in Vercel
+
+1. In the Vercel dashboard, open your **pnthr100-scanner** project.
+2. Go to **Settings** → **Domains**.
+3. Under "Add domain", type: **pnthrfunds.com** and click **Add**.
+4. Vercel will show how to set up DNS. You need to add a record so that **pnthrfunds.com** points to Vercel (see 6.2).
+
+## 6.2 Point your domain at Vercel (DNS)
+
+Where you manage DNS for **pnthrfunds.com** (e.g. GoDaddy, Namecheap, Cloudflare, your registrar):
+
+- If Vercel says to use **A records:** add the IPs Vercel shows (e.g. `76.76.21.21`) for the **root** host (sometimes called `@` or "apex").
+- If Vercel says to use **CNAME:** add a CNAME for **www** (or the host they specify) to **cname.vercel-dns.com**.
+
+After DNS is set, Vercel may take a few minutes to verify. When the domain shows a green check, the app will be at:
+
+- **https://pnthrfunds.com/pnthr100/**
+
+(Vercel's redirect in this project sends the root path to `/pnthr100/`.)
+
+## 6.3 If pnthrfunds.com already has a different website
+
+If the **root** of pnthrfunds.com is another site (e.g. WordPress, Squarespace) and you only want the scanner at **/pnthr100**:
+
+- You **cannot** point the whole domain to Vercel without replacing that site.
+- Use a **subdomain** instead: **pnthr100.pnthrfunds.com**. In Vercel → Settings → Domains, add **pnthr100.pnthrfunds.com**. In your DNS, add a **CNAME** for **pnthr100** to **cname.vercel-dns.com**. The app will be at **https://pnthr100.pnthrfunds.com/pnthr100/**.
 
 ---
 
 # Quick reference
 
-- **App link to share:** your Vercel URL (e.g. `https://pnthr100-scanner-xxxx.vercel.app`).
+- **App link to share:** your Vercel URL (e.g. `https://pnthr100-scanner-xxxx.vercel.app/pnthr100/`) or custom URL (e.g. `https://pnthrfunds.com/pnthr100/`).
 - **Backend (Render):** free tier may sleep after ~15 min of no use; first load after that can be slow, then normal.
 - **Secrets:** Your `server/.env` stays only on your Mac; we never put it on GitHub. Render and Vercel get the same values as **environment variables** that you typed in.
 

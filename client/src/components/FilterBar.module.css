@@ -1,0 +1,247 @@
+.filterBar {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
+  cursor: pointer;
+  user-select: none;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge {
+  background: #fcf000;
+  color: #1e2c4b;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.clearBtn {
+  background: rgba(252, 240, 0, 0.15);
+  border: 1px solid rgba(252, 240, 0, 0.4);
+  color: #fcf000;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.clearBtn:hover {
+  background: rgba(252, 240, 0, 0.3);
+}
+
+.chevron {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+}
+
+/* Panels */
+.panels {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-top: 2px solid #fcf000;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.groupLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.groupCount {
+  font-weight: 600;
+  color: #1e2c4b;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Pill buttons (signal, exchange) */
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pill {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid #d4d4d4;
+  background: white;
+  color: #444;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pill:hover {
+  border-color: #1e2c4b;
+  color: #1e2c4b;
+}
+
+.pillActive {
+  background: #1e2c4b;
+  border-color: #1e2c4b;
+  color: white;
+}
+
+/* Signal-specific pill colors when active */
+.pill_BUY.pillActive {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
+.pill_YELLOW_BUY.pillActive {
+  background: #ca8a04;
+  border-color: #ca8a04;
+}
+
+.pill_SELL.pillActive {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.pill_YELLOW_SELL.pillActive {
+  background: #ea580c;
+  border-color: #ea580c;
+}
+
+.pill_NONE.pillActive {
+  background: #6b7280;
+  border-color: #6b7280;
+}
+
+/* Sector grid — wrapping pills */
+.sectorGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sectorPill {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid #d4d4d4;
+  background: white;
+  color: #444;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sectorPill:hover {
+  border-color: #1e2c4b;
+  color: #1e2c4b;
+}
+
+.sectorPill.pillActive {
+  background: #1e2c4b;
+  border-color: #1e2c4b;
+  color: white;
+}
+
+/* Range filters row */
+.rangeRow {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.rangeGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 180px;
+}
+
+.rangeInputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rangeInput {
+  width: 80px;
+  padding: 6px 10px;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #212121;
+  transition: border-color 0.15s;
+}
+
+.rangeInput:focus {
+  outline: none;
+  border-color: #1e2c4b;
+}
+
+.rangeInput::placeholder {
+  color: #b4b4b4;
+}
+
+.rangeSep {
+  color: #b4b4b4;
+  font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .panels {
+    padding: 12px 14px;
+  }
+
+  .rangeRow {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .rangeInput {
+    width: 70px;
+  }
+}

@@ -5,10 +5,15 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #efefef;
   min-height: 100vh;
   color: #212121;
+}
+
+h1, h2, h3, h4, h5, h6,
+.title, .scan-btn, .refresh-button {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .app {
@@ -47,20 +52,22 @@ body {
   display: block;
 }
 
-.subtitle {
-  font-size: 16px;
-  color: #b4b4b4;
-  margin-bottom: 20px;
-}
 
-/* Primary scan actions: Scan Long + Scan Short, then Manage Stocks (secondary) */
+/* Primary scan actions: Scan Long + Scan Short */
 .scan-actions {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin: 24px 0 16px 0;
+  margin: 24px 0 10px 0;
   flex-wrap: wrap;
+}
+
+/* Secondary row: Manage Stocks sits below the primary scan buttons */
+.manage-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
 }
 
 .scan-btn {
@@ -107,18 +114,17 @@ body {
 }
 
 .scan-btn.scan-short.active {
-  background: #fcf000;
-  color: #000000;
-  border-color: #fcf000;
+  background: #670404;
+  color: #ffffff;
+  border-color: #670404;
 }
 
 .scan-btn.scan-short.active:hover {
-  background: #e8d900;
-  border-color: #e8d900;
+  background: #4a0303;
+  border-color: #4a0303;
 }
 
 .manage-link {
-  margin-left: 8px;
   padding: 8px 14px;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -184,26 +190,25 @@ body {
 }
 
 .refresh-button {
-  background: #fcf000;
-  color: #000000;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 700;
+  background: transparent;
+  color: #9e9e9e;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
-  margin-top: 20px;
+  transition: all 0.2s;
 }
 
 .refresh-button:hover:not(:disabled) {
-  background: #e8d900;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(252, 240, 0, 0.35);
+  color: #b4b4b4;
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .refresh-button:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
@@ -229,39 +234,6 @@ body {
   padding: 0 24px;
 }
 
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.stat-card {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-  text-align: center;
-  border-top: 3px solid #1e2c4b;
-}
-
-.stat-value {
-  font-size: 32px;
-  font-weight: 700;
-  color: #212121;
-  margin-bottom: 8px;
-}
-
-.stat-value.positive {
-  color: #b5d91d;
-}
-
-.stat-label {
-  font-size: 14px;
-  color: #b4b4b4;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
 
 .loading {
   text-align: center;
@@ -341,6 +313,35 @@ body {
   font-size: 14px;
   border-top: 3px solid #fcf000;
   margin-top: 32px;
+}
+
+.footer-love {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.love-frame {
+  border: 2px solid rgba(252, 240, 0, 0.3);
+  border-radius: 8px;
+  padding: 4px;
+  display: inline-block;
+}
+
+.love-img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+}
+
+.love-text {
+  font-size: 13px;
+  color: #9e9e9e;
+  font-style: italic;
 }
 
 /* Responsive design */

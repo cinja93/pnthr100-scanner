@@ -56,6 +56,7 @@ export default function StockModal({ stock, onClose }) {
         <div className={styles.header}>
           <div className={styles.stockInfo}>
             <h2 className={styles.ticker}>{stock.ticker}</h2>
+            {stock.companyName && <p className={styles.companyName}>{stock.companyName}</p>}
             <div className={styles.badges}>
               <span className={styles.badge}>{stock.sector}</span>
               <span className={styles.badge}>{stock.exchange}</span>

@@ -360,6 +360,68 @@ export async function cleanupOldRankings(weeksToKeep = 12) {
   }
 }
 
+// ── Mobile app integration (READ-ONLY from stt-production-db) ──
+// This never writes, updates, or deletes anything in the mobile app's database.
+
+let sttDb = null;
+
+async function connectToSttDatabase() {
+  if (sttDb) return sttDb;
+  try {
+    if (!client) await connectToDatabase(); // ensure client is connected
+    if (!client) return null;
+    sttDb = client.db('stt-production-db');
+    console.log('✅ Connected to stt-production-db (read-only)');
+    return sttDb;
+  } catch (error) {
+    console.error('❌ stt-production-db connection error:', error.message);
+    return null;
+  }
+}
+
+// Get the most recent laser signal for each ticker (read-only query)
+export async function getLatestSignals(tickers) {
+  try {
+    const database = await connectToSttDatabase();
+    if (!database) return {};
+
+    const collection = database.collection('laser_signals');
+    const upperTickers = tickers.map(t => t.toUpperCase());
+
+    // Aggregation: for each symbol, get the document with the latest timestamp
+    const results = await collection.aggregate([
+      { $match: { symbol: { $in: upperTickers } } },
+      { $sort: { timestamp: -1 } },
+      { $group: {
+        _id: '$symbol',
+        signal: { $first: '$signal' },
+        price: { $first: '$price' },
+        timestamp: { $first: '$timestamp' },
+        isNewSignal: { $first: '$isNewSignal' },
+        profitPercentage: { $first: '$profitPercentage' }
+      }}
+    ]).toArray();
+
+    // Return as a map: { AAPL: { signal: "BUY", isNewSignal: true, ... }, ... }
+    const signalMap = {};
+    for (const doc of results) {
+      signalMap[doc._id] = {
+        signal: doc.signal,
+        price: doc.price,
+        timestamp: doc.timestamp,
+        isNewSignal: doc.isNewSignal ?? false,
+        profitPercentage: doc.profitPercentage
+      };
+    }
+
+    console.log(`📡 Fetched signals for ${Object.keys(signalMap).length}/${tickers.length} tickers`);
+    return signalMap;
+  } catch (error) {
+    console.error('Error fetching laser signals:', error.message);
+    return {};
+  }
+}
+
 // Close database connection
 export async function closeDatabaseConnection() {
   if (client) {

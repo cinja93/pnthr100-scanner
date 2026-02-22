@@ -111,6 +111,60 @@
   font-size: 14px;
 }
 
+/* Signal column styles - override .table td color */
+.signalColumn {
+  text-align: center !important;
+  width: 90px;
+}
+
+.table td.signalBuy {
+  color: #16a34a;
+  font-weight: 700;
+  text-align: center;
+  font-size: 13px;
+}
+
+.table td.signalYellowSell {
+  color: #d97706;
+  font-weight: 700;
+  text-align: center;
+  font-size: 13px;
+}
+
+.table td.signalSell {
+  color: #dc2626;
+  font-weight: 700;
+  text-align: center;
+  font-size: 13px;
+}
+
+.table td.signalNone {
+  color: #b4b4b4;
+  text-align: center;
+  font-size: 13px;
+}
+
+.signalIcon {
+  height: 28px;
+  width: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.stopPriceCell {
+  font-weight: 500;
+  color: #212121;
+}
+
+.riskCell {
+  font-weight: 500;
+  color: #555;
+}
+
+.signalNone {
+  color: #b4b4b4;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .table {

@@ -1,10 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import StockTable from './components/StockTable';
 import StockModal from './components/StockModal';
 import ManageStocks from './components/ManageStocks';
-import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate } from './services/api';
+import FilterBar from './components/FilterBar';
+import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals } from './services/api';
 import pnthrLogo from './assets/PNTHR FUNDS Logo black background 2 lines.png';
+import builtWithLove from './assets/Built with Love.jpg';
 import './App.css';
+
+const defaultFilters = {
+  signals: [],
+  sectors: [],
+  exchanges: [],
+  minPrice: '',
+  maxPrice: '',
+  minRiskDollar: '',
+  maxRiskDollar: '',
+  minRiskPct: '',
+  maxRiskPct: '',
+};
 
 function App() {
   const [stocks, setStocks] = useState([]);
@@ -14,8 +28,36 @@ function App() {
   const scanType = activeTab === 'manage' ? 'long' : activeTab; // long/short for scanner view
   const [selectedDate, setSelectedDate] = useState(null); // null until dates load, then most recent date or 'current'
   const [availableDates, setAvailableDates] = useState([]);
+  const [signals, setSignals] = useState({}); // { AAPL: { signal: "BUY", ... }, ... }
   const [selectedStock, setSelectedStock] = useState(null); // For modal
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [filters, setFilters] = useState(defaultFilters);
+
+  // Reset filters whenever the user switches tabs or changes the date
+  useEffect(() => {
+    setFilters(defaultFilters);
+  }, [activeTab, selectedDate]);
+
+  // Apply filters to stocks (risk values derived here since they need signals data)
+  const filteredStocks = useMemo(() => {
+    return stocks.filter(stock => {
+      const signalData = signals[stock.ticker];
+      const stopPrice = signalData?.stopPrice ?? null;
+      const riskDollar = stopPrice != null ? Math.abs(stock.currentPrice - stopPrice) : null;
+      const riskPct = riskDollar != null ? (riskDollar / stock.currentPrice) * 100 : null;
+
+      if (filters.signals.length > 0 && !filters.signals.includes(signalData?.signal ?? 'NONE')) return false;
+      if (filters.sectors.length > 0 && !filters.sectors.includes(stock.sector)) return false;
+      if (filters.exchanges.length > 0 && !filters.exchanges.includes(stock.exchange)) return false;
+      if (filters.minPrice !== '' && stock.currentPrice < +filters.minPrice) return false;
+      if (filters.maxPrice !== '' && stock.currentPrice > +filters.maxPrice) return false;
+      if (filters.minRiskDollar !== '' && (riskDollar == null || riskDollar < +filters.minRiskDollar)) return false;
+      if (filters.maxRiskDollar !== '' && (riskDollar == null || riskDollar > +filters.maxRiskDollar)) return false;
+      if (filters.minRiskPct !== '' && (riskPct == null || riskPct < +filters.minRiskPct)) return false;
+      if (filters.maxRiskPct !== '' && (riskPct == null || riskPct > +filters.maxRiskPct)) return false;
+      return true;
+    });
+  }, [stocks, signals, filters]);
 
   useEffect(() => {
     loadAvailableDates();
@@ -49,6 +91,8 @@ function App() {
       const data = await fetchFn(forceRefresh);
       setStocks(data);
       setSelectedDate('current');
+      // Fetch laser signals in parallel (non-blocking)
+      fetchSignals(data.map(s => s.ticker)).then(setSignals);
     } catch (err) {
       setError('Failed to load stock data. Please try again later.');
       console.error(err);
@@ -70,6 +114,8 @@ function App() {
       const list = scanType === 'short' ? (data.shortRankings || []) : (data.rankings || []);
       setStocks(list);
       setSelectedDate(date);
+      // Fetch laser signals in parallel (non-blocking)
+      fetchSignals(list.map(s => s.ticker)).then(setSignals);
     } catch (err) {
       setError(`Failed to load data for ${date}. Please try again.`);
       console.error(err);
@@ -101,11 +147,8 @@ function App() {
             <img src={pnthrLogo} alt="PNTHR Funds" className="logo" />
             PNTHR100 Scanner
           </h1>
-          <p className="subtitle">
-            Long: Top 100 YTD • Short: Bottom 100 YTD — S&P 500, NASDAQ 100 & Dow 30
-          </p>
 
-          {/* Primary: Scan Long / Scan Short. Secondary: Manage Stocks */}
+          {/* Primary scan buttons */}
           <div className="scan-actions">
             <button
               className={`scan-btn scan-long ${activeTab === 'long' ? 'active' : ''}`}
@@ -119,6 +162,10 @@ function App() {
             >
               📉 Scan Short
             </button>
+          </div>
+
+          {/* Secondary: Manage Stocks on its own row */}
+          <div className="manage-row">
             <button
               className="manage-link"
               onClick={() => setActiveTab('manage')}
@@ -147,11 +194,10 @@ function App() {
                     </option>
                   ))}
                 </select>
+                <button className="refresh-button" onClick={() => loadCurrentStocks(true)} disabled={loading}>
+                  {loading ? '🔄 Loading...' : '🔄 Refresh Data'}
+                </button>
               </div>
-
-              <button className="refresh-button" onClick={() => loadCurrentStocks(true)} disabled={loading}>
-                {loading ? '🔄 Loading...' : '🔄 Refresh Data'}
-              </button>
             </>
           )}
         </div>
@@ -186,26 +232,8 @@ function App() {
                   </div>
                 )}
 
-                <div className="stats">
-                  <div className="stat-card">
-                    <div className="stat-value">{stocks.length}</div>
-                    <div className="stat-label">{scanType === 'long' ? 'Top Performers' : 'Short Candidates'}</div>
-                  </div>
-                  <div className="stat-card">
-                    <div className={`stat-value ${scanType === 'long' ? 'positive' : ''}`}>
-                      {stocks[0]?.ytdReturn >= 0 ? '+' : ''}{stocks[0]?.ytdReturn.toFixed(2)}%
-                    </div>
-                    <div className="stat-label">{scanType === 'long' ? 'Best YTD Return' : 'Worst YTD Return (#1 short)'}</div>
-                  </div>
-                  <div className="stat-card">
-                    <div className="stat-value">
-                      {stocks[stocks.length - 1]?.ytdReturn >= 0 ? '+' : ''}
-                      {stocks[stocks.length - 1]?.ytdReturn.toFixed(2)}%
-                    </div>
-                    <div className="stat-label">{scanType === 'long' ? '100th Best Return' : '100th Worst Return'}</div>
-                  </div>
-                </div>
-                <StockTable stocks={stocks} onTickerClick={handleTickerClick} />
+                <FilterBar stocks={stocks} signals={signals} filters={filters} onChange={setFilters} />
+                <StockTable stocks={filteredStocks} signals={signals} onTickerClick={handleTickerClick} />
               </>
             )}
           </>
@@ -217,6 +245,12 @@ function App() {
 
       <footer className="footer">
         <p>Data provided by Financial Modeling Prep • Live view cached for 5 minutes</p>
+        <div className="footer-love">
+          <div className="love-frame">
+            <img src={builtWithLove} alt="Built with Love" className="love-img" />
+          </div>
+          <p className="love-text">Built with love by Cindy and Blazer</p>
+        </div>
       </footer>
 
       {/* Stock Detail Modal */}

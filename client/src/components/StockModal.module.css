@@ -43,9 +43,17 @@
 .ticker {
   font-size: 32px;
   font-weight: 700;
-  margin: 0 0 12px 0;
+  margin: 0 0 4px 0;
   font-family: 'Courier New', monospace;
   color: #fcf000;
+}
+
+.companyName {
+  font-size: 14px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 12px 0;
+  letter-spacing: 0.3px;
 }
 
 .badges {

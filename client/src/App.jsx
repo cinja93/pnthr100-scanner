@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import StockTable from './components/StockTable';
-import StockModal from './components/StockModal';
+import ChartModal from './components/ChartModal';
 import ManageStocks from './components/ManageStocks';
 import FilterBar from './components/FilterBar';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals } from './services/api';
@@ -29,8 +29,7 @@ function App() {
   const [selectedDate, setSelectedDate] = useState(null); // null until dates load, then most recent date or 'current'
   const [availableDates, setAvailableDates] = useState([]);
   const [signals, setSignals] = useState({}); // { AAPL: { signal: "BUY", ... }, ... }
-  const [selectedStock, setSelectedStock] = useState(null); // For modal
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [chartIndex, setChartIndex] = useState(null); // index into filteredStocks
   const [filters, setFilters] = useState(defaultFilters);
 
   // Reset filters whenever the user switches tabs or changes the date
@@ -132,14 +131,9 @@ function App() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  function handleTickerClick(stock) {
-    setSelectedStock(stock);
-    setIsModalOpen(true);
-  }
-
-  function handleCloseModal() {
-    setIsModalOpen(false);
-    setSelectedStock(null);
+  function handleRowClick(stock) {
+    const index = filteredStocks.findIndex(s => s.ticker === stock.ticker);
+    if (index >= 0) setChartIndex(index);
   }
 
   return (
@@ -236,7 +230,7 @@ function App() {
                 )}
 
                 <FilterBar stocks={stocks} signals={signals} filters={filters} onChange={setFilters} scanType={scanType} />
-                <StockTable stocks={filteredStocks} signals={signals} onTickerClick={handleTickerClick} />
+                <StockTable stocks={filteredStocks} signals={signals} onTickerClick={handleRowClick} />
               </>
             )}
           </>
@@ -256,9 +250,14 @@ function App() {
         </div>
       </footer>
 
-      {/* Stock Detail Modal */}
-      {isModalOpen && selectedStock && (
-        <StockModal stock={selectedStock} onClose={handleCloseModal} />
+      {/* Chart Modal */}
+      {chartIndex != null && (
+        <ChartModal
+          stocks={filteredStocks}
+          initialIndex={chartIndex}
+          signals={signals}
+          onClose={() => setChartIndex(null)}
+        />
       )}
     </div>
   );

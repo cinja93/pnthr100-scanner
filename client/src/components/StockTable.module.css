@@ -44,6 +44,10 @@
   transition: background-color 0.2s;
 }
 
+.clickableRow {
+  cursor: pointer;
+}
+
 .table tbody tr:hover {
   background-color: #efefef;
 }

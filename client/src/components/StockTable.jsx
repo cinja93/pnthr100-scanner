@@ -167,7 +167,12 @@ export default function StockTable({ stocks, signals = {}, onTickerClick }) {
             const rankDisplay = getRankChangeDisplay(stock);
 
             return (
-              <tr key={stock.ticker}>
+              <tr
+                key={stock.ticker}
+                className={styles.clickableRow}
+                onClick={() => onTickerClick?.(stock)}
+                title={stock.companyName ? `${stock.companyName} — Click to view chart` : 'Click to view chart'}
+              >
                 <td className={styles.rankColumn}>{stock.rank ?? '—'}</td>
                 <td
                   className={rankDisplay.className}
@@ -175,11 +180,7 @@ export default function StockTable({ stocks, signals = {}, onTickerClick }) {
                 >
                   {rankDisplay.text}
                 </td>
-                <td
-                  className={styles.ticker}
-                  onClick={() => onTickerClick?.(stock)}
-                  title={stock.companyName ? `${stock.companyName} — Click to view history` : 'Click to view 12-week history'}
-                >
+                <td className={styles.ticker}>
                   {stock.ticker}
                 </td>
                 <td>{stock.exchange}</td>

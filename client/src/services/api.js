@@ -74,6 +74,18 @@ export async function fetchSignals(tickers) {
   }
 }
 
+// Fetch daily OHLCV history for charting
+export async function fetchChartData(ticker) {
+  try {
+    const response = await fetch(`${API_BASE}/api/chart/${ticker}`, { headers: authHeaders() });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching chart data:', error);
+    throw error;
+  }
+}
+
 // Fetch stock's 12-week ranking history
 export async function fetchStockHistory(ticker) {
   try {

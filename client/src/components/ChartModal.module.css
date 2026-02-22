@@ -1,0 +1,224 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 960px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
+  flex-shrink: 0;
+}
+
+.stockInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ticker {
+  font-size: 26px;
+  font-weight: 700;
+  color: #fcf000;
+  font-family: 'Inter', sans-serif;
+  line-height: 1;
+}
+
+.company {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.badges {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.badge {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+
+.closeBtn:hover {
+  color: white;
+}
+
+/* Controls row */
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  border-bottom: 1px solid #efefef;
+  flex-shrink: 0;
+}
+
+.rangeButtons {
+  display: flex;
+  gap: 6px;
+}
+
+.rangeBtn {
+  padding: 5px 14px;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  background: white;
+  color: #555;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rangeBtn:hover {
+  border-color: #1e2c4b;
+  color: #1e2c4b;
+}
+
+.rangeBtnActive {
+  background: #1e2c4b;
+  border-color: #1e2c4b;
+  color: white;
+}
+
+.priceInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.currentPrice {
+  font-size: 20px;
+  font-weight: 700;
+  color: #212121;
+  font-family: 'Inter', sans-serif;
+}
+
+.stopBadge {
+  font-size: 12px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+/* Chart area */
+.chartArea {
+  flex: 1;
+  min-height: 420px;
+}
+
+.chartContainer {
+  width: 100%;
+  height: 420px;
+}
+
+.loadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 420px;
+  gap: 12px;
+  color: #888;
+  font-size: 14px;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #efefef;
+  border-top: 3px solid #1e2c4b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.errorState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 420px;
+  color: #c33;
+  font-size: 14px;
+}
+
+/* Navigation footer */
+.navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-top: 1px solid #efefef;
+  background: #fafafa;
+  flex-shrink: 0;
+}
+
+.navBtn {
+  padding: 7px 18px;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  background: white;
+  color: #444;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.navBtn:hover:not(:disabled) {
+  border-color: #1e2c4b;
+  color: #1e2c4b;
+}
+
+.navBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.navPosition {
+  font-size: 13px;
+  color: #888;
+}

@@ -197,15 +197,19 @@ app.post('/api/signals', async (req, res) => {
   }
 });
 
-// Get OHLCV daily price history for charting
+// Get OHLCV daily price history for charting (5 years back)
 app.get('/api/chart/:ticker', async (req, res) => {
   try {
     const { ticker } = req.params;
     const FMP_API_KEY = process.env.FMP_API_KEY;
-    const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?apikey=${FMP_API_KEY}`;
+    const from = new Date();
+    from.setFullYear(from.getFullYear() - 5);
+    const fromStr = from.toISOString().split('T')[0];
+    const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?from=${fromStr}&apikey=${FMP_API_KEY}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`FMP error: ${response.status}`);
     const data = await response.json();
+    if (data['Error Message']) throw new Error(data['Error Message']);
     res.json(data.historical || []);
   } catch (error) {
     console.error('Error fetching chart data:', error);

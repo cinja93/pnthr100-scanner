@@ -79,7 +79,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
 
   // Build/rebuild chart when data, range, or stop price changes
   useEffect(() => {
-    if (!chartContainerRef.current || allWeeklyData.length === 0) return;
+    if (loading || !chartContainerRef.current || allWeeklyData.length === 0) return;
 
     // Destroy any existing chart
     if (chartRef.current) {
@@ -130,7 +130,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
         chartRef.current = null;
       }
     };
-  }, [allWeeklyData, range, stopPrice]);
+  }, [allWeeklyData, range, stopPrice, loading]);
 
   // Keyboard navigation
   useEffect(() => {

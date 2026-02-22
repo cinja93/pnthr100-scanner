@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { createChart, CandlestickSeries, LineSeries } from 'lightweight-charts';
+import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
 import { fetchChartData } from '../services/api';
 import styles from './ChartModal.module.css';
 
@@ -114,13 +114,9 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
     });
     chartRef.current = chart;
 
-    const series = chart.addSeries(CandlestickSeries, {
+    const series = chart.addSeries(BarSeries, {
       upColor: '#16a34a',
       downColor: '#dc2626',
-      borderUpColor: '#16a34a',
-      borderDownColor: '#dc2626',
-      wickUpColor: '#16a34a',
-      wickDownColor: '#dc2626',
     });
 
     series.setData(filtered);

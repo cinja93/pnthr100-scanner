@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { getTopStocks, calculateStopPrices, getWatchlistStocks } from './stockService.js';
+import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks } from './stockService.js';
 import {
   getSupplementalStocks,
   addSupplementalStock,
@@ -321,15 +321,29 @@ app.get('/api/stock-history/:ticker', async (req, res) => {
   }
 });
 
-// Get latest laser signals for a list of tickers (read-only from mobile app DB)
+// Get latest laser signals for a list of tickers (read-only from mobile app DB).
+// If shortList: true, tickers with no laser signal get a stop price from 2-week high + $0.01 (short exit).
 app.post('/api/signals', async (req, res) => {
   try {
-    const { tickers } = req.body;
+    const { tickers, shortList } = req.body;
     if (!Array.isArray(tickers) || tickers.length === 0) {
       return res.status(400).json({ error: 'tickers array is required' });
     }
     const signals = await getLatestSignals(tickers);
-    const signalsWithStops = await calculateStopPrices(signals);
+    let signalsWithStops = await calculateStopPrices(signals);
+    if (shortList) {
+      const missingStopTickers = tickers.filter(t => {
+        const key = (typeof t === 'string' ? t : t.ticker || t).toUpperCase();
+        return !(signalsWithStops[key]?.stopPrice != null);
+      });
+      if (missingStopTickers.length > 0) {
+        const shortStops = await getShortStopPrices(missingStopTickers);
+        signalsWithStops = { ...signalsWithStops };
+        for (const [ticker, data] of Object.entries(shortStops)) {
+          signalsWithStops[ticker] = { ...(signalsWithStops[ticker] || {}), ...data };
+        }
+      }
+    }
     res.json(signalsWithStops);
   } catch (error) {
     console.error('Error fetching signals:', error);

@@ -97,7 +97,7 @@ function App() {
       setSelectedDate('current');
       setSignals({});
       setSignalsLoading(true);
-      fetchSignals(data.map(s => s.ticker)).then(result => {
+      fetchSignals(data.map(s => s.ticker), { shortList: scanType === 'short' }).then(result => {
         setSignals(result);
         setSignalsLoading(false);
       });
@@ -123,7 +123,7 @@ function App() {
       setSelectedDate(date);
       setSignals({});
       setSignalsLoading(true);
-      fetchSignals(list.map(s => s.ticker)).then(result => {
+      fetchSignals(list.map(s => s.ticker), { shortList: scanType === 'short' }).then(result => {
         setSignals(result);
         setSignalsLoading(false);
       });

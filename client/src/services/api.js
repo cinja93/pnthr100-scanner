@@ -58,13 +58,15 @@ export async function fetchRankingByDate(date) {
   }
 }
 
-// Fetch latest laser signals for a list of tickers (from mobile app DB, read-only)
-export async function fetchSignals(tickers) {
+// Fetch latest laser signals for a list of tickers (from mobile app DB, read-only).
+// shortList: true = compute stop prices for short-scan tickers that have no laser signal (2-week high + $0.01).
+export async function fetchSignals(tickers, options = {}) {
   try {
+    const { shortList = false } = options;
     const response = await fetch(`${API_BASE}/api/signals`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ tickers })
+      body: JSON.stringify({ tickers, shortList })
     });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return response.json();

@@ -1,8 +1,17 @@
 import { useState, useMemo } from 'react';
 import styles from './FilterBar.module.css';
 
-const LONG_SIGNALS = ['NEW_BUY', 'BUY', 'NEW_YELLOW_BUY', 'YELLOW_BUY', 'NONE'];
-const SHORT_SIGNALS = ['NEW_SELL', 'SELL', 'NEW_YELLOW_SELL', 'YELLOW_SELL', 'NONE'];
+import confirmedBuyIcon     from './Confirmed Buy Signal.png';
+import confirmedSellIcon    from './Confirmed Sell Signal.png';
+import cautionBuyIcon       from './Caution Buy Signal.png';
+import cautionSellIcon      from './Caution Sell Signal.png';
+import newConfirmedBuyIcon  from './New Confirmed Buy Signal.png';
+import newConfirmedSellIcon from './New Confirmed Sell Signal.png';
+import newCautionBuyIcon    from './New Caution Buy Signal.png';
+import newCautionSellIcon   from './New Caution Sell Signal.png';
+
+const BUY_SIGNALS  = ['NEW_BUY', 'BUY', 'NEW_YELLOW_BUY', 'YELLOW_BUY'];
+const SELL_SIGNALS = ['NEW_SELL', 'SELL', 'NEW_YELLOW_SELL', 'YELLOW_SELL', 'NONE'];
 
 const SIGNAL_LABELS = {
   BUY: 'Confirmed Buy',
@@ -14,6 +23,17 @@ const SIGNAL_LABELS = {
   YELLOW_SELL: 'Caution Sell',
   NEW_YELLOW_SELL: 'New Caution Sell',
   NONE: 'No Signal',
+};
+
+const SIGNAL_ICONS = {
+  BUY: confirmedBuyIcon,
+  NEW_BUY: newConfirmedBuyIcon,
+  YELLOW_BUY: cautionBuyIcon,
+  NEW_YELLOW_BUY: newCautionBuyIcon,
+  SELL: confirmedSellIcon,
+  NEW_SELL: newConfirmedSellIcon,
+  YELLOW_SELL: cautionSellIcon,
+  NEW_YELLOW_SELL: newCautionSellIcon,
 };
 
 function countActiveFilters(filters) {
@@ -115,16 +135,31 @@ export default function FilterBar({ stocks, filters, onChange, scanType }) {
           {/* Signal */}
           <div className={styles.group}>
             <label className={styles.groupLabel}>Signal</label>
-            <div className={styles.pills}>
-              {(scanType === 'short' ? SHORT_SIGNALS : LONG_SIGNALS).map(value => (
-                <button
-                  key={value}
-                  className={`${styles.pill} ${filters.signals.includes(value) ? styles.pillActive : ''} ${styles[`pill_${value}`] || ''}`}
-                  onClick={() => togglePill('signals', value)}
-                >
-                  {SIGNAL_LABELS[value]}
-                </button>
-              ))}
+            <div className={styles.signalRows}>
+              <div className={styles.pills}>
+                {BUY_SIGNALS.map(value => (
+                  <button
+                    key={value}
+                    className={`${styles.pill} ${filters.signals.includes(value) ? styles.pillActive : ''} ${styles[`pill_${value}`] || ''}`}
+                    onClick={() => togglePill('signals', value)}
+                  >
+                    {SIGNAL_ICONS[value] && <img src={SIGNAL_ICONS[value]} alt="" className={styles.pillIcon} />}
+                    {SIGNAL_LABELS[value]}
+                  </button>
+                ))}
+              </div>
+              <div className={styles.pills}>
+                {SELL_SIGNALS.map(value => (
+                  <button
+                    key={value}
+                    className={`${styles.pill} ${filters.signals.includes(value) ? styles.pillActive : ''} ${styles[`pill_${value}`] || ''}`}
+                    onClick={() => togglePill('signals', value)}
+                  >
+                    {SIGNAL_ICONS[value] && <img src={SIGNAL_ICONS[value]} alt="" className={styles.pillIcon} />}
+                    {SIGNAL_LABELS[value]}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

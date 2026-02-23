@@ -1,0 +1,172 @@
+.page {
+  padding: 0;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.pageTitle {
+  font-family: 'Inter', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e2c4b;
+  margin-bottom: 4px;
+}
+
+.pageSubtitle {
+  font-size: 13px;
+  color: #888;
+}
+
+/* Controls row (refresh + add form) */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: center;
+  flex-wrap: wrap;
+}
+
+.refreshBtn {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #1e2c4b;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.refreshBtn:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.refreshBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Add form */
+.addForm {
+  display: flex;
+  gap: 8px;
+}
+
+.addInput {
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  width: 150px;
+  outline: none;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #1e2c4b;
+  transition: border-color 0.15s;
+}
+
+.addInput:focus {
+  border-color: #1e2c4b;
+}
+
+.addBtn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  background: #1e2c4b;
+  color: #f4c430;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.addBtn:hover:not(:disabled) {
+  background: #2d3f6b;
+}
+
+.addBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Error below add form */
+.addError {
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+/* Loading / error / empty states */
+.loadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  gap: 16px;
+  color: #888;
+  font-size: 14px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+}
+
+.loadingNote {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: -8px;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #efefef;
+  border-top: 3px solid #1e2c4b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.errorState {
+  padding: 40px;
+  text-align: center;
+  background: #fee;
+  border: 1px solid #fcc;
+  border-radius: 12px;
+  color: #c33;
+  font-size: 14px;
+}
+
+.emptyState {
+  padding: 60px 24px;
+  text-align: center;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.06);
+  color: #888;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.emptyState strong {
+  color: #1e2c4b;
+}

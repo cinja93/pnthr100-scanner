@@ -24,11 +24,12 @@ function getSignalDisplay(signalData) {
 // Signal sort order: buys first, sells last, no signal at bottom
 const SIGNAL_ORDER = { BUY: 1, YELLOW_BUY: 2, YELLOW_SELL: 3, SELL: 4 };
 
-export default function StockTable({ stocks, signals = {}, onTickerClick }) {
-  const [sortConfig, setSortConfig] = useState({
-    key: 'ytdReturn',
-    direction: 'desc'
-  });
+export default function StockTable({ stocks, signals = {}, signalsLoading = false, onTickerClick, onRemove, scanType }) {
+  const [sortConfig, setSortConfig] = useState(
+    scanType === 'short'
+      ? { key: 'rank', direction: 'asc' }
+      : { key: 'ytdReturn', direction: 'desc' }
+  );
 
   // Sort stocks based on current sort configuration
   const sortedStocks = [...stocks].sort((a, b) => {
@@ -122,12 +123,12 @@ export default function StockTable({ stocks, signals = {}, onTickerClick }) {
       <table className={styles.table}>
         <thead>
           <tr>
-            <th onClick={() => handleSort('rank')} className={`${styles.rankColumn} ${styles.sortable}`} scope="col">
+            {!onRemove && <th onClick={() => handleSort('rank')} className={`${styles.rankColumn} ${styles.sortable}`} scope="col">
               Rank {getSortIndicator('rank')}
-            </th>
-            <th onClick={() => handleSort('rankChange')} className={styles.sortable}>
+            </th>}
+            {!onRemove && <th onClick={() => handleSort('rankChange')} className={styles.sortable}>
               Rank Change {getSortIndicator('rankChange')}
-            </th>
+            </th>}
             <th onClick={() => handleSort('ticker')} className={styles.sortable}>
               Ticker {getSortIndicator('ticker')}
             </th>
@@ -155,6 +156,7 @@ export default function StockTable({ stocks, signals = {}, onTickerClick }) {
             <th onClick={() => handleSort('signal')} className={`${styles.signalColumn} ${styles.sortable}`}>
               Signal {getSortIndicator('signal')}
             </th>
+            {onRemove && <th className={styles.removeColumn}></th>}
           </tr>
         </thead>
         <tbody>
@@ -173,15 +175,16 @@ export default function StockTable({ stocks, signals = {}, onTickerClick }) {
                 onClick={() => onTickerClick?.(stock)}
                 title={stock.companyName ? `${stock.companyName} — Click to view chart` : 'Click to view chart'}
               >
-                <td className={styles.rankColumn}>{stock.rank ?? '—'}</td>
-                <td
+                {!onRemove && <td className={styles.rankColumn}>{stock.rank ?? '—'}</td>}
+                {!onRemove && <td
                   className={rankDisplay.className}
                   title={stock.previousRank ? `Previous rank: #${stock.previousRank}` : 'New entry'}
                 >
                   {rankDisplay.text}
-                </td>
+                </td>}
                 <td className={styles.ticker}>
-                  {stock.ticker}
+                  <span>{stock.ticker}</span>
+                  {stock.companyName && <div className={styles.companyName}>{stock.companyName}</div>}
                 </td>
                 <td>{stock.exchange}</td>
                 <td>{stock.sector}</td>
@@ -190,19 +193,38 @@ export default function StockTable({ stocks, signals = {}, onTickerClick }) {
                   {stock.ytdReturn >= 0 ? '+' : ''}{stock.ytdReturn.toFixed(2)}%
                 </td>
                 <td className={styles.stopPriceCell}>
-                  {stopPrice != null ? `$${stopPrice.toLocaleString()}` : '—'}
+                  {signalsLoading
+                    ? <span className={styles.loadingDots}>···</span>
+                    : stopPrice != null ? `$${stopPrice.toLocaleString()}` : '—'}
                 </td>
                 <td className={styles.riskCell}>
-                  {riskDollar != null ? `$${riskDollar.toFixed(2)}` : '—'}
+                  {signalsLoading
+                    ? <span className={styles.loadingDots}>···</span>
+                    : riskDollar != null ? `$${riskDollar.toFixed(2)}` : '—'}
                 </td>
                 <td className={styles.riskCell}>
-                  {riskPct != null ? `${riskPct.toFixed(2)}%` : '—'}
+                  {signalsLoading
+                    ? <span className={styles.loadingDots}>···</span>
+                    : riskPct != null ? `${riskPct.toFixed(2)}%` : '—'}
                 </td>
                 <td className={styles.signalColumn}>
-                  {icon
-                    ? <img src={icon} alt={alt} className={styles.signalIcon} title={alt} />
-                    : <span className={styles.signalNone}>—</span>}
+                  {signalsLoading
+                    ? <span className={styles.loadingDots}>···</span>
+                    : icon
+                      ? <img src={icon} alt={alt} className={styles.signalIcon} title={alt} />
+                      : <span className={styles.signalNone}>—</span>}
                 </td>
+                {onRemove && (
+                  <td className={styles.removeColumn}>
+                    <button
+                      className={styles.removeBtn}
+                      onClick={e => { e.stopPropagation(); onRemove(stock.ticker); }}
+                      title={`Remove ${stock.ticker} from watchlist`}
+                    >
+                      ✕
+                    </button>
+                  </td>
+                )}
               </tr>
             );
           })}

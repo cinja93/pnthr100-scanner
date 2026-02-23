@@ -19,180 +19,69 @@ h1, h2, h3, h4, h5, h6,
 .app {
   min-height: 100vh;
   display: flex;
+  flex-direction: row;
+}
+
+.content-wrapper {
+  flex: 1;
+  display: flex;
   flex-direction: column;
-}
-
-.header {
-  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-  padding: 24px 0;
-}
-
-.header-content {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 24px;
-  text-align: center;
-}
-
-.title {
-  font-size: 32px;
-  font-weight: 700;
-  color: #fcf000;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-}
-
-.logo {
-  height: 52px;
-  width: auto;
-  display: block;
+  min-width: 0;
+  overflow: hidden;
 }
 
 
-/* Primary scan actions: Scan Long + Scan Short */
-.scan-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin: 24px 0 10px 0;
-  flex-wrap: wrap;
-}
-
-/* Secondary row: Manage Stocks sits below the primary scan buttons */
-.manage-row {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 16px;
-}
-
-.scan-btn {
-  padding: 12px 28px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.scan-btn.scan-long {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e8f5e9;
-}
-
-.scan-btn.scan-long:hover {
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.35);
-}
-
-.scan-btn.scan-long.active {
-  background: #fcf000;
-  color: #000000;
-  border-color: #fcf000;
-}
-
-.scan-btn.scan-long.active:hover {
-  background: #e8d900;
-  border-color: #e8d900;
-}
-
-.scan-btn.scan-short {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffebee;
-}
-
-.scan-btn.scan-short:hover {
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.35);
-}
-
-.scan-btn.scan-short.active {
-  background: #670404;
-  color: #ffffff;
-  border-color: #670404;
-}
-
-.scan-btn.scan-short.active:hover {
-  background: #4a0303;
-  border-color: #4a0303;
-}
-
-.manage-link {
-  padding: 8px 14px;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #9e9e9e;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.manage-link:hover {
-  color: #b4b4b4;
-  border-color: rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-/* Date Picker */
+/* Date Picker — sits in main content area (light background) */
 .date-picker-container {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 20px;
+  margin-bottom: 20px;
 }
 
 .date-label {
   font-size: 14px;
   font-weight: 600;
-  color: #b4b4b4;
+  color: #555;
 }
 
 .date-picker {
-  padding: 10px 16px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  padding: 8px 14px;
+  border: 2px solid #d4d4d4;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.1);
+  color: #212121;
+  background: white;
   cursor: pointer;
   transition: border-color 0.2s;
   min-width: 250px;
 }
 
 .date-picker option {
-  background: #1e2c4b;
-  color: #ffffff;
+  background: white;
+  color: #212121;
 }
 
 .date-picker:hover:not(:disabled) {
-  border-color: #fcf000;
+  border-color: #1e2c4b;
 }
 
 .date-picker:focus {
   outline: none;
-  border-color: #fcf000;
+  border-color: #1e2c4b;
 }
 
 .date-picker:disabled {
-  background: rgba(255, 255, 255, 0.05);
+  background: #f5f5f5;
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .refresh-button {
-  background: transparent;
-  color: #9e9e9e;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: white;
+  color: #555;
+  border: 1px solid #d4d4d4;
   padding: 8px 14px;
   border-radius: 6px;
   font-size: 13px;
@@ -202,9 +91,8 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .refresh-button:hover:not(:disabled) {
-  color: #b4b4b4;
-  border-color: rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.05);
+  color: #1e2c4b;
+  border-color: #1e2c4b;
 }
 
 .refresh-button:disabled {
@@ -228,9 +116,8 @@ h1, h2, h3, h4, h5, h6,
 
 .main {
   flex: 1;
-  max-width: 1400px;
   width: 100%;
-  margin: 32px auto;
+  margin: 32px 0;
   padding: 0 24px;
 }
 
@@ -315,34 +202,6 @@ h1, h2, h3, h4, h5, h6,
   margin-top: 32px;
 }
 
-.footer-love {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.love-frame {
-  border: 2px solid rgba(252, 240, 0, 0.3);
-  border-radius: 8px;
-  padding: 4px;
-  display: inline-block;
-}
-
-.love-img {
-  width: 80px;
-  height: 80px;
-  object-fit: cover;
-  border-radius: 6px;
-  display: block;
-}
-
-.love-text {
-  font-size: 13px;
-  color: #9e9e9e;
-  font-style: italic;
-}
 
 /* Responsive design */
 @media (max-width: 768px) {

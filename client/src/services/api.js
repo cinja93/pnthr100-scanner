@@ -97,3 +97,46 @@ export async function fetchStockHistory(ticker) {
     throw error;
   }
 }
+
+// ── Watchlist ──
+
+export async function fetchWatchlist() {
+  const response = await fetch(`${API_BASE}/api/watchlist`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+export async function addWatchlistTicker(ticker) {
+  const response = await fetch(`${API_BASE}/api/watchlist`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ticker }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to add ticker');
+  return data;
+}
+
+export async function removeWatchlistTicker(ticker) {
+  const response = await fetch(`${API_BASE}/api/watchlist/${ticker}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(data.error || 'Failed to remove ticker');
+  }
+  return response.json();
+}
+
+// Fetch sector performance data (11 sectors, weekly cumulative % return, 12-month rolling)
+export async function fetchSectorData() {
+  try {
+    const response = await fetch(`${API_BASE}/api/sectors`, { headers: authHeaders() });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching sector data:', error);
+    throw error;
+  }
+}

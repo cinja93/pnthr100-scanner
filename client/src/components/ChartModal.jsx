@@ -3,13 +3,31 @@ import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
 import { fetchChartData } from '../services/api';
 import styles from './ChartModal.module.css';
 
-// Aggregate daily OHLCV (newest-first from FMP) into weekly candles
+import confirmedBuyIcon     from './Confirmed Buy Signal.png';
+import confirmedSellIcon    from './Confirmed Sell Signal.png';
+import cautionBuyIcon       from './Caution Buy Signal.png';
+import cautionSellIcon      from './Caution Sell Signal.png';
+import newConfirmedBuyIcon  from './New Confirmed Buy Signal.png';
+import newConfirmedSellIcon from './New Confirmed Sell Signal.png';
+import newCautionBuyIcon    from './New Caution Buy Signal.png';
+import newCautionSellIcon   from './New Caution Sell Signal.png';
+
+function getSignalIcon(signalData) {
+  if (!signalData?.signal) return null;
+  const { signal, isNewSignal } = signalData;
+  if (signal === 'BUY')         return { src: isNewSignal ? newConfirmedBuyIcon  : confirmedBuyIcon,  alt: isNewSignal ? 'New Confirmed Buy'  : 'Confirmed Buy'  };
+  if (signal === 'SELL')        return { src: isNewSignal ? newConfirmedSellIcon : confirmedSellIcon, alt: isNewSignal ? 'New Confirmed Sell' : 'Confirmed Sell' };
+  if (signal === 'YELLOW_BUY')  return { src: isNewSignal ? newCautionBuyIcon   : cautionBuyIcon,    alt: isNewSignal ? 'New Caution Buy'    : 'Caution Buy'    };
+  if (signal === 'YELLOW_SELL') return { src: isNewSignal ? newCautionSellIcon  : cautionSellIcon,   alt: isNewSignal ? 'New Caution Sell'   : 'Caution Sell'   };
+  return null;
+}
+
 function aggregateToWeekly(dailyData) {
   const sorted = [...dailyData].sort((a, b) => (a.date < b.date ? -1 : 1));
   const weeksMap = new Map();
   for (const day of sorted) {
     const date = new Date(day.date + 'T00:00:00');
-    const dow = date.getDay(); // 0=Sun
+    const dow = date.getDay();
     const monday = new Date(date);
     monday.setDate(date.getDate() - (dow === 0 ? 6 : dow - 1));
     const weekKey = monday.toISOString().split('T')[0];
@@ -25,7 +43,6 @@ function aggregateToWeekly(dailyData) {
   return [...weeksMap.values()];
 }
 
-// Calculate EMA over the full dataset for accuracy, then trim to display range
 function calculateEMA(weeklyData, period) {
   if (weeklyData.length < period) return [];
   const k = 2 / (period + 1);
@@ -48,12 +65,20 @@ function filterByRange(weeklyData, range) {
   return weeklyData.filter(w => w.time >= cutoffStr);
 }
 
+function formatWeekDate(timeStr) {
+  if (!timeStr) return '';
+  const date = new Date(timeStr + 'T00:00:00');
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [range, setRange] = useState('12m');
   const [allWeeklyData, setAllWeeklyData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [hoveredBar, setHoveredBar] = useState(null);
+  const [signalMarkerPos, setSignalMarkerPos] = useState(null);
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const cacheRef = useRef({});
@@ -61,6 +86,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
   const stock = stocks[currentIndex];
   const signalData = signals[stock?.ticker];
   const stopPrice = signalData?.stopPrice ?? null;
+  const signalIcon = getSignalIcon(signalData);
 
   // Fetch data when stock changes
   useEffect(() => {
@@ -95,7 +121,9 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
   useEffect(() => {
     if (loading || !chartContainerRef.current || allWeeklyData.length === 0) return;
 
-    // Destroy any existing chart
+    setHoveredBar(null);
+    setSignalMarkerPos(null);
+
     if (chartRef.current) {
       chartRef.current.remove();
       chartRef.current = null;
@@ -106,7 +134,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
 
     const chart = createChart(chartContainerRef.current, {
       autoSize: true,
-      layout: { background: { color: '#ffffff' }, textColor: '#212121' },
+      layout: { background: { color: '#ffffff' }, textColor: '#212121', attributionLogo: false },
       grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } },
       rightPriceScale: { borderColor: '#d4d4d4' },
       timeScale: { borderColor: '#d4d4d4', timeVisible: false },
@@ -121,10 +149,58 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
 
     series.setData(filtered);
 
-    // 21 EMA — calculated on full history so it's accurate in any display range
+    const filteredTimes = new Set(filtered.map(d => d.time));
+
+    // OHLC tooltip on crosshair hover
+    chart.subscribeCrosshairMove(param => {
+      if (!param.time || !param.point || !param.seriesData?.get(series)) {
+        setHoveredBar(null);
+        return;
+      }
+      const data = param.seriesData.get(series);
+      setHoveredBar({
+        x: param.point.x,
+        y: param.point.y,
+        time: param.time,
+        open: data.open,
+        high: data.high,
+        low: data.low,
+        close: data.close,
+      });
+    });
+
+    // Signal marker — float PNG icon over chart at the signal bar's price
+    if (signalData?.signal && signalData?.timestamp) {
+      const sigDate = new Date(signalData.timestamp);
+      const dow = sigDate.getDay();
+      const monday = new Date(sigDate);
+      monday.setDate(sigDate.getDate() - (dow === 0 ? 6 : dow - 1));
+      const weekKey = monday.toISOString().split('T')[0];
+      if (filteredTimes.has(weekKey)) {
+        const isBuy = signalData.signal.includes('BUY');
+        const barData = filtered.find(d => d.time === weekKey);
+        if (barData) {
+          const ICON = 32;
+          const updateMarkerPos = () => {
+            const x = chart.timeScale().timeToCoordinate(weekKey);
+            const price = isBuy ? barData.low : barData.high;
+            const y = series.priceToCoordinate(price);
+            if (x != null && y != null) {
+              setSignalMarkerPos({
+                left: Math.round(x) - ICON / 2,
+                top: isBuy ? Math.round(y) + 4 : Math.round(y) - ICON - 4,
+              });
+            }
+          };
+          chart.timeScale().subscribeVisibleTimeRangeChange(updateMarkerPos);
+          setTimeout(updateMarkerPos, 50);
+        }
+      }
+    }
+
+    // 21 EMA — calculated on full history for accuracy
     const ema21Full = calculateEMA(allWeeklyData, 21);
     if (ema21Full.length > 0) {
-      const filteredTimes = new Set(filtered.map(d => d.time));
       const ema21 = ema21Full.filter(d => filteredTimes.has(d.time));
       if (ema21.length > 0) {
         const emaSeries = chart.addSeries(LineSeries, {
@@ -145,13 +221,14 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
         lineWidth: 2,
         lineStyle: 2,
         axisLabelVisible: true,
-        title: `Stop $${stopPrice}`,
       });
     }
 
     chart.timeScale().fitContent();
 
     return () => {
+      setHoveredBar(null);
+      setSignalMarkerPos(null);
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
@@ -183,8 +260,10 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
         {/* Header */}
         <div className={styles.header}>
           <div className={styles.stockInfo}>
-            <span className={styles.ticker}>{stock.ticker}</span>
-            {stock.companyName && <span className={styles.company}>{stock.companyName}</span>}
+            <div className={styles.tickerRow}>
+              <span className={styles.ticker}>{stock.ticker}</span>
+              <span className={styles.company}>{stock.companyName}</span>
+            </div>
             <div className={styles.badges}>
               {stock.sector && <span className={styles.badge}>{stock.sector}</span>}
               {stock.exchange && <span className={styles.badge}>{stock.exchange}</span>}
@@ -207,6 +286,9 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
             ))}
           </div>
           <div className={styles.priceInfo}>
+            {signalIcon && (
+              <img src={signalIcon.src} alt={signalIcon.alt} className={styles.signalIcon} title={signalIcon.alt} />
+            )}
             <span className={styles.currentPrice}>${stock.currentPrice?.toLocaleString()}</span>
             {stopPrice != null && (
               <span className={styles.stopBadge}>Stop: ${stopPrice.toLocaleString()}</span>
@@ -224,7 +306,36 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
           )}
           {error && <div className={styles.errorState}>{error}</div>}
           {!loading && !error && (
-            <div ref={chartContainerRef} className={styles.chartContainer} />
+            <div className={styles.chartWrapper}>
+              <div ref={chartContainerRef} className={styles.chartContainer} />
+
+              {/* PNG signal marker overlaid on chart */}
+              {signalMarkerPos && signalIcon && (
+                <img
+                  src={signalIcon.src}
+                  alt={signalIcon.alt}
+                  className={styles.chartMarkerIcon}
+                  style={{ left: signalMarkerPos.left, top: signalMarkerPos.top }}
+                />
+              )}
+
+              {/* OHLC tooltip on hover */}
+              {hoveredBar && (
+                <div
+                  className={styles.ohlcTooltip}
+                  style={{
+                    left: hoveredBar.x < 180 ? hoveredBar.x + 14 : hoveredBar.x - 148,
+                    top: Math.max(8, hoveredBar.y - 72),
+                  }}
+                >
+                  <div className={styles.ohlcDate}>Week of {formatWeekDate(hoveredBar.time)}</div>
+                  <div className={styles.ohlcRow}><span>O</span><span>${hoveredBar.open?.toFixed(2)}</span></div>
+                  <div className={styles.ohlcRow}><span>H</span><span>${hoveredBar.high?.toFixed(2)}</span></div>
+                  <div className={styles.ohlcRow}><span>L</span><span>${hoveredBar.low?.toFixed(2)}</span></div>
+                  <div className={styles.ohlcRow}><span>C</span><span>${hoveredBar.close?.toFixed(2)}</span></div>
+                </div>
+              )}
+            </div>
           )}
         </div>
 

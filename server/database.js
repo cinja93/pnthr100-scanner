@@ -23,6 +23,7 @@ export async function connectToDatabase() {
     // Create indexes for faster queries
     await db.collection('rankings').createIndex({ date: -1 });
     await db.collection('supplemental_stocks').createIndex({ ticker: 1 }, { unique: true });
+    await db.collection('watchlist').createIndex({ ticker: 1 }, { unique: true });
 
     console.log('✅ Connected to MongoDB');
     return db;
@@ -256,6 +257,52 @@ export async function removeSupplementalStock(ticker) {
     return { success: true, ticker: ticker.toUpperCase() };
   } catch (error) {
     console.error('Error removing supplemental stock:', error.message);
+    throw error;
+  }
+}
+
+// ── Watchlist ──
+
+export async function getWatchlistTickers() {
+  try {
+    const database = await connectToDatabase();
+    if (!database) return [];
+    const collection = database.collection('watchlist');
+    const docs = await collection.find().sort({ addedAt: 1 }).toArray();
+    return docs.map(doc => doc.ticker);
+  } catch (error) {
+    console.error('Error getting watchlist:', error.message);
+    return [];
+  }
+}
+
+export async function addToWatchlist(ticker) {
+  try {
+    const database = await connectToDatabase();
+    if (!database) throw new Error('Database not available');
+    const collection = database.collection('watchlist');
+    const existing = await collection.findOne({ ticker });
+    if (existing) throw new Error(`${ticker} is already on your watchlist`);
+    await collection.insertOne({ ticker, addedAt: new Date() });
+    console.log(`✅ Added to watchlist: ${ticker}`);
+    return { success: true, ticker };
+  } catch (error) {
+    console.error('Error adding to watchlist:', error.message);
+    throw error;
+  }
+}
+
+export async function removeFromWatchlist(ticker) {
+  try {
+    const database = await connectToDatabase();
+    if (!database) throw new Error('Database not available');
+    const collection = database.collection('watchlist');
+    const result = await collection.deleteOne({ ticker: ticker.toUpperCase() });
+    if (result.deletedCount === 0) throw new Error(`${ticker} not found in watchlist`);
+    console.log(`✅ Removed from watchlist: ${ticker}`);
+    return { success: true, ticker };
+  } catch (error) {
+    console.error('Error removing from watchlist:', error.message);
     throw error;
   }
 }

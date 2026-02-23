@@ -43,6 +43,48 @@ async function fetchFMP(endpoint, retries = 3) {
 // auto-invalidates each new week without any manual expiry logic.
 let stopPriceCache = { weekKey: null, stops: {} };
 
+// Year-start price cache — Dec 31 close is constant all year; cache indefinitely
+// and only re-fetch when the calendar year rolls over or for newly-seen tickers.
+let yearStartPriceCache = { year: null, prices: {} };
+
+// Fetch year-start (Dec 31) close prices for a list of tickers.
+// Already-cached tickers are returned immediately; only missing ones hit FMP.
+async function getYearStartPrices(tickers) {
+  const currentYear = new Date().getFullYear();
+  const yearStart = getYearStartDate();
+
+  // Reset on new year
+  if (yearStartPriceCache.year !== currentYear) {
+    yearStartPriceCache = { year: currentYear, prices: {} };
+  }
+
+  const missing = tickers.filter(t => !(t in yearStartPriceCache.prices));
+
+  if (missing.length > 0) {
+    console.log(`📅 Fetching year-start prices for ${missing.length} tickers...`);
+    const concurrency = 15;
+    for (let i = 0; i < missing.length; i += concurrency) {
+      const chunk = missing.slice(i, i + concurrency);
+      await Promise.all(chunk.map(async (ticker) => {
+        try {
+          const historical = await fetchFMP(`/historical-price-full/${ticker}?from=${yearStart}&to=${yearStart}`);
+          if (historical?.historical?.length > 0) {
+            yearStartPriceCache.prices[ticker] = historical.historical[historical.historical.length - 1].close;
+          }
+        } catch (err) {
+          console.error(`Year-start price error for ${ticker}:`, err.message);
+        }
+      }));
+      if (i + concurrency < missing.length) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+    console.log(`📅 Year-start prices cached: ${Object.keys(yearStartPriceCache.prices).length} tickers`);
+  }
+
+  return yearStartPriceCache.prices;
+}
+
 // Calculate stop prices for tickers that have signals using 2-week price history:
 //   BUY / YELLOW_BUY  → lowest low of the 2 most recent complete trading weeks − $0.01
 //   SELL / YELLOW_SELL → highest high of the 2 most recent complete trading weeks + $0.01
@@ -115,73 +157,77 @@ export async function calculateStopPrices(signalMap) {
   return result;
 }
 
-// Fetch stock data and calculate YTD returns
+// Fetch stock data and calculate YTD returns.
+// Uses FMP bulk quote + profile endpoints (2 calls instead of ~200),
+// plus a year-long in-memory cache for Dec 31 prices.
 export async function getTopStocks() {
   try {
     const tickers = await getAllTickers();
     console.log(`Fetching data for ${tickers.length} unique tickers from FMP...`);
 
-    const yearStart = getYearStartDate();
+    // ── Step 1: Bulk fetch quotes (200 tickers per call) ──────────────────────
+    console.log('📊 Bulk fetching quotes...');
+    const quoteMap = {};
+    const bulkChunk = 200;
+    for (let i = 0; i < tickers.length; i += bulkChunk) {
+      const chunk = tickers.slice(i, i + bulkChunk);
+      try {
+        const quotes = await fetchFMP(`/quote/${chunk.join(',')}`);
+        if (Array.isArray(quotes)) {
+          for (const q of quotes) quoteMap[q.symbol] = q;
+        }
+      } catch (err) {
+        console.error(`Bulk quote error (chunk ${i / bulkChunk + 1}):`, err.message);
+      }
+      if (i + bulkChunk < tickers.length) await new Promise(r => setTimeout(r, 500));
+    }
+    console.log(`✅ Quotes received for ${Object.keys(quoteMap).length} tickers`);
+
+    // ── Step 2: Bulk fetch profiles (200 tickers per call) ───────────────────
+    console.log('🏢 Bulk fetching profiles...');
+    const profileMap = {};
+    for (let i = 0; i < tickers.length; i += bulkChunk) {
+      const chunk = tickers.slice(i, i + bulkChunk);
+      try {
+        const profiles = await fetchFMP(`/profile/${chunk.join(',')}`);
+        if (Array.isArray(profiles)) {
+          for (const p of profiles) profileMap[p.symbol] = p;
+        }
+      } catch (err) {
+        console.error(`Bulk profile error (chunk ${i / bulkChunk + 1}):`, err.message);
+      }
+      if (i + bulkChunk < tickers.length) await new Promise(r => setTimeout(r, 500));
+    }
+    console.log(`✅ Profiles received for ${Object.keys(profileMap).length} tickers`);
+
+    // ── Step 3: Year-start prices (cached after first run) ───────────────────
+    const yearStartPrices = await getYearStartPrices(tickers);
+
+    // ── Step 4: Assemble stock objects ────────────────────────────────────────
     const stockData = [];
+    for (const ticker of tickers) {
+      const quoteData = quoteMap[ticker];
+      const profileData = profileMap[ticker];
+      const yearStartPrice = yearStartPrices[ticker];
 
-    // Process in smaller batches with limited concurrency to avoid FMP 429 rate limit
-    const batchSize = 80;
-    const concurrency = 5;
-    for (let i = 0; i < tickers.length; i += batchSize) {
-      const batch = tickers.slice(i, i + batchSize);
-      const batchNum = Math.floor(i / batchSize) + 1;
-      const totalBatches = Math.ceil(tickers.length / batchSize);
+      if (!quoteData || !yearStartPrice || !quoteData.price) continue;
 
-      console.log(`Processing batch ${batchNum}/${totalBatches} (${batch.length} stocks)...`);
-
-      for (let c = 0; c < batch.length; c += concurrency) {
-        const chunk = batch.slice(c, c + concurrency);
-        const chunkResults = await Promise.all(
-          chunk.map(async (ticker) => {
-            try {
-              const [quote, profile, historical] = await Promise.all([
-                fetchFMP(`/quote/${ticker}`),
-                fetchFMP(`/profile/${ticker}`),
-                fetchFMP(`/historical-price-full/${ticker}?from=${yearStart}&to=${yearStart}`)
-              ]);
-              if (!quote || !quote[0] || !profile || !profile[0]) return null;
-              const quoteData = quote[0];
-              const profileData = profile[0];
-              let yearStartPrice = null;
-              if (historical?.historical?.length > 0) {
-                yearStartPrice = historical.historical[historical.historical.length - 1].close;
-              }
-              if (!yearStartPrice || !quoteData.price) return null;
-              const currentPrice = quoteData.price;
-              const ytdReturn = ((currentPrice - yearStartPrice) / yearStartPrice) * 100;
-              return {
-                ticker: quoteData.symbol,
-                companyName: profileData.companyName || '',
-                exchange: profileData.exchangeShortName || quoteData.exchange || 'N/A',
-                sector: profileData.sector || 'N/A',
-                currentPrice: parseFloat(currentPrice.toFixed(2)),
-                ytdReturn: parseFloat(ytdReturn.toFixed(2))
-              };
-            } catch (error) {
-              console.error(`Error fetching ${ticker}:`, error.message);
-              return null;
-            }
-          })
-        );
-        stockData.push(...chunkResults.filter(Boolean));
-        await new Promise((r) => setTimeout(r, 400));
-      }
-
-      console.log(`Batch ${batchNum} complete: ${stockData.length} stocks so far`);
-      if (i + batchSize < tickers.length) {
-        await new Promise((r) => setTimeout(r, 1500));
-      }
+      const currentPrice = quoteData.price;
+      const ytdReturn = ((currentPrice - yearStartPrice) / yearStartPrice) * 100;
+      stockData.push({
+        ticker: quoteData.symbol,
+        companyName: profileData?.companyName || quoteData.name || '',
+        exchange: profileData?.exchangeShortName || quoteData.exchange || 'N/A',
+        sector: profileData?.sector || 'N/A',
+        currentPrice: parseFloat(currentPrice.toFixed(2)),
+        ytdReturn: parseFloat(ytdReturn.toFixed(2)),
+      });
     }
 
     // Sort by YTD: top 100 = long (highest first), bottom 100 = short (lowest first so #1 = largest loss)
     const sorted = [...stockData].sort((a, b) => b.ytdReturn - a.ytdReturn);
     const top100 = sorted.slice(0, 100);
-    const bottom100 = [...sorted.slice(-100)].sort((a, b) => a.ytdReturn - b.ytdReturn); // ascending: worst = rank 1
+    const bottom100 = [...sorted.slice(-100)].sort((a, b) => a.ytdReturn - b.ytdReturn);
 
     console.log(`✅ Fetched ${stockData.length} stocks: top 100 (long) + bottom 100 (short)`);
     console.log(`Long: #1 ${top100[0]?.ticker} +${top100[0]?.ytdReturn}% YTD | Short: #1 ${bottom100[0]?.ticker} (largest loss) ${bottom100[0]?.ytdReturn}% YTD`);
@@ -198,4 +244,43 @@ export async function getTopStocks() {
     console.error('Error in getTopStocks:', error);
     throw error;
   }
+}
+
+// Fetch live stock data for an arbitrary list of tickers (used by Watchlist).
+// Uses shared bulk endpoints and year-start price cache.
+export async function getWatchlistStocks(tickers) {
+  if (!tickers || tickers.length === 0) return [];
+
+  const [quoteArr, profileArr, yearStartPrices] = await Promise.all([
+    fetchFMP(`/quote/${tickers.join(',')}`).catch(() => []),
+    fetchFMP(`/profile/${tickers.join(',')}`).catch(() => []),
+    getYearStartPrices(tickers),
+  ]);
+
+  const quoteMap = {};
+  if (Array.isArray(quoteArr)) for (const q of quoteArr) quoteMap[q.symbol] = q;
+  const profileMap = {};
+  if (Array.isArray(profileArr)) for (const p of profileArr) profileMap[p.symbol] = p;
+
+  return tickers.map(ticker => {
+    const quoteData = quoteMap[ticker];
+    const profileData = profileMap[ticker];
+    const yearStartPrice = yearStartPrices[ticker];
+
+    if (!quoteData || !yearStartPrice || !quoteData.price) return null;
+
+    const currentPrice = quoteData.price;
+    const ytdReturn = ((currentPrice - yearStartPrice) / yearStartPrice) * 100;
+    return {
+      ticker: quoteData.symbol,
+      companyName: profileData?.companyName || quoteData.name || '',
+      exchange: profileData?.exchangeShortName || quoteData.exchange || 'N/A',
+      sector: profileData?.sector || 'N/A',
+      currentPrice: parseFloat(currentPrice.toFixed(2)),
+      ytdReturn: parseFloat(ytdReturn.toFixed(2)),
+      rank: null,
+      rankChange: null,
+      previousRank: null,
+    };
+  }).filter(Boolean);
 }

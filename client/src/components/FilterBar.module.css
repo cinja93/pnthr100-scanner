@@ -81,6 +81,12 @@
   gap: 8px;
 }
 
+.signalRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .groupLabel {
   font-size: 11px;
   font-weight: 700;
@@ -107,6 +113,9 @@
 }
 
 .pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   padding: 5px 12px;
   border-radius: 20px;
   border: 1px solid #d4d4d4;
@@ -116,6 +125,13 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
+}
+
+.pillIcon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .pill:hover {

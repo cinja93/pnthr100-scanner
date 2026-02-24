@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks } from './stockService.js';
+import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import {
   getSupplementalStocks,
   addSupplementalStock,
@@ -38,6 +39,9 @@ app.use('/api', (req, res, next) => {
 let cachedData = null;
 let lastFetch = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+let cachedPortfolio = null;
+let lastPortfolioFetch = null;
 
 // Fetch company names from FMP bulk quote and merge into a stocks array.
 // Only fills in entries where companyName is missing/empty.
@@ -390,6 +394,112 @@ app.get('/api/sectors', async (req, res) => {
   } catch (error) {
     console.error('Error fetching sector data:', error);
     res.status(500).json({ error: 'Failed to fetch sector data' });
+  }
+});
+
+// ── Portfolio ────────────────────────────────────────────────────────────────
+
+// GET /api/portfolio
+// Returns top 50 long + top 50 short enriched with laser signals and stop prices.
+// The client defaults to checking only ranks 1-25 from each list.
+// Position sizing (shares, value) is computed client-side from the returned stopPrice.
+app.get('/api/portfolio', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (cachedPortfolio && lastPortfolioFetch && (now - lastPortfolioFetch) < CACHE_DURATION) {
+      return res.json(cachedPortfolio);
+    }
+    const data = await getStocksCache();
+    const long50 = data.long.slice(0, 50).map(s => ({ ...s, direction: 'LONG' }));
+    const short50 = data.short.slice(0, 50).map(s => ({ ...s, direction: 'SHORT' }));
+    const all100 = await enrichWithSignals([...long50, ...short50]);
+    cachedPortfolio = all100;
+    lastPortfolioFetch = now;
+    res.json(all100);
+  } catch (error) {
+    console.error('Error fetching portfolio:', error);
+    res.status(500).json({ error: 'Failed to fetch portfolio data' });
+  }
+});
+
+// GET /api/portfolio/ticker/:ticker
+// Fetch live data for a single user-specified ticker (for the add-row feature).
+app.get('/api/portfolio/ticker/:ticker', async (req, res) => {
+  try {
+    const ticker = req.params.ticker.toUpperCase();
+    const stocks = await getWatchlistStocks([ticker]);
+    if (!stocks || stocks.length === 0) {
+      return res.status(404).json({ error: `Ticker ${ticker} not found` });
+    }
+    const enriched = await enrichWithSignals(stocks);
+    res.json(enriched[0]);
+  } catch (error) {
+    console.error('Error fetching portfolio ticker:', error);
+    res.status(500).json({ error: 'Failed to fetch ticker data' });
+  }
+});
+
+// POST /api/portfolio/optimize
+// Runs risk-adjusted portfolio optimisation (Sortino-first, sector caps, vol targeting).
+// Body: { accountSize: number, tickers: string[] }
+app.post('/api/portfolio/optimize', async (req, res) => {
+  try {
+    const { accountSize, tickers, riskPct = 1 } = req.body;
+    if (!accountSize || !Array.isArray(tickers) || tickers.length < 2) {
+      return res.status(400).json({ error: 'accountSize and at least 2 tickers are required' });
+    }
+    const clampedRiskPct = Math.min(Math.max(parseFloat(riskPct) || 1, 0.1), 10);
+
+    // Determine direction for each requested ticker from current scan data
+    const scanData = await getStocksCache();
+    const shortTickerSet = new Set(scanData.short.slice(0, 25).map(s => s.ticker));
+
+    // Fetch live data for requested tickers and add direction
+    const stockData = await getWatchlistStocks(tickers);
+    const stocksWithDir = stockData.map(s => ({
+      ...s,
+      direction: shortTickerSet.has(s.ticker) ? 'SHORT' : 'LONG',
+    }));
+
+    // Add signals + stop prices
+    const positions = await enrichWithSignals(stocksWithDir);
+
+    // Optimise
+    const {
+      fractions,
+      sortino,
+      sharpe,
+      scaleFactor,
+      maxDrawdown,
+      portfolioVol,
+      vix,
+      avgCorrelation,
+      excludedCount,
+    } = await optimizeWithRason(positions, accountSize, clampedRiskPct);
+
+    // Compute optimised shares per position
+    const results = positions.map((p, i) => {
+      const riskPerShare = p.stopPrice != null
+        ? Math.abs(p.currentPrice - p.stopPrice)
+        : p.currentPrice * 0.08;
+      const baseShares = riskPerShare > 0
+        ? Math.floor(accountSize * (clampedRiskPct / 100) / riskPerShare)
+        : 0;
+      const optShares = Math.floor(baseShares * (fractions[i] ?? 0));
+      return {
+        ticker: p.ticker,
+        direction: p.direction,
+        baseShares,
+        optShares,
+        optValue: parseFloat((optShares * p.currentPrice).toFixed(2)),
+        fraction: parseFloat((fractions[i] ?? 0).toFixed(4)),
+      };
+    });
+
+    res.json({ results, sortino, sharpe, scaleFactor, maxDrawdown, portfolioVol, vix, avgCorrelation, excludedCount });
+  } catch (error) {
+    console.error('Error in portfolio optimize:', error);
+    res.status(500).json({ error: error.message || 'Optimization failed' });
   }
 });
 

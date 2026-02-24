@@ -10,17 +10,14 @@
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   background: white;
   font-size: 14px;
 }
 
 .table thead {
-  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
   color: white;
-  position: sticky;
-  top: 0;
-  z-index: 10;
 }
 
 .table th {
@@ -30,6 +27,10 @@
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
 }
 
 .table th.sortable {
@@ -43,8 +44,11 @@
 }
 
 .table tbody tr {
-  border-bottom: 1px solid #f0f0f0;
   transition: background-color 0.2s;
+}
+
+.table tbody td {
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .table tbody tr:nth-child(even) {

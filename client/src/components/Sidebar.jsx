@@ -7,7 +7,7 @@ const NAV_ITEMS = [
   { key: 'short',     label: 'Scan Short', icon: '📉' },
   { key: 'sectors',   label: 'Sectors',    icon: '📊', dividerBefore: true },
   { key: 'watchlist', label: 'Watchlist',  icon: '👁' },
-  { key: 'portfolio', label: 'Portfolio',  icon: '📁', soon: true },
+  { key: 'portfolio', label: 'Portfolio',  icon: '📁' },
 ];
 
 export default function Sidebar({ activePage, onNavigate }) {

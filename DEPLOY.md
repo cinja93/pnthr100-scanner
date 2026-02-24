@@ -150,6 +150,7 @@ Render will run your Node server 24/7 so the app can get stock data from anywher
    | `MONGODB_URI` | Copy the full line from your `server/.env` (starts with `mongodb+srv://...`). Paste here. |
    | `MONGODB_DB_NAME` | Type: `pnthr100` (or whatever is in your .env as MONGODB_DB_NAME) |
    | `FMP_API_KEY` | Copy from your `server/.env` (the value of FMP_API_KEY). Paste here. |
+   | `API_KEY` | Copy from your `server/.env` (the value of API_KEY). This protects all API routes. |
 
    For each row: type the **Name** exactly (e.g. `MONGODB_URI`), paste or type the **Value**, then add the next variable. Don’t put quotes around the values.
 
@@ -191,12 +192,16 @@ Vercel will host the React app and give you one link to share with your husband 
    | **Build Command** | Should be `npm run build`. Leave it. |
    | **Output Directory** | Should be `dist`. Leave it. |
 
-## 4.3 Add the API URL (important)
+## 4.3 Add the API URL and key (important)
 
 1. Expand **Environment Variables**.
-2. **Name:** type exactly: `VITE_API_URL`  
-   **Value:** paste the **Render URL** you saved in Part 3 (e.g. `https://pnthr100-scanner-api-xxxx.onrender.com`).  
-   No slash at the end, and no quotes.
+2. Add these two variables (click **Add** between each):
+
+   | Name | Value |
+   |------|-------|
+   | `VITE_API_URL` | The Render URL from Part 3 (e.g. `https://pnthr100-scanner-api-xxxx.onrender.com`). No trailing slash. |
+   | `VITE_API_KEY` | The same value as `API_KEY` in your `server/.env`. This lets the browser authenticate with the server. |
+
 3. Leave the environment as **Production** (default).
 4. Click the **Deploy** button.
 

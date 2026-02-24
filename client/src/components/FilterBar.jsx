@@ -226,7 +226,7 @@ export default function FilterBar({ stocks, filters, onChange, scanType }) {
             </div>
 
             <div className={styles.rangeGroup}>
-              <label className={styles.groupLabel}>Risk $ (per share)</label>
+              <label className={styles.groupLabel}>Risk per Share</label>
               <div className={styles.rangeInputs}>
                 <input
                   type="number"

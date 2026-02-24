@@ -148,7 +148,7 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
               Stop Price {getSortIndicator('stopPrice')}
             </th>
             <th onClick={() => handleSort('riskDollar')} className={styles.sortable}>
-              Risk $ {getSortIndicator('riskDollar')}
+              Risk per Share {getSortIndicator('riskDollar')}
             </th>
             <th onClick={() => handleSort('riskPct')} className={styles.sortable}>
               Risk % {getSortIndicator('riskPct')}

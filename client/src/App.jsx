@@ -5,6 +5,7 @@ import FilterBar from './components/FilterBar';
 import Sidebar from './components/Sidebar';
 import SectorPage from './components/SectorPage';
 import WatchlistPage from './components/WatchlistPage';
+import PortfolioPage from './components/PortfolioPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals } from './services/api';
 import './App.css';
 
@@ -216,6 +217,9 @@ function App() {
 
           {/* Watchlist page */}
           {activePage === 'watchlist' && <WatchlistPage />}
+
+          {/* Portfolio page */}
+          {activePage === 'portfolio' && <PortfolioPage />}
         </main>
 
         <footer className="footer">

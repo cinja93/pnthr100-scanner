@@ -1,0 +1,390 @@
+.page {
+  padding: 0 24px 48px;
+}
+
+.pageHeader {
+  margin-bottom: 24px;
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1e2c4b;
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+}
+
+/* ── Controls ─────────────────────────────────────────────────────────────── */
+
+.controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.accountField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.accountLabel {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #555;
+}
+
+.accountInput {
+  height: 40px;
+  padding: 0 12px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #212121;
+  width: 180px;
+  transition: border-color 0.2s;
+}
+
+.accountInput:focus {
+  outline: none;
+  border-color: #1e2c4b;
+}
+
+.optimizeBtn {
+  height: 40px;
+  padding: 0 20px;
+  background: linear-gradient(135deg, #1e2c4b 0%, #000 100%);
+  color: #fcf000;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+
+.optimizeBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.optimizingBtn {
+  opacity: 0.75;
+}
+
+.optimizeError {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 13px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+/* ── Summary cards ───────────────────────────────────────────────────────── */
+
+.summary {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.summaryCard {
+  background: #f7f8fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 130px;
+}
+
+.sortinoCard {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.sharpeCard {
+  background: #fefce8;
+  border-color: #fde047;
+}
+
+.cardLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #888;
+  font-weight: 600;
+}
+
+.cardValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e2c4b;
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+
+.tableContainer {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 320px);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  background: white;
+}
+
+.table thead {
+  color: white;
+}
+
+.table th {
+  padding: 12px 10px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(135deg, #1e2c4b 0%, #000 100%);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.table tbody tr {
+  transition: background-color 0.15s;
+}
+
+.table tbody td {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.table tbody tr:hover {
+  background-color: #f7f8fa;
+}
+
+/* Long row: subtle green left border */
+.longRow {
+  border-left: 3px solid #86efac;
+}
+
+/* Short row: subtle red left border */
+.shortRow {
+  border-left: 3px solid #fca5a5;
+}
+
+/* Excluded / unchecked rows: dim out */
+.excludedRow {
+  opacity: 0.4;
+}
+
+.table td {
+  padding: 10px 10px;
+  color: #212121;
+  vertical-align: middle;
+}
+
+/* Column widths */
+.chkCol {
+  width: 36px;
+  text-align: center !important;
+  padding: 0 4px !important;
+}
+
+.rankCol {
+  width: 100px;
+  text-align: center !important;
+  color: #aaa;
+  font-size: 12px;
+}
+
+.dirCol {
+  width: 40px;
+  text-align: center !important;
+}
+
+.numCol {
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+/* Direction tags */
+.longTag {
+  background: #dcfce7;
+  color: #166534;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.shortTag {
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tickerCell {
+  font-weight: 700;
+  color: #1e2c4b;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.companyCell {
+  color: #555;
+  font-size: 12px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sharesCell {
+  font-weight: 600;
+  color: #1e2c4b;
+}
+
+.dimVal {
+  color: #ccc;
+}
+
+.proxyMark {
+  color: #f59e0b;
+  font-size: 10px;
+  margin-left: 2px;
+  cursor: help;
+}
+
+/* Checkbox */
+.checkbox {
+  cursor: pointer;
+  width: 15px;
+  height: 15px;
+  accent-color: #1e2c4b;
+}
+
+/* ── Sector header rows ──────────────────────────────────────────────────── */
+
+.sectorRow {
+  background: #f0f2f5 !important;
+  border-left: none !important;
+  border-bottom: none !important;
+}
+
+.sectorRow:hover {
+  background: #f0f2f5 !important;
+}
+
+.sectorCell {
+  padding: 6px 12px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.8px !important;
+  color: #888 !important;
+}
+
+/* ── Add-ticker row ──────────────────────────────────────────────────────── */
+
+.addRow {
+  border-left: none !important;
+  background: #fafafa;
+}
+
+.addCell {
+  padding: 8px 12px !important;
+}
+
+.addInput {
+  width: 100%;
+  max-width: 320px;
+  padding: 6px 10px;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #555;
+  background: transparent;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.addInput:focus {
+  border-color: #1e2c4b;
+  color: #212121;
+}
+
+.addError {
+  margin-left: 10px;
+  font-size: 12px;
+  color: #dc2626;
+}
+
+/* ── Footer note ─────────────────────────────────────────────────────────── */
+
+.note {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 10px;
+}
+
+/* ── States ──────────────────────────────────────────────────────────────── */
+
+.loadingState,
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  gap: 16px;
+  color: #666;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #1e2c4b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.retryBtn {
+  padding: 8px 20px;
+  background: #1e2c4b;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}

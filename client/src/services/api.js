@@ -131,6 +131,34 @@ export async function removeWatchlistTicker(ticker) {
   return response.json();
 }
 
+// ── Portfolio ──
+
+export async function fetchPortfolio() {
+  const response = await fetch(`${API_BASE}/api/portfolio`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+export async function fetchPortfolioTicker(ticker) {
+  const response = await fetch(`${API_BASE}/api/portfolio/ticker/${ticker}`, { headers: authHeaders() });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || `Ticker ${ticker} not found`);
+  }
+  return response.json();
+}
+
+export async function optimizePortfolio(accountSize, tickers) {
+  const response = await fetch(`${API_BASE}/api/portfolio/optimize`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ accountSize, tickers }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `HTTP error! status: ${response.status}`);
+  return data;
+}
+
 // Fetch sector performance data (11 sectors, weekly cumulative % return, 12-month rolling)
 export async function fetchSectorData() {
   try {

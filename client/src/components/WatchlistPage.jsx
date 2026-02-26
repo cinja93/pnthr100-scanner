@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
-import { fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchSignals } from '../services/api';
+import { fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchSignals, fetchEarnings } from '../services/api';
 import styles from './WatchlistPage.module.css';
 
 export default function WatchlistPage() {
@@ -13,6 +13,7 @@ export default function WatchlistPage() {
   const [addInput, setAddInput] = useState('');
   const [addError, setAddError] = useState(null);
   const [addLoading, setAddLoading] = useState(false);
+  const [earnings, setEarnings] = useState({});
   const [chartIndex, setChartIndex] = useState(null);
 
   useEffect(() => {
@@ -26,12 +27,14 @@ export default function WatchlistPage() {
       const data = await fetchWatchlist();
       setStocks(data);
       if (data.length > 0) {
+        const tickers = data.map(s => s.ticker);
         setSignals({});
         setSignalsLoading(true);
-        fetchSignals(data.map(s => s.ticker)).then(result => {
+        fetchSignals(tickers).then(result => {
           setSignals(result);
           setSignalsLoading(false);
         });
+        fetchEarnings(tickers).then(result => setEarnings(result));
       }
     } catch (err) {
       console.error(err);
@@ -134,6 +137,7 @@ export default function WatchlistPage() {
           stocks={stocks}
           signals={signals}
           signalsLoading={signalsLoading}
+          earnings={earnings}
           onTickerClick={handleRowClick}
           onRemove={handleRemove}
           scanType="long"

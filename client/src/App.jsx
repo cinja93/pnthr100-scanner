@@ -8,7 +8,7 @@ import WatchlistPage from './components/WatchlistPage';
 import PortfolioPage from './components/PortfolioPage';
 import EmaCrossoverPage from './components/EmaCrossoverPage';
 import EtfPage from './components/EtfPage';
-import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals } from './services/api';
+import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchEarnings } from './services/api';
 import './App.css';
 
 const defaultFilters = {
@@ -33,6 +33,7 @@ function App() {
   const [availableDates, setAvailableDates] = useState([]);
   const [signals, setSignals] = useState({});
   const [signalsLoading, setSignalsLoading] = useState(false);
+  const [earnings, setEarnings] = useState({});
   const [chartIndex, setChartIndex] = useState(null);
   const [filters, setFilters] = useState(defaultFilters);
 
@@ -100,10 +101,12 @@ function App() {
       setSelectedDate('current');
       setSignals({});
       setSignalsLoading(true);
-      fetchSignals(data.map(s => s.ticker), { shortList: scanType === 'short' }).then(result => {
+      const tickers = data.map(s => s.ticker);
+      fetchSignals(tickers, { shortList: scanType === 'short' }).then(result => {
         setSignals(result);
         setSignalsLoading(false);
       });
+      fetchEarnings(tickers).then(result => setEarnings(result));
     } catch (err) {
       setError('Failed to load stock data. Please try again later.');
       console.error(err);
@@ -126,10 +129,12 @@ function App() {
       setSelectedDate(date);
       setSignals({});
       setSignalsLoading(true);
-      fetchSignals(list.map(s => s.ticker), { shortList: scanType === 'short' }).then(result => {
+      const tickers = list.map(s => s.ticker);
+      fetchSignals(tickers, { shortList: scanType === 'short' }).then(result => {
         setSignals(result);
         setSignalsLoading(false);
       });
+      fetchEarnings(tickers).then(result => setEarnings(result));
     } catch (err) {
       setError(`Failed to load data for ${date}. Please try again.`);
       console.error(err);
@@ -208,7 +213,7 @@ function App() {
                     </div>
                   )}
                   <FilterBar stocks={stocks} signals={signals} filters={filters} onChange={setFilters} scanType={scanType} />
-                  <StockTable key={activePage} stocks={filteredStocks} signals={signals} signalsLoading={signalsLoading} onTickerClick={handleRowClick} scanType={scanType} />
+                  <StockTable key={activePage} stocks={filteredStocks} signals={signals} signalsLoading={signalsLoading} earnings={earnings} onTickerClick={handleRowClick} scanType={scanType} />
                 </>
               )}
             </>

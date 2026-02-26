@@ -230,6 +230,28 @@
   background: #fef2f2;
 }
 
+/* Earnings within 14 days — amber row highlight */
+.earningsHighlight {
+  background: #fef3c7 !important;
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.earningsHighlight:hover {
+  background: #fde68a !important;
+}
+
+.earningsSoonBadge {
+  display: inline-block;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 5px;
+  white-space: nowrap;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .table {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
-import { fetchSectorData, fetchSectorStocks } from '../services/api';
+import { fetchSectorData, fetchSectorStocks, fetchEarnings } from '../services/api';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
 import styles from './SectorPage.module.css';
@@ -207,6 +207,7 @@ function SectorMiniChart({ sectorKey, chartData, onClick }) {
 function SectorStocksModal({ sectorKey, sectorName, onClose }) {
   const [stocks, setStocks] = useState([]);
   const [signals, setSignals] = useState({});
+  const [earnings, setEarnings] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartIndex, setChartIndex] = useState(null);
@@ -216,8 +217,10 @@ function SectorStocksModal({ sectorKey, sectorName, onClose }) {
     setError(null);
     fetchSectorStocks(sectorKey)
       .then(result => {
-        setStocks(result.stocks || []);
+        const stockList = result.stocks || [];
+        setStocks(stockList);
         setSignals(result.signals || {});
+        fetchEarnings(stockList.map(s => s.ticker)).then(r => setEarnings(r));
       })
       .catch(err => {
         console.error(err);
@@ -261,6 +264,7 @@ function SectorStocksModal({ sectorKey, sectorName, onClose }) {
               stocks={stocks}
               signals={signals}
               signalsLoading={false}
+              earnings={earnings}
               onTickerClick={handleTickerClick}
               scanType="long"
             />

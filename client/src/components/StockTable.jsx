@@ -24,7 +24,18 @@ function getSignalDisplay(signalData) {
 // Signal sort order: buys first, sells last, no signal at bottom
 const SIGNAL_ORDER = { BUY: 1, YELLOW_BUY: 2, YELLOW_SELL: 3, SELL: 4 };
 
-export default function StockTable({ stocks, signals = {}, signalsLoading = false, onTickerClick, onRemove, scanType }) {
+const TODAY = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
+
+function getEarningsInfo(dateStr) {
+  if (!dateStr) return { display: '—', daysAway: null, highlight: false };
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const earningsDate = new Date(y, m - 1, d);
+  const daysAway = Math.round((earningsDate - TODAY) / (1000 * 60 * 60 * 24));
+  const display = earningsDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return { display, daysAway, highlight: daysAway >= 0 && daysAway <= 14 };
+}
+
+export default function StockTable({ stocks, signals = {}, signalsLoading = false, earnings = {}, onTickerClick, onRemove, scanType }) {
   const [sortConfig, setSortConfig] = useState({ key: 'rank', direction: 'asc' });
 
   // Sort stocks based on current sort configuration
@@ -70,6 +81,16 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
       if (aVal === null) return dir;
       if (bVal === null) return -dir;
       return (aVal - bVal) * dir;
+    }
+
+    // Special handling for earnings date (from earnings map)
+    if (sortConfig.key === 'earningsDate') {
+      const aVal = earnings[a.ticker] ?? null;
+      const bVal = earnings[b.ticker] ?? null;
+      if (aVal === null && bVal === null) return 0;
+      if (aVal === null) return dir;
+      if (bVal === null) return -dir;
+      return (aVal < bVal ? -1 : aVal > bVal ? 1 : 0) * dir;
     }
 
     const aValue = a[sortConfig.key];
@@ -152,6 +173,9 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
             <th onClick={() => handleSort('signal')} className={`${styles.signalColumn} ${styles.sortable}`}>
               Signal {getSortIndicator('signal')}
             </th>
+            <th onClick={() => handleSort('earningsDate')} className={styles.sortable}>
+              Next Earnings {getSortIndicator('earningsDate')}
+            </th>
             {onRemove && <th className={styles.removeColumn}></th>}
           </tr>
         </thead>
@@ -164,10 +188,12 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
             const riskPct = riskDollar != null ? (riskDollar / stock.currentPrice) * 100 : null;
             const rankDisplay = getRankChangeDisplay(stock);
 
+            const earningsInfo = getEarningsInfo(earnings[stock.ticker]);
+
             return (
               <tr
                 key={stock.ticker}
-                className={styles.clickableRow}
+                className={`${styles.clickableRow}${earningsInfo.highlight ? ` ${styles.earningsHighlight}` : ''}`}
                 onClick={() => onTickerClick?.(stock)}
                 title={stock.companyName ? `${stock.companyName} — Click to view chart` : 'Click to view chart'}
               >
@@ -209,6 +235,14 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
                     : icon
                       ? <img src={icon} alt={alt} className={styles.signalIcon} title={alt} />
                       : <span className={styles.signalNone}>—</span>}
+                </td>
+                <td>
+                  {earningsInfo.display}
+                  {earningsInfo.highlight && (
+                    <span className={styles.earningsSoonBadge}>
+                      {earningsInfo.daysAway === 0 ? 'Today' : `${earningsInfo.daysAway}d`}
+                    </span>
+                  )}
                 </td>
                 {onRemove && (
                   <td className={styles.removeColumn}>

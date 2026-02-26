@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
-import { fetchEtfStocks } from '../services/api';
+import { fetchEtfStocks, fetchEarnings } from '../services/api';
 import styles from './EtfPage.module.css';
 
 export default function EtfPage() {
@@ -9,6 +9,7 @@ export default function EtfPage() {
   const [signals, setSignals] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [earnings, setEarnings] = useState({});
   const [chartIndex, setChartIndex] = useState(null);
 
   useEffect(() => {
@@ -20,8 +21,10 @@ export default function EtfPage() {
     setError(null);
     try {
       const result = await fetchEtfStocks(forceRefresh);
-      setStocks(result.stocks || []);
+      const stockList = result.stocks || [];
+      setStocks(stockList);
       setSignals(result.signals || {});
+      fetchEarnings(stockList.map(s => s.ticker)).then(r => setEarnings(r));
     } catch (err) {
       setError('Failed to run ETF scan. Make sure the server is running.');
       console.error(err);
@@ -84,6 +87,7 @@ export default function EtfPage() {
               stocks={stocks}
               signals={signals}
               signalsLoading={false}
+              earnings={earnings}
               onTickerClick={handleRowClick}
               scanType="long"
             />

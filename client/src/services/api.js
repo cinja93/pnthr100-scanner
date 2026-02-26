@@ -193,6 +193,21 @@ export async function fetchEtfStocks(forceRefresh = false) {
   return response.json();
 }
 
+// Fetch next earnings date for a list of tickers.
+// Returns { TICKER: 'YYYY-MM-DD' } for tickers with upcoming earnings (next 3 months).
+export async function fetchEarnings(tickers) {
+  if (!tickers || tickers.length === 0) return {};
+  try {
+    const qs = encodeURIComponent(tickers.join(','));
+    const response = await fetch(`${API_BASE}/api/earnings?tickers=${qs}`, { headers: authHeaders() });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching earnings:', error);
+    return {};
+  }
+}
+
 // Fetch stocks in a given sector (by sector key, e.g. 'informationTechnology')
 export async function fetchSectorStocks(sectorKey) {
   const response = await fetch(`${API_BASE}/api/sector-stocks/${sectorKey}`, { headers: authHeaders() });

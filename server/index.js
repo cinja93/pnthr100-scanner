@@ -664,6 +664,73 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
   }
 });
 
+// ── Earnings ──────────────────────────────────────────────────────────────────
+
+// Per-ticker cache: { AAPL: '2025-05-01', MSFT: null, ... }
+// Uses the per-symbol historical/earning_calendar endpoint (available on free FMP plans)
+// which includes upcoming estimated dates (eps: null for future entries).
+let earningsCache = {};
+let earningsCacheTime = null;
+const EARNINGS_CACHE_DURATION = 4 * 60 * 60 * 1000; // 4 hours
+
+async function fetchNextEarningsDate(ticker, FMP_API_KEY) {
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const url = `https://financialmodelingprep.com/api/v3/historical/earning_calendar/${ticker}?limit=8&apikey=${FMP_API_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Response is a flat array (not { historical: [...] })
+    if (!Array.isArray(data)) return null;
+    // Find the earliest future date (upcoming estimates have eps: null)
+    const upcoming = data
+      .filter(e => e.date >= today)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return upcoming.length > 0 ? upcoming[0].date : null;
+  } catch {
+    return null;
+  }
+}
+
+// GET /api/earnings?tickers=AAPL,MSFT,...
+// Returns the next upcoming earnings date for each requested ticker.
+// Fetches per-symbol historical earnings and caches results for 4 hours.
+app.get('/api/earnings', async (req, res) => {
+  try {
+    const tickerParam = req.query.tickers;
+    if (!tickerParam) return res.status(400).json({ error: 'tickers query param required' });
+
+    const requested = tickerParam.split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
+    if (requested.length === 0) return res.json({});
+
+    const FMP_API_KEY = process.env.FMP_API_KEY;
+    const now = Date.now();
+
+    // Reset cache if expired
+    if (!earningsCacheTime || (now - earningsCacheTime) > EARNINGS_CACHE_DURATION) {
+      earningsCache = {};
+      earningsCacheTime = now;
+    }
+
+    // Fetch only uncached tickers, all in parallel
+    const missing = requested.filter(t => !(t in earningsCache));
+    if (missing.length > 0) {
+      console.log(`📅 Fetching earnings dates for ${missing.length} tickers`);
+      const results = await Promise.all(missing.map(t => fetchNextEarningsDate(t, FMP_API_KEY)));
+      missing.forEach((ticker, i) => { earningsCache[ticker] = results[i]; });
+    }
+
+    const result = {};
+    for (const ticker of requested) {
+      if (earningsCache[ticker]) result[ticker] = earningsCache[ticker];
+    }
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching earnings:', error);
+    res.status(500).json({ error: 'Failed to fetch earnings data' });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
-import { fetchEmaCrossoverStocks } from '../services/api';
+import { fetchEmaCrossoverStocks, fetchEarnings } from '../services/api';
 import styles from './EmaCrossoverPage.module.css';
 
 export default function EmaCrossoverPage() {
@@ -9,6 +9,7 @@ export default function EmaCrossoverPage() {
   const [signals, setSignals] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [earnings, setEarnings] = useState({});
   const [chartIndex, setChartIndex] = useState(null);
 
   useEffect(() => {
@@ -20,8 +21,10 @@ export default function EmaCrossoverPage() {
     setError(null);
     try {
       const result = await fetchEmaCrossoverStocks(forceRefresh);
-      setStocks(result.stocks || []);
+      const stockList = result.stocks || [];
+      setStocks(stockList);
       setSignals(result.signals || {});
+      fetchEarnings(stockList.map(s => s.ticker)).then(r => setEarnings(r));
     } catch (err) {
       setError('Failed to run EMA Crossover scan. Make sure the server is running.');
       console.error(err);
@@ -85,6 +88,7 @@ export default function EmaCrossoverPage() {
               stocks={stocks}
               signals={signals}
               signalsLoading={false}
+              earnings={earnings}
               onTickerClick={handleRowClick}
               scanType="long"
             />

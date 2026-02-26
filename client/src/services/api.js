@@ -159,6 +159,47 @@ export async function optimizePortfolio(accountSize, tickers) {
   return data;
 }
 
+// EMA Crossover scan: returns { stocks: [...], signals: {...} }
+// Universe: top 100 long + top 100 short. Cached 60 min server-side; pass forceRefresh=true to bust cache.
+export async function fetchEmaCrossoverStocks(forceRefresh = false) {
+  const qs = forceRefresh ? '?refresh=1' : '';
+  const response = await fetch(`${API_BASE}/api/stocks/ema-crossover${qs}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+// Fetch the first date each ticker appeared in the long or short top-100 list.
+// Returns { TICKER: { date: 'YYYY-MM-DD', list: 'LONG' | 'SHORT' }, ... }
+export async function fetchEntryDates(tickers) {
+  try {
+    const response = await fetch(`${API_BASE}/api/entry-dates`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ tickers }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching entry dates:', error);
+    return {};
+  }
+}
+
+// ETF scan: top 100 US ETFs by YTD return with signals. Cached 60 min; pass forceRefresh=true to bust.
+export async function fetchEtfStocks(forceRefresh = false) {
+  const qs = forceRefresh ? '?refresh=1' : '';
+  const response = await fetch(`${API_BASE}/api/stocks/etfs${qs}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+// Fetch stocks in a given sector (by sector key, e.g. 'informationTechnology')
+export async function fetchSectorStocks(sectorKey) {
+  const response = await fetch(`${API_BASE}/api/sector-stocks/${sectorKey}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // Fetch sector performance data (11 sectors, weekly cumulative % return, 12-month rolling)
 export async function fetchSectorData() {
   try {

@@ -25,11 +25,7 @@ function getSignalDisplay(signalData) {
 const SIGNAL_ORDER = { BUY: 1, YELLOW_BUY: 2, YELLOW_SELL: 3, SELL: 4 };
 
 export default function StockTable({ stocks, signals = {}, signalsLoading = false, onTickerClick, onRemove, scanType }) {
-  const [sortConfig, setSortConfig] = useState(
-    scanType === 'short'
-      ? { key: 'rank', direction: 'asc' }
-      : { key: 'ytdReturn', direction: 'desc' }
-  );
+  const [sortConfig, setSortConfig] = useState({ key: 'rank', direction: 'asc' });
 
   // Sort stocks based on current sort configuration
   const sortedStocks = [...stocks].sort((a, b) => {
@@ -124,7 +120,7 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
         <thead>
           <tr>
             {!onRemove && <th onClick={() => handleSort('rank')} className={`${styles.rankColumn} ${styles.sortable}`} scope="col">
-              Rank {getSortIndicator('rank')}
+              Performance Rank {getSortIndicator('rank')}
             </th>}
             {!onRemove && <th onClick={() => handleSort('rankChange')} className={styles.sortable}>
               Rank Change {getSortIndicator('rankChange')}

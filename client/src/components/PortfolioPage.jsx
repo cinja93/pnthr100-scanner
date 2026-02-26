@@ -173,8 +173,12 @@ export default function PortfolioPage() {
   const totalOptValue = optimized
     ? Array.from(optimized.resultsMap.values()).reduce((sum, r) => sum + (r.optValue || 0), 0)
     : null;
-  const longCount = checkedStocks.filter(s => s.direction === 'LONG').length;
-  const shortCount = checkedStocks.filter(s => s.direction === 'SHORT').length;
+  const longCount = optimized
+    ? checkedStocks.filter(s => s.direction === 'LONG' && (optimized.resultsMap.get(s.ticker)?.optShares ?? 0) >= 1).length
+    : checkedStocks.filter(s => s.direction === 'LONG').length;
+  const shortCount = optimized
+    ? checkedStocks.filter(s => s.direction === 'SHORT' && (optimized.resultsMap.get(s.ticker)?.optShares ?? 0) >= 1).length
+    : checkedStocks.filter(s => s.direction === 'SHORT').length;
 
   const canOptimize = accountSize > 0 && checkedStocks.length >= 2 && !optimizing;
 
@@ -336,8 +340,8 @@ export default function PortfolioPage() {
               <th className={styles.numCol}>Risk %</th>
               <th className={styles.numCol}>Max Shares</th>
               <th className={styles.numCol}>Pos. Value</th>
-              {optimized && <th className={styles.numCol}>Opt Shares</th>}
-              {optimized && <th className={styles.numCol}>Opt Pos. Value</th>}
+              {optimized && <th className={styles.numCol}>Optimal Shares</th>}
+              {optimized && <th className={styles.numCol}>Optimal Position Value</th>}
             </tr>
           </thead>
           <tbody>
@@ -367,6 +371,8 @@ export default function PortfolioPage() {
                     const pos = computePosition(stock, accountSize, riskPct);
                     const opt = optimized?.resultsMap?.get(stock.ticker);
 
+                    const hasOptShares = opt && opt.optShares >= 1;
+
                     return (
                       <tr
                         key={stock.ticker}
@@ -374,6 +380,7 @@ export default function PortfolioPage() {
                           styles.row,
                           isLong ? styles.longRow : styles.shortRow,
                           !isIncluded ? styles.excludedRow : '',
+                          hasOptShares ? styles.optActiveRow : '',
                         ].join(' ')}
                       >
                         <td className={styles.chkCol}>

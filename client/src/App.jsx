@@ -6,6 +6,8 @@ import Sidebar from './components/Sidebar';
 import SectorPage from './components/SectorPage';
 import WatchlistPage from './components/WatchlistPage';
 import PortfolioPage from './components/PortfolioPage';
+import EmaCrossoverPage from './components/EmaCrossoverPage';
+import EtfPage from './components/EtfPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals } from './services/api';
 import './App.css';
 
@@ -217,6 +219,12 @@ function App() {
 
           {/* Watchlist page */}
           {activePage === 'watchlist' && <WatchlistPage />}
+
+          {/* EMA Crossover page */}
+          {activePage === 'ema' && <EmaCrossoverPage />}
+
+          {/* ETF Scan page */}
+          {activePage === 'etf' && <EtfPage />}
 
           {/* Portfolio page */}
           {activePage === 'portfolio' && <PortfolioPage />}

@@ -3,9 +3,11 @@ import pnthrLogo from '../assets/PNTHR FUNDS Logo black background 2 lines.png';
 import builtWithLove from '../assets/Built with Love.jpg';
 
 const NAV_ITEMS = [
-  { key: 'long',      label: 'Scan Long',  icon: '📈', section: 'SCANNER' },
-  { key: 'short',     label: 'Scan Short', icon: '📉' },
-  { key: 'sectors',   label: 'Sectors',    icon: '📊', dividerBefore: true },
+  { key: 'long',      label: 'Scan Long',      icon: '📈', section: 'SCANNER' },
+  { key: 'short',     label: 'Scan Short',     icon: '📉' },
+  { key: 'ema',       label: 'EMA Crossover',  icon: '〰️' },
+  { key: 'etf',       label: 'ETF Scan',       icon: '🗂️' },
+  { key: 'sectors',   label: 'Sectors',        icon: '📊', dividerBefore: true },
   { key: 'watchlist', label: 'Watchlist',  icon: '👁' },
   { key: 'portfolio', label: 'Portfolio',  icon: '📁' },
 ];

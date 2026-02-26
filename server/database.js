@@ -426,7 +426,10 @@ async function connectToSttDatabase() {
   }
 }
 
-// Get the most recent laser signal for each ticker (read-only query)
+// Get the first signal of the most recent direction-change run for each ticker.
+// "Direction" = BUY family (BUY, YELLOW_BUY) vs SELL family (SELL, YELLOW_SELL).
+// Example: NEW_BUY (3w ago) → CAUTION_BUY (2w ago) → returns NEW_BUY (first of the buy run).
+//          If it then changed to SELL (1w ago) → returns SELL (first of the new sell run).
 export async function getLatestSignals(tickers) {
   try {
     const database = await connectToSttDatabase();
@@ -435,36 +438,97 @@ export async function getLatestSignals(tickers) {
     const collection = database.collection('laser_signals');
     const upperTickers = tickers.map(t => t.toUpperCase());
 
-    // Aggregation: for each symbol, get the document with the latest timestamp
+    // Limit to last 2 years to keep array sizes manageable; sort ASC to walk direction changes
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+
     const results = await collection.aggregate([
-      { $match: { symbol: { $in: upperTickers } } },
-      { $sort: { timestamp: -1 } },
+      { $match: { symbol: { $in: upperTickers }, timestamp: { $gte: twoYearsAgo } } },
+      { $sort: { timestamp: 1 } },
       { $group: {
         _id: '$symbol',
-        signal: { $first: '$signal' },
-        price: { $first: '$price' },
-        timestamp: { $first: '$timestamp' },
-        isNewSignal: { $first: '$isNewSignal' },
-        profitPercentage: { $first: '$profitPercentage' }
-      }}
+        signals: { $push: {
+          signal: '$signal',
+          price: '$price',
+          timestamp: '$timestamp',
+          isNewSignal: '$isNewSignal',
+          profitPercentage: '$profitPercentage',
+        }},
+      }},
     ]).toArray();
 
-    // Return as a map: { AAPL: { signal: "BUY", isNewSignal: true, ... }, ... }
+    function getDir(signal) { return signal.includes('SELL') ? 'S' : 'B'; }
+
     const signalMap = {};
     for (const doc of results) {
+      const sigs = doc.signals; // ascending by timestamp
+      if (sigs.length === 0) continue;
+
+      // Walk forward tracking direction changes; record the start of each new run.
+      // At the end, runStart holds the first signal of the most recent direction run.
+      let runStart = sigs[0];
+      let runDir = getDir(sigs[0].signal);
+      for (let i = 1; i < sigs.length; i++) {
+        const dir = getDir(sigs[i].signal);
+        if (dir !== runDir) {
+          runStart = sigs[i];
+          runDir = dir;
+        }
+      }
+
       signalMap[doc._id] = {
-        signal: doc.signal,
-        price: doc.price,
-        timestamp: doc.timestamp,
-        isNewSignal: doc.isNewSignal ?? false,
-        profitPercentage: doc.profitPercentage
+        signal: runStart.signal,
+        price: runStart.price,
+        timestamp: runStart.timestamp,
+        isNewSignal: runStart.isNewSignal ?? false,
+        profitPercentage: runStart.profitPercentage,
       };
     }
 
-    console.log(`📡 Fetched signals for ${Object.keys(signalMap).length}/${tickers.length} tickers`);
+    console.log(`📡 Fetched direction-change signals for ${Object.keys(signalMap).length}/${tickers.length} tickers`);
     return signalMap;
   } catch (error) {
     console.error('Error fetching laser signals:', error.message);
+    return {};
+  }
+}
+
+// Get the first date each ticker appeared in the long or short top-100 list.
+// Returns { AAPL: { date: '2025-01-10', list: 'LONG' }, TSLA: { date: '2024-11-22', list: 'SHORT' }, ... }
+// Note: rankings history is kept for 12 weeks; stocks present longer will show the oldest available date.
+export async function getListEntryDates(tickers) {
+  try {
+    const database = await connectToDatabase();
+    if (!database) return {};
+
+    const upperTickers = tickers.map(t => t.toUpperCase());
+    const collection = database.collection('rankings');
+
+    // Fetch all ranking docs sorted oldest-first; project only the ticker arrays to keep it light
+    const allDocs = await collection.find(
+      { $or: [
+        { 'rankings.ticker': { $in: upperTickers } },
+        { 'shortRankings.ticker': { $in: upperTickers } },
+      ]},
+      { projection: { date: 1, 'rankings.ticker': 1, 'shortRankings.ticker': 1 } }
+    ).sort({ date: 1 }).toArray();
+
+    const entryMap = {};
+    const remaining = new Set(upperTickers);
+
+    for (const doc of allDocs) {
+      if (remaining.size === 0) break;
+      for (const ticker of [...remaining]) {
+        const inLong  = doc.rankings?.some(r => r.ticker === ticker);
+        const inShort = !inLong && doc.shortRankings?.some(r => r.ticker === ticker);
+        if (inLong)  { entryMap[ticker] = { date: doc.date, list: 'LONG'  }; remaining.delete(ticker); }
+        else if (inShort) { entryMap[ticker] = { date: doc.date, list: 'SHORT' }; remaining.delete(ticker); }
+      }
+    }
+
+    return entryMap;
+  } catch (error) {
+    console.error('Error fetching list entry dates:', error.message);
     return {};
   }
 }

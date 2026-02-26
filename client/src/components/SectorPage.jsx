@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
-import { fetchSectorData } from '../services/api';
+import { fetchSectorData, fetchSectorStocks } from '../services/api';
+import StockTable from './StockTable';
+import ChartModal from './ChartModal';
 import styles from './SectorPage.module.css';
 
 const SECTOR_NAMES = {
@@ -78,9 +80,10 @@ function computeCumulative(filteredData, sectorKey) {
   });
 }
 
-function SectorMiniChart({ sectorKey, chartData }) {
+function SectorMiniChart({ sectorKey, chartData, onClick }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
+  const tooltipRef = useRef(null);
 
   useEffect(() => {
     if (!containerRef.current || chartData.length === 0) return;
@@ -92,12 +95,30 @@ function SectorMiniChart({ sectorKey, chartData }) {
 
     const chart = createChart(containerRef.current, {
       autoSize: true,
-      layout: { background: { color: '#ffffff' }, textColor: '#212121', attributionLogo: false },
+      layout: { background: { color: '#ffffff' }, textColor: '#888', attributionLogo: false, fontSize: 10 },
       grid: { vertLines: { color: '#f5f5f5' }, horzLines: { color: '#f5f5f5' } },
       rightPriceScale: { visible: false },
       leftPriceScale: { visible: false },
-      timeScale: { visible: false },
-      crosshair: { mode: 0 },
+      timeScale: {
+        visible: true,
+        borderVisible: false,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+      },
+      crosshair: {
+        // Vertical line only — no horizontal crosshair
+        vertLine: {
+          visible: true,
+          width: 1,
+          style: 3,         // dashed
+          color: '#94a3b8',
+          labelVisible: false,
+        },
+        horzLine: {
+          visible: false,
+          labelVisible: false,
+        },
+      },
       handleScroll: false,
       handleScale: false,
     });
@@ -108,11 +129,47 @@ function SectorMiniChart({ sectorKey, chartData }) {
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
-      crosshairMarkerVisible: false,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 4,
     });
 
     series.setData(chartData.map(d => ({ time: d.date, value: d.value })));
     chart.timeScale().fitContent();
+
+    // Show a floating date label next to the crosshair dot as the user hovers
+    chart.subscribeCrosshairMove(param => {
+      const tooltip = tooltipRef.current;
+      if (!tooltip) return;
+
+      if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
+        tooltip.style.display = 'none';
+        return;
+      }
+
+      // param.time is a 'YYYY-MM-DD' string when using date strings
+      const dateStr = typeof param.time === 'string'
+        ? param.time
+        : new Date(param.time * 1000).toISOString().split('T')[0];
+
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const formatted = new Date(year, month - 1, day).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+      });
+
+      tooltip.textContent = formatted;
+      tooltip.style.display = 'block';
+
+      // Position to the right of the dot; flip left if near the right edge
+      const containerWidth = containerRef.current ? containerRef.current.offsetWidth : 0;
+      const tooltipWidth = tooltip.offsetWidth || 90;
+      const OFFSET = 10;
+      const left = param.point.x + OFFSET + tooltipWidth > containerWidth
+        ? param.point.x - OFFSET - tooltipWidth
+        : param.point.x + OFFSET;
+
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top  = `${param.point.y - 22}px`;
+    });
 
     return () => {
       if (chartRef.current) {
@@ -126,7 +183,7 @@ function SectorMiniChart({ sectorKey, chartData }) {
   const isPositive = currentReturn != null && currentReturn >= 0;
 
   return (
-    <div className={styles.card}>
+    <div className={styles.card} onClick={onClick} title={`Click to see all stocks in ${SECTOR_NAMES[sectorKey]}`}>
       <div className={styles.cardHeader}>
         <span className={styles.sectorName}>{SECTOR_NAMES[sectorKey]}</span>
         {currentReturn != null && (
@@ -135,16 +192,106 @@ function SectorMiniChart({ sectorKey, chartData }) {
           </span>
         )}
       </div>
-      <div ref={containerRef} className={styles.chartContainer} />
+      {/* Relative wrapper so the tooltip is positioned inside the chart area */}
+      <div className={styles.chartWrap}>
+        <div ref={containerRef} className={styles.chartContainer} />
+        <div ref={tooltipRef} className={styles.chartTooltip} />
+      </div>
+      <div className={styles.cardFooter}>View stocks →</div>
     </div>
   );
 }
+
+// ── Sector stocks modal ──────────────────────────────────────────────────────
+
+function SectorStocksModal({ sectorKey, sectorName, onClose }) {
+  const [stocks, setStocks] = useState([]);
+  const [signals, setSignals] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [chartIndex, setChartIndex] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetchSectorStocks(sectorKey)
+      .then(result => {
+        setStocks(result.stocks || []);
+        setSignals(result.signals || {});
+      })
+      .catch(err => {
+        console.error(err);
+        setError('Failed to load sector stocks.');
+      })
+      .finally(() => setLoading(false));
+  }, [sectorKey]);
+
+  function handleTickerClick(stock) {
+    const idx = stocks.findIndex(s => s.ticker === stock.ticker);
+    if (idx >= 0) setChartIndex(idx);
+  }
+
+  return (
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div className={styles.modalPanel} onClick={e => e.stopPropagation()}>
+        <div className={styles.modalHeader}>
+          <div>
+            <h2 className={styles.modalTitle}>{sectorName}</h2>
+            {!loading && !error && (
+              <p className={styles.modalSubtitle}>{stocks.length} stocks ranked by YTD return</p>
+            )}
+          </div>
+          <button className={styles.modalCloseBtn} onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        {loading && (
+          <div className={styles.modalLoading}>
+            <div className={styles.spinner} />
+            <p>Loading stocks…</p>
+          </div>
+        )}
+
+        {error && !loading && (
+          <div className={styles.modalError}>{error}</div>
+        )}
+
+        {!loading && !error && stocks.length > 0 && (
+          <div className={styles.modalTableWrap}>
+            <StockTable
+              stocks={stocks}
+              signals={signals}
+              signalsLoading={false}
+              onTickerClick={handleTickerClick}
+              scanType="long"
+            />
+          </div>
+        )}
+
+        {!loading && !error && stocks.length === 0 && (
+          <div className={styles.modalEmpty}>No stocks found for this sector.</div>
+        )}
+      </div>
+
+      {chartIndex != null && (
+        <ChartModal
+          stocks={stocks}
+          initialIndex={chartIndex}
+          signals={signals}
+          onClose={() => setChartIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Main SectorPage ──────────────────────────────────────────────────────────
 
 export default function SectorPage() {
   const [allData, setAllData] = useState(null);
   const [timeRange, setTimeRange] = useState('12M');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedSector, setSelectedSector] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -217,9 +364,18 @@ export default function SectorPage() {
               key={key}
               sectorKey={key}
               chartData={bySector[key]}
+              onClick={() => setSelectedSector(key)}
             />
           ))}
         </div>
+      )}
+
+      {selectedSector && (
+        <SectorStocksModal
+          sectorKey={selectedSector}
+          sectorName={SECTOR_NAMES[selectedSector]}
+          onClose={() => setSelectedSector(null)}
+        />
       )}
     </div>
   );

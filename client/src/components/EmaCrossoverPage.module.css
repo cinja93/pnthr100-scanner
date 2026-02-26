@@ -1,0 +1,95 @@
+.page {
+  padding: 0 24px 48px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1e2c4b;
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: #666;
+  margin: 0;
+  max-width: 640px;
+  line-height: 1.5;
+}
+
+.refreshBtn {
+  height: 40px;
+  padding: 0 20px;
+  background: linear-gradient(135deg, #1e2c4b 0%, #000 100%);
+  color: #fcf000;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.refreshBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.resultCount {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.loadingState,
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  gap: 12px;
+  color: #666;
+  text-align: center;
+}
+
+.loadingNote {
+  font-size: 12px;
+  color: #999;
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #1e2c4b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.retryBtn {
+  padding: 8px 20px;
+  background: #1e2c4b;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}

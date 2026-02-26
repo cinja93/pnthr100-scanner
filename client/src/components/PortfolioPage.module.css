@@ -200,6 +200,11 @@
   opacity: 0.4;
 }
 
+/* Rows with at least 1 optimal share after optimization */
+.optActiveRow {
+  background-color: #fefce8 !important;
+}
+
 .table td {
   padding: 10px 10px;
   color: #212121;

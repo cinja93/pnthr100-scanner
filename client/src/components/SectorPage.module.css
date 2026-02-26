@@ -122,7 +122,14 @@
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.1s;
+}
+
+.card:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  transform: translateY(-2px);
 }
 
 .cardHeader {
@@ -158,7 +165,134 @@
   background: #fef2f2;
 }
 
+.chartWrap {
+  position: relative;
+}
+
 .chartContainer {
   width: 100%;
   height: 140px;
+}
+
+.chartTooltip {
+  display: none;
+  position: absolute;
+  background: rgba(30, 44, 75, 0.88);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.cardFooter {
+  font-size: 11px;
+  color: #94a3b8;
+  text-align: right;
+  letter-spacing: 0.02em;
+}
+
+/* ── Sector stocks modal ──────────────────────────────────────────────── */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+}
+
+.modalPanel {
+  background: #f8fafc;
+  width: min(900px, 90vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 24px 24px 16px;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.modalTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e2c4b;
+  margin: 0 0 2px;
+}
+
+.modalSubtitle {
+  font-size: 13px;
+  color: #888;
+  margin: 0;
+}
+
+.modalCloseBtn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  color: #64748b;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.modalCloseBtn:hover {
+  background: #e2e8f0;
+  color: #1e2c4b;
+}
+
+.modalTableWrap {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 24px 24px;
+}
+
+.modalLoading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #888;
+  font-size: 14px;
+}
+
+.modalError {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c33;
+  font-size: 14px;
+}
+
+.modalEmpty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  font-size: 14px;
 }

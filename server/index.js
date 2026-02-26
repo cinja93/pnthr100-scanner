@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks } from './stockService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
+import { getEmaCrossoverStocks } from './emaCrossoverService.js';
+import { getEtfStocks } from './etfService.js';
 import {
   getSupplementalStocks,
   addSupplementalStock,
@@ -12,7 +14,8 @@ import {
   getAllRankings,
   getRankingByDate,
   getStockHistory,
-  getLatestSignals
+  getLatestSignals,
+  getListEntryDates,
 } from './database.js';
 
 const app = express();
@@ -74,42 +77,89 @@ let sectorCache = null;
 let sectorCacheTime = null;
 const SECTOR_CACHE_DURATION = 60 * 60 * 1000; // 1 hour — bust cache by restarting server
 
-// FMP field name → camelCase sector key
-const SECTOR_FIELDS = {
-  communicationServicesChangesPercentage: 'communicationServices',
-  consumerCyclicalChangesPercentage:      'consumerDiscretionary',
-  consumerDefensiveChangesPercentage:     'consumerStaples',
-  energyChangesPercentage:                'energy',
-  financialServicesChangesPercentage:     'financials',
-  healthcareChangesPercentage:            'healthCare',
-  industrialsChangesPercentage:           'industrials',
-  technologyChangesPercentage:            'informationTechnology',
-  basicMaterialsChangesPercentage:        'materials',
-  realEstateChangesPercentage:            'realEstate',
-  utilitiesChangesPercentage:             'utilities',
+// SPDR sector ETF ticker → internal sector key
+// These are the same ETFs that Barchart and most platforms use as sector benchmarks.
+const SECTOR_ETF_MAP = {
+  XLC:  'communicationServices',
+  XLY:  'consumerDiscretionary',
+  XLP:  'consumerStaples',
+  XLE:  'energy',
+  XLF:  'financials',
+  XLV:  'healthCare',
+  XLI:  'industrials',
+  XLK:  'informationTechnology',
+  XLB:  'materials',
+  XLRE: 'realEstate',
+  XLU:  'utilities',
 };
 
-// Process raw FMP daily sector data — returns daily % changes for the last 13 months.
-// Cumulative computation is done on the frontend per the selected time range.
-function processSectorData(rawData) {
-  if (!Array.isArray(rawData) || rawData.length === 0) return [];
+// Fetch 14 months of daily closes for all 11 sector ETFs.
+// FMP's bulk historical endpoint silently caps at 5 tickers, so we fetch each
+// ETF individually in parallel and merge the results.
+async function fetchEtfSectorData() {
+  const FMP_API_KEY = process.env.FMP_API_KEY;
 
-  // Sort ascending by date
-  const sorted = [...rawData].sort((a, b) => (a.date < b.date ? -1 : 1));
+  // 14 months so we have a prior-day close for the first day we want to show
+  const from = new Date();
+  from.setMonth(from.getMonth() - 14);
+  const fromStr = from.toISOString().split('T')[0];
 
-  // Keep 13 months so the frontend can slice any supported range
+  // Fetch all 11 ETFs concurrently (individual requests — bulk caps at 5)
+  const etfSymbols = Object.keys(SECTOR_ETF_MAP);
+  const closesBySymbol = {};
+  await Promise.all(etfSymbols.map(async symbol => {
+    try {
+      const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${symbol}?from=${fromStr}&apikey=${FMP_API_KEY}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`FMP ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data.historical) && data.historical.length > 0) {
+        closesBySymbol[symbol] = [...data.historical]
+          .sort((a, b) => (a.date < b.date ? -1 : 1))
+          .map(d => ({ date: d.date, close: d.close }));
+      } else {
+        console.warn(`No historical data returned for ${symbol}`);
+      }
+    } catch (err) {
+      console.error(`ETF history fetch error for ${symbol}:`, err.message);
+    }
+  }));
+  console.log(`📊 Sector ETF data fetched for: ${Object.keys(closesBySymbol).join(', ')}`);
+
+  // Compute daily % return for each ETF: { symbol: { date: pct } }
+  const dailyReturnsBySymbol = {};
+  for (const [symbol, bars] of Object.entries(closesBySymbol)) {
+    dailyReturnsBySymbol[symbol] = {};
+    for (let i = 1; i < bars.length; i++) {
+      const prev = bars[i - 1].close;
+      const curr = bars[i].close;
+      if (prev && curr) {
+        dailyReturnsBySymbol[symbol][bars[i].date] =
+          parseFloat(((curr - prev) / prev * 100).toFixed(4));
+      }
+    }
+  }
+
+  // Collect trading dates present in any ETF, filter to last 13 months, sort ascending
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - 13);
   const cutoffStr = cutoff.toISOString().split('T')[0];
-  const recent = sorted.filter(d => d.date >= cutoffStr);
-  if (recent.length === 0) return [];
 
-  return recent.map(day => {
-    const sectors = {};
-    for (const [fmpField, sectorKey] of Object.entries(SECTOR_FIELDS)) {
-      sectors[sectorKey] = parseFloat((day[fmpField] ?? 0).toFixed(4));
+  const allDates = new Set();
+  for (const returns of Object.values(dailyReturnsBySymbol)) {
+    for (const date of Object.keys(returns)) {
+      if (date >= cutoffStr) allDates.add(date);
     }
-    return { date: day.date, sectors };
+  }
+  const sortedDates = [...allDates].sort();
+
+  // Build output: one entry per trading day with all 11 sector % changes
+  return sortedDates.map(date => {
+    const sectors = {};
+    for (const [symbol, sectorKey] of Object.entries(SECTOR_ETF_MAP)) {
+      sectors[sectorKey] = dailyReturnsBySymbol[symbol]?.[date] ?? 0;
+    }
+    return { date, sectors };
   });
 }
 
@@ -149,6 +199,32 @@ app.get('/api/stocks/shorts', async (req, res) => {
   } catch (error) {
     console.error('Error fetching short stocks:', error);
     res.status(500).json({ error: 'Failed to fetch short stock data' });
+  }
+});
+
+// EMA Crossover scan: stocks with a BUY signal + weekly close >= 21-week EMA, or
+// SELL signal + weekly close <= 21-week EMA, within the last 2 completed weeks.
+// Universe: top 100 long + top 100 short. Cached 60 min; pass ?refresh=1 to bust.
+app.get('/api/stocks/ema-crossover', async (req, res) => {
+  try {
+    const forceRefresh = req.query.refresh === '1';
+    const result = await getEmaCrossoverStocks(forceRefresh);
+    res.json(result);
+  } catch (error) {
+    console.error('Error running EMA crossover scan:', error);
+    res.status(500).json({ error: 'Failed to run EMA crossover scan' });
+  }
+});
+
+// ETF scan: top 100 US ETFs by YTD return with signals. Cached 60 min; pass ?refresh=1 to bust.
+app.get('/api/stocks/etfs', async (req, res) => {
+  try {
+    const forceRefresh = req.query.refresh === '1';
+    const result = await getEtfStocks(forceRefresh);
+    res.json(result);
+  } catch (error) {
+    console.error('Error running ETF scan:', error);
+    res.status(500).json({ error: 'Failed to run ETF scan' });
   }
 });
 
@@ -355,6 +431,21 @@ app.post('/api/signals', async (req, res) => {
   }
 });
 
+// Get the first date each ticker appeared in the long or short top-100 list.
+app.post('/api/entry-dates', async (req, res) => {
+  try {
+    const { tickers } = req.body;
+    if (!Array.isArray(tickers) || tickers.length === 0) {
+      return res.status(400).json({ error: 'tickers array is required' });
+    }
+    const entryDates = await getListEntryDates(tickers);
+    res.json(entryDates);
+  } catch (error) {
+    console.error('Error fetching entry dates:', error);
+    res.status(500).json({ error: 'Failed to fetch entry dates' });
+  }
+});
+
 // Get OHLCV daily price history for charting (5 years back)
 app.get('/api/chart/:ticker', async (req, res) => {
   try {
@@ -375,19 +466,15 @@ app.get('/api/chart/:ticker', async (req, res) => {
   }
 });
 
-// Sector performance: 11 GICS sectors, weekly cumulative % return, 12-month rolling
+// Sector performance: 11 SPDR sector ETFs, daily % changes for last 13 months.
+// Cumulative compounding is done client-side per the selected time range.
 app.get('/api/sectors', async (req, res) => {
   try {
     const now = Date.now();
     if (sectorCache && sectorCacheTime && (now - sectorCacheTime) < SECTOR_CACHE_DURATION) {
       return res.json(sectorCache);
     }
-    const FMP_API_KEY = process.env.FMP_API_KEY;
-    const url = `https://financialmodelingprep.com/api/v3/historical-sectors-performance?limit=400&apikey=${FMP_API_KEY}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`FMP error: ${response.status}`);
-    const data = await response.json();
-    const processed = processSectorData(Array.isArray(data) ? data : []);
+    const processed = await fetchEtfSectorData();
     sectorCache = processed;
     sectorCacheTime = now;
     res.json(processed);
@@ -500,6 +587,80 @@ app.post('/api/portfolio/optimize', async (req, res) => {
   } catch (error) {
     console.error('Error in portfolio optimize:', error);
     res.status(500).json({ error: error.message || 'Optimization failed' });
+  }
+});
+
+// ── Sector stocks ────────────────────────────────────────────────────────────
+
+// Map internal sector keys to the exact sector names FMP uses in its screener
+const SECTOR_KEY_TO_FMP = {
+  communicationServices: 'Communication Services',
+  consumerDiscretionary: 'Consumer Cyclical',
+  consumerStaples:       'Consumer Defensive',
+  energy:                'Energy',
+  financials:            'Financial Services',
+  healthCare:            'Healthcare',
+  industrials:           'Industrials',
+  informationTechnology: 'Technology',
+  materials:             'Basic Materials',
+  realEstate:            'Real Estate',
+  utilities:             'Utilities',
+};
+
+// GET /api/sector-stocks/:sectorKey
+// Returns up to 100 large-cap US stocks in the given sector, ranked by YTD return.
+app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
+  const { sectorKey } = req.params;
+  const fmpSector = SECTOR_KEY_TO_FMP[sectorKey];
+  if (!fmpSector) return res.status(400).json({ error: 'Unknown sector key' });
+
+  try {
+    const FMP_API_KEY = process.env.FMP_API_KEY;
+    const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
+
+    // 1. Screen for large-cap US stocks in this sector (NYSE + NASDAQ, $500M+ market cap)
+    const screenerUrl = `${FMP_BASE}/stock-screener?sector=${encodeURIComponent(fmpSector)}&exchange=NYSE,NASDAQ&country=US&marketCapMoreThan=500000000&limit=150&apikey=${FMP_API_KEY}`;
+    const screenerRes = await fetch(screenerUrl);
+    if (!screenerRes.ok) throw new Error(`FMP screener ${screenerRes.status}`);
+    const screenerData = await screenerRes.json();
+    if (!Array.isArray(screenerData) || screenerData.length === 0) {
+      return res.json({ stocks: [], signals: {} });
+    }
+
+    const tickers = screenerData.map(s => s.symbol);
+
+    // 2. Fetch YTD % return via stock-price-change (no historical price dependency)
+    const ytdRes = await fetch(`${FMP_BASE}/stock-price-change/${tickers.join(',')}?apikey=${FMP_API_KEY}`);
+    const ytdData = ytdRes.ok ? await ytdRes.json() : [];
+    const ytdMap = {};
+    if (Array.isArray(ytdData)) for (const item of ytdData) ytdMap[item.symbol] = item.ytd;
+
+    // 3. Build stock objects, sort by YTD desc, assign ranks
+    const stocks = screenerData
+      .filter(s => s.price && ytdMap[s.symbol] != null)
+      .map(s => ({
+        ticker: s.symbol,
+        companyName: s.companyName || '',
+        exchange: s.exchangeShortName || s.exchange || 'N/A',
+        sector: s.sector || fmpSector,
+        currentPrice: parseFloat(Number(s.price).toFixed(2)),
+        ytdReturn: parseFloat(Number(ytdMap[s.symbol]).toFixed(2)),
+        rank: null,
+        rankChange: null,
+        previousRank: null,
+      }))
+      .sort((a, b) => b.ytdReturn - a.ytdReturn)
+      .map((s, i) => ({ ...s, rank: i + 1 }));
+
+    // 4. Get Laser signals + stop prices for these tickers
+    const stockTickers = stocks.map(s => s.ticker);
+    const rawSignals = await getLatestSignals(stockTickers);
+    const signals = await calculateStopPrices(rawSignals);
+
+    res.json({ stocks, signals });
+  } catch (error) {
+    console.error(`Error fetching sector stocks for ${sectorKey}:`, error);
+    res.status(500).json({ error: 'Failed to fetch sector stocks' });
   }
 });
 

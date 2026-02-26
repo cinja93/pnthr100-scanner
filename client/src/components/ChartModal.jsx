@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
-import { fetchChartData } from '../services/api';
+import { fetchChartData, fetchEntryDates } from '../services/api';
 import styles from './ChartModal.module.css';
+import pantherHeadIcon from '../assets/panther head.png';
 
 import confirmedBuyIcon     from './Confirmed Buy Signal.png';
 import confirmedSellIcon    from './Confirmed Sell Signal.png';
@@ -79,9 +80,12 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
   const [error, setError] = useState(null);
   const [hoveredBar, setHoveredBar] = useState(null);
   const [signalMarkerPos, setSignalMarkerPos] = useState(null);
+  const [pantherMarkerPos, setPantherMarkerPos] = useState(null);
+  const [entryDatesLoaded, setEntryDatesLoaded] = useState(false);
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const cacheRef = useRef({});
+  const entryDatesRef = useRef({});
 
   const stock = stocks[currentIndex];
   const signalData = signals[stock?.ticker];
@@ -117,12 +121,22 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
     return () => { cancelled = true; };
   }, [currentIndex]);
 
+  // Fetch entry dates for all stocks in this modal (batch, one-time on mount)
+  useEffect(() => {
+    const tickers = stocks.map(s => s.ticker);
+    fetchEntryDates(tickers).then(data => {
+      entryDatesRef.current = data;
+      setEntryDatesLoaded(true);
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Build/rebuild chart when data, range, or stop price changes
   useEffect(() => {
     if (loading || !chartContainerRef.current || allWeeklyData.length === 0) return;
 
     setHoveredBar(null);
     setSignalMarkerPos(null);
+    setPantherMarkerPos(null);
 
     if (chartRef.current) {
       chartRef.current.remove();
@@ -198,6 +212,37 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
       }
     }
 
+    // Panther head — float icon at the date the stock first appeared in the long or short top-100 list
+    const entryInfo = entryDatesRef.current[stock?.ticker];
+    if (entryInfo?.date) {
+      const entryDate = new Date(entryInfo.date + 'T00:00:00');
+      const dow = entryDate.getDay();
+      const monday = new Date(entryDate);
+      monday.setDate(entryDate.getDate() - (dow === 0 ? 6 : dow - 1));
+      const weekKey = monday.toISOString().split('T')[0];
+      if (filteredTimes.has(weekKey)) {
+        const barData = filtered.find(d => d.time === weekKey);
+        if (barData) {
+          const ICON = 24;
+          const isLong = entryInfo.list === 'LONG';
+          const updatePantherPos = () => {
+            const x = chart.timeScale().timeToCoordinate(weekKey);
+            const price = isLong ? barData.low : barData.high;
+            const y = series.priceToCoordinate(price);
+            if (x != null && y != null) {
+              setPantherMarkerPos({
+                left: Math.round(x) - ICON / 2,
+                top: isLong ? Math.round(y) + 28 : Math.round(y) - ICON - 28,
+                list: entryInfo.list,
+              });
+            }
+          };
+          chart.timeScale().subscribeVisibleTimeRangeChange(updatePantherPos);
+          setTimeout(updatePantherPos, 50);
+        }
+      }
+    }
+
     // 21 EMA — calculated on full history for accuracy
     const ema21Full = calculateEMA(allWeeklyData, 21);
     if (ema21Full.length > 0) {
@@ -229,12 +274,13 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
     return () => {
       setHoveredBar(null);
       setSignalMarkerPos(null);
+      setPantherMarkerPos(null);
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
       }
     };
-  }, [allWeeklyData, range, stopPrice, loading]);
+  }, [allWeeklyData, range, stopPrice, loading, entryDatesLoaded]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -317,6 +363,20 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
                   className={styles.chartMarkerIcon}
                   style={{ left: signalMarkerPos.left, top: signalMarkerPos.top }}
                 />
+              )}
+
+              {/* Panther head — marks the date stock first entered the long or short top-100 list */}
+              {pantherMarkerPos && (
+                <div
+                  className={styles.pantherMarker}
+                  style={{ left: pantherMarkerPos.left, top: pantherMarkerPos.top }}
+                  title={`First appeared in ${pantherMarkerPos.list} top-100 list`}
+                >
+                  <img src={pantherHeadIcon} alt="PNTHR entry" className={styles.pantherIcon} />
+                  <span className={`${styles.pantherBadge} ${pantherMarkerPos.list === 'LONG' ? styles.pantherBadgeLong : styles.pantherBadgeShort}`}>
+                    {pantherMarkerPos.list === 'LONG' ? 'L' : 'S'}
+                  </span>
+                </div>
               )}
 
               {/* OHLC tooltip on hover */}

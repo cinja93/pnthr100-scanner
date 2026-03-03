@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import styles from './LoginPage.module.css';
-import logo from '../assets/PNTHR FUNDS Logo white background 2 lines copy.png';
+import logo from '../assets/panther head.png';
 
 export default function LoginPage({ onLogin }) {
   const [mode, setMode] = useState('login'); // 'login' | 'register'

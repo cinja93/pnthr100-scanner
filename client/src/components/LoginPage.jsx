@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import styles from './LoginPage.module.css';
+import logo from '../assets/PNTHR FUNDS Logo white background 2 lines copy.png';
 
 export default function LoginPage({ onLogin }) {
   const [mode, setMode] = useState('login'); // 'login' | 'register'
@@ -51,7 +52,7 @@ export default function LoginPage({ onLogin }) {
   return (
     <div className={styles.backdrop}>
       <div className={styles.card}>
-        <div className={styles.logo}>PNTHR100</div>
+        <img src={logo} alt="PNTHR Funds" className={styles.logo} />
         <h1 className={styles.title}>{mode === 'login' ? 'Sign In' : 'Create Account'}</h1>
 
         <form onSubmit={handleSubmit} className={styles.form}>

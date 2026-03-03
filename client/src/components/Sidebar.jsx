@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { key: 'portfolio', label: 'Portfolio',  icon: '📁' },
 ];
 
-export default function Sidebar({ activePage, onNavigate }) {
+export default function Sidebar({ activePage, onNavigate, currentUser, onLogout }) {
   return (
     <aside className={styles.sidebar}>
       {/* Logo */}
@@ -44,6 +44,12 @@ export default function Sidebar({ activePage, onNavigate }) {
 
       {/* Footer */}
       <div className={styles.sidebarFooter}>
+        {currentUser && (
+          <div className={styles.userArea}>
+            <span className={styles.userEmail} title={currentUser.email}>{currentUser.email}</span>
+            <button className={styles.logoutBtn} onClick={onLogout} title="Sign out">Sign out</button>
+          </div>
+        )}
         <div className={styles.loveFrame}>
           <img src={builtWithLove} alt="Built with Love" className={styles.loveImg} />
         </div>

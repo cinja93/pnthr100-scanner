@@ -128,6 +128,44 @@
   gap: 8px;
 }
 
+.userArea {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.userEmail {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+  word-break: break-all;
+  max-width: 100%;
+}
+
+.logoutBtn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.logoutBtn:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+
 .loveFrame {
   border: 1px solid rgba(252, 240, 0, 0.25);
   border-radius: 6px;

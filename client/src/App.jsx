@@ -8,7 +8,8 @@ import WatchlistPage from './components/WatchlistPage';
 import PortfolioPage from './components/PortfolioPage';
 import EmaCrossoverPage from './components/EmaCrossoverPage';
 import EtfPage from './components/EtfPage';
-import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchEarnings } from './services/api';
+import LoginPage from './components/LoginPage';
+import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken } from './services/api';
 import './App.css';
 
 const defaultFilters = {
@@ -24,7 +25,51 @@ const defaultFilters = {
 };
 
 function App() {
-  const [activePage, setActivePage] = useState('long'); // 'long' | 'short' | 'sectors' | 'watchlist'
+  const [authToken, setAuthTokenState] = useState(() => localStorage.getItem('pnthr_token'));
+  const [currentUser, setCurrentUser] = useState(null); // { email, accountSize, defaultPage }
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // On mount: validate stored token
+  useEffect(() => {
+    const token = localStorage.getItem('pnthr_token');
+    if (!token) { setAuthLoading(false); return; }
+    setAuthToken(token);
+    fetchUserProfile()
+      .then(profile => {
+        setCurrentUser(profile);
+        setAuthTokenState(token);
+      })
+      .catch(() => {
+        // Token invalid or expired — clear it
+        localStorage.removeItem('pnthr_token');
+        clearAuthToken();
+        setAuthTokenState(null);
+      })
+      .finally(() => setAuthLoading(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleLogin(token, email, profile) {
+    localStorage.setItem('pnthr_token', token);
+    setAuthToken(token);
+    setAuthTokenState(token);
+    setCurrentUser({ email, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long' });
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('pnthr_token');
+    clearAuthToken();
+    setAuthTokenState(null);
+    setCurrentUser(null);
+  }
+
+  if (authLoading) return null; // brief flash while validating token
+  if (!authToken) return <LoginPage onLogin={handleLogin} />;
+
+  return <AppInner currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />;
+}
+
+function AppInner({ currentUser, setCurrentUser, onLogout }) {
+  const [activePage, setActivePage] = useState(currentUser?.defaultPage || 'long');
   const scanType = activePage === 'short' ? 'short' : 'long';
   const [stocks, setStocks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -156,7 +201,7 @@ function App() {
 
   return (
     <div className="app">
-      <Sidebar activePage={activePage} onNavigate={setActivePage} />
+      <Sidebar activePage={activePage} onNavigate={setActivePage} currentUser={currentUser} onLogout={onLogout} />
 
       <div className="content-wrapper">
         <main className="main">
@@ -233,7 +278,7 @@ function App() {
           {activePage === 'etf' && <EtfPage />}
 
           {/* Portfolio page */}
-          {activePage === 'portfolio' && <PortfolioPage />}
+          {activePage === 'portfolio' && <PortfolioPage currentUser={currentUser} onProfileUpdate={setCurrentUser} />}
         </main>
 
         <footer className="footer">

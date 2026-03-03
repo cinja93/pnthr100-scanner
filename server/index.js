@@ -5,6 +5,7 @@ import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
 import { getEtfStocks } from './etfService.js';
+import { authenticateJWT, hashPassword, verifyPassword, generateToken } from './auth.js';
 import {
   getSupplementalStocks,
   addSupplementalStock,
@@ -18,6 +19,10 @@ import {
   getStockHistory,
   getLatestSignals,
   getListEntryDates,
+  createUser,
+  findUserByEmail,
+  getUserProfile,
+  upsertUserProfile,
 } from './database.js';
 
 const app = express();
@@ -27,17 +32,50 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// API key authentication — protects all /api/* routes
-const API_KEY = process.env.API_KEY;
-if (!API_KEY) {
-  console.error('⚠️  API_KEY is not set in .env — all /api requests will be rejected');
-}
-app.use('/api', (req, res, next) => {
-  const key = req.headers['x-api-key'];
-  if (!key || key !== API_KEY) {
-    return res.status(401).json({ error: 'Unauthorized' });
+// ── Auth routes (public — no middleware) ───────────────────────────────────
+
+app.post('/auth/register', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    const hashedPassword = await hashPassword(password);
+    const user = await createUser(email, hashedPassword);
+    const token = generateToken(user._id, user.email);
+    res.json({ token, email: user.email });
+  } catch (error) {
+    if (error.message.includes('already exists')) {
+      return res.status(409).json({ error: error.message });
+    }
+    console.error('Register error:', error);
+    res.status(500).json({ error: 'Failed to create account' });
   }
-  next();
+});
+
+app.post('/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+    const user = await findUserByEmail(email);
+    if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+    const valid = await verifyPassword(password, user.hashedPassword);
+    if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
+    const token = generateToken(user._id, user.email);
+    const profile = await getUserProfile(user._id.toString());
+    res.json({ token, email: user.email, profile });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// ── API authentication ────────────────────────────────────────────────────────
+// Accepts either a valid JWT (browser sessions) or x-api-key (server-to-server, cron jobs).
+const API_KEY = process.env.API_KEY;
+app.use('/api', (req, res, next) => {
+  const apiKey = req.headers['x-api-key'];
+  if (apiKey && apiKey === API_KEY) return next();
+  authenticateJWT(req, res, next);
 });
 
 // Cache for stock data (refresh every 5 minutes)
@@ -298,12 +336,42 @@ app.delete('/api/supplemental-stocks/:ticker', async (req, res) => {
   }
 });
 
+// ── User profile ──
+
+app.get('/api/user/profile', async (req, res) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+    const profile = await getUserProfile(req.user.userId);
+    res.json({ email: req.user.email, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long' });
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
+app.patch('/api/user/profile', async (req, res) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+    const { accountSize, defaultPage } = req.body;
+    const updates = {};
+    if (accountSize !== undefined) updates.accountSize = accountSize === null ? null : Number(accountSize);
+    if (defaultPage !== undefined) updates.defaultPage = defaultPage;
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'Nothing to update' });
+    await upsertUserProfile(req.user.userId, updates);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
 // ── Watchlist ──
 
 // Get all watchlist stocks with live data
 app.get('/api/watchlist', async (req, res) => {
   try {
-    const tickers = await getWatchlistTickers();
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+    const tickers = await getWatchlistTickers(req.user.userId);
     if (tickers.length === 0) return res.json([]);
     const stocks = await getWatchlistStocks(tickers);
     res.json(stocks);
@@ -316,6 +384,7 @@ app.get('/api/watchlist', async (req, res) => {
 // Add a ticker to the watchlist
 app.post('/api/watchlist', async (req, res) => {
   try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
     const { ticker } = req.body;
     if (!ticker || typeof ticker !== 'string') {
       return res.status(400).json({ error: 'Ticker is required' });
@@ -324,7 +393,7 @@ app.post('/api/watchlist', async (req, res) => {
     if (!/^[A-Z]{1,5}[A-Z.\-]*$/.test(tickerUpper)) {
       return res.status(400).json({ error: 'Invalid ticker format' });
     }
-    const result = await addToWatchlist(tickerUpper);
+    const result = await addToWatchlist(tickerUpper, req.user.userId);
     res.json(result);
   } catch (error) {
     console.error('Error adding to watchlist:', error);
@@ -339,8 +408,9 @@ app.post('/api/watchlist', async (req, res) => {
 // Remove a ticker from the watchlist
 app.delete('/api/watchlist/:ticker', async (req, res) => {
   try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
     const { ticker } = req.params;
-    const result = await removeFromWatchlist(ticker);
+    const result = await removeFromWatchlist(ticker, req.user.userId);
     res.json(result);
   } catch (error) {
     console.error('Error removing from watchlist:', error);

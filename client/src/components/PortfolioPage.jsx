@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import styles from './PortfolioPage.module.css';
+import { updateUserProfile } from '../services/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : 'http://localhost:3000');
 function authHeaders(extra = {}) {
-  return { 'x-api-key': import.meta.env.VITE_API_KEY, ...extra };
+  const token = localStorage.getItem('pnthr_token');
+  return { ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...extra };
 }
 
 async function apiFetchPortfolio() {
@@ -62,10 +64,12 @@ function fmtPct(n) {
   return n.toFixed(1) + '%';
 }
 
-export default function PortfolioPage() {
+export default function PortfolioPage({ currentUser, onProfileUpdate }) {
   const [portfolio, setPortfolio] = useState([]);
   const [included, setIncluded] = useState(new Set());
-  const [accountSizeStr, setAccountSizeStr] = useState('');
+  const [accountSizeStr, setAccountSizeStr] = useState(
+    currentUser?.accountSize ? String(currentUser.accountSize) : ''
+  );
   const [riskPctStr, setRiskPctStr] = useState('1');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -141,6 +145,10 @@ export default function PortfolioPage() {
     setOptimizing(true);
     setOptimizeError('');
     setOptimized(null);
+    // Persist account size to user profile
+    updateUserProfile({ accountSize }).then(() => {
+      if (onProfileUpdate) onProfileUpdate(prev => ({ ...prev, accountSize }));
+    }).catch(() => {});
     try {
       const result = await apiOptimize(accountSize, riskPct, tickerList);
       const resultsMap = new Map();

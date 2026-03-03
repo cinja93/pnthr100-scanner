@@ -1,4 +1,4 @@
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -23,7 +23,14 @@ export async function connectToDatabase() {
     // Create indexes for faster queries
     await db.collection('rankings').createIndex({ date: -1 });
     await db.collection('supplemental_stocks').createIndex({ ticker: 1 }, { unique: true });
-    await db.collection('watchlist').createIndex({ ticker: 1 }, { unique: true });
+
+    // Users + profiles
+    await db.collection('users').createIndex({ email: 1 }, { unique: true });
+    await db.collection('user_profiles').createIndex({ userId: 1 }, { unique: true });
+
+    // Per-user watchlist: drop old global unique index, create per-user compound index
+    try { await db.collection('watchlist').dropIndex('ticker_1'); } catch { /* may not exist */ }
+    await db.collection('watchlist').createIndex({ userId: 1, ticker: 1 }, { unique: true });
 
     console.log('✅ Connected to MongoDB');
     return db;
@@ -261,14 +268,15 @@ export async function removeSupplementalStock(ticker) {
   }
 }
 
-// ── Watchlist ──
+// ── Watchlist (per-user) ──
 
-export async function getWatchlistTickers() {
+export async function getWatchlistTickers(userId) {
   try {
     const database = await connectToDatabase();
     if (!database) return [];
     const collection = database.collection('watchlist');
-    const docs = await collection.find().sort({ addedAt: 1 }).toArray();
+    const uid = new ObjectId(userId);
+    const docs = await collection.find({ userId: uid }).sort({ addedAt: 1 }).toArray();
     return docs.map(doc => doc.ticker);
   } catch (error) {
     console.error('Error getting watchlist:', error.message);
@@ -276,35 +284,79 @@ export async function getWatchlistTickers() {
   }
 }
 
-export async function addToWatchlist(ticker) {
+export async function addToWatchlist(ticker, userId) {
   try {
     const database = await connectToDatabase();
     if (!database) throw new Error('Database not available');
     const collection = database.collection('watchlist');
-    const existing = await collection.findOne({ ticker });
-    if (existing) throw new Error(`${ticker} is already on your watchlist`);
-    await collection.insertOne({ ticker, addedAt: new Date() });
-    console.log(`✅ Added to watchlist: ${ticker}`);
-    return { success: true, ticker };
+    const uid = new ObjectId(userId);
+    const upper = ticker.toUpperCase();
+    const existing = await collection.findOne({ userId: uid, ticker: upper });
+    if (existing) throw new Error(`${upper} is already on your watchlist`);
+    await collection.insertOne({ userId: uid, ticker: upper, addedAt: new Date() });
+    console.log(`✅ Added to watchlist: ${upper}`);
+    return { success: true, ticker: upper };
   } catch (error) {
     console.error('Error adding to watchlist:', error.message);
     throw error;
   }
 }
 
-export async function removeFromWatchlist(ticker) {
+export async function removeFromWatchlist(ticker, userId) {
   try {
     const database = await connectToDatabase();
     if (!database) throw new Error('Database not available');
     const collection = database.collection('watchlist');
-    const result = await collection.deleteOne({ ticker: ticker.toUpperCase() });
-    if (result.deletedCount === 0) throw new Error(`${ticker} not found in watchlist`);
-    console.log(`✅ Removed from watchlist: ${ticker}`);
-    return { success: true, ticker };
+    const uid = new ObjectId(userId);
+    const upper = ticker.toUpperCase();
+    const result = await collection.deleteOne({ userId: uid, ticker: upper });
+    if (result.deletedCount === 0) throw new Error(`${upper} not found in watchlist`);
+    console.log(`✅ Removed from watchlist: ${upper}`);
+    return { success: true, ticker: upper };
   } catch (error) {
     console.error('Error removing from watchlist:', error.message);
     throw error;
   }
+}
+
+// ── Users ──
+
+export async function createUser(email, hashedPassword) {
+  const database = await connectToDatabase();
+  if (!database) throw new Error('Database not available');
+  const collection = database.collection('users');
+  const lower = email.toLowerCase().trim();
+  const existing = await collection.findOne({ email: lower });
+  if (existing) throw new Error('An account with that email already exists');
+  const result = await collection.insertOne({ email: lower, hashedPassword, createdAt: new Date() });
+  return { _id: result.insertedId, email: lower };
+}
+
+export async function findUserByEmail(email) {
+  const database = await connectToDatabase();
+  if (!database) return null;
+  return database.collection('users').findOne({ email: email.toLowerCase().trim() });
+}
+
+// ── User Profiles ──
+
+export async function getUserProfile(userId) {
+  const database = await connectToDatabase();
+  if (!database) return null;
+  return database.collection('user_profiles').findOne({ userId: new ObjectId(userId) });
+}
+
+export async function upsertUserProfile(userId, updates) {
+  const database = await connectToDatabase();
+  if (!database) throw new Error('Database not available');
+  const uid = new ObjectId(userId);
+  const now = new Date();
+  const result = await database.collection('user_profiles').findOneAndUpdate(
+    { userId: uid },
+    { $set: { ...updates, updatedAt: now }, $setOnInsert: { userId: uid, createdAt: now } },
+    { upsert: true, returnDocument: 'after' }
+  );
+  return result;
 }
 
 // Get all rankings from last 12 weeks

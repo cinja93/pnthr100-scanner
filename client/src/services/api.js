@@ -1,12 +1,35 @@
 // In dev: use relative URL so Vite proxy hits local server. In production: use deployed API URL.
 const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : 'http://localhost:3000');
 
+// JWT token — set once after login via setAuthToken()
+let _token = null;
+export function setAuthToken(token) { _token = token; }
+export function clearAuthToken() { _token = null; }
+
 // Base headers included on every request
 function authHeaders(extra = {}) {
   return {
-    'x-api-key': import.meta.env.VITE_API_KEY,
+    ...(_token ? { 'Authorization': `Bearer ${_token}` } : {}),
     ...extra
   };
+}
+
+// ── Auth ──
+
+export async function fetchUserProfile() {
+  const response = await fetch(`${API_BASE}/api/user/profile`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+export async function updateUserProfile(updates) {
+  const response = await fetch(`${API_BASE}/api/user/profile`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(updates),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
 }
 
 export async function fetchTopStocks(forceRefresh = false) {

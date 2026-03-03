@@ -151,6 +151,9 @@ export default function WatchlistPage() {
           initialIndex={chartIndex}
           signals={signals}
           onClose={() => setChartIndex(null)}
+          onWatchlistChange={(ticker, nowIn) => {
+            if (!nowIn) setStocks(prev => prev.filter(s => s.ticker !== ticker));
+          }}
         />
       )}
     </div>

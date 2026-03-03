@@ -57,6 +57,7 @@ function App() {
 
   function handleLogout() {
     localStorage.removeItem('pnthr_token');
+    localStorage.removeItem('pnthr_page');
     clearAuthToken();
     setAuthTokenState(null);
     setCurrentUser(null);
@@ -69,7 +70,14 @@ function App() {
 }
 
 function AppInner({ currentUser, setCurrentUser, onLogout }) {
-  const [activePage, setActivePage] = useState(currentUser?.defaultPage || 'long');
+  const [activePage, setActivePage] = useState(
+    () => localStorage.getItem('pnthr_page') || currentUser?.defaultPage || 'long'
+  );
+
+  function navigate(page) {
+    setActivePage(page);
+    localStorage.setItem('pnthr_page', page);
+  }
   const scanType = activePage === 'short' ? 'short' : 'long';
   const [stocks, setStocks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -201,7 +209,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
   return (
     <div className="app">
-      <Sidebar activePage={activePage} onNavigate={setActivePage} currentUser={currentUser} onLogout={onLogout} />
+      <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} onLogout={onLogout} />
 
       <div className="content-wrapper">
         <main className="main">

@@ -1,6 +1,14 @@
 import { MongoClient, ObjectId } from 'mongodb';
 import dotenv from 'dotenv';
 
+// Safely construct an ObjectId; throws a clear error if the id is not a valid 24-char hex string.
+function safeObjectId(id) {
+  if (!id || !/^[a-f\d]{24}$/i.test(String(id))) {
+    throw new Error('Invalid user ID format');
+  }
+  return new ObjectId(id);
+}
+
 dotenv.config();
 
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -275,7 +283,7 @@ export async function getWatchlistTickers(userId) {
     const database = await connectToDatabase();
     if (!database) return [];
     const collection = database.collection('watchlist');
-    const uid = new ObjectId(userId);
+    const uid = safeObjectId(userId);
     const docs = await collection.find({ userId: uid }).sort({ addedAt: 1 }).toArray();
     return docs.map(doc => doc.ticker);
   } catch (error) {
@@ -289,7 +297,7 @@ export async function addToWatchlist(ticker, userId) {
     const database = await connectToDatabase();
     if (!database) throw new Error('Database not available');
     const collection = database.collection('watchlist');
-    const uid = new ObjectId(userId);
+    const uid = safeObjectId(userId);
     const upper = ticker.toUpperCase();
     const existing = await collection.findOne({ userId: uid, ticker: upper });
     if (existing) throw new Error(`${upper} is already on your watchlist`);
@@ -307,7 +315,7 @@ export async function removeFromWatchlist(ticker, userId) {
     const database = await connectToDatabase();
     if (!database) throw new Error('Database not available');
     const collection = database.collection('watchlist');
-    const uid = new ObjectId(userId);
+    const uid = safeObjectId(userId);
     const upper = ticker.toUpperCase();
     const result = await collection.deleteOne({ userId: uid, ticker: upper });
     if (result.deletedCount === 0) throw new Error(`${upper} not found in watchlist`);
@@ -343,13 +351,13 @@ export async function findUserByEmail(email) {
 export async function getUserProfile(userId) {
   const database = await connectToDatabase();
   if (!database) return null;
-  return database.collection('user_profiles').findOne({ userId: new ObjectId(userId) });
+  return database.collection('user_profiles').findOne({ userId: safeObjectId(userId) });
 }
 
 export async function upsertUserProfile(userId, updates) {
   const database = await connectToDatabase();
   if (!database) throw new Error('Database not available');
-  const uid = new ObjectId(userId);
+  const uid = safeObjectId(userId);
   const now = new Date();
   const result = await database.collection('user_profiles').findOneAndUpdate(
     { userId: uid },

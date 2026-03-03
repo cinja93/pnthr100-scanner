@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks } from './stockService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
@@ -29,15 +30,26 @@ const app = express();
 const PORT = 3000;
 
 // Middleware
-app.use(cors());
+const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
+app.use(cors({ origin: allowedOrigin }));
 app.use(express.json());
+
+// Rate limiting for auth endpoints — 10 attempts per 15 minutes per IP
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts, please try again later' },
+});
 
 // ── Auth routes (public — no middleware) ───────────────────────────────────
 
-app.post('/auth/register', async (req, res) => {
+app.post('/auth/register', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email address' });
     if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
     const hashedPassword = await hashPassword(password);
     const user = await createUser(email, hashedPassword);
@@ -52,7 +64,7 @@ app.post('/auth/register', async (req, res) => {
   }
 });
 
-app.post('/auth/login', async (req, res) => {
+app.post('/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });

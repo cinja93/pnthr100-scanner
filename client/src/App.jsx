@@ -151,8 +151,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       fetchSignals(tickers, { shortList: scanType === 'short' }).then(result => {
         setSignals(result);
         setSignalsLoading(false);
-      });
-      fetchEarnings(tickers).then(result => setEarnings(result));
+      }).catch(err => { console.error('Signals fetch error:', err); setSignalsLoading(false); });
+      fetchEarnings(tickers).then(result => setEarnings(result)).catch(err => console.error('Earnings fetch error:', err));
     } catch (err) {
       setError('Failed to load stock data. Please try again later.');
       console.error(err);
@@ -179,8 +179,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       fetchSignals(tickers, { shortList: scanType === 'short' }).then(result => {
         setSignals(result);
         setSignalsLoading(false);
-      });
-      fetchEarnings(tickers).then(result => setEarnings(result));
+      }).catch(err => { console.error('Signals fetch error:', err); setSignalsLoading(false); });
+      fetchEarnings(tickers).then(result => setEarnings(result)).catch(err => console.error('Earnings fetch error:', err));
     } catch (err) {
       setError(`Failed to load data for ${date}. Please try again.`);
       console.error(err);

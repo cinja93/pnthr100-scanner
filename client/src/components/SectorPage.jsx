@@ -211,6 +211,7 @@ function SectorStocksModal({ sectorKey, sectorName, onClose }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartIndex, setChartIndex] = useState(null);
+  const [chartStocks, setChartStocks] = useState([]);
 
   useEffect(() => {
     setLoading(true);
@@ -229,9 +230,9 @@ function SectorStocksModal({ sectorKey, sectorName, onClose }) {
       .finally(() => setLoading(false));
   }, [sectorKey]);
 
-  function handleTickerClick(stock) {
-    const idx = stocks.findIndex(s => s.ticker === stock.ticker);
-    if (idx >= 0) setChartIndex(idx);
+  function handleTickerClick(_stock, sortedIdx, sortedStocks) {
+    setChartStocks(sortedStocks);
+    setChartIndex(sortedIdx);
   }
 
   return (
@@ -280,7 +281,7 @@ function SectorStocksModal({ sectorKey, sectorName, onClose }) {
 
       {chartIndex != null && (
         <ChartModal
-          stocks={stocks}
+          stocks={chartStocks}
           initialIndex={chartIndex}
           signals={signals}
           onClose={() => setChartIndex(null)}

@@ -15,6 +15,7 @@ export default function WatchlistPage() {
   const [addLoading, setAddLoading] = useState(false);
   const [earnings, setEarnings] = useState({});
   const [chartIndex, setChartIndex] = useState(null);
+  const [chartStocks, setChartStocks] = useState([]);
 
   useEffect(() => {
     loadWatchlist();
@@ -70,9 +71,9 @@ export default function WatchlistPage() {
     }
   }
 
-  function handleRowClick(stock) {
-    const index = stocks.findIndex(s => s.ticker === stock.ticker);
-    if (index >= 0) setChartIndex(index);
+  function handleRowClick(_stock, sortedIdx, sortedStocks) {
+    setChartStocks(sortedStocks);
+    setChartIndex(sortedIdx);
   }
 
   return (
@@ -146,7 +147,7 @@ export default function WatchlistPage() {
 
       {chartIndex != null && (
         <ChartModal
-          stocks={stocks}
+          stocks={chartStocks}
           initialIndex={chartIndex}
           signals={signals}
           onClose={() => setChartIndex(null)}

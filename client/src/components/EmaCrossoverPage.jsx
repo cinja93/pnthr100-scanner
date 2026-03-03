@@ -11,6 +11,7 @@ export default function EmaCrossoverPage() {
   const [error, setError] = useState(null);
   const [earnings, setEarnings] = useState({});
   const [chartIndex, setChartIndex] = useState(null);
+  const [chartStocks, setChartStocks] = useState([]);
 
   useEffect(() => {
     load(false);
@@ -33,9 +34,9 @@ export default function EmaCrossoverPage() {
     }
   }
 
-  function handleRowClick(stock) {
-    const index = stocks.findIndex(s => s.ticker === stock.ticker);
-    if (index >= 0) setChartIndex(index);
+  function handleRowClick(_stock, sortedIdx, sortedStocks) {
+    setChartStocks(sortedStocks);
+    setChartIndex(sortedIdx);
   }
 
   return (
@@ -98,7 +99,7 @@ export default function EmaCrossoverPage() {
 
       {chartIndex != null && (
         <ChartModal
-          stocks={stocks}
+          stocks={chartStocks}
           initialIndex={chartIndex}
           signals={signals}
           onClose={() => setChartIndex(null)}

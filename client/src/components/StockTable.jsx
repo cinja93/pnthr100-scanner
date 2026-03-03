@@ -180,7 +180,7 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
           </tr>
         </thead>
         <tbody>
-          {sortedStocks.map((stock) => {
+          {sortedStocks.map((stock, sortedIdx) => {
             const signalData = signals[stock.ticker];
             const { icon, alt } = getSignalDisplay(signalData);
             const stopPrice = signalData?.stopPrice ?? null;
@@ -194,7 +194,7 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
               <tr
                 key={stock.ticker}
                 className={`${styles.clickableRow}${earningsInfo.highlight ? ` ${styles.earningsHighlight}` : ''}`}
-                onClick={() => onTickerClick?.(stock)}
+                onClick={() => onTickerClick?.(stock, sortedIdx, sortedStocks)}
                 title={stock.companyName ? `${stock.companyName} — Click to view chart` : 'Click to view chart'}
               >
                 {!onRemove && <td className={styles.rankColumn}>{stock.rank ?? '—'}</td>}

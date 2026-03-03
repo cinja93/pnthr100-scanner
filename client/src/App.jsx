@@ -35,6 +35,7 @@ function App() {
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [earnings, setEarnings] = useState({});
   const [chartIndex, setChartIndex] = useState(null);
+  const [chartStocks, setChartStocks] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
 
   const isScanner = activePage === 'long' || activePage === 'short';
@@ -148,9 +149,9 @@ function App() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  function handleRowClick(stock) {
-    const index = filteredStocks.findIndex(s => s.ticker === stock.ticker);
-    if (index >= 0) setChartIndex(index);
+  function handleRowClick(_stock, sortedIdx, sortedStocks) {
+    setChartStocks(sortedStocks);
+    setChartIndex(sortedIdx);
   }
 
   return (
@@ -243,7 +244,7 @@ function App() {
       {/* Chart Modal */}
       {chartIndex != null && (
         <ChartModal
-          stocks={filteredStocks}
+          stocks={chartStocks}
           initialIndex={chartIndex}
           signals={signals}
           onClose={() => setChartIndex(null)}

@@ -394,28 +394,9 @@
   font-size: 14px;
 }
 
-.selectionRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.selAllBtn {
-  padding: 5px 14px;
-  background: #1e2c4b;
-  color: white;
-  border: none;
-  border-radius: 6px;
+.headerCheckbox {
+  width: 15px;
+  height: 15px;
   cursor: pointer;
-  font-size: 13px;
-}
-
-.selAllBtn:hover {
-  background: #2d4270;
-}
-
-.selCount {
-  font-size: 13px;
-  color: #6b7280;
+  accent-color: #1e2c4b;
 }

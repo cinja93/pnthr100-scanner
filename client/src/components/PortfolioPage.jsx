@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import styles from './PortfolioPage.module.css';
 import { updateUserProfile } from '../services/api';
 
@@ -80,7 +80,8 @@ export default function PortfolioPage({ currentUser, onProfileUpdate }) {
 
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeError, setOptimizeError] = useState('');
-  const [optimized, setOptimized] = useState(null); // { resultsMap, sortino, sharpe, scaleFactor, maxDrawdown, portfolioVol, avgCorrelation, excludedCount }
+  const [optimized, setOptimized] = useState(null);
+  const selectAllRef = useRef(null); // { resultsMap, sortino, sharpe, scaleFactor, maxDrawdown, portfolioVol, avgCorrelation, excludedCount }
 
   const accountSize = parseFloat(accountSizeStr.replace(/,/g, '')) || 0;
   const riskPct = Math.min(Math.max(parseFloat(riskPctStr) || 1, 0.1), 10); // clamp 0.1–10%
@@ -88,6 +89,15 @@ export default function PortfolioPage({ currentUser, onProfileUpdate }) {
   useEffect(() => {
     loadPortfolio();
   }, []);
+
+  // Keep header checkbox indeterminate state in sync
+  useEffect(() => {
+    if (!selectAllRef.current) return;
+    const allChecked = portfolio.length > 0 && included.size === portfolio.length;
+    const someChecked = included.size > 0 && !allChecked;
+    selectAllRef.current.checked = allChecked;
+    selectAllRef.current.indeterminate = someChecked;
+  }, [included, portfolio]);
 
   async function loadPortfolio() {
     setLoading(true);
@@ -115,14 +125,9 @@ export default function PortfolioPage({ currentUser, onProfileUpdate }) {
     setOptimizeError('');
   }
 
-  function selectAll() {
-    setIncluded(new Set(portfolio.map(s => s.ticker)));
-    setOptimized(null);
-    setOptimizeError('');
-  }
-
-  function deselectAll() {
-    setIncluded(new Set());
+  function toggleAll() {
+    const allSelected = portfolio.length > 0 && included.size === portfolio.length;
+    setIncluded(allSelected ? new Set() : new Set(portfolio.map(s => s.ticker)));
     setOptimized(null);
     setOptimizeError('');
   }
@@ -343,25 +348,20 @@ export default function PortfolioPage({ currentUser, onProfileUpdate }) {
         </div>
       )}
 
-      {/* Select / Deselect All */}
-      {portfolio.length > 0 && (
-        <div className={styles.selectionRow}>
-          <button className={styles.selAllBtn} onClick={selectAll}>
-            Select All ({portfolio.length})
-          </button>
-          <button className={styles.selAllBtn} onClick={deselectAll}>
-            Deselect All
-          </button>
-          <span className={styles.selCount}>{included.size} selected</span>
-        </div>
-      )}
-
       {/* Table */}
       <div className={styles.tableContainer}>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th className={styles.chkCol}></th>
+              <th className={styles.chkCol}>
+                <input
+                  ref={selectAllRef}
+                  type="checkbox"
+                  className={styles.headerCheckbox}
+                  onChange={toggleAll}
+                  title="Select / deselect all"
+                />
+              </th>
               <th className={styles.rankCol}>Current Rank #</th>
               <th className={styles.dirCol}>L/S</th>
               <th>Ticker</th>

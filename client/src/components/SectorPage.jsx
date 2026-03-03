@@ -235,45 +235,47 @@ function SectorStocksModal({ sectorKey, sectorName, onClose }) {
   }
 
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modalPanel} onClick={e => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <div>
-            <h2 className={styles.modalTitle}>{sectorName}</h2>
-            {!loading && !error && (
-              <p className={styles.modalSubtitle}>{stocks.length} stocks ranked by YTD return</p>
-            )}
+    <>
+      <div className={styles.modalOverlay} onClick={onClose}>
+        <div className={styles.modalPanel} onClick={e => e.stopPropagation()}>
+          <div className={styles.modalHeader}>
+            <div>
+              <h2 className={styles.modalTitle}>{sectorName}</h2>
+              {!loading && !error && (
+                <p className={styles.modalSubtitle}>{stocks.length} stocks ranked by YTD return</p>
+              )}
+            </div>
+            <button className={styles.modalCloseBtn} onClick={onClose} aria-label="Close">✕</button>
           </div>
-          <button className={styles.modalCloseBtn} onClick={onClose} aria-label="Close">✕</button>
+
+          {loading && (
+            <div className={styles.modalLoading}>
+              <div className={styles.spinner} />
+              <p>Loading stocks…</p>
+            </div>
+          )}
+
+          {error && !loading && (
+            <div className={styles.modalError}>{error}</div>
+          )}
+
+          {!loading && !error && stocks.length > 0 && (
+            <div className={styles.modalTableWrap}>
+              <StockTable
+                stocks={stocks}
+                signals={signals}
+                signalsLoading={false}
+                earnings={earnings}
+                onTickerClick={handleTickerClick}
+                scanType="long"
+              />
+            </div>
+          )}
+
+          {!loading && !error && stocks.length === 0 && (
+            <div className={styles.modalEmpty}>No stocks found for this sector.</div>
+          )}
         </div>
-
-        {loading && (
-          <div className={styles.modalLoading}>
-            <div className={styles.spinner} />
-            <p>Loading stocks…</p>
-          </div>
-        )}
-
-        {error && !loading && (
-          <div className={styles.modalError}>{error}</div>
-        )}
-
-        {!loading && !error && stocks.length > 0 && (
-          <div className={styles.modalTableWrap}>
-            <StockTable
-              stocks={stocks}
-              signals={signals}
-              signalsLoading={false}
-              earnings={earnings}
-              onTickerClick={handleTickerClick}
-              scanType="long"
-            />
-          </div>
-        )}
-
-        {!loading && !error && stocks.length === 0 && (
-          <div className={styles.modalEmpty}>No stocks found for this sector.</div>
-        )}
       </div>
 
       {chartIndex != null && (
@@ -284,7 +286,7 @@ function SectorStocksModal({ sectorKey, sectorName, onClose }) {
           onClose={() => setChartIndex(null)}
         />
       )}
-    </div>
+    </>
   );
 }
 

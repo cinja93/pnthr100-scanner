@@ -45,7 +45,7 @@ export default function EmaCrossoverPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>EMA Crossover</h1>
+          <h1 className={styles.title}>PNTHR Hunt</h1>
           <p className={styles.subtitle}>
             Stocks whose weekly close crossed the 21-week EMA within the past 2 weeks —
             above EMA with a BUY signal, or below EMA with a SELL signal.

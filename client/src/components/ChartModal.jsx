@@ -111,6 +111,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
         const weekly = aggregateToWeekly(daily);
         cacheRef.current[ticker] = weekly;
         setAllWeeklyData(weekly);
+        if (weekly.length === 0) setError('No chart data available for this ticker.');
       })
       .catch(err => {
         if (cancelled) return;

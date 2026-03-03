@@ -35,12 +35,23 @@ function getEarningsInfo(dateStr) {
   return { display, daysAway, highlight: daysAway >= 0 && daysAway <= 14 };
 }
 
-export default function StockTable({ stocks, signals = {}, signalsLoading = false, earnings = {}, onTickerClick, onRemove, scanType }) {
+export default function StockTable({ stocks, signals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, onTickerClick, onRemove, scanType }) {
   const [sortConfig, setSortConfig] = useState({ key: 'rank', direction: 'asc' });
+  const hasScannerRanks = scannerRanks !== null;
 
   // Sort stocks based on current sort configuration
   const sortedStocks = [...stocks].sort((a, b) => {
     const dir = sortConfig.direction === 'asc' ? 1 : -1;
+
+    // Special handling for rank when using scanner ranks (nulls sort last)
+    if (sortConfig.key === 'rank' && hasScannerRanks) {
+      const aRank = scannerRanks[a.ticker?.toUpperCase()]?.rank ?? null;
+      const bRank = scannerRanks[b.ticker?.toUpperCase()]?.rank ?? null;
+      if (aRank === null && bRank === null) return 0;
+      if (aRank === null) return dir;
+      if (bRank === null) return -dir;
+      return (aRank - bRank) * dir;
+    }
 
     // Special handling for signal column (data lives in signals map, not stock object)
     if (sortConfig.key === 'signal') {
@@ -143,7 +154,7 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
             {!onRemove && <th onClick={() => handleSort('rank')} className={`${styles.rankColumn} ${styles.sortable}`} scope="col">
               Performance Rank {getSortIndicator('rank')}
             </th>}
-            {!onRemove && <th onClick={() => handleSort('rankChange')} className={styles.sortable}>
+            {!onRemove && !hasScannerRanks && <th onClick={() => handleSort('rankChange')} className={styles.sortable}>
               Rank Change {getSortIndicator('rankChange')}
             </th>}
             <th onClick={() => handleSort('ticker')} className={styles.sortable}>
@@ -152,9 +163,9 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
             <th onClick={() => handleSort('exchange')} className={styles.sortable}>
               Exchange {getSortIndicator('exchange')}
             </th>
-            <th onClick={() => handleSort('sector')} className={styles.sortable}>
+            {!hideSector && <th onClick={() => handleSort('sector')} className={styles.sortable}>
               Sector {getSortIndicator('sector')}
-            </th>
+            </th>}
             <th onClick={() => handleSort('currentPrice')} className={styles.sortable}>
               Current Price {getSortIndicator('currentPrice')}
             </th>
@@ -197,8 +208,14 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
                 onClick={() => onTickerClick?.(stock, sortedIdx, sortedStocks)}
                 title={stock.companyName ? `${stock.companyName} — Click to view chart` : 'Click to view chart'}
               >
-                {!onRemove && <td className={styles.rankColumn}>{stock.rank ?? '—'}</td>}
-                {!onRemove && <td
+                {!onRemove && <td className={styles.rankColumn}>
+                  {hasScannerRanks ? (() => {
+                    const info = scannerRanks[stock.ticker?.toUpperCase()];
+                    if (!info) return '—';
+                    return <span>{info.rank} <span className={info.list === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort}>{info.list === 'LONG' ? 'L' : 'S'}</span></span>;
+                  })() : (stock.rank ?? '—')}
+                </td>}
+                {!onRemove && !hasScannerRanks && <td
                   className={rankDisplay.className}
                   title={stock.previousRank ? `Previous rank: #${stock.previousRank}` : 'New entry'}
                 >
@@ -209,7 +226,7 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
                   {stock.companyName && <div className={styles.companyName}>{stock.companyName}</div>}
                 </td>
                 <td>{stock.exchange}</td>
-                <td>{stock.sector}</td>
+                {!hideSector && <td>{stock.sector}</td>}
                 <td className={styles.price}>${stock.currentPrice.toLocaleString()}</td>
                 <td className={stock.ytdReturn >= 0 ? styles.positive : styles.negative}>
                   {stock.ytdReturn >= 0 ? '+' : ''}{stock.ytdReturn.toFixed(2)}%

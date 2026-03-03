@@ -137,6 +137,20 @@
   font-size: 14px;
 }
 
+/* Scanner L/S badge shown next to rank in secondary views (sectors, EMA) */
+.scannerBadgeLong,
+.scannerBadgeShort {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.scannerBadgeLong  { background: #dcfce7; color: #15803d; }
+.scannerBadgeShort { background: #fee2e2; color: #b91c1c; }
+
 /* Signal column styles - override .table td color */
 .signalColumn {
   text-align: center !important;

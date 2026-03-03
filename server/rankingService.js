@@ -156,6 +156,32 @@ export async function addShortRankingComparison(bottomStocks) {
   }
 }
 
+// Returns the date string (YYYY-MM-DD) of the most recent Friday in Eastern time.
+// Works any day of the week (not just on Fridays).
+export function getLastFridayDate() {
+  return getRankingDate();
+}
+
+// Save rankings for a specific date, bypassing the isFriday() check.
+// Skips if a ranking already exists for that date.
+export async function saveRankingManually(longStocks, shortStocks, date) {
+  try {
+    const rankingDate = date || getRankingDate();
+    const existing = await getRankingByDate(rankingDate);
+    if (existing) {
+      console.log(`✅ Ranking already exists for ${rankingDate}, skipping manual save`);
+      return { skipped: true, date: rankingDate };
+    }
+    console.log(`💾 Manual save for ${rankingDate}...`);
+    await saveRanking(rankingDate, longStocks, shortStocks);
+    await cleanupOldRankings(12);
+    return { saved: true, date: rankingDate };
+  } catch (error) {
+    console.error('Error in manual save:', error);
+    throw error;
+  }
+}
+
 // Auto-save long + short rankings if it's Friday (Eastern)
 export async function autoSaveRankingIfFriday(longStocks, shortStocks = null) {
   try {

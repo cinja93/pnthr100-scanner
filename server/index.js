@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks } from './stockService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
+import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
 import { getEtfStocks } from './etfService.js';
 import {
@@ -13,6 +14,7 @@ import {
   removeFromWatchlist,
   getAllRankings,
   getRankingByDate,
+  getMostRecentRanking,
   getStockHistory,
   getLatestSignals,
   getListEntryDates,
@@ -389,6 +391,22 @@ app.get('/api/rankings/:date', async (req, res) => {
   }
 });
 
+// POST /api/rankings/save
+// Force a fresh scan and save it for the most recent Friday (or a supplied date).
+// Useful for backfilling a missed Friday when the server was sleeping.
+// Body (optional): { date: 'YYYY-MM-DD' }
+app.post('/api/rankings/save', async (req, res) => {
+  try {
+    const date = req.body?.date || getLastFridayDate();
+    const data = await getStocksCache(true); // force fresh scan
+    const result = await saveRankingManually(data.long, data.short, date);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in manual ranking save:', error);
+    res.status(500).json({ error: error.message || 'Failed to save ranking' });
+  }
+});
+
 // Get stock's ranking history over last 12 weeks
 app.get('/api/stock-history/:ticker', async (req, res) => {
   try {
@@ -731,6 +749,37 @@ app.get('/api/earnings', async (req, res) => {
   }
 });
 
+// GET /api/scanner-ranks
+// Returns the most-recent-week scanner rank for every ticker in the long + short lists.
+// Cached 1 hour. Used by secondary views (sectors, EMA) to carry over PNTHR100 rank.
+let scannerRanksCache = null;
+let scannerRanksCacheTime = null;
+const SCANNER_RANKS_CACHE_DURATION = 60 * 60 * 1000; // 1 hour
+
+app.get('/api/scanner-ranks', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (scannerRanksCache && scannerRanksCacheTime && (now - scannerRanksCacheTime) < SCANNER_RANKS_CACHE_DURATION) {
+      return res.json(scannerRanksCache);
+    }
+    const ranking = await getMostRecentRanking();
+    if (!ranking) return res.json({});
+    const map = {};
+    for (const stock of ranking.rankings || []) {
+      if (stock.ticker) map[stock.ticker.toUpperCase()] = { rank: stock.rank, list: 'LONG' };
+    }
+    for (const stock of ranking.shortRankings || []) {
+      if (stock.ticker) map[stock.ticker.toUpperCase()] = { rank: stock.rank, list: 'SHORT' };
+    }
+    scannerRanksCache = map;
+    scannerRanksCacheTime = now;
+    res.json(map);
+  } catch (error) {
+    console.error('Error fetching scanner ranks:', error);
+    res.status(500).json({ error: 'Failed to fetch scanner ranks' });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -740,3 +789,22 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 API available at http://localhost:${PORT}/api/stocks`);
 });
+
+// Scheduled Friday auto-save: checks every 30 minutes.
+// On Fridays (Eastern) between 4:00 PM and 8:00 PM, forces a fresh scan
+// which triggers autoSaveRankingIfFriday internally.
+// Note: only works while the server is awake — pair with an external uptime
+// monitor (e.g. cron-job.org hitting /health) to prevent Render free-tier sleep.
+setInterval(async () => {
+  try {
+    const now = new Date();
+    const etWeekday = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long' });
+    const etHour = parseInt(now.toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }), 10);
+    if (etWeekday === 'Friday' && etHour >= 16 && etHour <= 20) {
+      console.log('⏰ Friday scheduler: forcing fresh scan for auto-save...');
+      await getStocksCache(true);
+    }
+  } catch (err) {
+    console.error('Friday scheduler error:', err.message);
+  }
+}, 30 * 60 * 1000);

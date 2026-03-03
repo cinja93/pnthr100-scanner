@@ -208,6 +208,19 @@ export async function fetchEarnings(tickers) {
   }
 }
 
+// Fetch the most-recent-week scanner rank for every ticker in the long + short lists.
+// Returns { TICKER: { rank: N, list: 'LONG'|'SHORT' } }
+export async function fetchScannerRanks() {
+  try {
+    const response = await fetch(`${API_BASE}/api/scanner-ranks`, { headers: authHeaders() });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching scanner ranks:', error);
+    return {};
+  }
+}
+
 // Fetch stocks in a given sector (by sector key, e.g. 'informationTechnology')
 export async function fetchSectorStocks(sectorKey) {
   const response = await fetch(`${API_BASE}/api/sector-stocks/${sectorKey}`, { headers: authHeaders() });

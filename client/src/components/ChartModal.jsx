@@ -288,7 +288,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
 
   // Load watchlist on mount
   useEffect(() => {
-    fetchWatchlist().then(tickers => setWatchlistSet(new Set(tickers))).catch(() => {});
+    fetchWatchlist().then(data => setWatchlistSet(new Set(data.map(s => s.ticker)))).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function toggleWatchlist() {

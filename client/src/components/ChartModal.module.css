@@ -318,3 +318,33 @@
   background: #dc2626;
   color: white;
 }
+
+.headerActions {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.watchlistBtn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+
+.watchlistBtn:hover:not(:disabled) {
+  color: #fcf000;
+}
+
+.watchlistBtnActive {
+  color: #fcf000;
+}
+
+.watchlistBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

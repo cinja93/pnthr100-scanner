@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
-import { fetchChartData, fetchEntryDates } from '../services/api';
+import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker } from '../services/api';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
 
@@ -82,6 +82,8 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
   const [signalMarkerPos, setSignalMarkerPos] = useState(null);
   const [pantherMarkerPos, setPantherMarkerPos] = useState(null);
   const [entryDatesLoaded, setEntryDatesLoaded] = useState(false);
+  const [watchlistSet, setWatchlistSet] = useState(new Set());
+  const [watchlistSaving, setWatchlistSaving] = useState(false);
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const cacheRef = useRef({});
@@ -91,6 +93,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
   const signalData = signals[stock?.ticker];
   const stopPrice = signalData?.stopPrice ?? null;
   const signalIcon = getSignalIcon(signalData);
+  const inWatchlist = stock ? watchlistSet.has(stock.ticker) : false;
 
   // Fetch data when stock changes
   useEffect(() => {
@@ -283,6 +286,30 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
     };
   }, [allWeeklyData, range, stopPrice, loading, entryDatesLoaded]);
 
+  // Load watchlist on mount
+  useEffect(() => {
+    fetchWatchlist().then(tickers => setWatchlistSet(new Set(tickers))).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function toggleWatchlist() {
+    const ticker = stock.ticker;
+    const inList = watchlistSet.has(ticker);
+    setWatchlistSaving(true);
+    try {
+      if (inList) {
+        await removeWatchlistTicker(ticker);
+        setWatchlistSet(prev => { const next = new Set(prev); next.delete(ticker); return next; });
+      } else {
+        await addWatchlistTicker(ticker);
+        setWatchlistSet(prev => new Set([...prev, ticker]));
+      }
+    } catch (err) {
+      console.error('Watchlist toggle error:', err);
+    } finally {
+      setWatchlistSaving(false);
+    }
+  }
+
   // Keyboard navigation
   useEffect(() => {
     function handleKey(e) {
@@ -316,7 +343,17 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
               {stock.exchange && <span className={styles.badge}>{stock.exchange}</span>}
             </div>
           </div>
-          <button className={styles.closeBtn} onClick={onClose} title="Close">×</button>
+          <div className={styles.headerActions}>
+            <button
+              className={`${styles.watchlistBtn} ${inWatchlist ? styles.watchlistBtnActive : ''}`}
+              onClick={toggleWatchlist}
+              disabled={watchlistSaving}
+              title={inWatchlist ? `Remove ${stock.ticker} from watchlist` : `Add ${stock.ticker} to watchlist`}
+            >
+              {inWatchlist ? '★' : '☆'}
+            </button>
+            <button className={styles.closeBtn} onClick={onClose} title="Close">×</button>
+          </div>
         </div>
 
         {/* Controls */}

@@ -72,7 +72,7 @@ function formatWeekDate(timeStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
+export default function ChartModal({ stocks, initialIndex, signals, onClose, onWatchlistChange }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [range, setRange] = useState('12m');
   const [allWeeklyData, setAllWeeklyData] = useState([]);
@@ -299,9 +299,11 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose }) {
       if (inList) {
         await removeWatchlistTicker(ticker);
         setWatchlistSet(prev => { const next = new Set(prev); next.delete(ticker); return next; });
+        onWatchlistChange?.(ticker, false);
       } else {
         await addWatchlistTicker(ticker);
         setWatchlistSet(prev => new Set([...prev, ticker]));
+        onWatchlistChange?.(ticker, true);
       }
     } catch (err) {
       console.error('Watchlist toggle error:', err);

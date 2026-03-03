@@ -111,7 +111,18 @@ export default function PortfolioPage({ currentUser, onProfileUpdate }) {
       else next.add(ticker);
       return next;
     });
-    // Clear optimization results when selection changes
+    setOptimized(null);
+    setOptimizeError('');
+  }
+
+  function selectAll() {
+    setIncluded(new Set(portfolio.map(s => s.ticker)));
+    setOptimized(null);
+    setOptimizeError('');
+  }
+
+  function deselectAll() {
+    setIncluded(new Set());
     setOptimized(null);
     setOptimizeError('');
   }
@@ -329,6 +340,19 @@ export default function PortfolioPage({ currentUser, onProfileUpdate }) {
               <strong className={styles.cardValue}>{optimized.excludedCount}</strong>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Select / Deselect All */}
+      {portfolio.length > 0 && (
+        <div className={styles.selectionRow}>
+          <button className={styles.selAllBtn} onClick={selectAll}>
+            Select All ({portfolio.length})
+          </button>
+          <button className={styles.selAllBtn} onClick={deselectAll}>
+            Deselect All
+          </button>
+          <span className={styles.selCount}>{included.size} selected</span>
         </div>
       )}
 

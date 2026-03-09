@@ -296,14 +296,15 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
           const positions = [];
           for (const ev of allSignalEvents) {
             const x = chart.timeScale().timeToCoordinate(ev.time);
-            const isLong = ev.signal === 'BL' || ev.signal === 'BE';
-            const price  = isLong ? ev.barLow * 0.98 : ev.barHigh * 1.02;
+            // BL, SE → below bar; SS, BE → above bar
+            const belowBar = ev.signal === 'BL' || ev.signal === 'SE';
+            const price = belowBar ? ev.barLow * 0.98 : ev.barHigh * 1.02;
             const y = series.priceToCoordinate(price);
             if (x != null && y != null) {
               positions.push({
                 signal: ev.signal,
                 left: Math.round(x),
-                top: isLong ? Math.round(y) : Math.round(y) - BADGE_H,
+                top: belowBar ? Math.round(y) : Math.round(y) - BADGE_H,
               });
             }
           }

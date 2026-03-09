@@ -127,18 +127,20 @@ function computeSignal(weeklyBars) {
   // BL: above EMA, slope rising, close breaks above 2-week high
   if (current.close > emaCurrent && slopeUp && current.close > twoWeekHigh + 0.01) {
     return {
-      signal:    'BL',
-      ema21:     parseFloat(emaCurrent.toFixed(4)),
-      stopPrice: parseFloat((twoWeekLow - 0.01).toFixed(2)),
+      signal:     'BL',
+      ema21:      parseFloat(emaCurrent.toFixed(4)),
+      stopPrice:  parseFloat((twoWeekLow - 0.01).toFixed(2)),
+      signalDate: current.weekStart, // YYYY-MM-DD of the Monday that opened the signal week
     };
   }
 
   // SS: below EMA, slope falling, close breaks below 2-week low
   if (current.close < emaCurrent && slopeDown && current.close < twoWeekLow - 0.01) {
     return {
-      signal:    'SS',
-      ema21:     parseFloat(emaCurrent.toFixed(4)),
-      stopPrice: parseFloat((twoWeekHigh + 0.01).toFixed(2)),
+      signal:     'SS',
+      ema21:      parseFloat(emaCurrent.toFixed(4)),
+      stopPrice:  parseFloat((twoWeekHigh + 0.01).toFixed(2)),
+      signalDate: current.weekStart,
     };
   }
 

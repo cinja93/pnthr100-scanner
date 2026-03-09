@@ -187,9 +187,11 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
       });
     });
 
-    // Signal marker — float PNG icon over chart at the signal bar's price
-    if (signalData?.signal && signalData?.timestamp) {
-      const sigDate = new Date(signalData.timestamp);
+    // Signal marker — float badge over chart at the signal bar's price
+    // Uses signalDate (PNTHR signals) or timestamp (Laser signals) to find the week
+    const sigDateStr = signalData?.signalDate || signalData?.timestamp;
+    if (signalData?.signal && sigDateStr) {
+      const sigDate = new Date(sigDateStr + (sigDateStr.length === 10 ? 'T12:00:00' : ''));
       const dow = sigDate.getDay();
       const monday = new Date(sigDate);
       monday.setDate(sigDate.getDate() - (dow === 0 ? 6 : dow - 1));
@@ -401,8 +403,20 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
             <div className={styles.chartWrapper}>
               <div ref={chartContainerRef} className={styles.chartContainer} />
 
-              {/* PNG signal marker overlaid on chart */}
-              {signalMarkerPos && signalIcon && (
+              {/* Signal marker overlaid on chart — text badge for BL/SS, icon for Laser signals */}
+              {signalMarkerPos && signalData?.signal === 'BL' && (
+                <span
+                  className={`${styles.chartSignalBadge} ${styles.chartSignalBadgeBL}`}
+                  style={{ left: signalMarkerPos.left, top: signalMarkerPos.top }}
+                >BL</span>
+              )}
+              {signalMarkerPos && signalData?.signal === 'SS' && (
+                <span
+                  className={`${styles.chartSignalBadge} ${styles.chartSignalBadgeSS}`}
+                  style={{ left: signalMarkerPos.left, top: signalMarkerPos.top }}
+                >SS</span>
+              )}
+              {signalMarkerPos && signalIcon && signalData?.signal !== 'BL' && signalData?.signal !== 'SS' && (
                 <img
                   src={signalIcon.src}
                   alt={signalIcon.alt}

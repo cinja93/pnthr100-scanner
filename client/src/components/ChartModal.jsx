@@ -372,7 +372,13 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
             ))}
           </div>
           <div className={styles.priceInfo}>
-            {signalIcon && (
+            {signalData?.signal === 'BL' && (
+              <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeBL}`}>BL</span>
+            )}
+            {signalData?.signal === 'SS' && (
+              <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeSS}`}>SS</span>
+            )}
+            {signalData?.signal && signalData.signal !== 'BL' && signalData.signal !== 'SS' && signalIcon && (
               <img src={signalIcon.src} alt={signalIcon.alt} className={styles.signalIcon} title={signalIcon.alt} />
             )}
             <span className={styles.currentPrice}>${stock.currentPrice?.toLocaleString()}</span>

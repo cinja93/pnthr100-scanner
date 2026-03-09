@@ -145,6 +145,23 @@
   object-fit: contain;
 }
 
+.pnthrBadge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.pnthrBadgeBL {
+  background: #16a34a;
+  color: #fff;
+}
+.pnthrBadgeSS {
+  background: #dc2626;
+  color: #fff;
+}
+
 .stopBadge {
   font-size: 12px;
   color: #92400e;

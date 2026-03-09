@@ -252,9 +252,13 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 <td className={styles.signalColumn}>
                   {signalsLoading
                     ? <span className={styles.loadingDots}>···</span>
-                    : icon
-                      ? <img src={icon} alt={alt} className={styles.signalIcon} title={alt} />
-                      : <span className={styles.signalNone}>—</span>}
+                    : signalData?.signal === 'BL'
+                      ? <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeBL}`}>BL</span>
+                      : signalData?.signal === 'SS'
+                        ? <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeSS}`}>SS</span>
+                        : icon
+                          ? <img src={icon} alt={alt} className={styles.signalIcon} title={alt} />
+                          : <span className={styles.signalNone}>—</span>}
                 </td>
                 <td className={styles.signalColumn}>
                   {signalsLoading ? <span className={styles.loadingDots}>···</span> : (() => {

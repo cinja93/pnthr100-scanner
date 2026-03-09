@@ -146,12 +146,12 @@ function runStateMachine(weeklyBars) {
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
           lastEvent = { signal: 'BE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
-          position = null; continue;
+          position = null; longDaylight = 0; shortDaylight = 0; continue;
         }
       } else {
         if (current.high > twoWeekHigh) {
           lastEvent = { signal: 'SE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
-          position = null; continue;
+          position = null; longDaylight = 0; shortDaylight = 0; continue;
         }
       }
     }

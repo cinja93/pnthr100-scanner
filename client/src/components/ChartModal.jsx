@@ -92,12 +92,12 @@ function detectAllSignals(weeklyData, period = 21) {
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
           events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high });
-          position = null; continue;
+          position = null; longDaylight = 0; shortDaylight = 0; continue;
         }
       } else {
         if (current.high > twoWeekHigh) {
           events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high });
-          position = null; continue;
+          position = null; longDaylight = 0; shortDaylight = 0; continue;
         }
       }
     }

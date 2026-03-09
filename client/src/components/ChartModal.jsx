@@ -83,19 +83,11 @@ function detectAllSignals(weeklyData, period = 21) {
     const twoWeekHigh = Math.max(prev1.high, prev2.high);
     const twoWeekLow  = Math.min(prev1.low,  prev2.low);
 
-    // Update daylight streak counters; reset trend flag if price crosses back through EMA
-    if (current.low > emaCurrent) {
-      longDaylight++;
-    } else {
-      longDaylight = 0;
-      longTrendActive = false;
-    }
-    if (current.high < emaCurrent) {
-      shortDaylight++;
-    } else {
-      shortDaylight = 0;
-      shortTrendActive = false;
-    }
+    // Update daylight streak counters.
+    // longTrendActive/shortTrendActive are never reset once set — once a BL/SS has fired,
+    // all subsequent re-entries only need Phase 1 (no daylight zone required).
+    longDaylight  = current.low  > emaCurrent ? longDaylight + 1 : 0;
+    shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
 
     // Past entry week: check for BE/SE exit
     // BE: this week's low breaks below the 2-week structural low

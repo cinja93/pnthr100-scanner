@@ -277,6 +277,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
 
     // Show the most recent entry (BL/SS) + its exit (BE/SE) if they fall in the visible range
     const allDetected = detectAllSignals(allWeeklyData, 21);
+    console.log(`[signals] ${stock.ticker} allDetected:`, allDetected.map(e => `${e.signal}@${e.time}`));
     const lastEntryIdx = (() => { for (let i = allDetected.length - 1; i >= 0; i--) { if (allDetected[i].signal === 'BL' || allDetected[i].signal === 'SS') return i; } return -1; })();
     const lastEntry  = lastEntryIdx >= 0 ? allDetected[lastEntryIdx] : null;
     const exitEvent  = lastEntry ? allDetected.slice(lastEntryIdx + 1).find(e => e.signal === 'BE' || e.signal === 'SE') : null;

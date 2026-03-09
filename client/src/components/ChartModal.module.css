@@ -218,6 +218,14 @@
   background: #dc2626;
   color: #fff;
 }
+.chartSignalBadgeBE {
+  background: #d97706;
+  color: #fff;
+}
+.chartSignalBadgeSE {
+  background: #d97706;
+  color: #fff;
+}
 
 /* OHLC hover tooltip */
 .ohlcTooltip {

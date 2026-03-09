@@ -57,30 +57,96 @@ function calculateEMA(weeklyData, period) {
   return result;
 }
 
-// Scan full weekly history and return every bar that triggers a BL or SS signal.
-// Mirrors the server-side computeSignal logic so charts always match the signal engine.
+// Wilder's ATR(3) aligned to weeklyData indices.
+// atrData[i] = ATR through end of week i (null for early bars).
+// Formula: ATR = ((prior ATR * 2) + current TR) / 3; seeded with SMA of first 3 TRs.
+function calculateWildersATR(weeklyData, period = 3) {
+  const n = weeklyData.length;
+  const atrs = new Array(n).fill(null);
+  if (n < period + 1) return atrs;
+  // trs[i-1] = TR for weeklyData[i]
+  const trs = [];
+  for (let i = 1; i < n; i++) {
+    const curr = weeklyData[i], prev = weeklyData[i - 1];
+    trs.push(Math.max(curr.high - curr.low, Math.abs(curr.high - prev.close), Math.abs(curr.low - prev.close)));
+  }
+  if (trs.length < period) return atrs;
+  let atr = trs.slice(0, period).reduce((s, v) => s + v, 0) / period;
+  atrs[period] = atr;
+  for (let i = period + 1; i < n; i++) {
+    atr = ((atr * 2) + trs[i - 1]) / 3;
+    atrs[i] = atr;
+  }
+  return atrs;
+}
+
+// Scan full weekly history; returns events: BL/SS (first of each streak) + BE/SE (stop exits).
+// Ratcheting stops follow Phase 5 protective stop logic (Wilder's ATR 3 + structural support).
 function detectAllSignals(weeklyData, period = 21) {
   if (weeklyData.length < period + 2) return [];
   const emaData = calculateEMA(weeklyData, period);
-  // emaData[0] corresponds to weeklyData[period-1]; emaData[k] → weeklyData[period-1+k]
-  const signals = [];
+  const atrData = calculateWildersATR(weeklyData, 3);
+  const events = [];
+  let prevSignal = null;
+  let position = null; // { type: 'BL'|'SS', stop: number, entryWi: number }
+
   for (let wi = period + 1; wi < weeklyData.length; wi++) {
     const emaIdx = wi - (period - 1);
     if (emaIdx < 1) continue;
-    const current = weeklyData[wi];
-    const prev1   = weeklyData[wi - 1];
-    const prev2   = weeklyData[wi - 2];
-    const emaCurrent = emaData[emaIdx].value;
-    const emaPrev    = emaData[emaIdx - 1].value;
+    const current  = weeklyData[wi];
+    const prev1    = weeklyData[wi - 1];
+    const prev2    = weeklyData[wi - 2];
+    const emaCurrent  = emaData[emaIdx].value;
+    const emaPrev     = emaData[emaIdx - 1].value;
     const twoWeekHigh = Math.max(prev1.high, prev2.high);
     const twoWeekLow  = Math.min(prev1.low,  prev2.low);
-    if (current.close > emaCurrent && emaCurrent > emaPrev && current.close > twoWeekHigh + 0.01) {
-      signals.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });
-    } else if (current.close < emaCurrent && emaCurrent < emaPrev && current.close < twoWeekLow - 0.01) {
-      signals.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high });
+
+    // Past entry week: ratchet stop and check for BE/SE exit
+    if (position && position.entryWi !== wi) {
+      const atr = atrData[wi - 1]; // ATR through end of prev1 (last Friday)
+
+      if (position.type === 'BL') {
+        const pctBuf = 0.001 * prev1.close;
+        const structural = pctBuf > 0.01 ? twoWeekLow + pctBuf : twoWeekLow - 0.01;
+        const volFloor   = atr != null ? prev1.close - atr : structural;
+        position.stop    = Math.max(Math.max(structural, volFloor), position.stop); // only ratchets up
+        if (current.open < position.stop || current.low < position.stop) {
+          events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high });
+          position = null; prevSignal = null; continue;
+        }
+      } else { // SS
+        const pctBuf = 0.001 * prev1.close;
+        const structural = pctBuf > 0.01 ? twoWeekHigh - pctBuf : twoWeekHigh + 0.01;
+        const volStop    = atr != null ? prev1.close + atr : structural;
+        position.stop    = Math.min(Math.min(structural, volStop), position.stop); // only ratchets down
+        if (current.open > position.stop || current.high > position.stop) {
+          events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high });
+          position = null; prevSignal = null; continue;
+        }
+      }
     }
+
+    // Determine this week's EMA signal
+    let thisSignal = null;
+    if (current.close > emaCurrent && emaCurrent > emaPrev && current.close > twoWeekHigh + 0.01) {
+      thisSignal = 'BL';
+    } else if (current.close < emaCurrent && emaCurrent < emaPrev && current.close < twoWeekLow - 0.01) {
+      thisSignal = 'SS';
+    }
+
+    // New entry: first week of streak, no active position
+    if (!position && thisSignal && thisSignal !== prevSignal) {
+      events.push({ time: current.time, signal: thisSignal, barLow: current.low, barHigh: current.high });
+      const pctBuf = 0.001 * current.close;
+      const entryStop = thisSignal === 'BL'
+        ? (pctBuf > 0.01 ? current.low  + pctBuf : current.low  - 0.01)
+        : (pctBuf > 0.01 ? current.high - pctBuf : current.high + 0.01);
+      position = { type: thisSignal, stop: entryStop, entryWi: wi };
+    }
+
+    prevSignal = thisSignal;
   }
-  return signals;
+  return events;
 }
 
 function filterByRange(weeklyData, range) {
@@ -216,10 +282,12 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
       });
     });
 
-    // Show only the most recent BL/SS signal if it falls within the current view range
+    // Show the most recent entry (BL/SS) + its exit (BE/SE) if they fall in the visible range
     const allDetected = detectAllSignals(allWeeklyData, 21);
-    const mostRecent = allDetected.length > 0 ? allDetected[allDetected.length - 1] : null;
-    const allSignalEvents = mostRecent && filteredTimes.has(mostRecent.time) ? [mostRecent] : [];
+    const lastEntryIdx = (() => { for (let i = allDetected.length - 1; i >= 0; i--) { if (allDetected[i].signal === 'BL' || allDetected[i].signal === 'SS') return i; } return -1; })();
+    const lastEntry  = lastEntryIdx >= 0 ? allDetected[lastEntryIdx] : null;
+    const exitEvent  = lastEntry ? allDetected.slice(lastEntryIdx + 1).find(e => e.signal === 'BE' || e.signal === 'SE') : null;
+    const allSignalEvents = [lastEntry, exitEvent].filter(e => e && filteredTimes.has(e.time));
     if (allSignalEvents.length > 0) {
       const BADGE_H = 22;
       const updateAllMarkers = () => {
@@ -228,14 +296,14 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
           const positions = [];
           for (const ev of allSignalEvents) {
             const x = chart.timeScale().timeToCoordinate(ev.time);
-            const isBuy = ev.signal === 'BL';
-            const price = isBuy ? ev.barLow * 0.98 : ev.barHigh * 1.02;
+            const isLong = ev.signal === 'BL' || ev.signal === 'BE';
+            const price  = isLong ? ev.barLow * 0.98 : ev.barHigh * 1.02;
             const y = series.priceToCoordinate(price);
             if (x != null && y != null) {
               positions.push({
                 signal: ev.signal,
                 left: Math.round(x),
-                top: isBuy ? Math.round(y) : Math.round(y) - BADGE_H,
+                top: isLong ? Math.round(y) : Math.round(y) - BADGE_H,
               });
             }
           }
@@ -439,7 +507,12 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
               {signalMarkers.map((m, i) => (
                 <span
                   key={i}
-                  className={`${styles.chartSignalBadge} ${m.signal === 'BL' ? styles.chartSignalBadgeBL : styles.chartSignalBadgeSS}`}
+                  className={`${styles.chartSignalBadge} ${
+                    m.signal === 'BL' ? styles.chartSignalBadgeBL :
+                    m.signal === 'SS' ? styles.chartSignalBadgeSS :
+                    m.signal === 'BE' ? styles.chartSignalBadgeBE :
+                    styles.chartSignalBadgeSE
+                  }`}
                   style={{ left: m.left, top: m.top }}
                 >{m.signal}</span>
               ))}

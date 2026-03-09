@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
-import { fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchSignals, fetchEarnings } from '../services/api';
+import { fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchSignals, fetchLaserSignals, fetchEarnings } from '../services/api';
 import styles from './WatchlistPage.module.css';
 
 export default function WatchlistPage() {
   const [stocks, setStocks] = useState([]);
   const [signals, setSignals] = useState({});
+  const [laserSignals, setLaserSignals] = useState({});
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -30,9 +31,14 @@ export default function WatchlistPage() {
       if (data.length > 0) {
         const tickers = data.map(s => s.ticker);
         setSignals({});
+        setLaserSignals({});
         setSignalsLoading(true);
-        fetchSignals(tickers).then(result => {
-          setSignals(result);
+        Promise.all([
+          fetchSignals(tickers).catch(() => ({})),
+          fetchLaserSignals(tickers).catch(() => ({})),
+        ]).then(([pnthr, laser]) => {
+          setSignals(pnthr);
+          setLaserSignals(laser);
           setSignalsLoading(false);
         });
         fetchEarnings(tickers).then(result => setEarnings(result));
@@ -137,6 +143,7 @@ export default function WatchlistPage() {
         <StockTable
           stocks={stocks}
           signals={signals}
+          laserSignals={laserSignals}
           signalsLoading={signalsLoading}
           earnings={earnings}
           onTickerClick={handleRowClick}

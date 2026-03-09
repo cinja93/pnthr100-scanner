@@ -146,6 +146,16 @@
 }
 
 /* Signal-specific pill colors when active */
+.pill_BL.pillActive {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
+.pill_SS.pillActive {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
 .pill_BUY.pillActive,
 .pill_NEW_BUY.pillActive {
   background: #16a34a;

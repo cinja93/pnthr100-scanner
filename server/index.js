@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks } from './stockService.js';
+import { getSignals } from './signalService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
@@ -18,8 +19,8 @@ import {
   getRankingByDate,
   getMostRecentRanking,
   getStockHistory,
-  getLatestSignals,
   getListEntryDates,
+  getLatestSignals,
   createUser,
   findUserByEmail,
   getUserProfile,
@@ -501,16 +502,15 @@ app.get('/api/stock-history/:ticker', async (req, res) => {
   }
 });
 
-// Get latest laser signals for a list of tickers (read-only from mobile app DB).
-// If shortList: true, tickers with no laser signal get a stop price from 2-week high + $0.01 (short exit).
+// Get EMA-derived signals for a list of tickers.
+// If shortList: true, tickers with no signal get a proxy stop from 2-week high + $0.01.
 app.post('/api/signals', async (req, res) => {
   try {
     const { tickers, shortList } = req.body;
     if (!Array.isArray(tickers) || tickers.length === 0) {
       return res.status(400).json({ error: 'tickers array is required' });
     }
-    const signals = await getLatestSignals(tickers);
-    let signalsWithStops = await calculateStopPrices(signals);
+    let signalsWithStops = await getSignals(tickers);
     if (shortList) {
       const missingStopTickers = tickers.filter(t => {
         const key = (typeof t === 'string' ? t : t.ticker || t).toUpperCase();
@@ -528,6 +528,36 @@ app.post('/api/signals', async (req, res) => {
   } catch (error) {
     console.error('Error fetching signals:', error);
     res.status(500).json({ error: 'Failed to fetch signals' });
+  }
+});
+
+// Get legacy Laser signals from MongoDB (read-only mirror of The Laser app DB).
+// Used alongside /api/signals for side-by-side comparison during PNTHR signal rollout.
+app.post('/api/laser-signals', async (req, res) => {
+  try {
+    const { tickers, shortList } = req.body;
+    if (!Array.isArray(tickers) || tickers.length === 0) {
+      return res.status(400).json({ error: 'tickers array is required' });
+    }
+    let signals = await getLatestSignals(tickers);
+    signals = await calculateStopPrices(signals);
+    if (shortList) {
+      const missingStopTickers = tickers.filter(t => {
+        const key = (typeof t === 'string' ? t : t.ticker || t).toUpperCase();
+        return !(signals[key]?.stopPrice != null);
+      });
+      if (missingStopTickers.length > 0) {
+        const shortStops = await getShortStopPrices(missingStopTickers);
+        signals = { ...signals };
+        for (const [ticker, data] of Object.entries(shortStops)) {
+          signals[ticker] = { ...(signals[ticker] || {}), ...data };
+        }
+      }
+    }
+    res.json(signals);
+  } catch (error) {
+    console.error('Error fetching laser signals:', error);
+    res.status(500).json({ error: 'Failed to fetch laser signals' });
   }
 });
 
@@ -752,10 +782,9 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
       .sort((a, b) => b.ytdReturn - a.ytdReturn)
       .map((s, i) => ({ ...s, rank: i + 1 }));
 
-    // 4. Get Laser signals + stop prices for these tickers
+    // 4. Get EMA signals + stop prices for these tickers
     const stockTickers = stocks.map(s => s.ticker);
-    const rawSignals = await getLatestSignals(stockTickers);
-    const signals = await calculateStopPrices(rawSignals);
+    const signals = await getSignals(stockTickers);
 
     res.json({ stocks, signals });
   } catch (error) {

@@ -10,7 +10,7 @@ export default function LoginPage({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : 'http://localhost:3000');
+  const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
 
   async function handleSubmit(e) {
     e.preventDefault();

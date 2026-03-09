@@ -9,7 +9,7 @@ import PortfolioPage from './components/PortfolioPage';
 import EmaCrossoverPage from './components/EmaCrossoverPage';
 import EtfPage from './components/EtfPage';
 import LoginPage from './components/LoginPage';
-import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken } from './services/api';
+import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken } from './services/api';
 import './App.css';
 
 const defaultFilters = {
@@ -85,6 +85,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [selectedDate, setSelectedDate] = useState(null);
   const [availableDates, setAvailableDates] = useState([]);
   const [signals, setSignals] = useState({});
+  const [laserSignals, setLaserSignals] = useState({});
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [earnings, setEarnings] = useState({});
   const [chartIndex, setChartIndex] = useState(null);
@@ -154,12 +155,18 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       setStocks(data);
       setSelectedDate('current');
       setSignals({});
+      setLaserSignals({});
       setSignalsLoading(true);
       const tickers = data.map(s => s.ticker);
-      fetchSignals(tickers, { shortList: scanType === 'short' }).then(result => {
-        setSignals(result);
+      const opts = { shortList: scanType === 'short' };
+      Promise.all([
+        fetchSignals(tickers, opts).catch(err => { console.error('PNTHR signals error:', err); return {}; }),
+        fetchLaserSignals(tickers, opts).catch(err => { console.error('Laser signals error:', err); return {}; }),
+      ]).then(([pnthr, laser]) => {
+        setSignals(pnthr);
+        setLaserSignals(laser);
         setSignalsLoading(false);
-      }).catch(err => { console.error('Signals fetch error:', err); setSignalsLoading(false); });
+      });
       fetchEarnings(tickers).then(result => setEarnings(result)).catch(err => console.error('Earnings fetch error:', err));
     } catch (err) {
       setError('Failed to load stock data. Please try again later.');
@@ -182,12 +189,18 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       setStocks(list);
       setSelectedDate(date);
       setSignals({});
+      setLaserSignals({});
       setSignalsLoading(true);
       const tickers = list.map(s => s.ticker);
-      fetchSignals(tickers, { shortList: scanType === 'short' }).then(result => {
-        setSignals(result);
+      const opts = { shortList: scanType === 'short' };
+      Promise.all([
+        fetchSignals(tickers, opts).catch(err => { console.error('PNTHR signals error:', err); return {}; }),
+        fetchLaserSignals(tickers, opts).catch(err => { console.error('Laser signals error:', err); return {}; }),
+      ]).then(([pnthr, laser]) => {
+        setSignals(pnthr);
+        setLaserSignals(laser);
         setSignalsLoading(false);
-      }).catch(err => { console.error('Signals fetch error:', err); setSignalsLoading(false); });
+      });
       fetchEarnings(tickers).then(result => setEarnings(result)).catch(err => console.error('Earnings fetch error:', err));
     } catch (err) {
       setError(`Failed to load data for ${date}. Please try again.`);
@@ -267,7 +280,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                     </div>
                   )}
                   <FilterBar stocks={stocks} signals={signals} filters={filters} onChange={setFilters} scanType={scanType} />
-                  <StockTable key={activePage} stocks={filteredStocks} signals={signals} signalsLoading={signalsLoading} earnings={earnings} onTickerClick={handleRowClick} scanType={scanType} />
+                  <StockTable key={activePage} stocks={filteredStocks} signals={signals} laserSignals={laserSignals} signalsLoading={signalsLoading} earnings={earnings} onTickerClick={handleRowClick} scanType={scanType} />
                 </>
               )}
             </>

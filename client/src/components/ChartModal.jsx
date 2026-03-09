@@ -16,8 +16,8 @@ import newCautionSellIcon   from './New Caution Sell Signal.png';
 function getSignalIcon(signalData) {
   if (!signalData?.signal) return null;
   const { signal, isNewSignal } = signalData;
-  if (signal === 'BUY')         return { src: isNewSignal ? newConfirmedBuyIcon  : confirmedBuyIcon,  alt: isNewSignal ? 'New Confirmed Buy'  : 'Confirmed Buy'  };
-  if (signal === 'SELL')        return { src: isNewSignal ? newConfirmedSellIcon : confirmedSellIcon, alt: isNewSignal ? 'New Confirmed Sell' : 'Confirmed Sell' };
+  if (signal === 'BL'  || signal === 'BUY')         return { src: isNewSignal ? newConfirmedBuyIcon  : confirmedBuyIcon,  alt: isNewSignal ? 'New BL'  : 'BL'  };
+  if (signal === 'SS'  || signal === 'SELL')        return { src: isNewSignal ? newConfirmedSellIcon : confirmedSellIcon, alt: isNewSignal ? 'New SS'  : 'SS'  };
   if (signal === 'YELLOW_BUY')  return { src: isNewSignal ? newCautionBuyIcon   : cautionBuyIcon,    alt: isNewSignal ? 'New Caution Buy'    : 'Caution Buy'    };
   if (signal === 'YELLOW_SELL') return { src: isNewSignal ? newCautionSellIcon  : cautionSellIcon,   alt: isNewSignal ? 'New Caution Sell'   : 'Caution Sell'   };
   return null;
@@ -195,7 +195,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
       monday.setDate(sigDate.getDate() - (dow === 0 ? 6 : dow - 1));
       const weekKey = monday.toISOString().split('T')[0];
       if (filteredTimes.has(weekKey)) {
-        const isBuy = signalData.signal.includes('BUY');
+        const isBuy = signalData.signal === 'BL' || signalData.signal.includes('BUY');
         const barData = filtered.find(d => d.time === weekKey);
         if (barData) {
           const ICON = 32;

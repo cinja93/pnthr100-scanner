@@ -14,15 +14,15 @@ import newCautionSellIcon from './New Caution Sell Signal.png';
 function getSignalDisplay(signalData) {
   if (!signalData) return { icon: null, alt: '—' };
   const { signal, isNewSignal } = signalData;
-  if (signal === 'BUY')         return { icon: isNewSignal ? newConfirmedBuyIcon  : confirmedBuyIcon,  alt: isNewSignal ? 'New Confirmed Buy'  : 'Confirmed Buy'  };
-  if (signal === 'SELL')        return { icon: isNewSignal ? newConfirmedSellIcon : confirmedSellIcon, alt: isNewSignal ? 'New Confirmed Sell' : 'Confirmed Sell' };
+  if (signal === 'BL'  || signal === 'BUY')         return { icon: isNewSignal ? newConfirmedBuyIcon  : confirmedBuyIcon,  alt: isNewSignal ? 'New BL'  : 'BL'  };
+  if (signal === 'SS'  || signal === 'SELL')        return { icon: isNewSignal ? newConfirmedSellIcon : confirmedSellIcon, alt: isNewSignal ? 'New SS'  : 'SS'  };
   if (signal === 'YELLOW_BUY')  return { icon: isNewSignal ? newCautionBuyIcon   : cautionBuyIcon,    alt: isNewSignal ? 'New Caution Buy'    : 'Caution Buy'    };
   if (signal === 'YELLOW_SELL') return { icon: isNewSignal ? newCautionSellIcon  : cautionSellIcon,   alt: isNewSignal ? 'New Caution Sell'   : 'Caution Sell'   };
   return { icon: null, alt: signal };
 }
 
 // Signal sort order: buys first, sells last, no signal at bottom
-const SIGNAL_ORDER = { BUY: 1, YELLOW_BUY: 2, YELLOW_SELL: 3, SELL: 4 };
+const SIGNAL_ORDER = { BL: 1, BUY: 1, YELLOW_BUY: 2, YELLOW_SELL: 3, SS: 4, SELL: 4 };
 
 const TODAY = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
 
@@ -35,7 +35,7 @@ function getEarningsInfo(dateStr) {
   return { display, daysAway, highlight: daysAway >= 0 && daysAway <= 14 };
 }
 
-export default function StockTable({ stocks, signals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, onTickerClick, onRemove, scanType }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, onTickerClick, onRemove, scanType }) {
   const [sortConfig, setSortConfig] = useState({ key: 'rank', direction: 'asc' });
   const hasScannerRanks = scannerRanks !== null;
 
@@ -182,7 +182,10 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
               Risk % {getSortIndicator('riskPct')}
             </th>
             <th onClick={() => handleSort('signal')} className={`${styles.signalColumn} ${styles.sortable}`}>
-              Signal {getSortIndicator('signal')}
+              PNTHR Signal {getSortIndicator('signal')}
+            </th>
+            <th className={styles.signalColumn}>
+              Laser Signal
             </th>
             <th onClick={() => handleSort('earningsDate')} className={styles.sortable}>
               Next Earnings {getSortIndicator('earningsDate')}
@@ -252,6 +255,15 @@ export default function StockTable({ stocks, signals = {}, signalsLoading = fals
                     : icon
                       ? <img src={icon} alt={alt} className={styles.signalIcon} title={alt} />
                       : <span className={styles.signalNone}>—</span>}
+                </td>
+                <td className={styles.signalColumn}>
+                  {signalsLoading ? <span className={styles.loadingDots}>···</span> : (() => {
+                    const ld = laserSignals[stock.ticker];
+                    const { icon: li, alt: la } = getSignalDisplay(ld);
+                    return li
+                      ? <img src={li} alt={la} className={styles.signalIcon} title={la} />
+                      : <span className={styles.signalNone}>—</span>;
+                  })()}
                 </td>
                 <td>
                   {earningsInfo.display}

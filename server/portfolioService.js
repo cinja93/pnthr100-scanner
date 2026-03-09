@@ -1,19 +1,17 @@
-import { getLatestSignals } from './database.js';
-import { calculateStopPrices } from './stockService.js';
+import { getSignals } from './signalService.js';
 
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 const FMP_API_KEY = process.env.FMP_API_KEY;
 
-// Add laser signals + calculated stop prices to an array of stock objects.
+// Add EMA-derived signals + stop prices to an array of stock objects.
 // Mutates nothing — returns new objects.
 export async function enrichWithSignals(stocks) {
   if (!stocks || stocks.length === 0) return [];
   const tickers = stocks.map(s => s.ticker);
-  const signalMap = await getLatestSignals(tickers);
-  const withStops = await calculateStopPrices(signalMap);
+  const signalMap = await getSignals(tickers);
 
   return stocks.map(stock => {
-    const sig = withStops[stock.ticker];
+    const sig = signalMap[stock.ticker];
     const stopPrice = sig?.stopPrice ?? null;
     return {
       ...stock,
@@ -146,29 +144,33 @@ function computeAvgCorrelation(returnSeries) {
   return count > 0 ? total / count : 0;
 }
 
-// Risk-Adjusted Portfolio Optimization
-// ─────────────────────────────────────
-// Step 1a Drop any stock with Sortino < 0 (net loser on a risk-adjusted basis).
-// Step 1b Sector caps (≤ 25% of positions per sector).
-//         Within an over-weight sector, drop lowest individual Sortino stocks.
-// Step 2  Build equal-risk-weight portfolio return series (capital-weighted by baseW).
-// Step 3  VIX-based vol targeting: volScale = min(1, VIX_TARGET / currentVIX).
-//         Falls back to no scaling if VIX is unavailable.
-// Step 4  Correlation check: further reduce if avg P&L correlation > 0.5.
-// Step 5  Compute portfolio Sortino (primary), Sharpe (secondary), MaxDrawdown.
+// ── RASON Product Mix Portfolio Optimization ──────────────────────────────────
+//
+// Formulation (Simplex LP):
+//   Variables : x[i] ∈ [0, 1]  — allocation fraction for each position
+//   Objective : Maximize Σ sortino[i] * x[i]
+//               LP naturally sets x[i] = 0 for negative-Sortino stocks.
+//   Constraints: for each sector s: Σ{i in s} x[i] ≤ maxPerSector
+//
+// Post-solve (local JS):
+//   VIX-based vol targeting  — volScale  = min(1, VIX_TARGET / currentVIX)
+//   Correlation check        — corrScale = min(1, CORR_THRESHOLD / avgCorr)
+//   Final scaleFactor        = min(volScale, corrScale)
+//
+// Falls back to rule-based greedy selection if RASON is unavailable.
 //
 // Returns { fractions[], sortino, sharpe, scaleFactor, maxDrawdown, portfolioVol, vix, avgCorrelation }
 export async function optimizeWithRason(positions, accountSize, riskPct = 1) {
   const WEEKS = 12;
-  const VIX_TARGET = 20;        // VIX level at which full sizing applies; scale back proportionally above this
-  const SECTOR_CAP = 0.25;      // max 25% of positions in any one sector
-  const CORR_THRESHOLD = 0.50;  // scale down when avg pairwise correlation exceeds this
+  const VIX_TARGET = 20;
+  const SECTOR_CAP = 0.25;
+  const CORR_THRESHOLD = 0.50;
 
   const n = positions.length;
   const tickers = positions.map(p => p.ticker);
   const dir = positions.map(p => (p.direction === 'LONG' ? 1 : -1));
 
-  // Capital weight of each position at full (100%) base allocation
+  // Capital weight of each position at full base allocation
   const baseW = positions.map((p) => {
     const riskPerShare = p.stopPrice != null
       ? Math.abs(p.currentPrice - p.stopPrice)
@@ -187,30 +189,89 @@ export async function optimizeWithRason(positions, accountSize, riskPct = 1) {
     alignReturns(returnsMap[t] || [], WEEKS).map(r => dir[i] * r)
   );
 
-  // Per-stock Sortino for ranking within sectors
   const stockSortino = adjReturns.map(computeSortino);
-
-  // ── Step 1a: Drop stocks with negative Sortino (lost money on a risk-adjusted basis) ──
-  // Start with only non-negative Sortino stocks; sector cap then trims further.
-  const included = new Set([...Array(n).keys()].filter(i => stockSortino[i] >= 0));
-
-  // ── Step 1b: Sector caps ───────────────────────────────────────────────────
   const maxPerSector = Math.max(2, Math.ceil(n * SECTOR_CAP));
-  const sectorGroups = {};
-  positions.forEach((p, i) => {
-    if (!included.has(i)) return; // skip already-excluded stocks
-    const s = p.sector || 'Unknown';
-    (sectorGroups[s] = sectorGroups[s] || []).push({ i, sortino: stockSortino[i] });
-  });
-  for (const group of Object.values(sectorGroups)) {
-    if (group.length > maxPerSector) {
-      group.sort((a, b) => b.sortino - a.sortino);
-      group.slice(maxPerSector).forEach(g => included.delete(g.i));
-    }
-  }
-  const inclArr = [...included];
 
-  // ── Step 2: Portfolio return series (capital-weighted) ────────────────────
+  // ── Build RASON LP model ───────────────────────────────────────────────────
+  // One scalar variable per position: x0, x1, ... xN (RASON scalar variable format)
+  const xNames = positions.map((_, i) => `x${i}`);
+
+  const variables = {};
+  xNames.forEach((name) => {
+    variables[name] = { value: 0.5, lowerBound: 0, upperBound: 1, finalValue: [] };
+  });
+
+  // Objective: maximize Σ sortino[i] * xi
+  const objFormula = xNames
+    .map((name, i) => `${stockSortino[i].toFixed(8)}*${name}`)
+    .join(' + ');
+
+  // Sector constraints: Σ xi for stocks in sector s ≤ maxPerSector
+  const sectors = [...new Set(positions.map(p => p.sector || 'Unknown'))];
+  const constraints = {};
+  sectors.forEach((sector) => {
+    const members = positions
+      .map((p, i) => (p.sector || 'Unknown') === sector ? xNames[i] : null)
+      .filter(Boolean);
+    if (members.length > 0) {
+      const key = `sec_${sector.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      constraints[key] = { upper: maxPerSector, formula: members.join(' + ') };
+    }
+  });
+
+  const rasonModel = {
+    engineSettings: { engine: 'Simplex LP' },
+    variables,
+    constraints,
+    objective: {
+      obj: { type: 'maximize', formula: objFormula, finalValue: [] },
+    },
+  };
+
+  // ── Call RASON API ─────────────────────────────────────────────────────────
+  let fractions;
+  try {
+    const rasonRes = await fetch('https://rason.net/api/optimize', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.RASON_API_TOKEN}`,
+      },
+      body: JSON.stringify(rasonModel),
+    });
+
+    if (!rasonRes.ok) throw new Error(`RASON HTTP ${rasonRes.status}`);
+    const rasonResult = await rasonRes.json();
+
+    // Extract per-position fractions from solution
+    fractions = xNames.map(name => {
+      const val = rasonResult?.variables?.[name]?.finalValue;
+      return typeof val === 'number' ? Math.max(0, Math.min(1, val)) : 0;
+    });
+
+    console.log(`📐 RASON solved. Included: ${fractions.filter(f => f > 0.01).length}/${n}`);
+  } catch (err) {
+    // ── Fallback: greedy rule-based selection ──────────────────────────────
+    console.warn(`⚠️  RASON unavailable (${err.message}), using rule-based fallback.`);
+    const included = new Set([...Array(n).keys()].filter(i => stockSortino[i] >= 0));
+    const sectorGroups = {};
+    positions.forEach((p, i) => {
+      if (!included.has(i)) return;
+      const s = p.sector || 'Unknown';
+      (sectorGroups[s] = sectorGroups[s] || []).push({ i, sortino: stockSortino[i] });
+    });
+    for (const group of Object.values(sectorGroups)) {
+      if (group.length > maxPerSector) {
+        group.sort((a, b) => b.sortino - a.sortino);
+        group.slice(maxPerSector).forEach(g => included.delete(g.i));
+      }
+    }
+    fractions = positions.map((_, i) => included.has(i) ? 1 : 0);
+  }
+
+  // ── Post-solve: VIX scaling + correlation check ────────────────────────────
+  const inclArr = fractions.map((f, i) => f > 0.01 ? i : -1).filter(i => i >= 0);
+
   const totalBaseW = inclArr.reduce((s, i) => s + baseW[i], 0);
   const portRets = Array(WEEKS).fill(0);
   for (const i of inclArr) {
@@ -218,8 +279,6 @@ export async function optimizeWithRason(positions, accountSize, riskPct = 1) {
     for (let wk = 0; wk < WEEKS; wk++) portRets[wk] += adjReturns[i][wk] * w;
   }
 
-  // ── Step 3: VIX-based volatility targeting ────────────────────────────────
-  // portMean / portVolAnnual still computed for Sharpe reporting (Step 5).
   const portMean = portRets.reduce((s, r) => s + r, 0) / WEEKS;
   const portVolWeekly = Math.sqrt(
     portRets.reduce((s, r) => s + (r - portMean) ** 2, 0) / Math.max(WEEKS - 1, 1)
@@ -227,17 +286,13 @@ export async function optimizeWithRason(positions, accountSize, riskPct = 1) {
   const portVolAnnual = portVolWeekly * Math.sqrt(52);
 
   const vix = await fetchVix();
-  // Scale back proportionally when VIX > target; no leverage when VIX is calm.
   const volScale = (vix != null && vix > VIX_TARGET) ? VIX_TARGET / vix : 1.0;
 
-  // ── Step 4: Correlation check ──────────────────────────────────────────────
   const avgCorr = computeAvgCorrelation(inclArr.map(i => adjReturns[i]));
   const corrScale = avgCorr > CORR_THRESHOLD ? CORR_THRESHOLD / avgCorr : 1.0;
 
   const scaleFactor = Math.min(volScale, corrScale);
 
-  // ── Step 5: Portfolio metrics ──────────────────────────────────────────────
-  // Sortino and Sharpe are scale-invariant; report unscaled portfolio quality.
   const portSortino = computeSortino(portRets);
   const portSharpe = portVolAnnual > 0 ? (portMean * 52) / portVolAnnual : 0;
   const portMaxDD = computeMaxDrawdown(portRets);
@@ -245,18 +300,18 @@ export async function optimizeWithRason(positions, accountSize, riskPct = 1) {
   console.log(
     `📐 Opt done. Sortino: ${portSortino.toFixed(2)}, Sharpe: ${portSharpe.toFixed(2)}, ` +
     `Scale: ${(scaleFactor * 100).toFixed(0)}%, VIX: ${vix != null ? vix.toFixed(1) : 'N/A'}, ` +
-    `Excluded: ${n - included.size}`
+    `Excluded: ${n - inclArr.length}`
   );
 
   return {
-    fractions: positions.map((_, i) => included.has(i) ? scaleFactor : 0),
+    fractions: fractions.map(f => f > 0.01 ? f * scaleFactor : 0),
     sortino: portSortino,
     sharpe: portSharpe,
     scaleFactor,
     maxDrawdown: portMaxDD,
     portfolioVol: portVolAnnual,
-    vix,                          // raw VIX level (e.g. 22.4), null if unavailable
+    vix,
     avgCorrelation: avgCorr,
-    excludedCount: n - included.size,
+    excludedCount: n - inclArr.length,
   };
 }

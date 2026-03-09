@@ -1,5 +1,5 @@
 // In dev: use relative URL so Vite proxy hits local server. In production: use deployed API URL.
-const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : 'http://localhost:3000');
+const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
 
 // JWT token — set once after login via setAuthToken()
 let _token = null;
@@ -81,8 +81,8 @@ export async function fetchRankingByDate(date) {
   }
 }
 
-// Fetch latest laser signals for a list of tickers (from mobile app DB, read-only).
-// shortList: true = compute stop prices for short-scan tickers that have no laser signal (2-week high + $0.01).
+// Fetch PNTHR EMA-derived signals (BL/SS) for a list of tickers.
+// shortList: true = compute proxy stop prices for short-scan tickers with no signal.
 export async function fetchSignals(tickers, options = {}) {
   try {
     const { shortList = false } = options;
@@ -95,6 +95,23 @@ export async function fetchSignals(tickers, options = {}) {
     return response.json();
   } catch (error) {
     console.error('Error fetching signals:', error);
+    return {};
+  }
+}
+
+// Fetch legacy Laser signals from MongoDB (for side-by-side comparison).
+export async function fetchLaserSignals(tickers, options = {}) {
+  try {
+    const { shortList = false } = options;
+    const response = await fetch(`${API_BASE}/api/laser-signals`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ tickers, shortList })
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching laser signals:', error);
     return {};
   }
 }

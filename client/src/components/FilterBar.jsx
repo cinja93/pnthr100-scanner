@@ -10,10 +10,12 @@ import newConfirmedSellIcon from './New Confirmed Sell Signal.png';
 import newCautionBuyIcon    from './New Caution Buy Signal.png';
 import newCautionSellIcon   from './New Caution Sell Signal.png';
 
-const BUY_SIGNALS  = ['NEW_BUY', 'BUY', 'NEW_YELLOW_BUY', 'YELLOW_BUY'];
-const SELL_SIGNALS = ['NEW_SELL', 'SELL', 'NEW_YELLOW_SELL', 'YELLOW_SELL', 'NONE'];
+const BUY_SIGNALS  = ['BL', 'NEW_BUY', 'BUY', 'NEW_YELLOW_BUY', 'YELLOW_BUY'];
+const SELL_SIGNALS = ['SS', 'NEW_SELL', 'SELL', 'NEW_YELLOW_SELL', 'YELLOW_SELL', 'NONE'];
 
 const SIGNAL_LABELS = {
+  BL: 'BL',
+  SS: 'SS',
   BUY: 'Confirmed Buy',
   NEW_BUY: 'New Confirmed Buy',
   YELLOW_BUY: 'Caution Buy',
@@ -26,6 +28,8 @@ const SIGNAL_LABELS = {
 };
 
 const SIGNAL_ICONS = {
+  BL: confirmedBuyIcon,
+  SS: confirmedSellIcon,
   BUY: confirmedBuyIcon,
   NEW_BUY: newConfirmedBuyIcon,
   YELLOW_BUY: cautionBuyIcon,

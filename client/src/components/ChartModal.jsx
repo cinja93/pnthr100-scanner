@@ -57,6 +57,32 @@ function calculateEMA(weeklyData, period) {
   return result;
 }
 
+// Scan full weekly history and return every bar that triggers a BL or SS signal.
+// Mirrors the server-side computeSignal logic so charts always match the signal engine.
+function detectAllSignals(weeklyData, period = 21) {
+  if (weeklyData.length < period + 2) return [];
+  const emaData = calculateEMA(weeklyData, period);
+  // emaData[0] corresponds to weeklyData[period-1]; emaData[k] → weeklyData[period-1+k]
+  const signals = [];
+  for (let wi = period + 1; wi < weeklyData.length; wi++) {
+    const emaIdx = wi - (period - 1);
+    if (emaIdx < 1) continue;
+    const current = weeklyData[wi];
+    const prev1   = weeklyData[wi - 1];
+    const prev2   = weeklyData[wi - 2];
+    const emaCurrent = emaData[emaIdx].value;
+    const emaPrev    = emaData[emaIdx - 1].value;
+    const twoWeekHigh = Math.max(prev1.high, prev2.high);
+    const twoWeekLow  = Math.min(prev1.low,  prev2.low);
+    if (current.close > emaCurrent && emaCurrent > emaPrev && current.close > twoWeekHigh + 0.01) {
+      signals.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });
+    } else if (current.close < emaCurrent && emaCurrent < emaPrev && current.close < twoWeekLow - 0.01) {
+      signals.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high });
+    }
+  }
+  return signals;
+}
+
 function filterByRange(weeklyData, range) {
   if (range === 'all') return weeklyData;
   const months = range === '3m' ? 3 : 12;
@@ -79,7 +105,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [hoveredBar, setHoveredBar] = useState(null);
-  const [signalMarkerPos, setSignalMarkerPos] = useState(null);
+  const [signalMarkers, setSignalMarkers] = useState([]);
   const [pantherMarkerPos, setPantherMarkerPos] = useState(null);
   const [entryDatesLoaded, setEntryDatesLoaded] = useState(false);
   const [watchlistSet, setWatchlistSet] = useState(new Set());
@@ -139,7 +165,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
     if (loading || !chartContainerRef.current || allWeeklyData.length === 0) return;
 
     setHoveredBar(null);
-    setSignalMarkerPos(null);
+    setSignalMarkers([]);
     setPantherMarkerPos(null);
 
     if (chartRef.current) {
@@ -187,37 +213,30 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
       });
     });
 
-    // Signal marker — float badge over chart at the signal bar's price
-    // Uses signalDate (PNTHR signals) or timestamp (Laser signals) to find the week
-    const sigDateStr = signalData?.signalDate || signalData?.timestamp;
-    if (signalData?.signal && sigDateStr) {
-      const sigDate = new Date(sigDateStr + (sigDateStr.length === 10 ? 'T12:00:00' : ''));
-      const dow = sigDate.getDay();
-      const monday = new Date(sigDate);
-      monday.setDate(sigDate.getDate() - (dow === 0 ? 6 : dow - 1));
-      const weekKey = monday.toISOString().split('T')[0];
-      if (filteredTimes.has(weekKey)) {
-        const isBuy = signalData.signal === 'BL' || signalData.signal.includes('BUY');
-        const barData = filtered.find(d => d.time === weekKey);
-        if (barData) {
-          const BADGE_H = 22; // approximate badge height in px
-          const updateMarkerPos = () => {
-            const x = chart.timeScale().timeToCoordinate(weekKey);
-            // BL: 2% below bar low (label below bar); SS: 2% above bar high (label above bar)
-            const price = isBuy ? barData.low * 0.98 : barData.high * 1.02;
-            const y = series.priceToCoordinate(price);
-            if (x != null && y != null) {
-              setSignalMarkerPos({
-                left: Math.round(x),
-                // BL: top of badge at offset price; SS: bottom of badge at offset price
-                top: isBuy ? Math.round(y) : Math.round(y) - BADGE_H,
-              });
-            }
-          };
-          chart.timeScale().subscribeVisibleTimeRangeChange(updateMarkerPos);
-          setTimeout(updateMarkerPos, 50);
+    // Detect all historical BL/SS signals and overlay badges on chart
+    const allSignalEvents = detectAllSignals(allWeeklyData, 21)
+      .filter(e => filteredTimes.has(e.time));
+    if (allSignalEvents.length > 0) {
+      const BADGE_H = 22;
+      const updateAllMarkers = () => {
+        const positions = [];
+        for (const ev of allSignalEvents) {
+          const x = chart.timeScale().timeToCoordinate(ev.time);
+          const isBuy = ev.signal === 'BL';
+          const price = isBuy ? ev.barLow * 0.98 : ev.barHigh * 1.02;
+          const y = series.priceToCoordinate(price);
+          if (x != null && y != null) {
+            positions.push({
+              signal: ev.signal,
+              left: Math.round(x),
+              top: isBuy ? Math.round(y) : Math.round(y) - BADGE_H,
+            });
+          }
         }
-      }
+        setSignalMarkers(positions);
+      };
+      chart.timeScale().subscribeVisibleTimeRangeChange(updateAllMarkers);
+      setTimeout(updateAllMarkers, 50);
     }
 
     // Panther head — float icon at the date the stock first appeared in the long or short top-100 list
@@ -405,27 +424,14 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
             <div className={styles.chartWrapper}>
               <div ref={chartContainerRef} className={styles.chartContainer} />
 
-              {/* Signal marker overlaid on chart — text badge for BL/SS, icon for Laser signals */}
-              {signalMarkerPos && signalData?.signal === 'BL' && (
+              {/* BL/SS signal badges — all historical signals overlaid on chart */}
+              {signalMarkers.map((m, i) => (
                 <span
-                  className={`${styles.chartSignalBadge} ${styles.chartSignalBadgeBL}`}
-                  style={{ left: signalMarkerPos.left, top: signalMarkerPos.top }}
-                >BL</span>
-              )}
-              {signalMarkerPos && signalData?.signal === 'SS' && (
-                <span
-                  className={`${styles.chartSignalBadge} ${styles.chartSignalBadgeSS}`}
-                  style={{ left: signalMarkerPos.left, top: signalMarkerPos.top }}
-                >SS</span>
-              )}
-              {signalMarkerPos && signalIcon && signalData?.signal !== 'BL' && signalData?.signal !== 'SS' && (
-                <img
-                  src={signalIcon.src}
-                  alt={signalIcon.alt}
-                  className={styles.chartMarkerIcon}
-                  style={{ left: signalMarkerPos.left, top: signalMarkerPos.top }}
-                />
-              )}
+                  key={i}
+                  className={`${styles.chartSignalBadge} ${m.signal === 'BL' ? styles.chartSignalBadgeBL : styles.chartSignalBadgeSS}`}
+                  style={{ left: m.left, top: m.top }}
+                >{m.signal}</span>
+              ))}
 
               {/* Panther head — marks the date stock first entered the long or short top-100 list */}
               {pantherMarkerPos && (

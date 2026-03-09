@@ -57,62 +57,69 @@ function calculateEMA(weeklyData, period) {
   return result;
 }
 
-// Scan full weekly history; returns events: BL/SS (first of each streak) + BE/SE (structural exits).
-// Phase 5 exit logic: structural 2-week low/high + 0.1% predatory buffer; trigger on weekly close.
+// Scan full weekly history; returns events: BL/SS entries + BE/SE exits.
+//
+// BL (Launch): weekLow is 1–10% above 21-EMA, within first 3 bars of long-daylight streak
+//              (current or previous bar is the 1st or 2nd bar where low > EMA).
+// SS (Failure): weekHigh is 1–10% below 21-EMA, within first 3 bars of short-daylight streak.
+// Phase 5 exit: structural 2-week low/high + 0.1% predatory buffer, trigger on weekly close.
 function detectAllSignals(weeklyData, period = 21) {
   if (weeklyData.length < period + 2) return [];
   const emaData = calculateEMA(weeklyData, period);
   const events = [];
-  let prevSignal = null;
-  let position = null; // { type: 'BL'|'SS', entryWi: number }
+  let position      = null; // { type: 'BL'|'SS', entryWi: number }
+  let longDaylight  = 0;   // consecutive bars where weekLow > EMA
+  let shortDaylight = 0;   // consecutive bars where weekHigh < EMA
 
   for (let wi = period + 1; wi < weeklyData.length; wi++) {
     const emaIdx = wi - (period - 1);
     if (emaIdx < 1) continue;
-    const current  = weeklyData[wi];
-    const prev1    = weeklyData[wi - 1];
-    const prev2    = weeklyData[wi - 2];
+    const current     = weeklyData[wi];
+    const prev1       = weeklyData[wi - 1];
+    const prev2       = weeklyData[wi - 2];
     const emaCurrent  = emaData[emaIdx].value;
-    const emaPrev     = emaData[emaIdx - 1].value;
     const twoWeekHigh = Math.max(prev1.high, prev2.high);
     const twoWeekLow  = Math.min(prev1.low,  prev2.low);
+
+    // Update daylight streak counters for this bar
+    longDaylight  = current.low  > emaCurrent ? longDaylight  + 1 : 0;
+    shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
 
     // Past entry week: compute structural stop and check for exit
     if (position && position.entryWi !== wi) {
       const pctBuf = 0.001 * current.close;
-
       if (position.type === 'BL') {
-        // BE: close falls to structural 2-week low + predatory buffer
         const stop = pctBuf > 0.01 ? twoWeekLow + pctBuf : twoWeekLow - 0.01;
         if (current.close <= stop) {
           events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high });
-          position = null; prevSignal = null; continue;
+          position = null; continue;
         }
-      } else { // SS
-        // SE: close rises to structural 2-week high − predatory buffer
+      } else {
         const stop = pctBuf > 0.01 ? twoWeekHigh - pctBuf : twoWeekHigh + 0.01;
         if (current.close >= stop) {
           events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high });
-          position = null; prevSignal = null; continue;
+          position = null; continue;
         }
       }
     }
 
-    // Determine this week's EMA signal
-    let thisSignal = null;
-    if (current.close > emaCurrent && emaCurrent > emaPrev && current.close > twoWeekHigh + 0.01) {
-      thisSignal = 'BL';
-    } else if (current.close < emaCurrent && emaCurrent < emaPrev && current.close < twoWeekLow - 0.01) {
-      thisSignal = 'SS';
-    }
+    // BL (Launch): all 3 Phase 1 conditions + daylight zone (low 1–10% above EMA, first 3 daylight bars)
+    // SS (Failure): all 3 Phase 1 conditions + daylight zone (high 1–10% below EMA, first 3 daylight bars)
+    if (!position) {
+      const emaPrev  = emaData[emaIdx - 1].value;
+      const blPhase1 = current.close > emaCurrent && emaCurrent > emaPrev && current.close > twoWeekHigh + 0.01;
+      const ssPhase1 = current.close < emaCurrent && emaCurrent < emaPrev && current.close < twoWeekLow - 0.01;
+      const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
+      const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-    // New entry: first week of streak, no active position
-    if (!position && thisSignal && thisSignal !== prevSignal) {
-      events.push({ time: current.time, signal: thisSignal, barLow: current.low, barHigh: current.high });
-      position = { type: thisSignal, entryWi: wi };
+      if (blPhase1 && blZone && longDaylight >= 1 && longDaylight <= 3) {
+        events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });
+        position = { type: 'BL', entryWi: wi };
+      } else if (ssPhase1 && ssZone && shortDaylight >= 1 && shortDaylight <= 3) {
+        events.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high });
+        position = { type: 'SS', entryWi: wi };
+      }
     }
-
-    prevSignal = thisSignal;
   }
   return events;
 }

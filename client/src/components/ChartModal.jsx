@@ -85,18 +85,17 @@ function detectAllSignals(weeklyData, period = 21) {
     longDaylight  = current.low  > emaCurrent ? longDaylight  + 1 : 0;
     shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
 
-    // Past entry week: compute structural stop and check for exit
+    // Past entry week: check for BE/SE exit
+    // BE: this week's low breaks below the 2-week structural low
+    // SE: this week's high breaks above the 2-week structural high
     if (position && position.entryWi !== wi) {
-      const pctBuf = 0.001 * current.close;
       if (position.type === 'BL') {
-        const stop = pctBuf > 0.01 ? twoWeekLow + pctBuf : twoWeekLow - 0.01;
-        if (current.close <= stop) {
+        if (current.low < twoWeekLow) {
           events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high });
           position = null; continue;
         }
       } else {
-        const stop = pctBuf > 0.01 ? twoWeekHigh - pctBuf : twoWeekHigh + 0.01;
-        if (current.close >= stop) {
+        if (current.high > twoWeekHigh) {
           events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high });
           position = null; continue;
         }

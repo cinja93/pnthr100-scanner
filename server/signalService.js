@@ -140,17 +140,16 @@ function runStateMachine(weeklyBars) {
     shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
 
     // Past entry week: check for BE/SE exit
+    // BE: this week's low breaks below the 2-week structural low
+    // SE: this week's high breaks above the 2-week structural high
     if (position && position.entryWi !== wi) {
-      const pctBuf = 0.001 * current.close;
       if (position.type === 'BL') {
-        const stop = pctBuf > 0.01 ? twoWeekLow + pctBuf : twoWeekLow - 0.01;
-        if (current.close <= stop) {
+        if (current.low < twoWeekLow) {
           lastEvent = { signal: 'BE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
           position = null; continue;
         }
       } else {
-        const stop = pctBuf > 0.01 ? twoWeekHigh - pctBuf : twoWeekHigh + 0.01;
-        if (current.close >= stop) {
+        if (current.high > twoWeekHigh) {
           lastEvent = { signal: 'SE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
           position = null; continue;
         }
@@ -167,11 +166,11 @@ function runStateMachine(weeklyBars) {
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
       if (blPhase1 && blZone && longDaylight >= 1 && longDaylight <= 3) {
-        const stopPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));
+        const stopPrice = parseFloat(twoWeekLow.toFixed(2));
         lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'BL', entryWi: wi };
       } else if (ssPhase1 && ssZone && shortDaylight >= 1 && shortDaylight <= 3) {
-        const stopPrice = parseFloat((twoWeekHigh + 0.01).toFixed(2));
+        const stopPrice = parseFloat(twoWeekHigh.toFixed(2));
         lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'SS', entryWi: wi };
       }

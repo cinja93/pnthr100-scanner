@@ -200,15 +200,17 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
         const isBuy = signalData.signal === 'BL' || signalData.signal.includes('BUY');
         const barData = filtered.find(d => d.time === weekKey);
         if (barData) {
-          const ICON = 32;
+          const BADGE_H = 22; // approximate badge height in px
           const updateMarkerPos = () => {
             const x = chart.timeScale().timeToCoordinate(weekKey);
-            const price = isBuy ? barData.low : barData.high;
+            // BL: 2% below bar low (label below bar); SS: 2% above bar high (label above bar)
+            const price = isBuy ? barData.low * 0.98 : barData.high * 1.02;
             const y = series.priceToCoordinate(price);
             if (x != null && y != null) {
               setSignalMarkerPos({
-                left: Math.round(x) - ICON / 2,
-                top: isBuy ? Math.round(y) + 4 : Math.round(y) - ICON - 4,
+                left: Math.round(x),
+                // BL: top of badge at offset price; SS: bottom of badge at offset price
+                top: isBuy ? Math.round(y) : Math.round(y) - BADGE_H,
               });
             }
           };

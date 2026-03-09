@@ -119,10 +119,12 @@ function runStateMachine(weeklyBars) {
   // emas[i] aligns to weeklyBars[i + (period - 1)]
   const emaOffset = EMA_PERIOD - 1;
 
-  let position      = null; // { type: 'BL'|'SS', entryWi: number }
-  let lastEvent     = null; // most recent emitted event
-  let longDaylight  = 0;   // consecutive bars where weekLow > EMA
-  let shortDaylight = 0;   // consecutive bars where weekHigh < EMA
+  let position         = null;  // { type: 'BL'|'SS', entryWi: number }
+  let lastEvent        = null;  // most recent emitted event
+  let longDaylight     = 0;    // consecutive bars where weekLow > EMA
+  let shortDaylight    = 0;    // consecutive bars where weekHigh < EMA
+  let longTrendActive  = false; // true after first BL fires; allows re-entry with Phase 1 only (no daylight zone) while price stays above EMA
+  let shortTrendActive = false; // true after first SS fires; allows re-entry with Phase 1 only while price stays below EMA
 
   for (let wi = EMA_PERIOD + 1; wi < weeklyBars.length; wi++) {
     const emaIdx = wi - emaOffset;
@@ -135,9 +137,19 @@ function runStateMachine(weeklyBars) {
     const twoWeekHigh = Math.max(prev1.high, prev2.high);
     const twoWeekLow  = Math.min(prev1.low,  prev2.low);
 
-    // Update daylight streak counters for this bar
-    longDaylight  = current.low  > emaCurrent ? longDaylight  + 1 : 0;
-    shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
+    // Update daylight streak counters; reset trend flag if price crosses back through EMA
+    if (current.low > emaCurrent) {
+      longDaylight++;
+    } else {
+      longDaylight = 0;
+      longTrendActive = false;
+    }
+    if (current.high < emaCurrent) {
+      shortDaylight++;
+    } else {
+      shortDaylight = 0;
+      shortTrendActive = false;
+    }
 
     // Past entry week: check for BE/SE exit
     // BE: this week's low breaks below the 2-week structural low
@@ -146,18 +158,19 @@ function runStateMachine(weeklyBars) {
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
           lastEvent = { signal: 'BE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
-          position = null; longDaylight = 0; shortDaylight = 0; continue;
+          position = null; continue;
         }
       } else {
         if (current.high > twoWeekHigh) {
           lastEvent = { signal: 'SE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
-          position = null; longDaylight = 0; shortDaylight = 0; continue;
+          position = null; continue;
         }
       }
     }
 
-    // BL (Launch): all 3 Phase 1 conditions + daylight zone (low 1–10% above EMA, first 3 daylight bars)
-    // SS (Failure): all 3 Phase 1 conditions + daylight zone (high 1–10% below EMA, first 3 daylight bars)
+    // BL (Launch): Phase 1 + daylight zone required for first entry in a trend.
+    // Once longTrendActive, only Phase 1 needed (price stayed above EMA after prior BL/BE).
+    // SS (Failure): symmetric.
     if (!position) {
       const emaPrev = emas[emaIdx - 1];
       const blPhase1 = current.close > emaCurrent && emaCurrent > emaPrev && current.close > twoWeekHigh + 0.01;
@@ -165,14 +178,16 @@ function runStateMachine(weeklyBars) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      if (blPhase1 && blZone && longDaylight >= 1 && longDaylight <= 3) {
+      if (blPhase1 && (longTrendActive || (blZone && longDaylight >= 1 && longDaylight <= 3))) {
         const stopPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));
         lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'BL', entryWi: wi };
-      } else if (ssPhase1 && ssZone && shortDaylight >= 1 && shortDaylight <= 3) {
+        longTrendActive = true;
+      } else if (ssPhase1 && (shortTrendActive || (ssZone && shortDaylight >= 1 && shortDaylight <= 3))) {
         const stopPrice = parseFloat((twoWeekHigh + 0.01).toFixed(2));
         lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'SS', entryWi: wi };
+        shortTrendActive = true;
       }
     }
   }

@@ -124,11 +124,15 @@ function detectAllSignals(weeklyData, period = 21) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      if (blPhase1 && (longTrendActive || (blZone && longDaylight >= 1 && longDaylight <= 3))) {
+      // longDaylight===0 means the low touched at/below EMA this bar (EMA crossover from below) — allow Phase 1-only entry
+      const blDaylightOk = longTrendActive || longDaylight === 0 || (blZone && longDaylight >= 1 && longDaylight <= 3);
+      const ssDaylightOk = shortTrendActive || shortDaylight === 0 || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
+
+      if (blPhase1 && blDaylightOk) {
         events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });
         position = { type: 'BL', entryWi: wi };
         longTrendActive = true;
-      } else if (ssPhase1 && (shortTrendActive || (ssZone && shortDaylight >= 1 && shortDaylight <= 3))) {
+      } else if (ssPhase1 && ssDaylightOk) {
         events.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high });
         position = { type: 'SS', entryWi: wi };
         shortTrendActive = true;

@@ -178,12 +178,16 @@ function runStateMachine(weeklyBars) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      if (blPhase1 && (longTrendActive || (blZone && longDaylight >= 1 && longDaylight <= 3))) {
+      // longDaylight===0 means the low touched at/below EMA this bar (EMA crossover from below) — allow Phase 1-only entry
+      const blDaylightOk = longTrendActive || longDaylight === 0 || (blZone && longDaylight >= 1 && longDaylight <= 3);
+      const ssDaylightOk = shortTrendActive || shortDaylight === 0 || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
+
+      if (blPhase1 && blDaylightOk) {
         const stopPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));
         lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'BL', entryWi: wi };
         longTrendActive = true;
-      } else if (ssPhase1 && (shortTrendActive || (ssZone && shortDaylight >= 1 && shortDaylight <= 3))) {
+      } else if (ssPhase1 && ssDaylightOk) {
         const stopPrice = parseFloat((twoWeekHigh + 0.01).toFixed(2));
         lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'SS', entryWi: wi };

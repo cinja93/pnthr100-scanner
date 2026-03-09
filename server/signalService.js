@@ -26,8 +26,9 @@ const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 
 const EMA_PERIOD = 21;
-// 2.5× EMA period gives reliable EMA values; +2 weeks for breakout lookback
-const WEEKS_HISTORY = 55;
+// 5-year window matches the chart's data range so server and client state machines
+// traverse the same BL/BE cycles and produce consistent signals.
+const WEEKS_HISTORY = 260;
 
 // Weekly cache keyed by last-Friday date string
 let signalCache = { weekKey: null, signals: {} };

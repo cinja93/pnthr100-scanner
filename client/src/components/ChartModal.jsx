@@ -57,38 +57,14 @@ function calculateEMA(weeklyData, period) {
   return result;
 }
 
-// Wilder's ATR(3) aligned to weeklyData indices.
-// atrData[i] = ATR through end of week i (null for early bars).
-// Formula: ATR = ((prior ATR * 2) + current TR) / 3; seeded with SMA of first 3 TRs.
-function calculateWildersATR(weeklyData, period = 3) {
-  const n = weeklyData.length;
-  const atrs = new Array(n).fill(null);
-  if (n < period + 1) return atrs;
-  // trs[i-1] = TR for weeklyData[i]
-  const trs = [];
-  for (let i = 1; i < n; i++) {
-    const curr = weeklyData[i], prev = weeklyData[i - 1];
-    trs.push(Math.max(curr.high - curr.low, Math.abs(curr.high - prev.close), Math.abs(curr.low - prev.close)));
-  }
-  if (trs.length < period) return atrs;
-  let atr = trs.slice(0, period).reduce((s, v) => s + v, 0) / period;
-  atrs[period] = atr;
-  for (let i = period + 1; i < n; i++) {
-    atr = ((atr * 2) + trs[i - 1]) / 3;
-    atrs[i] = atr;
-  }
-  return atrs;
-}
-
-// Scan full weekly history; returns events: BL/SS (first of each streak) + BE/SE (stop exits).
-// Ratcheting stops follow Phase 5 protective stop logic (Wilder's ATR 3 + structural support).
+// Scan full weekly history; returns events: BL/SS (first of each streak) + BE/SE (structural exits).
+// Phase 5 exit logic: structural 2-week low/high + 0.1% predatory buffer; trigger on weekly close.
 function detectAllSignals(weeklyData, period = 21) {
   if (weeklyData.length < period + 2) return [];
   const emaData = calculateEMA(weeklyData, period);
-  const atrData = calculateWildersATR(weeklyData, 3);
   const events = [];
   let prevSignal = null;
-  let position = null; // { type: 'BL'|'SS', stop: number, entryWi: number }
+  let position = null; // { type: 'BL'|'SS', entryWi: number }
 
   for (let wi = period + 1; wi < weeklyData.length; wi++) {
     const emaIdx = wi - (period - 1);
@@ -101,25 +77,21 @@ function detectAllSignals(weeklyData, period = 21) {
     const twoWeekHigh = Math.max(prev1.high, prev2.high);
     const twoWeekLow  = Math.min(prev1.low,  prev2.low);
 
-    // Past entry week: ratchet stop and check for BE/SE exit
+    // Past entry week: compute structural stop and check for exit
     if (position && position.entryWi !== wi) {
-      const atr = atrData[wi - 1]; // ATR through end of prev1 (last Friday)
+      const pctBuf = 0.001 * current.close;
 
       if (position.type === 'BL') {
-        const pctBuf = 0.001 * prev1.close;
-        const structural = pctBuf > 0.01 ? twoWeekLow + pctBuf : twoWeekLow - 0.01;
-        const volFloor   = atr != null ? prev1.close - atr : structural;
-        position.stop    = Math.max(Math.max(structural, volFloor), position.stop); // only ratchets up
-        if (current.open < position.stop || current.low < position.stop) {
+        // BE: close falls to structural 2-week low + predatory buffer
+        const stop = pctBuf > 0.01 ? twoWeekLow + pctBuf : twoWeekLow - 0.01;
+        if (current.close <= stop) {
           events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high });
           position = null; prevSignal = null; continue;
         }
       } else { // SS
-        const pctBuf = 0.001 * prev1.close;
-        const structural = pctBuf > 0.01 ? twoWeekHigh - pctBuf : twoWeekHigh + 0.01;
-        const volStop    = atr != null ? prev1.close + atr : structural;
-        position.stop    = Math.min(Math.min(structural, volStop), position.stop); // only ratchets down
-        if (current.open > position.stop || current.high > position.stop) {
+        // SE: close rises to structural 2-week high − predatory buffer
+        const stop = pctBuf > 0.01 ? twoWeekHigh - pctBuf : twoWeekHigh + 0.01;
+        if (current.close >= stop) {
           events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high });
           position = null; prevSignal = null; continue;
         }
@@ -137,11 +109,7 @@ function detectAllSignals(weeklyData, period = 21) {
     // New entry: first week of streak, no active position
     if (!position && thisSignal && thisSignal !== prevSignal) {
       events.push({ time: current.time, signal: thisSignal, barLow: current.low, barHigh: current.high });
-      const pctBuf = 0.001 * current.close;
-      const entryStop = thisSignal === 'BL'
-        ? (pctBuf > 0.01 ? current.low  + pctBuf : current.low  - 0.01)
-        : (pctBuf > 0.01 ? current.high - pctBuf : current.high + 0.01);
-      position = { type: thisSignal, stop: entryStop, entryWi: wi };
+      position = { type: thisSignal, entryWi: wi };
     }
 
     prevSignal = thisSignal;

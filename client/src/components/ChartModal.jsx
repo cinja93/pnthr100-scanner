@@ -195,8 +195,11 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
 
     const filteredTimes = new Set(filtered.map(d => d.time));
 
+    let destroyed = false;
+
     // OHLC tooltip on crosshair hover
     chart.subscribeCrosshairMove(param => {
+      if (destroyed) return;
       if (!param.time || !param.point || !param.seriesData?.get(series)) {
         setHoveredBar(null);
         return;
@@ -220,21 +223,24 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
     if (allSignalEvents.length > 0) {
       const BADGE_H = 22;
       const updateAllMarkers = () => {
-        const positions = [];
-        for (const ev of allSignalEvents) {
-          const x = chart.timeScale().timeToCoordinate(ev.time);
-          const isBuy = ev.signal === 'BL';
-          const price = isBuy ? ev.barLow * 0.98 : ev.barHigh * 1.02;
-          const y = series.priceToCoordinate(price);
-          if (x != null && y != null) {
-            positions.push({
-              signal: ev.signal,
-              left: Math.round(x),
-              top: isBuy ? Math.round(y) : Math.round(y) - BADGE_H,
-            });
+        if (destroyed) return;
+        try {
+          const positions = [];
+          for (const ev of allSignalEvents) {
+            const x = chart.timeScale().timeToCoordinate(ev.time);
+            const isBuy = ev.signal === 'BL';
+            const price = isBuy ? ev.barLow * 0.98 : ev.barHigh * 1.02;
+            const y = series.priceToCoordinate(price);
+            if (x != null && y != null) {
+              positions.push({
+                signal: ev.signal,
+                left: Math.round(x),
+                top: isBuy ? Math.round(y) : Math.round(y) - BADGE_H,
+              });
+            }
           }
-        }
-        setSignalMarkers(positions);
+          setSignalMarkers(positions);
+        } catch { /* chart destroyed mid-callback */ }
       };
       chart.timeScale().subscribeVisibleTimeRangeChange(updateAllMarkers);
       setTimeout(updateAllMarkers, 50);
@@ -254,16 +260,19 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
           const ICON = 24;
           const isLong = entryInfo.list === 'LONG';
           const updatePantherPos = () => {
-            const x = chart.timeScale().timeToCoordinate(weekKey);
-            const price = isLong ? barData.low : barData.high;
-            const y = series.priceToCoordinate(price);
-            if (x != null && y != null) {
-              setPantherMarkerPos({
-                left: Math.round(x) - ICON / 2,
-                top: isLong ? Math.round(y) + 28 : Math.round(y) - ICON - 28,
-                list: entryInfo.list,
-              });
-            }
+            if (destroyed) return;
+            try {
+              const x = chart.timeScale().timeToCoordinate(weekKey);
+              const price = isLong ? barData.low : barData.high;
+              const y = series.priceToCoordinate(price);
+              if (x != null && y != null) {
+                setPantherMarkerPos({
+                  left: Math.round(x) - ICON / 2,
+                  top: isLong ? Math.round(y) + 28 : Math.round(y) - ICON - 28,
+                  list: entryInfo.list,
+                });
+              }
+            } catch { /* chart destroyed mid-callback */ }
           };
           chart.timeScale().subscribeVisibleTimeRangeChange(updatePantherPos);
           setTimeout(updatePantherPos, 50);
@@ -300,8 +309,9 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
     chart.timeScale().fitContent();
 
     return () => {
+      destroyed = true;
       setHoveredBar(null);
-      setSignalMarkerPos(null);
+      setSignalMarkers([]);
       setPantherMarkerPos(null);
       if (chartRef.current) {
         chartRef.current.remove();

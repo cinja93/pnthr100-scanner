@@ -19,6 +19,7 @@ function countActiveFilters(filters) {
   if (filters.minPrice !== '' || filters.maxPrice !== '') count++;
   if (filters.minRiskDollar !== '' || filters.maxRiskDollar !== '') count++;
   if (filters.minRiskPct !== '' || filters.maxRiskPct !== '') count++;
+  if (filters.minWeeksAgo !== '' || filters.maxWeeksAgo !== '') count++;
   return count;
 }
 
@@ -77,6 +78,8 @@ export default function FilterBar({ stocks, filters, onChange, scanType }) {
       maxRiskDollar: '',
       minRiskPct: '',
       maxRiskPct: '',
+      minWeeksAgo: '',
+      maxWeeksAgo: '',
     });
   }
 
@@ -231,6 +234,31 @@ export default function FilterBar({ stocks, filters, onChange, scanType }) {
                   min="0"
                   step="0.1"
                   onChange={e => setRange('maxRiskPct', e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className={styles.rangeGroup}>
+              <label className={styles.groupLabel}>Weeks Since Signal</label>
+              <div className={styles.rangeInputs}>
+                <input
+                  type="number"
+                  className={styles.rangeInput}
+                  placeholder="Min"
+                  value={filters.minWeeksAgo}
+                  min="1"
+                  step="1"
+                  onChange={e => setRange('minWeeksAgo', e.target.value)}
+                />
+                <span className={styles.rangeSep}>–</span>
+                <input
+                  type="number"
+                  className={styles.rangeInput}
+                  placeholder="Max"
+                  value={filters.maxWeeksAgo}
+                  min="1"
+                  step="1"
+                  onChange={e => setRange('maxWeeksAgo', e.target.value)}
                 />
               </div>
             </div>

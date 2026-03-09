@@ -230,9 +230,10 @@ export async function getSignals(tickers) {
   for (const ticker of tickers) {
     const s = signalCache.signals[ticker] || { signal: null, ema21: null, stopPrice: null };
     result[ticker] = {
-      signal:           s.signal, // 'BL', 'SS', or null
+      signal:           s.signal, // 'BL', 'SS', 'BE', 'SE', or null
       stopPrice:        s.stopPrice,
       ema21:            s.ema21,
+      signalDate:       s.signalDate || null, // YYYY-MM-DD (Monday of signal week)
       isNewSignal:      false,
       profitPercentage: null,
     };

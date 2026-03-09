@@ -22,7 +22,24 @@ const defaultFilters = {
   maxRiskDollar: '',
   minRiskPct: '',
   maxRiskPct: '',
+  minWeeksAgo: '',
+  maxWeeksAgo: '',
 };
+
+// Compute inclusive weeks since a signal date (Monday of signal week) to current week's Monday.
+// Returns null if no signalDate.
+function computeWeeksAgo(signalDate) {
+  if (!signalDate) return null;
+  const signalMonday = new Date(signalDate + 'T12:00:00');
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun..6=Sat
+  const daysToMonday = dow === 0 ? -6 : 1 - dow;
+  const currentMonday = new Date(today);
+  currentMonday.setDate(today.getDate() + daysToMonday);
+  currentMonday.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((currentMonday - signalMonday) / (1000 * 60 * 60 * 24));
+  return Math.floor(diffDays / 7) + 1; // inclusive: signal week = week 1
+}
 
 function App() {
   const [authToken, setAuthTokenState] = useState(() => localStorage.getItem('pnthr_token'));
@@ -119,6 +136,12 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       if (filters.maxRiskDollar !== '' && (riskDollar == null || riskDollar > +filters.maxRiskDollar)) return false;
       if (filters.minRiskPct !== '' && (riskPct == null || riskPct < +filters.minRiskPct)) return false;
       if (filters.maxRiskPct !== '' && (riskPct == null || riskPct > +filters.maxRiskPct)) return false;
+      if (filters.minWeeksAgo !== '' || filters.maxWeeksAgo !== '') {
+        const weeksAgo = computeWeeksAgo(signalData?.signalDate);
+        if (weeksAgo == null) return false;
+        if (filters.minWeeksAgo !== '' && weeksAgo < +filters.minWeeksAgo) return false;
+        if (filters.maxWeeksAgo !== '' && weeksAgo > +filters.maxWeeksAgo) return false;
+      }
       return true;
     });
   }, [stocks, signals, filters]);

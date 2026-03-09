@@ -156,30 +156,6 @@
   border-color: #dc2626;
 }
 
-.pill_BUY.pillActive,
-.pill_NEW_BUY.pillActive {
-  background: #16a34a;
-  border-color: #16a34a;
-}
-
-.pill_YELLOW_BUY.pillActive,
-.pill_NEW_YELLOW_BUY.pillActive {
-  background: #ca8a04;
-  border-color: #ca8a04;
-}
-
-.pill_SELL.pillActive,
-.pill_NEW_SELL.pillActive {
-  background: #dc2626;
-  border-color: #dc2626;
-}
-
-.pill_YELLOW_SELL.pillActive,
-.pill_NEW_YELLOW_SELL.pillActive {
-  background: #ea580c;
-  border-color: #ea580c;
-}
-
 .pill_NONE.pillActive {
   background: #6b7280;
   border-color: #6b7280;

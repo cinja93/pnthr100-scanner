@@ -213,9 +213,10 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
       });
     });
 
-    // Detect all historical BL/SS signals and overlay badges on chart
-    const allSignalEvents = detectAllSignals(allWeeklyData, 21)
-      .filter(e => filteredTimes.has(e.time));
+    // Show only the most recent BL/SS signal if it falls within the current view range
+    const allDetected = detectAllSignals(allWeeklyData, 21);
+    const mostRecent = allDetected.length > 0 ? allDetected[allDetected.length - 1] : null;
+    const allSignalEvents = mostRecent && filteredTimes.has(mostRecent.time) ? [mostRecent] : [];
     if (allSignalEvents.length > 0) {
       const BADGE_H = 22;
       const updateAllMarkers = () => {

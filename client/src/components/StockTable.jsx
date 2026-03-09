@@ -22,7 +22,7 @@ function getSignalDisplay(signalData) {
 }
 
 // Signal sort order: buys first, sells last, no signal at bottom
-const SIGNAL_ORDER = { BL: 1, BUY: 1, YELLOW_BUY: 2, YELLOW_SELL: 3, SS: 4, SELL: 4 };
+const SIGNAL_ORDER = { BL: 1, BUY: 1, BE: 2, YELLOW_BUY: 3, YELLOW_SELL: 4, SE: 5, SS: 6, SELL: 6 };
 
 const TODAY = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
 
@@ -256,9 +256,11 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                       ? <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeBL}`}>BL</span>
                       : signalData?.signal === 'SS'
                         ? <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeSS}`}>SS</span>
-                        : icon
-                          ? <img src={icon} alt={alt} className={styles.signalIcon} title={alt} />
-                          : <span className={styles.signalNone}>—</span>}
+                        : signalData?.signal === 'BE'
+                          ? <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeBE}`}>BE</span>
+                          : signalData?.signal === 'SE'
+                            ? <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeSE}`}>SE</span>
+                            : <span className={styles.signalNone}>—</span>}
                 </td>
                 <td className={styles.signalColumn}>
                   {signalsLoading ? <span className={styles.loadingDots}>···</span> : (() => {

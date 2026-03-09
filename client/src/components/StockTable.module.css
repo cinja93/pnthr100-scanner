@@ -222,6 +222,14 @@
   background: #dc2626;
   color: #fff;
 }
+.pnthrBadgeBE {
+  background: #d97706;
+  color: #fff;
+}
+.pnthrBadgeSE {
+  background: #d97706;
+  color: #fff;
+}
 
 /* Signals loading placeholder */
 .loadingDots {

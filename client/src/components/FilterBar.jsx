@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react';
 import styles from './FilterBar.module.css';
 
-const SIGNALS = ['BL', 'SS', 'NONE'];
+const SIGNALS = ['BL', 'BE', 'SS', 'SE', 'NONE'];
 
 const SIGNAL_LABELS = {
   BL:   'BL',
+  BE:   'BE',
   SS:   'SS',
+  SE:   'SE',
   NONE: 'No Signal',
 };
 

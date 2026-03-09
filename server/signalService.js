@@ -100,9 +100,10 @@ function computeEMASeries(closes, period) {
   return emas;
 }
 
-// Derive BL/SS signal from completed weekly bars.
-// Uses bars[-1] as "current week", bars[-2] and bars[-3] as "prior 2 weeks".
-function computeSignal(weeklyBars) {
+// Run full state machine over all completed weekly bars to find the most recent signal event.
+// Mirrors the client's detectAllSignals logic — returns BL/SS entries and BE/SE exits.
+// Phase 5 exit logic: structural 2-week low/high + 0.1% predatory buffer, trigger on weekly close.
+function runStateMachine(weeklyBars) {
   if (weeklyBars.length < EMA_PERIOD + 2) {
     return { signal: null, ema21: null, stopPrice: null };
   }
@@ -111,44 +112,66 @@ function computeSignal(weeklyBars) {
   const emas   = computeEMASeries(closes, EMA_PERIOD);
   if (emas.length < 2) return { signal: null, ema21: null, stopPrice: null };
 
-  const emaCurrent = emas[emas.length - 1];
-  const emaPrev    = emas[emas.length - 2];
+  // emas[i] aligns to weeklyBars[i + (period - 1)]
+  const emaOffset = EMA_PERIOD - 1;
 
-  const current = weeklyBars[weeklyBars.length - 1]; // last completed week
-  const prev1   = weeklyBars[weeklyBars.length - 2]; // one week prior
-  const prev2   = weeklyBars[weeklyBars.length - 3]; // two weeks prior
+  let prevSignal = null;
+  let position   = null; // { type: 'BL'|'SS', entryWi: number }
+  let lastEvent  = null; // most recent emitted event
 
-  const slopeUp   = emaCurrent > emaPrev;
-  const slopeDown = emaCurrent < emaPrev;
+  for (let wi = EMA_PERIOD + 1; wi < weeklyBars.length; wi++) {
+    const emaIdx = wi - emaOffset;
+    if (emaIdx < 1) continue;
 
-  const twoWeekHigh = Math.max(prev1.high, prev2.high);
-  const twoWeekLow  = Math.min(prev1.low,  prev2.low);
+    const current     = weeklyBars[wi];
+    const prev1       = weeklyBars[wi - 1];
+    const prev2       = weeklyBars[wi - 2];
+    const emaCurrent  = emas[emaIdx];
+    const emaPrev     = emas[emaIdx - 1];
+    const twoWeekHigh = Math.max(prev1.high, prev2.high);
+    const twoWeekLow  = Math.min(prev1.low,  prev2.low);
 
-  // BL: above EMA, slope rising, close breaks above 2-week high
-  if (current.close > emaCurrent && slopeUp && current.close > twoWeekHigh + 0.01) {
-    return {
-      signal:     'BL',
-      ema21:      parseFloat(emaCurrent.toFixed(4)),
-      stopPrice:  parseFloat((twoWeekLow - 0.01).toFixed(2)),
-      signalDate: current.weekStart, // YYYY-MM-DD of the Monday that opened the signal week
-    };
+    // Past entry week: check for BE/SE exit
+    if (position && position.entryWi !== wi) {
+      const pctBuf = 0.001 * current.close;
+      if (position.type === 'BL') {
+        const stop = pctBuf > 0.01 ? twoWeekLow + pctBuf : twoWeekLow - 0.01;
+        if (current.close <= stop) {
+          lastEvent = { signal: 'BE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
+          position = null; prevSignal = null; continue;
+        }
+      } else {
+        const stop = pctBuf > 0.01 ? twoWeekHigh - pctBuf : twoWeekHigh + 0.01;
+        if (current.close >= stop) {
+          lastEvent = { signal: 'SE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
+          position = null; prevSignal = null; continue;
+        }
+      }
+    }
+
+    // Check BL/SS entry conditions
+    let thisSignal = null;
+    if (current.close > emaCurrent && emaCurrent > emaPrev && current.close > twoWeekHigh + 0.01) thisSignal = 'BL';
+    else if (current.close < emaCurrent && emaCurrent < emaPrev && current.close < twoWeekLow - 0.01) thisSignal = 'SS';
+
+    // Only emit first bar of a new streak and only when not already in a position
+    if (!position && thisSignal && thisSignal !== prevSignal) {
+      const stopPrice = thisSignal === 'BL'
+        ? parseFloat((twoWeekLow  - 0.01).toFixed(2))
+        : parseFloat((twoWeekHigh + 0.01).toFixed(2));
+      lastEvent = { signal: thisSignal, signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
+      position  = { type: thisSignal, entryWi: wi };
+    }
+
+    prevSignal = thisSignal;
   }
 
-  // SS: below EMA, slope falling, close breaks below 2-week low
-  if (current.close < emaCurrent && slopeDown && current.close < twoWeekLow - 0.01) {
-    return {
-      signal:     'SS',
-      ema21:      parseFloat(emaCurrent.toFixed(4)),
-      stopPrice:  parseFloat((twoWeekHigh + 0.01).toFixed(2)),
-      signalDate: current.weekStart,
-    };
+  if (!lastEvent) {
+    const lastEma = emas[emas.length - 1];
+    return { signal: null, ema21: parseFloat(lastEma.toFixed(4)), stopPrice: null };
   }
 
-  return {
-    signal:    null,
-    ema21:     parseFloat(emaCurrent.toFixed(4)),
-    stopPrice: null,
-  };
+  return lastEvent;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -187,7 +210,7 @@ export async function getSignals(tickers) {
         try {
           const daily  = await fetchDailyBars(ticker, fromDate, toDate);
           const weekly = aggregateWeeklyBars(daily);
-          signalCache.signals[ticker] = computeSignal(weekly);
+          signalCache.signals[ticker] = runStateMachine(weekly);
         } catch (err) {
           console.error(`Signal error for ${ticker}:`, err.message);
           signalCache.signals[ticker] = { signal: null, ema21: null, stopPrice: null };

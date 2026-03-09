@@ -156,6 +156,16 @@
   border-color: #dc2626;
 }
 
+.pill_BE.pillActive {
+  background: #d97706;
+  border-color: #d97706;
+}
+
+.pill_SE.pillActive {
+  background: #d97706;
+  border-color: #d97706;
+}
+
 .pill_NONE.pillActive {
   background: #6b7280;
   border-color: #6b7280;

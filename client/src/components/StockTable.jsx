@@ -24,6 +24,20 @@ function getSignalDisplay(signalData) {
 // Signal sort order: buys first, sells last, no signal at bottom
 const SIGNAL_ORDER = { BL: 1, BUY: 1, BE: 2, YELLOW_BUY: 3, YELLOW_SELL: 4, SE: 5, SS: 6, SELL: 6 };
 
+// Inclusive weeks since signal (signal week = week 1)
+function computeWeeksAgo(signalDate) {
+  if (!signalDate) return null;
+  const signalMonday = new Date(signalDate + 'T12:00:00');
+  const today = new Date();
+  const dow = today.getDay();
+  const daysToMonday = dow === 0 ? -6 : 1 - dow;
+  const currentMonday = new Date(today);
+  currentMonday.setDate(today.getDate() + daysToMonday);
+  currentMonday.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((currentMonday - signalMonday) / (1000 * 60 * 60 * 24));
+  return Math.floor(diffDays / 7) + 1;
+}
+
 const TODAY = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
 
 function getEarningsInfo(dateStr) {
@@ -58,6 +72,16 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
       const aOrder = SIGNAL_ORDER[signals[a.ticker]?.signal] ?? 99;
       const bOrder = SIGNAL_ORDER[signals[b.ticker]?.signal] ?? 99;
       return (aOrder - bOrder) * dir;
+    }
+
+    // Special handling for weeks since signal
+    if (sortConfig.key === 'weeksAgo') {
+      const aVal = computeWeeksAgo(signals[a.ticker]?.signalDate);
+      const bVal = computeWeeksAgo(signals[b.ticker]?.signalDate);
+      if (aVal === null && bVal === null) return 0;
+      if (aVal === null) return dir;
+      if (bVal === null) return -dir;
+      return (aVal - bVal) * dir;
     }
 
     // Special handling for stop price (from signals map)
@@ -184,6 +208,9 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             <th onClick={() => handleSort('signal')} className={`${styles.signalColumn} ${styles.sortable}`}>
               PNTHR Signal {getSortIndicator('signal')}
             </th>
+            <th onClick={() => handleSort('weeksAgo')} className={`${styles.signalColumn} ${styles.sortable}`}>
+              Wks Since {getSortIndicator('weeksAgo')}
+            </th>
             <th className={styles.signalColumn}>
               Laser Signal
             </th>
@@ -261,6 +288,19 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                           : signalData?.signal === 'SE'
                             ? <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeSE}`}>SE</span>
                             : <span className={styles.signalNone}>—</span>}
+                </td>
+                <td className={styles.signalColumn}>
+                  {signalsLoading
+                    ? <span className={styles.loadingDots}>···</span>
+                    : (() => {
+                        const sig = signalData?.signal;
+                        const wks = computeWeeksAgo(signalData?.signalDate);
+                        if (!sig || wks == null) return <span className={styles.signalNone}>—</span>;
+                        const cls = sig === 'BL' ? styles.pnthrBadgeBL
+                                  : sig === 'SS' ? styles.pnthrBadgeSS
+                                  : styles.pnthrBadgeBE; // BE and SE both orange
+                        return <span className={`${styles.pnthrBadge} ${cls}`}>{sig}+{wks}</span>;
+                      })()}
                 </td>
                 <td className={styles.signalColumn}>
                   {signalsLoading ? <span className={styles.loadingDots}>···</span> : (() => {

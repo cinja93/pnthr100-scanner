@@ -166,11 +166,11 @@ function runStateMachine(weeklyBars) {
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
       if (blPhase1 && blZone && longDaylight >= 1 && longDaylight <= 3) {
-        const stopPrice = parseFloat(twoWeekLow.toFixed(2));
+        const stopPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));
         lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'BL', entryWi: wi };
       } else if (ssPhase1 && ssZone && shortDaylight >= 1 && shortDaylight <= 3) {
-        const stopPrice = parseFloat(twoWeekHigh.toFixed(2));
+        const stopPrice = parseFloat((twoWeekHigh + 0.01).toFixed(2));
         lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'SS', entryWi: wi };
       }

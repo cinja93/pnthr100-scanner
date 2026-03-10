@@ -127,11 +127,11 @@ function detectAllSignals(weeklyData, period = 21) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      // Re-entry (longTrendActive): skip the 1–10% zone but still require at least 1% daylight
-      //   so the low is visibly above EMA (not just touching it on the crossover bar).
+      // Re-entry (longTrendActive): skip the 1–10% zone but cap at 25% daylight.
+      //   < 1%: too close to EMA (crossover bar). > 25%: too extended, disqualified.
       // First entry: full 1–10% zone with 1–3 bar streak.
-      const blDaylightOk = (longTrendActive  && current.low  >= emaCurrent * 1.01) || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
-      const ssDaylightOk = (shortTrendActive && current.high <= emaCurrent * 0.99) || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
+      const blDaylightOk = (longTrendActive  && current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.25) || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
+      const ssDaylightOk = (shortTrendActive && current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.75) || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
       if (blPhase1 && blDaylightOk) {
         events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });

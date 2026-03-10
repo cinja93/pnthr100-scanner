@@ -174,8 +174,8 @@ function runStateMachine(weeklyBars) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      const blDaylightOk = (longTrendActive  && current.low  >= emaCurrent * 1.01) || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
-      const ssDaylightOk = (shortTrendActive && current.high <= emaCurrent * 0.99) || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
+      const blDaylightOk = (longTrendActive  && current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.25) || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
+      const ssDaylightOk = (shortTrendActive && current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.75) || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
       if (blPhase1 && blDaylightOk) {
         const stopPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));

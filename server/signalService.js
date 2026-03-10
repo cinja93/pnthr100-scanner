@@ -171,9 +171,10 @@ function runStateMachine(weeklyBars) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      // longDaylight===0 means the low touched at/below EMA this bar (EMA crossover from below) — allow Phase 1-only entry
-      const blDaylightOk = longTrendActive || longDaylight === 0 || (blZone && longDaylight >= 1 && longDaylight <= 3);
-      const ssDaylightOk = shortTrendActive || shortDaylight === 0 || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
+      // Daylight required for first entry: low must be strictly above EMA (longDaylight >= 1) and in the 1–10% zone.
+      // Once longTrendActive (after first BL), re-entries only need Phase 1 — no daylight zone required.
+      const blDaylightOk = longTrendActive || (blZone && longDaylight >= 1 && longDaylight <= 3);
+      const ssDaylightOk = shortTrendActive || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
       if (blPhase1 && blDaylightOk) {
         const stopPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));

@@ -102,8 +102,9 @@ function detectAllSignals(weeklyData, period = 21) {
     if (position && position.entryWi !== wi) {
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
-          const profitDollar = parseFloat((current.close - position.entryClose).toFixed(2));
-          const profitPct    = parseFloat(((profitDollar / position.entryClose) * 100).toFixed(2));
+          const exitPrice    = parseFloat((twoWeekLow - 0.01).toFixed(2));
+          const profitDollar = parseFloat((exitPrice - position.entryPrice).toFixed(2));
+          const profitPct    = parseFloat(((profitDollar / position.entryPrice) * 100).toFixed(2));
           events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high, profitDollar, profitPct });
           // BE: same-direction BL re-entry remains active (no cap — trend continuation).
           // Opposite-side SS re-entry allowed but capped at 25% (switching sides).
@@ -113,8 +114,9 @@ function detectAllSignals(weeklyData, period = 21) {
         }
       } else {
         if (current.high > twoWeekHigh) {
-          const profitDollar = parseFloat((position.entryClose - current.close).toFixed(2));
-          const profitPct    = parseFloat(((profitDollar / position.entryClose) * 100).toFixed(2));
+          const exitPrice    = parseFloat((twoWeekHigh + 0.01).toFixed(2));
+          const profitDollar = parseFloat((position.entryPrice - exitPrice).toFixed(2));
+          const profitPct    = parseFloat(((profitDollar / position.entryPrice) * 100).toFixed(2));
           events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high, profitDollar, profitPct });
           // SE: same-direction SS re-entry remains active (no cap — trend continuation).
           // Opposite-side BL re-entry allowed but capped at 25% (switching sides).
@@ -146,14 +148,14 @@ function detectAllSignals(weeklyData, period = 21) {
 
       if (blPhase1 && blDaylightOk) {
         events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });
-        position          = { type: 'BL', entryWi: wi, entryClose: current.close };
+        position          = { type: 'BL', entryWi: wi, entryPrice: parseFloat((twoWeekHigh + 0.01).toFixed(2)) };
         longTrendActive   = true;
         longTrendCapped   = false; // same-side now — future BE→BL re-entry has no cap
         shortTrendActive  = false;
         shortTrendCapped  = false;
       } else if (ssPhase1 && ssDaylightOk) {
         events.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high });
-        position          = { type: 'SS', entryWi: wi, entryClose: current.close };
+        position          = { type: 'SS', entryWi: wi, entryPrice: parseFloat((twoWeekLow - 0.01).toFixed(2)) };
         shortTrendActive  = true;
         shortTrendCapped  = false; // same-side now — future SE→SS re-entry has no cap
         longTrendActive   = false;

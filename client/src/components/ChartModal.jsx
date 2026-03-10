@@ -565,7 +565,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
               {hoveredMarkerProfit && (
                 <div
                   className={styles.profitTooltip}
-                  style={{ left: hoveredMarkerProfit.left + 16, top: Math.max(8, hoveredMarkerProfit.top - 54) }}
+                  style={{ left: Math.max(8, hoveredMarkerProfit.left - 136), top: Math.max(8, hoveredMarkerProfit.top - 54) }}
                 >
                   <div className={styles.profitTooltipTitle}>
                     {hoveredMarkerProfit.signal} Profit

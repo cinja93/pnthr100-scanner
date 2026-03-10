@@ -4,24 +4,6 @@ import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, re
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
 
-import confirmedBuyIcon     from './Confirmed Buy Signal.png';
-import confirmedSellIcon    from './Confirmed Sell Signal.png';
-import cautionBuyIcon       from './Caution Buy Signal.png';
-import cautionSellIcon      from './Caution Sell Signal.png';
-import newConfirmedBuyIcon  from './New Confirmed Buy Signal.png';
-import newConfirmedSellIcon from './New Confirmed Sell Signal.png';
-import newCautionBuyIcon    from './New Caution Buy Signal.png';
-import newCautionSellIcon   from './New Caution Sell Signal.png';
-
-function getSignalIcon(signalData) {
-  if (!signalData?.signal) return null;
-  const { signal, isNewSignal } = signalData;
-  if (signal === 'BL'  || signal === 'BUY')         return { src: isNewSignal ? newConfirmedBuyIcon  : confirmedBuyIcon,  alt: isNewSignal ? 'New BL'  : 'BL'  };
-  if (signal === 'SS'  || signal === 'SELL')        return { src: isNewSignal ? newConfirmedSellIcon : confirmedSellIcon, alt: isNewSignal ? 'New SS'  : 'SS'  };
-  if (signal === 'YELLOW_BUY')  return { src: isNewSignal ? newCautionBuyIcon   : cautionBuyIcon,    alt: isNewSignal ? 'New Caution Buy'    : 'Caution Buy'    };
-  if (signal === 'YELLOW_SELL') return { src: isNewSignal ? newCautionSellIcon  : cautionSellIcon,   alt: isNewSignal ? 'New Caution Sell'   : 'Caution Sell'   };
-  return null;
-}
 
 function aggregateToWeekly(dailyData) {
   const sorted = [...dailyData].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -197,18 +179,20 @@ function detectAllSignals(weeklyData, period = 21) {
     }
   }
 
-  // Compute live stops if still in an open position
+  // Compute live stops and current signal from client data (always up-to-date)
   let pnthrStop = null, currentWeekStop = null, activeType = null;
+  let currentSignal = events.length > 0 ? events[events.length - 1].signal : null;
   if (position) {
     const lastBar = weeklyData[weeklyData.length - 1];
     pnthrStop       = position.pnthrStop;
     activeType      = position.type;
+    currentSignal   = position.type; // 'BL' or 'SS' (open position)
     currentWeekStop = position.type === 'BL'
       ? parseFloat((lastBar.low  - 0.01).toFixed(2))
       : parseFloat((lastBar.high + 0.01).toFixed(2));
   }
 
-  return { events, pnthrStop, currentWeekStop, activeType };
+  return { events, pnthrStop, currentWeekStop, activeType, currentSignal };
 }
 
 function filterByRange(weeklyData, range) {
@@ -226,7 +210,7 @@ function formatWeekDate(timeStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function ChartModal({ stocks, initialIndex, signals, onClose, onWatchlistChange }) {
+export default function ChartModal({ stocks, initialIndex, onClose, onWatchlistChange }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [range, setRange] = useState('12m');
   const [allWeeklyData, setAllWeeklyData] = useState([]);
@@ -236,6 +220,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
   const [hoveredMarkerProfit, setHoveredMarkerProfit] = useState(null);
   const [pnthrStop, setPnthrStop] = useState(null);
   const [currentWeekStop, setCurrentWeekStop] = useState(null);
+  const [currentSignal, setCurrentSignal] = useState(null);
   const [signalMarkers, setSignalMarkers] = useState([]);
   const [pantherMarkerPos, setPantherMarkerPos] = useState(null);
   const [entryDatesLoaded, setEntryDatesLoaded] = useState(false);
@@ -247,8 +232,6 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
   const entryDatesRef = useRef({});
 
   const stock = stocks[currentIndex];
-  const signalData = signals[stock?.ticker];
-  const signalIcon = getSignalIcon(signalData);
   const inWatchlist = stock ? watchlistSet.has(stock.ticker) : false;
 
   // Fetch data when stock changes
@@ -349,9 +332,10 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
     });
 
     // Compute signals and live stops from full history
-    const { events: allDetected, pnthrStop: ps, currentWeekStop: cws } = detectAllSignals(allWeeklyData, 21);
+    const { events: allDetected, pnthrStop: ps, currentWeekStop: cws, currentSignal: cs } = detectAllSignals(allWeeklyData, 21);
     setPnthrStop(ps);
     setCurrentWeekStop(cws);
+    setCurrentSignal(cs);
     const lastEntryIdx = (() => { for (let i = allDetected.length - 1; i >= 0; i--) { if (allDetected[i].signal === 'BL' || allDetected[i].signal === 'SS') return i; } return -1; })();
     const lastEntry  = lastEntryIdx >= 0 ? allDetected[lastEntryIdx] : null;
     const exitEvent  = lastEntry ? allDetected.slice(lastEntryIdx + 1).find(e => e.signal === 'BE' || e.signal === 'SE') : null;
@@ -465,6 +449,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
       setPantherMarkerPos(null);
       setPnthrStop(null);
       setCurrentWeekStop(null);
+      setCurrentSignal(null);
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
@@ -558,14 +543,17 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
             ))}
           </div>
           <div className={styles.priceInfo}>
-            {signalData?.signal === 'BL' && (
+            {currentSignal === 'BL' && (
               <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeBL}`}>BL</span>
             )}
-            {signalData?.signal === 'SS' && (
+            {currentSignal === 'SS' && (
               <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeSS}`}>SS</span>
             )}
-            {signalData?.signal && signalData.signal !== 'BL' && signalData.signal !== 'SS' && signalIcon && (
-              <img src={signalIcon.src} alt={signalIcon.alt} className={styles.signalIcon} title={signalIcon.alt} />
+            {currentSignal === 'BE' && (
+              <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeBE}`}>BE</span>
+            )}
+            {currentSignal === 'SE' && (
+              <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeSE}`}>SE</span>
             )}
             <span className={styles.currentPrice}>${stock.currentPrice?.toLocaleString()}</span>
             {pnthrStop != null && (

@@ -161,6 +161,14 @@
   background: #dc2626;
   color: #fff;
 }
+.pnthrBadgeBE {
+  background: #ea580c;
+  color: #fff;
+}
+.pnthrBadgeSE {
+  background: #2563eb;
+  color: #fff;
+}
 
 .stopBadge {
   font-size: 12px;

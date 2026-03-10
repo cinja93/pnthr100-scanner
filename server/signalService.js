@@ -108,7 +108,7 @@ function computeEMASeries(closes, period) {
 //              (current or previous bar is the 1st or 2nd bar where low > EMA).
 // SS (Failure): weekHigh is 1–10% below 21-EMA, within first 3 bars of short-daylight streak.
 // Phase 5 exit: structural 2-week low/high + 0.1% predatory buffer, trigger on weekly close.
-function runStateMachine(weeklyBars) {
+function runStateMachine(weeklyBars, debugTicker = null) {
   if (weeklyBars.length < EMA_PERIOD + 2) {
     return { signal: null, ema21: null, stopPrice: null };
   }
@@ -154,26 +154,21 @@ function runStateMachine(weeklyBars) {
     if (position && position.entryWi !== wi) {
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
+          if (debugTicker) console.log(`[${debugTicker}] BE  ${current.weekStart}  close=${current.close.toFixed(2)} ema=${emaCurrent.toFixed(2)} lta=${longTrendActive} sta=${shortTrendActive}`);
           lastEvent = { signal: 'BE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
-          // BE: short trend may follow — allow Phase 1 SS re-entry without daylight zone.
-          // Safe because ssPhase1 still requires close < EMA.
           shortTrendActive = true;
           position = null; continue;
         }
       } else {
         if (current.high > twoWeekHigh) {
+          if (debugTicker) console.log(`[${debugTicker}] SE  ${current.weekStart}  close=${current.close.toFixed(2)} ema=${emaCurrent.toFixed(2)} lta=${longTrendActive} sta=${shortTrendActive}`);
           lastEvent = { signal: 'SE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
-          // SE: long trend may follow — allow Phase 1 BL re-entry without daylight zone.
-          // Safe because blPhase1 still requires close > EMA.
           longTrendActive = true;
           position = null; continue;
         }
       }
     }
 
-    // BL (Launch): Phase 1 + daylight zone required for first entry in a trend.
-    // Once longTrendActive, only Phase 1 needed (price stayed above EMA after prior BL/BE).
-    // SS (Failure): symmetric.
     if (!position) {
       const emaPrev = emas[emaIdx - 1];
       const blPhase1 = current.close > emaCurrent && emaCurrent > emaPrev && current.high >= twoWeekHigh + 0.01;
@@ -181,24 +176,27 @@ function runStateMachine(weeklyBars) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      // Re-entry (longTrendActive): skip the 1–10% zone but still require at least 1% daylight
-      //   so the low is visibly above EMA (not just touching it on the crossover bar).
-      // First entry: full 1–10% zone with 1–3 bar streak.
       const blDaylightOk = (longTrendActive  && current.low  >= emaCurrent * 1.01) || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
       const ssDaylightOk = (shortTrendActive && current.high <= emaCurrent * 0.99) || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
+      if (debugTicker && current.weekStart >= '2025-07-01') {
+        console.log(`[${debugTicker}] ${current.weekStart}  close=${current.close.toFixed(2)} ema=${emaCurrent.toFixed(2)} high=${current.high.toFixed(2)} low=${current.low.toFixed(2)} twoWkH=${twoWeekHigh.toFixed(2)} lta=${longTrendActive} sta=${shortTrendActive} blP1=${blPhase1} blDOk=${blDaylightOk}`);
+      }
+
       if (blPhase1 && blDaylightOk) {
+        if (debugTicker) console.log(`[${debugTicker}] BL  ${current.weekStart}`);
         const stopPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));
         lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'BL', entryWi: wi };
         longTrendActive  = true;
-        shortTrendActive = false; // confirmed long — short re-entry privilege expires
+        shortTrendActive = false;
       } else if (ssPhase1 && ssDaylightOk) {
+        if (debugTicker) console.log(`[${debugTicker}] SS  ${current.weekStart}`);
         const stopPrice = parseFloat((twoWeekHigh + 0.01).toFixed(2));
         lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'SS', entryWi: wi };
         shortTrendActive = true;
-        longTrendActive  = false; // confirmed short — long re-entry privilege expires
+        longTrendActive  = false;
       }
     }
   }
@@ -247,7 +245,8 @@ export async function getSignals(tickers) {
         try {
           const daily  = await fetchDailyBars(ticker, fromDate, toDate);
           const weekly = aggregateWeeklyBars(daily);
-          signalCache.signals[ticker] = runStateMachine(weekly);
+          const debugTickers = ['MU','AMAT','ODFL','APA'];
+          signalCache.signals[ticker] = runStateMachine(weekly, debugTickers.includes(ticker) ? ticker : null);
         } catch (err) {
           console.error(`Signal error for ${ticker}:`, err.message);
           signalCache.signals[ticker] = { signal: null, ema21: null, stopPrice: null };

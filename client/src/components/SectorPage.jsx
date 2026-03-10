@@ -332,10 +332,21 @@ export default function SectorPage() {
       })
       .finally(() => setLoading(false));
 
-    // Fetch signal counts independently — loads in background, doesn't block charts
-    fetchSectorSignalCounts()
-      .then(counts => setSignalCounts(counts))
-      .catch(err => console.error('Signal counts error:', err));
+    // Fetch signal counts — retries every 20s if server is still computing
+    let retryTimer;
+    function loadCounts() {
+      fetchSectorSignalCounts()
+        .then(counts => {
+          if (counts) {
+            setSignalCounts(counts);
+          } else {
+            retryTimer = setTimeout(loadCounts, 20000);
+          }
+        })
+        .catch(err => console.error('Signal counts error:', err));
+    }
+    loadCounts();
+    return () => clearTimeout(retryTimer);
   }, []);
 
   // Recompute cumulative series whenever data or range changes — no extra API calls

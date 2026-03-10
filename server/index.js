@@ -751,18 +751,18 @@ async function getSP500Constituents(FMP_API_KEY) {
   return data;
 }
 
-// GET /api/sector-signal-counts
-// Returns BL/BE/SS/SE counts for each sector, based on S&P 500 constituents.
-app.get('/api/sector-signal-counts', async (req, res) => {
+// Sector signal counts — pre-computed in background at startup, cached weekly
+let sectorSignalCountsCache = null;
+
+async function computeSectorSignalCounts() {
   try {
+    console.log('📡 Computing sector signal counts for all S&P 500 stocks...');
     const FMP_API_KEY = process.env.FMP_API_KEY;
     const constituents = await getSP500Constituents(FMP_API_KEY);
 
-    // Build reverse map: FMP sector name → our sector key
     const gicsToKey = {};
     for (const [key, gics] of Object.entries(SECTOR_KEY_TO_GICS)) gicsToKey[gics] = key;
 
-    // Group tickers by sector key
     const tickersBySector = {};
     for (const c of constituents) {
       const sectorKey = gicsToKey[c.sector];
@@ -771,28 +771,31 @@ app.get('/api/sector-signal-counts', async (req, res) => {
       tickersBySector[sectorKey].push(c.symbol);
     }
 
-    // Get signals for all S&P 500 tickers (uses cache — fast if already computed)
     const allTickers = constituents.map(c => c.symbol);
     const signals = await getSignals(allTickers);
 
-    // Count signals per sector
     const counts = {};
     for (const [sectorKey, tickers] of Object.entries(tickersBySector)) {
       counts[sectorKey] = { BL: 0, BE: 0, SS: 0, SE: 0, total: tickers.length };
       for (const ticker of tickers) {
         const sig = signals[ticker]?.signal;
-        if (sig === 'BL' || sig === 'BUY')  counts[sectorKey].BL++;
-        else if (sig === 'BE')              counts[sectorKey].BE++;
-        else if (sig === 'SS' || sig === 'SELL') counts[sectorKey].SS++;
-        else if (sig === 'SE')              counts[sectorKey].SE++;
+        if (sig === 'BL' || sig === 'BUY')       counts[sectorKey].BL++;
+        else if (sig === 'BE')                    counts[sectorKey].BE++;
+        else if (sig === 'SS' || sig === 'SELL')  counts[sectorKey].SS++;
+        else if (sig === 'SE')                    counts[sectorKey].SE++;
       }
     }
 
-    res.json(counts);
+    sectorSignalCountsCache = counts;
+    console.log('✅ Sector signal counts ready');
   } catch (err) {
-    console.error('Error fetching sector signal counts:', err);
-    res.status(500).json({ error: 'Failed to fetch sector signal counts' });
+    console.error('Error computing sector signal counts:', err);
   }
+}
+
+// GET /api/sector-signal-counts — returns instantly from cache (computed at startup)
+app.get('/api/sector-signal-counts', async (req, res) => {
+  res.json(sectorSignalCountsCache); // null until background job finishes (~2 min after start)
 });
 
 // GET /api/sector-stocks/:sectorKey
@@ -962,6 +965,8 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 API available at http://localhost:${PORT}/api/stocks`);
+  // Pre-compute sector signal counts in background (takes ~2 min for 503 stocks)
+  computeSectorSignalCounts();
 });
 
 // Scheduled Friday auto-save: checks every 30 minutes.

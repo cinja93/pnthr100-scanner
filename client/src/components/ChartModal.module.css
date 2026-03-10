@@ -226,6 +226,40 @@
   background: #d97706;
   color: #fff;
 }
+.chartSignalBadgeInteractive {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.chartSignalBadgeInteractive:hover {
+  filter: brightness(1.15);
+}
+
+/* Profit tooltip for profitable BE/SE exits */
+.profitTooltip {
+  position: absolute;
+  background: rgba(15, 120, 50, 0.93);
+  color: #fff;
+  border-radius: 8px;
+  padding: 7px 12px;
+  pointer-events: none;
+  z-index: 30;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  min-width: 110px;
+  white-space: nowrap;
+}
+.profitTooltipTitle {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.8;
+  margin-bottom: 3px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.profitTooltipRow {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
 
 /* OHLC hover tooltip */
 .ohlcTooltip {

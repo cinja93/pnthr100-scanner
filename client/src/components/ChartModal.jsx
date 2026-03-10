@@ -67,7 +67,7 @@ function detectAllSignals(weeklyData, period = 21) {
   if (weeklyData.length < period + 2) return [];
   const emaData = calculateEMA(weeklyData, period);
   const events = [];
-  let position         = null;  // { type: 'BL'|'SS', entryWi: number }
+  let position         = null;  // { type: 'BL'|'SS', entryWi: number, entryClose: number }
   let longDaylight     = 0;    // consecutive bars where weekLow > EMA
   let shortDaylight    = 0;    // consecutive bars where weekHigh < EMA
   // longTrendActive: true after BL or SE fires; expires only when SS fires.
@@ -96,7 +96,9 @@ function detectAllSignals(weeklyData, period = 21) {
     if (position && position.entryWi !== wi) {
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
-          events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high });
+          const profitDollar = parseFloat((current.close - position.entryClose).toFixed(2));
+          const profitPct    = parseFloat(((profitDollar / position.entryClose) * 100).toFixed(2));
+          events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high, profitDollar, profitPct });
           // BE: short trend may follow — allow Phase 1 SS re-entry without daylight zone.
           // Safe because ssPhase1 still requires close < EMA.
           shortTrendActive = true;
@@ -104,7 +106,9 @@ function detectAllSignals(weeklyData, period = 21) {
         }
       } else {
         if (current.high > twoWeekHigh) {
-          events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high });
+          const profitDollar = parseFloat((position.entryClose - current.close).toFixed(2));
+          const profitPct    = parseFloat(((profitDollar / position.entryClose) * 100).toFixed(2));
+          events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high, profitDollar, profitPct });
           // SE: long trend may follow — allow Phase 1 BL re-entry without daylight zone.
           // Safe because blPhase1 still requires close > EMA.
           longTrendActive = true;
@@ -131,12 +135,12 @@ function detectAllSignals(weeklyData, period = 21) {
 
       if (blPhase1 && blDaylightOk) {
         events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });
-        position         = { type: 'BL', entryWi: wi };
+        position         = { type: 'BL', entryWi: wi, entryClose: current.close };
         longTrendActive  = true;
         shortTrendActive = false; // confirmed long — short re-entry privilege expires
       } else if (ssPhase1 && ssDaylightOk) {
         events.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high });
-        position         = { type: 'SS', entryWi: wi };
+        position         = { type: 'SS', entryWi: wi, entryClose: current.close };
         shortTrendActive = true;
         longTrendActive  = false; // confirmed short — long re-entry privilege expires
       }
@@ -167,6 +171,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [hoveredBar, setHoveredBar] = useState(null);
+  const [hoveredMarkerProfit, setHoveredMarkerProfit] = useState(null);
   const [signalMarkers, setSignalMarkers] = useState([]);
   const [pantherMarkerPos, setPantherMarkerPos] = useState(null);
   const [entryDatesLoaded, setEntryDatesLoaded] = useState(false);
@@ -302,6 +307,8 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
                 signal: ev.signal,
                 left: Math.round(x),
                 top: belowBar ? Math.round(y) : Math.round(y) - BADGE_H,
+                profitDollar: ev.profitDollar ?? null,
+                profitPct:    ev.profitPct    ?? null,
               });
             }
           }
@@ -501,19 +508,24 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
             <div className={styles.chartWrapper}>
               <div ref={chartContainerRef} className={styles.chartContainer} />
 
-              {/* BL/SS signal badges — all historical signals overlaid on chart */}
-              {signalMarkers.map((m, i) => (
-                <span
-                  key={i}
-                  className={`${styles.chartSignalBadge} ${
-                    m.signal === 'BL' ? styles.chartSignalBadgeBL :
-                    m.signal === 'SS' ? styles.chartSignalBadgeSS :
-                    m.signal === 'BE' ? styles.chartSignalBadgeBE :
-                    styles.chartSignalBadgeSE
-                  }`}
-                  style={{ left: m.left, top: m.top }}
-                >{m.signal}</span>
-              ))}
+              {/* BL/SS/BE/SE signal badges — overlaid on chart at signal bar */}
+              {signalMarkers.map((m, i) => {
+                const isProfitable = (m.signal === 'BE' || m.signal === 'SE') && m.profitPct != null && m.profitPct > 0;
+                return (
+                  <span
+                    key={i}
+                    className={`${styles.chartSignalBadge} ${
+                      m.signal === 'BL' ? styles.chartSignalBadgeBL :
+                      m.signal === 'SS' ? styles.chartSignalBadgeSS :
+                      m.signal === 'BE' ? styles.chartSignalBadgeBE :
+                      styles.chartSignalBadgeSE
+                    } ${isProfitable ? styles.chartSignalBadgeInteractive : ''}`}
+                    style={{ left: m.left, top: m.top }}
+                    onMouseEnter={isProfitable ? () => setHoveredMarkerProfit(m) : undefined}
+                    onMouseLeave={isProfitable ? () => setHoveredMarkerProfit(null) : undefined}
+                  >{m.signal}</span>
+                );
+              })}
 
               {/* Panther head — marks the date stock first entered the long or short top-100 list */}
               {pantherMarkerPos && (
@@ -526,6 +538,24 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
                   <span className={`${styles.pantherBadge} ${pantherMarkerPos.list === 'LONG' ? styles.pantherBadgeLong : styles.pantherBadgeShort}`}>
                     {pantherMarkerPos.list === 'LONG' ? 'L' : 'S'}
                   </span>
+                </div>
+              )}
+
+              {/* Profit tooltip for profitable BE/SE markers */}
+              {hoveredMarkerProfit && (
+                <div
+                  className={styles.profitTooltip}
+                  style={{ left: hoveredMarkerProfit.left + 16, top: hoveredMarkerProfit.top - 54 }}
+                >
+                  <div className={styles.profitTooltipTitle}>
+                    {hoveredMarkerProfit.signal} Profit
+                  </div>
+                  <div className={styles.profitTooltipRow}>
+                    +{hoveredMarkerProfit.profitPct.toFixed(2)}%
+                  </div>
+                  <div className={styles.profitTooltipRow}>
+                    +${hoveredMarkerProfit.profitDollar.toFixed(2)}/sh
+                  </div>
                 </div>
               )}
 

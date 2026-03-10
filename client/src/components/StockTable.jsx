@@ -252,7 +252,14 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                   {rankDisplay.text}
                 </td>}
                 <td className={styles.ticker}>
-                  <span>{stock.ticker}</span>
+                  <div className={styles.tickerRow}>
+                    {hasScannerRanks && (() => {
+                      const info = scannerRanks[stock.ticker?.toUpperCase()];
+                      if (!info) return null;
+                      return <span className={info.list === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort} style={{ marginLeft: 0, marginRight: 4 }}>{info.list === 'LONG' ? 'L' : 'S'}</span>;
+                    })()}
+                    <span>{stock.ticker}</span>
+                  </div>
                   {stock.companyName && <div className={styles.companyName}>{stock.companyName}</div>}
                 </td>
                 <td>{stock.exchange}</td>

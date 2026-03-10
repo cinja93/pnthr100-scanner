@@ -172,6 +172,16 @@
   font-weight: 600;
 }
 
+.stopBadgeCurr {
+  font-size: 12px;
+  color: #6b21a8;
+  background: #faf5ff;
+  border: 1px solid #d8b4fe;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
 /* Chart area */
 .chartArea {
   flex: 1;

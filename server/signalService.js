@@ -85,6 +85,41 @@ function aggregateWeeklyBars(daily) {
   return Object.values(weekMap).sort((a, b) => (a.weekStart > b.weekStart ? 1 : -1));
 }
 
+// Wilder's ATR(period) over weekly bars.
+// Returns array indexed by bar index; atrArr[i] = ATR through bar i (null until seeded).
+function computeWilderATR(weeklyBars, period = 3) {
+  const n = weeklyBars.length;
+  const atrArr = new Array(n).fill(null);
+  if (n < period + 1) return atrArr;
+  const trs = new Array(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    const cur = weeklyBars[i], prev = weeklyBars[i - 1];
+    trs[i] = Math.max(cur.high - cur.low, Math.abs(cur.high - prev.close), Math.abs(cur.low - prev.close));
+  }
+  let atr = 0;
+  for (let i = 1; i <= period; i++) atr += trs[i];
+  atr /= period;
+  atrArr[period] = atr;
+  for (let i = period + 1; i < n; i++) {
+    atr = (atr * 2 + trs[i]) / 3;
+    atrArr[i] = atr;
+  }
+  return atrArr;
+}
+
+// Predatory buffer stop for a long position (entry week).
+// For expensive stocks: stop slightly above low (tighter). For cheap: below low.
+function longPredStop(low, price) {
+  const buf = price * 0.001;
+  return parseFloat((buf > 0.01 ? low + buf : low - 0.01).toFixed(2));
+}
+
+// Predatory buffer stop for a short position (entry week).
+function shortPredStop(high, price) {
+  const buf = price * 0.001;
+  return parseFloat((buf > 0.01 ? high - buf : high + 0.01).toFixed(2));
+}
+
 // Compute EMA series from an array of closes.
 // Returns values aligned to closes starting at index (period − 1).
 // Length = closes.length − period + 1
@@ -115,7 +150,8 @@ function runStateMachine(weeklyBars) {
 
   const closes = weeklyBars.map(b => b.close);
   const emas   = computeEMASeries(closes, EMA_PERIOD);
-  if (emas.length < 2) return { signal: null, ema21: null, stopPrice: null };
+  if (emas.length < 2) return { signal: null, ema21: null, stopPrice: null, currentWeekStop: null };
+  const atrArr = computeWilderATR(weeklyBars);
 
   // emas[i] aligns to weeklyBars[i + (period - 1)]
   const emaOffset = EMA_PERIOD - 1;
@@ -151,10 +187,24 @@ function runStateMachine(weeklyBars) {
     longDaylight  = current.low  > emaCurrent ? longDaylight + 1 : 0;
     shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
 
-    // Past entry week: check for BE/SE exit
-    // BE: this week's low breaks below the 2-week structural low
-    // SE: this week's high breaks above the 2-week structural high
+    // Past entry week: update PNTHR stop (ratchet), then check for BE/SE exit
     if (position && position.entryWi !== wi) {
+      const prevAtr = atrArr[wi - 1];
+      if (prevAtr != null) {
+        if (position.type === 'BL') {
+          const structStop = parseFloat((twoWeekLow - 0.01).toFixed(2));
+          const atrFloor   = parseFloat((prev1.close - prevAtr).toFixed(2));
+          const candidate  = Math.max(structStop, atrFloor);
+          position.pnthrStop = parseFloat(Math.max(position.pnthrStop, candidate).toFixed(2));
+        } else {
+          const structStop  = parseFloat((twoWeekHigh + 0.01).toFixed(2));
+          const atrCeiling  = parseFloat((prev1.close + prevAtr).toFixed(2));
+          const candidate   = Math.min(structStop, atrCeiling);
+          position.pnthrStop = parseFloat(Math.min(position.pnthrStop, candidate).toFixed(2));
+        }
+      }
+      // BE: this week's low breaks below the 2-week structural low
+      // SE: this week's high breaks above the 2-week structural high
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
           lastEvent = { signal: 'BE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
@@ -185,17 +235,17 @@ function runStateMachine(weeklyBars) {
       const ssDaylightOk = ssReentry || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
       if (blPhase1 && blDaylightOk) {
-        const stopPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));
-        lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
-        position         = { type: 'BL', entryWi: wi };
+        const initStop = longPredStop(current.low, current.close);
+        lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: initStop };
+        position         = { type: 'BL', entryWi: wi, pnthrStop: initStop };
         longTrendActive  = true;
         longTrendCapped  = false; // same-side — future BE→BL re-entry has no cap
         shortTrendActive = false;
         shortTrendCapped = false;
       } else if (ssPhase1 && ssDaylightOk) {
-        const stopPrice = parseFloat((twoWeekHigh + 0.01).toFixed(2));
-        lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
-        position         = { type: 'SS', entryWi: wi };
+        const initStop = shortPredStop(current.high, current.close);
+        lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: initStop };
+        position         = { type: 'SS', entryWi: wi, pnthrStop: initStop };
         shortTrendActive = true;
         shortTrendCapped = false; // same-side — future SE→SS re-entry has no cap
         longTrendActive  = false;
@@ -206,7 +256,17 @@ function runStateMachine(weeklyBars) {
 
   if (!lastEvent) {
     const lastEma = emas[emas.length - 1];
-    return { signal: null, ema21: parseFloat(lastEma.toFixed(4)), stopPrice: null };
+    return { signal: null, ema21: parseFloat(lastEma.toFixed(4)), stopPrice: null, currentWeekStop: null };
+  }
+
+  // If still in an open position, attach live stop prices to the signal event
+  if (position) {
+    const lastBar = weeklyBars[weeklyBars.length - 1];
+    lastEvent.pnthrStop = position.pnthrStop;
+    lastEvent.stopPrice = position.pnthrStop; // backward-compat alias
+    lastEvent.currentWeekStop = position.type === 'BL'
+      ? parseFloat((lastBar.low  - 0.01).toFixed(2))
+      : parseFloat((lastBar.high + 0.01).toFixed(2));
   }
 
   return lastEvent;
@@ -269,7 +329,9 @@ export async function getSignals(tickers) {
     const s = signalCache.signals[ticker] || { signal: null, ema21: null, stopPrice: null };
     result[ticker] = {
       signal:           s.signal, // 'BL', 'SS', 'BE', 'SE', or null
-      stopPrice:        s.stopPrice,
+      stopPrice:        s.pnthrStop ?? s.stopPrice ?? null, // backward-compat alias for pnthrStop
+      pnthrStop:        s.pnthrStop ?? null,
+      currentWeekStop:  s.currentWeekStop ?? null,
       ema21:            s.ema21,
       signalDate:       s.signalDate || null, // YYYY-MM-DD (Monday of signal week)
       isNewSignal:      false,

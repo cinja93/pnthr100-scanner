@@ -57,26 +57,54 @@ function calculateEMA(weeklyData, period) {
   return result;
 }
 
+// Wilder's ATR(period) over weekly bars.
+// Returns array indexed by bar index; atrArr[i] = ATR through bar i (null until seeded).
+function computeWilderATR(weeklyData, period = 3) {
+  const n = weeklyData.length;
+  const atrArr = new Array(n).fill(null);
+  if (n < period + 1) return atrArr;
+  const trs = new Array(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    const cur = weeklyData[i], prev = weeklyData[i - 1];
+    trs[i] = Math.max(cur.high - cur.low, Math.abs(cur.high - prev.close), Math.abs(cur.low - prev.close));
+  }
+  let atr = 0;
+  for (let i = 1; i <= period; i++) atr += trs[i];
+  atr /= period;
+  atrArr[period] = atr;
+  for (let i = period + 1; i < n; i++) {
+    atr = (atr * 2 + trs[i]) / 3;
+    atrArr[i] = atr;
+  }
+  return atrArr;
+}
+
+function longPredStop(low, price) {
+  const buf = price * 0.001;
+  return parseFloat((buf > 0.01 ? low + buf : low - 0.01).toFixed(2));
+}
+
+function shortPredStop(high, price) {
+  const buf = price * 0.001;
+  return parseFloat((buf > 0.01 ? high - buf : high + 0.01).toFixed(2));
+}
+
 // Scan full weekly history; returns events: BL/SS entries + BE/SE exits.
 //
 // BL (Launch): weekLow is 1–10% above 21-EMA, within first 3 bars of long-daylight streak
 //              (current or previous bar is the 1st or 2nd bar where low > EMA).
 // SS (Failure): weekHigh is 1–10% below 21-EMA, within first 3 bars of short-daylight streak.
 // Phase 5 exit: structural 2-week low/high + 0.1% predatory buffer, trigger on weekly close.
+// Returns { events, pnthrStop, currentWeekStop, activeType } where stop fields are
+// non-null only when the most recent BL/SS signal is still open (no following BE/SE).
 function detectAllSignals(weeklyData, period = 21) {
-  if (weeklyData.length < period + 2) return [];
+  if (weeklyData.length < period + 2) return { events: [], pnthrStop: null, currentWeekStop: null, activeType: null };
   const emaData = calculateEMA(weeklyData, period);
-  const events = [];
-  let position         = null;  // { type: 'BL'|'SS', entryWi: number, entryClose: number }
-  let longDaylight     = 0;    // consecutive bars where weekLow > EMA
-  let shortDaylight    = 0;    // consecutive bars where weekHigh < EMA
-  // longTrendActive: true after BL or SE fires; expires only when SS fires.
-  // shortTrendActive: true after SS or BE fires; expires only when BL fires.
-  // EMA position does NOT reset these flags — only a confirmed opposite entry does.
-  // longTrendCapped: 25% daylight cap applies only when re-entering long after SE (opposite side).
-  //   BL→BE→BL re-entry has no cap (same direction trend continuation).
-  //   SS→SE→BL re-entry is capped at 25% (switching sides — too extended = disqualified).
-  // shortTrendCapped: symmetric for short side.
+  const atrArr  = computeWilderATR(weeklyData);
+  const events  = [];
+  let position         = null;  // { type, entryWi, entryPrice, pnthrStop }
+  let longDaylight     = 0;
+  let shortDaylight    = 0;
   let longTrendActive   = false;
   let longTrendCapped   = false;
   let shortTrendActive  = false;
@@ -92,24 +120,34 @@ function detectAllSignals(weeklyData, period = 21) {
     const twoWeekHigh = Math.max(prev1.high, prev2.high);
     const twoWeekLow  = Math.min(prev1.low,  prev2.low);
 
-    // Update daylight streak counters.
     longDaylight  = current.low  > emaCurrent ? longDaylight + 1 : 0;
     shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
 
-    // Past entry week: check for BE/SE exit
-    // BE: this week's low breaks below the 2-week structural low
-    // SE: this week's high breaks above the 2-week structural high
+    // Past entry week: update PNTHR stop (ratchet), then check for BE/SE exit
     if (position && position.entryWi !== wi) {
+      const prevAtr = atrArr[wi - 1];
+      if (prevAtr != null) {
+        if (position.type === 'BL') {
+          const structStop = parseFloat((twoWeekLow - 0.01).toFixed(2));
+          const atrFloor   = parseFloat((prev1.close - prevAtr).toFixed(2));
+          const candidate  = Math.max(structStop, atrFloor);
+          position.pnthrStop = parseFloat(Math.max(position.pnthrStop, candidate).toFixed(2));
+        } else {
+          const structStop  = parseFloat((twoWeekHigh + 0.01).toFixed(2));
+          const atrCeiling  = parseFloat((prev1.close + prevAtr).toFixed(2));
+          const candidate   = Math.min(structStop, atrCeiling);
+          position.pnthrStop = parseFloat(Math.min(position.pnthrStop, candidate).toFixed(2));
+        }
+      }
+
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
           const exitPrice    = parseFloat((twoWeekLow - 0.01).toFixed(2));
           const profitDollar = parseFloat((exitPrice - position.entryPrice).toFixed(2));
           const profitPct    = parseFloat(((profitDollar / position.entryPrice) * 100).toFixed(2));
           events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high, profitDollar, profitPct });
-          // BE: same-direction BL re-entry remains active (no cap — trend continuation).
-          // Opposite-side SS re-entry allowed but capped at 25% (switching sides).
           shortTrendActive = true;
-          shortTrendCapped = true;   // SS after BE = opposite side → cap applies
+          shortTrendCapped = true;
           position = null; continue;
         }
       } else {
@@ -118,18 +156,13 @@ function detectAllSignals(weeklyData, period = 21) {
           const profitDollar = parseFloat((position.entryPrice - exitPrice).toFixed(2));
           const profitPct    = parseFloat(((profitDollar / position.entryPrice) * 100).toFixed(2));
           events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high, profitDollar, profitPct });
-          // SE: same-direction SS re-entry remains active (no cap — trend continuation).
-          // Opposite-side BL re-entry allowed but capped at 25% (switching sides).
           longTrendActive = true;
-          longTrendCapped = true;    // BL after SE = opposite side → cap applies
+          longTrendCapped = true;
           position = null; continue;
         }
       }
     }
 
-    // BL (Launch): Phase 1 + daylight zone required for first entry in a trend.
-    // Once longTrendActive, only Phase 1 needed (price stayed above EMA after prior BL/BE).
-    // SS (Failure): symmetric.
     if (!position) {
       const emaPrev  = emaData[emaIdx - 1].value;
       const blPhase1 = current.close > emaCurrent && emaCurrent > emaPrev && current.high >= twoWeekHigh + 0.01;
@@ -137,33 +170,45 @@ function detectAllSignals(weeklyData, period = 21) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      // Re-entry: skip the 1–10% zone, require >= 1% daylight.
-      //   Same-side re-entry (BL→BE→BL, SS→SE→SS): no upper cap — trend continuation.
-      //   Opposite-side re-entry (SE→BL, BE→SS): cap at 25% — too extended = disqualified.
-      // First entry: full 1–10% zone with 1–3 bar streak.
       const blReentry    = longTrendActive  && current.low  >= emaCurrent * 1.01 && (!longTrendCapped  || current.low  <= emaCurrent * 1.25);
       const ssReentry    = shortTrendActive && current.high <= emaCurrent * 0.99 && (!shortTrendCapped || current.high >= emaCurrent * 0.75);
       const blDaylightOk = blReentry || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
       const ssDaylightOk = ssReentry || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
       if (blPhase1 && blDaylightOk) {
+        const entryPrice = parseFloat((twoWeekHigh + 0.01).toFixed(2));
+        const initStop   = longPredStop(current.low, current.close);
         events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });
-        position          = { type: 'BL', entryWi: wi, entryPrice: parseFloat((twoWeekHigh + 0.01).toFixed(2)) };
+        position          = { type: 'BL', entryWi: wi, entryPrice, pnthrStop: initStop };
         longTrendActive   = true;
-        longTrendCapped   = false; // same-side now — future BE→BL re-entry has no cap
+        longTrendCapped   = false;
         shortTrendActive  = false;
         shortTrendCapped  = false;
       } else if (ssPhase1 && ssDaylightOk) {
+        const entryPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));
+        const initStop   = shortPredStop(current.high, current.close);
         events.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high });
-        position          = { type: 'SS', entryWi: wi, entryPrice: parseFloat((twoWeekLow - 0.01).toFixed(2)) };
+        position          = { type: 'SS', entryWi: wi, entryPrice, pnthrStop: initStop };
         shortTrendActive  = true;
-        shortTrendCapped  = false; // same-side now — future SE→SS re-entry has no cap
+        shortTrendCapped  = false;
         longTrendActive   = false;
         longTrendCapped   = false;
       }
     }
   }
-  return events;
+
+  // Compute live stops if still in an open position
+  let pnthrStop = null, currentWeekStop = null, activeType = null;
+  if (position) {
+    const lastBar = weeklyData[weeklyData.length - 1];
+    pnthrStop       = position.pnthrStop;
+    activeType      = position.type;
+    currentWeekStop = position.type === 'BL'
+      ? parseFloat((lastBar.low  - 0.01).toFixed(2))
+      : parseFloat((lastBar.high + 0.01).toFixed(2));
+  }
+
+  return { events, pnthrStop, currentWeekStop, activeType };
 }
 
 function filterByRange(weeklyData, range) {
@@ -189,6 +234,8 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
   const [error, setError] = useState(null);
   const [hoveredBar, setHoveredBar] = useState(null);
   const [hoveredMarkerProfit, setHoveredMarkerProfit] = useState(null);
+  const [pnthrStop, setPnthrStop] = useState(null);
+  const [currentWeekStop, setCurrentWeekStop] = useState(null);
   const [signalMarkers, setSignalMarkers] = useState([]);
   const [pantherMarkerPos, setPantherMarkerPos] = useState(null);
   const [entryDatesLoaded, setEntryDatesLoaded] = useState(false);
@@ -201,7 +248,6 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
 
   const stock = stocks[currentIndex];
   const signalData = signals[stock?.ticker];
-  const stopPrice = signalData?.stopPrice ?? null;
   const signalIcon = getSignalIcon(signalData);
   const inWatchlist = stock ? watchlistSet.has(stock.ticker) : false;
 
@@ -300,8 +346,10 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
       });
     });
 
-    // Show the most recent entry (BL/SS) + its exit (BE/SE) if they fall in the visible range
-    const allDetected = detectAllSignals(allWeeklyData, 21);
+    // Compute signals and live stops from full history
+    const { events: allDetected, pnthrStop: ps, currentWeekStop: cws } = detectAllSignals(allWeeklyData, 21);
+    setPnthrStop(ps);
+    setCurrentWeekStop(cws);
     const lastEntryIdx = (() => { for (let i = allDetected.length - 1; i >= 0; i--) { if (allDetected[i].signal === 'BL' || allDetected[i].signal === 'SS') return i; } return -1; })();
     const lastEntry  = lastEntryIdx >= 0 ? allDetected[lastEntryIdx] : null;
     const exitEvent  = lastEntry ? allDetected.slice(lastEntryIdx + 1).find(e => e.signal === 'BE' || e.signal === 'SE') : null;
@@ -385,13 +433,24 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
       }
     }
 
-    if (stopPrice != null) {
+    if (ps != null) {
       series.createPriceLine({
-        price: stopPrice,
+        price: ps,
         color: '#ca8a04',
         lineWidth: 2,
-        lineStyle: 2,
+        lineStyle: 2, // dashed
         axisLabelVisible: true,
+        title: 'PNTHR',
+      });
+    }
+    if (cws != null) {
+      series.createPriceLine({
+        price: cws,
+        color: '#9333ea',
+        lineWidth: 1,
+        lineStyle: 3, // dotted
+        axisLabelVisible: true,
+        title: 'CW',
       });
     }
 
@@ -402,12 +461,14 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
       setHoveredBar(null);
       setSignalMarkers([]);
       setPantherMarkerPos(null);
+      setPnthrStop(null);
+      setCurrentWeekStop(null);
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
       }
     };
-  }, [allWeeklyData, range, stopPrice, loading, entryDatesLoaded]);
+  }, [allWeeklyData, range, loading, entryDatesLoaded]);
 
   // Load watchlist on mount
   useEffect(() => {
@@ -505,8 +566,11 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
               <img src={signalIcon.src} alt={signalIcon.alt} className={styles.signalIcon} title={signalIcon.alt} />
             )}
             <span className={styles.currentPrice}>${stock.currentPrice?.toLocaleString()}</span>
-            {stopPrice != null && (
-              <span className={styles.stopBadge}>Stop: ${stopPrice.toLocaleString()}</span>
+            {pnthrStop != null && (
+              <span className={styles.stopBadge}>PNTHR Stop: ${pnthrStop.toFixed(2)}</span>
+            )}
+            {currentWeekStop != null && (
+              <span className={styles.stopBadgeCurr}>Curr Stop: ${currentWeekStop.toFixed(2)}</span>
             )}
           </div>
         </div>

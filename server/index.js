@@ -753,7 +753,7 @@ async function getSP500Constituents(FMP_API_KEY) {
 
 // GET /api/sector-signal-counts
 // Returns BL/BE/SS/SE counts for each sector, based on S&P 500 constituents.
-app.get('/api/sector-signal-counts', requireApiKey, async (req, res) => {
+app.get('/api/sector-signal-counts', async (req, res) => {
   try {
     const FMP_API_KEY = process.env.FMP_API_KEY;
     const constituents = await getSP500Constituents(FMP_API_KEY);

@@ -1,14 +1,16 @@
 import { useState, useMemo } from 'react';
 import styles from './FilterBar.module.css';
 
-const SIGNALS = ['BL', 'BE', 'SS', 'SE', 'NONE'];
+const SIGNALS = ['NEW_BL', 'BL', 'BE', 'NEW_SS', 'SS', 'SE', 'NONE'];
 
 const SIGNAL_LABELS = {
-  BL:   'BL',
-  BE:   'BE',
-  SS:   'SS',
-  SE:   'SE',
-  NONE: 'No Signal',
+  NEW_BL: '★ New BL',
+  BL:     'BL',
+  BE:     'BE',
+  NEW_SS: '★ New SS',
+  SS:     'SS',
+  SE:     'SE',
+  NONE:   'No Signal',
 };
 
 function countActiveFilters(filters) {
@@ -61,6 +63,11 @@ export default function FilterBar({ stocks, filters, onChange, scanType }) {
       ? current.filter(s => s !== sector)
       : [...current, sector];
     onChange({ ...filters, sectors: next });
+  }
+
+  function toggleAllSectors() {
+    const allSelected = sectors.every(s => filters.sectors.includes(s));
+    onChange({ ...filters, sectors: allSelected ? [] : [...sectors] });
   }
 
   function setRange(field, value) {
@@ -135,6 +142,12 @@ export default function FilterBar({ stocks, filters, onChange, scanType }) {
               )}
             </label>
             <div className={styles.sectorGrid}>
+              <button
+                className={`${styles.sectorPill} ${styles.sectorPillAll} ${sectors.every(s => filters.sectors.includes(s)) ? styles.pillActive : ''}`}
+                onClick={toggleAllSectors}
+              >
+                All
+              </button>
               {sectors.map(sector => (
                 <button
                   key={sector}

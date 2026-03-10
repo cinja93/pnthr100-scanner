@@ -303,7 +303,8 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                         const cls = sig === 'BL' ? styles.pnthrBadgeBL
                                   : sig === 'SS' ? styles.pnthrBadgeSS
                                   : styles.pnthrBadgeBE; // BE and SE both orange
-                        return <span className={`${styles.pnthrBadge} ${cls}`}>{sig}+{wks}</span>;
+                        const isNew = signalData?.isNewSignal;
+                        return <span className={`${styles.pnthrBadge} ${cls}`}>{isNew ? '★ ' : ''}{sig}+{wks}</span>;
                       })()}
                 </td>
                 <td>

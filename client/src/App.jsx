@@ -108,6 +108,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [chartIndex, setChartIndex] = useState(null);
   const [chartStocks, setChartStocks] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
+  const [longBatchStats, setLongBatchStats] = useState(null);
 
   const isScanner = activePage === 'long' || activePage === 'short';
 
@@ -189,6 +190,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         setSignals(pnthr);
         setLaserSignals(laser);
         setSignalsLoading(false);
+        if (scanType === 'long') computeAndSetLongStats(pnthr);
       });
       fetchEarnings(tickers).then(result => setEarnings(result)).catch(err => console.error('Earnings fetch error:', err));
     } catch (err) {
@@ -223,6 +225,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         setSignals(pnthr);
         setLaserSignals(laser);
         setSignalsLoading(false);
+        if (scanType === 'long') computeAndSetLongStats(pnthr);
       });
       fetchEarnings(tickers).then(result => setEarnings(result)).catch(err => console.error('Earnings fetch error:', err));
     } catch (err) {
@@ -231,6 +234,15 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  function computeAndSetLongStats(pnthrSignals) {
+    const closed = Object.values(pnthrSignals).filter(s => s.signal === 'BE' && s.profitDollar != null);
+    if (closed.length === 0) { setLongBatchStats(null); return; }
+    const wins = closed.filter(s => s.profitDollar > 0);
+    const avgDollar = closed.reduce((sum, s) => sum + s.profitDollar, 0) / closed.length;
+    const avgPct    = closed.reduce((sum, s) => sum + s.profitPct,    0) / closed.length;
+    setLongBatchStats({ total: closed.length, wins: wins.length, winRate: (wins.length / closed.length) * 100, avgDollar, avgPct });
   }
 
   function formatDate(dateString) {
@@ -245,7 +257,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
   return (
     <div className="app">
-      <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} onLogout={onLogout} />
+      <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} onLogout={onLogout} longStats={longBatchStats} />
 
       <div className="content-wrapper">
         <main className="main">

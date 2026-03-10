@@ -207,14 +207,20 @@ function runStateMachine(weeklyBars) {
       // SE: this week's high breaks above the 2-week structural high
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
-          lastEvent = { signal: 'BE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
+          const exitPrice   = position.pnthrStop;
+          const profitDollar = parseFloat((exitPrice - position.entryClose).toFixed(2));
+          const profitPct    = parseFloat(((profitDollar / position.entryClose) * 100).toFixed(2));
+          lastEvent = { signal: 'BE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null, profitDollar, profitPct };
           shortTrendActive = true;
           shortTrendCapped = true;   // SS after BE = opposite side → 25% cap applies
           position = null; continue;
         }
       } else {
         if (current.high > twoWeekHigh) {
-          lastEvent = { signal: 'SE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
+          const exitPrice    = position.pnthrStop;
+          const profitDollar = parseFloat((position.entryClose - exitPrice).toFixed(2));
+          const profitPct    = parseFloat(((profitDollar / position.entryClose) * 100).toFixed(2));
+          lastEvent = { signal: 'SE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null, profitDollar, profitPct };
           longTrendActive = true;
           longTrendCapped = true;    // BL after SE = opposite side → 25% cap applies
           position = null; continue;
@@ -237,7 +243,7 @@ function runStateMachine(weeklyBars) {
       if (blPhase1 && blDaylightOk) {
         const initStop = longPredStop(current.low, current.close);
         lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: initStop };
-        position         = { type: 'BL', entryWi: wi, pnthrStop: initStop };
+        position         = { type: 'BL', entryWi: wi, pnthrStop: initStop, entryClose: current.close };
         longTrendActive  = true;
         longTrendCapped  = false; // same-side — future BE→BL re-entry has no cap
         shortTrendActive = false;
@@ -245,7 +251,7 @@ function runStateMachine(weeklyBars) {
       } else if (ssPhase1 && ssDaylightOk) {
         const initStop = shortPredStop(current.high, current.close);
         lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: initStop };
-        position         = { type: 'SS', entryWi: wi, pnthrStop: initStop };
+        position         = { type: 'SS', entryWi: wi, pnthrStop: initStop, entryClose: current.close };
         shortTrendActive = true;
         shortTrendCapped = false; // same-side — future SE→SS re-entry has no cap
         longTrendActive  = false;
@@ -336,6 +342,8 @@ export async function getSignals(tickers) {
       signalDate:       s.signalDate || null, // YYYY-MM-DD (Monday of signal week)
       isNewSignal:      false,
       profitPercentage: null,
+      profitDollar:     s.profitDollar ?? null,
+      profitPct:        s.profitPct    ?? null,
     };
   }
   return result;

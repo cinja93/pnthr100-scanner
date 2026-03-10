@@ -118,6 +118,64 @@
   letter-spacing: 0.5px;
 }
 
+/* Nav item wrapper (for tooltip positioning) */
+.navItemWrapper {
+  position: relative;
+}
+
+/* Batch stats tooltip on PNTHR Long hover */
+.statsTooltip {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 0;
+  z-index: 200;
+  background: #14532d;
+  border: 1px solid #16a34a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-width: 190px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.statsTooltipTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: #86efac;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(134, 239, 172, 0.25);
+  padding-bottom: 6px;
+}
+
+.statsRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 5px;
+}
+
+.statsLabel {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.statsValue {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.statsPos {
+  color: #4ade80;
+}
+
+.statsNeg {
+  color: #f87171;
+}
+
 /* Footer */
 .sidebarFooter {
   padding: 16px;

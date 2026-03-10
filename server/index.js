@@ -751,6 +751,50 @@ async function getSP500Constituents(FMP_API_KEY) {
   return data;
 }
 
+// GET /api/sector-signal-counts
+// Returns BL/BE/SS/SE counts for each sector, based on S&P 500 constituents.
+app.get('/api/sector-signal-counts', requireApiKey, async (req, res) => {
+  try {
+    const FMP_API_KEY = process.env.FMP_API_KEY;
+    const constituents = await getSP500Constituents(FMP_API_KEY);
+
+    // Build reverse map: FMP sector name → our sector key
+    const gicsToKey = {};
+    for (const [key, gics] of Object.entries(SECTOR_KEY_TO_GICS)) gicsToKey[gics] = key;
+
+    // Group tickers by sector key
+    const tickersBySector = {};
+    for (const c of constituents) {
+      const sectorKey = gicsToKey[c.sector];
+      if (!sectorKey) continue;
+      if (!tickersBySector[sectorKey]) tickersBySector[sectorKey] = [];
+      tickersBySector[sectorKey].push(c.symbol);
+    }
+
+    // Get signals for all S&P 500 tickers (uses cache — fast if already computed)
+    const allTickers = constituents.map(c => c.symbol);
+    const signals = await getSignals(allTickers);
+
+    // Count signals per sector
+    const counts = {};
+    for (const [sectorKey, tickers] of Object.entries(tickersBySector)) {
+      counts[sectorKey] = { BL: 0, BE: 0, SS: 0, SE: 0 };
+      for (const ticker of tickers) {
+        const sig = signals[ticker]?.signal;
+        if (sig === 'BL' || sig === 'BUY')  counts[sectorKey].BL++;
+        else if (sig === 'BE')              counts[sectorKey].BE++;
+        else if (sig === 'SS' || sig === 'SELL') counts[sectorKey].SS++;
+        else if (sig === 'SE')              counts[sectorKey].SE++;
+      }
+    }
+
+    res.json(counts);
+  } catch (err) {
+    console.error('Error fetching sector signal counts:', err);
+    res.status(500).json({ error: 'Failed to fetch sector signal counts' });
+  }
+});
+
 // GET /api/sector-stocks/:sectorKey
 // Returns S&P 500 stocks in the given GICS sector, ranked by YTD return.
 app.get('/api/sector-stocks/:sectorKey', async (req, res) => {

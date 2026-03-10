@@ -261,6 +261,13 @@ export async function fetchScannerRanks() {
   }
 }
 
+// Fetch BL/BE/SS/SE signal counts for all 11 sectors
+export async function fetchSectorSignalCounts() {
+  const response = await fetch(`${API_BASE}/api/sector-signal-counts`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // Fetch stocks in a given sector (by sector key, e.g. 'informationTechnology')
 export async function fetchSectorStocks(sectorKey) {
   const response = await fetch(`${API_BASE}/api/sector-stocks/${sectorKey}`, { headers: authHeaders() });

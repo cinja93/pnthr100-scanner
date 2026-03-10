@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
-import { fetchSectorData, fetchSectorStocks, fetchEarnings, fetchScannerRanks } from '../services/api';
+import { fetchSectorData, fetchSectorStocks, fetchEarnings, fetchScannerRanks, fetchSectorSignalCounts } from '../services/api';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
 import styles from './SectorPage.module.css';
@@ -80,7 +80,7 @@ function computeCumulative(filteredData, sectorKey) {
   });
 }
 
-function SectorMiniChart({ sectorKey, chartData, onClick }) {
+function SectorMiniChart({ sectorKey, chartData, signalCounts, onClick }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const tooltipRef = useRef(null);
@@ -197,6 +197,17 @@ function SectorMiniChart({ sectorKey, chartData, onClick }) {
         <div ref={containerRef} className={styles.chartContainer} />
         <div ref={tooltipRef} className={styles.chartTooltip} />
       </div>
+      {signalCounts && (
+        <div className={styles.signalSummary}>
+          {signalCounts.BL > 0 && <span className={styles.sigBL}>BL <strong>{signalCounts.BL}</strong></span>}
+          {signalCounts.BE > 0 && <span className={styles.sigBE}>BE <strong>{signalCounts.BE}</strong></span>}
+          {signalCounts.SS > 0 && <span className={styles.sigSS}>SS <strong>{signalCounts.SS}</strong></span>}
+          {signalCounts.SE > 0 && <span className={styles.sigSE}>SE <strong>{signalCounts.SE}</strong></span>}
+          {signalCounts.BL === 0 && signalCounts.BE === 0 && signalCounts.SS === 0 && signalCounts.SE === 0 && (
+            <span className={styles.sigNone}>No signals</span>
+          )}
+        </div>
+      )}
       <div className={styles.cardFooter}>View stocks →</div>
     </div>
   );
@@ -303,6 +314,7 @@ export default function SectorPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedSector, setSelectedSector] = useState(null);
+  const [signalCounts, setSignalCounts] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -314,6 +326,11 @@ export default function SectorPage() {
         setError('Failed to load sector data.');
       })
       .finally(() => setLoading(false));
+
+    // Fetch signal counts independently — loads in background, doesn't block charts
+    fetchSectorSignalCounts()
+      .then(counts => setSignalCounts(counts))
+      .catch(err => console.error('Signal counts error:', err));
   }, []);
 
   // Recompute cumulative series whenever data or range changes — no extra API calls
@@ -375,6 +392,7 @@ export default function SectorPage() {
               key={key}
               sectorKey={key}
               chartData={bySector[key]}
+              signalCounts={signalCounts?.[key] ?? null}
               onClick={() => setSelectedSector(key)}
             />
           ))}

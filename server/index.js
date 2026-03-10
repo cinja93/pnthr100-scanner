@@ -723,16 +723,17 @@ app.post('/api/portfolio/optimize', async (req, res) => {
 // ── Sector stocks ────────────────────────────────────────────────────────────
 
 // Map internal sector keys to GICS sector names as used by the S&P 500 constituent list
+// FMP sp500_constituent uses its own sector names (not pure GICS)
 const SECTOR_KEY_TO_GICS = {
   communicationServices: 'Communication Services',
-  consumerDiscretionary: 'Consumer Discretionary',
-  consumerStaples:       'Consumer Staples',
+  consumerDiscretionary: 'Consumer Cyclical',
+  consumerStaples:       'Consumer Defensive',
   energy:                'Energy',
-  financials:            'Financials',
-  healthCare:            'Health Care',
+  financials:            'Financial Services',
+  healthCare:            'Healthcare',
   industrials:           'Industrials',
-  informationTechnology: 'Information Technology',
-  materials:             'Materials',
+  informationTechnology: 'Technology',
+  materials:             'Basic Materials',
   realEstate:            'Real Estate',
   utilities:             'Utilities',
 };

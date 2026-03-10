@@ -87,11 +87,11 @@ function detectAllSignals(weeklyData, period = 21) {
     longDaylight  = current.low  > emaCurrent ? longDaylight + 1 : 0;
     shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
 
-    // Reset trend flags only when price crosses to the wrong side of the EMA.
-    // A BE/SE alone does not reset — the trend can re-enter via Phase 1 only
-    // as long as price stays on the correct side of the EMA.
-    if (current.close < emaCurrent) longTrendActive  = false;
-    if (current.close > emaCurrent) shortTrendActive = false;
+    // Reset trend flags only when there is no active position AND price crosses
+    // to the wrong side of the EMA. While in an active position a brief dip
+    // below/above the EMA without triggering BE/SE must not invalidate the trend.
+    if (!position && current.close < emaCurrent) longTrendActive  = false;
+    if (!position && current.close > emaCurrent) shortTrendActive = false;
 
     // Past entry week: check for BE/SE exit
     // BE: this week's low breaks below the 2-week structural low

@@ -425,8 +425,7 @@ export default function ChartModal({ stocks, initialIndex, onClose, onWatchlistC
         color: '#ca8a04',
         lineWidth: 2,
         lineStyle: 2, // dashed
-        axisLabelVisible: true,
-        title: 'PNTHR',
+        axisLabelVisible: false,
       });
     }
     if (cws != null) {
@@ -435,8 +434,7 @@ export default function ChartModal({ stocks, initialIndex, onClose, onWatchlistC
         color: '#9333ea',
         lineWidth: 1,
         lineStyle: 3, // dotted
-        axisLabelVisible: true,
-        title: 'CW',
+        axisLabelVisible: false,
       });
     }
 

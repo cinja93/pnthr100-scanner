@@ -152,10 +152,10 @@ function runStateMachine(weeklyBars) {
       aboveEMAStreak = 0;
     } else if (current.close < emaCurrent) {
       aboveEMAStreak = 0;
-      if (++belowEMAStreak >= 2) longTrendActive  = false;
+      if (++belowEMAStreak >= 6) longTrendActive  = false;
     } else {
       belowEMAStreak = 0;
-      if (++aboveEMAStreak >= 2) shortTrendActive = false;
+      if (++aboveEMAStreak >= 6) shortTrendActive = false;
     }
 
     // Past entry week: check for BE/SE exit
@@ -191,12 +191,11 @@ function runStateMachine(weeklyBars) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      // Daylight required for ALL entries: the weekly low must be above EMA (longDaylight >= 1).
-      // First entry also requires the 1–10% zone and a streak of 1–3 bars.
-      // Once longTrendActive (after first BL/SE), re-entries skip the 1–10% zone restriction
-      // but the low must still be above EMA (longDaylight >= 1) — i.e., not the EMA crossover bar itself.
-      const blDaylightOk = (longTrendActive  && longDaylight  >= 1) || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
-      const ssDaylightOk = (shortTrendActive && shortDaylight >= 1) || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
+      // Re-entry (longTrendActive): skip the 1–10% zone but still require at least 1% daylight
+      //   so the low is visibly above EMA (not just touching it on the crossover bar).
+      // First entry: full 1–10% zone with 1–3 bar streak.
+      const blDaylightOk = (longTrendActive  && current.low  >= emaCurrent * 1.01) || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
+      const ssDaylightOk = (shortTrendActive && current.high <= emaCurrent * 0.99) || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
       if (blPhase1 && blDaylightOk) {
         const stopPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));

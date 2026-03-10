@@ -44,6 +44,10 @@ function getLastFriday() {
   return d.toISOString().split('T')[0];
 }
 
+function getToday() {
+  return new Date().toISOString().split('T')[0];
+}
+
 async function fetchDailyBars(ticker, from, to) {
   const url = `${FMP_BASE_URL}/historical-price-full/${ticker}?from=${from}&to=${to}&apikey=${FMP_API_KEY}`;
   const res = await fetch(url);
@@ -296,16 +300,19 @@ export async function getSignals(tickers) {
   if (!tickers || tickers.length === 0) return {};
 
   const weekKey = getLastFriday();
+  const today   = getToday();
 
-  // Invalidate cache when week rolls over
-  if (signalCache.weekKey !== weekKey) {
-    signalCache = { weekKey, signals: {} };
+  // Invalidate cache daily so intra-week bars (Mon–Thu) are picked up for NEW signal detection
+  if (signalCache.weekKey !== today) {
+    signalCache = { weekKey: today, signals: {} };
   }
 
   const missing = tickers.filter(t => !(t in signalCache.signals));
 
   if (missing.length > 0) {
-    const toDate  = weekKey;
+    // Fetch through today so the current in-progress weekly bar is included.
+    // isNew = true only when a BL/SS fires on that last (current-week) bar.
+    const toDate  = today;
     const fromD   = new Date(weekKey);
     fromD.setDate(fromD.getDate() - WEEKS_HISTORY * 7);
     const fromDate = fromD.toISOString().split('T')[0];

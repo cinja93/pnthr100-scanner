@@ -73,8 +73,14 @@ function detectAllSignals(weeklyData, period = 21) {
   // longTrendActive: true after BL or SE fires; expires only when SS fires.
   // shortTrendActive: true after SS or BE fires; expires only when BL fires.
   // EMA position does NOT reset these flags — only a confirmed opposite entry does.
-  let longTrendActive  = false;
-  let shortTrendActive = false;
+  // longTrendCapped: 25% daylight cap applies only when re-entering long after SE (opposite side).
+  //   BL→BE→BL re-entry has no cap (same direction trend continuation).
+  //   SS→SE→BL re-entry is capped at 25% (switching sides — too extended = disqualified).
+  // shortTrendCapped: symmetric for short side.
+  let longTrendActive   = false;
+  let longTrendCapped   = false;
+  let shortTrendActive  = false;
+  let shortTrendCapped  = false;
 
   for (let wi = period + 1; wi < weeklyData.length; wi++) {
     const emaIdx = wi - (period - 1);
@@ -99,9 +105,10 @@ function detectAllSignals(weeklyData, period = 21) {
           const profitDollar = parseFloat((current.close - position.entryClose).toFixed(2));
           const profitPct    = parseFloat(((profitDollar / position.entryClose) * 100).toFixed(2));
           events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high, profitDollar, profitPct });
-          // BE: short trend may follow — allow Phase 1 SS re-entry without daylight zone.
-          // Safe because ssPhase1 still requires close < EMA.
+          // BE: same-direction BL re-entry remains active (no cap — trend continuation).
+          // Opposite-side SS re-entry allowed but capped at 25% (switching sides).
           shortTrendActive = true;
+          shortTrendCapped = true;   // SS after BE = opposite side → cap applies
           position = null; continue;
         }
       } else {
@@ -109,9 +116,10 @@ function detectAllSignals(weeklyData, period = 21) {
           const profitDollar = parseFloat((position.entryClose - current.close).toFixed(2));
           const profitPct    = parseFloat(((profitDollar / position.entryClose) * 100).toFixed(2));
           events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high, profitDollar, profitPct });
-          // SE: long trend may follow — allow Phase 1 BL re-entry without daylight zone.
-          // Safe because blPhase1 still requires close > EMA.
+          // SE: same-direction SS re-entry remains active (no cap — trend continuation).
+          // Opposite-side BL re-entry allowed but capped at 25% (switching sides).
           longTrendActive = true;
+          longTrendCapped = true;    // BL after SE = opposite side → cap applies
           position = null; continue;
         }
       }
@@ -127,22 +135,29 @@ function detectAllSignals(weeklyData, period = 21) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      // Re-entry (longTrendActive): skip the 1–10% zone but cap at 25% daylight.
-      //   < 1%: too close to EMA (crossover bar). > 25%: too extended, disqualified.
+      // Re-entry: skip the 1–10% zone, require >= 1% daylight.
+      //   Same-side re-entry (BL→BE→BL, SS→SE→SS): no upper cap — trend continuation.
+      //   Opposite-side re-entry (SE→BL, BE→SS): cap at 25% — too extended = disqualified.
       // First entry: full 1–10% zone with 1–3 bar streak.
-      const blDaylightOk = (longTrendActive  && current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.25) || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
-      const ssDaylightOk = (shortTrendActive && current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.75) || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
+      const blReentry    = longTrendActive  && current.low  >= emaCurrent * 1.01 && (!longTrendCapped  || current.low  <= emaCurrent * 1.25);
+      const ssReentry    = shortTrendActive && current.high <= emaCurrent * 0.99 && (!shortTrendCapped || current.high >= emaCurrent * 0.75);
+      const blDaylightOk = blReentry || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
+      const ssDaylightOk = ssReentry || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
       if (blPhase1 && blDaylightOk) {
         events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });
-        position         = { type: 'BL', entryWi: wi, entryClose: current.close };
-        longTrendActive  = true;
-        shortTrendActive = false; // confirmed long — short re-entry privilege expires
+        position          = { type: 'BL', entryWi: wi, entryClose: current.close };
+        longTrendActive   = true;
+        longTrendCapped   = false; // same-side now — future BE→BL re-entry has no cap
+        shortTrendActive  = false;
+        shortTrendCapped  = false;
       } else if (ssPhase1 && ssDaylightOk) {
         events.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high });
-        position         = { type: 'SS', entryWi: wi, entryClose: current.close };
-        shortTrendActive = true;
-        longTrendActive  = false; // confirmed short — long re-entry privilege expires
+        position          = { type: 'SS', entryWi: wi, entryClose: current.close };
+        shortTrendActive  = true;
+        shortTrendCapped  = false; // same-side now — future SE→SS re-entry has no cap
+        longTrendActive   = false;
+        longTrendCapped   = false;
       }
     }
   }

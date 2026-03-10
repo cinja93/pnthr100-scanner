@@ -125,13 +125,16 @@ function runStateMachine(weeklyBars) {
   let longDaylight     = 0;    // consecutive bars where weekLow > EMA
   let shortDaylight    = 0;    // consecutive bars where weekHigh < EMA
   // longTrendActive: true after BL or SE fires; expires only when SS fires.
-  // Allows re-entry BL with Phase 1 + 1% daylight (no 1–10% zone restriction).
   // shortTrendActive: true after SS or BE fires; expires only when BL fires.
   // Price position relative to EMA does NOT reset these flags — only a confirmed
-  // entry in the opposite direction does. This lets MU re-enter long even after
-  // spending many weeks below EMA following a BE stop-out.
+  // entry in the opposite direction does.
+  // longTrendCapped: 25% daylight cap for BL re-entry only when switching sides (SE→BL).
+  //   Same-side re-entry (BL→BE→BL) has no cap — it is trend continuation.
+  // shortTrendCapped: symmetric for short.
   let longTrendActive  = false;
+  let longTrendCapped  = false;
   let shortTrendActive = false;
+  let shortTrendCapped = false;
 
   for (let wi = EMA_PERIOD + 1; wi < weeklyBars.length; wi++) {
     const emaIdx = wi - emaOffset;
@@ -156,12 +159,14 @@ function runStateMachine(weeklyBars) {
         if (current.low < twoWeekLow) {
           lastEvent = { signal: 'BE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
           shortTrendActive = true;
+          shortTrendCapped = true;   // SS after BE = opposite side → 25% cap applies
           position = null; continue;
         }
       } else {
         if (current.high > twoWeekHigh) {
           lastEvent = { signal: 'SE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
           longTrendActive = true;
+          longTrendCapped = true;    // BL after SE = opposite side → 25% cap applies
           position = null; continue;
         }
       }
@@ -174,21 +179,27 @@ function runStateMachine(weeklyBars) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      const blDaylightOk = (longTrendActive  && current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.25) || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
-      const ssDaylightOk = (shortTrendActive && current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.75) || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
+      const blReentry    = longTrendActive  && current.low  >= emaCurrent * 1.01 && (!longTrendCapped  || current.low  <= emaCurrent * 1.25);
+      const ssReentry    = shortTrendActive && current.high <= emaCurrent * 0.99 && (!shortTrendCapped || current.high >= emaCurrent * 0.75);
+      const blDaylightOk = blReentry || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
+      const ssDaylightOk = ssReentry || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
       if (blPhase1 && blDaylightOk) {
         const stopPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));
         lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
-        position  = { type: 'BL', entryWi: wi };
+        position         = { type: 'BL', entryWi: wi };
         longTrendActive  = true;
+        longTrendCapped  = false; // same-side — future BE→BL re-entry has no cap
         shortTrendActive = false;
+        shortTrendCapped = false;
       } else if (ssPhase1 && ssDaylightOk) {
         const stopPrice = parseFloat((twoWeekHigh + 0.01).toFixed(2));
         lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
-        position  = { type: 'SS', entryWi: wi };
+        position         = { type: 'SS', entryWi: wi };
         shortTrendActive = true;
+        shortTrendCapped = false; // same-side — future SE→SS re-entry has no cap
         longTrendActive  = false;
+        longTrendCapped  = false;
       }
     }
   }

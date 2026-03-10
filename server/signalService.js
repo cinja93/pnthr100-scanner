@@ -166,8 +166,8 @@ function runStateMachine(weeklyBars) {
     // SS (Failure): symmetric.
     if (!position) {
       const emaPrev = emas[emaIdx - 1];
-      const blPhase1 = current.close > emaCurrent && emaCurrent > emaPrev && current.close > twoWeekHigh + 0.01;
-      const ssPhase1 = current.close < emaCurrent && emaCurrent < emaPrev && current.close < twoWeekLow - 0.01;
+      const blPhase1 = current.close > emaCurrent && emaCurrent > emaPrev && current.high >= twoWeekHigh + 0.01;
+      const ssPhase1 = current.close < emaCurrent && emaCurrent < emaPrev && current.low  <= twoWeekLow  - 0.01;
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 

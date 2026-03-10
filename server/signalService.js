@@ -142,12 +142,13 @@ function runStateMachine(weeklyBars) {
     longDaylight  = current.low  > emaCurrent ? longDaylight + 1 : 0;
     shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
 
-    // Reset trend flags whenever there is no active position and the weekly close
-    // crosses to the wrong side of the EMA. Once price closes below the EMA
-    // (with no open position), the established long trend is considered broken
-    // and the next BL entry requires the full 4-condition check including daylight zone.
-    if (!position && current.close < emaCurrent) longTrendActive  = false;
-    if (!position && current.close > emaCurrent) shortTrendActive = false;
+    // Reset trend flags when no active position, close is on the wrong side of EMA,
+    // AND the EMA slope confirms the move (EMA also declining for longs, rising for shorts).
+    // Requiring slope confirmation prevents a single brief dip below a still-rising EMA
+    // (e.g. right after a BE stop-out) from cancelling the re-entry privilege.
+    const emaPrevOuter = emas[emaIdx - 1];
+    if (!position && current.close < emaCurrent && emaCurrent < emaPrevOuter) longTrendActive  = false;
+    if (!position && current.close > emaCurrent && emaCurrent > emaPrevOuter) shortTrendActive = false;
 
     // Past entry week: check for BE/SE exit
     // BE: this week's low breaks below the 2-week structural low

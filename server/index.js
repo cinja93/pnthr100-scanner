@@ -722,59 +722,74 @@ app.post('/api/portfolio/optimize', async (req, res) => {
 
 // ── Sector stocks ────────────────────────────────────────────────────────────
 
-// Map internal sector keys to the exact sector names FMP uses in its screener
-const SECTOR_KEY_TO_FMP = {
+// Map internal sector keys to GICS sector names as used by the S&P 500 constituent list
+const SECTOR_KEY_TO_GICS = {
   communicationServices: 'Communication Services',
-  consumerDiscretionary: 'Consumer Cyclical',
-  consumerStaples:       'Consumer Defensive',
+  consumerDiscretionary: 'Consumer Discretionary',
+  consumerStaples:       'Consumer Staples',
   energy:                'Energy',
-  financials:            'Financial Services',
-  healthCare:            'Healthcare',
+  financials:            'Financials',
+  healthCare:            'Health Care',
   industrials:           'Industrials',
-  informationTechnology: 'Technology',
-  materials:             'Basic Materials',
+  informationTechnology: 'Information Technology',
+  materials:             'Materials',
   realEstate:            'Real Estate',
   utilities:             'Utilities',
 };
 
+// Cache S&P 500 constituent list (refreshes daily)
+let sp500Cache = { date: null, constituents: null };
+
+async function getSP500Constituents(FMP_API_KEY) {
+  const today = new Date().toISOString().split('T')[0];
+  if (sp500Cache.date === today && sp500Cache.constituents) return sp500Cache.constituents;
+  const res = await fetch(`https://financialmodelingprep.com/api/v3/sp500_constituent?apikey=${FMP_API_KEY}`);
+  if (!res.ok) throw new Error(`FMP SP500 constituent ${res.status}`);
+  const data = await res.json();
+  sp500Cache = { date: today, constituents: data };
+  return data;
+}
+
 // GET /api/sector-stocks/:sectorKey
-// Returns up to 100 large-cap US stocks in the given sector, ranked by YTD return.
+// Returns S&P 500 stocks in the given GICS sector, ranked by YTD return.
 app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
   const { sectorKey } = req.params;
-  const fmpSector = SECTOR_KEY_TO_FMP[sectorKey];
-  if (!fmpSector) return res.status(400).json({ error: 'Unknown sector key' });
+  const gicsSector = SECTOR_KEY_TO_GICS[sectorKey];
+  if (!gicsSector) return res.status(400).json({ error: 'Unknown sector key' });
 
   try {
     const FMP_API_KEY = process.env.FMP_API_KEY;
     const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
 
-    // 1. Screen for large-cap US stocks in this sector (NYSE + NASDAQ, $500M+ market cap)
-    const screenerUrl = `${FMP_BASE}/stock-screener?sector=${encodeURIComponent(fmpSector)}&exchange=NYSE,NASDAQ&country=US&marketCapMoreThan=500000000&limit=150&apikey=${FMP_API_KEY}`;
-    const screenerRes = await fetch(screenerUrl);
-    if (!screenerRes.ok) throw new Error(`FMP screener ${screenerRes.status}`);
-    const screenerData = await screenerRes.json();
-    if (!Array.isArray(screenerData) || screenerData.length === 0) {
-      return res.json({ stocks: [], signals: {} });
-    }
+    // 1. Get S&P 500 constituents and filter to this GICS sector
+    const constituents = await getSP500Constituents(FMP_API_KEY);
+    const sectorConstituents = constituents.filter(c => c.sector === gicsSector);
+    if (sectorConstituents.length === 0) return res.json({ stocks: [], signals: {} });
 
-    const tickers = screenerData.map(s => s.symbol);
+    const tickers = sectorConstituents.map(c => c.symbol);
 
-    // 2. Fetch YTD % return via stock-price-change (no historical price dependency)
+    // 2. Fetch current prices via quote endpoint
+    const quoteRes = await fetch(`${FMP_BASE}/quote/${tickers.join(',')}?apikey=${FMP_API_KEY}`);
+    const quoteData = quoteRes.ok ? await quoteRes.json() : [];
+    const quoteMap = {};
+    if (Array.isArray(quoteData)) for (const q of quoteData) quoteMap[q.symbol] = q;
+
+    // 3. Fetch YTD % return
     const ytdRes = await fetch(`${FMP_BASE}/stock-price-change/${tickers.join(',')}?apikey=${FMP_API_KEY}`);
     const ytdData = ytdRes.ok ? await ytdRes.json() : [];
     const ytdMap = {};
     if (Array.isArray(ytdData)) for (const item of ytdData) ytdMap[item.symbol] = item.ytd;
 
-    // 3. Build stock objects, sort by YTD desc, assign ranks
-    const stocks = screenerData
-      .filter(s => s.price && ytdMap[s.symbol] != null)
-      .map(s => ({
-        ticker: s.symbol,
-        companyName: s.companyName || '',
-        exchange: s.exchangeShortName || s.exchange || 'N/A',
-        sector: s.sector || fmpSector,
-        currentPrice: parseFloat(Number(s.price).toFixed(2)),
-        ytdReturn: parseFloat(Number(ytdMap[s.symbol]).toFixed(2)),
+    // 4. Build stock objects, sort by YTD desc, assign ranks
+    const stocks = sectorConstituents
+      .filter(c => quoteMap[c.symbol]?.price && ytdMap[c.symbol] != null)
+      .map(c => ({
+        ticker: c.symbol,
+        companyName: c.name || '',
+        exchange: quoteMap[c.symbol]?.exchange || 'N/A',
+        sector: gicsSector,
+        currentPrice: parseFloat(Number(quoteMap[c.symbol].price).toFixed(2)),
+        ytdReturn: parseFloat(Number(ytdMap[c.symbol]).toFixed(2)),
         rank: null,
         rankChange: null,
         previousRank: null,
@@ -782,9 +797,8 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
       .sort((a, b) => b.ytdReturn - a.ytdReturn)
       .map((s, i) => ({ ...s, rank: i + 1 }));
 
-    // 4. Get EMA signals + stop prices for these tickers
-    const stockTickers = stocks.map(s => s.ticker);
-    const signals = await getSignals(stockTickers);
+    // 5. Get EMA signals + stop prices for these tickers
+    const signals = await getSignals(stocks.map(s => s.ticker));
 
     res.json({ stocks, signals });
   } catch (error) {

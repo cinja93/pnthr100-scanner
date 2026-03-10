@@ -156,11 +156,15 @@ function runStateMachine(weeklyBars) {
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
           lastEvent = { signal: 'BE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
+          // BE with close below EMA: long trend definitively over — allow Phase 1 short entry
+          if (current.close < emaCurrent) shortTrendActive = true;
           position = null; continue;
         }
       } else {
         if (current.high > twoWeekHigh) {
           lastEvent = { signal: 'SE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null };
+          // SE with close above EMA: short trend definitively over — allow Phase 1 long entry
+          if (current.close > emaCurrent) longTrendActive = true;
           position = null; continue;
         }
       }

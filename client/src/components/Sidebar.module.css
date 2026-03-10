@@ -118,17 +118,13 @@
   letter-spacing: 0.5px;
 }
 
-/* Nav item wrapper (for tooltip positioning) */
-.navItemWrapper {
-  position: relative;
-}
+.navItemWrapper {}
 
-/* Batch stats tooltip on PNTHR Long hover */
+/* Batch stats tooltip on PNTHR Long/Short hover */
 .statsTooltip {
-  position: absolute;
-  left: calc(100% + 8px);
-  top: 0;
-  z-index: 200;
+  position: fixed;
+  left: 228px;
+  z-index: 9999;
   background: #14532d;
   border: 1px solid #16a34a;
   border-radius: 8px;

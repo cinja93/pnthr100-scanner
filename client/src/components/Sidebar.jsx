@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import styles from './Sidebar.module.css';
 import pnthrLogo from '../assets/PNTHR FUNDS Logo black background 2 lines.png';
 import builtWithLove from '../assets/Built with Love.jpg';
@@ -13,9 +13,9 @@ const NAV_ITEMS = [
   { key: 'portfolio', label: 'Portfolio',  icon: '📁' },
 ];
 
-function BatchStatsTooltip({ stats, styles }) {
+function BatchStatsTooltip({ stats, top }) {
   return (
-    <div className={styles.statsTooltip}>
+    <div className={styles.statsTooltip} style={{ top }}>
       <div className={styles.statsTooltipTitle}>Closed Trades This Batch</div>
       <div className={styles.statsRow}>
         <span className={styles.statsLabel}>Total closed</span>
@@ -42,8 +42,21 @@ function BatchStatsTooltip({ stats, styles }) {
 }
 
 export default function Sidebar({ activePage, onNavigate, currentUser, onLogout, longStats, shortStats }) {
-  const [showLongTooltip, setShowLongTooltip] = useState(false);
-  const [showShortTooltip, setShowShortTooltip] = useState(false);
+  const [tooltipKey, setTooltipKey] = useState(null); // 'long' | 'short' | null
+  const [tooltipTop, setTooltipTop] = useState(0);
+  const btnRefs = useRef({});
+
+  function handleMouseEnter(key) {
+    if (key !== 'long' && key !== 'short') return;
+    const btn = btnRefs.current[key];
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      setTooltipTop(rect.top);
+    }
+    setTooltipKey(key);
+  }
+
+  const activeTooltipStats = tooltipKey === 'long' ? longStats : tooltipKey === 'short' ? shortStats : null;
 
   return (
     <aside className={styles.sidebar}>
@@ -61,33 +74,28 @@ export default function Sidebar({ activePage, onNavigate, currentUser, onLogout,
             )}
             {item.dividerBefore && <div className={styles.divider} />}
             <button
+              ref={el => { if (el) btnRefs.current[item.key] = el; }}
               className={`${styles.navItem} ${activePage === item.key ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
               onClick={() => !item.soon && onNavigate(item.key)}
               disabled={item.soon}
               title={item.soon ? 'Coming soon' : item.label}
-              onMouseEnter={() => {
-                if (item.key === 'long') setShowLongTooltip(true);
-                if (item.key === 'short') setShowShortTooltip(true);
-              }}
-              onMouseLeave={() => { setShowLongTooltip(false); setShowShortTooltip(false); }}
+              onMouseEnter={() => handleMouseEnter(item.key)}
+              onMouseLeave={() => setTooltipKey(null)}
             >
               <span className={styles.navIcon}>{item.icon}</span>
               <span className={styles.navLabel}>{item.label}</span>
               {item.soon && <span className={styles.soonBadge}>Soon</span>}
             </button>
-            {item.key === 'long' && showLongTooltip && (
-              longStats
-                ? <BatchStatsTooltip stats={longStats} styles={styles} />
-                : <div className={styles.statsTooltip}><div className={styles.statsTooltipTitle}>No closed trades yet</div></div>
-            )}
-            {item.key === 'short' && showShortTooltip && (
-              shortStats
-                ? <BatchStatsTooltip stats={shortStats} styles={styles} />
-                : <div className={styles.statsTooltip}><div className={styles.statsTooltipTitle}>No closed trades yet</div></div>
-            )}
           </div>
         ))}
       </nav>
+
+      {/* Fixed tooltip rendered outside sidebar overflow */}
+      {tooltipKey && (
+        activeTooltipStats
+          ? <BatchStatsTooltip stats={activeTooltipStats} top={tooltipTop} />
+          : <div className={styles.statsTooltip} style={{ top: tooltipTop }}><div className={styles.statsTooltipTitle}>No closed trades yet</div></div>
+      )}
 
       {/* Footer */}
       <div className={styles.sidebarFooter}>

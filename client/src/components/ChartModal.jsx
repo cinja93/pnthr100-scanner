@@ -519,8 +519,13 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
                       m.signal === 'SS' ? styles.chartSignalBadgeSS :
                       m.signal === 'BE' ? styles.chartSignalBadgeBE :
                       styles.chartSignalBadgeSE
-                    } ${isProfitable ? styles.chartSignalBadgeInteractive : ''}`}
-                    style={{ left: m.left, top: m.top }}
+                    }`}
+                    style={{
+                      left: m.left,
+                      top: m.top,
+                      pointerEvents: isProfitable ? 'auto' : 'none',
+                      cursor: isProfitable ? 'pointer' : 'default',
+                    }}
                     onMouseEnter={isProfitable ? () => setHoveredMarkerProfit(m) : undefined}
                     onMouseLeave={isProfitable ? () => setHoveredMarkerProfit(null) : undefined}
                   >{m.signal}</span>
@@ -545,7 +550,7 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
               {hoveredMarkerProfit && (
                 <div
                   className={styles.profitTooltip}
-                  style={{ left: hoveredMarkerProfit.left + 16, top: hoveredMarkerProfit.top - 54 }}
+                  style={{ left: hoveredMarkerProfit.left + 16, top: Math.max(8, hoveredMarkerProfit.top - 54) }}
                 >
                   <div className={styles.profitTooltipTitle}>
                     {hoveredMarkerProfit.signal} Profit

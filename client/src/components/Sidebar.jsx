@@ -66,8 +66,8 @@ export default function Sidebar({ activePage, onNavigate, currentUser, onLogout,
               disabled={item.soon}
               title={item.soon ? 'Coming soon' : item.label}
               onMouseEnter={() => {
-                if (item.key === 'long' && longStats) setShowLongTooltip(true);
-                if (item.key === 'short' && shortStats) setShowShortTooltip(true);
+                if (item.key === 'long') setShowLongTooltip(true);
+                if (item.key === 'short') setShowShortTooltip(true);
               }}
               onMouseLeave={() => { setShowLongTooltip(false); setShowShortTooltip(false); }}
             >
@@ -75,11 +75,15 @@ export default function Sidebar({ activePage, onNavigate, currentUser, onLogout,
               <span className={styles.navLabel}>{item.label}</span>
               {item.soon && <span className={styles.soonBadge}>Soon</span>}
             </button>
-            {item.key === 'long' && showLongTooltip && longStats && (
-              <BatchStatsTooltip stats={longStats} styles={styles} />
+            {item.key === 'long' && showLongTooltip && (
+              longStats
+                ? <BatchStatsTooltip stats={longStats} styles={styles} />
+                : <div className={styles.statsTooltip}><div className={styles.statsTooltipTitle}>No closed trades yet</div></div>
             )}
-            {item.key === 'short' && showShortTooltip && shortStats && (
-              <BatchStatsTooltip stats={shortStats} styles={styles} />
+            {item.key === 'short' && showShortTooltip && (
+              shortStats
+                ? <BatchStatsTooltip stats={shortStats} styles={styles} />
+                : <div className={styles.statsTooltip}><div className={styles.statsTooltipTitle}>No closed trades yet</div></div>
             )}
           </div>
         ))}

@@ -319,6 +319,8 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
     const series = chart.addSeries(BarSeries, {
       upColor: '#16a34a',
       downColor: '#dc2626',
+      priceLineVisible: false,
+      lastValueVisible: false,
     });
 
     series.setData(filtered);

@@ -329,18 +329,25 @@ export async function getSignals(tickers) {
     console.log(`📡 EMA signals done: ${activeCount} active (BL/SS) out of ${Object.keys(signalCache.signals).length} tickers`);
   }
 
+  // Compute the Monday of the current week (weekKey is Friday; Monday is 4 days earlier)
+  const friday = new Date(weekKey + 'T12:00:00');
+  const monday = new Date(friday);
+  monday.setDate(friday.getDate() - 4);
+  const currentWeekMonday = monday.toISOString().split('T')[0];
+
   // Build return map in the format the rest of the app expects
   const result = {};
   for (const ticker of tickers) {
     const s = signalCache.signals[ticker] || { signal: null, ema21: null, stopPrice: null };
+    const isActive = s.signal === 'BL' || s.signal === 'SS';
     result[ticker] = {
       signal:           s.signal, // 'BL', 'SS', 'BE', 'SE', or null
-      stopPrice:        s.pnthrStop ?? s.stopPrice ?? null, // backward-compat alias for pnthrStop
+      stopPrice:        s.pnthrStop ?? s.stopPrice ?? null,
       pnthrStop:        s.pnthrStop ?? null,
       currentWeekStop:  s.currentWeekStop ?? null,
       ema21:            s.ema21,
       signalDate:       s.signalDate || null, // YYYY-MM-DD (Monday of signal week)
-      isNewSignal:      false,
+      isNewSignal:      isActive && s.signalDate === currentWeekMonday,
       profitPercentage: null,
       profitDollar:     s.profitDollar ?? null,
       profitPct:        s.profitPct    ?? null,

@@ -84,10 +84,14 @@ function detectAllSignals(weeklyData, period = 21) {
     const twoWeekLow  = Math.min(prev1.low,  prev2.low);
 
     // Update daylight streak counters.
-    // longTrendActive/shortTrendActive are never reset once set — once a BL/SS has fired,
-    // all subsequent re-entries only need Phase 1 (no daylight zone required).
     longDaylight  = current.low  > emaCurrent ? longDaylight + 1 : 0;
     shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
+
+    // Reset trend flags only when price crosses to the wrong side of the EMA.
+    // A BE/SE alone does not reset — the trend can re-enter via Phase 1 only
+    // as long as price stays on the correct side of the EMA.
+    if (current.close < emaCurrent) longTrendActive  = false;
+    if (current.close > emaCurrent) shortTrendActive = false;
 
     // Past entry week: check for BE/SE exit
     // BE: this week's low breaks below the 2-week structural low
@@ -96,12 +100,12 @@ function detectAllSignals(weeklyData, period = 21) {
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
           events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high });
-          position = null; longTrendActive = false; continue;
+          position = null; continue;
         }
       } else {
         if (current.high > twoWeekHigh) {
           events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high });
-          position = null; shortTrendActive = false; continue;
+          position = null; continue;
         }
       }
     }

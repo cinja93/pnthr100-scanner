@@ -128,10 +128,12 @@ function detectAllSignals(weeklyData, period = 21) {
       const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
 
-      // Daylight required for first entry: low must be strictly above EMA (longDaylight >= 1) and in the 1–10% zone.
-      // Once longTrendActive (after first BL), re-entries only need Phase 1 — no daylight zone required.
-      const blDaylightOk = longTrendActive || (blZone && longDaylight >= 1 && longDaylight <= 3);
-      const ssDaylightOk = shortTrendActive || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
+      // Daylight required for ALL entries: the weekly low must be above EMA (longDaylight >= 1).
+      // First entry also requires the 1–10% zone and a streak of 1–3 bars.
+      // Once longTrendActive (after first BL/SE), re-entries skip the 1–10% zone restriction
+      // but the low must still be above EMA (longDaylight >= 1) — i.e., not the EMA crossover bar itself.
+      const blDaylightOk = (longTrendActive  && longDaylight  >= 1) || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
+      const ssDaylightOk = (shortTrendActive && shortDaylight >= 1) || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
       if (blPhase1 && blDaylightOk) {
         events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });

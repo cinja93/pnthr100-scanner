@@ -265,15 +265,20 @@ function runStateMachine(weeklyBars) {
     return { signal: null, ema21: parseFloat(lastEma.toFixed(4)), stopPrice: null, currentWeekStop: null };
   }
 
+  const lastBar = weeklyBars[weeklyBars.length - 1];
+
   // If still in an open position, attach live stop prices to the signal event
   if (position) {
-    const lastBar = weeklyBars[weeklyBars.length - 1];
     lastEvent.pnthrStop = position.pnthrStop;
     lastEvent.stopPrice = position.pnthrStop; // backward-compat alias
     lastEvent.currentWeekStop = position.type === 'BL'
       ? parseFloat((lastBar.low  - 0.01).toFixed(2))
       : parseFloat((lastBar.high + 0.01).toFixed(2));
   }
+
+  // NEW signal = BL or SS that fired on the very last (rightmost) completed bar
+  const isActiveSignal = lastEvent.signal === 'BL' || lastEvent.signal === 'SS';
+  lastEvent.isNew = isActiveSignal && lastEvent.signalDate === lastBar.weekStart;
 
   return lastEvent;
 }
@@ -329,17 +334,10 @@ export async function getSignals(tickers) {
     console.log(`📡 EMA signals done: ${activeCount} active (BL/SS) out of ${Object.keys(signalCache.signals).length} tickers`);
   }
 
-  // Compute the Monday of the current week (weekKey is Friday; Monday is 4 days earlier)
-  const friday = new Date(weekKey + 'T12:00:00');
-  const monday = new Date(friday);
-  monday.setDate(friday.getDate() - 4);
-  const currentWeekMonday = monday.toISOString().split('T')[0];
-
   // Build return map in the format the rest of the app expects
   const result = {};
   for (const ticker of tickers) {
     const s = signalCache.signals[ticker] || { signal: null, ema21: null, stopPrice: null };
-    const isActive = s.signal === 'BL' || s.signal === 'SS';
     result[ticker] = {
       signal:           s.signal, // 'BL', 'SS', 'BE', 'SE', or null
       stopPrice:        s.pnthrStop ?? s.stopPrice ?? null,
@@ -347,7 +345,7 @@ export async function getSignals(tickers) {
       currentWeekStop:  s.currentWeekStop ?? null,
       ema21:            s.ema21,
       signalDate:       s.signalDate || null, // YYYY-MM-DD (Monday of signal week)
-      isNewSignal:      isActive && s.signalDate === currentWeekMonday,
+      isNewSignal:      s.isNew ?? false,
       profitPercentage: null,
       profitDollar:     s.profitDollar ?? null,
       profitPct:        s.profitPct    ?? null,

@@ -101,15 +101,17 @@ function detectAllSignals(weeklyData, period = 21) {
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
           events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high });
-          // BE with close below EMA: long trend definitively over — allow Phase 1 short entry
-          if (current.close < emaCurrent) shortTrendActive = true;
+          // BE: short trend may follow — allow Phase 1 SS re-entry without daylight zone.
+          // Safe because ssPhase1 still requires close < EMA.
+          shortTrendActive = true;
           position = null; continue;
         }
       } else {
         if (current.high > twoWeekHigh) {
           events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high });
-          // SE with close above EMA: short trend definitively over — allow Phase 1 long entry
-          if (current.close > emaCurrent) longTrendActive = true;
+          // SE: long trend may follow — allow Phase 1 BL re-entry without daylight zone.
+          // Safe because blPhase1 still requires close > EMA.
+          longTrendActive = true;
           position = null; continue;
         }
       }

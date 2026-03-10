@@ -105,7 +105,6 @@ function detectAllSignals(weeklyData, period = 21) {
           const exitPrice    = parseFloat((twoWeekLow - 0.01).toFixed(2));
           const profitDollar = parseFloat((exitPrice - position.entryPrice).toFixed(2));
           const profitPct    = parseFloat(((profitDollar / position.entryPrice) * 100).toFixed(2));
-          console.log(`[profit] BE @${current.time}: entryPrice=${position.entryPrice} exitPrice=${exitPrice} profitDollar=${profitDollar} profitPct=${profitPct}`);
           events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high, profitDollar, profitPct });
           // BE: same-direction BL re-entry remains active (no cap — trend continuation).
           // Opposite-side SS re-entry allowed but capped at 25% (switching sides).
@@ -303,12 +302,10 @@ export default function ChartModal({ stocks, initialIndex, signals, onClose, onW
 
     // Show the most recent entry (BL/SS) + its exit (BE/SE) if they fall in the visible range
     const allDetected = detectAllSignals(allWeeklyData, 21);
-    console.log(`[signals] ${stock.ticker} allDetected:`, allDetected.map(e => `${e.signal}@${e.time}`));
     const lastEntryIdx = (() => { for (let i = allDetected.length - 1; i >= 0; i--) { if (allDetected[i].signal === 'BL' || allDetected[i].signal === 'SS') return i; } return -1; })();
     const lastEntry  = lastEntryIdx >= 0 ? allDetected[lastEntryIdx] : null;
     const exitEvent  = lastEntry ? allDetected.slice(lastEntryIdx + 1).find(e => e.signal === 'BE' || e.signal === 'SE') : null;
     const allSignalEvents = [lastEntry, exitEvent].filter(e => e && filteredTimes.has(e.time));
-    console.log(`[signals] ${stock.ticker} lastEntry:`, lastEntry, 'exitEvent:', exitEvent, 'allSignalEvents:', allSignalEvents.map(e => `${e.signal}@${e.time} profit=${e.profitPct}%`));
     if (allSignalEvents.length > 0) {
       const BADGE_H = 22;
       const updateAllMarkers = () => {

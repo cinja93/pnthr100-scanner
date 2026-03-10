@@ -197,7 +197,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
               YTD Return {getSortIndicator('ytdReturn')}
             </th>
             <th onClick={() => handleSort('stopPrice')} className={styles.sortable}>
-              Stop Price {getSortIndicator('stopPrice')}
+              PNTHR Stop {getSortIndicator('stopPrice')}
             </th>
             <th onClick={() => handleSort('riskDollar')} className={styles.sortable}>
               Risk per Share {getSortIndicator('riskDollar')}
@@ -210,9 +210,6 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             </th>
             <th onClick={() => handleSort('weeksAgo')} className={`${styles.signalColumn} ${styles.sortable}`}>
               Wks Since {getSortIndicator('weeksAgo')}
-            </th>
-            <th className={styles.signalColumn}>
-              Laser Signal
             </th>
             <th onClick={() => handleSort('earningsDate')} className={styles.sortable}>
               Next Earnings {getSortIndicator('earningsDate')}
@@ -308,15 +305,6 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                                   : styles.pnthrBadgeBE; // BE and SE both orange
                         return <span className={`${styles.pnthrBadge} ${cls}`}>{sig}+{wks}</span>;
                       })()}
-                </td>
-                <td className={styles.signalColumn}>
-                  {signalsLoading ? <span className={styles.loadingDots}>···</span> : (() => {
-                    const ld = laserSignals[stock.ticker];
-                    const { icon: li, alt: la } = getSignalDisplay(ld);
-                    return li
-                      ? <img src={li} alt={la} className={styles.signalIcon} title={la} />
-                      : <span className={styles.signalNone}>—</span>;
-                  })()}
                 </td>
                 <td>
                   {earningsInfo.display}

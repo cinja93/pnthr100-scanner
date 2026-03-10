@@ -13,8 +13,37 @@ const NAV_ITEMS = [
   { key: 'portfolio', label: 'Portfolio',  icon: '📁' },
 ];
 
-export default function Sidebar({ activePage, onNavigate, currentUser, onLogout, longStats }) {
+function BatchStatsTooltip({ stats, styles }) {
+  return (
+    <div className={styles.statsTooltip}>
+      <div className={styles.statsTooltipTitle}>Closed Trades This Batch</div>
+      <div className={styles.statsRow}>
+        <span className={styles.statsLabel}>Total closed</span>
+        <span className={styles.statsValue}>{stats.total}</span>
+      </div>
+      <div className={styles.statsRow}>
+        <span className={styles.statsLabel}>Winners</span>
+        <span className={styles.statsValue}>{stats.wins} ({stats.winRate.toFixed(0)}%)</span>
+      </div>
+      <div className={styles.statsRow}>
+        <span className={styles.statsLabel}>Avg profit</span>
+        <span className={`${styles.statsValue} ${stats.avgDollar >= 0 ? styles.statsPos : styles.statsNeg}`}>
+          {stats.avgDollar >= 0 ? '+' : ''}{stats.avgDollar.toFixed(2)}
+        </span>
+      </div>
+      <div className={styles.statsRow}>
+        <span className={styles.statsLabel}>Avg %</span>
+        <span className={`${styles.statsValue} ${stats.avgPct >= 0 ? styles.statsPos : styles.statsNeg}`}>
+          {stats.avgPct >= 0 ? '+' : ''}{stats.avgPct.toFixed(2)}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export default function Sidebar({ activePage, onNavigate, currentUser, onLogout, longStats, shortStats }) {
   const [showLongTooltip, setShowLongTooltip] = useState(false);
+  const [showShortTooltip, setShowShortTooltip] = useState(false);
 
   return (
     <aside className={styles.sidebar}>
@@ -36,37 +65,21 @@ export default function Sidebar({ activePage, onNavigate, currentUser, onLogout,
               onClick={() => !item.soon && onNavigate(item.key)}
               disabled={item.soon}
               title={item.soon ? 'Coming soon' : item.label}
-              onMouseEnter={() => item.key === 'long' && longStats && setShowLongTooltip(true)}
-              onMouseLeave={() => setShowLongTooltip(false)}
+              onMouseEnter={() => {
+                if (item.key === 'long' && longStats) setShowLongTooltip(true);
+                if (item.key === 'short' && shortStats) setShowShortTooltip(true);
+              }}
+              onMouseLeave={() => { setShowLongTooltip(false); setShowShortTooltip(false); }}
             >
               <span className={styles.navIcon}>{item.icon}</span>
               <span className={styles.navLabel}>{item.label}</span>
               {item.soon && <span className={styles.soonBadge}>Soon</span>}
             </button>
             {item.key === 'long' && showLongTooltip && longStats && (
-              <div className={styles.statsTooltip}>
-                <div className={styles.statsTooltipTitle}>Closed Trades This Batch</div>
-                <div className={styles.statsRow}>
-                  <span className={styles.statsLabel}>Total closed</span>
-                  <span className={styles.statsValue}>{longStats.total}</span>
-                </div>
-                <div className={styles.statsRow}>
-                  <span className={styles.statsLabel}>Winners</span>
-                  <span className={styles.statsValue}>{longStats.wins} ({longStats.winRate.toFixed(0)}%)</span>
-                </div>
-                <div className={styles.statsRow}>
-                  <span className={styles.statsLabel}>Avg profit</span>
-                  <span className={`${styles.statsValue} ${longStats.avgDollar >= 0 ? styles.statsPos : styles.statsNeg}`}>
-                    {longStats.avgDollar >= 0 ? '+' : ''}{longStats.avgDollar.toFixed(2)}
-                  </span>
-                </div>
-                <div className={styles.statsRow}>
-                  <span className={styles.statsLabel}>Avg %</span>
-                  <span className={`${styles.statsValue} ${longStats.avgPct >= 0 ? styles.statsPos : styles.statsNeg}`}>
-                    {longStats.avgPct >= 0 ? '+' : ''}{longStats.avgPct.toFixed(2)}%
-                  </span>
-                </div>
-              </div>
+              <BatchStatsTooltip stats={longStats} styles={styles} />
+            )}
+            {item.key === 'short' && showShortTooltip && shortStats && (
+              <BatchStatsTooltip stats={shortStats} styles={styles} />
             )}
           </div>
         ))}

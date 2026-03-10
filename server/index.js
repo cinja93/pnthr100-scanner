@@ -778,7 +778,7 @@ app.get('/api/sector-signal-counts', requireApiKey, async (req, res) => {
     // Count signals per sector
     const counts = {};
     for (const [sectorKey, tickers] of Object.entries(tickersBySector)) {
-      counts[sectorKey] = { BL: 0, BE: 0, SS: 0, SE: 0 };
+      counts[sectorKey] = { BL: 0, BE: 0, SS: 0, SE: 0, total: tickers.length };
       for (const ticker of tickers) {
         const sig = signals[ticker]?.signal;
         if (sig === 'BL' || sig === 'BUY')  counts[sectorKey].BL++;

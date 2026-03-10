@@ -208,7 +208,12 @@ function SectorMiniChart({ sectorKey, chartData, signalCounts, onClick }) {
           )}
         </div>
       )}
-      <div className={styles.cardFooter}>View stocks →</div>
+      <div className={styles.cardFooter}>
+        {signalCounts?.total != null && (
+          <span className={styles.stockCount}>{signalCounts.total} stocks</span>
+        )}
+        <span>View stocks →</span>
+      </div>
     </div>
   );
 }

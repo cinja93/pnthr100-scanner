@@ -763,7 +763,11 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
 
     // 1. Get S&P 500 constituents and filter to this GICS sector
     const constituents = await getSP500Constituents(FMP_API_KEY);
+    // Debug: log unique sector values from FMP to verify field name/values
+    const uniqueSectors = [...new Set(constituents.map(c => c.sector))].sort();
+    console.log(`[sector-stocks] ${constituents.length} SP500 constituents, unique sectors:`, uniqueSectors);
     const sectorConstituents = constituents.filter(c => c.sector === gicsSector);
+    console.log(`[sector-stocks] ${sectorKey} → "${gicsSector}" → ${sectorConstituents.length} matches`);
     if (sectorConstituents.length === 0) return res.json({ stocks: [], signals: {} });
 
     const tickers = sectorConstituents.map(c => c.symbol);

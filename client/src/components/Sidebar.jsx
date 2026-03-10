@@ -28,7 +28,7 @@ function BatchStatsTooltip({ stats, top }) {
       <div className={styles.statsRow}>
         <span className={styles.statsLabel}>Avg profit</span>
         <span className={`${styles.statsValue} ${stats.avgDollar >= 0 ? styles.statsPos : styles.statsNeg}`}>
-          {stats.avgDollar >= 0 ? '+' : ''}{stats.avgDollar.toFixed(2)}
+          {stats.avgDollar >= 0 ? '+' : '-'}${Math.abs(stats.avgDollar).toFixed(2)} / share
         </span>
       </div>
       <div className={styles.statsRow}>

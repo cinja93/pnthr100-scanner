@@ -70,10 +70,11 @@ function detectAllSignals(weeklyData, period = 21) {
   let position         = null;  // { type: 'BL'|'SS', entryWi: number }
   let longDaylight     = 0;    // consecutive bars where weekLow > EMA
   let shortDaylight    = 0;    // consecutive bars where weekHigh < EMA
-  let longTrendActive  = false; // after first BL/SE; allows re-entry with Phase 1 only while above EMA
-  let shortTrendActive = false; // after first SS/BE; allows re-entry with Phase 1 only while below EMA
-  let belowEMAStreak   = 0;    // consecutive bars (!position && close < EMA)
-  let aboveEMAStreak   = 0;    // consecutive bars (!position && close > EMA)
+  // longTrendActive: true after BL or SE fires; expires only when SS fires.
+  // shortTrendActive: true after SS or BE fires; expires only when BL fires.
+  // EMA position does NOT reset these flags — only a confirmed opposite entry does.
+  let longTrendActive  = false;
+  let shortTrendActive = false;
 
   for (let wi = period + 1; wi < weeklyData.length; wi++) {
     const emaIdx = wi - (period - 1);
@@ -88,20 +89,6 @@ function detectAllSignals(weeklyData, period = 21) {
     // Update daylight streak counters.
     longDaylight  = current.low  > emaCurrent ? longDaylight + 1 : 0;
     shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
-
-    // Reset trend flags only after 2+ consecutive weeks on the wrong side of EMA with no position.
-    // A single-week dip (e.g. brief pullback after BE, or stock building base after SE)
-    // does not cancel the re-entry privilege.
-    if (position) {
-      belowEMAStreak = 0;
-      aboveEMAStreak = 0;
-    } else if (current.close < emaCurrent) {
-      aboveEMAStreak = 0;
-      if (++belowEMAStreak >= 6) longTrendActive  = false;
-    } else {
-      belowEMAStreak = 0;
-      if (++aboveEMAStreak >= 6) shortTrendActive = false;
-    }
 
     // Past entry week: check for BE/SE exit
     // BE: this week's low breaks below the 2-week structural low
@@ -144,12 +131,14 @@ function detectAllSignals(weeklyData, period = 21) {
 
       if (blPhase1 && blDaylightOk) {
         events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });
-        position = { type: 'BL', entryWi: wi };
-        longTrendActive = true;
+        position         = { type: 'BL', entryWi: wi };
+        longTrendActive  = true;
+        shortTrendActive = false; // confirmed long — short re-entry privilege expires
       } else if (ssPhase1 && ssDaylightOk) {
         events.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high });
-        position = { type: 'SS', entryWi: wi };
+        position         = { type: 'SS', entryWi: wi };
         shortTrendActive = true;
+        longTrendActive  = false; // confirmed short — long re-entry privilege expires
       }
     }
   }

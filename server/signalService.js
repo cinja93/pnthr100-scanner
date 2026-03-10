@@ -124,10 +124,14 @@ function runStateMachine(weeklyBars) {
   let lastEvent        = null;  // most recent emitted event
   let longDaylight     = 0;    // consecutive bars where weekLow > EMA
   let shortDaylight    = 0;    // consecutive bars where weekHigh < EMA
-  let longTrendActive  = false; // true after first BL/SE; allows re-entry with Phase 1 only (no zone) while above EMA
-  let shortTrendActive = false; // true after first SS/BE; allows re-entry with Phase 1 only while below EMA
-  let belowEMAStreak   = 0;    // consecutive bars (!position && close < EMA)
-  let aboveEMAStreak   = 0;    // consecutive bars (!position && close > EMA)
+  // longTrendActive: true after BL or SE fires; expires only when SS fires.
+  // Allows re-entry BL with Phase 1 + 1% daylight (no 1–10% zone restriction).
+  // shortTrendActive: true after SS or BE fires; expires only when BL fires.
+  // Price position relative to EMA does NOT reset these flags — only a confirmed
+  // entry in the opposite direction does. This lets MU re-enter long even after
+  // spending many weeks below EMA following a BE stop-out.
+  let longTrendActive  = false;
+  let shortTrendActive = false;
 
   for (let wi = EMA_PERIOD + 1; wi < weeklyBars.length; wi++) {
     const emaIdx = wi - emaOffset;
@@ -143,20 +147,6 @@ function runStateMachine(weeklyBars) {
     // Update daylight streak counters.
     longDaylight  = current.low  > emaCurrent ? longDaylight + 1 : 0;
     shortDaylight = current.high < emaCurrent ? shortDaylight + 1 : 0;
-
-    // Reset trend flags only after 2+ consecutive weeks on the wrong side of EMA with no position.
-    // A single-week dip (e.g. brief pullback after BE, or stock building base after SE)
-    // does not cancel the re-entry privilege.
-    if (position) {
-      belowEMAStreak = 0;
-      aboveEMAStreak = 0;
-    } else if (current.close < emaCurrent) {
-      aboveEMAStreak = 0;
-      if (++belowEMAStreak >= 6) longTrendActive  = false;
-    } else {
-      belowEMAStreak = 0;
-      if (++aboveEMAStreak >= 6) shortTrendActive = false;
-    }
 
     // Past entry week: check for BE/SE exit
     // BE: this week's low breaks below the 2-week structural low
@@ -201,12 +191,14 @@ function runStateMachine(weeklyBars) {
         const stopPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));
         lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'BL', entryWi: wi };
-        longTrendActive = true;
+        longTrendActive  = true;
+        shortTrendActive = false; // confirmed long — short re-entry privilege expires
       } else if (ssPhase1 && ssDaylightOk) {
         const stopPrice = parseFloat((twoWeekHigh + 0.01).toFixed(2));
         lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice };
         position  = { type: 'SS', entryWi: wi };
         shortTrendActive = true;
+        longTrendActive  = false; // confirmed short — long re-entry privilege expires
       }
     }
   }

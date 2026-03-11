@@ -56,7 +56,7 @@ function matchesPinSignal(sigData, pinSignal) {
   return sigData.signal === pinSignal;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, groupBySector = false, pinSignal = null, onTickerClick, onRemove, scanType }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, pinSignal = null, onTickerClick, onRemove, scanType }) {
   const [sortConfig, setSortConfig] = useState({ key: groupBySector ? 'ytdReturn' : 'rank', direction: groupBySector ? 'desc' : 'asc' });
   const hasScannerRanks = scannerRanks !== null;
 
@@ -225,9 +225,9 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             <th onClick={() => handleSort('weeksAgo')} className={`${styles.signalColumn} ${styles.sortable}`}>
               Wks Since {getSortIndicator('weeksAgo')}
             </th>
-            <th onClick={() => handleSort('earningsDate')} className={styles.sortable}>
+            {!hideEarnings && <th onClick={() => handleSort('earningsDate')} className={styles.sortable}>
               Next Earnings {getSortIndicator('earningsDate')}
-            </th>
+            </th>}
             {onRemove && <th className={styles.removeColumn}></th>}
           </tr>
         </thead>
@@ -250,7 +250,8 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
               (!onRemove ? 1 : 0) +              // rank
               (!onRemove && !hasScannerRanks ? 1 : 0) + // rankChange
               (!hideSector ? 1 : 0) +            // sector
-              (onRemove ? 1 : 0);                // remove btn
+              (onRemove ? 1 : 0) +               // remove btn
+              (hideEarnings ? -1 : 0);           // earnings hidden
 
             let lastSector = null;
             return displayStocks.map((stock, sortedIdx) => {
@@ -325,21 +326,29 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 <td className={stock.ytdReturn != null ? (stock.ytdReturn >= 0 ? styles.positive : styles.negative) : ''}>
                   {stock.ytdReturn != null ? `${stock.ytdReturn >= 0 ? '+' : ''}${stock.ytdReturn.toFixed(2)}%` : '—'}
                 </td>
-                <td className={styles.stopPriceCell}>
-                  {signalsLoading
-                    ? <span className={styles.loadingDots}>···</span>
-                    : stopPrice != null ? `$${stopPrice.toLocaleString()}` : '—'}
-                </td>
-                <td className={styles.riskCell}>
-                  {signalsLoading
-                    ? <span className={styles.loadingDots}>···</span>
-                    : riskDollar != null ? `$${riskDollar.toFixed(2)}` : '—'}
-                </td>
-                <td className={styles.riskCell}>
-                  {signalsLoading
-                    ? <span className={styles.loadingDots}>···</span>
-                    : riskPct != null ? `${riskPct.toFixed(2)}%` : '—'}
-                </td>
+                {signalsLoading ? (
+                  <>
+                    <td className={styles.stopPriceCell}><span className={styles.loadingDots}>···</span></td>
+                    <td className={styles.riskCell}><span className={styles.loadingDots}>···</span></td>
+                    <td className={styles.riskCell}><span className={styles.loadingDots}>···</span></td>
+                  </>
+                ) : (signalData?.signal === 'BE' || signalData?.signal === 'SE') ? (
+                  <td colSpan={3} className={styles.pauseCell}>
+                    <span className={styles.pauseBadge}>⏸ PAUSE</span>
+                  </td>
+                ) : (
+                  <>
+                    <td className={styles.stopPriceCell}>
+                      {stopPrice != null ? `$${stopPrice.toLocaleString()}` : '—'}
+                    </td>
+                    <td className={styles.riskCell}>
+                      {riskDollar != null ? `$${riskDollar.toFixed(2)}` : '—'}
+                    </td>
+                    <td className={styles.riskCell}>
+                      {riskPct != null ? `${riskPct.toFixed(2)}%` : '—'}
+                    </td>
+                  </>
+                )}
                 <td className={styles.signalColumn}>
                   {signalsLoading
                     ? <span className={styles.loadingDots}>···</span>
@@ -367,14 +376,14 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                         return <span className={`${styles.pnthrBadge} ${cls}`}>{isNew ? '★ ' : ''}{sig}+{wks}</span>;
                       })()}
                 </td>
-                <td>
+                {!hideEarnings && <td>
                   {earningsInfo.display}
                   {earningsInfo.highlight && (
                     <span className={styles.earningsSoonBadge}>
                       {earningsInfo.daysAway === 0 ? 'Today' : `${earningsInfo.daysAway}d`}
                     </span>
                   )}
-                </td>
+                </td>}
                 {onRemove && (
                   <td className={styles.removeColumn}>
                     <button

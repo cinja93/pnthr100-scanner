@@ -114,6 +114,7 @@ export default function EtfPage() {
           signals={signals}
           signalsLoading={false}
           earnings={earnings}
+          hideEarnings={true}
           onTickerClick={handleRowClick}
           scanType="long"
         />

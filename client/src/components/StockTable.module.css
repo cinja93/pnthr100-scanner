@@ -233,6 +233,22 @@
   color: #555;
 }
 
+.pauseCell {
+  vertical-align: middle;
+}
+
+.pauseBadge {
+  display: inline-block;
+  background: #fcf000;
+  color: #111111;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 3px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 .signalNone {
   color: #b4b4b4;
 }

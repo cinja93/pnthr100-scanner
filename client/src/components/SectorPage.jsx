@@ -33,6 +33,20 @@ const SECTOR_COLORS = {
   utilities:              '#14b8a6',
 };
 
+const SECTOR_ETF = {
+  communicationServices:  'XLC',
+  consumerDiscretionary:  'XLY',
+  consumerStaples:        'XLP',
+  energy:                 'XLE',
+  financials:             'XLF',
+  healthCare:             'XLV',
+  industrials:            'XLI',
+  informationTechnology:  'XLK',
+  materials:              'XLB',
+  realEstate:             'XLRE',
+  utilities:              'XLU',
+};
+
 const TIME_RANGES = ['5D', '1M', '6M', 'YTD', '12M'];
 
 const RANGE_SUBTITLES = {
@@ -188,6 +202,7 @@ function SectorMiniChart({ sectorKey, chartData, signalCounts, onClick, onSignal
         <span className={styles.sectorName}>{SECTOR_NAMES[sectorKey]}</span>
         {currentReturn != null && (
           <span className={`${styles.returnBadge} ${isPositive ? styles.positive : styles.negative}`}>
+            {SECTOR_ETF[sectorKey] && <span className={styles.etfTicker}>{SECTOR_ETF[sectorKey]}</span>}
             {isPositive ? '+' : ''}{currentReturn.toFixed(2)}%
           </span>
         )}

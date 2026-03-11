@@ -14,7 +14,7 @@ export default function SearchPage() {
   const [error, setError]           = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [eyesMoving, setEyesMoving] = useState(true);
+  const [eyesDown, setEyesDown] = useState(false);
   const [chartIndex, setChartIndex] = useState(null);
   const [chartStocks, setChartStocks] = useState([]);
   const debounceRef   = useRef(null);
@@ -26,6 +26,7 @@ export default function SearchPage() {
     if (query.length < 1) {
       setSuggestions([]);
       setShowSuggestions(false);
+      setEyesDown(false);
       return;
     }
     clearTimeout(debounceRef.current);
@@ -57,9 +58,11 @@ export default function SearchPage() {
     setError(null);
     setStock(null);
     setSignals({});
+    setEyesDown(false);
     try {
       const result = await fetchStockSearch(t);
       setStock(result.stock);
+      setEyesDown(true);
       setSignals(result.signals || {});
       fetchEarnings([result.stock.ticker]).then(setEarnings);
     } catch (err) {
@@ -137,8 +140,8 @@ export default function SearchPage() {
             <div className={`${styles.eyeBase} ${styles.eyeLeft}`} />
             <div className={`${styles.eyeBase} ${styles.eyeRight}`} />
             {/* Animated eyes on top */}
-            <div className={`${styles.eye} ${styles.eyeLeft}  ${eyesMoving ? styles.eyeMoving : ''}`} />
-            <div className={`${styles.eye} ${styles.eyeRight} ${eyesMoving ? styles.eyeMoving : ''}`} />
+            <div className={`${styles.eye} ${styles.eyeLeft}  ${eyesDown ? styles.eyesDown : styles.eyeMoving}`} />
+            <div className={`${styles.eye} ${styles.eyeRight} ${eyesDown ? styles.eyesDown : styles.eyeMoving}`} />
           </div>
         </div>
 

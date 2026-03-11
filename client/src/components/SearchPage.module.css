@@ -197,6 +197,8 @@
     0 0 8px 3px rgba(252, 240, 0, 0.9),
     0 0 20px 6px rgba(252, 240, 0, 0.4);
   pointer-events: none;
+  translate: 0 0;
+  transition: translate 0.5s ease;
 }
 
 /* Black pupil dot on the moving eye — covers the logo's static pupil */
@@ -212,7 +214,7 @@
   transform: translateX(-50%);
 }
 
-.eyeLeft  { top: 50%; left: 31%; rotate:  16deg; }
+.eyeLeft  { top: 50%; left: 30%; rotate:  16deg; }
 .eyeRight { top: 49%; left: 61%; rotate: -24deg; }
 
 @keyframes eyeScan {
@@ -222,4 +224,14 @@
 
 .eyeMoving {
   animation: eyeScan 1.1s ease-in-out infinite alternate;
+}
+
+.eyesDown {
+  translate: 0 6px;
+}
+
+.eyesDown::after {
+  width: 10px;
+  height: 10px;
+  top: 0px;
 }

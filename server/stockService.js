@@ -403,7 +403,15 @@ export async function getJungleStocks(specLongs = [], specShorts = []) {
     });
   }
 
-  return stocks
-    .sort((a, b) => b.ytdReturn - a.ytdReturn)
-    .map((s, i) => ({ ...s, rank: i + 1 }));
+  // Always enforce exactly 679 — spec stocks are priority; trim lowest-YTD sp517 if needed
+  const TARGET = 679;
+  const specSet = new Set([...specLongs, ...specShorts]);
+  const sorted = stocks.sort((a, b) => b.ytdReturn - a.ytdReturn);
+  const specStocks = sorted.filter(s => specSet.has(s.ticker));
+  const sp517Stocks = sorted.filter(s => !specSet.has(s.ticker));
+  const trimmed = [...sp517Stocks.slice(0, TARGET - specStocks.length), ...specStocks]
+    .sort((a, b) => b.ytdReturn - a.ytdReturn);
+
+  console.log(`🌿 Jungle final: ${trimmed.length} stocks (target: ${TARGET})`);
+  return trimmed.map((s, i) => ({ ...s, rank: i + 1 }));
 }

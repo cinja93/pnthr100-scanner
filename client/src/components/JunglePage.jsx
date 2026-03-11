@@ -5,22 +5,23 @@ import { fetchJungleStocks, fetchEarnings, fetchScannerRanks } from '../services
 import styles from './JunglePage.module.css';
 
 const UNIVERSE_FILTERS = [
-  { key: 'all',        label: 'All Jungle',   countKey: 'all' },
-  { key: 'sp517',      label: 'S&P 517',      countKey: 'sp517' },
-  { key: 'sp400Long',  label: '400 Longs',    countKey: 'sp400Long' },
-  { key: 'sp400Short', label: '400 Shorts',   countKey: 'sp400Short' },
+  { key: 'all',        label: 'Full 679 Jungle',       countKey: 'all' },
+  { key: 'sp517',      label: 'S&P 500',               countKey: 'sp517' },
+  { key: 'sp400Long',  label: 'S&P 400 Leading Longs', countKey: 'sp400Long' },
+  { key: 'sp400Short', label: 'S&P 400 Leading Shorts',countKey: 'sp400Short' },
 ];
 
 export default function JunglePage() {
-  const [stocks, setStocks]           = useState([]);
-  const [signals, setSignals]         = useState({});
-  const [earnings, setEarnings]       = useState({});
-  const [scannerRanks, setScannerRanks] = useState(null);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState(null);
+  const [stocks, setStocks]               = useState([]);
+  const [signals, setSignals]             = useState({});
+  const [earnings, setEarnings]           = useState({});
+  const [scannerRanks, setScannerRanks]   = useState(null);
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState(null);
   const [universeFilter, setUniverseFilter] = useState('all');
-  const [chartIndex, setChartIndex]   = useState(null);
-  const [chartStocks, setChartStocks] = useState([]);
+  const [groupBySector, setGroupBySector] = useState(false);
+  const [chartIndex, setChartIndex]       = useState(null);
+  const [chartStocks, setChartStocks]     = useState([]);
 
   function load(forceRefresh = false) {
     setLoading(true);
@@ -69,13 +70,23 @@ export default function JunglePage() {
           <h1 className={styles.title}>🐆 PNTHR 679 Jungle</h1>
           {!loading && !error && (
             <p className={styles.subtitle}>
-              {counts.all} stocks — S&P 517 core + S&P 400 Long &amp; Short leaders
+              {counts.all} stocks — S&P 500 core + S&P 400 Long &amp; Short leaders
             </p>
           )}
         </div>
-        <button className={styles.refreshBtn} onClick={() => load(true)} disabled={loading}>
-          {loading ? 'Loading…' : '↻ Refresh'}
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            className={`${styles.sectorToggle} ${groupBySector ? styles.sectorToggleActive : ''}`}
+            onClick={() => setGroupBySector(v => !v)}
+            disabled={loading}
+            title="Group by sector"
+          >
+            ⬛ {groupBySector ? 'By Sector' : 'By Sector'}
+          </button>
+          <button className={styles.refreshBtn} onClick={() => load(true)} disabled={loading}>
+            {loading ? 'Loading…' : '↻ Refresh'}
+          </button>
+        </div>
       </div>
 
       {!loading && !error && stocks.length > 0 && (
@@ -109,6 +120,7 @@ export default function JunglePage() {
           signalsLoading={false}
           earnings={earnings}
           scannerRanks={scannerRanks}
+          groupBySector={groupBySector}
           onTickerClick={handleTickerClick}
           scanType="long"
         />

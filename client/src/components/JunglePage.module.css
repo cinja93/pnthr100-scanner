@@ -28,6 +28,33 @@
   margin: 0;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sectorToggle {
+  background: transparent;
+  color: #aaaaaa;
+  border: 1px solid #444444;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.sectorToggle:hover:not(:disabled) { border-color: #fcf000; color: #fcf000; }
+.sectorToggleActive {
+  background: #fcf000;
+  color: #111111;
+  border-color: #fcf000;
+}
+.sectorToggleActive:hover:not(:disabled) { opacity: 0.85; }
+
 .refreshBtn {
   background: #fcf000;
   color: #111111;

@@ -289,6 +289,14 @@ export async function fetchSpeculativeStocks(side) {
   return response.json();
 }
 
+// Fetch PNTHR 679 Jungle: all SP517 + SP400 Long/Short leaders with signals
+export async function fetchJungleStocks(forceRefresh = false) {
+  const url = `${API_BASE}/api/jungle-stocks${forceRefresh ? '?refresh=1' : ''}`;
+  const response = await fetch(url, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // Fetch sector performance data (11 sectors, weekly cumulative % return, 12-month rolling)
 export async function fetchSectorData() {
   try {

@@ -8,6 +8,7 @@ import WatchlistPage from './components/WatchlistPage';
 import PortfolioPage from './components/PortfolioPage';
 import EmaCrossoverPage from './components/EmaCrossoverPage';
 import EtfPage from './components/EtfPage';
+import JunglePage from './components/JunglePage';
 import LoginPage from './components/LoginPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken } from './services/api';
 import './App.css';
@@ -344,6 +345,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* ETF Scan page */}
           {activePage === 'etf' && <EtfPage />}
+
+          {/* Jungle page */}
+          {activePage === 'jungle' && <JunglePage />}
 
           {/* Portfolio page */}
           {activePage === 'portfolio' && <PortfolioPage currentUser={currentUser} onProfileUpdate={setCurrentUser} />}

@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
-import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks } from './stockService.js';
+import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks, getJungleStocks } from './stockService.js';
 import { getSignals } from './signalService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
@@ -1065,6 +1065,27 @@ app.get('/api/speculative-stocks/:side', async (req, res) => {
   } catch (error) {
     console.error(`Error fetching speculative ${side}:`, error);
     res.status(500).json({ error: `Failed to fetch speculative ${side}` });
+  }
+});
+
+// ── PNTHR 679 Jungle ─────────────────────────────────────────────────────────
+let jungleCacheData = null;
+let jungleCacheTime = 0;
+
+app.get('/api/jungle-stocks', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (jungleCacheData && (now - jungleCacheTime) < 5 * 60 * 1000 && !req.query.refresh) {
+      return res.json(jungleCacheData);
+    }
+    const stocks  = await getJungleStocks(SPEC_LONGS, SPEC_SHORTS);
+    const signals = await getSignals(stocks.map(s => s.ticker));
+    jungleCacheData = { stocks, signals };
+    jungleCacheTime = now;
+    res.json(jungleCacheData);
+  } catch (err) {
+    console.error('Error in /api/jungle-stocks:', err);
+    res.status(500).json({ error: 'Failed to load jungle stocks' });
   }
 });
 

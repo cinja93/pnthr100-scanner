@@ -6,7 +6,7 @@ import builtWithLove from '../assets/Built with Love.jpg';
 const NAV_ITEMS = [
   { key: 'long',      label: 'PNTHR 100 Longs',   icon: '📈', section: 'SCANNER' },
   { key: 'short',     label: 'PNTHR 100 Shorts',  icon: '📉' },
-  { key: 'jungle',    label: 'PNTHR 679 Jungle',  icon: '🐆', soon: true },
+  { key: 'jungle',    label: 'PNTHR 679 Jungle',  icon: '🐆' },
   { key: 'ema',       label: 'PNTHR Hunt',        icon: '〰️' },
   { key: 'etf',       label: 'ETF Scan',          icon: '🗂️' },
   { key: 'sectors',   label: 'Sectors',           icon: '📊', dividerBefore: true },

@@ -348,3 +348,62 @@ export async function getWatchlistStocks(tickers) {
     };
   }).filter(Boolean);
 }
+
+// Fetch live stock data for the full PNTHR 679 Jungle universe:
+// getAllTickers() (SP517) + specLongs (SP400 Long leaders) + specShorts (SP400 Short leaders).
+// Returns sorted by YTD desc with universe field: 'sp517' | 'sp400Long' | 'sp400Short'.
+export async function getJungleStocks(specLongs = [], specShorts = []) {
+  const sp517 = await getAllTickers();
+  const specLongsSet  = new Set(specLongs);
+  const specShortsSet = new Set(specShorts);
+  const allTickers = [...new Set([...sp517, ...specLongs, ...specShorts])];
+
+  console.log(`🌿 Jungle: ${allTickers.length} unique tickers (${sp517.length} SP517 + ${specLongs.length} 400L + ${specShorts.length} 400S)`);
+
+  const CHUNK = 200;
+  const quoteMap   = {};
+  const profileMap = {};
+
+  for (let i = 0; i < allTickers.length; i += CHUNK) {
+    const chunk = allTickers.slice(i, i + CHUNK);
+    const [quotes, profiles] = await Promise.all([
+      fetchFMP(`/quote/${chunk.join(',')}`).catch(() => []),
+      fetchFMP(`/profile/${chunk.join(',')}`).catch(() => []),
+    ]);
+    if (Array.isArray(quotes))   for (const q of quotes)   quoteMap[q.symbol]   = q;
+    if (Array.isArray(profiles)) for (const p of profiles) profileMap[p.symbol] = p;
+    if (i + CHUNK < allTickers.length) await new Promise(r => setTimeout(r, 300));
+  }
+
+  const yearStartPrices = await getYearStartPrices(allTickers);
+
+  const stocks = [];
+  for (const ticker of allTickers) {
+    const q   = quoteMap[ticker];
+    const p   = profileMap[ticker];
+    const ysp = yearStartPrices[ticker];
+    if (!q || !ysp || !q.price) continue;
+
+    const currentPrice = q.price;
+    const ytdReturn    = ((currentPrice - ysp) / ysp) * 100;
+    const universe     = specLongsSet.has(ticker)  ? 'sp400Long'
+                       : specShortsSet.has(ticker) ? 'sp400Short'
+                       : 'sp517';
+
+    stocks.push({
+      ticker:      q.symbol,
+      companyName: p?.companyName || q.name || '',
+      exchange:    p?.exchangeShortName || q.exchange || 'N/A',
+      sector:      p?.sector || 'N/A',
+      currentPrice: parseFloat(currentPrice.toFixed(2)),
+      ytdReturn:    parseFloat(ytdReturn.toFixed(2)),
+      universe,
+      rank: null,
+      rankChange: null,
+    });
+  }
+
+  return stocks
+    .sort((a, b) => b.ytdReturn - a.ytdReturn)
+    .map((s, i) => ({ ...s, rank: i + 1 }));
+}

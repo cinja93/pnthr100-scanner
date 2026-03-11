@@ -150,6 +150,10 @@ export default function SearchPage() {
         <div className={styles.pantherCol}>
           <div className={styles.pantherWrap}>
             <img src={pantherHead} alt="PNTHR" className={styles.pantherBig} />
+            {/* Static yellow bases always covering the logo's own black pupils */}
+            <div className={`${styles.eyeBase} ${styles.eyeLeft}`} />
+            <div className={`${styles.eyeBase} ${styles.eyeRight}`} />
+            {/* Animated eyes on top */}
             <div className={`${styles.eye} ${styles.eyeLeft}  ${eyesMoving ? styles.eyeMoving : ''}`} />
             <div className={`${styles.eye} ${styles.eyeRight} ${eyesMoving ? styles.eyeMoving : ''}`} />
           </div>

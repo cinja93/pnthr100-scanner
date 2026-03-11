@@ -80,7 +80,7 @@ function computeCumulative(filteredData, sectorKey) {
   });
 }
 
-function SectorMiniChart({ sectorKey, chartData, signalCounts, onClick }) {
+function SectorMiniChart({ sectorKey, chartData, signalCounts, onClick, onSignalClick }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const tooltipRef = useRef(null);
@@ -199,10 +199,12 @@ function SectorMiniChart({ sectorKey, chartData, signalCounts, onClick }) {
       </div>
       {signalCounts && (
         <div className={styles.signalSummary}>
-          {signalCounts.BL > 0 && <span className={styles.sigBL}>BL <strong>{signalCounts.BL}</strong></span>}
-          {signalCounts.BE > 0 && <span className={styles.sigBE}>BE <strong>{signalCounts.BE}</strong></span>}
-          {signalCounts.SS > 0 && <span className={styles.sigSS}>SS <strong>{signalCounts.SS}</strong></span>}
-          {signalCounts.SE > 0 && <span className={styles.sigSE}>SE <strong>{signalCounts.SE}</strong></span>}
+          {signalCounts.newBL > 0 && <button className={`${styles.sigNewBL} ${styles.sigClickable}`} onClick={e => { e.stopPropagation(); onSignalClick('newBL'); }}>New BL <strong>{signalCounts.newBL}</strong></button>}
+          {signalCounts.newSS > 0 && <button className={`${styles.sigNewSS} ${styles.sigClickable}`} onClick={e => { e.stopPropagation(); onSignalClick('newSS'); }}>New SS <strong>{signalCounts.newSS}</strong></button>}
+          {signalCounts.BL > 0 && <button className={`${styles.sigBL} ${styles.sigClickable}`} onClick={e => { e.stopPropagation(); onSignalClick('BL'); }}>BL <strong>{signalCounts.BL}</strong></button>}
+          {signalCounts.BE > 0 && <button className={`${styles.sigBE} ${styles.sigClickable}`} onClick={e => { e.stopPropagation(); onSignalClick('BE'); }}>BE <strong>{signalCounts.BE}</strong></button>}
+          {signalCounts.SS > 0 && <button className={`${styles.sigSS} ${styles.sigClickable}`} onClick={e => { e.stopPropagation(); onSignalClick('SS'); }}>SS <strong>{signalCounts.SS}</strong></button>}
+          {signalCounts.SE > 0 && <button className={`${styles.sigSE} ${styles.sigClickable}`} onClick={e => { e.stopPropagation(); onSignalClick('SE'); }}>SE <strong>{signalCounts.SE}</strong></button>}
           {signalCounts.BL === 0 && signalCounts.BE === 0 && signalCounts.SS === 0 && signalCounts.SE === 0 && (
             <span className={styles.sigNone}>No signals</span>
           )}
@@ -466,7 +468,7 @@ function Sp400StocksModal({ side, onClose }) {
 
 // ── Sector stocks modal ──────────────────────────────────────────────────────
 
-function SectorStocksModal({ sectorKey, sectorName, onClose }) {
+function SectorStocksModal({ sectorKey, sectorName, filterSignal, onClose }) {
   const [stocks, setStocks] = useState([]);
   const [signals, setSignals] = useState({});
   const [earnings, setEarnings] = useState({});
@@ -526,6 +528,12 @@ function SectorStocksModal({ sectorKey, sectorName, onClose }) {
 
           {!loading && !error && stocks.length > 0 && (
             <div className={styles.modalTableWrap}>
+              {filterSignal && (
+                <div className={styles.filterLabel}>
+                  Showing: <strong>{filterSignal === 'newBL' ? 'New BL' : filterSignal === 'newSS' ? 'New SS' : filterSignal}</strong> signals first
+                  <button className={styles.filterClear} onClick={onClose}>✕ Close filter</button>
+                </div>
+              )}
               <StockTable
                 stocks={stocks}
                 signals={signals}
@@ -533,6 +541,7 @@ function SectorStocksModal({ sectorKey, sectorName, onClose }) {
                 earnings={earnings}
                 scannerRanks={scannerRanks}
                 hideSector
+                pinSignal={filterSignal}
                 onTickerClick={handleTickerClick}
                 scanType="long"
               />
@@ -565,6 +574,7 @@ export default function SectorPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedSector, setSelectedSector] = useState(null);
+  const [selectedFilter, setSelectedFilter] = useState(null);
   const [signalCounts, setSignalCounts] = useState(null);
   const [specCounts, setSpecCounts] = useState(null);
   const [specModal, setSpecModal] = useState(null); // 'longs' | 'shorts' | null
@@ -669,7 +679,8 @@ export default function SectorPage() {
                 sectorKey={key}
                 chartData={bySector[key]}
                 signalCounts={signalCounts?.[key] ?? null}
-                onClick={() => setSelectedSector(key)}
+                onClick={() => { setSelectedSector(key); setSelectedFilter(null); }}
+                onSignalClick={filter => { setSelectedSector(key); setSelectedFilter(filter); }}
               />
             ))}
           </div>
@@ -687,7 +698,8 @@ export default function SectorPage() {
         <SectorStocksModal
           sectorKey={selectedSector}
           sectorName={SECTOR_NAMES[selectedSector]}
-          onClose={() => setSelectedSector(null)}
+          filterSignal={selectedFilter}
+          onClose={() => { setSelectedSector(null); setSelectedFilter(null); }}
         />
       )}
 

@@ -49,12 +49,26 @@ function getEarningsInfo(dateStr) {
   return { display, daysAway, highlight: daysAway >= 0 && daysAway <= 14 };
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, groupBySector = false, onTickerClick, onRemove, scanType }) {
+function matchesPinSignal(sigData, pinSignal) {
+  if (!sigData || !pinSignal) return false;
+  if (pinSignal === 'newBL') return sigData.signal === 'BL' && sigData.isNewSignal;
+  if (pinSignal === 'newSS') return sigData.signal === 'SS' && sigData.isNewSignal;
+  return sigData.signal === pinSignal;
+}
+
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, groupBySector = false, pinSignal = null, onTickerClick, onRemove, scanType }) {
   const [sortConfig, setSortConfig] = useState({ key: groupBySector ? 'ytdReturn' : 'rank', direction: groupBySector ? 'desc' : 'asc' });
   const hasScannerRanks = scannerRanks !== null;
 
   // Sort stocks based on current sort configuration
   const sortedStocks = [...stocks].sort((a, b) => {
+    // pinSignal: matching stocks always float to the top
+    if (pinSignal) {
+      const aPin = matchesPinSignal(signals[a.ticker], pinSignal);
+      const bPin = matchesPinSignal(signals[b.ticker], pinSignal);
+      if (aPin && !bPin) return -1;
+      if (!aPin && bPin) return 1;
+    }
     const dir = sortConfig.direction === 'asc' ? 1 : -1;
 
     // Special handling for rank when using scanner ranks (nulls sort last)

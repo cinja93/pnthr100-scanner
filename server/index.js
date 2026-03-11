@@ -778,13 +778,15 @@ async function computeSectorSignalCounts() {
 
     const counts = {};
     for (const [sectorKey, tickers] of Object.entries(tickersBySector)) {
-      counts[sectorKey] = { BL: 0, BE: 0, SS: 0, SE: 0, total: tickers.length };
+      counts[sectorKey] = { BL: 0, BE: 0, SS: 0, SE: 0, newBL: 0, newSS: 0, total: tickers.length };
       for (const ticker of tickers) {
-        const sig = signals[ticker]?.signal;
-        if (sig === 'BL' || sig === 'BUY')       counts[sectorKey].BL++;
-        else if (sig === 'BE')                    counts[sectorKey].BE++;
-        else if (sig === 'SS' || sig === 'SELL')  counts[sectorKey].SS++;
-        else if (sig === 'SE')                    counts[sectorKey].SE++;
+        const sigData = signals[ticker];
+        const sig = sigData?.signal;
+        const isNew = sigData?.isNewSignal ?? false;
+        if (sig === 'BL' || sig === 'BUY')       { counts[sectorKey].BL++; if (isNew) counts[sectorKey].newBL++; }
+        else if (sig === 'BE')                      counts[sectorKey].BE++;
+        else if (sig === 'SS' || sig === 'SELL')  { counts[sectorKey].SS++; if (isNew) counts[sectorKey].newSS++; }
+        else if (sig === 'SE')                      counts[sectorKey].SE++;
       }
     }
 

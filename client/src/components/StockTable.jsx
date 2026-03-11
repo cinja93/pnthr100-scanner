@@ -56,7 +56,7 @@ function matchesPinSignal(sigData, pinSignal) {
   return sigData.signal === pinSignal;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, pinSignal = null, onTickerClick, onRemove, scanType }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, pinSignal = null, compact = false, onTickerClick, onRemove, scanType }) {
   const [sortConfig, setSortConfig] = useState({ key: groupBySector ? 'ytdReturn' : 'rank', direction: groupBySector ? 'desc' : 'asc' });
   const hasScannerRanks = scannerRanks !== null;
 
@@ -202,7 +202,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
   };
 
   return (
-    <div className={styles.tableContainer}>
+    <div className={styles.tableContainer} style={compact ? { minHeight: 0 } : undefined}>
       <table className={styles.table}>
         <thead>
           <tr>

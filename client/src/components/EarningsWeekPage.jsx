@@ -140,6 +140,7 @@ export default function EarningsWeekPage() {
             earnings={earnings}
             onTickerClick={handleRowClick}
             scanType="long"
+            compact={true}
           />
         </div>
       ))}

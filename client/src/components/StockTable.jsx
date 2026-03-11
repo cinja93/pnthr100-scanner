@@ -98,38 +98,47 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
       return (aVal - bVal) * dir;
     }
 
-    // Special handling for stop price (from signals map)
-    if (sortConfig.key === 'stopPrice') {
-      const aVal = signals[a.ticker]?.stopPrice ?? null;
-      const bVal = signals[b.ticker]?.stopPrice ?? null;
-      if (aVal === null && bVal === null) return 0;
-      if (aVal === null) return dir;
-      if (bVal === null) return -dir;
-      return (aVal - bVal) * dir;
-    }
+    // Special handling for stop price / risk columns — 3-state sort:
+    //   asc:         active (low→high) → PAUSE → no signal
+    //   desc:        active (high→low) → PAUSE → no signal
+    //   pause-first: PAUSE → active (high→low) → no signal
+    if (sortConfig.key === 'stopPrice' || sortConfig.key === 'riskDollar' || sortConfig.key === 'riskPct') {
+      const isPauseFirst = sortConfig.direction === 'pause-first';
+      const numDir = (sortConfig.direction === 'asc') ? 1 : -1; // pause-first also sorts numerics desc
 
-    // Special handling for risk $ (derived from signals + stock)
-    if (sortConfig.key === 'riskDollar') {
-      const aStop = signals[a.ticker]?.stopPrice;
-      const bStop = signals[b.ticker]?.stopPrice;
-      const aVal = aStop != null ? Math.abs(a.currentPrice - aStop) : null;
-      const bVal = bStop != null ? Math.abs(b.currentPrice - bStop) : null;
-      if (aVal === null && bVal === null) return 0;
-      if (aVal === null) return dir;
-      if (bVal === null) return -dir;
-      return (aVal - bVal) * dir;
-    }
+      const aSig = signals[a.ticker]?.signal;
+      const bSig = signals[b.ticker]?.signal;
+      const aIsPause = aSig === 'BE' || aSig === 'SE';
+      const bIsPause = bSig === 'BE' || bSig === 'SE';
 
-    // Special handling for risk % (derived from signals + stock)
-    if (sortConfig.key === 'riskPct') {
-      const aStop = signals[a.ticker]?.stopPrice;
-      const bStop = signals[b.ticker]?.stopPrice;
-      const aVal = aStop != null ? (Math.abs(a.currentPrice - aStop) / a.currentPrice) * 100 : null;
-      const bVal = bStop != null ? (Math.abs(b.currentPrice - bStop) / b.currentPrice) * 100 : null;
-      if (aVal === null && bVal === null) return 0;
-      if (aVal === null) return dir;
-      if (bVal === null) return -dir;
-      return (aVal - bVal) * dir;
+      let aVal, bVal;
+      if (sortConfig.key === 'stopPrice') {
+        aVal = signals[a.ticker]?.stopPrice ?? null;
+        bVal = signals[b.ticker]?.stopPrice ?? null;
+      } else {
+        const aStop = signals[a.ticker]?.stopPrice;
+        const bStop = signals[b.ticker]?.stopPrice;
+        if (sortConfig.key === 'riskDollar') {
+          aVal = aStop != null ? Math.abs(a.currentPrice - aStop) : null;
+          bVal = bStop != null ? Math.abs(b.currentPrice - bStop) : null;
+        } else {
+          aVal = aStop != null ? (Math.abs(a.currentPrice - aStop) / a.currentPrice) * 100 : null;
+          bVal = bStop != null ? (Math.abs(b.currentPrice - bStop) / b.currentPrice) * 100 : null;
+        }
+      }
+
+      // Assign tiers based on mode
+      // pause-first: PAUSE=0, active=1, none=2
+      // asc/desc:    active=0, PAUSE=1, none=2
+      const aTier = aIsPause ? (isPauseFirst ? 0 : 1) : aVal !== null ? (isPauseFirst ? 1 : 0) : 2;
+      const bTier = bIsPause ? (isPauseFirst ? 0 : 1) : bVal !== null ? (isPauseFirst ? 1 : 0) : 2;
+
+      if (aTier !== bTier) return aTier - bTier;
+      if (aIsPause && bIsPause) return 0; // both PAUSE, equal
+      if (aVal === null && bVal === null) return 0; // both no-signal
+      if (aVal === null) return 1;
+      if (bVal === null) return -1;
+      return (aVal - bVal) * numDir;
     }
 
     // Special handling for earnings date (from earnings map)
@@ -159,16 +168,24 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
   });
 
   // Handle column header click
+  const STOP_KEYS = new Set(['stopPrice', 'riskDollar', 'riskPct']);
   const handleSort = (key) => {
-    setSortConfig(prevConfig => ({
-      key,
-      direction: prevConfig.key === key && prevConfig.direction === 'desc' ? 'asc' : 'desc'
-    }));
+    setSortConfig(prevConfig => {
+      if (prevConfig.key !== key) return { key, direction: 'asc' };
+      if (STOP_KEYS.has(key)) {
+        // 3-state: asc (low→high, PAUSE last) → desc (high→low, PAUSE last) → pause-first (PAUSE top, then high→low)
+        if (prevConfig.direction === 'asc') return { key, direction: 'desc' };
+        if (prevConfig.direction === 'desc') return { key, direction: 'pause-first' };
+        return { key, direction: 'asc' };
+      }
+      return { key, direction: prevConfig.direction === 'desc' ? 'asc' : 'desc' };
+    });
   };
 
   // Get sort indicator for column
   const getSortIndicator = (key) => {
     if (sortConfig.key !== key) return '⇅';
+    if (sortConfig.direction === 'pause-first') return '⏸';
     return sortConfig.direction === 'asc' ? '▲' : '▼';
   };
 

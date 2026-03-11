@@ -419,23 +419,29 @@ export default function ChartModal({ stocks, initialIndex, onClose, onWatchlistC
       }
     }
 
-    if (ps != null) {
-      series.createPriceLine({
-        price: ps,
+    // Draw stop lines only across the last 3 bars (not full chart width)
+    const last3 = filtered.slice(-3);
+    if (ps != null && last3.length > 0) {
+      const pnthrLineSeries = chart.addSeries(LineSeries, {
         color: '#ca8a04',
         lineWidth: 2,
         lineStyle: 2, // dashed
-        axisLabelVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
       });
+      pnthrLineSeries.setData(last3.map(b => ({ time: b.time, value: ps })));
     }
-    if (cws != null) {
-      series.createPriceLine({
-        price: cws,
+    if (cws != null && last3.length > 0) {
+      const cwsLineSeries = chart.addSeries(LineSeries, {
         color: '#9333ea',
         lineWidth: 1,
         lineStyle: 3, // dotted
-        axisLabelVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
       });
+      cwsLineSeries.setData(last3.map(b => ({ time: b.time, value: cws })));
     }
 
     chart.timeScale().fitContent();

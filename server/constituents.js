@@ -23,6 +23,22 @@ async function fetchConstituents(endpoint) {
   }
 }
 
+// Weekly cache for constituent lists — keyed by last Friday's date so it auto-refreshes each week
+const constituentCache = { weekKey: null, allTickers: null, dow30: null, sp500: null };
+
+function getWeekKey() {
+  const today = new Date();
+  const day = today.getDay(); // 0=Sun … 6=Sat
+  const daysToLastFriday = day === 5 ? 0 : (day + 2) % 7;
+  const lastFriday = new Date(today);
+  lastFriday.setDate(today.getDate() - daysToLastFriday);
+  return lastFriday.toISOString().split('T')[0];
+}
+
+function isCacheValid() {
+  return constituentCache.weekKey === getWeekKey();
+}
+
 // Supplemental stocks - extracted from user's manual PNTHR 100 list
 // These fill gaps in FMP's constituent lists (stocks that should be in S&P 500/NASDAQ/DOW but are missing)
 const SUPPLEMENTAL_STOCKS = [
@@ -42,51 +58,43 @@ const SUPPLEMENTAL_STOCKS = [
   "UPS", "VLO", "VMC", "VTRS", "VZ", "WAB", "WDC", "WMB", "WMT", "WSM", "XOM"
 ];
 
+// Populate the weekly cache — fetches all three lists in one shot so they share a single cache refresh
+async function refreshConstituentCache() {
+  const weekKey = getWeekKey();
+  console.log(`📋 Refreshing constituent cache for week of ${weekKey}...`);
+
+  const [sp500, nasdaq100, dow30, userSupplemental] = await Promise.all([
+    fetchConstituents('/sp500_constituent'),
+    fetchConstituents('/nasdaq_constituent'),
+    fetchConstituents('/dowjones_constituent'),
+    getSupplementalStocks(),
+  ]);
+
+  console.log(`Fetched: ${sp500.length} S&P 500, ${nasdaq100.length} Nasdaq 100, ${dow30.length} Dow 30`);
+
+  const allTickers = [...new Set([...sp500, ...nasdaq100, ...dow30, ...SUPPLEMENTAL_STOCKS, ...userSupplemental])];
+  constituentCache.weekKey   = weekKey;
+  constituentCache.allTickers = allTickers;
+  constituentCache.dow30     = dow30;
+  constituentCache.sp500     = sp500;
+
+  console.log(`📋 Constituent cache set (${allTickers.length} unique tickers, valid until next Friday)`);
+}
+
 // Get all unique tickers from S&P 500, NASDAQ 100, and Dow 30
 export async function getAllTickers() {
-  try {
-    console.log('Fetching complete constituent lists from FMP...');
-
-    // Fetch FMP lists and user-added supplemental stocks in parallel
-    const [sp500, nasdaq100, dow30, userSupplemental] = await Promise.all([
-      fetchConstituents('/sp500_constituent'),
-      fetchConstituents('/nasdaq_constituent'),
-      fetchConstituents('/dowjones_constituent'),
-      getSupplementalStocks()
-    ]);
-
-    console.log(`Fetched: ${sp500.length} S&P 500 stocks, ${nasdaq100.length} NASDAQ 100 stocks, ${dow30.length} Dow 30 stocks`);
-    console.log(`Supplemental: ${SUPPLEMENTAL_STOCKS.length} hardcoded + ${userSupplemental.length} user-added`);
-
-    // Combine FMP lists with both hardcoded and user-added supplemental stocks
-    const allTickers = [...sp500, ...nasdaq100, ...dow30, ...SUPPLEMENTAL_STOCKS, ...userSupplemental];
-    const uniqueTickers = [...new Set(allTickers)];
-
-    console.log(`Total unique tickers: ${uniqueTickers.length}`);
-    return uniqueTickers;
-
-  } catch (error) {
-    console.error('Error fetching constituent lists:', error);
-    throw error;
-  }
+  if (!isCacheValid()) await refreshConstituentCache();
+  return constituentCache.allTickers;
 }
 
 // Get Dow 30 tickers (for tagging in Jungle universe)
 export async function getDow30Tickers() {
-  try {
-    return await fetchConstituents('/dowjones_constituent');
-  } catch (error) {
-    console.error('Error fetching Dow 30 tickers:', error);
-    return [];
-  }
+  if (!isCacheValid()) await refreshConstituentCache();
+  return constituentCache.dow30;
 }
 
 // Get S&P 500 tickers (for tagging in Jungle universe)
 export async function getSp500Tickers() {
-  try {
-    return await fetchConstituents('/sp500_constituent');
-  } catch (error) {
-    console.error('Error fetching S&P 500 tickers:', error);
-    return [];
-  }
+  if (!isCacheValid()) await refreshConstituentCache();
+  return constituentCache.sp500;
 }

@@ -313,8 +313,7 @@ app.get('/api/stocks/search', async (req, res) => {
       previousRank: null,
     };
 
-    const rawSignals = await getLatestSignals([ticker]);
-    const signals = await calculateStopPrices(rawSignals);
+    const signals = await getSignals([ticker]);
 
     res.json({ stock, signals });
   } catch (err) {

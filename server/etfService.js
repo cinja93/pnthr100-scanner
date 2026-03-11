@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
-import { getLatestSignals } from './database.js';
-import { calculateStopPrices } from './stockService.js';
+import { getSignals } from './signalService.js';
 
 dotenv.config();
 
@@ -156,8 +155,7 @@ export async function getEtfStocks(forceRefresh = false) {
     .filter(Boolean);
 
   const stockTickers = stocks.map(s => s.ticker);
-  const rawSignals = await getLatestSignals(stockTickers);
-  const signals = await calculateStopPrices(rawSignals);
+  const signals = await getSignals(stockTickers);
 
   console.log(`📊 ETF 140 complete: ${stocks.length} ETFs`);
   const result = { stocks, signals, categories: ETF_CATEGORIES.map(c => c.label) };

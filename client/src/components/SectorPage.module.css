@@ -226,6 +226,101 @@
   color: #94a3b8;
 }
 
+/* ── S&P 400 full-width card ─────────────────────────────────────────── */
+
+.sp400Card {
+  margin-top: 16px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sp400CardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sp400CardTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e2c4b;
+  display: block;
+}
+
+.sp400CardSub {
+  font-size: 11px;
+  color: #94a3b8;
+  display: block;
+  margin-top: 2px;
+}
+
+.sp400Body {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.sp400Panel {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, background 0.15s;
+  border: 1px solid #e5e7eb;
+}
+
+.sp400Panel:hover {
+  background: #f1f5f9;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.sp400PanelTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e2c4b;
+}
+
+.sp400PanelLoading {
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.sp400PanelFooter {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.sp400Center {
+  display: flex;
+  flex-direction: column;
+}
+
+.sp400Chart {
+  width: 100%;
+  height: 140px;
+}
+
+@media (max-width: 768px) {
+  .sp400Body {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Sector stocks modal ──────────────────────────────────────────────── */
 
 .modalOverlay {

@@ -7,6 +7,7 @@ import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
 import { getEtfStocks } from './etfService.js';
+import { SPEC_LONGS, SPEC_SHORTS } from './speculative162.js';
 import { authenticateJWT, hashPassword, verifyPassword, generateToken } from './auth.js';
 import {
   getSupplementalStocks,
@@ -144,6 +145,7 @@ const SECTOR_ETF_MAP = {
   XLB:  'materials',
   XLRE: 'realEstate',
   XLU:  'utilities',
+  IJH:  'sp400',
 };
 
 // Fetch 14 months of daily closes for all 11 sector ETFs.
@@ -811,11 +813,7 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
 
     // 1. Get S&P 500 constituents and filter to this GICS sector
     const constituents = await getSP500Constituents(FMP_API_KEY);
-    // Debug: log unique sector values from FMP to verify field name/values
-    const uniqueSectors = [...new Set(constituents.map(c => c.sector))].sort();
-    console.log(`[sector-stocks] ${constituents.length} SP500 constituents, unique sectors:`, uniqueSectors);
     const sectorConstituents = constituents.filter(c => c.sector === gicsSector);
-    console.log(`[sector-stocks] ${sectorKey} → "${gicsSector}" → ${sectorConstituents.length} matches`);
     if (sectorConstituents.length === 0) return res.json({ stocks: [], signals: {} });
 
     const tickers = sectorConstituents.map(c => c.symbol);
@@ -957,6 +955,99 @@ app.get('/api/scanner-ranks', async (req, res) => {
   }
 });
 
+// ── Speculative 162 (S&P 400 Mid-Cap) ────────────────────────────────────────
+
+// Signal counts for the 81 speculative longs + 81 speculative shorts
+let speculativeSignalCountsCache = null;
+
+async function computeSpeculativeSignalCounts() {
+  try {
+    console.log('📡 Computing speculative signal counts (162 S&P 400 stocks)...');
+    const allTickers = [...SPEC_LONGS, ...SPEC_SHORTS];
+    const signals = await getSignals(allTickers);
+
+    const counts = {
+      longs:  { BL: 0, BE: 0, SS: 0, SE: 0, total: SPEC_LONGS.length },
+      shorts: { BL: 0, BE: 0, SS: 0, SE: 0, total: SPEC_SHORTS.length },
+    };
+
+    for (const ticker of SPEC_LONGS) {
+      const sig = signals[ticker]?.signal;
+      if      (sig === 'BL' || sig === 'BUY')  counts.longs.BL++;
+      else if (sig === 'BE')                   counts.longs.BE++;
+      else if (sig === 'SS' || sig === 'SELL') counts.longs.SS++;
+      else if (sig === 'SE')                   counts.longs.SE++;
+    }
+    for (const ticker of SPEC_SHORTS) {
+      const sig = signals[ticker]?.signal;
+      if      (sig === 'BL' || sig === 'BUY')  counts.shorts.BL++;
+      else if (sig === 'BE')                   counts.shorts.BE++;
+      else if (sig === 'SS' || sig === 'SELL') counts.shorts.SS++;
+      else if (sig === 'SE')                   counts.shorts.SE++;
+    }
+
+    speculativeSignalCountsCache = counts;
+    console.log('✅ Speculative signal counts ready');
+  } catch (err) {
+    console.error('Error computing speculative signal counts:', err);
+  }
+}
+
+// GET /api/speculative-signal-counts — returns instantly from cache
+app.get('/api/speculative-signal-counts', (req, res) => {
+  res.json(speculativeSignalCountsCache); // null until background job finishes
+});
+
+// GET /api/speculative-stocks/:side — returns longs or shorts with live quotes + signals
+app.get('/api/speculative-stocks/:side', async (req, res) => {
+  const { side } = req.params;
+  if (side !== 'longs' && side !== 'shorts') {
+    return res.status(400).json({ error: 'side must be longs or shorts' });
+  }
+
+  try {
+    const tickers = side === 'longs' ? SPEC_LONGS : SPEC_SHORTS;
+    const FMP_API_KEY = process.env.FMP_API_KEY;
+    const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
+
+    const [quoteRes, ytdRes] = await Promise.all([
+      fetch(`${FMP_BASE}/quote/${tickers.join(',')}?apikey=${FMP_API_KEY}`),
+      fetch(`${FMP_BASE}/stock-price-change/${tickers.join(',')}?apikey=${FMP_API_KEY}`),
+    ]);
+
+    const quoteData = quoteRes.ok ? await quoteRes.json() : [];
+    const ytdData   = ytdRes.ok   ? await ytdRes.json()   : [];
+
+    const quoteMap = {};
+    if (Array.isArray(quoteData)) for (const q of quoteData) quoteMap[q.symbol] = q;
+    const ytdMap = {};
+    if (Array.isArray(ytdData)) for (const item of ytdData) ytdMap[item.symbol] = item.ytd;
+
+    const stocks = tickers
+      .filter(t => quoteMap[t]?.price != null && ytdMap[t] != null)
+      .map(t => ({
+        ticker:       t,
+        companyName:  quoteMap[t]?.name || '',
+        exchange:     quoteMap[t]?.exchange || 'N/A',
+        sector:       '',
+        currentPrice: parseFloat(Number(quoteMap[t].price).toFixed(2)),
+        ytdReturn:    parseFloat(Number(ytdMap[t]).toFixed(2)),
+        rank:         null,
+        rankChange:   null,
+        previousRank: null,
+      }))
+      .sort((a, b) => side === 'longs' ? b.ytdReturn - a.ytdReturn : a.ytdReturn - b.ytdReturn)
+      .map((s, i) => ({ ...s, rank: i + 1 }));
+
+    const signals = await getSignals(tickers);
+
+    res.json({ stocks, signals });
+  } catch (error) {
+    console.error(`Error fetching speculative ${side}:`, error);
+    res.status(500).json({ error: `Failed to fetch speculative ${side}` });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -965,8 +1056,9 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 API available at http://localhost:${PORT}/api/stocks`);
-  // Pre-compute sector signal counts in background (takes ~2 min for 503 stocks)
+  // Pre-compute signal counts in background (takes ~2 min each)
   computeSectorSignalCounts();
+  computeSpeculativeSignalCounts();
 });
 
 // Scheduled Friday auto-save: checks every 30 minutes.

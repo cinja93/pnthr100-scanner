@@ -275,6 +275,20 @@ export async function fetchSectorStocks(sectorKey) {
   return response.json();
 }
 
+// Fetch BL/BE/SS/SE signal counts for the 81 speculative longs + 81 speculative shorts
+export async function fetchSpeculativeSignalCounts() {
+  const response = await fetch(`${API_BASE}/api/speculative-signal-counts`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+// Fetch speculative stocks for a given side ('longs' or 'shorts') with live quotes + signals
+export async function fetchSpeculativeStocks(side) {
+  const response = await fetch(`${API_BASE}/api/speculative-stocks/${side}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // Fetch sector performance data (11 sectors, weekly cumulative % return, 12-month rolling)
 export async function fetchSectorData() {
   try {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
-import { fetchSectorData, fetchSectorStocks, fetchEarnings, fetchScannerRanks, fetchSectorSignalCounts } from '../services/api';
+import { fetchSectorData, fetchSectorStocks, fetchEarnings, fetchScannerRanks, fetchSectorSignalCounts, fetchSpeculativeSignalCounts, fetchSpeculativeStocks } from '../services/api';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
 import styles from './SectorPage.module.css';
@@ -218,6 +218,251 @@ function SectorMiniChart({ sectorKey, chartData, signalCounts, onClick }) {
   );
 }
 
+// ── S&P 400 center chart (IJH line chart, no card wrapper) ───────────────────
+
+function Sp400CenterChart({ chartData }) {
+  const containerRef = useRef(null);
+  const chartRef = useRef(null);
+  const tooltipRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current || chartData.length === 0) return;
+
+    if (chartRef.current) {
+      chartRef.current.remove();
+      chartRef.current = null;
+    }
+
+    const chart = createChart(containerRef.current, {
+      autoSize: true,
+      layout: { background: { color: '#ffffff' }, textColor: '#888', attributionLogo: false, fontSize: 10 },
+      grid: { vertLines: { color: '#f5f5f5' }, horzLines: { color: '#f5f5f5' } },
+      rightPriceScale: { visible: false },
+      leftPriceScale: { visible: false },
+      timeScale: { visible: true, borderVisible: false, fixLeftEdge: true, fixRightEdge: true },
+      crosshair: {
+        vertLine: { visible: true, width: 1, style: 3, color: '#94a3b8', labelVisible: false },
+        horzLine: { visible: false, labelVisible: false },
+      },
+      handleScroll: false,
+      handleScale: false,
+    });
+    chartRef.current = chart;
+
+    const series = chart.addSeries(LineSeries, {
+      color: '#f59e0b',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 4,
+    });
+
+    series.setData(chartData.map(d => ({ time: d.date, value: d.value })));
+    chart.timeScale().fitContent();
+
+    chart.subscribeCrosshairMove(param => {
+      const tooltip = tooltipRef.current;
+      if (!tooltip) return;
+      if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
+        tooltip.style.display = 'none';
+        return;
+      }
+      const dateStr = typeof param.time === 'string'
+        ? param.time
+        : new Date(param.time * 1000).toISOString().split('T')[0];
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const formatted = new Date(year, month - 1, day).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+      });
+      tooltip.textContent = formatted;
+      tooltip.style.display = 'block';
+      const containerWidth = containerRef.current ? containerRef.current.offsetWidth : 0;
+      const tooltipWidth = tooltip.offsetWidth || 90;
+      const OFFSET = 10;
+      const left = param.point.x + OFFSET + tooltipWidth > containerWidth
+        ? param.point.x - OFFSET - tooltipWidth
+        : param.point.x + OFFSET;
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top  = `${param.point.y - 22}px`;
+    });
+
+    return () => {
+      if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; }
+    };
+  }, [chartData]);
+
+  return (
+    <div className={styles.chartWrap}>
+      <div ref={containerRef} className={styles.sp400Chart} />
+      <div ref={tooltipRef} className={styles.chartTooltip} />
+    </div>
+  );
+}
+
+// ── S&P 400 full-width card ───────────────────────────────────────────────────
+
+function Sp400Card({ chartData, specCounts, timeRange, onClickLongs, onClickShorts }) {
+  const currentReturn = chartData.length > 0 ? chartData[chartData.length - 1].value : null;
+  const isPositive = currentReturn != null && currentReturn >= 0;
+
+  return (
+    <div className={styles.sp400Card}>
+      <div className={styles.sp400CardHeader}>
+        <div>
+          <span className={styles.sp400CardTitle}>S&P 400 Mid-Cap</span>
+          <span className={styles.sp400CardSub}>iShares Core S&P Mid-Cap ETF (IJH) · {RANGE_SUBTITLES[timeRange]}</span>
+        </div>
+        {currentReturn != null && (
+          <span className={`${styles.returnBadge} ${isPositive ? styles.positive : styles.negative}`}>
+            IJH {isPositive ? '+' : ''}{currentReturn.toFixed(2)}%
+          </span>
+        )}
+      </div>
+      <div className={styles.sp400Body}>
+        {/* Left: Long Leaders */}
+        <div className={styles.sp400Panel} onClick={onClickLongs} title="View S&P 400 Long Leaders">
+          <div className={styles.sp400PanelTitle}>S&P 400 Long Leaders</div>
+          {specCounts?.longs ? (
+            <div className={styles.signalSummary}>
+              {specCounts.longs.BL > 0 && <span className={styles.sigBL}>BL <strong>{specCounts.longs.BL}</strong></span>}
+              {specCounts.longs.BE > 0 && <span className={styles.sigBE}>BE <strong>{specCounts.longs.BE}</strong></span>}
+              {specCounts.longs.SS > 0 && <span className={styles.sigSS}>SS <strong>{specCounts.longs.SS}</strong></span>}
+              {specCounts.longs.SE > 0 && <span className={styles.sigSE}>SE <strong>{specCounts.longs.SE}</strong></span>}
+              {specCounts.longs.BL === 0 && specCounts.longs.BE === 0 && specCounts.longs.SS === 0 && specCounts.longs.SE === 0 && (
+                <span className={styles.sigNone}>No signals</span>
+              )}
+            </div>
+          ) : (
+            <div className={styles.sp400PanelLoading}>Computing…</div>
+          )}
+          <div className={styles.sp400PanelFooter}>
+            {specCounts?.longs?.total != null && <span>{specCounts.longs.total} stocks</span>}
+            <span>View stocks →</span>
+          </div>
+        </div>
+
+        {/* Center: IJH chart */}
+        <div className={styles.sp400Center}>
+          <Sp400CenterChart chartData={chartData} />
+        </div>
+
+        {/* Right: Short Leaders */}
+        <div className={styles.sp400Panel} onClick={onClickShorts} title="View S&P 400 Short Leaders">
+          <div className={styles.sp400PanelTitle}>S&P 400 Short Leaders</div>
+          {specCounts?.shorts ? (
+            <div className={styles.signalSummary}>
+              {specCounts.shorts.BL > 0 && <span className={styles.sigBL}>BL <strong>{specCounts.shorts.BL}</strong></span>}
+              {specCounts.shorts.BE > 0 && <span className={styles.sigBE}>BE <strong>{specCounts.shorts.BE}</strong></span>}
+              {specCounts.shorts.SS > 0 && <span className={styles.sigSS}>SS <strong>{specCounts.shorts.SS}</strong></span>}
+              {specCounts.shorts.SE > 0 && <span className={styles.sigSE}>SE <strong>{specCounts.shorts.SE}</strong></span>}
+              {specCounts.shorts.BL === 0 && specCounts.shorts.BE === 0 && specCounts.shorts.SS === 0 && specCounts.shorts.SE === 0 && (
+                <span className={styles.sigNone}>No signals</span>
+              )}
+            </div>
+          ) : (
+            <div className={styles.sp400PanelLoading}>Computing…</div>
+          )}
+          <div className={styles.sp400PanelFooter}>
+            {specCounts?.shorts?.total != null && <span>{specCounts.shorts.total} stocks</span>}
+            <span>View stocks →</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── S&P 400 stocks modal ──────────────────────────────────────────────────────
+
+function Sp400StocksModal({ side, onClose }) {
+  const [stocks, setStocks] = useState([]);
+  const [signals, setSignals] = useState({});
+  const [earnings, setEarnings] = useState({});
+  const [scannerRanks, setScannerRanks] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [chartIndex, setChartIndex] = useState(null);
+  const [chartStocks, setChartStocks] = useState([]);
+
+  const title = side === 'longs' ? 'S&P 400 Long Leaders' : 'S&P 400 Short Leaders';
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetchScannerRanks().then(r => setScannerRanks(r));
+    fetchSpeculativeStocks(side)
+      .then(result => {
+        const stockList = result.stocks || [];
+        setStocks(stockList);
+        setSignals(result.signals || {});
+        fetchEarnings(stockList.map(s => s.ticker)).then(r => setEarnings(r));
+      })
+      .catch(err => {
+        console.error(err);
+        setError('Failed to load stocks.');
+      })
+      .finally(() => setLoading(false));
+  }, [side]);
+
+  function handleTickerClick(_stock, sortedIdx, sortedStocks) {
+    setChartStocks(sortedStocks);
+    setChartIndex(sortedIdx);
+  }
+
+  return (
+    <>
+      <div className={styles.modalOverlay} onClick={onClose}>
+        <div className={styles.modalPanel} onClick={e => e.stopPropagation()}>
+          <div className={styles.modalHeader}>
+            <div>
+              <h2 className={styles.modalTitle}>{title}</h2>
+              {!loading && !error && (
+                <p className={styles.modalSubtitle}>{stocks.length} stocks ranked by YTD return</p>
+              )}
+            </div>
+            <button className={styles.modalCloseBtn} onClick={onClose} aria-label="Close">✕</button>
+          </div>
+
+          {loading && (
+            <div className={styles.modalLoading}>
+              <div className={styles.spinner} />
+              <p>Loading stocks…</p>
+            </div>
+          )}
+          {error && !loading && <div className={styles.modalError}>{error}</div>}
+          {!loading && !error && stocks.length > 0 && (
+            <div className={styles.modalTableWrap}>
+              <StockTable
+                stocks={stocks}
+                signals={signals}
+                signalsLoading={false}
+                earnings={earnings}
+                scannerRanks={scannerRanks}
+                hideSector
+                onTickerClick={handleTickerClick}
+                scanType={side === 'longs' ? 'long' : 'short'}
+              />
+            </div>
+          )}
+          {!loading && !error && stocks.length === 0 && (
+            <div className={styles.modalEmpty}>No stocks found.</div>
+          )}
+        </div>
+      </div>
+
+      {chartIndex != null && (
+        <ChartModal
+          stocks={chartStocks}
+          initialIndex={chartIndex}
+          signals={signals}
+          onClose={() => setChartIndex(null)}
+        />
+      )}
+    </>
+  );
+}
+
 // ── Sector stocks modal ──────────────────────────────────────────────────────
 
 function SectorStocksModal({ sectorKey, sectorName, onClose }) {
@@ -320,6 +565,8 @@ export default function SectorPage() {
   const [error, setError] = useState(null);
   const [selectedSector, setSelectedSector] = useState(null);
   const [signalCounts, setSignalCounts] = useState(null);
+  const [specCounts, setSpecCounts] = useState(null);
+  const [specModal, setSpecModal] = useState(null); // 'longs' | 'shorts' | null
 
   useEffect(() => {
     setLoading(true);
@@ -332,32 +579,43 @@ export default function SectorPage() {
       })
       .finally(() => setLoading(false));
 
-    // Fetch signal counts — retries every 20s if server is still computing
-    let retryTimer;
-    function loadCounts() {
+    // Fetch sector signal counts — retries every 20s if server is still computing
+    let sectorRetry;
+    function loadSectorCounts() {
       fetchSectorSignalCounts()
         .then(counts => {
-          if (counts) {
-            setSignalCounts(counts);
-          } else {
-            retryTimer = setTimeout(loadCounts, 20000);
-          }
+          if (counts) setSignalCounts(counts);
+          else sectorRetry = setTimeout(loadSectorCounts, 20000);
         })
         .catch(err => console.error('Signal counts error:', err));
     }
-    loadCounts();
-    return () => clearTimeout(retryTimer);
+    loadSectorCounts();
+
+    // Fetch speculative signal counts — same retry pattern
+    let specRetry;
+    function loadSpecCounts() {
+      fetchSpeculativeSignalCounts()
+        .then(counts => {
+          if (counts) setSpecCounts(counts);
+          else specRetry = setTimeout(loadSpecCounts, 20000);
+        })
+        .catch(err => console.error('Speculative counts error:', err));
+    }
+    loadSpecCounts();
+
+    return () => { clearTimeout(sectorRetry); clearTimeout(specRetry); };
   }, []);
 
   // Recompute cumulative series whenever data or range changes — no extra API calls
-  const { bySector, sortedSectorKeys } = useMemo(() => {
-    if (!allData) return { bySector: null, sortedSectorKeys: Object.keys(SECTOR_NAMES) };
+  const { bySector, sortedSectorKeys, sp400Data } = useMemo(() => {
+    if (!allData) return { bySector: null, sortedSectorKeys: Object.keys(SECTOR_NAMES), sp400Data: [] };
 
     const filtered = getFilteredData(allData, timeRange);
     const bySector = {};
     for (const key of Object.keys(SECTOR_NAMES)) {
       bySector[key] = computeCumulative(filtered, key);
     }
+    const sp400Data = computeCumulative(filtered, 'sp400');
 
     const sortedSectorKeys = Object.keys(SECTOR_NAMES).sort((a, b) => {
       const aLast = bySector[a]?.at(-1)?.value ?? -Infinity;
@@ -365,7 +623,7 @@ export default function SectorPage() {
       return bLast - aLast;
     });
 
-    return { bySector, sortedSectorKeys };
+    return { bySector, sortedSectorKeys, sp400Data };
   }, [allData, timeRange]);
 
   return (
@@ -402,17 +660,26 @@ export default function SectorPage() {
       )}
 
       {!loading && !error && bySector && (
-        <div className={styles.grid}>
-          {sortedSectorKeys.map(key => (
-            <SectorMiniChart
-              key={key}
-              sectorKey={key}
-              chartData={bySector[key]}
-              signalCounts={signalCounts?.[key] ?? null}
-              onClick={() => setSelectedSector(key)}
-            />
-          ))}
-        </div>
+        <>
+          <div className={styles.grid}>
+            {sortedSectorKeys.map(key => (
+              <SectorMiniChart
+                key={key}
+                sectorKey={key}
+                chartData={bySector[key]}
+                signalCounts={signalCounts?.[key] ?? null}
+                onClick={() => setSelectedSector(key)}
+              />
+            ))}
+          </div>
+          <Sp400Card
+            chartData={sp400Data}
+            specCounts={specCounts}
+            timeRange={timeRange}
+            onClickLongs={() => setSpecModal('longs')}
+            onClickShorts={() => setSpecModal('shorts')}
+          />
+        </>
       )}
 
       {selectedSector && (
@@ -420,6 +687,13 @@ export default function SectorPage() {
           sectorKey={selectedSector}
           sectorName={SECTOR_NAMES[selectedSector]}
           onClose={() => setSelectedSector(null)}
+        />
+      )}
+
+      {specModal && (
+        <Sp400StocksModal
+          side={specModal}
+          onClose={() => setSpecModal(null)}
         />
       )}
     </div>

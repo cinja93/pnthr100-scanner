@@ -207,6 +207,20 @@
   height: 420px;
 }
 
+.earningsWindowLabel {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #000000;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  pointer-events: none;
+  z-index: 10;
+}
+
 .chartMarkerIcon {
   position: absolute;
   width: 32px;

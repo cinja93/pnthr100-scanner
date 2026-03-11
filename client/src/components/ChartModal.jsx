@@ -238,6 +238,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   const [entryDatesLoaded, setEntryDatesLoaded] = useState(false);
   const [watchlistSet, setWatchlistSet] = useState(new Set());
   const [watchlistSaving, setWatchlistSaving] = useState(false);
+  const [inEarningsWindow, setInEarningsWindow] = useState(false);
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const cacheRef = useRef({});
@@ -304,9 +305,10 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
     // Yellow background if today is within 5 trading days of earnings (inclusive)
     const todayStr = new Date().toISOString().split('T')[0];
     const earningsDate = earnings[stock?.ticker] ?? null;
-    const inEarningsWindow = earningsDate && todayStr <= earningsDate
-      && todayStr >= nTradingDaysBefore(earningsDate, 4);
-    const chartBg = inEarningsWindow ? '#fffde7' : '#ffffff';
+    const earningsWindow = !!(earningsDate && todayStr <= earningsDate
+      && todayStr >= nTradingDaysBefore(earningsDate, 4));
+    setInEarningsWindow(earningsWindow);
+    const chartBg = earningsWindow ? '#fffde7' : '#ffffff';
 
     const chart = createChart(chartContainerRef.current, {
       autoSize: true,
@@ -600,6 +602,11 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
           {!loading && !error && (
             <div className={styles.chartWrapper}>
               <div ref={chartContainerRef} className={styles.chartContainer} />
+
+              {/* Earnings Week label — centered top of chart when in earnings window */}
+              {inEarningsWindow && (
+                <div className={styles.earningsWindowLabel}>Earnings Week</div>
+              )}
 
               {/* BL/SS/BE/SE signal badges — overlaid on chart at signal bar */}
               {signalMarkers.map((m, i) => {

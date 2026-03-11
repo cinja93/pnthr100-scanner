@@ -4,6 +4,7 @@ import ChartModal from './ChartModal';
 import { fetchStockSearch, fetchEarnings, fetchAutocompleteSuggestions } from '../services/api';
 import styles from './SearchPage.module.css';
 import pantherHead from '../assets/panther head.png';
+import pantherPaw from '../assets/panther-paw.svg';
 
 export default function SearchPage() {
   const [query, setQuery]           = useState('');
@@ -149,6 +150,11 @@ export default function SearchPage() {
 
       {!loading && stock && (
         <div className={styles.resultWrap}>
+          {eyesDown && (
+            <div className={styles.pawContainer}>
+              <img src={pantherPaw} alt="" className={styles.pawImg} />
+            </div>
+          )}
           <StockTable
             stocks={[stock]}
             signals={signals}

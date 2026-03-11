@@ -12,8 +12,8 @@
   align-items: flex-start;
   justify-content: center;
   gap: 40px;
-  padding: 32px 28px 28px;
-  flex: 1;
+  padding: 32px 28px 0;
+  flex: 0 0 auto;
 }
 
 /* ── Left column ─────────────────────────────────────────── */
@@ -150,6 +150,7 @@
 }
 
 .resultWrap {
+  position: relative;
   padding: 0 28px 28px;
   flex-shrink: 0;
 }
@@ -234,4 +235,27 @@
   width: 10px;
   height: 10px;
   top: 0px;
+}
+
+/* ── Paw drop-in ──────────────────────────────────────── */
+.pawContainer {
+  position: absolute;
+  top: -90px;
+  left: 48%;
+  z-index: 20;
+  pointer-events: none;
+  animation: pawDropIn 0.55s cubic-bezier(0.22, 1.4, 0.5, 1) 0.25s both;
+}
+
+@keyframes pawDropIn {
+  0%   { transform: translateY(-100px) rotate(20deg); opacity: 0; }
+  80%  { transform: translateY(8px) rotate(-5deg); opacity: 1; }
+  100% { transform: translateY(0px) rotate(-3deg); opacity: 1; }
+}
+
+.pawImg {
+  width: 160px;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 6px 16px rgba(0,0,0,0.9));
 }

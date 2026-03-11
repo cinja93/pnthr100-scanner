@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 185" width="200" height="185">
+  <defs>
+    <radialGradient id="padGrad" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#3a3530"/>
+      <stop offset="100%" stop-color="#141210"/>
+    </radialGradient>
+    <radialGradient id="toeGrad" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#444040"/>
+      <stop offset="100%" stop-color="#1a1818"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.8"/>
+    </filter>
+    <filter id="clawGlow">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#ccc" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Claws — curved, pointed, extending from toes -->
+  <!-- Claw 1 (leftmost) -->
+  <path d="M 32 108 Q 22 130 18 158 Q 16 168 21 170 Q 26 172 30 162 Q 36 140 40 118 Z"
+        fill="url(#clawWhite)" filter="url(#clawGlow)"/>
+  <linearGradient id="clawWhite" x1="0%" y1="0%" x2="0%" y2="100%">
+    <stop offset="0%" stop-color="#aaaaaa"/>
+    <stop offset="50%" stop-color="#e8e8e8"/>
+    <stop offset="100%" stop-color="#ffffff"/>
+  </linearGradient>
+  <path d="M 32 108 Q 22 130 18 158 Q 16 168 21 170 Q 26 172 30 162 Q 36 140 40 118 Z"
+        fill="url(#clawWhite)" filter="url(#clawGlow)"/>
+
+  <!-- Claw 2 -->
+  <path d="M 70 98 Q 64 122 62 152 Q 61 163 67 164 Q 73 165 75 154 Q 79 130 80 106 Z"
+        fill="url(#clawWhite)" filter="url(#clawGlow)"/>
+
+  <!-- Claw 3 -->
+  <path d="M 114 98 Q 116 122 118 152 Q 119 163 113 164 Q 107 165 105 154 Q 101 130 100 106 Z"
+        fill="url(#clawWhite)" filter="url(#clawGlow)"/>
+
+  <!-- Claw 4 (rightmost) -->
+  <path d="M 152 108 Q 162 130 166 158 Q 168 168 163 170 Q 158 172 154 162 Q 148 140 144 118 Z"
+        fill="url(#clawWhite)" filter="url(#clawGlow)"/>
+
+  <!-- Toe 1 (far left) -->
+  <ellipse cx="32" cy="112" rx="22" ry="20" fill="url(#toeGrad)" filter="url(#shadow)"/>
+  <ellipse cx="26" cy="106" rx="9" ry="7" fill="rgba(255,255,255,0.05)"/>
+
+  <!-- Toe 2 -->
+  <ellipse cx="72" cy="100" rx="22" ry="20" fill="url(#toeGrad)" filter="url(#shadow)"/>
+  <ellipse cx="66" cy="94" rx="9" ry="7" fill="rgba(255,255,255,0.05)"/>
+
+  <!-- Toe 3 -->
+  <ellipse cx="114" cy="100" rx="22" ry="20" fill="url(#toeGrad)" filter="url(#shadow)"/>
+  <ellipse cx="108" cy="94" rx="9" ry="7" fill="rgba(255,255,255,0.05)"/>
+
+  <!-- Toe 4 (far right) -->
+  <ellipse cx="154" cy="112" rx="22" ry="20" fill="url(#toeGrad)" filter="url(#shadow)"/>
+  <ellipse cx="148" cy="106" rx="9" ry="7" fill="rgba(255,255,255,0.05)"/>
+</svg>

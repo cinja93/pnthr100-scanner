@@ -1,13 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 185" width="200" height="185">
   <defs>
-    <radialGradient id="padGrad" cx="40%" cy="35%" r="60%">
-      <stop offset="0%" stop-color="#3a3530"/>
-      <stop offset="100%" stop-color="#141210"/>
-    </radialGradient>
     <radialGradient id="toeGrad" cx="35%" cy="30%" r="65%">
       <stop offset="0%" stop-color="#444040"/>
       <stop offset="100%" stop-color="#1a1818"/>
     </radialGradient>
+    <linearGradient id="clawWhite" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#aaaaaa"/>
+      <stop offset="50%" stop-color="#e8e8e8"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
       <feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.8"/>
     </filter>
@@ -18,13 +19,6 @@
 
   <!-- Claws — curved, pointed, extending from toes -->
   <!-- Claw 1 (leftmost) -->
-  <path d="M 32 108 Q 22 130 18 158 Q 16 168 21 170 Q 26 172 30 162 Q 36 140 40 118 Z"
-        fill="url(#clawWhite)" filter="url(#clawGlow)"/>
-  <linearGradient id="clawWhite" x1="0%" y1="0%" x2="0%" y2="100%">
-    <stop offset="0%" stop-color="#aaaaaa"/>
-    <stop offset="50%" stop-color="#e8e8e8"/>
-    <stop offset="100%" stop-color="#ffffff"/>
-  </linearGradient>
   <path d="M 32 108 Q 22 130 18 158 Q 16 168 21 170 Q 26 172 30 162 Q 36 140 40 118 Z"
         fill="url(#clawWhite)" filter="url(#clawGlow)"/>
 

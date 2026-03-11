@@ -302,11 +302,16 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
     const filtered = filterByRange(allWeeklyData, range);
     if (filtered.length === 0) return;
 
-    // Yellow background if today is within 5 trading days of earnings (inclusive)
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Yellow background if today is within 14 calendar days of earnings (matches dashboard row highlight)
     const earningsDate = earnings[stock?.ticker] ?? null;
-    const earningsWindow = !!(earningsDate && todayStr <= earningsDate
-      && todayStr >= nTradingDaysBefore(earningsDate, 4));
+    const earningsWindow = (() => {
+      if (!earningsDate) return false;
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const [ey, em, ed] = earningsDate.split('-').map(Number);
+      const eDate = new Date(ey, em - 1, ed);
+      const daysAway = Math.round((eDate - today) / (1000 * 60 * 60 * 24));
+      return daysAway >= 0 && daysAway <= 14;
+    })();
     setInEarningsWindow(earningsWindow);
     const chartBg = earningsWindow ? '#fffde7' : '#ffffff';
 

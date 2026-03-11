@@ -336,10 +336,11 @@ app.get('/api/earnings/week', async (req, res) => {
 
     if (!Array.isArray(data)) return res.json({ byDate: {}, dates: [] });
 
-    // Group by date, sort each day alphabetically by ticker
+    // Group by date — US-listed tickers only (no dots = no exchange suffix), sort alphabetically
     const byDate = {};
     for (const item of data) {
       if (!item.date || !item.symbol) continue;
+      if (item.symbol.includes('.')) continue; // skip non-US (e.g. 001520.KS, 0762.HK, 0J51.L)
       if (!byDate[item.date]) byDate[item.date] = [];
       byDate[item.date].push({
         ticker: item.symbol,

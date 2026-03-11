@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
-import { fetchEarningsWeek } from '../services/api';
+import { useState, useEffect, useMemo } from 'react';
+import StockTable from './StockTable';
+import ChartModal from './ChartModal';
+import { fetchJungleStocks, fetchEarnings } from '../services/api';
 import styles from './EarningsWeekPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
-// Returns { from, to } date strings covering the relevant window
-function getEarningsDateRange() {
+// Returns { from, to } date strings for the relevant earnings window
+function getEarningsDateWindow() {
   const today = new Date();
   const dow = today.getDay(); // 0=Sun, 1=Mon…5=Fri, 6=Sat
   const fmt = d => d.toISOString().split('T')[0];
@@ -13,7 +15,7 @@ function getEarningsDateRange() {
   const end   = new Date(today);
 
   if (dow === 5) {
-    // Friday: show today through next Friday (6 trading days)
+    // Friday: show today + all of next week (6 days)
     end.setDate(today.getDate() + 7);
   } else if (dow === 6) {
     // Saturday: show next Mon–Fri
@@ -24,7 +26,7 @@ function getEarningsDateRange() {
     start.setDate(today.getDate() + 1);
     end.setDate(today.getDate() + 5);
   } else {
-    // Mon–Thu: show today through this Friday
+    // Mon–Thu: today through this Friday
     end.setDate(today.getDate() + (5 - dow));
   }
 
@@ -37,38 +39,55 @@ function formatDayHeader(dateStr) {
   return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-function formatRevenue(val) {
-  if (val == null) return '—';
-  if (Math.abs(val) >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
-  if (Math.abs(val) >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
-  return `$${val.toFixed(0)}`;
-}
-
 export default function EarningsWeekPage() {
-  const [byDate, setByDate]   = useState({});
-  const [dates, setDates]     = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+  const [stocks, setStocks]           = useState([]);
+  const [signals, setSignals]         = useState({});
+  const [earnings, setEarnings]       = useState({});
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
+  const [chartIndex, setChartIndex]   = useState(null);
+  const [chartStocks, setChartStocks] = useState([]);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    fetchJungleStocks()
+      .then(data => {
+        const stockList = data.stocks || [];
+        setStocks(stockList);
+        setSignals(data.signals || {});
+        fetchEarnings(stockList.map(s => s.ticker)).then(setEarnings);
+      })
+      .catch(err => {
+        console.error(err);
+        setError('Failed to load earnings data.');
+      })
+      .finally(() => setLoading(false));
+  }
 
   useEffect(() => { load(); }, []);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const { from, to } = getEarningsDateRange();
-      const result = await fetchEarningsWeek(from, to);
-      setByDate(result.byDate || {});
-      setDates(result.dates || []);
-    } catch (err) {
-      setError('Failed to load earnings calendar.');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { from, to } = useMemo(() => getEarningsDateWindow(), []);
 
-  const totalCount = dates.reduce((sum, d) => sum + (byDate[d]?.length || 0), 0);
+  // Filter jungle stocks to those with earnings in this week's window, grouped by date
+  const byDate = useMemo(() => {
+    const groups = {};
+    for (const stock of stocks) {
+      const date = earnings[stock.ticker];
+      if (!date || date < from || date > to) continue;
+      if (!groups[date]) groups[date] = [];
+      groups[date].push(stock);
+    }
+    return groups;
+  }, [stocks, earnings, from, to]);
+
+  const dates = useMemo(() => Object.keys(byDate).sort(), [byDate]);
+  const totalCount = dates.reduce((sum, d) => sum + byDate[d].length, 0);
+
+  function handleRowClick(_s, idx, sortedStocks) {
+    setChartStocks(sortedStocks);
+    setChartIndex(idx);
+  }
 
   return (
     <div className={styles.page}>
@@ -80,8 +99,10 @@ export default function EarningsWeekPage() {
           </h1>
           <p className={styles.subtitle}>
             {!loading && !error
-              ? `${totalCount} companies reporting across ${dates.length} day${dates.length !== 1 ? 's' : ''}`
-              : 'Upcoming earnings reports for this week'}
+              ? totalCount > 0
+                ? `${totalCount} Jungle stocks reporting across ${dates.length} day${dates.length !== 1 ? 's' : ''}`
+                : 'No Jungle stocks reporting this period'
+              : 'PNTHR 679 Jungle — upcoming earnings this week'}
           </p>
         </div>
         <button className={styles.refreshBtn} onClick={load} disabled={loading}>
@@ -92,7 +113,7 @@ export default function EarningsWeekPage() {
       {loading && (
         <div className={styles.loadingState}>
           <div className={styles.spinner} />
-          <p>Loading earnings calendar…</p>
+          <p>Loading Jungle earnings…</p>
         </div>
       )}
 
@@ -105,58 +126,32 @@ export default function EarningsWeekPage() {
 
       {!loading && !error && dates.length === 0 && (
         <div className={styles.emptyState}>
-          <p>No earnings reported for this period.</p>
+          <p>No Jungle stocks reporting this week.</p>
         </div>
       )}
 
-      {!loading && !error && dates.map(date => {
-        const stocks = byDate[date] || [];
-        return (
-          <div key={date} className={styles.daySection}>
-            <h2 className={styles.dayHeader}>{formatDayHeader(date)}</h2>
-            <div className={styles.tableWrapper}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Ticker</th>
-                    <th>Company</th>
-                    <th>Time</th>
-                    <th>EPS Est</th>
-                    <th>EPS Actual</th>
-                    <th>Rev Est</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stocks.map(s => (
-                    <tr key={s.ticker}>
-                      <td className={styles.tickerCell}>{s.ticker}</td>
-                      <td className={styles.nameCell}>{s.name}</td>
-                      <td className={styles.timeCell}>
-                        {s.time === 'bmo'
-                          ? <span className={styles.bmoBadge}>BMO</span>
-                          : s.time === 'amc'
-                          ? <span className={styles.amcBadge}>AMC</span>
-                          : <span className={styles.noTime}>—</span>}
-                      </td>
-                      <td className={styles.numCell}>
-                        {s.epsEstimated != null ? s.epsEstimated.toFixed(2) : '—'}
-                      </td>
-                      <td className={styles.numCell}>
-                        {s.eps != null
-                          ? <span className={s.eps >= (s.epsEstimated ?? s.eps) ? styles.beat : styles.miss}>
-                              {s.eps.toFixed(2)}
-                            </span>
-                          : '—'}
-                      </td>
-                      <td className={styles.numCell}>{formatRevenue(s.revenueEstimated)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-      })}
+      {!loading && !error && dates.map(date => (
+        <div key={date} className={styles.daySection}>
+          <h2 className={styles.dayHeader}>{formatDayHeader(date)}</h2>
+          <StockTable
+            stocks={byDate[date]}
+            signals={signals}
+            signalsLoading={false}
+            earnings={earnings}
+            onTickerClick={handleRowClick}
+            scanType="long"
+          />
+        </div>
+      ))}
+
+      {chartIndex != null && (
+        <ChartModal
+          stocks={chartStocks}
+          initialIndex={chartIndex}
+          signals={signals}
+          onClose={() => setChartIndex(null)}
+        />
+      )}
     </div>
   );
 }

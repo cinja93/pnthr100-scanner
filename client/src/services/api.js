@@ -242,12 +242,6 @@ export async function fetchStockSearch(ticker) {
   return response.json();
 }
 
-export async function fetchEarningsWeek(from, to) {
-  const response = await fetch(`${API_BASE}/api/earnings/week?from=${from}&to=${to}`, { headers: authHeaders() });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
-}
-
 // Fetch next earnings date for a list of tickers.
 // Returns { TICKER: 'YYYY-MM-DD' } for tickers with upcoming earnings (next 3 months).
 export async function fetchEarnings(tickers) {

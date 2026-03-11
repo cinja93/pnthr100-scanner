@@ -206,7 +206,7 @@
   flex-wrap: wrap;
 }
 
-.sigBL, .sigBE, .sigSS, .sigSE, .sigNone {
+.sigBL, .sigBE, .sigSS, .sigSE, .sigNone, .sigNewBL, .sigNewSS {
   display: inline-flex;
   align-items: center;
   gap: 4px;

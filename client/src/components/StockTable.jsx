@@ -46,7 +46,7 @@ function getEarningsInfo(dateStr) {
   const earningsDate = new Date(y, m - 1, d);
   const daysAway = Math.round((earningsDate - TODAY) / (1000 * 60 * 60 * 24));
   const display = earningsDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return { display, daysAway, highlight: daysAway >= 0 && daysAway <= 14 };
+  return { display, daysAway, highlight: daysAway >= 0 && daysAway <= 5 };
 }
 
 function matchesPinSignal(sigData, pinSignal) {

@@ -310,7 +310,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       const [ey, em, ed] = earningsDate.split('-').map(Number);
       const eDate = new Date(ey, em - 1, ed);
       const daysAway = Math.round((eDate - today) / (1000 * 60 * 60 * 24));
-      return daysAway >= 0 && daysAway <= 14;
+      return daysAway >= 0 && daysAway <= 5;
     })();
     setInEarningsWindow(earningsWindow);
     const chartBg = earningsWindow ? '#fffde7' : '#ffffff';

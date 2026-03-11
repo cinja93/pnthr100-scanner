@@ -307,7 +307,21 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                     })()}
                     <span>{stock.ticker}</span>
                   </div>
-                  {stock.companyName && <div className={styles.companyName}>{stock.companyName}</div>}
+                  {stock.companyName && (
+                    <div className={styles.companyName}>
+                      {stock.companyName}
+                      {(() => {
+                        const tags = [];
+                        if (stock.isSp500) tags.push('500');
+                        if (stock.isDow30) tags.push('30');
+                        if (stock.universe === 'sp400Long')  tags.push('400L');
+                        if (stock.universe === 'sp400Short') tags.push('400S');
+                        return tags.length > 0
+                          ? <span className={styles.membershipTag}>({tags.join(', ')})</span>
+                          : null;
+                      })()}
+                    </div>
+                  )}
                 </td>
                 <td>{stock.exchange}</td>
                 {!hideSector && <td>{stock.sector}</td>}

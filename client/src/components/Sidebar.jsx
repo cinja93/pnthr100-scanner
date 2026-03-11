@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import styles from './Sidebar.module.css';
-import pnthrLogo from '../assets/PNTHR FUNDS Logo black background 2 lines.png';
+import pnthrLogo from '../assets/panther head.png';
 import builtWithLove from '../assets/Built with Love.jpg';
 
 const NAV_ITEMS = [

@@ -80,3 +80,13 @@ export async function getDow30Tickers() {
     return [];
   }
 }
+
+// Get S&P 500 tickers (for tagging in Jungle universe)
+export async function getSp500Tickers() {
+  try {
+    return await fetchConstituents('/sp500_constituent');
+  } catch (error) {
+    console.error('Error fetching S&P 500 tickers:', error);
+    return [];
+  }
+}

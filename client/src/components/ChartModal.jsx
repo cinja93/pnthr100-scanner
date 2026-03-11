@@ -195,6 +195,18 @@ function detectAllSignals(weeklyData, period = 21) {
   return { events, pnthrStop, currentWeekStop, activeType, currentSignal };
 }
 
+// Count n trading days (Mon–Fri) before a date string, returning the start date string
+function nTradingDaysBefore(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  let count = 0;
+  while (count < n) {
+    d.setDate(d.getDate() - 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return d.toISOString().split('T')[0];
+}
+
 function filterByRange(weeklyData, range) {
   if (range === 'all') return weeklyData;
   const months = range === '3m' ? 3 : 12;
@@ -210,7 +222,7 @@ function formatWeekDate(timeStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function ChartModal({ stocks, initialIndex, onClose, onWatchlistChange }) {
+export default function ChartModal({ stocks, initialIndex, earnings = {}, onClose, onWatchlistChange }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [range, setRange] = useState('12m');
   const [allWeeklyData, setAllWeeklyData] = useState([]);
@@ -289,9 +301,16 @@ export default function ChartModal({ stocks, initialIndex, onClose, onWatchlistC
     const filtered = filterByRange(allWeeklyData, range);
     if (filtered.length === 0) return;
 
+    // Yellow background if today is within 5 trading days of earnings (inclusive)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const earningsDate = earnings[stock?.ticker] ?? null;
+    const inEarningsWindow = earningsDate && todayStr <= earningsDate
+      && todayStr >= nTradingDaysBefore(earningsDate, 4);
+    const chartBg = inEarningsWindow ? '#fffde7' : '#ffffff';
+
     const chart = createChart(chartContainerRef.current, {
       autoSize: true,
-      layout: { background: { color: '#ffffff' }, textColor: '#212121', attributionLogo: false },
+      layout: { background: { color: chartBg }, textColor: '#212121', attributionLogo: false },
       grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } },
       rightPriceScale: { borderColor: '#d4d4d4' },
       timeScale: { borderColor: '#d4d4d4', timeVisible: false },
@@ -459,7 +478,7 @@ export default function ChartModal({ stocks, initialIndex, onClose, onWatchlistC
         chartRef.current = null;
       }
     };
-  }, [allWeeklyData, range, loading, entryDatesLoaded]);
+  }, [allWeeklyData, range, loading, entryDatesLoaded, earnings]);
 
   // Load watchlist on mount
   useEffect(() => {

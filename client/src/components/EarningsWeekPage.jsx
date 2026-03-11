@@ -150,6 +150,7 @@ export default function EarningsWeekPage() {
           stocks={chartStocks}
           initialIndex={chartIndex}
           signals={signals}
+          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}

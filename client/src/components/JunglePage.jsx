@@ -137,6 +137,7 @@ export default function JunglePage() {
         <ChartModal
           stocks={chartStocks}
           initialIndex={chartIndex}
+          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}

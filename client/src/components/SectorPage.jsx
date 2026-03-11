@@ -474,6 +474,7 @@ function Sp400StocksModal({ side, onClose }) {
           stocks={chartStocks}
           initialIndex={chartIndex}
           signals={signals}
+          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}
@@ -574,6 +575,7 @@ function SectorStocksModal({ sectorKey, sectorName, filterSignal, onClose }) {
           stocks={chartStocks}
           initialIndex={chartIndex}
           signals={signals}
+          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}

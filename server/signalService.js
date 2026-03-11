@@ -111,17 +111,24 @@ function computeWilderATR(weeklyBars, period = 3) {
   return atrArr;
 }
 
-// Predatory buffer stop for a long position (entry week).
-// For expensive stocks: stop slightly above low (tighter). For cheap: below low.
-function longPredStop(low, price) {
-  const buf = price * 0.001;
-  return parseFloat((buf > 0.01 ? low + buf : low - 0.01).toFixed(2));
+// Initial PNTHR stop for a new BL entry:
+//   structural: lowest low of the prior 2 completed weeks − $0.01
+//   ATR floor:  entry close − Wilder ATR(3)
+//   Take the higher of the two (most conservative = tighter stop for a long).
+function blInitStop(twoWeekLow, entryClose, atr) {
+  const structural = parseFloat((twoWeekLow - 0.01).toFixed(2));
+  const atrBased   = atr != null ? parseFloat((entryClose - atr).toFixed(2)) : -Infinity;
+  return parseFloat(Math.max(structural, atrBased).toFixed(2));
 }
 
-// Predatory buffer stop for a short position (entry week).
-function shortPredStop(high, price) {
-  const buf = price * 0.001;
-  return parseFloat((buf > 0.01 ? high - buf : high + 0.01).toFixed(2));
+// Initial PNTHR stop for a new SS entry:
+//   structural: highest high of the prior 2 completed weeks + $0.01
+//   ATR ceiling: entry close + Wilder ATR(3)
+//   Take the lower of the two (most conservative = tighter stop for a short).
+function ssInitStop(twoWeekHigh, entryClose, atr) {
+  const structural = parseFloat((twoWeekHigh + 0.01).toFixed(2));
+  const atrBased   = atr != null ? parseFloat((entryClose + atr).toFixed(2)) : Infinity;
+  return parseFloat(Math.min(structural, atrBased).toFixed(2));
 }
 
 // Compute EMA series from an array of closes.
@@ -245,7 +252,7 @@ function runStateMachine(weeklyBars) {
       const ssDaylightOk = ssReentry || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
       if (blPhase1 && blDaylightOk) {
-        const initStop = longPredStop(current.low, current.close);
+        const initStop = blInitStop(twoWeekLow, current.close, atrArr[wi]);
         lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: initStop };
         position         = { type: 'BL', entryWi: wi, pnthrStop: initStop, entryClose: current.close };
         longTrendActive  = true;
@@ -253,7 +260,7 @@ function runStateMachine(weeklyBars) {
         shortTrendActive = false;
         shortTrendCapped = false;
       } else if (ssPhase1 && ssDaylightOk) {
-        const initStop = shortPredStop(current.high, current.close);
+        const initStop = ssInitStop(twoWeekHigh, current.close, atrArr[wi]);
         lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: initStop };
         position         = { type: 'SS', entryWi: wi, pnthrStop: initStop, entryClose: current.close };
         shortTrendActive = true;

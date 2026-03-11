@@ -14,7 +14,7 @@ export default function SearchPage() {
   const [error, setError]           = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [eyesMoving, setEyesMoving] = useState(false);
+  const [eyesMoving, setEyesMoving] = useState(true);
   const [chartIndex, setChartIndex] = useState(null);
   const [chartStocks, setChartStocks] = useState([]);
   const debounceRef   = useRef(null);
@@ -26,10 +26,8 @@ export default function SearchPage() {
     if (query.length < 1) {
       setSuggestions([]);
       setShowSuggestions(false);
-      setEyesMoving(false);
       return;
     }
-    setEyesMoving(true);
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       const results = await fetchAutocompleteSuggestions(query);
@@ -54,7 +52,6 @@ export default function SearchPage() {
   async function doSearch(ticker) {
     const t = (ticker || query).trim().toUpperCase();
     if (!t) return;
-    setEyesMoving(false);
     setShowSuggestions(false);
     setLoading(true);
     setError(null);
@@ -75,7 +72,6 @@ export default function SearchPage() {
   function handleSuggestionClick(ticker) {
     setQuery(ticker);
     setShowSuggestions(false);
-    setEyesMoving(false);
     doSearch(ticker);
   }
 
@@ -131,19 +127,6 @@ export default function SearchPage() {
           </form>
 
           {error && <div className={styles.errorMsg}>{error}</div>}
-
-          {!loading && stock && (
-            <div className={styles.resultWrap}>
-              <StockTable
-                stocks={[stock]}
-                signals={signals}
-                signalsLoading={false}
-                earnings={earnings}
-                onTickerClick={handleTickerClick}
-                scanType="long"
-              />
-            </div>
-          )}
         </div>
 
         {/* ── Right column: big panther with animated eyes ── */}
@@ -160,6 +143,19 @@ export default function SearchPage() {
         </div>
 
       </div>
+
+      {!loading && stock && (
+        <div className={styles.resultWrap}>
+          <StockTable
+            stocks={[stock]}
+            signals={signals}
+            signalsLoading={false}
+            earnings={earnings}
+            onTickerClick={handleTickerClick}
+            scanType="long"
+          />
+        </div>
+      )}
 
       {chartIndex != null && (
         <ChartModal

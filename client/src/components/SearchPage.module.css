@@ -150,7 +150,8 @@
 }
 
 .resultWrap {
-  margin-top: 24px;
+  padding: 0 28px 28px;
+  flex-shrink: 0;
 }
 
 /* ── Right column: panther ───────────────────────────────── */

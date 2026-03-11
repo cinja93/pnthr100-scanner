@@ -322,8 +322,8 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 <td>{stock.exchange}</td>
                 {!hideSector && <td>{stock.sector}</td>}
                 <td className={styles.price}>${stock.currentPrice.toLocaleString()}</td>
-                <td className={stock.ytdReturn >= 0 ? styles.positive : styles.negative}>
-                  {stock.ytdReturn >= 0 ? '+' : ''}{stock.ytdReturn.toFixed(2)}%
+                <td className={stock.ytdReturn != null ? (stock.ytdReturn >= 0 ? styles.positive : styles.negative) : ''}>
+                  {stock.ytdReturn != null ? `${stock.ytdReturn >= 0 ? '+' : ''}${stock.ytdReturn.toFixed(2)}%` : '—'}
                 </td>
                 <td className={styles.stopPriceCell}>
                   {signalsLoading

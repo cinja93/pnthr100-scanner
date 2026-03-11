@@ -9,6 +9,7 @@ import PortfolioPage from './components/PortfolioPage';
 import EmaCrossoverPage from './components/EmaCrossoverPage';
 import EtfPage from './components/EtfPage';
 import JunglePage from './components/JunglePage';
+import SearchPage from './components/SearchPage';
 import LoginPage from './components/LoginPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken } from './services/api';
 import './App.css';
@@ -333,6 +334,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
               )}
             </>
           )}
+
+          {/* Search page */}
+          {activePage === 'search' && <SearchPage />}
 
           {/* Sectors page */}
           {activePage === 'sectors' && <SectorPage />}

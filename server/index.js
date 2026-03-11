@@ -283,6 +283,46 @@ app.get('/api/stocks/etfs', async (req, res) => {
   }
 });
 
+// Single ticker search — any NYSE/Nasdaq stock
+app.get('/api/stocks/search', async (req, res) => {
+  try {
+    const ticker = (req.query.ticker || '').toUpperCase().trim();
+    if (!ticker) return res.status(400).json({ error: 'ticker is required' });
+
+    const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
+    const FMP_API_KEY = process.env.FMP_API_KEY;
+
+    const quoteRes = await fetch(`${FMP_BASE_URL}/quote/${ticker}?apikey=${FMP_API_KEY}`);
+    if (!quoteRes.ok) throw new Error(`FMP ${quoteRes.status}`);
+    const quoteArr = await quoteRes.json();
+    if (!Array.isArray(quoteArr) || quoteArr.length === 0) {
+      return res.status(404).json({ error: `Ticker "${ticker}" not found` });
+    }
+    const q = quoteArr[0];
+    if (!q.price) return res.status(404).json({ error: `No price data for "${ticker}"` });
+
+    const stock = {
+      ticker: q.symbol,
+      companyName: q.name || q.symbol,
+      exchange: q.exchange || 'N/A',
+      sector: 'N/A',
+      currentPrice: parseFloat(Number(q.price).toFixed(2)),
+      ytdReturn: null,
+      rank: 1,
+      rankChange: null,
+      previousRank: null,
+    };
+
+    const rawSignals = await getLatestSignals([ticker]);
+    const signals = await calculateStopPrices(rawSignals);
+
+    res.json({ stock, signals });
+  } catch (err) {
+    console.error('Search error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get all user-added supplemental stocks
 app.get('/api/supplemental-stocks', async (req, res) => {
   try {

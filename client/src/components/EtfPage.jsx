@@ -1,21 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
 import { fetchEtfStocks, fetchEarnings } from '../services/api';
 import styles from './EtfPage.module.css';
+import pantherHead from '../assets/panther head.png';
 
 export default function EtfPage() {
-  const [stocks, setStocks] = useState([]);
-  const [signals, setSignals] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [earnings, setEarnings] = useState({});
-  const [chartIndex, setChartIndex] = useState(null);
+  const [stocks, setStocks]           = useState([]);
+  const [signals, setSignals]         = useState({});
+  const [categories, setCategories]   = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
+  const [earnings, setEarnings]       = useState({});
+  const [activeCategory, setActiveCategory] = useState('All');
+  const [chartIndex, setChartIndex]   = useState(null);
   const [chartStocks, setChartStocks] = useState([]);
 
-  useEffect(() => {
-    load(false);
-  }, []);
+  useEffect(() => { load(false); }, []);
 
   async function load(forceRefresh) {
     setLoading(true);
@@ -25,14 +26,20 @@ export default function EtfPage() {
       const stockList = result.stocks || [];
       setStocks(stockList);
       setSignals(result.signals || {});
+      setCategories(result.categories || []);
       fetchEarnings(stockList.map(s => s.ticker)).then(r => setEarnings(r));
     } catch (err) {
-      setError('Failed to run ETF scan. Make sure the server is running.');
+      setError('Failed to load ETF data. Make sure the server is running.');
       console.error(err);
     } finally {
       setLoading(false);
     }
   }
+
+  const filteredStocks = useMemo(() => {
+    if (activeCategory === 'All') return stocks;
+    return stocks.filter(s => s.category === activeCategory);
+  }, [stocks, activeCategory]);
 
   function handleRowClick(_stock, sortedIdx, sortedStocks) {
     setChartStocks(sortedStocks);
@@ -43,10 +50,14 @@ export default function EtfPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>ETF Scan</h1>
+          <h1 className={styles.title}>
+            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
+            PNTHR ETFs
+          </h1>
           <p className={styles.subtitle}>
-            Top 100 US-listed ETFs ranked by YTD return, with Laser signals where available.
-            Universe: all US exchange-traded funds priced above $2.
+            {!loading && !error
+              ? `${stocks.length} curated ETFs across ${categories.length} categories`
+              : 'Curated list of 140 ETFs organized by category, with Laser signals where available.'}
           </p>
         </div>
         <button
@@ -54,18 +65,39 @@ export default function EtfPage() {
           onClick={() => load(true)}
           disabled={loading}
         >
-          {loading ? '🔄 Scanning...' : '🔄 Refresh'}
+          {loading ? 'Loading…' : '↻ Refresh'}
         </button>
       </div>
+
+      {!loading && !error && stocks.length > 0 && (
+        <div className={styles.filterRow}>
+          <button
+            className={`${styles.filterBtn} ${activeCategory === 'All' ? styles.filterBtnActive : ''}`}
+            onClick={() => setActiveCategory('All')}
+          >
+            All ETFs
+            <span className={styles.filterCount}>{stocks.length}</span>
+          </button>
+          {categories.map(cat => {
+            const count = stocks.filter(s => s.category === cat).length;
+            return (
+              <button
+                key={cat}
+                className={`${styles.filterBtn} ${activeCategory === cat ? styles.filterBtnActive : ''}`}
+                onClick={() => setActiveCategory(cat)}
+              >
+                {cat}
+                <span className={styles.filterCount}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {loading && (
         <div className={styles.loadingState}>
           <div className={styles.spinner} />
-          <p>Running ETF scan…</p>
-          <p className={styles.loadingNote}>
-            Fetching YTD returns for all US-listed ETFs and ranking the top 100.
-            First run may take 30–60 seconds. Results are cached for 1 hour.
-          </p>
+          <p>Loading ETF 140…</p>
         </div>
       )}
 
@@ -76,24 +108,15 @@ export default function EtfPage() {
         </div>
       )}
 
-      {!loading && !error && (
-        <>
-          <div className={styles.resultCount}>
-            {stocks.length === 0
-              ? 'No ETFs returned.'
-              : `${stocks.length} ETF${stocks.length === 1 ? '' : 's'} ranked by YTD return`}
-          </div>
-          {stocks.length > 0 && (
-            <StockTable
-              stocks={stocks}
-              signals={signals}
-              signalsLoading={false}
-              earnings={earnings}
-              onTickerClick={handleRowClick}
-              scanType="long"
-            />
-          )}
-        </>
+      {!loading && !error && filteredStocks.length > 0 && (
+        <StockTable
+          stocks={filteredStocks}
+          signals={signals}
+          signalsLoading={false}
+          earnings={earnings}
+          onTickerClick={handleRowClick}
+          scanType="long"
+        />
       )}
 
       {chartIndex != null && (

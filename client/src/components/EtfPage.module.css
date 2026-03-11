@@ -1,5 +1,8 @@
 .page {
-  padding: 0 24px 48px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
 }
 
 .header {
@@ -7,52 +10,104 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 20px;
+  padding: 24px 24px 16px;
+  background: #111111;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .title {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 700;
-  color: #111111;
+  color: #fcf000;
   margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pantherLogo {
+  height: 36px;
+  width: auto;
 }
 
 .subtitle {
   font-size: 13px;
-  color: #666;
+  color: #aaaaaa;
   margin: 0;
   max-width: 640px;
   line-height: 1.5;
 }
 
 .refreshBtn {
-  height: 40px;
-  padding: 0 20px;
-  background: linear-gradient(135deg, #111111 0%, #000 100%);
-  color: #fcf000;
+  background: #fcf000;
+  color: #111111;
   border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+.refreshBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.refreshBtn:hover:not(:disabled) { opacity: 0.85; }
+
+.filterRow {
+  display: flex;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #f8f8f8;
+  border-bottom: 1px solid #e5e5e5;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
-.refreshBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.resultCount {
-  font-size: 13px;
-  color: #555;
-  margin-bottom: 12px;
+.filterBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 20px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 12px;
   font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.filterBtn:hover { border-color: #111111; color: #111111; }
+
+.filterBtnActive {
+  background: #111111;
+  color: #fcf000;
+  border-color: #111111;
+}
+.filterBtnActive:hover { background: #222222; }
+
+.filterCount {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.65;
+}
+.filterBtnActive .filterCount { opacity: 1; }
+
+.loadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 80px 24px;
+  color: #888888;
+  font-size: 14px;
+  flex: 1;
 }
 
-.loadingState,
 .errorState {
   display: flex;
   flex-direction: column;
@@ -60,15 +115,8 @@
   justify-content: center;
   padding: 80px 24px;
   gap: 12px;
-  color: #666;
+  color: #dc2626;
   text-align: center;
-}
-
-.loadingNote {
-  font-size: 12px;
-  color: #999;
-  max-width: 420px;
-  line-height: 1.5;
 }
 
 .spinner {

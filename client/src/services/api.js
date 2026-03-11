@@ -233,6 +233,15 @@ export async function fetchEtfStocks(forceRefresh = false) {
   return response.json();
 }
 
+export async function fetchStockSearch(ticker) {
+  const response = await fetch(`${API_BASE}/api/stocks/search?ticker=${encodeURIComponent(ticker)}`, { headers: authHeaders() });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
 // Fetch next earnings date for a list of tickers.
 // Returns { TICKER: 'YYYY-MM-DD' } for tickers with upcoming earnings (next 3 months).
 export async function fetchEarnings(tickers) {

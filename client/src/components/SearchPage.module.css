@@ -1,0 +1,86 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 24px 24px 16px;
+  background: #111111;
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fcf000;
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pantherLogo {
+  height: 36px;
+  width: auto;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: #aaaaaa;
+  margin: 0;
+}
+
+.searchArea {
+  padding: 20px 24px;
+  background: #f8f8f8;
+  border-bottom: 1px solid #e5e5e5;
+  flex-shrink: 0;
+}
+
+.searchForm {
+  display: flex;
+  gap: 10px;
+  max-width: 480px;
+}
+
+.searchInput {
+  flex: 1;
+  padding: 10px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  outline: none;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: border-color 0.15s;
+}
+.searchInput:focus { border-color: #111111; }
+.searchInput::placeholder { font-weight: 400; text-transform: none; letter-spacing: normal; color: #aaaaaa; }
+
+.searchBtn {
+  padding: 10px 24px;
+  background: #fcf000;
+  color: #111111;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.searchBtn:hover:not(:disabled) { opacity: 0.85; }
+.searchBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.errorState {
+  padding: 20px 24px;
+  color: #dc2626;
+  font-size: 14px;
+  font-weight: 500;
+}

@@ -5,6 +5,15 @@ import { fetchStockSearch, fetchEarnings, fetchAutocompleteSuggestions } from '.
 import styles from './SearchPage.module.css';
 import pantherHead from '../assets/panther head.png';
 import pantherPaw from '../assets/panther-paw.svg';
+import roarSrc from '../assets/panther-roar.wav';
+
+function playRoar() {
+  try {
+    const audio = new Audio(roarSrc);
+    audio.volume = 0.8;
+    audio.play();
+  } catch (_) { /* audio not supported */ }
+}
 
 export default function SearchPage() {
   const [query, setQuery]           = useState('');
@@ -64,6 +73,7 @@ export default function SearchPage() {
       const result = await fetchStockSearch(t);
       setStock(result.stock);
       setEyesDown(true);
+      playRoar();
       setSignals(result.signals || {});
       fetchEarnings([result.stock.ticker]).then(setEarnings);
     } catch (err) {

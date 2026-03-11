@@ -247,7 +247,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 const groupCount = displayStocks.filter(s => s.sector === stock.sector).length;
                 rows.push(
                   <tr key={`grp-${stock.sector}`} className={styles.sectorGroupRow}>
-                    <td colSpan={colCount}>{stock.sector || 'Other'} <span className={styles.sectorGroupCount}>({groupCount})</span></td>
+                    <td colSpan={colCount} style={{background:'#1e2c4b',color:'#ffffff',fontWeight:700,fontSize:'13px',padding:'10px 16px',letterSpacing:'0.1em',textTransform:'uppercase'}}>{stock.sector || 'Other'} <span style={{fontSize:'11px',fontWeight:500,opacity:0.6,marginLeft:'6px'}}>({groupCount})</span></td>
                   </tr>
                 );
               }

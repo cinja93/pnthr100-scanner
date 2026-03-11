@@ -6,7 +6,7 @@ import builtWithLove from '../assets/Built with Love.jpg';
 const NAV_ITEMS = [
   { key: 'long',      label: 'PNTHR 100 Longs',   icon: '📈', section: 'SCANNER' },
   { key: 'short',     label: 'PNTHR 100 Shorts',  icon: '📉' },
-  { key: 'jungle',    label: 'PNTHR 679 Jungle',  icon: '🐆' },
+  { key: 'jungle',    label: 'PNTHR 679 Jungle',  iconImg: true },
   { key: 'ema',       label: 'PNTHR Hunt',        icon: '〰️' },
   { key: 'etf',       label: 'ETF Scan',          icon: '🗂️' },
   { key: 'sectors',   label: 'Sectors',           icon: '📊', dividerBefore: true },
@@ -83,7 +83,11 @@ export default function Sidebar({ activePage, onNavigate, currentUser, onLogout,
               onMouseEnter={() => handleMouseEnter(item.key)}
               onMouseLeave={() => setTooltipKey(null)}
             >
-              <span className={styles.navIcon}>{item.icon}</span>
+              <span className={styles.navIcon}>
+                {item.iconImg
+                  ? <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
+                  : item.icon}
+              </span>
               <span className={styles.navLabel}>{item.label}</span>
               {item.soon && <span className={styles.soonBadge}>Soon</span>}
             </button>

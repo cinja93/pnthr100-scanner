@@ -103,6 +103,13 @@
   flex-shrink: 0;
 }
 
+.navIconImg {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  display: block;
+}
+
 .navLabel {
   flex: 1;
 }

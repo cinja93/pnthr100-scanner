@@ -322,6 +322,46 @@ app.get('/api/stocks/search', async (req, res) => {
   }
 });
 
+// Earnings calendar for the current/upcoming week
+app.get('/api/earnings/week', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from and to dates required' });
+
+    const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
+    const FMP_API_KEY = process.env.FMP_API_KEY;
+
+    const url = `${FMP_BASE_URL}/earning_calendar?from=${from}&to=${to}&apikey=${FMP_API_KEY}`;
+    const data = await fetch(url).then(r => r.json());
+
+    if (!Array.isArray(data)) return res.json({ byDate: {}, dates: [] });
+
+    // Group by date, sort each day alphabetically by ticker
+    const byDate = {};
+    for (const item of data) {
+      if (!item.date || !item.symbol) continue;
+      if (!byDate[item.date]) byDate[item.date] = [];
+      byDate[item.date].push({
+        ticker: item.symbol,
+        name: item.name || item.symbol,
+        time: item.time || null,          // 'bmo' | 'amc' | null
+        epsEstimated: item.epsEstimated ?? null,
+        eps: item.eps ?? null,
+        revenueEstimated: item.revenueEstimated ?? null,
+      });
+    }
+    for (const date of Object.keys(byDate)) {
+      byDate[date].sort((a, b) => a.ticker.localeCompare(b.ticker));
+    }
+
+    const dates = Object.keys(byDate).sort();
+    res.json({ byDate, dates });
+  } catch (err) {
+    console.error('Earnings week error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch earnings calendar' });
+  }
+});
+
 // Get all user-added supplemental stocks
 app.get('/api/supplemental-stocks', async (req, res) => {
   try {

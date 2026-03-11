@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { key: 'jungle',    label: 'PNTHR 679 Jungle',  iconImg: true },
   { key: 'etf',       label: 'PNTHR ETFs',        iconImg: true },
   { key: 'sectors',   label: 'PNTHR Sectors',     iconImg: true },
+  { key: 'earnings',  label: 'Earnings Week',     icon: '📅' },
   { key: 'ema',       label: 'PNTHR Hunt',        icon: '〰️', dividerBefore: true },
   { key: 'watchlist', label: 'Watchlist',         icon: '👁' },
   { key: 'portfolio', label: 'Portfolio',         icon: '📁' },

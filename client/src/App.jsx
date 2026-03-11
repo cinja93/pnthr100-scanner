@@ -8,6 +8,7 @@ import WatchlistPage from './components/WatchlistPage';
 import PortfolioPage from './components/PortfolioPage';
 import EmaCrossoverPage from './components/EmaCrossoverPage';
 import EtfPage from './components/EtfPage';
+import EarningsWeekPage from './components/EarningsWeekPage';
 import JunglePage from './components/JunglePage';
 import SearchPage from './components/SearchPage';
 import LoginPage from './components/LoginPage';
@@ -349,6 +350,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* ETF Scan page */}
           {activePage === 'etf' && <EtfPage />}
+
+          {/* Earnings Week page */}
+          {activePage === 'earnings' && <EarningsWeekPage />}
 
           {/* Jungle page */}
           {activePage === 'jungle' && <JunglePage />}

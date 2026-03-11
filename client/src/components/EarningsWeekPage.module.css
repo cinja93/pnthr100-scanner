@@ -1,0 +1,217 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  background: #111111;
+  border-bottom: 1px solid #2a2a2a;
+  flex-shrink: 0;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fcf000;
+  margin: 0;
+  letter-spacing: 0.04em;
+}
+
+.pantherLogo {
+  height: 36px;
+  width: auto;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #888;
+}
+
+.refreshBtn {
+  background: #1e1e1e;
+  color: #fcf000;
+  border: 1px solid #fcf000;
+  border-radius: 6px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.refreshBtn:hover:not(:disabled) { background: #2a2a00; }
+.refreshBtn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Day sections ────────────────────────────────────────── */
+.daySection {
+  flex-shrink: 0;
+  padding: 0 20px 20px;
+  overflow-x: auto;
+}
+
+.page > .daySection:first-of-type {
+  padding-top: 16px;
+}
+
+.dayHeader {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fcf000;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 20px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+/* ── Scrollable container ────────────────────────────────── */
+.page {
+  overflow-y: auto;
+}
+
+/* ── Table ───────────────────────────────────────────────── */
+.tableWrapper {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #e0e0e0;
+}
+
+.table thead th {
+  background: #1a1a1a;
+  color: #888;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #2a2a2a;
+  white-space: nowrap;
+}
+
+.table tbody tr {
+  border-bottom: 1px solid #1e1e1e;
+  transition: background 0.1s;
+}
+.table tbody tr:hover { background: #1a1a1a; }
+
+.table tbody td {
+  padding: 7px 12px;
+  vertical-align: middle;
+}
+
+.tickerCell {
+  font-weight: 800;
+  color: #ffffff;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.nameCell {
+  color: #ccc;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeCell {
+  white-space: nowrap;
+}
+
+.numCell {
+  text-align: right;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* ── Time badges ─────────────────────────────────────────── */
+.bmoBadge {
+  background: #1a3a1a;
+  color: #4caf50;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+}
+
+.amcBadge {
+  background: #3a1a1a;
+  color: #ef5350;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+}
+
+.noTime {
+  color: #555;
+}
+
+/* ── EPS beat/miss ───────────────────────────────────────── */
+.beat { color: #4caf50; font-weight: 700; }
+.miss { color: #ef5350; font-weight: 700; }
+
+/* ── States ──────────────────────────────────────────────── */
+.loadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 60px 20px;
+  color: #888;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #2a2a2a;
+  border-top-color: #fcf000;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: #ef5350;
+}
+
+.retryBtn {
+  background: #1e1e1e;
+  color: #fcf000;
+  border: 1px solid #fcf000;
+  border-radius: 6px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.emptyState {
+  padding: 40px 20px;
+  color: #888;
+  text-align: center;
+}

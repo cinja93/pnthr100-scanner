@@ -11,7 +11,8 @@ const NAV_ITEMS = [
   { key: 'etf',       label: 'PNTHR ETFs',        iconImg: true },
   { key: 'sectors',   label: 'PNTHR Sectors',     iconImg: true },
   { key: 'earnings',  label: 'Earnings Week',     icon: '📅' },
-  { key: 'ema',       label: 'PNTHR Hunt',        icon: '〰️', dividerBefore: true },
+  { key: 'prey',      label: 'PNTHR Prey',        iconImg: true, dividerBefore: true },
+  { key: 'ema',       label: 'PNTHR Hunt',        icon: '〰️' },
   { key: 'watchlist', label: 'Watchlist',         icon: '👁' },
   { key: 'portfolio', label: 'Portfolio',         icon: '📁' },
 ];

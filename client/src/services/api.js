@@ -315,6 +315,14 @@ export async function fetchJungleStocks(forceRefresh = false) {
   return response.json();
 }
 
+// Fetch PNTHR PREY results (Alphas, Springs, Dinner)
+export async function fetchPreyStocks(forceRefresh = false) {
+  const url = `${API_BASE}/api/prey${forceRefresh ? '?refresh=1' : ''}`;
+  const response = await fetch(url, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // Fetch sector performance data (11 sectors, weekly cumulative % return, 12-month rolling)
 export async function fetchSectorData() {
   try {

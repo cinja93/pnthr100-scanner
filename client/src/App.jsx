@@ -11,6 +11,7 @@ import EtfPage from './components/EtfPage';
 import EarningsWeekPage from './components/EarningsWeekPage';
 import JunglePage from './components/JunglePage';
 import SearchPage from './components/SearchPage';
+import PreyPage from './components/PreyPage';
 import LoginPage from './components/LoginPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken } from './services/api';
 import './App.css';
@@ -353,6 +354,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* Earnings Week page */}
           {activePage === 'earnings' && <EarningsWeekPage />}
+
+          {/* PNTHR PREY page */}
+          {activePage === 'prey' && <PreyPage />}
 
           {/* Jungle page */}
           {activePage === 'jungle' && <JunglePage />}

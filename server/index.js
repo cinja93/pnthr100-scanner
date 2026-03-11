@@ -8,6 +8,7 @@ import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
 import { getEtfStocks } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
+import { getPreyResults, clearPreyCache } from './preyService.js';
 import { authenticateJWT, hashPassword, verifyPassword, generateToken } from './auth.js';
 import {
   getSupplementalStocks,
@@ -1198,6 +1199,24 @@ app.get('/api/jungle-stocks', async (req, res) => {
   } catch (err) {
     console.error('Error in /api/jungle-stocks:', err);
     res.status(500).json({ error: 'Failed to load jungle stocks' });
+  }
+});
+
+// ── PNTHR PREY ────────────────────────────────────────────────────────────────
+app.get('/api/prey', authenticateJWT, async (req, res) => {
+  try {
+    if (req.query.refresh) clearPreyCache();
+    // Build the 679 stock universe with metadata
+    const [specLongs, specShorts] = await Promise.all([getSp400Longs(), getSp400Shorts()]);
+    const stocks = await getJungleStocks(specLongs, specShorts);
+    const tickers = stocks.map(s => s.ticker);
+    const stockMeta = {};
+    for (const s of stocks) stockMeta[s.ticker] = { companyName: s.companyName, sector: s.sector, exchange: s.exchange, currentPrice: s.currentPrice };
+    const results = await getPreyResults(tickers, stockMeta);
+    res.json(results);
+  } catch (err) {
+    console.error('Error in /api/prey:', err);
+    res.status(500).json({ error: 'Prey scan failed' });
   }
 });
 

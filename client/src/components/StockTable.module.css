@@ -12,17 +12,18 @@
 .sectorGroupRow td {
   background: #1e2c4b;
   color: #f4c430;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 6px 16px;
-  letter-spacing: 0.08em;
+  padding: 10px 16px;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .sectorGroupCount {
-  font-weight: 400;
-  opacity: 0.7;
-  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.6;
+  margin-left: 6px;
 }
 
 .table {

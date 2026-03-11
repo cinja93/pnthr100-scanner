@@ -113,15 +113,13 @@
 .tickerRow {
   display: flex;
   align-items: center;
+  gap: 5px;
 }
 
 .companyName {
   font-size: 11px;
   font-weight: 400;
   color: #888;
-  display: flex;
-  align-items: center;
-  gap: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

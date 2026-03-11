@@ -7,7 +7,7 @@ import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
 import { getEtfStocks } from './etfService.js';
-import { SPEC_LONGS, SPEC_SHORTS } from './speculative162.js';
+import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { authenticateJWT, hashPassword, verifyPassword, generateToken } from './auth.js';
 import {
   getSupplementalStocks,
@@ -1078,7 +1078,8 @@ app.get('/api/jungle-stocks', async (req, res) => {
     if (jungleCacheData && (now - jungleCacheTime) < 5 * 60 * 1000 && !req.query.refresh) {
       return res.json(jungleCacheData);
     }
-    const stocks  = await getJungleStocks(SPEC_LONGS, SPEC_SHORTS);
+    const [specLongs, specShorts] = await Promise.all([getSp400Longs(), getSp400Shorts()]);
+    const stocks  = await getJungleStocks(specLongs, specShorts);
     const signals = await getSignals(stocks.map(s => s.ticker));
     jungleCacheData = { stocks, signals };
     jungleCacheTime = now;

@@ -242,6 +242,15 @@ export async function fetchStockSearch(ticker) {
   return response.json();
 }
 
+export async function fetchAutocompleteSuggestions(query) {
+  if (!query || query.length < 1) return [];
+  try {
+    const response = await fetch(`${API_BASE}/api/search/autocomplete?q=${encodeURIComponent(query)}`, { headers: authHeaders() });
+    if (!response.ok) return [];
+    return response.json();
+  } catch { return []; }
+}
+
 // Fetch next earnings date for a list of tickers.
 // Returns { TICKER: 'YYYY-MM-DD' } for tickers with upcoming earnings (next 3 months).
 export async function fetchEarnings(tickers) {

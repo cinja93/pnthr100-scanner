@@ -363,6 +363,37 @@ app.get('/api/earnings/week', async (req, res) => {
   }
 });
 
+// Autocomplete: search NYSE/Nasdaq/ETF tickers and names
+app.get('/api/search/autocomplete', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (q.length < 1) return res.json([]);
+
+    const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
+    const FMP_API_KEY = process.env.FMP_API_KEY;
+
+    const url = `${FMP_BASE_URL}/search?query=${encodeURIComponent(q)}&limit=20&apikey=${FMP_API_KEY}`;
+    const data = await fetch(url).then(r => r.json());
+
+    const US_EXCHANGES = new Set(['NYSE', 'NASDAQ', 'AMEX', 'NYSEARCA', 'ETF', 'OTC']);
+    const results = Array.isArray(data)
+      ? data
+          .filter(item => !item.symbol?.includes('.') && US_EXCHANGES.has(item.exchangeShortName))
+          .map(item => ({
+            ticker: item.symbol,
+            name: item.name || item.symbol,
+            exchange: item.exchangeShortName || 'N/A',
+          }))
+          .slice(0, 15)
+      : [];
+
+    res.json(results);
+  } catch (err) {
+    console.error('Autocomplete error:', err.message);
+    res.json([]);
+  }
+});
+
 // Get all user-added supplemental stocks
 app.get('/api/supplemental-stocks', async (req, res) => {
   try {

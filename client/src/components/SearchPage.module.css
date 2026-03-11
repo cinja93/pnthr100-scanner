@@ -2,85 +2,198 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  overflow-y: auto;
+  background: #111111;
 }
 
-.header {
+/* ── Two-column layout ───────────────────────────────────── */
+.searchLayout {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  padding: 24px 24px 16px;
-  background: #111111;
-  flex-shrink: 0;
+  gap: 0;
+  padding: 32px 28px 28px;
+  flex: 1;
+}
+
+/* ── Left column ─────────────────────────────────────────── */
+.searchCol {
+  flex: 0 0 420px;
+  min-width: 300px;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .title {
-  font-size: 22px;
-  font-weight: 700;
-  color: #fcf000;
-  margin: 0 0 4px;
   display: flex;
   align-items: center;
   gap: 10px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fcf000;
+  margin: 0 0 4px;
+  letter-spacing: 0.04em;
 }
 
-.pantherLogo {
-  height: 36px;
+.titleLogo {
+  height: 32px;
   width: auto;
 }
 
 .subtitle {
-  font-size: 13px;
-  color: #aaaaaa;
-  margin: 0;
-}
-
-.searchArea {
-  padding: 20px 24px;
-  background: #f8f8f8;
-  border-bottom: 1px solid #e5e5e5;
-  flex-shrink: 0;
+  font-size: 12px;
+  color: #666;
+  margin: 0 0 20px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .searchForm {
+  position: relative;
+}
+
+.inputRow {
   display: flex;
-  gap: 10px;
-  max-width: 480px;
+  gap: 8px;
 }
 
 .searchInput {
   flex: 1;
-  padding: 10px 16px;
-  font-size: 16px;
-  font-weight: 600;
-  border: 2px solid #d1d5db;
+  background: #1a1a1a;
+  border: 1px solid #333;
   border-radius: 8px;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 11px 14px;
   outline: none;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   transition: border-color 0.15s;
 }
-.searchInput:focus { border-color: #111111; }
-.searchInput::placeholder { font-weight: 400; text-transform: none; letter-spacing: normal; color: #aaaaaa; }
+.searchInput::placeholder { color: #555; font-weight: 400; }
+.searchInput:focus { border-color: #fcf000; }
 
 .searchBtn {
-  padding: 10px 24px;
   background: #fcf000;
   color: #111111;
   border: none;
   border-radius: 8px;
+  padding: 11px 20px;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
   white-space: nowrap;
-  transition: opacity 0.15s;
+  transition: background 0.15s;
 }
-.searchBtn:hover:not(:disabled) { opacity: 0.85; }
-.searchBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.searchBtn:hover:not(:disabled) { background: #ffe600; }
+.searchBtn:disabled { opacity: 0.4; cursor: default; }
 
-.errorState {
-  padding: 20px 24px;
-  color: #dc2626;
-  font-size: 14px;
-  font-weight: 500;
+/* ── Autocomplete dropdown ───────────────────────────────── */
+.dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  z-index: 100;
+  max-height: 320px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+}
+
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.dropdownItem:hover { background: #252525; }
+
+.suggTicker {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fcf000;
+  min-width: 56px;
+  letter-spacing: 0.04em;
+}
+
+.suggName {
+  font-size: 12px;
+  color: #ccc;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggExchange {
+  font-size: 10px;
+  color: #555;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.errorMsg {
+  margin-top: 16px;
+  color: #ef5350;
+  font-size: 13px;
+}
+
+.resultWrap {
+  margin-top: 24px;
+}
+
+/* ── Right column: panther ───────────────────────────────── */
+.pantherCol {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0 0 40px;
+}
+
+.pantherWrap {
+  position: relative;
+  display: inline-block;
+}
+
+.pantherBig {
+  width: 340px;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 0 40px rgba(252, 240, 0, 0.08));
+}
+
+/* Eye overlays — positioned over the panther's eyes */
+.eye {
+  position: absolute;
+  width: 18px;
+  height: 10px;
+  background: #fcf000;
+  border-radius: 50%;
+  box-shadow:
+    0 0 8px 3px rgba(252, 240, 0, 0.9),
+    0 0 20px 6px rgba(252, 240, 0, 0.4);
+  pointer-events: none;
+}
+
+.eyeLeft  { top: 38%; left: 27%; }
+.eyeRight { top: 38%; left: 57%; }
+
+@keyframes eyeScan {
+  0%   { transform: translateX(-9px); }
+  100% { transform: translateX(9px); }
+}
+
+.eyeMoving {
+  animation: eyeScan 1.1s ease-in-out infinite alternate;
 }

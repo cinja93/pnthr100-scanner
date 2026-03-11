@@ -10,7 +10,7 @@
 
 /* Sector group header row (used when groupBySector=true) */
 .sectorGroupRow td {
-  background: #1e2c4b;
+  background: #111111;
   color: #ffffff !important;
   font-size: 13px;
   font-weight: 700;
@@ -48,7 +48,7 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
+  background: linear-gradient(135deg, #111111 0%, #000000 100%);
 }
 
 .table th.sortable {
@@ -99,7 +99,7 @@
 
 .ticker {
   font-weight: 700;
-  color: #1e2c4b;
+  color: #111111;
   font-size: 15px;
   cursor: pointer;
   transition: color 0.2s, background-color 0.2s;

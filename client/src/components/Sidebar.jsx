@@ -4,13 +4,14 @@ import pnthrLogo from '../assets/PNTHR FUNDS Logo black background 2 lines.png';
 import builtWithLove from '../assets/Built with Love.jpg';
 
 const NAV_ITEMS = [
-  { key: 'long',      label: 'PNTHR Long',     icon: '📈', section: 'SCANNER' },
-  { key: 'short',     label: 'PNTHR Short',    icon: '📉' },
-  { key: 'ema',       label: 'PNTHR Hunt',     icon: '〰️' },
-  { key: 'etf',       label: 'ETF Scan',       icon: '🗂️' },
-  { key: 'sectors',   label: 'Sectors',        icon: '📊', dividerBefore: true },
-  { key: 'watchlist', label: 'Watchlist',  icon: '👁' },
-  { key: 'portfolio', label: 'Portfolio',  icon: '📁' },
+  { key: 'long',      label: 'PNTHR 100 Longs',   icon: '📈', section: 'SCANNER' },
+  { key: 'short',     label: 'PNTHR 100 Shorts',  icon: '📉' },
+  { key: 'jungle',    label: 'PNTHR 679 Jungle',  icon: '🐆', soon: true },
+  { key: 'ema',       label: 'PNTHR Hunt',        icon: '〰️' },
+  { key: 'etf',       label: 'ETF Scan',          icon: '🗂️' },
+  { key: 'sectors',   label: 'Sectors',           icon: '📊', dividerBefore: true },
+  { key: 'watchlist', label: 'Watchlist',         icon: '👁' },
+  { key: 'portfolio', label: 'Portfolio',         icon: '📁' },
 ];
 
 function BatchStatsTooltip({ stats, top }) {

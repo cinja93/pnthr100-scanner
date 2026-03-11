@@ -9,7 +9,7 @@
 .title {
   font-size: 26px;
   font-weight: 700;
-  color: #1e2c4b;
+  color: #111111;
   margin: 0 0 4px;
 }
 
@@ -56,13 +56,13 @@
 
 .accountInput:focus {
   outline: none;
-  border-color: #1e2c4b;
+  border-color: #111111;
 }
 
 .optimizeBtn {
   height: 40px;
   padding: 0 20px;
-  background: linear-gradient(135deg, #1e2c4b 0%, #000 100%);
+  background: linear-gradient(135deg, #111111 0%, #000 100%);
   color: #fcf000;
   border: none;
   border-radius: 8px;
@@ -133,7 +133,7 @@
 .cardValue {
   font-size: 18px;
   font-weight: 700;
-  color: #1e2c4b;
+  color: #111111;
 }
 
 /* ── Table ───────────────────────────────────────────────────────────────── */
@@ -167,7 +167,7 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: linear-gradient(135deg, #1e2c4b 0%, #000 100%);
+  background: linear-gradient(135deg, #111111 0%, #000 100%);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   white-space: nowrap;
@@ -256,7 +256,7 @@
 
 .tickerCell {
   font-weight: 700;
-  color: #1e2c4b;
+  color: #111111;
   font-size: 14px;
   white-space: nowrap;
 }
@@ -272,7 +272,7 @@
 
 .sharesCell {
   font-weight: 600;
-  color: #1e2c4b;
+  color: #111111;
 }
 
 .dimVal {
@@ -291,7 +291,7 @@
   cursor: pointer;
   width: 15px;
   height: 15px;
-  accent-color: #1e2c4b;
+  accent-color: #111111;
 }
 
 /* ── Sector header rows ──────────────────────────────────────────────────── */
@@ -340,7 +340,7 @@
 }
 
 .addInput:focus {
-  border-color: #1e2c4b;
+  border-color: #111111;
   color: #212121;
 }
 
@@ -375,7 +375,7 @@
   width: 36px;
   height: 36px;
   border: 3px solid #e5e7eb;
-  border-top-color: #1e2c4b;
+  border-top-color: #111111;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -386,7 +386,7 @@
 
 .retryBtn {
   padding: 8px 20px;
-  background: #1e2c4b;
+  background: #111111;
   color: white;
   border: none;
   border-radius: 8px;
@@ -398,5 +398,5 @@
   width: 15px;
   height: 15px;
   cursor: pointer;
-  accent-color: #1e2c4b;
+  accent-color: #111111;
 }

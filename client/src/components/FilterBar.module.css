@@ -12,7 +12,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
-  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
+  background: linear-gradient(135deg, #111111 0%, #000000 100%);
   cursor: pointer;
   user-select: none;
 }
@@ -30,7 +30,7 @@
 
 .badge {
   background: #fcf000;
-  color: #1e2c4b;
+  color: #111111;
   font-size: 11px;
   font-weight: 700;
   padding: 2px 8px;
@@ -100,7 +100,7 @@
 
 .groupCount {
   font-weight: 600;
-  color: #1e2c4b;
+  color: #111111;
   text-transform: none;
   letter-spacing: 0;
 }
@@ -135,13 +135,13 @@
 }
 
 .pill:hover {
-  border-color: #1e2c4b;
-  color: #1e2c4b;
+  border-color: #111111;
+  color: #111111;
 }
 
 .pillActive {
-  background: #1e2c4b;
-  border-color: #1e2c4b;
+  background: #111111;
+  border-color: #111111;
   color: white;
 }
 
@@ -201,13 +201,13 @@
 }
 
 .sectorPill:hover {
-  border-color: #1e2c4b;
-  color: #1e2c4b;
+  border-color: #111111;
+  color: #111111;
 }
 
 .sectorPill.pillActive {
-  background: #1e2c4b;
-  border-color: #1e2c4b;
+  background: #111111;
+  border-color: #111111;
   color: white;
 }
 
@@ -249,7 +249,7 @@
 
 .rangeInput:focus {
   outline: none;
-  border-color: #1e2c4b;
+  border-color: #111111;
 }
 
 .rangeInput::placeholder {

@@ -64,12 +64,12 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .date-picker:hover:not(:disabled) {
-  border-color: #1e2c4b;
+  border-color: #111111;
 }
 
 .date-picker:focus {
   outline: none;
-  border-color: #1e2c4b;
+  border-color: #111111;
 }
 
 .date-picker:disabled {
@@ -91,8 +91,8 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .refresh-button:hover:not(:disabled) {
-  color: #1e2c4b;
-  border-color: #1e2c4b;
+  color: #111111;
+  border-color: #111111;
 }
 
 .refresh-button:disabled {
@@ -102,7 +102,7 @@ h1, h2, h3, h4, h5, h6,
 
 /* Viewing Indicator */
 .viewing-indicator {
-  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
+  background: linear-gradient(135deg, #111111 0%, #000000 100%);
   color: #fcf000;
   padding: 12px 20px;
   border-radius: 8px;
@@ -193,7 +193,7 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .footer {
-  background: #1e2c4b;
+  background: #111111;
   padding: 20px;
   text-align: center;
   color: #b4b4b4;

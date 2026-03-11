@@ -14,7 +14,7 @@
 .title {
   font-size: 26px;
   font-weight: 700;
-  color: #1e2c4b;
+  color: #111111;
   margin: 0 0 4px;
 }
 
@@ -29,7 +29,7 @@
 .refreshBtn {
   height: 40px;
   padding: 0 20px;
-  background: linear-gradient(135deg, #1e2c4b 0%, #000 100%);
+  background: linear-gradient(135deg, #111111 0%, #000 100%);
   color: #fcf000;
   border: none;
   border-radius: 8px;
@@ -75,7 +75,7 @@
   width: 36px;
   height: 36px;
   border: 3px solid #e5e7eb;
-  border-top-color: #1e2c4b;
+  border-top-color: #111111;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -86,7 +86,7 @@
 
 .retryBtn {
   padding: 8px 20px;
-  background: #1e2c4b;
+  background: #111111;
   color: white;
   border: none;
   border-radius: 8px;

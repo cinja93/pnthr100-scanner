@@ -32,7 +32,7 @@
   align-items: flex-start;
   padding: 24px;
   border-bottom: 2px solid #fcf000;
-  background: linear-gradient(135deg, #1e2c4b 0%, #000000 100%);
+  background: linear-gradient(135deg, #111111 0%, #000000 100%);
   color: white;
 }
 
@@ -157,7 +157,7 @@
 
 .historyTable thead {
   background: #efefef;
-  color: #1e2c4b;
+  color: #111111;
 }
 
 .historyTable th {
@@ -194,7 +194,7 @@
 
 .rankCell {
   font-weight: 700;
-  color: #1e2c4b;
+  color: #111111;
   font-size: 15px;
 }
 

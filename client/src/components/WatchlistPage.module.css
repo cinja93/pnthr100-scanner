@@ -15,7 +15,7 @@
   font-family: 'Inter', sans-serif;
   font-size: 24px;
   font-weight: 700;
-  color: #1e2c4b;
+  color: #111111;
   margin-bottom: 4px;
 }
 
@@ -38,7 +38,7 @@
   font-size: 13px;
   font-weight: 600;
   background: #f1f5f9;
-  color: #1e2c4b;
+  color: #111111;
   border: 1.5px solid #d1d5db;
   border-radius: 8px;
   cursor: pointer;
@@ -71,19 +71,19 @@
   outline: none;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #1e2c4b;
+  color: #111111;
   transition: border-color 0.15s;
 }
 
 .addInput:focus {
-  border-color: #1e2c4b;
+  border-color: #111111;
 }
 
 .addBtn {
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 700;
-  background: #1e2c4b;
+  background: #111111;
   color: #f4c430;
   border: none;
   border-radius: 8px;
@@ -137,7 +137,7 @@
   width: 36px;
   height: 36px;
   border: 3px solid #efefef;
-  border-top: 3px solid #1e2c4b;
+  border-top: 3px solid #111111;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -168,5 +168,5 @@
 }
 
 .emptyState strong {
-  color: #1e2c4b;
+  color: #111111;
 }

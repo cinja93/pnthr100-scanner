@@ -20,6 +20,14 @@
   font-weight: 700;
   color: #fcf000;
   margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pantherLogo {
+  height: 36px;
+  width: auto;
 }
 
 .subtitle {

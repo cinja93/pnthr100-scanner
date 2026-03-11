@@ -70,3 +70,13 @@ export async function getAllTickers() {
     throw error;
   }
 }
+
+// Get Dow 30 tickers (for tagging in Jungle universe)
+export async function getDow30Tickers() {
+  try {
+    return await fetchConstituents('/dowjones_constituent');
+  } catch (error) {
+    console.error('Error fetching Dow 30 tickers:', error);
+    return [];
+  }
+}

@@ -3,10 +3,12 @@ import StockTable from './StockTable';
 import ChartModal from './ChartModal';
 import { fetchJungleStocks, fetchEarnings, fetchScannerRanks } from '../services/api';
 import styles from './JunglePage.module.css';
+import pantherHead from '../assets/panther head.png';
 
 const UNIVERSE_FILTERS = [
   { key: 'all',        label: 'Full 679 Jungle',       countKey: 'all' },
   { key: 'sp517',      label: 'S&P 500',               countKey: 'sp517' },
+  { key: 'dow30',      label: 'Dow 30',                countKey: 'dow30' },
   { key: 'sp400Long',  label: 'S&P 400 Leading Longs', countKey: 'sp400Long' },
   { key: 'sp400Short', label: 'S&P 400 Leading Shorts',countKey: 'sp400Short' },
 ];
@@ -49,12 +51,14 @@ export default function JunglePage() {
   const counts = useMemo(() => ({
     all:        stocks.length,
     sp517:      stocks.filter(s => s.universe === 'sp517').length,
+    dow30:      stocks.filter(s => s.isDow30).length,
     sp400Long:  stocks.filter(s => s.universe === 'sp400Long').length,
     sp400Short: stocks.filter(s => s.universe === 'sp400Short').length,
   }), [stocks]);
 
   const filteredStocks = useMemo(() => {
-    if (universeFilter === 'all') return stocks;
+    if (universeFilter === 'all')    return stocks;
+    if (universeFilter === 'dow30')  return stocks.filter(s => s.isDow30);
     return stocks.filter(s => s.universe === universeFilter);
   }, [stocks, universeFilter]);
 
@@ -67,7 +71,10 @@ export default function JunglePage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>🐆 PNTHR 679 Jungle</h1>
+          <h1 className={styles.title}>
+            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
+            PNTHR 679 Jungle
+          </h1>
           {!loading && !error && (
             <p className={styles.subtitle}>
               {counts.all} stocks — S&P 500 core + S&P 400 Long &amp; Short leaders

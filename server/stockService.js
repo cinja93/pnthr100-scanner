@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { getAllTickers } from './constituents.js';
+import { getAllTickers, getDow30Tickers } from './constituents.js';
 import { addRankingComparison, addShortRankingComparison, autoSaveRankingIfFriday } from './rankingService.js';
 
 dotenv.config();
@@ -353,12 +353,13 @@ export async function getWatchlistStocks(tickers) {
 // getAllTickers() (SP517) + specLongs (SP400 Long leaders) + specShorts (SP400 Short leaders).
 // Returns sorted by YTD desc with universe field: 'sp517' | 'sp400Long' | 'sp400Short'.
 export async function getJungleStocks(specLongs = [], specShorts = []) {
-  const sp517 = await getAllTickers();
+  const [sp517, dow30List] = await Promise.all([getAllTickers(), getDow30Tickers()]);
   const specLongsSet  = new Set(specLongs);
   const specShortsSet = new Set(specShorts);
+  const dow30Set      = new Set(dow30List);
   const allTickers = [...new Set([...sp517, ...specLongs, ...specShorts])];
 
-  console.log(`🌿 Jungle: ${allTickers.length} unique tickers (${sp517.length} SP517 + ${specLongs.length} 400L + ${specShorts.length} 400S)`);
+  console.log(`🌿 Jungle: ${allTickers.length} unique tickers (${sp517.length} SP517 + ${specLongs.length} 400L + ${specShorts.length} 400S + ${dow30List.length} Dow30)`);
 
   const CHUNK = 200;
   const quoteMap   = {};
@@ -398,20 +399,23 @@ export async function getJungleStocks(specLongs = [], specShorts = []) {
       currentPrice: parseFloat(currentPrice.toFixed(2)),
       ytdReturn:    parseFloat(ytdReturn.toFixed(2)),
       universe,
+      isDow30:     dow30Set.has(q.symbol),
       rank: null,
       rankChange: null,
     });
   }
 
-  // Always enforce exactly 679 — spec stocks are priority; trim lowest-YTD sp517 if needed
+  // Always enforce exactly 679 — spec stocks (400L/400S) are protected; trim lowest-YTD sp517 if needed
   const TARGET = 679;
   const specSet = new Set([...specLongs, ...specShorts]);
   const sorted = stocks.sort((a, b) => b.ytdReturn - a.ytdReturn);
-  const specStocks = sorted.filter(s => specSet.has(s.ticker));
+  const specStocks  = sorted.filter(s => specSet.has(s.ticker));
   const sp517Stocks = sorted.filter(s => !specSet.has(s.ticker));
-  const trimmed = [...sp517Stocks.slice(0, TARGET - specStocks.length), ...specStocks]
-    .sort((a, b) => b.ytdReturn - a.ytdReturn);
+  const allowedSp517 = Math.max(0, TARGET - specStocks.length);
+  const trimmed = [...sp517Stocks.slice(0, allowedSp517), ...specStocks]
+    .sort((a, b) => b.ytdReturn - a.ytdReturn)
+    .slice(0, TARGET); // hard cap in case of any edge-case rounding
 
-  console.log(`🌿 Jungle final: ${trimmed.length} stocks (target: ${TARGET})`);
+  console.log(`🌿 Jungle final: ${trimmed.length} stocks (sp517: ${Math.min(sp517Stocks.length, allowedSp517)}, spec: ${specStocks.length}, target: ${TARGET})`);
   return trimmed.map((s, i) => ({ ...s, rank: i + 1 }));
 }

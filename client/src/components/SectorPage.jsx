@@ -440,6 +440,7 @@ function Sp400StocksModal({ side, onClose }) {
                 earnings={earnings}
                 scannerRanks={scannerRanks}
                 hideSector
+                groupBySector
                 onTickerClick={handleTickerClick}
                 scanType={side === 'longs' ? 'long' : 'short'}
               />

@@ -998,6 +998,9 @@ app.get('/api/speculative-signal-counts', (req, res) => {
   res.json(speculativeSignalCountsCache); // null until background job finishes
 });
 
+// Sector cache for speculative tickers (profile data rarely changes)
+const speculativeSectorCache = { longs: null, shorts: null };
+
 // GET /api/speculative-stocks/:side — returns longs or shorts with live quotes + signals
 app.get('/api/speculative-stocks/:side', async (req, res) => {
   const { side } = req.params;
@@ -1010,13 +1013,28 @@ app.get('/api/speculative-stocks/:side', async (req, res) => {
     const FMP_API_KEY = process.env.FMP_API_KEY;
     const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
 
-    const [quoteRes, ytdRes] = await Promise.all([
+    // Fetch quotes, YTD, and sector profile in parallel
+    const [quoteRes, ytdRes, profileRes] = await Promise.all([
       fetch(`${FMP_BASE}/quote/${tickers.join(',')}?apikey=${FMP_API_KEY}`),
       fetch(`${FMP_BASE}/stock-price-change/${tickers.join(',')}?apikey=${FMP_API_KEY}`),
+      speculativeSectorCache[side]
+        ? Promise.resolve(null) // skip if cached
+        : fetch(`${FMP_BASE}/profile/${tickers.join(',')}?apikey=${FMP_API_KEY}`),
     ]);
 
     const quoteData = quoteRes.ok ? await quoteRes.json() : [];
     const ytdData   = ytdRes.ok   ? await ytdRes.json()   : [];
+
+    // Build sector map from profile (cached after first fetch)
+    if (!speculativeSectorCache[side] && profileRes?.ok) {
+      const profileData = await profileRes.json();
+      const sectorMap = {};
+      if (Array.isArray(profileData)) {
+        for (const p of profileData) if (p.symbol && p.sector) sectorMap[p.symbol] = p.sector;
+      }
+      speculativeSectorCache[side] = sectorMap;
+    }
+    const sectorMap = speculativeSectorCache[side] || {};
 
     const quoteMap = {};
     if (Array.isArray(quoteData)) for (const q of quoteData) quoteMap[q.symbol] = q;
@@ -1029,7 +1047,7 @@ app.get('/api/speculative-stocks/:side', async (req, res) => {
         ticker:       t,
         companyName:  quoteMap[t]?.name || '',
         exchange:     quoteMap[t]?.exchange || 'N/A',
-        sector:       '',
+        sector:       sectorMap[t] || '',
         currentPrice: parseFloat(Number(quoteMap[t].price).toFixed(2)),
         ytdReturn:    parseFloat(Number(ytdMap[t]).toFixed(2)),
         rank:         null,

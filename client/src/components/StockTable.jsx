@@ -49,8 +49,8 @@ function getEarningsInfo(dateStr) {
   return { display, daysAway, highlight: daysAway >= 0 && daysAway <= 14 };
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, onTickerClick, onRemove, scanType }) {
-  const [sortConfig, setSortConfig] = useState({ key: 'rank', direction: 'asc' });
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, groupBySector = false, onTickerClick, onRemove, scanType }) {
+  const [sortConfig, setSortConfig] = useState({ key: groupBySector ? 'ytdReturn' : 'rank', direction: groupBySector ? 'desc' : 'asc' });
   const hasScannerRanks = scannerRanks !== null;
 
   // Sort stocks based on current sort configuration
@@ -218,7 +218,40 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
           </tr>
         </thead>
         <tbody>
-          {sortedStocks.map((stock, sortedIdx) => {
+          {(() => {
+            // When groupBySector, sort by sector name then by sortConfig within each group
+            let displayStocks = sortedStocks;
+            if (groupBySector) {
+              const groups = {};
+              for (const stock of sortedStocks) {
+                const s = stock.sector || 'Other';
+                if (!groups[s]) groups[s] = [];
+                groups[s].push(stock);
+              }
+              displayStocks = Object.keys(groups).sort().flatMap(s => groups[s]);
+            }
+
+            const colCount =
+              10 + // always-present columns (ticker, exchange, price, ytd, stop, risk$, risk%, signal, wks, earnings)
+              (!onRemove ? 1 : 0) +              // rank
+              (!onRemove && !hasScannerRanks ? 1 : 0) + // rankChange
+              (!hideSector ? 1 : 0) +            // sector
+              (onRemove ? 1 : 0);                // remove btn
+
+            let lastSector = null;
+            return displayStocks.map((stock, sortedIdx) => {
+              const rows = [];
+
+              if (groupBySector && stock.sector !== lastSector) {
+                lastSector = stock.sector;
+                const groupCount = displayStocks.filter(s => s.sector === stock.sector).length;
+                rows.push(
+                  <tr key={`grp-${stock.sector}`} className={styles.sectorGroupRow}>
+                    <td colSpan={colCount}>{stock.sector || 'Other'} <span className={styles.sectorGroupCount}>({groupCount})</span></td>
+                  </tr>
+                );
+              }
+
             const signalData = signals[stock.ticker];
             const { icon, alt } = getSignalDisplay(signalData);
             const stopPrice = signalData?.stopPrice ?? null;
@@ -228,11 +261,11 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
 
             const earningsInfo = getEarningsInfo(earnings[stock.ticker]);
 
-            return (
+            rows.push(
               <tr
                 key={stock.ticker}
                 className={`${styles.clickableRow}${earningsInfo.highlight ? ` ${styles.earningsHighlight}` : ''}`}
-                onClick={() => onTickerClick?.(stock, sortedIdx, sortedStocks)}
+                onClick={() => onTickerClick?.(stock, sortedIdx, displayStocks)}
                 title={stock.companyName ? `${stock.companyName} — Click to view chart` : 'Click to view chart'}
               >
                 {!onRemove && <td className={styles.rankColumn}>
@@ -328,7 +361,9 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 )}
               </tr>
             );
-          })}
+            return rows;
+          }).flat();
+          })()}
         </tbody>
       </table>
     </div>

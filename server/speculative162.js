@@ -10,7 +10,7 @@ export const SPEC_LONGS = [
   "LSCC","FCFS","RRX","JAZZ","CASY","THC","OVV","AMKR","AHR","NYT",
   "ENS","KTOS","CGNX","NXST","DTM","ONTO","ENSG","BWA","DY","HXL",
   "FLS","TKR","LFUS","WFRD","TTC","LNTH","TEX","WLK","ENTG","CLH",
-  "OSK","MASI","NVST","MP","USFD","CYTK","PEN","BWXT","MTDR","APG",
+  "OSK","NVST","MP","USFD","CYTK","PEN","BWXT","MTDR","APG",
   "NVT","CHRD","KEX","OHI","CNX","ULS","WBS","WCC","KNX","WTS","NJR",
 ];
 

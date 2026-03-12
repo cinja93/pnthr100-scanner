@@ -294,6 +294,8 @@ function runStateMachine(weeklyBars) {
   return lastEvent;
 }
 
+export { runStateMachine };
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 // Returns a signal map backward-compatible with the old getLatestSignals() shape,

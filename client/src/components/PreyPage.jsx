@@ -86,6 +86,8 @@ function DinnerRow({ s, onClick }) {
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>
       <td className={styles.tdNum}>{price(s.ema21)}</td>
       <td className={isLong ? styles.tdPos : styles.tdNeg}>{pct(s.priceDeltaPct)}</td>
+      <td className={styles.tdNum}>{s.rsi ?? '—'}</td>
+      <td className={styles.td}><span className={`${styles.badge} ${styles.badgeOBV}`}>{s.obvSlope}</span></td>
       <td className={styles.tdGray}>{s.sector || '—'}</td>
     </tr>
   );
@@ -141,7 +143,7 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick }) {
 
 const ALPHA_HEADERS  = ['Ticker', 'Signal', 'Wks Since', 'Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
 const SPRING_HEADERS = ['Ticker', 'Signal', 'Touch', 'Price', 'EMA21', 'Δ EMA', 'Wks / 52', 'OBV', 'Sector', 'Daylight'];
-const DINNER_HEADERS = ['Ticker', 'Signal', 'Strategy', 'Price', 'EMA21', 'Δ EMA', 'Sector'];
+const DINNER_HEADERS = ['Ticker', 'Signal', 'Strategy', 'Price', 'EMA21', 'Δ EMA', 'RSI', 'OBV', 'Sector'];
 
 export default function PreyPage() {
   const [data, setData]       = useState(null);

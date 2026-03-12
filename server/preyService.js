@@ -11,6 +11,7 @@
 
 import dotenv from 'dotenv';
 dotenv.config();
+import { runStateMachine } from './signalService.js';
 
 const FMP_API_KEY   = process.env.FMP_API_KEY;
 const FMP_BASE_URL  = 'https://financialmodelingprep.com/api/v3';
@@ -519,64 +520,73 @@ function runSpringShort(ticker, data) {
 // broke the prior 2-week structural high/low).
 
 function runDinner(ticker, data) {
-  const { weekly, ema21 } = data;
+  const { weekly, ema21, obv, rsi } = data;
   const n = weekly.length;
   if (n < 25) return null;
 
-  const li = n - 1;
-  const lastEma = ema21[li], prevEma = ema21[li - 1];
+  const li      = n - 1;
+  const lastEma = ema21[li];
+  const prevEma = ema21[li - 1];
   if (lastEma == null || prevEma == null) return null;
 
-  // Count consecutive bars above EMA (for BL+1)
-  let barsAbove = 0;
-  for (let i = li; i >= 0 && ema21[i] != null; i--) {
-    if (weekly[i].close > ema21[i]) barsAbove++; else break;
+  // Use the canonical PNTHR state machine to determine current signal
+  const sig = runStateMachine(weekly);
+  if (!sig || (sig.signal !== 'BL' && sig.signal !== 'SS')) return null;
+
+  // Dinner = BL+1 or SS+1: signal must have fired on the previous bar (li-1)
+  if (sig.signalDate !== weekly[li - 1].weekStart) return null;
+
+  const lastRsi = rsi[li];
+  const prevRsi = rsi[li - 1];
+  const lastObv = obv[li];
+  const prevObv = obv[li - 1];
+
+  if (sig.signal === 'BL') {
+    // Quality filters for Dinner Long:
+    // 1. EMA slope rising
+    if (lastEma <= prevEma) return null;
+    // 2. OBV rising
+    if (lastObv == null || prevObv == null || lastObv <= prevObv) return null;
+    // 3. RSI rising AND has room to reach 85
+    if (lastRsi == null || prevRsi == null) return null;
+    if (lastRsi <= prevRsi) return null;
+    if (lastRsi >= 75) return null;
+    // 4. Daylight: current bar low above EMA
+    if (weekly[li].low <= lastEma) return null;
+
+    const delta = (weekly[li].close - lastEma) / lastEma;
+    return {
+      ticker, strategy: 'BL+1', direction: 'long',
+      currentPrice: weekly[li].close,
+      ema21: +lastEma.toFixed(2),
+      priceDeltaPct: +(delta * 100).toFixed(2),
+      rsi: +lastRsi.toFixed(1),
+      obvSlope: 'rising',
+    };
   }
 
-  // Count consecutive bars below EMA (for SS+1)
-  let barsBelow = 0;
-  for (let i = li; i >= 0 && ema21[i] != null; i--) {
-    if (weekly[i].close < ema21[i]) barsBelow++; else break;
-  }
+  if (sig.signal === 'SS') {
+    // Quality filters for Dinner Short:
+    // 1. EMA slope falling
+    if (lastEma >= prevEma) return null;
+    // 2. OBV falling
+    if (lastObv == null || prevObv == null || lastObv >= prevObv) return null;
+    // 3. RSI falling AND has room to reach 15
+    if (lastRsi == null || prevRsi == null) return null;
+    if (lastRsi >= prevRsi) return null;
+    if (lastRsi <= 25) return null;
+    // 4. Daylight: current bar high below EMA
+    if (weekly[li].high >= lastEma) return null;
 
-  // BL+1: exactly 2 bars above EMA, EMA trending up, bar 1 broke 2-week high,
-  //        AND bar 1 low is in the 1-10% daylight zone above EMA (true BL entry)
-  if (barsAbove === 2 && lastEma > prevEma && li >= 4) {
-    const entryEma = ema21[li - 1];
-    const twoWeekHigh = Math.max(weekly[li - 3].high, weekly[li - 2].high);
-    if (weekly[li - 1].close > twoWeekHigh + 0.01 && entryEma != null) {
-      const daylightLow = (weekly[li - 1].low - entryEma) / entryEma;
-      if (daylightLow >= 0.01 && daylightLow <= 0.10) {
-        const delta = (weekly[li].close - lastEma) / lastEma;
-        if (delta >= 0 && delta <= 0.15) {
-          return {
-            ticker, strategy: 'BL+1', direction: 'long', barNumber: 2,
-            currentPrice: weekly[li].close, ema21: +lastEma.toFixed(2),
-            priceDeltaPct: +(delta * 100).toFixed(2),
-          };
-        }
-      }
-    }
-  }
-
-  // SS+1: exactly 2 bars below EMA, EMA trending down, bar 1 broke 2-week low,
-  //        AND bar 1 high is in the 1-10% daylight zone below EMA (true SS entry)
-  if (barsBelow === 2 && lastEma < prevEma && li >= 4) {
-    const entryEma = ema21[li - 1];
-    const twoWeekLow = Math.min(weekly[li - 3].low, weekly[li - 2].low);
-    if (weekly[li - 1].close < twoWeekLow - 0.01 && entryEma != null) {
-      const daylightHigh = (entryEma - weekly[li - 1].high) / entryEma;
-      if (daylightHigh >= 0.01 && daylightHigh <= 0.10) {
-        const delta = (lastEma - weekly[li].close) / lastEma;
-        if (delta >= 0 && delta <= 0.15) {
-          return {
-            ticker, strategy: 'SS+1', direction: 'short', barNumber: 2,
-            currentPrice: weekly[li].close, ema21: +lastEma.toFixed(2),
-            priceDeltaPct: +(delta * 100).toFixed(2),
-          };
-        }
-      }
-    }
+    const delta = (lastEma - weekly[li].close) / lastEma;
+    return {
+      ticker, strategy: 'SS+1', direction: 'short',
+      currentPrice: weekly[li].close,
+      ema21: +lastEma.toFixed(2),
+      priceDeltaPct: +(delta * 100).toFixed(2),
+      rsi: +lastRsi.toFixed(1),
+      obvSlope: 'falling',
+    };
   }
 
   return null;

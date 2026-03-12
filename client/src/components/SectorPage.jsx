@@ -84,6 +84,19 @@ function getFilteredData(allData, timeRange) {
   return allData.filter(d => d.date >= cutoffStr);
 }
 
+// Compute EMA(105) = 21-week EMA on a {date, value} series.
+// Returns a Map of date → ema value. Uses all supplied data for warm-up.
+function computeEMA105(series) {
+  const k = 2 / 106; // period = 105
+  const emaMap = new Map();
+  let ema = null;
+  for (const { date, value } of series) {
+    ema = ema === null ? value : value * k + ema * (1 - k);
+    emaMap.set(date, ema);
+  }
+  return emaMap;
+}
+
 // Compound daily % changes into a cumulative return series
 function computeCumulative(filteredData, sectorKey) {
   let cum = 0;
@@ -94,7 +107,7 @@ function computeCumulative(filteredData, sectorKey) {
   });
 }
 
-function SectorMiniChart({ sectorKey, chartData, signalCounts, onClick, onSignalClick }) {
+function SectorMiniChart({ sectorKey, chartData, emaData = [], signalCounts, onClick, onSignalClick }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const tooltipRef = useRef(null);
@@ -148,6 +161,20 @@ function SectorMiniChart({ sectorKey, chartData, signalCounts, onClick, onSignal
     });
 
     series.setData(chartData.map(d => ({ time: d.date, value: d.value })));
+
+    // 21-week EMA overlay (dotted blue line)
+    if (emaData.length > 0) {
+      const emaSeries = chart.addSeries(LineSeries, {
+        color: '#3b82f6',
+        lineWidth: 1,
+        lineStyle: 1, // Dotted
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      emaSeries.setData(emaData.map(d => ({ time: d.date, value: d.value })));
+    }
+
     chart.timeScale().fitContent();
 
     // Show a floating date label next to the crosshair dot as the user hovers
@@ -191,7 +218,7 @@ function SectorMiniChart({ sectorKey, chartData, signalCounts, onClick, onSignal
         chartRef.current = null;
       }
     };
-  }, [sectorKey, chartData]);
+  }, [sectorKey, chartData, emaData]);
 
   const currentReturn = chartData.length > 0 ? chartData[chartData.length - 1].value : null;
   const isPositive = currentReturn != null && currentReturn >= 0;
@@ -237,7 +264,7 @@ function SectorMiniChart({ sectorKey, chartData, signalCounts, onClick, onSignal
 
 // ── S&P 400 center chart (IJH line chart, no card wrapper) ───────────────────
 
-function Sp400CenterChart({ chartData }) {
+function Sp400CenterChart({ chartData, emaData = [] }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const tooltipRef = useRef(null);
@@ -276,6 +303,20 @@ function Sp400CenterChart({ chartData }) {
     });
 
     series.setData(chartData.map(d => ({ time: d.date, value: d.value })));
+
+    // 21-week EMA overlay (dotted blue line)
+    if (emaData.length > 0) {
+      const emaSeries = chart.addSeries(LineSeries, {
+        color: '#3b82f6',
+        lineWidth: 1,
+        lineStyle: 1, // Dotted
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      emaSeries.setData(emaData.map(d => ({ time: d.date, value: d.value })));
+    }
+
     chart.timeScale().fitContent();
 
     chart.subscribeCrosshairMove(param => {
@@ -307,7 +348,7 @@ function Sp400CenterChart({ chartData }) {
     return () => {
       if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; }
     };
-  }, [chartData]);
+  }, [chartData, emaData]);
 
   return (
     <div className={styles.chartWrap}>
@@ -319,7 +360,7 @@ function Sp400CenterChart({ chartData }) {
 
 // ── S&P 400 full-width card ───────────────────────────────────────────────────
 
-function Sp400Card({ chartData, specCounts, timeRange, onClickLongs, onClickShorts }) {
+function Sp400Card({ chartData, emaData = [], specCounts, timeRange, onClickLongs, onClickShorts }) {
   const currentReturn = chartData.length > 0 ? chartData[chartData.length - 1].value : null;
   const isPositive = currentReturn != null && currentReturn >= 0;
 
@@ -361,7 +402,7 @@ function Sp400Card({ chartData, specCounts, timeRange, onClickLongs, onClickShor
 
         {/* Center: IJH chart */}
         <div className={styles.sp400Center}>
-          <Sp400CenterChart chartData={chartData} />
+          <Sp400CenterChart chartData={chartData} emaData={emaData} />
         </div>
 
         {/* Right: Short Leaders */}
@@ -639,15 +680,32 @@ export default function SectorPage() {
   }, []);
 
   // Recompute cumulative series whenever data or range changes — no extra API calls
-  const { bySector, sortedSectorKeys, sp400Data } = useMemo(() => {
-    if (!allData) return { bySector: null, sortedSectorKeys: Object.keys(SECTOR_NAMES), sp400Data: [] };
+  const { bySector, emasBySector, sortedSectorKeys, sp400Data, sp400EmaData } = useMemo(() => {
+    if (!allData) return { bySector: null, emasBySector: {}, sortedSectorKeys: Object.keys(SECTOR_NAMES), sp400Data: [], sp400EmaData: [] };
 
     const filtered = getFilteredData(allData, timeRange);
+    const startDate = filtered[0]?.date;
+
+    // Compute cumulative returns on FULL history for EMA warm-up, then slice
     const bySector = {};
+    const emasBySector = {};
     for (const key of Object.keys(SECTOR_NAMES)) {
       bySector[key] = computeCumulative(filtered, key);
+      const fullCum = computeCumulative(allData, key);
+      const emaMap  = computeEMA105(fullCum);
+      const startEma = startDate ? (emaMap.get(startDate) ?? 0) : 0;
+      emasBySector[key] = filtered
+        .map(d => { const v = emaMap.get(d.date); return v != null ? { date: d.date, value: +(v - startEma).toFixed(2) } : null; })
+        .filter(Boolean);
     }
-    const sp400Data = computeCumulative(filtered, 'sp400');
+
+    const sp400Data    = computeCumulative(filtered, 'sp400');
+    const sp400Full    = computeCumulative(allData, 'sp400');
+    const sp400EmaMap  = computeEMA105(sp400Full);
+    const sp400StartEma = startDate ? (sp400EmaMap.get(startDate) ?? 0) : 0;
+    const sp400EmaData = filtered
+      .map(d => { const v = sp400EmaMap.get(d.date); return v != null ? { date: d.date, value: +(v - sp400StartEma).toFixed(2) } : null; })
+      .filter(Boolean);
 
     const sortedSectorKeys = Object.keys(SECTOR_NAMES).sort((a, b) => {
       const aLast = bySector[a]?.at(-1)?.value ?? -Infinity;
@@ -655,7 +713,7 @@ export default function SectorPage() {
       return bLast - aLast;
     });
 
-    return { bySector, sortedSectorKeys, sp400Data };
+    return { bySector, emasBySector, sortedSectorKeys, sp400Data, sp400EmaData };
   }, [allData, timeRange]);
 
   return (
@@ -699,6 +757,7 @@ export default function SectorPage() {
                 key={key}
                 sectorKey={key}
                 chartData={bySector[key]}
+                emaData={emasBySector[key] ?? []}
                 signalCounts={signalCounts?.[key] ?? null}
                 onClick={() => { setSelectedSector(key); setSelectedFilter(null); }}
                 onSignalClick={filter => { setSelectedSector(key); setSelectedFilter(filter); }}
@@ -707,6 +766,7 @@ export default function SectorPage() {
           </div>
           <Sp400Card
             chartData={sp400Data}
+            emaData={sp400EmaData}
             specCounts={specCounts}
             timeRange={timeRange}
             onClickLongs={() => setSpecModal('longs')}

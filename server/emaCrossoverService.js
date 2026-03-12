@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import { getAllTickers } from './constituents.js';
-import { getWatchlistStocks, calculateStopPrices } from './stockService.js';
-import { getLatestSignals } from './database.js';
+import { getWatchlistStocks } from './stockService.js';
+import { getSignals } from './signalService.js';
 
 dotenv.config();
 
@@ -96,7 +96,7 @@ function checkRecentCrossover(signal, daily) {
   const refClose = closes.get(refBar.time);
   if (refClose == null) return false;
 
-  const isBuy = signal.includes('BUY');
+  const isBuy = signal === 'BL';
 
   if (isBuy) {
     const wasBelow    = refClose < refBar.ema;
@@ -127,9 +127,10 @@ export async function getEmaCrossoverStocks(forceRefresh = false) {
   const allTickers = await getAllTickers(); // ~600–700 unique tickers
   console.log(`📊 Universe: ${allTickers.length} tickers`);
 
-  // 2. Get direction-change signals for all tickers (one MongoDB aggregation — fast)
-  const rawSignals = await getLatestSignals(allTickers);
-  const tickersWithSignals = allTickers.filter(t => rawSignals[t]?.signal);
+  // 2. Get signals for all tickers using the main state machine (5yr data, BL/SS/BE/SE format)
+  const rawSignals = await getSignals(allTickers);
+  // Only check BL/SS — crossover is only meaningful on entry signals, not exits
+  const tickersWithSignals = allTickers.filter(t => rawSignals[t]?.signal === 'BL' || rawSignals[t]?.signal === 'SS');
   console.log(`📊 ${tickersWithSignals.length} tickers have signals — checking EMA crossover...`);
 
   // 3. Fetch price history and test the actual crossover condition (5 concurrent, 300ms delay)
@@ -163,13 +164,9 @@ export async function getEmaCrossoverStocks(forceRefresh = false) {
     ? await getWatchlistStocks(matchingTickers)
     : [];
 
-  // 5. Compute stop prices for the matching set
-  const signalsWithStops = matchingTickers.length > 0
-    ? await calculateStopPrices(matchingSignalsMap)
-    : {};
-
   console.log(`📊 EMA crossover complete: ${matchingStocks.length} stocks`);
-  const result = { stocks: matchingStocks, signals: signalsWithStops };
+  // getSignals() already includes stopPrice — no separate calculateStopPrices() call needed
+  const result = { stocks: matchingStocks, signals: matchingSignalsMap };
   emaCrossoverCache = { data: result, timestamp: Date.now() };
   return result;
 }

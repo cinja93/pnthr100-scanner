@@ -1212,7 +1212,8 @@ app.get('/api/prey', authenticateJWT, async (req, res) => {
     const tickers = stocks.map(s => s.ticker);
     const stockMeta = {};
     for (const s of stocks) stockMeta[s.ticker] = { companyName: s.companyName, sector: s.sector, exchange: s.exchange, currentPrice: s.currentPrice };
-    const results = await getPreyResults(tickers, stockMeta);
+    const jungleSignals = await getSignals(tickers);
+    const results = await getPreyResults(tickers, stockMeta, jungleSignals);
     res.json(results);
   } catch (err) {
     console.error('Error in /api/prey:', err);

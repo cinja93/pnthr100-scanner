@@ -514,64 +514,35 @@ function runSpringShort(ticker, data) {
 }
 
 // ── Dinner: BL+1 / SS+1 ──────────────────────────────────────────────────────
-// Detect bars where last week (li-1) fired a BL or SS signal and this week
-// (li) is one bar past it (BL+1 / SS+1), with quality filters applied.
-//
-// BL signal conditions on bar li-1:
-//   close > EMA, EMA slope up, high >= twoWeekHigh+0.01, low in 1-10% daylight
-//
-// SS signal conditions on bar li-1:
-//   close < EMA, EMA slope down, low <= twoWeekLow-0.01, high in 1-10% zone
-//
-// Quality filters on current bar (li): EMA slope, OBV, RSI direction + room, daylight
+// Starts from the pre-computed Jungle signals (5-year state machine).
+// A stock qualifies if its BL or SS signal fired exactly last week (li-1),
+// making this week (li) bar 1 past the signal (BL+1 / SS+1).
+// Then applies quality filters on the current bar.
 
-function runDinner(ticker, data) {
+function runDinner(ticker, data, signalData) {
+  if (!signalData) return null;
+  const { signal, signalDate } = signalData;
+  if (signal !== 'BL' && signal !== 'SS') return null;
+
   const { weekly, ema21, obv, rsi } = data;
   const n = weekly.length;
-  if (n < 25) return null;
+  if (n < 5) return null;
 
   const li = n - 1;
-  if (li < 4) return null;
+  const lastEma = ema21[li];
+  const prevEma = ema21[li - 1];
+  if (lastEma == null || prevEma == null) return null;
 
-  const lastEma    = ema21[li];
-  const prevEma    = ema21[li - 1];   // EMA at signal bar
-  const prevPrevEma = ema21[li - 2];  // EMA one bar before signal
-  if (lastEma == null || prevEma == null || prevPrevEma == null) return null;
+  // Signal must have fired on exactly the previous bar (li-1)
+  if (signalDate !== weekly[li - 1].weekStart) return null;
 
-  const cur  = weekly[li];
-  const prev = weekly[li - 1]; // signal bar
-
-  // Two-week structural high/low uses the 2 bars before the signal bar
-  const twoWeekHigh = Math.max(weekly[li - 2].high, weekly[li - 3].high);
-  const twoWeekLow  = Math.min(weekly[li - 2].low,  weekly[li - 3].low);
-
-  const prevDeltaAbove = (prev.low  - prevEma) / prevEma;  // > 0 means low above EMA
-  const prevDeltaBelow = (prevEma  - prev.high) / prevEma; // > 0 means high below EMA
-
-  const isBLSignalBar = (
-    prev.close > prevEma &&
-    prevEma > prevPrevEma &&
-    prev.high >= twoWeekHigh + 0.01 &&
-    prevDeltaAbove >= 0.01 && prevDeltaAbove <= 0.10 &&
-    weekly[li - 2].low <= prevPrevEma   // bar before signal was at/touching EMA (fresh launch)
-  );
-
-  const isSSSignalBar = (
-    prev.close < prevEma &&
-    prevEma < prevPrevEma &&
-    prev.low <= twoWeekLow - 0.01 &&
-    prevDeltaBelow >= 0.01 && prevDeltaBelow <= 0.10 &&
-    weekly[li - 2].high >= prevPrevEma  // bar before signal was at/touching EMA (fresh breakdown)
-  );
-
-  if (!isBLSignalBar && !isSSSignalBar) return null;
-
+  const cur     = weekly[li];
   const lastRsi = rsi[li];
   const prevRsi = rsi[li - 1];
   const lastObv = obv[li];
   const prevObv = obv[li - 1];
 
-  if (isBLSignalBar) {
+  if (signal === 'BL') {
     if (cur.close <= lastEma) return null;         // still above EMA
     if (lastEma <= prevEma) return null;           // EMA still rising
     if (lastObv == null || prevObv == null || lastObv <= prevObv) return null; // OBV rising
@@ -590,7 +561,7 @@ function runDinner(ticker, data) {
     };
   }
 
-  if (isSSSignalBar) {
+  if (signal === 'SS') {
     if (cur.close >= lastEma) return null;         // still below EMA
     if (lastEma >= prevEma) return null;           // EMA still falling
     if (lastObv == null || prevObv == null || lastObv >= prevObv) return null; // OBV falling
@@ -627,7 +598,7 @@ async function processBatch(items, fn, concurrency = 12) {
 
 // ── Main Export ───────────────────────────────────────────────────────────────
 
-export async function getPreyResults(tickers, stockMeta = {}) {
+export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}) {
   const weekKey = getLastFriday();
   if (preyCache.weekKey === weekKey && preyCache.results) return preyCache.results;
 
@@ -658,7 +629,7 @@ export async function getPreyResults(tickers, stockMeta = {}) {
     const sS = runSpringShort(ticker, data);
     if (sS) springShorts.push({ ...sS, ...meta });
 
-    const din = runDinner(ticker, data);
+    const din = runDinner(ticker, data, jungleSignals[ticker]);
     if (din) dinner.push({ ...din, ...meta });
   });
 

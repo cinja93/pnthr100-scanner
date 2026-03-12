@@ -411,14 +411,14 @@
 .rowLaunched:hover { background: rgba(22, 163, 74,  0.18) !important; }
 .rowLaunchedShort  { background: rgba(220, 38, 38, 0.10) !important; box-shadow: inset 3px 0 0 #dc2626; }
 .rowLaunchedShort:hover { background: rgba(220, 38, 38, 0.18) !important; }
-.rowGaining        { background: rgba(252, 180, 0,  0.10) !important; box-shadow: inset 3px 0 0 #f59e0b; }
-.rowGaining:hover  { background: rgba(252, 180, 0,  0.18) !important; }
+.rowGaining        { background: rgba(59, 130, 246, 0.08) !important; box-shadow: inset 3px 0 0 #3b82f6; }
+.rowGaining:hover  { background: rgba(59, 130, 246, 0.15) !important; }
 .rowCoiled         { opacity: 0.72; }
 .rowCoiled:hover   { opacity: 1; }
 
 /* ── Springs status badges ───────────────────────────────────────────────── */
 .badgeLaunched { background: #16a34a; color: #fff; }
-.badgeGaining  { background: #f59e0b; color: #111; }
+.badgeGaining  { background: #3b82f6; color: #fff; }
 .badgeCoiled   { background: #9ca3af; color: #fff; font-size: 11px; }
 
 /* ── Stalk / Attack row states ───────────────────────────────────────────── */

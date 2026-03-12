@@ -171,9 +171,9 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowEx
   );
 }
 
-const ALPHA_HEADERS  = ['Ticker', 'Signal', 'Wks Since', 'Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
-const SPRING_HEADERS = ['Ticker', 'Signal', 'Touch', 'Price', 'EMA21', 'Δ EMA', 'Wks / 52', 'OBV', 'Sector', 'Daylight'];
-const DINNER_HEADERS = ['Ticker', 'Signal', 'Exchange', 'Sector', 'Price', 'PNTHR Stop', 'Risk $', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
+const ALPHA_HEADERS  = ['Ticker', 'PNTHR Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
+const SPRING_HEADERS = ['Ticker', 'PNTHR Signal', 'Touch', 'Current Price', 'EMA21', 'Δ EMA', 'Wks / 52', 'OBV', 'Sector', 'Daylight'];
+const DINNER_HEADERS = ['Ticker', 'PNTHR Signal', 'Exchange', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk $', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
 
 export default function PreyPage({ onNavigate }) {
   const [data, setData]       = useState(null);
@@ -303,17 +303,19 @@ export default function PreyPage({ onNavigate }) {
 
           {/* Dinner */}
           <section className={styles.section}>
-            <h2 className={styles.groupTitle}>
-              Dinner <span className={styles.groupBadge}>BL+1 · SS+1</span>
-              <button
-                type="button"
-                className={styles.infoBtn}
-                onClick={() => setShowDinnerGuide(v => !v)}
-                aria-label="Column definitions"
-                title="What the columns mean"
-              >i</button>
-            </h2>
-            <p className={styles.groupSubtitle}>One bar past the PNTHR entry signal · still in the zone</p>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.groupTitle}>
+                Dinner <span className={styles.groupBadge}>BL+1 · SS+1</span>
+                <button
+                  type="button"
+                  className={styles.infoBtn}
+                  onClick={() => setShowDinnerGuide(v => !v)}
+                  aria-label="Column definitions"
+                  title="What the columns mean"
+                >i</button>
+              </h2>
+              <p className={styles.groupSubtitle}>One bar past the PNTHR entry signal · still in the zone</p>
+            </div>
             {showDinnerGuide && (
               <div className={styles.columnGuidePopover}>
                 <strong>What the columns mean:</strong>
@@ -341,17 +343,19 @@ export default function PreyPage({ onNavigate }) {
 
           {/* Alphas */}
           <section className={styles.section}>
-            <h2 className={styles.groupTitle}>
-              Alphas <span className={styles.groupBadge}>Elite</span>
-              <button
-                type="button"
-                className={styles.infoBtn}
-                onClick={() => setShowAlphaGuide(v => !v)}
-                aria-label="Column definitions"
-                title="What the columns mean"
-              >i</button>
-            </h2>
-            <p className={styles.groupSubtitle}>Maximum trend alignment · institutional accumulation · sector alpha leadership</p>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.groupTitle}>
+                Alphas <span className={styles.groupBadge}>Elite</span>
+                <button
+                  type="button"
+                  className={styles.infoBtn}
+                  onClick={() => setShowAlphaGuide(v => !v)}
+                  aria-label="Column definitions"
+                  title="What the columns mean"
+                >i</button>
+              </h2>
+              <p className={styles.groupSubtitle}>Maximum trend alignment · institutional accumulation · sector alpha leadership</p>
+            </div>
             {showAlphaGuide && (
               <div className={styles.columnGuidePopover}>
                 <strong>What the columns mean:</strong>
@@ -382,17 +386,19 @@ export default function PreyPage({ onNavigate }) {
 
           {/* Springs */}
           <section className={styles.section}>
-            <h2 className={styles.groupTitle}>
-              Springs <span className={styles.groupBadge}>Institutional</span>
-              <button
-                type="button"
-                className={styles.infoBtn}
-                onClick={() => setShowSpringGuide(v => !v)}
-                aria-label="Column definitions"
-                title="What the columns mean"
-              >i</button>
-            </h2>
-            <p className={styles.groupSubtitle}>Long-term trend maturity · 21-EMA touch & relaunch · confirmed daylight</p>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.groupTitle}>
+                Springs <span className={styles.groupBadge}>Institutional</span>
+                <button
+                  type="button"
+                  className={styles.infoBtn}
+                  onClick={() => setShowSpringGuide(v => !v)}
+                  aria-label="Column definitions"
+                  title="What the columns mean"
+                >i</button>
+              </h2>
+              <p className={styles.groupSubtitle}>Long-term trend maturity · 21-EMA touch & relaunch · confirmed daylight</p>
+            </div>
             {showSpringGuide && (
               <div className={styles.columnGuidePopover}>
                 <strong>What the columns mean:</strong>
@@ -422,17 +428,19 @@ export default function PreyPage({ onNavigate }) {
 
           {/* Hunt */}
           <section className={styles.section}>
-            <h2 className={styles.groupTitle}>
-              Hunt <span className={styles.groupBadge}>New Cross</span>
-              <button
-                type="button"
-                className={styles.infoBtn}
-                onClick={() => setShowHuntGuide(v => !v)}
-                aria-label="Column definitions"
-                title="What the columns mean"
-              >i</button>
-            </h2>
-            <p className={styles.groupSubtitle}>Fresh tracks. Stocks that just crossed the 21-week EMA — the panther locks on.</p>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.groupTitle}>
+                Hunt <span className={styles.groupBadge}>New Cross</span>
+                <button
+                  type="button"
+                  className={styles.infoBtn}
+                  onClick={() => setShowHuntGuide(v => !v)}
+                  aria-label="Column definitions"
+                  title="What the columns mean"
+                >i</button>
+              </h2>
+              <p className={styles.groupSubtitle}>Fresh tracks. Stocks that just crossed the 21-week EMA — the panther locks on.</p>
+            </div>
             {showHuntGuide && (
               <div className={styles.columnGuidePopover}>
                 <strong>What the columns mean:</strong>

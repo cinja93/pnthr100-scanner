@@ -142,6 +142,13 @@
   margin: 0 24px 32px;
 }
 
+.sectionHeader {
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
 .groupTitle {
   font-size: 18px;
   font-weight: 800;

@@ -1,10 +1,10 @@
+/* ── Page shell ──────────────────────────────────────────────────────── */
 .page {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  background: #f3f4f6;
 }
 
 .header {
@@ -69,7 +69,7 @@
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #333;
+  border: 3px solid #efefef;
   border-top-color: #fcf000;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -77,8 +77,8 @@
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.loadingText  { color: #ccc; font-size: 15px; margin: 0; }
-.loadingNote  { color: #555; font-size: 12px; margin: 0; }
+.loadingText  { color: #555; font-size: 15px; margin: 0; }
+.loadingNote  { color: #aaa; font-size: 12px; margin: 0; }
 
 /* ── Error ───────────────────────────────────────────────────────────── */
 .error {
@@ -91,6 +91,7 @@
   display: flex;
   align-items: center;
   gap: 16px;
+  margin: 16px 24px;
 }
 
 .retryBtn {
@@ -115,7 +116,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 0 24px 24px;
+  margin: 0 24px 20px;
 }
 
 .sectorUp, .sectorDown {
@@ -142,6 +143,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .groupBadge {
@@ -157,31 +159,20 @@
 .groupSubtitle {
   font-size: 12px;
   color: #6b7280;
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   letter-spacing: 0.04em;
 }
 
-.sectionTitleRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-
-.sectionTitleRow .groupSubtitle {
-  margin-bottom: 0;
-}
-
+/* ── Info button ─────────────────────────────────────────────────────── */
 .infoBtn {
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   border: 2px solid #111111;
   background: #fcf000;
   color: #111111;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   font-style: italic;
   cursor: pointer;
@@ -190,20 +181,16 @@
   justify-content: center;
   padding: 0;
   line-height: 1;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
-
-.infoBtn:hover {
-  background: #e8d800;
-}
+.infoBtn:hover { background: #e8d800; }
 
 .columnGuidePopover {
   font-size: 12px;
   color: #4b5563;
   line-height: 1.5;
-  margin-top: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   padding: 12px 14px;
   background: #f9fafb;
   border: 1px solid #e5e7eb;
@@ -211,19 +198,14 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.columnGuidePopover strong {
-  color: #111827;
-}
+.columnGuidePopover strong { color: #111827; }
 
 .columnGuideList {
   margin: 8px 0 0;
   padding-left: 20px;
   list-style: disc;
 }
-
-.columnGuideList li {
-  margin-bottom: 2px;
-}
+.columnGuideList li { margin-bottom: 2px; }
 
 /* ── Side Toggle ─────────────────────────────────────────────────────── */
 .sideToggle {
@@ -248,187 +230,148 @@
 .sideBtnLong  { background: #ecfdf3; border-color: #16a34a; color: #166534; }
 .sideBtnShort { background: #fef2f2; border-color: #dc2626; color: #b91c1c; }
 
-/* ── Table ───────────────────────────────────────────────────────────── */
+/* ── Table (matches StockTable design) ───────────────────────────────── */
 .tableWrap {
-  background: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
-}
-
-.tableScroll {
+  width: 100%;
   overflow-x: auto;
-  max-height: calc(100vh - 320px);
+  overflow-y: auto;
+  max-height: calc(100vh - 380px);
+  min-height: 200px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .empty {
   color: #6b7280;
   font-size: 13px;
-  padding: 24px;
+  padding: 32px;
   font-style: italic;
   text-align: center;
+  background: white;
 }
 
 .table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 13px;
-  background: #ffffff;
+  background: white;
+  font-size: 14px;
 }
 
+.table thead { color: white; }
+
 .th {
+  padding: 16px;
   text-align: left;
-  padding: 12px 12px;
-  color: #e5e7eb;
   font-weight: 600;
-  font-size: 11px;
-  letter-spacing: 0.5px;
+  font-size: 13px;
   text-transform: uppercase;
-  white-space: nowrap;
+  letter-spacing: 0.5px;
   position: sticky;
   top: 0;
   z-index: 10;
   background: linear-gradient(135deg, #111111 0%, #000000 100%);
+  white-space: nowrap;
+  color: #e5e7eb;
 }
 
 .table tbody tr {
   transition: background-color 0.15s;
-}
-.table tbody tr:hover { background-color: #f9fafb; }
-
-/* Row color coding */
-.rowLong  td { border-left: 3px solid transparent; }
-.rowShort td { border-left: 3px solid transparent; }
-.rowLong  td:first-child { border-left-color: #22c55e; }
-.rowShort td:first-child { border-left-color: #ef4444; }
-
-.clickableRow {
   cursor: pointer;
 }
+.table tbody tr:nth-child(even) { background-color: #f7f8fa; }
+.table tbody tr:hover { background-color: #efefef; }
 
-/* Cells */
-.tdTicker {
-  padding: 9px 10px;
-  font-weight: 800;
-  color: #111827;
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
+.table tbody td {
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.tdName {
-  padding: 9px 10px;
-  color: #6b7280;
-  max-width: 180px;
+.td {
+  padding: 14px 16px;
+  color: #212121;
+}
+
+/* ── Cell types ──────────────────────────────────────────────────────── */
+.tdTicker {
+  padding: 14px 16px;
+}
+
+.tickerSymbol {
+  font-weight: 700;
+  color: #111111;
+  font-size: 15px;
+}
+
+.companyName {
+  font-size: 11px;
+  font-weight: 400;
+  color: #888;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 160px;
+  margin-top: 2px;
 }
 
-.tdDir {
-  padding: 9px 10px;
-  font-weight: 700;
-  font-size: 11px;
-  white-space: nowrap;
-}
-.rowLong  .tdDir { color: #4caf50; }
-.rowShort .tdDir { color: #ef5350; }
-
-.tdBar {
-  padding: 9px 10px;
-  color: #6b7280;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.tdPrice, .tdEma {
-  padding: 9px 10px;
-  color: #111827;
+.tdNum {
+  padding: 14px 16px;
+  color: #212121;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.tdDeltaPos {
-  padding: 9px 10px;
+.tdGray {
+  padding: 14px 16px;
+  color: #6b7280;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.tdPos {
+  padding: 14px 16px;
   color: #16a34a;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.tdDeltaNeg {
-  padding: 9px 10px;
-  color: #dc2626;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.tdStat {
-  padding: 9px 10px;
-  color: #4b5563;
+  font-weight: 600;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.tdObv {
-  padding: 9px 10px;
-  color: #4b5563;
-  font-size: 11px;
+.tdNeg {
+  padding: 14px 16px;
+  color: #ef4444;
+  font-weight: 600;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.tdSector {
-  padding: 9px 10px;
-  color: #6b7280;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-/* OBV & signal pills */
-.obvPill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* ── Badges (matching pnthrBadge from StockTable) ────────────────────── */
+.badge {
+  display: inline-block;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.badgeBL  { background: #16a34a; color: #fff; }
+.badgeSS  { background: #dc2626; color: #fff; }
+.badgeWks { background: #d97706; color: #fff; } /* amber — like WKS SINCE */
+.badgeOBV {
   background: #eff6ff;
   color: #1d4ed8;
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
 }
-
-.tdSignal {
-  padding: 9px 10px;
-  white-space: nowrap;
-}
-
-.signalPill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 10px;
-  border-radius: 999px;
+.badgeConfirm {
   background: #f3f4ff;
   color: #4b5563;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
 }
 
 @media (max-width: 768px) {
-  .header {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .section {
-    margin: 0 12px 24px;
-  }
-
-  .tableScroll {
-    max-height: none;
-  }
+  .header { flex-direction: column; gap: 12px; }
+  .section { margin: 0 12px 24px; }
+  .tableWrap { max-height: none; }
+  .th, .td, .tdTicker, .tdNum, .tdGray, .tdPos, .tdNeg { padding: 10px 8px; }
+  .th { font-size: 11px; }
 }

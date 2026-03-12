@@ -4,12 +4,6 @@ import ChartModal from './ChartModal';
 import styles from './PreyPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
-const GROUPS = [
-  { key: 'alphas',  label: 'Alphas',  subtitle: 'Elite Alpha Longs & Shorts — maximum trend alignment' },
-  { key: 'springs', label: 'Springs', subtitle: 'PNTHR Spring — institutional powerhouses off the 21-EMA floor/ceiling' },
-  { key: 'dinner',  label: 'Dinner',  subtitle: 'BL+1 & SS+1 — one bar past entry, still in the zone' },
-];
-
 function pct(v) {
   if (v == null) return '—';
   return `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`;
@@ -20,76 +14,79 @@ function price(v) {
   return `$${Number(v).toFixed(2)}`;
 }
 
-function AlphaRow({ s, onClick }) {
+function TickerCell({ ticker, companyName }) {
   return (
-    <tr
-      className={`${s.direction === 'long' ? styles.rowLong : styles.rowShort} ${styles.clickableRow}`}
-      onClick={onClick}
-    >
-      <td className={styles.tdTicker}>{s.ticker}</td>
-      <td className={styles.tdName}>{s.companyName || '—'}</td>
-      <td className={styles.tdDir}>{s.direction === 'long' ? '▲ Long' : '▼ Short'}</td>
-      <td className={styles.tdBar}>Bar {s.barNumber}</td>
-      <td className={styles.tdPrice}>{price(s.currentPrice)}</td>
-      <td className={styles.tdEma}>{price(s.ema21)}</td>
-      <td className={s.direction === 'long' ? styles.tdDeltaPos : styles.tdDeltaNeg}>{pct(s.priceDeltaPct)}</td>
-      <td className={styles.tdStat}>{s.rsi ?? '—'}</td>
-      <td className={styles.tdStat}>{s.adx ?? '—'}</td>
-      <td className={styles.tdObv}>
-        <span className={styles.obvPill}>{s.obvSlope}</span>
-      </td>
-      <td className={styles.tdSector}>{s.sectorEtf ?? '—'}</td>
-      <td className={s.direction === 'long' ? styles.tdDeltaPos : styles.tdDeltaNeg}>
-        {pct(s.stock4wPct)} vs {pct(s.sector4wPct)}
-      </td>
+    <td className={styles.tdTicker}>
+      <div className={styles.tickerSymbol}>{ticker}</div>
+      {companyName && <div className={styles.companyName}>{companyName}</div>}
+    </td>
+  );
+}
+
+function DirBadge({ direction }) {
+  return (
+    <span className={`${styles.badge} ${direction === 'long' ? styles.badgeBL : styles.badgeSS}`}>
+      {direction === 'long' ? 'BL' : 'SS'}
+    </span>
+  );
+}
+
+function WksBadge({ direction, n }) {
+  const label = `${direction === 'long' ? 'BL' : 'SS'}+${n}`;
+  return <span className={`${styles.badge} ${styles.badgeWks}`}>{label}</span>;
+}
+
+function AlphaRow({ s, onClick }) {
+  const isLong = s.direction === 'long';
+  return (
+    <tr onClick={onClick}>
+      <TickerCell ticker={s.ticker} companyName={s.companyName} />
+      <td className={styles.td}><DirBadge direction={s.direction} /></td>
+      <td className={styles.td}><WksBadge direction={s.direction} n={s.barNumber} /></td>
+      <td className={styles.tdNum}>{price(s.currentPrice)}</td>
+      <td className={styles.tdNum}>{price(s.ema21)}</td>
+      <td className={isLong ? styles.tdPos : styles.tdNeg}>{pct(s.priceDeltaPct)}</td>
+      <td className={styles.tdNum}>{s.rsi ?? '—'}</td>
+      <td className={styles.tdNum}>{s.adx ?? '—'}</td>
+      <td className={styles.td}><span className={`${styles.badge} ${styles.badgeOBV}`}>{s.obvSlope}</span></td>
+      <td className={styles.tdGray}>{s.sectorEtf ?? '—'}</td>
+      <td className={isLong ? styles.tdPos : styles.tdNeg}>{pct(s.stock4wPct)} vs {pct(s.sector4wPct)}</td>
     </tr>
   );
 }
 
 function SpringRow({ s, onClick }) {
+  const isLong = s.direction === 'long';
+  const wks = s.weeksAbove52 ?? s.weeksBelow52;
   return (
-    <tr
-      className={`${s.direction === 'long' ? styles.rowLong : styles.rowShort} ${styles.clickableRow}`}
-      onClick={onClick}
-    >
-      <td className={styles.tdTicker}>{s.ticker}</td>
-      <td className={styles.tdName}>{s.companyName || '—'}</td>
-      <td className={styles.tdDir}>{s.direction === 'long' ? '▲ Long' : '▼ Short'}</td>
-      <td className={styles.tdBar}>T-{s.touchBar} touch</td>
-      <td className={styles.tdPrice}>{price(s.currentPrice)}</td>
-      <td className={styles.tdEma}>{price(s.ema21)}</td>
-      <td className={s.direction === 'long' ? styles.tdDeltaPos : styles.tdDeltaNeg}>{pct(s.priceDeltaPct)}</td>
-      <td className={styles.tdStat} colSpan={2}>{s.weeksAbove52 ?? s.weeksBelow52 ?? '—'} / 52 wks</td>
-      <td className={styles.tdObv}>
-        <span className={styles.obvPill}>{s.obvSlope}</span>
-      </td>
-      <td className={styles.tdSector}>{s.sector || '—'}</td>
-      <td className={styles.tdSignal}>
-        <span className={styles.signalPill}>confirmed</span>
-      </td>
+    <tr onClick={onClick}>
+      <TickerCell ticker={s.ticker} companyName={s.companyName} />
+      <td className={styles.td}><DirBadge direction={s.direction} /></td>
+      <td className={styles.tdGray}>T-{s.touchBar}</td>
+      <td className={styles.tdNum}>{price(s.currentPrice)}</td>
+      <td className={styles.tdNum}>{price(s.ema21)}</td>
+      <td className={isLong ? styles.tdPos : styles.tdNeg}>{pct(s.priceDeltaPct)}</td>
+      <td className={styles.tdNum}>{wks != null ? `${wks} / 52` : '—'}</td>
+      <td className={styles.td}><span className={`${styles.badge} ${styles.badgeOBV}`}>{s.obvSlope}</span></td>
+      <td className={styles.tdGray}>{s.sector || '—'}</td>
+      <td className={styles.td}><span className={`${styles.badge} ${styles.badgeConfirm}`}>confirmed</span></td>
     </tr>
   );
 }
 
 function DinnerRow({ s, onClick }) {
+  const isLong = s.direction === 'long';
   return (
-    <tr
-      className={`${s.direction === 'long' ? styles.rowLong : styles.rowShort} ${styles.clickableRow}`}
-      onClick={onClick}
-    >
-      <td className={styles.tdTicker}>{s.ticker}</td>
-      <td className={styles.tdName}>{s.companyName || '—'}</td>
-      <td className={styles.tdDir}>{s.direction === 'long' ? '▲ Long' : '▼ Short'}</td>
-      <td className={styles.tdSignal}>
-        <span className={styles.signalPill}>{s.strategy}</span>
+    <tr onClick={onClick}>
+      <TickerCell ticker={s.ticker} companyName={s.companyName} />
+      <td className={styles.td}><DirBadge direction={s.direction} /></td>
+      <td className={styles.td}>
+        <span className={`${styles.badge} ${isLong ? styles.badgeBL : styles.badgeSS}`}>{s.strategy}</span>
       </td>
-      <td className={styles.tdPrice}>{price(s.currentPrice)}</td>
-      <td className={styles.tdEma}>{price(s.ema21)}</td>
-      <td className={s.direction === 'long' ? styles.tdDeltaPos : styles.tdDeltaNeg}>{pct(s.priceDeltaPct)}</td>
-      <td className={styles.tdStat} colSpan={2}>—</td>
-      <td className={styles.tdObv}>—</td>
-      <td className={styles.tdSector}>{s.sector || '—'}</td>
-      <td>—</td>
+      <td className={styles.tdNum}>{price(s.currentPrice)}</td>
+      <td className={styles.tdNum}>{price(s.ema21)}</td>
+      <td className={isLong ? styles.tdPos : styles.tdNeg}>{pct(s.priceDeltaPct)}</td>
+      <td className={styles.tdGray}>{s.sector || '—'}</td>
     </tr>
   );
 }
@@ -100,7 +97,7 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick }) {
   const count = rows?.length ?? 0;
 
   return (
-    <div className={styles.tableWrap}>
+    <div>
       <div className={styles.sideToggle}>
         <button
           className={`${styles.sideBtn} ${side === 'long' ? styles.sideBtnLong : ''}`}
@@ -119,7 +116,7 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick }) {
       {count === 0 ? (
         <div className={styles.empty}>No {side} candidates found this week.</div>
       ) : (
-        <div className={styles.tableScroll}>
+        <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
               <tr>
@@ -142,9 +139,9 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick }) {
   );
 }
 
-const ALPHA_HEADERS  = ['Ticker', 'Company', 'Dir', 'Bar', 'Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
-const SPRING_HEADERS = ['Ticker', 'Company', 'Dir', 'Touch', 'Price', 'EMA21', 'Δ EMA', 'Wks / 52', '', 'OBV', 'Sector', 'Daylight'];
-const DINNER_HEADERS = ['Ticker', 'Company', 'Dir', 'Signal', 'Price', 'EMA21', 'Δ EMA', '', '', 'OBV', 'Sector', ''];
+const ALPHA_HEADERS  = ['Ticker', 'Signal', 'Wks Since', 'Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
+const SPRING_HEADERS = ['Ticker', 'Signal', 'Touch', 'Price', 'EMA21', 'Δ EMA', 'Wks / 52', 'OBV', 'Sector', 'Daylight'];
+const DINNER_HEADERS = ['Ticker', 'Signal', 'Strategy', 'Price', 'EMA21', 'Δ EMA', 'Sector'];
 
 export default function PreyPage() {
   const [data, setData]       = useState(null);

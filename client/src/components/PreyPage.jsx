@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { fetchPreyStocks, fetchEarnings, fetchEmaCrossoverStocks, fetchScannerRanks } from '../services/api';
 import ChartModal from './ChartModal';
 import StockTable from './StockTable';
@@ -122,10 +122,43 @@ function DinnerRow({ s, onClick, earnings = {} }) {
   );
 }
 
-function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowExtraProps = {} }) {
+function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowExtraProps = {}, sortAccessors = {} }) {
   const [side, setSide] = useState('long');
-  const rows = side === 'long' ? longs : shorts;
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+
+  const rawRows = side === 'long' ? longs : shorts;
+
+  const rows = useMemo(() => {
+    if (!sortKey || !sortAccessors[sortKey] || !rawRows) return rawRows ?? [];
+    const fn = sortAccessors[sortKey];
+    return [...rawRows].sort((a, b) => {
+      const av = fn(a), bv = fn(b);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const cmp = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [rawRows, sortKey, sortDir, sortAccessors]);
+
   const count = rows?.length ?? 0;
+
+  function handleHeaderClick(h) {
+    if (!sortAccessors[h]) return;
+    if (sortKey === h) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(h);
+      setSortDir('asc');
+    }
+  }
+
+  function sortIcon(h) {
+    if (!sortAccessors[h]) return null;
+    if (sortKey !== h) return <span className={styles.sortIcon}>↕</span>;
+    return <span className={styles.sortIcon}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  }
 
   return (
     <div>
@@ -151,7 +184,15 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowEx
           <table className={styles.table}>
             <thead>
               <tr>
-                {headers.map(h => <th key={h} className={styles.th}>{h}</th>)}
+                {headers.map(h => (
+                  <th
+                    key={h}
+                    className={`${styles.th} ${sortAccessors[h] ? styles.thSortable : ''}`}
+                    onClick={() => handleHeaderClick(h)}
+                  >
+                    {h}{sortIcon(h)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -174,6 +215,40 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowEx
 const ALPHA_HEADERS  = ['Ticker', 'PNTHR Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
 const SPRING_HEADERS = ['Ticker', 'PNTHR Signal', 'Touch', 'Current Price', 'EMA21', 'Δ EMA', 'Wks / 52', 'OBV', 'Sector', 'Daylight'];
 const DINNER_HEADERS = ['Ticker', 'PNTHR Signal', 'Exchange', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk Per Share', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
+
+const ALPHA_SORT = {
+  'Ticker':        s => s.ticker,
+  'Wks Since':     s => s.barNumber ?? 0,
+  'Current Price': s => s.currentPrice ?? 0,
+  'EMA21':         s => s.ema21 ?? 0,
+  'Δ EMA':         s => s.priceDeltaPct ?? 0,
+  'RSI':           s => s.rsi ?? 0,
+  'ADX':           s => s.adx ?? 0,
+  'ETF':           s => s.sectorEtf || '',
+  '4-Wk α':        s => (s.stock4wPct ?? 0) - (s.sector4wPct ?? 0),
+};
+
+const SPRING_SORT = {
+  'Ticker':        s => s.ticker,
+  'Touch':         s => s.touchBar ?? 0,
+  'Current Price': s => s.currentPrice ?? 0,
+  'EMA21':         s => s.ema21 ?? 0,
+  'Δ EMA':         s => s.priceDeltaPct ?? 0,
+  'Wks / 52':      s => s.weeksAbove52 ?? s.weeksBelow52 ?? 0,
+  'Sector':        s => s.sector || '',
+};
+
+const DINNER_SORT = {
+  'Ticker':         s => s.ticker,
+  'Exchange':       s => s.exchange || '',
+  'Sector':         s => s.sector || '',
+  'Current Price':  s => s.currentPrice ?? 0,
+  'PNTHR Stop':     s => s.stopPrice ?? 0,
+  'Risk Per Share': s => s.currentPrice != null && s.stopPrice != null ? Math.abs(s.currentPrice - s.stopPrice) : 0,
+  'Risk %':         s => s.currentPrice != null && s.stopPrice != null ? Math.abs(s.currentPrice - s.stopPrice) / s.currentPrice * 100 : 0,
+  'RSI':            s => s.rsi ?? 0,
+  'Δ EMA':          s => s.priceDeltaPct ?? 0,
+};
 
 export default function PreyPage({ onNavigate }) {
   const [data, setData]       = useState(null);
@@ -338,6 +413,7 @@ export default function PreyPage({ onNavigate }) {
               headers={DINNER_HEADERS}
               onStockClick={handleStockClick}
               rowExtraProps={{ earnings }}
+              sortAccessors={DINNER_SORT}
             />
           </section>
 
@@ -381,6 +457,7 @@ export default function PreyPage({ onNavigate }) {
               RowComponent={AlphaRow}
               headers={ALPHA_HEADERS}
               onStockClick={handleStockClick}
+              sortAccessors={ALPHA_SORT}
             />
           </section>
 
@@ -423,6 +500,7 @@ export default function PreyPage({ onNavigate }) {
               RowComponent={SpringRow}
               headers={SPRING_HEADERS}
               onStockClick={handleStockClick}
+              sortAccessors={SPRING_SORT}
             />
           </section>
 

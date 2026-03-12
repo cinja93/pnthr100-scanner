@@ -539,32 +539,42 @@ function runDinner(ticker, data) {
     if (weekly[i].close < ema21[i]) barsBelow++; else break;
   }
 
-  // BL+1: exactly 2 bars above EMA, EMA trending up, and bar 1 broke 2-week high
+  // BL+1: exactly 2 bars above EMA, EMA trending up, bar 1 broke 2-week high,
+  //        AND bar 1 low is in the 1-10% daylight zone above EMA (true BL entry)
   if (barsAbove === 2 && lastEma > prevEma && li >= 4) {
+    const entryEma = ema21[li - 1];
     const twoWeekHigh = Math.max(weekly[li - 3].high, weekly[li - 2].high);
-    if (weekly[li - 1].close > twoWeekHigh + 0.01) {
-      const delta = (weekly[li].close - lastEma) / lastEma;
-      if (delta >= 0 && delta <= 0.15) {
-        return {
-          ticker, strategy: 'BL+1', direction: 'long', barNumber: 2,
-          currentPrice: weekly[li].close, ema21: +lastEma.toFixed(2),
-          priceDeltaPct: +(delta * 100).toFixed(2),
-        };
+    if (weekly[li - 1].close > twoWeekHigh + 0.01 && entryEma != null) {
+      const daylightLow = (weekly[li - 1].low - entryEma) / entryEma;
+      if (daylightLow >= 0.01 && daylightLow <= 0.10) {
+        const delta = (weekly[li].close - lastEma) / lastEma;
+        if (delta >= 0 && delta <= 0.15) {
+          return {
+            ticker, strategy: 'BL+1', direction: 'long', barNumber: 2,
+            currentPrice: weekly[li].close, ema21: +lastEma.toFixed(2),
+            priceDeltaPct: +(delta * 100).toFixed(2),
+          };
+        }
       }
     }
   }
 
-  // SS+1: exactly 2 bars below EMA, EMA trending down, and bar 1 broke 2-week low
+  // SS+1: exactly 2 bars below EMA, EMA trending down, bar 1 broke 2-week low,
+  //        AND bar 1 high is in the 1-10% daylight zone below EMA (true SS entry)
   if (barsBelow === 2 && lastEma < prevEma && li >= 4) {
+    const entryEma = ema21[li - 1];
     const twoWeekLow = Math.min(weekly[li - 3].low, weekly[li - 2].low);
-    if (weekly[li - 1].close < twoWeekLow - 0.01) {
-      const delta = (lastEma - weekly[li].close) / lastEma;
-      if (delta >= 0 && delta <= 0.15) {
-        return {
-          ticker, strategy: 'SS+1', direction: 'short', barNumber: 2,
-          currentPrice: weekly[li].close, ema21: +lastEma.toFixed(2),
-          priceDeltaPct: +(delta * 100).toFixed(2),
-        };
+    if (weekly[li - 1].close < twoWeekLow - 0.01 && entryEma != null) {
+      const daylightHigh = (entryEma - weekly[li - 1].high) / entryEma;
+      if (daylightHigh >= 0.01 && daylightHigh <= 0.10) {
+        const delta = (lastEma - weekly[li].close) / lastEma;
+        if (delta >= 0 && delta <= 0.15) {
+          return {
+            ticker, strategy: 'SS+1', direction: 'short', barNumber: 2,
+            currentPrice: weekly[li].close, ema21: +lastEma.toFixed(2),
+            priceDeltaPct: +(delta * 100).toFixed(2),
+          };
+        }
       }
     }
   }

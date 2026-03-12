@@ -552,14 +552,16 @@ function runDinner(ticker, data) {
     prev.close > prevEma &&
     prevEma > prevPrevEma &&
     prev.high >= twoWeekHigh + 0.01 &&
-    prevDeltaAbove >= 0.01 && prevDeltaAbove <= 0.10
+    prevDeltaAbove >= 0.01 && prevDeltaAbove <= 0.10 &&
+    weekly[li - 2].low <= prevPrevEma   // bar before signal was at/touching EMA (fresh launch)
   );
 
   const isSSSignalBar = (
     prev.close < prevEma &&
     prevEma < prevPrevEma &&
     prev.low <= twoWeekLow - 0.01 &&
-    prevDeltaBelow >= 0.01 && prevDeltaBelow <= 0.10
+    prevDeltaBelow >= 0.01 && prevDeltaBelow <= 0.10 &&
+    weekly[li - 2].high >= prevPrevEma  // bar before signal was at/touching EMA (fresh breakdown)
   );
 
   if (!isBLSignalBar && !isSSSignalBar) return null;

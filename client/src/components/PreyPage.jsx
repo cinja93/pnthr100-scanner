@@ -56,6 +56,12 @@ function AlphaRow({ s, onClick }) {
   );
 }
 
+function SignalBadge({ badge }) {
+  if (!badge) return <span className={styles.tdGray}>—</span>;
+  const isBL = badge.startsWith('BL');
+  return <span className={`${styles.badge} ${isBL ? styles.badgeBL : styles.badgeSS}`}>{badge}</span>;
+}
+
 function SpringStatusBadge({ status }) {
   const cls = status === 'LAUNCHED' ? styles.badgeLaunched
             : status === 'GAINING'  ? styles.badgeGaining
@@ -72,6 +78,7 @@ function SpringRow({ s, onClick }) {
     <tr onClick={onClick} className={rowCls}>
       <TickerCell ticker={s.ticker} companyName={s.companyName} />
       <td className={styles.td}><SpringStatusBadge status={s.status} /></td>
+      <td className={styles.td}><SignalBadge badge={s.signalBadge} /></td>
       <td className={styles.tdNum}>{price(s.high26)}</td>
       <td className={isLong ? styles.tdNeg : styles.tdPos}>
         {s.pctOffHigh != null ? `${Number(s.pctOffHigh).toFixed(1)}%` : '—'}
@@ -107,6 +114,7 @@ function CrouchRow({ s, onClick }) {
           {isAttack ? (isLong ? 'ATTACK ▲' : 'ATTACK ▼') : 'STALK'}
         </span>
       </td>
+      <td className={styles.td}><SignalBadge badge={s.signalBadge} /></td>
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>
       <td className={styles.tdNum}>{s.bandWidth != null ? `${Number(s.bandWidth).toFixed(2)}%` : '—'}</td>
       <td className={styles.tdGray}>{s.bwMin52 != null ? `${Number(s.bwMin52).toFixed(2)}%` : '—'}</td>
@@ -300,8 +308,8 @@ function SprintTable({ longs, shorts, signals, onRowClick }) {
 }
 
 const ALPHA_HEADERS  = ['Ticker', 'PNTHR Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
-const SPRING_HEADERS = ['Ticker', 'Status', '6M High', '% Off High', 'Current', '% vs Open', '% past Trigger', 'EMA21', 'Δ EMA', 'Sector'];
-const CROUCH_HEADERS = ['Ticker', 'State', 'Current', 'Band Width %', '52-Wk Min BW', 'Expansion %', 'Wks in Squeeze', 'EMA Lean', 'Δ EMA', 'Sector'];
+const SPRING_HEADERS = ['Ticker', 'Status', 'Signal', '6M High', '% Off High', 'Current', '% vs Open', '% past Trigger', 'EMA21', 'Δ EMA', 'Sector'];
+const CROUCH_HEADERS = ['Ticker', 'State', 'Signal', 'Current', 'Band Width %', '52-Wk Min BW', 'Expansion %', 'Wks in Squeeze', 'EMA Lean', 'Δ EMA', 'Sector'];
 const DINNER_HEADERS = ['Ticker', 'PNTHR Signal', 'Exchange', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk Per Share', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
 
 const ALPHA_SORT = {
@@ -318,6 +326,7 @@ const ALPHA_SORT = {
 
 const SPRING_SORT = {
   'Ticker':          s => s.ticker,
+  'Signal':          s => s.signalBadge || '',
   '% Off High':      s => s.pctOffHigh ?? 0,
   'Current':         s => s.currentPrice ?? 0,
   '% vs Open':       s => s.pctVsOpen ?? 0,
@@ -329,6 +338,7 @@ const SPRING_SORT = {
 
 const CROUCH_SORT = {
   'Ticker':          s => s.ticker,
+  'Signal':          s => s.signalBadge || '',
   'Current':         s => s.currentPrice ?? 0,
   'Band Width %':    s => s.bandWidth ?? 0,
   '52-Wk Min BW':   s => s.bwMin52 ?? 0,
@@ -515,7 +525,7 @@ export default function PreyPage({ onNavigate }) {
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.groupTitle}>
-                Dinner <span className={styles.groupBadge}>BL+1 · SS+1</span>
+                PNTHR Dinner <span className={styles.groupBadge}>BL+1 · SS+1</span>
                 <button
                   type="button"
                   className={styles.infoBtn}
@@ -556,7 +566,7 @@ export default function PreyPage({ onNavigate }) {
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.groupTitle}>
-                Alphas <span className={styles.groupBadge}>Elite</span>
+                PNTHR Alphas <span className={styles.groupBadge}>Elite</span>
                 <button
                   type="button"
                   className={styles.infoBtn}
@@ -600,7 +610,7 @@ export default function PreyPage({ onNavigate }) {
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.groupTitle}>
-                Springs <span className={styles.groupBadge}>Pullback</span>
+                PNTHR Springs <span className={styles.groupBadge}>Pullback</span>
                 <button
                   type="button"
                   className={styles.infoBtn}
@@ -642,7 +652,7 @@ export default function PreyPage({ onNavigate }) {
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.groupTitle}>
-                Crouch <span className={styles.groupBadge}>BB Squeeze</span>
+                PNTHR Crouch <span className={styles.groupBadge}>BB Squeeze</span>
                 <button
                   type="button"
                   className={styles.infoBtn}
@@ -684,7 +694,7 @@ export default function PreyPage({ onNavigate }) {
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.groupTitle}>
-                Sprint <span className={styles.groupBadge}>Rising</span>
+                PNTHR Sprint <span className={styles.groupBadge}>Rising</span>
                 <button
                   type="button"
                   className={styles.infoBtn}
@@ -731,7 +741,7 @@ export default function PreyPage({ onNavigate }) {
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.groupTitle}>
-                Hunt <span className={styles.groupBadge}>New Cross</span>
+                PNTHR Hunt <span className={styles.groupBadge}>New Cross</span>
                 <button
                   type="button"
                   className={styles.infoBtn}

@@ -373,6 +373,23 @@ function runAlphaShort(ticker, sector, data, sectorStatus, sectorFW) {
   };
 }
 
+// ── Signal Badge Helper ───────────────────────────────────────────────────────
+// Returns "BL+N" or "SS+N" string: the active signal and how many weekly bars
+// have elapsed since it fired, or null if no active signal found.
+
+function getSignalBadge(weekly, signalData) {
+  if (!signalData) return null;
+  const { signal, signalDate } = signalData;
+  if (signal !== 'BL' && signal !== 'SS') return null;
+  const li = weekly.length - 1;
+  for (let i = li; i >= Math.max(0, li - 52); i--) {
+    if (weekly[i].weekStart === signalDate) {
+      return `${signal}+${li - i}`;
+    }
+  }
+  return null;
+}
+
 // ── Rule Set 3: PNTHR Spring Long ─────────────────────────────────────────────
 // Strategy: stock made a 26-week high, pulled back ≥8%, is still above rising
 // 21-week EMA, and is in one of three stages: COILED (setup only), GAINING
@@ -750,25 +767,29 @@ export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}
     const aS = runAlphaShort(ticker, sector, data, sectorStatus, sectorFW);
     if (aS) alphaShorts.push({ ...aS, ...meta });
 
+    const sigBadge = getSignalBadge(data.weekly, jungleSignals[ticker]);
+
     const sL = runSpringLong(ticker, data);
-    if (sL) springLongs.push({ ...sL, ...meta });
+    if (sL) springLongs.push({ ...sL, ...meta, signalBadge: sigBadge });
 
     const sS = runSpringShort(ticker, data);
-    if (sS) springShorts.push({ ...sS, ...meta });
+    if (sS) springShorts.push({ ...sS, ...meta, signalBadge: sigBadge });
 
     const din = runDinner(ticker, data, jungleSignals[ticker]);
     if (din) dinner.push({ ...din, ...meta });
 
     const stalk = runStalk(ticker, data);
     if (stalk) {
-      if (stalk.direction === 'long') crouchLongs.push({ ...stalk, ...meta });
-      else crouchShorts.push({ ...stalk, ...meta });
+      const r = { ...stalk, ...meta, signalBadge: sigBadge };
+      if (stalk.direction === 'long') crouchLongs.push(r);
+      else crouchShorts.push(r);
     }
 
     const attack = runAttack(ticker, data);
     if (attack) {
-      if (attack.direction === 'long') crouchLongs.push({ ...attack, ...meta });
-      else crouchShorts.push({ ...attack, ...meta });
+      const r = { ...attack, ...meta, signalBadge: sigBadge };
+      if (attack.direction === 'long') crouchLongs.push(r);
+      else crouchShorts.push(r);
     }
   });
 

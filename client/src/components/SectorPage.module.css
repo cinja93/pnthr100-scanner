@@ -302,7 +302,7 @@
 
 .sp400Body {
   display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 12px;
   align-items: stretch;
 }
@@ -320,8 +320,25 @@
 }
 
 .sp400Panel:hover {
-  background: #f1f5f9;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.sp400PanelLong {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.sp400PanelLong:hover {
+  background: #dcfce7;
+}
+
+.sp400PanelShort {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.sp400PanelShort:hover {
+  background: #fee2e2;
 }
 
 .sp400PanelTitle {

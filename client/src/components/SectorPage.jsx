@@ -379,7 +379,7 @@ function Sp400Card({ chartData, emaData = [], specCounts, timeRange, onClickLong
       </div>
       <div className={styles.sp400Body}>
         {/* Left: Long Leaders */}
-        <div className={styles.sp400Panel} onClick={onClickLongs} title="View S&P 400 Long Leaders">
+        <div className={`${styles.sp400Panel} ${styles.sp400PanelLong}`} onClick={onClickLongs} title="View S&P 400 Long Leaders">
           <div className={styles.sp400PanelTitle}>S&P 400 Long Leaders</div>
           {specCounts?.longs ? (
             <div className={styles.signalSummary}>
@@ -406,7 +406,7 @@ function Sp400Card({ chartData, emaData = [], specCounts, timeRange, onClickLong
         </div>
 
         {/* Right: Short Leaders */}
-        <div className={styles.sp400Panel} onClick={onClickShorts} title="View S&P 400 Short Leaders">
+        <div className={`${styles.sp400Panel} ${styles.sp400PanelShort}`} onClick={onClickShorts} title="View S&P 400 Short Leaders">
           <div className={styles.sp400PanelTitle}>S&P 400 Short Leaders</div>
           {specCounts?.shorts ? (
             <div className={styles.signalSummary}>

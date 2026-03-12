@@ -173,7 +173,7 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowEx
 
 const ALPHA_HEADERS  = ['Ticker', 'PNTHR Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
 const SPRING_HEADERS = ['Ticker', 'PNTHR Signal', 'Touch', 'Current Price', 'EMA21', 'Δ EMA', 'Wks / 52', 'OBV', 'Sector', 'Daylight'];
-const DINNER_HEADERS = ['Ticker', 'PNTHR Signal', 'Exchange', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk $', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
+const DINNER_HEADERS = ['Ticker', 'PNTHR Signal', 'Exchange', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk Per Share', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
 
 export default function PreyPage({ onNavigate }) {
   const [data, setData]       = useState(null);

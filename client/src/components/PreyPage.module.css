@@ -285,7 +285,6 @@
   top: 0;
   z-index: 10;
   background: linear-gradient(135deg, #111111 0%, #000000 100%);
-  white-space: nowrap;
   color: #e5e7eb;
 }
 

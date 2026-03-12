@@ -77,8 +77,8 @@ function SpringRow({ s, onClick }) {
   return (
     <tr onClick={onClick} className={rowCls}>
       <TickerCell ticker={s.ticker} companyName={s.companyName} />
-      <td className={styles.td}><SpringStatusBadge status={s.status} /></td>
       <td className={styles.td}><SignalBadge badge={s.signalBadge} /></td>
+      <td className={styles.td}><SpringStatusBadge status={s.status} /></td>
       <td className={styles.tdNum}>{price(s.high26)}</td>
       <td className={isLong ? styles.tdNeg : styles.tdPos}>
         {s.pctOffHigh != null ? `${Number(s.pctOffHigh).toFixed(1)}%` : '—'}
@@ -109,12 +109,12 @@ function CrouchRow({ s, onClick }) {
   return (
     <tr onClick={onClick} className={rowCls}>
       <TickerCell ticker={s.ticker} companyName={s.companyName} />
+      <td className={styles.td}><SignalBadge badge={s.signalBadge} /></td>
       <td className={styles.td}>
         <span className={`${styles.badge} ${stateBadgeCls}`}>
           {isAttack ? (isLong ? 'ATTACK ▲' : 'ATTACK ▼') : 'STALK'}
         </span>
       </td>
-      <td className={styles.td}><SignalBadge badge={s.signalBadge} /></td>
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>
       <td className={styles.tdNum}>{s.bandWidth != null ? `${Number(s.bandWidth).toFixed(2)}%` : '—'}</td>
       <td className={styles.tdGray}>{s.bwMin52 != null ? `${Number(s.bwMin52).toFixed(2)}%` : '—'}</td>
@@ -307,10 +307,10 @@ function SprintTable({ longs, shorts, signals, onRowClick }) {
   );
 }
 
-const ALPHA_HEADERS  = ['Ticker', 'PNTHR Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
-const SPRING_HEADERS = ['Ticker', 'Status', 'Signal', '6M High', '% Off High', 'Current', '% vs Open', '% past Trigger', 'EMA21', 'Δ EMA', 'Sector'];
-const CROUCH_HEADERS = ['Ticker', 'State', 'Signal', 'Current', 'Band Width %', '52-Wk Min BW', 'Expansion %', 'Wks in Squeeze', 'EMA Lean', 'Δ EMA', 'Sector'];
-const DINNER_HEADERS = ['Ticker', 'PNTHR Signal', 'Exchange', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk Per Share', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
+const ALPHA_HEADERS  = ['Ticker', 'Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
+const SPRING_HEADERS = ['Ticker', 'Signal', 'Status', '6M High', '% Off High', 'Current', '% vs Open', '% past Trigger', 'EMA21', 'Δ EMA', 'Sector'];
+const CROUCH_HEADERS = ['Ticker', 'Signal', 'State', 'Current', 'Band Width %', '52-Wk Min BW', 'Expansion %', 'Wks in Squeeze', 'EMA Lean', 'Δ EMA', 'Sector'];
+const DINNER_HEADERS = ['Ticker', 'Signal', 'Exchange', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk Per Share', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
 
 const ALPHA_SORT = {
   'Ticker':        s => s.ticker,
@@ -566,7 +566,7 @@ export default function PreyPage({ onNavigate }) {
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.groupTitle}>
-                PNTHR Alphas <span className={styles.groupBadge}>Elite</span>
+                PNTHR Alpha <span className={styles.groupBadge}>Elite</span>
                 <button
                   type="button"
                   className={styles.infoBtn}
@@ -610,7 +610,7 @@ export default function PreyPage({ onNavigate }) {
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.groupTitle}>
-                PNTHR Springs <span className={styles.groupBadge}>Pullback</span>
+                PNTHR Spring <span className={styles.groupBadge}>Pullback</span>
                 <button
                   type="button"
                   className={styles.infoBtn}

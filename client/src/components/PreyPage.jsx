@@ -193,12 +193,16 @@ export default function PreyPage() {
     try {
       const res = await fetchPreyStocks(forceRefresh);
       setData(res);
-      const dinnerTickers = [
-        ...(res.dinner?.longs  || []),
-        ...(res.dinner?.shorts || []),
+      const allTickers = [
+        ...(res.dinner?.longs   || []),
+        ...(res.dinner?.shorts  || []),
+        ...(res.alphas?.longs   || []),
+        ...(res.alphas?.shorts  || []),
+        ...(res.springs?.longs  || []),
+        ...(res.springs?.shorts || []),
       ].map(s => s.ticker);
-      if (dinnerTickers.length > 0) {
-        fetchEarnings(dinnerTickers).then(setEarnings);
+      if (allTickers.length > 0) {
+        fetchEarnings(allTickers).then(setEarnings);
       }
     } catch (e) {
       setError(e.message || 'Scan failed.');
@@ -383,7 +387,7 @@ export default function PreyPage() {
         <ChartModal
           stocks={chartStocks}
           initialIndex={chartIndex}
-          earnings={{}}
+          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}

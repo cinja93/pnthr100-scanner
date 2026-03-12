@@ -335,6 +335,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+.tdRisk {
+  padding: 14px 16px;
+  color: #555555;
+  font-weight: 500;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .tdNeg {
   padding: 14px 16px;
   color: #ef4444;

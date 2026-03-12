@@ -105,7 +105,7 @@ function DinnerRow({ s, onClick, earnings = {} }) {
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>
       <td className={styles.tdNum}>{stopPrice != null ? price(stopPrice) : '—'}</td>
       <td className={styles.tdNum}>{riskDollar != null ? `$${riskDollar.toFixed(2)}` : '—'}</td>
-      <td className={isLong ? styles.tdNeg : styles.tdPos}>{riskPct != null ? `${riskPct.toFixed(2)}%` : '—'}</td>
+      <td className={styles.tdRisk}>{riskPct != null ? `${riskPct.toFixed(2)}%` : '—'}</td>
       <td className={styles.tdNum}>{s.rsi ?? '—'}</td>
       <td className={styles.td}><span className={`${styles.badge} ${styles.badgeOBV}`}>{s.obvSlope}</span></td>
       <td className={isLong ? styles.tdPos : styles.tdNeg}>{pct(s.priceDeltaPct)}</td>

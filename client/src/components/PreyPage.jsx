@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { fetchPreyStocks, fetchEarnings } from '../services/api';
+import { fetchPreyStocks, fetchEarnings, fetchEmaCrossoverStocks, fetchScannerRanks } from '../services/api';
 import ChartModal from './ChartModal';
+import StockTable from './StockTable';
 import styles from './PreyPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -183,9 +184,16 @@ export default function PreyPage({ onNavigate }) {
   const [showAlphaGuide, setShowAlphaGuide] = useState(false);
   const [showSpringGuide, setShowSpringGuide] = useState(false);
   const [showDinnerGuide, setShowDinnerGuide] = useState(false);
+  const [showHuntGuide, setShowHuntGuide] = useState(false);
   const [earnings, setEarnings] = useState({});
+  const [huntStocks, setHuntStocks] = useState([]);
+  const [huntSignals, setHuntSignals] = useState({});
+  const [huntScannerRanks, setHuntScannerRanks] = useState(null);
+  const [huntLoading, setHuntLoading] = useState(true);
+  const [huntError, setHuntError] = useState(null);
+  const [chartSignals, setChartSignals] = useState({});
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadHunt(); }, []);
 
   async function load(forceRefresh = false) {
     setLoading(true);
@@ -211,10 +219,33 @@ export default function PreyPage({ onNavigate }) {
     }
   }
 
-  function handleStockClick(stock, list, index) {
+  async function loadHunt(forceRefresh = false) {
+    setHuntLoading(true);
+    setHuntError(null);
+    try {
+      const result = await fetchEmaCrossoverStocks(forceRefresh);
+      const stockList = result.stocks || [];
+      setHuntStocks(stockList);
+      setHuntSignals(result.signals || {});
+      fetchScannerRanks().then(setHuntScannerRanks);
+    } catch (e) {
+      setHuntError(e.message || 'Hunt scan failed.');
+    } finally {
+      setHuntLoading(false);
+    }
+  }
+
+  function handleStockClick(stock, list, index, signals = {}) {
     if (!stock || !Array.isArray(list)) return;
+    setChartSignals(signals);
     setChartStocks(list);
     setChartIndex(index ?? list.indexOf(stock));
+  }
+
+  function handleHuntRowClick(_stock, sortedIdx, sortedStocks) {
+    setChartSignals(huntSignals);
+    setChartStocks(sortedStocks);
+    setChartIndex(sortedIdx);
   }
 
   return (
@@ -388,6 +419,61 @@ export default function PreyPage({ onNavigate }) {
               onStockClick={handleStockClick}
             />
           </section>
+
+          {/* Hunt */}
+          <section className={styles.section}>
+            <h2 className={styles.groupTitle}>
+              Hunt <span className={styles.groupBadge}>New Cross</span>
+              <button
+                type="button"
+                className={styles.infoBtn}
+                onClick={() => setShowHuntGuide(v => !v)}
+                aria-label="Column definitions"
+                title="What the columns mean"
+              >i</button>
+            </h2>
+            <p className={styles.groupSubtitle}>Fresh tracks. Stocks that just crossed the 21-week EMA — the panther locks on.</p>
+            {showHuntGuide && (
+              <div className={styles.columnGuidePopover}>
+                <strong>What the columns mean:</strong>
+                <ul className={styles.columnGuideList}>
+                  <li><strong>Ticker</strong> — Stock symbol and company name.</li>
+                  <li><strong>Exchange</strong> — NYSE or NASDAQ.</li>
+                  <li><strong>Sector</strong> — Sector the stock belongs to.</li>
+                  <li><strong>Current Price</strong> — Last weekly close price.</li>
+                  <li><strong>YTD Return</strong> — Year-to-date performance (%).</li>
+                  <li><strong>PNTHR Stop</strong> — Predatory buffer stop: ratcheted via Wilder ATR(3) from the signal week.</li>
+                  <li><strong>Risk Per Share</strong> — Dollar distance from current price to the PNTHR Stop.</li>
+                  <li><strong>Risk %</strong> — Risk as a percentage of current price.</li>
+                  <li><strong>PNTHR Signal</strong> — BL (Buy Long) or SS (Sell Short) — the entry signal type.</li>
+                  <li><strong>Wks Since</strong> — Number of weekly bars since the crossover signal fired.</li>
+                  <li><strong>Next Earnings</strong> — Upcoming earnings date. Amber highlight = within 14 days.</li>
+                </ul>
+              </div>
+            )}
+            {huntLoading && (
+              <div className={styles.empty}>Scanning for fresh EMA crossovers…</div>
+            )}
+            {huntError && !huntLoading && (
+              <div className={styles.empty}>⚠️ {huntError}</div>
+            )}
+            {!huntLoading && !huntError && huntStocks.length === 0 && (
+              <div className={styles.empty}>No fresh EMA crossovers found this week.</div>
+            )}
+            {!huntLoading && !huntError && huntStocks.length > 0 && (
+              <div className={styles.tableWrap}>
+                <StockTable
+                  stocks={huntStocks}
+                  signals={huntSignals}
+                  signalsLoading={false}
+                  earnings={earnings}
+                  scannerRanks={huntScannerRanks}
+                  onTickerClick={handleHuntRowClick}
+                  scanType="long"
+                />
+              </div>
+            )}
+          </section>
         </>
       )}
 
@@ -395,6 +481,7 @@ export default function PreyPage({ onNavigate }) {
         <ChartModal
           stocks={chartStocks}
           initialIndex={chartIndex}
+          signals={chartSignals}
           earnings={earnings}
           onClose={() => setChartIndex(null)}
         />

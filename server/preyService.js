@@ -11,7 +11,6 @@
 
 import dotenv from 'dotenv';
 dotenv.config();
-import { runStateMachine } from './signalService.js';
 
 const FMP_API_KEY   = process.env.FMP_API_KEY;
 const FMP_BASE_URL  = 'https://financialmodelingprep.com/api/v3';
@@ -515,49 +514,73 @@ function runSpringShort(ticker, data) {
 }
 
 // ── Dinner: BL+1 / SS+1 ──────────────────────────────────────────────────────
-// A stock is Dinner if the PNTHR state machine's last completed bar was bar 1
-// of a BL or SS signal (i.e., 2 consecutive bars above/below EMA where bar 1
-// broke the prior 2-week structural high/low).
+// Detect bars where last week (li-1) fired a BL or SS signal and this week
+// (li) is one bar past it (BL+1 / SS+1), with quality filters applied.
+//
+// BL signal conditions on bar li-1:
+//   close > EMA, EMA slope up, high >= twoWeekHigh+0.01, low in 1-10% daylight
+//
+// SS signal conditions on bar li-1:
+//   close < EMA, EMA slope down, low <= twoWeekLow-0.01, high in 1-10% zone
+//
+// Quality filters on current bar (li): EMA slope, OBV, RSI direction + room, daylight
 
 function runDinner(ticker, data) {
   const { weekly, ema21, obv, rsi } = data;
   const n = weekly.length;
   if (n < 25) return null;
 
-  const li      = n - 1;
-  const lastEma = ema21[li];
-  const prevEma = ema21[li - 1];
-  if (lastEma == null || prevEma == null) return null;
+  const li = n - 1;
+  if (li < 4) return null;
 
-  // Use the canonical PNTHR state machine to determine current signal
-  const sig = runStateMachine(weekly);
-  if (!sig || (sig.signal !== 'BL' && sig.signal !== 'SS')) return null;
+  const lastEma    = ema21[li];
+  const prevEma    = ema21[li - 1];   // EMA at signal bar
+  const prevPrevEma = ema21[li - 2];  // EMA one bar before signal
+  if (lastEma == null || prevEma == null || prevPrevEma == null) return null;
 
-  // Dinner = BL+1 or SS+1: signal must have fired on the previous bar (li-1)
-  if (sig.signalDate !== weekly[li - 1].weekStart) return null;
+  const cur  = weekly[li];
+  const prev = weekly[li - 1]; // signal bar
+
+  // Two-week structural high/low uses the 2 bars before the signal bar
+  const twoWeekHigh = Math.max(weekly[li - 2].high, weekly[li - 3].high);
+  const twoWeekLow  = Math.min(weekly[li - 2].low,  weekly[li - 3].low);
+
+  const prevDeltaAbove = (prev.low  - prevEma) / prevEma;  // > 0 means low above EMA
+  const prevDeltaBelow = (prevEma  - prev.high) / prevEma; // > 0 means high below EMA
+
+  const isBLSignalBar = (
+    prev.close > prevEma &&
+    prevEma > prevPrevEma &&
+    prev.high >= twoWeekHigh + 0.01 &&
+    prevDeltaAbove >= 0.01 && prevDeltaAbove <= 0.10
+  );
+
+  const isSSSignalBar = (
+    prev.close < prevEma &&
+    prevEma < prevPrevEma &&
+    prev.low <= twoWeekLow - 0.01 &&
+    prevDeltaBelow >= 0.01 && prevDeltaBelow <= 0.10
+  );
+
+  if (!isBLSignalBar && !isSSSignalBar) return null;
 
   const lastRsi = rsi[li];
   const prevRsi = rsi[li - 1];
   const lastObv = obv[li];
   const prevObv = obv[li - 1];
 
-  if (sig.signal === 'BL') {
-    // Quality filters for Dinner Long:
-    // 1. EMA slope rising
-    if (lastEma <= prevEma) return null;
-    // 2. OBV rising
-    if (lastObv == null || prevObv == null || lastObv <= prevObv) return null;
-    // 3. RSI rising AND has room to reach 85
-    if (lastRsi == null || prevRsi == null) return null;
-    if (lastRsi <= prevRsi) return null;
-    if (lastRsi >= 75) return null;
-    // 4. Daylight: current bar low above EMA
-    if (weekly[li].low <= lastEma) return null;
+  if (isBLSignalBar) {
+    if (cur.close <= lastEma) return null;         // still above EMA
+    if (lastEma <= prevEma) return null;           // EMA still rising
+    if (lastObv == null || prevObv == null || lastObv <= prevObv) return null; // OBV rising
+    if (lastRsi == null || prevRsi == null || lastRsi <= prevRsi) return null; // RSI rising
+    if (lastRsi >= 75) return null;                // RSI has room to reach 85
+    if (cur.low <= lastEma) return null;           // daylight confirmed
 
-    const delta = (weekly[li].close - lastEma) / lastEma;
+    const delta = (cur.close - lastEma) / lastEma;
     return {
       ticker, strategy: 'BL+1', direction: 'long',
-      currentPrice: weekly[li].close,
+      currentPrice: cur.close,
       ema21: +lastEma.toFixed(2),
       priceDeltaPct: +(delta * 100).toFixed(2),
       rsi: +lastRsi.toFixed(1),
@@ -565,23 +588,18 @@ function runDinner(ticker, data) {
     };
   }
 
-  if (sig.signal === 'SS') {
-    // Quality filters for Dinner Short:
-    // 1. EMA slope falling
-    if (lastEma >= prevEma) return null;
-    // 2. OBV falling
-    if (lastObv == null || prevObv == null || lastObv >= prevObv) return null;
-    // 3. RSI falling AND has room to reach 15
-    if (lastRsi == null || prevRsi == null) return null;
-    if (lastRsi >= prevRsi) return null;
-    if (lastRsi <= 25) return null;
-    // 4. Daylight: current bar high below EMA
-    if (weekly[li].high >= lastEma) return null;
+  if (isSSSignalBar) {
+    if (cur.close >= lastEma) return null;         // still below EMA
+    if (lastEma >= prevEma) return null;           // EMA still falling
+    if (lastObv == null || prevObv == null || lastObv >= prevObv) return null; // OBV falling
+    if (lastRsi == null || prevRsi == null || lastRsi >= prevRsi) return null; // RSI falling
+    if (lastRsi <= 25) return null;                // RSI has room to reach 15
+    if (cur.high >= lastEma) return null;          // daylight confirmed
 
-    const delta = (lastEma - weekly[li].close) / lastEma;
+    const delta = (lastEma - cur.close) / lastEma;
     return {
       ticker, strategy: 'SS+1', direction: 'short',
-      currentPrice: weekly[li].close,
+      currentPrice: cur.close,
       ema21: +lastEma.toFixed(2),
       priceDeltaPct: +(delta * 100).toFixed(2),
       rsi: +lastRsi.toFixed(1),

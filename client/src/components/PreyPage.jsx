@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchPreyStocks, fetchEarnings, fetchEmaCrossoverStocks, fetchScannerRanks } from '../services/api';
+import { fetchPreyStocks, fetchEarnings, fetchEmaCrossoverStocks, fetchScannerRanks, fetchTopStocks, fetchShortStocks, fetchSignals } from '../services/api';
 import ChartModal from './ChartModal';
 import StockTable from './StockTable';
 import styles from './PreyPage.module.css';
@@ -212,6 +212,43 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowEx
   );
 }
 
+function SprintTable({ longs, shorts, signals, onRowClick }) {
+  const [side, setSide] = useState('long');
+  const stocks = side === 'long' ? longs : shorts;
+
+  return (
+    <div>
+      <div className={styles.sideToggle}>
+        <button
+          className={`${styles.sideBtn} ${side === 'long' ? styles.sideBtnLong : ''}`}
+          onClick={() => setSide('long')}
+        >
+          Longs ({longs?.length ?? 0})
+        </button>
+        <button
+          className={`${styles.sideBtn} ${side === 'short' ? styles.sideBtnShort : ''}`}
+          onClick={() => setSide('short')}
+        >
+          Shorts ({shorts?.length ?? 0})
+        </button>
+      </div>
+      {!stocks?.length ? (
+        <div className={styles.empty}>No {side} sprint candidates this week.</div>
+      ) : (
+        <div className={styles.tableWrap}>
+          <StockTable
+            stocks={stocks}
+            signals={signals}
+            signalsLoading={false}
+            onTickerClick={(_s, idx, sorted) => onRowClick?.(_s, idx, sorted)}
+            scanType={side}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ALPHA_HEADERS  = ['Ticker', 'PNTHR Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
 const SPRING_HEADERS = ['Ticker', 'PNTHR Signal', 'Touch', 'Current Price', 'EMA21', 'Δ EMA', 'Wks / 52', 'OBV', 'Sector', 'Daylight'];
 const DINNER_HEADERS = ['Ticker', 'PNTHR Signal', 'Exchange', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk Per Share', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
@@ -260,15 +297,21 @@ export default function PreyPage({ onNavigate }) {
   const [showSpringGuide, setShowSpringGuide] = useState(false);
   const [showDinnerGuide, setShowDinnerGuide] = useState(false);
   const [showHuntGuide, setShowHuntGuide] = useState(false);
+  const [showSprintGuide, setShowSprintGuide] = useState(false);
   const [earnings, setEarnings] = useState({});
   const [huntStocks, setHuntStocks] = useState([]);
   const [huntSignals, setHuntSignals] = useState({});
   const [huntScannerRanks, setHuntScannerRanks] = useState(null);
   const [huntLoading, setHuntLoading] = useState(true);
   const [huntError, setHuntError] = useState(null);
+  const [sprintLongs, setSprintLongs] = useState([]);
+  const [sprintShorts, setSprintShorts] = useState([]);
+  const [sprintSignals, setSprintSignals] = useState({});
+  const [sprintLoading, setSprintLoading] = useState(true);
+  const [sprintError, setSprintError] = useState(null);
   const [chartSignals, setChartSignals] = useState({});
 
-  useEffect(() => { load(); loadHunt(); }, []);
+  useEffect(() => { load(); loadHunt(); loadSprint(); }, []);
 
   async function load(forceRefresh = false) {
     setLoading(true);
@@ -310,6 +353,26 @@ export default function PreyPage({ onNavigate }) {
     }
   }
 
+  async function loadSprint() {
+    setSprintLoading(true);
+    setSprintError(null);
+    try {
+      const [longStocks, shortStocks] = await Promise.all([fetchTopStocks(), fetchShortStocks()]);
+      const filteredLongs  = (longStocks  || []).filter(s => s.rankChange > 0 || s.rankChange === null);
+      const filteredShorts = (shortStocks || []).filter(s => s.rankChange > 0 || s.rankChange === null);
+      setSprintLongs(filteredLongs);
+      setSprintShorts(filteredShorts);
+      const allTickers = [...filteredLongs, ...filteredShorts].map(s => s.ticker);
+      if (allTickers.length > 0) {
+        fetchSignals(allTickers).then(setSprintSignals);
+      }
+    } catch (e) {
+      setSprintError(e.message || 'Sprint scan failed.');
+    } finally {
+      setSprintLoading(false);
+    }
+  }
+
   function handleStockClick(stock, list, index, signals = {}) {
     if (!stock || !Array.isArray(list)) return;
     setChartSignals(signals);
@@ -319,6 +382,12 @@ export default function PreyPage({ onNavigate }) {
 
   function handleHuntRowClick(_stock, sortedIdx, sortedStocks) {
     setChartSignals(huntSignals);
+    setChartStocks(sortedStocks);
+    setChartIndex(sortedIdx);
+  }
+
+  function handleSprintRowClick(_stock, sortedIdx, sortedStocks) {
+    setChartSignals(sprintSignals);
     setChartStocks(sortedStocks);
     setChartIndex(sortedIdx);
   }
@@ -502,6 +571,53 @@ export default function PreyPage({ onNavigate }) {
               onStockClick={handleStockClick}
               sortAccessors={SPRING_SORT}
             />
+          </section>
+
+          {/* Sprint */}
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.groupTitle}>
+                Sprint <span className={styles.groupBadge}>Rising</span>
+                <button
+                  type="button"
+                  className={styles.infoBtn}
+                  onClick={() => setShowSprintGuide(v => !v)}
+                  aria-label="Column definitions"
+                  title="What the columns mean"
+                >i</button>
+              </h2>
+              <p className={styles.groupSubtitle}>New entries and rising ranks in the PNTHR 100 — momentum building, the panther accelerates.</p>
+            </div>
+            {showSprintGuide && (
+              <div className={styles.columnGuidePopover}>
+                <strong>What the columns mean:</strong>
+                <ul className={styles.columnGuideList}>
+                  <li><strong>Performance Rank</strong> — Current rank in the PNTHR 100 (1 = strongest performer).</li>
+                  <li><strong>Rank Change</strong> — How many positions the stock moved up this week. "New" = first time on the list.</li>
+                  <li><strong>Ticker</strong> — Stock symbol and company name.</li>
+                  <li><strong>Exchange</strong> — NYSE or NASDAQ.</li>
+                  <li><strong>Sector</strong> — Sector the stock belongs to.</li>
+                  <li><strong>Current Price</strong> — Last weekly close price.</li>
+                  <li><strong>YTD Return</strong> — Year-to-date performance (%).</li>
+                  <li><strong>PNTHR Stop</strong> — Predatory buffer stop: ratcheted via Wilder ATR(3) from the signal week.</li>
+                  <li><strong>Risk Per Share</strong> — Dollar distance from current price to the PNTHR Stop.</li>
+                  <li><strong>Risk %</strong> — Risk as a percentage of current price.</li>
+                  <li><strong>PNTHR Signal</strong> — BL (Buy Long) or SS (Sell Short) entry signal type.</li>
+                  <li><strong>Wks Since</strong> — Weeks since the signal fired.</li>
+                  <li><strong>Next Earnings</strong> — Upcoming earnings date. Amber highlight = within 14 days.</li>
+                </ul>
+              </div>
+            )}
+            {sprintLoading && <div className={styles.empty}>Scanning PNTHR 100 for risers…</div>}
+            {sprintError && !sprintLoading && <div className={styles.empty}>⚠️ {sprintError}</div>}
+            {!sprintLoading && !sprintError && (
+              <SprintTable
+                longs={sprintLongs}
+                shorts={sprintShorts}
+                signals={sprintSignals}
+                onRowClick={handleSprintRowClick}
+              />
+            )}
           </section>
 
           {/* Hunt */}

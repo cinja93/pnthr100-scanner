@@ -56,21 +56,36 @@ function AlphaRow({ s, onClick }) {
   );
 }
 
+function SpringStatusBadge({ status }) {
+  const cls = status === 'LAUNCHED' ? styles.badgeLaunched
+            : status === 'GAINING'  ? styles.badgeGaining
+            : styles.badgeCoiled;
+  return <span className={`${styles.badge} ${cls}`}>{status}</span>;
+}
+
 function SpringRow({ s, onClick }) {
   const isLong = s.direction === 'long';
-  const wks = s.weeksAbove52 ?? s.weeksBelow52;
+  const rowCls = s.status === 'LAUNCHED' ? (isLong ? styles.rowLaunched : styles.rowLaunchedShort)
+               : s.status === 'GAINING'  ? styles.rowGaining
+               : styles.rowCoiled;
   return (
-    <tr onClick={onClick}>
+    <tr onClick={onClick} className={rowCls}>
       <TickerCell ticker={s.ticker} companyName={s.companyName} />
-      <td className={styles.td}><DirBadge direction={s.direction} /></td>
-      <td className={styles.tdGray}>T-{s.touchBar}</td>
+      <td className={styles.td}><SpringStatusBadge status={s.status} /></td>
+      <td className={styles.tdNum}>{price(s.high26)}</td>
+      <td className={isLong ? styles.tdNeg : styles.tdPos}>
+        {s.pctOffHigh != null ? `${Number(s.pctOffHigh).toFixed(1)}%` : '—'}
+      </td>
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>
+      <td className={s.pctVsOpen != null ? styles.tdPos : styles.tdGray}>
+        {s.pctVsOpen != null ? `+${Number(s.pctVsOpen).toFixed(1)}%` : '—'}
+      </td>
+      <td className={s.pctAboveTrigger != null ? styles.tdPos : styles.tdGray}>
+        {s.pctAboveTrigger != null ? `+${Number(s.pctAboveTrigger).toFixed(1)}%` : '—'}
+      </td>
       <td className={styles.tdNum}>{price(s.ema21)}</td>
       <td className={isLong ? styles.tdPos : styles.tdNeg}>{pct(s.priceDeltaPct)}</td>
-      <td className={styles.tdNum}>{wks != null ? `${wks} / 52` : '—'}</td>
-      <td className={styles.td}><span className={`${styles.badge} ${styles.badgeOBV}`}>{s.obvSlope}</span></td>
       <td className={styles.tdGray}>{s.sector || '—'}</td>
-      <td className={styles.td}><span className={`${styles.badge} ${styles.badgeConfirm}`}>confirmed</span></td>
     </tr>
   );
 }
@@ -250,7 +265,7 @@ function SprintTable({ longs, shorts, signals, onRowClick }) {
 }
 
 const ALPHA_HEADERS  = ['Ticker', 'PNTHR Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
-const SPRING_HEADERS = ['Ticker', 'PNTHR Signal', 'Touch', 'Current Price', 'EMA21', 'Δ EMA', 'Wks / 52', 'OBV', 'Sector', 'Daylight'];
+const SPRING_HEADERS = ['Ticker', 'Status', '6M High', '% Off High', 'Current', '% vs Open', '% past Trigger', 'EMA21', 'Δ EMA', 'Sector'];
 const DINNER_HEADERS = ['Ticker', 'PNTHR Signal', 'Exchange', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk Per Share', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
 
 const ALPHA_SORT = {
@@ -266,13 +281,14 @@ const ALPHA_SORT = {
 };
 
 const SPRING_SORT = {
-  'Ticker':        s => s.ticker,
-  'Touch':         s => s.touchBar ?? 0,
-  'Current Price': s => s.currentPrice ?? 0,
-  'EMA21':         s => s.ema21 ?? 0,
-  'Δ EMA':         s => s.priceDeltaPct ?? 0,
-  'Wks / 52':      s => s.weeksAbove52 ?? s.weeksBelow52 ?? 0,
-  'Sector':        s => s.sector || '',
+  'Ticker':          s => s.ticker,
+  '% Off High':      s => s.pctOffHigh ?? 0,
+  'Current':         s => s.currentPrice ?? 0,
+  '% vs Open':       s => s.pctVsOpen ?? 0,
+  '% past Trigger':  s => s.pctAboveTrigger ?? 0,
+  'EMA21':           s => s.ema21 ?? 0,
+  'Δ EMA':           s => s.priceDeltaPct ?? 0,
+  'Sector':          s => s.sector || '',
 };
 
 const DINNER_SORT = {
@@ -534,7 +550,7 @@ export default function PreyPage({ onNavigate }) {
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.groupTitle}>
-                Springs <span className={styles.groupBadge}>Institutional</span>
+                Springs <span className={styles.groupBadge}>Pullback</span>
                 <button
                   type="button"
                   className={styles.infoBtn}
@@ -543,23 +559,22 @@ export default function PreyPage({ onNavigate }) {
                   title="What the columns mean"
                 >i</button>
               </h2>
-              <p className={styles.groupSubtitle}>Long-term trend maturity · 21-EMA touch & relaunch · confirmed daylight</p>
+              <p className={styles.groupSubtitle}>6-month high → ≥8% pullback → relaunch above EMA · three stages: Coiled → Gaining → Launched</p>
             </div>
             {showSpringGuide && (
               <div className={styles.columnGuidePopover}>
                 <strong>What the columns mean:</strong>
                 <ul className={styles.columnGuideList}>
-                  <li><strong>Ticker</strong> — Stock symbol.</li>
-                  <li><strong>Company</strong> — Company name.</li>
-                  <li><strong>Dir</strong> — Direction: Long (bullish) or Short (bearish).</li>
-                  <li><strong>Touch</strong> — How many bars ago the stock last touched the 21-EMA.</li>
-                  <li><strong>Price</strong> — Current share price.</li>
-                  <li><strong>EMA21</strong> — 21-week exponential moving average (trend line).</li>
-                  <li><strong>Δ EMA</strong> — How far price is above or below the 21-EMA (%).</li>
-                  <li><strong>Wks / 52</strong> — Weeks above (longs) or below (shorts) the EMA out of the last 52 weeks — measures long-term trend maturity.</li>
-                  <li><strong>OBV</strong> — On-Balance Volume slope (volume supporting the move).</li>
+                  <li><strong>Ticker</strong> — Stock symbol and company name.</li>
+                  <li><strong>Status</strong> — Stage of the Spring setup: <strong>COILED</strong> (setup met, watching), <strong>GAINING</strong> (building intraweek momentum), or <strong>LAUNCHED</strong> (trigger confirmed).</li>
+                  <li><strong>6M High</strong> — The 26-week high the stock made before pulling back (shorts: 26-week low).</li>
+                  <li><strong>% Off High</strong> — How far the current price is from that 6-month extreme. Deeper pullback = more coiled energy.</li>
+                  <li><strong>Current</strong> — Current weekly close price.</li>
+                  <li><strong>% vs Open</strong> — For GAINING stocks: how much the close is above (longs) or below (shorts) this week's open. Higher = more momentum building toward a launch.</li>
+                  <li><strong>% past Trigger</strong> — For LAUNCHED stocks: how far the close has moved past the prior week's high (longs) or low (shorts). Confirms the Spring's strength.</li>
+                  <li><strong>EMA21</strong> — 21-week exponential moving average (trend anchor).</li>
+                  <li><strong>Δ EMA</strong> — Distance between current price and the 21-EMA (%).</li>
                   <li><strong>Sector</strong> — Sector the stock belongs to.</li>
-                  <li><strong>Daylight</strong> — Confirmed open space between price and EMA after the touch.</li>
                 </ul>
               </div>
             )}

@@ -374,142 +374,125 @@ function runAlphaShort(ticker, sector, data, sectorStatus, sectorFW) {
 }
 
 // ── Rule Set 3: PNTHR Spring Long ─────────────────────────────────────────────
+// Strategy: stock made a 26-week high, pulled back ≥8%, is still above rising
+// 21-week EMA, and is in one of three stages: COILED (setup only), GAINING
+// (current close > weekly open — building momentum), or LAUNCHED (current
+// close > prior week's high — trigger confirmed).
 
 function runSpringLong(ticker, data) {
-  const { weekly, ema21, obv, monthlyData } = data;
+  const { weekly, ema21 } = data;
   const n = weekly.length;
-  if (n < 60) return null;
+  if (n < 32) return null;
 
   const li = n - 1;
   const lastEma = ema21[li];
-  if (lastEma == null) return null;
-  const cur = weekly[li];
+  const ema4ago = ema21[li - 4];
+  if (lastEma == null || ema4ago == null) return null;
 
-  // Step 0: 21-EMA slope positive over 52 weeks
-  const ema52 = ema21[li - 52];
-  if (ema52 == null || lastEma <= ema52) return null;
+  const cur  = weekly[li];
+  const prev = weekly[li - 1];
 
-  // Step 1: ≥32 of last 52 weeks closed above EMA
-  let weeksAbove = 0;
-  for (let i = li - 51; i <= li; i++) {
-    if (ema21[i] != null && weekly[i].close > ema21[i]) weeksAbove++;
+  // Rule 1: price above 21-week EMA
+  if (cur.close <= lastEma) return null;
+
+  // Rule 2: EMA net rising (higher than 4 weeks ago)
+  if (lastEma <= ema4ago) return null;
+
+  // Rule 3: find 26-week high; it must have occurred 2–14 weeks ago
+  let high26 = -Infinity;
+  for (let i = Math.max(0, li - 26); i <= li; i++) {
+    if (weekly[i].high > high26) high26 = weekly[i].high;
   }
-  if (weeksAbove < 32) return null;
-
-  // Step 1b: last 3 months above monthly 21-EMA
-  const { closes: mC, ema: mE } = monthlyData;
-  if (!mE || mE.length < 3) return null;
-  const ml = mE.length;
-  for (let i = ml - 3; i < ml; i++) {
-    if (mE[i] == null || mC[i] <= mE[i]) return null;
+  let highWeeksAgo = null;
+  for (let i = li; i >= Math.max(0, li - 26); i--) {
+    if (weekly[i].high >= high26 * 0.999) { highWeeksAgo = li - i; break; }
   }
+  if (highWeeksAgo === null || highWeeksAgo < 2 || highWeeksAgo > 14) return null;
 
-  // Step 2: weekly low touched/pierced EMA in T-3 to T-7, closed above
-  let touchBar = -1;
-  for (let t = 3; t <= 7; t++) {
-    const idx = li - t;
-    if (idx < 0 || ema21[idx] == null) continue;
-    if (weekly[idx].low <= ema21[idx] && weekly[idx].close > ema21[idx]) { touchBar = t; break; }
+  // Rule 4: current price ≥8% below that 26-week high
+  const pctOffHigh = (high26 - cur.close) / high26 * 100;
+  if (pctOffHigh < 8) return null;
+
+  // Determine stage
+  let status, pctVsOpen = null, pctAboveTrigger = null;
+  if (cur.close > prev.high) {
+    status = 'LAUNCHED';
+    pctAboveTrigger = +(((cur.close - prev.high) / prev.high) * 100).toFixed(2);
+  } else if (cur.close > cur.open) {
+    status = 'GAINING';
+    pctVsOpen = +(((cur.close - cur.open) / cur.open) * 100).toFixed(2);
+  } else {
+    status = 'COILED';
   }
-  if (touchBar === -1) return null;
-
-  // Step 3: Recency lock — T-2 low <= EMA (fresh daylight check)
-  const t2 = li - 2;
-  if (t2 < 0 || ema21[t2] == null || weekly[t2].low > ema21[t2]) return null;
-
-  // Step 4: Daylight — lowest low 1%–10% above EMA (T-0 or T-1)
-  const daylight0 = (cur.low / lastEma) - 1;
-  let daylightOk = daylight0 >= 0.01 && daylight0 <= 0.10;
-  if (!daylightOk) {
-    const t1e = ema21[li - 1];
-    if (t1e != null) {
-      const d1 = (weekly[li-1].low / t1e) - 1;
-      daylightOk = d1 >= 0.01 && d1 <= 0.10;
-    }
-  }
-  if (!daylightOk) return null;
-
-  // Step 5: Price > weekly open AND OBV positive slope
-  if (cur.close <= cur.open) return null;
-  if (li < 5 || obv[li] <= obv[li - 5]) return null;
 
   const delta = (cur.close - lastEma) / lastEma;
   return {
     ticker, strategy: 'Spring Long', direction: 'long',
-    touchBar, weeksAbove52: weeksAbove,
+    status, high26: +high26.toFixed(2), pctOffHigh: +pctOffHigh.toFixed(2),
+    highWeeksAgo, pctVsOpen, pctAboveTrigger,
     currentPrice: cur.close, ema21: +lastEma.toFixed(2),
     priceDeltaPct: +(delta * 100).toFixed(2),
-    obvSlope: 'positive', daylight: 'confirmed',
   };
 }
 
 // ── Rule Set 4: PNTHR Spring Short ────────────────────────────────────────────
+// Mirror of Spring Long: stock made a 26-week low, bounced ≥8% (the "pullback"
+// in short direction), is still below a falling 21-week EMA.
+// LAUNCHED = close < prior week's low; GAINING = close < weekly open; COILED = setup only.
 
 function runSpringShort(ticker, data) {
-  const { weekly, ema21, obv, monthlyData } = data;
+  const { weekly, ema21 } = data;
   const n = weekly.length;
-  if (n < 60) return null;
+  if (n < 32) return null;
 
   const li = n - 1;
   const lastEma = ema21[li];
-  if (lastEma == null) return null;
-  const cur = weekly[li];
+  const ema4ago = ema21[li - 4];
+  if (lastEma == null || ema4ago == null) return null;
 
-  // Step 0: 21-EMA slope negative over 52 weeks
-  const ema52 = ema21[li - 52];
-  if (ema52 == null || lastEma >= ema52) return null;
+  const cur  = weekly[li];
+  const prev = weekly[li - 1];
 
-  // Step 1: ≥32 of last 52 weeks closed below EMA
-  let weeksBelow = 0;
-  for (let i = li - 51; i <= li; i++) {
-    if (ema21[i] != null && weekly[i].close < ema21[i]) weeksBelow++;
+  // Rule 1: price below 21-week EMA
+  if (cur.close >= lastEma) return null;
+
+  // Rule 2: EMA net falling (lower than 4 weeks ago)
+  if (lastEma >= ema4ago) return null;
+
+  // Rule 3: find 26-week low; it must have occurred 2–14 weeks ago
+  let low26 = Infinity;
+  for (let i = Math.max(0, li - 26); i <= li; i++) {
+    if (weekly[i].low < low26) low26 = weekly[i].low;
   }
-  if (weeksBelow < 32) return null;
-
-  // Step 1b: last 3 months below monthly 21-EMA
-  const { closes: mC, ema: mE } = monthlyData;
-  if (!mE || mE.length < 3) return null;
-  const ml = mE.length;
-  for (let i = ml - 3; i < ml; i++) {
-    if (mE[i] == null || mC[i] >= mE[i]) return null;
+  let lowWeeksAgo = null;
+  for (let i = li; i >= Math.max(0, li - 26); i--) {
+    if (weekly[i].low <= low26 * 1.001) { lowWeeksAgo = li - i; break; }
   }
+  if (lowWeeksAgo === null || lowWeeksAgo < 2 || lowWeeksAgo > 14) return null;
 
-  // Step 2: high touched/pierced EMA in T-3 to T-7, closed below
-  let touchBar = -1;
-  for (let t = 3; t <= 7; t++) {
-    const idx = li - t;
-    if (idx < 0 || ema21[idx] == null) continue;
-    if (weekly[idx].high >= ema21[idx] && weekly[idx].close < ema21[idx]) { touchBar = t; break; }
+  // Rule 4: current price ≥8% above that 26-week low (bounced up = "off extreme")
+  const pctOffHigh = (cur.close - low26) / low26 * 100;
+  if (pctOffHigh < 8) return null;
+
+  // Determine stage
+  let status, pctVsOpen = null, pctAboveTrigger = null;
+  if (cur.close < prev.low) {
+    status = 'LAUNCHED';
+    pctAboveTrigger = +(((prev.low - cur.close) / prev.low) * 100).toFixed(2);
+  } else if (cur.close < cur.open) {
+    status = 'GAINING';
+    pctVsOpen = +(((cur.open - cur.close) / cur.open) * 100).toFixed(2);
+  } else {
+    status = 'COILED';
   }
-  if (touchBar === -1) return null;
-
-  // Step 3: Recency lock — T-2 high >= EMA
-  const t2 = li - 2;
-  if (t2 < 0 || ema21[t2] == null || weekly[t2].high < ema21[t2]) return null;
-
-  // Step 4: Highest high 1%–10% below EMA (T-0 or T-1)
-  const dist0 = 1 - (cur.high / lastEma);
-  let daylightOk = dist0 >= 0.01 && dist0 <= 0.10;
-  if (!daylightOk) {
-    const t1e = ema21[li - 1];
-    if (t1e != null) {
-      const d1 = 1 - (weekly[li-1].high / t1e);
-      daylightOk = d1 >= 0.01 && d1 <= 0.10;
-    }
-  }
-  if (!daylightOk) return null;
-
-  // Step 5: Price < weekly open AND OBV negative slope
-  if (cur.close >= cur.open) return null;
-  if (li < 5 || obv[li] >= obv[li - 5]) return null;
 
   const delta = (lastEma - cur.close) / lastEma;
   return {
     ticker, strategy: 'Spring Short', direction: 'short',
-    touchBar, weeksBelow52: weeksBelow,
+    status, high26: +low26.toFixed(2), pctOffHigh: +pctOffHigh.toFixed(2),
+    highWeeksAgo: lowWeeksAgo, pctVsOpen, pctAboveTrigger,
     currentPrice: cur.close, ema21: +lastEma.toFixed(2),
     priceDeltaPct: +(delta * 100).toFixed(2),
-    obvSlope: 'negative', daylight: 'confirmed',
   };
 }
 
@@ -638,8 +621,16 @@ export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}
   // Sort: Alphas by bar# then delta; Springs by touchBar; Dinner by delta
   alphaLongs.sort((a, b)  => a.barNumber - b.barNumber || b.priceDeltaPct - a.priceDeltaPct);
   alphaShorts.sort((a, b) => a.barNumber - b.barNumber || b.priceDeltaPct - a.priceDeltaPct);
-  springLongs.sort((a, b)  => a.touchBar - b.touchBar);
-  springShorts.sort((a, b) => a.touchBar - b.touchBar);
+  const statusPriority = { LAUNCHED: 0, GAINING: 1, COILED: 2 };
+  function sortSprings(a, b) {
+    const sp = statusPriority[a.status] - statusPriority[b.status];
+    if (sp !== 0) return sp;
+    if (a.status === 'LAUNCHED') return (b.pctAboveTrigger ?? 0) - (a.pctAboveTrigger ?? 0);
+    if (a.status === 'GAINING')  return (b.pctVsOpen ?? 0) - (a.pctVsOpen ?? 0);
+    return (b.pctOffHigh ?? 0) - (a.pctOffHigh ?? 0);
+  }
+  springLongs.sort(sortSprings);
+  springShorts.sort(sortSprings);
   dinner.sort((a, b) => b.priceDeltaPct - a.priceDeltaPct);
 
   const results = {

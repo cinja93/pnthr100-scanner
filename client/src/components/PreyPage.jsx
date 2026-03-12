@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { fetchPreyStocks } from '../services/api';
 import styles from './PreyPage.module.css';
+import pantherHead from '../assets/panther head.png';
 
 const GROUPS = [
   { key: 'alphas',  label: 'Alphas',  subtitle: 'Elite Alpha Longs & Shorts — maximum trend alignment' },
@@ -30,7 +31,9 @@ function AlphaRow({ s }) {
       <td className={s.direction === 'long' ? styles.tdDeltaPos : styles.tdDeltaNeg}>{pct(s.priceDeltaPct)}</td>
       <td className={styles.tdStat}>{s.rsi ?? '—'}</td>
       <td className={styles.tdStat}>{s.adx ?? '—'}</td>
-      <td className={styles.tdObv}>{s.obvSlope}</td>
+      <td className={styles.tdObv}>
+        <span className={styles.obvPill}>{s.obvSlope}</span>
+      </td>
       <td className={styles.tdSector}>{s.sectorEtf ?? '—'}</td>
       <td className={s.direction === 'long' ? styles.tdDeltaPos : styles.tdDeltaNeg}>
         {pct(s.stock4wPct)} vs {pct(s.sector4wPct)}
@@ -50,9 +53,13 @@ function SpringRow({ s }) {
       <td className={styles.tdEma}>{price(s.ema21)}</td>
       <td className={s.direction === 'long' ? styles.tdDeltaPos : styles.tdDeltaNeg}>{pct(s.priceDeltaPct)}</td>
       <td className={styles.tdStat} colSpan={2}>{s.weeksAbove52 ?? s.weeksBelow52 ?? '—'} / 52 wks</td>
-      <td className={styles.tdObv}>{s.obvSlope}</td>
+      <td className={styles.tdObv}>
+        <span className={styles.obvPill}>{s.obvSlope}</span>
+      </td>
       <td className={styles.tdSector}>{s.sector || '—'}</td>
-      <td className={styles.tdDeltaPos}>confirmed</td>
+      <td className={styles.tdSignal}>
+        <span className={styles.signalPill}>confirmed</span>
+      </td>
     </tr>
   );
 }
@@ -63,7 +70,9 @@ function DinnerRow({ s }) {
       <td className={styles.tdTicker}>{s.ticker}</td>
       <td className={styles.tdName}>{s.companyName || '—'}</td>
       <td className={styles.tdDir}>{s.direction === 'long' ? '▲ Long' : '▼ Short'}</td>
-      <td className={styles.tdBar}>{s.strategy}</td>
+      <td className={styles.tdSignal}>
+        <span className={styles.signalPill}>{s.strategy}</span>
+      </td>
       <td className={styles.tdPrice}>{price(s.currentPrice)}</td>
       <td className={styles.tdEma}>{price(s.ema21)}</td>
       <td className={s.direction === 'long' ? styles.tdDeltaPos : styles.tdDeltaNeg}>{pct(s.priceDeltaPct)}</td>
@@ -145,11 +154,14 @@ export default function PreyPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>PNTHR PREY</h1>
+          <h1 className={styles.title}>
+            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
+            PNTHR PREY
+          </h1>
           <p className={styles.subtitle}>679 stocks · Sector-filtered · Three precision strategies</p>
         </div>
         <button className={styles.refreshBtn} onClick={() => load(true)} disabled={loading}>
-          {loading ? '🔄 Scanning…' : '🔄 Refresh'}
+          {loading ? 'Scanning…' : '↻ Refresh'}
         </button>
       </div>
 

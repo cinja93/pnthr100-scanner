@@ -276,6 +276,8 @@
 
 .th {
   padding: 16px;
+  height: 70px;
+  vertical-align: bottom;
   text-align: left;
   font-weight: 600;
   font-size: 13px;

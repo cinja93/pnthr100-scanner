@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchPreyStocks } from '../services/api';
+import ChartModal from './ChartModal';
 import styles from './PreyPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -19,9 +20,12 @@ function price(v) {
   return `$${Number(v).toFixed(2)}`;
 }
 
-function AlphaRow({ s }) {
+function AlphaRow({ s, onClick }) {
   return (
-    <tr className={s.direction === 'long' ? styles.rowLong : styles.rowShort}>
+    <tr
+      className={`${s.direction === 'long' ? styles.rowLong : styles.rowShort} ${styles.clickableRow}`}
+      onClick={onClick}
+    >
       <td className={styles.tdTicker}>{s.ticker}</td>
       <td className={styles.tdName}>{s.companyName || '—'}</td>
       <td className={styles.tdDir}>{s.direction === 'long' ? '▲ Long' : '▼ Short'}</td>
@@ -42,9 +46,12 @@ function AlphaRow({ s }) {
   );
 }
 
-function SpringRow({ s }) {
+function SpringRow({ s, onClick }) {
   return (
-    <tr className={s.direction === 'long' ? styles.rowLong : styles.rowShort}>
+    <tr
+      className={`${s.direction === 'long' ? styles.rowLong : styles.rowShort} ${styles.clickableRow}`}
+      onClick={onClick}
+    >
       <td className={styles.tdTicker}>{s.ticker}</td>
       <td className={styles.tdName}>{s.companyName || '—'}</td>
       <td className={styles.tdDir}>{s.direction === 'long' ? '▲ Long' : '▼ Short'}</td>
@@ -64,9 +71,12 @@ function SpringRow({ s }) {
   );
 }
 
-function DinnerRow({ s }) {
+function DinnerRow({ s, onClick }) {
   return (
-    <tr className={s.direction === 'long' ? styles.rowLong : styles.rowShort}>
+    <tr
+      className={`${s.direction === 'long' ? styles.rowLong : styles.rowShort} ${styles.clickableRow}`}
+      onClick={onClick}
+    >
       <td className={styles.tdTicker}>{s.ticker}</td>
       <td className={styles.tdName}>{s.companyName || '—'}</td>
       <td className={styles.tdDir}>{s.direction === 'long' ? '▲ Long' : '▼ Short'}</td>
@@ -84,7 +94,7 @@ function DinnerRow({ s }) {
   );
 }
 
-function ResultTable({ longs, shorts, RowComponent, headers }) {
+function ResultTable({ longs, shorts, RowComponent, headers, onStockClick }) {
   const [side, setSide] = useState('long');
   const rows = side === 'long' ? longs : shorts;
   const count = rows?.length ?? 0;
@@ -117,7 +127,13 @@ function ResultTable({ longs, shorts, RowComponent, headers }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((s, i) => <RowComponent key={s.ticker + i} s={s} />)}
+              {rows.map((s, i) => (
+                <RowComponent
+                  key={s.ticker + i}
+                  s={s}
+                  onClick={() => onStockClick?.(s, rows, i)}
+                />
+              ))}
             </tbody>
           </table>
         </div>
@@ -134,6 +150,8 @@ export default function PreyPage() {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
+  const [chartStocks, setChartStocks] = useState([]);
+  const [chartIndex, setChartIndex]   = useState(null);
 
   useEffect(() => { load(); }, []);
 
@@ -148,6 +166,12 @@ export default function PreyPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleStockClick(stock, list, index) {
+    if (!stock || !Array.isArray(list)) return;
+    setChartStocks(list);
+    setChartIndex(index ?? list.indexOf(stock));
   }
 
   return (
@@ -204,6 +228,7 @@ export default function PreyPage() {
               shorts={data.alphas.shorts}
               RowComponent={AlphaRow}
               headers={ALPHA_HEADERS}
+              onStockClick={handleStockClick}
             />
           </section>
 
@@ -216,6 +241,7 @@ export default function PreyPage() {
               shorts={data.springs.shorts}
               RowComponent={SpringRow}
               headers={SPRING_HEADERS}
+              onStockClick={handleStockClick}
             />
           </section>
 
@@ -228,9 +254,19 @@ export default function PreyPage() {
               shorts={data.dinner.shorts}
               RowComponent={DinnerRow}
               headers={DINNER_HEADERS}
+              onStockClick={handleStockClick}
             />
           </section>
         </>
+      )}
+
+      {chartIndex != null && chartStocks.length > 0 && (
+        <ChartModal
+          stocks={chartStocks}
+          initialIndex={chartIndex}
+          earnings={{}}
+          onClose={() => setChartIndex(null)}
+        />
       )}
     </div>
   );

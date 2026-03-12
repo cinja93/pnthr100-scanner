@@ -238,6 +238,10 @@
 .rowLong  td:first-child { border-left-color: #22c55e; }
 .rowShort td:first-child { border-left-color: #ef4444; }
 
+.clickableRow {
+  cursor: pointer;
+}
+
 /* Cells */
 .tdTicker {
   padding: 9px 10px;

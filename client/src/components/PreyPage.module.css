@@ -368,6 +368,25 @@
   font-size: 11px;
 }
 
+/* ── Earnings highlight ───────────────────────────────────────────────────── */
+.earningsHighlight {
+  background: #fef3c7 !important;
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+.earningsHighlight:hover { background: #fde68a !important; }
+
+.earningsSoonBadge {
+  display: inline-block;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 5px;
+  white-space: nowrap;
+}
+
 @media (max-width: 768px) {
   .header { flex-direction: column; gap: 12px; }
   .section { margin: 0 12px 24px; }

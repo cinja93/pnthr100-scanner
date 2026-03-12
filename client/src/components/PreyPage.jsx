@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchPreyStocks } from '../services/api';
+import { fetchPreyStocks, fetchEarnings } from '../services/api';
 import ChartModal from './ChartModal';
 import styles from './PreyPage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -74,26 +74,54 @@ function SpringRow({ s, onClick }) {
   );
 }
 
-function DinnerRow({ s, onClick }) {
+function getEarningsInfo(dateStr) {
+  if (!dateStr) return { display: '—', highlight: false, daysAway: null };
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const earningsDate = new Date(y, m - 1, d);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const daysAway = Math.round((earningsDate - today) / (1000 * 60 * 60 * 24));
+  const display = earningsDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return { display, highlight: daysAway >= 0 && daysAway <= 14, daysAway };
+}
+
+function DinnerRow({ s, onClick, earnings = {} }) {
   const isLong = s.direction === 'long';
+  const stopPrice = s.stopPrice ?? null;
+  const riskDollar = stopPrice != null ? Math.abs(s.currentPrice - stopPrice) : null;
+  const riskPct = riskDollar != null ? (riskDollar / s.currentPrice) * 100 : null;
+  const earningsInfo = getEarningsInfo(earnings[s.ticker]);
+
   return (
-    <tr onClick={onClick}>
+    <tr
+      onClick={onClick}
+      className={earningsInfo.highlight ? styles.earningsHighlight : undefined}
+    >
       <TickerCell ticker={s.ticker} companyName={s.companyName} />
-      <td className={styles.td}><DirBadge direction={s.direction} /></td>
       <td className={styles.td}>
         <span className={`${styles.badge} ${isLong ? styles.badgeBL : styles.badgeSS}`}>{s.strategy}</span>
       </td>
+      <td className={styles.tdGray}>{s.exchange || '—'}</td>
+      <td className={styles.tdGray}>{s.sector || '—'}</td>
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>
-      <td className={styles.tdNum}>{price(s.ema21)}</td>
-      <td className={isLong ? styles.tdPos : styles.tdNeg}>{pct(s.priceDeltaPct)}</td>
+      <td className={styles.tdNum}>{stopPrice != null ? price(stopPrice) : '—'}</td>
+      <td className={styles.tdNum}>{riskDollar != null ? `$${riskDollar.toFixed(2)}` : '—'}</td>
+      <td className={isLong ? styles.tdNeg : styles.tdPos}>{riskPct != null ? `${riskPct.toFixed(2)}%` : '—'}</td>
       <td className={styles.tdNum}>{s.rsi ?? '—'}</td>
       <td className={styles.td}><span className={`${styles.badge} ${styles.badgeOBV}`}>{s.obvSlope}</span></td>
-      <td className={styles.tdGray}>{s.sector || '—'}</td>
+      <td className={isLong ? styles.tdPos : styles.tdNeg}>{pct(s.priceDeltaPct)}</td>
+      <td className={styles.tdGray}>
+        {earningsInfo.display}
+        {earningsInfo.highlight && (
+          <span className={styles.earningsSoonBadge}>
+            {earningsInfo.daysAway === 0 ? 'Today' : `${earningsInfo.daysAway}d`}
+          </span>
+        )}
+      </td>
     </tr>
   );
 }
 
-function ResultTable({ longs, shorts, RowComponent, headers, onStockClick }) {
+function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowExtraProps = {} }) {
   const [side, setSide] = useState('long');
   const rows = side === 'long' ? longs : shorts;
   const count = rows?.length ?? 0;
@@ -131,6 +159,7 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick }) {
                   key={s.ticker + i}
                   s={s}
                   onClick={() => onStockClick?.(s, rows, i)}
+                  {...rowExtraProps}
                 />
               ))}
             </tbody>
@@ -143,7 +172,7 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick }) {
 
 const ALPHA_HEADERS  = ['Ticker', 'Signal', 'Wks Since', 'Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
 const SPRING_HEADERS = ['Ticker', 'Signal', 'Touch', 'Price', 'EMA21', 'Δ EMA', 'Wks / 52', 'OBV', 'Sector', 'Daylight'];
-const DINNER_HEADERS = ['Ticker', 'Signal', 'Strategy', 'Price', 'EMA21', 'Δ EMA', 'RSI', 'OBV', 'Sector'];
+const DINNER_HEADERS = ['Ticker', 'Signal', 'Exchange', 'Sector', 'Price', 'PNTHR Stop', 'Risk $', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
 
 export default function PreyPage() {
   const [data, setData]       = useState(null);
@@ -154,6 +183,7 @@ export default function PreyPage() {
   const [showAlphaGuide, setShowAlphaGuide] = useState(false);
   const [showSpringGuide, setShowSpringGuide] = useState(false);
   const [showDinnerGuide, setShowDinnerGuide] = useState(false);
+  const [earnings, setEarnings] = useState({});
 
   useEffect(() => { load(); }, []);
 
@@ -163,6 +193,13 @@ export default function PreyPage() {
     try {
       const res = await fetchPreyStocks(forceRefresh);
       setData(res);
+      const dinnerTickers = [
+        ...(res.dinner?.longs  || []),
+        ...(res.dinner?.shorts || []),
+      ].map(s => s.ticker);
+      if (dinnerTickers.length > 0) {
+        fetchEarnings(dinnerTickers).then(setEarnings);
+      }
     } catch (e) {
       setError(e.message || 'Scan failed.');
     } finally {
@@ -255,6 +292,7 @@ export default function PreyPage() {
               RowComponent={DinnerRow}
               headers={DINNER_HEADERS}
               onStockClick={handleStockClick}
+              rowExtraProps={{ earnings }}
             />
           </section>
 

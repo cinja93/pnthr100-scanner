@@ -558,6 +558,7 @@ function runDinner(ticker, data, signalData) {
       priceDeltaPct: +(delta * 100).toFixed(2),
       rsi: +lastRsi.toFixed(1),
       obvSlope: 'rising',
+      stopPrice: signalData.stopPrice ?? null,
     };
   }
 
@@ -577,6 +578,7 @@ function runDinner(ticker, data, signalData) {
       priceDeltaPct: +(delta * 100).toFixed(2),
       rsi: +lastRsi.toFixed(1),
       obvSlope: 'falling',
+      stopPrice: signalData.stopPrice ?? null,
     };
   }
 

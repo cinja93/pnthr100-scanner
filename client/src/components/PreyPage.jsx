@@ -153,6 +153,8 @@ export default function PreyPage() {
   const [chartStocks, setChartStocks] = useState([]);
   const [chartIndex, setChartIndex]   = useState(null);
   const [showAlphaGuide, setShowAlphaGuide] = useState(false);
+  const [showSpringGuide, setShowSpringGuide] = useState(false);
+  const [showDinnerGuide, setShowDinnerGuide] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -222,21 +224,17 @@ export default function PreyPage() {
 
           {/* Alphas */}
           <section className={styles.section}>
-            <div className={styles.sectionTitleRow}>
-              <div>
-                <h2 className={styles.groupTitle}>Alphas <span className={styles.groupBadge}>Elite</span></h2>
-                <p className={styles.groupSubtitle}>Maximum trend alignment · institutional accumulation · sector alpha leadership</p>
-              </div>
+            <h2 className={styles.groupTitle}>
+              Alphas <span className={styles.groupBadge}>Elite</span>
               <button
                 type="button"
                 className={styles.infoBtn}
                 onClick={() => setShowAlphaGuide(v => !v)}
                 aria-label="Column definitions"
                 title="What the columns mean"
-              >
-                i
-              </button>
-            </div>
+              >i</button>
+            </h2>
+            <p className={styles.groupSubtitle}>Maximum trend alignment · institutional accumulation · sector alpha leadership</p>
             {showAlphaGuide && (
               <div className={styles.columnGuidePopover}>
                 <strong>What the columns mean:</strong>
@@ -267,8 +265,35 @@ export default function PreyPage() {
 
           {/* Springs */}
           <section className={styles.section}>
-            <h2 className={styles.groupTitle}>Springs <span className={styles.groupBadge}>Institutional</span></h2>
+            <h2 className={styles.groupTitle}>
+              Springs <span className={styles.groupBadge}>Institutional</span>
+              <button
+                type="button"
+                className={styles.infoBtn}
+                onClick={() => setShowSpringGuide(v => !v)}
+                aria-label="Column definitions"
+                title="What the columns mean"
+              >i</button>
+            </h2>
             <p className={styles.groupSubtitle}>Long-term trend maturity · 21-EMA touch & relaunch · confirmed daylight</p>
+            {showSpringGuide && (
+              <div className={styles.columnGuidePopover}>
+                <strong>What the columns mean:</strong>
+                <ul className={styles.columnGuideList}>
+                  <li><strong>Ticker</strong> — Stock symbol.</li>
+                  <li><strong>Company</strong> — Company name.</li>
+                  <li><strong>Dir</strong> — Direction: Long (bullish) or Short (bearish).</li>
+                  <li><strong>Touch</strong> — How many bars ago the stock last touched the 21-EMA.</li>
+                  <li><strong>Price</strong> — Current share price.</li>
+                  <li><strong>EMA21</strong> — 21-week exponential moving average (trend line).</li>
+                  <li><strong>Δ EMA</strong> — How far price is above or below the 21-EMA (%).</li>
+                  <li><strong>Wks / 52</strong> — Weeks above (longs) or below (shorts) the EMA out of the last 52 weeks — measures long-term trend maturity.</li>
+                  <li><strong>OBV</strong> — On-Balance Volume slope (volume supporting the move).</li>
+                  <li><strong>Sector</strong> — Sector the stock belongs to.</li>
+                  <li><strong>Daylight</strong> — Confirmed open space between price and EMA after the touch.</li>
+                </ul>
+              </div>
+            )}
             <ResultTable
               longs={data.springs.longs}
               shorts={data.springs.shorts}
@@ -280,8 +305,32 @@ export default function PreyPage() {
 
           {/* Dinner */}
           <section className={styles.section}>
-            <h2 className={styles.groupTitle}>Dinner <span className={styles.groupBadge}>BL+1 · SS+1</span></h2>
+            <h2 className={styles.groupTitle}>
+              Dinner <span className={styles.groupBadge}>BL+1 · SS+1</span>
+              <button
+                type="button"
+                className={styles.infoBtn}
+                onClick={() => setShowDinnerGuide(v => !v)}
+                aria-label="Column definitions"
+                title="What the columns mean"
+              >i</button>
+            </h2>
             <p className={styles.groupSubtitle}>One bar past the PNTHR entry signal · still in the zone</p>
+            {showDinnerGuide && (
+              <div className={styles.columnGuidePopover}>
+                <strong>What the columns mean:</strong>
+                <ul className={styles.columnGuideList}>
+                  <li><strong>Ticker</strong> — Stock symbol.</li>
+                  <li><strong>Company</strong> — Company name.</li>
+                  <li><strong>Dir</strong> — Direction: Long (bullish) or Short (bearish).</li>
+                  <li><strong>Signal</strong> — Entry strategy: BL+1 (one bar past Buy Long) or SS+1 (one bar past Sell Short).</li>
+                  <li><strong>Price</strong> — Current share price.</li>
+                  <li><strong>EMA21</strong> — 21-week exponential moving average (trend line).</li>
+                  <li><strong>Δ EMA</strong> — How far price is above or below the 21-EMA (%).</li>
+                  <li><strong>Sector</strong> — Sector the stock belongs to.</li>
+                </ul>
+              </div>
+            )}
             <ResultTable
               longs={data.dinner.longs}
               shorts={data.dinner.shorts}

@@ -174,7 +174,7 @@ const ALPHA_HEADERS  = ['Ticker', 'Signal', 'Wks Since', 'Price', 'EMA21', 'Δ E
 const SPRING_HEADERS = ['Ticker', 'Signal', 'Touch', 'Price', 'EMA21', 'Δ EMA', 'Wks / 52', 'OBV', 'Sector', 'Daylight'];
 const DINNER_HEADERS = ['Ticker', 'Signal', 'Exchange', 'Sector', 'Price', 'PNTHR Stop', 'Risk $', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
 
-export default function PreyPage() {
+export default function PreyPage({ onNavigate }) {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
@@ -256,9 +256,17 @@ export default function PreyPage() {
           {/* Sector Sentinel status bar */}
           <div className={styles.sectorBar}>
             {Object.entries(data.sectorStatus || {}).map(([etf, status]) => (
-              <span key={etf} className={status === 'above' ? styles.sectorUp : styles.sectorDown}>
+              <button
+                key={etf}
+                className={`${styles.sectorBtn} ${status === 'above' ? styles.sectorUp : styles.sectorDown}`}
+                onClick={() => {
+                  sessionStorage.setItem('pnthr-sector-etf', etf);
+                  onNavigate?.('sectors');
+                }}
+                title={`Go to ${etf} sector`}
+              >
                 {etf} {status === 'above' ? '▲' : '▼'}
-              </span>
+              </button>
             ))}
           </div>
 

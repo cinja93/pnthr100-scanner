@@ -356,7 +356,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {activePage === 'earnings' && <EarningsWeekPage />}
 
           {/* PNTHR PREY page */}
-          {activePage === 'prey' && <PreyPage />}
+          {activePage === 'prey' && <PreyPage onNavigate={navigate} />}
 
           {/* Jungle page */}
           {activePage === 'jungle' && <JunglePage />}

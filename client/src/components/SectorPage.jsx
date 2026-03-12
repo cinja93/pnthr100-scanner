@@ -590,8 +590,12 @@ export default function SectorPage() {
   const [timeRange, setTimeRange] = useState('12M');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedSector, setSelectedSector] = useState(null);
+  // Check if navigated here from PREY page with a specific ETF pre-selected
+  const pendingEtf = sessionStorage.getItem('pnthr-sector-etf');
+  const ETF_TO_SECTOR = Object.fromEntries(Object.entries(SECTOR_ETF).map(([k, v]) => [v, k]));
+  const [selectedSector, setSelectedSector] = useState(pendingEtf ? (ETF_TO_SECTOR[pendingEtf] ?? null) : null);
   const [selectedFilter, setSelectedFilter] = useState(null);
+  useEffect(() => { sessionStorage.removeItem('pnthr-sector-etf'); }, []);
   const [signalCounts, setSignalCounts] = useState(null);
   const [specCounts, setSpecCounts] = useState(null);
   const [specModal, setSpecModal] = useState(null); // 'longs' | 'shorts' | null

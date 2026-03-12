@@ -160,6 +160,72 @@
   letter-spacing: 0.04em;
 }
 
+.sectionTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.sectionTitleRow .groupSubtitle {
+  margin-bottom: 0;
+}
+
+.infoBtn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #374151;
+  background: #ffffff;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 700;
+  font-style: italic;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.infoBtn:hover {
+  background: #f3f4f6;
+  color: #111827;
+  border-color: #111827;
+}
+
+.columnGuidePopover {
+  font-size: 12px;
+  color: #4b5563;
+  line-height: 1.5;
+  margin-top: 10px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.columnGuidePopover strong {
+  color: #111827;
+}
+
+.columnGuideList {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.columnGuideList li {
+  margin-bottom: 2px;
+}
+
 /* ── Side Toggle ─────────────────────────────────────────────────────── */
 .sideToggle {
   display: flex;

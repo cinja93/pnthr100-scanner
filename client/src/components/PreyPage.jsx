@@ -152,6 +152,7 @@ export default function PreyPage() {
   const [error, setError]     = useState(null);
   const [chartStocks, setChartStocks] = useState([]);
   const [chartIndex, setChartIndex]   = useState(null);
+  const [showAlphaGuide, setShowAlphaGuide] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -221,8 +222,40 @@ export default function PreyPage() {
 
           {/* Alphas */}
           <section className={styles.section}>
-            <h2 className={styles.groupTitle}>Alphas <span className={styles.groupBadge}>Elite</span></h2>
-            <p className={styles.groupSubtitle}>Maximum trend alignment · institutional accumulation · sector alpha leadership</p>
+            <div className={styles.sectionTitleRow}>
+              <div>
+                <h2 className={styles.groupTitle}>Alphas <span className={styles.groupBadge}>Elite</span></h2>
+                <p className={styles.groupSubtitle}>Maximum trend alignment · institutional accumulation · sector alpha leadership</p>
+              </div>
+              <button
+                type="button"
+                className={styles.infoBtn}
+                onClick={() => setShowAlphaGuide(v => !v)}
+                aria-label="Column definitions"
+                title="What the columns mean"
+              >
+                i
+              </button>
+            </div>
+            {showAlphaGuide && (
+              <div className={styles.columnGuidePopover}>
+                <strong>What the columns mean:</strong>
+                <ul className={styles.columnGuideList}>
+                  <li><strong>Ticker</strong> — Stock symbol.</li>
+                  <li><strong>Company</strong> — Company name.</li>
+                  <li><strong>Dir</strong> — Direction: Long (bullish) or Short (bearish).</li>
+                  <li><strong>Bar</strong> — Which weekly bar since the trend signal (Bar 1 = first week).</li>
+                  <li><strong>Price</strong> — Current share price.</li>
+                  <li><strong>EMA21</strong> — 21-week exponential moving average (trend line).</li>
+                  <li><strong>Δ EMA</strong> — How far price is above or below the 21-EMA (%).</li>
+                  <li><strong>RSI</strong> — Relative Strength Index (momentum; 0–100).</li>
+                  <li><strong>ADX</strong> — Trend strength (higher = stronger trend).</li>
+                  <li><strong>OBV</strong> — On-Balance Volume slope (volume supporting the move).</li>
+                  <li><strong>ETF</strong> — Sector ETF this stock is grouped with.</li>
+                  <li><strong>4-Wk α</strong> — Stock 4-wk return vs sector 4-wk return (outperformance).</li>
+                </ul>
+              </div>
+            )}
             <ResultTable
               longs={data.alphas.longs}
               shorts={data.alphas.shorts}

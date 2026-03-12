@@ -221,6 +221,43 @@ export default function PreyPage() {
             ))}
           </div>
 
+          {/* Dinner */}
+          <section className={styles.section}>
+            <h2 className={styles.groupTitle}>
+              Dinner <span className={styles.groupBadge}>BL+1 · SS+1</span>
+              <button
+                type="button"
+                className={styles.infoBtn}
+                onClick={() => setShowDinnerGuide(v => !v)}
+                aria-label="Column definitions"
+                title="What the columns mean"
+              >i</button>
+            </h2>
+            <p className={styles.groupSubtitle}>One bar past the PNTHR entry signal · still in the zone</p>
+            {showDinnerGuide && (
+              <div className={styles.columnGuidePopover}>
+                <strong>What the columns mean:</strong>
+                <ul className={styles.columnGuideList}>
+                  <li><strong>Ticker</strong> — Stock symbol.</li>
+                  <li><strong>Company</strong> — Company name.</li>
+                  <li><strong>Dir</strong> — Direction: Long (bullish) or Short (bearish).</li>
+                  <li><strong>Signal</strong> — Entry strategy: BL+1 (one bar past Buy Long) or SS+1 (one bar past Sell Short).</li>
+                  <li><strong>Price</strong> — Current share price.</li>
+                  <li><strong>EMA21</strong> — 21-week exponential moving average (trend line).</li>
+                  <li><strong>Δ EMA</strong> — How far price is above or below the 21-EMA (%).</li>
+                  <li><strong>Sector</strong> — Sector the stock belongs to.</li>
+                </ul>
+              </div>
+            )}
+            <ResultTable
+              longs={data.dinner.longs}
+              shorts={data.dinner.shorts}
+              RowComponent={DinnerRow}
+              headers={DINNER_HEADERS}
+              onStockClick={handleStockClick}
+            />
+          </section>
+
           {/* Alphas */}
           <section className={styles.section}>
             <h2 className={styles.groupTitle}>
@@ -298,43 +335,6 @@ export default function PreyPage() {
               shorts={data.springs.shorts}
               RowComponent={SpringRow}
               headers={SPRING_HEADERS}
-              onStockClick={handleStockClick}
-            />
-          </section>
-
-          {/* Dinner */}
-          <section className={styles.section}>
-            <h2 className={styles.groupTitle}>
-              Dinner <span className={styles.groupBadge}>BL+1 · SS+1</span>
-              <button
-                type="button"
-                className={styles.infoBtn}
-                onClick={() => setShowDinnerGuide(v => !v)}
-                aria-label="Column definitions"
-                title="What the columns mean"
-              >i</button>
-            </h2>
-            <p className={styles.groupSubtitle}>One bar past the PNTHR entry signal · still in the zone</p>
-            {showDinnerGuide && (
-              <div className={styles.columnGuidePopover}>
-                <strong>What the columns mean:</strong>
-                <ul className={styles.columnGuideList}>
-                  <li><strong>Ticker</strong> — Stock symbol.</li>
-                  <li><strong>Company</strong> — Company name.</li>
-                  <li><strong>Dir</strong> — Direction: Long (bullish) or Short (bearish).</li>
-                  <li><strong>Signal</strong> — Entry strategy: BL+1 (one bar past Buy Long) or SS+1 (one bar past Sell Short).</li>
-                  <li><strong>Price</strong> — Current share price.</li>
-                  <li><strong>EMA21</strong> — 21-week exponential moving average (trend line).</li>
-                  <li><strong>Δ EMA</strong> — How far price is above or below the 21-EMA (%).</li>
-                  <li><strong>Sector</strong> — Sector the stock belongs to.</li>
-                </ul>
-              </div>
-            )}
-            <ResultTable
-              longs={data.dinner.longs}
-              shorts={data.dinner.shorts}
-              RowComponent={DinnerRow}
-              headers={DINNER_HEADERS}
               onStockClick={handleStockClick}
             />
           </section>

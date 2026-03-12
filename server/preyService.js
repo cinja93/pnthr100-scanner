@@ -496,6 +496,146 @@ function runSpringShort(ticker, data) {
   };
 }
 
+// ── Bollinger Band Helpers ────────────────────────────────────────────────────
+
+// 20-week SMA ± 2 std dev; returns array of { upper, middle, lower, bw } per bar
+// bw = (upper - lower) / middle * 100  (normalized bandwidth)
+function computeBB20(weeklyBars) {
+  const n = weeklyBars.length;
+  const bb = new Array(n).fill(null);
+  if (n < 20) return bb;
+  for (let i = 19; i < n; i++) {
+    const window = weeklyBars.slice(i - 19, i + 1).map(b => b.close);
+    const mean = window.reduce((s, v) => s + v, 0) / 20;
+    const variance = window.reduce((s, v) => s + (v - mean) ** 2, 0) / 20;
+    const std = Math.sqrt(variance);
+    const upper = mean + 2 * std;
+    const lower = mean - 2 * std;
+    const bw = mean === 0 ? 0 : ((upper - lower) / mean) * 100;
+    bb[i] = { upper, middle: mean, lower, bw };
+  }
+  return bb;
+}
+
+// ── Rule Set 5: PNTHR Stalk ───────────────────────────────────────────────────
+// BB bandwidth at/near its 52-week minimum — volatility compressed, not yet fired.
+// Split Long/Short by EMA lean (above = potential long, below = potential short).
+
+function runStalk(ticker, data) {
+  const { weekly, ema21 } = data;
+  const n = weekly.length;
+  if (n < 72) return null; // need 52 weeks of valid BB (BB starts at bar 19, so 19+52=71)
+
+  const bb = computeBB20(weekly);
+  const li = n - 1;
+
+  // Collect last 52 valid BW values
+  const bwHistory = [];
+  for (let i = li; i >= 0 && bwHistory.length < 52; i--) {
+    if (bb[i] != null) bwHistory.push({ idx: i, bw: bb[i].bw });
+  }
+  if (bwHistory.length < 52) return null;
+
+  const currentBw = bwHistory[0].bw;
+  const minBw52 = Math.min(...bwHistory.map(b => b.bw));
+
+  // Current BW must be within 10% of the 52-week minimum (squeeze loaded)
+  if (currentBw > minBw52 * 1.10) return null;
+
+  // NOT in attack mode: BW must NOT have expanded ≥15% from min within last 3 weeks
+  for (let i = 0; i < Math.min(3, bwHistory.length); i++) {
+    if (bwHistory[i].bw >= minBw52 * 1.15) return null;
+  }
+
+  // Count consecutive weeks in squeeze (within 10% of 52-week min)
+  let wksInSqueeze = 0;
+  for (const { bw } of bwHistory) {
+    if (bw <= minBw52 * 1.10) wksInSqueeze++; else break;
+  }
+
+  const lastEma = ema21[li];
+  const ema4ago = ema21[li - 4];
+  if (lastEma == null || ema4ago == null) return null;
+
+  const cur = weekly[li];
+  const direction = cur.close > lastEma ? 'long' : 'short';
+  const emaSlope = lastEma - ema4ago;
+
+  return {
+    ticker, strategy: 'Stalk', direction,
+    currentPrice: cur.close,
+    bandWidth: +currentBw.toFixed(2),
+    bwMin52: +minBw52.toFixed(2),
+    wksInSqueeze,
+    ema21: +lastEma.toFixed(2),
+    emaSlope: +emaSlope.toFixed(2),
+    emaLean: cur.close > lastEma ? 'above' : 'below',
+  };
+}
+
+// ── Rule Set 6: PNTHR Attack ──────────────────────────────────────────────────
+// BB squeeze just fired: BW hit 52-week min within last 3 weeks, now expanded ≥15%.
+// Direction = current weekly close vs prior weekly close (price-driven, no EMA req).
+
+function runAttack(ticker, data) {
+  const { weekly, ema21 } = data;
+  const n = weekly.length;
+  if (n < 72) return null;
+
+  const bb = computeBB20(weekly);
+  const li = n - 1;
+
+  const bwHistory = [];
+  for (let i = li; i >= 0 && bwHistory.length < 55; i--) {
+    if (bb[i] != null) bwHistory.push({ idx: i, bw: bb[i].bw });
+  }
+  if (bwHistory.length < 52) return null;
+
+  const bw52 = bwHistory.slice(0, 52);
+  const minBw52 = Math.min(...bw52.map(b => b.bw));
+  const currentBw = bwHistory[0].bw;
+
+  // Current BW must have expanded ≥15% from the 52-week minimum
+  if (currentBw < minBw52 * 1.15) return null;
+
+  // The 52-week minimum must have occurred within the last 3 weeks
+  let minWeeksAgo = null;
+  for (let i = 0; i < Math.min(3, bwHistory.length); i++) {
+    if (Math.abs(bwHistory[i].bw - minBw52) / minBw52 < 0.01) {
+      minWeeksAgo = i;
+      break;
+    }
+  }
+  if (minWeeksAgo === null) return null;
+
+  // Count weeks that were in the squeeze before firing
+  let wksInSqueeze = 0;
+  for (let i = minWeeksAgo; i < bwHistory.length; i++) {
+    if (bwHistory[i].bw <= minBw52 * 1.10) wksInSqueeze++; else break;
+  }
+
+  // Direction: current close vs prior close
+  const cur  = weekly[li];
+  const prev = weekly[li - 1];
+  const direction = cur.close >= prev.close ? 'long' : 'short';
+  const expansionPct = +((currentBw - minBw52) / minBw52 * 100).toFixed(2);
+
+  const lastEma = ema21[li];
+  const ema4ago = ema21[li - 4];
+  const emaSlope = (lastEma != null && ema4ago != null) ? lastEma - ema4ago : null;
+
+  return {
+    ticker, strategy: 'Attack', direction,
+    currentPrice: cur.close,
+    bandWidth: +currentBw.toFixed(2),
+    bwMin52: +minBw52.toFixed(2),
+    expansionPct,
+    wksInSqueeze,
+    ema21: lastEma != null ? +lastEma.toFixed(2) : null,
+    emaSlope: emaSlope != null ? +emaSlope.toFixed(2) : null,
+  };
+}
+
 // ── Dinner: BL+1 / SS+1 ──────────────────────────────────────────────────────
 // Starts from the pre-computed Jungle signals (5-year state machine).
 // A stock qualifies if its BL or SS signal fired exactly last week (li-1),
@@ -595,6 +735,7 @@ export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}
 
   // 2. Scan all tickers
   const alphaLongs = [], alphaShorts = [], springLongs = [], springShorts = [], dinner = [];
+  const stalkLongs = [], stalkShorts = [], attackLongs = [], attackShorts = [];
 
   await processBatch(tickers, async ticker => {
     const meta   = stockMeta[ticker] || {};
@@ -616,6 +757,18 @@ export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}
 
     const din = runDinner(ticker, data, jungleSignals[ticker]);
     if (din) dinner.push({ ...din, ...meta });
+
+    const stalk = runStalk(ticker, data);
+    if (stalk) {
+      if (stalk.direction === 'long') stalkLongs.push({ ...stalk, ...meta });
+      else stalkShorts.push({ ...stalk, ...meta });
+    }
+
+    const attack = runAttack(ticker, data);
+    if (attack) {
+      if (attack.direction === 'long') attackLongs.push({ ...attack, ...meta });
+      else attackShorts.push({ ...attack, ...meta });
+    }
   });
 
   // Sort: Alphas by bar# then delta; Springs by touchBar; Dinner by delta
@@ -632,10 +785,18 @@ export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}
   springLongs.sort(sortSprings);
   springShorts.sort(sortSprings);
   dinner.sort((a, b) => b.priceDeltaPct - a.priceDeltaPct);
+  // Stalk: tightest BW first (most compressed = most interesting)
+  stalkLongs.sort((a, b)  => a.bandWidth - b.bandWidth);
+  stalkShorts.sort((a, b) => a.bandWidth - b.bandWidth);
+  // Attack: largest expansion first (most explosive move)
+  attackLongs.sort((a, b)  => b.expansionPct - a.expansionPct);
+  attackShorts.sort((a, b) => b.expansionPct - a.expansionPct);
 
   const results = {
     alphas:  { longs: alphaLongs,  shorts: alphaShorts  },
     springs: { longs: springLongs, shorts: springShorts },
+    stalk:   { longs: stalkLongs,  shorts: stalkShorts  },
+    attack:  { longs: attackLongs, shorts: attackShorts },
     dinner:  {
       longs:  dinner.filter(d => d.direction === 'long'),
       shorts: dinner.filter(d => d.direction === 'short'),
@@ -646,7 +807,7 @@ export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}
   };
 
   preyCache = { weekKey, results };
-  console.log(`[PREY] Done. Alphas: ${alphaLongs.length}L/${alphaShorts.length}S  Springs: ${springLongs.length}L/${springShorts.length}S  Dinner: ${dinner.length}`);
+  console.log(`[PREY] Done. Alphas: ${alphaLongs.length}L/${alphaShorts.length}S  Springs: ${springLongs.length}L/${springShorts.length}S  Stalk: ${stalkLongs.length}L/${stalkShorts.length}S  Attack: ${attackLongs.length}L/${attackShorts.length}S  Dinner: ${dinner.length}`);
   return results;
 }
 

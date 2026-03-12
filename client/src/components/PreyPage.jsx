@@ -90,6 +90,49 @@ function SpringRow({ s, onClick }) {
   );
 }
 
+function StalkRow({ s, onClick }) {
+  const isLong = s.direction === 'long';
+  return (
+    <tr onClick={onClick} className={styles.rowStalk}>
+      <TickerCell ticker={s.ticker} companyName={s.companyName} />
+      <td className={styles.tdNum}>{price(s.currentPrice)}</td>
+      <td className={styles.tdNum}>{s.bandWidth != null ? `${Number(s.bandWidth).toFixed(2)}%` : '—'}</td>
+      <td className={styles.tdGray}>{s.bwMin52 != null ? `${Number(s.bwMin52).toFixed(2)}%` : '—'}</td>
+      <td className={styles.tdNum}>{s.wksInSqueeze ?? '—'}</td>
+      <td className={isLong ? styles.tdPos : styles.tdNeg}>{s.emaLean === 'above' ? 'Above EMA' : 'Below EMA'}</td>
+      <td className={s.emaSlope > 0 ? styles.tdPos : styles.tdNeg}>
+        {s.emaSlope != null ? `${s.emaSlope > 0 ? '+' : ''}${Number(s.emaSlope).toFixed(2)}` : '—'}
+      </td>
+      <td className={styles.tdGray}>{s.sector || '—'}</td>
+    </tr>
+  );
+}
+
+function AttackRow({ s, onClick }) {
+  const isLong = s.direction === 'long';
+  const rowCls = isLong ? styles.rowAttackLong : styles.rowAttackShort;
+  return (
+    <tr onClick={onClick} className={rowCls}>
+      <TickerCell ticker={s.ticker} companyName={s.companyName} />
+      <td className={styles.td}>
+        <span className={`${styles.badge} ${isLong ? styles.badgeBL : styles.badgeSS}`}>
+          {isLong ? 'LONG' : 'SHORT'}
+        </span>
+      </td>
+      <td className={styles.tdNum}>{price(s.currentPrice)}</td>
+      <td className={styles.tdNum}>{s.bandWidth != null ? `${Number(s.bandWidth).toFixed(2)}%` : '—'}</td>
+      <td className={isLong ? styles.tdPos : styles.tdNeg}>
+        {s.expansionPct != null ? `+${Number(s.expansionPct).toFixed(1)}%` : '—'}
+      </td>
+      <td className={styles.tdGray}>{s.wksInSqueeze ?? '—'}</td>
+      <td className={s.emaSlope != null ? (s.emaSlope > 0 ? styles.tdPos : styles.tdNeg) : styles.tdGray}>
+        {s.emaSlope != null ? `${s.emaSlope > 0 ? '+' : ''}${Number(s.emaSlope).toFixed(2)}` : '—'}
+      </td>
+      <td className={styles.tdGray}>{s.sector || '—'}</td>
+    </tr>
+  );
+}
+
 function getEarningsInfo(dateStr) {
   if (!dateStr) return { display: '—', highlight: false, daysAway: null };
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -266,6 +309,8 @@ function SprintTable({ longs, shorts, signals, onRowClick }) {
 
 const ALPHA_HEADERS  = ['Ticker', 'PNTHR Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
 const SPRING_HEADERS = ['Ticker', 'Status', '6M High', '% Off High', 'Current', '% vs Open', '% past Trigger', 'EMA21', 'Δ EMA', 'Sector'];
+const STALK_HEADERS  = ['Ticker', 'Current', 'Band Width %', '52-Wk Min BW', 'Wks in Squeeze', 'EMA Lean', 'Δ EMA', 'Sector'];
+const ATTACK_HEADERS = ['Ticker', 'Direction', 'Current', 'Band Width %', 'Expansion %', 'Wks in Squeeze', 'Δ EMA', 'Sector'];
 const DINNER_HEADERS = ['Ticker', 'PNTHR Signal', 'Exchange', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk Per Share', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
 
 const ALPHA_SORT = {
@@ -291,6 +336,26 @@ const SPRING_SORT = {
   'Sector':          s => s.sector || '',
 };
 
+const STALK_SORT = {
+  'Ticker':          s => s.ticker,
+  'Current':         s => s.currentPrice ?? 0,
+  'Band Width %':    s => s.bandWidth ?? 0,
+  '52-Wk Min BW':   s => s.bwMin52 ?? 0,
+  'Wks in Squeeze':  s => s.wksInSqueeze ?? 0,
+  'Δ EMA':           s => s.emaSlope ?? 0,
+  'Sector':          s => s.sector || '',
+};
+
+const ATTACK_SORT = {
+  'Ticker':          s => s.ticker,
+  'Current':         s => s.currentPrice ?? 0,
+  'Band Width %':    s => s.bandWidth ?? 0,
+  'Expansion %':     s => s.expansionPct ?? 0,
+  'Wks in Squeeze':  s => s.wksInSqueeze ?? 0,
+  'Δ EMA':           s => s.emaSlope ?? 0,
+  'Sector':          s => s.sector || '',
+};
+
 const DINNER_SORT = {
   'Ticker':         s => s.ticker,
   'Exchange':       s => s.exchange || '',
@@ -311,6 +376,8 @@ export default function PreyPage({ onNavigate }) {
   const [chartIndex, setChartIndex]   = useState(null);
   const [showAlphaGuide, setShowAlphaGuide] = useState(false);
   const [showSpringGuide, setShowSpringGuide] = useState(false);
+  const [showStalkGuide, setShowStalkGuide] = useState(false);
+  const [showAttackGuide, setShowAttackGuide] = useState(false);
   const [showDinnerGuide, setShowDinnerGuide] = useState(false);
   const [showHuntGuide, setShowHuntGuide] = useState(false);
   const [showSprintGuide, setShowSprintGuide] = useState(false);
@@ -342,6 +409,10 @@ export default function PreyPage({ onNavigate }) {
         ...(res.alphas?.shorts  || []),
         ...(res.springs?.longs  || []),
         ...(res.springs?.shorts || []),
+        ...(res.stalk?.longs    || []),
+        ...(res.stalk?.shorts   || []),
+        ...(res.attack?.longs   || []),
+        ...(res.attack?.shorts  || []),
       ].map(s => s.ticker);
       if (allTickers.length > 0) {
         fetchEarnings(allTickers).then(setEarnings);
@@ -585,6 +656,86 @@ export default function PreyPage({ onNavigate }) {
               headers={SPRING_HEADERS}
               onStockClick={handleStockClick}
               sortAccessors={SPRING_SORT}
+            />
+          </section>
+
+          {/* Stalk */}
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.groupTitle}>
+                Stalk <span className={styles.groupBadge}>BB Squeeze</span>
+                <button
+                  type="button"
+                  className={styles.infoBtn}
+                  onClick={() => setShowStalkGuide(v => !v)}
+                  aria-label="Column definitions"
+                  title="What the columns mean"
+                >i</button>
+              </h2>
+              <p className={styles.groupSubtitle}>BB bandwidth at 52-week minimum — volatility fully compressed, explosion imminent · grey = watching, direction unknown</p>
+            </div>
+            {showStalkGuide && (
+              <div className={styles.columnGuidePopover}>
+                <strong>What the columns mean:</strong>
+                <ul className={styles.columnGuideList}>
+                  <li><strong>Ticker</strong> — Stock symbol and company name.</li>
+                  <li><strong>Current</strong> — Current weekly close price.</li>
+                  <li><strong>Band Width %</strong> — Current Bollinger Band width: (Upper − Lower) / Middle × 100. Lower = more compressed.</li>
+                  <li><strong>52-Wk Min BW</strong> — The tightest band width over the last 52 weeks — the squeeze floor.</li>
+                  <li><strong>Wks in Squeeze</strong> — How many consecutive weeks the bands have been within 10% of the 52-week minimum.</li>
+                  <li><strong>EMA Lean</strong> — Whether price is above or below the 21-week EMA — hints at likely direction when it fires.</li>
+                  <li><strong>Δ EMA</strong> — EMA slope over the last 4 weeks (rising or falling).</li>
+                  <li><strong>Sector</strong> — Sector the stock belongs to.</li>
+                </ul>
+              </div>
+            )}
+            <ResultTable
+              longs={data.stalk?.longs ?? []}
+              shorts={data.stalk?.shorts ?? []}
+              RowComponent={StalkRow}
+              headers={STALK_HEADERS}
+              onStockClick={handleStockClick}
+              sortAccessors={STALK_SORT}
+            />
+          </section>
+
+          {/* Attack */}
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.groupTitle}>
+                Attack <span className={styles.groupBadge}>BB Fire</span>
+                <button
+                  type="button"
+                  className={styles.infoBtn}
+                  onClick={() => setShowAttackGuide(v => !v)}
+                  aria-label="Column definitions"
+                  title="What the columns mean"
+                >i</button>
+              </h2>
+              <p className={styles.groupSubtitle}>BB squeeze just fired — bands expanded ≥15% from 52-week minimum · green = Long, red = Short</p>
+            </div>
+            {showAttackGuide && (
+              <div className={styles.columnGuidePopover}>
+                <strong>What the columns mean:</strong>
+                <ul className={styles.columnGuideList}>
+                  <li><strong>Ticker</strong> — Stock symbol and company name.</li>
+                  <li><strong>Direction</strong> — Long (green) if close is above prior week's close; Short (red) if below — price-driven, no EMA requirement.</li>
+                  <li><strong>Current</strong> — Current weekly close price.</li>
+                  <li><strong>Band Width %</strong> — Current Bollinger Band width after the squeeze fired.</li>
+                  <li><strong>Expansion %</strong> — How much the band width has grown from the 52-week minimum. Bigger = more explosive the move.</li>
+                  <li><strong>Wks in Squeeze</strong> — How many weeks were spent in the squeeze before it fired — longer coil = more potential energy.</li>
+                  <li><strong>Δ EMA</strong> — EMA slope over last 4 weeks (context only).</li>
+                  <li><strong>Sector</strong> — Sector the stock belongs to.</li>
+                </ul>
+              </div>
+            )}
+            <ResultTable
+              longs={data.attack?.longs ?? []}
+              shorts={data.attack?.shorts ?? []}
+              RowComponent={AttackRow}
+              headers={ATTACK_HEADERS}
+              onStockClick={handleStockClick}
+              sortAccessors={ATTACK_SORT}
             />
           </section>
 

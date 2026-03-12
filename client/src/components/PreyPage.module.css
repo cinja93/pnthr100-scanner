@@ -421,6 +421,15 @@
 .badgeGaining  { background: #f59e0b; color: #111; }
 .badgeCoiled   { background: #9ca3af; color: #fff; font-size: 11px; }
 
+/* ── Stalk / Attack row states ───────────────────────────────────────────── */
+.rowStalk        { opacity: 0.68; filter: grayscale(30%); }
+.rowStalk:hover  { opacity: 1; filter: none; }
+
+.rowAttackLong        { background: rgba(22, 163, 74,  0.10) !important; box-shadow: inset 3px 0 0 #16a34a; }
+.rowAttackLong:hover  { background: rgba(22, 163, 74,  0.18) !important; }
+.rowAttackShort       { background: rgba(220, 38, 38, 0.10) !important; box-shadow: inset 3px 0 0 #dc2626; }
+.rowAttackShort:hover { background: rgba(220, 38, 38, 0.18) !important; }
+
 /* ── Earnings highlight ───────────────────────────────────────────────────── */
 .earningsHighlight {
   background: #fef3c7 !important;

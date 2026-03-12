@@ -449,6 +449,70 @@
   white-space: nowrap;
 }
 
+/* ── Section nav pills ──────────────────────────────────────────────── */
+.sectionNav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #111111;
+  display: flex;
+  gap: 6px;
+  padding: 8px 24px;
+  border-bottom: 1px solid #1f1f1f;
+  flex-wrap: wrap;
+}
+
+.navPill {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid #333;
+  background: transparent;
+  color: #aaaaaa;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.navPill:hover { background: #1f1f1f; color: #fcf000; border-color: #fcf000; }
+
+/* ── Section title row (title + collapse btn) ────────────────────────── */
+.sectionTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.collapseBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 18px;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s, transform 0.2s;
+  transform-origin: center;
+}
+.collapseBtn:hover { color: #111827; }
+.collapseBtnClosed { transform: rotate(-90deg); }
+
+/* ── Count note in section title ─────────────────────────────────────── */
+.countNote {
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  margin-left: 4px;
+  letter-spacing: 0.02em;
+}
+
+/* ── All button in side toggle ───────────────────────────────────────── */
+.sideBtnAll { background: #f0f9ff; border-color: #0ea5e9; color: #0369a1; }
+
 @media (max-width: 768px) {
   .header { flex-direction: column; gap: 12px; }
   .section { margin: 0 12px 24px; }

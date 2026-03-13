@@ -645,6 +645,35 @@ app.get('/api/rankings/:date', async (req, res) => {
       if (ranking.shortRankings) ranking.shortRankings = enrichedShort;
     }
 
+    // Enrich with membership tags (isSp500, isDow30, universe, rankList)
+    const [sp500Tickers, dow30Tickers, sp400Longs, sp400Shorts] = await Promise.all([
+      getSp500Tickers().catch(() => []),
+      getDow30Tickers().catch(() => []),
+      getSp400Longs().catch(() => []),
+      getSp400Shorts().catch(() => []),
+    ]);
+    const sp500Set = new Set(sp500Tickers);
+    const dow30Set = new Set(dow30Tickers);
+    const sp400LSet = new Set(sp400Longs);
+    const sp400SSet = new Set(sp400Shorts);
+
+    const enrichMembership = (stocks, rankList) => stocks.map(s => {
+      const t = s.ticker?.toUpperCase();
+      let universe = null;
+      if (sp400LSet.has(t)) universe = 'sp400Long';
+      else if (sp400SSet.has(t)) universe = 'sp400Short';
+      return {
+        ...s,
+        isSp500: sp500Set.has(t),
+        isDow30: dow30Set.has(t),
+        universe,
+        rankList,
+      };
+    });
+
+    ranking.rankings = enrichMembership(ranking.rankings || [], 'LONG');
+    ranking.shortRankings = enrichMembership(ranking.shortRankings || [], 'SHORT');
+
     res.json(ranking);
   } catch (error) {
     console.error('Error fetching ranking by date:', error);

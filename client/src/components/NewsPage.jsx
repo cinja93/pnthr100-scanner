@@ -154,19 +154,30 @@ export default function NewsPage() {
   const knownTickers = useMemo(() => new Set(jungleStocks.map(s => s.ticker)), [jungleStocks]);
 
   // Wrap known ticker symbols in clickable spans (only in text nodes, not inside HTML tags)
+  // Also inject a View Chart button next to the Trade of the Week heading
   const renderedHtml = useMemo(() => {
     if (!rawHtml || knownTickers.size === 0) return rawHtml;
-    return rawHtml.replace(/(?<=>|^)([^<]+)(?=<|$)/g, textBlock =>
+    const totwTicker = extractTotwTicker(issue?.narrative);
+    let html = rawHtml.replace(/(?<=>|^)([^<]+)(?=<|$)/g, textBlock =>
       textBlock.replace(/\b([A-Z]{2,5})\b/g, word =>
         knownTickers.has(word)
           ? `<span class="pnthr-ticker-link" data-ticker="${word}">${word}</span>`
           : word
       )
     );
-  }, [rawHtml, knownTickers]);
+    // Inject View Chart button inline with the Trade of the Week heading
+    if (totwTicker) {
+      const btn = `<button class="pnthr-totw-btn" data-totw-chart="${totwTicker}">📈 View Chart (${totwTicker})</button>`;
+      html = html.replace(
+        /(<h2[^>]*>)(Trade of the Week)(<\/h2>)/i,
+        `$1$2 ${btn}$3`
+      );
+    }
+    return html;
+  }, [rawHtml, knownTickers, issue?.narrative]);
 
   function handleArticleClick(e) {
-    const ticker = e.target.dataset?.ticker;
+    const ticker = e.target.dataset?.ticker || e.target.dataset?.totwChart;
     if (!ticker) return;
     const idx = jungleStocks.findIndex(s => s.ticker === ticker);
     if (idx === -1) return;
@@ -266,24 +277,6 @@ export default function NewsPage() {
                       </button>
                     </>
                   )}
-                  {!editMode && (() => {
-                    const totwTicker = extractTotwTicker(issue.narrative) || issue.featuredTrade?.ticker;
-                    if (!totwTicker) return null;
-                    return (
-                      <button
-                        className={styles.chartBtn}
-                        title={`View chart for ${totwTicker} — Trade of the Week`}
-                        onClick={() => {
-                          const idx = jungleStocks.findIndex(s => s.ticker === totwTicker);
-                          if (idx === -1) return;
-                          setChartStocks(jungleStocks);
-                          setChartIndex(idx);
-                        }}
-                      >
-                        📈 View Chart ({totwTicker})
-                      </button>
-                    );
-                  })()}
                   {issue.status !== 'published' && !editMode && (
                     <button className={styles.publishBtn} onClick={handlePublish} disabled={publishing}>
                       {publishing ? 'Publishing...' : 'Publish'}

@@ -55,9 +55,7 @@ export default function EtfPage() {
             PNTHR ETFs
           </h1>
           <p className={styles.subtitle}>
-            {!loading && !error
-              ? `${stocks.length} curated ETFs across ${categories.length} categories`
-              : 'Curated list of 140 ETFs organized by category, with Laser signals where available.'}
+            Strategic PNTHR ETFs organized by category with PNTHR signals.
           </p>
         </div>
         <button

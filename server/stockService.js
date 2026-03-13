@@ -371,11 +371,12 @@ export async function getWatchlistStocks(tickers) {
 // getAllTickers() (SP517) + specLongs (SP400 Long leaders) + specShorts (SP400 Short leaders).
 // Returns sorted by YTD desc with universe field: 'sp517' | 'sp400Long' | 'sp400Short'.
 export async function getJungleStocks(specLongs = [], specShorts = []) {
-  const [sp517, dow30List, sp500List] = await Promise.all([getAllTickers(), getDow30Tickers(), getSp500Tickers()]);
+  const [sp517, dow30List, sp500List, ndx100List] = await Promise.all([getAllTickers(), getDow30Tickers(), getSp500Tickers(), getNasdaq100Tickers().catch(() => [])]);
   const specLongsSet  = new Set(specLongs);
   const specShortsSet = new Set(specShorts);
   const dow30Set      = new Set(dow30List);
   const sp500Set      = new Set(sp500List);
+  const ndx100Set     = new Set(ndx100List);
   const allTickers = [...new Set([...sp517, ...specLongs, ...specShorts])];
 
   console.log(`🌿 Jungle: ${allTickers.length} unique tickers (${sp517.length} SP517 + ${specLongs.length} 400L + ${specShorts.length} 400S + ${dow30List.length} Dow30)`);

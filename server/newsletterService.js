@@ -90,31 +90,27 @@ export async function generateIssue(weekOf) {
         return `**Week of ${wk}:** ${excerpt}...`;
       }).join('\n\n');
 
-  const prompt = `You are PNTHR, a sophisticated institutional-grade market intelligence system. Write the weekly "PNTHR's Perch" newsletter for the week of ${formatDateLong(weekOf)}.
+  const prompt = `You are PNTHR, a sophisticated market intelligence system. Write the weekly "PNTHR's Perch" newsletter for the week of ${formatDateLong(weekOf)}.
 
-PNTHR is a 21-week EMA-based trend-following system scanning ~679 stocks (S&P 500 + S&P 400 leaders). Signals:
-- **BL (Buy Long)**: price breaks above 21-week EMA with momentum and structure
-- **SS (Sell Short)**: price breaks below 21-week EMA with downward momentum
-- **BE (Break Even / Exit Long)**: structural break — exit the long
-- **SE (Short Exit)**: structure break — close the short
+PNTHR scans roughly 679 stocks across the S&P 500 and S&P 400 using a 21-week EMA trend-following model. Each week the system identifies stocks breaking into new uptrends (longs) or breaking down into downtrends (shorts), stocks approaching their breakout trigger (spring setups), and stocks compressing in tight Bollinger Bands ahead of a potential volatility expansion.
 
-This week's scanner snapshot:
+This week's data snapshot:
 
-**PNTHR DINNER** — Current open BL/SS positions (highest conviction, in-trade):
+Current open positions (in-trade):
 ${dinnerSummary}
 
-**PNTHR ALPHA** — Recent BL/SS entries, ranked by momentum quality:
+New entries this week, ranked by momentum quality:
 ${alphaSummary}
 
-**PNTHR SPRING** — Coiled setups approaching breakout trigger:
+Setups coiling near breakout trigger:
 ${springSummary}
 
-**PNTHR CROUCH** — Bollinger Band squeeze (pre-explosion volatility compression):
+Bollinger Band compressions (pre-explosion):
 ${crouchSummary}
 
 ---
 
-Prior weeks' narrative excerpts (for The Perch lookback):
+Prior weeks' narrative excerpts (for the lookback section):
 ${lookbackContext}
 
 ---
@@ -124,23 +120,27 @@ Write the newsletter with these EXACT sections in markdown:
 # PNTHR's Perch — Week of ${formatDateLong(weekOf)}
 
 ## Market Pulse
-2–3 sentences on the current market environment as suggested by the distribution of BL vs SS signals, activity in PNTHR Dinner and Alpha, and sector breadth.
+3–4 sentences. Do not simply list what signals fired. Interpret what the market is telling us. Which sectors are leading long, which are breaking down, and what does that distribution say about the economy right now? Is institutional money rotating into defense and utilities because recession risk is real, or is this a healthy pause in a bull market? Is the weakness in consumer names at both the high and low end of the income spectrum, something a K-shaped economy would show, telling us something about consumer stress that the headlines are missing? Be specific about sectors, and be willing to make a case about what this moment in the market means.
 
 ## This Week's Prey
-Highlight 3–5 specific names from Alpha, Spring, or Hunt. For each: ticker, signal type, and 1–2 sentences on why it stands out structurally. Be specific — price vs EMA, momentum, sector context.
+Highlight 3–5 specific names from the data above. For each: ticker, price, direction (long or short), and 2–3 sentences of interpretation. Do not just describe the signal. Ask why this stock is moving this way, what it says about its sector, and what that sector's behavior suggests about the broader economy. A major financial breaking down is not just a chart event, it is a statement about credit conditions, lending appetite, or systemic confidence. A healthcare name breaking up or down may reflect reimbursement pressure, demographic shifts, or risk-off rotation. Go deeper.
 
 ## The Squeeze Watch
-Comment on names in PNTHR Crouch. What sectors are compressing? What does the squeeze distribution signal about potential near-term volatility expansion?
+Look at the compressed setups. Which sectors are sitting in tight coils right now, and what does that tell us about where the next big move is hiding? If technology and industrials are both compressing simultaneously, is that coincidence or is the market holding its breath ahead of a macro event? Interpret the tension, not just the list.
 
 ## The Perch — Looking Back
-Humbly and specifically review prior calls. Were tickers highlighted in previous issues that now show follow-through (or failed)? Be honest. When something worked, say so. When it didn't, own it. Cite specific tickers and weeks where possible.
+Humbly and specifically review prior calls. Which tickers highlighted in previous issues followed through, and which failed? Be honest. Own the misses. Cite specific names and weeks. If a pattern of misses is emerging in a particular sector, say so and ask what that tells us.
 
 ## Closing Thought
-1–2 sentences. A precise, forward-looking insight on what the panther is watching for next week.
+1–2 sentences. A forward-looking thought about what the market setup is signaling for the weeks ahead. Give the reader something to think about, not just something to act on.
 
 ---
 
-Tone: Analytical, precise, confident — like a seasoned institutional trader who lets the data speak. No hype. No filler. No emojis. Markdown only.`;
+CRITICAL TONE AND STYLE RULES:
+- Never use em-dashes (the — character). Use commas, semicolons, colons, or rewrite the sentence instead.
+- Write for an intelligent but general audience. Avoid proprietary system jargon. Say "current open long positions" not "Dinner longs." Say "momentum entries" not "Alpha signals." If you must reference a system category, explain it briefly in plain English.
+- The goal is to help the reader think, not just inform them. Every section should leave the reader asking a question or forming an opinion about what is happening in the economy and markets.
+- Tone: Analytical, confident, and opinionated, like a seasoned portfolio manager writing a weekly letter to investors. No hype. No filler. No emojis. Markdown only.`;
 
   console.log('[Newsletter] Calling Claude API...');
   const message = await client.messages.create({

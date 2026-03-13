@@ -11,6 +11,7 @@ import {
   publishNewsletterIssue,
   fetchJungleStocks,
   fetchEarnings,
+  fetchStockSearch,
 } from '../services/api';
 
 marked.setOptions({ breaks: true });
@@ -184,13 +185,26 @@ export default function NewsPage({ currentUser }) {
     return html;
   }, [rawHtml, knownTickers, issue?.narrative]);
 
-  function handleArticleClick(e) {
+  async function handleArticleClick(e) {
     const ticker = e.target.dataset?.ticker || e.target.dataset?.totwChart;
     if (!ticker) return;
     const idx = jungleStocks.findIndex(s => s.ticker === ticker);
-    if (idx === -1) return;
-    setChartStocks(jungleStocks);
-    setChartIndex(idx);
+    if (idx !== -1) {
+      // Jungle stocks already loaded — use full list for prev/next navigation
+      setChartStocks(jungleStocks);
+      setChartIndex(idx);
+    } else {
+      // Jungle stocks not loaded yet (cold server) — fetch this single ticker
+      try {
+        const result = await fetchStockSearch(ticker);
+        if (result?.stock) {
+          setChartStocks([result.stock]);
+          setChartIndex(0);
+        }
+      } catch (err) {
+        console.warn('Single-stock chart fallback failed:', err);
+      }
+    }
   }
 
   return (

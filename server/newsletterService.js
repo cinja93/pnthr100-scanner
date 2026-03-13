@@ -53,32 +53,35 @@ function summarizeAllRows(rows) {
   }).join(', ');
 }
 
-// Group rows by sector, return a summary string with counts and new-signal counts
-function sectorBreakdown(longs, shorts) {
+// Full sector signal breakdown across ALL 679 PNTHR stocks — used for intermarket analysis
+// Returns per-sector counts of new and existing BL/SS/BE/SE signals with directional lean
+function computeFullSectorCounts(signals, stockMeta) {
   const map = {};
-  const add = (rows, dir) => {
-    (rows || []).forEach(r => {
-      const sec = r.sector || 'Unknown';
-      if (!map[sec]) map[sec] = { newLong: 0, long: 0, newShort: 0, short: 0, be: 0, se: 0 };
-      if (dir === 'long')  { r.isNewSignal ? map[sec].newLong++ : map[sec].long++; }
-      if (dir === 'short') { r.isNewSignal ? map[sec].newShort++ : map[sec].short++; }
-      if (dir === 'be')    map[sec].be++;
-      if (dir === 'se')    map[sec].se++;
-    });
-  };
-  add(longs,  'long');
-  add(shorts, 'short');
+  for (const [ticker, sig] of Object.entries(signals)) {
+    const sector = stockMeta[ticker]?.sector || 'Unknown';
+    if (!map[sector]) map[sector] = { newBL: 0, BL: 0, BE: 0, newSS: 0, SS: 0, SE: 0, total: 0 };
+    map[sector].total++;
+    const s    = sig.signal;
+    const isNew = sig.isNewSignal ?? false;
+    if      (s === 'BL') { map[sector].BL++; if (isNew) map[sector].newBL++; }
+    else if (s === 'BE')   map[sector].BE++;
+    else if (s === 'SS') { map[sector].SS++; if (isNew) map[sector].newSS++; }
+    else if (s === 'SE')   map[sector].SE++;
+  }
+
   return Object.entries(map)
-    .sort((a, b) => (b[1].newShort + b[1].short) - (a[1].newShort + a[1].short))
-    .map(([sec, c]) => {
+    .filter(([, c]) => c.newBL + c.newSS + c.BL + c.SS + c.BE + c.SE > 0)
+    .sort((a, b) => (b[1].newBL + b[1].newSS) - (a[1].newBL + a[1].newSS))
+    .map(([sector, c]) => {
       const parts = [];
-      if (c.newLong)  parts.push(`${c.newLong} new long${c.newLong > 1 ? 's' : ''}`);
-      if (c.long)     parts.push(`${c.long} existing long${c.long > 1 ? 's' : ''}`);
-      if (c.newShort) parts.push(`${c.newShort} new short${c.newShort > 1 ? 's' : ''}`);
-      if (c.short)    parts.push(`${c.short} existing short${c.short > 1 ? 's' : ''}`);
-      if (c.be)       parts.push(`${c.be} long exit${c.be > 1 ? 's' : ''} (BE)`);
-      if (c.se)       parts.push(`${c.se} short cover${c.se > 1 ? 's' : ''} (SE)`);
-      return `${sec}: ${parts.join(', ')}`;
+      if (c.newBL) parts.push(`NEW BL+1: ${c.newBL}`);
+      if (c.BL)    parts.push(`Existing BL: ${c.BL}`);
+      if (c.BE)    parts.push(`BE exits (longs sold off): ${c.BE}`);
+      if (c.newSS) parts.push(`NEW SS+1: ${c.newSS}`);
+      if (c.SS)    parts.push(`Existing SS: ${c.SS}`);
+      if (c.SE)    parts.push(`SE covers (shorts covered): ${c.SE}`);
+      const lean = c.newSS > c.newBL ? 'BEARISH' : c.newBL > c.newSS ? 'BULLISH' : 'NEUTRAL';
+      return `${sector} [${lean} lean this week]: ${parts.join(', ')} | ${c.total} stocks tracked`;
     }).join('\n');
 }
 
@@ -182,7 +185,8 @@ export async function generateIssue(weekOf) {
   const springSummary = 'LONG: ' + summarizeRows(prey.springs?.longs, 10) + ' | SHORT: ' + summarizeRows(prey.springs?.shorts, 10);
   const crouchSummary = 'LONG: ' + summarizeRows(prey.crouch?.longs, 10) + ' | SHORT: ' + summarizeRows(prey.crouch?.shorts, 10);
 
-  const sectorSummary = sectorBreakdown(dinnerLongs, dinnerShorts);
+  // Full sector breakdown across all 679 PNTHR stocks — drives intermarket analysis
+  const sectorSummary = computeFullSectorCounts(prey.signals || {}, prey.stockMeta || {});
 
   // Trade of the Week summary for prompt
   function tradeStr(t) {
@@ -228,7 +232,7 @@ ${springSummary}
 Bollinger Band compressions (pre-explosion):
 ${crouchSummary}
 
-Sector breakdown of current open positions:
+Full sector signal breakdown across all 679 PNTHR stocks (this week's new entries plus full open book):
 ${sectorSummary}
 
 This week's profitable closed trades (long exits and short covers):
@@ -260,7 +264,11 @@ If profitable exits exist this week, highlight the single best performer. Use th
 If there are no profitable exits this week, write a single sentence acknowledging that the week produced no closed winners, and note whether open positions are holding well or showing stress.
 
 ## Sector Analysis
-This is the most important section. Look at the sector breakdown above. For each sector that has notable activity, interpret what it means economically. Do not just list the sectors; explain them. If financials are breaking down heavily, what does that say about credit conditions, lending, or systemic risk? If consumer discretionary names at both the low and high end of the income spectrum are showing weakness simultaneously, what does that tell us about the health of the American consumer? A K-shaped economy can get hit from both ends at once: dollar stores and luxury brands suffering together is not a contradiction, it is a signal. If industrials are breaking down, what historical patterns does that echo? If energy is holding up while everything else falls, what is the market pricing in? Write 3–5 paragraphs, one per meaningful sector cluster. This section should make the reader think about what the economy is actually doing beneath the headlines.
+This is the most important section. You have the full sector breakdown above showing new entries this week (NEW BL+1 and NEW SS+1), existing trends (BL/SS from prior weeks), and exits (BE = longs selling off, SE = shorts being covered) per sector across all 679 tracked stocks. Use this to tell a story about capital rotation and economic health.
+
+Ask and answer the hard questions: If Materials is seeing heavy new SS+1 signals while Energy is seeing new BL+1 signals, is capital rotating between them? What does that say about global demand versus supply dynamics? If Consumer Staples and Consumer Discretionary are both breaking down simultaneously, what does that tell us about the American consumer across income brackets? A K-shaped economy can get hit from both ends at once: dollar stores and luxury brands suffering together is not a contradiction, it is a signal worth explaining. If Financials are generating new shorts, what does that imply for credit conditions, lending standards, or systemic risk? If Industrials are seeing longs sell off (BE signals), what has that historically preceded in the business cycle? If one sector is holding longs while everything else breaks, where is institutional money hiding and why?
+
+Look at the sectors generating the most NEW SS+1 signals this week — those are the sectors actively breaking down right now, not just drifting. Look at any sector generating NEW BL+1 signals against a bearish tape — that is a contrarian tell. Follow the capital. Write 3–5 paragraphs. Lead with the most extreme directional signal. Connect the dots between sectors. Make the reader see something they would not have seen on their own.
 
 ## This Week's Prey
 Highlight 3–5 specific names from the data above. For each: ticker, price, direction (long or short), and 2–3 sentences of interpretation. Do not just describe the signal. Ask why this stock is moving this way, what it says about its sector, and what that sector's behavior suggests about the broader economy. Go deeper than the chart.

@@ -674,7 +674,7 @@ export default function PreyPage({ onNavigate }) {
           {/* Section nav */}
           <div className={styles.sectionNav}>
             {[
-              { key: 'dinner', label: 'PNTHR Dinner', count: data.dinner.longs.length + data.dinner.shorts.length },
+              { key: 'feast', label: 'PNTHR Feast', count: data.dinner.longs.length + data.dinner.shorts.length },
               { key: 'alpha',  label: 'PNTHR Alpha',  count: data.alphas.longs.length + data.alphas.shorts.length },
               { key: 'spring', label: 'PNTHR Spring', count: data.springs.longs.length + data.springs.shorts.length },
               { key: 'crouch', label: 'PNTHR Crouch', count: (data.crouch?.longs.length ?? 0) + (data.crouch?.shorts.length ?? 0) },
@@ -691,20 +691,20 @@ export default function PreyPage({ onNavigate }) {
             ))}
           </div>
 
-          {/* Dinner */}
-          <section className={styles.section} id="prey-dinner">
+          {/* Feast */}
+          <section className={styles.section} id="prey-feast">
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.groupTitle}>
-                  PNTHR Dinner <span className={styles.groupBadge}>BL+1 · SS+1</span>
+                  PNTHR Feast <span className={styles.groupBadge}>BL+1 · SS+1</span>
                   <span className={styles.countNote}>{data.dinner.longs.length}L · {data.dinner.shorts.length}S</span>
                   <button type="button" className={styles.infoBtn} onClick={() => setShowDinnerGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
                 </h2>
-                <button type="button" className={`${styles.collapseBtn} ${collapsed.dinner ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('dinner')}>▼</button>
+                <button type="button" className={`${styles.collapseBtn} ${collapsed.feast ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('feast')}>▼</button>
               </div>
-              {!collapsed.dinner && <p className={styles.groupSubtitle}>One bar past the PNTHR entry signal · still in the zone</p>}
+              {!collapsed.feast && <p className={styles.groupSubtitle}>One bar past the PNTHR entry signal · still in the zone</p>}
             </div>
-            {!collapsed.dinner && (
+            {!collapsed.feast && (
               <>
                 {showDinnerGuide && (
                   <div className={styles.columnGuidePopover}>

@@ -165,13 +165,13 @@ export async function generateIssue(weekOf) {
   // Fetch prior issues for lookback context
   const priorIssues = await getPriorPublishedIssues(4);
 
-  // PNTHR Dinner by definition only shows BL+1 and SS+1 (first week of signal, still in the zone).
-  // Every stock in Dinner IS a new signal this week — no further filtering needed.
+  // PNTHR Feast by definition only shows BL+1 and SS+1 (first week of signal, still in the zone).
+  // Every stock in Feast IS a new signal this week — no further filtering needed.
   const dinnerLongs  = prey.dinner?.longs  || [];
   const dinnerShorts = prey.dinner?.shorts || [];
 
   const dinnerSummary = [
-    `SIGNAL NOTATION: BL+1 = brand-new Buy Long entry THIS WEEK. SS+1 = brand-new Sell Short entry THIS WEEK. The PNTHR Dinner section only contains BL+1 and SS+1 stocks, meaning every stock listed below triggered a new entry signal this week.`,
+    `SIGNAL NOTATION: BL+1 = brand-new Buy Long entry THIS WEEK. SS+1 = brand-new Sell Short entry THIS WEEK. The PNTHR Feast section only contains BL+1 and SS+1 stocks, meaning every stock listed below triggered a new entry signal this week.`,
     ``,
     `New BL+1 signals this week (new long entries): ${dinnerLongs.length}`,
     `New SS+1 signals this week (new short entries): ${dinnerShorts.length}`,
@@ -286,7 +286,7 @@ Humbly and specifically review prior calls from previous issues. Which tickers f
 
 CRITICAL TONE AND STYLE RULES:
 - Never use em-dashes (the — character). Use commas, semicolons, colons, or rewrite the sentence instead.
-- Write for an intelligent but general audience. Avoid proprietary system jargon. Say "current open long positions" not "Dinner longs." Say "momentum entries" not "Alpha signals." If you must reference a system category, explain it briefly in plain English.
+- Write for an intelligent but general audience. Avoid proprietary system jargon. Say "current open long positions" not "Feast longs." Say "momentum entries" not "Alpha signals." If you must reference a system category, explain it briefly in plain English.
 - CRITICAL: BL+1 and SS+1 signals are brand-new entries firing THIS WEEK. BL+N or SS+N where N>1 are existing trends already in motion. Never confuse the two. The ratio of new SS+1 to new BL+1 this week is the acceleration signal and must lead Market Pulse. An existing open book of 36 shorts and 6 longs is a downtrend. A week with 36 new SS+1 signals is an accelerating breakdown — a much stronger statement.
 - The goal is to help the reader think, not just inform them. Every section should leave the reader with a question or a point of view about what is actually happening in the economy.
 - Tone: Analytical, confident, and opinionated, like a seasoned portfolio manager writing a weekly letter to investors. No hype. No filler. No emojis. Markdown only.

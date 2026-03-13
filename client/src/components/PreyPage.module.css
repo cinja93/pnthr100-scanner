@@ -540,6 +540,31 @@
 /* ── All button in side toggle ───────────────────────────────────────── */
 .sideBtnAll { background: #f0f9ff; border-color: #0ea5e9; color: #0369a1; }
 
+/* ── Rank columns ────────────────────────────────────────────────────── */
+.tdRank {
+  text-align: center;
+  font-weight: 600;
+  color: #b4b4b4;
+  white-space: nowrap;
+  padding: 10px 12px;
+}
+
+.rankUp {
+  color: #16a34a;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  padding: 10px 12px;
+}
+
+.rankDown {
+  color: #dc2626;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  padding: 10px 12px;
+}
+
 @media (max-width: 768px) {
   .header { flex-direction: column; gap: 12px; }
   .section { margin: 0 12px 24px; }

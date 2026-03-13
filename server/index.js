@@ -1376,7 +1376,28 @@ app.get('/api/prey', authenticateJWT, async (req, res) => {
       currentPrice: s.currentPrice, ytdReturn: s.ytdReturn,
       isSp500: s.isSp500, isDow30: s.isDow30, isNasdaq100: s.isNasdaq100,
       universe: s.universe, rankList: s.rankList ?? null,
+      rank: null, rankChange: null,
     };
+    // Enrich with PNTHR 100 rank + rankChange from most recent saved ranking
+    try {
+      const latestRanking = await getMostRecentRanking();
+      if (latestRanking) {
+        for (const entry of (latestRanking.rankings || [])) {
+          if (stockMeta[entry.ticker]) {
+            stockMeta[entry.ticker].rank       = entry.rank       ?? null;
+            stockMeta[entry.ticker].rankChange = entry.rankChange ?? null;
+            stockMeta[entry.ticker].rankList   = 'LONG';
+          }
+        }
+        for (const entry of (latestRanking.shortRankings || [])) {
+          if (stockMeta[entry.ticker]) {
+            stockMeta[entry.ticker].rank       = entry.rank       ?? null;
+            stockMeta[entry.ticker].rankChange = entry.rankChange ?? null;
+            stockMeta[entry.ticker].rankList   = 'SHORT';
+          }
+        }
+      }
+    } catch { /* best-effort — prey still works without rank data */ }
     const jungleSignals = await getSignals(tickers);
     const results = await getPreyResults(tickers, stockMeta, jungleSignals);
     res.json(results);

@@ -62,10 +62,23 @@ function WksBadge({ direction, n }) {
   return <span className={`${styles.badge} ${styles.badgeWks}`}>{label}</span>;
 }
 
+function RankCells({ s }) {
+  const rc = s.rankChange;
+  const rcClass = rc == null ? styles.tdGray : rc > 0 ? styles.rankUp : rc < 0 ? styles.rankDown : styles.tdGray;
+  const rcText  = rc == null ? '—' : rc > 0 ? `▲ +${rc}` : rc < 0 ? `▼ ${rc}` : '— —';
+  return (
+    <>
+      <td className={styles.tdRank}>{s.rank ?? '—'}</td>
+      <td className={rcClass}>{rcText}</td>
+    </>
+  );
+}
+
 function AlphaRow({ s, onClick }) {
   const isLong = s.direction === 'long';
   return (
     <tr onClick={onClick}>
+      <RankCells s={s} />
       <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge ?? (isLong ? 'BL' : 'SS')} /></td>
       <td className={styles.td}><WksBadge direction={s.direction} n={s.barNumber} /></td>
@@ -102,6 +115,7 @@ function SpringRow({ s, onClick }) {
                : styles.rowCoiled;
   return (
     <tr onClick={onClick} className={rowCls}>
+      <RankCells s={s} />
       <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge} /></td>
       <td className={styles.td}><SpringStatusBadge status={s.status} /></td>
@@ -134,6 +148,7 @@ function SneakRow({ s, onClick }) {
     : styles.badgeCoiled;
   return (
     <tr onClick={onClick} className={rowCls}>
+      <RankCells s={s} />
       <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge} /></td>
       <td className={styles.td}>
@@ -181,9 +196,9 @@ function DinnerRow({ s, onClick, earnings = {} }) {
       onClick={onClick}
       className={earningsInfo.highlight ? styles.earningsHighlight : undefined}
     >
+      <RankCells s={s} />
       <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge ?? s.strategy} /></td>
-      <td className={styles.tdGray}>{s.exchange || '—'}</td>
       <td className={styles.tdGray}>{s.sector || '—'}</td>
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>
       <td className={styles.tdNum}>{stopPrice != null ? price(stopPrice) : '—'}</td>
@@ -337,7 +352,7 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
       } else if (sortKey === 'Next Earnings') {
         av = earnings[a.ticker] ?? '9999'; bv = earnings[b.ticker] ?? '9999';
       } else {
-        const FM = { 'Ticker': 'ticker', 'Exchange': 'exchange', 'Sector': 'sector', 'Current Price': 'currentPrice', 'YTD Return': 'ytdReturn' };
+        const FM = { 'Ticker': 'ticker', 'Sector': 'sector', 'Current Price': 'currentPrice', 'YTD Return': 'ytdReturn', 'Perf Rank': 'rank', 'Rank Change': 'rankChange' };
         const f = FM[sortKey]; if (!f) return 0;
         av = a[f]; bv = b[f];
       }
@@ -357,7 +372,7 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
     return <span className={styles.sortIcon}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
   }
 
-  const HEADERS = ['Ticker', 'PNTHR Signal', 'Wks Since', 'Exchange', 'Sector', 'Current Price', 'YTD Return', 'PNTHR Stop', 'Risk $', 'Risk %', 'Next Earnings'];
+  const HEADERS = ['Perf Rank', 'Rank Change', 'Ticker', 'PNTHR Signal', 'Wks Since', 'Sector', 'Current Price', 'YTD Return', 'PNTHR Stop', 'Risk $', 'Risk %', 'Next Earnings'];
 
   return (
     <div>
@@ -405,8 +420,19 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
                   wksBadge = <span className={`${styles.badge} ${wksCls}`}>{sig}+{wks}</span>;
                 }
 
+                const rcChange = stock.rankChange;
+                const rcClass  = rcChange == null ? styles.tdGray
+                               : rcChange > 0    ? styles.rankUp
+                               : rcChange < 0    ? styles.rankDown
+                               : styles.tdGray;
+                const rcText   = rcChange == null ? '—'
+                               : rcChange > 0    ? `▲ +${rcChange}`
+                               : rcChange < 0    ? `▼ ${rcChange}`
+                               : '— —';
                 return (
                   <tr key={stock.ticker + i} onClick={() => onRowClick?.(stock, sortedRows, i)}>
+                    <td className={styles.tdRank}>{stock.rank ?? '—'}</td>
+                    <td className={rcClass}>{rcText}</td>
                     <td className={styles.tdTicker}>
                       <div className={styles.tickerSymbol}>
                         {stock.rankList && (
@@ -430,7 +456,6 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
                     </td>
                     <td className={styles.td}>{sigBadge}</td>
                     <td className={styles.td}>{wksBadge}</td>
-                    <td className={styles.tdGray}>{stock.exchange || '—'}</td>
                     <td className={styles.tdGray}>{stock.sector || '—'}</td>
                     <td className={styles.tdNum}>${stock.currentPrice?.toLocaleString() ?? '—'}</td>
                     <td className={stock.ytdReturn != null ? (stock.ytdReturn >= 0 ? styles.tdPos : styles.tdNeg) : styles.tdGray}>
@@ -456,12 +481,14 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
   );
 }
 
-const ALPHA_HEADERS  = ['Ticker', 'Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
-const SPRING_HEADERS = ['Ticker', 'Signal', 'Status', '6M High', '% Off High', 'Current', '% vs Open', '% past Trigger', 'EMA21', 'Δ EMA', 'Sector'];
-const CROUCH_HEADERS = ['Ticker', 'Signal', 'State', 'Current', 'Band Width %', '52-Wk Min BW', 'Expansion %', 'Wks in Squeeze', 'EMA Lean', 'Δ EMA', 'Sector'];
-const DINNER_HEADERS = ['Ticker', 'Signal', 'Exchange', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk Per Share', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
+const ALPHA_HEADERS  = ['Perf Rank', 'Rank Change', 'Ticker', 'Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
+const SPRING_HEADERS = ['Perf Rank', 'Rank Change', 'Ticker', 'Signal', 'Status', '6M High', '% Off High', 'Current', '% vs Open', '% past Trigger', 'EMA21', 'Δ EMA', 'Sector'];
+const CROUCH_HEADERS = ['Perf Rank', 'Rank Change', 'Ticker', 'Signal', 'State', 'Current', 'Band Width %', '52-Wk Min BW', 'Expansion %', 'Wks in Squeeze', 'EMA Lean', 'Δ EMA', 'Sector'];
+const DINNER_HEADERS = ['Perf Rank', 'Rank Change', 'Ticker', 'Signal', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk Per Share', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
 
 const ALPHA_SORT = {
+  'Perf Rank':     s => s.rank ?? 9999,
+  'Rank Change':   s => s.rankChange ?? 0,
   'Ticker':        s => s.ticker,
   'Signal':        s => s.direction || '',
   'Wks Since':     s => s.barNumber ?? 0,
@@ -476,6 +503,8 @@ const ALPHA_SORT = {
 };
 
 const SPRING_SORT = {
+  'Perf Rank':       s => s.rank ?? 9999,
+  'Rank Change':     s => s.rankChange ?? 0,
   'Ticker':          s => s.ticker,
   'Signal':          s => s.signalBadge || '',
   'Status':          s => s.status || '',
@@ -490,6 +519,8 @@ const SPRING_SORT = {
 };
 
 const CROUCH_SORT = {
+  'Perf Rank':       s => s.rank ?? 9999,
+  'Rank Change':     s => s.rankChange ?? 0,
   'Ticker':          s => s.ticker,
   'Signal':          s => s.signalBadge || '',
   'State':           s => s.strategy || '',
@@ -542,9 +573,10 @@ export default function PreyPage({ onNavigate }) {
   }
 
   const dinnerSort = useMemo(() => ({
+    'Perf Rank':      s => s.rank ?? 9999,
+    'Rank Change':    s => s.rankChange ?? 0,
     'Ticker':         s => s.ticker,
     'Signal':         s => s.strategy || '',
-    'Exchange':       s => s.exchange || '',
     'Sector':         s => s.sector || '',
     'Current Price':  s => s.currentPrice ?? 0,
     'PNTHR Stop':     s => s.stopPrice ?? 0,
@@ -740,9 +772,10 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
+                      <li><strong>Perf Rank</strong> — Current PNTHR 100 rank (1 = top performer). Only shows for stocks in the Long or Short top-100 leaderboard.</li>
+                      <li><strong>Rank Change</strong> — Week-over-week rank movement. ▲ +N = moved up N spots; ▼ −N = dropped; — = new entry or no prior week to compare.</li>
                       <li><strong>Ticker</strong> — Stock symbol and company name, with index membership (500 / 100 / 30 / 400).</li>
                       <li><strong>Signal</strong> — BL+1 (first week after a Buy Long signal) or SS+1 (first week after a Sell Short). Signal fired last week — this week confirms it is still in motion.</li>
-                      <li><strong>Exchange</strong> — NYSE or NASDAQ.</li>
                       <li><strong>Sector</strong> — Sector the stock belongs to.</li>
                       <li><strong>Current Price</strong> — Current weekly close price.</li>
                       <li><strong>PNTHR Stop</strong> — Predatory buffer stop, ratcheted via Wilder ATR(3) from the signal week.</li>
@@ -922,16 +955,17 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
-                      <li><strong>Ticker</strong> — Stock symbol and company name.</li>
-                      <li><strong>Exchange</strong> — NYSE or NASDAQ.</li>
+                      <li><strong>Perf Rank</strong> — Current PNTHR 100 rank. Only shows for stocks ranked in the Long or Short leaderboard.</li>
+                      <li><strong>Rank Change</strong> — Week-over-week rank movement. ▲ = rising; ▼ = falling; — = new entry.</li>
+                      <li><strong>Ticker</strong> — Stock symbol and company name, with index membership (500 / 100 / 30 / 400).</li>
+                      <li><strong>PNTHR Signal</strong> — BL (Buy Long) or SS (Sell Short) — the entry signal type.</li>
+                      <li><strong>Wks Since</strong> — Number of weekly bars since the crossover signal fired.</li>
                       <li><strong>Sector</strong> — Sector the stock belongs to.</li>
                       <li><strong>Current Price</strong> — Last weekly close price.</li>
                       <li><strong>YTD Return</strong> — Year-to-date performance (%).</li>
                       <li><strong>PNTHR Stop</strong> — Predatory buffer stop: ratcheted via Wilder ATR(3) from the signal week.</li>
-                      <li><strong>Risk Per Share</strong> — Dollar distance from current price to the PNTHR Stop.</li>
+                      <li><strong>Risk $</strong> — Dollar distance from current price to the PNTHR Stop.</li>
                       <li><strong>Risk %</strong> — Risk as a percentage of current price.</li>
-                      <li><strong>PNTHR Signal</strong> — BL (Buy Long) or SS (Sell Short) — the entry signal type.</li>
-                      <li><strong>Wks Since</strong> — Number of weekly bars since the crossover signal fired.</li>
                       <li><strong>Next Earnings</strong> — Upcoming earnings date. Amber highlight = within 14 days.</li>
                     </ul>
                   </div>
@@ -972,13 +1006,14 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
-                      <li><strong>Ticker</strong> — Stock symbol and company name, with index membership (500 / 100 / 30 / 400). Includes L or S badge if ranked Long or Short in the PNTHR 100.</li>
+                      <li><strong>Perf Rank</strong> — Current PNTHR 100 rank (1 = top YTD performer for Longs; 1 = worst YTD for Shorts). All Sprint stocks are ranked in the Long or Short leaderboard.</li>
+                      <li><strong>Rank Change</strong> — Week-over-week rank movement. ▲ +N = climbed N spots up the leaderboard; ▼ −N = slipped; — = new entry this week.</li>
+                      <li><strong>Ticker</strong> — Stock symbol and company name, with index membership (500 / 100 / 30 / 400). L/S badge shows Long or Short ranking side.</li>
                       <li><strong>PNTHR Signal</strong> — BL (Buy Long) or SS (Sell Short) — the active entry signal driving momentum.</li>
                       <li><strong>Wks Since</strong> — Weeks since the signal fired. BL+N or SS+N format.</li>
-                      <li><strong>Exchange</strong> — NYSE or NASDAQ.</li>
                       <li><strong>Sector</strong> — Sector the stock belongs to.</li>
                       <li><strong>Current Price</strong> — Current weekly close price.</li>
-                      <li><strong>YTD Return</strong> — Year-to-date performance (%) — the metric that drives PNTHR 100 rank. Higher = further up the Long leaderboard; lower (more negative) = further up the Short leaderboard.</li>
+                      <li><strong>YTD Return</strong> — Year-to-date performance (%) — the metric that drives PNTHR 100 rank. Higher = further up the Long leaderboard; more negative = further up the Short leaderboard.</li>
                       <li><strong>PNTHR Stop</strong> — Predatory buffer stop, ratcheted via Wilder ATR(3) from the signal week.</li>
                       <li><strong>Risk $</strong> — Dollar distance from current price to the PNTHR Stop.</li>
                       <li><strong>Risk %</strong> — Risk as a percentage of current price.</li>

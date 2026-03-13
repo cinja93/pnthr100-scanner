@@ -301,6 +301,20 @@ app.get('/api/stocks/ema-crossover', async (req, res) => {
   try {
     const forceRefresh = req.query.refresh === '1';
     const result = await getEmaCrossoverStocks(forceRefresh);
+    // Enrich stocks with PNTHR 100 rank/rankChange so Hunt shows real rank vs JUNGLE badge
+    if (result.stocks?.length) {
+      try {
+        const latestRanking = await getMostRecentRanking();
+        if (latestRanking) {
+          const longMap  = Object.fromEntries((latestRanking.rankings      || []).map(r => [r.ticker, { rank: r.rank, rankChange: r.rankChange, rankList: 'LONG'  }]));
+          const shortMap = Object.fromEntries((latestRanking.shortRankings || []).map(r => [r.ticker, { rank: r.rank, rankChange: r.rankChange, rankList: 'SHORT' }]));
+          result.stocks = result.stocks.map(s => {
+            const entry = longMap[s.ticker] || shortMap[s.ticker];
+            return entry ? { ...s, rank: entry.rank, rankChange: entry.rankChange, rankList: entry.rankList } : s;
+          });
+        }
+      } catch { /* rank enrichment is best-effort */ }
+    }
     res.json(result);
   } catch (error) {
     console.error('Error running EMA crossover scan:', error);

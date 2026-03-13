@@ -171,6 +171,19 @@
   font-size: 14px;
 }
 
+/* Jungle badge — shown in rank column when stock is NOT in PNTHR 100 */
+.badgeJungle {
+  display: inline-block;
+  background: #14532d;
+  color: #86efac;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+}
+
 /* Scanner L/S badge shown next to rank in secondary views (sectors, EMA) */
 .scannerBadgeLong,
 .scannerBadgeShort {

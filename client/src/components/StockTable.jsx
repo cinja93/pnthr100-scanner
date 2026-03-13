@@ -306,7 +306,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 {!onRemove && <td className={styles.rankColumn}>
                   {hasScannerRanks ? (() => {
                     const info = scannerRanks[stock.ticker?.toUpperCase()];
-                    if (!info) return '—';
+                    if (!info) return <span className={styles.badgeJungle}>JUNGLE</span>;
                     return <span>{info.rank} <span className={info.list === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort}>{info.list === 'LONG' ? 'L' : 'S'}</span></span>;
                   })() : (stock.rank ?? '—')}
                 </td>}

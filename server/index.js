@@ -383,7 +383,7 @@ app.get('/api/search/autocomplete', async (req, res) => {
     const url = `${FMP_BASE_URL}/search?query=${encodeURIComponent(q)}&limit=20&apikey=${FMP_API_KEY}`;
     const data = await fetch(url).then(r => r.json());
 
-    const US_EXCHANGES = new Set(['NYSE', 'NASDAQ', 'AMEX', 'NYSEARCA', 'ETF', 'OTC']);
+    const US_EXCHANGES = new Set(['NYSE', 'NASDAQ', 'AMEX', 'NYSEARCA', 'ETF']);
     const results = Array.isArray(data)
       ? data
           .filter(item => !item.symbol?.includes('.') && US_EXCHANGES.has(item.exchangeShortName))

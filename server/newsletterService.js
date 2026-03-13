@@ -183,7 +183,7 @@ export async function generateIssue(weekOf) {
 
   const alphaSummary  = 'LONG: ' + summarizeRows(prey.alphas?.longs, 10) + ' | SHORT: ' + summarizeRows(prey.alphas?.shorts, 10);
   const springSummary = 'LONG: ' + summarizeRows(prey.springs?.longs, 10) + ' | SHORT: ' + summarizeRows(prey.springs?.shorts, 10);
-  const crouchSummary = 'LONG: ' + summarizeRows(prey.crouch?.longs, 10) + ' | SHORT: ' + summarizeRows(prey.crouch?.shorts, 10);
+  const sneakSummary = 'LONG: ' + summarizeRows(prey.sneak?.longs, 10) + ' | SHORT: ' + summarizeRows(prey.sneak?.shorts, 10);
 
   // Full sector breakdown across all 679 PNTHR stocks — drives intermarket analysis
   const sectorSummary = computeFullSectorCounts(prey.signals || {}, prey.stockMeta || {});
@@ -230,7 +230,7 @@ Setups coiling near breakout trigger:
 ${springSummary}
 
 Bollinger Band compressions (pre-explosion):
-${crouchSummary}
+${sneakSummary}
 
 Full sector signal breakdown across all 679 PNTHR stocks (this week's new entries plus full open book):
 ${sectorSummary}

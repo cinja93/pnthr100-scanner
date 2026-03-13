@@ -57,8 +57,9 @@ export default function SignalHistoryPage() {
   const [chartStocks, setChartStocks] = useState([]);
 
   // Snapshot controls
-  const [snapping, setSnapping]   = useState(false);
-  const [snapMsg, setSnapMsg]     = useState(null);
+  const [snapping, setSnapping]     = useState(false);
+  const [snapMsg, setSnapMsg]       = useState(null);
+  const [snapError, setSnapError]   = useState(false);
 
   // Filters
   const [filterSignal, setFilterSignal] = useState('all');
@@ -107,15 +108,18 @@ export default function SignalHistoryPage() {
   async function handleSnapshot() {
     setSnapping(true);
     setSnapMsg(null);
+    setSnapError(false);
     try {
       const res = await saveSignalHistorySnapshot();
+      setSnapError(false);
       setSnapMsg(`✓ Saved ${res.count} records for week of ${formatWeekOf(res.weekOf)}`);
       // Refresh week list
       const w = await fetchSignalHistoryWeeks();
       setWeeks(w);
       if (!selectedWeek && w.length > 0) setSelectedWeek(w[0]);
     } catch (err) {
-      setSnapMsg(`✗ ${err.message}`);
+      setSnapError(true);
+      setSnapMsg(`✗ ${err.message} — Load the Jungle page first, then try again.`);
     } finally {
       setSnapping(false);
     }
@@ -150,7 +154,7 @@ export default function SignalHistoryPage() {
           </div>
         </div>
         <div className={styles.headerRight}>
-          {snapMsg && <span className={styles.snapMsg}>{snapMsg}</span>}
+          {snapMsg && <span className={snapError ? styles.snapMsgError : styles.snapMsg}>{snapMsg}</span>}
           <button className={styles.snapshotBtn} onClick={handleSnapshot} disabled={snapping}>
             {snapping ? 'Saving…' : '📸 Save This Week'}
           </button>

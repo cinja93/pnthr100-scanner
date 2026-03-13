@@ -369,3 +369,30 @@ export async function getSignals(tickers) {
   }
   return result;
 }
+
+// Return the already-computed signals from the in-memory cache without triggering
+// any FMP API calls. Returns null if the cache is empty (server is cold).
+// The snapshot endpoint uses this so "Save This Week" is instant when the Jungle
+// page has already been visited in this server session.
+export function getCachedSignals() {
+  const today = getToday();
+  if (signalCache.weekKey !== today) return null; // cache is stale or empty
+  const count = Object.keys(signalCache.signals).length;
+  if (count === 0) return null;
+  // Build the same shape as getSignals() returns
+  const result = {};
+  for (const [ticker, s] of Object.entries(signalCache.signals)) {
+    result[ticker] = {
+      signal:          s.signal,
+      stopPrice:       s.pnthrStop ?? s.stopPrice ?? null,
+      pnthrStop:       s.pnthrStop ?? null,
+      currentWeekStop: s.currentWeekStop ?? null,
+      ema21:           s.ema21,
+      signalDate:      s.signalDate || null,
+      isNewSignal:     s.isNew ?? false,
+      profitDollar:    s.profitDollar ?? null,
+      profitPct:       s.profitPct    ?? null,
+    };
+  }
+  return result;
+}

@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks, getJungleStocks } from './stockService.js';
-import { getSignals } from './signalService.js';
+import { getSignals, getCachedSignals } from './signalService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
@@ -1269,10 +1269,19 @@ cron.schedule('0 23 * * 5', async () => {
 // POST /api/admin/signal-history/snapshot — manually save this week's snapshot
 app.post('/api/admin/signal-history/snapshot', authenticateJWT, requireAdmin, async (req, res) => {
   try {
-    const jungleData = await getJungleStocks();
-    const tickers = (jungleData.stocks || []).map(s => s.ticker);
-    const signals  = await getSignals(tickers);
-    const count    = await saveWeeklySnapshot(signals);
+    // Prefer the already-warm in-memory signal cache so the snapshot is instant
+    // when the Jungle page has been loaded this session. If the cache is cold
+    // (server just restarted), fall back to a full getSignals() fetch.
+    let signals = getCachedSignals();
+    if (signals) {
+      console.log(`[Signal Archive] Using cached signals for snapshot (${Object.keys(signals).length} tickers)`);
+    } else {
+      console.log('[Signal Archive] Cache cold — fetching signals from FMP (this may take a few minutes)...');
+      const jungleData = await getJungleStocks();
+      const tickers = (jungleData.stocks || []).map(s => s.ticker);
+      signals = await getSignals(tickers);
+    }
+    const count = await saveWeeklySnapshot(signals);
     res.json({ ok: true, count, weekOf: getCurrentWeekOf() });
   } catch (err) {
     console.error('[Signal Archive] Manual snapshot failed:', err.message);

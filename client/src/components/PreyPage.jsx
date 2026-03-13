@@ -110,7 +110,7 @@ function SpringRow({ s, onClick }) {
   );
 }
 
-function CrouchRow({ s, onClick }) {
+function SneakRow({ s, onClick }) {
   const isLong = s.direction === 'long';
   const isAttack = s.strategy === 'Attack';
   const rowCls = isAttack
@@ -483,7 +483,7 @@ export default function PreyPage({ onNavigate }) {
   const [chartIndex, setChartIndex]   = useState(null);
   const [showAlphaGuide, setShowAlphaGuide] = useState(false);
   const [showSpringGuide, setShowSpringGuide] = useState(false);
-  const [showCrouchGuide, setShowCrouchGuide] = useState(false);
+  const [showSneakGuide, setShowSneakGuide] = useState(false);
   const [showDinnerGuide, setShowDinnerGuide] = useState(false);
   const [showHuntGuide, setShowHuntGuide] = useState(false);
   const [showSprintGuide, setShowSprintGuide] = useState(false);
@@ -541,8 +541,8 @@ export default function PreyPage({ onNavigate }) {
         ...(res.alphas?.shorts  || []),
         ...(res.springs?.longs  || []),
         ...(res.springs?.shorts || []),
-        ...(res.crouch?.longs   || []),
-        ...(res.crouch?.shorts  || []),
+        ...(res.sneak?.longs   || []),
+        ...(res.sneak?.shorts  || []),
       ].map(s => s.ticker);
       if (allTickers.length > 0) {
         fetchEarnings(allTickers).then(setEarnings);
@@ -677,7 +677,7 @@ export default function PreyPage({ onNavigate }) {
               { key: 'feast', label: 'PNTHR Feast', count: data.dinner.longs.length + data.dinner.shorts.length },
               { key: 'alpha',  label: 'PNTHR Alpha',  count: data.alphas.longs.length + data.alphas.shorts.length },
               { key: 'spring', label: 'PNTHR Spring', count: data.springs.longs.length + data.springs.shorts.length },
-              { key: 'crouch', label: 'PNTHR Crouch', count: (data.crouch?.longs.length ?? 0) + (data.crouch?.shorts.length ?? 0) },
+              { key: 'sneak', label: 'PNTHR Sneak', count: (data.sneak?.longs.length ?? 0) + (data.sneak?.shorts.length ?? 0) },
               { key: 'hunt',   label: 'PNTHR Hunt',   count: huntStocks.length },
               { key: 'sprint', label: 'PNTHR Sprint', count: sprintLongs.length + sprintShorts.length },
             ].map(({ key, label, count }) => (
@@ -822,22 +822,22 @@ export default function PreyPage({ onNavigate }) {
             )}
           </section>
 
-          {/* Crouch */}
-          <section className={styles.section} id="prey-crouch">
+          {/* Sneak */}
+          <section className={styles.section} id="prey-sneak">
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.groupTitle}>
-                  PNTHR Crouch <span className={styles.groupBadge}>BB Squeeze</span>
-                  <span className={styles.countNote}>{(data.crouch?.longs.length ?? 0)}L · {(data.crouch?.shorts.length ?? 0)}S</span>
-                  <button type="button" className={styles.infoBtn} onClick={() => setShowCrouchGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
+                  PNTHR Sneak <span className={styles.groupBadge}>BB Squeeze</span>
+                  <span className={styles.countNote}>{(data.sneak?.longs.length ?? 0)}L · {(data.sneak?.shorts.length ?? 0)}S</span>
+                  <button type="button" className={styles.infoBtn} onClick={() => setShowSneakGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
                 </h2>
-                <button type="button" className={`${styles.collapseBtn} ${collapsed.crouch ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('crouch')}>▼</button>
+                <button type="button" className={`${styles.collapseBtn} ${collapsed.sneak ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('sneak')}>▼</button>
               </div>
-              {!collapsed.crouch && <p className={styles.groupSubtitle}>Bollinger Band squeeze — STALK (grey, coiling) upgrades to ATTACK (green/red) when bands fire ≥15%</p>}
+              {!collapsed.sneak && <p className={styles.groupSubtitle}>Bollinger Band squeeze — STALK (grey, coiling) upgrades to ATTACK (green/red) when bands fire ≥15%</p>}
             </div>
-            {!collapsed.crouch && (
+            {!collapsed.sneak && (
               <>
-                {showCrouchGuide && (
+                {showSneakGuide && (
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
@@ -856,9 +856,9 @@ export default function PreyPage({ onNavigate }) {
                   </div>
                 )}
                 <ResultTable
-                  longs={data.crouch?.longs ?? []}
-                  shorts={data.crouch?.shorts ?? []}
-                  RowComponent={CrouchRow}
+                  longs={data.sneak?.longs ?? []}
+                  shorts={data.sneak?.shorts ?? []}
+                  RowComponent={SneakRow}
                   headers={CROUCH_HEADERS}
                   onStockClick={handleStockClick}
                   sortAccessors={CROUCH_SORT}

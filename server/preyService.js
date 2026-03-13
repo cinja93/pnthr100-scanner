@@ -755,7 +755,7 @@ export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}
 
   // 2. Scan all tickers
   const alphaLongs = [], alphaShorts = [], springLongs = [], springShorts = [], dinner = [];
-  const crouchLongs = [], crouchShorts = [];
+  const sneakLongs = [], sneakShorts = [];
 
   await processBatch(tickers, async ticker => {
     const meta   = stockMeta[ticker] || {};
@@ -783,15 +783,15 @@ export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}
     const stalk = runStalk(ticker, data);
     if (stalk) {
       const r = { ...stalk, ...meta, signalBadge: sigBadge };
-      if (stalk.direction === 'long') crouchLongs.push(r);
-      else crouchShorts.push(r);
+      if (stalk.direction === 'long') sneakLongs.push(r);
+      else sneakShorts.push(r);
     }
 
     const attack = runAttack(ticker, data);
     if (attack) {
       const r = { ...attack, ...meta, signalBadge: sigBadge };
-      if (attack.direction === 'long') crouchLongs.push(r);
-      else crouchShorts.push(r);
+      if (attack.direction === 'long') sneakLongs.push(r);
+      else sneakShorts.push(r);
     }
   });
 
@@ -809,20 +809,20 @@ export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}
   springLongs.sort(sortSprings);
   springShorts.sort(sortSprings);
   dinner.sort((a, b) => b.priceDeltaPct - a.priceDeltaPct);
-  // Crouch: Attack first (by expansion desc), then Stalk (by tightest BW)
-  function sortCrouch(a, b) {
+  // Sneak: Attack first (by expansion desc), then Stalk (by tightest BW)
+  function sortSneak(a, b) {
     const aIsAttack = a.strategy === 'Attack', bIsAttack = b.strategy === 'Attack';
     if (aIsAttack !== bIsAttack) return aIsAttack ? -1 : 1;
     if (aIsAttack) return (b.expansionPct ?? 0) - (a.expansionPct ?? 0);
     return (a.bandWidth ?? 0) - (b.bandWidth ?? 0);
   }
-  crouchLongs.sort(sortCrouch);
-  crouchShorts.sort(sortCrouch);
+  sneakLongs.sort(sortSneak);
+  sneakShorts.sort(sortSneak);
 
   const results = {
     alphas:  { longs: alphaLongs,  shorts: alphaShorts  },
     springs: { longs: springLongs, shorts: springShorts },
-    crouch:  { longs: crouchLongs, shorts: crouchShorts },
+    sneak:   { longs: sneakLongs,  shorts: sneakShorts  },
     dinner:  {
       longs:  dinner.filter(d => d.direction === 'long'),
       shorts: dinner.filter(d => d.direction === 'short'),
@@ -833,7 +833,7 @@ export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}
   };
 
   preyCache = { weekKey, results };
-  console.log(`[PREY] Done. Alphas: ${alphaLongs.length}L/${alphaShorts.length}S  Springs: ${springLongs.length}L/${springShorts.length}S  Crouch: ${crouchLongs.length}L/${crouchShorts.length}S  Dinner: ${dinner.length}`);
+  console.log(`[PREY] Done. Alphas: ${alphaLongs.length}L/${alphaShorts.length}S  Springs: ${springLongs.length}L/${springShorts.length}S  Sneak: ${sneakLongs.length}L/${sneakShorts.length}S  Dinner: ${dinner.length}`);
   return results;
 }
 

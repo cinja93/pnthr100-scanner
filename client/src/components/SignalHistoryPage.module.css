@@ -66,6 +66,10 @@
   font-size: 12px;
   color: #50d080;
 }
+.snapMsgError {
+  font-size: 12px;
+  color: #ff6060;
+}
 
 /* ── Body layout ─────────────────────────────────────────── */
 .body {

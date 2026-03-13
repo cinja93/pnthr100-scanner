@@ -1429,8 +1429,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ── Cron: auto-generate newsletter every Friday at 5pm ET (22:00 UTC) ─────────
-cron.schedule('0 22 * * 5', async () => {
+// ── Cron: auto-generate newsletter every Friday at 5pm ET ───────────────────
+cron.schedule('0 17 * * 5', async () => {
   try {
     const weekOf = getMostRecentFriday();
     console.log(`[Cron] Generating PNTHR's Perch for week of ${weekOf}...`);
@@ -1439,11 +1439,11 @@ cron.schedule('0 22 * * 5', async () => {
   } catch (err) {
     console.error('[Cron] Newsletter generation failed:', err.message);
   }
-});
+}, { timezone: 'America/New_York' });
 
-// ── Cron: archive weekly signal snapshot every Friday at 6pm ET (23:00 UTC) ───
-// Runs one hour after newsletter generation so signal cache is warm.
-cron.schedule('0 23 * * 5', async () => {
+// ── Cron: archive weekly signal snapshot every Friday at 8pm ET ─────────────
+// Runs 3 hours after newsletter generation so signal cache is fully warm.
+cron.schedule('0 20 * * 5', async () => {
   try {
     console.log('[Signal Archive] Saving weekly snapshot...');
     const jungleData = await getJungleStocks();
@@ -1454,7 +1454,7 @@ cron.schedule('0 23 * * 5', async () => {
   } catch (err) {
     console.error('[Signal Archive] Snapshot failed:', err.message);
   }
-});
+}, { timezone: 'America/New_York' });
 
 // ── Admin: signal history endpoints ────────────────────────────────────────────
 

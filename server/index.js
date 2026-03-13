@@ -1211,10 +1211,10 @@ app.get('/api/scanner-ranks', async (req, res) => {
     if (!ranking) return res.json({});
     const map = {};
     for (const stock of ranking.rankings || []) {
-      if (stock.ticker) map[stock.ticker.toUpperCase()] = { rank: stock.rank, list: 'LONG' };
+      if (stock.ticker) map[stock.ticker.toUpperCase()] = { rank: stock.rank, rankChange: stock.rankChange ?? null, list: 'LONG' };
     }
     for (const stock of ranking.shortRankings || []) {
-      if (stock.ticker) map[stock.ticker.toUpperCase()] = { rank: stock.rank, list: 'SHORT' };
+      if (stock.ticker) map[stock.ticker.toUpperCase()] = { rank: stock.rank, rankChange: stock.rankChange ?? null, list: 'SHORT' };
     }
     scannerRanksCache = map;
     scannerRanksCacheTime = now;

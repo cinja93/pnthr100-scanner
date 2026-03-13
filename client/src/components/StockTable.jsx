@@ -209,7 +209,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             {!onRemove && <th onClick={() => handleSort('rank')} className={`${styles.rankColumn} ${styles.sortable}`} scope="col">
               {rankLabel} {getSortIndicator('rank')}
             </th>}
-            {!onRemove && !hasScannerRanks && <th onClick={() => handleSort('rankChange')} className={styles.sortable}>
+            {!onRemove && <th onClick={() => handleSort('rankChange')} className={styles.sortable}>
               Rank Change {getSortIndicator('rankChange')}
             </th>}
             <th onClick={() => handleSort('ticker')} className={styles.sortable}>
@@ -265,7 +265,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             const colCount =
               10 + // always-present columns (ticker, exchange, price, ytd, stop, risk$, risk%, signal, wks, earnings)
               (!onRemove ? 1 : 0) +              // rank
-              (!onRemove && !hasScannerRanks ? 1 : 0) + // rankChange
+              (!onRemove ? 1 : 0) +              // rankChange (always shown)
               (!hideSector ? 1 : 0) +            // sector
               (onRemove ? 1 : 0) +               // remove btn
               (hideEarnings ? -1 : 0);           // earnings hidden
@@ -310,12 +310,18 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                     return <span>{info.rank} <span className={info.list === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort}>{info.list === 'LONG' ? 'L' : 'S'}</span></span>;
                   })() : (stock.rank ?? '—')}
                 </td>}
-                {!onRemove && !hasScannerRanks && <td
-                  className={rankDisplay.className}
-                  title={stock.previousRank ? `Previous rank: #${stock.previousRank}` : 'New entry'}
-                >
-                  {rankDisplay.text}
-                </td>}
+                {!onRemove && (() => {
+                  if (hasScannerRanks) {
+                    const info = scannerRanks[stock.ticker?.toUpperCase()];
+                    if (!info) return <td className={styles.rankNew}>—</td>;
+                    const rc = info.rankChange;
+                    if (rc == null) return <td className={styles.rankNew}>— —</td>;
+                    if (rc > 0) return <td className={`${styles.table && ''} ${styles.rankUp}`}>▲ +{rc}</td>;
+                    if (rc < 0) return <td className={styles.rankDown}>▼ {rc}</td>;
+                    return <td className={styles.rankNew}>— —</td>;
+                  }
+                  return <td className={rankDisplay.className} title={stock.previousRank ? `Previous rank: #${stock.previousRank}` : 'New entry'}>{rankDisplay.text}</td>;
+                })()}
                 <td className={styles.ticker}>
                   <div className={styles.tickerRow}>
                     {(() => {

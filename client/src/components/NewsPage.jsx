@@ -15,6 +15,14 @@ import {
 
 marked.setOptions({ breaks: true });
 
+// Parse the Trade of the Week ticker from the narrative markdown.
+// Looks for the line: > **TICKER — Company Name**
+function extractTotwTicker(narrative) {
+  if (!narrative) return null;
+  const match = narrative.match(/>\s*\*\*([A-Z]{1,5})\s*[—–-]/);
+  return match?.[1] ?? null;
+}
+
 function formatWeekOf(isoDate) {
   if (!isoDate) return '';
   return new Date(isoDate + 'T12:00:00').toLocaleDateString('en-US', {
@@ -258,17 +266,24 @@ export default function NewsPage() {
                       </button>
                     </>
                   )}
-                  {issue.featuredTrade && !editMode && (
-                    <a
-                      className={styles.chartBtn}
-                      href={`/?ticker=${issue.featuredTrade.ticker}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      title={`View chart for ${issue.featuredTrade.ticker} — Trade of the Week`}
-                    >
-                      📈 View Chart ({issue.featuredTrade.ticker})
-                    </a>
-                  )}
+                  {!editMode && (() => {
+                    const totwTicker = extractTotwTicker(issue.narrative) || issue.featuredTrade?.ticker;
+                    if (!totwTicker) return null;
+                    return (
+                      <button
+                        className={styles.chartBtn}
+                        title={`View chart for ${totwTicker} — Trade of the Week`}
+                        onClick={() => {
+                          const idx = jungleStocks.findIndex(s => s.ticker === totwTicker);
+                          if (idx === -1) return;
+                          setChartStocks(jungleStocks);
+                          setChartIndex(idx);
+                        }}
+                      >
+                        📈 View Chart ({totwTicker})
+                      </button>
+                    );
+                  })()}
                   {issue.status !== 'published' && !editMode && (
                     <button className={styles.publishBtn} onClick={handlePublish} disabled={publishing}>
                       {publishing ? 'Publishing...' : 'Publish'}

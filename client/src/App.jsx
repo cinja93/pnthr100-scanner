@@ -361,7 +361,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {activePage === 'prey' && <PreyPage onNavigate={navigate} />}
 
           {/* PNTHR's Perch newsletter */}
-          {activePage === 'perch' && <NewsPage />}
+          {activePage === 'perch' && <NewsPage currentUser={currentUser} />}
 
           {/* Jungle page */}
           {activePage === 'jungle' && <JunglePage />}

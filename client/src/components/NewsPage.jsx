@@ -38,7 +38,8 @@ function StatusBadge({ status }) {
   );
 }
 
-export default function NewsPage() {
+export default function NewsPage({ currentUser }) {
+  const isAdmin = currentUser?.role === 'admin';
   const [issues, setIssues]           = useState([]);
   const [selectedId, setSelectedId]   = useState(null);
   const [issue, setIssue]             = useState(null);
@@ -204,13 +205,15 @@ export default function NewsPage() {
             <p className={styles.headerSub}>Weekly Market Intelligence · The panther surveys the jungle from above</p>
           </div>
         </div>
-        <button
-          className={styles.generateBtn}
-          onClick={handleGenerate}
-          disabled={generating}
-        >
-          {generating ? '⏳ Generating...' : '+ Generate This Week'}
-        </button>
+        {isAdmin && (
+          <button
+            className={styles.generateBtn}
+            onClick={handleGenerate}
+            disabled={generating}
+          >
+            {generating ? '⏳ Generating...' : '+ Generate This Week'}
+          </button>
+        )}
       </div>
 
       {genError && <div className={styles.genError}>Generation failed: {genError}</div>}
@@ -274,7 +277,7 @@ export default function NewsPage() {
                   )}
                 </div>
                 <div className={styles.controlsRight}>
-                  {!editMode ? (
+                  {isAdmin && (!editMode ? (
                     <button className={styles.editBtn} onClick={() => setEditMode(true)}>Edit</button>
                   ) : (
                     <>
@@ -283,8 +286,8 @@ export default function NewsPage() {
                         {saving ? 'Saving...' : 'Save Draft'}
                       </button>
                     </>
-                  )}
-                  {issue.status !== 'published' && !editMode && (
+                  ))}
+                  {isAdmin && issue.status !== 'published' && !editMode && (
                     <button className={styles.publishBtn} onClick={handlePublish} disabled={publishing}>
                       {publishing ? 'Publishing...' : 'Publish'}
                     </button>

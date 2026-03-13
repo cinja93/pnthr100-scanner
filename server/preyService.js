@@ -380,6 +380,8 @@ function runAlphaShort(ticker, sector, data, sectorStatus, sectorFW) {
 function getSignalBadge(weekly, signalData) {
   if (!signalData) return null;
   const { signal, signalDate } = signalData;
+  // BE and SE = pause/exit state — pass through so the client renders ⏸ PAUSE
+  if (signal === 'BE' || signal === 'SE') return signal;
   if (signal !== 'BL' && signal !== 'SS') return null;
   const li = weekly.length - 1;
   for (let i = li; i >= Math.max(0, li - 52); i--) {

@@ -561,8 +561,17 @@ export default function PreyPage({ onNavigate }) {
       const result = await fetchEmaCrossoverStocks(forceRefresh);
       const stockList = result.stocks || [];
       setHuntStocks(stockList);
-      setHuntSignals(result.signals || {});
+      // Merge base signals from crossover scan with current live signals
+      // so BE/SE (PAUSE) states are always reflected correctly
+      const baseSigs = result.signals || {};
+      setHuntSignals(baseSigs);
       fetchScannerRanks().then(setHuntScannerRanks);
+      if (stockList.length > 0) {
+        const tickers = stockList.map(s => s.ticker);
+        fetchSignals(tickers).then(liveSigs => {
+          setHuntSignals(prev => ({ ...prev, ...liveSigs }));
+        });
+      }
     } catch (e) {
       setHuntError(e.message || 'Hunt scan failed.');
     } finally {

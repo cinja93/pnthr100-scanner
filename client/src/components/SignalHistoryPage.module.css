@@ -350,3 +350,146 @@
   width: 56px;
   opacity: 0.2;
 }
+
+/* ── Week Calendar Picker ─────────────────────────────────── */
+.calWrap {
+  position: relative;
+}
+.calBtn {
+  background: rgba(252,240,0,0.08);
+  border: 1px solid rgba(252,240,0,0.3);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.12s;
+  line-height: 1.6;
+}
+.calBtn:hover { background: rgba(252,240,0,0.16); }
+
+.calPopover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 200;
+  width: 240px;
+  background: #111;
+  border: 1px solid #fcf000;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 20px rgba(252,240,0,0.08);
+  overflow: hidden;
+  font-family: 'Inter', 'Helvetica Neue', sans-serif;
+}
+
+/* Year row */
+.calYearRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #000;
+  border-bottom: 1px solid #1e1e1e;
+}
+.calYearLabel {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fcf000;
+  letter-spacing: 0.12em;
+}
+.calArrow {
+  background: none;
+  border: none;
+  color: #fcf000;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+.calArrow:hover:not(:disabled) { background: rgba(252,240,0,0.12); }
+.calArrow:disabled { color: #3a3a3a; cursor: default; }
+
+/* Month grid (4 × 3) */
+.calMonthGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 10px;
+}
+.calMonthBtn {
+  border: none;
+  border-radius: 5px;
+  padding: 7px 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.calMonthActive {
+  background: rgba(252,240,0,0.12);
+  color: #fcf000;
+  border: 1px solid rgba(252,240,0,0.35);
+}
+.calMonthActive:hover { background: rgba(252,240,0,0.22); }
+.calMonthEmpty {
+  background: #191919;
+  color: #3a3a3a;
+  cursor: default;
+  border: 1px solid transparent;
+}
+
+/* Back button */
+.calBackBtn {
+  display: block;
+  width: 100%;
+  background: #000;
+  border: none;
+  border-bottom: 1px solid #1e1e1e;
+  color: #7a7a7a;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: color 0.12s;
+  letter-spacing: 0.04em;
+}
+.calBackBtn:hover { color: #fcf000; }
+
+/* Week list */
+.calWeekList {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 3px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.calWeekItem {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: #c8c8c8;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.calWeekItem:hover {
+  background: #1a1a1a;
+  color: #fcf000;
+  border-color: rgba(252,240,0,0.2);
+}
+.calWeekItemActive {
+  background: #1a1a00;
+  color: #fcf000;
+  border-color: rgba(252,240,0,0.5);
+  font-weight: 700;
+}
+.calEmpty {
+  font-size: 11px;
+  color: #4a4a4a;
+  padding: 8px 10px;
+}

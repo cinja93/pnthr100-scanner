@@ -8,6 +8,7 @@ import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
 import { getEtfStocks } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
+import { getSp500Tickers, getDow30Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
 import newsletterRouter from './routes/newsletter.js';
 import cron from 'node-cron';
@@ -301,11 +302,15 @@ app.get('/api/stocks/search', async (req, res) => {
     const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
     const FMP_API_KEY = process.env.FMP_API_KEY;
 
-    // Fetch quote, profile (sector), and YTD price change in parallel
-    const [quoteRes, profileRes, changeRes] = await Promise.all([
+    // Fetch quote, profile (sector), YTD price change, and index membership in parallel
+    const [quoteRes, profileRes, changeRes, sp500Tickers, dow30Tickers, sp400Longs, sp400Shorts] = await Promise.all([
       fetch(`${FMP_BASE_URL}/quote/${ticker}?apikey=${FMP_API_KEY}`),
       fetch(`${FMP_BASE_URL}/profile/${ticker}?apikey=${FMP_API_KEY}`),
       fetch(`${FMP_BASE_URL}/stock-price-change/${ticker}?apikey=${FMP_API_KEY}`),
+      getSp500Tickers().catch(() => []),
+      getDow30Tickers().catch(() => []),
+      getSp400Longs().catch(() => []),
+      getSp400Shorts().catch(() => []),
     ]);
 
     if (!quoteRes.ok) throw new Error(`FMP ${quoteRes.status}`);
@@ -334,6 +339,13 @@ app.get('/api/stocks/search', async (req, res) => {
       }
     } catch { /* ignore */ }
 
+    // Index membership flags
+    const sp500Set   = new Set(sp500Tickers);
+    const dow30Set   = new Set(dow30Tickers);
+    const sp400LSet  = new Set(sp400Longs.map(t => (typeof t === 'string' ? t : t.ticker)));
+    const sp400SSet  = new Set(sp400Shorts.map(t => (typeof t === 'string' ? t : t.ticker)));
+    const universe   = sp400LSet.has(ticker) ? 'sp400Long' : sp400SSet.has(ticker) ? 'sp400Short' : 'sp517';
+
     const stock = {
       ticker: q.symbol,
       companyName: q.name || q.symbol,
@@ -345,6 +357,9 @@ app.get('/api/stocks/search', async (req, res) => {
       rankChange: null,
       previousRank: null,
       rankList: null,
+      isSp500:  sp500Set.has(ticker),
+      isDow30:  dow30Set.has(ticker),
+      universe,
     };
 
     // Check if this ticker is in the most recent PNTHR 100 long or short ranking

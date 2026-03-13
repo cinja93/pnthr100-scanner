@@ -318,18 +318,23 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 </td>}
                 <td className={styles.ticker}>
                   <div className={styles.tickerRow}>
-                    {hasScannerRanks && (() => {
-                      const info = scannerRanks[stock.ticker?.toUpperCase()];
-                      if (!info) return null;
-                      return <span className={info.list === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort} style={{ marginLeft: 0, marginRight: 4 }}>{info.list === 'LONG' ? 'L' : 'S'}</span>;
+                    {(() => {
+                      // L/S badge: prefer scannerRanks prop, fall back to stock.rankList
+                      let list = null;
+                      if (hasScannerRanks) {
+                        list = scannerRanks[stock.ticker?.toUpperCase()]?.list ?? null;
+                      } else if (stock.rankList) {
+                        list = stock.rankList;
+                      }
+                      if (!list) return null;
+                      return <span className={list === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort} style={{ marginLeft: 0, marginRight: 4 }}>{list === 'LONG' ? 'L' : 'S'}</span>;
                     })()}
                     <span>{stock.ticker}</span>
                     {(() => {
                       const tags = [];
                       if (stock.isSp500) tags.push('500');
                       if (stock.isDow30) tags.push('30');
-                      if (stock.universe === 'sp400Long')  tags.push('400L');
-                      if (stock.universe === 'sp400Short') tags.push('400S');
+                      if (stock.universe === 'sp400Long' || stock.universe === 'sp400Short') tags.push('400');
                       return tags.length > 0
                         ? <span className={styles.membershipTag}>({tags.join(', ')})</span>
                         : null;

@@ -5,32 +5,31 @@ import { fetchJungleStocks, fetchEarnings } from '../services/api';
 import styles from './EarningsWeekPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
-// Returns { from, to } date strings for the relevant earnings window
+// Returns { from, to, isNextWeek } for the relevant earnings window.
+// Thu–Sun: show NEXT week Mon–Fri (users plan ahead on Thursday).
+// Mon–Wed: show current week today through Friday.
 function getEarningsDateWindow() {
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const dow = today.getDay(); // 0=Sun, 1=Mon…5=Fri, 6=Sat
   const fmt = d => d.toISOString().split('T')[0];
 
   const start = new Date(today);
   const end   = new Date(today);
 
-  if (dow === 5) {
-    // Friday: show today + all of next week (6 days)
-    end.setDate(today.getDate() + 7);
-  } else if (dow === 6) {
-    // Saturday: show next Mon–Fri
-    start.setDate(today.getDate() + 2);
-    end.setDate(today.getDate() + 6);
-  } else if (dow === 0) {
-    // Sunday: show next Mon–Fri
-    start.setDate(today.getDate() + 1);
-    end.setDate(today.getDate() + 5);
+  const showNextWeek = dow >= 4 || dow === 0 || dow === 6; // Thu=4, Fri=5, Sat=6, Sun=0
+
+  if (showNextWeek) {
+    // Days until next Monday: Sun→1, Thu→4, Fri→3, Sat→2
+    const daysToNextMon = dow === 0 ? 1 : dow === 6 ? 2 : (8 - dow);
+    start.setDate(today.getDate() + daysToNextMon);
+    end.setDate(today.getDate() + daysToNextMon + 4); // Mon through Fri
   } else {
-    // Mon–Thu: today through this Friday
+    // Mon–Wed: today through this Friday
     end.setDate(today.getDate() + (5 - dow));
   }
 
-  return { from: fmt(start), to: fmt(end) };
+  return { from: fmt(start), to: fmt(end), isNextWeek: showNextWeek };
 }
 
 function formatDayHeader(dateStr) {
@@ -67,7 +66,7 @@ export default function EarningsWeekPage() {
 
   useEffect(() => { load(); }, []);
 
-  const { from, to } = useMemo(() => getEarningsDateWindow(), []);
+  const { from, to, isNextWeek } = useMemo(() => getEarningsDateWindow(), []);
 
   // Filter jungle stocks to those with earnings in this week's window, grouped by date
   const byDate = useMemo(() => {
@@ -95,14 +94,14 @@ export default function EarningsWeekPage() {
         <div>
           <h1 className={styles.title}>
             <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            Earnings Week
+            Earnings {isNextWeek ? 'Next Week' : 'This Week'}
           </h1>
           <p className={styles.subtitle}>
             {!loading && !error
               ? totalCount > 0
-                ? `${totalCount} Jungle stocks reporting across ${dates.length} day${dates.length !== 1 ? 's' : ''}`
-                : 'No Jungle stocks reporting this period'
-              : 'PNTHR 679 Jungle — upcoming earnings this week'}
+                ? `${totalCount} Jungle stocks reporting ${isNextWeek ? 'next week' : 'this week'} across ${dates.length} day${dates.length !== 1 ? 's' : ''}`
+                : `No Jungle stocks reporting ${isNextWeek ? 'next week' : 'this week'}`
+              : `PNTHR 679 Jungle — upcoming earnings ${isNextWeek ? 'next week' : 'this week'}`}
           </p>
         </div>
         <button className={styles.refreshBtn} onClick={load} disabled={loading}>

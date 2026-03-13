@@ -1,13 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { marked } from 'marked';
 import styles from './NewsPage.module.css';
 import pnthrLogo from '../assets/panther head.png';
+import ChartModal from './ChartModal';
 import {
   fetchNewsletterList,
   fetchNewsletterIssue,
   generateNewsletterIssue,
   saveNewsletterDraft,
   publishNewsletterIssue,
+  fetchJungleStocks,
+  fetchEarnings,
 } from '../services/api';
 
 marked.setOptions({ breaks: true });
@@ -41,6 +44,12 @@ export default function NewsPage() {
   const [error, setError]             = useState(null);
   const [genError, setGenError]       = useState(null);
 
+  // Jungle stocks + earnings — loaded silently for chart linking
+  const [jungleStocks, setJungleStocks]   = useState([]);
+  const [jungleEarnings, setJungleEarnings] = useState({});
+  const [chartIndex, setChartIndex]       = useState(null);
+  const [chartStocks, setChartStocks]     = useState([]);
+
   // Load issue list
   const loadList = useCallback(async () => {
     try {
@@ -59,6 +68,17 @@ export default function NewsPage() {
   }, [selectedId]);
 
   useEffect(() => { loadList(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Silently pre-load jungle stocks so tickers in the newsletter are clickable
+  useEffect(() => {
+    fetchJungleStocks()
+      .then(data => {
+        const stockList = data.stocks || [];
+        setJungleStocks(stockList);
+        fetchEarnings(stockList.map(s => s.ticker)).then(setJungleEarnings);
+      })
+      .catch(err => console.warn('Chart pre-load skipped:', err));
+  }, []);
 
   // Load selected issue
   useEffect(() => {
@@ -120,9 +140,31 @@ export default function NewsPage() {
     }
   }
 
-  const renderedHtml = issue?.narrative
-    ? marked.parse(issue.narrative)
-    : '';
+  const rawHtml = issue?.narrative ? marked.parse(issue.narrative) : '';
+
+  // Known tickers set — built once jungle stocks load
+  const knownTickers = useMemo(() => new Set(jungleStocks.map(s => s.ticker)), [jungleStocks]);
+
+  // Wrap known ticker symbols in clickable spans (only in text nodes, not inside HTML tags)
+  const renderedHtml = useMemo(() => {
+    if (!rawHtml || knownTickers.size === 0) return rawHtml;
+    return rawHtml.replace(/(?<=>|^)([^<]+)(?=<|$)/g, textBlock =>
+      textBlock.replace(/\b([A-Z]{2,5})\b/g, word =>
+        knownTickers.has(word)
+          ? `<span class="pnthr-ticker-link" data-ticker="${word}">${word}</span>`
+          : word
+      )
+    );
+  }, [rawHtml, knownTickers]);
+
+  function handleArticleClick(e) {
+    const ticker = e.target.dataset?.ticker;
+    if (!ticker) return;
+    const idx = jungleStocks.findIndex(s => s.ticker === ticker);
+    if (idx === -1) return;
+    setChartStocks(jungleStocks);
+    setChartIndex(idx);
+  }
 
   return (
     <div className={styles.page}>
@@ -243,16 +285,26 @@ export default function NewsPage() {
                   onChange={e => setDraftText(e.target.value)}
                 />
               ) : (
-                /* Rendered article */
+                /* Rendered article — tickers are clickable spans */
                 <article
                   className={styles.articleBody}
                   dangerouslySetInnerHTML={{ __html: renderedHtml }}
+                  onClick={handleArticleClick}
                 />
               )}
             </>
           )}
         </main>
       </div>
+
+      {chartIndex != null && (
+        <ChartModal
+          stocks={chartStocks}
+          initialIndex={chartIndex}
+          earnings={jungleEarnings}
+          onClose={() => setChartIndex(null)}
+        />
+      )}
     </div>
   );
 }

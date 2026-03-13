@@ -24,7 +24,7 @@ async function fetchConstituents(endpoint) {
 }
 
 // Weekly cache for constituent lists — keyed by last Friday's date so it auto-refreshes each week
-const constituentCache = { weekKey: null, allTickers: null, dow30: null, sp500: null };
+const constituentCache = { weekKey: null, allTickers: null, dow30: null, sp500: null, nasdaq100: null };
 
 function getWeekKey() {
   const today = new Date();
@@ -73,10 +73,11 @@ async function refreshConstituentCache() {
   console.log(`Fetched: ${sp500.length} S&P 500, ${nasdaq100.length} Nasdaq 100, ${dow30.length} Dow 30`);
 
   const allTickers = [...new Set([...sp500, ...nasdaq100, ...dow30, ...SUPPLEMENTAL_STOCKS, ...userSupplemental])];
-  constituentCache.weekKey   = weekKey;
+  constituentCache.weekKey    = weekKey;
   constituentCache.allTickers = allTickers;
-  constituentCache.dow30     = dow30;
-  constituentCache.sp500     = sp500;
+  constituentCache.dow30      = dow30;
+  constituentCache.sp500      = sp500;
+  constituentCache.nasdaq100  = nasdaq100;
 
   console.log(`📋 Constituent cache set (${allTickers.length} unique tickers, valid until next Friday)`);
 }
@@ -97,4 +98,10 @@ export async function getDow30Tickers() {
 export async function getSp500Tickers() {
   if (!isCacheValid()) await refreshConstituentCache();
   return constituentCache.sp500;
+}
+
+// Get Nasdaq 100 tickers
+export async function getNasdaq100Tickers() {
+  if (!isCacheValid()) await refreshConstituentCache();
+  return constituentCache.nasdaq100;
 }

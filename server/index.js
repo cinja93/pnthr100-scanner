@@ -8,7 +8,7 @@ import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
 import { getEtfStocks } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
-import { getSp500Tickers, getDow30Tickers } from './constituents.js';
+import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
 import newsletterRouter from './routes/newsletter.js';
 import cron from 'node-cron';
@@ -303,12 +303,13 @@ app.get('/api/stocks/search', async (req, res) => {
     const FMP_API_KEY = process.env.FMP_API_KEY;
 
     // Fetch quote, profile (sector), YTD price change, and index membership in parallel
-    const [quoteRes, profileRes, changeRes, sp500Tickers, dow30Tickers, sp400Longs, sp400Shorts] = await Promise.all([
+    const [quoteRes, profileRes, changeRes, sp500Tickers, dow30Tickers, nasdaq100Tickers, sp400Longs, sp400Shorts] = await Promise.all([
       fetch(`${FMP_BASE_URL}/quote/${ticker}?apikey=${FMP_API_KEY}`),
       fetch(`${FMP_BASE_URL}/profile/${ticker}?apikey=${FMP_API_KEY}`),
       fetch(`${FMP_BASE_URL}/stock-price-change/${ticker}?apikey=${FMP_API_KEY}`),
       getSp500Tickers().catch(() => []),
       getDow30Tickers().catch(() => []),
+      getNasdaq100Tickers().catch(() => []),
       getSp400Longs().catch(() => []),
       getSp400Shorts().catch(() => []),
     ]);
@@ -340,11 +341,12 @@ app.get('/api/stocks/search', async (req, res) => {
     } catch { /* ignore */ }
 
     // Index membership flags
-    const sp500Set   = new Set(sp500Tickers);
-    const dow30Set   = new Set(dow30Tickers);
-    const sp400LSet  = new Set(sp400Longs.map(t => (typeof t === 'string' ? t : t.ticker)));
-    const sp400SSet  = new Set(sp400Shorts.map(t => (typeof t === 'string' ? t : t.ticker)));
-    const universe   = sp400LSet.has(ticker) ? 'sp400Long' : sp400SSet.has(ticker) ? 'sp400Short' : 'sp517';
+    const sp500Set    = new Set(sp500Tickers);
+    const dow30Set    = new Set(dow30Tickers);
+    const ndx100Set   = new Set(nasdaq100Tickers);
+    const sp400LSet   = new Set(sp400Longs.map(t => (typeof t === 'string' ? t : t.ticker)));
+    const sp400SSet   = new Set(sp400Shorts.map(t => (typeof t === 'string' ? t : t.ticker)));
+    const universe    = sp400LSet.has(ticker) ? 'sp400Long' : sp400SSet.has(ticker) ? 'sp400Short' : 'sp517';
 
     const stock = {
       ticker: q.symbol,
@@ -357,8 +359,9 @@ app.get('/api/stocks/search', async (req, res) => {
       rankChange: null,
       previousRank: null,
       rankList: null,
-      isSp500:  sp500Set.has(ticker),
-      isDow30:  dow30Set.has(ticker),
+      isSp500:     sp500Set.has(ticker),
+      isDow30:     dow30Set.has(ticker),
+      isNasdaq100: ndx100Set.has(ticker),
       universe,
     };
 
@@ -645,15 +648,17 @@ app.get('/api/rankings/:date', async (req, res) => {
       if (ranking.shortRankings) ranking.shortRankings = enrichedShort;
     }
 
-    // Enrich with membership tags (isSp500, isDow30, universe, rankList)
-    const [sp500Tickers, dow30Tickers, sp400Longs, sp400Shorts] = await Promise.all([
+    // Enrich with membership tags (isSp500, isDow30, isNasdaq100, universe, rankList)
+    const [sp500Tickers, dow30Tickers, nasdaq100Tickers, sp400Longs, sp400Shorts] = await Promise.all([
       getSp500Tickers().catch(() => []),
       getDow30Tickers().catch(() => []),
+      getNasdaq100Tickers().catch(() => []),
       getSp400Longs().catch(() => []),
       getSp400Shorts().catch(() => []),
     ]);
-    const sp500Set = new Set(sp500Tickers);
-    const dow30Set = new Set(dow30Tickers);
+    const sp500Set  = new Set(sp500Tickers);
+    const dow30Set  = new Set(dow30Tickers);
+    const ndx100Set = new Set(nasdaq100Tickers);
     const sp400LSet = new Set(sp400Longs);
     const sp400SSet = new Set(sp400Shorts);
 
@@ -664,8 +669,9 @@ app.get('/api/rankings/:date', async (req, res) => {
       else if (sp400SSet.has(t)) universe = 'sp400Short';
       return {
         ...s,
-        isSp500: sp500Set.has(t),
-        isDow30: dow30Set.has(t),
+        isSp500:     sp500Set.has(t),
+        isDow30:     dow30Set.has(t),
+        isNasdaq100: ndx100Set.has(t),
         universe,
         rankList,
       };
@@ -1038,12 +1044,14 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
     if (Array.isArray(ytdData)) for (const item of ytdData) ytdMap[item.symbol] = item.ytd;
 
     // 4. Fetch membership lists for tags
-    const [dow30Tickers, sp400Longs, sp400Shorts] = await Promise.all([
+    const [dow30Tickers, nasdaq100Tickers, sp400Longs, sp400Shorts] = await Promise.all([
       getDow30Tickers().catch(() => []),
+      getNasdaq100Tickers().catch(() => []),
       getSp400Longs().catch(() => []),
       getSp400Shorts().catch(() => []),
     ]);
     const dow30Set  = new Set(dow30Tickers);
+    const ndx100Set = new Set(nasdaq100Tickers);
     const sp400LSet = new Set(sp400Longs);
     const sp400SSet = new Set(sp400Shorts);
 
@@ -1060,9 +1068,10 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
         rank: null,
         rankChange: null,
         previousRank: null,
-        isSp500: true, // all sector stocks are S&P 500 members
-        isDow30: dow30Set.has(c.symbol),
-        universe: sp400LSet.has(c.symbol) ? 'sp400Long' : sp400SSet.has(c.symbol) ? 'sp400Short' : null,
+        isSp500:     true, // all sector stocks are S&P 500 members
+        isDow30:     dow30Set.has(c.symbol),
+        isNasdaq100: ndx100Set.has(c.symbol),
+        universe:    sp400LSet.has(c.symbol) ? 'sp400Long' : sp400SSet.has(c.symbol) ? 'sp400Short' : null,
       }))
       .sort((a, b) => b.ytdReturn - a.ytdReturn)
       .map((s, i) => ({ ...s, rank: i + 1 }));
@@ -1263,12 +1272,14 @@ app.get('/api/speculative-stocks/:side', async (req, res) => {
     const ytdMap = {};
     if (Array.isArray(ytdData)) for (const item of ytdData) ytdMap[item.symbol] = item.ytd;
 
-    const [sp500TickersForSpec, dow30TickersForSpec] = await Promise.all([
+    const [sp500TickersForSpec, dow30TickersForSpec, ndx100TickersForSpec] = await Promise.all([
       getSp500Tickers().catch(() => []),
       getDow30Tickers().catch(() => []),
+      getNasdaq100Tickers().catch(() => []),
     ]);
-    const sp500SetSpec = new Set(sp500TickersForSpec);
-    const dow30SetSpec = new Set(dow30TickersForSpec);
+    const sp500SetSpec  = new Set(sp500TickersForSpec);
+    const dow30SetSpec  = new Set(dow30TickersForSpec);
+    const ndx100SetSpec = new Set(ndx100TickersForSpec);
     const sp400LSetSpec = new Set(sp400Longs);
     const sp400SSetSpec = new Set(sp400Shorts);
 
@@ -1284,9 +1295,10 @@ app.get('/api/speculative-stocks/:side', async (req, res) => {
         rank:         null,
         rankChange:   null,
         previousRank: null,
-        isSp500:  sp500SetSpec.has(t),
-        isDow30:  dow30SetSpec.has(t),
-        universe: sp400LSetSpec.has(t) ? 'sp400Long' : sp400SSetSpec.has(t) ? 'sp400Short' : null,
+        isSp500:     sp500SetSpec.has(t),
+        isDow30:     dow30SetSpec.has(t),
+        isNasdaq100: ndx100SetSpec.has(t),
+        universe:    sp400LSetSpec.has(t) ? 'sp400Long' : sp400SSetSpec.has(t) ? 'sp400Short' : null,
         rankList: side === 'longs' ? 'LONG' : 'SHORT',
       }))
       .sort((a, b) => side === 'longs' ? b.ytdReturn - a.ytdReturn : a.ytdReturn - b.ytdReturn)

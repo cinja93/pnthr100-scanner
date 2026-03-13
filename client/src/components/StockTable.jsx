@@ -335,6 +335,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                       if (stock.isSp500) tags.push('500');
                       if (stock.isDow30) tags.push('30');
                       if (stock.universe === 'sp400Long' || stock.universe === 'sp400Short') tags.push('400');
+                      if (stock.isNasdaq100) tags.push('100');
                       return tags.length > 0
                         ? <span className={styles.membershipTag}>({tags.join(', ')})</span>
                         : null;

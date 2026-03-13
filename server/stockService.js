@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { getAllTickers, getDow30Tickers, getSp500Tickers } from './constituents.js';
+import { getAllTickers, getDow30Tickers, getSp500Tickers, getNasdaq100Tickers } from './constituents.js';
 import { addRankingComparison, addShortRankingComparison, autoSaveRankingIfFriday } from './rankingService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 
@@ -227,15 +227,17 @@ export async function getShortStopPrices(tickers) {
 // plus a year-long in-memory cache for Dec 31 prices.
 export async function getTopStocks() {
   try {
-    const [tickers, sp500Tickers, dow30Tickers, sp400Longs, sp400Shorts] = await Promise.all([
+    const [tickers, sp500Tickers, dow30Tickers, nasdaq100Tickers, sp400Longs, sp400Shorts] = await Promise.all([
       getAllTickers(),
       getSp500Tickers().catch(() => []),
       getDow30Tickers().catch(() => []),
+      getNasdaq100Tickers().catch(() => []),
       getSp400Longs().catch(() => []),
       getSp400Shorts().catch(() => []),
     ]);
     const sp500Set  = new Set(sp500Tickers);
     const dow30Set  = new Set(dow30Tickers);
+    const ndx100Set = new Set(nasdaq100Tickers);
     const sp400LSet = new Set(sp400Longs);
     const sp400SSet = new Set(sp400Shorts);
     console.log(`Fetching data for ${tickers.length} unique tickers from FMP...`);
@@ -297,9 +299,10 @@ export async function getTopStocks() {
         sector: profileData?.sector || 'N/A',
         currentPrice: parseFloat(currentPrice.toFixed(2)),
         ytdReturn: parseFloat(ytdReturn.toFixed(2)),
-        isSp500:  sp500Set.has(sym),
-        isDow30:  dow30Set.has(sym),
-        universe: sp400LSet.has(sym) ? 'sp400Long' : sp400SSet.has(sym) ? 'sp400Short' : 'sp517',
+        isSp500:     sp500Set.has(sym),
+        isDow30:     dow30Set.has(sym),
+        isNasdaq100: ndx100Set.has(sym),
+        universe:    sp400LSet.has(sym) ? 'sp400Long' : sp400SSet.has(sym) ? 'sp400Short' : 'sp517',
       });
     }
 
@@ -417,6 +420,7 @@ export async function getJungleStocks(specLongs = [], specShorts = []) {
       universe,
       isSp500:     sp500Set.has(q.symbol),
       isDow30:     dow30Set.has(q.symbol),
+      isNasdaq100: ndx100Set.has(q.symbol),
       rank: null,
       rankChange: null,
     });

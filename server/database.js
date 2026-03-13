@@ -40,6 +40,13 @@ export async function connectToDatabase() {
     try { await db.collection('watchlist').dropIndex('ticker_1'); } catch { /* may not exist */ }
     await db.collection('watchlist').createIndex({ userId: 1, ticker: 1 }, { unique: true });
 
+    // Signal history archive: weekly snapshots of all 679 stock signals
+    await db.collection('signal_history').createIndex({ ticker: 1, weekOf: -1 });
+    await db.collection('signal_history').createIndex({ weekOf: -1, signal: 1 });
+    await db.collection('signal_history').createIndex(
+      { ticker: 1, weekOf: 1 }, { unique: true }
+    );
+
     console.log('✅ Connected to MongoDB');
     return db;
   } catch (error) {

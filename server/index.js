@@ -12,6 +12,7 @@ import { getPreyResults, clearPreyCache } from './preyService.js';
 import newsletterRouter from './routes/newsletter.js';
 import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
+import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
 import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateToken, resolveRole } from './auth.js';
 import {
   getSupplementalStocks,
@@ -1245,6 +1246,67 @@ cron.schedule('0 22 * * 5', async () => {
     console.log(`[Cron] PNTHR's Perch generated successfully.`);
   } catch (err) {
     console.error('[Cron] Newsletter generation failed:', err.message);
+  }
+});
+
+// ── Cron: archive weekly signal snapshot every Friday at 6pm ET (23:00 UTC) ───
+// Runs one hour after newsletter generation so signal cache is warm.
+cron.schedule('0 23 * * 5', async () => {
+  try {
+    console.log('[Signal Archive] Saving weekly snapshot...');
+    const jungleData = await getJungleStocks();
+    const tickers = (jungleData.stocks || []).map(s => s.ticker);
+    const signals  = await getSignals(tickers);
+    const count    = await saveWeeklySnapshot(signals);
+    console.log(`[Signal Archive] Saved ${count} signal records for week of ${getCurrentWeekOf()}.`);
+  } catch (err) {
+    console.error('[Signal Archive] Snapshot failed:', err.message);
+  }
+});
+
+// ── Admin: signal history endpoints ────────────────────────────────────────────
+
+// POST /api/admin/signal-history/snapshot — manually save this week's snapshot
+app.post('/api/admin/signal-history/snapshot', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const jungleData = await getJungleStocks();
+    const tickers = (jungleData.stocks || []).map(s => s.ticker);
+    const signals  = await getSignals(tickers);
+    const count    = await saveWeeklySnapshot(signals);
+    res.json({ ok: true, count, weekOf: getCurrentWeekOf() });
+  } catch (err) {
+    console.error('[Signal Archive] Manual snapshot failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/signal-history/weeks — list all archived weeks
+app.get('/api/admin/signal-history/weeks', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const weeks = await listArchivedWeeks();
+    res.json(weeks);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/signal-history/week/:weekOf — get all active signals for a week
+app.get('/api/admin/signal-history/week/:weekOf', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const records = await getWeekSnapshot(req.params.weekOf);
+    res.json(records);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/signal-history/ticker/:ticker — full history for one stock
+app.get('/api/admin/signal-history/ticker/:ticker', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const records = await getTickerHistory(req.params.ticker);
+    res.json(records);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

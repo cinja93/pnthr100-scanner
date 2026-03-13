@@ -154,18 +154,25 @@ export default function NewsPage() {
   const knownTickers = useMemo(() => new Set(jungleStocks.map(s => s.ticker)), [jungleStocks]);
 
   // Wrap known ticker symbols in clickable spans (only in text nodes, not inside HTML tags)
-  // Also inject a View Chart button next to the Trade of the Week heading
+  // Also inject a View Chart button next to the Trade of the Week heading.
+  // NOTE: button injection is independent of jungle stocks so it always shows immediately.
   const renderedHtml = useMemo(() => {
-    if (!rawHtml || knownTickers.size === 0) return rawHtml;
+    if (!rawHtml) return rawHtml;
     const totwTicker = extractTotwTicker(issue?.narrative);
-    let html = rawHtml.replace(/(?<=>|^)([^<]+)(?=<|$)/g, textBlock =>
-      textBlock.replace(/\b([A-Z]{2,5})\b/g, word =>
-        knownTickers.has(word)
-          ? `<span class="pnthr-ticker-link" data-ticker="${word}">${word}</span>`
-          : word
-      )
-    );
-    // Inject View Chart button inline with the Trade of the Week heading
+
+    // Linkify tickers only once jungle stocks are loaded
+    let html = rawHtml;
+    if (knownTickers.size > 0) {
+      html = html.replace(/(?<=>|^)([^<]+)(?=<|$)/g, textBlock =>
+        textBlock.replace(/\b([A-Z]{2,5})\b/g, word =>
+          knownTickers.has(word)
+            ? `<span class="pnthr-ticker-link" data-ticker="${word}">${word}</span>`
+            : word
+        )
+      );
+    }
+
+    // Always inject TOTW button whenever the narrative has a featured trade
     if (totwTicker) {
       const btn = `<button class="pnthr-totw-btn" data-totw-chart="${totwTicker}">📈 View Chart (${totwTicker})</button>`;
       html = html.replace(

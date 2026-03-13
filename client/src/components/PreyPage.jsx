@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { fetchPreyStocks, fetchEarnings, fetchEmaCrossoverStocks, fetchScannerRanks, fetchTopStocks, fetchShortStocks, fetchSignals } from '../services/api';
 import ChartModal from './ChartModal';
-import StockTable from './StockTable';
 import styles from './PreyPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -13,6 +12,19 @@ function pct(v) {
 function price(v) {
   if (v == null) return '—';
   return `$${Number(v).toFixed(2)}`;
+}
+
+function computeWeeksAgo(signalDate) {
+  if (!signalDate) return null;
+  const signalMonday = new Date(signalDate + 'T12:00:00');
+  const today = new Date();
+  const dow = today.getDay();
+  const daysToMonday = dow === 0 ? -6 : 1 - dow;
+  const currentMonday = new Date(today);
+  currentMonday.setDate(today.getDate() + daysToMonday);
+  currentMonday.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((currentMonday - signalMonday) / (1000 * 60 * 60 * 24));
+  return Math.floor(diffDays / 7) + 1;
 }
 
 function TickerCell({ ticker, companyName }) {
@@ -58,6 +70,7 @@ function AlphaRow({ s, onClick }) {
 
 function SignalBadge({ badge }) {
   if (!badge) return <span className={styles.tdGray}>—</span>;
+  if (badge === 'BE' || badge === 'SE') return <span className={`${styles.badge} ${styles.badgePause}`}>⏸ PAUSE</span>;
   const isBL = badge.startsWith('BL');
   return <span className={`${styles.badge} ${isBL ? styles.badgeBL : styles.badgeSS}`}>{badge}</span>;
 }
@@ -276,37 +289,139 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowEx
   );
 }
 
-function SprintTable({ longs, shorts, signals, onRowClick }) {
+// PreyStockTable — uniform Signal-in-col-2 table for Hunt and Sprint
+function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, onRowClick }) {
+  const hasTabs = longs !== undefined || shorts !== undefined;
   const [side, setSide] = useState('long');
-  const stocks = side === 'long' ? longs : shorts;
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+
+  const allLongs  = longs  ?? [];
+  const allShorts = shorts ?? [];
+  const rawRows = hasTabs
+    ? (side === 'long' ? allLongs : side === 'short' ? allShorts : [...allLongs, ...allShorts])
+    : (stocks ?? []);
+
+  const sortedRows = useMemo(() => {
+    if (!sortKey) return rawRows;
+    return [...rawRows].sort((a, b) => {
+      const sigA = signals[a.ticker];
+      const sigB = signals[b.ticker];
+      let av, bv;
+      const SIG_ORDER = { BL: 1, SS: 2, BE: 3, SE: 3 };
+      if (sortKey === 'PNTHR Signal') {
+        av = SIG_ORDER[sigA?.signal] ?? 99;
+        bv = SIG_ORDER[sigB?.signal] ?? 99;
+      } else if (sortKey === 'Wks Since') {
+        av = computeWeeksAgo(sigA?.signalDate) ?? 999;
+        bv = computeWeeksAgo(sigB?.signalDate) ?? 999;
+      } else if (sortKey === 'PNTHR Stop') {
+        av = sigA?.stopPrice ?? 0; bv = sigB?.stopPrice ?? 0;
+      } else if (sortKey === 'Risk $') {
+        av = sigA?.stopPrice != null ? Math.abs(a.currentPrice - sigA.stopPrice) : 0;
+        bv = sigB?.stopPrice != null ? Math.abs(b.currentPrice - sigB.stopPrice) : 0;
+      } else if (sortKey === 'Risk %') {
+        av = sigA?.stopPrice != null ? Math.abs(a.currentPrice - sigA.stopPrice) / a.currentPrice * 100 : 0;
+        bv = sigB?.stopPrice != null ? Math.abs(b.currentPrice - sigB.stopPrice) / b.currentPrice * 100 : 0;
+      } else if (sortKey === 'Next Earnings') {
+        av = earnings[a.ticker] ?? '9999'; bv = earnings[b.ticker] ?? '9999';
+      } else {
+        const FM = { 'Ticker': 'ticker', 'Exchange': 'exchange', 'Sector': 'sector', 'Current Price': 'currentPrice', 'YTD Return': 'ytdReturn' };
+        const f = FM[sortKey]; if (!f) return 0;
+        av = a[f]; bv = b[f];
+      }
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1; if (bv == null) return -1;
+      const cmp = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [rawRows, sortKey, sortDir, signals, earnings]);
+
+  function handleSort(h) {
+    if (sortKey === h) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(h); setSortDir('asc'); }
+  }
+  function sortIcon(h) {
+    if (sortKey !== h) return <span className={styles.sortIcon}>↕</span>;
+    return <span className={styles.sortIcon}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  }
+
+  const HEADERS = ['Ticker', 'PNTHR Signal', 'Wks Since', 'Exchange', 'Sector', 'Current Price', 'YTD Return', 'PNTHR Stop', 'Risk $', 'Risk %', 'Next Earnings'];
 
   return (
     <div>
-      <div className={styles.sideToggle}>
-        <button
-          className={`${styles.sideBtn} ${side === 'long' ? styles.sideBtnLong : ''}`}
-          onClick={() => setSide('long')}
-        >
-          Longs ({longs?.length ?? 0})
-        </button>
-        <button
-          className={`${styles.sideBtn} ${side === 'short' ? styles.sideBtnShort : ''}`}
-          onClick={() => setSide('short')}
-        >
-          Shorts ({shorts?.length ?? 0})
-        </button>
-      </div>
-      {!stocks?.length ? (
-        <div className={styles.empty}>No {side} sprint candidates this week.</div>
+      {hasTabs && (
+        <div className={styles.sideToggle}>
+          <button className={`${styles.sideBtn} ${side === 'long'  ? styles.sideBtnLong  : ''}`} onClick={() => setSide('long')}>Longs ({allLongs.length})</button>
+          <button className={`${styles.sideBtn} ${side === 'short' ? styles.sideBtnShort : ''}`} onClick={() => setSide('short')}>Shorts ({allShorts.length})</button>
+          <button className={`${styles.sideBtn} ${side === 'all'   ? styles.sideBtnAll   : ''}`} onClick={() => setSide('all')}>All ({allLongs.length + allShorts.length})</button>
+        </div>
+      )}
+      {sortedRows.length === 0 ? (
+        <div className={styles.empty}>The panther is patient. No candidates this week.</div>
       ) : (
         <div className={styles.tableWrap}>
-          <StockTable
-            stocks={stocks}
-            signals={signals}
-            signalsLoading={false}
-            onTickerClick={(_s, idx, sorted) => onRowClick?.(_s, idx, sorted)}
-            scanType={side}
-          />
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                {HEADERS.map(h => (
+                  <th key={h} className={`${styles.th} ${styles.thSortable}`} onClick={() => handleSort(h)}>
+                    {h}{sortIcon(h)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedRows.map((stock, i) => {
+                const sigData = signals[stock.ticker];
+                const sig = sigData?.signal;
+                const isPause = sig === 'BE' || sig === 'SE';
+                const stopPrice = sigData?.stopPrice ?? null;
+                const riskDollar = stopPrice != null ? Math.abs(stock.currentPrice - stopPrice) : null;
+                const riskPct = riskDollar != null ? (riskDollar / stock.currentPrice) * 100 : null;
+                const wks = computeWeeksAgo(sigData?.signalDate);
+                const earningsInfo = getEarningsInfo(earnings[stock.ticker]);
+
+                let sigBadge;
+                if (!sig) sigBadge = <span className={styles.tdGray}>—</span>;
+                else if (isPause) sigBadge = <span className={`${styles.badge} ${styles.badgePause}`}>⏸ PAUSE</span>;
+                else sigBadge = <span className={`${styles.badge} ${sig === 'BL' ? styles.badgeBL : styles.badgeSS}`}>{sigData?.isNewSignal ? '★ ' : ''}{sig}</span>;
+
+                let wksBadge;
+                if (!sig || wks == null) wksBadge = <span className={styles.tdGray}>—</span>;
+                else {
+                  const wksCls = sig === 'BL' ? styles.badgeBL : sig === 'SS' ? styles.badgeSS : styles.badgeCoiled;
+                  wksBadge = <span className={`${styles.badge} ${wksCls}`}>{sig}+{wks}</span>;
+                }
+
+                return (
+                  <tr key={stock.ticker + i} onClick={() => onRowClick?.(stock, sortedRows, i)}>
+                    <td className={styles.tdTicker}>
+                      <div className={styles.tickerSymbol}>{stock.ticker}</div>
+                      {stock.companyName && <div className={styles.companyName}>{stock.companyName}</div>}
+                    </td>
+                    <td className={styles.td}>{sigBadge}</td>
+                    <td className={styles.td}>{wksBadge}</td>
+                    <td className={styles.tdGray}>{stock.exchange || '—'}</td>
+                    <td className={styles.tdGray}>{stock.sector || '—'}</td>
+                    <td className={styles.tdNum}>${stock.currentPrice?.toLocaleString() ?? '—'}</td>
+                    <td className={stock.ytdReturn != null ? (stock.ytdReturn >= 0 ? styles.tdPos : styles.tdNeg) : styles.tdGray}>
+                      {stock.ytdReturn != null ? `${stock.ytdReturn >= 0 ? '+' : ''}${stock.ytdReturn.toFixed(2)}%` : '—'}
+                    </td>
+                    <td className={styles.tdNum}>{stopPrice != null ? `$${stopPrice.toLocaleString()}` : '—'}</td>
+                    <td className={styles.tdNum}>{riskDollar != null ? `$${riskDollar.toFixed(2)}` : '—'}</td>
+                    <td className={styles.tdNum}>{riskPct != null ? `${riskPct.toFixed(2)}%` : '—'}</td>
+                    <td className={earningsInfo.highlight ? styles.earningsHighlight : ''}>
+                      {earningsInfo.display}
+                      {earningsInfo.highlight && (
+                        <span className={styles.earningsSoonBadge}>{earningsInfo.daysAway === 0 ? 'Today' : `${earningsInfo.daysAway}d`}</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -320,12 +435,14 @@ const DINNER_HEADERS = ['Ticker', 'Signal', 'Exchange', 'Sector', 'Current Price
 
 const ALPHA_SORT = {
   'Ticker':        s => s.ticker,
+  'Signal':        s => s.direction || '',
   'Wks Since':     s => s.barNumber ?? 0,
   'Current Price': s => s.currentPrice ?? 0,
   'EMA21':         s => s.ema21 ?? 0,
   'Δ EMA':         s => s.priceDeltaPct ?? 0,
   'RSI':           s => s.rsi ?? 0,
   'ADX':           s => s.adx ?? 0,
+  'OBV':           s => s.obvSlope || '',
   'ETF':           s => s.sectorEtf || '',
   '4-Wk α':        s => (s.stock4wPct ?? 0) - (s.sector4wPct ?? 0),
 };
@@ -333,6 +450,8 @@ const ALPHA_SORT = {
 const SPRING_SORT = {
   'Ticker':          s => s.ticker,
   'Signal':          s => s.signalBadge || '',
+  'Status':          s => s.status || '',
+  '6M High':         s => s.high26 ?? 0,
   '% Off High':      s => s.pctOffHigh ?? 0,
   'Current':         s => s.currentPrice ?? 0,
   '% vs Open':       s => s.pctVsOpen ?? 0,
@@ -345,26 +464,18 @@ const SPRING_SORT = {
 const CROUCH_SORT = {
   'Ticker':          s => s.ticker,
   'Signal':          s => s.signalBadge || '',
+  'State':           s => s.strategy || '',
   'Current':         s => s.currentPrice ?? 0,
   'Band Width %':    s => s.bandWidth ?? 0,
   '52-Wk Min BW':   s => s.bwMin52 ?? 0,
   'Expansion %':     s => s.expansionPct ?? 0,
   'Wks in Squeeze':  s => s.wksInSqueeze ?? 0,
+  'EMA Lean':        s => s.emaLean || '',
   'Δ EMA':           s => s.emaSlope ?? 0,
   'Sector':          s => s.sector || '',
 };
 
-const DINNER_SORT = {
-  'Ticker':         s => s.ticker,
-  'Exchange':       s => s.exchange || '',
-  'Sector':         s => s.sector || '',
-  'Current Price':  s => s.currentPrice ?? 0,
-  'PNTHR Stop':     s => s.stopPrice ?? 0,
-  'Risk Per Share': s => s.currentPrice != null && s.stopPrice != null ? Math.abs(s.currentPrice - s.stopPrice) : 0,
-  'Risk %':         s => s.currentPrice != null && s.stopPrice != null ? Math.abs(s.currentPrice - s.stopPrice) / s.currentPrice * 100 : 0,
-  'RSI':            s => s.rsi ?? 0,
-  'Δ EMA':          s => s.priceDeltaPct ?? 0,
-};
+// DINNER_SORT is computed as a useMemo inside PreyPage to access earnings data
 
 export default function PreyPage({ onNavigate }) {
   const [data, setData]       = useState(null);
@@ -401,6 +512,21 @@ export default function PreyPage({ onNavigate }) {
       return next;
     });
   }
+
+  const dinnerSort = useMemo(() => ({
+    'Ticker':         s => s.ticker,
+    'Signal':         s => s.strategy || '',
+    'Exchange':       s => s.exchange || '',
+    'Sector':         s => s.sector || '',
+    'Current Price':  s => s.currentPrice ?? 0,
+    'PNTHR Stop':     s => s.stopPrice ?? 0,
+    'Risk Per Share': s => s.currentPrice != null && s.stopPrice != null ? Math.abs(s.currentPrice - s.stopPrice) : 0,
+    'Risk %':         s => s.currentPrice != null && s.stopPrice != null ? Math.abs(s.currentPrice - s.stopPrice) / s.currentPrice * 100 : 0,
+    'RSI':            s => s.rsi ?? 0,
+    'OBV':            s => s.obvSlope || '',
+    'Δ EMA':          s => s.priceDeltaPct ?? 0,
+    'Next Earnings':  s => earnings[s.ticker] ?? '9999-99-99',
+  }), [earnings]);
 
   useEffect(() => { load(); loadHunt(); loadSprint(); }, []);
 
@@ -593,7 +719,7 @@ export default function PreyPage({ onNavigate }) {
                   headers={DINNER_HEADERS}
                   onStockClick={handleStockClick}
                   rowExtraProps={{ earnings }}
-                  sortAccessors={DINNER_SORT}
+                  sortAccessors={dinnerSort}
                 />
               </>
             )}
@@ -773,17 +899,12 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.empty}>The panther is patient. No fresh EMA crossovers this week.</div>
                 )}
                 {!huntLoading && !huntError && huntStocks.length > 0 && (
-                  <div className={styles.tableWrap}>
-                    <StockTable
-                      stocks={huntStocks}
-                      signals={huntSignals}
-                      signalsLoading={false}
-                      earnings={earnings}
-                      scannerRanks={huntScannerRanks}
-                      onTickerClick={handleHuntRowClick}
-                      scanType="long"
-                    />
-                  </div>
+                  <PreyStockTable
+                    stocks={huntStocks}
+                    signals={huntSignals}
+                    earnings={earnings}
+                    onRowClick={handleHuntRowClick}
+                  />
                 )}
               </>
             )}
@@ -827,10 +948,11 @@ export default function PreyPage({ onNavigate }) {
                 {sprintLoading && <div className={styles.empty}>Scanning PNTHR 100 for risers…</div>}
                 {sprintError && !sprintLoading && <div className={styles.empty}>⚠️ {sprintError}</div>}
                 {!sprintLoading && !sprintError && (
-                  <SprintTable
+                  <PreyStockTable
                     longs={sprintLongs}
                     shorts={sprintShorts}
                     signals={sprintSignals}
+                    earnings={earnings}
                     onRowClick={handleSprintRowClick}
                   />
                 )}

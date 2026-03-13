@@ -704,7 +704,7 @@ export default function PreyPage({ onNavigate }) {
             <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
             PNTHR PREY
           </h1>
-          <p className={styles.subtitle}>679 stocks · Sector-filtered · Three precision strategies</p>
+          <p className={styles.subtitle}>679 stocks analyzed. 6 different strategies. All in the kill zone — which ones will you and the PNTHR choose?</p>
         </div>
         <button className={styles.refreshBtn} onClick={() => load(true)} disabled={loading}>
           {loading ? 'Scanning…' : '↻ Refresh'}

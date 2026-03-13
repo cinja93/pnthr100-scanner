@@ -229,11 +229,38 @@ async function fetchEtfSectorData() {
 }
 
 // Fetch once; cache holds { long, short }
+// Flag to prevent multiple simultaneous full refreshes
+let stockRefreshInProgress = false;
+
 async function getStocksCache(skipCache = false) {
   const now = Date.now();
   if (!skipCache && cachedData && lastFetch && (now - lastFetch) < CACHE_DURATION) {
     return cachedData;
   }
+
+  // Cold start (no in-memory data): try MongoDB rankings as an instant fallback
+  // so Sprint loads immediately while a fresh FMP fetch runs in the background.
+  if (!cachedData && !skipCache) {
+    try {
+      const recent = await getMostRecentRanking();
+      if (recent?.rankings?.length > 0) {
+        console.log(`📊 Stocks: cold start — serving MongoDB fallback (${recent.date}), refreshing in background...`);
+        cachedData = { long: recent.rankings, short: recent.shortRankings || [] };
+        lastFetch = now - CACHE_DURATION + 60 * 1000; // force re-fetch after 1 min
+        if (!stockRefreshInProgress) {
+          stockRefreshInProgress = true;
+          getTopStocks()
+            .then(data => { cachedData = data; lastFetch = Date.now(); })
+            .catch(err => console.error('Background stock refresh error:', err.message))
+            .finally(() => { stockRefreshInProgress = false; });
+        }
+        return cachedData;
+      }
+    } catch (err) {
+      console.error('MongoDB stock fallback error:', err.message);
+    }
+  }
+
   console.log('Fetching fresh stock data (long + short)...');
   const data = await getTopStocks();
   cachedData = data;

@@ -27,10 +27,23 @@ function computeWeeksAgo(signalDate) {
   return Math.floor(diffDays / 7) + 1;
 }
 
-function TickerCell({ ticker, companyName }) {
+function TickerCell({ ticker, companyName, stock = {} }) {
+  const tags = [];
+  if (stock.isSp500)   tags.push('500');
+  if (stock.isDow30)   tags.push('30');
+  if (stock.isNasdaq100) tags.push('100');
+  if (stock.universe === 'sp400Long' || stock.universe === 'sp400Short') tags.push('400');
   return (
     <td className={styles.tdTicker}>
-      <div className={styles.tickerSymbol}>{ticker}</div>
+      <div className={styles.tickerSymbol}>
+        {stock.rankList && (
+          <span className={stock.rankList === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort} style={{ marginRight: 4 }}>
+            {stock.rankList === 'LONG' ? 'L' : 'S'}
+          </span>
+        )}
+        {ticker}
+        {tags.length > 0 && <span className={styles.membershipTag}> ({tags.join(', ')})</span>}
+      </div>
       {companyName && <div className={styles.companyName}>{companyName}</div>}
     </td>
   );
@@ -53,7 +66,7 @@ function AlphaRow({ s, onClick }) {
   const isLong = s.direction === 'long';
   return (
     <tr onClick={onClick}>
-      <TickerCell ticker={s.ticker} companyName={s.companyName} />
+      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge ?? (isLong ? 'BL' : 'SS')} /></td>
       <td className={styles.td}><WksBadge direction={s.direction} n={s.barNumber} /></td>
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>
@@ -89,7 +102,7 @@ function SpringRow({ s, onClick }) {
                : styles.rowCoiled;
   return (
     <tr onClick={onClick} className={rowCls}>
-      <TickerCell ticker={s.ticker} companyName={s.companyName} />
+      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge} /></td>
       <td className={styles.td}><SpringStatusBadge status={s.status} /></td>
       <td className={styles.tdNum}>{price(s.high26)}</td>
@@ -121,7 +134,7 @@ function SneakRow({ s, onClick }) {
     : styles.badgeCoiled;
   return (
     <tr onClick={onClick} className={rowCls}>
-      <TickerCell ticker={s.ticker} companyName={s.companyName} />
+      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge} /></td>
       <td className={styles.td}>
         <span className={`${styles.badge} ${stateBadgeCls}`}>
@@ -168,7 +181,7 @@ function DinnerRow({ s, onClick, earnings = {} }) {
       onClick={onClick}
       className={earningsInfo.highlight ? styles.earningsHighlight : undefined}
     >
-      <TickerCell ticker={s.ticker} companyName={s.companyName} />
+      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge ?? s.strategy} /></td>
       <td className={styles.tdGray}>{s.exchange || '—'}</td>
       <td className={styles.tdGray}>{s.sector || '—'}</td>

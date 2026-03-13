@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { getAllTickers } from './constituents.js';
 import { getWatchlistStocks } from './stockService.js';
 import { getSignals } from './signalService.js';
+import { connectToDatabase } from './database.js';
 
 dotenv.config();
 
@@ -11,6 +12,32 @@ const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 // Cache results for 60 minutes — the full-universe scan is expensive on first run.
 let emaCrossoverCache = { data: null, timestamp: null };
 const CACHE_TTL_MS = 60 * 60 * 1000;
+const MONGO_COLLECTION = 'ema_crossover_cache';
+let refreshInProgress = false;
+
+// ── MongoDB helpers ───────────────────────────────────────────────────────────
+async function loadFromMongo() {
+  try {
+    const db = await connectToDatabase();
+    if (!db) return null;
+    return await db.collection(MONGO_COLLECTION).findOne({}, { sort: { updatedAt: -1 } });
+  } catch { return null; }
+}
+
+async function saveToMongo(result) {
+  try {
+    const db = await connectToDatabase();
+    if (!db) return;
+    await db.collection(MONGO_COLLECTION).replaceOne(
+      {},
+      { stocks: result.stocks, signals: result.signals, updatedAt: new Date() },
+      { upsert: true }
+    );
+    console.log('📊 EMA crossover cache saved to MongoDB');
+  } catch (err) {
+    console.error('EMA crossover MongoDB save error:', err.message);
+  }
+}
 
 // Aggregate daily OHLCV to weekly (keyed by Monday of each week; weekly close = last trading day of week)
 function aggregateToWeekly(dailyData) {
@@ -115,58 +142,93 @@ function checkRecentCrossover(signal, daily) {
   }
 }
 
+async function runEmaCrossoverScan() {
+  if (refreshInProgress) return emaCrossoverCache.data;
+  refreshInProgress = true;
+  console.log('📊 EMA crossover scan starting (full universe: S&P 500 + NASDAQ 100 + Dow 30)...');
+  try {
+    // 1. Full universe from constituents.js (same lists used by the main scanner)
+    const allTickers = await getAllTickers(); // ~600–700 unique tickers
+    console.log(`📊 Universe: ${allTickers.length} tickers`);
+
+    // 2. Get signals for all tickers using the main state machine (5yr data, BL/SS/BE/SE format)
+    const rawSignals = await getSignals(allTickers);
+    // Only check BL/SS — crossover is only meaningful on entry signals, not exits
+    const tickersWithSignals = allTickers.filter(t => rawSignals[t]?.signal === 'BL' || rawSignals[t]?.signal === 'SS');
+    console.log(`📊 ${tickersWithSignals.length} tickers have signals — checking EMA crossover...`);
+
+    // 3. Fetch price history and test the actual crossover condition (5 concurrent, 300ms delay)
+    const matchingTickers = [];
+    const matchingSignalsMap = {};
+    const CONCURRENCY = 5;
+
+    for (let i = 0; i < tickersWithSignals.length; i += CONCURRENCY) {
+      const chunk = tickersWithSignals.slice(i, i + CONCURRENCY);
+      await Promise.all(chunk.map(async ticker => {
+        try {
+          const signal = rawSignals[ticker].signal;
+          const daily = await fetchHistory(ticker);
+          if (checkRecentCrossover(signal, daily)) {
+            matchingTickers.push(ticker);
+            matchingSignalsMap[ticker] = rawSignals[ticker];
+          }
+        } catch (err) {
+          console.error(`EMA crossover error for ${ticker}:`, err.message);
+        }
+      }));
+      if (i + CONCURRENCY < tickersWithSignals.length) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    console.log(`📊 ${matchingTickers.length} tickers passed the crossover test — fetching metadata...`);
+
+    // 4. Fetch stock metadata (quote, profile, YTD) only for the matching set — fast since it's a small list
+    const matchingStocks = matchingTickers.length > 0
+      ? await getWatchlistStocks(matchingTickers)
+      : [];
+
+    console.log(`📊 EMA crossover complete: ${matchingStocks.length} stocks`);
+    // getSignals() already includes stopPrice — no separate calculateStopPrices() call needed
+    const result = { stocks: matchingStocks, signals: matchingSignalsMap };
+    emaCrossoverCache = { data: result, timestamp: Date.now() };
+    await saveToMongo(result);
+    return result;
+  } catch (err) {
+    console.error('❌ EMA crossover scan failed:', err.message);
+    throw err;
+  } finally {
+    refreshInProgress = false;
+  }
+}
+
 export async function getEmaCrossoverStocks(forceRefresh = false) {
+  // 1. In-memory cache hit
   if (!forceRefresh && emaCrossoverCache.data && Date.now() - emaCrossoverCache.timestamp < CACHE_TTL_MS) {
-    console.log('📊 EMA crossover: serving from cache');
+    console.log('📊 EMA crossover: serving from in-memory cache');
     return emaCrossoverCache.data;
   }
 
-  console.log('📊 EMA crossover scan starting (full universe: S&P 500 + NASDAQ 100 + Dow 30)...');
-
-  // 1. Full universe from constituents.js (same lists used by the main scanner)
-  const allTickers = await getAllTickers(); // ~600–700 unique tickers
-  console.log(`📊 Universe: ${allTickers.length} tickers`);
-
-  // 2. Get signals for all tickers using the main state machine (5yr data, BL/SS/BE/SE format)
-  const rawSignals = await getSignals(allTickers);
-  // Only check BL/SS — crossover is only meaningful on entry signals, not exits
-  const tickersWithSignals = allTickers.filter(t => rawSignals[t]?.signal === 'BL' || rawSignals[t]?.signal === 'SS');
-  console.log(`📊 ${tickersWithSignals.length} tickers have signals — checking EMA crossover...`);
-
-  // 3. Fetch price history and test the actual crossover condition (5 concurrent, 300ms delay)
-  const matchingTickers = [];
-  const matchingSignalsMap = {};
-  const CONCURRENCY = 5;
-
-  for (let i = 0; i < tickersWithSignals.length; i += CONCURRENCY) {
-    const chunk = tickersWithSignals.slice(i, i + CONCURRENCY);
-    await Promise.all(chunk.map(async ticker => {
-      try {
-        const signal = rawSignals[ticker].signal;
-        const daily = await fetchHistory(ticker);
-        if (checkRecentCrossover(signal, daily)) {
-          matchingTickers.push(ticker);
-          matchingSignalsMap[ticker] = rawSignals[ticker];
-        }
-      } catch (err) {
-        console.error(`EMA crossover error for ${ticker}:`, err.message);
-      }
-    }));
-    if (i + CONCURRENCY < tickersWithSignals.length) {
-      await new Promise(r => setTimeout(r, 300));
+  // 2. MongoDB fallback — serves stale data instantly while refresh runs in background
+  const mongo = await loadFromMongo();
+  if (mongo?.stocks) {
+    const result = { stocks: mongo.stocks, signals: mongo.signals || {} };
+    emaCrossoverCache = { data: result, timestamp: Date.now() };
+    const ageHours = mongo.updatedAt ? (Date.now() - new Date(mongo.updatedAt).getTime()) / 3600000 : 999;
+    if (forceRefresh || ageHours > 1) {
+      console.log(`📊 EMA crossover: MongoDB data is ${ageHours.toFixed(1)}h old — refreshing in background...`);
+      if (!refreshInProgress) runEmaCrossoverScan().catch(err => console.error('Background EMA crossover error:', err.message));
+    } else {
+      console.log('📊 EMA crossover: serving from MongoDB cache');
     }
+    return result;
   }
 
-  console.log(`📊 ${matchingTickers.length} tickers passed the crossover test — fetching metadata...`);
-
-  // 4. Fetch stock metadata (quote, profile, YTD) only for the matching set — fast since it's a small list
-  const matchingStocks = matchingTickers.length > 0
-    ? await getWatchlistStocks(matchingTickers)
-    : [];
-
-  console.log(`📊 EMA crossover complete: ${matchingStocks.length} stocks`);
-  // getSignals() already includes stopPrice — no separate calculateStopPrices() call needed
-  const result = { stocks: matchingStocks, signals: matchingSignalsMap };
-  emaCrossoverCache = { data: result, timestamp: Date.now() };
-  return result;
+  // 3. Nothing cached — run full scan now (will be slow on first cold start)
+  console.log('📊 EMA crossover: no cached data, running full scan...');
+  try {
+    return await runEmaCrossoverScan();
+  } finally {
+    refreshInProgress = false;
+  }
 }

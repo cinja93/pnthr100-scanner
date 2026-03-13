@@ -49,7 +49,7 @@ const SUPPLEMENTAL_STOCKS = [
   "DXYZ", "ECL", "ED", "EOG", "EQIX", "ETN", "EVRG", "FAST", "FCX", "FDX", "GEV",
   "GILD", "GLW", "GNRC", "GOOGL", "GPC", "HAL", "HAS", "HCA", "HII", "HON", "HSY",
   "HUBB", "HWM", "IBKR", "IEX", "IFF", "INTC", "IP", "IRM", "ITW", "JBHT", "JCI",
-  "JNJ", "KEYS", "KLAC", "KMI", "KR", "LEN", "LHX", "LII", "LMT", "LOW", "LRCX",
+  "JNJ", "KEYS", "KLAC", "KMI", "KR", "KTOS", "LEN", "LHX", "LII", "LMT", "LOW", "LRCX",
   "LUV", "LW", "LYB", "MAR", "MAS", "MCHP", "MDLZ", "MO", "MOS", "MPC", "MPWR",
   "MRK", "MRNA", "MSI", "MU", "MUX", "NDSN", "NEE", "NEM", "NEOG", "NOC", "NOV",
   "O", "ODFL", "OKE", "ON", "PCAR", "PEP", "PH", "PHM", "PKG", "PM", "POOL", "PPG",
@@ -57,6 +57,9 @@ const SUPPLEMENTAL_STOCKS = [
   "SYY", "T", "TAP", "TDY", "TER", "TGT", "TNK", "TPL", "TRGP", "TT", "TXN", "UEC",
   "UPS", "VLO", "VMC", "VTRS", "VZ", "WAB", "WDC", "WMB", "WMT", "WSM", "XOM"
 ];
+
+// Tickers to exclude from the universe (e.g. going private, data quality issues)
+const EXCLUDED_TICKERS = new Set(["EA"]);
 
 // Populate the weekly cache — fetches all three lists in one shot so they share a single cache refresh
 async function refreshConstituentCache() {
@@ -72,7 +75,7 @@ async function refreshConstituentCache() {
 
   console.log(`Fetched: ${sp500.length} S&P 500, ${nasdaq100.length} Nasdaq 100, ${dow30.length} Dow 30`);
 
-  const allTickers = [...new Set([...sp500, ...nasdaq100, ...dow30, ...SUPPLEMENTAL_STOCKS, ...userSupplemental])];
+  const allTickers = [...new Set([...sp500, ...nasdaq100, ...dow30, ...SUPPLEMENTAL_STOCKS, ...userSupplemental])].filter(t => !EXCLUDED_TICKERS.has(t));
   constituentCache.weekKey    = weekKey;
   constituentCache.allTickers = allTickers;
   constituentCache.dow30      = dow30;

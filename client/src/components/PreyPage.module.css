@@ -392,9 +392,10 @@
   white-space: nowrap;
 }
 
-.badgeBL  { background: #16a34a; color: #fff; }
-.badgeSS  { background: #dc2626; color: #fff; }
-.badgeWks { background: #d97706; color: #fff; } /* amber — like WKS SINCE */
+.badgeBL    { background: #16a34a; color: #fff; }
+.badgeSS    { background: #dc2626; color: #fff; }
+.badgePause { background: #d97706; color: #fff; } /* amber — PAUSE / BE / SE */
+.badgeWks   { background: #d97706; color: #fff; } /* amber — like WKS SINCE */
 .badgeOBV {
   background: #eff6ff;
   color: #1d4ed8;

@@ -3,19 +3,43 @@ import styles from './Sidebar.module.css';
 import pnthrLogo from '../assets/panther head.png';
 import builtWithLove from '../assets/Built with Love.jpg';
 
-const NAV_ITEMS = [
-  { key: 'search',    label: 'PNTHR Search',      iconImg: true, section: 'SCANNER' },
-  { key: 'long',      label: 'PNTHR 100 Longs',   icon: '📈' },
-  { key: 'short',     label: 'PNTHR 100 Shorts',  icon: '📉' },
-  { key: 'jungle',    label: 'PNTHR 679 Jungle',  iconImg: true },
-  { key: 'etf',       label: 'PNTHR ETFs',        iconImg: true },
-  { key: 'sectors',   label: 'PNTHR Sectors',     iconImg: true },
-  { key: 'earnings',  label: 'Earnings Week',     icon: '📅' },
-  { key: 'prey',      label: 'PNTHR Prey',        iconImg: true, dividerBefore: true },
-  { key: 'perch',     label: 'PNTHR Perch',        iconImg: true },
-  { key: 'watchlist', label: 'Watchlist',         icon: '👁' },
-  { key: 'portfolio', label: 'Portfolio',         icon: '📁' },
+const NAV_GROUPS = [
+  {
+    groupLabel: 'This Week',
+    items: [
+      { key: 'perch',    label: 'PNTHR Perch',   iconImg: true },
+      { key: 'earnings', label: 'Earnings Week',  icon: '📅' },
+    ],
+  },
+  {
+    groupLabel: 'The Hunt',
+    items: [
+      { key: 'dashboard', label: 'Dashboard',    iconImg: true, soon: true },
+      { key: 'prey',      label: 'PNTHR Prey',   iconImg: true },
+      { key: 'search',    label: 'PNTHR Search', iconImg: true },
+    ],
+  },
+  {
+    groupLabel: 'Jungle',
+    items: [
+      { key: 'jungle',  label: 'PNTHR 679 Jungle', iconImg: true },
+      { key: 'long',    label: 'PNTHR 100 Longs',  icon: '📈' },
+      { key: 'short',   label: 'PNTHR 100 Shorts', icon: '📉' },
+      { key: 'etf',     label: "PNTHR ETF's",      iconImg: true },
+      { key: 'sectors', label: 'PNTHR Sectors',    iconImg: true },
+    ],
+  },
 ];
+
+function getFirstName(user) {
+  if (!user) return null;
+  if (user.name)      return user.name.split(' ')[0];
+  if (user.firstName) return user.firstName;
+  // Derive from email: "scott.tiger@..." → "Scott"
+  const local = (user.email || '').split('@')[0];
+  const part  = local.split(/[._-]/)[0] || local;
+  return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+}
 
 function BatchStatsTooltip({ stats, top }) {
   return (
@@ -46,9 +70,24 @@ function BatchStatsTooltip({ stats, top }) {
 }
 
 export default function Sidebar({ activePage, onNavigate, currentUser, onLogout, longStats, shortStats }) {
-  const [tooltipKey, setTooltipKey] = useState(null); // 'long' | 'short' | null
+  const [tooltipKey, setTooltipKey] = useState(null);
   const [tooltipTop, setTooltipTop] = useState(0);
   const btnRefs = useRef({});
+
+  const firstName = getFirstName(currentUser);
+
+  // Build the personal group dynamically
+  const personalGroup = firstName
+    ? {
+        groupLabel: `For ${firstName}`,
+        items: [
+          { key: 'portfolio', label: `${firstName}'s Portfolio`, icon: '📁' },
+          { key: 'watchlist', label: 'Watchlist',                icon: '👁' },
+        ],
+      }
+    : null;
+
+  const allGroups = personalGroup ? [...NAV_GROUPS, personalGroup] : NAV_GROUPS;
 
   function handleMouseEnter(key) {
     if (key !== 'long' && key !== 'short') return;
@@ -64,36 +103,42 @@ export default function Sidebar({ activePage, onNavigate, currentUser, onLogout,
 
   return (
     <aside className={styles.sidebar}>
-      {/* Logo */}
+      {/* Logo + PNTHR's Den */}
       <div className={styles.logoArea}>
-        <img src={pnthrLogo} alt="PNTHR Funds" className={styles.logo} />
+        <img src={pnthrLogo} alt="PNTHR" className={styles.logo} />
+        <div className={styles.appName}>
+          <span className={styles.appNameYellow}>PNTHR's</span>{' '}
+          <span className={styles.appNameWhite}>Den</span>
+        </div>
       </div>
 
-      {/* Navigation */}
+      {/* Navigation groups */}
       <nav className={styles.nav}>
-        {NAV_ITEMS.map((item) => (
-          <div key={item.key} className={styles.navItemWrapper}>
-            {item.section && (
-              <div className={styles.sectionLabel}>{item.section}</div>
-            )}
-            {item.dividerBefore && <div className={styles.divider} />}
-            <button
-              ref={el => { if (el) btnRefs.current[item.key] = el; }}
-              className={`${styles.navItem} ${activePage === item.key ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
-              onClick={() => !item.soon && onNavigate(item.key)}
-              disabled={item.soon}
-              title={item.soon ? 'Coming soon' : item.label}
-              onMouseEnter={() => handleMouseEnter(item.key)}
-              onMouseLeave={() => setTooltipKey(null)}
-            >
-              <span className={styles.navIcon}>
-                {item.iconImg
-                  ? <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
-                  : item.icon}
-              </span>
-              <span className={styles.navLabel}>{item.label}</span>
-              {item.soon && <span className={styles.soonBadge}>Soon</span>}
-            </button>
+        {allGroups.map((group) => (
+          <div key={group.groupLabel} className={styles.navGroup}>
+            <span className={styles.navGroupLabel}>{group.groupLabel}</span>
+            <div className={styles.navGroupBox}>
+              {group.items.map((item) => (
+                <button
+                  key={item.key}
+                  ref={el => { if (el) btnRefs.current[item.key] = el; }}
+                  className={`${styles.navItem} ${activePage === item.key ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
+                  onClick={() => !item.soon && onNavigate(item.key)}
+                  disabled={item.soon}
+                  title={item.soon ? 'Coming soon' : item.label}
+                  onMouseEnter={() => handleMouseEnter(item.key)}
+                  onMouseLeave={() => setTooltipKey(null)}
+                >
+                  <span className={styles.navIcon}>
+                    {item.iconImg
+                      ? <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
+                      : item.icon}
+                  </span>
+                  <span className={styles.navLabel}>{item.label}</span>
+                  {item.soon && <span className={styles.soonBadge}>Soon</span>}
+                </button>
+              ))}
+            </div>
           </div>
         ))}
       </nav>

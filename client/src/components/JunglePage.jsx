@@ -77,7 +77,7 @@ export default function JunglePage() {
           </h1>
           {!loading && !error && (
             <p className={styles.subtitle}>
-              {counts.all} stocks — S&P 500 core + S&P 400 Long &amp; Short leaders
+              PNTHR 679 Jungle — {counts.all} stocks including S&amp;P 500, Nasdaq 100, Dow 30 and S&amp;P 400 Leaders
             </p>
           )}
         </div>

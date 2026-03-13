@@ -231,7 +231,7 @@ function DinnerRow({ s, onClick, earnings = {} }) {
 }
 
 function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowExtraProps = {}, sortAccessors = {} }) {
-  const [side, setSide] = useState('long');
+  const [side, setSide] = useState('all');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
 
@@ -329,7 +329,7 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowEx
 // PreyStockTable — uniform Signal-in-col-2 table for Hunt and Sprint
 function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, onRowClick }) {
   const hasTabs = longs !== undefined || shorts !== undefined;
-  const [side, setSide] = useState('long');
+  const [side, setSide] = useState('all');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
 

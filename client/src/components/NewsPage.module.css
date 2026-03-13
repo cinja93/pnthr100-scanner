@@ -302,6 +302,20 @@
 .saveBtn:hover { background: #223a22; }
 .saveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.chartBtn {
+  background: #1a3a1a;
+  color: #50d080;
+  border: 1px solid #2a5a2a;
+  border-radius: 5px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s;
+}
+.chartBtn:hover { background: #223a22; }
+
 .publishBtn {
   background: #fcf000;
   color: #111111;
@@ -411,4 +425,19 @@
   padding: 4px 16px;
   color: #7a7a7a;
   font-style: italic;
+}
+
+/* Trade of the Week callout — triggered by blockquote containing "TRADE OF THE WEEK" */
+.articleBody blockquote:has(strong:first-child) {
+  background: rgba(40, 160, 80, 0.08);
+  border: 1px solid rgba(40, 160, 80, 0.3);
+  border-left: 4px solid #50d080;
+  border-radius: 6px;
+  padding: 16px 20px;
+  color: #d0d0d0;
+  font-style: normal;
+  margin: 0 0 24px;
+}
+.articleBody blockquote:has(strong:first-child) strong {
+  color: #50d080;
 }

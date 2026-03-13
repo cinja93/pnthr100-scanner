@@ -96,7 +96,47 @@ async function fetchPreyData() {
     };
   }
   const jungleSignals = await getSignals(tickers);
-  return getPreyResults(tickers, stockMeta, jungleSignals);
+  const preyResults = getPreyResults(tickers, stockMeta, jungleSignals);
+  return { ...preyResults, signals: jungleSignals, stockMeta };
+}
+
+// Find profitable exits this week. weekOf is YYYY-MM-DD (Friday).
+// weekStart of that week is the Monday 4 days prior.
+function findBestExits(signals, stockMeta, weekOf) {
+  // Determine Monday of the newsletter week
+  const fri = new Date(weekOf + 'T12:00:00');
+  const mon = new Date(fri);
+  mon.setDate(fri.getDate() - 4);
+  const weekStart = mon.toISOString().split('T')[0];
+
+  const exits = Object.entries(signals)
+    .filter(([, sig]) =>
+      (sig.signal === 'BE' || sig.signal === 'SE') &&
+      sig.profitDollar != null &&
+      sig.profitDollar > 0 &&
+      sig.signalDate === weekStart
+    )
+    .map(([ticker, sig]) => ({
+      ticker,
+      signal: sig.signal,
+      direction: sig.signal === 'BE' ? 'long' : 'short',
+      profitDollar: sig.profitDollar,
+      profitPct: sig.profitPct,
+      companyName: stockMeta[ticker]?.companyName || '',
+      sector: stockMeta[ticker]?.sector || '',
+      currentPrice: stockMeta[ticker]?.currentPrice ?? null,
+    }));
+
+  if (exits.length === 0) return { exits: [], bestDollar: null, bestPct: null };
+
+  const byDollar = [...exits].sort((a, b) => b.profitDollar - a.profitDollar);
+  const byPct    = [...exits].sort((a, b) => b.profitPct   - a.profitPct);
+
+  return {
+    exits,
+    bestDollar: byDollar[0],
+    bestPct: byPct[0],
+  };
 }
 
 async function getPriorPublishedIssues(limit = 4) {
@@ -115,6 +155,9 @@ export async function generateIssue(weekOf) {
   // Fetch live prey data
   console.log('[Newsletter] Fetching prey data for generation...');
   const prey = await fetchPreyData();
+
+  // Find this week's most profitable exits
+  const { exits, bestDollar, bestPct } = findBestExits(prey.signals || {}, prey.stockMeta || {}, weekOf);
 
   // Fetch prior issues for lookback context
   const priorIssues = await getPriorPublishedIssues(4);
@@ -142,6 +185,22 @@ export async function generateIssue(weekOf) {
   const crouchSummary = 'LONG: ' + summarizeRows(prey.crouch?.longs, 10) + ' | SHORT: ' + summarizeRows(prey.crouch?.shorts, 10);
 
   const sectorSummary = sectorBreakdown(dinnerLongs, dinnerShorts);
+
+  // Trade of the Week summary for prompt
+  function tradeStr(t) {
+    if (!t) return null;
+    const dir = t.signal === 'BE' ? 'Long exit (trade closed profitably)' : 'Short cover (trade closed profitably)';
+    return `${t.ticker} (${t.companyName}, ${t.sector}) — ${dir} | Profit: +$${t.profitDollar.toFixed(2)} / +${t.profitPct.toFixed(2)}%`;
+  }
+  const totw_dollar = tradeStr(bestDollar);
+  const totw_pct    = tradeStr(bestPct && bestPct.ticker !== bestDollar?.ticker ? bestPct : null);
+  const totwSummary = exits.length === 0
+    ? 'No profitable exits closed this week.'
+    : [
+        `Total profitable exits this week: ${exits.length}`,
+        totw_dollar ? `Best by dollar profit: ${totw_dollar}` : null,
+        totw_pct    ? `Best by % return: ${totw_pct}` : null,
+      ].filter(Boolean).join('\n');
 
   const lookbackContext = priorIssues.length === 0
     ? 'No prior published issues available yet — this is the inaugural issue.'
@@ -174,6 +233,9 @@ ${crouchSummary}
 Sector breakdown of current open positions:
 ${sectorSummary}
 
+This week's profitable closed trades (long exits and short covers):
+${totwSummary}
+
 ---
 
 Prior weeks' narrative excerpts (for the lookback section):
@@ -187,6 +249,17 @@ Write the newsletter with these EXACT sections in markdown:
 
 ## Market Pulse
 3–4 sentences. Lead with the ratio of brand-new SS+1 signals to brand-new BL+1 signals this week. These are first-week entries, stocks breaking down or breaking out RIGHT NOW, not trends already in motion. A week with many new SS+1 signals and few new BL+1 signals means the market is actively accelerating lower, not just sitting in an existing downtrend. Say what the ratio is, say what it means, and take a stance: is this a macro shock response, a distribution phase, or the early edge of something more serious?
+
+## Trade of the Week
+If profitable exits exist this week, highlight the single best performer. Use this format exactly — it will be styled as a callout box:
+
+> **TRADE OF THE WEEK**
+> **[TICKER] — [Company Name]** | [Sector]
+> [Long trade closed / Short trade covered]
+> **Profit: +$X.XX (+X.XX%)**
+> [2–3 sentences: what the trade captured, what it says about the stock or sector, and what takeaway the reader should draw from it. This should feel like a brief victory lap grounded in market insight.]
+
+If there are no profitable exits this week, write a single sentence acknowledging that the week produced no closed winners, and note whether open positions are holding well or showing stress.
 
 ## Sector Analysis
 This is the most important section. Look at the sector breakdown above. For each sector that has notable activity, interpret what it means economically. Do not just list the sectors; explain them. If financials are breaking down heavily, what does that say about credit conditions, lending, or systemic risk? If consumer discretionary names at both the low and high end of the income spectrum are showing weakness simultaneously, what does that tell us about the health of the American consumer? A K-shaped economy can get hit from both ends at once: dollar stores and luxury brands suffering together is not a contradiction, it is a signal. If industrials are breaking down, what historical patterns does that echo? If energy is holding up while everything else falls, what is the market pricing in? Write 3–5 paragraphs, one per meaningful sector cluster. This section should make the reader think about what the economy is actually doing beneath the headlines.
@@ -233,6 +306,8 @@ CRITICAL TONE AND STYLE RULES:
     weekOf,
     status: 'draft',
     narrative,
+    featuredTrade: bestDollar ?? null,
+    profitableExits: exits.slice(0, 20),
     dataSnapshot: {
       dinnerLongs:  (prey.dinner?.longs  || []).slice(0, 10).map(r => r.ticker),
       dinnerShorts: (prey.dinner?.shorts || []).slice(0, 10).map(r => r.ticker),

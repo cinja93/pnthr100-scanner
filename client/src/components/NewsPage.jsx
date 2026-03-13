@@ -216,6 +216,17 @@ export default function NewsPage() {
                       </button>
                     </>
                   )}
+                  {issue.featuredTrade && !editMode && (
+                    <a
+                      className={styles.chartBtn}
+                      href={`/?ticker=${issue.featuredTrade.ticker}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`View chart for ${issue.featuredTrade.ticker} — Trade of the Week`}
+                    >
+                      📈 View Chart ({issue.featuredTrade.ticker})
+                    </a>
+                  )}
                   {issue.status !== 'published' && !editMode && (
                     <button className={styles.publishBtn} onClick={handlePublish} disabled={publishing}>
                       {publishing ? 'Publishing...' : 'Publish'}

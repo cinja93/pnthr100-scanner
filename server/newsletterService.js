@@ -125,12 +125,16 @@ export async function generateIssue(weekOf) {
   const newDinnerShorts = dinnerShorts.filter(r => r.isNewSignal);
 
   const dinnerSummary = [
-    `Total open longs: ${dinnerLongs.length} (${newDinnerLongs.length} new this week)`,
-    `Total open shorts: ${dinnerShorts.length} (${newDinnerShorts.length} new this week)`,
-    `New longs this week: ${summarizeAllRows(newDinnerLongs) || 'None'}`,
-    `New shorts this week: ${summarizeAllRows(newDinnerShorts) || 'None'}`,
-    `All open longs: ${summarizeAllRows(dinnerLongs)}`,
-    `All open shorts: ${summarizeAllRows(dinnerShorts)}`,
+    `SIGNAL NOTATION: BL+1 or SS+1 means a brand-new signal fired THIS WEEK (first week in the trade). BL+N or SS+N where N>1 means the signal fired N weeks ago and the trend is ongoing. The ratio of new SS+1 to new BL+1 signals is the primary directional pulse of the market this week.`,
+    ``,
+    `Total open long positions: ${dinnerLongs.length} (${newDinnerLongs.length} are brand-new BL+1 signals this week)`,
+    `Total open short positions: ${dinnerShorts.length} (${newDinnerShorts.length} are brand-new SS+1 signals this week)`,
+    ``,
+    `NEW this week (BL+1, first week of trade): ${summarizeAllRows(newDinnerLongs) || 'None'}`,
+    `NEW this week (SS+1, first week of trade): ${summarizeAllRows(newDinnerShorts) || 'None'}`,
+    ``,
+    `All open longs (includes multi-week trends): ${summarizeAllRows(dinnerLongs)}`,
+    `All open shorts (includes multi-week trends): ${summarizeAllRows(dinnerShorts)}`,
   ].join('\n');
 
   const alphaSummary  = 'LONG: ' + summarizeRows(prey.alphas?.longs, 10) + ' | SHORT: ' + summarizeRows(prey.alphas?.shorts, 10);
@@ -182,7 +186,7 @@ Write the newsletter with these EXACT sections in markdown:
 # PNTHR's Perch — Week of ${formatDateLong(weekOf)}
 
 ## Market Pulse
-3–4 sentences. The new longs vs new shorts count in the open positions this week is your primary directional compass. If the system is generating far more new shorts than new longs, say so plainly and interpret what that means: is this a market in distribution, a response to a macro shock, or the early stages of a broader downturn? Be direct and be willing to take a stance.
+3–4 sentences. Lead with the ratio of brand-new SS+1 signals to brand-new BL+1 signals this week. These are first-week entries, stocks breaking down or breaking out RIGHT NOW, not trends already in motion. A week with many new SS+1 signals and few new BL+1 signals means the market is actively accelerating lower, not just sitting in an existing downtrend. Say what the ratio is, say what it means, and take a stance: is this a macro shock response, a distribution phase, or the early edge of something more serious?
 
 ## Sector Analysis
 This is the most important section. Look at the sector breakdown above. For each sector that has notable activity, interpret what it means economically. Do not just list the sectors; explain them. If financials are breaking down heavily, what does that say about credit conditions, lending, or systemic risk? If consumer discretionary names at both the low and high end of the income spectrum are showing weakness simultaneously, what does that tell us about the health of the American consumer? A K-shaped economy can get hit from both ends at once: dollar stores and luxury brands suffering together is not a contradiction, it is a signal. If industrials are breaking down, what historical patterns does that echo? If energy is holding up while everything else falls, what is the market pricing in? Write 3–5 paragraphs, one per meaningful sector cluster. This section should make the reader think about what the economy is actually doing beneath the headlines.
@@ -204,7 +208,7 @@ Humbly and specifically review prior calls from previous issues. Which tickers f
 CRITICAL TONE AND STYLE RULES:
 - Never use em-dashes (the — character). Use commas, semicolons, colons, or rewrite the sentence instead.
 - Write for an intelligent but general audience. Avoid proprietary system jargon. Say "current open long positions" not "Dinner longs." Say "momentum entries" not "Alpha signals." If you must reference a system category, explain it briefly in plain English.
-- The new longs vs new shorts ratio is the headline directional signal each week. Lead with it in Market Pulse and let it inform the tone of the entire issue.
+- CRITICAL: BL+1 and SS+1 signals are brand-new entries firing THIS WEEK. BL+N or SS+N where N>1 are existing trends already in motion. Never confuse the two. The ratio of new SS+1 to new BL+1 this week is the acceleration signal and must lead Market Pulse. An existing open book of 36 shorts and 6 longs is a downtrend. A week with 36 new SS+1 signals is an accelerating breakdown — a much stronger statement.
 - The goal is to help the reader think, not just inform them. Every section should leave the reader with a question or a point of view about what is actually happening in the economy.
 - Tone: Analytical, confident, and opinionated, like a seasoned portfolio manager writing a weekly letter to investors. No hype. No filler. No emojis. Markdown only.
 - Max tokens are limited, so be concise within each section. Prioritize depth over length.`;

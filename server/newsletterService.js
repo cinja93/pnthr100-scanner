@@ -99,7 +99,7 @@ async function fetchPreyData() {
     };
   }
   const jungleSignals = await getSignals(tickers);
-  const preyResults = getPreyResults(tickers, stockMeta, jungleSignals);
+  const preyResults = await getPreyResults(tickers, stockMeta, jungleSignals);
   return { ...preyResults, signals: jungleSignals, stockMeta };
 }
 

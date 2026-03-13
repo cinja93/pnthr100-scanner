@@ -379,7 +379,7 @@ export default function SignalHistoryPage() {
                     </span>
                   ))}
                   <span className={styles.totalBadge}>{summary.total} total</span>
-                  {weeks.length > 1 && (
+                  {weeks.length > 0 && (
                     <WeekCalendar
                       weeks={weeks}
                       selectedWeek={selectedWeek}

@@ -9,6 +9,9 @@ import { getEmaCrossoverStocks } from './emaCrossoverService.js';
 import { getEtfStocks } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
+import newsletterRouter from './routes/newsletter.js';
+import cron from 'node-cron';
+import { generateIssue, getMostRecentFriday } from './newsletterService.js';
 import { authenticateJWT, hashPassword, verifyPassword, generateToken } from './auth.js';
 import {
   getSupplementalStocks,
@@ -1221,9 +1224,24 @@ app.get('/api/prey', authenticateJWT, async (req, res) => {
   }
 });
 
+// ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
+app.use('/api/newsletter', newsletterRouter);
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ── Cron: auto-generate newsletter every Friday at 5pm ET (22:00 UTC) ─────────
+cron.schedule('0 22 * * 5', async () => {
+  try {
+    const weekOf = getMostRecentFriday();
+    console.log(`[Cron] Generating PNTHR's Perch for week of ${weekOf}...`);
+    await generateIssue(weekOf);
+    console.log(`[Cron] PNTHR's Perch generated successfully.`);
+  } catch (err) {
+    console.error('[Cron] Newsletter generation failed:', err.message);
+  }
 });
 
 app.listen(PORT, () => {

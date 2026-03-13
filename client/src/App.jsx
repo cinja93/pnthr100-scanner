@@ -12,6 +12,7 @@ import EarningsWeekPage from './components/EarningsWeekPage';
 import JunglePage from './components/JunglePage';
 import SearchPage from './components/SearchPage';
 import PreyPage from './components/PreyPage';
+import NewsPage from './components/NewsPage';
 import LoginPage from './components/LoginPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken } from './services/api';
 import './App.css';
@@ -357,6 +358,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR PREY page */}
           {activePage === 'prey' && <PreyPage onNavigate={navigate} />}
+
+          {/* PNTHR's Perch newsletter */}
+          {activePage === 'perch' && <NewsPage />}
 
           {/* Jungle page */}
           {activePage === 'jungle' && <JunglePage />}

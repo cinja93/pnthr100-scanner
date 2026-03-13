@@ -323,6 +323,52 @@ export async function fetchPreyStocks(forceRefresh = false) {
   return response.json();
 }
 
+// ── Newsletter (PNTHR's Perch) ──
+
+export async function fetchNewsletterList() {
+  const response = await fetch(`${API_BASE}/api/newsletter`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+export async function fetchNewsletterIssue(id) {
+  const response = await fetch(`${API_BASE}/api/newsletter/${id}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+export async function generateNewsletterIssue(weekOf) {
+  const response = await fetch(`${API_BASE}/api/newsletter/generate`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(weekOf ? { weekOf } : {}),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function saveNewsletterDraft(id, narrative) {
+  const response = await fetch(`${API_BASE}/api/newsletter/${id}`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ narrative }),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+export async function publishNewsletterIssue(id) {
+  const response = await fetch(`${API_BASE}/api/newsletter/${id}/publish`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // Fetch sector performance data (11 sectors, weekly cumulative % return, 12-month rolling)
 export async function fetchSectorData() {
   try {

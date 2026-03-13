@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "lightweight-charts": "^5.1.0",
+    "marked": "^17.0.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

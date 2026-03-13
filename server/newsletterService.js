@@ -162,22 +162,20 @@ export async function generateIssue(weekOf) {
   // Fetch prior issues for lookback context
   const priorIssues = await getPriorPublishedIssues(4);
 
+  // PNTHR Dinner by definition only shows BL+1 and SS+1 (first week of signal, still in the zone).
+  // Every stock in Dinner IS a new signal this week — no further filtering needed.
   const dinnerLongs  = prey.dinner?.longs  || [];
   const dinnerShorts = prey.dinner?.shorts || [];
-  const newDinnerLongs  = dinnerLongs.filter(r => r.isNewSignal);
-  const newDinnerShorts = dinnerShorts.filter(r => r.isNewSignal);
 
   const dinnerSummary = [
-    `SIGNAL NOTATION: BL+1 or SS+1 means a brand-new signal fired THIS WEEK (first week in the trade). BL+N or SS+N where N>1 means the signal fired N weeks ago and the trend is ongoing. The ratio of new SS+1 to new BL+1 signals is the primary directional pulse of the market this week.`,
+    `SIGNAL NOTATION: BL+1 = brand-new Buy Long entry THIS WEEK. SS+1 = brand-new Sell Short entry THIS WEEK. The PNTHR Dinner section only contains BL+1 and SS+1 stocks, meaning every stock listed below triggered a new entry signal this week.`,
     ``,
-    `Total open long positions: ${dinnerLongs.length} (${newDinnerLongs.length} are brand-new BL+1 signals this week)`,
-    `Total open short positions: ${dinnerShorts.length} (${newDinnerShorts.length} are brand-new SS+1 signals this week)`,
+    `New BL+1 signals this week (new long entries): ${dinnerLongs.length}`,
+    `New SS+1 signals this week (new short entries): ${dinnerShorts.length}`,
+    `Ratio of new shorts to new longs: ${dinnerLongs.length === 0 ? 'N/A (no new longs)' : (dinnerShorts.length / dinnerLongs.length).toFixed(1) + ':1'}`,
     ``,
-    `NEW this week (BL+1, first week of trade): ${summarizeAllRows(newDinnerLongs) || 'None'}`,
-    `NEW this week (SS+1, first week of trade): ${summarizeAllRows(newDinnerShorts) || 'None'}`,
-    ``,
-    `All open longs (includes multi-week trends): ${summarizeAllRows(dinnerLongs)}`,
-    `All open shorts (includes multi-week trends): ${summarizeAllRows(dinnerShorts)}`,
+    `New longs (BL+1): ${summarizeAllRows(dinnerLongs) || 'None'}`,
+    `New shorts (SS+1): ${summarizeAllRows(dinnerShorts) || 'None'}`,
   ].join('\n');
 
   const alphaSummary  = 'LONG: ' + summarizeRows(prey.alphas?.longs, 10) + ' | SHORT: ' + summarizeRows(prey.alphas?.shorts, 10);
@@ -248,7 +246,7 @@ Write the newsletter with these EXACT sections in markdown:
 # PNTHR's Perch — Week of ${formatDateLong(weekOf)}
 
 ## Market Pulse
-3–4 sentences. Lead with the ratio of brand-new SS+1 signals to brand-new BL+1 signals this week. These are first-week entries, stocks breaking down or breaking out RIGHT NOW, not trends already in motion. A week with many new SS+1 signals and few new BL+1 signals means the market is actively accelerating lower, not just sitting in an existing downtrend. Say what the ratio is, say what it means, and take a stance: is this a macro shock response, a distribution phase, or the early edge of something more serious?
+3–4 sentences. The data above tells you exactly how many new BL+1 and SS+1 signals fired this week, and gives you the ratio. Use those exact numbers. If 36 new short entries fired against 6 new long entries, that is a 6:1 ratio and means the market is actively accelerating lower RIGHT NOW, not just sitting in an existing downtrend. Say the ratio, say what it means, take a stance.
 
 ## Trade of the Week
 If profitable exits exist this week, highlight the single best performer. Use this format exactly — it will be styled as a callout box:

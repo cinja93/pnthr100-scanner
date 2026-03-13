@@ -56,7 +56,7 @@ function matchesPinSignal(sigData, pinSignal) {
   return sigData.signal === pinSignal;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, pinSignal = null, compact = false, onTickerClick, onRemove, scanType }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType }) {
   const [sortConfig, setSortConfig] = useState({ key: groupBySector ? 'ytdReturn' : 'rank', direction: groupBySector ? 'desc' : 'asc' });
   const hasScannerRanks = scannerRanks !== null;
 
@@ -299,7 +299,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             rows.push(
               <tr
                 key={stock.ticker}
-                className={`${styles.clickableRow}${earningsInfo.highlight ? ` ${styles.earningsHighlight}` : ''}`}
+                className={`${styles.clickableRow}${(earningsInfo.highlight || highlightAllEarnings) ? ` ${styles.earningsHighlight}` : ''}`}
                 onClick={() => onTickerClick?.(stock, sortedIdx, displayStocks)}
                 title={stock.companyName ? `${stock.companyName} — Click to view chart` : 'Click to view chart'}
               >

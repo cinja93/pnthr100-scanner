@@ -1037,7 +1037,17 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
     const ytdMap = {};
     if (Array.isArray(ytdData)) for (const item of ytdData) ytdMap[item.symbol] = item.ytd;
 
-    // 4. Build stock objects, sort by YTD desc, assign ranks
+    // 4. Fetch membership lists for tags
+    const [dow30Tickers, sp400Longs, sp400Shorts] = await Promise.all([
+      getDow30Tickers().catch(() => []),
+      getSp400Longs().catch(() => []),
+      getSp400Shorts().catch(() => []),
+    ]);
+    const dow30Set  = new Set(dow30Tickers);
+    const sp400LSet = new Set(sp400Longs);
+    const sp400SSet = new Set(sp400Shorts);
+
+    // 5. Build stock objects, sort by YTD desc, assign ranks
     const stocks = sectorConstituents
       .filter(c => quoteMap[c.symbol]?.price && ytdMap[c.symbol] != null)
       .map(c => ({
@@ -1050,11 +1060,14 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
         rank: null,
         rankChange: null,
         previousRank: null,
+        isSp500: true, // all sector stocks are S&P 500 members
+        isDow30: dow30Set.has(c.symbol),
+        universe: sp400LSet.has(c.symbol) ? 'sp400Long' : sp400SSet.has(c.symbol) ? 'sp400Short' : null,
       }))
       .sort((a, b) => b.ytdReturn - a.ytdReturn)
       .map((s, i) => ({ ...s, rank: i + 1 }));
 
-    // 5. Get EMA signals + stop prices for these tickers
+    // 6. Get EMA signals + stop prices for these tickers
     const signals = await getSignals(stocks.map(s => s.ticker));
 
     res.json({ stocks, signals });

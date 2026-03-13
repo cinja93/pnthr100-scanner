@@ -394,7 +394,7 @@
 
 .badgeBL    { background: #16a34a; color: #fff; }
 .badgeSS    { background: #dc2626; color: #fff; }
-.badgePause { background: #d97706; color: #fff; } /* amber — PAUSE / BE / SE */
+.badgePause { background: #fcf000; color: #111111; } /* bright yellow — PAUSE / BE / SE, matches PNTHR 100 */
 .badgeWks   { background: #d97706; color: #fff; } /* amber — like WKS SINCE */
 .badgeOBV {
   background: #eff6ff;

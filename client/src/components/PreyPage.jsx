@@ -54,7 +54,7 @@ function AlphaRow({ s, onClick }) {
   return (
     <tr onClick={onClick}>
       <TickerCell ticker={s.ticker} companyName={s.companyName} />
-      <td className={styles.td}><DirBadge direction={s.direction} /></td>
+      <td className={styles.td}><SignalBadge badge={s.signalBadge ?? (isLong ? 'BL' : 'SS')} /></td>
       <td className={styles.td}><WksBadge direction={s.direction} n={s.barNumber} /></td>
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>
       <td className={styles.tdNum}>{price(s.ema21)}</td>
@@ -169,9 +169,7 @@ function DinnerRow({ s, onClick, earnings = {} }) {
       className={earningsInfo.highlight ? styles.earningsHighlight : undefined}
     >
       <TickerCell ticker={s.ticker} companyName={s.companyName} />
-      <td className={styles.td}>
-        <span className={`${styles.badge} ${isLong ? styles.badgeBL : styles.badgeSS}`}>{s.strategy}</span>
-      </td>
+      <td className={styles.td}><SignalBadge badge={s.signalBadge ?? s.strategy} /></td>
       <td className={styles.tdGray}>{s.exchange || '—'}</td>
       <td className={styles.tdGray}>{s.sector || '—'}</td>
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>

@@ -216,7 +216,7 @@ export default function NewsPage({ currentUser }) {
           <img src={pnthrLogo} alt="PNTHR" className={styles.headerLogo} />
           <div className={styles.headerText}>
             <h1 className={styles.headerTitle}>PNTHR'S PERCH</h1>
-            <p className={styles.headerSub}>Weekly Market Intelligence · The PNTHR surveys the jungle from above. Nothing gets past The PNTHR! Legend.</p>
+            <p className={styles.headerSub}>Weekly Market Intelligence · The PNTHR surveys the jungle from above. Nothing gets past The PNTHR! ...Legend.</p>
           </div>
         </div>
         {isAdmin && (

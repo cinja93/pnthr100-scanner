@@ -219,8 +219,8 @@ function runStateMachine(weeklyBars) {
       if (position.type === 'BL') {
         if (current.low < twoWeekLow) {
           const exitPrice   = position.pnthrStop;
-          const profitDollar = parseFloat((exitPrice - position.entryClose).toFixed(2));
-          const profitPct    = parseFloat(((profitDollar / position.entryClose) * 100).toFixed(2));
+          const profitDollar = parseFloat((exitPrice - position.entryPrice).toFixed(2));
+          const profitPct    = parseFloat(((profitDollar / position.entryPrice) * 100).toFixed(2));
           lastEvent = { signal: 'BE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null, profitDollar, profitPct };
           shortTrendActive = true;
           shortTrendCapped = true;   // SS after BE = opposite side → 25% cap applies
@@ -229,8 +229,8 @@ function runStateMachine(weeklyBars) {
       } else {
         if (current.high > twoWeekHigh) {
           const exitPrice    = position.pnthrStop;
-          const profitDollar = parseFloat((position.entryClose - exitPrice).toFixed(2));
-          const profitPct    = parseFloat(((profitDollar / position.entryClose) * 100).toFixed(2));
+          const profitDollar = parseFloat((position.entryPrice - exitPrice).toFixed(2));
+          const profitPct    = parseFloat(((profitDollar / position.entryPrice) * 100).toFixed(2));
           lastEvent = { signal: 'SE', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: null, profitDollar, profitPct };
           longTrendActive = true;
           longTrendCapped = true;    // BL after SE = opposite side → 25% cap applies
@@ -254,7 +254,7 @@ function runStateMachine(weeklyBars) {
       if (blPhase1 && blDaylightOk) {
         const initStop = blInitStop(twoWeekLow, current.close, atrArr[wi]);
         lastEvent = { signal: 'BL', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: initStop };
-        position         = { type: 'BL', entryWi: wi, pnthrStop: initStop, entryClose: current.close };
+        position         = { type: 'BL', entryWi: wi, pnthrStop: initStop, entryPrice: parseFloat((twoWeekHigh + 0.01).toFixed(2)) };
         longTrendActive  = true;
         longTrendCapped  = false; // same-side — future BE→BL re-entry has no cap
         shortTrendActive = false;
@@ -262,7 +262,7 @@ function runStateMachine(weeklyBars) {
       } else if (ssPhase1 && ssDaylightOk) {
         const initStop = ssInitStop(twoWeekHigh, current.close, atrArr[wi]);
         lastEvent = { signal: 'SS', signalDate: current.weekStart, ema21: parseFloat(emaCurrent.toFixed(4)), stopPrice: initStop };
-        position         = { type: 'SS', entryWi: wi, pnthrStop: initStop, entryClose: current.close };
+        position         = { type: 'SS', entryWi: wi, pnthrStop: initStop, entryPrice: parseFloat((twoWeekLow - 0.01).toFixed(2)) };
         shortTrendActive = true;
         shortTrendCapped = false; // same-side — future SE→SS re-entry has no cap
         longTrendActive  = false;

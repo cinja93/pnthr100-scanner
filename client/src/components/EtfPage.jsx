@@ -116,6 +116,7 @@ export default function EtfPage() {
           onTickerClick={handleRowClick}
           scanType="long"
           rankLabel="ETF Performance Rank"
+          groupByCategory={activeCategory === 'All'}
         />
       )}
 

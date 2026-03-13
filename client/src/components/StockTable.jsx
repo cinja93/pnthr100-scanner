@@ -56,8 +56,8 @@ function matchesPinSignal(sigData, pinSignal) {
   return sigData.signal === pinSignal;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank' }) {
-  const [sortConfig, setSortConfig] = useState({ key: groupBySector ? 'ytdReturn' : 'rank', direction: groupBySector ? 'desc' : 'asc' });
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank' }) {
+  const [sortConfig, setSortConfig] = useState({ key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
   const hasScannerRanks = scannerRanks !== null;
 
   // Sort stocks based on current sort configuration
@@ -250,7 +250,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
         </thead>
         <tbody>
           {(() => {
-            // When groupBySector, sort by sector name then by sortConfig within each group
+            // When groupBySector/groupByCategory, group stocks and insert header rows
             let displayStocks = sortedStocks;
             if (groupBySector) {
               const groups = {};
@@ -260,6 +260,21 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 groups[s].push(stock);
               }
               displayStocks = Object.keys(groups).sort().flatMap(s => groups[s]);
+            } else if (groupByCategory) {
+              // Preserve category order from sorted stocks (already sorted by rank/ytd within each category)
+              const seen = new Set();
+              const categoryOrder = [];
+              for (const stock of sortedStocks) {
+                const cat = stock.category || 'Other';
+                if (!seen.has(cat)) { seen.add(cat); categoryOrder.push(cat); }
+              }
+              const groups = {};
+              for (const stock of sortedStocks) {
+                const cat = stock.category || 'Other';
+                if (!groups[cat]) groups[cat] = [];
+                groups[cat].push(stock);
+              }
+              displayStocks = categoryOrder.flatMap(cat => groups[cat]);
             }
 
             const colCount =
@@ -271,6 +286,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
               (hideEarnings ? -1 : 0);           // earnings hidden
 
             let lastSector = null;
+            let lastCategory = null;
             return displayStocks.map((stock, sortedIdx) => {
               const rows = [];
 
@@ -283,6 +299,17 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 rows.push(
                   <tr key={`grp-${stock.sector}`} className={styles.sectorGroupRow}>
                     <td colSpan={colCount} style={{background:'#1e2c4b',color:'#ffffff',fontWeight:700,fontSize:'13px',padding:'10px 16px',letterSpacing:'0.1em',textTransform:'uppercase'}}>{sectorLabel} <span style={{fontSize:'11px',fontWeight:500,opacity:0.6,marginLeft:'6px'}}>({groupCount})</span></td>
+                  </tr>
+                );
+              }
+
+              if (groupByCategory && stock.category !== lastCategory) {
+                lastCategory = stock.category;
+                const cat = stock.category || 'Other';
+                const groupCount = displayStocks.filter(s => (s.category || 'Other') === cat).length;
+                rows.push(
+                  <tr key={`cat-${cat}`} className={styles.sectorGroupRow}>
+                    <td colSpan={colCount} style={{background:'#0f2a1a',color:'#86efac',fontWeight:700,fontSize:'13px',padding:'10px 16px',letterSpacing:'0.1em',textTransform:'uppercase'}}>{cat} <span style={{fontSize:'11px',fontWeight:500,opacity:0.7,marginLeft:'6px'}}>({groupCount})</span></td>
                   </tr>
                 );
               }

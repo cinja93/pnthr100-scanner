@@ -63,12 +63,23 @@ function WksBadge({ direction, n }) {
 }
 
 function RankCells({ s }) {
+  const inPnthr100 = s.rank != null;
   const rc = s.rankChange;
-  const rcClass = rc == null ? styles.tdGray : rc > 0 ? styles.rankUp : rc < 0 ? styles.rankDown : styles.tdGray;
-  const rcText  = rc == null ? '—' : rc > 0 ? `▲ +${rc}` : rc < 0 ? `▼ ${rc}` : '— —';
+  const rcClass = !inPnthr100 ? styles.tdGray
+                : rc == null ? styles.tdGray
+                : rc > 0    ? styles.rankUp
+                : rc < 0    ? styles.rankDown
+                : styles.tdGray;
+  const rcText  = !inPnthr100 ? '—'
+                : rc == null  ? '—'
+                : rc > 0      ? `▲ +${rc}`
+                : rc < 0      ? `▼ ${rc}`
+                : '— —';
   return (
     <>
-      <td className={styles.tdRank}>{s.rank ?? '—'}</td>
+      <td className={styles.tdRank}>
+        {inPnthr100 ? s.rank : <span className={styles.badgeJungle}>JUNGLE</span>}
+      </td>
       <td className={rcClass}>{rcText}</td>
     </>
   );
@@ -420,18 +431,23 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
                   wksBadge = <span className={`${styles.badge} ${wksCls}`}>{sig}+{wks}</span>;
                 }
 
+                const inPnthr100 = stock.rank != null;
                 const rcChange = stock.rankChange;
-                const rcClass  = rcChange == null ? styles.tdGray
-                               : rcChange > 0    ? styles.rankUp
-                               : rcChange < 0    ? styles.rankDown
+                const rcClass  = !inPnthr100      ? styles.tdGray
+                               : rcChange == null ? styles.tdGray
+                               : rcChange > 0     ? styles.rankUp
+                               : rcChange < 0     ? styles.rankDown
                                : styles.tdGray;
-                const rcText   = rcChange == null ? '—'
-                               : rcChange > 0    ? `▲ +${rcChange}`
-                               : rcChange < 0    ? `▼ ${rcChange}`
+                const rcText   = !inPnthr100      ? '—'
+                               : rcChange == null ? '—'
+                               : rcChange > 0     ? `▲ +${rcChange}`
+                               : rcChange < 0     ? `▼ ${rcChange}`
                                : '— —';
                 return (
                   <tr key={stock.ticker + i} onClick={() => onRowClick?.(stock, sortedRows, i)}>
-                    <td className={styles.tdRank}>{stock.rank ?? '—'}</td>
+                    <td className={styles.tdRank}>
+                      {inPnthr100 ? stock.rank : <span className={styles.badgeJungle}>JUNGLE</span>}
+                    </td>
                     <td className={rcClass}>{rcText}</td>
                     <td className={styles.tdTicker}>
                       <div className={styles.tickerSymbol}>
@@ -772,8 +788,8 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
-                      <li><strong>Perf Rank</strong> — Current PNTHR 100 rank (1 = top performer). Only shows for stocks in the Long or Short top-100 leaderboard.</li>
-                      <li><strong>Rank Change</strong> — Week-over-week rank movement. ▲ +N = moved up N spots; ▼ −N = dropped; — = new entry or no prior week to compare.</li>
+                      <li><strong>Perf Rank</strong> — PNTHR 100 rank if this stock is in the Long or Short leaderboard. Shows <strong>JUNGLE</strong> (dark green badge) if it's in the 679-stock universe but outside the top/bottom 100.</li>
+                      <li><strong>Rank Change</strong> — Week-over-week rank movement. ▲ +N = moved up N spots; ▼ −N = dropped; — = new entry or not in PNTHR 100.</li>
                       <li><strong>Ticker</strong> — Stock symbol and company name, with index membership (500 / 100 / 30 / 400).</li>
                       <li><strong>Signal</strong> — BL+1 (first week after a Buy Long signal) or SS+1 (first week after a Sell Short). Signal fired last week — this week confirms it is still in motion.</li>
                       <li><strong>Sector</strong> — Sector the stock belongs to.</li>
@@ -820,6 +836,8 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
+                      <li><strong>Perf Rank</strong> — PNTHR 100 rank if this stock is in the Long or Short leaderboard. Shows <strong>JUNGLE</strong> (dark green) if it's in the 679-stock universe but outside the top/bottom 100.</li>
+                      <li><strong>Rank Change</strong> — Week-over-week rank movement. ▲ +N = climbed; ▼ −N = dropped; — = new entry or not in PNTHR 100.</li>
                       <li><strong>Ticker</strong> — Stock symbol and company name.</li>
                       <li><strong>Signal</strong> — BL (Buy Long) or SS (Sell Short) entry direction.</li>
                       <li><strong>Wks Since</strong> — Which weekly bar since the signal (Bar 1 = first week).</li>
@@ -865,6 +883,8 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
+                      <li><strong>Perf Rank</strong> — PNTHR 100 rank if this stock is in the Long or Short leaderboard. Shows <strong>JUNGLE</strong> if it's in the 679 universe but outside the top/bottom 100.</li>
+                      <li><strong>Rank Change</strong> — Week-over-week rank movement. ▲ +N = climbed; ▼ −N = dropped; — = new entry or not ranked.</li>
                       <li><strong>Ticker</strong> — Stock symbol and company name.</li>
                       <li><strong>Signal</strong> — Active PNTHR signal if one exists (BL+N or SS+N).</li>
                       <li><strong>Status</strong> — Stage: <strong>COILED</strong> (setup met, watching), <strong>GAINING</strong> (building momentum), or <strong>LAUNCHED</strong> (trigger confirmed).</li>
@@ -910,6 +930,8 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
+                      <li><strong>Perf Rank</strong> — PNTHR 100 rank if this stock is in the Long or Short leaderboard. Shows <strong>JUNGLE</strong> if it's in the 679 universe but outside the top/bottom 100.</li>
+                      <li><strong>Rank Change</strong> — Week-over-week rank movement. ▲ +N = climbed; ▼ −N = dropped; — = new entry or not ranked.</li>
                       <li><strong>Ticker</strong> — Stock symbol and company name.</li>
                       <li><strong>Signal</strong> — Active PNTHR signal if one exists (BL+N or SS+N).</li>
                       <li><strong>State</strong> — <strong>STALK</strong>: BB at 52-week min, coiling. <strong>ATTACK ▲/▼</strong>: squeeze fired ≥15% expansion within last 3 weeks.</li>
@@ -955,8 +977,8 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
-                      <li><strong>Perf Rank</strong> — Current PNTHR 100 rank. Only shows for stocks ranked in the Long or Short leaderboard.</li>
-                      <li><strong>Rank Change</strong> — Week-over-week rank movement. ▲ = rising; ▼ = falling; — = new entry.</li>
+                      <li><strong>Perf Rank</strong> — PNTHR 100 rank if this stock is in the Long or Short leaderboard. Shows <strong>JUNGLE</strong> (dark green badge) if it's in the 679 universe but outside the top/bottom 100.</li>
+                      <li><strong>Rank Change</strong> — Week-over-week rank movement. ▲ +N = climbing; ▼ −N = dropping; — = new entry or not in PNTHR 100.</li>
                       <li><strong>Ticker</strong> — Stock symbol and company name, with index membership (500 / 100 / 30 / 400).</li>
                       <li><strong>PNTHR Signal</strong> — BL (Buy Long) or SS (Sell Short) — the entry signal type.</li>
                       <li><strong>Wks Since</strong> — Number of weekly bars since the crossover signal fired.</li>
@@ -1006,7 +1028,7 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
-                      <li><strong>Perf Rank</strong> — Current PNTHR 100 rank (1 = top YTD performer for Longs; 1 = worst YTD for Shorts). All Sprint stocks are ranked in the Long or Short leaderboard.</li>
+                      <li><strong>Perf Rank</strong> — PNTHR 100 rank (1 = top YTD for Longs; 1 = worst YTD for Shorts). All Sprint stocks are in the leaderboard, so this always shows a number — no JUNGLE badge here.</li>
                       <li><strong>Rank Change</strong> — Week-over-week rank movement. ▲ +N = climbed N spots up the leaderboard; ▼ −N = slipped; — = new entry this week.</li>
                       <li><strong>Ticker</strong> — Stock symbol and company name, with index membership (500 / 100 / 30 / 400). L/S badge shows Long or Short ranking side.</li>
                       <li><strong>PNTHR Signal</strong> — BL (Buy Long) or SS (Sell Short) — the active entry signal driving momentum.</li>

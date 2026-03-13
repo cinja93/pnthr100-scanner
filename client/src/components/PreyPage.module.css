@@ -540,6 +540,19 @@
 /* ── All button in side toggle ───────────────────────────────────────── */
 .sideBtnAll { background: #f0f9ff; border-color: #0ea5e9; color: #0369a1; }
 
+/* ── Jungle badge (stock is in the 679 universe but not PNTHR 100) ─── */
+.badgeJungle {
+  display: inline-block;
+  background: #14532d;
+  color: #86efac;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+}
+
 /* ── Rank columns ────────────────────────────────────────────────────── */
 .tdRank {
   text-align: center;

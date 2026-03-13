@@ -1182,23 +1182,24 @@ let speculativeSignalCountsCache = null;
 
 async function computeSpeculativeSignalCounts() {
   try {
-    console.log('📡 Computing speculative signal counts (162 S&P 400 stocks)...');
-    const allTickers = [...SPEC_LONGS, ...SPEC_SHORTS];
+    console.log('📡 Computing speculative signal counts (S&P 400 stocks)...');
+    const [specLongs, specShorts] = await Promise.all([getSp400Longs(), getSp400Shorts()]);
+    const allTickers = [...specLongs, ...specShorts];
     const signals = await getSignals(allTickers);
 
     const counts = {
-      longs:  { BL: 0, BE: 0, SS: 0, SE: 0, total: SPEC_LONGS.length },
-      shorts: { BL: 0, BE: 0, SS: 0, SE: 0, total: SPEC_SHORTS.length },
+      longs:  { BL: 0, BE: 0, SS: 0, SE: 0, total: specLongs.length },
+      shorts: { BL: 0, BE: 0, SS: 0, SE: 0, total: specShorts.length },
     };
 
-    for (const ticker of SPEC_LONGS) {
+    for (const ticker of specLongs) {
       const sig = signals[ticker]?.signal;
       if      (sig === 'BL' || sig === 'BUY')  counts.longs.BL++;
       else if (sig === 'BE')                   counts.longs.BE++;
       else if (sig === 'SS' || sig === 'SELL') counts.longs.SS++;
       else if (sig === 'SE')                   counts.longs.SE++;
     }
-    for (const ticker of SPEC_SHORTS) {
+    for (const ticker of specShorts) {
       const sig = signals[ticker]?.signal;
       if      (sig === 'BL' || sig === 'BUY')  counts.shorts.BL++;
       else if (sig === 'BE')                   counts.shorts.BE++;
@@ -1229,7 +1230,8 @@ app.get('/api/speculative-stocks/:side', async (req, res) => {
   }
 
   try {
-    const tickers = side === 'longs' ? SPEC_LONGS : SPEC_SHORTS;
+    const [sp400Longs, sp400Shorts] = await Promise.all([getSp400Longs(), getSp400Shorts()]);
+    const tickers = side === 'longs' ? sp400Longs : sp400Shorts;
     const FMP_API_KEY = process.env.FMP_API_KEY;
     const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
 
@@ -1261,6 +1263,15 @@ app.get('/api/speculative-stocks/:side', async (req, res) => {
     const ytdMap = {};
     if (Array.isArray(ytdData)) for (const item of ytdData) ytdMap[item.symbol] = item.ytd;
 
+    const [sp500TickersForSpec, dow30TickersForSpec] = await Promise.all([
+      getSp500Tickers().catch(() => []),
+      getDow30Tickers().catch(() => []),
+    ]);
+    const sp500SetSpec = new Set(sp500TickersForSpec);
+    const dow30SetSpec = new Set(dow30TickersForSpec);
+    const sp400LSetSpec = new Set(sp400Longs);
+    const sp400SSetSpec = new Set(sp400Shorts);
+
     const stocks = tickers
       .filter(t => quoteMap[t]?.price != null && ytdMap[t] != null)
       .map(t => ({
@@ -1273,6 +1284,10 @@ app.get('/api/speculative-stocks/:side', async (req, res) => {
         rank:         null,
         rankChange:   null,
         previousRank: null,
+        isSp500:  sp500SetSpec.has(t),
+        isDow30:  dow30SetSpec.has(t),
+        universe: sp400LSetSpec.has(t) ? 'sp400Long' : sp400SSetSpec.has(t) ? 'sp400Short' : null,
+        rankList: side === 'longs' ? 'LONG' : 'SHORT',
       }))
       .sort((a, b) => side === 'longs' ? b.ytdReturn - a.ytdReturn : a.ytdReturn - b.ytdReturn)
       .map((s, i) => ({ ...s, rank: i + 1 }));

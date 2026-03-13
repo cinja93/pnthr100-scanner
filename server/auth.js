@@ -17,11 +17,26 @@ export async function verifyPassword(plain, hash) {
   return bcrypt.compare(plain, hash);
 }
 
-export function generateToken(userId, email) {
-  return jwt.sign({ userId: userId.toString(), email }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+// Role is embedded in the token so every request carries it without a DB lookup
+export function generateToken(userId, email, role = 'member') {
+  return jwt.sign({ userId: userId.toString(), email, role }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 }
 
-// Express middleware — verifies Bearer token and sets req.user = { userId, email }
+// Returns the set of admin emails from the ADMIN_EMAILS env var (comma-separated)
+export function getAdminEmails() {
+  return (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+// Resolves the correct role for a user: ADMIN_EMAILS env var always wins
+export function resolveRole(email) {
+  const admins = getAdminEmails();
+  return admins.includes(email.toLowerCase().trim()) ? 'admin' : 'member';
+}
+
+// Express middleware — verifies Bearer token and sets req.user = { userId, email, role }
 export function authenticateJWT(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader?.startsWith('Bearer ')) {
@@ -30,9 +45,20 @@ export function authenticateJWT(req, res, next) {
   const token = authHeader.slice(7);
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    req.user = { userId: payload.userId, email: payload.email };
+    // Always re-resolve role from ADMIN_EMAILS so promotions/demotions take effect
+    // on the next request without requiring re-login
+    const role = resolveRole(payload.email);
+    req.user = { userId: payload.userId, email: payload.email, role };
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+}
+
+// Middleware — rejects non-admins with 403
+export function requireAdmin(req, res, next) {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
 }

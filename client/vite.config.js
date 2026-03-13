@@ -8,6 +8,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     base: '/',
+    build: {
+      sourcemap: false, // Never expose source maps in production — protects signal logic
+    },
     server: {
       port: 5174,
       proxy: {

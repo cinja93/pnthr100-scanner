@@ -336,8 +336,8 @@ export async function createUser(email, hashedPassword) {
   const lower = email.toLowerCase().trim();
   const existing = await collection.findOne({ email: lower });
   if (existing) throw new Error('An account with that email already exists');
-  const result = await collection.insertOne({ email: lower, hashedPassword, createdAt: new Date() });
-  return { _id: result.insertedId, email: lower };
+  const result = await collection.insertOne({ email: lower, hashedPassword, role: 'member', createdAt: new Date() });
+  return { _id: result.insertedId, email: lower, role: 'member' };
 }
 
 export async function findUserByEmail(email) {

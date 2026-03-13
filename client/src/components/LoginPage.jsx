@@ -34,7 +34,7 @@ export default function LoginPage({ onLogin }) {
         setError(data.error || 'Something went wrong');
         return;
       }
-      onLogin(data.token, data.email, data.profile ?? null);
+      onLogin(data.token, data.email, data.profile ?? null, data.role ?? 'member');
     } catch {
       setError('Unable to connect to server. Please try again.');
     } finally {

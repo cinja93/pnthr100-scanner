@@ -1,5 +1,6 @@
 // server/routes/newsletter.js
 import { Router } from 'express';
+import { authenticateJWT, requireAdmin } from '../auth.js';
 import {
   generateIssue,
   listIssues,
@@ -11,7 +12,7 @@ import {
 
 const router = Router();
 
-// GET /api/newsletter — list all issues (title/date/status only, no narrative)
+// GET /api/newsletter — list all issues (any authenticated user can view)
 router.get('/', async (req, res) => {
   try {
     const issues = await listIssues();
@@ -22,7 +23,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/newsletter/:id — get full issue with narrative
+// GET /api/newsletter/:id — get full issue (any authenticated user can read)
 router.get('/:id', async (req, res) => {
   try {
     const issue = await getIssue(req.params.id);
@@ -34,8 +35,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/newsletter/generate — generate new issue (defaults to this Friday)
-router.post('/generate', async (req, res) => {
+// POST /api/newsletter/generate — ADMIN ONLY
+router.post('/generate', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const weekOf = req.body.weekOf || getMostRecentFriday();
     console.log(`[Newsletter] Generating issue for week of ${weekOf}...`);
@@ -47,8 +48,8 @@ router.post('/generate', async (req, res) => {
   }
 });
 
-// PATCH /api/newsletter/:id — save edited narrative
-router.patch('/:id', async (req, res) => {
+// PATCH /api/newsletter/:id — ADMIN ONLY (edit narrative)
+router.patch('/:id', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { narrative } = req.body;
     if (!narrative) return res.status(400).json({ error: 'narrative is required' });
@@ -60,8 +61,8 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// POST /api/newsletter/:id/publish — publish issue
-router.post('/:id/publish', async (req, res) => {
+// POST /api/newsletter/:id/publish — ADMIN ONLY
+router.post('/:id/publish', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     await publishIssue(req.params.id);
     res.json({ ok: true });

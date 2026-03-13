@@ -48,7 +48,7 @@ function computeWeeksAgo(signalDate) {
 
 function App() {
   const [authToken, setAuthTokenState] = useState(() => localStorage.getItem('pnthr_token'));
-  const [currentUser, setCurrentUser] = useState(null); // { email, accountSize, defaultPage }
+  const [currentUser, setCurrentUser] = useState(null); // { email, role, accountSize, defaultPage }
   const [authLoading, setAuthLoading] = useState(true);
 
   // On mount: validate stored token
@@ -70,11 +70,11 @@ function App() {
       .finally(() => setAuthLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleLogin(token, email, profile) {
+  function handleLogin(token, email, profile, role = 'member') {
     localStorage.setItem('pnthr_token', token);
     setAuthToken(token);
     setAuthTokenState(token);
-    setCurrentUser({ email, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long' });
+    setCurrentUser({ email, role, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long' });
   }
 
   function handleLogout() {

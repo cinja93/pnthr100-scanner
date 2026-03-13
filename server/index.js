@@ -12,7 +12,7 @@ import { getPreyResults, clearPreyCache } from './preyService.js';
 import newsletterRouter from './routes/newsletter.js';
 import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
-import { authenticateJWT, hashPassword, verifyPassword, generateToken } from './auth.js';
+import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateToken, resolveRole } from './auth.js';
 import {
   getSupplementalStocks,
   addSupplementalStock,
@@ -51,7 +51,8 @@ const authLimiter = rateLimit({
 
 // ── Auth routes (public — no middleware) ───────────────────────────────────
 
-app.post('/auth/register', authLimiter, async (req, res) => {
+// Register is admin-only — only admins can create new accounts (invite system)
+app.post('/auth/register', authLimiter, authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
@@ -59,8 +60,9 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
     const hashedPassword = await hashPassword(password);
     const user = await createUser(email, hashedPassword);
-    const token = generateToken(user._id, user.email);
-    res.json({ token, email: user.email });
+    const role = resolveRole(user.email);
+    const token = generateToken(user._id, user.email, role);
+    res.json({ token, email: user.email, role });
   } catch (error) {
     if (error.message.includes('already exists')) {
       return res.status(409).json({ error: error.message });
@@ -78,9 +80,11 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Invalid email or password' });
     const valid = await verifyPassword(password, user.hashedPassword);
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
-    const token = generateToken(user._id, user.email);
+    // Role is always resolved from ADMIN_EMAILS env var — no DB migration needed
+    const role = resolveRole(user.email);
+    const token = generateToken(user._id, user.email, role);
     const profile = await getUserProfile(user._id.toString());
-    res.json({ token, email: user.email, profile });
+    res.json({ token, email: user.email, role, profile });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
@@ -472,7 +476,7 @@ app.get('/api/user/profile', async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
     const profile = await getUserProfile(req.user.userId);
-    res.json({ email: req.user.email, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long' });
+    res.json({ email: req.user.email, role: req.user.role, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long' });
   } catch (error) {
     console.error('Error fetching user profile:', error);
     res.status(500).json({ error: 'Failed to fetch profile' });

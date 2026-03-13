@@ -1,0 +1,348 @@
+/* SignalHistoryPage.module.css */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0d0d0d;
+  color: #e8e8e8;
+  font-family: 'Inter', 'Helvetica Neue', sans-serif;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  background: #111;
+  border-bottom: 3px solid #fcf000;
+  flex-shrink: 0;
+  gap: 16px;
+}
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.headerLogo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(252,240,0,0.35));
+}
+.title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fcf000;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0;
+}
+.subtitle {
+  font-size: 12px;
+  color: #5a5a5a;
+  margin: 3px 0 0;
+}
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.snapshotBtn {
+  background: #fcf000;
+  color: #111;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.snapshotBtn:hover { background: #e8e800; }
+.snapshotBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.snapMsg {
+  font-size: 12px;
+  color: #50d080;
+}
+
+/* ── Body layout ─────────────────────────────────────────── */
+.body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Week sidebar ────────────────────────────────────────── */
+.weekSidebar {
+  width: 180px;
+  flex-shrink: 0;
+  background: #111;
+  border-right: 1px solid #1e1e1e;
+  overflow-y: auto;
+  padding: 16px 0;
+}
+.sidebarTitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #5a5a5a;
+  text-transform: uppercase;
+  padding: 0 16px 10px;
+}
+.sidebarEmpty {
+  font-size: 12px;
+  color: #4a4a4a;
+  padding: 12px 16px;
+  line-height: 1.6;
+}
+.weekList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.weekBtn {
+  width: 100%;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  padding: 9px 16px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+  color: #c8c8c8;
+  transition: background 0.12s;
+}
+.weekBtn:hover { background: #191919; }
+.weekBtnActive {
+  background: #1a1a00;
+  border-left-color: #fcf000;
+  color: #fcf000;
+  font-weight: 600;
+}
+
+/* ── Main ────────────────────────────────────────────────── */
+.main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Drill-down panel ────────────────────────────────────── */
+.drillPanel {
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.drillHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #161616;
+  border-bottom: 1px solid #222;
+}
+.drillTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fcf000;
+  flex: 1;
+}
+.drillChart {
+  background: rgba(80,208,128,0.12);
+  color: #50d080;
+  border: 1px solid rgba(80,208,128,0.35);
+  border-radius: 5px;
+  padding: 3px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.drillChart:hover { background: rgba(80,208,128,0.22); }
+.drillClose {
+  background: none;
+  border: none;
+  color: #5a5a5a;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.drillClose:hover { color: #c8c8c8; }
+.drillTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.drillTable th {
+  text-align: left;
+  padding: 8px 12px;
+  color: #5a5a5a;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #1e1e1e;
+}
+.drillTable td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #181818;
+  color: #c8c8c8;
+}
+
+/* ── Week header + summary ───────────────────────────────── */
+.weekHeader {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.weekTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fcf000;
+}
+.summaryBadges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.totalBadge {
+  font-size: 12px;
+  color: #7a7a7a;
+  font-weight: 600;
+}
+
+/* ── Filters ─────────────────────────────────────────────── */
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.searchInput {
+  background: #1a1a1a;
+  border: 1px solid #2e2e2e;
+  border-radius: 5px;
+  color: #c8c8c8;
+  padding: 5px 12px;
+  font-size: 12px;
+  width: 140px;
+}
+.searchInput:focus { outline: none; border-color: #fcf000; }
+.filterBtn {
+  background: #1a1a1a;
+  border: 1px solid #2e2e2e;
+  border-radius: 5px;
+  color: #7a7a7a;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.filterBtn:hover { background: #222; color: #c8c8c8; }
+.filterBtnActive {
+  background: rgba(252,240,0,0.12);
+  border-color: rgba(252,240,0,0.4);
+  color: #fcf000;
+}
+
+/* ── Main table ──────────────────────────────────────────── */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.table th {
+  text-align: left;
+  padding: 8px 12px;
+  color: #5a5a5a;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #1e1e1e;
+  white-space: nowrap;
+}
+.row td {
+  padding: 7px 12px;
+  border-bottom: 1px solid #141414;
+  color: #c8c8c8;
+  white-space: nowrap;
+}
+.row:hover td { background: #141414; }
+.tickerBtn {
+  background: none;
+  border: none;
+  color: #fcf000;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.tickerBtn:hover { color: #fff; }
+.chartMiniBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  opacity: 0.5;
+  transition: opacity 0.12s;
+}
+.chartMiniBtn:hover { opacity: 1; }
+.newDot {
+  background: rgba(252,240,0,0.15);
+  color: #fcf000;
+  border: 1px solid rgba(252,240,0,0.35);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.pos { color: #50d080; }
+.neg { color: #ff6060; }
+.emptyRow { color: #4a4a4a; text-align: center; padding: 24px; }
+
+/* ── Misc ────────────────────────────────────────────────── */
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #5a5a5a;
+  font-size: 13px;
+  padding: 24px 0;
+}
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #2a2a2a;
+  border-top-color: #fcf000;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 80px 0;
+  color: #4a4a4a;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.emptyLogo {
+  width: 56px;
+  opacity: 0.2;
+}

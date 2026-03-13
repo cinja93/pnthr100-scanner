@@ -76,13 +76,15 @@ export default function Sidebar({ activePage, onNavigate, currentUser, onLogout,
 
   const firstName = getFirstName(currentUser);
 
-  // Build the personal group dynamically
+  // Build the personal group dynamically (admin gets Signal History)
+  const isAdmin = currentUser?.role === 'admin';
   const personalGroup = firstName
     ? {
         groupLabel: `For ${firstName}`,
         items: [
-          { key: 'portfolio', label: `${firstName}'s Portfolio`, icon: '📁' },
-          { key: 'watchlist', label: 'Watchlist',                icon: '👁' },
+          { key: 'portfolio',       label: `${firstName}'s Portfolio`, icon: '📁' },
+          { key: 'watchlist',       label: 'Watchlist',                icon: '👁' },
+          ...(isAdmin ? [{ key: 'signal-history', label: 'Signal History', icon: '🗂' }] : []),
         ],
       }
     : null;

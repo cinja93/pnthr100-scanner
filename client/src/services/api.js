@@ -380,3 +380,32 @@ export async function fetchSectorData() {
     throw error;
   }
 }
+
+// ── Signal History (admin only) ───────────────────────────────────────────────
+
+export async function fetchSignalHistoryWeeks() {
+  const res = await fetch(`${API_BASE}/api/admin/signal-history/weeks`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchSignalHistoryWeek(weekOf) {
+  const res = await fetch(`${API_BASE}/api/admin/signal-history/week/${weekOf}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchSignalHistoryTicker(ticker) {
+  const res = await fetch(`${API_BASE}/api/admin/signal-history/ticker/${ticker}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function saveSignalHistorySnapshot() {
+  const res = await fetch(`${API_BASE}/api/admin/signal-history/snapshot`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

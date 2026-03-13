@@ -13,6 +13,7 @@ import JunglePage from './components/JunglePage';
 import SearchPage from './components/SearchPage';
 import PreyPage from './components/PreyPage';
 import NewsPage from './components/NewsPage';
+import SignalHistoryPage from './components/SignalHistoryPage';
 import LoginPage from './components/LoginPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken } from './services/api';
 import './App.css';
@@ -367,6 +368,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* Portfolio page */}
           {activePage === 'portfolio' && <PortfolioPage currentUser={currentUser} onProfileUpdate={setCurrentUser} />}
+
+          {/* Signal History — admin only */}
+          {activePage === 'signal-history' && <SignalHistoryPage />}
         </main>
 
         <footer className="footer">

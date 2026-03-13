@@ -301,7 +301,13 @@ app.get('/api/stocks/search', async (req, res) => {
     const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
     const FMP_API_KEY = process.env.FMP_API_KEY;
 
-    const quoteRes = await fetch(`${FMP_BASE_URL}/quote/${ticker}?apikey=${FMP_API_KEY}`);
+    // Fetch quote, profile (sector), and YTD price change in parallel
+    const [quoteRes, profileRes, changeRes] = await Promise.all([
+      fetch(`${FMP_BASE_URL}/quote/${ticker}?apikey=${FMP_API_KEY}`),
+      fetch(`${FMP_BASE_URL}/profile/${ticker}?apikey=${FMP_API_KEY}`),
+      fetch(`${FMP_BASE_URL}/stock-price-change/${ticker}?apikey=${FMP_API_KEY}`),
+    ]);
+
     if (!quoteRes.ok) throw new Error(`FMP ${quoteRes.status}`);
     const quoteArr = await quoteRes.json();
     if (!Array.isArray(quoteArr) || quoteArr.length === 0) {
@@ -310,14 +316,32 @@ app.get('/api/stocks/search', async (req, res) => {
     const q = quoteArr[0];
     if (!q.price) return res.status(404).json({ error: `No price data for "${ticker}"` });
 
+    // Extract sector from profile (best effort)
+    let sector = 'N/A';
+    try {
+      const profileArr = await profileRes.json();
+      if (Array.isArray(profileArr) && profileArr[0]?.sector) {
+        sector = profileArr[0].sector;
+      }
+    } catch { /* ignore */ }
+
+    // Extract YTD return from price-change endpoint (best effort)
+    let ytdReturn = null;
+    try {
+      const changeArr = await changeRes.json();
+      if (Array.isArray(changeArr) && changeArr[0]?.['ytd'] != null) {
+        ytdReturn = parseFloat(Number(changeArr[0]['ytd']).toFixed(2));
+      }
+    } catch { /* ignore */ }
+
     const stock = {
       ticker: q.symbol,
       companyName: q.name || q.symbol,
       exchange: q.exchange || 'N/A',
-      sector: 'N/A',
+      sector,
       currentPrice: parseFloat(Number(q.price).toFixed(2)),
-      ytdReturn: null,
-      rank: 1,
+      ytdReturn,
+      rank: null,        // search results have no performance rank
       rankChange: null,
       previousRank: null,
     };

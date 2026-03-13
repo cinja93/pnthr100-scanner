@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { getAllTickers, getDow30Tickers, getSp500Tickers } from './constituents.js';
 import { addRankingComparison, addShortRankingComparison, autoSaveRankingIfFriday } from './rankingService.js';
+import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 
 dotenv.config();
 
@@ -226,7 +227,17 @@ export async function getShortStopPrices(tickers) {
 // plus a year-long in-memory cache for Dec 31 prices.
 export async function getTopStocks() {
   try {
-    const tickers = await getAllTickers();
+    const [tickers, sp500Tickers, dow30Tickers, sp400Longs, sp400Shorts] = await Promise.all([
+      getAllTickers(),
+      getSp500Tickers().catch(() => []),
+      getDow30Tickers().catch(() => []),
+      getSp400Longs().catch(() => []),
+      getSp400Shorts().catch(() => []),
+    ]);
+    const sp500Set  = new Set(sp500Tickers);
+    const dow30Set  = new Set(dow30Tickers);
+    const sp400LSet = new Set(sp400Longs);
+    const sp400SSet = new Set(sp400Shorts);
     console.log(`Fetching data for ${tickers.length} unique tickers from FMP...`);
 
     // ── Step 1: Bulk fetch quotes (200 tickers per call) ──────────────────────
@@ -278,20 +289,24 @@ export async function getTopStocks() {
 
       const currentPrice = quoteData.price;
       const ytdReturn = ((currentPrice - yearStartPrice) / yearStartPrice) * 100;
+      const sym = quoteData.symbol;
       stockData.push({
-        ticker: quoteData.symbol,
+        ticker: sym,
         companyName: profileData?.companyName || quoteData.name || '',
         exchange: profileData?.exchangeShortName || quoteData.exchange || 'N/A',
         sector: profileData?.sector || 'N/A',
         currentPrice: parseFloat(currentPrice.toFixed(2)),
         ytdReturn: parseFloat(ytdReturn.toFixed(2)),
+        isSp500:  sp500Set.has(sym),
+        isDow30:  dow30Set.has(sym),
+        universe: sp400LSet.has(sym) ? 'sp400Long' : sp400SSet.has(sym) ? 'sp400Short' : 'sp517',
       });
     }
 
     // Sort by YTD: top 100 = long (highest first), bottom 100 = short (lowest first so #1 = largest loss)
     const sorted = [...stockData].sort((a, b) => b.ytdReturn - a.ytdReturn);
-    const top100 = sorted.slice(0, 100);
-    const bottom100 = [...sorted.slice(-100)].sort((a, b) => a.ytdReturn - b.ytdReturn);
+    const top100    = sorted.slice(0, 100).map(s => ({ ...s, rankList: 'LONG' }));
+    const bottom100 = [...sorted.slice(-100)].sort((a, b) => a.ytdReturn - b.ytdReturn).map(s => ({ ...s, rankList: 'SHORT' }));
 
     console.log(`✅ Fetched ${stockData.length} stocks: top 100 (long) + bottom 100 (short)`);
     console.log(`Long: #1 ${top100[0]?.ticker} +${top100[0]?.ytdReturn}% YTD | Short: #1 ${bottom100[0]?.ticker} (largest loss) ${bottom100[0]?.ytdReturn}% YTD`);

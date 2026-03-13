@@ -15,8 +15,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 20px 28px;
-  background: linear-gradient(135deg, #0d0d0d 0%, #1a1200 100%);
-  border-bottom: 1px solid #2a2200;
+  background: #111111;
+  border-bottom: 3px solid #fcf000;
   flex-shrink: 0;
 }
 
@@ -30,7 +30,7 @@
   width: 56px;
   height: 56px;
   object-fit: contain;
-  filter: drop-shadow(0 0 12px rgba(212, 175, 55, 0.5));
+  filter: drop-shadow(0 0 12px rgba(252, 240, 0, 0.4));
 }
 
 .headerText {
@@ -43,21 +43,21 @@
   font-size: 22px;
   font-weight: 800;
   letter-spacing: 0.12em;
-  color: #d4af37;
+  color: #fcf000;
   margin: 0;
   text-transform: uppercase;
 }
 
 .headerSub {
   font-size: 12px;
-  color: #7a7060;
+  color: #7a7a7a;
   margin: 0;
   letter-spacing: 0.04em;
 }
 
 .generateBtn {
-  background: #d4af37;
-  color: #0d0d0d;
+  background: #fcf000;
+  color: #111111;
   border: none;
   border-radius: 6px;
   padding: 9px 18px;
@@ -67,7 +67,7 @@
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
 }
-.generateBtn:hover { background: #e8c84a; }
+.generateBtn:hover { background: #e8e800; }
 .generateBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .genError {
@@ -137,13 +137,13 @@
 }
 .issueBtn:hover { background: #191919; }
 .issueBtnActive {
-  background: #1a1500;
-  border-left-color: #d4af37;
+  background: #1a1a00;
+  border-left-color: #fcf000;
 }
 
 .issueDate {
   font-size: 12px;
-  color: #c8c0b0;
+  color: #c8c8c8;
   font-weight: 500;
 }
 
@@ -167,9 +167,9 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  background: rgba(180, 120, 20, 0.2);
-  color: #d4af37;
-  border: 1px solid rgba(180, 120, 20, 0.35);
+  background: rgba(252, 240, 0, 0.12);
+  color: #fcf000;
+  border: 1px solid rgba(252, 240, 0, 0.3);
   border-radius: 3px;
   padding: 1px 6px;
 }
@@ -195,7 +195,7 @@
   width: 28px;
   height: 28px;
   border: 3px solid #2a2a2a;
-  border-top-color: #d4af37;
+  border-top-color: #fcf000;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -251,7 +251,7 @@
 .issueWeek {
   font-size: 14px;
   font-weight: 600;
-  color: #d4af37;
+  color: #fcf000;
 }
 
 .metaNote {
@@ -303,8 +303,8 @@
 .saveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .publishBtn {
-  background: #d4af37;
-  color: #0d0d0d;
+  background: #fcf000;
+  color: #111111;
   border: none;
   border-radius: 5px;
   padding: 6px 16px;
@@ -313,7 +313,7 @@
   cursor: pointer;
   transition: background 0.12s;
 }
-.publishBtn:hover { background: #e8c84a; }
+.publishBtn:hover { background: #e8e800; }
 .publishBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Edit textarea ───────────────────────────────────────── */
@@ -331,11 +331,11 @@
   resize: vertical;
   box-sizing: border-box;
 }
-.editor:focus { outline: none; border-color: #d4af37; }
+.editor:focus { outline: none; border-color: #fcf000; }
 
 /* ── Rendered article markdown ───────────────────────────── */
 .articleBody {
-  color: #d0ccc5;
+  color: #d0d0d0;
   line-height: 1.8;
   font-size: 15px;
 }
@@ -343,28 +343,28 @@
 .articleBody h1 {
   font-size: 22px;
   font-weight: 800;
-  color: #d4af37;
+  color: #fcf000;
   letter-spacing: 0.04em;
   margin: 0 0 24px;
-  border-bottom: 1px solid #2a2000;
+  border-bottom: 1px solid #2a2a2a;
   padding-bottom: 12px;
 }
 
 .articleBody h2 {
   font-size: 15px;
   font-weight: 700;
-  color: #c8b870;
+  color: #fcf000;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   margin: 32px 0 10px;
-  border-left: 3px solid #d4af37;
+  border-left: 3px solid #fcf000;
   padding-left: 10px;
 }
 
 .articleBody h3 {
   font-size: 14px;
   font-weight: 600;
-  color: #b0a880;
+  color: #c8c8c8;
   margin: 20px 0 6px;
 }
 
@@ -373,12 +373,12 @@
 }
 
 .articleBody strong {
-  color: #e8e0c8;
+  color: #ffffff;
   font-weight: 600;
 }
 
 .articleBody em {
-  color: #a89a70;
+  color: #a0a0a0;
 }
 
 .articleBody ul,
@@ -399,16 +399,16 @@
 
 .articleBody code {
   background: #1a1a1a;
-  color: #d4af37;
+  color: #fcf000;
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 13px;
 }
 
 .articleBody blockquote {
-  border-left: 3px solid #d4af37;
+  border-left: 3px solid #fcf000;
   margin: 0 0 14px;
   padding: 4px 16px;
-  color: #8a8070;
+  color: #7a7a7a;
   font-style: italic;
 }

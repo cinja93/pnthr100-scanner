@@ -341,10 +341,27 @@ app.get('/api/stocks/search', async (req, res) => {
       sector,
       currentPrice: parseFloat(Number(q.price).toFixed(2)),
       ytdReturn,
-      rank: null,        // search results have no performance rank
+      rank: null,
       rankChange: null,
       previousRank: null,
+      rankList: null,
     };
+
+    // Check if this ticker is in the most recent PNTHR 100 long or short ranking
+    try {
+      const latestRanking = await getMostRecentRanking();
+      if (latestRanking) {
+        const longEntry  = (latestRanking.rankings      || []).find(r => r.ticker === ticker);
+        const shortEntry = (latestRanking.shortRankings || []).find(r => r.ticker === ticker);
+        const entry = longEntry || shortEntry;
+        if (entry) {
+          stock.rank         = entry.rank         ?? null;
+          stock.rankChange   = entry.rankChange   ?? null;
+          stock.previousRank = entry.previousRank ?? null;
+          stock.rankList     = longEntry ? 'LONG' : 'SHORT';
+        }
+      }
+    } catch { /* ranking lookup is best-effort */ }
 
     const signals = await getSignals([ticker]);
 

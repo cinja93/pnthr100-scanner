@@ -135,8 +135,16 @@ export async function getEtfStocks(forceRefresh = false) {
     fetchYtdChanges(ALL_ETF_TICKERS),
   ]);
 
-  const stocks = ALL_ETF_TICKERS
-    .map((ticker, i) => {
+  // Build previous rank lookup from the cached run (for rank change calculation)
+  const prevRankMap = {};
+  if (etfCache.data?.stocks) {
+    for (const s of etfCache.data.stocks) {
+      if (s.ticker && s.rank != null) prevRankMap[s.ticker] = s.rank;
+    }
+  }
+
+  const unsorted = ALL_ETF_TICKERS
+    .map(ticker => {
       const q = quoteMap[ticker];
       if (!q?.price) return null;
       return {
@@ -147,12 +155,25 @@ export async function getEtfStocks(forceRefresh = false) {
         category: TICKER_CATEGORY[ticker] || 'ETF',
         currentPrice: parseFloat(Number(q.price).toFixed(2)),
         ytdReturn: ytdMap[ticker] != null ? parseFloat(Number(ytdMap[ticker]).toFixed(2)) : null,
-        rank: i + 1,
-        rankChange: null,
-        previousRank: null,
       };
     })
     .filter(Boolean);
+
+  // Sort by YTD return descending (nulls last) — rank 1 = best YTD performance
+  unsorted.sort((a, b) => {
+    if (a.ytdReturn == null && b.ytdReturn == null) return 0;
+    if (a.ytdReturn == null) return 1;
+    if (b.ytdReturn == null) return -1;
+    return b.ytdReturn - a.ytdReturn;
+  });
+
+  const stocks = unsorted.map((s, i) => {
+    const newRank = i + 1;
+    const prevRank = prevRankMap[s.ticker] ?? null;
+    // rankChange: positive = moved up (rank number decreased), negative = dropped
+    const rankChange = prevRank != null ? prevRank - newRank : null;
+    return { ...s, rank: newRank, rankChange, previousRank: prevRank };
+  });
 
   const stockTickers = stocks.map(s => s.ticker);
   const signals = await getSignals(stockTickers);

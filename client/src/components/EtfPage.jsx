@@ -117,6 +117,7 @@ export default function EtfPage() {
           hideEarnings={true}
           onTickerClick={handleRowClick}
           scanType="long"
+          rankLabel="ETF Performance Rank"
         />
       )}
 

@@ -56,7 +56,7 @@ function matchesPinSignal(sigData, pinSignal) {
   return sigData.signal === pinSignal;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank' }) {
   const [sortConfig, setSortConfig] = useState({ key: groupBySector ? 'ytdReturn' : 'rank', direction: groupBySector ? 'desc' : 'asc' });
   const hasScannerRanks = scannerRanks !== null;
 
@@ -207,7 +207,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
         <thead>
           <tr>
             {!onRemove && <th onClick={() => handleSort('rank')} className={`${styles.rankColumn} ${styles.sortable}`} scope="col">
-              Performance Rank {getSortIndicator('rank')}
+              {rankLabel} {getSortIndicator('rank')}
             </th>}
             {!onRemove && !hasScannerRanks && <th onClick={() => handleSort('rankChange')} className={styles.sortable}>
               Rank Change {getSortIndicator('rankChange')}

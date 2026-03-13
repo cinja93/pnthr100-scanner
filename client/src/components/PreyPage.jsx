@@ -395,7 +395,24 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
                 return (
                   <tr key={stock.ticker + i} onClick={() => onRowClick?.(stock, sortedRows, i)}>
                     <td className={styles.tdTicker}>
-                      <div className={styles.tickerSymbol}>{stock.ticker}</div>
+                      <div className={styles.tickerSymbol}>
+                        {stock.rankList && (
+                          <span className={stock.rankList === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort} style={{ marginRight: 4 }}>
+                            {stock.rankList === 'LONG' ? 'L' : 'S'}
+                          </span>
+                        )}
+                        {stock.ticker}
+                        {(() => {
+                          const tags = [];
+                          if (stock.isSp500) tags.push('500');
+                          if (stock.isDow30) tags.push('30');
+                          if (stock.isNasdaq100) tags.push('100');
+                          if (stock.universe === 'sp400Long' || stock.universe === 'sp400Short') tags.push('400');
+                          return tags.length > 0
+                            ? <span className={styles.membershipTag}> ({tags.join(', ')})</span>
+                            : null;
+                        })()}
+                      </div>
                       {stock.companyName && <div className={styles.companyName}>{stock.companyName}</div>}
                     </td>
                     <td className={styles.td}>{sigBadge}</td>

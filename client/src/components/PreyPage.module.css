@@ -343,6 +343,32 @@
   margin-top: 2px;
 }
 
+.scannerBadgeLong {
+  display: inline-block;
+  background: #16a34a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.scannerBadgeShort {
+  display: inline-block;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.membershipTag {
+  font-size: 10px;
+  color: #aaa;
+  font-weight: 400;
+}
+
 .tdNum {
   padding: 14px 16px;
   color: #212121;

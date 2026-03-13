@@ -1344,7 +1344,12 @@ app.get('/api/prey', authenticateJWT, async (req, res) => {
     const stocks = await getJungleStocks(specLongs, specShorts);
     const tickers = stocks.map(s => s.ticker);
     const stockMeta = {};
-    for (const s of stocks) stockMeta[s.ticker] = { companyName: s.companyName, sector: s.sector, exchange: s.exchange, currentPrice: s.currentPrice };
+    for (const s of stocks) stockMeta[s.ticker] = {
+      companyName: s.companyName, sector: s.sector, exchange: s.exchange,
+      currentPrice: s.currentPrice, ytdReturn: s.ytdReturn,
+      isSp500: s.isSp500, isDow30: s.isDow30, isNasdaq100: s.isNasdaq100,
+      universe: s.universe, rankList: s.rankList ?? null,
+    };
     const jungleSignals = await getSignals(tickers);
     const results = await getPreyResults(tickers, stockMeta, jungleSignals);
     res.json(results);

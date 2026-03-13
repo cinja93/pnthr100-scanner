@@ -732,7 +732,7 @@ export default function PreyPage({ onNavigate }) {
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.feast ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('feast')}>▼</button>
               </div>
-              {!collapsed.feast && <p className={styles.groupSubtitle}>One bar past the PNTHR entry signal · still in the zone</p>}
+              {!collapsed.feast && <p className={styles.groupSubtitle}>New Signal! Attack! PNTHR in motion! Fresh kill, first bite...delicious.</p>}
             </div>
             {!collapsed.feast && (
               <>
@@ -740,12 +740,18 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
-                      <li><strong>Ticker</strong> — Stock symbol.</li>
-                      <li><strong>Signal</strong> — Entry strategy: BL+1 (one bar past Buy Long) or SS+1 (one bar past Sell Short).</li>
-                      <li><strong>Price</strong> — Current share price.</li>
-                      <li><strong>EMA21</strong> — 21-week exponential moving average (trend line).</li>
-                      <li><strong>Δ EMA</strong> — How far price is above or below the 21-EMA (%).</li>
+                      <li><strong>Ticker</strong> — Stock symbol and company name, with index membership (500 / 100 / 30 / 400).</li>
+                      <li><strong>Signal</strong> — BL+1 (first week after a Buy Long signal) or SS+1 (first week after a Sell Short). Signal fired last week — this week confirms it is still in motion.</li>
+                      <li><strong>Exchange</strong> — NYSE or NASDAQ.</li>
                       <li><strong>Sector</strong> — Sector the stock belongs to.</li>
+                      <li><strong>Current Price</strong> — Current weekly close price.</li>
+                      <li><strong>PNTHR Stop</strong> — Predatory buffer stop, ratcheted via Wilder ATR(3) from the signal week.</li>
+                      <li><strong>Risk Per Share</strong> — Dollar distance from current price to the PNTHR Stop.</li>
+                      <li><strong>Risk %</strong> — Risk as a percentage of current price.</li>
+                      <li><strong>RSI</strong> — Relative Strength Index. Must be rising and below 75 (BL) or falling and above 25 (SS) — momentum confirmed in the right direction.</li>
+                      <li><strong>OBV</strong> — On-Balance Volume slope. Rising (BL) or falling (SS) confirms volume is backing the move.</li>
+                      <li><strong>Δ EMA</strong> — How far price is above (BL) or below (SS) the 21-week EMA (%). Daylight must be confirmed.</li>
+                      <li><strong>Next Earnings</strong> — Upcoming earnings date. Amber highlight = within 14 days.</li>
                     </ul>
                   </div>
                 )}
@@ -767,13 +773,13 @@ export default function PreyPage({ onNavigate }) {
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.groupTitle}>
-                  PNTHR Alpha <span className={styles.groupBadge}>Elite</span>
+                  PNTHR Alpha <span className={styles.groupBadge}>Elite 9</span>
                   <span className={styles.countNote}>{data.alphas.longs.length}L · {data.alphas.shorts.length}S</span>
                   <button type="button" className={styles.infoBtn} onClick={() => setShowAlphaGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.alpha ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('alpha')}>▼</button>
               </div>
-              {!collapsed.alpha && <p className={styles.groupSubtitle}>Maximum trend alignment · institutional accumulation · sector alpha leadership</p>}
+              {!collapsed.alpha && <p className={styles.groupSubtitle}>Nine peak predatory conditions — trend, sector, volume, momentum, and alpha all confirmed.</p>}
             </div>
             {!collapsed.alpha && (
               <>
@@ -818,7 +824,7 @@ export default function PreyPage({ onNavigate }) {
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.spring ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('spring')}>▼</button>
               </div>
-              {!collapsed.spring && <p className={styles.groupSubtitle}>6-month high → ≥8% pullback → relaunch above EMA · three stages: Coiled → Gaining → Launched</p>}
+              {!collapsed.spring && <p className={styles.groupSubtitle}>Hit the 6-month extreme, pulled back ≥8%, now reloading. Three stages: Coiled → Gaining → Launched.</p>}
             </div>
             {!collapsed.spring && (
               <>
@@ -863,7 +869,7 @@ export default function PreyPage({ onNavigate }) {
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.sneak ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('sneak')}>▼</button>
               </div>
-              {!collapsed.sneak && <p className={styles.groupSubtitle}>Bollinger Band squeeze — STALK (grey, coiling) upgrades to ATTACK (green/red) when bands fire ≥15%</p>}
+              {!collapsed.sneak && <p className={styles.groupSubtitle}>Coiling in silence. STALK builds pressure. ATTACK fires the breakout.</p>}
             </div>
             {!collapsed.sneak && (
               <>
@@ -902,13 +908,13 @@ export default function PreyPage({ onNavigate }) {
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.groupTitle}>
-                  PNTHR Hunt <span className={styles.groupBadge}>New Cross</span>
+                  PNTHR Hunt <span className={styles.groupBadge}>PNTHR Crossed</span>
                   <span className={styles.countNote}>{huntStocks.length} stocks</span>
                   <button type="button" className={styles.infoBtn} onClick={() => setShowHuntGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.hunt ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('hunt')}>▼</button>
               </div>
-              {!collapsed.hunt && <p className={styles.groupSubtitle}>Fresh tracks. Stocks that just crossed the 21-week EMA — the panther locks on.</p>}
+              {!collapsed.hunt && <p className={styles.groupSubtitle}>Fresh tracks. BL and SS signals with a new direction in the last 2 weeks — the PNTHR just picked up the scent.</p>}
             </div>
             {!collapsed.hunt && (
               <>
@@ -952,13 +958,13 @@ export default function PreyPage({ onNavigate }) {
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.groupTitle}>
-                  PNTHR Sprint <span className={styles.groupBadge}>Rising</span>
+                  PNTHR Sprint <span className={styles.groupBadge}>PNTHR Rising</span>
                   <span className={styles.countNote}>{sprintLongs.length}L · {sprintShorts.length}S</span>
                   <button type="button" className={styles.infoBtn} onClick={() => setShowSprintGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.sprint ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('sprint')}>▼</button>
               </div>
-              {!collapsed.sprint && <p className={styles.groupSubtitle}>New entries and rising ranks in the PNTHR 100 — momentum building, the panther accelerates.</p>}
+              {!collapsed.sprint && <p className={styles.groupSubtitle}>Rank up. These stocks are moving up the PNTHR 100 performance ladder or just joined the hunt.</p>}
             </div>
             {!collapsed.sprint && (
               <>
@@ -966,18 +972,16 @@ export default function PreyPage({ onNavigate }) {
                   <div className={styles.columnGuidePopover}>
                     <strong>What the columns mean:</strong>
                     <ul className={styles.columnGuideList}>
-                      <li><strong>Performance Rank</strong> — Current rank in the PNTHR 100 (1 = strongest performer).</li>
-                      <li><strong>Rank Change</strong> — How many positions the stock moved up this week. "New" = first time on the list.</li>
-                      <li><strong>Ticker</strong> — Stock symbol and company name.</li>
+                      <li><strong>Ticker</strong> — Stock symbol and company name, with index membership (500 / 100 / 30 / 400). Includes L or S badge if ranked Long or Short in the PNTHR 100.</li>
+                      <li><strong>PNTHR Signal</strong> — BL (Buy Long) or SS (Sell Short) — the active entry signal driving momentum.</li>
+                      <li><strong>Wks Since</strong> — Weeks since the signal fired. BL+N or SS+N format.</li>
                       <li><strong>Exchange</strong> — NYSE or NASDAQ.</li>
                       <li><strong>Sector</strong> — Sector the stock belongs to.</li>
-                      <li><strong>Current Price</strong> — Last weekly close price.</li>
-                      <li><strong>YTD Return</strong> — Year-to-date performance (%).</li>
-                      <li><strong>PNTHR Stop</strong> — Predatory buffer stop: ratcheted via Wilder ATR(3) from the signal week.</li>
-                      <li><strong>Risk Per Share</strong> — Dollar distance from current price to the PNTHR Stop.</li>
+                      <li><strong>Current Price</strong> — Current weekly close price.</li>
+                      <li><strong>YTD Return</strong> — Year-to-date performance (%) — the metric that drives PNTHR 100 rank. Higher = further up the Long leaderboard; lower (more negative) = further up the Short leaderboard.</li>
+                      <li><strong>PNTHR Stop</strong> — Predatory buffer stop, ratcheted via Wilder ATR(3) from the signal week.</li>
+                      <li><strong>Risk $</strong> — Dollar distance from current price to the PNTHR Stop.</li>
                       <li><strong>Risk %</strong> — Risk as a percentage of current price.</li>
-                      <li><strong>PNTHR Signal</strong> — BL (Buy Long) or SS (Sell Short) entry signal type.</li>
-                      <li><strong>Wks Since</strong> — Weeks since the signal fired.</li>
                       <li><strong>Next Earnings</strong> — Upcoming earnings date. Amber highlight = within 14 days.</li>
                     </ul>
                   </div>

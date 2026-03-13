@@ -726,7 +726,7 @@ export default function PreyPage({ onNavigate }) {
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.groupTitle}>
-                  PNTHR Feast <span className={styles.groupBadge}>BL+1 · SS+1</span>
+                  PNTHR Feast <span className={styles.groupBadge}>PNTHR New Buy · New Sell</span>
                   <span className={styles.countNote}>{data.dinner.longs.length}L · {data.dinner.shorts.length}S</span>
                   <button type="button" className={styles.infoBtn} onClick={() => setShowDinnerGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
                 </h2>
@@ -773,7 +773,7 @@ export default function PreyPage({ onNavigate }) {
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.groupTitle}>
-                  PNTHR Alpha <span className={styles.groupBadge}>Elite 9</span>
+                  PNTHR Alpha <span className={styles.groupBadge}>PNTHR Elite 9</span>
                   <span className={styles.countNote}>{data.alphas.longs.length}L · {data.alphas.shorts.length}S</span>
                   <button type="button" className={styles.infoBtn} onClick={() => setShowAlphaGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
                 </h2>
@@ -818,7 +818,7 @@ export default function PreyPage({ onNavigate }) {
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.groupTitle}>
-                  PNTHR Spring <span className={styles.groupBadge}>Pullback</span>
+                  PNTHR Spring <span className={styles.groupBadge}>PNTHR Pullback · Attack</span>
                   <span className={styles.countNote}>{data.springs.longs.length}L · {data.springs.shorts.length}S</span>
                   <button type="button" className={styles.infoBtn} onClick={() => setShowSpringGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
                 </h2>
@@ -863,7 +863,7 @@ export default function PreyPage({ onNavigate }) {
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.groupTitle}>
-                  PNTHR Sneak <span className={styles.groupBadge}>BB Squeeze</span>
+                  PNTHR Sneak <span className={styles.groupBadge}>PNTHR Coil</span>
                   <span className={styles.countNote}>{(data.sneak?.longs.length ?? 0)}L · {(data.sneak?.shorts.length ?? 0)}S</span>
                   <button type="button" className={styles.infoBtn} onClick={() => setShowSneakGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
                 </h2>
@@ -908,7 +908,7 @@ export default function PreyPage({ onNavigate }) {
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.groupTitle}>
-                  PNTHR Hunt <span className={styles.groupBadge}>PNTHR Crossed</span>
+                  PNTHR Hunt <span className={styles.groupBadge}>PNTHR Cross</span>
                   <span className={styles.countNote}>{huntStocks.length} stocks</span>
                   <button type="button" className={styles.infoBtn} onClick={() => setShowHuntGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
                 </h2>

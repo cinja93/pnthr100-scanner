@@ -628,7 +628,7 @@ function SectorStocksModal({ sectorKey, sectorName, filterSignal, onClose }) {
 
 export default function SectorPage() {
   const [allData, setAllData] = useState(null);
-  const [timeRange, setTimeRange] = useState('12M');
+  const [timeRange, setTimeRange] = useState('5D');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   // Check if navigated here from PREY page with a specific ETF pre-selected

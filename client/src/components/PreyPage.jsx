@@ -964,7 +964,7 @@ export default function PreyPage({ onNavigate }) {
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.groupTitle}>
                   PNTHR Hunt <span className={styles.groupBadge}>PNTHR Cross</span>
-                  <span className={styles.countNote}>{huntStocks.length} stocks</span>
+                  <span className={styles.countNote}>{huntStocks.filter(s => huntSignals[s.ticker]?.signal === 'BL').length}L · {huntStocks.filter(s => huntSignals[s.ticker]?.signal === 'SS').length}S</span>
                   <button type="button" className={styles.infoBtn} onClick={() => setShowHuntGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.hunt ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('hunt')}>▼</button>
@@ -999,7 +999,8 @@ export default function PreyPage({ onNavigate }) {
                 )}
                 {!huntLoading && !huntError && huntStocks.length > 0 && (
                   <PreyStockTable
-                    stocks={huntStocks}
+                    longs={huntStocks.filter(s => huntSignals[s.ticker]?.signal === 'BL')}
+                    shorts={huntStocks.filter(s => huntSignals[s.ticker]?.signal === 'SS')}
                     signals={huntSignals}
                     earnings={earnings}
                     onRowClick={handleHuntRowClick}

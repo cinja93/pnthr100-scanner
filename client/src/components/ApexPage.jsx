@@ -110,8 +110,8 @@ export default function ApexPage() {
     setChartIndex(idx);
   }
 
-  // Tier summary cards (top 5 tiers only)
-  const topTiers = TIERS.slice(0, 5);
+  // All 10 tier filter cards
+  const topTiers = TIERS;
 
   return (
     <div className={styles.page}>

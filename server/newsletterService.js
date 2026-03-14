@@ -1,6 +1,7 @@
 // server/newsletterService.js
 // PNTHR'S PERCH — Weekly AI-generated market intelligence newsletter
 import Anthropic from '@anthropic-ai/sdk';
+import fetch from 'node-fetch';
 import { connectToDatabase } from './database.js';
 import { getJungleStocks } from './stockService.js';
 import { getSignals } from './signalService.js';
@@ -85,6 +86,89 @@ function computeFullSectorCounts(signals, stockMeta) {
     }).join('\n');
 }
 
+// Sector ETFs tracked for 5D performance context
+const SECTOR_ETFS = [
+  { ticker: 'SPY',  label: 'S&P 500' },
+  { ticker: 'QQQ',  label: 'Nasdaq 100' },
+  { ticker: 'XLK',  label: 'Technology' },
+  { ticker: 'XLF',  label: 'Financials' },
+  { ticker: 'XLE',  label: 'Energy' },
+  { ticker: 'XLV',  label: 'Healthcare' },
+  { ticker: 'XLY',  label: 'Consumer Discretionary' },
+  { ticker: 'XLP',  label: 'Consumer Staples' },
+  { ticker: 'XLI',  label: 'Industrials' },
+  { ticker: 'XLB',  label: 'Materials' },
+  { ticker: 'XLRE', label: 'Real Estate' },
+  { ticker: 'XLU',  label: 'Utilities' },
+  { ticker: 'XLC',  label: 'Communication Services' },
+];
+
+// Fetch SPY, QQQ, and sector ETF weekly signals + 5D return
+async function fetchMarketContext() {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return { spyStatus: 'unknown', qqqStatus: 'unknown', sectorReturns: '' };
+
+  try {
+    const tickers = SECTOR_ETFS.map(e => e.ticker).join(',');
+    const url = `https://financialmodelingprep.com/api/v3/quote/${tickers}?apikey=${apiKey}`;
+    const res = await fetch(url);
+    const quotes = await res.json();
+    if (!Array.isArray(quotes)) return { spyStatus: 'unknown', qqqStatus: 'unknown', sectorReturns: '' };
+
+    const quoteMap = {};
+    for (const q of quotes) quoteMap[q.symbol] = q;
+
+    // SPY and QQQ status based on changesPercentage (5D proxy = week's % change)
+    function statusLine(ticker, label) {
+      const q = quoteMap[ticker];
+      if (!q) return `${label}: data unavailable`;
+      const chg = q.changesPercentage ?? 0;
+      const dir = chg >= 0 ? '+' : '';
+      // price vs 200-day SMA as EMA proxy — FMP quote includes priceAvg200
+      const above = q.price > (q.priceAvg200 ?? q.price) ? 'ABOVE' : 'BELOW';
+      return `${label} (${ticker}): price $${Number(q.price).toFixed(2)}, 5D ${dir}${chg.toFixed(2)}%, currently ${above} 200-day avg`;
+    }
+
+    const spyStatus = statusLine('SPY', 'S&P 500 (SPY)');
+    const qqqStatus = statusLine('QQQ', 'Nasdaq 100 (QQQ)');
+
+    // Sector ETF 5D returns table (excludes SPY/QQQ — shown separately above)
+    const sectorLines = SECTOR_ETFS
+      .filter(e => e.ticker !== 'SPY' && e.ticker !== 'QQQ')
+      .map(e => {
+        const q = quoteMap[e.ticker];
+        if (!q) return `  ${e.label} (${e.ticker}): no data`;
+        const chg = q.changesPercentage ?? 0;
+        const dir = chg >= 0 ? '+' : '';
+        const arrow = chg >= 1 ? '▲' : chg <= -1 ? '▼' : '→';
+        return `  ${arrow} ${e.label} (${e.ticker}): ${dir}${chg.toFixed(2)}% this week`;
+      });
+
+    return {
+      spyStatus,
+      qqqStatus,
+      sectorReturns: sectorLines.join('\n'),
+    };
+  } catch (err) {
+    console.warn('[Newsletter] Market context fetch failed:', err.message);
+    return { spyStatus: 'unavailable', qqqStatus: 'unavailable', sectorReturns: '' };
+  }
+}
+
+// Compute Sprint movers — stocks that rose in PNTHR rank or are new entries
+function computeSprintMovers(stocks) {
+  const risers = stocks
+    .filter(s => s.rankChange > 0 || s.rankChange === null)
+    .sort((a, b) => (b.rankChange ?? 999) - (a.rankChange ?? 999))
+    .slice(0, 15);
+
+  if (risers.length === 0) return 'No notable rank risers this week.';
+  return risers.map(s => {
+    const tag = s.rankChange === null ? 'NEW ENTRY' : `+${s.rankChange} rank`;
+    return `${s.ticker} [${s.sector || ''}] (${tag})`;
+  }).join(', ');
+}
+
 async function fetchPreyData() {
   const [specLongs, specShorts] = await Promise.all([getSp400Longs(), getSp400Shorts()]);
   const stocks = await getJungleStocks(specLongs, specShorts);
@@ -155,12 +239,19 @@ async function getPriorPublishedIssues(limit = 4) {
 export async function generateIssue(weekOf) {
   const client = getAnthropicClient();
 
-  // Fetch live prey data
-  console.log('[Newsletter] Fetching prey data for generation...');
-  const prey = await fetchPreyData();
+  // Fetch all data in parallel
+  console.log('[Newsletter] Fetching data for generation...');
+  const [prey, marketCtx] = await Promise.all([
+    fetchPreyData(),
+    fetchMarketContext(),
+  ]);
 
   // Find this week's most profitable exits
   const { exits, bestDollar, bestPct } = findBestExits(prey.signals || {}, prey.stockMeta || {}, weekOf);
+
+  // Sprint movers from full stock list
+  const allStocks = Object.entries(prey.stockMeta || {}).map(([ticker, meta]) => ({ ticker, ...meta }));
+  const sprintSummary = computeSprintMovers(allStocks);
 
   // Fetch prior issues for lookback context
   const priorIssues = await getPriorPublishedIssues(4);
@@ -214,83 +305,87 @@ export async function generateIssue(weekOf) {
 
   const prompt = `You are PNTHR, a sophisticated market intelligence system. Write the weekly "PNTHR's Perch" newsletter for the week of ${formatDateLong(weekOf)}.
 
-PNTHR scans roughly 679 stocks across the S&P 500 and S&P 400 using a 21-week EMA trend-following model. Each week the system identifies stocks breaking into new uptrends (longs) or breaking down into downtrends (shorts), stocks approaching their breakout trigger (spring setups), and stocks compressing in tight Bollinger Bands ahead of a potential volatility expansion. Long exits (BE) and short covers (SE) signal potential sector reversals.
+PNTHR scans roughly 679 stocks across the S&P 500 and S&P 400 using a 21-week EMA trend-following model. BL+1 = brand-new Buy Long entry THIS WEEK. SS+1 = brand-new Sell Short entry THIS WEEK. The BL+1 to SS+1 ratio is the primary market pulse indicator. NEVER confuse new signals (BL+1/SS+1) with existing open positions (BL+N/SS+N where N > 1).
 
 ---
 
-THIS WEEK'S MARKET SNAPSHOT:
+THIS WEEK'S DATA:
 
-Open positions (current in-trade universe):
+INDEX STATUS (SPY vs QQQ — differentiate these, money can flow into one and out of the other):
+${marketCtx.spyStatus}
+${marketCtx.qqqStatus}
+
+SECTOR ETF 5-DAY PERFORMANCE (use to identify which sectors are leading and lagging):
+${marketCtx.sectorReturns || 'Sector ETF data unavailable this week.'}
+
+NEW SIGNALS THIS WEEK (BL+1 = new longs, SS+1 = new shorts — these are the acceleration signals):
 ${dinnerSummary}
 
-New momentum entries this week (ranked by signal quality):
-${alphaSummary}
-
-Setups coiling near breakout trigger:
-${springSummary}
-
-Bollinger Band compressions (pre-explosion):
-${sneakSummary}
-
-Full sector signal breakdown across all 679 PNTHR stocks (this week's new entries plus full open book):
+FULL SECTOR SIGNAL BREAKDOWN across all 679 PNTHR stocks (new entries + full open book + exits):
 ${sectorSummary}
 
-This week's profitable closed trades (long exits and short covers):
+PNTHR SPRINT — stocks rising in PNTHR rank or new to the scan this week:
+${sprintSummary}
+
+TRADE OF THE WEEK candidates (profitable closed trades this week):
 ${totwSummary}
 
----
+SPRING SETUPS (stocks coiling near breakout trigger):
+${springSummary}
 
-Prior weeks' narrative excerpts (for the lookback section):
+BOLLINGER BAND COMPRESSIONS (pre-explosion coils):
+${sneakSummary}
+
+PRIOR WEEKS CONTEXT (for lookback section):
 ${lookbackContext}
 
 ---
 
-Write the newsletter with these EXACT sections in markdown:
+Write the newsletter in EXACTLY this structure and format. Follow the section names and markdown precisely — the rendering engine depends on them:
 
 # PNTHR's Perch — Week of ${formatDateLong(weekOf)}
 
-## Market Pulse
-3–4 sentences. The data above tells you exactly how many new BL+1 and SS+1 signals fired this week, and gives you the ratio. Use those exact numbers. If 36 new short entries fired against 6 new long entries, that is a 6:1 ratio and means the market is actively accelerating lower RIGHT NOW, not just sitting in an existing downtrend. Say the ratio, say what it means, take a stance.
+[INTRO HOOK — 1 punchy paragraph, no heading. Open with the BL+1 to SS+1 ratio using the EXACT numbers from the data. State what it means for the market right now. If SPY and QQQ are diverging, call it out. Take a clear stance. Make The PNTHR sound like it sees something others don't.]
 
-## Trade of the Week
-If profitable exits exist this week, highlight the single best performer. Use this format exactly — it will be styled as a callout box:
+## PNTHR Trade of the Week - [TICKER]
 
-> **TRADE OF THE WEEK**
-> **[TICKER] — [Company Name]** | [Sector]
-> [Long trade closed / Short trade covered]
-> **Profit: +$X.XX (+X.XX%)**
-> [2–3 sentences: what the trade captured, what it says about the stock or sector, and what takeaway the reader should draw from it. This should feel like a brief victory lap grounded in market insight.]
+[If profitable exits exist, use the best one. Replace [TICKER] in the heading above with the actual ticker symbol — this is used by the rendering engine to build the chart button. Then write 1-2 paragraphs about what the trade captured, what it says about the stock or sector, and what the reader should take away. Ground it in market insight, not just numbers.]
 
-If there are no profitable exits this week, write a single sentence acknowledging that the week produced no closed winners, and note whether open positions are holding well or showing stress.
+> **[TICKER] - [Company Name]** | [Sector]
+> [Long exit (trade closed profitably) / Short cover (trade closed profitably)]
+> **Profit: +$[X.XX] (+[X.XX]%)**
 
-## Sector Analysis
-This is the most important section. You have the full sector breakdown above showing new entries this week (NEW BL+1 and NEW SS+1), existing trends (BL/SS from prior weeks), and exits (BE = longs selling off, SE = shorts being covered) per sector across all 679 tracked stocks. Use this to tell a story about capital rotation and economic health.
+[If no profitable exits this week, write one sentence acknowledging it and note whether open positions are holding or showing stress. Skip the blockquote. Use a placeholder ticker in the heading such as "## PNTHR Trade of the Week - WATCH" in that case.]
 
-Ask and answer the hard questions: If Materials is seeing heavy new SS+1 signals while Energy is seeing new BL+1 signals, is capital rotating between them? What does that say about global demand versus supply dynamics? If Consumer Staples and Consumer Discretionary are both breaking down simultaneously, what does that tell us about the American consumer across income brackets? A K-shaped economy can get hit from both ends at once: dollar stores and luxury brands suffering together is not a contradiction, it is a signal worth explaining. If Financials are generating new shorts, what does that imply for credit conditions, lending standards, or systemic risk? If Industrials are seeing longs sell off (BE signals), what has that historically preceded in the business cycle? If one sector is holding longs while everything else breaks, where is institutional money hiding and why?
+## Market Overview
 
-Look at the sectors generating the most NEW SS+1 signals this week — those are the sectors actively breaking down right now, not just drifting. Look at any sector generating NEW BL+1 signals against a bearish tape — that is a contrarian tell. Follow the capital. Write 3–5 paragraphs. Lead with the most extreme directional signal. Connect the dots between sectors. Make the reader see something they would not have seen on their own.
+[SPY vs QQQ EMA status, the BL+1/SS+1 ratio and what it signals. Differentiate S&P 500 from Nasdaq 100 — they can diverge. State clearly: is this an accelerating breakdown, an acceleration upward, or a neutral tape? 2-3 paragraphs.]
 
-## This Week's Prey
-Highlight 3–5 specific names from the data above. For each: ticker, price, direction (long or short), and 2–3 sentences of interpretation. Do not just describe the signal. Ask why this stock is moving this way, what it says about its sector, and what that sector's behavior suggests about the broader economy. Go deeper than the chart.
+## Sector Intelligence
 
-## The Squeeze Watch
-Look at the compressed Bollinger Band setups. Which sectors are sitting in tight coils right now, and what does that tension tell us about where the next big move may be hiding? Interpret the setup, not just the list.
+[This is the most important section. Use the sector signal breakdown AND the sector ETF 5D returns together. Lead with the sectors generating the most NEW SS+1 signals — those are actively breaking down. Call out any sector with NEW BL+1 signals against a bearish tape as a contrarian tell. Identify the rotation story: where is capital leaving and where is it hiding? Connect the dots. Make the reader see something they would not have found on their own. 3-5 paragraphs.]
 
-## The Perch — Looking Back
-Humbly and specifically review prior calls from previous issues. Which tickers followed through and which failed? Be honest. Own the misses. Cite specific names and weeks. If a pattern of misses is emerging in a particular sector, say so.
+## New BL+1 Breakdown
 
-## Closing Thought
-1–2 sentences. A forward-looking thought about what this week's market structure signals for the weeks ahead. Give the reader something to think about.
+[For each new long entry this week: ticker, sector, current price, and 2-3 sentences of interpretation. Why is THIS stock breaking out when the broader tape is [direction]? What does it say about its sector? Is it a defensive rotation, a contrarian bet, or a true outlier? Cover every BL+1 stock from the data above.]
+
+## PNTHR Sprint
+
+[Highlight the top rank risers and new entries from the sprint data above. What does their sector mix tell us about where momentum is building? 1-2 paragraphs.]
+
+## The Bottom Line
+
+[1 tight summary paragraph. Tell the investor exactly what to DO this week. Not just what happened — what action to take, what to watch, and what would change the thesis. End with a forward-looking thought about what this week's market structure signals for the weeks ahead.]
 
 ---
 
-CRITICAL TONE AND STYLE RULES:
-- Never use em-dashes (the — character). Use commas, semicolons, colons, or rewrite the sentence instead.
-- Write for an intelligent but general audience. Avoid proprietary system jargon. Say "current open long positions" not "Feast longs." Say "momentum entries" not "Alpha signals." If you must reference a system category, explain it briefly in plain English.
-- CRITICAL: BL+1 and SS+1 signals are brand-new entries firing THIS WEEK. BL+N or SS+N where N>1 are existing trends already in motion. Never confuse the two. The ratio of new SS+1 to new BL+1 this week is the acceleration signal and must lead Market Pulse. An existing open book of 36 shorts and 6 longs is a downtrend. A week with 36 new SS+1 signals is an accelerating breakdown — a much stronger statement.
-- The goal is to help the reader think, not just inform them. Every section should leave the reader with a question or a point of view about what is actually happening in the economy.
-- Tone: Analytical, confident, and opinionated, like a seasoned portfolio manager writing a weekly letter to investors. No hype. No filler. No emojis. Markdown only.
-- Max tokens are limited, so be concise within each section. Prioritize depth over length.`;
+ABSOLUTE RULES — violations break the rendering engine or mislead readers:
+1. NEVER use em-dashes (the character —). Use commas, semicolons, colons, or hyphens instead. This is not a style preference — em-dashes break the newsletter formatting.
+2. The ## PNTHR Trade of the Week heading MUST contain the ticker symbol after a hyphen (e.g. "## PNTHR Trade of the Week - DAR"). The rendering engine extracts it from there.
+3. The blockquote MUST start with > **[TICKER] - [Company Name]** as the very first line. Do not put > **TRADE OF THE WEEK** or any other text before the ticker line.
+4. Use only markdown. No HTML, no emojis, no special characters outside standard markdown.
+5. Differentiate NEW signals (BL+1/SS+1) from existing trends (BL+N/SS+N where N>1) at all times. These are fundamentally different market signals.
+6. Write for an intelligent investor audience. Analyze and conclude — do not just list data. Every section must leave the reader with a point of view and an action.`;
 
   console.log('[Newsletter] Calling Claude API...');
   const message = await client.messages.create({

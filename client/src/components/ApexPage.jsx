@@ -259,7 +259,7 @@ export default function ApexPage() {
                         <td>
                           <span
                             className={styles.tierBadge}
-                            style={{ borderColor: tier.color, color: tier.color }}
+                            style={{ background: tier.color, color: tier.textColor }}
                             title={tier.tagline}
                           >
                             {stock.tier}

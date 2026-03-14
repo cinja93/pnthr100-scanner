@@ -11,6 +11,9 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  padding: 24px 24px 16px;
+  background: #111111;
+  color: #ffffff;
   margin-bottom: 20px;
   gap: 16px;
 }
@@ -18,22 +21,20 @@
 .title {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 26px;
-  font-weight: 800;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 700;
   color: #fcf000;
-  margin: 0 0 6px 0;
-  letter-spacing: 0.05em;
+  margin: 0 0 4px 0;
 }
 
 .pantherLogo {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
+  height: 36px;
+  width: auto;
 }
 
 .subtitle {
-  color: #9ca3af;
+  color: #aaaaaa;
   font-size: 13px;
   margin: 0;
 }

@@ -321,6 +321,13 @@
   color: #212121;
 }
 
+/* ── Row selection + ticker click ──────────────────────────────────── */
+.selectedRow td { background: rgba(252, 240, 0, 0.13) !important; }
+.selectedRow:hover td { background: rgba(252, 240, 0, 0.2) !important; }
+.selectedRow { box-shadow: inset 3px 0 0 #fcf000; }
+.tickerClickable { cursor: pointer !important; }
+.tickerClickable:hover .tickerSymbol { text-decoration: underline; }
+
 /* ── Cell types ──────────────────────────────────────────────────────── */
 .tdTicker {
   padding: 14px 16px;

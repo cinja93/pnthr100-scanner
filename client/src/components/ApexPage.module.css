@@ -212,11 +212,16 @@
   z-index: 10;
 }
 .row {
-  cursor: pointer;
+  cursor: default;
   transition: background-color 0.2s;
 }
 .row:nth-child(even) { background-color: #f7f8fa; }
 .row:hover { background-color: #efefef !important; }
+.selectedRow td { background: rgba(252, 240, 0, 0.13) !important; }
+.selectedRow:hover td { background: rgba(252, 240, 0, 0.2) !important; }
+.selectedRow { box-shadow: inset 3px 0 0 #fcf000; }
+.tickerClickable { cursor: pointer !important; }
+.tickerClickable:hover span { text-decoration: underline; }
 .table td {
   padding: 14px 16px;
   color: #212121;

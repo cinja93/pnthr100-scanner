@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import styles from './StockTable.module.css';
 
 import confirmedBuyIcon from './Confirmed Buy Signal.png';
@@ -58,6 +58,29 @@ function matchesPinSignal(sigData, pinSignal) {
 
 export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank' }) {
   const [sortConfig, setSortConfig] = useState({ key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
+  const [selectedTicker, setSelectedTicker] = useState(null);
+  const listRef = useRef([]);
+
+  // Arrow-key navigation through visible rows
+  useEffect(() => {
+    function onKey(e) {
+      if (!selectedTicker) return;
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const list = listRef.current;
+      const idx = list.findIndex(s => s.ticker === selectedTicker);
+      if (idx === -1) return;
+      const next = e.key === 'ArrowDown'
+        ? Math.min(idx + 1, list.length - 1)
+        : Math.max(idx - 1, 0);
+      setSelectedTicker(list[next].ticker);
+      document.getElementById(`strow-${list[next].ticker}`)
+        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [selectedTicker]);
+
   const hasScannerRanks = scannerRanks !== null;
 
   // Sort stocks based on current sort configuration
@@ -208,6 +231,29 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
     return { text: '— —', className: styles.rankNew };
   };
 
+  // Build display order (may differ from sortedStocks when groupBySector/groupByCategory)
+  let displayStocks = sortedStocks;
+  if (groupBySector) {
+    const _grp = {};
+    for (const s of sortedStocks) { const sec = s.sector || 'Other'; if (!_grp[sec]) _grp[sec] = []; _grp[sec].push(s); }
+    displayStocks = Object.keys(_grp).sort().flatMap(sec => _grp[sec]);
+  } else if (groupByCategory) {
+    const _seen = new Set(); const _ord = [];
+    for (const s of sortedStocks) { const c = s.category || 'Other'; if (!_seen.has(c)) { _seen.add(c); _ord.push(c); } }
+    const _grp = {};
+    for (const s of sortedStocks) { const c = s.category || 'Other'; if (!_grp[c]) _grp[c] = []; _grp[c].push(s); }
+    displayStocks = _ord.flatMap(c => _grp[c]);
+  }
+  listRef.current = displayStocks;
+
+  const colCount =
+    10 +
+    (!onRemove ? 1 : 0) +
+    (!onRemove ? 1 : 0) +
+    (!hideSector ? 1 : 0) +
+    (onRemove ? 1 : 0) +
+    (hideEarnings ? -1 : 0);
+
   return (
     <div className={styles.tableContainer} style={compact ? { minHeight: 0 } : undefined}>
       <table className={styles.table}>
@@ -257,41 +303,6 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
         </thead>
         <tbody>
           {(() => {
-            // When groupBySector/groupByCategory, group stocks and insert header rows
-            let displayStocks = sortedStocks;
-            if (groupBySector) {
-              const groups = {};
-              for (const stock of sortedStocks) {
-                const s = stock.sector || 'Other';
-                if (!groups[s]) groups[s] = [];
-                groups[s].push(stock);
-              }
-              displayStocks = Object.keys(groups).sort().flatMap(s => groups[s]);
-            } else if (groupByCategory) {
-              // Preserve category order from sorted stocks (already sorted by rank/ytd within each category)
-              const seen = new Set();
-              const categoryOrder = [];
-              for (const stock of sortedStocks) {
-                const cat = stock.category || 'Other';
-                if (!seen.has(cat)) { seen.add(cat); categoryOrder.push(cat); }
-              }
-              const groups = {};
-              for (const stock of sortedStocks) {
-                const cat = stock.category || 'Other';
-                if (!groups[cat]) groups[cat] = [];
-                groups[cat].push(stock);
-              }
-              displayStocks = categoryOrder.flatMap(cat => groups[cat]);
-            }
-
-            const colCount =
-              10 + // always-present columns (ticker, exchange, price, ytd, stop, risk$, risk%, signal, wks, earnings)
-              (!onRemove ? 1 : 0) +              // rank
-              (!onRemove ? 1 : 0) +              // rankChange (always shown)
-              (!hideSector ? 1 : 0) +            // sector
-              (onRemove ? 1 : 0) +               // remove btn
-              (hideEarnings ? -1 : 0);           // earnings hidden
-
             let lastSector = null;
             let lastCategory = null;
             return displayStocks.map((stock, sortedIdx) => {
@@ -332,10 +343,11 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
 
             rows.push(
               <tr
+                id={`strow-${stock.ticker}`}
                 key={stock.ticker}
-                className={`${styles.clickableRow}${(earningsInfo.highlight || highlightAllEarnings) ? ` ${styles.earningsHighlight}` : ''}`}
-                onClick={() => onTickerClick?.(stock, sortedIdx, displayStocks)}
-                title={stock.companyName ? `${stock.companyName} — Click to view chart` : 'Click to view chart'}
+                className={`${styles.clickableRow}${selectedTicker === stock.ticker ? ` ${styles.selectedRow}` : ''}${(earningsInfo.highlight || highlightAllEarnings) ? ` ${styles.earningsHighlight}` : ''}`}
+                onClick={() => setSelectedTicker(stock.ticker)}
+                title={stock.companyName || ''}
               >
                 {!onRemove && <td className={styles.rankColumn}>
                   {hasScannerRanks ? (() => {
@@ -356,7 +368,11 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                   }
                   return <td className={rankDisplay.className} title={stock.previousRank ? `Previous rank: #${stock.previousRank}` : 'New entry'}>{rankDisplay.text}</td>;
                 })()}
-                <td className={styles.ticker}>
+                <td
+                  className={`${styles.ticker} ${styles.tickerClickable}`}
+                  onClick={e => { e.stopPropagation(); onTickerClick?.(stock, sortedIdx, displayStocks); }}
+                  title="Click to view chart"
+                >
                   <div className={styles.tickerRow}>
                     {(() => {
                       // L/S badge: prefer scannerRanks prop, fall back to stock.rankList

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import ChartModal from './ChartModal';
 import { fetchApexStocks } from '../services/api';
 import styles from './ApexPage.module.css';
@@ -124,6 +124,28 @@ export default function ApexPage() {
   const [chartIndex, setChartIndex] = useState(null);
   const [chartStocks, setChartStocks] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: 'apexScore', dir: 'desc' });
+  const [selectedTicker, setSelectedTicker] = useState(null);
+  const sortedRef = useRef([]);
+
+  // Arrow-key navigation through Kill page rows
+  useEffect(() => {
+    function onKey(e) {
+      if (!selectedTicker) return;
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const list = sortedRef.current;
+      const idx = list.findIndex(s => s.ticker === selectedTicker);
+      if (idx === -1) return;
+      const next = e.key === 'ArrowDown'
+        ? Math.min(idx + 1, list.length - 1)
+        : Math.max(idx - 1, 0);
+      setSelectedTicker(list[next].ticker);
+      document.getElementById(`aprow-${list[next].ticker}`)
+        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [selectedTicker]);
 
   useEffect(() => { load(false); }, []);
 
@@ -305,14 +327,16 @@ export default function ApexPage() {
                   </tr>
                 </thead>
                 <tbody>
+                  {(() => { sortedRef.current = sorted; return null; })()}
                   {sorted.map((stock, idx) => {
                     const tier = getTierConfig(stock.tier);
                     const wks = computeWeeksAgo(stock.signalDate);
                     return (
                       <tr
+                        id={`aprow-${stock.ticker}`}
                         key={stock.ticker}
-                        className={styles.row}
-                        onClick={() => handleRowClick(stock, idx, sorted)}
+                        className={`${styles.row}${selectedTicker === stock.ticker ? ` ${styles.selectedRow}` : ''}`}
+                        onClick={() => setSelectedTicker(stock.ticker)}
                         title={stock.companyName || stock.ticker}
                       >
                         {/* Kill Rank */}
@@ -355,8 +379,12 @@ export default function ApexPage() {
                           ) : <span className={styles.badgeJungle}>JUNGLE</span>}
                         </td>
 
-                        {/* Ticker + tags */}
-                        <td className={styles.tickerCell}>
+                        {/* Ticker + tags — click opens chart */}
+                        <td
+                          className={`${styles.tickerCell} ${styles.tickerClickable}`}
+                          onClick={e => { e.stopPropagation(); handleRowClick(stock, idx, sorted); }}
+                          title="Click to view chart"
+                        >
                           <div className={styles.tickerRow}>
                             {stock.rankList && (
                               <span className={stock.rankList === 'LONG' ? styles.badgeLong : styles.badgeShort}>

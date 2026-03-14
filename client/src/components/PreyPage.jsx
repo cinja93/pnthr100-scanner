@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { fetchPreyStocks, fetchEarnings, fetchEmaCrossoverStocks, fetchScannerRanks, fetchTopStocks, fetchShortStocks, fetchSignals } from '../services/api';
 import ChartModal from './ChartModal';
 import styles from './PreyPage.module.css';
@@ -27,14 +27,18 @@ function computeWeeksAgo(signalDate) {
   return Math.floor(diffDays / 7) + 1;
 }
 
-function TickerCell({ ticker, companyName, stock = {} }) {
+function TickerCell({ ticker, companyName, stock = {}, onChartClick }) {
   const tags = [];
   if (stock.isSp500)   tags.push('500');
   if (stock.isDow30)   tags.push('30');
   if (stock.isNasdaq100) tags.push('100');
   if (stock.universe === 'sp400Long' || stock.universe === 'sp400Short') tags.push('400');
   return (
-    <td className={styles.tdTicker}>
+    <td
+      className={`${styles.tdTicker} ${styles.tickerClickable}`}
+      onClick={e => { e.stopPropagation(); onChartClick?.(); }}
+      title="Click to view chart"
+    >
       <div className={styles.tickerSymbol}>
         {stock.rankList && (
           <span className={stock.rankList === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort} style={{ marginRight: 4 }}>
@@ -85,12 +89,12 @@ function RankCells({ s }) {
   );
 }
 
-function AlphaRow({ s, onClick }) {
+function AlphaRow({ s, onClick, onSelect, rowId, addCls }) {
   const isLong = s.direction === 'long';
   return (
-    <tr onClick={onClick}>
+    <tr id={rowId} onClick={() => onSelect?.()} className={addCls || undefined}>
       <RankCells s={s} />
-      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
+      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} onChartClick={onClick} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge ?? (isLong ? 'BL' : 'SS')} /></td>
       <td className={styles.td}><WksBadge direction={s.direction} n={s.barNumber} /></td>
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>
@@ -119,15 +123,15 @@ function SpringStatusBadge({ status }) {
   return <span className={`${styles.badge} ${cls}`}>{status}</span>;
 }
 
-function SpringRow({ s, onClick }) {
+function SpringRow({ s, onClick, onSelect, rowId, addCls }) {
   const isLong = s.direction === 'long';
   const rowCls = s.status === 'LAUNCHED' ? (isLong ? styles.rowLaunched : styles.rowLaunchedShort)
                : s.status === 'GAINING'  ? styles.rowGaining
                : styles.rowCoiled;
   return (
-    <tr onClick={onClick} className={rowCls}>
+    <tr id={rowId} onClick={() => onSelect?.()} className={[rowCls, addCls].filter(Boolean).join(' ')}>
       <RankCells s={s} />
-      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
+      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} onChartClick={onClick} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge} /></td>
       <td className={styles.td}><SpringStatusBadge status={s.status} /></td>
       <td className={styles.tdNum}>{price(s.high26)}</td>
@@ -148,7 +152,7 @@ function SpringRow({ s, onClick }) {
   );
 }
 
-function SneakRow({ s, onClick }) {
+function SneakRow({ s, onClick, onSelect, rowId, addCls }) {
   const isLong = s.direction === 'long';
   const isAttack = s.strategy === 'Attack';
   const rowCls = isAttack
@@ -158,9 +162,9 @@ function SneakRow({ s, onClick }) {
     ? (isLong ? styles.badgeBL : styles.badgeSS)
     : styles.badgeCoiled;
   return (
-    <tr onClick={onClick} className={rowCls}>
+    <tr id={rowId} onClick={() => onSelect?.()} className={[rowCls, addCls].filter(Boolean).join(' ')}>
       <RankCells s={s} />
-      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
+      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} onChartClick={onClick} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge} /></td>
       <td className={styles.td}>
         <span className={`${styles.badge} ${stateBadgeCls}`}>
@@ -195,7 +199,7 @@ function getEarningsInfo(dateStr) {
   return { display, highlight: daysAway >= 0 && daysAway <= 14, daysAway };
 }
 
-function DinnerRow({ s, onClick, earnings = {} }) {
+function DinnerRow({ s, onClick, onSelect, rowId, addCls, earnings = {} }) {
   const isLong = s.direction === 'long';
   const stopPrice = s.stopPrice ?? null;
   const riskDollar = stopPrice != null ? Math.abs(s.currentPrice - stopPrice) : null;
@@ -204,11 +208,12 @@ function DinnerRow({ s, onClick, earnings = {} }) {
 
   return (
     <tr
-      onClick={onClick}
-      className={earningsInfo.highlight ? styles.earningsHighlight : undefined}
+      id={rowId}
+      onClick={() => onSelect?.()}
+      className={[earningsInfo.highlight ? styles.earningsHighlight : null, addCls].filter(Boolean).join(' ') || undefined}
     >
       <RankCells s={s} />
-      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} />
+      <TickerCell ticker={s.ticker} companyName={s.companyName} stock={s} onChartClick={onClick} />
       <td className={styles.td}><SignalBadge badge={s.signalBadge ?? s.strategy} /></td>
       <td className={styles.tdGray}>{s.sector || '—'}</td>
       <td className={styles.tdNum}>{price(s.currentPrice)}</td>
@@ -234,6 +239,27 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowEx
   const [side, setSide] = useState('all');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
+  const [selectedTicker, setSelectedTicker] = useState(null);
+  const listRef = useRef([]);
+
+  useEffect(() => {
+    function onKey(e) {
+      if (!selectedTicker) return;
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const list = listRef.current;
+      const idx = list.findIndex(s => s.ticker === selectedTicker);
+      if (idx === -1) return;
+      const next = e.key === 'ArrowDown'
+        ? Math.min(idx + 1, list.length - 1)
+        : Math.max(idx - 1, 0);
+      setSelectedTicker(list[next].ticker);
+      document.getElementById(`rrow-${list[next].ticker}`)
+        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [selectedTicker]);
 
   const rawRows = side === 'all' ? [...(longs ?? []), ...(shorts ?? [])] : side === 'long' ? longs : shorts;
 
@@ -310,11 +336,15 @@ function ResultTable({ longs, shorts, RowComponent, headers, onStockClick, rowEx
               </tr>
             </thead>
             <tbody>
+              {(() => { listRef.current = rows; return null; })()}
               {rows.map((s, i) => (
                 <RowComponent
                   key={s.ticker + i}
+                  rowId={`rrow-${s.ticker}`}
                   s={s}
                   onClick={() => onStockClick?.(s, rows, i)}
+                  onSelect={() => setSelectedTicker(s.ticker)}
+                  addCls={selectedTicker === s.ticker ? styles.selectedRow : undefined}
                   {...rowExtraProps}
                 />
               ))}
@@ -332,6 +362,27 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
   const [side, setSide] = useState('all');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
+  const [selectedTicker, setSelectedTicker] = useState(null);
+  const listRef = useRef([]);
+
+  useEffect(() => {
+    function onKey(e) {
+      if (!selectedTicker) return;
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const list = listRef.current;
+      const idx = list.findIndex(s => s.ticker === selectedTicker);
+      if (idx === -1) return;
+      const next = e.key === 'ArrowDown'
+        ? Math.min(idx + 1, list.length - 1)
+        : Math.max(idx - 1, 0);
+      setSelectedTicker(list[next].ticker);
+      document.getElementById(`prow-${list[next].ticker}`)
+        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [selectedTicker]);
 
   const allLongs  = longs  ?? [];
   const allShorts = shorts ?? [];
@@ -419,6 +470,7 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
               </tr>
             </thead>
             <tbody>
+              {(() => { listRef.current = sortedRows; return null; })()}
               {sortedRows.map((stock, i) => {
                 const sigData = signals[stock.ticker];
                 const sig = sigData?.signal;
@@ -454,12 +506,21 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
                                : rcChange < 0     ? `▼ ${rcChange}`
                                : '— —';
                 return (
-                  <tr key={stock.ticker + i} onClick={() => onRowClick?.(stock, sortedRows, i)}>
+                  <tr
+                    id={`prow-${stock.ticker}`}
+                    key={stock.ticker + i}
+                    className={selectedTicker === stock.ticker ? styles.selectedRow : undefined}
+                    onClick={() => setSelectedTicker(stock.ticker)}
+                  >
                     <td className={styles.tdRank}>
                       {inPnthr100 ? stock.rank : <span className={styles.badgeJungle}>JUNGLE</span>}
                     </td>
                     <td className={rcClass}>{rcText}</td>
-                    <td className={styles.tdTicker}>
+                    <td
+                      className={`${styles.tdTicker} ${styles.tickerClickable}`}
+                      onClick={e => { e.stopPropagation(); onRowClick?.(stock, sortedRows, i); }}
+                      title="Click to view chart"
+                    >
                       <div className={styles.tickerSymbol}>
                         {stock.rankList && (
                           <span className={stock.rankList === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort} style={{ marginRight: 4 }}>

@@ -88,7 +88,26 @@
 }
 
 .clickableRow {
-  cursor: pointer;
+  cursor: default;
+}
+
+/* Row selection highlight (click row to select, arrow-key to navigate) */
+.selectedRow td {
+  background: rgba(252, 240, 0, 0.13) !important;
+}
+.selectedRow:hover td {
+  background: rgba(252, 240, 0, 0.2) !important;
+}
+.selectedRow {
+  box-shadow: inset 3px 0 0 #fcf000;
+}
+
+/* Ticker cell opens chart — pointer + underline hint */
+.tickerClickable {
+  cursor: pointer !important;
+}
+.tickerClickable:hover span {
+  text-decoration: underline;
 }
 
 .table tbody tr:hover {

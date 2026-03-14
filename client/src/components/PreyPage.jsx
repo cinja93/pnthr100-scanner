@@ -347,11 +347,21 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
       let av, bv;
       const SIG_ORDER = { BL: 1, SS: 2, BE: 3, SE: 3 };
       if (sortKey === 'PNTHR Signal') {
-        av = SIG_ORDER[sigA?.signal] ?? 99;
-        bv = SIG_ORDER[sigB?.signal] ?? 99;
+        // sort by type THEN weeks: BL+1 < BL+2 < ... < SS+1 < SS+2 ...
+        const aType = SIG_ORDER[sigA?.signal] ?? 99;
+        const bType = SIG_ORDER[sigB?.signal] ?? 99;
+        const aWks  = computeWeeksAgo(sigA?.signalDate) ?? 9999;
+        const bWks  = computeWeeksAgo(sigB?.signalDate) ?? 9999;
+        av = aType * 10000 + aWks;
+        bv = bType * 10000 + bWks;
       } else if (sortKey === 'Wks Since') {
-        av = computeWeeksAgo(sigA?.signalDate) ?? 999;
-        bv = computeWeeksAgo(sigB?.signalDate) ?? 999;
+        // sort by weeks THEN type: BL+1, SS+1, BL+2, SS+2 ...
+        const aType = SIG_ORDER[sigA?.signal] ?? 99;
+        const bType = SIG_ORDER[sigB?.signal] ?? 99;
+        const aWks  = computeWeeksAgo(sigA?.signalDate) ?? 9999;
+        const bWks  = computeWeeksAgo(sigB?.signalDate) ?? 9999;
+        av = aWks * 10000 + aType;
+        bv = bWks * 10000 + bType;
       } else if (sortKey === 'PNTHR Stop') {
         av = sigA?.stopPrice ?? 0; bv = sigB?.stopPrice ?? 0;
       } else if (sortKey === 'Risk $') {

@@ -81,21 +81,28 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
       return (aRank - bRank) * dir;
     }
 
-    // Special handling for signal column (data lives in signals map, not stock object)
+    // Special handling for signal column: sort by type THEN weeks
+    // e.g. BL+1 < BL+2 < BL+3 ... < SS+1 < SS+2 < SS+3 ...
     if (sortConfig.key === 'signal') {
-      const aOrder = SIGNAL_ORDER[signals[a.ticker]?.signal] ?? 99;
-      const bOrder = SIGNAL_ORDER[signals[b.ticker]?.signal] ?? 99;
-      return (aOrder - bOrder) * dir;
+      const aSig  = signals[a.ticker];
+      const bSig  = signals[b.ticker];
+      const aType = SIGNAL_ORDER[aSig?.signal] ?? 99;
+      const bType = SIGNAL_ORDER[bSig?.signal] ?? 99;
+      const aWks  = computeWeeksAgo(aSig?.signalDate) ?? 9999;
+      const bWks  = computeWeeksAgo(bSig?.signalDate) ?? 9999;
+      return (aType * 10000 + aWks - (bType * 10000 + bWks)) * dir;
     }
 
-    // Special handling for weeks since signal
+    // Special handling for weeks since signal: sort by weeks THEN type
+    // e.g. BL+1, SS+1, BL+2, SS+2 ...
     if (sortConfig.key === 'weeksAgo') {
-      const aVal = computeWeeksAgo(signals[a.ticker]?.signalDate);
-      const bVal = computeWeeksAgo(signals[b.ticker]?.signalDate);
-      if (aVal === null && bVal === null) return 0;
-      if (aVal === null) return dir;
-      if (bVal === null) return -dir;
-      return (aVal - bVal) * dir;
+      const aSig  = signals[a.ticker];
+      const bSig  = signals[b.ticker];
+      const aWks  = computeWeeksAgo(aSig?.signalDate) ?? 9999;
+      const bWks  = computeWeeksAgo(bSig?.signalDate) ?? 9999;
+      const aType = SIGNAL_ORDER[aSig?.signal] ?? 99;
+      const bType = SIGNAL_ORDER[bSig?.signal] ?? 99;
+      return (aWks * 10000 + aType - (bWks * 10000 + bType)) * dir;
     }
 
     // Special handling for stop price / risk columns — 3-state sort:

@@ -89,8 +89,24 @@ function sortStocks(stocks, { key, dir }) {
       case 'sector':      av = a.sector ?? ''; bv = b.sector ?? ''; break;
       case 'price':       av = a.currentPrice ?? -1; bv = b.currentPrice ?? -1; break;
       case 'ytd':         av = a.ytdReturn ?? -999; bv = b.ytdReturn ?? -999; break;
-      case 'signal':      av = a.signal ?? ''; bv = b.signal ?? ''; break;
-      case 'wks':         av = computeWeeksAgo(a.signalDate) ?? 9999; bv = computeWeeksAgo(b.signalDate) ?? 9999; break;
+      case 'signal': {
+        // sort by type THEN weeks: BL+1 < BL+2 < ... < SS+1 < SS+2 ...
+        const APEX_SIG_ORDER = { BL: 1, SS: 2 };
+        const aType = APEX_SIG_ORDER[a.signal] ?? 99;
+        const bType = APEX_SIG_ORDER[b.signal] ?? 99;
+        const aW    = computeWeeksAgo(a.signalDate) ?? 9999;
+        const bW    = computeWeeksAgo(b.signalDate) ?? 9999;
+        av = aType * 10000 + aW; bv = bType * 10000 + bW; break;
+      }
+      case 'wks': {
+        // sort by weeks THEN type: BL+1, SS+1, BL+2, SS+2 ...
+        const APEX_SIG_ORDER2 = { BL: 1, SS: 2 };
+        const aW2   = computeWeeksAgo(a.signalDate) ?? 9999;
+        const bW2   = computeWeeksAgo(b.signalDate) ?? 9999;
+        const aType2 = APEX_SIG_ORDER2[a.signal] ?? 99;
+        const bType2 = APEX_SIG_ORDER2[b.signal] ?? 99;
+        av = aW2 * 10000 + aType2; bv = bW2 * 10000 + bType2; break;
+      }
       default:            av = 0; bv = 0;
     }
     if (typeof av === 'string') return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);

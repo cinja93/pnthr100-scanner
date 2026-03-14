@@ -223,6 +223,15 @@
   border-bottom: 1px solid #f0f0f0;
 }
 
+/* ── Kill Rank ───────────────────────────────────────────────────────────────── */
+.killRankCell {
+  font-weight: 700;
+  font-size: 15px;
+  color: #b4b4b4;
+  text-align: center;
+  width: 50px;
+}
+
 /* ── Score Badge ─────────────────────────────────────────────────────────────── */
 .scoreCell { text-align: center; }
 .scoreBadge {

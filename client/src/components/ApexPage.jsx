@@ -221,7 +221,8 @@ export default function ApexPage() {
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>APEX Score</th>
+                    <th>Kill Rank</th>
+                    <th>Kill Score</th>
                     <th>Tier</th>
                     <th>Ticker</th>
                     <th>Exchange</th>
@@ -245,7 +246,10 @@ export default function ApexPage() {
                         onClick={() => handleRowClick(stock, idx, filtered)}
                         title={stock.companyName || stock.ticker}
                       >
-                        {/* APEX Score */}
+                        {/* Kill Rank */}
+                        <td className={styles.killRankCell}>{idx + 1}</td>
+
+                        {/* Kill Score */}
                         <td className={styles.scoreCell}>
                           <span
                             className={styles.scoreBadge}

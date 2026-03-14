@@ -55,7 +55,7 @@ function ScoreBar({ score, max, color }) {
 function ScoreBreakdown({ scores }) {
   const dims = [
     { label: 'Signal Freshness', key: 'freshness',    max: 25 },
-    { label: 'Trend Quality',    key: 'trendQuality', max: 20 },
+    { label: 'Trend Quality',    key: 'trendQuality', max: 25 },
     { label: 'Momentum',         key: 'momentum',     max: 15 },
     { label: 'Rank + Rise',      key: 'rankRise',     max: 20 },
     { label: 'Trend Duration',   key: 'duration',     max: 10 },
@@ -417,7 +417,7 @@ export default function ApexPage() {
           className={styles.breakdownPopupFixed}
           style={{ left: Math.max(8, popup.x - 240), top: popup.y }}
         >
-          <div className={styles.breakdownTitle}>{popup.ticker} — {popup.apexScore}/100</div>
+          <div className={styles.breakdownTitle}>{popup.ticker} — {popup.apexScore}/105</div>
           <ScoreBreakdown scores={popup.scores} />
         </div>
       )}

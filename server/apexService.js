@@ -240,20 +240,30 @@ function scoreTrendQuality(data, signalData) {
   const lastEma = ema21[li], prevEma = ema21[li - 1];
   if (lastEma == null || prevEma == null) return 0;
   const cur = weekly[li];
+  const prev = weekly[li - 1];
   const emaRising = lastEma > prevEma;
   // EMA slope must align with signal direction
   if (signal === 'BL' && !emaRising) return 2;
   if (signal === 'SS' &&  emaRising) return 2;
-  // Delta = how far price is from EMA
+  // Delta = how far price is from EMA (0-20 pts)
   const delta = signal === 'BL'
     ? (cur.close - lastEma) / lastEma
     : (lastEma - cur.close) / lastEma;
-  if (delta < 0)    return 4;  // wrong side
-  if (delta < 0.01) return 10; // just crossed
-  if (delta <= 0.05) return 20; // sweet spot 1-5%
-  if (delta <= 0.07) return 15; // 5-7%
-  if (delta <= 0.10) return 10; // 7-10%
-  return 5;                     // >10% overextended
+  let score;
+  if (delta < 0)         score = 4;  // wrong side
+  else if (delta < 0.01) score = 10; // just crossed
+  else if (delta <= 0.05) score = 20; // sweet spot 1-5%
+  else if (delta <= 0.07) score = 15; // 5-7%
+  else if (delta <= 0.10) score = 10; // 7-10%
+  else                   score = 5;  // >10% overextended
+  // +5 if current bar closes in signal direction:
+  // SS: this week closed lower than open AND lower than last week's close (bearish confirmation)
+  // BL: this week closed higher than open AND higher than last week's close (bullish confirmation)
+  if (prev) {
+    if (signal === 'SS' && cur.close < cur.open && cur.close < prev.close) score += 5;
+    if (signal === 'BL' && cur.close > cur.open && cur.close > prev.close) score += 5;
+  }
+  return score;
 }
 
 // D3: Momentum (0-15 pts) — RSI + OBV + Volume pulse

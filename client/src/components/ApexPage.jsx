@@ -174,7 +174,7 @@ export default function ApexPage() {
         <div>
           <h1 className={styles.title}>
             <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            PNTHR APEX
+            PNTHR KILL
           </h1>
           <p className={styles.subtitle}>
             679 stocks. 100-point predatory scoring. Who has the PNTHR's attention right now?

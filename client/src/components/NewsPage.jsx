@@ -181,21 +181,29 @@ export default function NewsPage({ currentUser }) {
       );
     }
 
-    // Strip panther emoji from rendered HTML — replaced by actual logo image below
+    // Strip panther emoji and replace em-dashes with regular dashes throughout
     html = html.replace(/🐆\s*/g, '');
+    html = html.replace(/—/g, ' - ');
 
-    // Inject TOTW card header (logo + label + chart button) after the TOTW heading
+    // Inject TOTW hero card — replaces the h2 heading entirely
     if (totwTicker) {
-      const cardHeader = `<div class="pnthr-totw-card-header">` +
-        `<img src="${pnthrLogo}" class="pnthr-totw-logo-img" alt="PNTHR" />` +
-        `<span class="pnthr-totw-card-label">PNTHR TRADE OF THE WEEK</span>` +
-        `<button class="pnthr-totw-btn" data-totw-chart="${totwTicker}">📈 View ${totwTicker} Chart</button>` +
+      const card =
+        `<div class="pnthr-totw-hero">` +
+          `<div class="pnthr-totw-hero-left">` +
+            `<img src="${pnthrLogo}" class="pnthr-totw-logo-img" alt="PNTHR" />` +
+            `<div>` +
+              `<div class="pnthr-totw-hero-label">PNTHR TRADE OF THE WEEK</div>` +
+              `<div class="pnthr-totw-hero-ticker">${totwTicker}</div>` +
+            `</div>` +
+          `</div>` +
+          `<button class="pnthr-totw-btn" data-totw-chart="${totwTicker}">▶ VIEW CHART</button>` +
         `</div>`;
+      // Replace the TOTW h2 with the hero card + hidden h2
       const replaced = html.replace(
-        /(<h2[^>]*>[^<]*Trade of the Week[^<]*<\/h2>)/i,
-        `$1${cardHeader}`
+        /(<h2[^>]*>)([^<]*Trade of the Week[^<]*)(<\/h2>)/i,
+        `${card}<h2 class="pnthr-totw-heading">$2$3`
       );
-      html = replaced !== html ? replaced : html + cardHeader;
+      html = replaced !== html ? replaced : html + card;
     }
     return html;
   }, [rawHtml, knownTickers, issue?.narrative]);

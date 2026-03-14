@@ -476,80 +476,104 @@
   font-style: italic;
 }
 
-/* Trade of the Week ticker callout — > **DAR — Company** */
-.articleBody blockquote:has(strong:first-child) {
-  background: #0d1f14;
-  border: 1px solid rgba(80, 208, 128, 0.35);
-  border-left: 5px solid #50d080;
+/* ── Trade of the Week Hero Card ────────────────────────── */
+
+/* Hide the redundant h2 — hero card replaces it */
+.articleBody :global(.pnthr-totw-heading) {
+  display: none;
+}
+
+/* Hero card — top half of the two-part TOTW block */
+.articleBody :global(.pnthr-totw-hero) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #111111;
+  border: 1px solid rgba(252, 240, 0, 0.35);
+  border-top: 5px solid #fcf000;
+  border-radius: 10px 10px 0 0;
+  border-bottom: none;
+  padding: 18px 24px;
+  margin: 20px 0 0;
+}
+
+.articleBody :global(.pnthr-totw-hero-left) {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.articleBody :global(.pnthr-totw-logo-img) {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(252, 240, 0, 0.7));
+  flex-shrink: 0;
+}
+
+.articleBody :global(.pnthr-totw-hero-label) {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #fcf000;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.articleBody :global(.pnthr-totw-hero-ticker) {
+  font-size: 34px;
+  font-weight: 900;
+  color: #fcf000;
+  letter-spacing: 0.1em;
+  line-height: 1;
+}
+
+/* VIEW CHART button — yellow/black, impossible to miss */
+.articleBody :global(.pnthr-totw-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fcf000;
+  color: #111111;
+  border: none;
   border-radius: 8px;
-  padding: 14px 20px;
-  color: #d0d0d0;
+  padding: 14px 28px;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: background 0.12s, transform 0.12s, box-shadow 0.12s;
+  box-shadow: 0 4px 20px rgba(252, 240, 0, 0.35);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.articleBody :global(.pnthr-totw-btn):hover {
+  background: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(252, 240, 0, 0.5);
+}
+
+/* TOTW ticker callout — bottom half of two-part card */
+.articleBody blockquote:has(strong:first-child) {
+  background: #1a1a1a;
+  border: 1px solid rgba(252, 240, 0, 0.2);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  padding: 14px 24px;
+  color: #ffffff;
   font-style: normal;
-  margin: 4px 0 16px;
+  margin: 0 0 20px;
 }
 .articleBody blockquote:has(strong:first-child) p {
   margin: 0;
 }
 .articleBody blockquote:has(strong:first-child) strong {
-  color: #50d080;
-  font-size: 17px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-
-/* TOTW card header — logo + label + chart button */
-.articleBody :global(.pnthr-totw-card-header) {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #181800;
-  border: 1px solid rgba(252, 240, 0, 0.25);
-  border-top: 3px solid #fcf000;
-  border-radius: 8px;
-  padding: 12px 18px;
-  margin: 0 0 14px;
-}
-
-.articleBody :global(.pnthr-totw-logo-img) {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 8px rgba(252, 240, 0, 0.5));
-  flex-shrink: 0;
-}
-
-.articleBody :global(.pnthr-totw-card-label) {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  color: #fcf000;
-  text-transform: uppercase;
-  flex: 1;
-}
-
-/* View Chart button inside TOTW card */
-.articleBody :global(.pnthr-totw-btn) {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: #50d080;
-  color: #111111;
-  border: none;
-  border-radius: 6px;
-  padding: 7px 16px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  transition: background 0.12s, transform 0.1s, box-shadow 0.12s;
-  text-transform: uppercase;
-  box-shadow: 0 2px 10px rgba(80, 208, 128, 0.3);
-  flex-shrink: 0;
-}
-.articleBody :global(.pnthr-totw-btn):hover {
-  background: #6ee09a;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(80, 208, 128, 0.45);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 /* Clickable ticker links injected into rendered markdown */

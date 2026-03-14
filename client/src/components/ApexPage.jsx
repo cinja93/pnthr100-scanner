@@ -22,6 +22,10 @@ const TIERS = [
 function getTierConfig(tierName) {
   return TIERS.find(t => t.name === tierName) || TIERS[9];
 }
+function getTierIndex(tierName) {
+  const idx = TIERS.findIndex(t => t.name === tierName);
+  return idx === -1 ? 9 : idx;
+}
 
 // Weeks-ago helper
 function computeWeeksAgo(signalDate) {
@@ -70,15 +74,40 @@ function ScoreBreakdown({ scores }) {
   );
 }
 
+// ── Sort helper ───────────────────────────────────────────────────────────────
+function sortStocks(stocks, { key, dir }) {
+  return [...stocks].sort((a, b) => {
+    let av, bv;
+    switch (key) {
+      case 'apexScore':   av = a.apexScore   ?? -1;  bv = b.apexScore   ?? -1;  break;
+      case 'tier':        av = getTierIndex(a.tier);  bv = getTierIndex(b.tier); break;
+      case 'rank':
+        // ranked stocks first (lower rank # = better), then JUNGLE
+        av = a.rank ?? 9999; bv = b.rank ?? 9999; break;
+      case 'ticker':      av = a.ticker ?? ''; bv = b.ticker ?? ''; break;
+      case 'exchange':    av = a.exchange ?? ''; bv = b.exchange ?? ''; break;
+      case 'sector':      av = a.sector ?? ''; bv = b.sector ?? ''; break;
+      case 'price':       av = a.currentPrice ?? -1; bv = b.currentPrice ?? -1; break;
+      case 'ytd':         av = a.ytdReturn ?? -999; bv = b.ytdReturn ?? -999; break;
+      case 'signal':      av = a.signal ?? ''; bv = b.signal ?? ''; break;
+      case 'wks':         av = computeWeeksAgo(a.signalDate) ?? 9999; bv = computeWeeksAgo(b.signalDate) ?? 9999; break;
+      default:            av = 0; bv = 0;
+    }
+    if (typeof av === 'string') return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return dir === 'asc' ? av - bv : bv - av;
+  });
+}
+
 export default function ApexPage() {
   const [data, setData]             = useState(null);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
-  const [side, setSide]             = useState('all'); // 'all' | 'long' | 'short'
-  const [tierFilter, setTierFilter] = useState('all'); // 'all' or tier name
-  const [popup, setPopup]           = useState(null); // { ticker, x, y, scores }
+  const [side, setSide]             = useState('all');
+  const [tierFilter, setTierFilter] = useState('all');
+  const [popup, setPopup]           = useState(null);
   const [chartIndex, setChartIndex] = useState(null);
   const [chartStocks, setChartStocks] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ key: 'apexScore', dir: 'desc' });
 
   useEffect(() => { load(false); }, []);
 
@@ -96,6 +125,28 @@ export default function ApexPage() {
     }
   }
 
+  function handleSort(key) {
+    setSortConfig(prev =>
+      prev.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: key === 'ticker' || key === 'exchange' || key === 'sector' || key === 'signal' ? 'asc' : 'desc' }
+    );
+  }
+
+  function SortTh({ col, label }) {
+    const active = sortConfig.key === col;
+    const arrow = active ? (sortConfig.dir === 'asc' ? ' ▲' : ' ▼') : ' ·';
+    return (
+      <th
+        className={styles.thSortable}
+        onClick={() => handleSort(col)}
+        title={`Sort by ${label}`}
+      >
+        {label}<span className={active ? styles.sortArrowActive : styles.sortArrow}>{arrow}</span>
+      </th>
+    );
+  }
+
   const stocks = data?.stocks || [];
 
   const filtered = stocks.filter(s => {
@@ -104,6 +155,8 @@ export default function ApexPage() {
     if (tierFilter !== 'all' && s.tier !== tierFilter) return false;
     return true;
   });
+
+  const sorted = sortStocks(filtered, sortConfig);
 
   function handleRowClick(stock, idx, list) {
     setChartStocks(list);
@@ -214,36 +267,36 @@ export default function ApexPage() {
           </div>
 
           {/* ── Table ────────────────────────────────────────────────────────── */}
-          {filtered.length === 0 ? (
+          {sorted.length === 0 ? (
             <div className={styles.emptyState}>No stocks match the current filters.</div>
           ) : (
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>Kill Rank</th>
-                    <th>Kill Score</th>
-                    <th>Tier</th>
-                    <th>Ticker</th>
-                    <th>Exchange</th>
-                    <th>Sector</th>
-                    <th>Price</th>
-                    <th>YTD</th>
-                    <th>Signal</th>
-                    <th>Wks</th>
-                    <th>PNTHR Rank</th>
-                    <th>Score Detail</th>
+                    <th className={styles.thStatic}>Kill Rank</th>
+                    <SortTh col="apexScore" label="Kill Score" />
+                    <SortTh col="tier"      label="Tier" />
+                    <SortTh col="rank"      label="PNTHR Rank" />
+                    <SortTh col="ticker"    label="Ticker" />
+                    <SortTh col="exchange"  label="Exchange" />
+                    <SortTh col="sector"    label="Sector" />
+                    <SortTh col="price"     label="Price" />
+                    <SortTh col="ytd"       label="YTD" />
+                    <SortTh col="signal"    label="Signal" />
+                    <SortTh col="wks"       label="Wks" />
+                    <th className={styles.thStatic}>Score Detail</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((stock, idx) => {
+                  {sorted.map((stock, idx) => {
                     const tier = getTierConfig(stock.tier);
                     const wks = computeWeeksAgo(stock.signalDate);
                     return (
                       <tr
                         key={stock.ticker}
                         className={styles.row}
-                        onClick={() => handleRowClick(stock, idx, filtered)}
+                        onClick={() => handleRowClick(stock, idx, sorted)}
                         title={stock.companyName || stock.ticker}
                       >
                         {/* Kill Rank */}
@@ -268,6 +321,22 @@ export default function ApexPage() {
                           >
                             {stock.tier}
                           </span>
+                        </td>
+
+                        {/* PNTHR 100 Rank — moved here, JUNGLE badge if not ranked */}
+                        <td className={styles.rankCell}>
+                          {stock.rank != null ? (
+                            <span>
+                              #{stock.rank}
+                              {stock.rankChange === null || stock.rankChange === undefined
+                                ? <span className={styles.rankNew}> NEW</span>
+                                : stock.rankChange > 0
+                                  ? <span className={styles.rankUp}> ▲+{stock.rankChange}</span>
+                                  : stock.rankChange < 0
+                                    ? <span className={styles.rankDown}> ▼{stock.rankChange}</span>
+                                    : null}
+                            </span>
+                          ) : <span className={styles.badgeJungle}>JUNGLE</span>}
                         </td>
 
                         {/* Ticker + tags */}
@@ -320,22 +389,6 @@ export default function ApexPage() {
                             : '—'}
                         </td>
 
-                        {/* PNTHR 100 Rank */}
-                        <td className={styles.rankCell}>
-                          {stock.rank != null ? (
-                            <span>
-                              #{stock.rank}
-                              {stock.rankChange === null || stock.rankChange === undefined
-                                ? <span className={styles.rankNew}> NEW</span>
-                                : stock.rankChange > 0
-                                  ? <span className={styles.rankUp}> ▲+{stock.rankChange}</span>
-                                  : stock.rankChange < 0
-                                    ? <span className={styles.rankDown}> ▼{stock.rankChange}</span>
-                                    : null}
-                            </span>
-                          ) : <span className={styles.noRank}>—</span>}
-                        </td>
-
                         {/* Score Detail hover */}
                         <td
                           className={styles.detailCell}
@@ -363,7 +416,6 @@ export default function ApexPage() {
         <div
           className={styles.breakdownPopupFixed}
           style={{ left: Math.max(8, popup.x - 240), top: popup.y }}
-          onMouseEnter={() => {/* keep open */}}
         >
           <div className={styles.breakdownTitle}>{popup.ticker} — {popup.apexScore}/100</div>
           <ScoreBreakdown scores={popup.scores} />

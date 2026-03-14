@@ -223,6 +223,17 @@
   border-bottom: 1px solid #f0f0f0;
 }
 
+/* ── Sortable headers ────────────────────────────────────────────────────────── */
+.thSortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s;
+}
+.thSortable:hover { background-color: rgba(252, 240, 0, 0.12); }
+.thStatic { cursor: default; }
+.sortArrow       { color: #555; font-size: 10px; margin-left: 2px; }
+.sortArrowActive { color: #fcf000; font-size: 10px; margin-left: 2px; }
+
 /* ── Kill Rank ───────────────────────────────────────────────────────────────── */
 .killRankCell {
   font-weight: 700;
@@ -305,6 +316,16 @@
 .rankDown  { color: #dc2626; font-size: 11px; }
 .rankNew   { color: #ca8a04; font-size: 10px; font-weight: 700; }
 .noRank    { color: #b4b4b4; }
+.badgeJungle {
+  display: inline-block;
+  background: #14532d;
+  color: #86efac;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
 
 /* ── Score Detail / Breakdown ────────────────────────────────────────────────── */
 .detailCell {

@@ -93,13 +93,13 @@
 
 /* Row selection highlight (click row to select, arrow-key to navigate) */
 .selectedRow td {
-  background: rgba(252, 240, 0, 0.13) !important;
+  background: rgba(59, 130, 246, 0.12) !important;
 }
 .selectedRow:hover td {
-  background: rgba(252, 240, 0, 0.2) !important;
+  background: rgba(59, 130, 246, 0.20) !important;
 }
 .selectedRow {
-  box-shadow: inset 3px 0 0 #fcf000;
+  box-shadow: inset 3px 0 0 #3b82f6;
 }
 
 /* Ticker cell opens chart — pointer + underline hint */

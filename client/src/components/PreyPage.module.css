@@ -322,9 +322,9 @@
 }
 
 /* ── Row selection + ticker click ──────────────────────────────────── */
-.selectedRow td { background: rgba(252, 240, 0, 0.13) !important; }
-.selectedRow:hover td { background: rgba(252, 240, 0, 0.2) !important; }
-.selectedRow { box-shadow: inset 3px 0 0 #fcf000; }
+.selectedRow td { background: rgba(59, 130, 246, 0.12) !important; }
+.selectedRow:hover td { background: rgba(59, 130, 246, 0.20) !important; }
+.selectedRow { box-shadow: inset 3px 0 0 #3b82f6; }
 .tickerClickable { cursor: pointer !important; }
 .tickerClickable:hover .tickerSymbol { text-decoration: underline; }
 

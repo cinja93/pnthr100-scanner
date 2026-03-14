@@ -17,11 +17,18 @@ import {
 marked.setOptions({ breaks: true });
 
 // Parse the Trade of the Week ticker from the narrative markdown.
-// Looks for the line: > **TICKER — Company Name**
+// Strategy 1: > **TICKER — Company Name**  (blockquote trigger line)
+// Strategy 2: ## ... Trade of the Week — TICKER  (from heading itself)
+// Strategy 3: ## ... Trade of the Week — TICKER (Company Name)
 function extractTotwTicker(narrative) {
   if (!narrative) return null;
-  const match = narrative.match(/>\s*\*\*([A-Z]{1,5})\s*[—–-]/);
-  return match?.[1] ?? null;
+  // Blockquote line: > **DAR — ...
+  const bqMatch = narrative.match(/>\s*\*\*([A-Z]{1,5})\s*[—–-]/);
+  if (bqMatch) return bqMatch[1];
+  // Heading line: ## ... Trade of the Week — DAR ...
+  const hdgMatch = narrative.match(/##[^\n]*Trade of the Week[^\n]*[—–-]\s*([A-Z]{2,5})\b/i);
+  if (hdgMatch) return hdgMatch[1];
+  return null;
 }
 
 function formatWeekOf(isoDate) {
@@ -174,13 +181,15 @@ export default function NewsPage({ currentUser }) {
       );
     }
 
-    // Always inject TOTW button whenever the narrative has a featured trade
+    // Always inject TOTW button as a prominent block after the Trade of the Week heading
     if (totwTicker) {
-      const btn = `<button class="pnthr-totw-btn" data-totw-chart="${totwTicker}">📈 View Chart (${totwTicker})</button>`;
-      html = html.replace(
-        /(<h2[^>]*>)([^<]*Trade of the Week[^<]*)(<\/h2>)/i,
-        `$1$2 ${btn}$3`
+      const btnBlock = `<div class="pnthr-totw-btnwrap"><button class="pnthr-totw-btn" data-totw-chart="${totwTicker}">📈 View ${totwTicker} Chart</button></div>`;
+      const replaced = html.replace(
+        /(<h2[^>]*>[^<]*Trade of the Week[^<]*<\/h2>)/i,
+        `$1${btnBlock}`
       );
+      // Fallback: if h2 pattern didn't match, append button at end of article
+      html = replaced !== html ? replaced : html + btnBlock;
     }
     return html;
   }, [rawHtml, knownTickers, issue?.narrative]);

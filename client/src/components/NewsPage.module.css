@@ -412,16 +412,15 @@
 }
 
 .articleBody h2 {
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 800;
-  color: #111111;
-  background: #fcf000;
-  letter-spacing: 0.1em;
+  color: #fcf000;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin: 36px 0 14px;
-  padding: 7px 14px;
-  border-radius: 3px;
-  display: inline-block;
+  margin: 40px 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid rgba(252, 240, 0, 0.25);
+  display: block;
 }
 
 .articleBody h3 {
@@ -479,51 +478,61 @@
 
 /* Trade of the Week callout — triggered by blockquote containing bold ticker */
 .articleBody blockquote:has(strong:first-child) {
-  background: linear-gradient(135deg, rgba(80, 208, 128, 0.08) 0%, rgba(80, 208, 128, 0.04) 100%);
-  border: 1px solid rgba(80, 208, 128, 0.35);
-  border-left: 5px solid #50d080;
-  border-radius: 8px;
-  padding: 18px 22px;
+  background: linear-gradient(135deg, #0a1f14 0%, #0d2a1a 100%);
+  border: 1px solid rgba(80, 208, 128, 0.4);
+  border-left: 6px solid #50d080;
+  border-radius: 10px;
+  padding: 22px 28px;
   color: #d0d0d0;
   font-style: normal;
-  margin: 0 0 24px;
+  margin: 8px 0 28px;
+  box-shadow: 0 4px 24px rgba(80, 208, 128, 0.1);
+}
+.articleBody blockquote:has(strong:first-child) p {
+  margin: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
-.articleBody blockquote:has(strong:first-child)::before {
+.articleBody blockquote:has(strong:first-child) p::before {
   content: '🐆';
-  font-size: 24px;
+  font-size: 28px;
   flex-shrink: 0;
 }
 .articleBody blockquote:has(strong:first-child) strong {
   color: #50d080;
-  font-size: 16px;
-  letter-spacing: 0.04em;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
 }
 
-/* Trade of the Week inline View Chart button */
+/* TOTW button wrapper — block below the heading */
+.articleBody :global(.pnthr-totw-btnwrap) {
+  margin: -8px 0 20px;
+}
+
+/* Trade of the Week View Chart button */
 .articleBody :global(.pnthr-totw-btn) {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   background: #50d080;
   color: #111111;
   border: none;
-  border-radius: 5px;
-  padding: 4px 12px;
-  font-size: 11px;
+  border-radius: 6px;
+  padding: 8px 20px;
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   cursor: pointer;
-  vertical-align: middle;
-  margin-left: 12px;
-  transition: background 0.12s, transform 0.1s;
+  transition: background 0.12s, transform 0.1s, box-shadow 0.12s;
   text-transform: uppercase;
+  box-shadow: 0 2px 12px rgba(80, 208, 128, 0.3);
 }
 .articleBody :global(.pnthr-totw-btn):hover {
   background: #6ee09a;
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 18px rgba(80, 208, 128, 0.45);
 }
 
 /* Clickable ticker links injected into rendered markdown */

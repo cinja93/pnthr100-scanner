@@ -5,17 +5,18 @@ import styles from './ApexPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
 // ── Tier config (mirrors server) ─────────────────────────────────────────────
+// Traffic-light palette: dark green → lighter green → dark yellow → lighter yellow → dark red → light red
 const TIERS = [
-  { name: 'ALPHA PNTHR KILL', tagline: 'Jugular. Teeth in. Alpha PNTHR is Legend.',           color: '#fcf000', textColor: '#111111' },
-  { name: 'STRIKING',          tagline: 'Claws out. Contact made. In the kill zone.',          color: '#ef4444', textColor: '#ffffff' },
-  { name: 'HUNTING',           tagline: 'Full pursuit mode. Locked and moving fast.',          color: '#f97316', textColor: '#ffffff' },
-  { name: 'POUNCING',          tagline: 'The leap has begun. No turning back.',                color: '#f59e0b', textColor: '#111111' },
-  { name: 'COILING',           tagline: 'Body compressed. Energy stored. About to explode.',  color: '#84cc16', textColor: '#111111' },
-  { name: 'STALKING',          tagline: 'Eyes fixed on target. Closing the distance silently.', color: '#22c55e', textColor: '#111111' },
-  { name: 'TRACKING',          tagline: 'Scent picked up. Target identified. Moving with intent.', color: '#3b82f6', textColor: '#ffffff' },
-  { name: 'PROWLING',          tagline: 'Moving through the jungle. No target yet.',           color: '#8b5cf6', textColor: '#ffffff' },
-  { name: 'STIRRING',          tagline: 'Waking up. Eyes barely open.',                       color: '#6b7280', textColor: '#ffffff' },
-  { name: 'DORMANT',           tagline: 'Flat. Sleeping. No signal, no momentum.',            color: '#374151', textColor: '#9ca3af' },
+  { name: 'ALPHA PNTHR KILL', tagline: 'Jugular. Teeth in. Alpha PNTHR is Legend.',            color: '#15803d', textColor: '#ffffff' }, // dark green
+  { name: 'STRIKING',          tagline: 'Claws out. Contact made. In the kill zone.',           color: '#16a34a', textColor: '#ffffff' }, // green
+  { name: 'HUNTING',           tagline: 'Full pursuit mode. Locked and moving fast.',           color: '#22c55e', textColor: '#111111' }, // medium green
+  { name: 'POUNCING',          tagline: 'The leap has begun. No turning back.',                 color: '#86efac', textColor: '#111111' }, // light green
+  { name: 'COILING',           tagline: 'Body compressed. Energy stored. About to explode.',   color: '#ca8a04', textColor: '#ffffff' }, // dark yellow/gold
+  { name: 'STALKING',          tagline: 'Eyes fixed on target. Closing the distance silently.',color: '#eab308', textColor: '#111111' }, // yellow
+  { name: 'TRACKING',          tagline: 'Scent picked up. Target identified. Moving with intent.', color: '#fde047', textColor: '#111111' }, // light yellow
+  { name: 'PROWLING',          tagline: 'Moving through the jungle. No target yet.',            color: '#b91c1c', textColor: '#ffffff' }, // dark red
+  { name: 'STIRRING',          tagline: 'Waking up. Eyes barely open.',                        color: '#ef4444', textColor: '#ffffff' }, // red
+  { name: 'DORMANT',           tagline: 'Flat. Sleeping. No signal, no momentum.',             color: '#fca5a5', textColor: '#111111' }, // light red
 ];
 
 function getTierConfig(tierName) {
@@ -75,7 +76,7 @@ export default function ApexPage() {
   const [error, setError]           = useState(null);
   const [side, setSide]             = useState('all'); // 'all' | 'long' | 'short'
   const [tierFilter, setTierFilter] = useState('all'); // 'all' or tier name
-  const [hoveredTicker, setHoveredTicker] = useState(null);
+  const [popup, setPopup]           = useState(null); // { ticker, x, y, scores }
   const [chartIndex, setChartIndex] = useState(null);
   const [chartStocks, setChartStocks] = useState([]);
 
@@ -302,9 +303,9 @@ export default function ApexPage() {
                         {/* Signal */}
                         <td>
                           {stock.signal === 'BL'
-                            ? <span className={`${styles.sigBadge} ${styles.sigBL}`}>{stock.isNewSignal ? '★ BL' : 'BL'}</span>
+                            ? <span className={styles.sigBadgeBL}>{stock.isNewSignal ? '★ BL' : 'BL'}</span>
                             : stock.signal === 'SS'
-                              ? <span className={`${styles.sigBadge} ${styles.sigSS}`}>{stock.isNewSignal ? '★ SS' : 'SS'}</span>
+                              ? <span className={styles.sigBadgeSS}>{stock.isNewSignal ? '★ SS' : 'SS'}</span>
                               : <span className={styles.sigNone}>—</span>}
                         </td>
 
@@ -334,16 +335,14 @@ export default function ApexPage() {
                         {/* Score Detail hover */}
                         <td
                           className={styles.detailCell}
-                          onMouseEnter={() => setHoveredTicker(stock.ticker)}
-                          onMouseLeave={() => setHoveredTicker(null)}
+                          onMouseEnter={(e) => {
+                            if (!stock.scores) return;
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setPopup({ ticker: stock.ticker, apexScore: stock.apexScore, scores: stock.scores, x: rect.left, y: rect.bottom + 4 });
+                          }}
+                          onMouseLeave={() => setPopup(null)}
                         >
                           <span className={styles.detailIcon}>📊</span>
-                          {hoveredTicker === stock.ticker && stock.scores && (
-                            <div className={styles.breakdownPopup}>
-                              <div className={styles.breakdownTitle}>{stock.ticker} — {stock.apexScore}/100</div>
-                              <ScoreBreakdown scores={stock.scores} />
-                            </div>
-                          )}
                         </td>
                       </tr>
                     );
@@ -353,6 +352,18 @@ export default function ApexPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Score Breakdown Popup (fixed, avoids overflow clipping) ─────────── */}
+      {popup && (
+        <div
+          className={styles.breakdownPopupFixed}
+          style={{ left: Math.max(8, popup.x - 240), top: popup.y }}
+          onMouseEnter={() => {/* keep open */}}
+        >
+          <div className={styles.breakdownTitle}>{popup.ticker} — {popup.apexScore}/100</div>
+          <ScoreBreakdown scores={popup.scores} />
+        </div>
       )}
 
       {/* ── Chart Modal ─────────────────────────────────────────────────────── */}

@@ -251,14 +251,31 @@
 .badgeLong  { background: #14532d; color: #86efac; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; }
 .badgeShort { background: #450a0a; color: #fca5a5; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; }
 
-/* ── Signal Badges ───────────────────────────────────────────────────────────── */
-.sigBadge { font-weight: 700; font-size: 12px; padding: 2px 7px; border-radius: 4px; }
-.sigBL    { background: #14532d; color: #86efac; }
-.sigSS    { background: #450a0a; color: #fca5a5; }
+/* ── Signal Badges (match StockTable exactly) ────────────────────────────────── */
+.sigBadgeBL {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: #16a34a;
+  color: #fff;
+}
+.sigBadgeSS {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: #dc2626;
+  color: #fff;
+}
 .sigNone  { color: #6b7280; }
 .wksCell  { }
-.wksBL    { font-size: 11px; font-weight: 700; color: #86efac; background: #14532d; padding: 2px 6px; border-radius: 4px; }
-.wksSS    { font-size: 11px; font-weight: 700; color: #fca5a5; background: #450a0a; padding: 2px 6px; border-radius: 4px; }
+.wksBL    { font-size: 11px; font-weight: 700; color: #fff; background: #16a34a; padding: 2px 6px; border-radius: 4px; }
+.wksSS    { font-size: 11px; font-weight: 700; color: #fff; background: #dc2626; padding: 2px 6px; border-radius: 4px; }
 
 /* ── Price / YTD ─────────────────────────────────────────────────────────────── */
 .price    { font-weight: 600; }
@@ -275,22 +292,20 @@
 
 /* ── Score Detail / Breakdown ────────────────────────────────────────────────── */
 .detailCell {
-  position: relative;
   text-align: center;
   cursor: default;
 }
 .detailIcon { font-size: 14px; cursor: pointer; }
-.breakdownPopup {
-  position: absolute;
-  right: 0;
-  top: 110%;
-  z-index: 100;
+.breakdownPopupFixed {
+  position: fixed;
+  z-index: 9999;
   background: #111827;
   border: 1px solid #374151;
   border-radius: 8px;
   padding: 14px 16px;
-  min-width: 260px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  min-width: 270px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.8);
+  pointer-events: none;
 }
 .breakdownTitle {
   font-size: 12px;

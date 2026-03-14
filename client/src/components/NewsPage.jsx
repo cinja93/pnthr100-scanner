@@ -178,7 +178,7 @@ export default function NewsPage({ currentUser }) {
     if (totwTicker) {
       const btn = `<button class="pnthr-totw-btn" data-totw-chart="${totwTicker}">📈 View Chart (${totwTicker})</button>`;
       html = html.replace(
-        /(<h2[^>]*>)(Trade of the Week)(<\/h2>)/i,
+        /(<h2[^>]*>)([^<]*Trade of the Week[^<]*)(<\/h2>)/i,
         `$1$2 ${btn}$3`
       );
     }
@@ -317,12 +317,23 @@ export default function NewsPage({ currentUser }) {
                   onChange={e => setDraftText(e.target.value)}
                 />
               ) : (
-                /* Rendered article — tickers are clickable spans */
-                <article
-                  className={styles.articleBody}
-                  dangerouslySetInnerHTML={{ __html: renderedHtml }}
-                  onClick={handleArticleClick}
-                />
+                <>
+                  {/* Article masthead — logo + title + date */}
+                  <div className={styles.articleMasthead}>
+                    <img src={pnthrLogo} alt="PNTHR" className={styles.mastheadLogo} />
+                    <div className={styles.mastheadTitle}>PNTHR'S PERCH</div>
+                    <div className={styles.mastheadSub}>Weekly Market Intelligence</div>
+                    <div className={styles.mastheadDate}>Week of {formatWeekOf(issue.weekOf)}</div>
+                  </div>
+                  <div className={styles.mastheadDivider} />
+
+                  {/* Rendered article — tickers are clickable spans */}
+                  <article
+                    className={styles.articleBody}
+                    dangerouslySetInnerHTML={{ __html: renderedHtml }}
+                    onClick={handleArticleClick}
+                  />
+                </>
               )}
             </>
           )}

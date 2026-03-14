@@ -181,15 +181,21 @@ export default function NewsPage({ currentUser }) {
       );
     }
 
-    // Always inject TOTW button as a prominent block after the Trade of the Week heading
+    // Strip panther emoji from rendered HTML — replaced by actual logo image below
+    html = html.replace(/🐆\s*/g, '');
+
+    // Inject TOTW card header (logo + label + chart button) after the TOTW heading
     if (totwTicker) {
-      const btnBlock = `<div class="pnthr-totw-btnwrap"><button class="pnthr-totw-btn" data-totw-chart="${totwTicker}">📈 View ${totwTicker} Chart</button></div>`;
+      const cardHeader = `<div class="pnthr-totw-card-header">` +
+        `<img src="${pnthrLogo}" class="pnthr-totw-logo-img" alt="PNTHR" />` +
+        `<span class="pnthr-totw-card-label">PNTHR TRADE OF THE WEEK</span>` +
+        `<button class="pnthr-totw-btn" data-totw-chart="${totwTicker}">📈 View ${totwTicker} Chart</button>` +
+        `</div>`;
       const replaced = html.replace(
         /(<h2[^>]*>[^<]*Trade of the Week[^<]*<\/h2>)/i,
-        `$1${btnBlock}`
+        `$1${cardHeader}`
       );
-      // Fallback: if h2 pattern didn't match, append button at end of article
-      html = replaced !== html ? replaced : html + btnBlock;
+      html = replaced !== html ? replaced : html + cardHeader;
     }
     return html;
   }, [rawHtml, knownTickers, issue?.narrative]);

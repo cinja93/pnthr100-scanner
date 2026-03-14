@@ -169,23 +169,14 @@ export default function NewsPage({ currentUser }) {
     if (!rawHtml) return rawHtml;
     const totwTicker = extractTotwTicker(issue?.narrative);
 
-    // Linkify tickers only once jungle stocks are loaded
-    let html = rawHtml;
-    if (knownTickers.size > 0) {
-      html = html.replace(/(?<=>|^)([^<]+)(?=<|$)/g, textBlock =>
-        textBlock.replace(/\b([A-Z]{2,5})\b/g, word =>
-          knownTickers.has(word)
-            ? `<span class="pnthr-ticker-link" data-ticker="${word}">${word}</span>`
-            : word
-        )
-      );
-    }
-
     // Strip panther emoji and replace em-dashes with regular dashes throughout
+    let html = rawHtml;
     html = html.replace(/🐆\s*/g, '');
     html = html.replace(/—/g, ' - ');
 
-    // Inject TOTW hero card — replaces the h2 heading entirely
+    // Inject TOTW hero card BEFORE ticker linkification so the h2 regex
+    // matches clean text (linkification would inject <span> tags inside h2,
+    // breaking the [^<]* pattern and causing the card to fall to the bottom).
     if (totwTicker) {
       const card =
         `<div class="pnthr-totw-hero">` +
@@ -200,11 +191,23 @@ export default function NewsPage({ currentUser }) {
         `</div>`;
       // Replace the TOTW h2 with the hero card + hidden h2
       const replaced = html.replace(
-        /(<h2[^>]*>)([^<]*Trade of the Week[^<]*)(<\/h2>)/i,
+        /(<h2[^>]*>)([\s\S]*?Trade of the Week[\s\S]*?)(<\/h2>)/i,
         `${card}<h2 class="pnthr-totw-heading">$2$3`
       );
       html = replaced !== html ? replaced : html + card;
     }
+
+    // Linkify tickers only once jungle stocks are loaded
+    if (knownTickers.size > 0) {
+      html = html.replace(/(?<=>|^)([^<]+)(?=<|$)/g, textBlock =>
+        textBlock.replace(/\b([A-Z]{2,5})\b/g, word =>
+          knownTickers.has(word)
+            ? `<span class="pnthr-ticker-link" data-ticker="${word}">${word}</span>`
+            : word
+        )
+      );
+    }
+
     return html;
   }, [rawHtml, knownTickers, issue?.narrative]);
 

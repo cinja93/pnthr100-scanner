@@ -1,0 +1,370 @@
+import { useState, useEffect } from 'react';
+import ChartModal from './ChartModal';
+import { fetchApexStocks } from '../services/api';
+import styles from './ApexPage.module.css';
+import pantherHead from '../assets/panther head.png';
+
+// ── Tier config (mirrors server) ─────────────────────────────────────────────
+const TIERS = [
+  { name: 'ALPHA PNTHR KILL', tagline: 'Jugular. Teeth in. Alpha PNTHR is Legend.',           color: '#fcf000', textColor: '#111111' },
+  { name: 'STRIKING',          tagline: 'Claws out. Contact made. In the kill zone.',          color: '#ef4444', textColor: '#ffffff' },
+  { name: 'HUNTING',           tagline: 'Full pursuit mode. Locked and moving fast.',          color: '#f97316', textColor: '#ffffff' },
+  { name: 'POUNCING',          tagline: 'The leap has begun. No turning back.',                color: '#f59e0b', textColor: '#111111' },
+  { name: 'COILING',           tagline: 'Body compressed. Energy stored. About to explode.',  color: '#84cc16', textColor: '#111111' },
+  { name: 'STALKING',          tagline: 'Eyes fixed on target. Closing the distance silently.', color: '#22c55e', textColor: '#111111' },
+  { name: 'TRACKING',          tagline: 'Scent picked up. Target identified. Moving with intent.', color: '#3b82f6', textColor: '#ffffff' },
+  { name: 'PROWLING',          tagline: 'Moving through the jungle. No target yet.',           color: '#8b5cf6', textColor: '#ffffff' },
+  { name: 'STIRRING',          tagline: 'Waking up. Eyes barely open.',                       color: '#6b7280', textColor: '#ffffff' },
+  { name: 'DORMANT',           tagline: 'Flat. Sleeping. No signal, no momentum.',            color: '#374151', textColor: '#9ca3af' },
+];
+
+function getTierConfig(tierName) {
+  return TIERS.find(t => t.name === tierName) || TIERS[9];
+}
+
+// Weeks-ago helper
+function computeWeeksAgo(signalDate) {
+  if (!signalDate) return null;
+  const signalMonday = new Date(signalDate + 'T12:00:00');
+  const today = new Date();
+  const dow = today.getDay();
+  const daysToMonday = dow === 0 ? -6 : 1 - dow;
+  const currentMonday = new Date(today);
+  currentMonday.setDate(today.getDate() + daysToMonday);
+  currentMonday.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((currentMonday - signalMonday) / (1000 * 60 * 60 * 24));
+  return Math.floor(diffDays / 7) + 1;
+}
+
+// Score bar component
+function ScoreBar({ score, max, color }) {
+  const pct = Math.min(100, Math.round((score / max) * 100));
+  return (
+    <div className={styles.scoreBarTrack}>
+      <div className={styles.scoreBarFill} style={{ width: `${pct}%`, background: color }} />
+    </div>
+  );
+}
+
+// Score breakdown tooltip
+function ScoreBreakdown({ scores }) {
+  const dims = [
+    { label: 'Signal Freshness', key: 'freshness',    max: 25 },
+    { label: 'Trend Quality',    key: 'trendQuality', max: 20 },
+    { label: 'Momentum',         key: 'momentum',     max: 15 },
+    { label: 'Rank + Rise',      key: 'rankRise',     max: 20 },
+    { label: 'Trend Duration',   key: 'duration',     max: 10 },
+    { label: 'Market Context',   key: 'context',      max: 10 },
+  ];
+  return (
+    <div className={styles.breakdown}>
+      {dims.map(d => (
+        <div key={d.key} className={styles.breakdownRow}>
+          <span className={styles.breakdownLabel}>{d.label}</span>
+          <ScoreBar score={scores[d.key] || 0} max={d.max} color="#fcf000" />
+          <span className={styles.breakdownScore}>{scores[d.key] || 0}/{d.max}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function ApexPage() {
+  const [data, setData]             = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
+  const [side, setSide]             = useState('all'); // 'all' | 'long' | 'short'
+  const [tierFilter, setTierFilter] = useState('all'); // 'all' or tier name
+  const [hoveredTicker, setHoveredTicker] = useState(null);
+  const [chartIndex, setChartIndex] = useState(null);
+  const [chartStocks, setChartStocks] = useState([]);
+
+  useEffect(() => { load(false); }, []);
+
+  async function load(forceRefresh) {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchApexStocks(forceRefresh);
+      setData(result);
+    } catch (err) {
+      setError('Failed to load APEX data. Make sure the server is running.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const stocks = data?.stocks || [];
+
+  const filtered = stocks.filter(s => {
+    if (side === 'long'  && s.signal !== 'BL') return false;
+    if (side === 'short' && s.signal !== 'SS') return false;
+    if (tierFilter !== 'all' && s.tier !== tierFilter) return false;
+    return true;
+  });
+
+  function handleRowClick(stock, idx, list) {
+    setChartStocks(list);
+    setChartIndex(idx);
+  }
+
+  // Tier summary cards (top 5 tiers only)
+  const topTiers = TIERS.slice(0, 5);
+
+  return (
+    <div className={styles.page}>
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className={styles.header}>
+        <div>
+          <h1 className={styles.title}>
+            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
+            PNTHR APEX
+          </h1>
+          <p className={styles.subtitle}>
+            679 stocks. 100-point predatory scoring. Who has the PNTHR's attention right now?
+          </p>
+        </div>
+        <button
+          className={styles.refreshBtn}
+          onClick={() => load(true)}
+          disabled={loading}
+        >
+          {loading ? 'Loading…' : '↻ Refresh'}
+        </button>
+      </div>
+
+      {/* ── Loading / Error ─────────────────────────────────────────────────── */}
+      {loading && (
+        <div className={styles.loadingState}>
+          <div className={styles.spinner} />
+          <p>Scoring 679 stocks…</p>
+          <p className={styles.loadingNote}>First load takes 1-2 minutes — weekly cached after that.</p>
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className={styles.errorState}>
+          <p>{error}</p>
+          <button className={styles.retryBtn} onClick={() => load(false)}>Try Again</button>
+        </div>
+      )}
+
+      {!loading && !error && data && (
+        <>
+          {/* ── SPY Context Banner ───────────────────────────────────────────── */}
+          <div className={styles.contextBanner}>
+            <span className={styles.contextLabel}>Broad Market (SPY):</span>
+            <span className={data.contextSummary.spyAboveEma ? styles.contextBull : styles.contextBear}>
+              {data.contextSummary.spyAboveEma ? '▲ Above EMA' : '▼ Below EMA'}
+            </span>
+            <span className={data.contextSummary.spyEmaRising ? styles.contextBull : styles.contextBear}>
+              {data.contextSummary.spyEmaRising ? '· EMA Rising' : '· EMA Falling'}
+            </span>
+            <span className={styles.contextMeta}>
+              · {data.activeSignals} active signals · {data.totalScanned} total stocks · scanned {new Date(data.scannedAt).toLocaleDateString()}
+            </span>
+          </div>
+
+          {/* ── Tier Summary Cards ───────────────────────────────────────────── */}
+          <div className={styles.tierCards}>
+            {topTiers.map(tier => {
+              const count = data.tierCounts?.[tier.name] || 0;
+              const isActive = tierFilter === tier.name;
+              return (
+                <button
+                  key={tier.name}
+                  className={`${styles.tierCard} ${isActive ? styles.tierCardActive : ''}`}
+                  style={{ borderColor: tier.color }}
+                  onClick={() => setTierFilter(isActive ? 'all' : tier.name)}
+                >
+                  <span className={styles.tierCardCount} style={{ color: tier.color }}>{count}</span>
+                  <span className={styles.tierCardName}>{tier.name}</span>
+                </button>
+              );
+            })}
+            <button
+              className={`${styles.tierCard} ${tierFilter === 'all' ? styles.tierCardActive : ''}`}
+              style={{ borderColor: '#555' }}
+              onClick={() => setTierFilter('all')}
+            >
+              <span className={styles.tierCardCount} style={{ color: '#aaa' }}>{stocks.length}</span>
+              <span className={styles.tierCardName}>ALL TIERS</span>
+            </button>
+          </div>
+
+          {/* ── L / S / All Tabs ─────────────────────────────────────────────── */}
+          <div className={styles.sideTabs}>
+            {[['all', 'All'], ['long', 'Longs (BL)'], ['short', 'Shorts (SS)']].map(([key, label]) => (
+              <button
+                key={key}
+                className={`${styles.sideTab} ${side === key ? styles.sideTabActive : ''}`}
+                onClick={() => setSide(key)}
+              >
+                {label}
+                <span className={styles.sideTabCount}>
+                  {key === 'all' ? filtered.length
+                    : key === 'long' ? stocks.filter(s => s.signal === 'BL' && (tierFilter === 'all' || s.tier === tierFilter)).length
+                    : stocks.filter(s => s.signal === 'SS' && (tierFilter === 'all' || s.tier === tierFilter)).length}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* ── Table ────────────────────────────────────────────────────────── */}
+          {filtered.length === 0 ? (
+            <div className={styles.emptyState}>No stocks match the current filters.</div>
+          ) : (
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>APEX Score</th>
+                    <th>Tier</th>
+                    <th>Ticker</th>
+                    <th>Exchange</th>
+                    <th>Sector</th>
+                    <th>Price</th>
+                    <th>YTD</th>
+                    <th>Signal</th>
+                    <th>Wks</th>
+                    <th>PNTHR Rank</th>
+                    <th>Score Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((stock, idx) => {
+                    const tier = getTierConfig(stock.tier);
+                    const wks = computeWeeksAgo(stock.signalDate);
+                    return (
+                      <tr
+                        key={stock.ticker}
+                        className={styles.row}
+                        onClick={() => handleRowClick(stock, idx, filtered)}
+                        title={stock.companyName || stock.ticker}
+                      >
+                        {/* APEX Score */}
+                        <td className={styles.scoreCell}>
+                          <span
+                            className={styles.scoreBadge}
+                            style={{ background: tier.color, color: tier.textColor }}
+                          >
+                            {stock.apexScore}
+                          </span>
+                        </td>
+
+                        {/* Tier badge */}
+                        <td>
+                          <span
+                            className={styles.tierBadge}
+                            style={{ borderColor: tier.color, color: tier.color }}
+                            title={tier.tagline}
+                          >
+                            {stock.tier}
+                          </span>
+                        </td>
+
+                        {/* Ticker + tags */}
+                        <td className={styles.tickerCell}>
+                          <div className={styles.tickerRow}>
+                            {stock.rankList && (
+                              <span className={stock.rankList === 'LONG' ? styles.badgeLong : styles.badgeShort}>
+                                {stock.rankList === 'LONG' ? 'L' : 'S'}
+                              </span>
+                            )}
+                            <span className={styles.tickerText}>{stock.ticker}</span>
+                            {(() => {
+                              const tags = [];
+                              if (stock.isSp500) tags.push('500');
+                              if (stock.isDow30) tags.push('30');
+                              if (stock.universe === 'sp400Long' || stock.universe === 'sp400Short') tags.push('400');
+                              if (stock.isNasdaq100) tags.push('100');
+                              return tags.length > 0
+                                ? <span className={styles.membershipTag}>({tags.join(', ')})</span>
+                                : null;
+                            })()}
+                          </div>
+                          {stock.companyName && <div className={styles.companyName}>{stock.companyName}</div>}
+                        </td>
+
+                        <td>{stock.exchange}</td>
+                        <td className={styles.sectorCell}>{stock.sector}</td>
+
+                        {/* Price */}
+                        <td className={styles.price}>${stock.currentPrice?.toLocaleString()}</td>
+
+                        {/* YTD */}
+                        <td className={stock.ytdReturn != null ? (stock.ytdReturn >= 0 ? styles.positive : styles.negative) : ''}>
+                          {stock.ytdReturn != null ? `${stock.ytdReturn >= 0 ? '+' : ''}${stock.ytdReturn.toFixed(2)}%` : '—'}
+                        </td>
+
+                        {/* Signal */}
+                        <td>
+                          {stock.signal === 'BL'
+                            ? <span className={`${styles.sigBadge} ${styles.sigBL}`}>{stock.isNewSignal ? '★ BL' : 'BL'}</span>
+                            : stock.signal === 'SS'
+                              ? <span className={`${styles.sigBadge} ${styles.sigSS}`}>{stock.isNewSignal ? '★ SS' : 'SS'}</span>
+                              : <span className={styles.sigNone}>—</span>}
+                        </td>
+
+                        {/* Weeks since signal */}
+                        <td className={styles.wksCell}>
+                          {wks != null
+                            ? <span className={stock.signal === 'BL' ? styles.wksBL : styles.wksSS}>{stock.signal}+{wks}</span>
+                            : '—'}
+                        </td>
+
+                        {/* PNTHR 100 Rank */}
+                        <td className={styles.rankCell}>
+                          {stock.rank != null ? (
+                            <span>
+                              #{stock.rank}
+                              {stock.rankChange === null || stock.rankChange === undefined
+                                ? <span className={styles.rankNew}> NEW</span>
+                                : stock.rankChange > 0
+                                  ? <span className={styles.rankUp}> ▲+{stock.rankChange}</span>
+                                  : stock.rankChange < 0
+                                    ? <span className={styles.rankDown}> ▼{stock.rankChange}</span>
+                                    : null}
+                            </span>
+                          ) : <span className={styles.noRank}>—</span>}
+                        </td>
+
+                        {/* Score Detail hover */}
+                        <td
+                          className={styles.detailCell}
+                          onMouseEnter={() => setHoveredTicker(stock.ticker)}
+                          onMouseLeave={() => setHoveredTicker(null)}
+                        >
+                          <span className={styles.detailIcon}>📊</span>
+                          {hoveredTicker === stock.ticker && stock.scores && (
+                            <div className={styles.breakdownPopup}>
+                              <div className={styles.breakdownTitle}>{stock.ticker} — {stock.apexScore}/100</div>
+                              <ScoreBreakdown scores={stock.scores} />
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Chart Modal ─────────────────────────────────────────────────────── */}
+      {chartIndex != null && (
+        <ChartModal
+          stocks={chartStocks}
+          initialIndex={chartIndex}
+          signals={Object.fromEntries(chartStocks.map(s => [s.ticker, { signal: s.signal, signalDate: s.signalDate, isNewSignal: s.isNewSignal, stopPrice: s.stopPrice }]))}
+          earnings={{}}
+          onClose={() => setChartIndex(null)}
+        />
+      )}
+    </div>
+  );
+}

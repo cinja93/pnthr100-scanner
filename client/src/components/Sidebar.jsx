@@ -15,6 +15,7 @@ const NAV_GROUPS = [
     groupLabel: 'The Hunt',
     items: [
       { key: 'dashboard', label: 'Dashboard',    iconImg: true, soon: true },
+      { key: 'apex',      label: 'PNTHR APEX',   iconImg: true },
       { key: 'prey',      label: 'PNTHR Prey',   iconImg: true },
       { key: 'search',    label: 'PNTHR Search', iconImg: true },
     ],

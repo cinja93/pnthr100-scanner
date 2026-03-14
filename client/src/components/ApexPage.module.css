@@ -1,0 +1,333 @@
+/* ApexPage.module.css — PNTHR APEX scoring dashboard */
+
+.page {
+  padding: 24px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 16px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 26px;
+  font-weight: 800;
+  color: #fcf000;
+  margin: 0 0 6px 0;
+  letter-spacing: 0.05em;
+}
+
+.pantherLogo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.subtitle {
+  color: #9ca3af;
+  font-size: 13px;
+  margin: 0;
+}
+
+.refreshBtn {
+  background: #fcf000;
+  color: #111111;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+.refreshBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.refreshBtn:hover:not(:disabled) { opacity: 0.85; }
+
+/* ── Loading / Error ─────────────────────────────────────────────────────────── */
+.loadingState {
+  text-align: center;
+  padding: 60px 24px;
+  color: #9ca3af;
+}
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid #374151;
+  border-top-color: #fcf000;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loadingNote { font-size: 12px; color: #6b7280; margin-top: 8px; }
+
+.errorState {
+  text-align: center;
+  padding: 40px;
+  color: #f87171;
+}
+.retryBtn {
+  margin-top: 12px;
+  background: #374151;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+/* ── Context Banner ──────────────────────────────────────────────────────────── */
+.contextBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #1a1a2e;
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.contextLabel  { color: #9ca3af; font-weight: 600; }
+.contextBull   { color: #22c55e; font-weight: 700; }
+.contextBear   { color: #ef4444; font-weight: 700; }
+.contextMeta   { color: #6b7280; margin-left: auto; }
+
+/* ── Tier Summary Cards ──────────────────────────────────────────────────────── */
+.tierCards {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.tierCard {
+  background: #111827;
+  border: 2px solid #374151;
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 110px;
+  transition: background 0.15s, transform 0.1s;
+}
+.tierCard:hover { background: #1f2937; transform: translateY(-1px); }
+.tierCardActive { background: #1f2937 !important; }
+.tierCardCount {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+.tierCardName {
+  font-size: 9px;
+  font-weight: 700;
+  color: #9ca3af;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* ── L/S/All Tabs ────────────────────────────────────────────────────────────── */
+.sideTabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.sideTab {
+  background: #1f2937;
+  color: #9ca3af;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+.sideTab:hover { background: #374151; color: #fff; }
+.sideTabActive { background: #374151; color: #fcf000; border-color: #fcf000; }
+.sideTabCount {
+  background: #374151;
+  color: #fff;
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+}
+.sideTabActive .sideTabCount { background: #4b5563; }
+
+/* ── Empty State ─────────────────────────────────────────────────────────────── */
+.emptyState {
+  text-align: center;
+  padding: 60px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────────── */
+.tableWrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #2d3748;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table thead tr {
+  background: #111827;
+}
+.table th {
+  padding: 10px 12px;
+  text-align: left;
+  color: #9ca3af;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #2d3748;
+  white-space: nowrap;
+}
+.row {
+  border-bottom: 1px solid #1f2937;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.row:hover { background: #1a2035; }
+.table td {
+  padding: 9px 12px;
+  color: #e5e7eb;
+  vertical-align: middle;
+}
+
+/* ── Score Badge ─────────────────────────────────────────────────────────────── */
+.scoreCell { text-align: center; }
+.scoreBadge {
+  display: inline-block;
+  font-size: 18px;
+  font-weight: 900;
+  width: 46px;
+  height: 46px;
+  line-height: 46px;
+  text-align: center;
+  border-radius: 50%;
+}
+
+/* ── Tier Badge ──────────────────────────────────────────────────────────────── */
+.tierBadge {
+  display: inline-block;
+  border: 1px solid;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ── Ticker Cell ─────────────────────────────────────────────────────────────── */
+.tickerCell { min-width: 110px; }
+.tickerRow  { display: flex; align-items: center; gap: 4px; }
+.tickerText { font-weight: 700; font-size: 14px; color: #fff; }
+.companyName { font-size: 10px; color: #6b7280; margin-top: 2px; }
+.membershipTag { font-size: 10px; color: #6b7280; }
+.badgeLong  { background: #14532d; color: #86efac; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; }
+.badgeShort { background: #450a0a; color: #fca5a5; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; }
+
+/* ── Signal Badges ───────────────────────────────────────────────────────────── */
+.sigBadge { font-weight: 700; font-size: 12px; padding: 2px 7px; border-radius: 4px; }
+.sigBL    { background: #14532d; color: #86efac; }
+.sigSS    { background: #450a0a; color: #fca5a5; }
+.sigNone  { color: #6b7280; }
+.wksCell  { }
+.wksBL    { font-size: 11px; font-weight: 700; color: #86efac; background: #14532d; padding: 2px 6px; border-radius: 4px; }
+.wksSS    { font-size: 11px; font-weight: 700; color: #fca5a5; background: #450a0a; padding: 2px 6px; border-radius: 4px; }
+
+/* ── Price / YTD ─────────────────────────────────────────────────────────────── */
+.price    { font-weight: 600; }
+.positive { color: #22c55e; font-weight: 600; }
+.negative { color: #ef4444; font-weight: 600; }
+.sectorCell { font-size: 12px; color: #9ca3af; }
+
+/* ── Rank Cell ───────────────────────────────────────────────────────────────── */
+.rankCell  { font-weight: 600; white-space: nowrap; }
+.rankUp    { color: #22c55e; font-size: 11px; }
+.rankDown  { color: #ef4444; font-size: 11px; }
+.rankNew   { color: #fcf000; font-size: 10px; font-weight: 700; }
+.noRank    { color: #4b5563; }
+
+/* ── Score Detail / Breakdown ────────────────────────────────────────────────── */
+.detailCell {
+  position: relative;
+  text-align: center;
+  cursor: default;
+}
+.detailIcon { font-size: 14px; cursor: pointer; }
+.breakdownPopup {
+  position: absolute;
+  right: 0;
+  top: 110%;
+  z-index: 100;
+  background: #111827;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  padding: 14px 16px;
+  min-width: 260px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+}
+.breakdownTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fcf000;
+  margin-bottom: 10px;
+  letter-spacing: 0.06em;
+}
+.breakdown { display: flex; flex-direction: column; gap: 6px; }
+.breakdownRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.breakdownLabel {
+  font-size: 11px;
+  color: #9ca3af;
+  width: 110px;
+  flex-shrink: 0;
+}
+.scoreBarTrack {
+  flex: 1;
+  height: 6px;
+  background: #374151;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.scoreBarFill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.breakdownScore {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e5e7eb;
+  width: 30px;
+  text-align: right;
+  flex-shrink: 0;
+}

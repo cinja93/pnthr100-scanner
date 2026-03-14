@@ -10,6 +10,7 @@ import { getEtfStocks } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
+import { getApexResults, clearApexCache } from './apexService.js';
 import newsletterRouter from './routes/newsletter.js';
 import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
@@ -1418,6 +1419,50 @@ app.get('/api/prey', authenticateJWT, async (req, res) => {
   } catch (err) {
     console.error('Error in /api/prey:', err);
     res.status(500).json({ error: 'Prey scan failed' });
+  }
+});
+
+// ── PNTHR APEX ────────────────────────────────────────────────────────────────
+app.get('/api/apex', authenticateJWT, async (req, res) => {
+  try {
+    if (req.query.refresh) clearApexCache();
+    const [specLongs, specShorts] = await Promise.all([getSp400Longs(), getSp400Shorts()]);
+    const stocks = await getJungleStocks(specLongs, specShorts);
+    const tickers = stocks.map(s => s.ticker);
+    const stockMeta = {};
+    for (const s of stocks) stockMeta[s.ticker] = {
+      companyName: s.companyName, sector: s.sector, exchange: s.exchange,
+      currentPrice: s.currentPrice, ytdReturn: s.ytdReturn,
+      isSp500: s.isSp500, isDow30: s.isDow30, isNasdaq100: s.isNasdaq100,
+      universe: s.universe, rankList: s.rankList ?? null,
+      rank: null, rankChange: undefined,
+    };
+    // Enrich with PNTHR 100 rank + rankChange
+    try {
+      const latestRanking = await getMostRecentRanking();
+      if (latestRanking) {
+        for (const entry of (latestRanking.rankings || [])) {
+          if (stockMeta[entry.ticker]) {
+            stockMeta[entry.ticker].rank       = entry.rank       ?? null;
+            stockMeta[entry.ticker].rankChange = entry.rankChange ?? undefined;
+            stockMeta[entry.ticker].rankList   = 'LONG';
+          }
+        }
+        for (const entry of (latestRanking.shortRankings || [])) {
+          if (stockMeta[entry.ticker]) {
+            stockMeta[entry.ticker].rank       = entry.rank       ?? null;
+            stockMeta[entry.ticker].rankChange = entry.rankChange ?? undefined;
+            stockMeta[entry.ticker].rankList   = 'SHORT';
+          }
+        }
+      }
+    } catch { /* best-effort */ }
+    const jungleSignals = await getSignals(tickers);
+    const results = await getApexResults(tickers, stockMeta, jungleSignals);
+    res.json(results);
+  } catch (err) {
+    console.error('Error in /api/apex:', err);
+    res.status(500).json({ error: 'APEX scan failed' });
   }
 });
 

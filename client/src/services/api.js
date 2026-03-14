@@ -323,6 +323,14 @@ export async function fetchPreyStocks(forceRefresh = false) {
   return response.json();
 }
 
+// PNTHR APEX — scored predatory ranking
+export async function fetchApexStocks(forceRefresh = false) {
+  const qs = forceRefresh ? '?refresh=1' : '';
+  const response = await fetch(`${API_BASE}/api/apex${qs}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // ── Newsletter (PNTHR's Perch) ──
 
 export async function fetchNewsletterList() {

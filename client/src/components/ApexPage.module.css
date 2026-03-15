@@ -251,6 +251,8 @@
   vertical-align: middle;
   border-bottom: 1px solid #f0f0f0;
 }
+.table th:last-child { padding-right: 28px; }
+.table td:last-child { padding-right: 28px; }
 
 /* ── Sortable headers ────────────────────────────────────────────────────────── */
 .thSortable {

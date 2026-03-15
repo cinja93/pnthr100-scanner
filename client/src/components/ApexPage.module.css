@@ -262,8 +262,8 @@
 .thStatic { cursor: default; }
 .thDetail { min-width: 200px; }
 /* Compound selector (0,2,1) beats .table th (0,1,1) — ensures padding-right wins */
-.table th.thDetail { padding-right: 56px; }
-.table td.detailCell { padding-right: 56px; }
+.table th.thDetail { text-align: center; padding-left: 0; padding-right: 0; }
+.table td.detailCell { text-align: center; padding-left: 0; padding-right: 0; }
 .sortArrow       { color: #555; font-size: 10px; margin-left: 2px; }
 .sortArrowActive { color: #fcf000; font-size: 10px; margin-left: 2px; }
 

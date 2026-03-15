@@ -409,3 +409,82 @@
   border-top: 1px solid #374151;
   margin: 4px 0;
 }
+
+/* ── Formula Guide Button ─────────────────────────────────────────────────── */
+.formulaBtn {
+  background: transparent;
+  border: 1px solid #374151;
+  border-radius: 4px;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  vertical-align: middle;
+  transition: background 0.15s, border-color 0.15s;
+  line-height: 1.4;
+}
+.formulaBtn:hover { background: rgba(252, 240, 0, 0.15); border-color: #fcf000; }
+.formulaBtnActive { background: rgba(252, 240, 0, 0.2) !important; border-color: #fcf000 !important; color: #fcf000 !important; }
+
+/* ── Formula Guide Popup ──────────────────────────────────────────────────── */
+.formulaPopup {
+  position: fixed;
+  z-index: 9999;
+  background: #111827;
+  border: 1px solid #374151;
+  border-radius: 10px;
+  padding: 0;
+  width: 440px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.85);
+  overflow: hidden;
+}
+.formulaHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1f2937;
+  border-bottom: 1px solid #374151;
+  padding: 10px 14px;
+}
+.formulaTitle {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fcf000;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.formulaClose {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.formulaClose:hover { color: #fff; }
+.formulaList {
+  padding: 10px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.formulaItem {
+  border-left: 2px solid #374151;
+  padding-left: 10px;
+}
+.formulaDim {
+  font-size: 11px;
+  font-weight: 800;
+  color: #fcf000;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+.formulaDesc {
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1.5;
+}

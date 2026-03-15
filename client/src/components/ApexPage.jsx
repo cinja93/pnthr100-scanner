@@ -159,6 +159,42 @@ function PreyTags({ strategies }) {
   );
 }
 
+// ── D1–D8 Formula reference data ─────────────────────────────────────────────
+const FORMULA_GUIDE = [
+  {
+    dim: 'D1 · Market Direction',
+    desc: 'Nasdaq stocks track QQQ; NYSE/ARCA track SPY. Look back 5 weeks: +1/week when signal aligns with index EMA direction, −1/week when against. Range: −5 to +5.',
+  },
+  {
+    dim: 'D2 · Sector Direction',
+    desc: '5D window: new signals ×2 pts; active/exits ±1 pt each; sector 5D return% ×2. 1M window: all signal counts point-for-point; sector 1M return% point-for-point. Sum of both windows.',
+  },
+  {
+    dim: 'D3 · Price Separation + Conviction',
+    desc: 'BL sep = (low − EMA) / EMA × 100. BL conv = (close − low) / low × 100. SS sep = (EMA − high) / EMA × 100. SS conv = (high − close) / high × 100. Both are pure %, point-for-point.',
+  },
+  {
+    dim: 'D4 · Rank Position — REMOVED',
+    desc: 'Always 0 pts. Static rank position removed 2026-03-14 — it dominated scoring (new #1 = 99 pts), overwhelming D1/D2 market/sector penalties.',
+  },
+  {
+    dim: 'D5 · Rank Rise (delta only)',
+    desc: 'Rising: +1 pt per position climbed. Falling: −1 pt per position dropped. Flat: 0 pts. New entries: 0 pts — must earn rank credit by actually rising on the list.',
+  },
+  {
+    dim: 'D6 · Momentum (4 sub-scores added)',
+    desc: 'A: EMA Conviction = directedSlope% × separation%. B: RSI − 50 (BL) or 50 − RSI (SS). C: OBV week-over-week % change (inverted for SS). D: ADX rising → ADX−5; falling → ADX−15; ADX < 15 → 0.',
+  },
+  {
+    dim: 'D7 · EMA Slope Duration',
+    desc: 'Count consecutive weeks EMA has sloped in signal direction going back from entry. BL: EMA[i] > EMA[i−1]. SS: EMA[i] < EMA[i−1]. First reversal stops count. Cap: 20 pts (1 pt/week).',
+  },
+  {
+    dim: 'D8 · Multi-Strategy Prey Presence',
+    desc: '+3 pts for each Prey section the stock appears in this week: Feast, Alpha, Spring, Sneak, Hunt, Sprint. Maximum 18 pts (6 strategies × 3 pts each).',
+  },
+];
+
 export default function ApexPage() {
   const [data, setData]             = useState(null);
   const [loading, setLoading]       = useState(true);
@@ -166,11 +202,23 @@ export default function ApexPage() {
   const [side, setSide]             = useState('all');
   const [tierFilter, setTierFilter] = useState('all');
   const [popup, setPopup]           = useState(null);
+  const [formulaOpen, setFormulaOpen] = useState(false);
+  const [formulaPos, setFormulaPos]   = useState({ x: 0, y: 0 });
+  const formulaBtnRef = useRef(null);
   const [chartIndex, setChartIndex] = useState(null);
   const [chartStocks, setChartStocks] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: 'apexScore', dir: 'desc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
   const sortedRef = useRef([]);
+
+  function toggleFormula(e) {
+    e.stopPropagation();
+    if (!formulaOpen && formulaBtnRef.current) {
+      const rect = formulaBtnRef.current.getBoundingClientRect();
+      setFormulaPos({ x: rect.right, y: rect.bottom + 6 });
+    }
+    setFormulaOpen(prev => !prev);
+  }
 
   // Arrow-key navigation through Kill page rows
   useEffect(() => {
@@ -375,7 +423,17 @@ export default function ApexPage() {
                     <SortTh col="ytd"       label="YTD" />
                     <SortTh col="signal"    label="Signal" />
                     <SortTh col="wks"       label="Wks" />
-                    <th className={styles.thStatic}>Score Detail</th>
+                    <th className={styles.thStatic}>
+                      Score Detail{' '}
+                      <button
+                        ref={formulaBtnRef}
+                        className={`${styles.formulaBtn}${formulaOpen ? ` ${styles.formulaBtnActive}` : ''}`}
+                        onClick={toggleFormula}
+                        title="D1–D8 Scoring Formulas"
+                      >
+                        📐
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -521,6 +579,27 @@ export default function ApexPage() {
         >
           <div className={styles.breakdownTitle}>{popup.ticker} — Kill Score: {popup.apexScore}</div>
           <ScoreBreakdown scores={popup.scores} total={popup.apexScore} />
+        </div>
+      )}
+
+      {/* ── D1–D8 Formula Guide Popup (click to open/close) ─────────────────── */}
+      {formulaOpen && (
+        <div
+          className={styles.formulaPopup}
+          style={{ left: Math.max(8, formulaPos.x - 440), top: formulaPos.y }}
+        >
+          <div className={styles.formulaHeader}>
+            <span className={styles.formulaTitle}>D1–D8 Scoring Formulas</span>
+            <button className={styles.formulaClose} onClick={() => setFormulaOpen(false)}>✕</button>
+          </div>
+          <div className={styles.formulaList}>
+            {FORMULA_GUIDE.map(f => (
+              <div key={f.dim} className={styles.formulaItem}>
+                <div className={styles.formulaDim}>{f.dim}</div>
+                <div className={styles.formulaDesc}>{f.desc}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -233,14 +233,16 @@
   z-index: 10;
 }
 .row {
-  cursor: default;
-  transition: background-color 0.2s;
+  cursor: pointer;
+  transition: background-color 0.15s;
 }
 .row:nth-child(even) { background-color: #f7f8fa; }
 .row:hover { background-color: #efefef !important; }
-.selectedRow td { background: rgba(59, 130, 246, 0.22) !important; }
-.selectedRow:hover td { background: rgba(59, 130, 246, 0.32) !important; }
-.selectedRow { box-shadow: inset 4px 0 0 #3b82f6; }
+/* Double-class beats .top10Row td and .row:hover regardless of order in file */
+.row.selectedRow td          { background: #dbeafe !important; }
+.row.selectedRow:hover td    { background: #bfdbfe !important; }
+/* Left-edge accent on first cell */
+.row.selectedRow .killRankCell { border-left: 4px solid #3b82f6 !important; }
 .tickerClickable { cursor: pointer !important; }
 .tickerClickable:hover span { text-decoration: underline; }
 .table td {
@@ -474,6 +476,8 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
 }
 .formulaItem {
   border-left: 2px solid #374151;

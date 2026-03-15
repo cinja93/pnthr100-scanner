@@ -215,7 +215,14 @@ export default function ApexPage() {
     e.stopPropagation();
     if (!formulaOpen && formulaBtnRef.current) {
       const rect = formulaBtnRef.current.getBoundingClientRect();
-      setFormulaPos({ x: rect.right, y: rect.bottom + 6 });
+      // Estimate popup height (~520px); if it would overflow the bottom, open upward
+      const estimatedH = 520;
+      const spaceBelow = window.innerHeight - rect.bottom - 12;
+      const top = spaceBelow >= estimatedH
+        ? rect.bottom + 6
+        : Math.max(8, rect.top - estimatedH - 6);
+      const left = Math.max(8, Math.min(rect.right - 440, window.innerWidth - 452));
+      setFormulaPos({ x: left, y: top });
     }
     setFormulaOpen(prev => !prev);
   }
@@ -584,7 +591,7 @@ export default function ApexPage() {
       {formulaOpen && (
         <div
           className={styles.formulaPopup}
-          style={{ left: Math.max(8, Math.min(formulaPos.x - 440, window.innerWidth - 452)), top: formulaPos.y }}
+          style={{ left: formulaPos.x, top: formulaPos.y }}
         >
           <div className={styles.formulaHeader}>
             <span className={styles.formulaTitle}>D1–D8 Scoring Formulas</span>

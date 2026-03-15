@@ -57,11 +57,10 @@ function ScoreBreakdown({ scores, total }) {
     { label: 'D1 Market Direction', key: 'd1'  },
     { label: 'D2 Sector Direction', key: 'd2'  },
     { label: 'D3 Sep + Conviction', key: 'd3'  },
-    { label: 'D4 Rank Pos (n/a)',   key: 'd4'  },
-    { label: 'D5 Rank Rise',        key: 'd5'  },
-    { label: 'D6 Momentum',         key: 'd6'  },
-    { label: 'D7 EMA Duration',     key: 'd7'  },
-    { label: 'D8 Prey Presence',    key: 'd8'  },
+    { label: 'D4 Rank Rise',        key: 'd5'  },
+    { label: 'D5 Momentum',         key: 'd6'  },
+    { label: 'D6 EMA Duration',     key: 'd7'  },
+    { label: 'D7 Prey Presence',    key: 'd8'  },
   ];
   return (
     <div className={styles.breakdown}>
@@ -174,23 +173,19 @@ const FORMULA_GUIDE = [
     desc: 'BL sep = (low − EMA) / EMA × 100. BL conv = (close − low) / low × 100. SS sep = (EMA − high) / EMA × 100. SS conv = (high − close) / high × 100. Both are pure %, point-for-point.',
   },
   {
-    dim: 'D4 · Rank Position — REMOVED',
-    desc: 'Always 0 pts. Static rank position removed 2026-03-14 — it dominated scoring (new #1 = 99 pts), overwhelming D1/D2 market/sector penalties.',
-  },
-  {
-    dim: 'D5 · Rank Rise (delta only)',
+    dim: 'D4 · Rank Rise (delta only)',
     desc: 'Rising: +1 pt per position climbed. Falling: −1 pt per position dropped. Flat: 0 pts. New entries: 0 pts — must earn rank credit by actually rising on the list.',
   },
   {
-    dim: 'D6 · Momentum (4 sub-scores added)',
+    dim: 'D5 · Momentum (4 sub-scores added)',
     desc: 'A: EMA Conviction = directedSlope% × separation%. B: RSI − 50 (BL) or 50 − RSI (SS). C: OBV week-over-week % change (inverted for SS). D: ADX rising → ADX−5; falling → ADX−15; ADX < 15 → 0.',
   },
   {
-    dim: 'D7 · EMA Slope Duration',
+    dim: 'D6 · EMA Slope Duration',
     desc: 'Count consecutive weeks EMA has sloped in signal direction going back from entry. BL: EMA[i] > EMA[i−1]. SS: EMA[i] < EMA[i−1]. First reversal stops count. Cap: 20 pts (1 pt/week).',
   },
   {
-    dim: 'D8 · Multi-Strategy Prey Presence',
+    dim: 'D7 · Multi-Strategy Prey Presence',
     desc: '+3 pts for each Prey section the stock appears in this week: Feast, Alpha, Spring, Sneak, Hunt, Sprint. Maximum 18 pts (6 strategies × 3 pts each).',
   },
 ];

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import ChartModal from './ChartModal';
+import KillBadge from './KillBadge';
 import { fetchApexStocks } from '../services/api';
 import styles from './ApexPage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -391,8 +392,9 @@ export default function ApexPage() {
                       >
                         {/* Kill Rank */}
                         <td className={styles.killRankCell}>
-                          {isTop10 && <span className={styles.top10Crown}>🏆</span>}
-                          {idx + 1}
+                          {isTop10
+                            ? <KillBadge rank={idx + 1} size={52} />
+                            : idx + 1}
                         </td>
 
                         {/* Kill Score — pill badge, accommodates larger numbers */}

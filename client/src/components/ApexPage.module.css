@@ -247,13 +247,10 @@
   font-size: 15px;
   color: #b4b4b4;
   text-align: center;
-  width: 60px;
+  width: 68px;
   white-space: nowrap;
-}
-.top10Crown {
-  font-size: 11px;
-  margin-right: 3px;
   vertical-align: middle;
+  padding: 6px 8px !important;
 }
 
 /* ── Top 10 Row highlight ────────────────────────────────────────────────────── */

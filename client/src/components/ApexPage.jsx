@@ -433,7 +433,7 @@ export default function ApexPage() {
                     <SortTh col="ytd"       label="YTD" />
                     <SortTh col="signal"    label="Signal" />
                     <SortTh col="wks"       label="Wks" />
-                    <th className={`${styles.thStatic} ${styles.thDetail}`}>Score Detail</th>
+                    <th className={styles.thStatic} style={{ minWidth: '140px', textAlign: 'center', paddingRight: '24px' }}>Score Detail</th>
                   </tr>
                 </thead>
                 <tbody>

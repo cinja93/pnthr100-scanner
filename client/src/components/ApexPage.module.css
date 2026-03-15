@@ -260,7 +260,10 @@
 }
 .thSortable:hover { background-color: rgba(252, 240, 0, 0.12); }
 .thStatic { cursor: default; }
-.thDetail { min-width: 160px; padding-right: 48px; }
+.thDetail { min-width: 200px; }
+/* Compound selector (0,2,1) beats .table th (0,1,1) — ensures padding-right wins */
+.table th.thDetail { padding-right: 56px; }
+.table td.detailCell { padding-right: 56px; }
 .sortArrow       { color: #555; font-size: 10px; margin-left: 2px; }
 .sortArrowActive { color: #fcf000; font-size: 10px; margin-left: 2px; }
 
@@ -390,7 +393,6 @@
 .detailCell {
   text-align: center;
   cursor: default;
-  padding-right: 48px;
 }
 .detailIcon { font-size: 14px; cursor: pointer; }
 .breakdownPopupFixed {

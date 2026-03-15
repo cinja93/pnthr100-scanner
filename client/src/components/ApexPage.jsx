@@ -269,7 +269,7 @@ export default function ApexPage() {
 
   function SortTh({ col, label, title: titleProp }) {
     const active = sortConfig.key === col;
-    const arrow = active ? (sortConfig.dir === 'asc' ? ' ▲' : ' ▼') : ' ·';
+    const arrow = active ? (sortConfig.dir === 'asc' ? '▲' : '▼') : '↕';
     return (
       <th
         className={styles.thSortable}

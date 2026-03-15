@@ -214,9 +214,16 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
 
   // Get sort indicator for column
   const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return '⇅';
-    if (sortConfig.direction === 'pause-first') return '⏸';
-    return sortConfig.direction === 'asc' ? '▲' : '▼';
+    const isActive = sortConfig.key === key;
+    let symbol;
+    if (!isActive) symbol = '↕';
+    else if (sortConfig.direction === 'pause-first') symbol = '⏸';
+    else symbol = sortConfig.direction === 'asc' ? '▲' : '▼';
+    return (
+      <span style={{ display: 'block', marginTop: '3px', fontSize: '11px', opacity: isActive ? 1 : 0.6, color: isActive ? '#fcf000' : 'inherit' }}>
+        {symbol}
+      </span>
+    );
   };
 
   // Get rank change display with arrow and color (rankChange: null/undefined = New, number = up/down/same)

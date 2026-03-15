@@ -7,14 +7,14 @@
 //   D1  Market Direction          ±5 typical   Index (QQQ/SPY) EMA alignment × 5 weeks
 //   D2  Sector Direction          variable      Sector ETF 5D + 1M return, alignment × multiplier
 //   D3  Price Separation + Close  variable      Separation% + conviction% (point-for-point)
-//   D4  Rank Position             1-99          Math.max(1, 100 - rank); 0 if not ranked
-//   D5  Rank Rise                 variable      +1/-1 per spot; new entry = 100-rank
+//   D4  Rank Position             0             REMOVED — was dominating; see changelog
+//   D5  Rank Rise (delta only)    variable      +1/-1 per spot; new entry = 0 pts
 //   D6  Momentum                  variable      EMA conviction + RSI + OBV% + ADX
 //   D7  EMA Slope Duration        0-20          Consecutive weeks EMA in signal direction
 //   D8  Multi-Strategy Prey       0-18          +3 pts per Prey strategy stock appears in
 //
-// Tiers: ≥300 ALPHA · ≥250 STRIKING · ≥200 HUNTING · ≥150 POUNCING
-//        ≥100 COILING · ≥75 STALKING · ≥50 TRACKING · ≥25 PROWLING
+// Tiers: ≥130 ALPHA · ≥100 STRIKING · ≥80 HUNTING · ≥65 POUNCING
+//        ≥50 COILING · ≥35 STALKING · ≥20 TRACKING · ≥10 PROWLING
 //        ≥0 STIRRING · <0 DORMANT
 //
 // Config: server/killScoringConfig.js — single source of truth for all weights
@@ -35,15 +35,15 @@ let apexCache = { weekKey: null, results: null };
 // ── Tier Definitions ──────────────────────────────────────────────────────────
 
 export const APEX_TIERS = [
-  { min: 300, max: Infinity, name: 'ALPHA PNTHR KILL', tagline: 'Jugular. Teeth in. Alpha PNTHR is Legend.' },
-  { min: 250, max: 299,      name: 'STRIKING',         tagline: 'Claws out. Contact made. In the kill zone.' },
-  { min: 200, max: 249,      name: 'HUNTING',          tagline: 'Full pursuit mode. Locked and moving fast.' },
-  { min: 150, max: 199,      name: 'POUNCING',         tagline: 'The leap has begun. No turning back.' },
-  { min: 100, max: 149,      name: 'COILING',          tagline: 'Body compressed. Energy stored. About to explode.' },
-  { min: 75,  max: 99,       name: 'STALKING',         tagline: 'Eyes fixed on target. Closing the distance silently.' },
-  { min: 50,  max: 74,       name: 'TRACKING',         tagline: 'Scent picked up. Target identified. Moving with intent.' },
-  { min: 25,  max: 49,       name: 'PROWLING',         tagline: 'Moving through the jungle. No target yet.' },
-  { min: 0,   max: 24,       name: 'STIRRING',         tagline: 'Waking up. Eyes barely open.' },
+  { min: 130, max: Infinity, name: 'ALPHA PNTHR KILL', tagline: 'Jugular. Teeth in. Alpha PNTHR is Legend.' },
+  { min: 100, max: 129,      name: 'STRIKING',         tagline: 'Claws out. Contact made. In the kill zone.' },
+  { min: 80,  max: 99,       name: 'HUNTING',          tagline: 'Full pursuit mode. Locked and moving fast.' },
+  { min: 65,  max: 79,       name: 'POUNCING',         tagline: 'The leap has begun. No turning back.' },
+  { min: 50,  max: 64,       name: 'COILING',          tagline: 'Body compressed. Energy stored. About to explode.' },
+  { min: 35,  max: 49,       name: 'STALKING',         tagline: 'Eyes fixed on target. Closing the distance silently.' },
+  { min: 20,  max: 34,       name: 'TRACKING',         tagline: 'Scent picked up. Target identified. Moving with intent.' },
+  { min: 10,  max: 19,       name: 'PROWLING',         tagline: 'Moving through the jungle. No target yet.' },
+  { min: 0,   max: 9,        name: 'STIRRING',         tagline: 'Waking up. Eyes barely open.' },
   { min: -Infinity, max: -1, name: 'DORMANT',          tagline: 'Fighting the trend. Sleeping against the flow.' },
 ];
 
@@ -421,26 +421,26 @@ function scoreD3(signal, data) {
   return sep + conv;
 }
 
-// ── D4: Rank Position ────────────────────────────────────────────────────────
-// Formula: Math.max(floor, 100 - rank); 0 if not ranked
+// ── D4: Rank Position — REMOVED ──────────────────────────────────────────────
+// Removed 2026-03-14: static rank position dominated scoring (up to 99 pts)
+// and overwhelmed market/sector direction signals. See killScoringConfig.js changelog.
+// Always returns 0 — kept for backward compatibility with score breakdown display.
 
-function scoreD4(rank) {
-  const cfg = KILL_CONFIG.d4;
-  if (rank == null) return 0;
-  return Math.max(cfg.floor, 100 - rank);
+function scoreD4() {
+  return 0;
 }
 
-// ── D5: Rank Rise ────────────────────────────────────────────────────────────
-// New entry (rankChange null/undefined): 100 - currentRank
+// ── D5: Rank Rise (delta only) ────────────────────────────────────────────────
+// New entry (rankChange null/undefined): 0 pts — no rise data, no bonus
 // Rising: +ptPerSpot per position climbed
 // Falling: -ptPerSpot per position dropped
 // Flat (0): 0 pts
 
 function scoreD5(rank, rankChange) {
   const cfg = KILL_CONFIG.d5;
-  // New entry
+  // New entry: no rise data yet
   if (rankChange === null || rankChange === undefined) {
-    return rank != null ? 100 - rank : 0;
+    return cfg.newEntryPts ?? 0;
   }
   return Number(rankChange) * cfg.ptPerSpot;
 }

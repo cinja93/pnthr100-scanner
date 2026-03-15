@@ -32,20 +32,19 @@ export const KILL_CONFIG = {
   // SS conv: (high - close) / high * 100
   d3: {},
 
-  // D4: Rank Position
-  // Formula: Math.max(floor, 100 - rank)
-  // Rank 1 = 99 pts, Rank 60 = 40 pts, Rank 100 = floor pts, not ranked = 0
-  d4: {
-    floor: 1,               // minimum pts for any stock on the PNTHR 100 list
-  },
+  // D4: Rank Position — REMOVED (2026-03-14)
+  // Static rank position gave too much weight (up to 99 pts) and drowned out
+  // market/sector direction signals. Replaced by pure D5 delta scoring.
+  // d4: { floor: 1 },
 
-  // D5: Rank Rise
-  // Rising: +1 per position climbed
-  // New entry (not previously ranked): 100 - currentRank pts
-  // Falling: -1 per position dropped
+  // D5: Rank Rise (delta only — no new-entry bonus)
+  // Rising: +ptPerSpot per position climbed
+  // New entry (rankChange null): 0 pts — no rise data yet
+  // Falling: -ptPerSpot per position dropped
   // Flat: 0 pts
   d5: {
     ptPerSpot: 1,           // points per position risen or fallen
+    newEntryPts: 0,         // new PNTHR 100 entries get no rank bonus until they actually rise
   },
 
   // D6: Momentum (4 sub-scores added together)
@@ -104,4 +103,10 @@ export const KILL_CONFIG = {
 //             D6: EMA conviction (slope×sep) + RSI-50 + OBV% + ADX (rising: -5, falling: -15)
 //             D7: 1pt/week consecutive EMA slope, max 20
 //             D8: +3pts per Prey strategy
+//
+// 2026-03-14  REMOVED D4 (rank position). Static rank was dominating scoring — rank #1
+//             new entry got 99pts from D4 alone, overwhelming D1 (-5 max) and D2 penalties.
+//             D5 new-entry bonus also removed (newEntryPts: 0). Stocks must earn rank
+//             credit by actually RISING on the list. D5 is now pure delta only.
+//             Tier thresholds recalibrated for lower max possible scores.
 //

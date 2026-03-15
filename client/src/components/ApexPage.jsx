@@ -6,7 +6,9 @@ import styles from './ApexPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
 // ── Tier config — mirrors server/apexService.js ───────────────────────────────
-// New thresholds: unbounded scoring, tiers based on total kill score
+// Thresholds recalibrated after D4 removal (2026-03-14):
+// ≥130 ALPHA · ≥100 STRIKING · ≥80 HUNTING · ≥65 POUNCING · ≥50 COILING
+// ≥35 STALKING · ≥20 TRACKING · ≥10 PROWLING · ≥0 STIRRING · <0 DORMANT
 const TIERS = [
   { name: 'ALPHA PNTHR KILL', tagline: 'Jugular. Teeth in. Alpha PNTHR is Legend.',            color: '#15803d', textColor: '#ffffff' },
   { name: 'STRIKING',         tagline: 'Claws out. Contact made. In the kill zone.',            color: '#16a34a', textColor: '#ffffff' },
@@ -55,7 +57,7 @@ function ScoreBreakdown({ scores, total }) {
     { label: 'D1 Market Direction', key: 'd1'  },
     { label: 'D2 Sector Direction', key: 'd2'  },
     { label: 'D3 Sep + Conviction', key: 'd3'  },
-    { label: 'D4 Rank Position',    key: 'd4'  },
+    { label: 'D4 Rank Pos (n/a)',   key: 'd4'  },
     { label: 'D5 Rank Rise',        key: 'd5'  },
     { label: 'D6 Momentum',         key: 'd6'  },
     { label: 'D7 EMA Duration',     key: 'd7'  },

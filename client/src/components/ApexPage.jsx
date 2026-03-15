@@ -96,6 +96,7 @@ function sortStocks(stocks, { key, dir }) {
   return [...stocks].sort((a, b) => {
     let av, bv;
     switch (key) {
+      case 'killRank':
       case 'apexScore':   av = a.apexScore   ?? -9999;  bv = b.apexScore   ?? -9999;  break;
       case 'tier':        av = getTierIndex(a.tier);    bv = getTierIndex(b.tier);    break;
       case 'rank':
@@ -266,14 +267,14 @@ export default function ApexPage() {
     );
   }
 
-  function SortTh({ col, label }) {
+  function SortTh({ col, label, title: titleProp }) {
     const active = sortConfig.key === col;
     const arrow = active ? (sortConfig.dir === 'asc' ? ' ▲' : ' ▼') : ' ·';
     return (
       <th
         className={styles.thSortable}
         onClick={() => handleSort(col)}
-        title={`Sort by ${label}`}
+        title={titleProp ?? `Sort by ${col}`}
       >
         {label}<span className={active ? styles.sortArrowActive : styles.sortArrow}>{arrow}</span>
       </th>
@@ -422,18 +423,18 @@ export default function ApexPage() {
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th className={styles.thStatic}>Kill Rank</th>
-                    <SortTh col="apexScore" label="Kill Score" />
-                    <SortTh col="tier"      label="Tier" />
-                    <SortTh col="rank"      label="PNTHR Rank" />
-                    <SortTh col="ticker"    label="Ticker" />
-                    <SortTh col="exchange"  label="Exchange" />
-                    <SortTh col="sector"    label="Sector" />
-                    <SortTh col="price"     label="Price" />
-                    <SortTh col="ytd"       label="YTD" />
-                    <SortTh col="signal"    label="Signal" />
-                    <SortTh col="wks"       label="Wks" />
-                    <th className={styles.thStatic} style={{ minWidth: '140px', textAlign: 'center', paddingRight: '24px' }}>Score Detail</th>
+                    <SortTh col="killRank" label={<>Kill<br/>Rank</>}    title="Sort by Kill Rank" />
+                    <SortTh col="apexScore" label={<>Kill<br/>Score</>}  title="Sort by Kill Score" />
+                    <SortTh col="tier"      label="Tier"                 title="Sort by Tier" />
+                    <SortTh col="rank"      label={<>PNTHR<br/>Rank</>}  title="Sort by PNTHR Rank" />
+                    <SortTh col="ticker"    label="Ticker"               title="Sort by Ticker" />
+                    <SortTh col="exchange"  label="Exchange"             title="Sort by Exchange" />
+                    <SortTh col="sector"    label="Sector"               title="Sort by Sector" />
+                    <SortTh col="price"     label={<>Current<br/>Price</>} title="Sort by Price" />
+                    <SortTh col="ytd"       label={<>YTD<br/>Return</>}  title="Sort by YTD Return" />
+                    <SortTh col="signal"    label={<>PNTHR<br/>Signal</>} title="Sort by Signal" />
+                    <SortTh col="wks"       label={<>Wks<br/>Since</>}   title="Sort by Weeks Since Signal" />
+                    <th className={styles.thStatic} style={{ minWidth: '90px', textAlign: 'center' }}>Score<br/>Detail</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -8,6 +8,13 @@ dotenv.config();
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 
+// Normalize FMP/Morningstar sector names to official S&P 500 GICS names
+function normalizeSector(sector) {
+  if (sector === 'Consumer Cyclical')  return 'Consumer Discretionary';
+  if (sector === 'Consumer Defensive') return 'Consumer Staples';
+  return sector;
+}
+
 // Get the last trading day of the previous year (Dec 31, 2025)
 function getYearStartDate() {
   const now = new Date();
@@ -296,7 +303,7 @@ export async function getTopStocks() {
         ticker: sym,
         companyName: profileData?.companyName || quoteData.name || '',
         exchange: profileData?.exchangeShortName || quoteData.exchange || 'N/A',
-        sector: profileData?.sector || 'N/A',
+        sector: normalizeSector(profileData?.sector) || 'N/A',
         currentPrice: parseFloat(currentPrice.toFixed(2)),
         ytdReturn: parseFloat(ytdReturn.toFixed(2)),
         isSp500:     sp500Set.has(sym),
@@ -415,7 +422,7 @@ export async function getJungleStocks(specLongs = [], specShorts = []) {
       ticker:      q.symbol,
       companyName: p?.companyName || q.name || '',
       exchange:    p?.exchangeShortName || q.exchange || 'N/A',
-      sector:      p?.sector || 'N/A',
+      sector:      normalizeSector(p?.sector) || 'N/A',
       currentPrice: parseFloat(currentPrice.toFixed(2)),
       ytdReturn:    parseFloat(ytdReturn.toFixed(2)),
       universe,

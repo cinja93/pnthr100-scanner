@@ -29,7 +29,6 @@ const SECTOR_MAP = {
   'Health Care':            'XLV',
   'Financial Services':     'XLF',
   'Financials':             'XLF',
-  'Consumer Cyclical':      'XLY',
   'Consumer Discretionary': 'XLY',
   'Communication Services': 'XLC',
   'Industrials':            'XLI',
@@ -37,7 +36,6 @@ const SECTOR_MAP = {
   'Materials':              'XLB',
   'Real Estate':            'XLRE',
   'Utilities':              'XLU',
-  'Consumer Defensive':     'XLP',
   'Consumer Staples':       'XLP',
 };
 

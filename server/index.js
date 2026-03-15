@@ -38,6 +38,13 @@ import {
 const app = express();
 const PORT = 3000;
 
+// Normalize FMP/Morningstar sector names to official S&P 500 GICS names
+function normalizeSector(sector) {
+  if (sector === 'Consumer Cyclical')  return 'Consumer Discretionary';
+  if (sector === 'Consumer Defensive') return 'Consumer Staples';
+  return sector;
+}
+
 // Middleware
 const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
 app.use(cors({ origin: allowedOrigin }));
@@ -369,7 +376,7 @@ app.get('/api/stocks/search', async (req, res) => {
     try {
       const profileArr = await profileRes.json();
       if (Array.isArray(profileArr) && profileArr[0]?.sector) {
-        sector = profileArr[0].sector;
+        sector = normalizeSector(profileArr[0].sector);
       }
     } catch { /* ignore */ }
 
@@ -981,8 +988,8 @@ app.post('/api/portfolio/optimize', async (req, res) => {
 // FMP sp500_constituent uses its own sector names (not pure GICS)
 const SECTOR_KEY_TO_GICS = {
   communicationServices: 'Communication Services',
-  consumerDiscretionary: 'Consumer Cyclical',
-  consumerStaples:       'Consumer Defensive',
+  consumerDiscretionary: 'Consumer Discretionary',
+  consumerStaples:       'Consumer Staples',
   energy:                'Energy',
   financials:            'Financial Services',
   healthCare:            'Healthcare',
@@ -1303,7 +1310,7 @@ app.get('/api/speculative-stocks/:side', async (req, res) => {
       const profileData = await profileRes.json();
       const sectorMap = {};
       if (Array.isArray(profileData)) {
-        for (const p of profileData) if (p.symbol && p.sector) sectorMap[p.symbol] = p.sector;
+        for (const p of profileData) if (p.symbol && p.sector) sectorMap[p.symbol] = normalizeSector(p.sector);
       }
       speculativeSectorCache[side] = sectorMap;
     }

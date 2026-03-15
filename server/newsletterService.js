@@ -1,7 +1,6 @@
 // server/newsletterService.js
 // PNTHR'S PERCH — Weekly AI-generated market intelligence newsletter
 import Anthropic from '@anthropic-ai/sdk';
-import fetch from 'node-fetch';
 import { connectToDatabase } from './database.js';
 import { getJungleStocks } from './stockService.js';
 import { getSignals } from './signalService.js';

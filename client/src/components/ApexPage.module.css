@@ -100,10 +100,11 @@
   font-size: 13px;
   flex-wrap: wrap;
 }
-.contextLabel  { color: #9ca3af; font-weight: 600; }
-.contextBull   { color: #22c55e; font-weight: 700; }
-.contextBear   { color: #ef4444; font-weight: 700; }
-.contextMeta   { color: #6b7280; margin-left: auto; }
+.contextLabel   { color: #9ca3af; font-weight: 600; }
+.contextBull    { color: #22c55e; font-weight: 700; }
+.contextBear    { color: #ef4444; font-weight: 700; }
+.contextMeta    { color: #6b7280; margin-left: auto; }
+.contextDivider { color: #374151; padding: 0 4px; }
 
 /* ── Tier Summary Cards ──────────────────────────────────────────────────────── */
 .tierCards {
@@ -246,20 +247,35 @@
   font-size: 15px;
   color: #b4b4b4;
   text-align: center;
-  width: 50px;
+  width: 60px;
+  white-space: nowrap;
+}
+.top10Crown {
+  font-size: 11px;
+  margin-right: 3px;
+  vertical-align: middle;
 }
 
-/* ── Score Badge ─────────────────────────────────────────────────────────────── */
+/* ── Top 10 Row highlight ────────────────────────────────────────────────────── */
+.top10Row td {
+  background: #fefce8 !important;
+}
+.top10Row:hover td {
+  background: #fef9c3 !important;
+}
+
+/* ── Score Badge — pill shape to fit larger numbers ──────────────────────────── */
 .scoreCell { text-align: center; }
 .scoreBadge {
   display: inline-block;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 900;
-  width: 46px;
-  height: 46px;
-  line-height: 46px;
+  min-width: 48px;
+  height: 36px;
+  line-height: 36px;
+  padding: 0 8px;
   text-align: center;
-  border-radius: 50%;
+  border-radius: 18px;
 }
 
 /* ── Tier Badge ──────────────────────────────────────────────────────────────── */
@@ -276,13 +292,30 @@
 }
 
 /* ── Ticker Cell ─────────────────────────────────────────────────────────────── */
-.tickerCell { min-width: 130px; }
+.tickerCell { min-width: 150px; }
 .tickerRow  { display: flex; align-items: center; gap: 4px; }
 .tickerText { font-weight: 700; font-size: 15px; color: #111111; }
 .companyName { font-size: 11px; color: #888; margin-top: 2px; }
 .membershipTag { font-size: 9px; font-weight: 600; color: #aaaaaa; white-space: nowrap; }
 .badgeLong  { background: #14532d; color: #86efac; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; }
 .badgeShort { background: #450a0a; color: #fca5a5; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; }
+
+/* ── Prey Strategy Tags ──────────────────────────────────────────────────────── */
+.preyTagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 3px;
+}
+.preyTag {
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 
 /* ── Signal Badges (match StockTable exactly) ────────────────────────────────── */
 .sigBadgeBL {
@@ -346,7 +379,7 @@
   border: 1px solid #374151;
   border-radius: 8px;
   padding: 14px 16px;
-  min-width: 270px;
+  min-width: 240px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.8);
   pointer-events: none;
 }
@@ -357,35 +390,25 @@
   margin-bottom: 10px;
   letter-spacing: 0.06em;
 }
-.breakdown { display: flex; flex-direction: column; gap: 6px; }
+.breakdown { display: flex; flex-direction: column; gap: 5px; }
 .breakdownRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
 }
 .breakdownLabel {
   font-size: 11px;
   color: #9ca3af;
-  width: 110px;
-  flex-shrink: 0;
-}
-.scoreBarTrack {
   flex: 1;
-  height: 6px;
-  background: #374151;
-  border-radius: 3px;
-  overflow: hidden;
-}
-.scoreBarFill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s ease;
 }
 .breakdownScore {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  color: #e5e7eb;
-  width: 30px;
   text-align: right;
   flex-shrink: 0;
+}
+.breakdownDivider {
+  border-top: 1px solid #374151;
+  margin: 4px 0;
 }

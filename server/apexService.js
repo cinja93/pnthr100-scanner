@@ -1,21 +1,30 @@
 // server/apexService.js
-// ── PNTHR APEX — 100-Point Predatory Scoring System ──────────────────────────
+// ── PNTHR KILL — 8-Dimension Predatory Scoring System ────────────────────────
 //
-// 6 dimensions totalling 100 pts:
-//   D1  Signal Freshness      (0-25)  BL/SS age: week 1=25, 2-3=18, 4-6=12, 7-10=6, >10=0
-//   D2  Trend Quality         (0-20)  Price vs 21-EMA delta + EMA slope direction
-//   D3  Momentum              (0-15)  RSI zone + OBV slope + Volume pulse
-//   D4  Rank Position + Rise  (0-20)  PNTHR 100 rank (0-10) + rankChange (0-10)
-//   D5  Trend Duration        (0-10)  Consecutive bars above/below EMA: 3-8=peak
-//   D6  Market Context        (0-10)  SPY + sector ETF alignment
+// Universe: PNTHR Prey stocks only (Feast, Alpha, Spring, Sneak, Hunt, Sprint)
+// No score cap — each dimension earns what it earns, scores can be negative.
 //
-// 10 tiers (DORMANT → ALPHA PNTHR KILL)
+//   D1  Market Direction          ±5 typical   Index (QQQ/SPY) EMA alignment × 5 weeks
+//   D2  Sector Direction          variable      Sector ETF 5D + 1M return, alignment × multiplier
+//   D3  Price Separation + Close  variable      Separation% + conviction% (point-for-point)
+//   D4  Rank Position             1-99          Math.max(1, 100 - rank); 0 if not ranked
+//   D5  Rank Rise                 variable      +1/-1 per spot; new entry = 100-rank
+//   D6  Momentum                  variable      EMA conviction + RSI + OBV% + ADX
+//   D7  EMA Slope Duration        0-20          Consecutive weeks EMA in signal direction
+//   D8  Multi-Strategy Prey       0-18          +3 pts per Prey strategy stock appears in
+//
+// Tiers: ≥300 ALPHA · ≥250 STRIKING · ≥200 HUNTING · ≥150 POUNCING
+//        ≥100 COILING · ≥75 STALKING · ≥50 TRACKING · ≥25 PROWLING
+//        ≥0 STIRRING · <0 DORMANT
+//
+// Config: server/killScoringConfig.js — single source of truth for all weights
 // Cached weekly — only re-runs at Friday boundary.
-// Only stocks with active BL/SS signals get full price data fetch; others score 0.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import dotenv from 'dotenv';
 dotenv.config();
+
+import { KILL_CONFIG } from './killScoringConfig.js';
 
 const FMP_API_KEY  = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
@@ -26,20 +35,20 @@ let apexCache = { weekKey: null, results: null };
 // ── Tier Definitions ──────────────────────────────────────────────────────────
 
 export const APEX_TIERS = [
-  { min: 91, max: 100, name: 'ALPHA PNTHR KILL', tagline: 'Jugular. Teeth in. Alpha PNTHR is Legend.' },
-  { min: 81, max: 90,  name: 'STRIKING',          tagline: 'Claws out. Contact made. In the kill zone.' },
-  { min: 71, max: 80,  name: 'HUNTING',            tagline: 'Full pursuit mode. Locked and moving fast.' },
-  { min: 61, max: 70,  name: 'POUNCING',           tagline: 'The leap has begun. No turning back.' },
-  { min: 51, max: 60,  name: 'COILING',            tagline: 'Body compressed. Energy stored. About to explode.' },
-  { min: 41, max: 50,  name: 'STALKING',           tagline: 'Eyes fixed on target. Closing the distance silently.' },
-  { min: 31, max: 40,  name: 'TRACKING',           tagline: 'Scent picked up. Target identified. Moving with intent.' },
-  { min: 21, max: 30,  name: 'PROWLING',           tagline: 'Moving through the jungle. No target yet.' },
-  { min: 11, max: 20,  name: 'STIRRING',           tagline: 'Waking up. Eyes barely open.' },
-  { min: 0,  max: 10,  name: 'DORMANT',            tagline: 'Flat. Sleeping. No signal, no momentum.' },
+  { min: 300, max: Infinity, name: 'ALPHA PNTHR KILL', tagline: 'Jugular. Teeth in. Alpha PNTHR is Legend.' },
+  { min: 250, max: 299,      name: 'STRIKING',         tagline: 'Claws out. Contact made. In the kill zone.' },
+  { min: 200, max: 249,      name: 'HUNTING',          tagline: 'Full pursuit mode. Locked and moving fast.' },
+  { min: 150, max: 199,      name: 'POUNCING',         tagline: 'The leap has begun. No turning back.' },
+  { min: 100, max: 149,      name: 'COILING',          tagline: 'Body compressed. Energy stored. About to explode.' },
+  { min: 75,  max: 99,       name: 'STALKING',         tagline: 'Eyes fixed on target. Closing the distance silently.' },
+  { min: 50,  max: 74,       name: 'TRACKING',         tagline: 'Scent picked up. Target identified. Moving with intent.' },
+  { min: 25,  max: 49,       name: 'PROWLING',         tagline: 'Moving through the jungle. No target yet.' },
+  { min: 0,   max: 24,       name: 'STIRRING',         tagline: 'Waking up. Eyes barely open.' },
+  { min: -Infinity, max: -1, name: 'DORMANT',          tagline: 'Fighting the trend. Sleeping against the flow.' },
 ];
 
 export function getTier(score) {
-  if (score == null || score < 0) return APEX_TIERS[9];
+  if (score == null) return APEX_TIERS[9];
   return APEX_TIERS.find(t => score >= t.min && score <= t.max) || APEX_TIERS[9];
 }
 
@@ -64,9 +73,9 @@ const SECTOR_MAP = {
   'Consumer Staples':       'XLP',
 };
 
-const CONTEXT_TICKERS = ['SPY', 'XLK', 'XLE', 'XLV', 'XLF', 'XLY', 'XLC', 'XLI', 'XLB', 'XLRE', 'XLU', 'XLP'];
+const ALL_SECTOR_ETFS = ['XLK', 'XLE', 'XLV', 'XLF', 'XLY', 'XLC', 'XLI', 'XLB', 'XLRE', 'XLU', 'XLP'];
 
-// ── Price Data Helpers ────────────────────────────────────────────────────────
+// ── Date Helpers ──────────────────────────────────────────────────────────────
 
 function getLastFriday() {
   const today = new Date();
@@ -76,6 +85,8 @@ function getLastFriday() {
   d.setDate(today.getDate() - daysBack);
   return d.toISOString().split('T')[0];
 }
+
+// ── Price Data Helpers ────────────────────────────────────────────────────────
 
 async function fetchDailyBars(ticker, from, to) {
   const url = `${FMP_BASE_URL}/historical-price-full/${ticker}?from=${from}&to=${to}&apikey=${FMP_API_KEY}`;
@@ -99,13 +110,15 @@ function aggregateWeeklyBars(daily) {
     }
     const w = weekMap[key];
     w.high   = Math.max(w.high, bar.high);
-    w.low    = Math.min(w.low, bar.low);
-    if (w.close === null) w.close = bar.close;
-    w.open   = bar.open;
+    w.low    = Math.min(w.low,  bar.low);
+    if (w.close === null) w.close = bar.close; // first-seen = Friday close
+    w.open   = bar.open;                        // last-seen  = Monday open
     w.volume += (bar.volume || 0);
   }
   return Object.values(weekMap).sort((a, b) => a.weekStart > b.weekStart ? 1 : -1);
 }
+
+// ── Indicator Computations ────────────────────────────────────────────────────
 
 function computeEMA21(weeklyBars) {
   const closes = weeklyBars.map(b => b.close);
@@ -152,6 +165,48 @@ function computeRSI14(weeklyBars) {
   return rsi;
 }
 
+function computeADX14(weeklyBars) {
+  const n = weeklyBars.length;
+  const adxArr = new Array(n).fill(null);
+  if (n < 30) return adxArr;
+
+  const trs = [], plusDMs = [], minusDMs = [];
+  for (let i = 1; i < n; i++) {
+    const cur = weeklyBars[i], prev = weeklyBars[i - 1];
+    trs.push(Math.max(cur.high - cur.low, Math.abs(cur.high - prev.close), Math.abs(cur.low - prev.close)));
+    const up = cur.high - prev.high, dn = prev.low - cur.low;
+    plusDMs.push(up > dn && up > 0 ? up : 0);
+    minusDMs.push(dn > up && dn > 0 ? dn : 0);
+  }
+
+  let smTR  = trs.slice(0, 14).reduce((a, b) => a + b, 0);
+  let smPDM = plusDMs.slice(0, 14).reduce((a, b) => a + b, 0);
+  let smMDM = minusDMs.slice(0, 14).reduce((a, b) => a + b, 0);
+
+  const dxArr = [];
+  for (let i = 14; i < trs.length; i++) {
+    smTR  = smTR  - smTR  / 14 + trs[i];
+    smPDM = smPDM - smPDM / 14 + plusDMs[i];
+    smMDM = smMDM - smMDM / 14 + minusDMs[i];
+    const pdi = smTR === 0 ? 0 : (smPDM / smTR) * 100;
+    const mdi = smTR === 0 ? 0 : (smMDM / smTR) * 100;
+    const sum = pdi + mdi;
+    dxArr.push(sum === 0 ? 0 : (Math.abs(pdi - mdi) / sum) * 100);
+  }
+
+  if (dxArr.length < 14) return adxArr;
+  let adx = dxArr.slice(0, 14).reduce((a, b) => a + b, 0) / 14;
+  const base = 28;
+  adxArr[base] = adx;
+  for (let i = 14; i < dxArr.length; i++) {
+    adx = (adx * 13 + dxArr[i]) / 14;
+    adxArr[base + (i - 13)] = adx;
+  }
+  return adxArr;
+}
+
+// ── Data Fetcher ──────────────────────────────────────────────────────────────
+
 async function fetchStockData(ticker) {
   try {
     const today = new Date();
@@ -159,223 +214,328 @@ async function fetchStockData(ticker) {
     from.setFullYear(today.getFullYear() - 3);
     const daily = await fetchDailyBars(ticker, from.toISOString().split('T')[0], today.toISOString().split('T')[0]);
     if (!daily || daily.length < 40) return null;
-    const dailyAsc = [...daily].sort((a, b) => a.date > b.date ? 1 : -1);
-    const weekly   = aggregateWeeklyBars(daily);
+    const weekly = aggregateWeeklyBars(daily);
     if (weekly.length < 30) return null;
-
     const ema21 = computeEMA21(weekly);
     const obv   = computeOBV(weekly);
     const rsi   = computeRSI14(weekly);
-
-    const recent = dailyAsc.slice(-25);
-    const vol5   = recent.slice(-5).reduce((s, b)  => s + (b.volume || 0), 0) / 5;
-    const vol20  = recent.slice(-20).reduce((s, b) => s + (b.volume || 0), 0) / 20;
-
-    return { weekly, ema21, obv, rsi, vol5, vol20 };
+    const adx   = computeADX14(weekly);
+    return { weekly, ema21, obv, rsi, adx };
   } catch {
     return null;
   }
 }
 
-// ── Context Loader (SPY + 11 sector ETFs) ────────────────────────────────────
+// ── Index Data (D1) ───────────────────────────────────────────────────────────
+// Returns { QQQ, SPY } — each with:
+//   history: boolean[5] — last 5 weeks, true = close above EMA (bullish)
+//   aboveEma, emaRising for context banner
 
-async function fetchContextData() {
-  const ctx = {};
-  await Promise.all(CONTEXT_TICKERS.map(async t => {
+async function fetchIndexData() {
+  const result = {};
+  for (const ticker of ['QQQ', 'SPY']) {
     try {
-      const data = await fetchStockData(t);
-      if (!data) return;
-      const n = data.weekly.length;
+      const data = await fetchStockData(ticker);
+      if (!data) continue;
+      const { weekly, ema21 } = data;
+      const n = weekly.length;
       const li = n - 1;
-      const ema = data.ema21[li];
-      const prevEma = data.ema21[li - 1];
-      if (ema == null) return;
-      ctx[t] = {
-        aboveEma:  data.weekly[li].close > ema,
-        emaRising: prevEma != null && ema > prevEma,
+      // Last 5 weeks of EMA position: true = bullish (close > EMA)
+      const history = [];
+      for (let i = Math.max(0, n - 5); i < n; i++) {
+        if (ema21[i] != null) history.push(weekly[i].close > ema21[i]);
+      }
+      result[ticker] = {
+        history,
+        aboveEma:  ema21[li] != null ? weekly[li].close > ema21[li] : null,
+        emaRising: ema21[li] != null && ema21[li - 1] != null ? ema21[li] > ema21[li - 1] : null,
       };
     } catch { /* skip */ }
+  }
+  return result;
+}
+
+// ── Sector Data (D2) ─────────────────────────────────────────────────────────
+// Returns map of ETF ticker → { return5D, return1M } in percent
+
+async function fetchSectorData() {
+  const result = {};
+  await Promise.all(ALL_SECTOR_ETFS.map(async etf => {
+    try {
+      const data = await fetchStockData(etf);
+      if (!data) return;
+      const { weekly } = data;
+      const n = weekly.length;
+      // 5D return = 1 week: weekly[n-1] vs weekly[n-2]
+      const return5D = n >= 2
+        ? (weekly[n - 1].close - weekly[n - 2].close) / weekly[n - 2].close * 100
+        : 0;
+      // 1M return = 4 weeks: weekly[n-1] vs weekly[n-5]
+      const return1M = n >= 5
+        ? (weekly[n - 1].close - weekly[n - 5].close) / weekly[n - 5].close * 100
+        : 0;
+      result[etf] = { return5D, return1M };
+    } catch { /* skip */ }
   }));
-  return ctx;
+  return result;
 }
 
-// ── Scoring Functions ─────────────────────────────────────────────────────────
+// ── Prey Presence Builder (D8) ────────────────────────────────────────────────
+// Returns Map<ticker, Set<strategyName>>
 
-function computeWeeksAgo(signalDate) {
-  if (!signalDate) return null;
-  const signalMonday = new Date(signalDate + 'T12:00:00');
-  const today = new Date();
-  const dow = today.getDay();
-  const daysToMonday = dow === 0 ? -6 : 1 - dow;
-  const currentMonday = new Date(today);
-  currentMonday.setDate(today.getDate() + daysToMonday);
-  currentMonday.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((currentMonday - signalMonday) / (1000 * 60 * 60 * 24));
-  return Math.floor(diffDays / 7) + 1;
+function buildPreyPresence(preyResults, huntTickers, stockMeta) {
+  const map = new Map();
+
+  function addStrategy(ticker, strategy) {
+    if (!map.has(ticker)) map.set(ticker, new Set());
+    map.get(ticker).add(strategy);
+  }
+
+  if (preyResults) {
+    // Feast (dinner section)
+    for (const s of (preyResults.dinner?.longs  || [])) addStrategy(s.ticker, 'Feast');
+    for (const s of (preyResults.dinner?.shorts || [])) addStrategy(s.ticker, 'Feast');
+    // Alpha
+    for (const s of (preyResults.alphas?.longs  || [])) addStrategy(s.ticker, 'Alpha');
+    for (const s of (preyResults.alphas?.shorts || [])) addStrategy(s.ticker, 'Alpha');
+    // Spring
+    for (const s of (preyResults.springs?.longs  || [])) addStrategy(s.ticker, 'Spring');
+    for (const s of (preyResults.springs?.shorts || [])) addStrategy(s.ticker, 'Spring');
+    // Sneak
+    for (const s of (preyResults.sneak?.longs  || [])) addStrategy(s.ticker, 'Sneak');
+    for (const s of (preyResults.sneak?.shorts || [])) addStrategy(s.ticker, 'Sneak');
+  }
+
+  // Hunt
+  for (const ticker of (huntTickers || [])) addStrategy(ticker, 'Hunt');
+
+  // Sprint (rankChange > 0 or null = new entry)
+  for (const [ticker, meta] of Object.entries(stockMeta)) {
+    if (meta.rankChange === null || meta.rankChange === undefined || meta.rankChange > 0) {
+      addStrategy(ticker, 'Sprint');
+    }
+  }
+
+  return map;
 }
 
-// D1: Signal Freshness (0-25 pts)
-function scoreSignalFreshness(signalData) {
-  if (!signalData) return 0;
-  const { signal, isNewSignal, signalDate } = signalData;
-  if (signal !== 'BL' && signal !== 'SS') return 0;
-  if (isNewSignal) return 25;
-  const wks = computeWeeksAgo(signalDate);
-  if (wks == null) return 0;
-  if (wks <= 1)  return 25;
-  if (wks <= 3)  return 18;
-  if (wks <= 6)  return 12;
-  if (wks <= 10) return 6;
-  return 0;
+// ── Collect All Prey Tickers ──────────────────────────────────────────────────
+
+function collectPreyTickers(preyResults, huntTickers, stockMeta) {
+  const set = new Set();
+
+  if (preyResults) {
+    for (const s of (preyResults.dinner?.longs   || [])) set.add(s.ticker);
+    for (const s of (preyResults.dinner?.shorts  || [])) set.add(s.ticker);
+    for (const s of (preyResults.alphas?.longs   || [])) set.add(s.ticker);
+    for (const s of (preyResults.alphas?.shorts  || [])) set.add(s.ticker);
+    for (const s of (preyResults.springs?.longs  || [])) set.add(s.ticker);
+    for (const s of (preyResults.springs?.shorts || [])) set.add(s.ticker);
+    for (const s of (preyResults.sneak?.longs    || [])) set.add(s.ticker);
+    for (const s of (preyResults.sneak?.shorts   || [])) set.add(s.ticker);
+  }
+  for (const t of (huntTickers || [])) set.add(t);
+
+  // Sprint: any stock in stockMeta with rising/new rank
+  for (const [ticker, meta] of Object.entries(stockMeta)) {
+    if (meta.rankChange === null || meta.rankChange === undefined || meta.rankChange > 0) {
+      set.add(ticker);
+    }
+  }
+
+  return set;
 }
 
-// D2: Trend Quality (0-20 pts)
-function scoreTrendQuality(data, signalData) {
-  if (!data || !signalData) return 0;
-  const { signal } = signalData;
-  if (signal !== 'BL' && signal !== 'SS') return 0;
-  const { weekly, ema21 } = data;
-  const n = weekly.length;
-  const li = n - 1;
-  const lastEma = ema21[li], prevEma = ema21[li - 1];
-  if (lastEma == null || prevEma == null) return 0;
-  const cur = weekly[li];
-  const prev = weekly[li - 1];
-  const emaRising = lastEma > prevEma;
-  // EMA slope must align with signal direction
-  if (signal === 'BL' && !emaRising) return 2;
-  if (signal === 'SS' &&  emaRising) return 2;
-  // Delta = how far price is from EMA (0-20 pts)
-  const delta = signal === 'BL'
-    ? (cur.close - lastEma) / lastEma
-    : (lastEma - cur.close) / lastEma;
-  let score;
-  if (delta < 0)         score = 4;  // wrong side
-  else if (delta < 0.01) score = 10; // just crossed
-  else if (delta <= 0.05) score = 20; // sweet spot 1-5%
-  else if (delta <= 0.07) score = 15; // 5-7%
-  else if (delta <= 0.10) score = 10; // 7-10%
-  else                   score = 5;  // >10% overextended
-  // +5 if current bar closes in signal direction:
-  // SS: this week closed lower than open AND lower than last week's close (bearish confirmation)
-  // BL: this week closed higher than open AND higher than last week's close (bullish confirmation)
-  if (prev) {
-    if (signal === 'SS' && cur.close < cur.open && cur.close < prev.close) score += 5;
-    if (signal === 'BL' && cur.close > cur.open && cur.close > prev.close) score += 5;
+// ── D1: Market Direction ──────────────────────────────────────────────────────
+// Exchange routing: Nasdaq → QQQ, NYSE/ARCA → SPY
+// Score ±1 per week for last 5 weeks (aligned = +1, misaligned = -1)
+
+function scoreD1(signal, exchange, indexData) {
+  const cfg = KILL_CONFIG.d1;
+  if (!signal || !indexData) return 0;
+  // Route to index by exchange
+  const exc = (exchange || '').toUpperCase();
+  const indexTicker = exc === 'NASDAQ' || exc.includes('NASDAQ') ? 'QQQ' : 'SPY';
+  const idx = indexData[indexTicker];
+  if (!idx || !idx.history || idx.history.length === 0) return 0;
+
+  let score = 0;
+  for (const isBullish of idx.history) {
+    const aligned = (signal === 'BL' && isBullish) || (signal === 'SS' && !isBullish);
+    score += aligned ? cfg.alignedPts : cfg.misalignedPts;
   }
   return score;
 }
 
-// D3: Momentum (0-15 pts) — RSI + OBV + Volume pulse
-function scoreMomentum(data, signalData) {
-  if (!data || !signalData) return 0;
-  const { signal } = signalData;
-  if (signal !== 'BL' && signal !== 'SS') return 0;
-  const { obv, rsi, vol5, vol20, weekly } = data;
-  const li = weekly.length - 1;
-  let score = 0;
+// ── D2: Sector Direction ──────────────────────────────────────────────────────
+// Sector direction = sign(sector ETF 5D return)
+// Aligned: BL + UP sector, or SS + DOWN sector
+// 5D: new signal ×2, else ×1 + sector 5D return %
+// 1M: sector 1M return % point-for-point
 
-  // RSI (0-7 pts)
+function scoreD2(signal, sector, isNewSignal, sectorData) {
+  const cfg = KILL_CONFIG.d2;
+  if (!signal || !sectorData) return 0;
+  const etf = SECTOR_MAP[sector];
+  if (!etf || !sectorData[etf]) return 0;
+  const { return5D, return1M } = sectorData[etf];
+
+  const sectorBullish = return5D >= 0;
+  const aligned = (signal === 'BL' && sectorBullish) || (signal === 'SS' && !sectorBullish);
+  const direction = aligned ? 1 : -1;
+
+  // 5D component: new signals get ×2
+  const mult5D = isNewSignal ? cfg.newSignalMultiplier5D : 1;
+  const score5D = Math.abs(return5D) * mult5D * direction * cfg.sectorReturn5DMultiplier;
+
+  // 1M component: point-for-point
+  const score1M = Math.abs(return1M) * cfg.sectorReturn1MMultiplier * direction;
+
+  return score5D + score1M;
+}
+
+// ── D3: Price Separation + Close Conviction ───────────────────────────────────
+// Both sub-scores are pure point-for-point percentages
+// BL sep:  (low - EMA) / EMA * 100
+// BL conv: (close - low) / low * 100
+// SS sep:  (EMA - high) / EMA * 100
+// SS conv: (high - close) / high * 100
+
+function scoreD3(signal, data) {
+  if (!signal || !data) return 0;
+  const { weekly, ema21 } = data;
+  const n = weekly.length;
+  const li = n - 1;
+  const ema = ema21[li];
+  const bar = weekly[li];
+  if (ema == null || !bar) return 0;
+
+  let sep = 0, conv = 0;
+  if (signal === 'BL') {
+    sep  = (bar.low   - ema)       / ema       * 100;
+    conv = (bar.close - bar.low)   / bar.low   * 100;
+  } else if (signal === 'SS') {
+    sep  = (ema       - bar.high)  / ema       * 100;
+    conv = (bar.high  - bar.close) / bar.high  * 100;
+  }
+  return sep + conv;
+}
+
+// ── D4: Rank Position ────────────────────────────────────────────────────────
+// Formula: Math.max(floor, 100 - rank); 0 if not ranked
+
+function scoreD4(rank) {
+  const cfg = KILL_CONFIG.d4;
+  if (rank == null) return 0;
+  return Math.max(cfg.floor, 100 - rank);
+}
+
+// ── D5: Rank Rise ────────────────────────────────────────────────────────────
+// New entry (rankChange null/undefined): 100 - currentRank
+// Rising: +ptPerSpot per position climbed
+// Falling: -ptPerSpot per position dropped
+// Flat (0): 0 pts
+
+function scoreD5(rank, rankChange) {
+  const cfg = KILL_CONFIG.d5;
+  // New entry
+  if (rankChange === null || rankChange === undefined) {
+    return rank != null ? 100 - rank : 0;
+  }
+  return Number(rankChange) * cfg.ptPerSpot;
+}
+
+// ── D6: Momentum (4 sub-scores) ───────────────────────────────────────────────
+//
+// A: EMA Conviction = directedSlope% × separation%
+// B: RSI centered on 50
+// C: OBV week-over-week % change (inverted for SS)
+// D: ADX trend strength (rising: ADX-5, falling: ADX-15, <15: 0)
+
+function scoreD6(signal, data) {
+  const cfg = KILL_CONFIG.d6;
+  if (!signal || !data) return 0;
+  const { weekly, ema21, obv, rsi, adx } = data;
+  const n  = weekly.length;
+  const li = n - 1;
+  const ema    = ema21[li];
+  const emaPrev = ema21[li - 1];
+  const bar    = weekly[li];
+  if (ema == null || !bar) return 0;
+
+  // Sub-score A: EMA Conviction = directedSlope% × separation%
+  let scoreA = 0;
+  if (emaPrev != null && emaPrev !== 0) {
+    const slopePercent = (ema - emaPrev) / emaPrev * 100;
+    // Directed slope: BL = positive (slope going up), SS = negative slope is good
+    const directedSlope = signal === 'BL' ? slopePercent : -slopePercent;
+    // Separation: same as D3 formula
+    const sep = signal === 'BL'
+      ? (bar.low  - ema) / ema * 100
+      : (ema - bar.high) / ema * 100;
+    scoreA = directedSlope * sep;
+  }
+
+  // Sub-score B: RSI centered on 50
+  let scoreB = 0;
   const curRsi = rsi[li];
   if (curRsi != null) {
-    if (signal === 'BL') {
-      if (curRsi >= 55 && curRsi <= 70)       score += 7;
-      else if (curRsi > 50 && curRsi < 75)    score += 4;
-      else if (curRsi >= 40 && curRsi < 50)   score += 2;
-    } else {
-      if (curRsi >= 30 && curRsi <= 45)       score += 7;
-      else if (curRsi >= 25 && curRsi < 50)   score += 4;
-      else if (curRsi > 50 && curRsi <= 60)   score += 2;
-    }
+    scoreB = signal === 'BL' ? curRsi - cfg.rsiCenter : cfg.rsiCenter - curRsi;
   }
 
-  // OBV 5-period slope (0-5 pts)
-  if (li >= 5) {
-    const obvSlope = obv[li] - obv[li - 5];
-    if (signal === 'BL' && obvSlope > 0)  score += 5;
-    else if (signal === 'SS' && obvSlope < 0) score += 5;
+  // Sub-score C: OBV week-over-week % change
+  let scoreC = 0;
+  if (li >= 1 && obv[li - 1] !== 0) {
+    const obvChange = (obv[li] - obv[li - 1]) / Math.abs(obv[li - 1]) * 100;
+    scoreC = signal === 'BL' ? obvChange : -obvChange;
   }
 
-  // Volume pulse (0-3 pts)
-  if (vol5 > 0 && vol20 > 0) {
-    if (vol5 >= vol20 * 1.2) score += 3;
-    else if (vol5 > vol20)   score += 2;
+  // Sub-score D: ADX trend strength
+  let scoreD = 0;
+  const adxCur  = adx[li];
+  const adxPrev = adx[li - 1];
+  if (adxCur != null && adxCur >= cfg.adxMinThreshold) {
+    const rising = adxPrev != null && adxCur > adxPrev;
+    scoreD = rising
+      ? adxCur - cfg.adxRisingOffset
+      : adxCur - cfg.adxFallingOffset;
+    if (scoreD < 0) scoreD = 0; // floor at 0 for ADX sub-score
   }
 
-  return Math.min(score, 15);
+  return scoreA + scoreB + scoreC + scoreD;
 }
 
-// D4: Rank Position + Rise (0-20 pts)
-function scoreRankAndRise(rank, rankChange) {
-  // Position (0-10 pts)
-  let posScore = 0;
-  if (rank != null) {
-    if (rank <= 10)  posScore = 10;
-    else if (rank <= 25)  posScore = 8;
-    else if (rank <= 50)  posScore = 6;
-    else if (rank <= 75)  posScore = 4;
-    else                  posScore = 2;
-  }
+// ── D7: EMA Slope Duration ────────────────────────────────────────────────────
+// Count consecutive weeks EMA has sloped in signal direction going backward
+// BL: ema[i] > ema[i-1] counts; SS: ema[i] < ema[i-1] counts
+// Hard stop at first reversal; cap at maxWeeks
 
-  // Rise (0-10 pts) — null = NEW entry
-  let riseScore = 0;
-  if (rankChange === null || rankChange === undefined) {
-    riseScore = 10; // NEW entry
-  } else {
-    const n = Number(rankChange);
-    if (n >= 30)      riseScore = 9;
-    else if (n >= 20) riseScore = 7;
-    else if (n >= 10) riseScore = 5;
-    else if (n >= 5)  riseScore = 3;
-    else if (n >= 1)  riseScore = 1;
-    else              riseScore = 0;
+function scoreD7(signal, data) {
+  const cfg = KILL_CONFIG.d7;
+  if (!signal || !data) return 0;
+  const { ema21 } = data;
+  const n = ema21.length;
+  let count = 0;
+  for (let i = n - 1; i >= 1; i--) {
+    if (ema21[i] == null || ema21[i - 1] == null) break;
+    const slopingRight = signal === 'BL'
+      ? ema21[i] > ema21[i - 1]
+      : ema21[i] < ema21[i - 1];
+    if (!slopingRight) break;
+    count++;
+    if (count >= cfg.maxWeeks) break;
   }
-
-  return posScore + riseScore;
+  return count;
 }
 
-// D5: Trend Duration (0-10 pts) — consecutive bars on correct side of EMA
-function scoreTrendDuration(data, signalData) {
-  if (!data || !signalData) return 0;
-  const { signal } = signalData;
-  if (signal !== 'BL' && signal !== 'SS') return 0;
-  const { weekly, ema21 } = data;
-  const li = weekly.length - 1;
-  let bars = 0;
-  for (let i = li; i >= 0 && ema21[i] != null; i--) {
-    const aboveEma = weekly[i].close > ema21[i];
-    if (signal === 'BL' && aboveEma)  bars++;
-    else if (signal === 'SS' && !aboveEma) bars++;
-    else break;
-  }
-  if (bars >= 3 && bars <= 8)  return 10; // ideal window
-  if (bars === 1 || bars === 2) return 5; // early
-  if (bars >= 9 && bars <= 12)  return 4; // mature
-  if (bars > 12)                return 2; // extended
-  return 0;
-}
+// ── D8: Multi-Strategy Prey Presence ─────────────────────────────────────────
+// +ptPerStrategy for each Prey section the stock appears in (max 6 strategies)
 
-// D6: Market Context (0-10 pts) — SPY + sector aligned
-function scoreMarketContext(sector, signalData, ctx) {
-  if (!signalData || !ctx) return 0;
-  const { signal } = signalData;
-  if (signal !== 'BL' && signal !== 'SS') return 0;
-
-  const spy = ctx['SPY'];
-  const broadAligned = spy
-    ? (signal === 'BL' ? spy.aboveEma && spy.emaRising : !spy.aboveEma && !spy.emaRising)
-    : false;
-
-  const etf = SECTOR_MAP[sector];
-  const sectorCtx = etf ? ctx[etf] : null;
-  const sectorAligned = sectorCtx
-    ? (signal === 'BL' ? sectorCtx.aboveEma && sectorCtx.emaRising : !sectorCtx.aboveEma && !sectorCtx.emaRising)
-    : false;
-
-  if (broadAligned && sectorAligned) return 10;
-  if (broadAligned)                  return 6;
-  if (sectorAligned)                 return 4;
-  return 0;
+function scoreD8(ticker, preyPresenceMap) {
+  const cfg = KILL_CONFIG.d8;
+  const strategies = preyPresenceMap.get(ticker);
+  if (!strategies || strategies.size === 0) return 0;
+  return strategies.size * cfg.ptPerStrategy;
 }
 
 // ── Batch Processor ───────────────────────────────────────────────────────────
@@ -393,37 +553,57 @@ async function processBatch(items, fn, concurrency = 10) {
 
 // ── Main Export ───────────────────────────────────────────────────────────────
 
-export async function getApexResults(tickers, stockMeta = {}, jungleSignals = {}) {
+export async function getApexResults(
+  tickers,
+  stockMeta        = {},
+  jungleSignals    = {},
+  preyResults      = null,
+  huntTickers      = new Set(),
+) {
   const weekKey = getLastFriday();
   if (apexCache.weekKey === weekKey && apexCache.results) return apexCache.results;
 
-  const activeTickers = tickers.filter(t => {
+  // Build prey presence — determines the universe + D8 scores
+  const preyPresenceMap = buildPreyPresence(preyResults, huntTickers, stockMeta);
+  const preyTickerSet   = collectPreyTickers(preyResults, huntTickers, stockMeta);
+
+  // Filter to Prey universe + active BL/SS signals
+  const preySignalTickers = [...preyTickerSet].filter(t => {
     const sig = jungleSignals[t]?.signal;
     return sig === 'BL' || sig === 'SS';
   });
 
-  console.log(`[APEX] Starting scan — ${activeTickers.length} active signal stocks out of ${tickers.length} total`);
+  console.log(`[KILL] Scoring ${preySignalTickers.length} Prey stocks (${preyTickerSet.size} in Prey universe, ${tickers.length} total)`);
 
-  // Load context (SPY + 11 sector ETFs)
-  const ctx = await fetchContextData();
-  console.log(`[APEX] Context loaded: ${Object.keys(ctx).length} ETFs`);
+  // Load shared context in parallel
+  console.log('[KILL] Fetching index + sector data...');
+  const [indexData, sectorData] = await Promise.all([
+    fetchIndexData(),
+    fetchSectorData(),
+  ]);
+  console.log(`[KILL] Index: ${Object.keys(indexData).join(', ')} | Sectors: ${Object.keys(sectorData).length} ETFs loaded`);
 
   const scored = [];
 
-  // Score active signal stocks (full price data fetch)
-  await processBatch(activeTickers, async ticker => {
+  await processBatch(preySignalTickers, async ticker => {
     const meta       = stockMeta[ticker] || {};
     const signalData = jungleSignals[ticker] || null;
+    if (!signalData?.signal) return;
+
+    const signal     = signalData.signal;
+    const isNewSignal = signalData.isNewSignal ?? false;
     const data       = await fetchStockData(ticker);
 
-    const d1 = scoreSignalFreshness(signalData);
-    const d2 = scoreTrendQuality(data, signalData);
-    const d3 = scoreMomentum(data, signalData);
-    const d4 = scoreRankAndRise(meta.rank ?? null, meta.rankChange);
-    const d5 = scoreTrendDuration(data, signalData);
-    const d6 = scoreMarketContext(meta.sector, signalData, ctx);
+    const d1 = scoreD1(signal, meta.exchange,  indexData);
+    const d2 = scoreD2(signal, meta.sector, isNewSignal, sectorData);
+    const d3 = scoreD3(signal, data);
+    const d4 = scoreD4(meta.rank ?? null);
+    const d5 = scoreD5(meta.rank ?? null, meta.rankChange);
+    const d6 = scoreD6(signal, data);
+    const d7 = scoreD7(signal, data);
+    const d8 = scoreD8(ticker, preyPresenceMap);
 
-    const total   = d1 + d2 + d3 + d4 + d5 + d6;
+    const total   = d1 + d2 + d3 + d4 + d5 + d6 + d7 + d8;
     const tierDef = getTier(total);
 
     scored.push({
@@ -433,10 +613,10 @@ export async function getApexResults(tickers, stockMeta = {}, jungleSignals = {}
       exchange:     meta.exchange     || '',
       currentPrice: meta.currentPrice || 0,
       ytdReturn:    meta.ytdReturn    ?? null,
-      signal:       signalData.signal,
-      signalDate:   signalData.signalDate   ?? null,
-      isNewSignal:  signalData.isNewSignal  ?? false,
-      stopPrice:    signalData.stopPrice    ?? null,
+      signal,
+      signalDate:   signalData.signalDate  ?? null,
+      isNewSignal,
+      stopPrice:    signalData.stopPrice   ?? null,
       rank:         meta.rank         ?? null,
       rankChange:   meta.rankChange   ?? undefined,
       rankList:     meta.rankList     || null,
@@ -444,21 +624,27 @@ export async function getApexResults(tickers, stockMeta = {}, jungleSignals = {}
       isDow30:      meta.isDow30      || false,
       isNasdaq100:  meta.isNasdaq100  || false,
       universe:     meta.universe     || null,
-      apexScore:    total,
-      scores: { freshness: d1, trendQuality: d2, momentum: d3, rankRise: d4, duration: d5, context: d6 },
+      preyStrategies: [...(preyPresenceMap.get(ticker) || [])],
+      apexScore:    Math.round(total * 10) / 10,
+      scores: { d1, d2: Math.round(d2 * 10) / 10, d3: Math.round(d3 * 10) / 10, d4, d5, d6: Math.round(d6 * 10) / 10, d7, d8 },
       tier:         tierDef.name,
       tierTagline:  tierDef.tagline,
     });
   });
 
-  // Sort: score desc, then signal freshness tie-breaker
+  // Sort by score descending
   scored.sort((a, b) => b.apexScore - a.apexScore);
+
+  // Mark top 10
+  scored.forEach((s, i) => { s.isTop10 = i < 10; });
 
   const results = {
     stocks: scored,
     contextSummary: {
-      spyAboveEma:  ctx['SPY']?.aboveEma  ?? null,
-      spyEmaRising: ctx['SPY']?.emaRising ?? null,
+      spyAboveEma:  indexData['SPY']?.aboveEma  ?? null,
+      spyEmaRising: indexData['SPY']?.emaRising ?? null,
+      qqqAboveEma:  indexData['QQQ']?.aboveEma  ?? null,
+      qqqEmaRising: indexData['QQQ']?.emaRising ?? null,
     },
     tierCounts: APEX_TIERS.reduce((acc, t) => {
       acc[t.name] = scored.filter(s => s.tier === t.name).length;
@@ -466,12 +652,12 @@ export async function getApexResults(tickers, stockMeta = {}, jungleSignals = {}
     }, {}),
     scannedAt:    new Date().toISOString(),
     totalScanned: tickers.length,
-    activeSignals: activeTickers.length,
+    preyCount:    preyTickerSet.size,
+    activeSignals: preySignalTickers.length,
   };
 
   apexCache = { weekKey, results };
-  const topCount = scored.filter(s => ['ALPHA PNTHR KILL', 'STRIKING', 'HUNTING'].includes(s.tier)).length;
-  console.log(`[APEX] Done. Scored: ${scored.length}. Top tier: ${topCount}.`);
+  console.log(`[KILL] Done. Scored: ${scored.length}. Top kill: ${scored[0]?.ticker ?? 'none'} @ ${scored[0]?.apexScore ?? 0}.`);
   return results;
 }
 

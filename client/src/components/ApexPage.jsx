@@ -4,19 +4,19 @@ import { fetchApexStocks } from '../services/api';
 import styles from './ApexPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
-// ── Tier config (mirrors server) ─────────────────────────────────────────────
-// Traffic-light palette: dark green → lighter green → dark yellow → lighter yellow → dark red → light red
+// ── Tier config — mirrors server/apexService.js ───────────────────────────────
+// New thresholds: unbounded scoring, tiers based on total kill score
 const TIERS = [
-  { name: 'ALPHA PNTHR KILL', tagline: 'Jugular. Teeth in. Alpha PNTHR is Legend.',            color: '#15803d', textColor: '#ffffff' }, // dark green
-  { name: 'STRIKING',          tagline: 'Claws out. Contact made. In the kill zone.',           color: '#16a34a', textColor: '#ffffff' }, // green
-  { name: 'HUNTING',           tagline: 'Full pursuit mode. Locked and moving fast.',           color: '#22c55e', textColor: '#111111' }, // medium green
-  { name: 'POUNCING',          tagline: 'The leap has begun. No turning back.',                 color: '#86efac', textColor: '#111111' }, // light green
-  { name: 'COILING',           tagline: 'Body compressed. Energy stored. About to explode.',   color: '#ca8a04', textColor: '#ffffff' }, // dark yellow/gold
-  { name: 'STALKING',          tagline: 'Eyes fixed on target. Closing the distance silently.',color: '#eab308', textColor: '#111111' }, // yellow
-  { name: 'TRACKING',          tagline: 'Scent picked up. Target identified. Moving with intent.', color: '#fde047', textColor: '#111111' }, // light yellow
-  { name: 'PROWLING',          tagline: 'Moving through the jungle. No target yet.',            color: '#b91c1c', textColor: '#ffffff' }, // dark red
-  { name: 'STIRRING',          tagline: 'Waking up. Eyes barely open.',                        color: '#ef4444', textColor: '#ffffff' }, // red
-  { name: 'DORMANT',           tagline: 'Flat. Sleeping. No signal, no momentum.',             color: '#fca5a5', textColor: '#111111' }, // light red
+  { name: 'ALPHA PNTHR KILL', tagline: 'Jugular. Teeth in. Alpha PNTHR is Legend.',            color: '#15803d', textColor: '#ffffff' },
+  { name: 'STRIKING',         tagline: 'Claws out. Contact made. In the kill zone.',            color: '#16a34a', textColor: '#ffffff' },
+  { name: 'HUNTING',          tagline: 'Full pursuit mode. Locked and moving fast.',            color: '#22c55e', textColor: '#111111' },
+  { name: 'POUNCING',         tagline: 'The leap has begun. No turning back.',                  color: '#86efac', textColor: '#111111' },
+  { name: 'COILING',          tagline: 'Body compressed. Energy stored. About to explode.',    color: '#ca8a04', textColor: '#ffffff' },
+  { name: 'STALKING',         tagline: 'Eyes fixed on target. Closing the distance silently.', color: '#eab308', textColor: '#111111' },
+  { name: 'TRACKING',         tagline: 'Scent picked up. Target identified. Moving with intent.', color: '#fde047', textColor: '#111111' },
+  { name: 'PROWLING',         tagline: 'Moving through the jungle. No target yet.',             color: '#b91c1c', textColor: '#ffffff' },
+  { name: 'STIRRING',         tagline: 'Waking up. Eyes barely open.',                         color: '#ef4444', textColor: '#ffffff' },
+  { name: 'DORMANT',          tagline: 'Fighting the trend. Sleeping against the flow.',        color: '#fca5a5', textColor: '#111111' },
 ];
 
 function getTierConfig(tierName) {
@@ -41,35 +41,50 @@ function computeWeeksAgo(signalDate) {
   return Math.floor(diffDays / 7) + 1;
 }
 
-// Score bar component
-function ScoreBar({ score, max, color }) {
-  const pct = Math.min(100, Math.round((score / max) * 100));
-  return (
-    <div className={styles.scoreBarTrack}>
-      <div className={styles.scoreBarFill} style={{ width: `${pct}%`, background: color }} />
-    </div>
-  );
+// Format a dimension score — plain number, 1 decimal
+function fmtScore(v) {
+  if (v == null) return '—';
+  const n = Number(v);
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
-// Score breakdown tooltip
-function ScoreBreakdown({ scores }) {
+// Score breakdown popup — D1–D8, plain numbers (no percentage bars, no max cap)
+function ScoreBreakdown({ scores, total }) {
   const dims = [
-    { label: 'Signal Freshness', key: 'freshness',    max: 25 },
-    { label: 'Trend Quality',    key: 'trendQuality', max: 25 },
-    { label: 'Momentum',         key: 'momentum',     max: 15 },
-    { label: 'Rank + Rise',      key: 'rankRise',     max: 20 },
-    { label: 'Trend Duration',   key: 'duration',     max: 10 },
-    { label: 'Market Context',   key: 'context',      max: 10 },
+    { label: 'D1 Market Direction', key: 'd1'  },
+    { label: 'D2 Sector Direction', key: 'd2'  },
+    { label: 'D3 Sep + Conviction', key: 'd3'  },
+    { label: 'D4 Rank Position',    key: 'd4'  },
+    { label: 'D5 Rank Rise',        key: 'd5'  },
+    { label: 'D6 Momentum',         key: 'd6'  },
+    { label: 'D7 EMA Duration',     key: 'd7'  },
+    { label: 'D8 Prey Presence',    key: 'd8'  },
   ];
   return (
     <div className={styles.breakdown}>
-      {dims.map(d => (
-        <div key={d.key} className={styles.breakdownRow}>
-          <span className={styles.breakdownLabel}>{d.label}</span>
-          <ScoreBar score={scores[d.key] || 0} max={d.max} color="#fcf000" />
-          <span className={styles.breakdownScore}>{scores[d.key] || 0}/{d.max}</span>
-        </div>
-      ))}
+      {dims.map(d => {
+        const val = scores?.[d.key];
+        const n   = Number(val);
+        const isNeg = n < 0;
+        return (
+          <div key={d.key} className={styles.breakdownRow}>
+            <span className={styles.breakdownLabel}>{d.label}</span>
+            <span
+              className={styles.breakdownScore}
+              style={{ color: isNeg ? '#f87171' : n > 0 ? '#86efac' : '#9ca3af', width: 'auto', minWidth: 40 }}
+            >
+              {fmtScore(val)}
+            </span>
+          </div>
+        );
+      })}
+      <div className={styles.breakdownDivider} />
+      <div className={styles.breakdownRow}>
+        <span className={styles.breakdownLabel} style={{ color: '#fcf000', fontWeight: 700 }}>TOTAL</span>
+        <span className={styles.breakdownScore} style={{ color: '#fcf000', fontWeight: 900, width: 'auto', minWidth: 40 }}>
+          {fmtScore(total)}
+        </span>
+      </div>
     </div>
   );
 }
@@ -79,39 +94,66 @@ function sortStocks(stocks, { key, dir }) {
   return [...stocks].sort((a, b) => {
     let av, bv;
     switch (key) {
-      case 'apexScore':   av = a.apexScore   ?? -1;  bv = b.apexScore   ?? -1;  break;
-      case 'tier':        av = getTierIndex(a.tier);  bv = getTierIndex(b.tier); break;
+      case 'apexScore':   av = a.apexScore   ?? -9999;  bv = b.apexScore   ?? -9999;  break;
+      case 'tier':        av = getTierIndex(a.tier);    bv = getTierIndex(b.tier);    break;
       case 'rank':
-        // ranked stocks first (lower rank # = better), then JUNGLE
         av = a.rank ?? 9999; bv = b.rank ?? 9999; break;
-      case 'ticker':      av = a.ticker ?? ''; bv = b.ticker ?? ''; break;
+      case 'ticker':      av = a.ticker   ?? ''; bv = b.ticker   ?? ''; break;
       case 'exchange':    av = a.exchange ?? ''; bv = b.exchange ?? ''; break;
-      case 'sector':      av = a.sector ?? ''; bv = b.sector ?? ''; break;
-      case 'price':       av = a.currentPrice ?? -1; bv = b.currentPrice ?? -1; break;
-      case 'ytd':         av = a.ytdReturn ?? -999; bv = b.ytdReturn ?? -999; break;
+      case 'sector':      av = a.sector   ?? ''; bv = b.sector   ?? ''; break;
+      case 'price':       av = a.currentPrice ?? -1;  bv = b.currentPrice ?? -1;  break;
+      case 'ytd':         av = a.ytdReturn    ?? -999; bv = b.ytdReturn    ?? -999; break;
       case 'signal': {
-        // sort by type THEN weeks: BL+1 < BL+2 < ... < SS+1 < SS+2 ...
-        const APEX_SIG_ORDER = { BL: 1, SS: 2 };
-        const aType = APEX_SIG_ORDER[a.signal] ?? 99;
-        const bType = APEX_SIG_ORDER[b.signal] ?? 99;
-        const aW    = computeWeeksAgo(a.signalDate) ?? 9999;
-        const bW    = computeWeeksAgo(b.signalDate) ?? 9999;
+        const SIG_ORDER = { BL: 1, SS: 2 };
+        const aType = SIG_ORDER[a.signal] ?? 99;
+        const bType = SIG_ORDER[b.signal] ?? 99;
+        const aW = computeWeeksAgo(a.signalDate) ?? 9999;
+        const bW = computeWeeksAgo(b.signalDate) ?? 9999;
         av = aType * 10000 + aW; bv = bType * 10000 + bW; break;
       }
       case 'wks': {
-        // sort by weeks THEN type: BL+1, SS+1, BL+2, SS+2 ...
-        const APEX_SIG_ORDER2 = { BL: 1, SS: 2 };
+        const SIG_ORDER2 = { BL: 1, SS: 2 };
         const aW2   = computeWeeksAgo(a.signalDate) ?? 9999;
         const bW2   = computeWeeksAgo(b.signalDate) ?? 9999;
-        const aType2 = APEX_SIG_ORDER2[a.signal] ?? 99;
-        const bType2 = APEX_SIG_ORDER2[b.signal] ?? 99;
+        const aType2 = SIG_ORDER2[a.signal] ?? 99;
+        const bType2 = SIG_ORDER2[b.signal] ?? 99;
         av = aW2 * 10000 + aType2; bv = bW2 * 10000 + bType2; break;
       }
-      default:            av = 0; bv = 0;
+      default: av = 0; bv = 0;
     }
     if (typeof av === 'string') return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     return dir === 'asc' ? av - bv : bv - av;
   });
+}
+
+// Strategy tag colors
+const STRATEGY_COLORS = {
+  Feast:  { bg: '#7f1d1d', color: '#fca5a5' },
+  Alpha:  { bg: '#1e3a5f', color: '#93c5fd' },
+  Spring: { bg: '#14532d', color: '#86efac' },
+  Sneak:  { bg: '#3b0764', color: '#d8b4fe' },
+  Hunt:   { bg: '#431407', color: '#fdba74' },
+  Sprint: { bg: '#1c1917', color: '#d6d3d1' },
+};
+
+function PreyTags({ strategies }) {
+  if (!strategies || strategies.length === 0) return null;
+  return (
+    <div className={styles.preyTagRow}>
+      {strategies.map(s => {
+        const c = STRATEGY_COLORS[s] || { bg: '#374151', color: '#9ca3af' };
+        return (
+          <span
+            key={s}
+            className={styles.preyTag}
+            style={{ background: c.bg, color: c.color }}
+          >
+            {s}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function ApexPage() {
@@ -156,7 +198,7 @@ export default function ApexPage() {
       const result = await fetchApexStocks(forceRefresh);
       setData(result);
     } catch (err) {
-      setError('Failed to load APEX data. Make sure the server is running.');
+      setError('Failed to load Kill data. Make sure the server is running.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -201,8 +243,7 @@ export default function ApexPage() {
     setChartIndex(idx);
   }
 
-  // All 10 tier filter cards
-  const topTiers = TIERS;
+  const ctx = data?.contextSummary || {};
 
   return (
     <div className={styles.page}>
@@ -215,7 +256,7 @@ export default function ApexPage() {
             PNTHR KILL
           </h1>
           <p className={styles.subtitle}>
-            679 stocks. 100-point predatory scoring. Who has the PNTHR's attention right now?
+            PNTHR Prey universe · 8-dimension predatory scoring · Who has the PNTHR's full attention?
           </p>
         </div>
         <button
@@ -231,7 +272,7 @@ export default function ApexPage() {
       {loading && (
         <div className={styles.loadingState}>
           <div className={styles.spinner} />
-          <p>Scoring 679 stocks…</p>
+          <p>Scoring Prey universe…</p>
           <p className={styles.loadingNote}>First load takes 1-2 minutes — weekly cached after that.</p>
         </div>
       )}
@@ -245,23 +286,31 @@ export default function ApexPage() {
 
       {!loading && !error && data && (
         <>
-          {/* ── SPY Context Banner ───────────────────────────────────────────── */}
+          {/* ── Context Banner: SPY + QQQ ────────────────────────────────────── */}
           <div className={styles.contextBanner}>
-            <span className={styles.contextLabel}>Broad Market (SPY):</span>
-            <span className={data.contextSummary.spyAboveEma ? styles.contextBull : styles.contextBear}>
-              {data.contextSummary.spyAboveEma ? '▲ Above EMA' : '▼ Below EMA'}
+            <span className={styles.contextLabel}>SPY:</span>
+            <span className={ctx.spyAboveEma ? styles.contextBull : styles.contextBear}>
+              {ctx.spyAboveEma ? '▲ Above EMA' : '▼ Below EMA'}
             </span>
-            <span className={data.contextSummary.spyEmaRising ? styles.contextBull : styles.contextBear}>
-              {data.contextSummary.spyEmaRising ? '· EMA Rising' : '· EMA Falling'}
+            <span className={ctx.spyEmaRising ? styles.contextBull : styles.contextBear}>
+              {ctx.spyEmaRising ? '· Rising' : '· Falling'}
+            </span>
+            <span className={styles.contextDivider}>|</span>
+            <span className={styles.contextLabel}>QQQ:</span>
+            <span className={ctx.qqqAboveEma ? styles.contextBull : styles.contextBear}>
+              {ctx.qqqAboveEma ? '▲ Above EMA' : '▼ Below EMA'}
+            </span>
+            <span className={ctx.qqqEmaRising ? styles.contextBull : styles.contextBear}>
+              {ctx.qqqEmaRising ? '· Rising' : '· Falling'}
             </span>
             <span className={styles.contextMeta}>
-              · {data.activeSignals} active signals · {data.totalScanned} total stocks · scanned {new Date(data.scannedAt).toLocaleDateString()}
+              · {data.activeSignals} scored · {data.preyCount ?? data.totalScanned} Prey · scanned {new Date(data.scannedAt).toLocaleDateString()}
             </span>
           </div>
 
           {/* ── Tier Summary Cards ───────────────────────────────────────────── */}
           <div className={styles.tierCards}>
-            {topTiers.map(tier => {
+            {TIERS.map(tier => {
               const count = data.tierCounts?.[tier.name] || 0;
               const isActive = tierFilter === tier.name;
               return (
@@ -297,7 +346,7 @@ export default function ApexPage() {
                 {label}
                 <span className={styles.sideTabCount}>
                   {key === 'all' ? filtered.length
-                    : key === 'long' ? stocks.filter(s => s.signal === 'BL' && (tierFilter === 'all' || s.tier === tierFilter)).length
+                    : key === 'long'  ? stocks.filter(s => s.signal === 'BL' && (tierFilter === 'all' || s.tier === tierFilter)).length
                     : stocks.filter(s => s.signal === 'SS' && (tierFilter === 'all' || s.tier === tierFilter)).length}
                 </span>
               </button>
@@ -330,19 +379,23 @@ export default function ApexPage() {
                   {(() => { sortedRef.current = sorted; return null; })()}
                   {sorted.map((stock, idx) => {
                     const tier = getTierConfig(stock.tier);
-                    const wks = computeWeeksAgo(stock.signalDate);
+                    const wks  = computeWeeksAgo(stock.signalDate);
+                    const isTop10 = stock.isTop10;
                     return (
                       <tr
                         id={`aprow-${stock.ticker}`}
                         key={stock.ticker}
-                        className={`${styles.row}${selectedTicker === stock.ticker ? ` ${styles.selectedRow}` : ''}`}
+                        className={`${styles.row}${selectedTicker === stock.ticker ? ` ${styles.selectedRow}` : ''}${isTop10 ? ` ${styles.top10Row}` : ''}`}
                         onClick={() => setSelectedTicker(stock.ticker)}
                         title={stock.companyName || stock.ticker}
                       >
                         {/* Kill Rank */}
-                        <td className={styles.killRankCell}>{idx + 1}</td>
+                        <td className={styles.killRankCell}>
+                          {isTop10 && <span className={styles.top10Crown}>🏆</span>}
+                          {idx + 1}
+                        </td>
 
-                        {/* Kill Score */}
+                        {/* Kill Score — pill badge, accommodates larger numbers */}
                         <td className={styles.scoreCell}>
                           <span
                             className={styles.scoreBadge}
@@ -363,7 +416,7 @@ export default function ApexPage() {
                           </span>
                         </td>
 
-                        {/* PNTHR 100 Rank — moved here, JUNGLE badge if not ranked */}
+                        {/* PNTHR 100 Rank */}
                         <td className={styles.rankCell}>
                           {stock.rank != null ? (
                             <span>
@@ -379,7 +432,7 @@ export default function ApexPage() {
                           ) : <span className={styles.badgeJungle}>JUNGLE</span>}
                         </td>
 
-                        {/* Ticker + tags — click opens chart */}
+                        {/* Ticker + tags + prey strategies — click opens chart */}
                         <td
                           className={`${styles.tickerCell} ${styles.tickerClickable}`}
                           onClick={e => { e.stopPropagation(); handleRowClick(stock, idx, sorted); }}
@@ -394,8 +447,8 @@ export default function ApexPage() {
                             <span className={styles.tickerText}>{stock.ticker}</span>
                             {(() => {
                               const tags = [];
-                              if (stock.isSp500) tags.push('500');
-                              if (stock.isDow30) tags.push('30');
+                              if (stock.isSp500)    tags.push('500');
+                              if (stock.isDow30)    tags.push('30');
                               if (stock.universe === 'sp400Long' || stock.universe === 'sp400Short') tags.push('400');
                               if (stock.isNasdaq100) tags.push('100');
                               return tags.length > 0
@@ -404,6 +457,7 @@ export default function ApexPage() {
                             })()}
                           </div>
                           {stock.companyName && <div className={styles.companyName}>{stock.companyName}</div>}
+                          <PreyTags strategies={stock.preyStrategies} />
                         </td>
 
                         <td>{stock.exchange}</td>
@@ -461,8 +515,8 @@ export default function ApexPage() {
           className={styles.breakdownPopupFixed}
           style={{ left: Math.max(8, popup.x - 240), top: popup.y }}
         >
-          <div className={styles.breakdownTitle}>{popup.ticker} — {popup.apexScore}/105</div>
-          <ScoreBreakdown scores={popup.scores} />
+          <div className={styles.breakdownTitle}>{popup.ticker} — Kill Score: {popup.apexScore}</div>
+          <ScoreBreakdown scores={popup.scores} total={popup.apexScore} />
         </div>
       )}
 

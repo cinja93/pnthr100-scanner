@@ -1422,7 +1422,7 @@ app.get('/api/prey', authenticateJWT, async (req, res) => {
   }
 });
 
-// ── PNTHR APEX ────────────────────────────────────────────────────────────────
+// ── PNTHR KILL ────────────────────────────────────────────────────────────────
 app.get('/api/apex', authenticateJWT, async (req, res) => {
   try {
     if (req.query.refresh) clearApexCache();
@@ -1458,11 +1458,24 @@ app.get('/api/apex', authenticateJWT, async (req, res) => {
       }
     } catch { /* best-effort */ }
     const jungleSignals = await getSignals(tickers);
-    const results = await getApexResults(tickers, stockMeta, jungleSignals);
+
+    // Load Prey results + Hunt tickers for Kill universe + D8 scoring
+    let preyResults  = null;
+    let huntTickers  = new Set();
+    try {
+      preyResults = await getPreyResults(tickers, stockMeta, jungleSignals);
+    } catch (e) { console.warn('[KILL] preyResults failed, scoring without:', e.message); }
+    try {
+      const huntData = await getEmaCrossoverStocks();
+      const huntList = huntData?.stocks || [];
+      huntTickers = new Set(huntList.map(s => s.ticker || s));
+    } catch (e) { console.warn('[KILL] huntTickers failed, scoring without:', e.message); }
+
+    const results = await getApexResults(tickers, stockMeta, jungleSignals, preyResults, huntTickers);
     res.json(results);
   } catch (err) {
     console.error('Error in /api/apex:', err);
-    res.status(500).json({ error: 'APEX scan failed' });
+    res.status(500).json({ error: 'PNTHR Kill scan failed' });
   }
 });
 

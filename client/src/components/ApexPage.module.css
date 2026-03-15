@@ -253,12 +253,12 @@
   padding: 6px 8px !important;
 }
 
-/* ── Top 10 Row highlight ────────────────────────────────────────────────────── */
+/* ── Top 10 Row highlight — pale green (yellow = earnings week elsewhere) ──── */
 .top10Row td {
-  background: #fefce8 !important;
+  background: #f0fdf4 !important;
 }
 .top10Row:hover td {
-  background: #fef9c3 !important;
+  background: #dcfce7 !important;
 }
 
 /* ── Score Badge — pill shape to fit larger numbers ──────────────────────────── */

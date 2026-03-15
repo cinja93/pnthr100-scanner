@@ -309,7 +309,7 @@ export default function ApexPage() {
             PNTHR KILL
           </h1>
           <p className={styles.subtitle}>
-            Stocks that are the PNTHR's Prey with 7-dimension predatory scoring. Which ones have the PNTHR's full attention this week? ...time for the PNTHR to Eat.
+            Stocks that are the PNTHR's Prey with 7-dimensional predatory scoring. Which ones have the PNTHR's full attention this week? ...time for the PNTHR to Eat.
           </p>
         </div>
         <button

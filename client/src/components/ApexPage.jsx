@@ -386,7 +386,7 @@ export default function ApexPage() {
             </button>
           </div>
 
-          {/* ── L / S / All Tabs ─────────────────────────────────────────────── */}
+          {/* ── L / S / All Tabs + Formula Guide button ─────────────────────── */}
           <div className={styles.sideTabs}>
             {[['all', 'All'], ['long', 'Longs (BL)'], ['short', 'Shorts (SS)']].map(([key, label]) => (
               <button
@@ -402,6 +402,14 @@ export default function ApexPage() {
                 </span>
               </button>
             ))}
+            <button
+              ref={formulaBtnRef}
+              className={`${styles.formulaTabBtn}${formulaOpen ? ` ${styles.formulaTabBtnActive}` : ''}`}
+              onClick={toggleFormula}
+              title="D1–D8 Scoring Formulas"
+            >
+              📐 Scoring Guide
+            </button>
           </div>
 
           {/* ── Table ────────────────────────────────────────────────────────── */}
@@ -423,17 +431,7 @@ export default function ApexPage() {
                     <SortTh col="ytd"       label="YTD" />
                     <SortTh col="signal"    label="Signal" />
                     <SortTh col="wks"       label="Wks" />
-                    <th className={styles.thStatic}>
-                      Score Detail{' '}
-                      <button
-                        ref={formulaBtnRef}
-                        className={`${styles.formulaBtn}${formulaOpen ? ` ${styles.formulaBtnActive}` : ''}`}
-                        onClick={toggleFormula}
-                        title="D1–D8 Scoring Formulas"
-                      >
-                        📐
-                      </button>
-                    </th>
+                    <th className={styles.thStatic}>Score Detail</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -497,7 +495,7 @@ export default function ApexPage() {
                         {/* Ticker + tags + prey strategies — click opens chart */}
                         <td
                           className={`${styles.tickerCell} ${styles.tickerClickable}`}
-                          onClick={e => { e.stopPropagation(); handleRowClick(stock, idx, sorted); }}
+                          onClick={e => { e.stopPropagation(); setSelectedTicker(stock.ticker); handleRowClick(stock, idx, sorted); }}
                           title="Click to view chart"
                         >
                           <div className={styles.tickerRow}>
@@ -586,7 +584,7 @@ export default function ApexPage() {
       {formulaOpen && (
         <div
           className={styles.formulaPopup}
-          style={{ left: Math.max(8, formulaPos.x - 440), top: formulaPos.y }}
+          style={{ left: Math.max(8, Math.min(formulaPos.x - 440, window.innerWidth - 452)), top: formulaPos.y }}
         >
           <div className={styles.formulaHeader}>
             <span className={styles.formulaTitle}>D1–D8 Scoring Formulas</span>

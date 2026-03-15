@@ -173,6 +173,26 @@
 }
 .sideTabActive .sideTabCount { background: #4b5563; }
 
+/* ── Scoring Guide button — lives in the tabs row, right-aligned ────────────── */
+.formulaTabBtn {
+  margin-left: auto;
+  background: #1f2937;
+  color: #9ca3af;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s;
+  letter-spacing: 0.03em;
+}
+.formulaTabBtn:hover { background: #374151; color: #fff; border-color: #555; }
+.formulaTabBtnActive { background: #1e3a5f !important; color: #fcf000 !important; border-color: #fcf000 !important; }
+
 /* ── Empty State ─────────────────────────────────────────────────────────────── */
 .emptyState {
   text-align: center;
@@ -218,9 +238,9 @@
 }
 .row:nth-child(even) { background-color: #f7f8fa; }
 .row:hover { background-color: #efefef !important; }
-.selectedRow td { background: rgba(59, 130, 246, 0.12) !important; }
-.selectedRow:hover td { background: rgba(59, 130, 246, 0.20) !important; }
-.selectedRow { box-shadow: inset 3px 0 0 #3b82f6; }
+.selectedRow td { background: rgba(59, 130, 246, 0.22) !important; }
+.selectedRow:hover td { background: rgba(59, 130, 246, 0.32) !important; }
+.selectedRow { box-shadow: inset 4px 0 0 #3b82f6; }
 .tickerClickable { cursor: pointer !important; }
 .tickerClickable:hover span { text-decoration: underline; }
 .table td {
@@ -409,23 +429,6 @@
   border-top: 1px solid #374151;
   margin: 4px 0;
 }
-
-/* ── Formula Guide Button ─────────────────────────────────────────────────── */
-.formulaBtn {
-  background: transparent;
-  border: 1px solid #374151;
-  border-radius: 4px;
-  color: #9ca3af;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 1px 5px;
-  margin-left: 4px;
-  vertical-align: middle;
-  transition: background 0.15s, border-color 0.15s;
-  line-height: 1.4;
-}
-.formulaBtn:hover { background: rgba(252, 240, 0, 0.15); border-color: #fcf000; }
-.formulaBtnActive { background: rgba(252, 240, 0, 0.2) !important; border-color: #fcf000 !important; color: #fcf000 !important; }
 
 /* ── Formula Guide Popup ──────────────────────────────────────────────────── */
 .formulaPopup {

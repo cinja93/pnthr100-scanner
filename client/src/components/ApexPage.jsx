@@ -433,7 +433,7 @@ export default function ApexPage() {
                     <SortTh col="ytd"       label="YTD" />
                     <SortTh col="signal"    label="Signal" />
                     <SortTh col="wks"       label="Wks" />
-                    <th className={`${styles.thStatic} ${styles.thDetail}`} style={{ paddingRight: '40px' }}>Score Detail</th>
+                    <th className={`${styles.thStatic} ${styles.thDetail}`} style={{ paddingRight: '48px' }}>Score Detail</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -552,7 +552,7 @@ export default function ApexPage() {
                         {/* Score Detail hover */}
                         <td
                           className={styles.detailCell}
-                          style={{ paddingRight: '40px' }}
+                          style={{ paddingRight: '48px' }}
                           onMouseEnter={(e) => {
                             if (!stock.scores) return;
                             const rect = e.currentTarget.getBoundingClientRect();

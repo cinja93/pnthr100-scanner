@@ -309,9 +309,9 @@ function buildPreyPresence(preyResults, huntTickers, stockMeta) {
   // Hunt
   for (const ticker of (huntTickers || [])) addStrategy(ticker, 'Hunt');
 
-  // Sprint (rankChange > 0 or null = new entry)
+  // Sprint: only stocks actually on the PNTHR 100 list that rose or are new entries
   for (const [ticker, meta] of Object.entries(stockMeta)) {
-    if (meta.rankChange === null || meta.rankChange === undefined || meta.rankChange > 0) {
+    if (meta.rank != null && (meta.rankChange === null || meta.rankChange > 0)) {
       addStrategy(ticker, 'Sprint');
     }
   }
@@ -336,9 +336,9 @@ function collectPreyTickers(preyResults, huntTickers, stockMeta) {
   }
   for (const t of (huntTickers || [])) set.add(t);
 
-  // Sprint: any stock in stockMeta with rising/new rank
+  // Sprint: only stocks actually on the PNTHR 100 list that rose or are new entries
   for (const [ticker, meta] of Object.entries(stockMeta)) {
-    if (meta.rankChange === null || meta.rankChange === undefined || meta.rankChange > 0) {
+    if (meta.rank != null && (meta.rankChange === null || meta.rankChange > 0)) {
       set.add(ticker);
     }
   }

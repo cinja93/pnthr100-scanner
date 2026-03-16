@@ -434,7 +434,7 @@ export default function ApexPage() {
                     <SortTh col="ytd"       label={<>YTD<br/>Return</>}  title="Sort by YTD Return" />
                     <SortTh col="signal"    label={<>PNTHR<br/>Signal</>} title="Sort by Signal" />
                     <SortTh col="wks"       label={<>Wks<br/>Since</>}   title="Sort by Weeks Since Signal" />
-                    <th className={styles.thStatic} style={{ minWidth: '90px', textAlign: 'center' }}>Score<br/>Detail</th>
+                    <th className={`${styles.thStatic} ${styles.thDetail}`} style={{ textAlign: 'center' }}>Score<br/>Detail</th>
                   </tr>
                 </thead>
                 <tbody>

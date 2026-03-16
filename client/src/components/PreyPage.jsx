@@ -755,16 +755,16 @@ export default function PreyPage({ onNavigate }) {
     setChartIndex(index ?? list.indexOf(stock));
   }
 
-  function handleHuntRowClick(_stock, sortedIdx, sortedStocks) {
+  function handleHuntRowClick(_stock, list, idx) {
     setChartSignals(huntSignals);
-    setChartStocks(sortedStocks);
-    setChartIndex(sortedIdx);
+    setChartStocks(list);
+    setChartIndex(idx);
   }
 
-  function handleSprintRowClick(_stock, sortedIdx, sortedStocks) {
+  function handleSprintRowClick(_stock, list, idx) {
     setChartSignals(sprintSignals);
-    setChartStocks(sortedStocks);
-    setChartIndex(sortedIdx);
+    setChartStocks(list);
+    setChartIndex(idx);
   }
 
   return (

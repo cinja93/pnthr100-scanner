@@ -1,91 +1,119 @@
 // killScoringConfig.js
-// PNTHR Kill Scoring — single source of truth for all weights and formulas
-// Tweak numbers here without touching apexService.js logic
-// Add a CHANGELOG entry every time you change a value
+// PNTHR Kill v3 Scoring — configuration constants and thresholds
+// Scoring logic lives in apexService.js; tweak numbers here without touching logic.
+// Add a CHANGELOG entry every time you change a value.
 
 export const KILL_CONFIG = {
 
-  // D1: Market Direction
+  // D1: Market Regime Multiplier (0.70× to 1.30×)
   // Exchange routing: Nasdaq → QQQ, NYSE/ARCA → SPY
-  // Look back 5 weeks: +1 per week signal aligns with index EMA position, -1 per week against
+  // regimeScore (-5 to +5) × multiplierStep = ±0.30 adjustment around 1.0 base
+  // BL benefits from bullish regime; SS benefits from bearish regime
   d1: {
-    lookbackWeeks: 5,       // number of weeks to score
-    alignedPts: 1,          // points when signal matches index direction
-    misalignedPts: -1,      // points when signal fights index direction
+    multiplierBase: 1.0,
+    multiplierStep: 0.06,   // per regime score point
+    multiplierMin:  0.70,
+    multiplierMax:  1.30,
+    // Index scoring: below+falling=-2, below=-1, above+rising=+2, above=+1
+    // Ratio scoring: openRatio >3=-2, >2=-1, <0.5=+2, <1=+1
+    // New ratio: newRatio >5 penalises by 1, <0.2 boosts by 1
   },
 
-  // D2: Sector Direction
-  // Sector direction = sign of sector ETF 5D return (positive = bullish, negative = bearish)
-  // 5D: new signals doubled, active/exits +1/-1 each, sector 5D return % doubled
-  // 1M: all counts point-for-point, sector 1M return % point-for-point
+  // D2: Sector Alignment (capped ±15 pts)
+  // 5D component: |return5D%| × newMult × direction × 2
+  // 1M component: |return1M%| × direction
+  // New signals (signalAge ≤ 1) get ×2 on the 5D component
   d2: {
-    newSignalMultiplier5D: 2,     // BL+1 in UP sector / SS+1 in DOWN sector gets ×2
-    sectorReturn5DMultiplier: 2,  // sector 5D return % gets doubled
-    sectorReturn1MMultiplier: 1,  // sector 1M return % is point-for-point
+    cap:              15,
+    newSignalMult5D:   2,   // age 0-1 new-signal multiplier on 5D component
+    sectorReturn5DScale: 2, // 5D return is doubled per base formula
+    sectorReturn1MScale: 1, // 1M return is point-for-point
   },
 
-  // D3: Price Separation + Close Conviction
-  // Both sub-scores are pure point-for-point percentages — no config multipliers
-  // BL sep: (low - EMA) / EMA * 100
-  // BL conv: (close - low) / low * 100
-  // SS sep: (EMA - high) / EMA * 100
-  // SS conv: (high - close) / high * 100
-  d3: {},
+  // D3: Entry Quality (0–85 pts) — THE DOMINANT DIMENSION
+  // Backed by 7,883 closed trades; entry quality is the #1 predictor of trade success
+  //   Sub-A: Close conviction (range-normalized) = (close-low)/(high-low)*100 × 2.5  → cap 40
+  //   Sub-B: EMA slope (signal-direction only)   = |slope%| × 10                     → cap 30
+  //   Sub-C: EMA separation                      = |sep%| × 1.5                      → cap 15
+  // Confirmation: CONFIRMED (≥30 pts) → 70%+ win rate evidence
+  //               PARTIAL (≥15 pts)   → developing quality
+  //               UNCONFIRMED (<15)   → low-quality entry
+  d3: {
+    convictionMult:        2.5,
+    convictionCap:         40,
+    slopeMult:             10,
+    slopeCap:              30,
+    separationMult:        1.5,
+    separationCap:         15,
+    confirmedThreshold:    30,
+    partialThreshold:      15,
+  },
 
-  // D4: Rank Position — REMOVED (2026-03-14)
-  // Static rank position gave too much weight (up to 99 pts) and drowned out
-  // market/sector direction signals. Replaced by pure D5 delta scoring.
-  // d4: { floor: 1 },
+  // D4: Signal Freshness (-15 to +10 pts)
+  // New signals with strong entry quality earn a bonus.
+  // Stale signals decay — position held too long loses edge.
+  //   Age 0 (new this week): CONFIRMED=+10, PARTIAL=+6, UNCONFIRMED=+3
+  //   Age 1:                 CONFIRMED=+7,  PARTIAL=+4, UNCONFIRMED=+2
+  //   Age 2:                 +4 pts
+  //   Age 3–5:               0 pts
+  //   Age 6–9:               -3 pts per week beyond 5
+  //   Age 10+:               -5 pts per week beyond 9, floor -15
+  d4: {
+    newConfirmedPts:       10,
+    newPartialPts:          6,
+    newUnconfirmedPts:      3,
+    age1ConfirmedPts:       7,
+    age1PartialPts:         4,
+    age1UnconfirmedPts:     2,
+    age2Pts:                4,
+    decayStart:             5,  // age > 5 begins decay zone
+    decayPerWeekEarly:      3,  // -3/week for age 6–9
+    decayDeepStart:         9,  // age > 9 enters deep decay
+    decayPerWeekDeep:       5,  // -5/week for age 10+
+    floor:                -15,
+  },
 
-  // D5: Rank Rise (delta only — no new-entry bonus)
-  // Rising: +ptPerSpot per position climbed
-  // New entry (rankChange null): 0 pts — no rise data yet
-  // Falling: -ptPerSpot per position dropped
-  // Flat: 0 pts
+  // D5: Rank Rise (capped ±20 pts)
+  // Linear delta: +1 per spot risen, -1 per spot fallen
+  // Capped to prevent rank volatility from dominating
   d5: {
-    ptPerSpot: 1,           // points per position risen or fallen
-    newEntryPts: 0,         // new PNTHR 100 entries get no rank bonus until they actually rise
+    cap:          20,   // max/min score
   },
 
-  // D6: Momentum (4 sub-scores added together)
+  // D6: Momentum (0–20 pts, floored at 0)
+  // 4 sub-scores added; raw sum capped 0–20
+  //   Sub-A: RSI centered on 50 → (rsi-50)/10 → ±5 range
+  //   Sub-B: OBV week-over-week % change → obvPct/5 → ±5 range (inverted for SS)
+  //   Sub-C: ADX strength (only if rising) → (adx-15)/5 → 0–5 range
+  //   Sub-D: Volume confirmation → 0 or +5 (if volumeRatio > 1.5)
   d6: {
-    // Sub-score A: EMA Conviction = directedSlope% × separation%
-    // BL: (+emaSlope%) × ((low-EMA)/EMA*100)
-    // SS: (-emaSlope%) × ((EMA-high)/EMA*100)
-    // No config — raw product is the score
-
-    // Sub-score B: RSI centered on 50
-    // BL: RSI - rsiCenter  →  RSI 65 = +15, RSI 35 = -15
-    // SS: rsiCenter - RSI  →  RSI 35 = +15, RSI 65 = -15
-    rsiCenter: 50,
-
-    // Sub-score C: OBV week-over-week % change
-    // BL: positive = positive pts; SS: inverted (negative OBV = positive pts)
-    // Formula: (currentOBV - prevOBV) / abs(prevOBV) * 100
-    // No config — raw % is the score
-
-    // Sub-score D: ADX trend strength
-    // ADX rising (this week > last week): ADX - adxRisingOffset
-    // ADX falling (this week < last week): ADX - adxFallingOffset
-    // ADX < adxMinThreshold: 0 pts
-    adxRisingOffset: 5,     // ADX 40 rising → 40-5 = 35 pts
-    adxFallingOffset: 15,   // ADX 30 falling → 30-15 = 15 pts
-    adxMinThreshold: 15,    // below this ADX value = 0 pts regardless
+    rsiCenter:        50,
+    rsiDivisor:       10,   // (rsi-50)/10 gives ±5 at RSI 100 or 0
+    obvDivisor:        5,   // obvChangePct/5 gives ±5 range
+    adxMin:           15,   // below this → 0 pts regardless
+    adxDivisor:        5,   // (adx-15)/5 gives 0–5 range
+    volumeThreshold:   1.5, // volumeRatio > 1.5 triggers +5
+    cap:              20,
   },
 
-  // D7: EMA Slope Duration
-  // Count consecutive weeks EMA has sloped in signal direction going backward from entry
-  // BL: ema[i] > ema[i-1] counts; SS: ema[i] < ema[i-1] counts
-  // Hard stop: first reversal ends the count
+  // D7: Rank Velocity (-10 to +10 pts)
+  // Measures acceleration of rank change (momentum of rank momentum)
+  // velocity = currentRankChange - previousRankChange
+  // score = clip(round(velocity / velocityDivisor), -10, +10)
   d7: {
-    maxWeeks: 20,           // cap at 20 pts (1 pt per week)
+    velocityDivisor:   6,
+    cap:              10,
   },
 
-  // D8: Multi-Strategy Prey Presence
-  // +ptPerStrategy for each Prey section the stock appears in this week
-  // Strategies: Feast, Alpha, Spring, Sneak, Hunt, Sprint (max 6)
+  // D8: Multi-Strategy Prey Presence (0–6 pts)
+  // SPRINT and HUNT each get extra weight (2 pts each) as direct trade signals
+  // Other strategies (Feast, Alpha, Spring, Sneak) each add 1 pt
+  // Max 6 pts regardless of strategy count
   d8: {
-    ptPerStrategy: 3,       // small tiebreaker bonus per strategy
+    sprintPts:  2,
+    huntPts:    2,
+    otherPts:   1,   // Feast / Alpha / Spring / Sneak
+    cap:        6,
   },
 
 };
@@ -94,19 +122,33 @@ export const KILL_CONFIG = {
 // CHANGELOG — document every change to weights/formulas with date + reason
 // =============================================================================
 //
-// 2026-03-14  Initial design locked after full D1–D8 design session with Cindy + Blazer
-//             D1: ±1/week × 5 weeks
-//             D2: 5D doubled new signals + 1M point-for-point
-//             D3: pure point-for-point separation + conviction %
-//             D4: max(1, 100-rank)
-//             D5: ±1/spot, new entry = 100-rank
-//             D6: EMA conviction (slope×sep) + RSI-50 + OBV% + ADX (rising: -5, falling: -15)
-//             D7: 1pt/week consecutive EMA slope, max 20
-//             D8: +3pts per Prey strategy
+// 2026-03-14  v2: Initial design locked — D1–D8 additive formula
+//             D1: ±1/week × 5 weeks (additive, range ±5)
+//             D2: 5D doubled new signals + 1M point-for-point (uncapped)
+//             D3: sep% + conv% (point-for-point, old low/high formula)
+//             D4: max(1, 100-rank) — THEN REMOVED same day (was dominating)
+//             D5: ±1/spot delta (uncapped)
+//             D6: EMA conviction (slope×sep) + RSI-50 + OBV% + ADX (uncapped)
+//             D7: consecutive EMA slope weeks, max 20
+//             D8: +3/strategy (max 18 with 6 strategies)
+//             Formula: D1+D2+D3+D4+D5+D6+D7+D8 (additive)
 //
-// 2026-03-14  REMOVED D4 (rank position). Static rank was dominating scoring — rank #1
-//             new entry got 99pts from D4 alone, overwhelming D1 (-5 max) and D2 penalties.
-//             D5 new-entry bonus also removed (newEntryPts: 0). Stocks must earn rank
-//             credit by actually RISING on the list. D5 is now pure delta only.
-//             Tier thresholds recalibrated for lower max possible scores.
+// 2026-03-16  v3: FULL REDESIGN — backed by 7,883 closed trades (Opus analysis)
+//             D1: Market MULTIPLIER 0.70×–1.30× (replaces ±5 additive)
+//                 regimeScore = indexScore(-2 to +2) + ratioScore(-3 to +3)
+//                 BL multiplier = 1.0 + regimeScore×0.06; SS inverted
+//             D2: Same formula but now capped ±15
+//             D3: NEW formula with 3 sub-scores; cap 85 total
+//                 Sub-A: range-normalized conviction × 2.5 (cap 40)
+//                 Sub-B: emaSlopePct × 10 (cap 30, signal-direction only)
+//                 Sub-C: emaSeparation% × 1.5 (cap 15)
+//                 CONFIRMATION gate: ≥30=CONFIRMED, ≥15=PARTIAL, else UNCONFIRMED
+//             D4: NEW Signal Freshness -15 to +10 (replaces always-0 D4)
+//                 Fresh CONFIRMED signals bonus; stale signals decay penalty
+//             D5: Rank delta capped ±20 (was uncapped — prevented volatility dominance)
+//             D6: Simplified — RSI±5 + OBV±5 + ADX 0–5 + Volume 0/5; cap 0–20
+//             D7: NEW Rank Velocity ±10 (replaces EMA slope duration)
+//                 velocity = currentRankChange - previousRankChange
+//             D8: NEW weights — SPRINT=2, HUNT=2, others=1 (was +3 flat for all)
+//             Formula: (D2+D3+D4+D5+D6+D7+D8) × D1 (MULTIPLICATIVE — not additive)
 //

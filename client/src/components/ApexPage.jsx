@@ -51,20 +51,25 @@ function fmtScore(v) {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
-// Score breakdown popup — D1–D8, plain numbers (no percentage bars, no max cap)
-function ScoreBreakdown({ scores, total }) {
-  const dims = [
-    { label: 'D1 Market Direction', key: 'd1'  },
-    { label: 'D2 Sector Direction', key: 'd2'  },
-    { label: 'D3 Sep + Conviction', key: 'd3'  },
-    { label: 'D4 Rank Rise',        key: 'd5'  },
-    { label: 'D5 Momentum',         key: 'd6'  },
-    { label: 'D6 EMA Duration',     key: 'd7'  },
-    { label: 'D7 Prey Presence',    key: 'd8'  },
+// Score breakdown popup — v3 dimensions
+// D1 is a multiplier (×); D2–D8 are additive; formula = (D2+…+D8) × D1
+function ScoreBreakdown({ scores, preMultiplier, total }) {
+  // D2–D8 additive dimensions
+  const additiveDims = [
+    { label: 'D2 Sector Alignment',   key: 'd2', range: '±15'      },
+    { label: 'D3 Entry Quality',       key: 'd3', range: '0–85'     },
+    { label: 'D4 Signal Freshness',    key: 'd4', range: '-15–+10'  },
+    { label: 'D5 Rank Rise',           key: 'd5', range: '±20'      },
+    { label: 'D6 Momentum',            key: 'd6', range: '0–20'     },
+    { label: 'D7 Rank Velocity',       key: 'd7', range: '±10'      },
+    { label: 'D8 Prey Presence',       key: 'd8', range: '0–6'      },
   ];
+  const d1Val = Number(scores?.d1 ?? 1);
+  const preVal = preMultiplier != null ? Number(preMultiplier) : null;
+
   return (
     <div className={styles.breakdown}>
-      {dims.map(d => {
+      {additiveDims.map(d => {
         const val = scores?.[d.key];
         const n   = Number(val);
         const isNeg = n < 0;
@@ -80,6 +85,27 @@ function ScoreBreakdown({ scores, total }) {
           </div>
         );
       })}
+      {/* Pre-multiplier subtotal */}
+      {preVal != null && (
+        <>
+          <div className={styles.breakdownDivider} />
+          <div className={styles.breakdownRow}>
+            <span className={styles.breakdownLabel} style={{ color: '#a5b4fc', fontSize: 11 }}>Pre-multiplier</span>
+            <span className={styles.breakdownScore} style={{ color: '#a5b4fc', fontWeight: 700, width: 'auto', minWidth: 40 }}>
+              {fmtScore(preVal)}
+            </span>
+          </div>
+        </>
+      )}
+      {/* D1 multiplier row */}
+      <div className={styles.breakdownRow}>
+        <span className={styles.breakdownLabel} style={{ color: '#fbbf24', fontSize: 11 }}>
+          D1 Market Multiplier
+        </span>
+        <span className={styles.breakdownScore} style={{ color: '#fbbf24', fontWeight: 700, width: 'auto', minWidth: 40 }}>
+          {d1Val.toFixed(2)}×
+        </span>
+      </div>
       <div className={styles.breakdownDivider} />
       <div className={styles.breakdownRow}>
         <span className={styles.breakdownLabel} style={{ color: '#fcf000', fontWeight: 700 }}>TOTAL</span>
@@ -159,35 +185,43 @@ function PreyTags({ strategies }) {
   );
 }
 
-// ── D1–D8 Formula reference data ─────────────────────────────────────────────
+// ── D1–D8 Formula reference data (v3) ────────────────────────────────────────
 const FORMULA_GUIDE = [
   {
-    dim: 'D1 · Market Direction',
-    desc: 'Nasdaq stocks track QQQ; NYSE/ARCA track SPY. Look back 5 weeks: +1/week when signal aligns with index EMA direction, −1/week when against. Range: −5 to +5.',
+    dim: 'FORMULA · Total = (D2+D3+D4+D5+D6+D7+D8) × D1',
+    desc: 'D1 is a multiplier (0.70×–1.30×) applied to the sum of all additive dimensions. Fighting the market regime compresses scores; aligned with the regime amplifies them.',
   },
   {
-    dim: 'D2 · Sector Direction',
-    desc: '5D window: new signals ×2 pts; active/exits ±1 pt each; sector 5D return% ×2. 1M window: all signal counts point-for-point; sector 1M return% point-for-point. Sum of both windows.',
+    dim: 'D1 · Market Regime Multiplier  (0.70× – 1.30×)',
+    desc: 'Nasdaq → QQQ; NYSE/ARCA → SPY. Index EMA position + slope scored −2 to +2. SS:BL open ratio and new-signal ratio add ±1–2. regimeScore (−5 to +5) × 0.06 = adjustment. BL: 1.0 + adj; SS: 1.0 − adj.',
   },
   {
-    dim: 'D3 · Price Separation + Conviction',
-    desc: 'BL sep = (low − EMA) / EMA × 100. BL conv = (close − low) / low × 100. SS sep = (EMA − high) / EMA × 100. SS conv = (high − close) / high × 100. Both are pure %, point-for-point.',
+    dim: 'D2 · Sector Alignment  (±15 pts)',
+    desc: 'Sector direction = sign of sector ETF 5D return. 5D component: |return5D%| × newMult × direction × 2 (new signals ×2). 1M component: |return1M%| × direction. Total capped ±15.',
   },
   {
-    dim: 'D4 · Rank Rise (delta only)',
-    desc: 'Rising: +1 pt per position climbed. Falling: −1 pt per position dropped. Flat: 0 pts. New entries: 0 pts — must earn rank credit by actually rising on the list.',
+    dim: 'D3 · Entry Quality  (0–85 pts) — THE KEY DIMENSION',
+    desc: 'Sub-A: Range-normalized conviction = (close−low)/(high−low)×100 × 2.5, cap 40. Sub-B: EMA slope% × 10 (signal direction only), cap 30. Sub-C: EMA separation% × 1.5, cap 15. CONFIRMED ≥30 (70%+ WR), PARTIAL ≥15, UNCONFIRMED <15.',
   },
   {
-    dim: 'D5 · Momentum (4 sub-scores added)',
-    desc: 'A: EMA Conviction = directedSlope% × separation%. B: RSI − 50 (BL) or 50 − RSI (SS). C: OBV week-over-week % change (inverted for SS). D: ADX rising → ADX−5; falling → ADX−15; ADX < 15 → 0.',
+    dim: 'D4 · Signal Freshness  (−15 to +10 pts)',
+    desc: 'Age 0 (new): CONFIRMED +10, PARTIAL +6, UNCONFIRMED +3. Age 1: CONFIRMED +7, PARTIAL +4, UNCONFIRMED +2. Age 2: +4. Age 3–5: 0. Age 6–9: −3/week. Age 10+: −5/week, floor −15.',
   },
   {
-    dim: 'D6 · EMA Slope Duration',
-    desc: 'Count consecutive weeks EMA has sloped in signal direction going back from entry. BL: EMA[i] > EMA[i−1]. SS: EMA[i] < EMA[i−1]. First reversal stops count. Cap: 20 pts (1 pt/week).',
+    dim: 'D5 · Rank Rise  (±20 pts)',
+    desc: '+1 pt per PNTHR 100 position risen, −1 per position dropped. New entries (null): 0 pts. Capped ±20 — 55% of +30 rank jumps revert the following week.',
   },
   {
-    dim: 'D7 · Multi-Strategy Prey Presence',
-    desc: '+3 pts for each Prey section the stock appears in this week: Feast, Alpha, Spring, Sneak, Hunt, Sprint. Maximum 18 pts (6 strategies × 3 pts each).',
+    dim: 'D6 · Momentum  (0–20 pts)',
+    desc: 'Sub-A: (RSI−50)/10 → ±5 pts. Sub-B: OBV wk/wk% ÷ 5 → ±5 pts (inverted for SS). Sub-C: (ADX−15)/5 → 0–5 pts, only when ADX rising above 15. Sub-D: +5 if volume ratio > 1.5×. Floor 0.',
+  },
+  {
+    dim: 'D7 · Rank Velocity  (±10 pts)',
+    desc: 'Measures momentum of rank movement: velocity = currentRankChange − previousRankChange. score = clip(round(velocity ÷ 6), −10, +10). Accelerating rises score positive; decelerating or reversing score negative.',
+  },
+  {
+    dim: 'D8 · Multi-Strategy Prey Presence  (0–6 pts)',
+    desc: 'SPRINT = +2 pts (in PNTHR 100 and rising). HUNT = +2 pts (EMA crossover). FEAST / ALPHA / SPRING / SNEAK = +1 pt each. Maximum 6 pts.',
   },
 ];
 
@@ -556,7 +590,7 @@ export default function ApexPage() {
                           onMouseEnter={(e) => {
                             if (!stock.scores) return;
                             const rect = e.currentTarget.getBoundingClientRect();
-                            setPopup({ ticker: stock.ticker, apexScore: stock.apexScore, scores: stock.scores, x: rect.left, y: rect.bottom + 4 });
+                            setPopup({ ticker: stock.ticker, apexScore: stock.apexScore, scores: stock.scores, preMultiplier: stock.preMultiplier, x: rect.left, y: rect.bottom + 4 });
                           }}
                           onMouseLeave={() => setPopup(null)}
                         >
@@ -579,7 +613,7 @@ export default function ApexPage() {
           style={{ left: Math.max(8, popup.x - 240), top: popup.y }}
         >
           <div className={styles.breakdownTitle}>{popup.ticker} — Kill Score: {popup.apexScore}</div>
-          <ScoreBreakdown scores={popup.scores} total={popup.apexScore} />
+          <ScoreBreakdown scores={popup.scores} preMultiplier={popup.preMultiplier} total={popup.apexScore} />
         </div>
       )}
 

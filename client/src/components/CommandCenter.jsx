@@ -412,7 +412,7 @@ async function apiPost(path, body) {
 
 // ── Pyramid Card (position row) ───────────────────────────────────────────────
 
-function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice }) {
+function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, flashed }) {
   const [expanded,    setExpanded]    = useState(false);
   const [editing,     setEditing]     = useState(null);
   const [ev,          setEv]          = useState({});
@@ -485,9 +485,14 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                          : staleLevel === 1 ? 'rgba(255,193,7,0.04)'
                          : 'transparent';
 
+  const flashBorder = flashed ? 'rgba(255,215,0,0.75)' : staleBorderColor;
+  const flashShadow = flashed ? '0 0 10px rgba(255,215,0,0.25)' : 'none';
+
   return (
     <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 10, overflow: 'hidden',
-      border: `1px solid ${staleBorderColor}` }}>
+      border: `1px solid ${flashBorder}`,
+      boxShadow: flashShadow,
+      transition: 'border-color 0.6s ease, box-shadow 0.6s ease' }}>
       {/* FEAST Alert — RSI > 85: overextended, sell 50% immediately */}
       {position.feastAlert && (
         <div style={{ background: 'rgba(220,53,69,0.2)', borderBottom: '1px solid rgba(220,53,69,0.4)',
@@ -923,6 +928,23 @@ function PipelineTab({ positions, nav }) {
   );
 }
 
+// ── Market Hours Helper ───────────────────────────────────────────────────────
+
+function isMarketHours() {
+  try {
+    const now = new Date();
+    const dow = now.getDay();
+    if (dow === 0 || dow === 6) return false;
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false,
+    }).formatToParts(now);
+    const h = parseInt(parts.find(p => p.type === 'hour').value, 10);
+    const m = parseInt(parts.find(p => p.type === 'minute').value, 10);
+    const mins = h * 60 + m;
+    return mins >= 9 * 60 + 30 && mins < 16 * 60;
+  } catch { return false; }
+}
+
 // ── Main Command Center ───────────────────────────────────────────────────────
 
 export default function CommandCenter() {
@@ -948,6 +970,54 @@ export default function CommandCenter() {
 
   const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
   const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
+
+  // ── Auto-refresh state ─────────────────────────────────────────────────────
+  const [lastRefresh,    setLastRefresh]    = useState(null);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [flashedTickers, setFlashedTickers] = useState(new Set());
+  const refreshFnRef  = useRef(null);
+  const flashTimerRef = useRef(null);
+
+  const refreshPrices = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const data = await apiGet('/api/positions');
+      if (data.positions?.length) {
+        setPositions(prev => {
+          const freshMap = {};
+          for (const fp of data.positions) freshMap[fp.id] = fp;
+          const changed = new Set();
+          const merged = prev.map(p => {
+            const fp = freshMap[p.id];
+            if (!fp) return p;
+            if (fp.currentPrice !== p.currentPrice) changed.add(p.ticker);
+            return { ...p, currentPrice: fp.currentPrice, feastAlert: fp.feastAlert,
+                     feastRSI: fp.feastRSI, tradingDaysActive: fp.tradingDaysActive };
+          });
+          if (changed.size > 0) {
+            setFlashedTickers(changed);
+            if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+            flashTimerRef.current = setTimeout(() => setFlashedTickers(new Set()), 2500);
+          }
+          return merged;
+        });
+      }
+      setLastRefresh(new Date());
+    } catch { /* silent — prices stay as-is */ }
+    setRefreshing(false);
+  }, [refreshing]);
+
+  // Keep ref in sync so the interval always calls the latest closure
+  useEffect(() => { refreshFnRef.current = refreshPrices; }, [refreshPrices]);
+
+  // 60-second auto-refresh during market hours only
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (isMarketHours()) refreshFnRef.current?.();
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Load positions from API on mount
   useEffect(() => {
@@ -1040,6 +1110,28 @@ export default function CommandCenter() {
               {heat.theoPct}% heat · ${heat.actual$} actual · {heat.slots} slots
             </span>
           </div>
+          {/* Refresh controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 6, height: 6, borderRadius: 3,
+              background: isMarketHours() ? '#28a745' : '#555',
+              boxShadow: isMarketHours() ? '0 0 5px #28a745' : 'none' }} />
+            <span style={{ fontSize: 10, color: isMarketHours() ? '#28a745' : '#555' }}>
+              {isMarketHours() ? 'LIVE' : 'CLOSED'}
+            </span>
+            <button onClick={refreshPrices} disabled={refreshing}
+              title="Refresh prices"
+              style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4,
+                color: refreshing ? '#555' : '#888', cursor: refreshing ? 'not-allowed' : 'pointer',
+                fontSize: 13, padding: '2px 7px', lineHeight: 1,
+                transition: 'color 0.2s' }}>
+              {refreshing ? '⟳' : '↻'}
+            </button>
+            {lastRefresh && (
+              <span style={{ fontSize: 10, color: '#444', fontFamily: 'monospace' }}>
+                {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            )}
+          </div>
           <span style={{ fontSize: 11, color: '#555' }}>NAV</span>
           <input type="number" value={nav} onChange={e => handleNavChange(+e.target.value || 0)}
             style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
@@ -1092,7 +1184,8 @@ export default function CommandCenter() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {positions.map(p => (
                   <PyramidCard key={p.id} position={p} netLiquidity={nav}
-                    onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice} />
+                    onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
+                    flashed={flashedTickers.has(p.ticker)} />
                 ))}
               </div>
             )}

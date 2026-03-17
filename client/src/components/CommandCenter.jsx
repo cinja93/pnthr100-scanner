@@ -171,9 +171,13 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const next    = lots.find(l => l.lot === highFilled + 1);
   const nextDist = next ? (isLong ? (next.triggerPrice - position.currentPrice) / position.currentPrice * 100
                                   : (position.currentPrice - next.triggerPrice) / position.currentPrice * 100) : null;
-  const t2met     = position.daysActive >= 5;
+  // tradingDaysActive is computed server-side from createdAt; fall back to daysActive for legacy docs
+  const tradDays  = position.tradingDaysActive ?? position.daysActive ?? 0;
+  const t2met     = tradDays >= 5;
   const t2blocked = highFilled === 1 && !t2met;
-  const stale     = highFilled <= 1 && position.daysActive >= 17;
+  // Multi-level stale: 15+=yellow, 18+=orange, 20+=red LIQUIDATE
+  const staleLevel = highFilled <= 1 ? (tradDays >= 20 ? 3 : tradDays >= 18 ? 2 : tradDays >= 15 ? 1 : 0) : 0;
+  const stale      = staleLevel > 0;
 
   const lot1P      = lots[0].actualPrice || position.entryPrice;
   const isRecycled = isLong ? position.stopPrice >= lot1P : position.stopPrice <= lot1P;
@@ -208,20 +212,46 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const saveStopOnly = () => { const v = parseFloat(stopVal); if (v) onUpdateStop(position.id, v); setEditingStop(false); };
   const startStopOnly = () => { setEditingStop(true); setStopVal(position.stopPrice.toString()); };
 
+  const staleBorderColor = staleLevel === 3 ? 'rgba(220,53,69,0.4)'
+                         : staleLevel === 2 ? 'rgba(255,140,0,0.35)'
+                         : staleLevel === 1 ? 'rgba(255,193,7,0.3)'
+                         : 'rgba(255,255,255,0.06)';
+  const staleHeaderBg   = staleLevel === 3 ? 'rgba(220,53,69,0.07)'
+                         : staleLevel === 2 ? 'rgba(255,140,0,0.05)'
+                         : staleLevel === 1 ? 'rgba(255,193,7,0.04)'
+                         : 'transparent';
+
   return (
     <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 10, overflow: 'hidden',
-      border: stale ? '1px solid rgba(220,53,69,0.3)' : '1px solid rgba(255,255,255,0.06)' }}>
+      border: `1px solid ${staleBorderColor}` }}>
+      {/* FEAST Alert — RSI > 85: overextended, sell 50% immediately */}
+      {position.feastAlert && (
+        <div style={{ background: 'rgba(220,53,69,0.2)', borderBottom: '1px solid rgba(220,53,69,0.4)',
+          padding: '9px 18px', display: 'flex', alignItems: 'center', gap: 10,
+          fontSize: 12, fontWeight: 700, letterSpacing: '0.03em' }}>
+          <span style={{ fontSize: 16, lineHeight: 1 }}>⚠</span>
+          <span style={{ color: '#FFD700' }}>FEAST ALERT</span>
+          <span style={{ color: '#e8e6e3' }}>—</span>
+          <span style={{ color: '#ff6b6b' }}>
+            Weekly RSI {position.feastRSI != null ? position.feastRSI.toFixed(0) : '>85'}
+          </span>
+          <span style={{ color: '#e8e6e3' }}>—</span>
+          <span style={{ color: '#FFD700' }}>SELL 50% IMMEDIATELY</span>
+        </div>
+      )}
       {/* Header */}
       <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        background: stale ? 'rgba(220,53,69,0.05)' : 'transparent' }}>
+        background: staleHeaderBg }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 17, fontWeight: 800, fontFamily: 'monospace' }}>{position.ticker}</span>
           <SigBadge d={position.direction} />
           {isRecycled && <Badge color="#0f5132" bg="#d1e7dd" small>RECYCLED</Badge>}
           {!isRecycled && actualRisk > 0 && <Badge color="#ffc107" bg="rgba(255,193,7,0.1)" small>${actualRisk.toFixed(0)} AT RISK</Badge>}
           {hasFloor && <Badge color="#28a745" bg="rgba(40,167,69,0.1)" small>FLOOR +${pnlFloor.toFixed(0)}</Badge>}
-          {stale    && <Badge color="#dc3545" bg="rgba(220,53,69,0.15)" small>STALE {position.daysActive}/20</Badge>}
-          {t2blocked && <Badge color="#664d03" bg="#fff3cd" small>GATE {5 - position.daysActive}d</Badge>}
+          {staleLevel === 3 && <Badge color="#fff" bg="rgba(220,53,69,0.5)" small>LIQUIDATE {tradDays}/20</Badge>}
+          {staleLevel === 2 && <Badge color="#000" bg="rgba(255,140,0,0.75)" small>STALE {tradDays}/20</Badge>}
+          {staleLevel === 1 && <Badge color="#664d03" bg="#fff3cd" small>STALE {tradDays}/20</Badge>}
+          {t2blocked && <Badge color="#664d03" bg="#fff3cd" small>GATE {Math.max(0, 5 - tradDays)}d</Badge>}
           <span style={{ fontSize: 11, color: '#555' }}>{position.sector}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -297,7 +327,9 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
             <span>Risk/shr: <b>${riskPerShr.toFixed(2)}</b></span>
             <span>$ at risk: <b style={{ color: actualRisk > 0 ? '#ffc107' : '#28a745' }}>${actualRisk.toFixed(0)}</b></span>
             {hasFloor && <span>P&L floor: <b style={{ color: '#28a745' }}>+${pnlFloor.toFixed(0)}</b></span>}
-            <span>Day {position.daysActive}/20</span>
+            <span style={{ color: staleLevel >= 2 ? '#ff8c00' : staleLevel === 1 ? '#ffc107' : undefined }}>
+              Day {tradDays}/20
+            </span>
             {recStopNote && stopBelowRec && <span style={{ color: '#FFD700' }}>{recStopNote}</span>}
           </div>
           {anchorDiffers && (
@@ -377,7 +409,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                         </div>
                       ) : isNext ? (
                         gated
-                          ? <Badge color="#664d03" bg="#fff3cd" small>GATE {5 - position.daysActive}d</Badge>
+                          ? <Badge color="#664d03" bg="#fff3cd" small>GATE {Math.max(0, 5 - tradDays)}d</Badge>
                           : <button onClick={() => startEdit(l.lot)} style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 3, padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>FILL</button>
                       ) : <Badge color="#555" small>{isLong ? 'BUY' : 'SELL'} LMT</Badge>}
                     </td>
@@ -395,7 +427,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
 // ── New Position Calculator ───────────────────────────────────────────────────
 
 function Calculator({ netLiquidity, onCreate }) {
-  const [f,       setF]       = useState({ ticker: '', entry: '', stop: '', gap: '', dir: 'LONG' });
+  const [f,       setF]       = useState({ ticker: '', entry: '', stop: '', gap: '', dir: 'LONG', sector: '' });
   const [result,  setResult]  = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -412,9 +444,10 @@ function Calculator({ netLiquidity, onCreate }) {
       if (data.found) {
         setF(prev => ({
           ...prev,
-          entry: data.currentPrice?.toFixed(2) || prev.entry,
-          gap:   data.maxGapPct?.toFixed(1)    || prev.gap,
-          dir:   data.suggestedDirection === 'SHORT' ? 'SHORT' : 'LONG',
+          entry:  data.currentPrice?.toFixed(2) || prev.entry,
+          gap:    data.maxGapPct?.toFixed(1)    || prev.gap,
+          dir:    data.suggestedDirection === 'SHORT' ? 'SHORT' : 'LONG',
+          sector: data.sector || prev.sector,
         }));
       }
     } catch { /* ok — user fills manually */ }
@@ -522,7 +555,7 @@ function Calculator({ netLiquidity, onCreate }) {
               onClick={() => {
                 const fills = { 1: { filled: true, price: result.entry, shares: result.lots[0].targetShares, date: new Date().toISOString().split('T')[0] } };
                 for (let i = 2; i <= 5; i++) fills[i] = { filled: false };
-                onCreate({ ticker: f.ticker || 'NEW', direction: f.dir, entryPrice: result.entry, originalStop: result.stop, stopPrice: result.stop, maxGapPct: +f.gap || 0, currentPrice: result.entry, fills, sector: '—', daysActive: 0 });
+                onCreate({ ticker: f.ticker || 'NEW', direction: f.dir, entryPrice: result.entry, originalStop: result.stop, stopPrice: result.stop, maxGapPct: +f.gap || 0, currentPrice: result.entry, fills, sector: f.sector || '—', daysActive: 0 });
               }}
               style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 6, padding: '8px 20px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
               ADD TO PORTFOLIO
@@ -629,11 +662,12 @@ function PipelineTab({ positions, nav }) {
 // ── Main Command Center ───────────────────────────────────────────────────────
 
 export default function CommandCenter() {
-  const [nav,       setNav]       = useState(84000);
-  const [positions, setPositions] = useState([]);
-  const [tab,       setTab]       = useState('positions');
-  const [loading,   setLoading]   = useState(true);
-  const [saving,    setSaving]    = useState(false);
+  const [nav,           setNav]           = useState(84000);
+  const [positions,     setPositions]     = useState([]);
+  const [tab,           setTab]           = useState('positions');
+  const [loading,       setLoading]       = useState(true);
+  const [saving,        setSaving]        = useState(false);
+  const [sectorWarning, setSectorWarning] = useState(null);
 
   const heat = useMemo(() => calcHeat(positions, nav), [positions, nav]);
 
@@ -683,8 +717,15 @@ export default function CommandCenter() {
     const pos = { id: Date.now(), ...data };
     setPositions(prev => [...prev, pos]);
     setTab('positions');
-    try { await apiPost('/api/positions', pos); } catch { /* ok */ }
-  }, []);
+    try {
+      const result = await apiPost('/api/positions', pos);
+      if (result.warning?.type === 'SECTOR_CONCENTRATION') {
+        setSectorWarning(result.warning.message);
+        // Auto-dismiss after 10 seconds
+        setTimeout(() => setSectorWarning(null), 10000);
+      }
+    } catch { /* non-fatal */ }
+  }, [setSectorWarning]);
 
   const tabs = [
     { id: 'positions',  l: 'Positions & Orders' },
@@ -733,6 +774,18 @@ export default function CommandCenter() {
       <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
         {tab === 'positions' && (
           <div>
+            {/* Sector concentration warning banner */}
+            {sectorWarning && (
+              <div style={{ background: 'rgba(255,193,7,0.1)', border: '1px solid rgba(255,193,7,0.3)',
+                borderRadius: 8, padding: '10px 16px', marginBottom: 14,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                fontSize: 12, color: '#ffc107', fontWeight: 600 }}>
+                <span>⚠ SECTOR CONCENTRATION: {sectorWarning}</span>
+                <button onClick={() => setSectorWarning(null)}
+                  style={{ background: 'none', border: 'none', color: '#ffc107', cursor: 'pointer',
+                    fontSize: 18, lineHeight: 1, padding: '0 4px' }}>×</button>
+              </div>
+            )}
             {/* Metric cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 16 }}>
               <MC label="Net liquidity" value={`$${(nav / 1000).toFixed(0)}K`} />

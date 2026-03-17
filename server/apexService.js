@@ -447,11 +447,16 @@ function calcD1(signal, exchange, indexData, signalCounts) {
 
   const regimeScore = indexScore + ratioScore;
 
-  // Map to multiplier (BL benefits from bullish; SS benefits from bearish)
+  // Map to multiplier: BL = bullish regime boosts score; SS = bearish regime boosts score.
+  // INTENTIONAL BEARISH BIAS: SS multiplier is 1.0 - regimeScore×0.06, which means
+  // a negative regimeScore (bearish market: below EMA, high SS:BL ratio) INCREASES the
+  // SS multiplier (e.g. regimeScore=-4 → SS mult=1.24). This is by design — short setups
+  // score higher when the broader market is in a downtrend, matching predatory logic.
   let multiplier;
   if (signal === 'BL') {
     multiplier = 1.0 + (regimeScore * 0.06);
   } else {
+    // SS: inverted — bearish regime (negative regimeScore) amplifies short setups
     multiplier = 1.0 - (regimeScore * 0.06);
   }
   const score = Math.max(0.70, Math.min(1.30, Math.round(multiplier * 100) / 100));
@@ -858,9 +863,6 @@ export async function getApexResults(
     const d1 = calcD1(signal, meta.exchange, indexData, signalCounts);
     const d2 = scoreD2(signal, meta.sector, isNewSignal, sectorData);
     const d3 = scoreD3(signal, data);
-    if (ticker === 'PSKY') {
-      console.log(`[PSKY DEBUG] signal=${signal} daylightSep=${d3.separationPct}% closeSep=${d3.closeSepPct}% overextended=${d3.overextended} d3score=${d3.score} confirmation=${d3.confirmation}`);
-    }
 
     // HARD GATE: separation > 20% — the move already happened, disqualified
     // Push to scored at -99 so it sorts to the bottom and is visible as OVEREXTENDED

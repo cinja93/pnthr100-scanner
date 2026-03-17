@@ -97,6 +97,27 @@ async function fetchADX(ticker) {
   } catch { return null; }
 }
 
+// ── Trading-Days Counter ──────────────────────────────────────────────────────
+// Count weekday trading days from createdAt to today (excludes weekends only).
+// Good enough for stale-position warnings; does not subtract public holidays.
+
+function tradingDaysSince(createdAt) {
+  if (!createdAt) return 0;
+  const start = new Date(createdAt);
+  const now   = new Date();
+  let count = 0;
+  const d = new Date(start);
+  d.setHours(0, 0, 0, 0);
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  while (d < today) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
 // 52-week max overnight gap (daily candles)
 async function calcGapRisk(ticker) {
   try {
@@ -206,15 +227,45 @@ export async function positionsGetAll(req, res) {
     let live = {};
     try { if (tickers.length) live = await fetchQuotes(tickers); } catch { /* ok */ }
 
-    const enriched = positions.map(p => ({
-      ...p,
-      currentPrice: live[p.ticker]?.price || p.currentPrice,
-      priceSource:  live[p.ticker] ? 'live' : 'stored',
-      dayHigh:      live[p.ticker]?.dayHigh  || null,
-      dayLow:       live[p.ticker]?.dayLow   || null,
-    }));
+    // ── FEAST alert: weekly RSI > 85 = overextended; SELL 50% immediately ──────
+    // Fetch in parallel; non-fatal if any call fails
+    const rsiMap = {};
+    if (tickers.length) {
+      const rsiResults = await Promise.allSettled(tickers.map(t => fetchRSI(t)));
+      tickers.forEach((t, i) => { rsiMap[t] = rsiResults[i].value ?? null; });
+    }
 
-    res.json({ positions: enriched, count: enriched.length, updatedAt: new Date().toISOString() });
+    // ── Sector concentration summary ─────────────────────────────────────────
+    const sectorCounts = {};
+    for (const p of positions) {
+      if (p.sector && p.sector !== '—') {
+        sectorCounts[p.sector] = (sectorCounts[p.sector] || 0) + 1;
+      }
+    }
+    const saturatedSectors = Object.entries(sectorCounts)
+      .filter(([, cnt]) => cnt >= 3).map(([s]) => s);
+
+    const enriched = positions.map(p => {
+      const rsi = rsiMap[p.ticker] ?? null;
+      return {
+        ...p,
+        currentPrice:      live[p.ticker]?.price   || p.currentPrice,
+        priceSource:       live[p.ticker] ? 'live' : 'stored',
+        dayHigh:           live[p.ticker]?.dayHigh  || null,
+        dayLow:            live[p.ticker]?.dayLow   || null,
+        tradingDaysActive: tradingDaysSince(p.createdAt),
+        feastAlert:        rsi !== null && rsi > 85,
+        feastRSI:          rsi,
+      };
+    });
+
+    res.json({
+      positions:        enriched,
+      count:            enriched.length,
+      sectorCounts,
+      saturatedSectors,
+      updatedAt:        new Date().toISOString(),
+    });
   } catch (err) {
     console.error('[CC] Positions GET error:', err);
     res.status(500).json({ error: err.message });
@@ -234,6 +285,8 @@ export async function positionsSave(req, res) {
       return res.status(400).json({ error: 'ticker and direction are required' });
     }
 
+    let warning = null;
+
     if (position.id) {
       await db.collection('pnthr_portfolio').updateOne(
         { id: position.id },
@@ -241,6 +294,20 @@ export async function positionsSave(req, res) {
         { upsert: true }
       );
     } else {
+      // ── Sector concentration check (warn, not block) ────────────────────────
+      if (position.sector && position.sector !== '—') {
+        const sectorCount = await db.collection('pnthr_portfolio').countDocuments({
+          status: 'ACTIVE',
+          sector: position.sector,
+        });
+        if (sectorCount >= 3) {
+          warning = {
+            type:    'SECTOR_CONCENTRATION',
+            message: `${sectorCount} active positions already in ${position.sector}. Max recommended: 2.`,
+          };
+        }
+      }
+
       position.id        = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
       position.status    = 'ACTIVE';
       position.createdAt = new Date();
@@ -249,7 +316,7 @@ export async function positionsSave(req, res) {
       await db.collection('pnthr_portfolio').insertOne(position);
     }
 
-    res.json({ success: true, id: position.id });
+    res.json({ success: true, id: position.id, warning });
   } catch (err) {
     console.error('[CC] Positions POST error:', err);
     res.status(500).json({ error: err.message });

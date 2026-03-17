@@ -52,7 +52,9 @@ export const APEX_TIERS = [
 
 export function getTier(score) {
   if (score == null) return APEX_TIERS[9];
-  return APEX_TIERS.find(t => score >= t.min && score <= t.max) || APEX_TIERS[9];
+  // Tiers are ordered highest→lowest; use only t.min so fractional scores
+  // (e.g. 99.8) don't fall through integer max boundaries into DORMANT.
+  return APEX_TIERS.find(t => score >= t.min) ?? APEX_TIERS[9];
 }
 
 // ── Sector Map ────────────────────────────────────────────────────────────────

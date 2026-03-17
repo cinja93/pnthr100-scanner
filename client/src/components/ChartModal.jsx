@@ -594,13 +594,17 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       const maxGapPct  = tickerData.maxGapPct || 0;
       const entryPrice = tickerData.currentPrice || stock.currentPrice || 0;
 
-      // Stop: use signal-service ATR stop if available; fallback to EMA ±2%
+      // Stop: prefer the chart's own pnthrStop (computed from fresh chart data via
+      // detectAllSignals) as it matches what's drawn on the chart. Fall back to
+      // stock.stopPrice from the server, then EMA ±2% if neither is available.
       const direction   = stock.signal === 'SS' ? 'SHORT' : 'LONG';
-      const stopDefault = stock.stopPrice
-        ? +stock.stopPrice
-        : direction === 'SHORT'
-          ? +(entryPrice * 1.02).toFixed(2)
-          : +(entryPrice * 0.98).toFixed(2);
+      const stopDefault = pnthrStop
+        ? +pnthrStop
+        : stock.stopPrice
+          ? +stock.stopPrice
+          : direction === 'SHORT'
+            ? +(entryPrice * 1.02).toFixed(2)
+            : +(entryPrice * 0.98).toFixed(2);
 
       // Sizing
       const sizing    = sizePosition({ netLiquidity: nav, entryPrice, stopPrice: stopDefault, maxGapPct, direction });
@@ -792,7 +796,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                       fontWeight: 700,
                       outline: 'none',
                       textAlign: 'right',
-                      width: 90,
+                      width: 110,
                     }}
                   />
                 </div>

@@ -187,43 +187,47 @@ function PreyTags({ strategies }) {
   );
 }
 
-// ── D1–D8 Formula reference data (v3) ────────────────────────────────────────
+// ── D1–D8 Formula reference data (v3.1) ──────────────────────────────────────
 const FORMULA_GUIDE = [
   {
     dim: 'FORMULA · Total = (D2+D3+D4+D5+D6+D7+D8) × D1',
-    desc: 'D1 is a multiplier (0.70×–1.30×) applied to the sum of all additive dimensions. Fighting the market regime compresses scores; aligned with the regime amplifies them.',
+    desc: 'D1 is a multiplier (0.70×–1.30×) applied to the sum of all additive dimensions. Aligned with the market regime amplifies scores; fighting it compresses them.',
   },
   {
     dim: 'D1 · Market Regime Multiplier  (0.70× – 1.30×)',
-    desc: 'Nasdaq → QQQ; NYSE/ARCA → SPY. Index EMA position + slope scored −2 to +2. SS:BL open ratio and new-signal ratio add ±1–2. regimeScore (−5 to +5) × 0.06 = adjustment. BL: 1.0 + adj; SS: 1.0 − adj.',
+    desc: 'Nasdaq stocks route to QQQ; NYSE/ARCA to SPY. Index EMA position + slope scored −2 to +2. SS:BL open ratio and new-signal ratio add ±1–2. regimeScore (−5 to +5) × 0.06 = adjustment. BL: 1.0 + adj; SS: 1.0 − adj.',
   },
   {
     dim: 'D2 · Sector Alignment  (±15 pts)',
-    desc: 'Sector direction = sign of sector ETF 5D return. 5D component: |return5D%| × newMult × direction × 2 (new signals ×2). 1M component: |return1M%| × direction. Total capped ±15.',
+    desc: 'Sector direction = sign of sector ETF 5D return. 5D component: |return5D%| × newMult × direction × 2 (new signals get 2×). 1M component: |return1M%| × direction. Total capped ±15.',
   },
   {
     dim: 'D3 · Entry Quality  (0–85 pts) — THE KEY DIMENSION',
-    desc: 'Sub-A: Range-normalized conviction = (close−low)/(high−low)×100 × 2.5, cap 40. Sub-B: EMA slope% × 10 (signal direction only), cap 30. Sub-C: EMA separation% × 1.5, cap 15. CONFIRMED ≥30 (70%+ WR), PARTIAL ≥15, UNCONFIRMED <15.',
+    desc: 'Sub-A: Close conviction = (close−low)/(high−low)×100 × 2.5, cap 40 pts. Sub-B: EMA slope% × 10 (signal direction only), cap 30 pts. Sub-C: EMA separation — BELL CURVE, sweet spot 2-8%: 0-2% ramp (0→6 pts), 2-8% (6→15 pts), 8-15% decay (15→3 pts), 15-20% steep decay (3→0 pts), 20%+ = OVEREXTENDED (hard gate, disqualified). Confirmation: CONFIRMED ≥30 pts, PARTIAL ≥15, UNCONFIRMED <15.',
+  },
+  {
+    dim: 'OVEREXTENDED · Hard Gate (separation > 20%)',
+    desc: 'The move already happened — entering now is chasing, not hunting. Stocks with EMA separation > 20% receive score −99, are excluded from Kill rankings, and appear greyed-out at the bottom of the list. D4–D8 are not calculated.',
   },
   {
     dim: 'D4 · Signal Freshness  (−15 to +10 pts)',
-    desc: 'Age 0 (new): CONFIRMED +10, PARTIAL +6, UNCONFIRMED +3. Age 1: CONFIRMED +7, PARTIAL +4, UNCONFIRMED +2. Age 2: +4. Age 3–5: 0. Age 6–9: −3/week. Age 10+: −5/week, floor −15.',
+    desc: 'Age 0 (new this week): CONFIRMED +10, PARTIAL +6, UNCONFIRMED +3. Age 1: CONFIRMED +7, PARTIAL +4, UNCONFIRMED +2. Age 2: +4. Age 3–5: 0. Age 6–9: −3/wk. Age 10+: −5/wk, floor −15.',
   },
   {
     dim: 'D5 · Rank Rise  (±20 pts)',
-    desc: '+1 pt per PNTHR 100 position risen, −1 per position dropped. New entries (null): 0 pts. Capped ±20 — 55% of +30 rank jumps revert the following week.',
+    desc: '+1 pt per PNTHR rank position risen this week, −1 per position dropped. New entries (no prior rank): 0 pts. Capped ±20 — 55% of +30 rank jumps revert the following week.',
   },
   {
     dim: 'D6 · Momentum  (0–20 pts)',
-    desc: 'Sub-A: (RSI−50)/10 → ±5 pts. Sub-B: OBV wk/wk% ÷ 5 → ±5 pts (inverted for SS). Sub-C: (ADX−15)/5 → 0–5 pts, only when ADX rising above 15. Sub-D: +5 if volume ratio > 1.5×. Floor 0.',
+    desc: 'Sub-A RSI: (RSI−50)/10 → ±5 pts (inverted for SS). Sub-B OBV: week-over-week% ÷ 5 → ±5 pts (inverted for SS). Sub-C ADX: (ADX−15)/5 → 0–5 pts, only when ADX rising above 15. Sub-D Volume: +5 if volume ratio > 1.5×. Total floored at 0.',
   },
   {
     dim: 'D7 · Rank Velocity  (±10 pts)',
-    desc: 'Measures momentum of rank movement: velocity = currentRankChange − previousRankChange. score = clip(round(velocity ÷ 6), −10, +10). Accelerating rises score positive; decelerating or reversing score negative.',
+    desc: 'Acceleration of rank movement: velocity = currentRankChange − previousRankChange. score = clip(round(velocity ÷ 6), −10, +10). A stock rising faster than last week scores positive; decelerating or reversing scores negative.',
   },
   {
     dim: 'D8 · Multi-Strategy Prey Presence  (0–6 pts)',
-    desc: 'SPRINT = +2 pts (in PNTHR 100 and rising). HUNT = +2 pts (EMA crossover). FEAST / ALPHA / SPRING / SNEAK = +1 pt each. Maximum 6 pts.',
+    desc: 'SPRINT +2 pts (PNTHR 100 riser). HUNT +2 pts (EMA crossover scan). FEAST / ALPHA / SPRING / SNEAK +1 pt each. Maximum 6 pts. Acts as tiebreaker — most of the 679 universe scores 0 here.',
   },
 ];
 
@@ -346,7 +350,7 @@ export default function ApexPage() {
             PNTHR KILL
           </h1>
           <p className={styles.subtitle}>
-            Stocks that are the PNTHR's Prey with 7-dimensional predatory scoring. Which ones have the PNTHR's full attention this week? ...time for the PNTHR to Eat.
+            8-dimensional predatory scoring across the full PNTHR 679 universe. Regime, sector, entry quality, freshness, rank momentum, velocity, and prey presence — which setup has the PNTHR's full attention this week?
           </p>
         </div>
         <button

@@ -91,6 +91,269 @@ function calcHeat(positions, nav) {
   };
 }
 
+// ── Risk Advisor Helpers ──────────────────────────────────────────────────────
+
+function highestFilledLot(p) {
+  let high = 0;
+  for (let i = 1; i <= 5; i++) if (p.fills?.[i]?.filled) high = i;
+  return high;
+}
+
+function filledSharesOf(p) {
+  let total = 0;
+  for (let i = 1; i <= 5; i++) {
+    const f = p.fills?.[i];
+    if (f?.filled) total += +(f.shares ?? 0);
+  }
+  return total;
+}
+
+function avgCostOf(p) {
+  let cost = 0, shares = 0;
+  for (let i = 1; i <= 5; i++) {
+    const f = p.fills?.[i];
+    if (f?.filled && f?.price && f?.shares) { cost += +f.shares * +f.price; shares += +f.shares; }
+  }
+  return shares > 0 ? cost / shares : (p.entryPrice || 0);
+}
+
+function pnlPctOf(p) {
+  const avg = avgCostOf(p);
+  if (!avg || !p.currentPrice) return 0;
+  const raw = (p.currentPrice - avg) / avg * 100;
+  return p.direction === 'SHORT' ? -raw : raw;
+}
+
+function isRecycledPos(p) {
+  const avg = avgCostOf(p);
+  return p.direction === 'LONG' ? p.stopPrice >= avg : p.stopPrice <= avg;
+}
+
+function runRiskAdvisor(positions, nav) {
+  const recs = [];
+  if (!positions.length || !nav) return recs;
+
+  const livePos = positions.filter(p => !isRecycledPos(p));
+  const liveCnt = livePos.length;
+
+  // Rule 1: Heat Cap Violation (>10 live positions = >10% heat)
+  if (liveCnt > 10) {
+    const excess = liveCnt - 10;
+    const candidates = [...livePos].sort((a, b) => pnlPctOf(a) - pnlPctOf(b)).slice(0, excess);
+    recs.push({
+      priority: 'CRITICAL', type: 'HEAT_VIOLATION',
+      message: `Portfolio heat at ${liveCnt}% — exceeds 10% cap by ${excess} slot${excess !== 1 ? 's' : ''}`,
+      actions: candidates.map(p => ({ ticker: p.ticker, action: 'CLOSE', shares: filledSharesOf(p), reason: `Worst performer at ${pnlPctOf(p).toFixed(1)}%` })),
+      alternative: `Or reduce share count on ${excess} position${excess !== 1 ? 's' : ''} to bring dollar risk within 1% each.`,
+    });
+  }
+
+  // Rule 2: Sector Concentration (>3 per sector)
+  const bySector = {};
+  for (const p of livePos) { const s = p.sector || 'Unknown'; (bySector[s] = bySector[s] || []).push(p); }
+  for (const [sector, sPos] of Object.entries(bySector)) {
+    if (sPos.length > 3) {
+      const excess = sPos.length - 3;
+      const weakest = [...sPos].sort((a, b) => pnlPctOf(a) - pnlPctOf(b)).slice(0, excess);
+      recs.push({
+        priority: 'HIGH', type: 'SECTOR_CONCENTRATION',
+        message: `${sector}: ${sPos.length} positions (max 3). ${excess} must close.`,
+        actions: weakest.map(p => ({ ticker: p.ticker, action: 'CLOSE', shares: filledSharesOf(p), reason: `Weakest in ${sector} at ${pnlPctOf(p).toFixed(1)}%` })),
+      });
+    }
+  }
+
+  // Rule 3: Stale Hunt Alert (Lot 1 only, ≥15 trading days)
+  for (const p of positions) {
+    if (highestFilledLot(p) <= 1 && (p.tradingDaysActive ?? 0) >= 15) {
+      const d = p.tradingDaysActive;
+      recs.push({
+        priority: d >= 20 ? 'CRITICAL' : 'HIGH', type: 'STALE_HUNT',
+        message: `${p.ticker}: Day ${d}/20 at Lot 1. ${d >= 20 ? 'LIQUIDATE NOW.' : `${20 - d} trading day${20 - d !== 1 ? 's' : ''} remaining.`}`,
+        actions: [{ ticker: p.ticker, action: d >= 20 ? 'LIQUIDATE' : 'MONITOR', shares: filledSharesOf(p), reason: 'Stale Hunt Rule' }],
+      });
+    }
+  }
+
+  // Rule 4: Lot 2 Ready (at Lot 1, ≥5 days, price gate met)
+  for (const p of positions) {
+    if (highestFilledLot(p) === 1 && (p.tradingDaysActive ?? 0) >= 5) {
+      const lot1Price = p.fills?.[1]?.price;
+      if (!lot1Price) continue;
+      const trigger = p.direction === 'LONG' ? +(lot1Price * 1.03).toFixed(2) : +(lot1Price * 0.97).toFixed(2);
+      const priceReady = p.direction === 'LONG' ? (p.currentPrice ?? 0) >= trigger : (p.currentPrice ?? 0) <= trigger;
+      if (priceReady) {
+        const sizing = sizePosition({ netLiquidity: nav, entryPrice: p.entryPrice, stopPrice: p.stopPrice, maxGapPct: p.maxGapPct || 0, direction: p.direction });
+        const lot2Shares = Math.round(sizing.totalShares * 0.30);
+        recs.push({
+          priority: 'ACTION', type: 'LOT2_READY',
+          message: `${p.ticker}: Lot 2 (The Stalk) is READY. Price and time gate both confirmed.`,
+          actions: [{ ticker: p.ticker, action: 'BUY', shares: lot2Shares, price: trigger, reason: 'Scale in 30% — Lot 2 trigger met' }],
+        });
+      }
+    }
+  }
+
+  // Rule 5: Stop Ratchet Needed (Lot 3+ filled, stop not at breakeven)
+  for (const p of positions) {
+    const highLot = highestFilledLot(p);
+    const lot1Fill = p.fills?.[1]?.price;
+    if (highLot >= 3 && lot1Fill) {
+      const needsRatchet = p.direction === 'LONG' ? p.stopPrice < +lot1Fill : p.stopPrice > +lot1Fill;
+      if (needsRatchet) {
+        const newStop = +(+lot1Fill).toFixed(2);
+        recs.push({
+          priority: 'HIGH', type: 'RATCHET_NEEDED',
+          message: `${p.ticker}: At Lot ${highLot} but stop ($${p.stopPrice}) is ${p.direction === 'LONG' ? 'below' : 'above'} breakeven ($${newStop}). MOVE STOP.`,
+          actions: [{ ticker: p.ticker, action: 'MOVE_STOP', newStop, oldStop: p.stopPrice, reason: 'Breakeven ratchet overdue' }],
+        });
+      }
+    }
+  }
+
+  // Rule 6: FEAST Alert (RSI > 85)
+  for (const p of positions) {
+    if (p.feastAlert || (p.feastRSI && p.feastRSI > 85)) {
+      const rsi = p.feastRSI;
+      const sellShares = Math.floor(filledSharesOf(p) / 2);
+      recs.push({
+        priority: 'CRITICAL', type: 'FEAST',
+        message: `${p.ticker}: Weekly RSI at ${rsi ? rsi.toFixed(0) : '85+'}. FEAST RULE — sell 50% immediately.`,
+        actions: [{ ticker: p.ticker, action: 'SELL', shares: sellShares, reason: `RSI ${rsi ? rsi.toFixed(0) : '85+'} > 85 — lock in parabolic gains` }],
+      });
+    }
+  }
+
+  // Rule 7: Position Oversized (>10% ticker cap)
+  for (const p of positions) {
+    const shares = filledSharesOf(p);
+    if (!shares || !p.currentPrice) continue;
+    const posValue = shares * p.currentPrice;
+    const tickerCap = nav * 0.10;
+    if (posValue > tickerCap) {
+      const sharesToSell = Math.ceil((posValue - tickerCap) / p.currentPrice);
+      recs.push({
+        priority: 'HIGH', type: 'OVERSIZED',
+        message: `${p.ticker}: Position value $${posValue.toFixed(0)} exceeds 10% cap ($${tickerCap.toFixed(0)}).`,
+        actions: [{ ticker: p.ticker, action: 'TRIM', shares: sharesToSell, reason: `Reduce by ${sharesToSell} shares to meet ticker cap` }],
+      });
+    }
+  }
+
+  // Rule 8: Dollar Risk Exceeds 1% Vitality
+  for (const p of positions) {
+    if (isRecycledPos(p)) continue;
+    const shares = filledSharesOf(p);
+    if (!shares) continue;
+    const riskPerShare = Math.abs(avgCostOf(p) - p.stopPrice);
+    if (!riskPerShare) continue;
+    const posRisk = shares * riskPerShare;
+    const vitality = nav * 0.01;
+    if (posRisk > vitality * 1.1) {
+      const maxShares = Math.floor(vitality / riskPerShare);
+      const excessShares = shares - maxShares;
+      recs.push({
+        priority: 'HIGH', type: 'RISK_EXCEEDED',
+        message: `${p.ticker}: $${posRisk.toFixed(0)} at risk exceeds 1% Vitality ($${vitality.toFixed(0)}).`,
+        actions: [{ ticker: p.ticker, action: 'TRIM', shares: excessShares, reason: `Sell ${excessShares} shares to bring risk within 1%` }],
+      });
+    }
+  }
+
+  // Sort: CRITICAL → HIGH → ACTION
+  const ORDER = { CRITICAL: 0, HIGH: 1, ACTION: 2 };
+  recs.sort((a, b) => (ORDER[a.priority] ?? 9) - (ORDER[b.priority] ?? 9));
+  return recs;
+}
+
+function formatAction(a) {
+  switch (a.action) {
+    case 'CLOSE':      return `CLOSE ${a.ticker}${a.shares ? ` (${a.shares} shares at market)` : ''} — ${a.reason}`;
+    case 'LIQUIDATE':  return `LIQUIDATE ${a.ticker}${a.shares ? ` (${a.shares} shares at market)` : ''} — ${a.reason}`;
+    case 'BUY':        return `BUY ${a.shares} shares of ${a.ticker}${a.price ? ` at $${a.price}` : ''} — ${a.reason}`;
+    case 'SELL':       return `SELL ${a.shares} shares of ${a.ticker} — ${a.reason}`;
+    case 'TRIM':       return `TRIM ${a.ticker} — sell ${a.shares} shares — ${a.reason}`;
+    case 'MOVE_STOP':  return `MOVE ${a.ticker} stop from $${a.oldStop} → $${a.newStop} — ${a.reason}`;
+    case 'MONITOR':    return `MONITOR ${a.ticker} — ${a.reason}`;
+    default:           return `${a.action} ${a.ticker} — ${a.reason}`;
+  }
+}
+
+const PRIORITY_STYLE = {
+  CRITICAL: { bg: 'rgba(220,53,69,0.12)',  border: 'rgba(220,53,69,0.35)',  badge: '#dc3545', text: '#ff6b6b' },
+  HIGH:     { bg: 'rgba(255,193,7,0.08)',  border: 'rgba(255,193,7,0.3)',   badge: '#ffc107', text: '#FFD700' },
+  ACTION:   { bg: 'rgba(40,167,69,0.08)', border: 'rgba(40,167,69,0.3)',  badge: '#28a745', text: '#4ade80' },
+};
+
+function RiskAdvisor({ recommendations }) {
+  const [open, setOpen] = useState(() => {
+    try { return localStorage.getItem('pnthr_advisor_open') !== 'false'; } catch { return true; }
+  });
+
+  const toggle = () => setOpen(v => {
+    const next = !v;
+    try { localStorage.setItem('pnthr_advisor_open', String(next)); } catch {}
+    return next;
+  });
+
+  const critCount = recommendations.filter(r => r.priority === 'CRITICAL').length;
+  const highCount = recommendations.filter(r => r.priority === 'HIGH').length;
+  const actCount  = recommendations.filter(r => r.priority === 'ACTION').length;
+  const allClear  = recommendations.length === 0;
+  const headerColor = allClear ? '#28a745' : critCount > 0 ? '#dc3545' : highCount > 0 ? '#ffc107' : '#28a745';
+
+  return (
+    <div style={{ marginBottom: 16, borderRadius: 10, overflow: 'hidden', border: `1px solid ${headerColor}40` }}>
+      <div onClick={toggle} style={{ background: `${headerColor}18`, padding: '9px 16px', cursor: 'pointer',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: headerColor, letterSpacing: '0.1em' }}>⚡ RISK ADVISOR</span>
+          {allClear ? (
+            <span style={{ fontSize: 11, color: '#28a745' }}>— All Clear · Portfolio healthy</span>
+          ) : (
+            <div style={{ display: 'flex', gap: 6 }}>
+              {critCount > 0 && <span style={{ fontSize: 10, background: 'rgba(220,53,69,0.2)', color: '#dc3545', padding: '2px 7px', borderRadius: 4, fontWeight: 700 }}>{critCount} CRITICAL</span>}
+              {highCount > 0 && <span style={{ fontSize: 10, background: 'rgba(255,193,7,0.15)', color: '#ffc107', padding: '2px 7px', borderRadius: 4, fontWeight: 700 }}>{highCount} HIGH</span>}
+              {actCount  > 0 && <span style={{ fontSize: 10, background: 'rgba(40,167,69,0.15)', color: '#28a745', padding: '2px 7px', borderRadius: 4, fontWeight: 700 }}>{actCount} ACTION</span>}
+            </div>
+          )}
+        </div>
+        <span style={{ color: '#555', fontSize: 10 }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && !allClear && (
+        <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.2)' }}>
+          {recommendations.map((rec, i) => {
+            const s = PRIORITY_STYLE[rec.priority] || PRIORITY_STYLE.HIGH;
+            return (
+              <div key={i} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 9, fontWeight: 800, background: s.badge, color: '#000', padding: '2px 6px', borderRadius: 3, letterSpacing: '0.08em' }}>
+                    {rec.priority}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#e8e6e3' }}>{rec.message}</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {rec.actions.map((a, j) => (
+                    <div key={j} style={{ fontSize: 11, color: s.text, fontFamily: 'monospace',
+                      paddingLeft: 8, borderLeft: `2px solid ${s.border}` }}>
+                      → {formatAction(a)}
+                    </div>
+                  ))}
+                  {rec.alternative && (
+                    <div style={{ fontSize: 11, color: '#666', marginTop: 4, fontStyle: 'italic' }}>
+                      Alt: {rec.alternative}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Tiny UI Components ────────────────────────────────────────────────────────
 
 function Badge({ children, color = '#888', bg, small }) {
@@ -683,7 +946,8 @@ export default function CommandCenter() {
   const [saving,        setSaving]        = useState(false);
   const [sectorWarning, setSectorWarning] = useState(null);
 
-  const heat = useMemo(() => calcHeat(positions, nav), [positions, nav]);
+  const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
+  const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
 
   // Load positions from API on mount
   useEffect(() => {
@@ -812,6 +1076,9 @@ export default function CommandCenter() {
               <MC label="Open slots" value={heat.slots} accent="#FFD700" />
               <MC label="Total positions" value={heat.totalPos} sub={`${heat.liveCnt} live · ${heat.recycledCnt} recycled`} />
             </div>
+
+            {/* Risk Advisor — runs every time positions load */}
+            {!loading && <RiskAdvisor recommendations={advisorRecs} />}
 
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#555' }}>Loading positions…</div>

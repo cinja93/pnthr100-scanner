@@ -1,5 +1,5 @@
 // In dev: use relative URL so Vite proxy hits local server. In production: use deployed API URL.
-const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
+export const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
 
 // JWT token — set once after login via setAuthToken()
 let _token = null;
@@ -7,7 +7,7 @@ export function setAuthToken(token) { _token = token; }
 export function clearAuthToken() { _token = null; }
 
 // Base headers included on every request
-function authHeaders(extra = {}) {
+export function authHeaders(extra = {}) {
   return {
     ...(_token ? { 'Authorization': `Bearer ${_token}` } : {}),
     ...extra

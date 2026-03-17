@@ -11,6 +11,16 @@ import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
 import { getApexResults, clearApexCache } from './apexService.js';
+import {
+  killPipelineHandler,
+  positionsGetAll,
+  positionsSave,
+  positionsClose,
+  tickerHandler,
+  regimeHandler,
+  ensureCommandCenterIndexes,
+} from './commandCenter.js';
+import { runFridayKillPipeline } from './fridayPipeline.js';
 import newsletterRouter from './routes/newsletter.js';
 import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
@@ -1486,6 +1496,14 @@ app.get('/api/apex', authenticateJWT, async (req, res) => {
   }
 });
 
+// ── PNTHR Command Center ───────────────────────────────────────────────────────
+app.get('/api/kill-pipeline',       authenticateJWT, killPipelineHandler);
+app.get('/api/positions',           authenticateJWT, positionsGetAll);
+app.post('/api/positions',          authenticateJWT, positionsSave);
+app.post('/api/positions/close',    authenticateJWT, positionsClose);
+app.get('/api/ticker/:symbol',      authenticateJWT, tickerHandler);
+app.get('/api/regime',              authenticateJWT, regimeHandler);
+
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
 app.use('/api/newsletter', newsletterRouter);
 
@@ -1493,6 +1511,18 @@ app.use('/api/newsletter', newsletterRouter);
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// ── Cron: PNTHR Kill scoring pipeline every Friday at 4:15pm ET ─────────────
+// Runs right after market close to pre-compute Kill scores and persist to MongoDB.
+// The Command Center's /api/kill-pipeline reads from this data for instant response.
+cron.schedule('15 16 * * 5', async () => {
+  try {
+    console.log('[Kill Pipeline] Starting Friday Kill pipeline...');
+    await runFridayKillPipeline();
+  } catch (err) {
+    console.error('[Kill Pipeline] Failed:', err.message);
+  }
+}, { timezone: 'America/New_York' });
 
 // ── Cron: auto-generate newsletter every Friday at 5pm ET ───────────────────
 cron.schedule('0 17 * * 5', async () => {
@@ -1582,6 +1612,8 @@ app.listen(PORT, () => {
   // Pre-compute signal counts in background (takes ~2 min each)
   computeSectorSignalCounts();
   computeSpeculativeSignalCounts();
+  // Bootstrap Command Center MongoDB indexes (non-blocking)
+  ensureCommandCenterIndexes().catch(() => {});
 });
 
 // Scheduled Friday auto-save: checks every 30 minutes.

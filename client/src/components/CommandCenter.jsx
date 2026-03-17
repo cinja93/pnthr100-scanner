@@ -5,8 +5,9 @@
 // Live position data from /api/positions + kill signals from /api/kill-pipeline
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { API_BASE, authHeaders } from '../services/api.js';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { API_BASE, authHeaders, updateUserProfile } from '../services/api.js';
+import { useAuth } from '../AuthContext';
 
 // ── Sizing Constants ──────────────────────────────────────────────────────────
 
@@ -662,7 +663,20 @@ function PipelineTab({ positions, nav }) {
 // ── Main Command Center ───────────────────────────────────────────────────────
 
 export default function CommandCenter() {
-  const [nav,           setNav]           = useState(100000);
+  const { currentUser, updateCurrentUser } = useAuth();
+  const [nav,           setNav]           = useState(() => currentUser?.accountSize ?? 100000);
+  const navSaveTimer = useRef(null);
+
+  // Debounce-save nav to profile whenever it changes (1s after last keystroke)
+  function handleNavChange(value) {
+    setNav(value);
+    if (navSaveTimer.current) clearTimeout(navSaveTimer.current);
+    navSaveTimer.current = setTimeout(() => {
+      updateUserProfile({ accountSize: value })
+        .then(() => updateCurrentUser({ accountSize: value }))
+        .catch(() => {}); // silent — UI still works even if save fails
+    }, 1000);
+  }
   const [positions,     setPositions]     = useState([]);
   const [tab,           setTab]           = useState('positions');
   const [loading,       setLoading]       = useState(true);
@@ -763,7 +777,7 @@ export default function CommandCenter() {
             </span>
           </div>
           <span style={{ fontSize: 11, color: '#555' }}>NAV</span>
-          <input type="number" value={nav} onChange={e => setNav(+e.target.value || 0)}
+          <input type="number" value={nav} onChange={e => handleNavChange(+e.target.value || 0)}
             style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: 6, padding: '5px 10px', color: '#FFD700', fontSize: 13, fontFamily: 'monospace',
               width: 120, textAlign: 'right', outline: 'none', fontWeight: 700 }} />

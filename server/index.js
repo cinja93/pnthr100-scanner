@@ -602,7 +602,7 @@ app.get('/api/user/profile', async (req, res) => {
   }
 });
 
-app.patch('/api/user/profile', authenticateJWT, requireAdmin, async (req, res) => {
+app.patch('/api/user/profile', authenticateJWT, async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
     const { accountSize, defaultPage } = req.body;

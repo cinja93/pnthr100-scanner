@@ -93,8 +93,11 @@ function App() {
   if (!authToken) return <LoginPage onLogin={handleLogin} />;
 
   const isAdmin = currentUser?.role === 'admin';
+  function updateCurrentUser(updates) {
+    setCurrentUser(prev => ({ ...prev, ...updates }));
+  }
   return (
-    <AuthContext.Provider value={{ currentUser, isAdmin }}>
+    <AuthContext.Provider value={{ currentUser, isAdmin, updateCurrentUser }}>
       <AppInner currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />
     </AuthContext.Provider>
   );

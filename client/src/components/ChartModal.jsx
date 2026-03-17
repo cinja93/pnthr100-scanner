@@ -721,52 +721,145 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
           </div>
         </div>
 
-        {/* SIZE IT panel — slide-down sizing result */}
-        {isAdmin && sizePanel && (
-          <div style={{ padding: '10px 20px', background: 'rgba(255,215,0,0.04)',
-            borderBottom: '1px solid rgba(255,215,0,0.15)',
-            display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-            <div>
-              <span style={{ fontSize: 12, fontWeight: 800, color: '#FFD700', fontFamily: 'monospace' }}>
-                {stock.ticker} · {sizePanel.direction}
-              </span>
-              <span style={{ fontSize: 12, color: '#aaa', marginLeft: 8 }}>
-                Lot 1: <b style={{ color: '#e8e6e3' }}>{sizePanel.lot1Shares} shr</b> @ ${sizePanel.entry?.toFixed(2)}
-              </span>
+        {/* SIZE IT panel — two-row data card */}
+        {isAdmin && sizePanel && (() => {
+          const vitality      = +(sizePanel.nav * 0.01).toFixed(0);
+          const heatAfter     = sizePanel.heatBefore + 1;
+          const overCap       = heatAfter > 10;
+          const riskOverVit   = sizePanel.risk$ > vitality;
+          const dirColor      = sizePanel.direction === 'SHORT' ? '#ff6b6b' : '#28a745';
+          const dirLabel      = sizePanel.direction === 'SHORT' ? 'SHORT' : 'LONG';
+          return (
+            <div style={{
+              background: '#0e0e0e',
+              borderTop: '2px solid #FFD700',
+              borderBottom: '1px solid rgba(255,215,0,0.12)',
+              padding: '14px 24px',
+              minHeight: 80,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}>
+              {/* Row 1: ticker · direction | lot 1 shares · total target */}
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: '#FFD700', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
+                    {stock.ticker}
+                  </span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: dirColor, fontFamily: 'monospace' }}>
+                    {dirLabel}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 28, alignItems: 'baseline' }}>
+                  <div>
+                    <span style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em' }}>LOT 1</span>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: '#e8e6e3', fontFamily: 'monospace', marginLeft: 8 }}>
+                      {sizePanel.lot1Shares} shr
+                    </span>
+                    <span style={{ fontSize: 13, color: '#888', fontFamily: 'monospace', marginLeft: 6 }}>
+                      @ ${sizePanel.entry?.toFixed(2)}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em' }}>TARGET</span>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: '#aaa', fontFamily: 'monospace', marginLeft: 8 }}>
+                      {sizePanel.totalShares} shr
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: stop input · risk · gap · heat · nav · vitality */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+
+                {/* Stop — prominent editable field */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stop</span>
+                  <input
+                    key={sizePanel.adjustedStop}
+                    type="number" step="0.01"
+                    defaultValue={sizePanel.adjustedStop}
+                    onBlur={e => recalcWithStop(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { recalcWithStop(e.target.value); e.target.blur(); } }}
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1.5px solid #FFD700',
+                      borderRadius: 6,
+                      padding: '5px 10px',
+                      color: '#dc3545',
+                      fontSize: 15,
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      outline: 'none',
+                      textAlign: 'right',
+                      width: 90,
+                    }}
+                  />
+                </div>
+
+                {/* Divider */}
+                <span style={{ color: 'rgba(255,255,255,0.08)', fontSize: 18 }}>|</span>
+
+                {/* Risk */}
+                <div>
+                  <span style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Risk </span>
+                  <span style={{ fontSize: 14, fontWeight: 800, fontFamily: 'monospace',
+                    color: riskOverVit ? '#dc3545' : '#ffc107' }}>
+                    ${sizePanel.risk$}
+                  </span>
+                  {riskOverVit && (
+                    <span style={{ fontSize: 10, color: '#dc3545', marginLeft: 5 }}>⚠ &gt;VITALITY</span>
+                  )}
+                </div>
+
+                {/* Gap */}
+                <div>
+                  <span style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Gap </span>
+                  <span style={{ fontSize: 14, fontFamily: 'monospace', color: '#aaa' }}>
+                    {sizePanel.gapPct?.toFixed(1)}% · {sizePanel.gapMult}×
+                  </span>
+                </div>
+
+                {/* Divider */}
+                <span style={{ color: 'rgba(255,255,255,0.08)', fontSize: 18 }}>|</span>
+
+                {/* Heat */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Heat </span>
+                  <span style={{ fontSize: 14, fontFamily: 'monospace', color: '#aaa' }}>{sizePanel.heatBefore}%</span>
+                  <span style={{ fontSize: 14, color: overCap ? '#dc3545' : '#28a745' }}>→</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, fontFamily: 'monospace',
+                    color: overCap ? '#dc3545' : '#28a745' }}>
+                    {heatAfter}%
+                  </span>
+                  {overCap && (
+                    <span style={{ fontSize: 10, color: '#dc3545', marginLeft: 2 }}>⚠ CAP</span>
+                  )}
+                </div>
+
+                {/* Divider */}
+                <span style={{ color: 'rgba(255,255,255,0.08)', fontSize: 18 }}>|</span>
+
+                {/* NAV + Vitality */}
+                <div style={{ display: 'flex', gap: 18 }}>
+                  <div>
+                    <span style={{ fontSize: 12, color: '#555', textTransform: 'uppercase', letterSpacing: '0.06em' }}>NAV </span>
+                    <span style={{ fontSize: 14, fontFamily: 'monospace', color: '#666' }}>
+                      ${(sizePanel.nav / 1000).toFixed(0)}K
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: 12, color: '#555', textTransform: 'uppercase', letterSpacing: '0.06em' }}>1% Vitality </span>
+                    <span style={{ fontSize: 14, fontFamily: 'monospace', color: '#666' }}>
+                      ${vitality.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, color: '#888' }}>Stop:</span>
-              <input
-                type="number" step="0.01"
-                defaultValue={sizePanel.adjustedStop}
-                onBlur={e => recalcWithStop(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') recalcWithStop(e.target.value); }}
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(220,53,69,0.35)',
-                  borderRadius: 4, padding: '3px 8px', color: '#dc3545', fontSize: 12,
-                  fontFamily: 'monospace', outline: 'none', textAlign: 'right', width: 72 }}
-              />
-            </div>
-            <div style={{ fontSize: 11, color: '#888' }}>
-              Risk: <span style={{ color: '#ffc107', fontWeight: 700 }}>${sizePanel.risk$}</span>
-            </div>
-            <div style={{ fontSize: 11, color: '#888' }}>
-              Gap: {sizePanel.gapPct?.toFixed(1)}% · {sizePanel.gapMult}×
-            </div>
-            <div style={{ fontSize: 11 }}>
-              Heat: <span style={{ color: '#aaa' }}>{sizePanel.heatBefore}%</span>
-              <span style={{ color: '#555' }}> → </span>
-              <span style={{ color: sizePanel.heatBefore + 1 > 10 ? '#dc3545' : '#28a745', fontWeight: 700 }}>
-                {sizePanel.heatBefore + 1}%
-              </span>
-              {sizePanel.heatBefore + 1 > 10 && (
-                <span style={{ color: '#dc3545', fontSize: 10, marginLeft: 4 }}>⚠ EXCEEDS CAP</span>
-              )}
-            </div>
-            <div style={{ fontSize: 11, color: '#555' }}>
-              Total: {sizePanel.totalShares} shr · NAV ${(sizePanel.nav / 1000).toFixed(0)}K
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Controls */}
         <div className={styles.controls}>

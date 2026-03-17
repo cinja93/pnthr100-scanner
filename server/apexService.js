@@ -534,17 +534,36 @@ function scoreD3(signal, data) {
     subB = Math.min(Math.abs(emaSlopePct) * 10, 30);
   }
 
-  // Sub-C: EMA separation — bell curve, sweet spot at 2-8%
-  // Use bar.close (where price ENDED), not bar.low/bar.high (intraweek extremes).
-  // bar.high for SS would measure the best-case rebound — a stock closing at $9.50
-  // that bounced to $10.80 intraweek would show 13.6% vs the actual 24% close gap.
-  let emaSeparationPct = 0;
+  // Sub-C: EMA separation — two measurements, two purposes:
+  //
+  // 1. emaSeparationPct (high/low): used for bell curve POINT SCORING
+  //    Measures the "daylight zone" — how far even the closest intraweek
+  //    extreme is from the EMA. This is the original entry quality signal:
+  //    a fresh BL with low just 3% above EMA has healthy daylight.
+  //    BL: (bar.low - EMA) / EMA * 100
+  //    SS: (EMA - bar.high) / EMA * 100
+  //
+  // 2. closeSepPct (close): used ONLY for the overextension HARD GATE
+  //    Measures where price actually ended the week. A stock that bounced
+  //    to $10.80 intraweek but closed at $9.50 (EMA $12.50) would show
+  //    13.6% daylight sep but 24% close sep — the move IS done.
+  //    BL: (bar.close - EMA) / EMA * 100
+  //    SS: (EMA - bar.close) / EMA * 100
+
+  let emaSeparationPct = 0; // high/low based — for bell curve points
+  let closeSepPct = 0;      // close based   — for overextension gate only
   if (ema !== 0) {
-    if (signal === 'BL') emaSeparationPct = (bar.close - ema) / ema * 100;
-    else                 emaSeparationPct = (ema - bar.close) / ema * 100;
+    if (signal === 'BL') {
+      emaSeparationPct = (bar.low   - ema) / ema * 100;
+      closeSepPct      = (bar.close - ema) / ema * 100;
+    } else {
+      emaSeparationPct = (ema - bar.high)  / ema * 100;
+      closeSepPct      = (ema - bar.close) / ema * 100;
+    }
   }
+
+  // Bell curve points — uses emaSeparationPct (high/low daylight)
   let subC = 0;
-  let overextended = false;
   if (emaSeparationPct <= 0) {
     subC = 0;
   } else if (emaSeparationPct <= 2) {
@@ -560,11 +579,12 @@ function scoreD3(signal, data) {
     // Steep decay: 15% → 3 pts, 20% → 0 pts
     subC = 3 - (emaSeparationPct - 15) * 0.6;
   } else {
-    // 20%+: move is done — hard gate triggers in caller
     subC = 0;
-    overextended = true;
   }
   subC = Math.max(subC, 0);
+
+  // Overextension gate — uses closeSepPct (actual close distance from EMA)
+  const overextended = closeSepPct > 20;
 
   const total = Math.round((subA + subB + subC) * 10) / 10;
 
@@ -581,9 +601,10 @@ function scoreD3(signal, data) {
     subC:           Math.round(subC  * 10) / 10,
     confirmation,
     overextended,
-    convictionPct:  Math.round(closeConvictionPct  * 10) / 10,
-    slopePct:       Math.round(emaSlopePct         * 10) / 10,
-    separationPct:  Math.round(emaSeparationPct    * 10) / 10,
+    convictionPct:  Math.round(closeConvictionPct * 10) / 10,
+    slopePct:       Math.round(emaSlopePct        * 10) / 10,
+    separationPct:  Math.round(emaSeparationPct   * 10) / 10, // high/low daylight (used for subC points)
+    closeSepPct:    Math.round(closeSepPct        * 10) / 10, // close-based (used for overextension gate)
   };
 }
 
@@ -825,7 +846,7 @@ export async function getApexResults(
     const d2 = scoreD2(signal, meta.sector, isNewSignal, sectorData);
     const d3 = scoreD3(signal, data);
     if (ticker === 'PSKY') {
-      console.log(`[PSKY DEBUG] signal=${signal} sep=${d3.separationPct}% overextended=${d3.overextended} d3score=${d3.score} confirmation=${d3.confirmation}`);
+      console.log(`[PSKY DEBUG] signal=${signal} daylightSep=${d3.separationPct}% closeSep=${d3.closeSepPct}% overextended=${d3.overextended} d3score=${d3.score} confirmation=${d3.confirmation}`);
     }
 
     // HARD GATE: separation > 20% — the move already happened, disqualified

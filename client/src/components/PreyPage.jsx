@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useAuth } from '../AuthContext';
 import { fetchPreyStocks, fetchEarnings, fetchEmaCrossoverStocks, fetchScannerRanks, fetchTopStocks, fetchShortStocks, fetchSignals } from '../services/api';
 import ChartModal from './ChartModal';
 import styles from './PreyPage.module.css';
@@ -624,6 +625,7 @@ const CROUCH_SORT = {
 // DINNER_SORT is computed as a useMemo inside PreyPage to access earnings data
 
 export default function PreyPage({ onNavigate }) {
+  const { isAdmin } = useAuth();
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
@@ -847,7 +849,7 @@ export default function PreyPage({ onNavigate }) {
                 <h2 className={styles.groupTitle}>
                   PNTHR Feast <span className={styles.groupBadge}>PNTHR New Buy · New Sell</span>
                   <span className={styles.countNote}>{data.dinner.longs.length}L · {data.dinner.shorts.length}S</span>
-                  <button type="button" className={styles.infoBtn} onClick={() => setShowDinnerGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
+                  {isAdmin && <button type="button" className={styles.infoBtn} onClick={() => setShowDinnerGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>}
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.feast ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('feast')}>▼</button>
               </div>
@@ -895,7 +897,7 @@ export default function PreyPage({ onNavigate }) {
                 <h2 className={styles.groupTitle}>
                   PNTHR Alpha <span className={styles.groupBadge}>PNTHR Elite 9</span>
                   <span className={styles.countNote}>{data.alphas.longs.length}L · {data.alphas.shorts.length}S</span>
-                  <button type="button" className={styles.infoBtn} onClick={() => setShowAlphaGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
+                  {isAdmin && <button type="button" className={styles.infoBtn} onClick={() => setShowAlphaGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>}
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.alpha ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('alpha')}>▼</button>
               </div>
@@ -942,7 +944,7 @@ export default function PreyPage({ onNavigate }) {
                 <h2 className={styles.groupTitle}>
                   PNTHR Spring <span className={styles.groupBadge}>PNTHR Pullback · Attack</span>
                   <span className={styles.countNote}>{data.springs.longs.length}L · {data.springs.shorts.length}S</span>
-                  <button type="button" className={styles.infoBtn} onClick={() => setShowSpringGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
+                  {isAdmin && <button type="button" className={styles.infoBtn} onClick={() => setShowSpringGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>}
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.spring ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('spring')}>▼</button>
               </div>
@@ -989,7 +991,7 @@ export default function PreyPage({ onNavigate }) {
                 <h2 className={styles.groupTitle}>
                   PNTHR Sneak <span className={styles.groupBadge}>PNTHR Coil</span>
                   <span className={styles.countNote}>{(data.sneak?.longs.length ?? 0)}L · {(data.sneak?.shorts.length ?? 0)}S</span>
-                  <button type="button" className={styles.infoBtn} onClick={() => setShowSneakGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
+                  {isAdmin && <button type="button" className={styles.infoBtn} onClick={() => setShowSneakGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>}
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.sneak ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('sneak')}>▼</button>
               </div>
@@ -1036,7 +1038,7 @@ export default function PreyPage({ onNavigate }) {
                 <h2 className={styles.groupTitle}>
                   PNTHR Hunt <span className={styles.groupBadge}>PNTHR Cross</span>
                   <span className={styles.countNote}>{huntStocks.filter(s => huntSignals[s.ticker]?.signal === 'BL').length}L · {huntStocks.filter(s => huntSignals[s.ticker]?.signal === 'SS').length}S</span>
-                  <button type="button" className={styles.infoBtn} onClick={() => setShowHuntGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
+                  {isAdmin && <button type="button" className={styles.infoBtn} onClick={() => setShowHuntGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>}
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.hunt ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('hunt')}>▼</button>
               </div>
@@ -1088,7 +1090,7 @@ export default function PreyPage({ onNavigate }) {
                 <h2 className={styles.groupTitle}>
                   PNTHR Sprint <span className={styles.groupBadge}>PNTHR Rising</span>
                   <span className={styles.countNote}>{sprintLongs.length}L · {sprintShorts.length}S</span>
-                  <button type="button" className={styles.infoBtn} onClick={() => setShowSprintGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>
+                  {isAdmin && <button type="button" className={styles.infoBtn} onClick={() => setShowSprintGuide(v => !v)} aria-label="Column definitions" title="What the columns mean">i</button>}
                 </h2>
                 <button type="button" className={`${styles.collapseBtn} ${collapsed.sprint ? styles.collapseBtnClosed : ''}`} onClick={() => toggleSection('sprint')}>▼</button>
               </div>

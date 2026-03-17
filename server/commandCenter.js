@@ -166,9 +166,9 @@ export async function killPipelineHandler(req, res) {
     let livePrices = {};
     try { if (tickers.length) livePrices = await fetchQuotes(tickers); } catch { /* ok */ }
 
-    // Portfolio tickers (IN PORT flag)
+    // Portfolio tickers (IN PORT flag) — scoped to the requesting user
     const portfolio = await db.collection('pnthr_portfolio')
-      .find({ status: 'ACTIVE' }).project({ ticker: 1 }).toArray();
+      .find({ status: 'ACTIVE', ownerId: req.user.userId }).project({ ticker: 1 }).toArray();
     const inPort = new Set(portfolio.map(p => p.ticker));
 
     const regime = await db.collection('pnthr_kill_regime').findOne({ weekOf });
@@ -221,7 +221,7 @@ export async function positionsGetAll(req, res) {
     if (!db) return res.status(503).json({ positions: [], error: 'DB unavailable' });
 
     const positions = await db.collection('pnthr_portfolio')
-      .find({ status: 'ACTIVE' }).sort({ createdAt: -1 }).toArray();
+      .find({ status: 'ACTIVE', ownerId: req.user.userId }).sort({ createdAt: -1 }).toArray();
 
     const tickers = [...new Set(positions.map(p => p.ticker))];
     let live = {};
@@ -299,6 +299,7 @@ export async function positionsSave(req, res) {
         const sectorCount = await db.collection('pnthr_portfolio').countDocuments({
           status: 'ACTIVE',
           sector: position.sector,
+          ownerId: req.user.userId,
         });
         if (sectorCount >= 3) {
           warning = {
@@ -310,6 +311,7 @@ export async function positionsSave(req, res) {
 
       position.id        = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
       position.status    = 'ACTIVE';
+      position.ownerId   = req.user.userId;
       position.createdAt = new Date();
       position.updatedAt = new Date();
       position.outcome   = { exitPrice: null, profitPct: null, profitDollar: null, holdingDays: null, exitReason: null };
@@ -334,7 +336,7 @@ export async function positionsClose(req, res) {
     const { id, exitPrice, exitReason } = req.body;
     if (!id || !exitPrice) return res.status(400).json({ error: 'id and exitPrice required' });
 
-    const position = await db.collection('pnthr_portfolio').findOne({ id });
+    const position = await db.collection('pnthr_portfolio').findOne({ id, ownerId: req.user.userId });
     if (!position) return res.status(404).json({ error: 'Position not found' });
 
     const isLong     = position.direction === 'LONG';

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../AuthContext';
 import ChartModal from './ChartModal';
 import KillBadge from './KillBadge';
 import { fetchApexStocks } from '../services/api';
@@ -253,6 +254,7 @@ const UI_DEFS = {
 };
 
 export default function ApexPage() {
+  const { isAdmin } = useAuth();
   const [data, setData]             = useState(null);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
@@ -435,7 +437,7 @@ export default function ApexPage() {
             <span className={styles.contextMeta}>
               · {data.activeSignals} scored · {data.preyCount ?? data.totalScanned} Prey · scanned {new Date(data.scannedAt).toLocaleDateString()}
             </span>
-            <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.regime, e)} title="What is Market Regime?">ⓘ</span>
+            {isAdmin && <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.regime, e)} title="What is Market Regime?">ⓘ</span>}
           </div>
 
           {/* ── Tier Summary Cards ───────────────────────────────────────────── */}
@@ -494,14 +496,16 @@ export default function ApexPage() {
                 </span>
               </button>
             ))}
-            <button
-              ref={formulaBtnRef}
-              className={`${styles.formulaTabBtn}${formulaOpen ? ` ${styles.formulaTabBtnActive}` : ''}`}
-              onClick={toggleFormula}
-              title="D1–D8 Scoring Formulas"
-            >
-              📐 Scoring Guide
-            </button>
+            {isAdmin && (
+              <button
+                ref={formulaBtnRef}
+                className={`${styles.formulaTabBtn}${formulaOpen ? ` ${styles.formulaTabBtnActive}` : ''}`}
+                onClick={toggleFormula}
+                title="D1–D8 Scoring Formulas"
+              >
+                📐 Scoring Guide
+              </button>
+            )}
           </div>
 
           {/* ── Table ────────────────────────────────────────────────────────── */}

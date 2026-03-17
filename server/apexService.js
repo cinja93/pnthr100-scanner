@@ -27,13 +27,42 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { getMostRecentRanking, getRankingBeforeDate } from './database.js';
+import { getMostRecentRanking, getRankingBeforeDate, connectToDatabase } from './database.js';
 
 const FMP_API_KEY  = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 
 // Weekly cache
 let apexCache = { weekKey: null, results: null };
+
+// ── FMP Candle Cache (MongoDB, 7-day TTL) ─────────────────────────────────────
+// Friday's candle data is static until the next Friday closes. Caching in
+// MongoDB means weekday loads hit the DB instead of FMP — zero timeout risk.
+
+async function getCachedCandles(ticker) {
+  try {
+    const db = await connectToDatabase();
+    if (!db) return null;
+    const doc = await db.collection('pnthr_candle_cache').findOne({ ticker });
+    if (!doc) return null;
+    const ageMs = Date.now() - new Date(doc.cachedAt).getTime();
+    if (ageMs > 7 * 24 * 60 * 60 * 1000) return null; // expired
+    return doc.daily;
+  } catch { return null; }
+}
+
+async function setCachedCandles(ticker, daily) {
+  try {
+    const db = await connectToDatabase();
+    if (!db) return;
+    await db.collection('pnthr_candle_cache').updateOne(
+      { ticker },
+      { $set: { ticker, daily, cachedAt: new Date() } },
+      { upsert: true }
+    );
+  } catch { /* best-effort */ }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Tier Definitions ──────────────────────────────────────────────────────────
 
@@ -116,11 +145,20 @@ function computeSignalAge(signalDate) {
 // ── Price Data Helpers ────────────────────────────────────────────────────────
 
 async function fetchDailyBars(ticker, from, to) {
+  // Check MongoDB candle cache first (7-day TTL — weekly data is static after Friday close)
+  const cached = await getCachedCandles(ticker);
+  if (cached) return cached;
+
   const url = `${FMP_BASE_URL}/historical-price-full/${ticker}?from=${from}&to=${to}&apikey=${FMP_API_KEY}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`FMP ${res.status} for ${ticker}`);
   const data = await res.json();
-  return data?.historical || [];
+  const daily = data?.historical || [];
+
+  // Persist to MongoDB cache (fire-and-forget)
+  if (daily.length > 0) setCachedCandles(ticker, daily);
+
+  return daily;
 }
 
 function aggregateWeeklyBars(daily) {
@@ -685,12 +723,18 @@ export async function getApexResults(
   // Prey membership is NOT a gate — it adds D8 tiebreaker points (SPRINT/HUNT +2,
   // FEAST/ALPHA/SPRING/SNEAK +1 each). The confirmation gate (D3 conviction ≥ 30)
   // and Kill scoring naturally filter weak setups to the bottom.
+  // Age cap: skip signals > 12 weeks old (cheap pre-filter, no FMP call needed).
+  // By week 12 D4 freshness is at its floor (-15 pts); these can never reach the
+  // top 20 unless every other dimension is maxed. Cuts scoring universe ~30-40%.
+  const MAX_SIGNAL_AGE_WEEKS = 12;
   const allSignalTickers = tickers.filter(t => {
-    const sig = jungleSignals[t]?.signal;
-    return sig === 'BL' || sig === 'SS';
+    const sig = jungleSignals[t];
+    if (sig?.signal !== 'BL' && sig?.signal !== 'SS') return false;
+    const age = computeSignalAge(sig.signalDate);
+    return age <= MAX_SIGNAL_AGE_WEEKS;
   });
 
-  console.log(`[KILL v3] Scoring ${allSignalTickers.length} stocks with open signals (${preyTickerSet.size} in Prey universe, ${tickers.length} total 679)`);
+  console.log(`[KILL v3] Scoring ${allSignalTickers.length} stocks with open signals ≤${MAX_SIGNAL_AGE_WEEKS}w (${preyTickerSet.size} in Prey universe, ${tickers.length} total 679)`);
 
   // Load index + sector context in parallel
   console.log('[KILL v3] Fetching index + sector data...');
@@ -800,7 +844,7 @@ export async function getApexResults(
       tier:         tierDef.name,
       tierTagline:  tierDef.tagline,
     });
-  });
+  }, 20); // concurrency=20 (up from 10) — cuts FMP wall time in half
 
   // Sort by score descending
   scored.sort((a, b) => b.apexScore - a.apexScore);

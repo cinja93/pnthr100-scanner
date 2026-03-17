@@ -469,6 +469,11 @@ export async function ensureCommandCenterIndexes() {
     const gapRisk = db.collection('pnthr_gap_risk');
     await gapRisk.createIndex({ ticker: 1 }, { unique: true });
 
+    // FMP candle cache — TTL index auto-expires docs after 7 days
+    const candles = db.collection('pnthr_candle_cache');
+    await candles.createIndex({ ticker: 1 }, { unique: true });
+    await candles.createIndex({ cachedAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
+
     console.log('[CC] Command Center MongoDB indexes ensured');
   } catch (e) {
     console.warn('[CC] Index creation failed (non-fatal):', e.message);

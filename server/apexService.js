@@ -535,11 +535,13 @@ function scoreD3(signal, data) {
   }
 
   // Sub-C: EMA separation — bell curve, sweet spot at 2-8%
-  // (how far price has moved from EMA in signal direction)
+  // Use bar.close (where price ENDED), not bar.low/bar.high (intraweek extremes).
+  // bar.high for SS would measure the best-case rebound — a stock closing at $9.50
+  // that bounced to $10.80 intraweek would show 13.6% vs the actual 24% close gap.
   let emaSeparationPct = 0;
   if (ema !== 0) {
-    if (signal === 'BL') emaSeparationPct = (bar.low  - ema) / ema * 100;
-    else                 emaSeparationPct = (ema - bar.high) / ema * 100;
+    if (signal === 'BL') emaSeparationPct = (bar.close - ema) / ema * 100;
+    else                 emaSeparationPct = (ema - bar.close) / ema * 100;
   }
   let subC = 0;
   let overextended = false;
@@ -822,6 +824,9 @@ export async function getApexResults(
     const d1 = calcD1(signal, meta.exchange, indexData, signalCounts);
     const d2 = scoreD2(signal, meta.sector, isNewSignal, sectorData);
     const d3 = scoreD3(signal, data);
+    if (ticker === 'PSKY') {
+      console.log(`[PSKY DEBUG] signal=${signal} sep=${d3.separationPct}% overextended=${d3.overextended} d3score=${d3.score} confirmation=${d3.confirmation}`);
+    }
 
     // HARD GATE: separation > 20% — the move already happened, disqualified
     // Push to scored at -99 so it sorts to the bottom and is visible as OVEREXTENDED

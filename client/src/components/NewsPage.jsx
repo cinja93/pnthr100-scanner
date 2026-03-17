@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAuth } from '../AuthContext';
 import { marked } from 'marked';
 import styles from './NewsPage.module.css';
 import pnthrLogo from '../assets/panther head.png';
@@ -46,8 +47,8 @@ function StatusBadge({ status }) {
   );
 }
 
-export default function NewsPage({ currentUser }) {
-  const isAdmin = currentUser?.role === 'admin';
+export default function NewsPage() {
+  const { isAdmin } = useAuth();
   const [issues, setIssues]           = useState([]);
   const [selectedId, setSelectedId]   = useState(null);
   const [issue, setIssue]             = useState(null);
@@ -297,7 +298,11 @@ export default function NewsPage({ currentUser }) {
           {!issueLoading && !issue && !error && (
             <div className={styles.emptyState}>
               <img src={pnthrLogo} alt="PNTHR" className={styles.emptyLogo} />
-              <p className={styles.emptyText}>Select an issue from the archive,<br />or generate this week's Perch.</p>
+              <p className={styles.emptyText}>
+                {isAdmin
+                  ? <>Select an issue from the archive,<br />or generate this week's Perch.</>
+                  : <>Select an issue from the archive<br />to read this week's intelligence.</>}
+              </p>
             </div>
           )}
 

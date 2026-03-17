@@ -802,8 +802,8 @@ export async function getApexResults(
   // Sort by score descending
   scored.sort((a, b) => b.apexScore - a.apexScore);
 
-  // Mark top 10
-  scored.forEach((s, i) => { s.isTop10 = i < 10; });
+  // Mark top 10 and assign kill rank to all scored stocks
+  scored.forEach((s, i) => { s.isTop10 = i < 10; s.killRank = i + 1; });
 
   const results = {
     stocks: scored,

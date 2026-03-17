@@ -3,6 +3,7 @@ import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
 import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker } from '../services/api';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
+import KillBadge from './KillBadge';
 
 
 function aggregateToWeekly(dailyData) {
@@ -607,6 +608,13 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
           {!loading && !error && (
             <div className={styles.chartWrapper}>
               <div ref={chartContainerRef} className={styles.chartContainer} />
+
+              {/* PNTHR Kill badge — upper-left overlay for top-10 Kill stocks */}
+              {stock.isTop10 && stock.killRank != null && (
+                <div className={styles.killBadgeOverlay} title={`PNTHR Kill #${stock.killRank}`}>
+                  <KillBadge rank={stock.killRank} size={52} />
+                </div>
+              )}
 
               {/* Earnings Week label — centered top of chart when in earnings window */}
               {inEarningsWindow && (

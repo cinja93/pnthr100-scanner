@@ -1002,27 +1002,27 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                   <div className={styles.ohlcRow}><span>C</span><span>${hoveredBar.close?.toFixed(2)}</span></div>
                 </div>
               )}
+
+              {/* Navigation — overlaid at bottom-center of chart */}
+              <div className={styles.navigation}>
+                <button
+                  className={styles.navBtn}
+                  onClick={() => setCurrentIndex(i => Math.max(0, i - 1))}
+                  disabled={currentIndex === 0}
+                >
+                  ← Prev
+                </button>
+                <span className={styles.navPosition}>{currentIndex + 1} / {stocks.length}</span>
+                <button
+                  className={styles.navBtn}
+                  onClick={() => setCurrentIndex(i => Math.min(stocks.length - 1, i + 1))}
+                  disabled={currentIndex === stocks.length - 1}
+                >
+                  Next →
+                </button>
+              </div>
             </div>
           )}
-        </div>
-
-        {/* Navigation */}
-        <div className={styles.navigation}>
-          <button
-            className={styles.navBtn}
-            onClick={() => setCurrentIndex(i => Math.max(0, i - 1))}
-            disabled={currentIndex === 0}
-          >
-            ← Prev
-          </button>
-          <span className={styles.navPosition}>{currentIndex + 1} of {stocks.length}</span>
-          <button
-            className={styles.navBtn}
-            onClick={() => setCurrentIndex(i => Math.min(stocks.length - 1, i + 1))}
-            disabled={currentIndex === stocks.length - 1}
-          >
-            Next →
-          </button>
         </div>
 
       </div>

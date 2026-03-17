@@ -323,6 +323,13 @@ export async function fetchPreyStocks(forceRefresh = false) {
   return response.json();
 }
 
+// PNTHR Kill — top-10 ranks from Friday pipeline (pre-computed, MongoDB)
+export async function fetchKillPipeline() {
+  const response = await fetch(`${API_BASE}/api/kill-pipeline`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // PNTHR APEX — scored predatory ranking
 export async function fetchApexStocks(forceRefresh = false) {
   const qs = forceRefresh ? '?refresh=1' : '';

@@ -1,9 +1,40 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
-import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker } from '../services/api';
+import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchKillPipeline } from '../services/api';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
 import KillBadge from './KillBadge';
+
+// ── Module-level kill rank cache ─────────────────────────────────────────────
+// Fetched once per session; Map<ticker, killRank (1-10)> for the current week's
+// top-10 stocks. This lets the badge show from ANY page, not just Kill page.
+let _killRankMap = null;
+let _killRankFetching = false;
+const _killRankCallbacks = [];
+
+function loadKillRanks() {
+  if (_killRankMap) return Promise.resolve(_killRankMap);
+  return new Promise((resolve) => {
+    _killRankCallbacks.push(resolve);
+    if (_killRankFetching) return;
+    _killRankFetching = true;
+    fetchKillPipeline()
+      .then(data => {
+        const map = new Map();
+        for (const s of (data.stocks || [])) {
+          if (s.killRank <= 10) map.set(s.ticker, s.killRank);
+        }
+        _killRankMap = map;
+      })
+      .catch(() => { _killRankMap = new Map(); }) // graceful failure → no badges
+      .finally(() => {
+        _killRankFetching = false;
+        for (const cb of _killRankCallbacks) cb(_killRankMap);
+        _killRankCallbacks.length = 0;
+      });
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 
 function aggregateToWeekly(dailyData) {
@@ -240,6 +271,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   const [watchlistSet, setWatchlistSet] = useState(new Set());
   const [watchlistSaving, setWatchlistSaving] = useState(false);
   const [inEarningsWindow, setInEarningsWindow] = useState(false);
+  const [killRankMap, setKillRankMap] = useState(_killRankMap); // start from cache if already loaded
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const cacheRef = useRef({});
@@ -488,9 +520,12 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
     };
   }, [allWeeklyData, range, loading, entryDatesLoaded, earnings]);
 
-  // Load watchlist on mount
+  // Load watchlist + kill ranks on mount
   useEffect(() => {
     fetchWatchlist().then(data => setWatchlistSet(new Set(data.map(s => s.ticker)))).catch(() => {});
+    if (!_killRankMap) {
+      loadKillRanks().then(map => setKillRankMap(map));
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function toggleWatchlist() {
@@ -610,11 +645,15 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
               <div ref={chartContainerRef} className={styles.chartContainer} />
 
               {/* PNTHR Kill badge — upper-left overlay for top-10 Kill stocks */}
-              {stock.isTop10 && stock.killRank != null && (
-                <div className={styles.killBadgeOverlay} title={`PNTHR Kill #${stock.killRank}`}>
-                  <KillBadge rank={stock.killRank} size={52} />
-                </div>
-              )}
+              {(() => {
+                const killRank = killRankMap?.get(stock.ticker)
+                  ?? (stock.isTop10 && stock.killRank ? stock.killRank : null);
+                return killRank != null ? (
+                  <div className={styles.killBadgeOverlay} title={`PNTHR Kill #${killRank}`}>
+                    <KillBadge rank={killRank} size={52} />
+                  </div>
+                ) : null;
+              })()}
 
               {/* Earnings Week label — centered top of chart when in earnings window */}
               {inEarningsWindow && (

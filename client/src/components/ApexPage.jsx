@@ -231,6 +231,27 @@ const FORMULA_GUIDE = [
   },
 ];
 
+// ── Tier + UI info definitions (shown in ⓘ popups) ───────────────────────────
+const TIER_DEFS = {
+  'ALPHA PNTHR KILL': '≥130 pts — The rarest and highest-conviction setup. Every dimension is firing: strong entry quality, perfect sector alignment, fresh signal, rising rank with acceleration, powerful momentum, and multiple Prey strategy confirmation — all amplified by a favorable market regime. Historically requires all 8 dimensions to align simultaneously. Immediate action candidate.',
+  'STRIKING':         '≥100 pts — A high-conviction setup with strong entry quality confirmed by multiple supporting dimensions. The core metrics (conviction, slope, separation) are solid, and at least 3–4 other dimensions are contributing meaningfully. These are your primary Kill Pipeline candidates for new position entries.',
+  'HUNTING':          '≥80 pts — An active setup with confirmed entry quality and moderate support from other dimensions. The trade has a clear directional signal backed by data, but not every dimension is aligned. Worth evaluating for entry if you have available Vitality slots and the sector isn't saturated.',
+  'POUNCING':         '≥65 pts — A developing setup where entry quality is present but supporting dimensions are mixed. Some factors confirm the trade, others are neutral or slightly negative. Monitor for improvement — if momentum or rank velocity picks up, this could promote to Hunting.',
+  'COILING':          '≥50 pts — Building energy but not yet confirmed. The signal exists and some metrics are positive, but the confirmation gate may not be fully met. These are stocks to watch, not to enter. They may be developing setups that need another week of data.',
+  'STALKING':         '≥35 pts — On the watchlist. The signal is present but entry quality is low or the supporting dimensions are weak. Keep an eye on it but don\'t commit capital until the score improves significantly.',
+  'TRACKING':         '≥20 pts — Early detection. The system has identified a directional signal but there\'s minimal confirmation. Too early and too weak for any action.',
+  'PROWLING':         '≥10 pts — Low signal strength. Barely registering on the scoring system. The stock has a signal but almost nothing supports it.',
+  'STIRRING':         '≥0 pts — Neutral. The stock has a signal but the positive and negative dimensions are roughly canceling out. No edge.',
+  'DORMANT':          '<0 pts — Fighting conditions. The dimensions are working against this signal — wrong regime, misaligned sector, weak entry, stale signal. The system is actively saying "do not enter this trade."',
+  'OVEREXTENDED':     'Filtered out — The stock has moved more than 20% away from its 21-week EMA at the close. The move has already happened. Entering now would be chasing, not hunting. These stocks are removed from Kill rankings entirely. They may reappear if price reverts closer to the EMA.',
+};
+
+const UI_DEFS = {
+  regime: 'Market Regime — The regime multiplier adjusts all Kill scores based on the broad market environment. When SPY and QQQ are below their falling 21-week EMAs (bear market), short signals are amplified up to 1.30× and long signals are dampened to 0.70×. When both are above rising EMAs (bull market), the reverse applies. This ensures the system favors trades aligned with the prevailing market direction.',
+  bl:     'Longs (BL) — Buy Long signals. Stocks that have crossed above their 21-week EMA with an upward-sloping EMA and confirmed entry quality. In a bear regime, these are dampened by the regime multiplier and fewer will score highly.',
+  ss:     'Shorts (SS) — Sell Short signals. Stocks that have crossed below their 21-week EMA with a downward-sloping EMA and confirmed entry quality. In a bear regime, these are amplified by the regime multiplier and will dominate the top rankings.',
+};
+
 export default function ApexPage() {
   const [data, setData]             = useState(null);
   const [loading, setLoading]       = useState(true);
@@ -238,6 +259,7 @@ export default function ApexPage() {
   const [side, setSide]             = useState('all');
   const [tierFilter, setTierFilter] = useState('all');
   const [popup, setPopup]           = useState(null);
+  const [infoPopup, setInfoPopup]   = useState(null); // { def, x, y }
   const [formulaOpen, setFormulaOpen] = useState(false);
   const [formulaPos, setFormulaPos]   = useState({ x: 0, y: 0 });
   const formulaBtnRef = useRef(null);
@@ -261,6 +283,19 @@ export default function ApexPage() {
       setFormulaPos({ x: left, y: top });
     }
     setFormulaOpen(prev => !prev);
+  }
+
+  // ⓘ info popup — shows tier / UI element definitions
+  function showInfo(def, e) {
+    e.stopPropagation();
+    if (!def) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const popupW = 310;
+    const popupH = 180;
+    const spaceBelow = window.innerHeight - rect.bottom - 10;
+    const x = Math.max(8, Math.min(rect.left - popupW / 2 + 8, window.innerWidth - popupW - 8));
+    const y = spaceBelow >= popupH ? rect.bottom + 6 : Math.max(8, rect.top - popupH - 6);
+    setInfoPopup(prev => (prev && prev.def === def) ? null : { def, x, y });
   }
 
   // Arrow-key navigation through Kill page rows
@@ -340,7 +375,7 @@ export default function ApexPage() {
   const ctx = data?.contextSummary || {};
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} onClick={() => setInfoPopup(null)}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className={styles.header}>
@@ -400,6 +435,7 @@ export default function ApexPage() {
             <span className={styles.contextMeta}>
               · {data.activeSignals} scored · {data.preyCount ?? data.totalScanned} Prey · scanned {new Date(data.scannedAt).toLocaleDateString()}
             </span>
+            <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.regime, e)} title="What is Market Regime?">ⓘ</span>
           </div>
 
           {/* ── Tier Summary Cards ───────────────────────────────────────────── */}
@@ -411,11 +447,18 @@ export default function ApexPage() {
                 <button
                   key={tier.name}
                   className={`${styles.tierCard} ${isActive ? styles.tierCardActive : ''}`}
-                  style={{ borderColor: tier.color }}
+                  style={{ borderColor: tier.color, position: 'relative' }}
                   onClick={() => setTierFilter(isActive ? 'all' : tier.name)}
                 >
                   <span className={styles.tierCardCount} style={{ color: tier.color }}>{count}</span>
                   <span className={styles.tierCardName}>{tier.name}</span>
+                  {TIER_DEFS[tier.name] && (
+                    <span
+                      className={styles.infoIconCorner}
+                      onClick={e => showInfo(TIER_DEFS[tier.name], e)}
+                      title="What does this tier mean?"
+                    >ⓘ</span>
+                  )}
                 </button>
               );
             })}
@@ -438,6 +481,12 @@ export default function ApexPage() {
                 onClick={() => setSide(key)}
               >
                 {label}
+                {key === 'long' && (
+                  <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.bl, e)} title="What is a BL signal?">ⓘ</span>
+                )}
+                {key === 'short' && (
+                  <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.ss, e)} title="What is an SS signal?">ⓘ</span>
+                )}
                 <span className={styles.sideTabCount}>
                   {key === 'all' ? filtered.length
                     : key === 'long'  ? stocks.filter(s => s.signal === 'BL' && (tierFilter === 'all' || s.tier === tierFilter)).length
@@ -642,6 +691,17 @@ export default function ApexPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ── ⓘ Info Popup (tier + UI element definitions) ─────────────────────── */}
+      {infoPopup && (
+        <div
+          className={styles.infoPopupBox}
+          style={{ left: infoPopup.x, top: infoPopup.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          {infoPopup.def}
         </div>
       )}
 

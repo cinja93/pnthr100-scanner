@@ -9,6 +9,7 @@ import pantherHead from '../assets/panther head.png';
 // Thresholds recalibrated after D4 removal (2026-03-14):
 // ≥130 ALPHA · ≥100 STRIKING · ≥80 HUNTING · ≥65 POUNCING · ≥50 COILING
 // ≥35 STALKING · ≥20 TRACKING · ≥10 PROWLING · ≥0 STIRRING · <0 DORMANT
+// OVEREXTENDED: separation > 20% — disqualified, shown greyed-out at bottom
 const TIERS = [
   { name: 'ALPHA PNTHR KILL', tagline: 'Jugular. Teeth in. Alpha PNTHR is Legend.',            color: '#15803d', textColor: '#ffffff' },
   { name: 'STRIKING',         tagline: 'Claws out. Contact made. In the kill zone.',            color: '#16a34a', textColor: '#ffffff' },
@@ -20,6 +21,7 @@ const TIERS = [
   { name: 'PROWLING',         tagline: 'Moving through the jungle. No target yet.',             color: '#b91c1c', textColor: '#ffffff' },
   { name: 'STIRRING',         tagline: 'Waking up. Eyes barely open.',                         color: '#ef4444', textColor: '#ffffff' },
   { name: 'DORMANT',          tagline: 'Fighting the trend. Sleeping against the flow.',        color: '#fca5a5', textColor: '#111111' },
+  { name: 'OVEREXTENDED',     tagline: 'Move already happened - too far from EMA to enter.',   color: '#555555', textColor: '#aaaaaa' },
 ];
 
 function getTierConfig(tierName) {
@@ -477,19 +479,20 @@ export default function ApexPage() {
                     const tier = getTierConfig(stock.tier);
                     const wks  = computeWeeksAgo(stock.signalDate);
                     const isTop10 = stock.isTop10;
+                    const isOverextended = stock.overextended === true;
                     return (
                       <tr
                         id={`aprow-${stock.ticker}`}
                         key={stock.ticker}
-                        className={`${styles.row}${selectedTicker === stock.ticker ? ` ${styles.selectedRow}` : ''}${isTop10 ? ` ${styles.top10Row}` : ''}`}
+                        className={`${styles.row}${selectedTicker === stock.ticker ? ` ${styles.selectedRow}` : ''}${isTop10 ? ` ${styles.top10Row}` : ''}${isOverextended ? ` ${styles.overextendedRow}` : ''}`}
                         onClick={() => setSelectedTicker(stock.ticker)}
-                        title={stock.companyName || stock.ticker}
+                        title={isOverextended ? `${stock.companyName || stock.ticker} — OVEREXTENDED: ${stock.scores?.d3?.separationPct ?? ''}% from EMA` : stock.companyName || stock.ticker}
                       >
                         {/* Kill Rank */}
                         <td className={styles.killRankCell}>
                           {isTop10
-                            ? <KillBadge rank={idx + 1} size={52} />
-                            : idx + 1}
+                            ? <KillBadge rank={stock.killRank} size={52} />
+                            : isOverextended ? '—' : stock.killRank}
                         </td>
 
                         {/* Kill Score — pill badge, accommodates larger numbers */}

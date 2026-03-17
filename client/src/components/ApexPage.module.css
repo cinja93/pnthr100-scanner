@@ -285,6 +285,15 @@
   background: #dcfce7 !important;
 }
 
+/* ── OVEREXTENDED Row — greyed-out, move already happened ──────────────────── */
+.overextendedRow td {
+  opacity: 0.45;
+}
+.overextendedRow:hover td {
+  opacity: 0.65;
+  background-color: #f0f0f0 !important;
+}
+
 /* ── Score Badge — pill shape to fit larger numbers ──────────────────────────── */
 .scoreCell { text-align: center; }
 .scoreBadge {

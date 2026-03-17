@@ -493,12 +493,16 @@ function scoreD2(signal, sector, isNewSignal, sectorData) {
 // ── D3: Entry Quality (0–85 pts) — THE DOMINANT DIMENSION ────────────────────
 // Sub-A: Close conviction (range-normalized) = (close-low)/(high-low)*100 × 2.5 → cap 40
 // Sub-B: EMA slope (signal direction only)   = |slopePct| × 10                  → cap 30
-// Sub-C: EMA separation                      = |sep%| × 1.5                     → cap 15
-// CONFIRMATION: ≥30=CONFIRMED, ≥15=PARTIAL, <15=UNCONFIRMED
+// Sub-C: EMA separation — BELL CURVE (not linear)
+//   Sweet spot 2-8%: confirmed trend, not yet overextended
+//   Hard gate 20%+:  OVEREXTENDED flag — move already happened, disqualified
+//   Shape: 0-2% ramp (0→6), 2-8% sweet spot (6→15), 8-15% decay (15→3),
+//          15-20% steep decay (3→0), 20%+ = 0 pts + overextended = true
+// CONFIRMATION: ≥30=CONFIRMED, ≥15=PARTIAL, <15=UNCONFIRMED, overextended=OVEREXTENDED
 
 function scoreD3(signal, data) {
   const zero = { score: 0, subA: 0, subB: 0, subC: 0, confirmation: 'UNCONFIRMED',
-                 convictionPct: 0, slopePct: 0, separationPct: 0 };
+                 overextended: false, convictionPct: 0, slopePct: 0, separationPct: 0 };
   if (!signal || !data) return zero;
   const { weekly, ema21 } = data;
   const n   = weekly.length;
@@ -530,18 +534,41 @@ function scoreD3(signal, data) {
     subB = Math.min(Math.abs(emaSlopePct) * 10, 30);
   }
 
-  // Sub-C: EMA separation (how far price has moved from EMA in signal direction)
+  // Sub-C: EMA separation — bell curve, sweet spot at 2-8%
+  // (how far price has moved from EMA in signal direction)
   let emaSeparationPct = 0;
   if (ema !== 0) {
     if (signal === 'BL') emaSeparationPct = (bar.low  - ema) / ema * 100;
     else                 emaSeparationPct = (ema - bar.high) / ema * 100;
   }
-  const subC = Math.min(Math.max(emaSeparationPct * 1.5, 0), 15);
+  let subC = 0;
+  let overextended = false;
+  if (emaSeparationPct <= 0) {
+    subC = 0;
+  } else if (emaSeparationPct <= 2) {
+    // Ramp: 0% → 0 pts, 2% → 6 pts
+    subC = emaSeparationPct * 3;
+  } else if (emaSeparationPct <= 8) {
+    // Sweet spot: 2% → 6 pts, 8% → 15 pts
+    subC = 6 + (emaSeparationPct - 2) * 1.5;
+  } else if (emaSeparationPct <= 15) {
+    // Decay: 8% → 15 pts, 15% → 3 pts
+    subC = 15 - (emaSeparationPct - 8) * (12 / 7);
+  } else if (emaSeparationPct <= 20) {
+    // Steep decay: 15% → 3 pts, 20% → 0 pts
+    subC = 3 - (emaSeparationPct - 15) * 0.6;
+  } else {
+    // 20%+: move is done — hard gate triggers in caller
+    subC = 0;
+    overextended = true;
+  }
+  subC = Math.max(subC, 0);
 
   const total = Math.round((subA + subB + subC) * 10) / 10;
 
   let confirmation;
-  if (total >= 30)      confirmation = 'CONFIRMED';
+  if (overextended)     confirmation = 'OVEREXTENDED';
+  else if (total >= 30) confirmation = 'CONFIRMED';
   else if (total >= 15) confirmation = 'PARTIAL';
   else                  confirmation = 'UNCONFIRMED';
 
@@ -551,6 +578,7 @@ function scoreD3(signal, data) {
     subB:           Math.round(subB  * 10) / 10,
     subC:           Math.round(subC  * 10) / 10,
     confirmation,
+    overextended,
     convictionPct:  Math.round(closeConvictionPct  * 10) / 10,
     slopePct:       Math.round(emaSlopePct         * 10) / 10,
     separationPct:  Math.round(emaSeparationPct    * 10) / 10,
@@ -794,6 +822,43 @@ export async function getApexResults(
     const d1 = calcD1(signal, meta.exchange, indexData, signalCounts);
     const d2 = scoreD2(signal, meta.sector, isNewSignal, sectorData);
     const d3 = scoreD3(signal, data);
+
+    // HARD GATE: separation > 20% — the move already happened, disqualified
+    // Push to scored at -99 so it sorts to the bottom and is visible as OVEREXTENDED
+    if (d3.overextended) {
+      scored.push({
+        ticker,
+        companyName:  meta.companyName  || '',
+        sector:       meta.sector       || '',
+        exchange:     meta.exchange     || '',
+        currentPrice: meta.currentPrice || 0,
+        ytdReturn:    meta.ytdReturn    ?? null,
+        signal,
+        signalDate:   signalData.signalDate  ?? null,
+        signalAge,
+        isNewSignal,
+        stopPrice:    signalData.stopPrice   ?? null,
+        rank:         meta.rank         ?? null,
+        rankChange:   meta.rankChange   ?? undefined,
+        rankList:     meta.rankList     || null,
+        isSp500:      meta.isSp500      || false,
+        isDow30:      meta.isDow30      || false,
+        isNasdaq100:  meta.isNasdaq100  || false,
+        universe:     meta.universe     || null,
+        preyStrategies: [],
+        apexScore:    -99,
+        preMultiplier: 0,
+        confirmation: 'OVEREXTENDED',
+        overextended: true,
+        scores: { d1: d1.score, d2: d2.score, d3: d3.score, d4: 0, d5: 0, d6: 0, d7: 0, d8: 0 },
+        scoreDetail: { d1, d2, d3,
+          d4: { score: 0 }, d5: { score: 0 }, d6: { score: 0 }, d7: { score: 0 }, d8: { score: 0 } },
+        tier:        'OVEREXTENDED',
+        tierTagline: 'Move already happened - too far from EMA',
+      });
+      return;
+    }
+
     const d4 = scoreD4(signalAge, d3.confirmation);
     const d5 = scoreD5(meta.rankChange);
     const d6 = scoreD6(signal, data);
@@ -846,11 +911,28 @@ export async function getApexResults(
     });
   }, 20); // concurrency=20 (up from 10) — cuts FMP wall time in half
 
-  // Sort by score descending
-  scored.sort((a, b) => b.apexScore - a.apexScore);
+  // Sort: non-overextended by score desc, then OVEREXTENDED at the very bottom
+  scored.sort((a, b) => {
+    if (a.overextended && !b.overextended) return 1;
+    if (!a.overextended && b.overextended) return -1;
+    return b.apexScore - a.apexScore;
+  });
 
-  // Mark top 10 and assign kill rank to all scored stocks
-  scored.forEach((s, i) => { s.isTop10 = i < 10; s.killRank = i + 1; });
+  // Assign kill rank only to non-overextended stocks; mark top 10
+  let rankCounter = 0;
+  scored.forEach(s => {
+    if (s.overextended) {
+      s.isTop10 = false;
+      s.killRank = null;
+    } else {
+      rankCounter++;
+      s.killRank = rankCounter;
+      s.isTop10 = rankCounter <= 10;
+    }
+  });
+
+  const overextendedCount = scored.filter(s => s.overextended).length;
+  console.log(`[KILL v3] Overextended (disqualified): ${overextendedCount}`);
 
   const results = {
     stocks: scored,
@@ -860,10 +942,13 @@ export async function getApexResults(
       qqqAboveEma:  indexData['QQQ']?.aboveEma  ?? null,
       qqqEmaRising: indexData['QQQ']?.emaRising ?? null,
     },
-    tierCounts: APEX_TIERS.reduce((acc, t) => {
-      acc[t.name] = scored.filter(s => s.tier === t.name).length;
-      return acc;
-    }, {}),
+    tierCounts: {
+      ...APEX_TIERS.reduce((acc, t) => {
+        acc[t.name] = scored.filter(s => s.tier === t.name).length;
+        return acc;
+      }, {}),
+      OVEREXTENDED: overextendedCount,
+    },
     scannedAt:     new Date().toISOString(),
     totalScanned:  tickers.length,
     preyCount:     preyTickerSet.size,

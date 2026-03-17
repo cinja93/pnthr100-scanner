@@ -350,7 +350,7 @@ export default function ApexPage() {
             PNTHR KILL
           </h1>
           <p className={styles.subtitle}>
-            8-dimensional predatory scoring across the full PNTHR 679 universe. Regime, sector, entry quality, freshness, rank momentum, velocity, and prey presence — which setup has the PNTHR's full attention this week?
+            Elaborate 8-dimensional predatory scoring across the full PNTHR 679 Jungle. Regime, sector, entry quality, freshness, rank momentum, velocity, and prey presence — which setup has the PNTHR's full attention this week? ...time for the PNTHR to EAT!
           </p>
         </div>
         <button

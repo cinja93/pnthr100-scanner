@@ -144,21 +144,29 @@ function computeSignalAge(signalDate) {
 
 // ── Price Data Helpers ────────────────────────────────────────────────────────
 
-async function fetchDailyBars(ticker, from, to) {
+async function fetchDailyBars(ticker, from, to, retries = 3) {
   // Check MongoDB candle cache first (7-day TTL — weekly data is static after Friday close)
   const cached = await getCachedCandles(ticker);
   if (cached) return cached;
 
   const url = `${FMP_BASE_URL}/historical-price-full/${ticker}?from=${from}&to=${to}&apikey=${FMP_API_KEY}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`FMP ${res.status} for ${ticker}`);
-  const data = await res.json();
-  const daily = data?.historical || [];
-
-  // Persist to MongoDB cache (fire-and-forget)
-  if (daily.length > 0) setCachedCandles(ticker, daily);
-
-  return daily;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const res = await fetch(url);
+    if (res.status === 429 && attempt < retries - 1) {
+      // Rate limited — exponential backoff: 2s, 4s
+      const wait = 2000 * (attempt + 1);
+      console.warn(`[FMP] 429 rate limit for ${ticker}, retrying in ${wait}ms (attempt ${attempt + 1}/${retries})`);
+      await new Promise(r => setTimeout(r, wait));
+      continue;
+    }
+    if (!res.ok) throw new Error(`FMP ${res.status} for ${ticker}`);
+    const data = await res.json();
+    const daily = data?.historical || [];
+    // Persist to MongoDB cache (fire-and-forget)
+    if (daily.length > 0) setCachedCandles(ticker, daily);
+    return daily;
+  }
+  throw new Error(`FMP failed after ${retries} attempts for ${ticker}`);
 }
 
 function aggregateWeeklyBars(daily) {
@@ -632,8 +640,10 @@ function scoreD4(signalAge, d3Confirmation) {
     // Early decay: -3 per week beyond week 5
     score = -3 * (signalAge - 5);
   } else {
-    // Deep decay: -5 per week beyond week 9, floor at -15
-    score = Math.max(-5 * (signalAge - 9) - 12, -15);
+    // Deep decay: smooth continuation from -12 at week 9, floor at -15
+    // -12 - 1.5/wk → week 10 = -13.5, week 11 = -15 (floor)
+    // Old formula (-5*(age-9)-12) jumped discontinuously from -12 to -17 at week 10.
+    score = Math.max(-12 - (signalAge - 9) * 1.5, -15);
   }
 
   return { score, signalAge, gatedBy: d3Confirmation };
@@ -650,11 +660,12 @@ function scoreD5(rankChange) {
   return { score, raw };
 }
 
-// ── D6: Momentum (0–20 pts, floored at 0) ────────────────────────────────────
+// ── D6: Momentum (-10 to +20 pts) ────────────────────────────────────────────
 // Sub-A: RSI (±5 pts)  — centered on 50; above/below favors BL/SS
 // Sub-B: OBV (±5 pts)  — buying/selling pressure confirms signal direction
 // Sub-C: ADX (0–5 pts) — trend strength, only when ADX is rising
 // Sub-D: Volume (0 or +5 pts) — above-average volume confirms breakout
+// Floor is -10 (not 0): misaligned RSI + declining OBV = real penalty
 
 function scoreD6(signal, data) {
   if (!signal || !data) return { score: 0, subA: 0, subB: 0, subC: 0, subD: 0 };
@@ -695,7 +706,9 @@ function scoreD6(signal, data) {
   }
 
   const raw   = subA + subB + subC + subD;
-  const score = Math.max(0, Math.min(20, Math.round(raw * 10) / 10));
+  // Floor is -10 (not 0) — a BL with RSI 25 and declining OBV should be penalized,
+  // not treated identically to a stock with no momentum data.
+  const score = Math.max(-10, Math.min(20, Math.round(raw * 10) / 10));
 
   return {
     score,

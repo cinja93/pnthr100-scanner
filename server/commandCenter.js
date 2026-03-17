@@ -241,7 +241,7 @@ export async function positionsSave(req, res) {
         { upsert: true }
       );
     } else {
-      position.id        = Date.now();
+      position.id        = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
       position.status    = 'ACTIVE';
       position.createdAt = new Date();
       position.updatedAt = new Date();

@@ -867,7 +867,7 @@ export async function getApexResults(
     scannedAt:     new Date().toISOString(),
     totalScanned:  tickers.length,
     preyCount:     preyTickerSet.size,
-    activeSignals: preySignalTickers.length,
+    activeSignals: allSignalTickers.length,
     regime: {
       ...signalCounts,
       spyAboveEma:  indexData['SPY']?.aboveEma  ?? null,

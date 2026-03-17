@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { AuthContext } from './AuthContext';
 import StockTable from './components/StockTable';
 import ChartModal from './components/ChartModal';
 import FilterBar from './components/FilterBar';
@@ -91,7 +92,12 @@ function App() {
   if (authLoading) return null; // brief flash while validating token
   if (!authToken) return <LoginPage onLogin={handleLogin} />;
 
-  return <AppInner currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />;
+  const isAdmin = currentUser?.role === 'admin';
+  return (
+    <AuthContext.Provider value={{ currentUser, isAdmin }}>
+      <AppInner currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />
+    </AuthContext.Provider>
+  );
 }
 
 function AppInner({ currentUser, setCurrentUser, onLogout }) {

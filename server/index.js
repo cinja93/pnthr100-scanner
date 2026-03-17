@@ -602,7 +602,7 @@ app.get('/api/user/profile', async (req, res) => {
   }
 });
 
-app.patch('/api/user/profile', async (req, res) => {
+app.patch('/api/user/profile', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
     const { accountSize, defaultPage } = req.body;
@@ -635,7 +635,7 @@ app.get('/api/watchlist', async (req, res) => {
 });
 
 // Add a ticker to the watchlist
-app.post('/api/watchlist', async (req, res) => {
+app.post('/api/watchlist', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
     const { ticker } = req.body;
@@ -659,7 +659,7 @@ app.post('/api/watchlist', async (req, res) => {
 });
 
 // Remove a ticker from the watchlist
-app.delete('/api/watchlist/:ticker', async (req, res) => {
+app.delete('/api/watchlist/:ticker', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
     const { ticker } = req.params;
@@ -1499,8 +1499,8 @@ app.get('/api/apex', authenticateJWT, async (req, res) => {
 // ── PNTHR Command Center ───────────────────────────────────────────────────────
 app.get('/api/kill-pipeline',       authenticateJWT, killPipelineHandler);
 app.get('/api/positions',           authenticateJWT, positionsGetAll);
-app.post('/api/positions',          authenticateJWT, positionsSave);
-app.post('/api/positions/close',    authenticateJWT, positionsClose);
+app.post('/api/positions',          authenticateJWT, requireAdmin, positionsSave);
+app.post('/api/positions/close',    authenticateJWT, requireAdmin, positionsClose);
 app.get('/api/ticker/:symbol',      authenticateJWT, tickerHandler);
 app.get('/api/regime',              authenticateJWT, regimeHandler);
 

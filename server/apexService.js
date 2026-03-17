@@ -681,13 +681,16 @@ export async function getApexResults(
   const preyPresenceMap = buildPreyPresence(preyResults, huntTickers, stockMeta);
   const preyTickerSet   = collectPreyTickers(preyResults, huntTickers, stockMeta);
 
-  // Filter to Prey universe + active BL/SS signals
-  const preySignalTickers = [...preyTickerSet].filter(t => {
+  // Score ALL 679 tickers with open BL/SS signals.
+  // Prey membership is NOT a gate — it adds D8 tiebreaker points (SPRINT/HUNT +2,
+  // FEAST/ALPHA/SPRING/SNEAK +1 each). The confirmation gate (D3 conviction ≥ 30)
+  // and Kill scoring naturally filter weak setups to the bottom.
+  const allSignalTickers = tickers.filter(t => {
     const sig = jungleSignals[t]?.signal;
     return sig === 'BL' || sig === 'SS';
   });
 
-  console.log(`[KILL v3] Scoring ${preySignalTickers.length} Prey stocks (${preyTickerSet.size} in Prey universe, ${tickers.length} total)`);
+  console.log(`[KILL v3] Scoring ${allSignalTickers.length} stocks with open signals (${preyTickerSet.size} in Prey universe, ${tickers.length} total 679)`);
 
   // Load index + sector context in parallel
   console.log('[KILL v3] Fetching index + sector data...');
@@ -733,7 +736,7 @@ export async function getApexResults(
 
   const scored = [];
 
-  await processBatch(preySignalTickers, async ticker => {
+  await processBatch(allSignalTickers, async ticker => {
     const meta       = stockMeta[ticker] || {};
     const signalData = jungleSignals[ticker] || null;
     if (!signalData?.signal) return;

@@ -21,6 +21,15 @@ import {
   ensureCommandCenterIndexes,
 } from './commandCenter.js';
 import { runFridayKillPipeline } from './fridayPipeline.js';
+import {
+  navGet,
+  navPost,
+  pendingEntriesGet,
+  pendingEntriesPost,
+  pendingEntryConfirm,
+  pendingEntryDismiss,
+  createPendingEntriesIndexes,
+} from './pendingEntries.js';
 import newsletterRouter from './routes/newsletter.js';
 import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
@@ -1504,6 +1513,14 @@ app.post('/api/positions/close',    authenticateJWT, requireAdmin, positionsClos
 app.get('/api/ticker/:symbol',      authenticateJWT, tickerHandler);
 app.get('/api/regime',              authenticateJWT, regimeHandler);
 
+// ── Pending Entries & NAV Settings ────────────────────────────────────────────
+app.get('/api/settings/nav',                    authenticateJWT, navGet);
+app.post('/api/settings/nav',                   authenticateJWT, navPost);
+app.get('/api/pending-entries',                 authenticateJWT, pendingEntriesGet);
+app.post('/api/pending-entries',                authenticateJWT, requireAdmin, pendingEntriesPost);
+app.post('/api/pending-entries/:id/confirm',    authenticateJWT, requireAdmin, pendingEntryConfirm);
+app.post('/api/pending-entries/:id/dismiss',    authenticateJWT, requireAdmin, pendingEntryDismiss);
+
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
 app.use('/api/newsletter', newsletterRouter);
 
@@ -1612,8 +1629,9 @@ app.listen(PORT, () => {
   // Pre-compute signal counts in background (takes ~2 min each)
   computeSectorSignalCounts();
   computeSpeculativeSignalCounts();
-  // Bootstrap Command Center MongoDB indexes (non-blocking)
+  // Bootstrap MongoDB indexes (non-blocking)
   ensureCommandCenterIndexes().catch(() => {});
+  createPendingEntriesIndexes().catch(() => {});
 });
 
 // Scheduled Friday auto-save: checks every 30 minutes.

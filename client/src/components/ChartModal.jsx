@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
-import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchKillPipeline } from '../services/api';
+import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchKillPipeline, fetchNav } from '../services/api';
+import { API_BASE, authHeaders } from '../services/api';
+import { sizePosition, calcHeat, STRIKE_PCT } from '../utils/sizingUtils.js';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
 import KillBadge from './KillBadge';
@@ -254,7 +256,8 @@ function formatWeekDate(timeStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function ChartModal({ stocks, initialIndex, earnings = {}, onClose, onWatchlistChange }) {
+export default function ChartModal({ stocks, initialIndex, earnings = {}, onClose, onWatchlistChange,
+  isAdmin = false, queuedTickers = new Set(), onQueueToggle }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [range, setRange] = useState('12m');
   const [allWeeklyData, setAllWeeklyData] = useState([]);
@@ -272,6 +275,11 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   const [watchlistSaving, setWatchlistSaving] = useState(false);
   const [inEarningsWindow, setInEarningsWindow] = useState(false);
   const [killRankMap, setKillRankMap] = useState(_killRankMap); // start from cache if already loaded
+  // ── SIZE IT / QUEUE IT state ─────────────────────────────────────────────────
+  const [sizePanel, setSizePanel] = useState(null);
+  const [sizeLoading, setSizeLoading] = useState(false);
+  const positionsCache = useRef(null);
+  const navCache = useRef(null);
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const cacheRef = useRef({});
@@ -279,6 +287,9 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
 
   const stock = stocks[currentIndex];
   const inWatchlist = stock ? watchlistSet.has(stock.ticker) : false;
+
+  // Reset SIZE IT panel when navigating to a new stock
+  useEffect(() => { setSizePanel(null); }, [currentIndex]);
 
   // Fetch data when stock changes
   useEffect(() => {
@@ -564,6 +575,93 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
     if (e.target === e.currentTarget) onClose();
   }
 
+  // ── SIZE IT: fetch gap data + nav + positions → calculate lot 1 sizing ────
+  async function handleSizeIt() {
+    if (sizeLoading || !stock) return;
+    setSizeLoading(true);
+    setSizePanel(null);
+    try {
+      // Fetch nav (cached per session)
+      if (!navCache.current) {
+        const navData = await fetchNav();
+        navCache.current = navData.nav || 100000;
+      }
+      const nav = navCache.current;
+
+      // Fetch gap risk + fresh price from ticker endpoint
+      const tickerRes = await fetch(`${API_BASE}/api/ticker/${stock.ticker}`, { headers: authHeaders() });
+      const tickerData = tickerRes.ok ? await tickerRes.json() : {};
+      const maxGapPct  = tickerData.maxGapPct || 0;
+      const entryPrice = tickerData.currentPrice || stock.currentPrice || 0;
+
+      // Stop: use signal-service ATR stop if available; fallback to EMA ±2%
+      const direction   = stock.signal === 'SS' ? 'SHORT' : 'LONG';
+      const stopDefault = stock.stopPrice
+        ? +stock.stopPrice
+        : direction === 'SHORT'
+          ? +(entryPrice * 1.02).toFixed(2)
+          : +(entryPrice * 0.98).toFixed(2);
+
+      // Sizing
+      const sizing    = sizePosition({ netLiquidity: nav, entryPrice, stopPrice: stopDefault, maxGapPct, direction });
+      const lot1Shr   = Math.max(1, Math.round(sizing.totalShares * STRIKE_PCT[0]));
+      const riskDollar = lot1Shr * Math.abs(entryPrice - stopDefault);
+
+      // Heat impact (fetch positions once and cache)
+      if (!positionsCache.current) {
+        const posRes = await fetch(`${API_BASE}/api/positions`, { headers: authHeaders() });
+        const posData = posRes.ok ? await posRes.json() : {};
+        positionsCache.current = posData.positions || [];
+      }
+      const heatBefore = calcHeat(positionsCache.current, nav).liveCnt;
+
+      setSizePanel({
+        nav, entry: entryPrice, stop: stopDefault, adjustedStop: stopDefault,
+        gapPct: maxGapPct, gapMult: sizing.gapMult,
+        totalShares: sizing.totalShares, lot1Shares: lot1Shr,
+        risk$: +riskDollar.toFixed(0), direction, heatBefore,
+      });
+    } catch { /* non-fatal — panel stays null */ }
+    setSizeLoading(false);
+  }
+
+  function recalcWithStop(newStopStr) {
+    const newStop = parseFloat(newStopStr);
+    if (!sizePanel || !newStop || newStop <= 0) return;
+    const sizing   = sizePosition({ netLiquidity: sizePanel.nav, entryPrice: sizePanel.entry, stopPrice: newStop, maxGapPct: sizePanel.gapPct, direction: sizePanel.direction });
+    const lot1Shr  = Math.max(1, Math.round(sizing.totalShares * STRIKE_PCT[0]));
+    const risk     = lot1Shr * Math.abs(sizePanel.entry - newStop);
+    setSizePanel(prev => ({ ...prev, adjustedStop: newStop, totalShares: sizing.totalShares, lot1Shares: lot1Shr, risk$: +risk.toFixed(0), gapMult: sizing.gapMult }));
+  }
+
+  function handleQueueToggle() {
+    if (!onQueueToggle || !sizePanel) return;
+    const isQueued = queuedTickers.has(stock.ticker);
+    if (isQueued) {
+      onQueueToggle({ ticker: stock.ticker, _remove: true });
+    } else {
+      onQueueToggle({
+        id:               Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        ticker:           stock.ticker,
+        signal:           stock.signal,
+        direction:        sizePanel.direction,
+        currentPrice:     sizePanel.entry,
+        suggestedStop:    sizePanel.stop,
+        adjustedStop:     sizePanel.adjustedStop,
+        gapPct:           sizePanel.gapPct,
+        gapMultiplier:    sizePanel.gapMult,
+        totalTargetShares: sizePanel.totalShares,
+        lot1Shares:       sizePanel.lot1Shares,
+        riskPerPosition:  sizePanel.risk$,
+        killScore:        stock.apexScore ?? stock.killScore ?? null,
+        killTier:         stock.tier ?? null,
+        sector:           stock.sector || '—',
+        companyName:      stock.companyName || '',
+        queuedAt:         Date.now(),
+      });
+    }
+  }
+
   if (!stock) return null;
 
   return (
@@ -583,6 +681,34 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
             </div>
           </div>
           <div className={styles.headerActions}>
+            {isAdmin && stock.signal && (
+              <>
+                <button
+                  onClick={handleSizeIt}
+                  disabled={sizeLoading}
+                  style={{ background: sizeLoading ? 'rgba(255,215,0,0.3)' : '#FFD700',
+                    color: '#000', border: 'none', borderRadius: 5, padding: '5px 12px',
+                    fontSize: 11, fontWeight: 800, cursor: sizeLoading ? 'not-allowed' : 'pointer',
+                    letterSpacing: '0.06em' }}
+                  title="Size this position"
+                >
+                  {sizeLoading ? '⟳' : 'SIZE IT'}
+                </button>
+                {sizePanel && (
+                  <button
+                    onClick={handleQueueToggle}
+                    style={{ background: queuedTickers.has(stock.ticker) ? '#28a745' : 'rgba(40,167,69,0.15)',
+                      color: queuedTickers.has(stock.ticker) ? '#fff' : '#28a745',
+                      border: `1px solid ${queuedTickers.has(stock.ticker) ? '#28a745' : 'rgba(40,167,69,0.4)'}`,
+                      borderRadius: 5, padding: '5px 12px', fontSize: 11, fontWeight: 700,
+                      cursor: 'pointer', letterSpacing: '0.04em' }}
+                    title={queuedTickers.has(stock.ticker) ? 'Remove from queue' : 'Add to entry queue'}
+                  >
+                    {queuedTickers.has(stock.ticker) ? 'QUEUED ✓' : 'QUEUE IT'}
+                  </button>
+                )}
+              </>
+            )}
             <button
               className={`${styles.watchlistBtn} ${inWatchlist ? styles.watchlistBtnActive : ''}`}
               onClick={toggleWatchlist}
@@ -594,6 +720,53 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
             <button className={styles.closeBtn} onClick={onClose} title="Close">×</button>
           </div>
         </div>
+
+        {/* SIZE IT panel — slide-down sizing result */}
+        {isAdmin && sizePanel && (
+          <div style={{ padding: '10px 20px', background: 'rgba(255,215,0,0.04)',
+            borderBottom: '1px solid rgba(255,215,0,0.15)',
+            display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+            <div>
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#FFD700', fontFamily: 'monospace' }}>
+                {stock.ticker} · {sizePanel.direction}
+              </span>
+              <span style={{ fontSize: 12, color: '#aaa', marginLeft: 8 }}>
+                Lot 1: <b style={{ color: '#e8e6e3' }}>{sizePanel.lot1Shares} shr</b> @ ${sizePanel.entry?.toFixed(2)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: '#888' }}>Stop:</span>
+              <input
+                type="number" step="0.01"
+                defaultValue={sizePanel.adjustedStop}
+                onBlur={e => recalcWithStop(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') recalcWithStop(e.target.value); }}
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(220,53,69,0.35)',
+                  borderRadius: 4, padding: '3px 8px', color: '#dc3545', fontSize: 12,
+                  fontFamily: 'monospace', outline: 'none', textAlign: 'right', width: 72 }}
+              />
+            </div>
+            <div style={{ fontSize: 11, color: '#888' }}>
+              Risk: <span style={{ color: '#ffc107', fontWeight: 700 }}>${sizePanel.risk$}</span>
+            </div>
+            <div style={{ fontSize: 11, color: '#888' }}>
+              Gap: {sizePanel.gapPct?.toFixed(1)}% · {sizePanel.gapMult}×
+            </div>
+            <div style={{ fontSize: 11 }}>
+              Heat: <span style={{ color: '#aaa' }}>{sizePanel.heatBefore}%</span>
+              <span style={{ color: '#555' }}> → </span>
+              <span style={{ color: sizePanel.heatBefore + 1 > 10 ? '#dc3545' : '#28a745', fontWeight: 700 }}>
+                {sizePanel.heatBefore + 1}%
+              </span>
+              {sizePanel.heatBefore + 1 > 10 && (
+                <span style={{ color: '#dc3545', fontSize: 10, marginLeft: 4 }}>⚠ EXCEEDS CAP</span>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: '#555' }}>
+              Total: {sizePanel.totalShares} shr · NAV ${(sizePanel.nav / 1000).toFixed(0)}K
+            </div>
+          </div>
+        )}
 
         {/* Controls */}
         <div className={styles.controls}>

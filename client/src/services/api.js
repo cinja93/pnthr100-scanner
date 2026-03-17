@@ -424,3 +424,56 @@ export async function saveSignalHistorySnapshot() {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+// ── Pending Entries & NAV Settings ────────────────────────────────────────────
+
+export async function fetchNav() {
+  const res = await fetch(`${API_BASE}/api/settings/nav`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json(); // { nav: number }
+}
+
+export async function saveNav(value) {
+  const res = await fetch(`${API_BASE}/api/settings/nav`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nav: value }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchPendingEntries() {
+  const res = await fetch(`${API_BASE}/api/pending-entries`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json(); // array of entry objects
+}
+
+export async function createPendingEntries(entries) {
+  const res = await fetch(`${API_BASE}/api/pending-entries`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(entries),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function confirmPendingEntry(id, { fillPrice, shares, date, stop }) {
+  const res = await fetch(`${API_BASE}/api/pending-entries/${id}/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fillPrice, shares, date, stop }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function dismissPendingEntry(id) {
+  const res = await fetch(`${API_BASE}/api/pending-entries/${id}/dismiss`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

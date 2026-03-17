@@ -6,90 +6,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { API_BASE, authHeaders, updateUserProfile } from '../services/api.js';
+import { API_BASE, authHeaders, updateUserProfile, fetchPendingEntries, confirmPendingEntry, dismissPendingEntry } from '../services/api.js';
 import { useAuth } from '../AuthContext';
+import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat } from '../utils/sizingUtils.js';
 
-// ── Sizing Constants ──────────────────────────────────────────────────────────
-
-const STRIKE_PCT    = [0.15, 0.30, 0.25, 0.20, 0.10];
-const LOT_NAMES     = ['The Scent', 'The Stalk', 'The Strike', 'The Jugular', 'The Kill'];
-const LOT_OFFSETS   = [0, 0.03, 0.06, 0.10, 0.14];
-const LOT_TIME_GATES = [0, 5, 0, 0, 0];
-
-// ── Position Sizing Logic ─────────────────────────────────────────────────────
-
-function buildLots({ entryPrice, stopPrice, totalShares, direction, fills = {} }) {
-  const isLong = direction === 'LONG';
-  const anchor = fills[1]?.filled && fills[1]?.price ? +fills[1].price : entryPrice;
-  return STRIKE_PCT.map((pct, i) => {
-    const targetShares  = Math.max(1, Math.round(totalShares * pct));
-    const triggerPrice  = isLong ? +(anchor * (1 + LOT_OFFSETS[i])).toFixed(2) : +(anchor * (1 - LOT_OFFSETS[i])).toFixed(2);
-    const fill          = fills[i + 1] || {};
-    const filled        = fill.filled || false;
-    const actualPrice   = fill.price  != null ? +fill.price  : null;
-    const actualShares  = fill.shares != null ? +fill.shares : (filled ? targetShares : 0);
-    const actualDate    = fill.date   || null;
-    const costBasis     = filled && actualPrice ? +(actualShares * actualPrice).toFixed(2) : 0;
-    return { lot: i + 1, name: LOT_NAMES[i], pctLabel: STRIKE_PCT[i] * 100, targetShares, triggerPrice,
-             offsetPct: Math.round(LOT_OFFSETS[i] * 100), timeGate: LOT_TIME_GATES[i],
-             filled, actualPrice, actualShares, actualDate, costBasis, anchor };
-  });
-}
-
-function enrichLots(lots, entryPrice, stopPrice, direction) {
-  const isLong = direction === 'LONG';
-  let cumShr = 0, cumCost = 0;
-  return lots.map((l, i) => {
-    if (l.filled && l.actualShares > 0) { cumShr += l.actualShares; cumCost += l.costBasis; }
-    const avgCost = cumShr > 0 ? +(cumCost / cumShr).toFixed(2) : 0;
-    let recStop, rNote;
-    if (i <= 1) { recStop = stopPrice; rNote = null; }
-    else if (i === 2) {
-      const p = lots[0].actualPrice || entryPrice; recStop = +p.toFixed(2);
-      rNote = `Move stop → $${recStop} (Lot 1 fill = breakeven)`;
-    } else if (i === 3) {
-      const p = lots[1].actualPrice || lots[1].triggerPrice; recStop = +p.toFixed(2);
-      rNote = `Ratchet stop → $${recStop} (Lot 2 fill)`;
-    } else {
-      const p = lots[2].actualPrice || lots[2].triggerPrice; recStop = +p.toFixed(2);
-      rNote = `Ratchet stop → $${recStop} (Lot 3 fill)`;
-    }
-    return { ...l, cumShr, cumCost: +cumCost.toFixed(2), avgCost, recommendedStop: recStop, ratchetNote: rNote };
-  });
-}
-
-function sizePosition({ netLiquidity, entryPrice, stopPrice, maxGapPct, direction }) {
-  const tickerCap = netLiquidity * 0.10;
-  const vitality  = netLiquidity * 0.01;
-  const structRisk = Math.abs((entryPrice - stopPrice) / entryPrice);
-  const gapMult   = maxGapPct > structRisk * 100 ? Math.max(0.3, structRisk * 100 / maxGapPct) : 1.0;
-  const rps       = Math.abs(entryPrice - stopPrice);
-  const total     = Math.floor(
-    Math.min(rps > 0 ? Math.floor(vitality / rps) : 0, Math.floor(tickerCap / entryPrice)) * gapMult
-  );
-  return { totalShares: total, gapMult: +gapMult.toFixed(2), structRisk: +(structRisk * 100).toFixed(2),
-           maxRisk$: +(total * rps).toFixed(2), gapProne: maxGapPct > structRisk * 100 };
-}
-
-function calcHeat(positions, nav) {
-  let liveCnt = 0, recycledCnt = 0, actual$ = 0;
-  for (const p of positions) {
-    const filledShr = Object.values(p.fills || {}).reduce((s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0);
-    const lot1P     = p.fills?.[1]?.price ? +p.fills[1].price : p.entryPrice;
-    const isL       = p.direction === 'LONG';
-    const rps       = isL ? Math.max(lot1P - p.stopPrice, 0) : Math.max(p.stopPrice - lot1P, 0);
-    const posRisk   = filledShr * rps;
-    const isRecycled = isL ? p.stopPrice >= lot1P : p.stopPrice <= lot1P;
-    if (isRecycled) { recycledCnt++; } else { liveCnt++; actual$ += posRisk; }
-  }
-  const theo$ = liveCnt * nav * 0.01;
-  return {
-    liveCnt, recycledCnt, totalPos: positions.length,
-    theo$: +theo$.toFixed(0), theoPct: +((theo$ / nav) * 100).toFixed(1),
-    actual$: +actual$.toFixed(0), actualPct: +((actual$ / nav) * 100).toFixed(2),
-    slots: Math.max(0, Math.floor((nav * 0.10 - theo$) / (nav * 0.01))),
-  };
-}
+// (buildLots, enrichLots, sizePosition, calcHeat imported from ../utils/sizingUtils.js)
 
 // ── Risk Advisor Helpers ──────────────────────────────────────────────────────
 
@@ -693,6 +614,105 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   );
 }
 
+// ── Pending Entry Card ────────────────────────────────────────────────────────
+
+const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+
+function PendingCard({ entry, nav, onConfirm, onDismiss }) {
+  const [fillPrice, setFillPrice] = useState(String(entry.currentPrice || ''));
+  const [shares,    setShares]    = useState(String(entry.lot1Shares || ''));
+  const [date,      setDate]      = useState(new Date().toISOString().split('T')[0]);
+  const [stop,      setStop]      = useState(String(entry.adjustedStop || entry.suggestedStop || ''));
+  const [saving,    setSaving]    = useState(false);
+
+  const isExpired  = Date.now() - new Date(entry.queuedAt).getTime() > FIVE_DAYS_MS;
+  const isLong     = entry.direction === 'LONG';
+
+  // Preview lot 2 / lot 3 triggers from current fill price
+  const previewLots = fillPrice && +fillPrice > 0 ? buildLots({
+    entryPrice: +fillPrice, stopPrice: +stop || entry.adjustedStop || entry.suggestedStop || 0,
+    totalShares: entry.totalTargetShares || 1, direction: entry.direction, fills: {},
+  }) : null;
+
+  const handleConfirm = async () => {
+    if (!fillPrice || !shares) return;
+    setSaving(true);
+    try {
+      await onConfirm(entry.id, { fillPrice: +fillPrice, shares: +shares, date, stop: +stop || undefined });
+    } catch { /* non-fatal */ }
+    setSaving(false);
+  };
+
+  const fI2 = { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,215,0,0.3)',
+    borderRadius: 4, padding: '4px 8px', color: '#FFD700', fontSize: 12,
+    fontFamily: 'monospace', outline: 'none', textAlign: 'right' };
+
+  return (
+    <div style={{ borderRadius: 10, overflow: 'hidden',
+      border: '1px dashed rgba(255,215,0,0.4)',
+      background: 'rgba(255,215,0,0.02)',
+      opacity: isExpired ? 0.6 : 1 }}>
+      {/* Card header */}
+      <div style={{ padding: '10px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        background: 'rgba(255,215,0,0.04)', borderBottom: '1px dashed rgba(255,215,0,0.15)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 16, fontWeight: 800, fontFamily: 'monospace', color: '#FFD700' }}>{entry.ticker}</span>
+          <SigBadge d={entry.direction} />
+          {entry.killTier && <TierBadge t={entry.killTier} />}
+          {entry.sector && <span style={{ fontSize: 11, color: '#555' }}>{entry.sector}</span>}
+          {entry.killScore != null && <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>Score: {entry.killScore}</span>}
+          {isExpired && <Badge color="#fff" bg="rgba(220,53,69,0.4)" small>EXPIRED</Badge>}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={handleConfirm} disabled={saving || !fillPrice || !shares}
+            style={{ background: saving ? 'rgba(40,167,69,0.3)' : '#28a745', color: '#fff',
+              border: 'none', borderRadius: 5, padding: '5px 14px', fontWeight: 700,
+              fontSize: 11, cursor: saving ? 'not-allowed' : 'pointer', letterSpacing: '0.04em' }}>
+            {saving ? '…' : 'CONFIRM ENTRY ✓'}
+          </button>
+          <button onClick={() => onDismiss(entry.id)}
+            style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', color: '#666',
+              borderRadius: 5, padding: '5px 10px', fontSize: 11, cursor: 'pointer' }}>
+            DISMISS ✕
+          </button>
+        </div>
+      </div>
+      {/* Fill fields */}
+      <div style={{ padding: '10px 18px', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 9, color: '#666', marginBottom: 2, textTransform: 'uppercase' }}>Fill Price</div>
+          <input type="number" step="0.01" value={fillPrice} onChange={e => setFillPrice(e.target.value)}
+            style={{ ...fI2, width: 72 }} placeholder={String(entry.currentPrice || '')} />
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: '#666', marginBottom: 2, textTransform: 'uppercase' }}>Shares (Lot 1)</div>
+          <input type="number" value={shares} onChange={e => setShares(e.target.value)}
+            style={{ ...fI2, width: 56 }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: '#666', marginBottom: 2, textTransform: 'uppercase' }}>Date</div>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            style={{ ...fI2, width: 112, color: '#aaa', fontSize: 11 }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: '#666', marginBottom: 2, textTransform: 'uppercase' }}>Stop</div>
+          <input type="number" step="0.01" value={stop} onChange={e => setStop(e.target.value)}
+            style={{ ...fI2, width: 72, borderColor: 'rgba(220,53,69,0.35)', color: '#dc3545' }} />
+        </div>
+        {previewLots && (
+          <div style={{ fontSize: 11, color: '#555', fontFamily: 'monospace' }}>
+            Lot 2 trigger: <span style={{ color: '#888' }}>${previewLots[1]?.triggerPrice}</span>
+            {' · '}
+            Lot 3: <span style={{ color: '#888' }}>${previewLots[2]?.triggerPrice}</span>
+            {' · '}
+            Total target: <span style={{ color: '#888' }}>{entry.totalTargetShares} shr</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── New Position Calculator ───────────────────────────────────────────────────
 
 function Calculator({ netLiquidity, onCreate }) {
@@ -962,11 +982,12 @@ export default function CommandCenter() {
         .catch(() => {}); // silent — UI still works even if save fails
     }, 1000);
   }
-  const [positions,     setPositions]     = useState([]);
-  const [tab,           setTab]           = useState('positions');
-  const [loading,       setLoading]       = useState(true);
-  const [saving,        setSaving]        = useState(false);
-  const [sectorWarning, setSectorWarning] = useState(null);
+  const [positions,       setPositions]       = useState([]);
+  const [pendingEntries,  setPendingEntries]  = useState([]);
+  const [tab,             setTab]             = useState('positions');
+  const [loading,         setLoading]         = useState(true);
+  const [saving,          setSaving]          = useState(false);
+  const [sectorWarning,   setSectorWarning]   = useState(null);
 
   const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
   const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
@@ -1019,7 +1040,7 @@ export default function CommandCenter() {
     return () => clearInterval(timer);
   }, []);
 
-  // Load positions from API on mount
+  // Load positions and pending entries on mount
   useEffect(() => {
     apiGet('/api/positions')
       .then(data => {
@@ -1027,6 +1048,9 @@ export default function CommandCenter() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+    fetchPendingEntries()
+      .then(data => { if (Array.isArray(data)) setPendingEntries(data); })
+      .catch(() => {});
   }, []);
 
   // Save position changes to API (debounced via a brief timeout)
@@ -1069,15 +1093,27 @@ export default function CommandCenter() {
       const result = await apiPost('/api/positions', pos);
       if (result.warning?.type === 'SECTOR_CONCENTRATION') {
         setSectorWarning(result.warning.message);
-        // Auto-dismiss after 10 seconds
         setTimeout(() => setSectorWarning(null), 10000);
       }
     } catch { /* non-fatal */ }
   }, [setSectorWarning]);
 
+  const handleConfirmEntry = useCallback(async (id, fillData) => {
+    await confirmPendingEntry(id, fillData);
+    setPendingEntries(prev => prev.filter(e => e.id !== id));
+    // Re-fetch positions so the new one appears immediately
+    apiGet('/api/positions')
+      .then(data => { if (data.positions?.length) setPositions(data.positions); })
+      .catch(() => {});
+  }, []);
+
+  const handleDismissEntry = useCallback(async (id) => {
+    await dismissPendingEntry(id);
+    setPendingEntries(prev => prev.filter(e => e.id !== id));
+  }, []);
+
   const tabs = [
     { id: 'positions',  l: 'Positions & Orders' },
-    { id: 'calculator', l: 'New Position' },
     { id: 'pipeline',   l: 'Kill Pipeline' },
   ];
 
@@ -1144,7 +1180,38 @@ export default function CommandCenter() {
       <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
         {tab === 'positions' && (
           <div>
-            {/* Sector concentration warning banner */}
+            {/* Pending Entries — queued from Kill page, awaiting fill confirmation */}
+            {pendingEntries.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#FFD700', letterSpacing: '0.1em',
+                  textTransform: 'uppercase', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  ⏳ PENDING ENTRIES
+                  <span style={{ fontSize: 10, background: 'rgba(255,215,0,0.15)', color: '#FFD700',
+                    padding: '2px 7px', borderRadius: 4, fontWeight: 700 }}>
+                    {pendingEntries.length}
+                  </span>
+                  <span style={{ fontSize: 10, color: '#555', fontWeight: 400, fontStyle: 'italic' }}>
+                    — Enter actual fill price &amp; shares, then CONFIRM ENTRY
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {[...pendingEntries]
+                    .sort((a, b) => {
+                      const aExp = Date.now() - new Date(a.queuedAt).getTime() > FIVE_DAYS_MS;
+                      const bExp = Date.now() - new Date(b.queuedAt).getTime() > FIVE_DAYS_MS;
+                      if (aExp && !bExp) return 1;
+                      if (!aExp && bExp) return -1;
+                      return new Date(a.queuedAt) - new Date(b.queuedAt);
+                    })
+                    .map(entry => (
+                      <PendingCard key={entry.id} entry={entry} nav={nav}
+                        onConfirm={handleConfirmEntry} onDismiss={handleDismissEntry} />
+                    ))}
+                </div>
+              </div>
+            )}
+
+          {/* Sector concentration warning banner */}
             {sectorWarning && (
               <div style={{ background: 'rgba(255,193,7,0.1)', border: '1px solid rgba(255,193,7,0.3)',
                 borderRadius: 8, padding: '10px 16px', marginBottom: 14,
@@ -1176,9 +1243,7 @@ export default function CommandCenter() {
               <div style={{ padding: 40, textAlign: 'center', color: '#555' }}>Loading positions…</div>
             ) : positions.length === 0 ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#555', fontSize: 13 }}>
-                No active positions. Use the <button onClick={() => setTab('calculator')}
-                  style={{ background: 'none', border: 'none', color: '#FFD700', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                  New Position</button> tab to add one, or check the Kill Pipeline for setups.
+                No active positions. Open a chart on the <span style={{ color: '#FFD700' }}>PNTHR Kill</span> page, click <span style={{ color: '#FFD700' }}>SIZE IT</span>, and queue setups to send here.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1191,7 +1256,6 @@ export default function CommandCenter() {
             )}
           </div>
         )}
-        {tab === 'calculator' && <Calculator netLiquidity={nav} onCreate={createPosition} />}
         {tab === 'pipeline'   && <PipelineTab positions={positions} nav={nav} />}
       </div>
     </div>

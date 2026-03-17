@@ -662,7 +662,7 @@ function PipelineTab({ positions, nav }) {
 // ── Main Command Center ───────────────────────────────────────────────────────
 
 export default function CommandCenter() {
-  const [nav,           setNav]           = useState(84000);
+  const [nav,           setNav]           = useState(100000);
   const [positions,     setPositions]     = useState([]);
   const [tab,           setTab]           = useState('positions');
   const [loading,       setLoading]       = useState(true);

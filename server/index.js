@@ -16,6 +16,7 @@ import {
   positionsGetAll,
   positionsSave,
   positionsClose,
+  positionsDelete,
   tickerHandler,
   regimeHandler,
   ensureCommandCenterIndexes,
@@ -1510,6 +1511,7 @@ app.get('/api/kill-pipeline',       authenticateJWT, killPipelineHandler);
 app.get('/api/positions',           authenticateJWT, positionsGetAll);
 app.post('/api/positions',          authenticateJWT, requireAdmin, positionsSave);
 app.post('/api/positions/close',    authenticateJWT, requireAdmin, positionsClose);
+app.delete('/api/positions/:id',    authenticateJWT, requireAdmin, positionsDelete);
 app.get('/api/ticker/:symbol',      authenticateJWT, tickerHandler);
 app.get('/api/regime',              authenticateJWT, regimeHandler);
 

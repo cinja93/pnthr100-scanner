@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { API_BASE, authHeaders, updateUserProfile, fetchPendingEntries, confirmPendingEntry, dismissPendingEntry } from '../services/api.js';
+import { API_BASE, authHeaders, updateUserProfile, fetchPendingEntries, confirmPendingEntry, dismissPendingEntry, deletePosition } from '../services/api.js';
 import { useAuth } from '../AuthContext';
 import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat } from '../utils/sizingUtils.js';
 
@@ -333,7 +333,7 @@ async function apiPost(path, body) {
 
 // ── Pyramid Card (position row) ───────────────────────────────────────────────
 
-function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, flashed }) {
+function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onDelete, flashed }) {
   const [expanded,    setExpanded]    = useState(false);
   const [editing,     setEditing]     = useState(null);
   const [ev,          setEv]          = useState({});
@@ -608,8 +608,41 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
               })}
             </tbody>
           </table>
+          {/* Delete position — hard remove from DB */}
+          <div style={{ padding: '10px 18px', borderTop: '1px solid rgba(255,255,255,0.04)',
+            display: 'flex', justifyContent: 'flex-end' }}>
+            <DeleteBtn onDelete={() => onDelete(position.id)} />
+          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function DeleteBtn({ onDelete }) {
+  const [confirm, setConfirm] = useState(false);
+  if (!confirm) {
+    return (
+      <button onClick={() => setConfirm(true)}
+        style={{ background: 'none', border: '1px solid rgba(220,53,69,0.3)', color: 'rgba(220,53,69,0.6)',
+          borderRadius: 4, padding: '4px 12px', fontSize: 11, cursor: 'pointer', letterSpacing: '0.04em' }}>
+        DELETE POSITION
+      </button>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontSize: 11, color: '#dc3545' }}>Permanently delete?</span>
+      <button onClick={onDelete}
+        style={{ background: '#dc3545', border: 'none', color: '#fff',
+          borderRadius: 4, padding: '4px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+        YES, DELETE
+      </button>
+      <button onClick={() => setConfirm(false)}
+        style={{ background: 'none', border: '1px solid rgba(255,255,255,0.12)', color: '#666',
+          borderRadius: 4, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>
+        Cancel
+      </button>
     </div>
   );
 }
@@ -1085,6 +1118,15 @@ export default function CommandCenter() {
     // Don't auto-save price (FMP provides live prices; only save if no live data)
   }, []);
 
+  const handleDeletePosition = useCallback(async (id) => {
+    try {
+      await deletePosition(id);
+      setPositions(prev => prev.filter(x => x.id !== id));
+    } catch (err) {
+      console.error('[CC] Delete position failed:', err);
+    }
+  }, []);
+
   const createPosition = useCallback(async (data) => {
     const pos = { id: Date.now(), ...data };
     setPositions(prev => [...prev, pos]);
@@ -1250,6 +1292,7 @@ export default function CommandCenter() {
                 {positions.map(p => (
                   <PyramidCard key={p.id} position={p} netLiquidity={nav}
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
+                    onDelete={handleDeletePosition}
                     flashed={flashedTickers.has(p.ticker)} />
                 ))}
               </div>

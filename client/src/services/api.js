@@ -477,3 +477,12 @@ export async function dismissPendingEntry(id) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+export async function deletePosition(id) {
+  const res = await fetch(`${API_BASE}/api/positions/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

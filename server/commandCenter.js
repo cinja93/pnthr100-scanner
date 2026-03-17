@@ -368,6 +368,28 @@ export async function positionsClose(req, res) {
   }
 }
 
+// ── DELETE /api/positions/:id ─────────────────────────────────────────────────
+// Hard-delete a position from the portfolio. Admin only. Used to remove test
+// entries or positions added by mistake.
+
+export async function positionsDelete(req, res) {
+  try {
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ error: 'id required' });
+
+    const result = await db.collection('pnthr_portfolio').deleteOne({ id, ownerId: req.user.userId });
+    if (result.deletedCount === 0) return res.status(404).json({ error: 'Position not found' });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[CC] Positions delete error:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
 // ── GET /api/ticker/:symbol ───────────────────────────────────────────────────
 // Auto-populate all data for a ticker. Called from "New Position" calculator.
 

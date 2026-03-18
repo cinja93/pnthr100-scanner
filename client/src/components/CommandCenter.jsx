@@ -342,7 +342,33 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
 
   const sizingStop = position.originalStop || position.stopPrice;
   const pc   = sizePosition({ netLiquidity, entryPrice: position.entryPrice, stopPrice: sizingStop, maxGapPct: position.maxGapPct || 0, direction: position.direction });
-  const rawLots = buildLots({ entryPrice: position.entryPrice, stopPrice: sizingStop, totalShares: pc.totalShares, direction: position.direction, fills: position.fills });
+
+  // ── Lot 1 fill recalculation ─────────────────────────────────────────────
+  // If user filled Lot 1 with more/fewer shares than recommended, scale the
+  // total target (and all subsequent lot targets) from the actual fill.
+  const lot1Fill       = position.fills?.[1];
+  const lot1Actual     = lot1Fill?.filled && lot1Fill?.shares ? +lot1Fill.shares : null;
+  const lot1FillPrice  = lot1Fill?.price ? +lot1Fill.price : position.entryPrice;
+  const lot1RPS        = Math.abs(lot1FillPrice - sizingStop);
+  const lot1Recommended = Math.max(1, Math.round(pc.totalShares * STRIKE_PCT[0]));
+  let effectiveTotal   = pc.totalShares;
+  let sizeWarning      = null;
+
+  if (lot1Actual !== null && lot1Actual !== lot1Recommended) {
+    const impliedTotal    = Math.round(lot1Actual / STRIKE_PCT[0]);
+    const maxByTickerCap  = lot1FillPrice > 0 ? Math.floor(netLiquidity * 0.10 / lot1FillPrice) : impliedTotal;
+    const maxByVitality   = lot1RPS > 0 ? Math.floor(netLiquidity * 0.01 / lot1RPS) : impliedTotal;
+    const cappedTotal     = Math.min(impliedTotal, maxByTickerCap, maxByVitality);
+    effectiveTotal        = Math.max(lot1Actual, cappedTotal); // never less than what was actually bought
+    if (impliedTotal > cappedTotal) {
+      const impliedVal = (impliedTotal * lot1FillPrice).toLocaleString(undefined, { maximumFractionDigits: 0 });
+      const capVal     = (netLiquidity * 0.10).toLocaleString(undefined, { maximumFractionDigits: 0 });
+      sizeWarning = `Lot 1 fill (${lot1Actual} shr) implies ${impliedTotal} total shares ($${impliedVal}) — exceeds 10% ticker cap ($${capVal}). Subsequent lots capped to ${cappedTotal} shares.`;
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const rawLots = buildLots({ entryPrice: position.entryPrice, stopPrice: sizingStop, totalShares: effectiveTotal, direction: position.direction, fills: position.fills });
   const lots = enrichLots(rawLots, position.entryPrice, position.stopPrice, position.direction);
   const isLong      = position.direction === 'LONG';
   const highFilled  = Math.max(...lots.filter(l => l.filled).map(l => l.lot), 0);
@@ -500,7 +526,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
           ))}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#555', marginTop: 3 }}>
-          <span>{totShr}/{pc.totalShares} shares · Avg: ${avg.toFixed(2)}</span>
+          <span>{totShr}/{effectiveTotal} shares · Avg: ${avg.toFixed(2)}</span>
           <span>{isRecycled ? 'RECYCLED · ' : actualRisk > 0 ? `$${actualRisk.toFixed(0)} risk · ` : ''}Value: ${posVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
         </div>
       </div>
@@ -526,6 +552,13 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
             <div style={{ padding: '5px 18px', fontSize: 11, color: '#FFD700',
               background: 'rgba(255,215,0,0.03)', borderBottom: '1px solid rgba(255,215,0,0.06)' }}>
               ★ Triggers cascade from Lot 1 fill: ${lots[0].actualPrice}
+            </div>
+          )}
+          {sizeWarning && (
+            <div style={{ padding: '6px 18px', fontSize: 11, color: '#ff9800',
+              background: 'rgba(255,152,0,0.08)', borderBottom: '1px solid rgba(255,152,0,0.15)',
+              display: 'flex', alignItems: 'center', gap: 6 }}>
+              ⚠ {sizeWarning}
             </div>
           )}
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>

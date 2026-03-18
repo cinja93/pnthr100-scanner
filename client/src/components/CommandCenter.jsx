@@ -353,6 +353,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const lot1Recommended = Math.max(1, Math.round(pc.totalShares * STRIKE_PCT[0]));
   let effectiveTotal   = pc.totalShares;
   let sizeWarning      = null;
+  let adjShares        = null; // null = no adjustment; array[5] = adjusted per-lot share counts
 
   if (lot1Actual !== null && lot1Actual !== lot1Recommended) {
     const impliedTotal    = Math.round(lot1Actual / STRIKE_PCT[0]);
@@ -360,6 +361,15 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
     const maxByVitality   = lot1RPS > 0 ? Math.floor(netLiquidity * 0.01 / lot1RPS) : impliedTotal;
     const cappedTotal     = Math.min(impliedTotal, maxByTickerCap, maxByVitality);
     effectiveTotal        = Math.max(lot1Actual, cappedTotal); // never less than what was actually bought
+
+    // Redistribute remaining cap shares across Lots 2-5 proportionally
+    const remaining = Math.max(0, effectiveTotal - lot1Actual);
+    const l2 = Math.round(remaining * 30 / 85);
+    const l3 = Math.round(remaining * 25 / 85);
+    const l4 = Math.round(remaining * 20 / 85);
+    const l5 = Math.max(0, remaining - l2 - l3 - l4); // absorb rounding remainder
+    adjShares = [lot1Actual, l2, l3, l4, l5]; // index 0 = Lot 1
+
     if (impliedTotal > cappedTotal) {
       const impliedVal = (impliedTotal * lot1FillPrice).toLocaleString(undefined, { maximumFractionDigits: 0 });
       const capVal     = (netLiquidity * 0.10).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -581,7 +591,18 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                   <tr key={i} style={{ background: bg, borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                     <td style={{ padding: '8px 8px', fontWeight: 700, color: tc, textAlign: 'right' }}>#{l.lot}</td>
                     <td style={{ padding: '8px 8px', fontFamily: 'sans-serif', fontSize: 11, fontWeight: 600, color: tc, textAlign: 'center' }}>{l.name}</td>
-                    <td style={{ padding: '8px 8px', textAlign: 'right', color: '#666', fontSize: 11 }}>{l.targetShares} ({l.pctLabel}%)</td>
+                    <td style={{ padding: '8px 8px', textAlign: 'right', fontSize: 11 }}>
+                      {adjShares && adjShares[i] !== l.targetShares ? (
+                        <span style={{ whiteSpace: 'nowrap' }}>
+                          <span style={{ color: '#444', textDecoration: 'line-through' }}>{l.targetShares}</span>
+                          <span style={{ color: '#555' }}> → </span>
+                          <span style={{ fontWeight: 700, color: l.filled ? '#888' : '#FFD700' }}>{adjShares[i]}</span>
+                          <span style={{ color: '#555', fontSize: 10 }}> ({l.pctLabel}%)</span>
+                        </span>
+                      ) : (
+                        <span style={{ color: '#666' }}>{l.targetShares} ({l.pctLabel}%)</span>
+                      )}
+                    </td>
                     <td style={{ padding: '4px 4px', textAlign: 'right' }}>
                       {ed ? <input type="number" value={ev.shares} onChange={e => setEv(v => ({ ...v, shares: e.target.value }))} style={{ ...fI, width: 48 }} />
                           : <span style={{ fontWeight: 700, fontSize: 13, color: l.filled ? '#e8e6e3' : '#555' }}>{l.filled ? l.actualShares : '—'}</span>}

@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import mongoSanitize from 'express-mongo-sanitize';
 import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks, getJungleStocks } from './stockService.js';
 import { getSignals, getCachedSignals } from './signalService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
@@ -66,9 +68,37 @@ function normalizeSector(sector) {
 }
 
 // Middleware
-const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
-app.use(cors({ origin: allowedOrigin }));
+// Helmet — secure HTTP headers (XSS, clickjacking, MIME sniffing, etc.)
+app.use(helmet({ contentSecurityPolicy: false })); // CSP disabled: Vercel handles it
+
+// CORS — support comma-separated origins in ALLOWED_ORIGIN env var
+const rawOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
+const allowedOrigins = rawOrigin.split(',').map(o => o.trim()).filter(Boolean);
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (Render health checks, curl, etc.)
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+}));
+
 app.use(express.json());
+
+// MongoDB injection guard — strips $ and . from req.body, query, params
+app.use(mongoSanitize());
+
+// General API rate limit — 120 requests per minute per IP
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down.' },
+});
+app.use('/api/', apiLimiter);
 
 // Rate limiting for auth endpoints — 10 attempts per 15 minutes per IP
 const authLimiter = rateLimit({
@@ -77,6 +107,18 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many attempts, please try again later' },
+});
+
+// ── Health check (public, no auth) ────────────────────────────────────────
+app.get('/api/health', async (_req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    await db.command({ ping: 1 });
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
 });
 
 // ── Auth routes (public — no middleware) ───────────────────────────────────

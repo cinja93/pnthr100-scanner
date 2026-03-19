@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
-import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchKillPipeline, fetchNav } from '../services/api';
-import { API_BASE, authHeaders } from '../services/api';
+import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchKillPipeline, fetchNav, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, calcHeat, STRIKE_PCT } from '../utils/sizingUtils.js';
+import { useQueue } from '../contexts/QueueContext';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
 import KillBadge from './KillBadge';
@@ -256,8 +256,8 @@ function formatWeekDate(timeStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function ChartModal({ stocks, initialIndex, earnings = {}, onClose, onWatchlistChange,
-  isAdmin = false, queuedTickers = new Set(), onQueueToggle }) {
+export default function ChartModal({ stocks, initialIndex, earnings = {}, onClose, onWatchlistChange }) {
+  const { isAdmin, queuedTickers, toggleQueue, nav: contextNav } = useQueue() || {};
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [range, setRange] = useState('12m');
   const [allWeeklyData, setAllWeeklyData] = useState([]);
@@ -581,12 +581,15 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
     setSizeLoading(true);
     setSizePanel(null);
     try {
-      // Fetch nav (cached per session)
-      if (!navCache.current) {
-        const navData = await fetchNav();
-        navCache.current = navData.nav || 100000;
+      // Nav: prefer context (loaded on mount by QueueProvider), fall back to local fetch
+      let nav = contextNav;
+      if (!nav) {
+        if (!navCache.current) {
+          const navData = await fetchNav();
+          navCache.current = navData.nav || 100000;
+        }
+        nav = navCache.current;
       }
-      const nav = navCache.current;
 
       // Fetch gap risk + fresh price from ticker endpoint
       const tickerRes = await fetch(`${API_BASE}/api/ticker/${stock.ticker}`, { headers: authHeaders() });
@@ -639,12 +642,12 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   }
 
   function handleQueueToggle() {
-    if (!onQueueToggle || !sizePanel) return;
-    const isQueued = queuedTickers.has(stock.ticker);
+    if (!toggleQueue || !sizePanel) return;
+    const isQueued = queuedTickers?.has(stock.ticker);
     if (isQueued) {
-      onQueueToggle({ ticker: stock.ticker, _remove: true });
+      toggleQueue({ ticker: stock.ticker, _remove: true });
     } else {
-      onQueueToggle({
+      toggleQueue({
         id:               Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
         ticker:           stock.ticker,
         signal:           stock.signal,
@@ -685,7 +688,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
             </div>
           </div>
           <div className={styles.headerActions}>
-            {isAdmin && stock.signal && (
+            {isAdmin && (
               <>
                 <button
                   onClick={handleSizeIt}
@@ -701,14 +704,14 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                 {sizePanel && (
                   <button
                     onClick={handleQueueToggle}
-                    style={{ background: queuedTickers.has(stock.ticker) ? '#28a745' : 'rgba(40,167,69,0.15)',
-                      color: queuedTickers.has(stock.ticker) ? '#fff' : '#28a745',
-                      border: `1px solid ${queuedTickers.has(stock.ticker) ? '#28a745' : 'rgba(40,167,69,0.4)'}`,
+                    style={{ background: queuedTickers?.has(stock.ticker) ? '#28a745' : 'rgba(40,167,69,0.15)',
+                      color: queuedTickers?.has(stock.ticker) ? '#fff' : '#28a745',
+                      border: `1px solid ${queuedTickers?.has(stock.ticker) ? '#28a745' : 'rgba(40,167,69,0.4)'}`,
                       borderRadius: 5, padding: '5px 12px', fontSize: 11, fontWeight: 700,
                       cursor: 'pointer', letterSpacing: '0.04em' }}
-                    title={queuedTickers.has(stock.ticker) ? 'Remove from queue' : 'Add to entry queue'}
+                    title={queuedTickers?.has(stock.ticker) ? 'Remove from queue' : 'Add to entry queue'}
                   >
-                    {queuedTickers.has(stock.ticker) ? 'QUEUED ✓' : 'QUEUE IT'}
+                    {queuedTickers?.has(stock.ticker) ? 'QUEUED ✓' : 'QUEUE IT'}
                   </button>
                 )}
               </>

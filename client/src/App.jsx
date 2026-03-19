@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { AuthContext } from './AuthContext';
+import { QueueProvider, useQueue } from './contexts/QueueContext';
+import QueueReviewPanel from './components/QueueReviewPanel';
 import StockTable from './components/StockTable';
 import ChartModal from './components/ChartModal';
 import FilterBar from './components/FilterBar';
@@ -98,12 +100,15 @@ function App() {
   }
   return (
     <AuthContext.Provider value={{ currentUser, isAdmin, updateCurrentUser }}>
-      <AppInner currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />
+      <QueueProvider>
+        <AppInner currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />
+      </QueueProvider>
     </AuthContext.Provider>
   );
 }
 
 function AppInner({ currentUser, setCurrentUser, onLogout }) {
+  const { isAdmin: qIsAdmin, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
   const [activePage, setActivePage] = useState(
     () => localStorage.getItem('pnthr_page') || currentUser?.defaultPage || 'long'
   );
@@ -404,6 +409,33 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
+      )}
+
+      {/* Floating queue counter — visible on all pages */}
+      {qIsAdmin && queueSize > 0 && !showQueuePanel && (
+        <div
+          onClick={() => setShowQueuePanel(true)}
+          style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 200,
+            background: '#FFD700', color: '#000', fontWeight: 800, fontSize: 12,
+            padding: '10px 18px', borderRadius: 24, cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(255,215,0,0.4)', letterSpacing: '0.05em',
+            userSelect: 'none' }}>
+          ⚡ QUEUE ({queueSize}) — REVIEW →
+        </div>
+      )}
+
+      {/* Send success toast */}
+      {sendSuccess && (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 200,
+          background: '#28a745', color: '#fff', fontWeight: 700, fontSize: 12,
+          padding: '10px 18px', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}>
+          ✓ Entries sent to Command!
+        </div>
+      )}
+
+      {/* Queue review panel */}
+      {showQueuePanel && qIsAdmin && (
+        <QueueReviewPanel onClose={() => setShowQueuePanel(false)} />
       )}
     </div>
   );

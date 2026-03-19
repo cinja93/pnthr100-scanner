@@ -619,11 +619,27 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                 <span style={{ color: '#555' }}>Avg Cost: </span>
                 <b style={{ color: '#FFD700' }}>${avg.toFixed(2)}</b>
                 <span style={{ color: '#555', fontWeight: 400 }}> ({totShr} shr)</span>
-                {position.ibkrAvgCost && Math.abs(+position.ibkrAvgCost - avg) > 0.01 && (
-                  <span style={{ color: '#ffc107', marginLeft: 6, fontSize: 10, fontWeight: 400 }}>
-                    ⚠ IBKR ${(+position.ibkrAvgCost).toFixed(2)} (${Math.abs(+position.ibkrAvgCost - avg).toFixed(2)} diff)
-                  </span>
-                )}
+                {position.ibkrAvgCost && (() => {
+                  const ibkrAvg  = +position.ibkrAvgCost;
+                  const diff     = Math.abs(ibkrAvg - avg);
+                  const diffPct  = avg > 0 ? diff / avg * 100 : 0;
+                  if (diff < 0.01) return (
+                    <span style={{ color: '#28a745', marginLeft: 6, fontSize: 10, fontWeight: 400 }}>
+                      ✓ matches IBKR
+                    </span>
+                  );
+                  if (diffPct < 0.1) return (
+                    <span style={{ color: '#6ea8fe', marginLeft: 6, fontSize: 10, fontWeight: 400 }}>
+                      ℹ IBKR ${ibkrAvg.toFixed(2)} (${diff.toFixed(2)} diff — likely commissions)
+                    </span>
+                  );
+                  return (
+                    <span style={{ color: '#ffc107', marginLeft: 6, fontSize: 10, fontWeight: 400, cursor: 'pointer', textDecoration: 'underline dotted' }}
+                      title="Significant avg cost difference — check your lot fill prices">
+                      ⚠ IBKR ${ibkrAvg.toFixed(2)} (${diff.toFixed(2)} diff — check fill prices)
+                    </span>
+                  );
+                })()}
               </span>
             )}
             <span>Entry: <b style={{ color: '#aaa' }}>${position.entryPrice}</b></span>

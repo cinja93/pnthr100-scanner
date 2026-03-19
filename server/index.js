@@ -38,6 +38,7 @@ import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
 import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateToken, resolveRole } from './auth.js';
+import { ibkrSync } from './ibkrSync.js';
 import {
   getSupplementalStocks,
   addSupplementalStock,
@@ -1554,6 +1555,7 @@ app.get('/api/positions',           authenticateJWT, positionsGetAll);
 app.post('/api/positions',          authenticateJWT, positionsSave);
 app.post('/api/positions/close',    authenticateJWT, positionsClose);
 app.delete('/api/positions/:id',    authenticateJWT, positionsDelete);
+app.post('/api/ibkr/sync',          authenticateJWT, ibkrSync);
 app.get('/api/ticker/:symbol',      authenticateJWT, tickerHandler);
 app.get('/api/regime',              authenticateJWT, regimeHandler);
 

@@ -490,6 +490,18 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
           {staleLevel === 1 && <Badge color="#664d03" bg="#fff3cd" small>STALE {tradDays}/20</Badge>}
           {t2blocked && <Badge color="#664d03" bg="#fff3cd" small>GATE {Math.max(0, 5 - tradDays)}d</Badge>}
           <span style={{ fontSize: 11, color: '#555' }}>{position.sector}</span>
+          {/* IBKR share count mismatch warning */}
+          {position.ibkrShares !== undefined && (() => {
+            const pnthrShares = Object.values(position.fills || {})
+              .reduce((s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0);
+            const diff = Math.abs(position.ibkrShares) - pnthrShares;
+            if (diff === 0) return null;
+            return (
+              <span style={{ color: '#ffc107', fontSize: 11 }}>
+                ⚠ IBKR {Math.abs(position.ibkrShares)} shr (PNTHR: {pnthrShares})
+              </span>
+            );
+          })()}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           {nextDist !== null && (
@@ -1307,6 +1319,20 @@ export default function CommandCenter() {
               {heat.theoPct}% heat · ${heat.actual$} actual · {heat.slots} slots
             </span>
           </div>
+          {/* IBKR sync indicator — visible when any position has been synced from TWS */}
+          {(() => {
+            const ibkrTs = positions.find(p => p.ibkrSyncedAt)?.ibkrSyncedAt;
+            if (!ibkrTs) return null;
+            const secsAgo = Math.round((Date.now() - new Date(ibkrTs).getTime()) / 1000);
+            const fresh   = secsAgo < 300;
+            const label   = secsAgo < 60 ? `${secsAgo}s ago` : `${Math.floor(secsAgo / 60)}m ago`;
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ color: fresh ? '#28a745' : '#888', fontSize: 10 }}>● IBKR</span>
+                <span style={{ color: '#555', fontSize: 10, fontFamily: 'monospace' }}>{label}</span>
+              </div>
+            );
+          })()}
           {/* Refresh controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 6, height: 6, borderRadius: 3,

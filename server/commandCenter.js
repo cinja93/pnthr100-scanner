@@ -245,12 +245,15 @@ export async function positionsGetAll(req, res) {
     const saturatedSectors = Object.entries(sectorCounts)
       .filter(([, cnt]) => cnt >= 3).map(([s]) => s);
 
+    const IBKR_FRESH_MS = 5 * 60 * 1000; // 5 minutes
     const enriched = positions.map(p => {
-      const rsi = rsiMap[p.ticker] ?? null;
+      const rsi       = rsiMap[p.ticker] ?? null;
+      const ibkrFresh = p.ibkrSyncedAt &&
+        (Date.now() - new Date(p.ibkrSyncedAt).getTime()) < IBKR_FRESH_MS;
       return {
         ...p,
-        currentPrice:      live[p.ticker]?.price   || p.currentPrice,
-        priceSource:       live[p.ticker] ? 'live' : 'stored',
+        currentPrice:      ibkrFresh ? p.currentPrice : (live[p.ticker]?.price || p.currentPrice),
+        priceSource:       ibkrFresh ? 'ibkr' : (live[p.ticker] ? 'live' : 'stored'),
         dayHigh:           live[p.ticker]?.dayHigh  || null,
         dayLow:            live[p.ticker]?.dayLow   || null,
         tradingDaysActive: tradingDaysSince(p.createdAt),

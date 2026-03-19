@@ -95,7 +95,6 @@ class PNTHRBridge(EWrapper, EClient):
     def nextValidId(self, orderId):
         """Called when the connection is fully established and ready."""
         print(f"[BRIDGE] Ready (next order ID: {orderId})")
-        self._request_data()
 
     # ── Data requests ─────────────────────────────────────────────────────────
     def _request_data(self):
@@ -241,18 +240,19 @@ def main():
         print("[BRIDGE] Not connected after 2s. Check TWS API settings and port.")
         sys.exit(1)
 
+    # Subscribe once — TWS streams updates continuously after this
+    app.reqAccountUpdates(True, "")
+    app.reqPositions()
+
+    # Wait for initial data load (up to 15s)
+    app.account_ready.wait(timeout=15)
+    app.positions_ready.wait(timeout=15)
+
     print(f"[BRIDGE] Syncing every {SYNC_INTERVAL}s. Press Ctrl+C to stop.\n")
 
     try:
         while True:
             if app.connected:
-                # Fresh data request
-                app._request_data()
-
-                # Wait up to 10s for both account + positions to arrive
-                app.account_ready.wait(timeout=10)
-                app.positions_ready.wait(timeout=10)
-
                 payload = app.get_payload()
                 if payload['account']['netLiquidation'] > 0:
                     push_to_pnthr(payload)
@@ -263,6 +263,9 @@ def main():
                 try:
                     app.connect(TWS_HOST, TWS_PORT, TWS_CLIENT_ID)
                     time.sleep(2)
+                    app.reqAccountUpdates(True, "")
+                    app.reqPositions()
+                    app.account_ready.wait(timeout=15)
                 except Exception:
                     pass
 

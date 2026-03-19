@@ -20,8 +20,46 @@ import CommandCenter from './components/CommandCenter';
 import NewsPage from './components/NewsPage';
 import SignalHistoryPage from './components/SignalHistoryPage';
 import LoginPage from './components/LoginPage';
-import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken } from './services/api';
+import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken, authHeaders, API_BASE } from './services/api';
+import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
 import './App.css';
+
+function calcReadyLots(positions) {
+  const alerts = [];
+  for (const p of positions) {
+    if (p.status !== 'ACTIVE') continue;
+    const fills = p.fills || {};
+    const filledLotNums = Object.entries(fills).filter(([, f]) => f.filled).map(([k]) => +k);
+    const highFilled = filledLotNums.length > 0 ? Math.max(...filledLotNums) : 0;
+    if (highFilled >= 5) continue;
+    const nextLot = highFilled + 1;
+    if (nextLot < 1 || nextLot > 5) continue;
+    const isLong = p.direction === 'LONG';
+    const anchor = fills[1]?.filled && fills[1]?.price ? +fills[1].price : (p.entryPrice || 0);
+    if (!anchor) continue;
+    const trigger = isLong
+      ? +(anchor * (1 + LOT_OFFSETS[nextLot - 1])).toFixed(2)
+      : +(anchor * (1 - LOT_OFFSETS[nextLot - 1])).toFixed(2);
+    // Time gate: Lot 2 requires 5 trading days since Lot 1 fill
+    if (nextLot === 2 && (p.tradingDaysActive ?? 0) < 5) continue;
+    const cp = p.currentPrice;
+    if (!cp) continue;
+    const priceReady = isLong ? cp >= trigger : cp <= trigger;
+    if (!priceReady) continue;
+    alerts.push({ ticker: p.ticker, direction: p.direction, lot: nextLot, lotName: LOT_NAMES[nextLot - 1], trigger, currentPrice: cp });
+  }
+  return alerts;
+}
+
+function isMarketHoursApp() {
+  const now = new Date();
+  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day = et.getDay();
+  if (day === 0 || day === 6) return false;
+  const h = et.getHours(), m = et.getMinutes();
+  const mins = h * 60 + m;
+  return mins >= 570 && mins < 960; // 9:30–16:00 ET
+}
 
 const defaultFilters = {
   signals: [],
@@ -109,6 +147,23 @@ function App() {
 
 function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const { isAuthenticated, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
+  const [lotAlerts, setLotAlerts] = useState([]);
+
+  useEffect(() => {
+    if (!isAuthenticated) { setLotAlerts([]); return; }
+    const fetchAlerts = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/positions`, { headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        setLotAlerts(calcReadyLots(data.positions || []));
+      } catch { /* ignore */ }
+    };
+    fetchAlerts();
+    const iv = setInterval(() => { if (isMarketHoursApp()) fetchAlerts(); }, 60000);
+    return () => clearInterval(iv);
+  }, [isAuthenticated]);
+
   const [activePage, setActivePage] = useState(
     () => localStorage.getItem('pnthr_page') || currentUser?.defaultPage || 'long'
   );
@@ -294,6 +349,47 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
 
       <div className="content-wrapper">
+        {/* Lot Ready banner — visible on all pages when a pyramid lot is triggered */}
+        {isAuthenticated && lotAlerts.length > 0 && (
+          <div style={{
+            background: 'linear-gradient(90deg, rgba(40,167,69,0.15), rgba(40,167,69,0.05))',
+            borderBottom: '1px solid rgba(40,167,69,0.3)',
+            padding: '8px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            fontSize: 12,
+            flexWrap: 'wrap',
+          }}>
+            <span style={{ color: '#28a745', fontWeight: 800, whiteSpace: 'nowrap' }}>
+              🎯 {lotAlerts.length} LOT{lotAlerts.length > 1 ? 'S' : ''} READY
+            </span>
+            {lotAlerts.map((a, i) => (
+              <span key={i} style={{ color: '#aaa' }}>
+                <b style={{ color: '#fff' }}>{a.ticker}</b>
+                {' '}Lot {a.lot} ({a.lotName}) — trigger ${a.trigger.toFixed(2)}
+                {i < lotAlerts.length - 1 ? <span style={{ color: '#444', margin: '0 6px' }}>|</span> : null}
+              </span>
+            ))}
+            <button
+              onClick={() => navigate('command')}
+              style={{
+                marginLeft: 'auto',
+                background: '#28a745',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 4,
+                padding: '4px 14px',
+                fontWeight: 700,
+                fontSize: 11,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              GO TO COMMAND →
+            </button>
+          </div>
+        )}
         <main className="main">
 
           {/* Scanner pages (Long / Short) */}

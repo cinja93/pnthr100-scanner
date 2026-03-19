@@ -612,7 +612,19 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
         <div>
           <div style={{ padding: '6px 18px', display: 'flex', gap: 16, fontSize: 11, color: '#777',
             background: 'rgba(0,0,0,0.15)', borderTop: '1px solid rgba(255,255,255,0.04)',
-            borderBottom: '1px solid rgba(255,255,255,0.04)', flexWrap: 'wrap' }}>
+            borderBottom: '1px solid rgba(255,255,255,0.04)', flexWrap: 'wrap', alignItems: 'center' }}>
+            {totShr > 0 && (
+              <span style={{ fontWeight: 700, fontSize: 12 }}>
+                <span style={{ color: '#555' }}>Avg Cost: </span>
+                <b style={{ color: '#FFD700' }}>${avg.toFixed(2)}</b>
+                <span style={{ color: '#555', fontWeight: 400 }}> ({totShr} shr)</span>
+                {position.ibkrAvgCost && Math.abs(+position.ibkrAvgCost - avg) > 0.01 && (
+                  <span style={{ color: '#ffc107', marginLeft: 6, fontSize: 10, fontWeight: 400 }}>
+                    ⚠ IBKR ${(+position.ibkrAvgCost).toFixed(2)} (${Math.abs(+position.ibkrAvgCost - avg).toFixed(2)} diff)
+                  </span>
+                )}
+              </span>
+            )}
             <span>Entry: <b style={{ color: '#aaa' }}>${position.entryPrice}</b></span>
             {anchorDiffers && <span>Lot 1 fill: <b style={{ color: '#FFD700' }}>${lots[0].actualPrice}</b></span>}
             <span>Stop: <b style={{ color: isRecycled ? '#28a745' : '#dc3545' }}>${position.stopPrice}</b></span>

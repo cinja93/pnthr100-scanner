@@ -712,6 +712,31 @@ function PendingCard({ entry, nav, onConfirm, onDismiss }) {
   const [stop,      setStop]      = useState(String(entry.adjustedStop || entry.suggestedStop || ''));
   const [direction, setDirection] = useState(entry.direction || 'LONG');
   const [saving,    setSaving]    = useState(false);
+  const stopUserEdited            = useRef(false);
+
+  // On mount: fetch live PNTHR stop for this ticker and use it as the default
+  // (unless the user has already edited the stop field manually)
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchLiveStop() {
+      try {
+        const res  = await fetch(`${API_BASE}/api/signals`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ tickers: [entry.ticker] }),
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const s    = data[entry.ticker.toUpperCase()];
+        const liveStop = s?.pnthrStop ?? s?.stopPrice ?? null;
+        if (liveStop && !stopUserEdited.current) {
+          setStop(String(liveStop));
+        }
+      } catch { /* non-fatal — keep queued stop */ }
+    }
+    fetchLiveStop();
+    return () => { cancelled = true; };
+  }, [entry.ticker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isExpired  = Date.now() - new Date(entry.queuedAt).getTime() > FIVE_DAYS_MS;
   const isLong     = direction === 'LONG';
@@ -792,9 +817,10 @@ function PendingCard({ entry, nav, onConfirm, onDismiss }) {
             style={{ ...fI2, width: 112, color: '#aaa', fontSize: 11 }} />
         </div>
         <div>
-          <div style={{ fontSize: 9, color: '#666', marginBottom: 2, textTransform: 'uppercase' }}>Stop</div>
-          <input type="number" step="0.01" value={stop} onChange={e => setStop(e.target.value)}
-            style={{ ...fI2, width: 72, borderColor: 'rgba(220,53,69,0.35)', color: '#dc3545' }} />
+          <div style={{ fontSize: 9, color: '#666', marginBottom: 2, textTransform: 'uppercase' }}>Stop <span style={{ color: '#28a745', fontSize: 8 }}>PNTHR</span></div>
+          <input type="number" step="0.01" value={stop}
+            onChange={e => { stopUserEdited.current = true; setStop(e.target.value); }}
+            style={{ ...fI2, width: 80, borderColor: 'rgba(220,53,69,0.35)', color: '#dc3545' }} />
         </div>
         {previewLots && (
           <div style={{ fontSize: 11, color: '#555', fontFamily: 'monospace' }}>

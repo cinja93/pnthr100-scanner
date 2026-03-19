@@ -5,7 +5,7 @@
 // Live position data from /api/positions + kill signals from /api/kill-pipeline
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from 'react';
 import { API_BASE, authHeaders, updateUserProfile, fetchNav, fetchPendingEntries, confirmPendingEntry, dismissPendingEntry, deletePosition } from '../services/api.js';
 import { useAuth } from '../AuthContext';
 import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat } from '../utils/sizingUtils.js';
@@ -339,7 +339,9 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const [ev,            setEv]            = useState({});
   const [editingStop,   setEditingStop]   = useState(false);
   const [editDirection, setEditDirection] = useState(position.direction || 'LONG');
-  const [stopVal,     setStopVal]     = useState('');
+  const [stopVal,       setStopVal]       = useState('');
+  const [twsAvg,        setTwsAvg]        = useState('');
+  const [ratchetRec,    setRatchetRec]    = useState(null);
 
   const sizingStop = position.originalStop || position.stopPrice;
   const pc   = sizePosition({ netLiquidity, entryPrice: position.entryPrice, stopPrice: sizingStop, maxGapPct: position.maxGapPct || 0, direction: position.direction });
@@ -415,8 +417,10 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
 
   const startEdit = (n) => {
     const l = lots.find(x => x.lot === n);
+    const defaultShares = l.filled ? l.actualShares : (adjShares ? adjShares[n - 1] : l.targetShares);
     setEditing(n);
-    setEv({ price: l.actualPrice || l.triggerPrice, shares: l.filled ? l.actualShares : l.targetShares, date: l.actualDate || new Date().toISOString().split('T')[0] });
+    setTwsAvg('');
+    setEv({ price: l.actualPrice || l.triggerPrice, shares: defaultShares, date: l.actualDate || new Date().toISOString().split('T')[0] });
     if (n === 1) {
       setEditingStop(true);
       setStopVal(position.stopPrice.toString());
@@ -434,7 +438,12 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
     }
     onUpdate(position.id, updates);
     if (n === 1 && editingStop) { const v = parseFloat(stopVal); if (v) onUpdateStop(position.id, v); }
-    setEditing(null); setEditingStop(false);
+    // Show ratchet recommendation when Lot 3, 4, or 5 is filled
+    if (n >= 3) {
+      const rec = checkRatchet(nf, position.direction, position.stopPrice);
+      if (rec) setRatchetRec(rec);
+    }
+    setEditing(null); setEditingStop(false); setTwsAvg('');
   };
   const unfill = (n) => {
     const nf = { ...position.fills };
@@ -443,6 +452,40 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   };
   const saveStopOnly = () => { const v = parseFloat(stopVal); if (v) onUpdateStop(position.id, v); setEditingStop(false); };
   const startStopOnly = () => { setEditingStop(true); setStopVal(position.stopPrice.toString()); };
+
+  // Back-calculate a lot's fill price from the new TWS blended average
+  const calcLotFillFromAvg = (newAvg, lotShares, priorFills) => {
+    const priorShares = priorFills.reduce((s, f) => s + (+f.shares || 0), 0);
+    const priorCost   = priorFills.reduce((s, f) => s + ((+f.shares || 0) * (+f.price || 0)), 0);
+    const newTotal    = newAvg * (priorShares + lotShares);
+    return (newTotal - priorCost) / lotShares;
+  };
+
+  // Check if a stop ratchet recommendation should show after a lot fill
+  const checkRatchet = (newFills, direction, currentStop) => {
+    const filledNums = Object.entries(newFills)
+      .filter(([, f]) => f.filled && f.price)
+      .map(([k]) => +k);
+    if (!filledNums.length) return null;
+    const highFilled = Math.max(...filledNums);
+    const isLongDir  = direction === 'LONG';
+    let recStop = null, msg = null;
+    if (highFilled >= 3 && newFills[1]?.price) {
+      recStop = +newFills[1].price;
+      msg = `Lot 3 filled — ratchet stop to breakeven ($${recStop.toFixed(2)})`;
+    }
+    if (highFilled >= 4 && newFills[2]?.price) {
+      recStop = +newFills[2].price;
+      msg = `Lot 4 filled — lock stop to Lot 2 fill ($${recStop.toFixed(2)})`;
+    }
+    if (highFilled >= 5 && newFills[3]?.price) {
+      recStop = +newFills[3].price;
+      msg = `Lot 5 filled — lock stop to Lot 3 fill ($${recStop.toFixed(2)})`;
+    }
+    if (!recStop) return null;
+    const needsRatchet = isLongDir ? currentStop < recStop : currentStop > recStop;
+    return needsRatchet ? { recStop, msg } : null;
+  };
 
   const staleBorderColor = staleLevel === 3 ? 'rgba(220,53,69,0.4)'
                          : staleLevel === 2 ? 'rgba(255,140,0,0.35)'
@@ -607,11 +650,36 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                 const isNext = l.lot === highFilled + 1;
                 const gated  = isNext && l.lot === 2 && !t2met;
                 const ed     = editing === l.lot;
-                const bg     = l.filled ? 'rgba(40,167,69,0.04)' : isNext ? (gated ? 'rgba(255,193,7,0.03)' : 'rgba(255,215,0,0.04)') : 'transparent';
-                const tc     = l.filled ? '#28a745' : isNext ? (gated ? '#ffc107' : '#FFD700') : '#555';
+                // Contextual lot status for badges and fill buttons
+                const getLotStatus = () => {
+                  if (l.filled) return 'FILLED';
+                  if (l.lot === 2) {
+                    if (!t2met) return 'GATE';
+                    const priceReached = position.currentPrice &&
+                      (isLong ? position.currentPrice >= l.triggerPrice : position.currentPrice <= l.triggerPrice);
+                    return priceReached ? 'READY' : 'WAITING';
+                  }
+                  const priorFilled = position.fills?.[l.lot - 1]?.filled ?? false;
+                  if (!priorFilled) return 'LOCKED';
+                  const priceReached = position.currentPrice &&
+                    (isLong ? position.currentPrice >= l.triggerPrice : position.currentPrice <= l.triggerPrice);
+                  return priceReached ? 'READY' : 'WAITING';
+                };
+                const lotStatus = getLotStatus();
+                const bg = lotStatus === 'FILLED'  ? 'rgba(40,167,69,0.04)'
+                         : lotStatus === 'READY'   ? 'rgba(40,167,69,0.03)'
+                         : lotStatus === 'WAITING' ? 'rgba(255,215,0,0.04)'
+                         : lotStatus === 'GATE'    ? 'rgba(255,193,7,0.03)'
+                         : 'transparent';
+                const tc = lotStatus === 'FILLED'  ? '#28a745'
+                         : lotStatus === 'READY'   ? '#28a745'
+                         : lotStatus === 'WAITING' ? '#FFD700'
+                         : lotStatus === 'GATE'    ? '#ffc107'
+                         : '#555';
                 const showStopInput = i === 0;
                 return (
-                  <tr key={i} style={{ background: bg, borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <Fragment key={i}>
+                  <tr style={{ background: bg, borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                     <td style={{ padding: '8px 8px', fontWeight: 700, color: tc, textAlign: 'right' }}>#{l.lot}</td>
                     <td style={{ padding: '8px 8px', fontFamily: 'sans-serif', fontSize: 11, fontWeight: 600, color: tc, textAlign: 'center' }}>{l.name}</td>
                     <td style={{ padding: '8px 8px', textAlign: 'right', fontSize: 11 }}>
@@ -680,24 +748,96 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                           <button onClick={saveStopOnly} style={{ background: '#28a745', color: '#fff', border: 'none', borderRadius: 3, padding: '3px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>SAVE</button>
                           <button onClick={() => setEditingStop(false)} style={{ background: 'none', color: '#888', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 3, padding: '3px 6px', fontSize: 10, cursor: 'pointer' }}>✕</button>
                         </div>
-                      ) : l.filled ? (
+                      ) : lotStatus === 'FILLED' ? (
                         <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center' }}>
                           <Badge color="#0f5132" bg="#d1e7dd" small>FILLED</Badge>
                           <button onClick={() => startEdit(l.lot)} style={{ background: 'none', color: '#888', border: 'none', fontSize: 10, cursor: 'pointer', textDecoration: 'underline' }}>edit</button>
                           {showStopInput && !editingStop && <button onClick={startStopOnly} style={{ background: 'none', color: '#dc3545', border: 'none', fontSize: 10, cursor: 'pointer', textDecoration: 'underline' }}>stop</button>}
                           {l.lot === highFilled && <button onClick={() => unfill(l.lot)} style={{ background: 'none', color: '#dc3545', border: 'none', fontSize: 10, cursor: 'pointer' }}>✕</button>}
                         </div>
-                      ) : isNext ? (
-                        gated
-                          ? <Badge color="#664d03" bg="#fff3cd" small>GATE {Math.max(0, 5 - tradDays)}d</Badge>
-                          : <button onClick={() => startEdit(l.lot)} style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 3, padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>FILL</button>
-                      ) : <Badge color="#555" small>{isLong ? 'BUY' : 'SELL'} LMT</Badge>}
+                      ) : lotStatus === 'GATE' ? (
+                        <Badge color="#664d03" bg="#fff3cd" small>GATE {Math.max(0, 5 - tradDays)}d</Badge>
+                      ) : lotStatus === 'LOCKED' ? (
+                        <Badge color="#444" bg="rgba(255,255,255,0.05)" small>LOCKED</Badge>
+                      ) : lotStatus === 'WAITING' ? (
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center' }}>
+                          <Badge color="#666" small>WAITING</Badge>
+                          <button onClick={() => startEdit(l.lot)} style={{ background: 'none', color: '#aaa', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 3, padding: '2px 8px', fontSize: 10, cursor: 'pointer' }}>FILL</button>
+                        </div>
+                      ) : lotStatus === 'READY' ? (
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center' }}>
+                          <Badge color="#0f5132" bg="#d1e7dd" small>READY</Badge>
+                          <button onClick={() => startEdit(l.lot)} style={{ background: '#28a745', color: '#fff', border: 'none', borderRadius: 3, padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                            FILL LOT {l.lot}
+                          </button>
+                        </div>
+                      ) : null}
                     </td>
                   </tr>
+                  {/* TWS average back-calc helper row — shows when editing lots 2-5 */}
+                  {ed && l.lot > 1 && (
+                    <tr key={`${i}-tws`} style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <td colSpan={12} style={{ padding: '4px 12px 8px 40px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 11, color: '#666' }}>Or enter TWS avg:</span>
+                          <input
+                            type="number" step="0.01"
+                            value={twsAvg}
+                            placeholder="e.g. 237.79"
+                            style={{ ...fI, width: 90 }}
+                            onChange={e => {
+                              setTwsAvg(e.target.value);
+                              const avg = +e.target.value;
+                              const shr = +ev.shares;
+                              if (avg > 0 && shr > 0) {
+                                const priorFills = Object.values(position.fills || {}).filter(f => f.filled && f.price);
+                                const calc = calcLotFillFromAvg(avg, shr, priorFills);
+                                if (calc > 0) setEv(prev => ({ ...prev, price: calc.toFixed(2) }));
+                              }
+                            }}
+                          />
+                          {twsAvg && +ev.shares > 0 && (() => {
+                            const priorFills = Object.values(position.fills || {}).filter(f => f.filled && f.price);
+                            const calc = calcLotFillFromAvg(+twsAvg, +ev.shares, priorFills);
+                            return calc > 0
+                              ? <span style={{ fontSize: 11, color: '#fcf000' }}>→ Lot {l.lot} fill: <strong>${calc.toFixed(2)}</strong></span>
+                              : null;
+                          })()}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
+          {/* Stop ratchet recommendation — shown after Lot 3/4/5 fill */}
+          {ratchetRec && (
+            <div style={{
+              margin: '0 18px 8px',
+              padding: '8px 12px',
+              background: 'rgba(255,193,7,0.12)',
+              border: '1px solid rgba(255,193,7,0.4)',
+              borderRadius: 6,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 12
+            }}>
+              <span style={{ color: '#ffc107', flex: 1 }}>⚡ {ratchetRec.msg}</span>
+              <button
+                onClick={() => { onUpdateStop(position.id, ratchetRec.recStop); setRatchetRec(null); }}
+                style={{ background: '#ffc107', color: '#000', border: 'none', borderRadius: 4, padding: '3px 10px', fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>
+                RATCHET STOP
+              </button>
+              <button
+                onClick={() => setRatchetRec(null)}
+                style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>
+                ✕
+              </button>
+            </div>
+          )}
           {/* Delete position — hard remove from DB */}
           <div style={{ padding: '10px 18px', borderTop: '1px solid rgba(255,255,255,0.04)',
             display: 'flex', justifyContent: 'flex-end' }}>

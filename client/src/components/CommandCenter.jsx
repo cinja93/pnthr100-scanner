@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { API_BASE, authHeaders, updateUserProfile, fetchPendingEntries, confirmPendingEntry, dismissPendingEntry, deletePosition } from '../services/api.js';
+import { API_BASE, authHeaders, updateUserProfile, fetchNav, fetchPendingEntries, confirmPendingEntry, dismissPendingEntry, deletePosition } from '../services/api.js';
 import { useAuth } from '../AuthContext';
 import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat } from '../utils/sizingUtils.js';
 
@@ -1184,9 +1184,17 @@ export default function CommandCenter() {
         });
       }
       setLastRefresh(new Date());
+      // Sync NAV from server (picks up IBKR NetLiquidation updates)
+      try {
+        const profile = await fetchNav();
+        if (profile?.accountSize && profile.accountSize !== nav) {
+          setNav(profile.accountSize);
+          updateCurrentUser({ accountSize: profile.accountSize });
+        }
+      } catch { /* silent */ }
     } catch { /* silent — prices stay as-is */ }
     setRefreshing(false);
-  }, [refreshing]);
+  }, [refreshing, nav]);
 
   // Keep ref in sync so the interval always calls the latest closure
   useEffect(() => { refreshFnRef.current = refreshPrices; }, [refreshPrices]);

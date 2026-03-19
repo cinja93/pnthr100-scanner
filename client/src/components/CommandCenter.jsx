@@ -334,10 +334,11 @@ async function apiPost(path, body) {
 // ── Pyramid Card (position row) ───────────────────────────────────────────────
 
 function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onDelete, flashed }) {
-  const [expanded,    setExpanded]    = useState(false);
-  const [editing,     setEditing]     = useState(null);
-  const [ev,          setEv]          = useState({});
-  const [editingStop, setEditingStop] = useState(false);
+  const [expanded,      setExpanded]      = useState(false);
+  const [editing,       setEditing]       = useState(null);
+  const [ev,            setEv]            = useState({});
+  const [editingStop,   setEditingStop]   = useState(false);
+  const [editDirection, setEditDirection] = useState(position.direction || 'LONG');
   const [stopVal,     setStopVal]     = useState('');
 
   const sizingStop = position.originalStop || position.stopPrice;
@@ -416,12 +417,22 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
     const l = lots.find(x => x.lot === n);
     setEditing(n);
     setEv({ price: l.actualPrice || l.triggerPrice, shares: l.filled ? l.actualShares : l.targetShares, date: l.actualDate || new Date().toISOString().split('T')[0] });
-    if (n === 1) { setEditingStop(true); setStopVal(position.stopPrice.toString()); }
+    if (n === 1) {
+      setEditingStop(true);
+      setStopVal(position.stopPrice.toString());
+      setEditDirection(position.direction || 'LONG'); // always reset to current on open
+    }
   };
   const save = (n) => {
     const nf = { ...position.fills };
     nf[n] = { filled: true, price: +ev.price, shares: +ev.shares, date: ev.date };
-    onUpdate(position.id, nf);
+    // Build updates object — direction only included when it changed on Lot 1
+    const updates = { fills: nf };
+    if (n === 1 && editDirection !== position.direction) {
+      updates.direction = editDirection;
+      updates.signal    = editDirection === 'LONG' ? 'BL' : 'SS';
+    }
+    onUpdate(position.id, updates);
     if (n === 1 && editingStop) { const v = parseFloat(stopVal); if (v) onUpdateStop(position.id, v); }
     setEditing(null); setEditingStop(false);
   };
@@ -635,7 +646,20 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                     </td>
                     <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                       {ed ? (
-                        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {l.lot === 1 && (
+                            <button
+                              onClick={() => setEditDirection(d => d === 'LONG' ? 'SHORT' : 'LONG')}
+                              title="Flip LONG ↔ SHORT"
+                              style={{
+                                background: editDirection === 'LONG' ? '#d1e7dd' : '#f8d7da',
+                                color: editDirection === 'LONG' ? '#0f5132' : '#842029',
+                                border: 'none', borderRadius: 4, padding: '3px 10px',
+                                fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                              }}>
+                              {editDirection} ⇄
+                            </button>
+                          )}
                           <button onClick={() => save(l.lot)} style={{ background: '#28a745', color: '#fff', border: 'none', borderRadius: 3, padding: '3px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>SAVE</button>
                           <button onClick={() => { setEditing(null); setEditingStop(false); }} style={{ background: 'none', color: '#888', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 3, padding: '3px 6px', fontSize: 10, cursor: 'pointer' }}>✕</button>
                         </div>
@@ -1185,9 +1209,14 @@ export default function CommandCenter() {
     setSaving(false);
   }, []);
 
-  const updateFills = useCallback((id, fills) => {
+  const updateFills = useCallback((id, updates) => {
+    // updates may be a plain fills object (legacy) or { fills, direction, signal }
+    const fills     = updates?.fills ?? updates;
+    const extraFields = updates?.fills ? { direction: updates.direction, signal: updates.signal } : {};
+    // strip undefined keys so we don't overwrite good values with undefined
+    Object.keys(extraFields).forEach(k => extraFields[k] === undefined && delete extraFields[k]);
     setPositions(prev => {
-      const updated = prev.map(x => x.id === id ? { ...x, fills } : x);
+      const updated = prev.map(x => x.id === id ? { ...x, fills, ...extraFields } : x);
       const pos = updated.find(x => x.id === id);
       if (pos) persistPosition(pos);
       return updated;

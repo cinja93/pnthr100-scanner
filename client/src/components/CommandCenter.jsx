@@ -756,9 +756,15 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                           {l.lot === highFilled && <button onClick={() => unfill(l.lot)} style={{ background: 'none', color: '#dc3545', border: 'none', fontSize: 10, cursor: 'pointer' }}>✕</button>}
                         </div>
                       ) : lotStatus === 'GATE' ? (
-                        <Badge color="#664d03" bg="#fff3cd" small>GATE {Math.max(0, 5 - tradDays)}d</Badge>
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center' }}>
+                          <Badge color="#664d03" bg="#fff3cd" small>GATE {Math.max(0, 5 - tradDays)}d</Badge>
+                          <button onClick={() => startEdit(l.lot)} style={{ background: 'none', color: '#aaa', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 3, padding: '2px 8px', fontSize: 10, cursor: 'pointer' }}>FILL</button>
+                        </div>
                       ) : lotStatus === 'LOCKED' ? (
-                        <Badge color="#444" bg="rgba(255,255,255,0.05)" small>LOCKED</Badge>
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center' }}>
+                          <Badge color="#444" bg="rgba(255,255,255,0.05)" small>LOCKED</Badge>
+                          <button onClick={() => startEdit(l.lot)} style={{ background: 'none', color: '#666', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 3, padding: '2px 8px', fontSize: 10, cursor: 'pointer' }}>FILL</button>
+                        </div>
                       ) : lotStatus === 'WAITING' ? (
                         <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center' }}>
                           <Badge color="#666" small>WAITING</Badge>

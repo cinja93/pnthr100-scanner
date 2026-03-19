@@ -102,7 +102,7 @@ export async function pendingEntriesPost(req, res) {
 
 // ── POST /api/pending-entries/:id/confirm ─────────────────────────────────────
 // Confirm a pending entry. Creates a full position in pnthr_portfolio.
-// Body: { fillPrice, shares, date, stop }
+// Body: { fillPrice, shares, date, stop, direction }
 
 export async function pendingEntryConfirm(req, res) {
   try {
@@ -114,8 +114,11 @@ export async function pendingEntryConfirm(req, res) {
     });
     if (!entry) return res.status(404).json({ error: 'Pending entry not found' });
 
-    const { fillPrice, shares, date, stop } = req.body;
+    const { fillPrice, shares, date, stop, direction } = req.body;
     if (!fillPrice || !shares) return res.status(400).json({ error: 'fillPrice and shares are required' });
+
+    // Allow direction override at confirm time (e.g. user flips LONG → SHORT)
+    const resolvedDirection = (direction === 'LONG' || direction === 'SHORT') ? direction : entry.direction;
 
     const posId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     const fills = { 1: { filled: true, price: +fillPrice, shares: +shares, date: date || new Date().toISOString().split('T')[0] } };
@@ -124,7 +127,7 @@ export async function pendingEntryConfirm(req, res) {
     const position = {
       id:           posId,
       ticker:       entry.ticker,
-      direction:    entry.direction,
+      direction:    resolvedDirection,
       entryPrice:   +fillPrice,
       originalStop: entry.adjustedStop || entry.suggestedStop,
       stopPrice:    stop ? +stop : (entry.adjustedStop || entry.suggestedStop),

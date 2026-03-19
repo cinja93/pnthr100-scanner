@@ -747,15 +747,31 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
               flexDirection: 'column',
               gap: 10,
             }}>
-              {/* Row 1: ticker · direction | lot 1 shares · total target */}
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+              {/* Row 1: ticker · direction toggle | lot 1 shares · total target */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 18, fontWeight: 900, color: '#FFD700', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
                     {stock.ticker}
                   </span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: dirColor, fontFamily: 'monospace' }}>
-                    {dirLabel}
-                  </span>
+                  <button
+                    onClick={() => setSizePanel(p => {
+                      const newDir  = p.direction === 'LONG' ? 'SHORT' : 'LONG';
+                      const newStop = newDir === 'SHORT'
+                        ? +(p.entry * 1.02).toFixed(2)
+                        : +(p.entry * 0.98).toFixed(2);
+                      const sizing  = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir });
+                      const lot1    = Math.max(1, Math.round(sizing.totalShares * 0.15));
+                      return { ...p, direction: newDir, adjustedStop: newStop, stop: newStop,
+                        totalShares: sizing.totalShares, lot1Shares: lot1,
+                        risk$: +(lot1 * Math.abs(p.entry - newStop)).toFixed(0) };
+                    })}
+                    title="Click to flip LONG ↔ SHORT"
+                    style={{ background: sizePanel.direction === 'SHORT' ? 'rgba(220,53,69,0.15)' : 'rgba(40,167,69,0.15)',
+                      border: `1.5px solid ${dirColor}`, color: dirColor,
+                      borderRadius: 5, padding: '3px 10px', fontSize: 12, fontWeight: 800,
+                      cursor: 'pointer', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+                    {dirLabel} ⇄
+                  </button>
                 </div>
                 <div style={{ display: 'flex', gap: 28, alignItems: 'baseline' }}>
                   <div>

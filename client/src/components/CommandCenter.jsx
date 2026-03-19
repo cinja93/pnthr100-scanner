@@ -710,22 +710,23 @@ function PendingCard({ entry, nav, onConfirm, onDismiss }) {
   const [shares,    setShares]    = useState(String(entry.lot1Shares || ''));
   const [date,      setDate]      = useState(new Date().toISOString().split('T')[0]);
   const [stop,      setStop]      = useState(String(entry.adjustedStop || entry.suggestedStop || ''));
+  const [direction, setDirection] = useState(entry.direction || 'LONG');
   const [saving,    setSaving]    = useState(false);
 
   const isExpired  = Date.now() - new Date(entry.queuedAt).getTime() > FIVE_DAYS_MS;
-  const isLong     = entry.direction === 'LONG';
+  const isLong     = direction === 'LONG';
 
   // Preview lot 2 / lot 3 triggers from current fill price
   const previewLots = fillPrice && +fillPrice > 0 ? buildLots({
     entryPrice: +fillPrice, stopPrice: +stop || entry.adjustedStop || entry.suggestedStop || 0,
-    totalShares: entry.totalTargetShares || 1, direction: entry.direction, fills: {},
+    totalShares: entry.totalTargetShares || 1, direction, fills: {},
   }) : null;
 
   const handleConfirm = async () => {
     if (!fillPrice || !shares) return;
     setSaving(true);
     try {
-      await onConfirm(entry.id, { fillPrice: +fillPrice, shares: +shares, date, stop: +stop || undefined });
+      await onConfirm(entry.id, { fillPrice: +fillPrice, shares: +shares, date, stop: +stop || undefined, direction });
     } catch { /* non-fatal */ }
     setSaving(false);
   };
@@ -744,7 +745,16 @@ function PendingCard({ entry, nav, onConfirm, onDismiss }) {
         background: 'rgba(255,215,0,0.04)', borderBottom: '1px dashed rgba(255,215,0,0.15)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 16, fontWeight: 800, fontFamily: 'monospace', color: '#FFD700' }}>{entry.ticker}</span>
-          <SigBadge d={entry.direction} />
+          {/* Direction toggle — click to flip LONG ↔ SHORT */}
+          <button onClick={() => setDirection(d => d === 'LONG' ? 'SHORT' : 'LONG')}
+            title="Click to flip direction"
+            style={{ background: isLong ? 'rgba(40,167,69,0.15)' : 'rgba(220,53,69,0.15)',
+              border: `1px solid ${isLong ? '#28a745' : '#dc3545'}`,
+              color: isLong ? '#28a745' : '#dc3545',
+              borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 800,
+              cursor: 'pointer', letterSpacing: '0.05em', userSelect: 'none' }}>
+            {direction} ⇄
+          </button>
           {entry.killTier && <TierBadge t={entry.killTier} />}
           {entry.sector && <span style={{ fontSize: 11, color: '#555' }}>{entry.sector}</span>}
           {entry.killScore != null && <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>Score: {entry.killScore}</span>}

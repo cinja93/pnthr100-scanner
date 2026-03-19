@@ -563,7 +563,8 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
               onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat(e.target.value); if (v) { onUpdatePrice(position.id, v); e.target.blur(); } } }}
               style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
                 borderRadius: 4, padding: '2px 6px', color: '#e8e6e3', fontSize: 15, fontFamily: 'monospace',
-                fontWeight: 700, width: 80, textAlign: 'right', outline: 'none' }}
+                fontWeight: 700, width: 80, textAlign: 'right', outline: 'none',
+                MozAppearance: 'textfield', WebkitAppearance: 'none' }}
               onFocus={e => { e.target.style.borderColor = '#FFD700'; e.target.style.color = '#FFD700'; }}
             />
           </div>

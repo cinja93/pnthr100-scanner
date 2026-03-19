@@ -82,19 +82,26 @@ export async function ibkrSync(req, res) {
           });
         }
 
+        // Sanity-check marketPrice: IBKR sometimes returns sentinel/garbage
+        // values (e.g. 600073) when the price feed isn't ready. Only accept
+        // prices that are plausible (> $0.01 and < $50,000).
+        const validPrice = typeof ibkr.marketPrice === 'number'
+          && ibkr.marketPrice > 0.01
+          && ibkr.marketPrice < 50000;
+
+        const $setFields = {
+          ibkrShares:        ibkrShares,
+          ibkrAvgCost:       ibkr.avgCost,
+          ibkrUnrealizedPNL: ibkr.unrealizedPNL,
+          ibkrMarketValue:   ibkr.marketValue,
+          ibkrSyncedAt:      syncedAt,
+        };
+        if (validPrice) $setFields.currentPrice = ibkr.marketPrice;
+
         return {
           updateOne: {
             filter: { id: pp.id, ownerId: userId },
-            update: {
-              $set: {
-                currentPrice:      ibkr.marketPrice,
-                ibkrShares:        ibkrShares,
-                ibkrAvgCost:       ibkr.avgCost,
-                ibkrUnrealizedPNL: ibkr.unrealizedPNL,
-                ibkrMarketValue:   ibkr.marketValue,
-                ibkrSyncedAt:      syncedAt,
-              },
-            },
+            update: { $set: $setFields },
           },
         };
       })

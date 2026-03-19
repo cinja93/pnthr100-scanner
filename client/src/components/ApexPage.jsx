@@ -604,7 +604,7 @@ export default function ApexPage() {
                               </span>
                             )}
                             <span className={styles.tickerText}>{stock.ticker}</span>
-                            {isAdmin && queuedTickers.has(stock.ticker) && (
+                            {queuedTickers.has(stock.ticker) && (
                               <span style={{ fontSize: 9, fontWeight: 800, background: '#FFD700', color: '#000',
                                 padding: '1px 5px', borderRadius: 3, letterSpacing: '0.04em' }}>QUEUED</span>
                             )}

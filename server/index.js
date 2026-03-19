@@ -1509,9 +1509,9 @@ app.get('/api/apex', authenticateJWT, async (req, res) => {
 // ── PNTHR Command Center ───────────────────────────────────────────────────────
 app.get('/api/kill-pipeline',       authenticateJWT, killPipelineHandler);
 app.get('/api/positions',           authenticateJWT, positionsGetAll);
-app.post('/api/positions',          authenticateJWT, requireAdmin, positionsSave);
-app.post('/api/positions/close',    authenticateJWT, requireAdmin, positionsClose);
-app.delete('/api/positions/:id',    authenticateJWT, requireAdmin, positionsDelete);
+app.post('/api/positions',          authenticateJWT, positionsSave);
+app.post('/api/positions/close',    authenticateJWT, positionsClose);
+app.delete('/api/positions/:id',    authenticateJWT, positionsDelete);
 app.get('/api/ticker/:symbol',      authenticateJWT, tickerHandler);
 app.get('/api/regime',              authenticateJWT, regimeHandler);
 
@@ -1519,9 +1519,9 @@ app.get('/api/regime',              authenticateJWT, regimeHandler);
 app.get('/api/settings/nav',                    authenticateJWT, navGet);
 app.post('/api/settings/nav',                   authenticateJWT, navPost);
 app.get('/api/pending-entries',                 authenticateJWT, pendingEntriesGet);
-app.post('/api/pending-entries',                authenticateJWT, requireAdmin, pendingEntriesPost);
-app.post('/api/pending-entries/:id/confirm',    authenticateJWT, requireAdmin, pendingEntryConfirm);
-app.post('/api/pending-entries/:id/dismiss',    authenticateJWT, requireAdmin, pendingEntryDismiss);
+app.post('/api/pending-entries',                authenticateJWT, pendingEntriesPost);
+app.post('/api/pending-entries/:id/confirm',    authenticateJWT, pendingEntryConfirm);
+app.post('/api/pending-entries/:id/dismiss',    authenticateJWT, pendingEntryDismiss);
 
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
 app.use('/api/newsletter', newsletterRouter);

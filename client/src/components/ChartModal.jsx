@@ -257,7 +257,7 @@ function formatWeekDate(timeStr) {
 }
 
 export default function ChartModal({ stocks, initialIndex, earnings = {}, onClose, onWatchlistChange }) {
-  const { isAdmin, queuedTickers, toggleQueue, nav: contextNav } = useQueue() || {};
+  const { isAuthenticated, queuedTickers, toggleQueue, nav: contextNav } = useQueue() || {};
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [range, setRange] = useState('12m');
   const [allWeeklyData, setAllWeeklyData] = useState([]);
@@ -688,7 +688,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
             </div>
           </div>
           <div className={styles.headerActions}>
-            {isAdmin && (
+            {isAuthenticated && (
               <>
                 <button
                   onClick={handleSizeIt}
@@ -729,7 +729,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
         </div>
 
         {/* SIZE IT panel — two-row data card */}
-        {isAdmin && sizePanel && (() => {
+        {isAuthenticated && sizePanel && (() => {
           const vitality      = +(sizePanel.nav * 0.01).toFixed(0);
           const heatAfter     = sizePanel.heatBefore + 1;
           const overCap       = heatAfter > 10;

@@ -108,7 +108,7 @@ function App() {
 }
 
 function AppInner({ currentUser, setCurrentUser, onLogout }) {
-  const { isAdmin: qIsAdmin, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
+  const { isAuthenticated, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
   const [activePage, setActivePage] = useState(
     () => localStorage.getItem('pnthr_page') || currentUser?.defaultPage || 'long'
   );
@@ -412,7 +412,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       )}
 
       {/* Floating queue counter — visible on all pages */}
-      {qIsAdmin && queueSize > 0 && !showQueuePanel && (
+      {isAuthenticated && queueSize > 0 && !showQueuePanel && (
         <div
           onClick={() => setShowQueuePanel(true)}
           style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 200,
@@ -434,7 +434,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       )}
 
       {/* Queue review panel */}
-      {showQueuePanel && qIsAdmin && (
+      {showQueuePanel && isAuthenticated && (
         <QueueReviewPanel onClose={() => setShowQueuePanel(false)} />
       )}
     </div>

@@ -7,7 +7,8 @@ const QueueContext = createContext(null);
 const SESSION_KEY = 'pnthr_queue';
 
 export function QueueProvider({ children }) {
-  const { isAdmin } = useAuth();
+  const { currentUser } = useAuth();
+  const isAuthenticated = !!currentUser;
 
   const [queue, setQueue] = useState(() => {
     try {
@@ -21,11 +22,11 @@ export function QueueProvider({ children }) {
   const [sendSuccess, setSendSuccess]       = useState(false);
   const [sendingQueue, setSendingQueue]     = useState(false);
 
-  // Load NAV on mount (admin only — members don't use sizing)
+  // Load NAV on mount for all authenticated users
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAuthenticated) return;
     fetchNav().then(d => setNav(d?.nav || 100000)).catch(() => setNav(100000));
-  }, [isAdmin]);
+  }, [isAuthenticated]);
 
   // Persist queue to sessionStorage on every change
   useEffect(() => {
@@ -60,6 +61,7 @@ export function QueueProvider({ children }) {
       showQueuePanel, setShowQueuePanel,
       sendSuccess, setSendSuccess,
       sendingQueue, setSendingQueue,
+      isAuthenticated,
     }}>
       {children}
     </QueueContext.Provider>

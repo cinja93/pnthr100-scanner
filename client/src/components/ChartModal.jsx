@@ -95,14 +95,24 @@ function computeWilderATR(weeklyData, period = 3) {
   return atrArr;
 }
 
-function longPredStop(low, price) {
-  const buf = price * 0.001;
-  return parseFloat((buf > 0.01 ? low + buf : low - 0.01).toFixed(2));
+// Initial PNTHR stop for a new BL entry:
+//   structural: 2-week low − $0.01  (floor: price must stay above prior support)
+//   ATR floor:  entry close − ATR(3) (tightest reasonable stop below close)
+//   Take the HIGHER of the two (most conservative = higher stop for a long).
+function blInitStop(twoWeekLow, entryClose, atr) {
+  const structural = parseFloat((twoWeekLow - 0.01).toFixed(2));
+  const atrBased   = atr != null ? parseFloat((entryClose - atr).toFixed(2)) : -Infinity;
+  return parseFloat(Math.max(structural, atrBased).toFixed(2));
 }
 
-function shortPredStop(high, price) {
-  const buf = price * 0.001;
-  return parseFloat((buf > 0.01 ? high - buf : high + 0.01).toFixed(2));
+// Initial PNTHR stop for a new SS entry:
+//   structural: 2-week high + $0.01  (ceiling: price must stay below prior resistance)
+//   ATR ceiling: entry close + ATR(3) (tightest reasonable stop above close)
+//   Take the LOWER of the two (most conservative = lower stop for a short).
+function ssInitStop(twoWeekHigh, entryClose, atr) {
+  const structural = parseFloat((twoWeekHigh + 0.01).toFixed(2));
+  const atrBased   = atr != null ? parseFloat((entryClose + atr).toFixed(2)) : Infinity;
+  return parseFloat(Math.min(structural, atrBased).toFixed(2));
 }
 
 // Scan full weekly history; returns events: BL/SS entries + BE/SE exits.
@@ -193,7 +203,7 @@ function detectAllSignals(weeklyData, period = 21) {
 
       if (blPhase1 && blDaylightOk) {
         const entryPrice = parseFloat((twoWeekHigh + 0.01).toFixed(2));
-        const initStop   = longPredStop(current.low, current.close);
+        const initStop   = blInitStop(twoWeekLow, current.close, atrArr[wi]);
         events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });
         position          = { type: 'BL', entryWi: wi, entryPrice, pnthrStop: initStop };
         longTrendActive   = true;
@@ -202,7 +212,7 @@ function detectAllSignals(weeklyData, period = 21) {
         shortTrendCapped  = false;
       } else if (ssPhase1 && ssDaylightOk) {
         const entryPrice = parseFloat((twoWeekLow - 0.01).toFixed(2));
-        const initStop   = shortPredStop(current.high, current.close);
+        const initStop   = ssInitStop(twoWeekHigh, current.close, atrArr[wi]);
         events.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high });
         position          = { type: 'SS', entryWi: wi, entryPrice, pnthrStop: initStop };
         shortTrendActive  = true;

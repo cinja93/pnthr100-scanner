@@ -148,6 +148,7 @@ function App() {
 
 function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const { isAuthenticated, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
+  const isAdmin = currentUser?.role === 'admin';
   const [lotAlerts, setLotAlerts] = useState([]);
 
   useEffect(() => {

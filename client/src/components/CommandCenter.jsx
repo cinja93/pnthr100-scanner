@@ -1691,7 +1691,12 @@ export default function CommandCenter() {
 
       {/* Chart Modal — opens when a position ticker is clicked */}
       {chartStock && (
-        <ChartModal stock={chartStock} onClose={() => setChartStock(null)} />
+        <ChartModal
+          stocks={[chartStock]}
+          initialIndex={0}
+          earnings={{}}
+          onClose={() => setChartStock(null)}
+        />
       )}
     </div>
   );

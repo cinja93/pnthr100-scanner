@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -53,6 +54,18 @@ export function authenticateJWT(req, res, next) {
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+}
+
+// One-time HMAC token for approve/deny email links — scoped to userId + action
+export function generateApprovalToken(userId) {
+  return crypto.createHmac('sha256', JWT_SECRET)
+    .update(userId.toString() + 'approval')
+    .digest('hex')
+    .substring(0, 32);
+}
+
+export function verifyApprovalToken(userId, token) {
+  return token === generateApprovalToken(userId);
 }
 
 // Middleware — rejects non-admins with 403

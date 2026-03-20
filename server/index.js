@@ -37,7 +37,8 @@ import newsletterRouter from './routes/newsletter.js';
 import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
-import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateToken, resolveRole } from './auth.js';
+import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateToken, resolveRole, generateApprovalToken, verifyApprovalToken } from './auth.js';
+import { sendApprovalRequestEmail, sendWelcomeEmail, sendDenialEmail } from './emailService.js';
 import { ibkrSync } from './ibkrSync.js';
 import {
   getSupplementalStocks,
@@ -56,6 +57,8 @@ import {
   findUserByEmail,
   getUserProfile,
   upsertUserProfile,
+  approveUser,
+  denyUser,
 } from './database.js';
 
 const app = express();
@@ -145,6 +148,65 @@ app.post('/auth/register', authLimiter, authenticateJWT, requireAdmin, async (re
   }
 });
 
+// Public self-registration — creates account as pending, emails admin for approval
+app.post('/auth/request-access', authLimiter, async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email address' });
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    const hashedPassword = await hashPassword(password);
+    const user = await createUser(email, hashedPassword, { name, status: 'pending' });
+    const token = generateApprovalToken(user._id.toString());
+    const apiUrl = process.env.API_URL || `https://pnthr100-scanner-api.onrender.com`;
+    const approveUrl = `${apiUrl}/auth/approve/${user._id}?action=approve&token=${token}`;
+    const denyUrl    = `${apiUrl}/auth/approve/${user._id}?action=deny&token=${token}`;
+    await sendApprovalRequestEmail({ applicantName: name, applicantEmail: email, approveUrl, denyUrl });
+    res.json({ success: true, pending: true, message: 'Your account request has been submitted. You will receive an email when approved.' });
+  } catch (error) {
+    if (error.message.includes('already exists')) return res.status(409).json({ error: error.message });
+    console.error('Request access error:', error);
+    res.status(500).json({ error: 'Failed to submit account request' });
+  }
+});
+
+// One-click approve/deny from email link
+app.get('/auth/approve/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const { action, token } = req.query;
+  if (!verifyApprovalToken(userId, token)) return res.status(403).send('<h2>Invalid or expired approval link.</h2>');
+  try {
+    const { connectToDatabase: getDb } = await import('./database.js');
+    const { ObjectId } = await import('mongodb');
+    const db = await getDb();
+    const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });
+    if (!user) return res.status(404).send('<h2>User not found.</h2>');
+    if (user.status !== 'pending') return res.send(page('Already Processed', '#aaa', `This account has already been processed (status: ${user.status}).`));
+    if (action === 'approve') {
+      await approveUser(userId);
+      await sendWelcomeEmail({ to: user.email, name: user.name || user.email }).catch(() => {});
+      return res.send(page('✓ Account Approved', '#28a745', `${user.name || user.email} (${user.email}) has been approved and notified.`));
+    }
+    if (action === 'deny') {
+      await denyUser(userId);
+      await sendDenialEmail({ to: user.email, name: user.name || user.email }).catch(() => {});
+      return res.send(page('✗ Account Denied', '#dc3545', `${user.name || user.email} (${user.email}) has been denied.`));
+    }
+    res.status(400).send('<h2>Invalid action.</h2>');
+  } catch (err) {
+    console.error('Approve error:', err);
+    res.status(500).send('<h2>Server error.</h2>');
+  }
+});
+
+function page(title, color, body) {
+  return `<html><body style="background:#0a0a0a;color:#fff;font-family:Arial;text-align:center;padding:60px;">
+    <h1 style="color:#D4A017;">PNTHR FUNDS</h1>
+    <h2 style="color:${color};">${title}</h2>
+    <p>${body}</p>
+  </body></html>`;
+}
+
 app.post('/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -153,6 +215,9 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Invalid email or password' });
     const valid = await verifyPassword(password, user.hashedPassword);
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
+    // Check approval status (users without a status field are legacy — treat as active)
+    if (user.status === 'pending') return res.status(403).json({ error: 'Your account is pending approval. You will receive an email when approved.', pending: true });
+    if (user.status === 'denied')  return res.status(403).json({ error: 'Your account request was not approved.', denied: true });
     // Role is always resolved from ADMIN_EMAILS env var — no DB migration needed
     const role = resolveRole(user.email);
     const token = generateToken(user._id, user.email, role);

@@ -336,15 +336,39 @@ export async function removeFromWatchlist(ticker, userId) {
 
 // ── Users ──
 
-export async function createUser(email, hashedPassword) {
+export async function createUser(email, hashedPassword, { name = '', status = 'active' } = {}) {
   const database = await connectToDatabase();
   if (!database) throw new Error('Database not available');
   const collection = database.collection('users');
   const lower = email.toLowerCase().trim();
   const existing = await collection.findOne({ email: lower });
   if (existing) throw new Error('An account with that email already exists');
-  const result = await collection.insertOne({ email: lower, hashedPassword, role: 'member', createdAt: new Date() });
-  return { _id: result.insertedId, email: lower, role: 'member' };
+  const result = await collection.insertOne({
+    email: lower, hashedPassword, name, role: 'member', status, createdAt: new Date(),
+  });
+  return { _id: result.insertedId, email: lower, name, role: 'member', status };
+}
+
+export async function approveUser(userId) {
+  const database = await connectToDatabase();
+  if (!database) throw new Error('Database not available');
+  const uid = safeObjectId(userId);
+  await database.collection('users').updateOne(
+    { _id: uid },
+    { $set: { status: 'active', approvedAt: new Date() } }
+  );
+  // Create user_profiles entry with $100K default NAV if not already present
+  await upsertUserProfile(userId, { accountSize: 100000 });
+}
+
+export async function denyUser(userId) {
+  const database = await connectToDatabase();
+  if (!database) throw new Error('Database not available');
+  const uid = safeObjectId(userId);
+  await database.collection('users').updateOne(
+    { _id: uid },
+    { $set: { status: 'denied', deniedAt: new Date() } }
+  );
 }
 
 export async function findUserByEmail(email) {

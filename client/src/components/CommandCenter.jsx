@@ -85,9 +85,13 @@ function runRiskAdvisor(positions, nav) {
     });
   }
 
-  // Rule 2: Sector Concentration (>3 per sector)
+  // Rule 2: Sector Concentration (>3 per sector) — ETFs exempt (they ARE the diversification)
   const bySector = {};
-  for (const p of livePos) { const s = p.sector || 'Unknown'; (bySector[s] = bySector[s] || []).push(p); }
+  for (const p of livePos) {
+    if (p.isETF || isEtfTicker(p.ticker)) continue; // ETFs tracked by dollar risk cap, not sector count
+    const s = p.sector || 'Unknown';
+    (bySector[s] = bySector[s] || []).push(p);
+  }
   for (const [sector, sPos] of Object.entries(bySector)) {
     if (sPos.length > 3) {
       const excess = sPos.length - 3;

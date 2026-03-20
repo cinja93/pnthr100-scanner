@@ -1367,6 +1367,11 @@ export default function CommandCenter() {
           updateCurrentUser({ accountSize: profile.accountSize });
         }
       } catch { /* silent */ }
+      // Re-sync pending entries so queue is never stale after a remount or nav change
+      try {
+        const fresh = await fetchPendingEntries();
+        if (Array.isArray(fresh)) setPendingEntries(fresh);
+      } catch { /* silent */ }
     } catch { /* silent — prices stay as-is */ }
     setRefreshing(false);
   }, [refreshing, nav]);
@@ -1382,7 +1387,7 @@ export default function CommandCenter() {
     return () => clearInterval(timer);
   }, []);
 
-  // Load positions and pending entries on mount
+  // Load positions, pending entries, and NAV on mount
   useEffect(() => {
     apiGet('/api/positions')
       .then(data => {
@@ -1393,7 +1398,16 @@ export default function CommandCenter() {
     fetchPendingEntries()
       .then(data => { if (Array.isArray(data)) setPendingEntries(data); })
       .catch(() => {});
-  }, []);
+    // Pull latest NAV on mount (picks up IBKR sync that happened before opening Command)
+    fetchNav()
+      .then(profile => {
+        if (profile?.accountSize && profile.accountSize !== nav) {
+          setNav(profile.accountSize);
+          updateCurrentUser({ accountSize: profile.accountSize });
+        }
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save position changes to API (debounced via a brief timeout)
   const persistPosition = useCallback(async (position) => {

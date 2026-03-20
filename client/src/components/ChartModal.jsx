@@ -123,7 +123,7 @@ function ssInitStop(twoWeekHigh, entryClose, atr) {
 // Phase 5 exit: structural 2-week low/high + 0.1% predatory buffer, trigger on weekly close.
 // Returns { events, pnthrStop, currentWeekStop, activeType } where stop fields are
 // non-null only when the most recent BL/SS signal is still open (no following BE/SE).
-function detectAllSignals(weeklyData, period = 21) {
+function detectAllSignals(weeklyData, period = 21, isETF = false) {
   if (weeklyData.length < period + 2) return { events: [], pnthrStop: null, currentWeekStop: null, activeType: null };
   const emaData = calculateEMA(weeklyData, period);
   const atrArr  = computeWilderATR(weeklyData);
@@ -193,11 +193,13 @@ function detectAllSignals(weeklyData, period = 21) {
       const emaPrev  = emaData[emaIdx - 1].value;
       const blPhase1 = current.close > emaCurrent && emaCurrent > emaPrev && current.high >= twoWeekHigh + 0.01;
       const ssPhase1 = current.close < emaCurrent && emaCurrent < emaPrev && current.low  <= twoWeekLow  - 0.01;
-      const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
-      const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
+      // ETFs use a tighter 0.3% daylight zone (vs 1% for stocks) so signals fire sooner
+      const dPct = isETF ? 0.003 : 0.01;
+      const blZone   = current.low  >= emaCurrent * (1 + dPct) && current.low  <= emaCurrent * 1.10;
+      const ssZone   = current.high <= emaCurrent * (1 - dPct) && current.high >= emaCurrent * 0.90;
 
-      const blReentry    = longTrendActive  && current.low  >= emaCurrent * 1.01 && (!longTrendCapped  || current.low  <= emaCurrent * 1.25);
-      const ssReentry    = shortTrendActive && current.high <= emaCurrent * 0.99 && (!shortTrendCapped || current.high >= emaCurrent * 0.75);
+      const blReentry    = longTrendActive  && current.low  >= emaCurrent * (1 + dPct) && (!longTrendCapped  || current.low  <= emaCurrent * 1.25);
+      const ssReentry    = shortTrendActive && current.high <= emaCurrent * (1 - dPct) && (!shortTrendCapped || current.high >= emaCurrent * 0.75);
       const blDaylightOk = blReentry || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
       const ssDaylightOk = ssReentry || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
@@ -412,7 +414,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
     });
 
     // Compute signals and live stops from full history
-    const { events: allDetected, pnthrStop: ps, currentWeekStop: cws, currentSignal: cs } = detectAllSignals(allWeeklyData, 21);
+    const { events: allDetected, pnthrStop: ps, currentWeekStop: cws, currentSignal: cs } = detectAllSignals(allWeeklyData, 21, isEtfTicker(stock?.ticker));
     setPnthrStop(ps);
     setCurrentWeekStop(cws);
     setCurrentSignal(cs);

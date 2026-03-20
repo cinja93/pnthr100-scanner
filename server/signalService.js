@@ -31,7 +31,9 @@ const EMA_PERIOD = 21;
 const WEEKS_HISTORY = 260;
 
 // Weekly cache keyed by last-Friday date string
-let signalCache = { weekKey: null, signals: {} };
+// Two separate caches: stocks use 1% daylight zone, ETFs use 0.3%
+let signalCache    = { weekKey: null, signals: {} };
+let etfSignalCache = { weekKey: null, signals: {} };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -154,7 +156,7 @@ function computeEMASeries(closes, period) {
 //              (current or previous bar is the 1st or 2nd bar where low > EMA).
 // SS (Failure): weekHigh is 1–10% below 21-EMA, within first 3 bars of short-daylight streak.
 // Phase 5 exit: structural 2-week low/high + 0.1% predatory buffer, trigger on weekly close.
-function runStateMachine(weeklyBars) {
+function runStateMachine(weeklyBars, isETF = false) {
   if (weeklyBars.length < EMA_PERIOD + 2) {
     return { signal: null, ema21: null, stopPrice: null };
   }
@@ -243,11 +245,13 @@ function runStateMachine(weeklyBars) {
       const emaPrev = emas[emaIdx - 1];
       const blPhase1 = current.close > emaCurrent && emaCurrent > emaPrev && current.high >= twoWeekHigh + 0.01;
       const ssPhase1 = current.close < emaCurrent && emaCurrent < emaPrev && current.low  <= twoWeekLow  - 0.01;
-      const blZone   = current.low  >= emaCurrent * 1.01 && current.low  <= emaCurrent * 1.10;
-      const ssZone   = current.high <= emaCurrent * 0.99 && current.high >= emaCurrent * 0.90;
+      // ETFs use a tighter 0.3% daylight zone (vs 1% for stocks) so signals fire sooner
+      const dPct = isETF ? 0.003 : 0.01;
+      const blZone   = current.low  >= emaCurrent * (1 + dPct) && current.low  <= emaCurrent * 1.10;
+      const ssZone   = current.high <= emaCurrent * (1 - dPct) && current.high >= emaCurrent * 0.90;
 
-      const blReentry    = longTrendActive  && current.low  >= emaCurrent * 1.01 && (!longTrendCapped  || current.low  <= emaCurrent * 1.25);
-      const ssReentry    = shortTrendActive && current.high <= emaCurrent * 0.99 && (!shortTrendCapped || current.high >= emaCurrent * 0.75);
+      const blReentry    = longTrendActive  && current.low  >= emaCurrent * (1 + dPct) && (!longTrendCapped  || current.low  <= emaCurrent * 1.25);
+      const ssReentry    = shortTrendActive && current.high <= emaCurrent * (1 - dPct) && (!shortTrendCapped || current.high >= emaCurrent * 0.75);
       const blDaylightOk = blReentry || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
       const ssDaylightOk = ssReentry || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
@@ -305,28 +309,32 @@ export { runStateMachine };
 //               isNewSignal: false, profitPercentage: null, ema21: number|null } }
 //
 // BL → 'BUY', SS → 'SELL' to keep existing UI labels working.
-export async function getSignals(tickers) {
+export async function getSignals(tickers, { isETF = false } = {}) {
   if (!tickers || tickers.length === 0) return {};
 
-  const weekKey = getLastFriday();
-  const today   = getToday();
+  const today = getToday();
+
+  // ETF signals use a separate cache (different daylight threshold)
+  const cache = isETF ? etfSignalCache : signalCache;
 
   // Invalidate cache daily so intra-week bars (Mon–Thu) are picked up for NEW signal detection
-  if (signalCache.weekKey !== today) {
-    signalCache = { weekKey: today, signals: {} };
+  if (cache.weekKey !== today) {
+    if (isETF) etfSignalCache = { weekKey: today, signals: {} };
+    else        signalCache   = { weekKey: today, signals: {} };
   }
 
-  const missing = tickers.filter(t => !(t in signalCache.signals));
+  const activeCache = isETF ? etfSignalCache : signalCache;
+  const missing = tickers.filter(t => !(t in activeCache.signals));
 
   if (missing.length > 0) {
     // Fetch through today so the current in-progress weekly bar is included.
     // isNew = true only when a BL/SS fires on that last (current-week) bar.
     const toDate  = today;
-    const fromD   = new Date(weekKey);
+    const fromD   = new Date(getLastFriday());
     fromD.setDate(fromD.getDate() - WEEKS_HISTORY * 7);
     const fromDate = fromD.toISOString().split('T')[0];
 
-    console.log(`📡 EMA signals: computing ${missing.length} tickers (${fromDate} → ${toDate})...`);
+    console.log(`📡 EMA signals${isETF ? ' (ETF)' : ''}: computing ${missing.length} tickers (${fromDate} → ${toDate})...`);
 
     const concurrency = 5;
     for (let i = 0; i < missing.length; i += concurrency) {
@@ -335,10 +343,10 @@ export async function getSignals(tickers) {
         try {
           const daily  = await fetchDailyBars(ticker, fromDate, toDate);
           const weekly = aggregateWeeklyBars(daily);
-          signalCache.signals[ticker] = runStateMachine(weekly);
+          activeCache.signals[ticker] = runStateMachine(weekly, isETF);
         } catch (err) {
           console.error(`Signal error for ${ticker}:`, err.message);
-          signalCache.signals[ticker] = { signal: null, ema21: null, stopPrice: null };
+          activeCache.signals[ticker] = { signal: null, ema21: null, stopPrice: null };
         }
       }));
       if (i + concurrency < missing.length) {
@@ -346,14 +354,14 @@ export async function getSignals(tickers) {
       }
     }
 
-    const activeCount = Object.values(signalCache.signals).filter(s => s.signal).length;
-    console.log(`📡 EMA signals done: ${activeCount} active (BL/SS) out of ${Object.keys(signalCache.signals).length} tickers`);
+    const activeCount = Object.values(activeCache.signals).filter(s => s.signal).length;
+    console.log(`📡 EMA signals done: ${activeCount} active (BL/SS) out of ${Object.keys(activeCache.signals).length} tickers`);
   }
 
   // Build return map in the format the rest of the app expects
   const result = {};
   for (const ticker of tickers) {
-    const s = signalCache.signals[ticker] || { signal: null, ema21: null, stopPrice: null };
+    const s = activeCache.signals[ticker] || { signal: null, ema21: null, stopPrice: null };
     result[ticker] = {
       signal:           s.signal, // 'BL', 'SS', 'BE', 'SE', or null
       stopPrice:        s.pnthrStop ?? s.stopPrice ?? null,

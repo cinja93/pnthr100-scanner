@@ -176,7 +176,7 @@ export async function getEtfStocks(forceRefresh = false) {
   });
 
   const stockTickers = stocks.map(s => s.ticker);
-  const signals = await getSignals(stockTickers);
+  const signals = await getSignals(stockTickers, { isETF: true });
 
   console.log(`📊 ETF 140 complete: ${stocks.length} ETFs`);
   const result = { stocks, signals, categories: ETF_CATEGORIES.map(c => c.label) };

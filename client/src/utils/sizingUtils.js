@@ -1,9 +1,5 @@
 // client/src/utils/sizingUtils.js
 // ── Shared Position Sizing & Heat Utilities ───────────────────────────────────
-//
-// Extracted from CommandCenter.jsx so ChartModal (SIZE IT panel) and Command
-// Center both use identical math. No logic changes from the original.
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Sizing Constants ──────────────────────────────────────────────────────────
 
@@ -11,6 +7,21 @@ export const STRIKE_PCT     = [0.15, 0.30, 0.25, 0.20, 0.10];
 export const LOT_NAMES      = ['The Scent', 'The Stalk', 'The Strike', 'The Jugular', 'The Kill'];
 export const LOT_OFFSETS    = [0, 0.03, 0.06, 0.10, 0.14];
 export const LOT_TIME_GATES = [0, 5, 0, 0, 0];
+
+// ── ETF Identification ────────────────────────────────────────────────────────
+// ETF tier: 0.5% vitality cap (vs 1% for stocks). Supplemented by tickerData.isEtf.
+export const ETF_LIST = new Set([
+  'SPY','QQQ','DIA','IWM','VTI','VOO','VEA','VWO','EEM','EFA',
+  'XLE','XLF','XLK','XLV','XLP','XLI','XLU','XLB','XLC','XLRE','XLY',
+  'GLD','SLV','TLT','HYG','LQD','USO','UNG',
+  'ARKK','SOXX','SMH','IBB','XBI','KRE','XHB','ITB',
+  'GDX','GDXJ','RSP','MDY','IJR','SCHA','VB',
+  'JETS','BUZZ','KWEB','FXI','INDA',
+]);
+
+export function isEtfTicker(ticker, profileIsEtf = false) {
+  return profileIsEtf || ETF_LIST.has((ticker || '').toUpperCase());
+}
 
 // ── Position Sizing Logic ─────────────────────────────────────────────────────
 
@@ -38,7 +49,6 @@ export function buildLots({ entryPrice, stopPrice, totalShares, direction, fills
 }
 
 export function enrichLots(lots, entryPrice, stopPrice, direction) {
-  const isLong = direction === 'LONG';
   let cumShr = 0, cumCost = 0;
   return lots.map((l, i) => {
     if (l.filled && l.actualShares > 0) { cumShr += l.actualShares; cumCost += l.costBasis; }
@@ -59,9 +69,10 @@ export function enrichLots(lots, entryPrice, stopPrice, direction) {
   });
 }
 
-export function sizePosition({ netLiquidity, entryPrice, stopPrice, maxGapPct, direction }) {
+// isETF=true → 0.5% vitality cap; false → 1% vitality cap
+export function sizePosition({ netLiquidity, entryPrice, stopPrice, maxGapPct, direction, isETF = false }) {
   const tickerCap  = netLiquidity * 0.10;
-  const vitality   = netLiquidity * 0.01;
+  const vitality   = netLiquidity * (isETF ? 0.005 : 0.01);
   const structRisk = Math.abs((entryPrice - stopPrice) / entryPrice);
   const gapMult    = maxGapPct > structRisk * 100 ? Math.max(0.3, structRisk * 100 / maxGapPct) : 1.0;
   const rps        = Math.abs(entryPrice - stopPrice);
@@ -70,6 +81,8 @@ export function sizePosition({ netLiquidity, entryPrice, stopPrice, maxGapPct, d
   );
   return {
     totalShares: total,
+    vitality:    +vitality.toFixed(0),
+    vitalityPct: isETF ? 0.5 : 1,
     gapMult:     +gapMult.toFixed(2),
     structRisk:  +(structRisk * 100).toFixed(2),
     maxRisk$:    +(total * rps).toFixed(2),
@@ -77,24 +90,42 @@ export function sizePosition({ netLiquidity, entryPrice, stopPrice, maxGapPct, d
   };
 }
 
+// ── Heat Calculation (actual dollar risk, split by ETF/stock) ─────────────────
+// Caps: stocks 10% NAV, ETFs 5% NAV, combined 15% NAV.
+// Recycled positions (stop beyond entry) = $0 risk.
 export function calcHeat(positions, nav) {
-  let liveCnt = 0, recycledCnt = 0, actual$ = 0;
+  let liveCnt = 0, recycledCnt = 0, stockRisk = 0, etfRisk = 0;
   for (const p of positions) {
-    const filledShr = Object.values(p.fills || {}).reduce((s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0);
-    const lot1P     = p.fills?.[1]?.price ? +p.fills[1].price : p.entryPrice;
-    const isL       = p.direction === 'LONG';
-    const rps       = isL ? Math.max(lot1P - p.stopPrice, 0) : Math.max(p.stopPrice - lot1P, 0);
-    const posRisk   = filledShr * rps;
-    const isRecycled = isL ? p.stopPrice >= lot1P : p.stopPrice <= lot1P;
-    if (isRecycled) { recycledCnt++; } else { liveCnt++; actual$ += posRisk; }
+    const filledShr  = Object.values(p.fills || {}).reduce((s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0);
+    const avg        = filledShr > 0
+      ? Object.values(p.fills || {}).filter(f => f.filled).reduce((s, f) => s + (+f.shares || 0) * (+f.price || 0), 0) / filledShr
+      : (p.entryPrice || 0);
+    const isL        = p.direction === 'LONG';
+    const rps        = Math.max(0, isL ? avg - p.stopPrice : p.stopPrice - avg);
+    const posRisk    = filledShr * rps;
+    const isRecycled = isL ? p.stopPrice >= avg : p.stopPrice <= avg;
+    if (isRecycled) {
+      recycledCnt++;
+    } else {
+      liveCnt++;
+      if (p.isETF) { etfRisk += posRisk; } else { stockRisk += posRisk; }
+    }
   }
-  const theo$ = liveCnt * nav * 0.01;
+  const totalRisk    = stockRisk + etfRisk;
+  const stockRiskPct = nav > 0 ? +((stockRisk / nav) * 100).toFixed(2) : 0;
+  const etfRiskPct   = nav > 0 ? +((etfRisk   / nav) * 100).toFixed(2) : 0;
+  const totalRiskPct = nav > 0 ? +((totalRisk  / nav) * 100).toFixed(2) : 0;
   return {
     liveCnt, recycledCnt, totalPos: positions.length,
-    theo$:     +theo$.toFixed(0),
-    theoPct:   +((theo$ / nav) * 100).toFixed(1),
-    actual$:   +actual$.toFixed(0),
-    actualPct: +((actual$ / nav) * 100).toFixed(2),
-    slots:     Math.max(0, Math.floor((nav * 0.10 - theo$) / (nav * 0.01))),
+    stockRisk:    +stockRisk.toFixed(0),
+    etfRisk:      +etfRisk.toFixed(0),
+    totalRisk:    +totalRisk.toFixed(0),
+    stockRiskPct, etfRiskPct, totalRiskPct,
+    // Legacy aliases kept for any code that still reads these
+    actual$:   +totalRisk.toFixed(0),
+    actualPct: totalRiskPct,
+    theo$:     0,
+    theoPct:   0,
+    slots:     0,
   };
 }

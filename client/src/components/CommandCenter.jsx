@@ -8,7 +8,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from 'react';
 import { API_BASE, authHeaders, updateUserProfile, fetchNav, fetchPendingEntries, confirmPendingEntry, dismissPendingEntry, deletePosition } from '../services/api.js';
 import { useAuth } from '../AuthContext';
-import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat } from '../utils/sizingUtils.js';
+import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat, isEtfTicker } from '../utils/sizingUtils.js';
 
 // (buildLots, enrichLots, sizePosition, calcHeat imported from ../utils/sizingUtils.js)
 
@@ -57,15 +57,31 @@ function runRiskAdvisor(positions, nav) {
   const livePos = positions.filter(p => !isRecycledPos(p));
   const liveCnt = livePos.length;
 
-  // Rule 1: Heat Cap Violation (>10 live positions = >10% heat)
-  if (liveCnt > 10) {
-    const excess = liveCnt - 10;
-    const candidates = [...livePos].sort((a, b) => pnlPctOf(a) - pnlPctOf(b)).slice(0, excess);
+  // Rule 1: Heat Cap Violation — actual dollar risk vs caps (stocks 10%, ETFs 5%, total 15%)
+  const heat = calcHeat(positions, nav);
+  if (heat.stockRiskPct > 10) {
+    const excess = +(heat.stockRisk - nav * 0.10).toFixed(0);
+    const candidates = [...livePos].filter(p => !p.isETF).sort((a, b) => pnlPctOf(a) - pnlPctOf(b)).slice(0, 2);
     recs.push({
       priority: 'CRITICAL', type: 'HEAT_VIOLATION',
-      message: `Portfolio heat at ${liveCnt}% — exceeds 10% cap by ${excess} slot${excess !== 1 ? 's' : ''}`,
+      message: `Stock risk at ${heat.stockRiskPct}% — exceeds 10% cap. Reduce by $${excess}.`,
       actions: candidates.map(p => ({ ticker: p.ticker, action: 'CLOSE', shares: filledSharesOf(p), reason: `Worst performer at ${pnlPctOf(p).toFixed(1)}%` })),
-      alternative: `Or reduce share count on ${excess} position${excess !== 1 ? 's' : ''} to bring dollar risk within 1% each.`,
+    });
+  }
+  if (heat.etfRiskPct > 5) {
+    const excess = +(heat.etfRisk - nav * 0.05).toFixed(0);
+    recs.push({
+      priority: 'CRITICAL', type: 'ETF_HEAT_VIOLATION',
+      message: `ETF risk at ${heat.etfRiskPct}% — exceeds 5% cap. Reduce by $${excess}.`,
+      actions: livePos.filter(p => p.isETF).sort((a, b) => pnlPctOf(a) - pnlPctOf(b)).slice(0, 1)
+        .map(p => ({ ticker: p.ticker, action: 'TRIM', shares: filledSharesOf(p), reason: 'ETF risk cap exceeded' })),
+    });
+  }
+  if (heat.totalRiskPct > 15) {
+    recs.push({
+      priority: 'CRITICAL', type: 'TOTAL_HEAT_VIOLATION',
+      message: `Combined risk at ${heat.totalRiskPct}% — exceeds 15% total cap.`,
+      actions: [],
     });
   }
 
@@ -161,22 +177,24 @@ function runRiskAdvisor(positions, nav) {
     }
   }
 
-  // Rule 8: Dollar Risk Exceeds 1% Vitality
+  // Rule 8: Dollar Risk Exceeds Vitality (1% stocks, 0.5% ETFs)
   for (const p of positions) {
     if (isRecycledPos(p)) continue;
     const shares = filledSharesOf(p);
     if (!shares) continue;
     const riskPerShare = Math.abs(avgCostOf(p) - p.stopPrice);
     if (!riskPerShare) continue;
-    const posRisk = shares * riskPerShare;
-    const vitality = nav * 0.01;
+    const posRisk  = shares * riskPerShare;
+    const isEtf    = p.isETF || isEtfTicker(p.ticker);
+    const vitality = nav * (isEtf ? 0.005 : 0.01);
+    const vPct     = isEtf ? '0.5%' : '1%';
     if (posRisk > vitality * 1.1) {
-      const maxShares = Math.floor(vitality / riskPerShare);
+      const maxShares    = Math.floor(vitality / riskPerShare);
       const excessShares = shares - maxShares;
       recs.push({
         priority: 'HIGH', type: 'RISK_EXCEEDED',
-        message: `${p.ticker}: $${posRisk.toFixed(0)} at risk exceeds 1% Vitality ($${vitality.toFixed(0)}).`,
-        actions: [{ ticker: p.ticker, action: 'TRIM', shares: excessShares, reason: `Sell ${excessShares} shares to bring risk within 1%` }],
+        message: `${p.ticker}: $${posRisk.toFixed(0)} at risk exceeds ${vPct} Vitality ($${vitality.toFixed(0)})${isEtf ? ' (ETF tier)' : ''}.`,
+        actions: [{ ticker: p.ticker, action: 'TRIM', shares: excessShares, reason: `Sell ${excessShares} shares to bring risk within ${vPct}` }],
       });
     }
   }
@@ -1239,7 +1257,7 @@ function PipelineTab({ positions, nav }) {
           <Badge color="#888" small>{regime.indexPosition?.toUpperCase()} · {regime.indexSlope?.toUpperCase()}</Badge>
           <Badge color="#888" small>BL: {regime.blCount} · SS: {regime.ssCount}</Badge>
           {weekOf && <Badge color="#555" small>Week of {weekOf}</Badge>}
-          <Badge color="#FFD700" bg="rgba(255,215,0,0.08)" small>{heat.slots} open slots</Badge>
+          <Badge color="#FFD700" bg="rgba(255,215,0,0.08)" small>{heat.totalRiskPct}% risk used · {heat.liveCnt} live</Badge>
         </div>
       )}
       <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
@@ -1516,9 +1534,9 @@ export default function CommandCenter() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 7, height: 7, borderRadius: 4,
-              background: heat.theoPct > 8 ? '#dc3545' : heat.theoPct > 5 ? '#ffc107' : '#28a745' }} />
+              background: heat.totalRiskPct > 15 ? '#dc3545' : heat.totalRiskPct > 10 ? '#ffc107' : '#28a745' }} />
             <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>
-              {heat.theoPct}% heat · ${heat.actual$} actual · {heat.slots} slots
+              {heat.stockRiskPct}% stocks · {heat.etfRiskPct}% ETFs · {heat.totalRiskPct}% total
             </span>
           </div>
           {/* IBKR sync indicator — visible when any position has been synced from TWS */}
@@ -1615,13 +1633,22 @@ export default function CommandCenter() {
             {/* Metric cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 16 }}>
               <MC label="Net liquidity" value={`$${(nav / 1000).toFixed(0)}K`} />
-              <MC label="1% Vitality" value={`$${(nav * 0.01).toLocaleString()}`} accent="#28a745" />
-              <MC label="Live heat" value={`${heat.theoPct}%`}
-                sub={`${heat.liveCnt} × 1% slots`}
-                sub2={`Actual risk: $${heat.actual$.toLocaleString()} (${heat.actualPct}%)`}
-                accent={heat.theoPct > 8 ? '#dc3545' : '#28a745'} />
-              <MC label="Recycled" value={heat.recycledCnt} sub="Stop ≥ entry = $0 risk" accent="#28a745" />
-              <MC label="Open slots" value={heat.slots} accent="#FFD700" />
+              <MC label="Stock risk"
+                value={`$${heat.stockRisk.toLocaleString()}`}
+                sub={`${heat.stockRiskPct}% of NAV`}
+                sub2="Cap: 10%"
+                accent={heat.stockRiskPct > 10 ? '#dc3545' : heat.stockRiskPct > 8 ? '#ffc107' : '#28a745'} />
+              <MC label="ETF risk"
+                value={`$${heat.etfRisk.toLocaleString()}`}
+                sub={`${heat.etfRiskPct}% of NAV`}
+                sub2="Cap: 5%"
+                accent={heat.etfRiskPct > 5 ? '#dc3545' : heat.etfRiskPct > 4 ? '#ffc107' : '#28a745'} />
+              <MC label="Total risk"
+                value={`$${heat.totalRisk.toLocaleString()}`}
+                sub={`${heat.totalRiskPct}% of NAV`}
+                sub2="Cap: 15%"
+                accent={heat.totalRiskPct > 15 ? '#dc3545' : heat.totalRiskPct > 12 ? '#ffc107' : '#28a745'} />
+              <MC label="Recycled" value={heat.recycledCnt} sub="$0 risk" accent="#28a745" />
               <MC label="Total positions" value={heat.totalPos} sub={`${heat.liveCnt} live · ${heat.recycledCnt} recycled`} />
             </div>
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
 import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchKillPipeline, fetchNav, API_BASE, authHeaders } from '../services/api';
-import { sizePosition, calcHeat, STRIKE_PCT } from '../utils/sizingUtils.js';
+import { sizePosition, calcHeat, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils.js';
 import { useQueue } from '../contexts/QueueContext';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
@@ -607,6 +607,9 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       const maxGapPct  = tickerData.maxGapPct || 0;
       const entryPrice = tickerData.currentPrice || stock.currentPrice || 0;
 
+      // ETF tier detection: hardcoded list OR FMP profile flag
+      const isETF = isEtfTicker(stock.ticker, tickerData.isEtf);
+
       // Stop: prefer the chart's own pnthrStop (computed from fresh chart data via
       // detectAllSignals) as it matches what's drawn on the chart. Fall back to
       // stock.stopPrice from the server, then EMA ±2% if neither is available.
@@ -624,9 +627,9 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
             ? +(entryPrice * 1.02).toFixed(2)
             : +(entryPrice * 0.98).toFixed(2);
 
-      // Sizing
-      const sizing    = sizePosition({ netLiquidity: nav, entryPrice, stopPrice: stopDefault, maxGapPct, direction });
-      const lot1Shr   = Math.max(1, Math.round(sizing.totalShares * STRIKE_PCT[0]));
+      // Sizing — ETF uses 0.5% vitality, stocks use 1%
+      const sizing     = sizePosition({ netLiquidity: nav, entryPrice, stopPrice: stopDefault, maxGapPct, direction, isETF });
+      const lot1Shr    = Math.max(1, Math.round(sizing.totalShares * STRIKE_PCT[0]));
       const riskDollar = lot1Shr * Math.abs(entryPrice - stopDefault);
 
       // Heat impact (fetch positions once and cache)
@@ -635,13 +638,17 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
         const posData = posRes.ok ? await posRes.json() : {};
         positionsCache.current = posData.positions || [];
       }
-      const heatBefore = calcHeat(positionsCache.current, nav).liveCnt;
+      const heat = calcHeat(positionsCache.current, nav);
 
       setSizePanel({
         nav, entry: entryPrice, stop: stopDefault, adjustedStop: stopDefault,
         gapPct: maxGapPct, gapMult: sizing.gapMult,
         totalShares: sizing.totalShares, lot1Shares: lot1Shr,
-        risk$: +riskDollar.toFixed(0), direction, heatBefore,
+        risk$: +riskDollar.toFixed(0), direction, isETF,
+        vitality: sizing.vitality, vitalityPct: sizing.vitalityPct,
+        stockRisk: heat.stockRisk, etfRisk: heat.etfRisk,
+        stockRiskPct: heat.stockRiskPct, etfRiskPct: heat.etfRiskPct,
+        heatBefore: heat.liveCnt, // legacy
       });
     } catch { /* non-fatal — panel stays null */ }
     setSizeLoading(false);
@@ -650,10 +657,10 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   function recalcWithStop(newStopStr) {
     const newStop = parseFloat(newStopStr);
     if (!sizePanel || !newStop || newStop <= 0) return;
-    const sizing   = sizePosition({ netLiquidity: sizePanel.nav, entryPrice: sizePanel.entry, stopPrice: newStop, maxGapPct: sizePanel.gapPct, direction: sizePanel.direction });
+    const sizing   = sizePosition({ netLiquidity: sizePanel.nav, entryPrice: sizePanel.entry, stopPrice: newStop, maxGapPct: sizePanel.gapPct, direction: sizePanel.direction, isETF: sizePanel.isETF });
     const lot1Shr  = Math.max(1, Math.round(sizing.totalShares * STRIKE_PCT[0]));
     const risk     = lot1Shr * Math.abs(sizePanel.entry - newStop);
-    setSizePanel(prev => ({ ...prev, adjustedStop: newStop, totalShares: sizing.totalShares, lot1Shares: lot1Shr, risk$: +risk.toFixed(0), gapMult: sizing.gapMult }));
+    setSizePanel(prev => ({ ...prev, adjustedStop: newStop, totalShares: sizing.totalShares, lot1Shares: lot1Shr, risk$: +risk.toFixed(0), gapMult: sizing.gapMult, vitality: sizing.vitality }));
   }
 
   function handleQueueToggle() {
@@ -745,12 +752,22 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
 
         {/* SIZE IT panel — two-row data card */}
         {isAuthenticated && sizePanel && (() => {
-          const vitality      = +(sizePanel.nav * 0.01).toFixed(0);
-          const heatAfter     = sizePanel.heatBefore + 1;
-          const overCap       = heatAfter > 10;
+          const vitality      = sizePanel.vitality ?? +(sizePanel.nav * (sizePanel.isETF ? 0.005 : 0.01)).toFixed(0);
           const riskOverVit   = sizePanel.risk$ > vitality;
           const dirColor      = sizePanel.direction === 'SHORT' ? '#ff6b6b' : '#28a745';
           const dirLabel      = sizePanel.direction === 'SHORT' ? 'SHORT' : 'LONG';
+          const tier          = sizePanel.isETF ? 'ETF' : 'STOCK';
+          const tierColor     = sizePanel.isETF ? '#6ea8fe' : '#FFD700';
+          const stockCap = 10, etfCap = 5, totalCap = 15;
+          const projStockPct  = sizePanel.isETF ? sizePanel.stockRiskPct : +(sizePanel.stockRiskPct + (sizePanel.risk$ / sizePanel.nav * 100)).toFixed(2);
+          const projEtfPct    = sizePanel.isETF ? +(sizePanel.etfRiskPct + (sizePanel.risk$ / sizePanel.nav * 100)).toFixed(2) : sizePanel.etfRiskPct;
+          const projTotalPct  = +(projStockPct + projEtfPct).toFixed(2);
+          const overStockCap  = projStockPct > stockCap;
+          const overEtfCap    = projEtfPct > etfCap;
+          const overTotalCap  = projTotalPct > totalCap;
+          const overCap       = overStockCap || overEtfCap || overTotalCap;
+          // legacy for heat display
+          const heatAfter     = sizePanel.heatBefore + 1;
           return (
             <div style={{
               background: '#0e0e0e',
@@ -774,10 +791,10 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                       const newStop = newDir === 'SHORT'
                         ? +(p.entry * 1.02).toFixed(2)
                         : +(p.entry * 0.98).toFixed(2);
-                      const sizing  = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir });
+                      const sizing  = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir, isETF: p.isETF });
                       const lot1    = Math.max(1, Math.round(sizing.totalShares * 0.15));
                       return { ...p, direction: newDir, adjustedStop: newStop, stop: newStop,
-                        totalShares: sizing.totalShares, lot1Shares: lot1,
+                        totalShares: sizing.totalShares, lot1Shares: lot1, vitality: sizing.vitality,
                         risk$: +(lot1 * Math.abs(p.entry - newStop)).toFixed(0) };
                     })}
                     title="Click to flip LONG ↔ SHORT"
@@ -787,6 +804,9 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                       cursor: 'pointer', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
                     {dirLabel} ⇄
                   </button>
+                  <span style={{ fontSize: 11, color: tierColor, fontWeight: 700, border: `1px solid ${tierColor}`, borderRadius: 3, padding: '2px 7px', opacity: 0.85 }}>
+                    {tier}
+                  </span>
                 </div>
                 <div style={{ display: 'flex', gap: 28, alignItems: 'baseline' }}>
                   <div>
@@ -861,18 +881,21 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                 {/* Divider */}
                 <span style={{ color: 'rgba(255,255,255,0.08)', fontSize: 18 }}>|</span>
 
-                {/* Heat */}
+                {/* Risk projection */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Heat </span>
-                  <span style={{ fontSize: 14, fontFamily: 'monospace', color: '#aaa' }}>{sizePanel.heatBefore}%</span>
+                  <span style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {sizePanel.isETF ? 'ETF Risk' : 'Stock Risk'}
+                  </span>
+                  <span style={{ fontSize: 14, fontFamily: 'monospace', color: '#aaa' }}>
+                    {sizePanel.isETF ? sizePanel.etfRiskPct : sizePanel.stockRiskPct}%
+                  </span>
                   <span style={{ fontSize: 14, color: overCap ? '#dc3545' : '#28a745' }}>→</span>
                   <span style={{ fontSize: 14, fontWeight: 800, fontFamily: 'monospace',
                     color: overCap ? '#dc3545' : '#28a745' }}>
-                    {heatAfter}%
+                    {sizePanel.isETF ? projEtfPct : projStockPct}%
                   </span>
-                  {overCap && (
-                    <span style={{ fontSize: 10, color: '#dc3545', marginLeft: 2 }}>⚠ CAP</span>
-                  )}
+                  <span style={{ fontSize: 10, color: '#555' }}>/ {sizePanel.isETF ? etfCap : stockCap}%</span>
+                  {overCap && <span style={{ fontSize: 10, color: '#dc3545', marginLeft: 2 }}>⚠ CAP</span>}
                 </div>
 
                 {/* Divider */}
@@ -887,7 +910,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                     </span>
                   </div>
                   <div>
-                    <span style={{ fontSize: 12, color: '#555', textTransform: 'uppercase', letterSpacing: '0.06em' }}>1% Vitality </span>
+                    <span style={{ fontSize: 12, color: '#555', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{sizePanel.vitalityPct ?? (sizePanel.isETF ? 0.5 : 1)}% Vitality </span>
                     <span style={{ fontSize: 14, fontFamily: 'monospace', color: '#666' }}>
                       ${vitality.toLocaleString()}
                     </span>

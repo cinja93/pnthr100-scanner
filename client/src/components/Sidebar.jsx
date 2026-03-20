@@ -18,7 +18,8 @@ const NAV_GROUPS = [
       { key: 'prey',     label: 'PNTHR Prey',     iconImg: true },
       { key: 'apex',     label: 'PNTHR Kill',     iconImg: true },
       { key: 'command',  label: 'PNTHR Command',  iconImg: true },
-      { key: 'history',  label: 'PNTHR History',  icon: '📊' },
+      { key: 'history',        label: 'PNTHR History',  icon: '📊' },
+      { key: 'signal-history', label: 'Signal History', icon: '📋' },
     ],
   },
   {

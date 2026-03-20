@@ -19,6 +19,7 @@ import { getPreyResults }         from './preyService.js';
 import { getApexResults }         from './apexService.js';
 import { getMostRecentRanking }   from './database.js';
 import { connectToDatabase }      from './database.js';
+import { checkCaseStudyEntries }  from './killHistory.js';
 
 // ── Compute weekOf (last Friday) ─────────────────────────────────────────────
 
@@ -202,7 +203,15 @@ export async function runFridayKillPipeline() {
       console.log(`   Saved ${historyDocs.length} history entries`);
     }
 
-    // ── 6. Summary ────────────────────────────────────────────────────────
+    // ── 6. Case Study Entries ──────────────────────────────────────────────
+    console.log('6. Running Kill case study detection...');
+    try {
+      await checkCaseStudyEntries(db, scored, jungleSignals, 'FRIDAY_PIPELINE');
+    } catch (err) {
+      console.error('[Kill Pipeline] Case study check failed (non-fatal):', err.message);
+    }
+
+    // ── 7. Summary ────────────────────────────────────────────────────────
     const alphaKills = scored.filter(s => s.tier === 'ALPHA PNTHR KILL');
     const striking   = scored.filter(s => s.tier === 'STRIKING');
     const confirmed  = scored.filter(s => s.confirmation === 'CONFIRMED');

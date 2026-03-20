@@ -19,6 +19,7 @@ import ApexPage from './components/ApexPage';
 import CommandCenter from './components/CommandCenter';
 import NewsPage from './components/NewsPage';
 import SignalHistoryPage from './components/SignalHistoryPage';
+import HistoryPage from './components/HistoryPage';
 import LoginPage from './components/LoginPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
@@ -486,6 +487,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* Portfolio page */}
           {activePage === 'portfolio' && <PortfolioPage currentUser={currentUser} onProfileUpdate={setCurrentUser} />}
+
+          {/* PNTHR Kill History — track record, visible to all */}
+          {activePage === 'history' && <HistoryPage />}
 
           {/* Signal History — admin only */}
           {activePage === 'signal-history' && <SignalHistoryPage />}

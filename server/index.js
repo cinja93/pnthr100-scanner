@@ -25,6 +25,13 @@ import {
 } from './commandCenter.js';
 import { runFridayKillPipeline } from './fridayPipeline.js';
 import {
+  checkCaseStudyEntries,
+  createKillHistoryIndexes,
+  killHistoryGetAll,
+  killHistoryGetActive,
+  killHistoryGetTrackRecord,
+} from './killHistory.js';
+import {
   navGet,
   navPost,
   pendingEntriesGet,
@@ -1607,12 +1614,29 @@ app.get('/api/apex', authenticateJWT, async (req, res) => {
     } catch (e) { console.warn('[KILL] huntTickers failed, scoring without:', e.message); }
 
     const results = await getApexResults(tickers, stockMeta, jungleSignals, preyResults, huntTickers);
+
+    // On explicit refresh: update case studies in background (don't block response)
+    if (req.query.refresh) {
+      const { connectToDatabase } = await import('./database.js');
+      connectToDatabase().then(db => {
+        if (db) {
+          checkCaseStudyEntries(db, results.stocks, jungleSignals, 'INTRAWEEK_REFRESH')
+            .catch(err => console.error('[CASE STUDY] intraweek check failed:', err.message));
+        }
+      }).catch(() => {});
+    }
+
     res.json(results);
   } catch (err) {
     console.error('Error in /api/apex:', err);
     res.status(500).json({ error: 'PNTHR Kill scan failed' });
   }
 });
+
+// ── PNTHR Kill History (Case Studies + Track Record) ───────────────────────────
+app.get('/api/kill-history',              authenticateJWT, killHistoryGetAll);
+app.get('/api/kill-history/active',       authenticateJWT, killHistoryGetActive);
+app.get('/api/kill-history/track-record', authenticateJWT, killHistoryGetTrackRecord);
 
 // ── PNTHR Command Center ───────────────────────────────────────────────────────
 app.get('/api/kill-pipeline',       authenticateJWT, killPipelineHandler);
@@ -1743,6 +1767,7 @@ app.listen(PORT, () => {
   // Bootstrap MongoDB indexes (non-blocking)
   ensureCommandCenterIndexes().catch(() => {});
   createPendingEntriesIndexes().catch(() => {});
+  createKillHistoryIndexes().catch(() => {});
 });
 
 // Scheduled Friday auto-save: checks every 30 minutes.

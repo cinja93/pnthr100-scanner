@@ -9,6 +9,7 @@ import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from 'rea
 import { API_BASE, authHeaders, updateUserProfile, fetchNav, fetchPendingEntries, confirmPendingEntry, dismissPendingEntry, deletePosition } from '../services/api.js';
 import { useAuth } from '../AuthContext';
 import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat, isEtfTicker } from '../utils/sizingUtils.js';
+import ChartModal from './ChartModal';
 
 // (buildLots, enrichLots, sizePosition, calcHeat imported from ../utils/sizingUtils.js)
 
@@ -355,7 +356,7 @@ async function apiPost(path, body) {
 
 // ── Pyramid Card (position row) ───────────────────────────────────────────────
 
-function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onDelete, flashed }) {
+function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onDelete, flashed, onOpenChart }) {
   const [expanded,      setExpanded]      = useState(false);
   const [editing,       setEditing]       = useState(null);
   const [ev,            setEv]            = useState({});
@@ -545,7 +546,13 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
       <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         background: staleHeaderBg }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 17, fontWeight: 800, fontFamily: 'monospace' }}>{position.ticker}</span>
+          <span
+            onClick={() => onOpenChart?.({ ticker: position.ticker, symbol: position.ticker, currentPrice: position.currentPrice, signal: position.signal, sector: position.sector, stopPrice: position.stopPrice })}
+            onMouseEnter={e => { e.currentTarget.style.color = '#FFD700'; e.currentTarget.style.textDecorationColor = '#FFD700'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.textDecorationColor = 'rgba(212,160,23,0.4)'; }}
+            title={`View ${position.ticker} chart`}
+            style={{ fontSize: 17, fontWeight: 800, fontFamily: 'monospace', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(212,160,23,0.4)', textUnderlineOffset: 3 }}
+          >{position.ticker}</span>
           <SigBadge d={position.direction} />
           {isRecycled && <Badge color="#0f5132" bg="#d1e7dd" small>RECYCLED</Badge>}
           {!isRecycled && actualRisk > 0 && <Badge color="#ffc107" bg="rgba(255,193,7,0.1)" small>${actualRisk.toFixed(0)} AT RISK</Badge>}
@@ -1346,6 +1353,7 @@ export default function CommandCenter() {
   const [loading,         setLoading]         = useState(true);
   const [saving,          setSaving]          = useState(false);
   const [sectorWarning,   setSectorWarning]   = useState(null);
+  const [chartStock,      setChartStock]      = useState(null);
 
   const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
   const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
@@ -1671,7 +1679,8 @@ export default function CommandCenter() {
                   <PyramidCard key={p.id} position={p} netLiquidity={nav}
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
                     onDelete={handleDeletePosition}
-                    flashed={flashedTickers.has(p.ticker)} />
+                    flashed={flashedTickers.has(p.ticker)}
+                    onOpenChart={setChartStock} />
                 ))}
               </div>
             )}
@@ -1679,6 +1688,11 @@ export default function CommandCenter() {
         )}
         {tab === 'pipeline'   && <PipelineTab positions={positions} nav={nav} />}
       </div>
+
+      {/* Chart Modal — opens when a position ticker is clicked */}
+      {chartStock && (
+        <ChartModal stock={chartStock} onClose={() => setChartStock(null)} />
+      )}
     </div>
   );
 }

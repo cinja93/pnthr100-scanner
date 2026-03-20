@@ -610,7 +610,12 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       // Stop: prefer the chart's own pnthrStop (computed from fresh chart data via
       // detectAllSignals) as it matches what's drawn on the chart. Fall back to
       // stock.stopPrice from the server, then EMA ±2% if neither is available.
-      const direction   = stock.signal === 'SS' ? 'SHORT' : 'LONG';
+      // Direction priority: Kill signal → price vs 21-week EMA → LONG fallback
+      const direction = stock.signal === 'SS' ? 'SHORT'
+        : stock.signal === 'BL' ? 'LONG'
+        : (tickerData.ema21 && entryPrice)
+          ? (entryPrice < tickerData.ema21 ? 'SHORT' : 'LONG')
+          : 'LONG';
       const stopDefault = pnthrStop
         ? +pnthrStop
         : stock.stopPrice

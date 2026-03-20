@@ -684,7 +684,8 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
         riskPerPosition:  sizePanel.risk$,
         killScore:        stock.apexScore ?? stock.killScore ?? null,
         killTier:         stock.tier ?? null,
-        sector:           stock.sector || '—',
+        isETF:            sizePanel.isETF || false,
+        sector:           sizePanel.isETF ? 'ETF' : (stock.sector || '—'),
         companyName:      stock.companyName || '',
         queuedAt:         Date.now(),
       });

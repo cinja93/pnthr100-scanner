@@ -82,7 +82,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
     { key: 'watchlist', label: 'Watchlist',      icon: '👁' },
   ];
   if (isAdmin) {
-    personalItems.push({ key: 'history',        label: 'PNTHR History',  icon: '📊' });
+    personalItems.push({ key: 'history',        label: 'PNTHR Kill History',  icon: '📊' });
     personalItems.push({ key: 'signal-history', label: 'Signal History', icon: '📋' });
   }
 

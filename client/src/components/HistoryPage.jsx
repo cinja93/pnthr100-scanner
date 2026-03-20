@@ -216,9 +216,9 @@ export default function HistoryPage() {
       try {
         setLoading(true);
         const [trRes, acRes, allRes] = await Promise.all([
-          fetch(`${API_BASE}/kill-history/track-record`, { headers: authHeaders() }),
-          fetch(`${API_BASE}/kill-history/active`,       { headers: authHeaders() }),
-          fetch(`${API_BASE}/kill-history`,              { headers: authHeaders() }),
+          fetch(`${API_BASE}/api/kill-history/track-record`, { headers: authHeaders() }),
+          fetch(`${API_BASE}/api/kill-history/active`,       { headers: authHeaders() }),
+          fetch(`${API_BASE}/api/kill-history`,              { headers: authHeaders() }),
         ]);
         if (!trRes.ok || !acRes.ok || !allRes.ok) throw new Error('Failed to load history');
         const [tr, ac, al] = await Promise.all([trRes.json(), acRes.json(), allRes.json()]);

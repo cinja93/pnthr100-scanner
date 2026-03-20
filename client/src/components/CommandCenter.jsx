@@ -1366,9 +1366,9 @@ export default function CommandCenter() {
       try {
         if (Date.now() - navLastEditedAt.current > 10000) {
           const profile = await fetchNav();
-          if (profile?.accountSize && profile.accountSize !== nav) {
-            setNav(profile.accountSize);
-            updateCurrentUser({ accountSize: profile.accountSize });
+          if (profile?.nav && profile.nav !== nav) {
+            setNav(profile.nav);
+            updateCurrentUser({ accountSize: profile.nav });
           }
         }
       } catch { /* silent */ }
@@ -1406,9 +1406,9 @@ export default function CommandCenter() {
     // Pull latest NAV on mount (picks up IBKR sync that happened before opening Command)
     fetchNav()
       .then(profile => {
-        if (profile?.accountSize) {
-          setNav(profile.accountSize);
-          updateCurrentUser({ accountSize: profile.accountSize });
+        if (profile?.nav) {
+          setNav(profile.nav);
+          updateCurrentUser({ accountSize: profile.nav });
         }
       })
       .catch(() => {});

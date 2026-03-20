@@ -615,12 +615,31 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       // Stop: prefer the chart's own pnthrStop (computed from fresh chart data via
       // detectAllSignals) as it matches what's drawn on the chart. Fall back to
       // stock.stopPrice from the server, then EMA ±2% if neither is available.
-      // Direction priority: Kill signal → price vs 21-week EMA → LONG fallback
-      const direction = stock.signal === 'SS' ? 'SHORT'
-        : stock.signal === 'BL' ? 'LONG'
-        : (tickerData.ema21 && entryPrice)
-          ? (entryPrice < tickerData.ema21 ? 'SHORT' : 'LONG')
-          : 'LONG';
+
+      // Direction: EMA position is the base (works for ALL stocks regardless of
+      // signal status). Explicit BL/SS signal overrides the EMA reading since
+      // it is more specific. LONG is the last-resort fallback only when neither
+      // EMA data nor a signal is available.
+      let direction = 'LONG'; // ultimate fallback
+      if (tickerData.ema21 && entryPrice) {
+        direction = entryPrice < tickerData.ema21 ? 'SHORT' : 'LONG';
+      }
+      if (stock.signal === 'SS' || stock.signal === 'ss') {
+        direction = 'SHORT';
+      } else if (stock.signal === 'BL' || stock.signal === 'bl') {
+        direction = 'LONG';
+      }
+
+      console.log('[SIZE IT] Direction detection:', {
+        ticker:     stock.ticker || stock.symbol,
+        signal:     stock.signal,
+        entryPrice,
+        ema21:      tickerData.ema21,
+        priceVsEma: tickerData.ema21 && entryPrice
+          ? (entryPrice < tickerData.ema21 ? 'BELOW → SHORT' : 'ABOVE → LONG')
+          : 'EMA unavailable — fallback LONG',
+        direction,
+      });
       const stopDefault = pnthrStop
         ? +pnthrStop
         : stock.stopPrice

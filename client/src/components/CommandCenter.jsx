@@ -1304,11 +1304,13 @@ function isMarketHours() {
 export default function CommandCenter() {
   const { currentUser, updateCurrentUser } = useAuth();
   const [nav,           setNav]           = useState(() => currentUser?.accountSize ?? 100000);
-  const navSaveTimer = useRef(null);
+  const navSaveTimer    = useRef(null);
+  const navLastEditedAt = useRef(0); // timestamp of last manual NAV edit
 
   // Debounce-save nav to profile whenever it changes (1s after last keystroke)
   function handleNavChange(value) {
     setNav(value);
+    navLastEditedAt.current = Date.now(); // mark manual edit so auto-sync won't overwrite
     if (navSaveTimer.current) clearTimeout(navSaveTimer.current);
     navSaveTimer.current = setTimeout(() => {
       updateUserProfile({ accountSize: value })
@@ -1360,11 +1362,14 @@ export default function CommandCenter() {
       }
       setLastRefresh(new Date());
       // Sync NAV from server (picks up IBKR NetLiquidation updates)
+      // Skip if user manually edited NAV in the last 10s to avoid race-condition overwrite
       try {
-        const profile = await fetchNav();
-        if (profile?.accountSize && profile.accountSize !== nav) {
-          setNav(profile.accountSize);
-          updateCurrentUser({ accountSize: profile.accountSize });
+        if (Date.now() - navLastEditedAt.current > 10000) {
+          const profile = await fetchNav();
+          if (profile?.accountSize && profile.accountSize !== nav) {
+            setNav(profile.accountSize);
+            updateCurrentUser({ accountSize: profile.accountSize });
+          }
         }
       } catch { /* silent */ }
       // Re-sync pending entries so queue is never stale after a remount or nav change
@@ -1401,7 +1406,7 @@ export default function CommandCenter() {
     // Pull latest NAV on mount (picks up IBKR sync that happened before opening Command)
     fetchNav()
       .then(profile => {
-        if (profile?.accountSize && profile.accountSize !== nav) {
+        if (profile?.accountSize) {
           setNav(profile.accountSize);
           updateCurrentUser({ accountSize: profile.accountSize });
         }

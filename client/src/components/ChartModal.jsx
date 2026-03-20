@@ -616,37 +616,63 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       // detectAllSignals) as it matches what's drawn on the chart. Fall back to
       // stock.stopPrice from the server, then EMA ±2% if neither is available.
 
-      // Direction: EMA position is the base (works for ALL stocks regardless of
-      // signal status). Explicit BL/SS signal overrides the EMA reading since
-      // it is more specific. LONG is the last-resort fallback only when neither
-      // EMA data nor a signal is available.
+      // Direction detection — 4-method waterfall, first match wins:
+      // M1: server's suggestedDirection (Kill signal > EMA comparison, already computed)
+      // M2: EMA value from ticker API (price vs 21-week EMA)
+      // M3: stock.ema from chart data
+      // M4: stop price relationship (stop above entry = short)
+      // Signal field on stock object overrides if explicitly SS/BL.
       let direction = 'LONG'; // ultimate fallback
-      if (tickerData.ema21 && entryPrice) {
-        direction = entryPrice < tickerData.ema21 ? 'SHORT' : 'LONG';
+      let dirSource = 'FALLBACK';
+
+      // M1: server suggestedDirection (most reliable — uses Kill signal + EMA)
+      if (tickerData.suggestedDirection) {
+        direction = tickerData.suggestedDirection;
+        dirSource = 'SERVER_SUGGESTED';
       }
-      if (stock.signal === 'SS' || stock.signal === 'ss') {
+      // M2: EMA from ticker API
+      else if (tickerData.ema21 && tickerData.ema21 > 0 && entryPrice) {
+        direction = entryPrice < tickerData.ema21 ? 'SHORT' : 'LONG';
+        dirSource = 'TICKER_EMA21';
+      }
+      // M3: EMA from stock object (chart page data)
+      else if (stock.ema && stock.ema > 0 && entryPrice) {
+        direction = entryPrice < stock.ema ? 'SHORT' : 'LONG';
+        dirSource = 'STOCK_EMA';
+      }
+      // M4: stop price relationship
+      else if (stock.stopPrice && entryPrice && stock.stopPrice > entryPrice * 1.02) {
         direction = 'SHORT';
-      } else if (stock.signal === 'BL' || stock.signal === 'bl') {
-        direction = 'LONG';
+        dirSource = 'STOP_RELATIONSHIP';
       }
 
+      // Explicit signal override (takes precedence over all EMA-based methods)
+      const sigRaw = stock.signal || stock.signalType || stock.pnthrSignal || stock.type || '';
+      const sigUp  = sigRaw.toUpperCase();
+      if (sigUp === 'SS') { direction = 'SHORT'; dirSource = 'SIGNAL_SS'; }
+      else if (sigUp === 'BL') { direction = 'LONG'; dirSource = 'SIGNAL_BL'; }
+
       console.log('[SIZE IT] Direction detection:', {
-        ticker:     stock.ticker || stock.symbol,
-        signal:     stock.signal,
+        ticker:           stock.ticker || stock.symbol,
+        signal:           stock.signal,
+        suggestedDirection: tickerData.suggestedDirection,
         entryPrice,
-        ema21:      tickerData.ema21,
-        priceVsEma: tickerData.ema21 && entryPrice
-          ? (entryPrice < tickerData.ema21 ? 'BELOW → SHORT' : 'ABOVE → LONG')
-          : 'EMA unavailable — fallback LONG',
+        ema21:            tickerData.ema21,
+        stockEma:         stock.ema,
+        stopPrice:        stock.stopPrice,
+        method:           dirSource,
         direction,
       });
-      const stopDefault = pnthrStop
-        ? +pnthrStop
+      // Stop default: PNTHR Stop from chart (ATR-based) > server stopPrice > EMA ±2%
+      const chartStop   = pnthrStop ? +pnthrStop : null;
+      const stopDefault = chartStop
+        ? chartStop
         : stock.stopPrice
           ? +stock.stopPrice
           : direction === 'SHORT'
             ? +(entryPrice * 1.02).toFixed(2)
             : +(entryPrice * 0.98).toFixed(2);
+      console.log('[SIZE IT] Stop:', { pnthrStop, chartStop, stockStopPrice: stock.stopPrice, stopDefault });
 
       // Sizing — ETF uses 0.5% vitality, stocks use 1%
       const sizing     = sizePosition({ netLiquidity: nav, entryPrice, stopPrice: stopDefault, maxGapPct, direction, isETF });
@@ -663,6 +689,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
 
       setSizePanel({
         nav, entry: entryPrice, stop: stopDefault, adjustedStop: stopDefault,
+        chartPnthrStop: chartStop,   // original chart PNTHR stop — used by direction toggle
         gapPct: maxGapPct, gapMult: sizing.gapMult,
         totalShares: sizing.totalShares, lot1Shares: lot1Shr,
         risk$: +riskDollar.toFixed(0), direction, isETF,
@@ -670,6 +697,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
         stockRisk: heat.stockRisk, etfRisk: heat.etfRisk,
         stockRiskPct: heat.stockRiskPct, etfRiskPct: heat.etfRiskPct,
         heatBefore: heat.liveCnt, // legacy
+        dirSource,  // debug: which detection method fired
       });
     } catch { /* non-fatal — panel stays null */ }
     setSizeLoading(false);
@@ -810,9 +838,12 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                   <button
                     onClick={() => setSizePanel(p => {
                       const newDir  = p.direction === 'LONG' ? 'SHORT' : 'LONG';
-                      const newStop = newDir === 'SHORT'
-                        ? +(p.entry * 1.02).toFixed(2)
-                        : +(p.entry * 0.98).toFixed(2);
+                      // Use the chart's PNTHR stop (ATR-based) if available, else ±2%
+                      const newStop = p.chartPnthrStop
+                        ? p.chartPnthrStop
+                        : newDir === 'SHORT'
+                          ? +(p.entry * 1.02).toFixed(2)
+                          : +(p.entry * 0.98).toFixed(2);
                       const sizing  = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir, isETF: p.isETF });
                       const lot1    = Math.max(1, Math.round(sizing.totalShares * 0.15));
                       return { ...p, direction: newDir, adjustedStop: newStop, stop: newStop,
@@ -828,6 +859,10 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                   </button>
                   <span style={{ fontSize: 11, color: tierColor, fontWeight: 700, border: `1px solid ${tierColor}`, borderRadius: 3, padding: '2px 7px', opacity: 0.85 }}>
                     {tier}
+                  </span>
+                  {/* DEBUG — remove after confirming direction is correct */}
+                  <span style={{ fontSize: 9, color: '#555', fontFamily: 'monospace' }}>
+                    dir:{sizePanel.dirSource} | stop:{sizePanel.chartPnthrStop ? `chart$${sizePanel.chartPnthrStop}` : 'no-chart-stop'}
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: 28, alignItems: 'baseline' }}>

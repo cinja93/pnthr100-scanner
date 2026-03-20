@@ -1353,7 +1353,7 @@ export default function CommandCenter() {
   const [loading,         setLoading]         = useState(true);
   const [saving,          setSaving]          = useState(false);
   const [sectorWarning,   setSectorWarning]   = useState(null);
-  const [chartStock,      setChartStock]      = useState(null);
+  const [chartModal,      setChartModal]      = useState(null); // { stocks, index }
 
   const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
   const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
@@ -1680,7 +1680,15 @@ export default function CommandCenter() {
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
                     onDelete={handleDeletePosition}
                     flashed={flashedTickers.has(p.ticker)}
-                    onOpenChart={setChartStock} />
+                    onOpenChart={(clicked) => {
+                      const stocks = positions.map(pos => ({
+                        ticker: pos.ticker, symbol: pos.ticker,
+                        currentPrice: pos.currentPrice, signal: pos.signal,
+                        sector: pos.sector, stopPrice: pos.stopPrice,
+                      }));
+                      const index = stocks.findIndex(s => s.ticker === clicked.ticker);
+                      setChartModal({ stocks, index: Math.max(0, index) });
+                    }} />
                 ))}
               </div>
             )}
@@ -1689,13 +1697,13 @@ export default function CommandCenter() {
         {tab === 'pipeline'   && <PipelineTab positions={positions} nav={nav} />}
       </div>
 
-      {/* Chart Modal — opens when a position ticker is clicked */}
-      {chartStock && (
+      {/* Chart Modal — opens when a position ticker is clicked; cycles through all positions */}
+      {chartModal && (
         <ChartModal
-          stocks={[chartStock]}
-          initialIndex={0}
+          stocks={chartModal.stocks}
+          initialIndex={chartModal.index}
           earnings={{}}
-          onClose={() => setChartStock(null)}
+          onClose={() => setChartModal(null)}
         />
       )}
     </div>

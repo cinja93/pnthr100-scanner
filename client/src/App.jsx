@@ -347,7 +347,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
   return (
     <div className="app">
-      <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
+      <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
 
       <div className="content-wrapper">
         {/* Lot Ready banner — visible on all pages when a pyramid lot is triggered */}
@@ -488,11 +488,17 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* Portfolio page */}
           {activePage === 'portfolio' && <PortfolioPage currentUser={currentUser} onProfileUpdate={setCurrentUser} />}
 
-          {/* PNTHR Kill History — track record, visible to all */}
-          {activePage === 'history' && <HistoryPage />}
+          {/* PNTHR Kill History — admin only */}
+          {activePage === 'history' && (isAdmin
+            ? <HistoryPage />
+            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
+          )}
 
           {/* Signal History — admin only */}
-          {activePage === 'signal-history' && <SignalHistoryPage />}
+          {activePage === 'signal-history' && (isAdmin
+            ? <SignalHistoryPage />
+            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
+          )}
         </main>
 
         <footer className="footer">

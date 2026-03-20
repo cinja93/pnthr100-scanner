@@ -17,9 +17,6 @@ const NAV_GROUPS = [
       { key: 'search',   label: 'PNTHR Search',   iconImg: true },
       { key: 'prey',     label: 'PNTHR Prey',     iconImg: true },
       { key: 'apex',     label: 'PNTHR Kill',     iconImg: true },
-      { key: 'command',  label: 'PNTHR Command',  iconImg: true },
-      { key: 'history',        label: 'PNTHR History',  icon: '📊' },
-      { key: 'signal-history', label: 'Signal History', icon: '📋' },
     ],
   },
   {
@@ -72,21 +69,25 @@ function BatchStatsTooltip({ stats, top }) {
   );
 }
 
-export default function Sidebar({ activePage, onNavigate, currentUser, onLogout, longStats, shortStats }) {
+export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, onLogout, longStats, shortStats }) {
   const [tooltipKey, setTooltipKey] = useState(null);
   const [tooltipTop, setTooltipTop] = useState(0);
   const btnRefs = useRef({});
 
   const firstName = getFirstName(currentUser);
 
-  // Personal group — portfolio and signal-history are hidden for everyone (admin-only features)
+  // Personal group — Command for everyone; History pages admin-only
+  const personalItems = [
+    { key: 'command',  label: 'PNTHR Command',  iconImg: true },
+    { key: 'watchlist', label: 'Watchlist',      icon: '👁' },
+  ];
+  if (isAdmin) {
+    personalItems.push({ key: 'history',        label: 'PNTHR History',  icon: '📊' });
+    personalItems.push({ key: 'signal-history', label: 'Signal History', icon: '📋' });
+  }
+
   const personalGroup = firstName
-    ? {
-        groupLabel: `For ${firstName}`,
-        items: [
-          { key: 'watchlist', label: 'Watchlist', icon: '👁' },
-        ],
-      }
+    ? { groupLabel: `For ${firstName}`, items: personalItems }
     : null;
 
   const allGroups = personalGroup ? [...NAV_GROUPS, personalGroup] : NAV_GROUPS;

@@ -20,6 +20,7 @@ import { getApexResults }         from './apexService.js';
 import { getMostRecentRanking }   from './database.js';
 import { connectToDatabase }      from './database.js';
 import { checkCaseStudyEntries }  from './killHistory.js';
+import { saveWeeklySnapshot, getCurrentWeekOf } from './signalHistoryService.js';
 
 // ── Compute weekOf (last Friday) ─────────────────────────────────────────────
 
@@ -211,7 +212,15 @@ export async function runFridayKillPipeline() {
       console.error('[Kill Pipeline] Case study check failed (non-fatal):', err.message);
     }
 
-    // ── 7. Summary ────────────────────────────────────────────────────────
+    // ── 7. Auto-save signal history snapshot ─────────────────────────────
+    try {
+      const count = await saveWeeklySnapshot(jungleSignals);
+      console.log(`[Signal History] Auto-saved ${count} signal records for week of ${getCurrentWeekOf()}`);
+    } catch (err) {
+      console.error('[Signal History] Auto-save failed (non-fatal):', err.message);
+    }
+
+    // ── 8. Summary ────────────────────────────────────────────────────────
     const alphaKills = scored.filter(s => s.tier === 'ALPHA PNTHR KILL');
     const striking   = scored.filter(s => s.tier === 'STRIKING');
     const confirmed  = scored.filter(s => s.confirmation === 'CONFIRMED');

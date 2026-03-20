@@ -5,7 +5,7 @@
 // Authenticates via JWT (req.user.userId = admin's ownerId).
 // Writes ONLY to that user's data — impossible to touch another user's records.
 
-import { connectToDatabase } from './database.js';
+import { connectToDatabase, upsertUserProfile } from './database.js';
 
 // ── POST /api/ibkr/sync ───────────────────────────────────────────────────────
 export async function ibkrSync(req, res) {
@@ -24,18 +24,12 @@ export async function ibkrSync(req, res) {
 
     // 1. Update user's NAV + account metadata from IBKR NetLiquidation
     if (account.netLiquidation > 0) {
-      await db.collection('user_profiles').updateOne(
-        { userId },
-        {
-          $set: {
-            accountSize:     Math.round(account.netLiquidation),
-            ibkrLastSync:    syncedAt,
-            ibkrAccountId:   accountId || null,
-            ibkrAccountData: account,
-          },
-        },
-        { upsert: true }
-      );
+      await upsertUserProfile(userId, {
+        accountSize:     Math.round(account.netLiquidation),
+        ibkrLastSync:    syncedAt,
+        ibkrAccountId:   accountId || null,
+        ibkrAccountData: account,
+      });
     }
 
     // 2. Upsert full IBKR positions snapshot (one doc per user)

@@ -117,8 +117,45 @@ export async function getMostRecentRanking() {
 
     if (ranking.length === 0) return null;
     const doc = ranking[0];
-    doc.rankings = sortRankingsByYtdAndAssignRank(doc.rankings);
-    if (doc.shortRankings) doc.shortRankings = sortShortRankingsByYtdAndAssignRank(doc.shortRankings);
+
+    const currentLong  = sortRankingsByYtdAndAssignRank(doc.rankings);
+    const currentShort = doc.shortRankings ? sortShortRankingsByYtdAndAssignRank(doc.shortRankings) : null;
+
+    // Fetch the previous ranking to compute rankChange (same logic as getRankingByDate)
+    const prevDocs = await collection
+      .find({ date: { $lt: doc.date } })
+      .sort({ date: -1 })
+      .limit(1)
+      .toArray();
+
+    if (prevDocs.length === 0) {
+      doc.rankings      = currentLong.map(s  => ({ ...s,  rankChange: null, previousRank: null }));
+      doc.shortRankings = currentShort ? currentShort.map(s => ({ ...s, rankChange: null, previousRank: null })) : undefined;
+      return doc;
+    }
+
+    const prev      = prevDocs[0];
+    const prevLong  = sortRankingsByYtdAndAssignRank(prev.rankings);
+    const prevLongMap = {};
+    prevLong.forEach(s => { if (s.ticker) prevLongMap[s.ticker.toUpperCase()] = s.rank; });
+
+    doc.rankings = currentLong.map(s => {
+      const previousRank = prevLongMap[(s.ticker || '').toUpperCase()] ?? null;
+      return { ...s, rankChange: previousRank !== null ? previousRank - s.rank : null, previousRank };
+    });
+
+    if (currentShort && prev.shortRankings) {
+      const prevShort = sortShortRankingsByYtdAndAssignRank(prev.shortRankings);
+      const prevShortMap = {};
+      prevShort.forEach(s => { if (s.ticker) prevShortMap[s.ticker.toUpperCase()] = s.rank; });
+      doc.shortRankings = currentShort.map(s => {
+        const previousRank = prevShortMap[(s.ticker || '').toUpperCase()] ?? null;
+        return { ...s, rankChange: previousRank !== null ? previousRank - s.rank : null, previousRank };
+      });
+    } else if (currentShort) {
+      doc.shortRankings = currentShort.map(s => ({ ...s, rankChange: null, previousRank: null }));
+    }
+
     return doc;
   } catch (error) {
     console.error('Error getting most recent ranking:', error.message);

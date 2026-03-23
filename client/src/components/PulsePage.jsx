@@ -99,13 +99,18 @@ export default function PulsePage({ onNavigate }) {
         onRefresh={refreshPulse}
       />
 
-      {/* TIER 1: Market environment — SPY, QQQ, Regime, VIX */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      {/* TIER 1: Market gauges — SPY, QQQ, NYSE, NASDAQ, IWM, GLD + VIX */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <SpyGauge regime={data.regime} />
         <QqqGauge regime={data.regime} />
-        <RegimeIndicator regime={data.regime} signals={data.signals} />
+        <MarketGauge label="NYSE" subLabel="Composite" data={data.marketGauges?.nyse} />
+        <MarketGauge label="NASDAQ" subLabel="Composite" data={data.marketGauges?.nasdaq} />
+        <MarketGauge label="IWM" subLabel="Russell 2000" data={data.marketGauges?.iwm} />
+        <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} />
         <VixThermometer vix={vix} />
       </div>
+      {/* Regime + Portfolio Heat compact strip */}
+      <RegimeStrip regime={data.regime} signals={data.signals} positions={data.positions} />
 
       {/* TIER 2: Signal intelligence — Kill Top 10, Sector Pulse, Signal Breadth, Macro */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -233,9 +238,9 @@ function StatusLight({ status, message, positions, pulseData, lastRefresh, isRef
   );
 }
 
-function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subValue, subValueColor }) {
-  const W = 180, H = 110;
-  const cx = W / 2, cy = H - 10, r = 80;
+function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subValue, subValueColor, gaugeW, gaugeH }) {
+  const W = gaugeW ?? 180, H = gaugeH ?? 110;
+  const cx = W / 2, cy = H - 10, r = Math.round(W * 80 / 180);
 
   const toAngle = (v) => {
     const pct = Math.max(0, Math.min(1, (v - min) / (max - min)));
@@ -293,6 +298,7 @@ function SpyGauge({ regime }) {
     <SemiGauge
       value={needleVal} min={-20} max={20} zones={zones}
       label="SPY"
+      gaugeW={150} gaugeH={100}
       displayValue={spy?.close ? `$${spy.close.toFixed(2)}` : (pos ? (pos === 'above' ? '▲ ABOVE' : '▼ BELOW') : '—')}
       subLabel={spy?.ema21 > 0 ? `vs $${spy.ema21.toFixed(2)} EMA` : (spy?.close ? 'EMA pending' : regime?.weekOf ? `Week ${regime.weekOf}` : 'No data')}
       subValue={sep !== null ? `${sep > 0 ? '+' : ''}${sep}%` : (pos ? `${pos} EMA` : null)}
@@ -317,6 +323,7 @@ function QqqGauge({ regime }) {
     <SemiGauge
       value={needleVal} min={-20} max={20} zones={zones}
       label="QQQ"
+      gaugeW={150} gaugeH={100}
       displayValue={qqq?.close ? `$${qqq.close.toFixed(2)}` : (pos ? (pos === 'above' ? '▲ ABOVE' : '▼ BELOW') : '—')}
       subLabel={qqq?.ema21 > 0 ? `vs $${qqq.ema21.toFixed(2)} EMA` : (qqq?.close ? 'EMA pending' : regime?.weekOf ? `Week ${regime.weekOf}` : 'No data')}
       subValue={sep !== null ? `${sep > 0 ? '+' : ''}${sep}%` : (pos ? `${pos} EMA` : null)}
@@ -358,6 +365,115 @@ function RegimeIndicator({ regime, signals }) {
         <span style={{ color: isBear ? '#ff6b6b' : '#6bcb77' }}>SPY {isBear ? '▼ below' : '▲ above'}</span>
         <span style={{ color: regime?.qqqAboveEma === false ? '#ff6b6b' : '#6bcb77' }}>QQQ {regime?.qqqAboveEma === false ? '▼ below' : '▲ above'}</span>
       </div>
+    </div>
+  );
+}
+
+// Equity zones (red left, green right)
+const EQUITY_ZONES = [
+  { from: -10, to: -5,  color: '#dc3545' },
+  { from: -5,  to: -2,  color: '#ff6b6b' },
+  { from: -2,  to:  2,  color: '#555' },
+  { from:  2,  to:  5,  color: '#6bcb77' },
+  { from:  5,  to:  10, color: '#28a745' },
+];
+// Gold zones (gray left, gold right)
+const GOLD_ZONES = [
+  { from: -10, to: -2,  color: '#444' },
+  { from: -2,  to:  2,  color: '#666' },
+  { from:  2,  to:  5,  color: '#C8A000' },
+  { from:  5,  to:  10, color: '#FFD700' },
+];
+
+function MarketGauge({ label, subLabel, data, isGold }) {
+  const price = data?.price ?? null;
+  const changePct = data?.changePct ?? null;
+  const needleVal = changePct !== null ? Math.max(-10, Math.min(10, changePct)) : 0;
+  const zones = isGold ? GOLD_ZONES : EQUITY_ZONES;
+
+  function fmtPrice(p) {
+    if (p == null) return '—';
+    if (p >= 1000) return p.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    return `$${p.toFixed(2)}`;
+  }
+
+  const pctColor = changePct === null ? '#888' : changePct >= 0 ? '#6bcb77' : '#ff6b6b';
+  const arrow = changePct === null ? '' : changePct >= 0 ? '▲' : '▼';
+
+  return (
+    <SemiGauge
+      value={needleVal} min={-10} max={10} zones={zones}
+      label={label}
+      gaugeW={150} gaugeH={100}
+      displayValue={price !== null ? fmtPrice(price) : '—'}
+      subLabel={subLabel}
+      subValue={changePct !== null ? `${arrow} ${Math.abs(changePct).toFixed(2)}%` : 'No data'}
+      subValueColor={pctColor}
+    />
+  );
+}
+
+function RegimeStrip({ regime, signals, positions }) {
+  const pos = regime?.indexPosition || 'unknown';
+  const isBear = pos === 'below';
+  const isBull = pos === 'above';
+  const label = isBear ? 'BEARISH' : isBull ? 'BULLISH' : 'NEUTRAL';
+  const labelColor = isBear ? '#ff6b6b' : isBull ? '#6bcb77' : '#888';
+  const borderColor = isBear ? '#dc3545' : isBull ? '#28a745' : '#555';
+  const bg = isBear ? 'rgba(220,53,69,0.07)' : isBull ? 'rgba(40,167,69,0.07)' : 'rgba(100,100,100,0.07)';
+  const ssD1 = regime?.ssD1 ?? null;
+  const blD1 = regime?.blD1 ?? null;
+  const ratio = signals?.ratio ?? null;
+  const heat = positions?.heat;
+  const nav = positions?.nav ?? 100000;
+  const capacity = heat ? ((0.15 * nav) - heat.totalRisk).toFixed(0) : null;
+
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      background: bg, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`,
+      borderRadius: 4, padding: '9px 18px', marginBottom: 12,
+    }}>
+      {/* Left: Regime */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <span style={{ color: labelColor, fontWeight: 900, fontSize: 15, fontFamily: 'monospace', letterSpacing: 2 }}>
+          ⚡ {label}
+        </span>
+        {ssD1 !== null && blD1 !== null ? (
+          <span style={{ fontSize: 12 }}>
+            <span style={{ color: '#ff6b6b', fontWeight: 700 }}>SS {ssD1.toFixed(2)}×</span>
+            <span style={{ color: '#333', margin: '0 6px' }}>|</span>
+            <span style={{ color: '#6bcb77', fontWeight: 700 }}>BL {blD1.toFixed(2)}×</span>
+          </span>
+        ) : null}
+        <span style={{ color: '#555', fontSize: 11 }}>
+          {ratio !== null ? `SS:BL ${ratio.toFixed(1)}:1` : ''}
+          {regime?.weekOf ? ` · Week ${regime.weekOf}` : ''}
+        </span>
+        <span style={{ fontSize: 11 }}>
+          <span style={{ color: isBear ? '#ff6b6b' : '#6bcb77' }}>SPY {isBear ? '▼' : '▲'}</span>
+          <span style={{ color: '#333', margin: '0 5px' }}>·</span>
+          <span style={{ color: regime?.qqqAboveEma === false ? '#ff6b6b' : '#6bcb77' }}>
+            QQQ {regime?.qqqAboveEma === false ? '▼' : '▲'}
+          </span>
+        </span>
+      </div>
+      {/* Right: Portfolio Heat */}
+      {heat && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+          <span style={{ color: '#555', fontSize: 11 }}>
+            Stk {heat.stockRiskPct?.toFixed(1)}%/10% · ETF {heat.etfRiskPct?.toFixed(1)}%/5%
+          </span>
+          <span style={{ color: '#FFD700', fontWeight: 700, fontSize: 13, fontFamily: 'monospace' }}>
+            Heat: {heat.totalRiskPct?.toFixed(1)}% / 15%
+          </span>
+          {capacity && (
+            <span style={{ color: '#28a745', fontSize: 11 }}>
+              ${Number(capacity).toLocaleString()} cap
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

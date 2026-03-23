@@ -2340,6 +2340,39 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       } catch { /* best-effort */ }
     }
 
+    // Always-fetch market gauge data: NYSE, NASDAQ, IWM, GLD
+    let marketGauges = { nyse: null, nasdaq: null, iwm: null, gld: null };
+    try {
+      const mgRes = await fetch(
+        `https://financialmodelingprep.com/api/v3/quote/%5ENYA,%5EIXIC,IWM,GLD?apikey=${FMP_KEY}`
+      );
+      if (mgRes.ok) {
+        const mgData = await mgRes.json();
+        function extractMg(symbol) {
+          const q = mgData.find(x => x.symbol === symbol || x.symbol === symbol.replace('%5E', '^'));
+          if (!q) return null;
+          return {
+            price: q.price ?? null,
+            change: q.change ?? null,
+            changePct: q.changesPercentage ?? null,
+            name: q.name ?? symbol,
+          };
+        }
+        marketGauges = {
+          nyse:   extractMg('%5ENYA')  || extractMg('^NYA'),
+          nasdaq: extractMg('%5EIXIC') || extractMg('^IXIC'),
+          iwm:    extractMg('IWM'),
+          gld:    extractMg('GLD'),
+        };
+        // Try alternate symbol names if not found
+        if (!marketGauges.nyse)   marketGauges.nyse   = mgData.find(q => q.symbol === '^NYA')  ? { price: mgData.find(q=>q.symbol==='^NYA').price,   changePct: mgData.find(q=>q.symbol==='^NYA').changesPercentage   } : null;
+        if (!marketGauges.nasdaq) marketGauges.nasdaq = mgData.find(q => q.symbol === '^IXIC') ? { price: mgData.find(q=>q.symbol==='^IXIC').price, changePct: mgData.find(q=>q.symbol==='^IXIC').changesPercentage } : null;
+        console.log('[PULSE] marketGauges fetched:', Object.entries(marketGauges).map(([k,v]) => `${k}:${v?.price ?? 'null'}`).join(' '));
+      }
+    } catch (e) {
+      console.warn('[PULSE] marketGauges fetch failed:', e.message);
+    }
+
     // Data freshness metadata — client shows "Scores: Fri Mar 20" vs "Scores: Live"
     const dataSource = liveApex ? 'live_apex' : 'friday_pipeline';
     const scoresAsOf = liveApex
@@ -2396,6 +2429,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       },
       lotsReady: lotsReady.slice(0, 5),
       marketSnapshot: { ...(marketSnapshot || {}), treasury10y, dxy },
+      marketGauges,
     });
   } catch (err) {
     console.error('[/api/pulse]', err.message);

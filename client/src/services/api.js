@@ -538,3 +538,17 @@ export async function addChangelogEntry(entry) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+// ── PNTHR's Pulse — Mission Control ───────────────────────────────────────────
+
+export async function fetchPulse() {
+  const res = await fetch(`${API_BASE}/api/pulse`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to load Pulse data');
+  return res.json();
+}
+
+export async function fetchLiveVix() {
+  const res = await fetch(`${API_BASE}/api/market-data/vix`, { headers: authHeaders() });
+  if (!res.ok) return { close: null, change: null };
+  return res.json();
+}

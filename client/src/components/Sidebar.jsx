@@ -7,7 +7,8 @@ const NAV_GROUPS = [
   {
     groupLabel: 'This Week',
     items: [
-      { key: 'perch',    label: 'PNTHR Perch',   iconImg: true },
+      { key: 'pulse',    label: "PNTHR's Pulse",  icon: '⚡' },
+      { key: 'perch',    label: 'PNTHR Perch',    iconImg: true },
       { key: 'earnings', label: 'Earnings Week',  icon: '📅' },
     ],
   },

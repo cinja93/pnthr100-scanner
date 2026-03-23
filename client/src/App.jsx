@@ -18,6 +18,7 @@ import PreyPage from './components/PreyPage';
 import ApexPage from './components/ApexPage';
 import CommandCenter from './components/CommandCenter';
 import NewsPage from './components/NewsPage';
+import PulsePage from './components/PulsePage';
 import SignalHistoryPage from './components/SignalHistoryPage';
 import HistoryPage from './components/HistoryPage';
 import LoginPage from './components/LoginPage';
@@ -476,6 +477,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR PREY page */}
           {activePage === 'prey' && <PreyPage onNavigate={navigate} />}
+
+          {/* PNTHR's Pulse mission control */}
+          {activePage === 'pulse' && <PulsePage onNavigate={navigate} />}
 
           {/* PNTHR's Perch newsletter */}
           {activePage === 'perch' && <NewsPage />}

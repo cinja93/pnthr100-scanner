@@ -2019,6 +2019,122 @@ app.post('/api/signal-history/changelog', authenticateJWT, requireAdmin, async (
   }
 });
 
+// ── PNTHR's Pulse — Mission Control Dashboard ─────────────────────────────────
+app.get('/api/pulse', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+
+    const [regimeDoc, killScores, signals, positions, userProfile, marketSnapshot] = await Promise.all([
+      db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } }),
+      db.collection('pnthr_kill_scores').find({ killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
+      db.collection('pnthr679_signals').find({ status: 'OPEN' }).toArray(),
+      db.collection('pnthr_portfolio').find({ ownerId: userId, status: { $ne: 'closed' } }).toArray(),
+      db.collection('user_profiles').findOne({ userId }),
+      db.collection('pnthr_weekly_market_snapshot').findOne({}, { sort: { weekOf: -1 } }),
+    ]);
+
+    const nav = userProfile?.accountSize || 100000;
+
+    // Signal breadth by sector
+    const sectorMap = {};
+    let blCount = 0, ssCount = 0;
+    for (const sig of signals) {
+      const s = sig.sector || 'Unknown';
+      if (!sectorMap[s]) sectorMap[s] = { bl: 0, ss: 0 };
+      if (sig.signal === 'BL') { sectorMap[s].bl++; blCount++; }
+      else if (sig.signal === 'SS') { sectorMap[s].ss++; ssCount++; }
+    }
+
+    // Portfolio heat calculation
+    const livePos = positions.filter(p => {
+      const fills = p.fills || [];
+      return fills.some(f => f.filled);
+    });
+    let stockRisk = 0, etfRisk = 0;
+    for (const p of livePos) {
+      const fills = p.fills || [];
+      const totalShares = fills.filter(f => f.filled).reduce((s, f) => s + (f.shares || 0), 0);
+      const stop = p.stopPrice || 0;
+      const avg = p.avgCost || p.entryPrice || 0;
+      const risk = totalShares * Math.abs(avg - stop);
+      const isShort = p.direction === 'SHORT';
+      const isRecycled = isShort ? stop <= avg : stop >= avg;
+      if (!isRecycled) {
+        if (p.isETF) etfRisk += risk;
+        else stockRisk += risk;
+      }
+    }
+    const totalRisk = stockRisk + etfRisk;
+    const stockRiskPct = +((stockRisk / nav) * 100).toFixed(2);
+    const etfRiskPct = +((etfRisk / nav) * 100).toFixed(2);
+    const totalRiskPct = +((totalRisk / nav) * 100).toFixed(2);
+
+    // Lots ready
+    const lotsReady = [];
+    for (const p of livePos) {
+      const fills = p.fills || [];
+      for (const f of fills) {
+        if (f.filled) continue;
+        const priorFilled = f.lot === 1 || fills.find(x => x.lot === f.lot - 1)?.filled;
+        if (priorFilled && f.triggerPrice) {
+          lotsReady.push({ ticker: p.ticker, lot: f.lot, triggerPrice: f.triggerPrice });
+        }
+      }
+    }
+
+    const shortCount = livePos.filter(p => p.direction === 'SHORT').length;
+    const longCount = livePos.filter(p => p.direction === 'LONG').length;
+
+    res.json({
+      statusLight: 'GREEN',
+      statusMessage: 'ALL SYSTEMS OPERATIONAL',
+      regime: regimeDoc || null,
+      killTop10: killScores,
+      signals: {
+        blCount, ssCount,
+        ratio: ssCount / Math.max(blCount, 1),
+        bySector: sectorMap,
+      },
+      positions: {
+        total: livePos.length,
+        short: shortCount,
+        long: longCount,
+        recycled: livePos.filter(p => {
+          const fills = p.fills || [];
+          const totalShares = fills.filter(f => f.filled).reduce((s, f) => s + (f.shares || 0), 0);
+          const stop = p.stopPrice || 0;
+          const avg = p.avgCost || p.entryPrice || 0;
+          const isShort = p.direction === 'SHORT';
+          return totalShares > 0 && (isShort ? stop <= avg : stop >= avg);
+        }).length,
+        heat: { stockRisk, etfRisk, totalRisk, stockRiskPct, etfRiskPct, totalRiskPct },
+        nav,
+      },
+      lotsReady: lotsReady.slice(0, 5),
+      marketSnapshot: marketSnapshot || null,
+    });
+  } catch (err) {
+    console.error('[/api/pulse]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Live VIX quote ─────────────────────────────────────────────────────────────
+app.get('/api/market-data/vix', authenticateJWT, async (req, res) => {
+  try {
+    const FMP_API_KEY = process.env.FMP_API_KEY;
+    const url = `https://financialmodelingprep.com/api/v3/quote/%5EVIX?apikey=${FMP_API_KEY}`;
+    const fmpRes = await fetch(url);
+    if (!fmpRes.ok) throw new Error(`FMP error ${fmpRes.status}`);
+    const data = await fmpRes.json();
+    res.json({ close: data[0]?.price || null, change: data[0]?.change || null });
+  } catch (e) {
+    res.json({ close: null, change: null });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 API available at http://localhost:${PORT}/api/stocks`);

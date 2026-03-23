@@ -28,6 +28,17 @@ function getToday() {
 export async function checkCaseStudyEntries(db, allScored, signalData, source) {
   if (!db || !allScored || allScored.length === 0) return;
 
+  // Guard: skip if D5 rank data is missing — means scoring engine ran at <100% capacity
+  // (D5 requires at least 2 weeks of PNTHR rankings to compare against)
+  const hasRankData = allScored.some(s => {
+    const d5 = s.scores?.d5 ?? s.scoreDetail?.d5?.score;
+    return d5 != null && d5 !== 0;
+  });
+  if (!hasRankData) {
+    console.log('[CASE STUDY] Skipping — D5 rank data missing (engine <100% capacity, need 2+ weeks of rankings)');
+    return;
+  }
+
   const today = getToday();
 
   // Top 10 non-overextended stocks

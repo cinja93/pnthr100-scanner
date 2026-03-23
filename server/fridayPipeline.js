@@ -33,6 +33,40 @@ function getLastFriday() {
   return d.toISOString().split('T')[0];
 }
 
+// ── Fetch VIX / 10Y Treasury / DXY from FMP ──────────────────────────────────
+
+async function fetchMacroContext() {
+  const FMP_API_KEY  = process.env.FMP_API_KEY;
+  const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
+  const result = { vix: null, treasury10y: null, dxy: null };
+
+  try {
+    const res = await fetch(`${FMP_BASE_URL}/quote/%5EVIX?apikey=${FMP_API_KEY}`);
+    if (res.ok) {
+      const data = await res.json();
+      result.vix = data?.[0]?.price ?? null;
+    }
+  } catch { /* non-fatal */ }
+
+  try {
+    const res = await fetch(`${FMP_BASE_URL}/quote/%5ETNX?apikey=${FMP_API_KEY}`);
+    if (res.ok) {
+      const data = await res.json();
+      result.treasury10y = data?.[0]?.price ?? null;
+    }
+  } catch { /* non-fatal */ }
+
+  try {
+    const res = await fetch(`${FMP_BASE_URL}/quote/DX-Y.NYB?apikey=${FMP_API_KEY}`);
+    if (res.ok) {
+      const data = await res.json();
+      result.dxy = data?.[0]?.price ?? null;
+    }
+  } catch { /* non-fatal */ }
+
+  return result;
+}
+
 // ── Main Pipeline ─────────────────────────────────────────────────────────────
 
 export async function runFridayKillPipeline() {
@@ -96,6 +130,11 @@ export async function runFridayKillPipeline() {
     const jungleSignals = await getSignals(tickers);
     const openSignalCount = Object.values(jungleSignals).filter(s => s?.signal === 'BL' || s?.signal === 'SS').length;
     console.log(`   ${openSignalCount} open signals (BL + SS)`);
+
+    // ── 3a. Fetch macro context (VIX, 10Y, DXY) ───────────────────────────
+    console.log('3a. Fetching macro context (VIX, 10Y, DXY)...');
+    const macroContext = await fetchMacroContext();
+    console.log(`   VIX: ${macroContext.vix ?? 'n/a'} | 10Y: ${macroContext.treasury10y ?? 'n/a'} | DXY: ${macroContext.dxy ?? 'n/a'}`);
 
     // ── 3. Fetch Prey + Hunt for D8 ───────────────────────────────────────
     console.log('3. Loading Prey + Hunt universe...');
@@ -204,6 +243,105 @@ export async function runFridayKillPipeline() {
       console.log(`   Saved ${historyDocs.length} history entries`);
     }
 
+    // ── 5b. Save weekly market snapshot ──────────────────────────────────
+    try {
+      const blCount  = regime?.blCount  ?? 0;
+      const ssCount  = regime?.ssCount  ?? 0;
+      const ssBlRatio = blCount > 0 ? ssCount / blCount : ssCount > 0 ? 99 : 0;
+      await db.collection('pnthr_weekly_market_snapshot').updateOne(
+        { weekOf },
+        {
+          $set: {
+            weekOf,
+            spyPrice:     null, // apex doesn't return raw prices in contextSummary
+            spyEma21:     null,
+            spyAboveEma:  contextSummary.spyAboveEma,
+            spyEmaRising: contextSummary.spyEmaRising,
+            qqqPrice:     null,
+            qqqEma21:     null,
+            qqqAboveEma:  contextSummary.qqqAboveEma,
+            qqqEmaRising: contextSummary.qqqEmaRising,
+            vix:          macroContext.vix,
+            treasury10y:  macroContext.treasury10y,
+            dxy:          macroContext.dxy,
+            blCount,
+            ssCount,
+            newBlCount:   regime?.newBlCount ?? 0,
+            newSsCount:   regime?.newSsCount ?? 0,
+            ssBlRatio,
+            createdAt:    new Date(),
+          },
+        },
+        { upsert: true }
+      );
+      console.log('   Saved weekly market snapshot');
+    } catch (err) {
+      console.error('[Kill Pipeline] Market snapshot save failed (non-fatal):', err.message);
+    }
+
+    // ── 5c. Save enriched signals ─────────────────────────────────────────
+    try {
+      // Fetch previous week's enriched signals for score trajectory
+      const prevWeekDate = new Date(weekOf);
+      prevWeekDate.setDate(prevWeekDate.getDate() - 7);
+      const prevWeekOf = prevWeekDate.toISOString().split('T')[0];
+      const prevWeekDocs = await db.collection('pnthr_enriched_signals')
+        .find({ weekOf: prevWeekOf }, { projection: { ticker: 1, totalScore: 1, tier: 1, killRank: 1 } })
+        .toArray();
+      const prevByTicker = {};
+      for (const d of prevWeekDocs) prevByTicker[d.ticker] = d;
+
+      let enrichedSaved = 0;
+      for (const s of scored) {
+        if (!s.signal || (s.signal !== 'BL' && s.signal !== 'SS')) continue;
+        try {
+          const prev = prevByTicker[s.ticker];
+          const scoreLastWeek  = prev?.totalScore ?? null;
+          const scoreDelta     = scoreLastWeek != null ? (s.apexScore - scoreLastWeek) : null;
+          const tierLastWeek   = prev?.tier ?? null;
+          const tierChanged    = tierLastWeek != null && tierLastWeek !== s.tier;
+          const rankLastWeek   = prev?.killRank ?? null;
+          const rankDelta      = (rankLastWeek != null && s.killRank != null) ? (rankLastWeek - s.killRank) : null;
+
+          await db.collection('pnthr_enriched_signals').updateOne(
+            { weekOf, ticker: s.ticker },
+            {
+              $set: {
+                weekOf,
+                ticker:         s.ticker,
+                signal:         s.signal,
+                signalAge:      s.signalAge ?? null,
+                sector:         s.sector ?? null,
+                exchange:       s.exchange ?? null,
+                killRank:       s.killRank ?? null,
+                killScore:      s.apexScore,
+                totalScore:     s.apexScore,
+                tier:           s.tier,
+                confirmation:   s.confirmation,
+                preMultiplier:  s.preMultiplier ?? null,
+                dimensions:     s.scoreDetail ?? null,
+                currentPrice:   s.currentPrice ?? null,
+                ema21:          null,
+                scoreLastWeek,
+                scoreDelta,
+                tierLastWeek,
+                tierChanged,
+                rankLastWeek,
+                rankDelta,
+                weeksInCurrentTier: tierChanged ? 1 : null,
+                createdAt:      new Date(),
+              },
+            },
+            { upsert: true }
+          );
+          enrichedSaved++;
+        } catch { /* skip individual stock errors */ }
+      }
+      console.log(`   Saved ${enrichedSaved} enriched signal records`);
+    } catch (err) {
+      console.error('[Kill Pipeline] Enriched signals save failed (non-fatal):', err.message);
+    }
+
     // ── 6. Case Study Entries ──────────────────────────────────────────────
     console.log('6. Running Kill case study detection...');
     try {
@@ -220,13 +358,31 @@ export async function runFridayKillPipeline() {
       console.error('[Signal History] Auto-save failed (non-fatal):', err.message);
     }
 
-    // ── 8. Summary ────────────────────────────────────────────────────────
+    // ── 8. Auto-log pipeline run to changelog ─────────────────────────────
+    try {
+      const alphaCount = scored.filter(s => s.tier === 'ALPHA PNTHR KILL').length;
+      const strCount   = scored.filter(s => s.tier === 'STRIKING').length;
+      await db.collection('pnthr_system_changelog').insertOne({
+        date:        weekOf,
+        version:     null,
+        category:    'PIPELINE',
+        impact:      'LOW',
+        description: `Friday pipeline completed. ${scored.length} scored, ${alphaCount} ALPHA, ${strCount} STRIKING. VIX: ${macroContext.vix ?? 'n/a'}. BL: ${regime?.blCount ?? 0}, SS: ${regime?.ssCount ?? 0}.`,
+        changedBy:   'PIPELINE',
+        details:     '',
+        createdAt:   new Date(),
+      });
+    } catch (err) {
+      console.error('[Kill Pipeline] Changelog auto-log failed (non-fatal):', err.message);
+    }
+
+    // ── 9. Summary ────────────────────────────────────────────────────────
     const alphaKills = scored.filter(s => s.tier === 'ALPHA PNTHR KILL');
     const striking   = scored.filter(s => s.tier === 'STRIKING');
     const confirmed  = scored.filter(s => s.confirmation === 'CONFIRMED');
 
     console.log(`\n${'='.repeat(60)}`);
-    console.log('PIPELINE COMPLETE');
+    console.log('PIPELINE COMPLETE'); // Step 9 summary
     console.log(`${'='.repeat(60)}`);
     console.log(`Total scored:   ${scored.length}`);
     console.log(`ALPHA KILL:     ${alphaKills.length}`);

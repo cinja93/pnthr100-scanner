@@ -486,3 +486,55 @@ export async function deletePosition(id) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+// ── Signal History Enhancement ─────────────────────────────────────────────────
+
+export async function fetchMarketSnapshots(from, to) {
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to)   params.set('to', to);
+  const query = params.toString() ? `?${params}` : '';
+  const res = await fetch(`${API_BASE}/api/signal-history/market-snapshots${query}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchEnrichedSignals(weekOf) {
+  const query = weekOf ? `?weekOf=${weekOf}` : '';
+  const res = await fetch(`${API_BASE}/api/signal-history/enriched-signals${query}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchTickerTrajectory(ticker, weeks = 12) {
+  const res = await fetch(`${API_BASE}/api/signal-history/enriched-signals/${ticker}/trajectory?weeks=${weeks}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchClosedTrades(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.tier)      params.set('tier', filters.tier);
+  if (filters.direction) params.set('direction', filters.direction);
+  if (filters.sector)    params.set('sector', filters.sector);
+  const query = params.toString() ? `?${params}` : '';
+  const res = await fetch(`${API_BASE}/api/signal-history/closed-trades${query}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchChangelog() {
+  const res = await fetch(`${API_BASE}/api/signal-history/changelog`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function addChangelogEntry(entry) {
+  const res = await fetch(`${API_BASE}/api/signal-history/changelog`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(entry),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

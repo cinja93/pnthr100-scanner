@@ -1855,6 +1855,170 @@ app.get('/api/admin/signal-history/ticker/:ticker', authenticateJWT, requireAdmi
   }
 });
 
+// ── Signal History Enhancement endpoints ──────────────────────────────────────
+
+// GET /api/signal-history/market-snapshots?from=&to=
+app.get('/api/signal-history/market-snapshots', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const query = {};
+    if (req.query.from || req.query.to) {
+      query.weekOf = {};
+      if (req.query.from) query.weekOf.$gte = req.query.from;
+      if (req.query.to)   query.weekOf.$lte = req.query.to;
+    }
+    const docs = await db.collection('pnthr_weekly_market_snapshot')
+      .find(query)
+      .sort({ weekOf: 1 })
+      .toArray();
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/signal-history/enriched-signals?weekOf=
+app.get('/api/signal-history/enriched-signals', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const weekOf = req.query.weekOf;
+    const query = weekOf ? { weekOf } : {};
+    if (!weekOf) {
+      // Default: latest week
+      const latest = await db.collection('pnthr_enriched_signals')
+        .findOne({}, { sort: { weekOf: -1 } });
+      if (latest) query.weekOf = latest.weekOf;
+    }
+    const docs = await db.collection('pnthr_enriched_signals')
+      .find(query)
+      .sort({ killRank: 1 })
+      .toArray();
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/signal-history/enriched-signals/:ticker/trajectory?weeks=12
+app.get('/api/signal-history/enriched-signals/:ticker/trajectory', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const weeks = parseInt(req.query.weeks) || 12;
+    const docs = await db.collection('pnthr_enriched_signals')
+      .find({ ticker: req.params.ticker.toUpperCase() })
+      .sort({ weekOf: -1 })
+      .limit(weeks)
+      .toArray();
+    res.json(docs.reverse());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/signal-history/closed-trades?tier=&direction=&sector=
+app.get('/api/signal-history/closed-trades', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const query = {};
+    if (req.query.tier)      query.entryTier  = req.query.tier;
+    if (req.query.direction) query.direction  = req.query.direction;
+    if (req.query.sector)    query.sector     = req.query.sector;
+    const docs = await db.collection('pnthr_closed_trades')
+      .find(query)
+      .sort({ exitDate: -1 })
+      .limit(500)
+      .toArray();
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/signal-history/closed-trades/summary
+app.get('/api/signal-history/closed-trades/summary', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const trades = await db.collection('pnthr_closed_trades').find({}).toArray();
+    const total    = trades.length;
+    const winners  = trades.filter(t => t.isWinner).length;
+    const avgProfitPct = total > 0 ? trades.reduce((s, t) => s + (t.profitPct ?? 0), 0) / total : 0;
+    const byTier   = {};
+    for (const t of trades) {
+      const k = t.entryTier || 'Unknown';
+      if (!byTier[k]) byTier[k] = { total: 0, winners: 0 };
+      byTier[k].total++;
+      if (t.isWinner) byTier[k].winners++;
+    }
+    res.json({ total, winners, winRate: total > 0 ? winners / total : 0, avgProfitPct, byTier });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/signal-history/dimension-effectiveness?monthOf=
+app.get('/api/signal-history/dimension-effectiveness', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const query = req.query.monthOf ? { monthOf: req.query.monthOf } : {};
+    const docs = await db.collection('pnthr_dimension_effectiveness')
+      .find(query)
+      .sort({ monthOf: -1 })
+      .limit(12)
+      .toArray();
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/signal-history/changelog
+app.get('/api/signal-history/changelog', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const docs = await db.collection('pnthr_system_changelog')
+      .find({})
+      .sort({ date: -1, createdAt: -1 })
+      .limit(500)
+      .toArray();
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/signal-history/changelog
+app.post('/api/signal-history/changelog', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const { date, version, category, impact, description, details } = req.body;
+    if (!date || !category || !description) {
+      return res.status(400).json({ error: 'date, category, and description are required' });
+    }
+    const doc = {
+      date,
+      version:    version || null,
+      category:   category || 'OTHER',
+      impact:     impact || 'LOW',
+      description,
+      details:    details || '',
+      changedBy:  req.user?.email || 'admin',
+      createdAt:  new Date(),
+    };
+    const result = await db.collection('pnthr_system_changelog').insertOne(doc);
+    res.json({ _id: result.insertedId, ...doc });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 API available at http://localhost:${PORT}/api/stocks`);

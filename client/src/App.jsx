@@ -35,7 +35,7 @@ function calcReadyLots(positions) {
     const highFilled = filledLotNums.length > 0 ? Math.max(...filledLotNums) : 0;
     if (highFilled >= 5) continue;
     const nextLot = highFilled + 1;
-    if (nextLot < 1 || nextLot > 5) continue;
+    if (nextLot < 2 || nextLot > 5) continue; // skip Lot 1 — user already knows about initial entry
     const isLong = p.direction === 'LONG';
     const anchor = fills[1]?.filled && fills[1]?.price ? +fills[1].price : (p.entryPrice || 0);
     if (!anchor) continue;

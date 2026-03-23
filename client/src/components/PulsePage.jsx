@@ -644,111 +644,141 @@ function SectorPulse({ signals, killDataLive, onNavigate }) {
 function NewSignalsPanel({ newSignals, onTickerClick }) {
   if (!newSignals) return null;
   const { blStocks = [], blEtfs = [], ssStocks = [], ssEtfs = [] } = newSignals;
-  const totalBL = blStocks.length + blEtfs.length;
-  const totalSS = ssStocks.length + ssEtfs.length;
-  if (totalBL === 0 && totalSS === 0) return (
+  const hasStocks = blStocks.length > 0 || ssStocks.length > 0;
+  const hasEtfs   = blEtfs.length > 0 || ssEtfs.length > 0;
+  if (!hasStocks && !hasEtfs) return (
     <div style={{ background: '#111', borderRadius: 12, padding: '12px 16px', marginBottom: 12, color: '#444', fontSize: 12, fontFamily: 'monospace' }}>
       <span style={{ color: '#FFD700', letterSpacing: 2, fontSize: 11 }}>⚡ NEW SIGNALS THIS WEEK</span>
       <span style={{ marginLeft: 16 }}>No new signals this week.</span>
     </div>
   );
 
-  // Build chart list for navigation within each direction group
-  function makeChartList(stocks) {
-    return stocks.map(s => ({ ticker: s.ticker, symbol: s.ticker, currentPrice: s.currentPrice, signal: s.signal, sector: s.sector }));
-  }
-  const blAll  = [...blStocks, ...blEtfs];
-  const ssAll  = [...ssStocks, ...ssEtfs];
-  const blChartList = makeChartList(blAll);
-  const ssChartList = makeChartList(ssAll);
+  // Separate chart lists: stocks-only for BL/SS columns, ETF-only for ETF box
+  function toChartItem(s) { return { ticker: s.ticker, symbol: s.ticker, currentPrice: s.currentPrice, signal: s.signal, sector: s.sector }; }
+  const blStockChartList = blStocks.map(toChartItem);
+  const ssStockChartList = ssStocks.map(toChartItem);
+  const blEtfChartList   = blEtfs.map(toChartItem);
+  const ssEtfChartList   = ssEtfs.map(toChartItem);
 
-  function NewSigRow({ s, idx, chartList }) {
+  // ── Stock row (Kill-scored, has tier badge) ──
+  function StockRow({ s, idx, chartList }) {
     const t = tierBadge(s.tier);
     return (
-      <div
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 10px',
-          borderBottom: '1px solid #1a1a1a', cursor: 'pointer',
-          transition: 'background 0.15s' }}
-        onMouseEnter={e => e.currentTarget.style.background = '#1e1e1e'}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 10px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer', transition: 'background 0.15s' }}
+        onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         onClick={() => onTickerClick(chartList, idx)}
       >
-        <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 48, fontFamily: 'monospace' }}>{s.ticker}</span>
+        <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 50, fontFamily: 'monospace' }}>{s.ticker}</span>
         <span style={{ color: '#555', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector || '—'}</span>
-        <span style={{ color: '#ccc', fontSize: 12, minWidth: 58, textAlign: 'right', fontFamily: 'monospace' }}>
-          {s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}
-        </span>
-        <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, minWidth: 42, textAlign: 'right', fontFamily: 'monospace' }}>
-          {s.totalScore != null ? s.totalScore.toFixed(1) : '—'}
-        </span>
-        <span style={{ minWidth: 80 }}>{t}</span>
-        <span style={{ color: '#FFD700', fontSize: 12 }}>▸</span>
+        <span style={{ color: '#ccc', fontSize: 12, minWidth: 60, textAlign: 'right', fontFamily: 'monospace' }}>{s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}</span>
+        <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, minWidth: 40, textAlign: 'right', fontFamily: 'monospace' }}>{s.totalScore != null ? s.totalScore.toFixed(1) : '—'}</span>
+        <span style={{ minWidth: 84 }}>{t}</span>
+        <span style={{ color: '#FFD700', fontSize: 11 }}>▸</span>
       </div>
     );
   }
 
-  function SignalSection({ label, stocks, etfs, direction }) {
+  // ── Stock column (BL or SS) — stocks only, no ETFs ──
+  function StockColumn({ direction, stocks, chartList }) {
     const borderColor = direction === 'BL' ? '#28a745' : '#dc3545';
     const headerBg    = direction === 'BL' ? 'rgba(40,167,69,0.12)' : 'rgba(220,53,69,0.12)';
     const badgeColor  = direction === 'BL' ? '#6bcb77' : '#ff6b6b';
-    const chartList   = direction === 'BL' ? blChartList : ssChartList;
-    const label2      = direction === 'BL' ? 'NEW BUY LONG (BL+1)' : 'NEW SELL SHORT (SS+1)';
-    const all = [...stocks, ...etfs];
-    if (all.length === 0) return (
-      <div style={{ flex: 1, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`, borderRadius: 8, padding: '10px 14px', color: '#444', fontSize: 12 }}>
-        <div style={{ color: badgeColor, fontSize: 11, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>{label2}</div>
-        <div style={{ color: '#333' }}>No new {direction === 'BL' ? 'BL' : 'SS'} signals.</div>
+    const label       = direction === 'BL' ? 'NEW BUY LONG (BL+1)' : 'NEW SELL SHORT (SS+1)';
+    return (
+      <div style={{ flex: 1, minWidth: 0, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`, borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: headerBg, padding: '6px 10px' }}>
+          <span style={{ color: badgeColor, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>{label}</span>
+          <span style={{ color: '#444', fontSize: 10, marginLeft: 8 }}>STOCKS ({stocks.length})</span>
+        </div>
+        {stocks.length > 0
+          ? stocks.map((s, i) => <StockRow key={s.ticker} s={s} idx={i} chartList={chartList} />)
+          : <div style={{ padding: '10px 14px', color: '#333', fontSize: 12 }}>No new {direction} signals this week.</div>
+        }
       </div>
     );
-    const stockOffset = 0;
-    const etfOffset   = stocks.length;
+  }
+
+  // ── ETF row (no Kill score — show price + category + ▸) ──
+  function EtfRow({ s, idx, chartList }) {
     return (
-      <div style={{ flex: 1, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`, borderRadius: 8, overflow: 'hidden' }}>
-        <div style={{ background: headerBg, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: badgeColor, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>{label2}</span>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #222', cursor: 'pointer', transition: 'background 0.15s' }}
+        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,215,0,0.04)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        onClick={() => onTickerClick(chartList, idx)}
+      >
+        <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 12, width: 52, fontFamily: 'monospace', flexShrink: 0 }}>{s.ticker}</span>
+        <span style={{ color: '#888', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector || '—'}</span>
+        <span style={{ color: '#e8e8e8', fontSize: 12, minWidth: 72, textAlign: 'right', fontFamily: 'monospace', flexShrink: 0 }}>
+          {s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}
+        </span>
+        <span style={{ color: '#FFD700', marginLeft: 10, fontSize: 11, flexShrink: 0 }}>▸</span>
+      </div>
+    );
+  }
+
+  // ── ETF box (full width, yellow top border) ──
+  function EtfBox() {
+    if (!hasEtfs) return null;
+    return (
+      <div style={{ background: '#1e1e1e', border: '1px solid #333', borderTop: '2px solid #FFD700', borderRadius: 6, padding: '12px 16px', marginTop: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <span style={{ color: '#FFD700', fontFamily: 'monospace', fontWeight: 700, fontSize: 12, letterSpacing: 1 }}>⚡ ETF NEW SIGNALS</span>
+          <span style={{ background: '#FFD700', color: '#000', fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 3, letterSpacing: 1 }}>ETF</span>
+          <span style={{ color: '#555', fontSize: 11 }}>
+            BL+1 ({blEtfs.length}) | SS+1 ({ssEtfs.length})
+          </span>
         </div>
-        {stocks.length > 0 && (
-          <>
-            <div style={{ padding: '4px 10px 2px', color: '#444', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', background: '#0d0d0d' }}>
-              Stocks ({stocks.length})
+        <div style={{ display: 'flex', gap: 24 }}>
+          {/* BL ETFs */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: '#28a745', fontSize: 11, fontWeight: 700, borderBottom: '1px solid #28a74544', paddingBottom: 5, marginBottom: 8 }}>
+              BL+1 ETFs ({blEtfs.length})
             </div>
-            {stocks.map((s, i) => <NewSigRow key={s.ticker} s={s} idx={stockOffset + i} chartList={chartList} />)}
-          </>
-        )}
-        {etfs.length > 0 && (
-          <>
-            <div style={{ padding: '4px 10px 2px', color: '#444', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', background: '#0d0d0d' }}>
-              ETFs ({etfs.length})
+            {blEtfs.length > 0
+              ? blEtfs.map((s, i) => <EtfRow key={s.ticker} s={s} idx={i} chartList={blEtfChartList} />)
+              : <div style={{ color: '#444', fontSize: 11, fontStyle: 'italic' }}>No new BL ETF signals</div>
+            }
+          </div>
+          {/* SS ETFs */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: '#dc3545', fontSize: 11, fontWeight: 700, borderBottom: '1px solid #dc354544', paddingBottom: 5, marginBottom: 8 }}>
+              SS+1 ETFs ({ssEtfs.length})
             </div>
-            {etfs.map((s, i) => <NewSigRow key={s.ticker} s={s} idx={etfOffset + i} chartList={chartList} />)}
-          </>
-        )}
+            {ssEtfs.length > 0
+              ? ssEtfs.map((s, i) => <EtfRow key={s.ticker} s={s} idx={i} chartList={ssEtfChartList} />)
+              : <div style={{ color: '#444', fontSize: 11, fontStyle: 'italic' }}>No new SS ETF signals</div>
+            }
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <div style={{ background: '#111', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-        <span style={{ color: '#FFD700', fontSize: 11, letterSpacing: 2, fontFamily: 'monospace' }}>⚡ NEW SIGNALS THIS WEEK</span>
-        {totalBL > 0 && (
-          <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>
-            {totalBL} BL+1{blEtfs.length > 0 ? <span style={{ color: '#4a9', fontWeight: 400 }}> ({blEtfs.length} ETF{blEtfs.length !== 1 ? 's' : ''})</span> : null}
-          </span>
-        )}
-        {totalBL > 0 && totalSS > 0 && <span style={{ color: '#333', fontSize: 11 }}>|</span>}
-        {totalSS > 0 && (
-          <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>
-            {totalSS} SS+1{ssEtfs.length > 0 ? <span style={{ color: '#c66', fontWeight: 400 }}> ({ssEtfs.length} ETF{ssEtfs.length !== 1 ? 's' : ''})</span> : null}
-          </span>
-        )}
+      {/* Header: Stocks counts | ETFs counts */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ color: '#FFD700', fontSize: 11, letterSpacing: 2, fontFamily: 'monospace', fontWeight: 700 }}>⚡ NEW SIGNALS THIS WEEK</span>
+        <span style={{ color: '#444', fontSize: 11 }}>Stocks:</span>
+        <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>{blStocks.length} BL+1</span>
+        <span style={{ color: '#333', fontSize: 11 }}>|</span>
+        <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>{ssStocks.length} SS+1</span>
+        {hasEtfs && <>
+          <span style={{ color: '#333', fontSize: 11, margin: '0 4px' }}>·</span>
+          <span style={{ color: '#444', fontSize: 11 }}>ETFs:</span>
+          <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>{blEtfs.length} BL+1</span>
+          <span style={{ color: '#333', fontSize: 11 }}>|</span>
+          <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>{ssEtfs.length} SS+1</span>
+        </>}
       </div>
-      {/* Two columns: BL | SS */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <SignalSection direction="BL" stocks={blStocks} etfs={blEtfs} />
-        <SignalSection direction="SS" stocks={ssStocks} etfs={ssEtfs} />
+      {/* Stock columns */}
+      <div style={{ display: 'flex', gap: 12 }}>
+        <StockColumn direction="BL" stocks={blStocks} chartList={blStockChartList} />
+        <StockColumn direction="SS" stocks={ssStocks} chartList={ssStockChartList} />
       </div>
+      {/* ETF box — full width, below stocks, hidden when empty */}
+      <EtfBox />
     </div>
   );
 }

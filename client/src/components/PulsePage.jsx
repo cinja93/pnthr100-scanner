@@ -7,7 +7,8 @@ export default function PulsePage({ onNavigate }) {
   const [vix, setVix] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [chartStock, setChartStock] = useState(null);
+  const [chartList, setChartList] = useState([]);   // array of stocks for ChartModal
+  const [chartIndex, setChartIndex] = useState(0);  // which stock is open
   const [signalModal, setSignalModal] = useState(null); // 'BL' | 'SS' | null
 
   useEffect(() => {
@@ -44,7 +45,7 @@ export default function PulsePage({ onNavigate }) {
 
       {/* TIER 2: Signal intelligence — Kill Top 10, Sector Pulse, Signal Breadth, Macro */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-        <KillTop10 killTop10={data.killTop10} onTickerClick={setChartStock} killDataLive={data.killDataLive} />
+        <KillTop10 killTop10={data.killTop10} onTickerClick={s => { setChartList([s]); setChartIndex(0); }} killDataLive={data.killDataLive} />
         <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} />
       </div>
       <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
@@ -57,15 +58,15 @@ export default function PulsePage({ onNavigate }) {
         <SignalStockModal
           signal={signalModal}
           onClose={() => setSignalModal(null)}
-          onTickerClick={(stock) => { setSignalModal(null); setChartStock(stock); }}
+          onTickerClick={(stocks, idx) => { setSignalModal(null); setChartList(stocks); setChartIndex(idx); }}
         />
       )}
-      {chartStock && (
+      {chartList.length > 0 && (
         <ChartModal
-          stocks={[chartStock]}
-          initialIndex={0}
+          stocks={chartList}
+          initialIndex={chartIndex}
           earnings={{}}
-          onClose={() => setChartStock(null)}
+          onClose={() => { setChartList([]); setChartIndex(0); }}
         />
       )}
     </div>
@@ -650,7 +651,10 @@ function SignalStockModal({ signal, onClose, onTickerClick }) {
                   <tr key={s.ticker} style={{ borderBottom: '1px solid #111', background: i % 2 === 0 ? 'transparent' : '#0a0a0a' }}>
                     <td style={{ padding: '7px 10px' }}>
                       <span
-                        onClick={() => onTickerClick({ ticker: s.ticker, symbol: s.ticker, currentPrice: s.currentPrice, signal, sector: s.sector })}
+                        onClick={() => {
+                          const chartStocks = sorted.map(x => ({ ticker: x.ticker, symbol: x.ticker, currentPrice: x.currentPrice, signal, sector: x.sector }));
+                          onTickerClick(chartStocks, i);
+                        }}
                         style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(212,160,23,0.4)' }}
                       >{s.ticker}</span>
                     </td>

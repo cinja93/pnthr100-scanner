@@ -36,28 +36,43 @@ export default function PulsePage({ onNavigate }) {
   const [chartList, setChartList] = useState([]);
   const [chartIndex, setChartIndex] = useState(0);
   const [signalModal, setSignalModal] = useState(null);
-
-  useEffect(() => {
-    Promise.all([fetchPulse(), fetchLiveVix()])
-      .then(([pulse, vixData]) => { setData(pulse); setVix(vixData); setLastRefresh(new Date()); })
-      .catch(err => { console.error(err); setError(err.message); })
-      .finally(() => setLoading(false));
-  }, []);
+  const autoRefreshTimer = React.useRef(null);
 
   async function refreshPulse() {
     if (isRefreshing) return;
+    if (autoRefreshTimer.current) { clearTimeout(autoRefreshTimer.current); autoRefreshTimer.current = null; }
     setIsRefreshing(true);
     try {
       const [pulse, vixData] = await Promise.all([fetchPulse(), fetchLiveVix()]);
       setData(pulse);
       setVix(vixData);
       setLastRefresh(new Date());
+      // If still warming, schedule another check in 90s
+      if (pulse.cacheWarming) {
+        autoRefreshTimer.current = setTimeout(refreshPulse, 90_000);
+      }
     } catch (err) {
       console.error('Refresh failed:', err);
     } finally {
       setIsRefreshing(false);
     }
   }
+
+  useEffect(() => {
+    Promise.all([fetchPulse(), fetchLiveVix()])
+      .then(([pulse, vixData]) => {
+        setData(pulse);
+        setVix(vixData);
+        setLastRefresh(new Date());
+        // Auto-refresh once warming completes (~90s for apex + ETF)
+        if (pulse.cacheWarming) {
+          autoRefreshTimer.current = setTimeout(refreshPulse, 90_000);
+        }
+      })
+      .catch(err => { console.error(err); setError(err.message); })
+      .finally(() => setLoading(false));
+    return () => { if (autoRefreshTimer.current) clearTimeout(autoRefreshTimer.current); };
+  }, []);
 
   if (loading) return (
     <div style={{ background: '#0a0a0a', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D4A017', fontSize: 18, fontFamily: 'monospace' }}>
@@ -140,7 +155,10 @@ function StatusLight({ status, message, positions, pulseData, lastRefresh, isRef
       ? { dot: '#28a745', label: 'Live',         anim: false }
       : { dot: '#ffc107', label: 'Fri Pipeline', anim: false };
 
-  const scoresLabel = isRefreshing ? 'Scores: Refreshing...' : formatScoresLabel(pulseData);
+  const isWarming = pulseData?.cacheWarming && !isRefreshing;
+  const scoresLabel = isRefreshing ? 'Scores: Refreshing...'
+    : isWarming ? 'Scores: Computing live scores... (auto-refreshes in ~90s)'
+    : formatScoresLabel(pulseData);
   const loadedLabel = formatLoadedAt(lastRefresh);
 
   return (

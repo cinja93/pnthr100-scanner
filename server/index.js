@@ -2021,12 +2021,84 @@ app.post('/api/signal-history/changelog', authenticateJWT, requireAdmin, async (
   }
 });
 
+// ── Pulse cache warmers — background, non-blocking ────────────────────────────
+// Triggered by /api/pulse when caches are cold so the dashboard is self-sufficient.
+// Uses a guard flag to prevent duplicate in-flight computations.
+
+let _apexWarmInProgress = false;
+async function warmApexCacheIfCold() {
+  const { getCachedApexResults: _getApex } = await import('./apexService.js');
+  if (_getApex() || _apexWarmInProgress) return;
+  _apexWarmInProgress = true;
+  console.log('[PULSE] Warming apex cache in background...');
+  try {
+    const [specLongs, specShorts] = await Promise.all([getSp400Longs(), getSp400Shorts()]);
+    const stocks = await getJungleStocks(specLongs, specShorts);
+    const tickers = stocks.map(s => s.ticker);
+    const stockMeta = {};
+    for (const s of stocks) {
+      stockMeta[s.ticker] = {
+        companyName: s.companyName, sector: s.sector, exchange: s.exchange,
+        currentPrice: s.currentPrice, ytdReturn: s.ytdReturn,
+        isSp500: s.isSp500, isDow30: s.isDow30, isNasdaq100: s.isNasdaq100,
+        universe: s.universe, rankList: s.rankList ?? null,
+        rank: null, rankChange: undefined,
+      };
+    }
+    try {
+      const latestRanking = await getMostRecentRanking();
+      if (latestRanking) {
+        for (const e of (latestRanking.rankings || [])) {
+          if (stockMeta[e.ticker]) { stockMeta[e.ticker].rank = e.rank ?? null; stockMeta[e.ticker].rankChange = e.rankChange ?? undefined; stockMeta[e.ticker].rankList = 'LONG'; }
+        }
+        for (const e of (latestRanking.shortRankings || [])) {
+          if (stockMeta[e.ticker]) { stockMeta[e.ticker].rank = e.rank ?? null; stockMeta[e.ticker].rankChange = e.rankChange ?? undefined; stockMeta[e.ticker].rankList = 'SHORT'; }
+        }
+      }
+    } catch { /* rankings are enrichment only */ }
+    const jungleSignals = await getSignals(tickers);
+    let preyResults = null, huntTickers = new Set();
+    try { preyResults = await getPreyResults(tickers, stockMeta, jungleSignals); } catch (e) { console.warn('[PULSE] prey failed:', e.message); }
+    try { const h = await getEmaCrossoverStocks(); huntTickers = new Set((h?.stocks || []).map(s => s.ticker || s)); } catch {}
+    const { getApexResults: _ga } = await import('./apexService.js');
+    await _ga(tickers, stockMeta, jungleSignals, preyResults, huntTickers);
+    console.log('[PULSE] ✅ Apex cache warmed');
+  } catch (err) {
+    console.error('[PULSE] Apex warm failed:', err.message);
+  } finally {
+    _apexWarmInProgress = false;
+  }
+}
+
+let _etfWarmInProgress = false;
+async function warmEtfCacheIfCold() {
+  if (getCachedEtfResults() || _etfWarmInProgress) return;
+  _etfWarmInProgress = true;
+  console.log('[PULSE] Warming ETF cache in background...');
+  try {
+    await getEtfStocks();
+    console.log('[PULSE] ✅ ETF cache warmed');
+  } catch (err) {
+    console.error('[PULSE] ETF warm failed:', err.message);
+  } finally {
+    _etfWarmInProgress = false;
+  }
+}
+
 // ── PNTHR's Pulse — Mission Control Dashboard ─────────────────────────────────
 app.get('/api/pulse', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
     const userId = req.user.userId;
+
+    // Fire cache warming in background if caches are cold (non-blocking — pulse responds immediately)
+    const { getCachedApexResults: _checkApex } = await import('./apexService.js');
+    const apexCold = !_checkApex();
+    const etfCold  = !getCachedEtfResults();
+    if (apexCold) warmApexCacheIfCold().catch(() => {});
+    if (etfCold)  warmEtfCacheIfCold().catch(() => {});
+    const cacheWarming = apexCold || etfCold;
 
     // DB queries for regime prices, portfolio, and macro snapshot
     const [regimeDoc, positions, userProfile, marketSnapshot] = await Promise.all([
@@ -2278,9 +2350,12 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       : (regimeDoc?.weekOf ?? null);
 
     res.json({
-      statusLight: 'GREEN',
-      statusMessage: 'ALL SYSTEMS OPERATIONAL',
+      statusLight: cacheWarming ? 'YELLOW' : 'GREEN',
+      statusMessage: cacheWarming ? 'SCORING ENGINE WARMING UP' : 'ALL SYSTEMS OPERATIONAL',
       killDataLive: !!liveApex,
+      cacheWarming,
+      apexWarmInProgress: _apexWarmInProgress,
+      etfWarmInProgress: _etfWarmInProgress,
       dataSource,
       scoresAsOf,
       weekOf,

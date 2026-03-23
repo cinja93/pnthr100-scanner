@@ -2376,6 +2376,21 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       console.warn('[PULSE] marketGauges fetch failed:', e.message);
     }
 
+    // WTI crude fallback — USOIL may not return in batch; try commodity endpoint separately
+    if (!marketGauges.crude) {
+      try {
+        const wtiRes = await fetch(`https://financialmodelingprep.com/api/v3/quote/USOIL?apikey=${FMP_KEY}`);
+        if (wtiRes.ok) {
+          const wtiData = await wtiRes.json();
+          if (Array.isArray(wtiData) && wtiData[0]?.price) {
+            const q = wtiData[0];
+            marketGauges.crude = { price: q.price, change: q.change ?? null, changePct: q.changesPercentage ?? null };
+            console.log('[PULSE] WTI crude fallback:', q.price);
+          }
+        }
+      } catch (e) { console.warn('[PULSE] WTI fallback failed:', e.message); }
+    }
+
     // Treasury yields: Fed (1mo proxy), 2Y, 10Y, 30Y
     let treasuryYields = { fed: null, y2: null, y10: null, y30: null };
     try {

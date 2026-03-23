@@ -99,8 +99,8 @@ export default function PulsePage({ onNavigate }) {
         onRefresh={refreshPulse}
       />
 
-      {/* TIER 1a: Equity gauges — SPY, QQQ, NYSE, NASDAQ, IWM, DJI + VIX */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      {/* ROW 1: Equity markets + VIX */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'nowrap', alignItems: 'flex-end' }}>
         <SpyGauge regime={data.regime} />
         <QqqGauge regime={data.regime} />
         <MarketGauge label="NYSE" subLabel="Composite" data={data.marketGauges?.nyse} />
@@ -109,11 +109,14 @@ export default function PulsePage({ onNavigate }) {
         <MarketGauge label="DJI" subLabel="Dow Jones" data={data.marketGauges?.dji} />
         <VixThermometer vix={vix} />
       </div>
-      {/* TIER 1b: Macro gauges — GLD, WTI Crude, USD, Fed Rate, 2Y, 10Y, 30Y */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      {/* ROW 2: Commodities & Currency */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'nowrap', alignItems: 'flex-end' }}>
         <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} />
         <MarketGauge label="WTI" subLabel="Crude Oil" data={data.marketGauges?.crude} />
         <MarketGauge label="USD" subLabel="Dollar Index" data={data.marketGauges?.usd} isIndex={true} />
+      </div>
+      {/* ROW 3: Interest rates */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'nowrap', alignItems: 'flex-end' }}>
         <YieldGauge label="FED" subLabel="Fed Rate (1mo)" data={data.treasuryYields?.fed} />
         <YieldGauge label="2Y" subLabel="2-Year Yield" data={data.treasuryYields?.y2} />
         <YieldGauge label="10Y" subLabel="10-Year Yield" data={data.treasuryYields?.y10} />

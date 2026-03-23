@@ -1644,6 +1644,7 @@ app.get('/api/kill-history/track-record', authenticateJWT, killHistoryGetTrackRe
 // ── Scoring Engine Health ───────────────────────────────────────────────────────
 app.get('/api/scoring-health', authenticateJWT, requireAdmin, async (req, res) => {
   try {
+    const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
 
     // pnthr_kill_scores has one doc PER STOCK per weekOf.

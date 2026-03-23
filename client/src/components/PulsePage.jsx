@@ -112,7 +112,7 @@ export default function PulsePage({ onNavigate }) {
       {/* ROW 2: Commodities & Currency */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'nowrap', alignItems: 'flex-end' }}>
         <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} />
-        <MarketGauge label="WTI" subLabel="Crude Oil" data={data.marketGauges?.crude} />
+        <MarketGauge label={data.marketGauges?.crude?.symbol === 'USO' ? 'USO' : 'WTI'} subLabel="Crude Oil" data={data.marketGauges?.crude} />
         <MarketGauge label="USD" subLabel="Dollar Index" data={data.marketGauges?.usd} isIndex={true} />
       </div>
       {/* ROW 3: Interest rates */}

@@ -2376,16 +2376,18 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       console.warn('[PULSE] marketGauges fetch failed:', e.message);
     }
 
-    // WTI crude fallback — USOIL may not return in batch; try commodity endpoint separately
+    // WTI crude fallback — USOIL may not return in batch; try USOIL then USO ETF as proxy
     if (!marketGauges.crude) {
       try {
-        const wtiRes = await fetch(`https://financialmodelingprep.com/api/v3/quote/USOIL?apikey=${FMP_KEY}`);
+        const wtiRes = await fetch(`https://financialmodelingprep.com/api/v3/quote/USOIL,USO?apikey=${FMP_KEY}`);
         if (wtiRes.ok) {
           const wtiData = await wtiRes.json();
-          if (Array.isArray(wtiData) && wtiData[0]?.price) {
-            const q = wtiData[0];
-            marketGauges.crude = { price: q.price, change: q.change ?? null, changePct: q.changesPercentage ?? null };
-            console.log('[PULSE] WTI crude fallback:', q.price);
+          if (Array.isArray(wtiData)) {
+            const q = wtiData.find(x => x.symbol === 'USOIL') || wtiData.find(x => x.symbol === 'USO');
+            if (q?.price) {
+              marketGauges.crude = { price: q.price, change: q.change ?? null, changePct: q.changesPercentage ?? null, symbol: q.symbol };
+              console.log('[PULSE] WTI crude fallback via', q.symbol, ':', q.price);
+            }
           }
         }
       } catch (e) { console.warn('[PULSE] WTI fallback failed:', e.message); }

@@ -1162,7 +1162,7 @@ async function computeSectorSignalCounts() {
 
     const tickersBySector = {};
     for (const c of constituents) {
-      const sectorKey = gicsToKey[c.sector];
+      const sectorKey = gicsToKey[normalizeSector(c.sector)];
       if (!sectorKey) continue;
       if (!tickersBySector[sectorKey]) tickersBySector[sectorKey] = [];
       tickersBySector[sectorKey].push(c.symbol);

@@ -114,6 +114,7 @@ export default function PulsePage({ onNavigate }) {
         <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} />
         <MarketGauge label={data.marketGauges?.crude?.symbol === 'USO' ? 'USO' : 'WTI'} subLabel="Crude Oil" data={data.marketGauges?.crude} />
         <MarketGauge label="USD" subLabel="Dollar Index" data={data.marketGauges?.usd} isIndex={true} />
+        <MarketGauge label="BTC" subLabel="Bitcoin" data={data.marketGauges?.btc} isBtc={true} />
       </div>
       {/* ROW 3: Interest rates */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'nowrap', alignItems: 'flex-end' }}>
@@ -397,16 +398,25 @@ const GOLD_ZONES = [
   { from:  2,  to:  5,  color: '#C8A000' },
   { from:  5,  to:  10, color: '#FFD700' },
 ];
+// Bitcoin zones (gray left, orange right)
+const BTC_ZONES = [
+  { from: -10, to: -5,  color: '#7a3000' },
+  { from: -5,  to: -2,  color: '#a84400' },
+  { from: -2,  to:  2,  color: '#555' },
+  { from:  2,  to:  5,  color: '#c85a00' },
+  { from:  5,  to:  10, color: '#F7931A' },
+];
 
-function MarketGauge({ label, subLabel, data, isGold, isIndex }) {
+function MarketGauge({ label, subLabel, data, isGold, isIndex, isBtc }) {
   const price = data?.price ?? null;
   const changePct = data?.changePct ?? null;
   const needleVal = changePct !== null ? Math.max(-10, Math.min(10, changePct)) : 0;
-  const zones = isGold ? GOLD_ZONES : EQUITY_ZONES;
+  const zones = isGold ? GOLD_ZONES : isBtc ? BTC_ZONES : EQUITY_ZONES;
 
   function fmtPrice(p) {
     if (p == null) return '—';
-    if (p >= 1000 || isIndex) return p.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    if (isIndex) return p.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    if (p >= 1000) return `$${p.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
     return `$${p.toFixed(2)}`;
   }
 

@@ -2340,11 +2340,11 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       } catch { /* best-effort */ }
     }
 
-    // Always-fetch market gauge data: NYSE, NASDAQ, IWM, GLD, DJI, WTI Crude, USD
-    let marketGauges = { nyse: null, nasdaq: null, iwm: null, gld: null, dji: null, crude: null, usd: null };
+    // Always-fetch market gauge data: NYSE, NASDAQ, IWM, GLD, DJI, WTI Crude, USD, BTC
+    let marketGauges = { nyse: null, nasdaq: null, iwm: null, gld: null, dji: null, crude: null, usd: null, btc: null };
     try {
       const mgRes = await fetch(
-        `https://financialmodelingprep.com/api/v3/quote/%5ENYA,%5EIXIC,IWM,GLD,%5EDJI,USOIL,DX-Y.NYB?apikey=${FMP_KEY}`
+        `https://financialmodelingprep.com/api/v3/quote/%5ENYA,%5EIXIC,IWM,GLD,%5EDJI,USOIL,DX-Y.NYB,BTCUSD?apikey=${FMP_KEY}`
       );
       if (mgRes.ok) {
         const mgData = await mgRes.json();
@@ -2366,6 +2366,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
           dji:    extractMg('%5EDJI')  || extractMg('^DJI'),
           crude:  extractMg('USOIL'),
           usd:    extractMg('DX-Y.NYB'),
+          btc:    extractMg('BTCUSD'),
         };
         // Try alternate symbol names if not found
         if (!marketGauges.nyse)   marketGauges.nyse   = mgData.find(q => q.symbol === '^NYA')  ? { price: mgData.find(q=>q.symbol==='^NYA').price,   changePct: mgData.find(q=>q.symbol==='^NYA').changesPercentage   } : null;

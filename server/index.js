@@ -1204,8 +1204,9 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
     const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
 
     // 1. Get S&P 500 constituents and filter to this GICS sector
+    // FMP's constituent list uses its own names (e.g. "Consumer Cyclical") — normalize before comparing.
     const constituents = await getSP500Constituents(FMP_API_KEY);
-    const sectorConstituents = constituents.filter(c => c.sector === gicsSector);
+    const sectorConstituents = constituents.filter(c => normalizeSector(c.sector) === gicsSector);
     if (sectorConstituents.length === 0) return res.json({ stocks: [], signals: {} });
 
     const tickers = sectorConstituents.map(c => c.symbol);

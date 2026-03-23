@@ -138,7 +138,7 @@ function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subV
 
 function SpyGauge({ regime }) {
   const spy = regime?.spy;
-  const sep = spy ? +((spy.close - spy.ema21) / spy.ema21 * 100).toFixed(1) : null;
+  const sep = (spy?.close && spy?.ema21 > 0) ? +((spy.close - spy.ema21) / spy.ema21 * 100).toFixed(1) : null;
   // Compute separation from stored regime fields (indexPosition/spyAboveEma)
   const pos = regime?.indexPosition;
   const zones = [
@@ -155,7 +155,7 @@ function SpyGauge({ regime }) {
       value={needleVal} min={-20} max={20} zones={zones}
       label="SPY"
       displayValue={spy?.close ? `$${spy.close.toFixed(2)}` : (pos ? (pos === 'above' ? '▲ ABOVE' : '▼ BELOW') : '—')}
-      subLabel={spy?.ema21 ? `vs $${spy.ema21.toFixed(2)} EMA` : (regime?.weekOf ? `Week ${regime.weekOf}` : 'No data')}
+      subLabel={spy?.ema21 > 0 ? `vs $${spy.ema21.toFixed(2)} EMA` : (spy?.close ? 'EMA pending' : regime?.weekOf ? `Week ${regime.weekOf}` : 'No data')}
       subValue={sep !== null ? `${sep > 0 ? '+' : ''}${sep}%` : (pos ? `${pos} EMA` : null)}
       subValueColor={sep !== null ? (sep >= 0 ? '#28a745' : '#dc3545') : (pos === 'above' ? '#28a745' : '#dc3545')}
     />
@@ -164,7 +164,7 @@ function SpyGauge({ regime }) {
 
 function QqqGauge({ regime }) {
   const qqq = regime?.qqq;
-  const sep = qqq ? +((qqq.close - qqq.ema21) / qqq.ema21 * 100).toFixed(1) : null;
+  const sep = (qqq?.close && qqq?.ema21 > 0) ? +((qqq.close - qqq.ema21) / qqq.ema21 * 100).toFixed(1) : null;
   const pos = regime?.qqqAboveEma != null ? (regime.qqqAboveEma ? 'above' : 'below') : null;
   const zones = [
     { from: -20, to: -10, color: '#dc3545' },
@@ -179,7 +179,7 @@ function QqqGauge({ regime }) {
       value={needleVal} min={-20} max={20} zones={zones}
       label="QQQ"
       displayValue={qqq?.close ? `$${qqq.close.toFixed(2)}` : (pos ? (pos === 'above' ? '▲ ABOVE' : '▼ BELOW') : '—')}
-      subLabel={qqq?.ema21 ? `vs $${qqq.ema21.toFixed(2)} EMA` : (regime?.weekOf ? `Week ${regime.weekOf}` : 'No data')}
+      subLabel={qqq?.ema21 > 0 ? `vs $${qqq.ema21.toFixed(2)} EMA` : (qqq?.close ? 'EMA pending' : regime?.weekOf ? `Week ${regime.weekOf}` : 'No data')}
       subValue={sep !== null ? `${sep > 0 ? '+' : ''}${sep}%` : (pos ? `${pos} EMA` : null)}
       subValueColor={sep !== null ? (sep >= 0 ? '#28a745' : '#dc3545') : (pos === 'above' ? '#28a745' : '#dc3545')}
     />
@@ -345,11 +345,11 @@ function KillTop10({ killTop10, onTickerClick, killDataLive }) {
 }
 
 // ── PNTHR Sector Mini-Gauge ────────────────────────────────────────────────────
-function PNTHRMiniGauge({ abbrev, bl, ss }) {
+function PNTHRMiniGauge({ label, bl, ss }) {
   const total = bl + ss;
   const ssRatio = total > 0 ? ss / total : 0.5;
-  const W = 120, H = 72;
-  const cx = W / 2, cy = H - 8, r = 50;
+  const W = 160, H = 96;
+  const cx = W / 2, cy = H - 10, r = 66;
 
   const toAngle = (v) => Math.PI + v * Math.PI;
   const arcPath = (a1, a2) => {
@@ -376,31 +376,29 @@ function PNTHRMiniGauge({ abbrev, bl, ss }) {
   const isBearish = ss >= bl;
   const dir = total === 0 ? '—' : `${netPct.toFixed(0)}% ${isBearish ? 'SS' : 'BL'}`;
   const dirColor = total === 0 ? '#555' : isBearish ? '#ff6b6b' : '#6bcb77';
-
-  // Text position: inside arc, just above center
-  const textY = cy - r * 0.60;
+  const textY = cy - r * 0.58;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', borderRadius: 8, padding: '6px 2px 5px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', borderRadius: 10, padding: '8px 4px 8px' }}>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
         {/* Background track */}
-        <path d={arcPath(Math.PI, 2 * Math.PI)} fill="none" stroke="#1e1e1e" strokeWidth={11} />
+        <path d={arcPath(Math.PI, 2 * Math.PI)} fill="none" stroke="#1e1e1e" strokeWidth={13} />
         {/* Color zones */}
         {zones.map((z, i) => (
-          <path key={i} d={arcPath(toAngle(z.from), toAngle(z.to))} fill="none" stroke={z.color} strokeWidth={9} opacity={0.75} />
+          <path key={i} d={arcPath(toAngle(z.from), toAngle(z.to))} fill="none" stroke={z.color} strokeWidth={11} opacity={0.75} />
         ))}
         {/* BL/SS counts inside arc */}
-        <text x={cx} y={textY} textAnchor="middle" fill="#777" fontSize={9} fontFamily="monospace" fontWeight={600}>
+        <text x={cx} y={textY} textAnchor="middle" fill="#ccc" fontSize={11} fontFamily="monospace" fontWeight={600}>
           {`↑${bl} ↓${ss}`}
         </text>
         {/* Needle */}
-        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#FFD700" strokeWidth={2.5} strokeLinecap="round" />
+        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#FFD700" strokeWidth={3} strokeLinecap="round" />
         {/* PNTHR head pivot */}
-        <circle cx={cx} cy={cy} r={10} fill="#0a0a0a" stroke="#FFD700" strokeWidth={1.5} />
-        <image href="/favicon.png" x={cx - 8} y={cy - 8} width={16} height={16} />
+        <circle cx={cx} cy={cy} r={13} fill="#0a0a0a" stroke="#FFD700" strokeWidth={1.5} />
+        <image href="/favicon.png" x={cx - 11} y={cy - 11} width={22} height={22} />
       </svg>
-      <div style={{ color: '#FCF000', fontSize: 9, fontWeight: 700, letterSpacing: 1.5, marginTop: -3 }}>{abbrev}</div>
-      <div style={{ color: dirColor, fontSize: 9, fontWeight: 600 }}>{dir}</div>
+      <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, textAlign: 'center', lineHeight: 1.2, marginTop: -2, padding: '0 4px' }}>{label}</div>
+      <div style={{ color: dirColor, fontSize: 11, fontWeight: 600, marginTop: 2 }}>{dir}</div>
     </div>
   );
 }
@@ -410,17 +408,17 @@ const ALIASES = {
   'Consumer Discretionary': 'Consumer Cyclical',
 };
 const SECTOR_CONFIG = [
-  { key: 'Technology',            abbrev: 'TECH' },
-  { key: 'Healthcare',            abbrev: 'HLTH' },
-  { key: 'Financial Services',    abbrev: 'FIN'  },
-  { key: 'Industrials',           abbrev: 'IND'  },
-  { key: 'Consumer Staples',      abbrev: 'CONS' },
-  { key: 'Energy',                abbrev: 'ENER' },
-  { key: 'Utilities',             abbrev: 'UTIL' },
-  { key: 'Basic Materials',       abbrev: 'MATL' },
-  { key: 'Communication Services',abbrev: 'COMM' },
-  { key: 'Real Estate',           abbrev: 'REAL' },
-  { key: 'Consumer Cyclical',     abbrev: 'COND' },
+  { key: 'Technology',             label: 'Technology'            },
+  { key: 'Healthcare',             label: 'Healthcare'            },
+  { key: 'Financial Services',     label: 'Financials'            },
+  { key: 'Industrials',            label: 'Industrials'           },
+  { key: 'Consumer Staples',       label: 'Consumer Staples'      },
+  { key: 'Energy',                 label: 'Energy'                },
+  { key: 'Utilities',              label: 'Utilities'             },
+  { key: 'Basic Materials',        label: 'Basic Materials'       },
+  { key: 'Communication Services', label: 'Communication'         },
+  { key: 'Real Estate',            label: 'Real Estate'           },
+  { key: 'Consumer Cyclical',      label: 'Consumer Disc.'        },
 ];
 
 function SectorPulse({ signals, killDataLive }) {
@@ -434,15 +432,15 @@ function SectorPulse({ signals, killDataLive }) {
   }
 
   return (
-    <div style={{ flex: 1, minWidth: 480, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+    <div style={{ flex: 1, minWidth: 600, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <span style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>⚡ PNTHR SECTOR PULSE</span>
         {killDataLive === false && <span style={{ color: '#555', fontSize: 10, background: '#1a1a1a', padding: '1px 6px', borderRadius: 4 }}>Fri pipeline</span>}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
-        {SECTOR_CONFIG.map(({ key, abbrev }) => {
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 6 }}>
+        {SECTOR_CONFIG.map(({ key, label }) => {
           const d = bySector[key] || { bl: 0, ss: 0 };
-          return <PNTHRMiniGauge key={key} abbrev={abbrev} bl={d.bl} ss={d.ss} />;
+          return <PNTHRMiniGauge key={key} label={label} bl={d.bl} ss={d.ss} />;
         })}
       </div>
     </div>

@@ -2100,15 +2100,24 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
 
     const nav = userProfile?.accountSize || 100000;
 
-    // Portfolio: all active positions for count, filled lots for heat
+    // fills can be an array (new lot system) OR an object keyed by lot number (old style)
+    // commandCenter uses Object.values(fills) — match that pattern
+    function getFillsArray(p) {
+      if (Array.isArray(p.fills)) return p.fills;
+      if (p.fills && typeof p.fills === 'object') return Object.values(p.fills);
+      return [];
+    }
+
+    // Portfolio heat — all positions with any filled lot OR direct shares field
     const filledPos = positions.filter(p => {
-      const fills = Array.isArray(p.fills) ? p.fills : [];
-      return fills.some(f => f.filled);
+      const fills = getFillsArray(p);
+      return fills.some(f => f.filled) || (p.shares > 0);
     });
     let stockRisk = 0, etfRisk = 0;
     for (const p of filledPos) {
-      const fills = Array.isArray(p.fills) ? p.fills : [];
-      const totalShares = fills.filter(f => f.filled).reduce((s, f) => s + (f.shares || 0), 0);
+      const fills = getFillsArray(p);
+      const filledShares = fills.filter(f => f.filled).reduce((s, f) => s + (+f.shares || 0), 0);
+      const totalShares = filledShares || (p.shares || 0);
       const stop = p.stopPrice || 0;
       const avg = p.avgCost || p.entryPrice || 0;
       const risk = totalShares * Math.abs(avg - stop);
@@ -2124,10 +2133,10 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     const etfRiskPct = +((etfRisk / nav) * 100).toFixed(2);
     const totalRiskPct = +((totalRisk / nav) * 100).toFixed(2);
 
-    // Lots ready (from filled positions)
+    // Lots ready
     const lotsReady = [];
     for (const p of filledPos) {
-      const fills = Array.isArray(p.fills) ? p.fills : [];
+      const fills = getFillsArray(p);
       for (const f of fills) {
         if (f.filled) continue;
         const priorFilled = f.lot === 1 || fills.find(x => x.lot === f.lot - 1)?.filled;
@@ -2140,13 +2149,38 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     const shortCount = positions.filter(p => p.direction === 'SHORT').length;
     const longCount = positions.filter(p => p.direction === 'LONG').length;
     const recycledCount = filledPos.filter(p => {
-      const fills = Array.isArray(p.fills) ? p.fills : [];
-      const totalShares = fills.filter(f => f.filled).reduce((s, f) => s + (f.shares || 0), 0);
+      const fills = getFillsArray(p);
+      const filledShares = fills.filter(f => f.filled).reduce((s, f) => s + (+f.shares || 0), 0);
+      const totalShares = filledShares || (p.shares || 0);
       const stop = p.stopPrice || 0;
       const avg = p.avgCost || p.entryPrice || 0;
       const isShort = p.direction === 'SHORT';
       return totalShares > 0 && (isShort ? stop <= avg : stop >= avg);
     }).length;
+
+    // Live 10Y and DXY from FMP (fallback for when Friday pipeline hasn't run)
+    let treasury10y = marketSnapshot?.treasury10y ?? null;
+    let dxy = marketSnapshot?.dxy ?? null;
+    if (treasury10y == null || dxy == null) {
+      try {
+        const FMP_KEY = process.env.FMP_API_KEY;
+        const [t10Res, dxyRes] = await Promise.all([
+          fetch(`https://financialmodelingprep.com/api/v3/quote/%5ETNX?apikey=${FMP_KEY}`),
+          fetch(`https://financialmodelingprep.com/api/v3/quote/DX-Y.NYB?apikey=${FMP_KEY}`),
+        ]);
+        if (treasury10y == null && t10Res.ok) {
+          const t10Data = await t10Res.json();
+          treasury10y = t10Data[0]?.price ?? null;
+        }
+        if (dxy == null && dxyRes.ok) {
+          const dxyData = await dxyRes.json();
+          dxy = dxyData[0]?.price ?? null;
+        }
+      } catch { /* best-effort */ }
+    }
+
+    // SPY/QQQ index data from apex cache
+    const apexIndexData = liveApex?.indexData || {};
 
     res.json({
       statusLight: 'GREEN',
@@ -2159,6 +2193,8 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         qqqAboveEma: apexRegime.qqqAboveEma ?? regimeDoc?.qqqAboveEma,
         qqqEmaRising: apexRegime.qqqEmaRising ?? regimeDoc?.qqqEmaRising,
         blCount, ssCount, ssD1, blD1, regimeScore,
+        spy: apexIndexData.SPY ? { close: apexIndexData.SPY.price, ema21: apexIndexData.SPY.ema21 } : (regimeDoc?.spy ?? null),
+        qqq: apexIndexData.QQQ ? { close: apexIndexData.QQQ.price, ema21: apexIndexData.QQQ.ema21 } : (regimeDoc?.qqq ?? null),
       },
       killTop10,
       signals: {
@@ -2175,7 +2211,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         nav,
       },
       lotsReady: lotsReady.slice(0, 5),
-      marketSnapshot: marketSnapshot || null,
+      marketSnapshot: { ...(marketSnapshot || {}), treasury10y, dxy },
     });
   } catch (err) {
     console.error('[/api/pulse]', err.message);

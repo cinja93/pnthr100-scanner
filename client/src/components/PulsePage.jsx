@@ -347,15 +347,32 @@ function SectorHeatmap({ signals }) {
     'Financial Services': 'FIN',
     'Industrials': 'IND',
     'Consumer Staples': 'CONS',
+    'Consumer Defensive': 'CONS',   // FMP name alias
     'Energy': 'ENER',
     'Utilities': 'UTIL',
     'Basic Materials': 'MATL',
     'Communication Services': 'COMM',
     'Real Estate': 'REAL',
     'Consumer Cyclical': 'COND',
+    'Consumer Discretionary': 'COND', // GICS name alias
   };
-  const bySector = signals?.bySector || {};
-  const sectors = Object.keys(sectorAbbrevs);
+
+  // Normalize bySector keys: merge alias names into canonical
+  const rawBySector = signals?.bySector || {};
+  const bySector = {};
+  for (const [sector, counts] of Object.entries(rawBySector)) {
+    const abbrev = sectorAbbrevs[sector];
+    if (!abbrev) continue;
+    // Find canonical sector name for this abbrev
+    const canonical = Object.keys(sectorAbbrevs).find(k => sectorAbbrevs[k] === abbrev && !['Consumer Defensive', 'Consumer Discretionary'].includes(k)) || sector;
+    if (!bySector[canonical]) bySector[canonical] = { bl: 0, ss: 0 };
+    bySector[canonical].bl += counts.bl || 0;
+    bySector[canonical].ss += counts.ss || 0;
+  }
+
+  const sectors = ['Technology', 'Healthcare', 'Financial Services', 'Industrials',
+    'Consumer Staples', 'Energy', 'Utilities', 'Basic Materials',
+    'Communication Services', 'Real Estate', 'Consumer Cyclical'];
 
   const getColor = (bl, ss) => {
     const total = bl + ss;
@@ -371,12 +388,12 @@ function SectorHeatmap({ signals }) {
   return (
     <div style={{ flex: 1, minWidth: 280, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
       <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, letterSpacing: 2, marginBottom: 10 }}>⚡ SECTOR SIGNALS</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 4 }}>
         {sectors.map(sec => {
           const d = bySector[sec] || { bl: 0, ss: 0 };
           return (
-            <div key={sec} style={{ background: getColor(d.bl, d.ss), borderRadius: 6, padding: '6px 4px', textAlign: 'center', border: '1px solid #222' }}>
-              <div style={{ color: '#aaa', fontSize: 9, fontWeight: 700 }}>{sectorAbbrevs[sec]}</div>
+            <div key={sec} style={{ background: getColor(d.bl, d.ss), borderRadius: 6, padding: '5px 3px', textAlign: 'center', border: '1px solid #222', minWidth: 0 }}>
+              <div style={{ color: '#ccc', fontSize: 9, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sectorAbbrevs[sec]}</div>
               <div style={{ color: '#6bcb77', fontSize: 9 }}>↑{d.bl}</div>
               <div style={{ color: '#ff6b6b', fontSize: 9 }}>↓{d.ss}</div>
             </div>

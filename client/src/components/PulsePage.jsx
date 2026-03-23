@@ -481,58 +481,27 @@ function RegimeStrip({ regime, signals, positions }) {
 function VixThermometer({ vix }) {
   const val = vix?.close || 0;
   const change = vix?.change;
-  const maxVix = 50;
   const zones = [
-    { from: 0, to: 15, color: '#28a745', label: 'CALM' },
-    { from: 15, to: 25, color: '#ffc107', label: 'NORMAL' },
-    { from: 25, to: 35, color: '#ff8c00', label: 'ELEVATED' },
-    { from: 35, to: 50, color: '#dc3545', label: 'FEAR' },
+    { from: 0,  to: 15, color: '#28a745' }, // CALM
+    { from: 15, to: 25, color: '#ffc107' }, // NORMAL
+    { from: 25, to: 35, color: '#ff8c00' }, // ELEVATED
+    { from: 35, to: 50, color: '#dc3545' }, // FEAR
   ];
+  const zoneLabel = val < 15 ? 'CALM' : val < 25 ? 'NORMAL' : val < 35 ? 'ELEVATED' : 'FEAR';
   const zoneColor = val < 15 ? '#28a745' : val < 25 ? '#ffc107' : val < 35 ? '#ff8c00' : '#dc3545';
-  const fillPct = Math.min(val / maxVix, 1) * 100;
-
-  const W = 70, H = 160, bx = 28, bw = 14, by = 10, bh = 130;
-
+  const changeStr = (change !== null && change !== undefined)
+    ? `${change > 0 ? '▲' : '▼'} ${Math.abs(change).toFixed(1)}`
+    : null;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', borderRadius: 12, padding: '12px 16px', minWidth: 100 }}>
-      <div style={{ color: '#888', fontSize: 11, letterSpacing: 2, fontWeight: 700, marginBottom: 4 }}>VIX</div>
-      <svg width={W} height={H}>
-        {zones.map((z, i) => {
-          const yTop = by + bh * (1 - z.to / maxVix);
-          const yBot = by + bh * (1 - z.from / maxVix);
-          const yMid = (yTop + yBot) / 2;
-          return (
-            <g key={i}>
-              <rect x={bx} y={yTop} width={bw} height={yBot - yTop} fill={z.color} opacity={0.2} rx={2} />
-              <text x={bx + bw + 5} y={yMid + 3} fill={z.color} fontSize={7} opacity={0.85}>{z.label}</text>
-            </g>
-          );
-        })}
-        <rect x={bx + 2} y={by + bh * (1 - fillPct / 100)} width={bw - 4} height={bh * (fillPct / 100)} fill={zoneColor} opacity={0.8} rx={2} />
-        <rect x={bx} y={by} width={bw} height={bh} fill="none" stroke="#444" strokeWidth={1.5} rx={3} />
-        {[10, 20, 30, 40].map(v => {
-          const y = by + bh * (1 - v / maxVix);
-          return (
-            <g key={v}>
-              <line x1={bx - 4} y1={y} x2={bx} y2={y} stroke="#555" strokeWidth={1} />
-              <text x={bx - 6} y={y + 3} textAnchor="end" fill="#555" fontSize={8}>{v}</text>
-            </g>
-          );
-        })}
-        {val > 0 && <line x1={bx} y1={by + bh * (1 - fillPct / 100)} x2={bx + bw + 4} y2={by + bh * (1 - fillPct / 100)} stroke={zoneColor} strokeWidth={2} />}
-        <circle cx={bx + bw / 2} cy={by + bh + 8} r={8} fill="#FFD700" />
-        <circle cx={bx + bw / 2} cy={by + bh + 8} r={4} fill="#0a0a0a" />
-      </svg>
-      <div style={{ color: '#fff', fontSize: 18, fontWeight: 800 }}>{val ? val.toFixed(1) : '—'}</div>
-      {change !== null && change !== undefined && (
-        <div style={{ color: change > 0 ? '#dc3545' : '#28a745', fontSize: 12 }}>
-          {change > 0 ? '▲' : '▼'} {Math.abs(change).toFixed(1)}
-        </div>
-      )}
-      <div style={{ color: zoneColor, fontSize: 10, fontWeight: 700, marginTop: 2 }}>
-        {val < 15 ? 'CALM' : val < 25 ? 'NORMAL' : val < 35 ? 'ELEVATED' : 'FEAR'}
-      </div>
-    </div>
+    <SemiGauge
+      value={val} min={0} max={50} zones={zones}
+      label="VIX"
+      gaugeW={150} gaugeH={100}
+      displayValue={val ? val.toFixed(1) : '—'}
+      subLabel="Fear Index"
+      subValue={changeStr ? `${changeStr} · ${zoneLabel}` : zoneLabel}
+      subValueColor={zoneColor}
+    />
   );
 }
 

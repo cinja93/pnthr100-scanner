@@ -755,7 +755,7 @@ export default function ApexPage() {
                 <div style={{ color: '#fcf000', fontWeight: 700, fontSize: 15, letterSpacing: 1 }}>⚡ SCORING ENGINE HEALTH</div>
                 {healthData && !healthLoading && (
                   <div style={{ color: '#666', fontSize: 11, marginTop: 3 }}>
-                    Last run: {healthData.lastRun ? new Date(healthData.lastRun).toLocaleString() : '—'} · {healthData.stocksScored ?? 0} stocks
+                    Week of {healthData.weekOf || '—'} · {healthData.lastRun ? new Date(healthData.lastRun).toLocaleString() : '—'} · {healthData.stocksScored ?? 0} stocks scored
                   </div>
                 )}
               </div>

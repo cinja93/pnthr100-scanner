@@ -1646,44 +1646,34 @@ app.get('/api/scoring-health', authenticateJWT, requireAdmin, async (req, res) =
   try {
     const db = await connectToDatabase();
 
-    // Pull the most recently persisted Kill scores from MongoDB
-    const scoreDocs = await db.collection('pnthr_kill_scores')
-      .find({}).sort({ createdAt: -1 }).limit(1).toArray();
+    // pnthr_kill_scores has one doc PER STOCK per weekOf.
+    // Find the most recent weekOf, then load all docs for that week.
+    const latest = await db.collection('pnthr_kill_scores')
+      .findOne({}, { sort: { createdAt: -1 }, projection: { weekOf: 1, createdAt: 1 } });
 
-    // Fall back to live cache if nothing persisted yet
-    let stocks = [];
-    let lastRun = null;
-    let source  = 'live_cache';
-
-    if (scoreDocs.length > 0 && scoreDocs[0].results?.length > 0) {
-      stocks  = scoreDocs[0].results;
-      lastRun = scoreDocs[0].createdAt;
-      source  = 'pnthr_kill_scores';
-    } else {
-      // Use apex cache via in-memory state (already warm from last /api/apex call)
-      const apexCache = global._apexCache;
-      if (apexCache?.results?.length) {
-        stocks  = apexCache.results;
-        lastRun = apexCache.cachedAt || new Date();
-      }
+    if (!latest) {
+      return res.json({ status: 'NO_DATA', message: 'No scoring run found yet. The Friday pipeline populates this.' });
     }
 
-    if (!stocks.length) {
-      return res.json({ status: 'NO_DATA', message: 'No scoring run found. Hit /api/apex?refresh=1 first.' });
-    }
+    const stocks = await db.collection('pnthr_kill_scores')
+      .find({ weekOf: latest.weekOf })
+      .toArray();
 
-    // ── Helper: analyse one dimension across all scored stocks ──────────────
-    function analyseD(key, subKey = 'score') {
+    const lastRun = latest.createdAt;
+
+    // ── Helper: read one dimension key across all scored stock docs ─────────
+    // Each doc has:  dimensions.d1.score, dimensions.d2.score, etc.
+    function analyseD(key) {
       const vals = stocks
-        .map(s => s.scoreDetail?.[key]?.[subKey] ?? s.scores?.[key] ?? null)
+        .map(s => s.dimensions?.[key]?.score ?? null)
         .filter(v => v !== null && v !== undefined);
       const nonZero = vals.filter(v => v !== 0);
       return {
-        count:     vals.length,
-        nonZero:   nonZero.length,
-        sample:    nonZero[0] ?? vals[0] ?? null,
-        allSame:   new Set(vals.map(v => Math.round(v * 10))).size <= 1,
-        hasData:   nonZero.length > 0,
+        count:   vals.length,
+        nonZero: nonZero.length,
+        sample:  nonZero[0] ?? vals[0] ?? null,
+        allSame: new Set(vals.map(v => Math.round(v * 10))).size <= 1,
+        hasData: nonZero.length > 0,
       };
     }
 
@@ -1696,32 +1686,31 @@ app.get('/api/scoring-health', authenticateJWT, requireAdmin, async (req, res) =
     const d7 = analyseD('d7');
     const d8 = analyseD('d8');
 
-    // D1 special: check regime multiplier varies (expected 0.70–1.30)
     const d1Varies = !d1.allSame;
-    const d3Conf   = stocks.find(s => s.scoreDetail?.d3?.confirmation)?.scoreDetail?.d3?.confirmation || '—';
+    const d3Conf   = stocks.find(s => s.dimensions?.d3?.confirmation)?.dimensions?.d3?.confirmation || '—';
 
-    function dim(id, name, range, source, stat, statusOverride) {
-      const ok = statusOverride ?? stat.hasData;
+    function dim(id, name, range, src, stat, statusOverride) {
+      const ok   = statusOverride ?? stat.hasData;
       const warn = !ok && stat.count > 0;
       return {
-        id, name, range, source,
-        status:    ok ? 'OK' : (warn ? 'WARNING' : 'ERROR'),
-        hasData:   stat.hasData,
-        nonZero:   stat.nonZero,
-        total:     stat.count,
-        sample:    stat.sample,
+        id, name, range, source: src,
+        status:  ok ? 'OK' : (warn ? 'WARNING' : 'ERROR'),
+        hasData: stat.hasData,
+        nonZero: stat.nonZero,
+        total:   stat.count,
+        sample:  stat.sample,
       };
     }
 
     const dimensions = [
-      dim('D1','Market Regime',    '0.70× – 1.30×', 'SPY/QQQ vs 21-week EMA + signal ratio', d1, d1Varies || d1.hasData),
-      dim('D2','Sector Alignment', '−15 to +15 pts', 'FMP sector 5D/1M performance',          d2),
+      dim('D1','Market Regime',    '0.70× – 1.30×', 'SPY/QQQ vs 21-week EMA + signal ratio',   d1, d1Varies || d1.hasData),
+      dim('D2','Sector Alignment', '−15 to +15 pts', 'FMP sector 5D/1M performance',             d2),
       dim('D3','Entry Quality',    '0 – 85 pts',     `Weekly candles (conviction/slope/sep) — ${d3Conf}`, d3),
-      dim('D4','Signal Freshness', '−15 to +10 pts', 'Signal age (days since entry)',          d4),
-      dim('D5','Rank Rise',        '−20 to +20 pts', 'PNTHR 100 weekly rankings delta',        d5),
-      dim('D6','Momentum',         '−10 to +20 pts', 'RSI, OBV, ADX, volume ratio',           d6),
-      dim('D7','Rank Velocity',    '−10 to +10 pts', 'Week-over-week rank change acceleration',d7),
-      dim('D8','Multi-Strategy',   '0 – 6 pts',      'PNTHR Prey strategies (HUNT/FEAST/etc.)',d8),
+      dim('D4','Signal Freshness', '−15 to +10 pts', 'Signal age (days since entry)',             d4),
+      dim('D5','Rank Rise',        '−20 to +20 pts', 'PNTHR 100 weekly rankings delta',           d5),
+      dim('D6','Momentum',         '−10 to +20 pts', 'RSI, OBV, ADX, volume ratio',              d6),
+      dim('D7','Rank Velocity',    '−10 to +10 pts', 'Week-over-week rank change acceleration',   d7),
+      dim('D8','Multi-Strategy',   '0 – 6 pts',      'PNTHR Prey strategies (HUNT/FEAST/etc.)',   d8),
     ];
 
     const okCount   = dimensions.filter(d => d.status === 'OK').length;
@@ -1729,10 +1718,11 @@ app.get('/api/scoring-health', authenticateJWT, requireAdmin, async (req, res) =
     const errCount  = dimensions.filter(d => d.status === 'ERROR').length;
 
     res.json({
-      status:        errCount > 0 ? 'ERROR' : warnCount > 0 ? 'WARNING' : 'OK',
+      status:       errCount > 0 ? 'ERROR' : warnCount > 0 ? 'WARNING' : 'OK',
       lastRun,
-      source,
-      stocksScored:  stocks.length,
+      weekOf:       latest.weekOf,
+      source:       'pnthr_kill_scores',
+      stocksScored: stocks.length,
       okCount,
       warnCount,
       errCount,

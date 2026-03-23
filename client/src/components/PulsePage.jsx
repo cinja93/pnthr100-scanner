@@ -2,21 +2,45 @@ import React, { useState, useEffect } from 'react';
 import { fetchPulse, fetchLiveVix, fetchSignalStocks } from '../services/api';
 import ChartModal from './ChartModal';
 
+function formatTimestamp(date) {
+  if (!date) return 'Loading...';
+  const day = date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'America/New_York' });
+  return `${day} at ${time} ET`;
+}
+
 export default function PulsePage({ onNavigate }) {
   const [data, setData] = useState(null);
   const [vix, setVix] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [chartList, setChartList] = useState([]);   // array of stocks for ChartModal
-  const [chartIndex, setChartIndex] = useState(0);  // which stock is open
-  const [signalModal, setSignalModal] = useState(null); // 'BL' | 'SS' | null
+  const [lastRefresh, setLastRefresh] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [chartList, setChartList] = useState([]);
+  const [chartIndex, setChartIndex] = useState(0);
+  const [signalModal, setSignalModal] = useState(null);
 
   useEffect(() => {
     Promise.all([fetchPulse(), fetchLiveVix()])
-      .then(([pulse, vixData]) => { setData(pulse); setVix(vixData); })
+      .then(([pulse, vixData]) => { setData(pulse); setVix(vixData); setLastRefresh(new Date()); })
       .catch(err => { console.error(err); setError(err.message); })
       .finally(() => setLoading(false));
   }, []);
+
+  async function refreshPulse() {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      const [pulse, vixData] = await Promise.all([fetchPulse(), fetchLiveVix()]);
+      setData(pulse);
+      setVix(vixData);
+      setLastRefresh(new Date());
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
 
   if (loading) return (
     <div style={{ background: '#0a0a0a', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D4A017', fontSize: 18, fontFamily: 'monospace' }}>
@@ -33,7 +57,15 @@ export default function PulsePage({ onNavigate }) {
   return (
     <div style={{ background: '#0a0a0a', minHeight: '100vh', padding: '16px 24px', fontFamily: 'monospace' }}>
       {/* STATUS LIGHT */}
-      <StatusLight status={data.statusLight} message={data.statusMessage} positions={data.positions} />
+      <StatusLight
+        status={data.statusLight}
+        message={data.statusMessage}
+        positions={data.positions}
+        lastRefresh={lastRefresh}
+        isRefreshing={isRefreshing}
+        onRefresh={refreshPulse}
+        killDataLive={data.killDataLive}
+      />
 
       {/* TIER 1: Market environment — SPY, QQQ, Regime, VIX */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -79,25 +111,83 @@ export default function PulsePage({ onNavigate }) {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function StatusLight({ status, message, positions }) {
+function StatusLight({ status, message, positions, lastRefresh, isRefreshing, onRefresh, killDataLive }) {
   const color = status === 'RED' ? '#dc3545' : status === 'YELLOW' ? '#ffc107' : '#28a745';
   const pulse = status !== 'GREEN';
+  const [hovRefresh, setHovRefresh] = useState(false);
+
+  const dataBadge = isRefreshing
+    ? { dot: '#ffc107', label: 'Refreshing...', anim: true }
+    : killDataLive
+      ? { dot: '#28a745', label: 'Live',         anim: false }
+      : { dot: '#ffc107', label: 'Fri Pipeline', anim: false };
+
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-      padding: '10px 24px', marginBottom: 16, borderRadius: 8,
+      marginBottom: 16, borderRadius: 8,
       border: `1px solid ${color}22`,
       background: `${color}11`,
-      animation: pulse ? 'pulse 2s ease-in-out infinite' : 'none',
+      animation: pulse ? 'statusPulse 2s ease-in-out infinite' : 'none',
+      overflow: 'hidden',
     }}>
-      <style>{`@keyframes pulse { 0%,100% { opacity:0.8 } 50% { opacity:1 } }`}</style>
-      <div style={{ width: 12, height: 12, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}` }} />
-      <span style={{ color, fontWeight: 700, fontSize: 14, letterSpacing: 2 }}>{message}</span>
-      {positions && (
-        <span style={{ color: '#888', fontSize: 12, marginLeft: 16 }}>
-          {positions.total} positions · {Math.round((positions.heat?.totalRiskPct || 0) * 10) / 10}% heat
+      <style>{`
+        @keyframes statusPulse { 0%,100% { opacity:0.85 } 50% { opacity:1 } }
+        @keyframes spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
+      `}</style>
+
+      {/* Row 1: status dot · message · positions · heat · REFRESH */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '9px 18px', gap: 10 }}>
+        <div style={{ width: 11, height: 11, borderRadius: '50%', background: color, boxShadow: `0 0 7px ${color}`, flexShrink: 0 }} />
+        <span style={{ color, fontWeight: 700, fontSize: 13, letterSpacing: 2, flex: 1 }}>{message}</span>
+        {positions && (
+          <span style={{ color: '#777', fontSize: 12 }}>
+            {positions.total} positions · {Math.round((positions.heat?.totalRiskPct || 0) * 10) / 10}% heat
+          </span>
+        )}
+        <button
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          onMouseEnter={() => setHovRefresh(true)}
+          onMouseLeave={() => setHovRefresh(false)}
+          style={{
+            background: hovRefresh ? 'rgba(255,215,0,0.1)' : 'transparent',
+            border: '1px solid #FFD700',
+            color: '#FFD700',
+            padding: '3px 10px',
+            borderRadius: 4,
+            cursor: isRefreshing ? 'wait' : 'pointer',
+            fontSize: 11,
+            fontFamily: 'monospace',
+            fontWeight: 700,
+            letterSpacing: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            boxShadow: hovRefresh ? '0 0 8px rgba(255,215,0,0.2)' : 'none',
+            transition: 'all 0.15s',
+          }}
+        >
+          <span style={{ display: 'inline-block', animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }}>↻</span>
+          {isRefreshing ? 'REFRESHING...' : 'REFRESH'}
+        </button>
+      </div>
+
+      {/* Row 2: timestamp · data source badge */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px 7px', borderTop: `1px solid ${color}11` }}>
+        <span style={{ color: '#555', fontSize: 11, fontFamily: 'monospace' }}>
+          {formatTimestamp(lastRefresh)}
         </span>
-      )}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+          <span style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: dataBadge.dot,
+            boxShadow: `0 0 5px ${dataBadge.dot}`,
+            animation: dataBadge.anim ? 'statusPulse 1s ease-in-out infinite' : 'none',
+            flexShrink: 0,
+          }} />
+          <span style={{ color: dataBadge.dot, fontFamily: 'monospace' }}>Data: {dataBadge.label}</span>
+        </span>
+      </div>
     </div>
   );
 }

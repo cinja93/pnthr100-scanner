@@ -3,7 +3,7 @@ import { useAuth } from '../AuthContext';
 import { useQueue } from '../contexts/QueueContext';
 import ChartModal from './ChartModal';
 import KillBadge from './KillBadge';
-import { fetchApexStocks } from '../services/api';
+import { fetchApexStocks, API_BASE, authHeaders } from '../services/api';
 import styles from './ApexPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -267,11 +267,26 @@ export default function ApexPage() {
   const [formulaOpen, setFormulaOpen] = useState(false);
   const [formulaPos, setFormulaPos]   = useState({ x: 0, y: 0 });
   const formulaBtnRef = useRef(null);
+  const [healthOpen,    setHealthOpen]    = useState(false);
+  const [healthData,    setHealthData]    = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
   const [chartIndex, setChartIndex] = useState(null);
   const [chartStocks, setChartStocks] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: 'apexScore', dir: 'desc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
   const sortedRef = useRef([]);
+
+  async function openHealth() {
+    setHealthOpen(true);
+    if (healthData) return; // already loaded
+    setHealthLoading(true);
+    try {
+      const res  = await fetch(`${API_BASE}/api/scoring-health`, { headers: authHeaders() });
+      const json = await res.json();
+      setHealthData(json);
+    } catch { setHealthData({ status: 'ERROR', message: 'Failed to load health data.' }); }
+    finally { setHealthLoading(false); }
+  }
 
   function toggleFormula(e) {
     e.stopPropagation();
@@ -499,14 +514,23 @@ export default function ApexPage() {
               </button>
             ))}
             {isAdmin && (
-              <button
-                ref={formulaBtnRef}
-                className={`${styles.formulaTabBtn}${formulaOpen ? ` ${styles.formulaTabBtnActive}` : ''}`}
-                onClick={toggleFormula}
-                title="D1–D8 Scoring Formulas"
-              >
-                📐 Scoring Guide
-              </button>
+              <>
+                <button
+                  ref={formulaBtnRef}
+                  className={`${styles.formulaTabBtn}${formulaOpen ? ` ${styles.formulaTabBtnActive}` : ''}`}
+                  onClick={toggleFormula}
+                  title="D1–D8 Scoring Formulas"
+                >
+                  📐 Scoring Guide
+                </button>
+                <button
+                  className={styles.formulaTabBtn}
+                  onClick={openHealth}
+                  title="Scoring engine dimension health check"
+                >
+                  ⚡ System Health
+                </button>
+              </>
             )}
           </div>
 
@@ -712,6 +736,86 @@ export default function ApexPage() {
           onClick={e => e.stopPropagation()}
         >
           {infoPopup.def}
+        </div>
+      )}
+
+      {/* ── System Health Modal ─────────────────────────────────────────────── */}
+      {healthOpen && (
+        <div
+          onClick={() => setHealthOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, width: 620, maxHeight: '90vh', overflowY: 'auto', fontFamily: 'monospace' }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <div>
+                <div style={{ color: '#fcf000', fontWeight: 700, fontSize: 15, letterSpacing: 1 }}>⚡ SCORING ENGINE HEALTH</div>
+                {healthData && !healthLoading && (
+                  <div style={{ color: '#666', fontSize: 11, marginTop: 3 }}>
+                    Last run: {healthData.lastRun ? new Date(healthData.lastRun).toLocaleString() : '—'} · {healthData.stocksScored ?? 0} stocks
+                  </div>
+                )}
+              </div>
+              <button onClick={() => setHealthOpen(false)} style={{ background: 'none', border: 'none', color: '#666', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '12px 20px 20px' }}>
+              {healthLoading && <div style={{ color: '#666', textAlign: 'center', padding: 40 }}>Loading…</div>}
+              {!healthLoading && healthData?.message && <div style={{ color: '#ff6b6b', padding: 20 }}>{healthData.message}</div>}
+              {!healthLoading && healthData?.dimensions && (() => {
+                const statusIcon  = s => s === 'OK' ? '✅' : s === 'WARNING' ? '⚠️' : '❌';
+                const statusColor = s => s === 'OK' ? '#28a745' : s === 'WARNING' ? '#fcf000' : '#dc3545';
+                const fmtSample   = (id, val) => {
+                  if (val === null || val === undefined) return '—';
+                  if (id === 'D1') return `${(+val).toFixed(2)}×`;
+                  return `${val > 0 ? '+' : ''}${(+val).toFixed(1)} pts`;
+                };
+                return (
+                  <>
+                    {healthData.dimensions.map(d => (
+                      <div key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', padding: '10px 0' }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                          <span style={{ fontSize: 16 }}>{statusIcon(d.status)}</span>
+                          <span style={{ color: '#fcf000', fontWeight: 700, fontSize: 13, width: 26 }}>{d.id}</span>
+                          <span style={{ color: '#fff', fontWeight: 600, fontSize: 13, width: 160 }}>{d.name}</span>
+                          <span style={{ color: statusColor(d.status), fontSize: 13, fontWeight: 600, flex: 1 }}>
+                            {fmtSample(d.id, d.sample)}
+                          </span>
+                          <span style={{ color: '#555', fontSize: 11 }}>{d.range}</span>
+                        </div>
+                        <div style={{ marginLeft: 52, marginTop: 2 }}>
+                          <span style={{ color: statusColor(d.status), fontSize: 11 }}>
+                            {d.status === 'OK' ? `${d.nonZero}/${d.total} stocks scoring` : d.status === 'WARNING' ? `${d.nonZero}/${d.total} non-zero — may be data gap` : 'No data — check pipeline'}
+                          </span>
+                          <span style={{ color: '#444', fontSize: 10, marginLeft: 10 }}>· {d.source}</span>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Summary bar */}
+                    <div style={{ marginTop: 16, padding: '10px 14px', background: '#0a0a0a', borderRadius: 6, display: 'flex', gap: 20, fontSize: 13 }}>
+                      <span style={{ color: '#28a745' }}>✅ {healthData.okCount} OK</span>
+                      <span style={{ color: '#fcf000' }}>⚠️ {healthData.warnCount} warnings</span>
+                      <span style={{ color: '#dc3545' }}>❌ {healthData.errCount} errors</span>
+                      <span style={{ color: '#555', marginLeft: 'auto', fontSize: 11 }}>source: {healthData.source}</span>
+                    </div>
+                    <div style={{ marginTop: 10, textAlign: 'right' }}>
+                      <button
+                        onClick={() => { setHealthData(null); openHealth(); }}
+                        style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', color: '#aaa', borderRadius: 4, padding: '4px 12px', fontSize: 11, cursor: 'pointer' }}
+                      >
+                        ↺ Refresh
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
         </div>
       )}
 

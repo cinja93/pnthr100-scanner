@@ -1615,6 +1615,9 @@ app.get('/api/apex', authenticateJWT, async (req, res) => {
 
     const results = await getApexResults(tickers, stockMeta, jungleSignals, preyResults, huntTickers);
 
+    // Expose to scoring-health endpoint
+    global._apexCache = { results: results.stocks || [], cachedAt: new Date() };
+
     // On explicit refresh: update case studies in background (don't block response)
     if (req.query.refresh) {
       const { connectToDatabase } = await import('./database.js');
@@ -1637,6 +1640,109 @@ app.get('/api/apex', authenticateJWT, async (req, res) => {
 app.get('/api/kill-history',              authenticateJWT, killHistoryGetAll);
 app.get('/api/kill-history/active',       authenticateJWT, killHistoryGetActive);
 app.get('/api/kill-history/track-record', authenticateJWT, killHistoryGetTrackRecord);
+
+// ── Scoring Engine Health ───────────────────────────────────────────────────────
+app.get('/api/scoring-health', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+
+    // Pull the most recently persisted Kill scores from MongoDB
+    const scoreDocs = await db.collection('pnthr_kill_scores')
+      .find({}).sort({ createdAt: -1 }).limit(1).toArray();
+
+    // Fall back to live cache if nothing persisted yet
+    let stocks = [];
+    let lastRun = null;
+    let source  = 'live_cache';
+
+    if (scoreDocs.length > 0 && scoreDocs[0].results?.length > 0) {
+      stocks  = scoreDocs[0].results;
+      lastRun = scoreDocs[0].createdAt;
+      source  = 'pnthr_kill_scores';
+    } else {
+      // Use apex cache via in-memory state (already warm from last /api/apex call)
+      const apexCache = global._apexCache;
+      if (apexCache?.results?.length) {
+        stocks  = apexCache.results;
+        lastRun = apexCache.cachedAt || new Date();
+      }
+    }
+
+    if (!stocks.length) {
+      return res.json({ status: 'NO_DATA', message: 'No scoring run found. Hit /api/apex?refresh=1 first.' });
+    }
+
+    // ── Helper: analyse one dimension across all scored stocks ──────────────
+    function analyseD(key, subKey = 'score') {
+      const vals = stocks
+        .map(s => s.scoreDetail?.[key]?.[subKey] ?? s.scores?.[key] ?? null)
+        .filter(v => v !== null && v !== undefined);
+      const nonZero = vals.filter(v => v !== 0);
+      return {
+        count:     vals.length,
+        nonZero:   nonZero.length,
+        sample:    nonZero[0] ?? vals[0] ?? null,
+        allSame:   new Set(vals.map(v => Math.round(v * 10))).size <= 1,
+        hasData:   nonZero.length > 0,
+      };
+    }
+
+    const d1 = analyseD('d1');
+    const d2 = analyseD('d2');
+    const d3 = analyseD('d3');
+    const d4 = analyseD('d4');
+    const d5 = analyseD('d5');
+    const d6 = analyseD('d6');
+    const d7 = analyseD('d7');
+    const d8 = analyseD('d8');
+
+    // D1 special: check regime multiplier varies (expected 0.70–1.30)
+    const d1Varies = !d1.allSame;
+    const d3Conf   = stocks.find(s => s.scoreDetail?.d3?.confirmation)?.scoreDetail?.d3?.confirmation || '—';
+
+    function dim(id, name, range, source, stat, statusOverride) {
+      const ok = statusOverride ?? stat.hasData;
+      const warn = !ok && stat.count > 0;
+      return {
+        id, name, range, source,
+        status:    ok ? 'OK' : (warn ? 'WARNING' : 'ERROR'),
+        hasData:   stat.hasData,
+        nonZero:   stat.nonZero,
+        total:     stat.count,
+        sample:    stat.sample,
+      };
+    }
+
+    const dimensions = [
+      dim('D1','Market Regime',    '0.70× – 1.30×', 'SPY/QQQ vs 21-week EMA + signal ratio', d1, d1Varies || d1.hasData),
+      dim('D2','Sector Alignment', '−15 to +15 pts', 'FMP sector 5D/1M performance',          d2),
+      dim('D3','Entry Quality',    '0 – 85 pts',     `Weekly candles (conviction/slope/sep) — ${d3Conf}`, d3),
+      dim('D4','Signal Freshness', '−15 to +10 pts', 'Signal age (days since entry)',          d4),
+      dim('D5','Rank Rise',        '−20 to +20 pts', 'PNTHR 100 weekly rankings delta',        d5),
+      dim('D6','Momentum',         '−10 to +20 pts', 'RSI, OBV, ADX, volume ratio',           d6),
+      dim('D7','Rank Velocity',    '−10 to +10 pts', 'Week-over-week rank change acceleration',d7),
+      dim('D8','Multi-Strategy',   '0 – 6 pts',      'PNTHR Prey strategies (HUNT/FEAST/etc.)',d8),
+    ];
+
+    const okCount   = dimensions.filter(d => d.status === 'OK').length;
+    const warnCount = dimensions.filter(d => d.status === 'WARNING').length;
+    const errCount  = dimensions.filter(d => d.status === 'ERROR').length;
+
+    res.json({
+      status:        errCount > 0 ? 'ERROR' : warnCount > 0 ? 'WARNING' : 'OK',
+      lastRun,
+      source,
+      stocksScored:  stocks.length,
+      okCount,
+      warnCount,
+      errCount,
+      dimensions,
+    });
+  } catch (err) {
+    console.error('[scoring-health]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── PNTHR Command Center ───────────────────────────────────────────────────────
 app.get('/api/kill-pipeline',       authenticateJWT, killPipelineHandler);

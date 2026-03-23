@@ -2023,7 +2023,6 @@ app.post('/api/signal-history/changelog', authenticateJWT, requireAdmin, async (
 app.get('/api/pulse', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
-    const { getApexResults } = await import('./apexService.js');
     const db = await connectToDatabase();
     const userId = req.user.userId;
 
@@ -2035,36 +2034,55 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       db.collection('pnthr_weekly_market_snapshot').findOne({}, { sort: { weekOf: -1 } }),
     ]);
 
-    // Live apex scores (weekly cache — same data as Kill page)
-    const apexResults = await getApexResults();
-    const killTop10 = apexResults.stocks
-      .filter(s => s.isTop10)
-      .map(s => ({
-        killRank: s.killRank,
-        ticker: s.ticker,
-        signal: s.signal,
-        totalScore: s.apexScore,
-        tier: s.tier,
-        sector: s.sector,
-        currentPrice: s.currentPrice,
-        rankChange: s.rankChange ?? null,
-      }));
+    // Live apex cache (populated when Kill page is visited this session).
+    // Falls back to Friday pipeline DB data when cache is cold.
+    const { getCachedApexResults } = await import('./apexService.js');
+    const liveApex = getCachedApexResults();
 
-    // Signal breadth + sector heatmap from live apex stocks
-    const blCount = apexResults.regime.blCount || 0;
-    const ssCount = apexResults.regime.ssCount || 0;
-    const sectorMap = {};
-    for (const s of apexResults.stocks) {
-      if (!s.signal || s.overextended) continue;
-      const sector = s.sector || 'Unknown';
-      if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
-      if (s.signal === 'BL') sectorMap[sector].bl++;
-      else if (s.signal === 'SS') sectorMap[sector].ss++;
+    let killTop10, blCount, ssCount, sectorMap;
+    if (liveApex) {
+      killTop10 = liveApex.stocks
+        .filter(s => s.isTop10)
+        .map(s => ({
+          killRank: s.killRank, ticker: s.ticker, signal: s.signal,
+          totalScore: s.apexScore, tier: s.tier, sector: s.sector,
+          currentPrice: s.currentPrice, rankChange: s.rankChange ?? null,
+        }));
+      blCount = liveApex.regime?.blCount || 0;
+      ssCount = liveApex.regime?.ssCount || 0;
+      sectorMap = {};
+      for (const s of liveApex.stocks) {
+        if (!s.signal || s.overextended) continue;
+        const sector = s.sector || 'Unknown';
+        if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
+        if (s.signal === 'BL') sectorMap[sector].bl++;
+        else if (s.signal === 'SS') sectorMap[sector].ss++;
+      }
+    } else {
+      // Cold server — fall back to Friday pipeline data
+      const [killScores, latestEnriched] = await Promise.all([
+        db.collection('pnthr_kill_scores').find({ killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
+        db.collection('pnthr_enriched_signals').findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } }),
+      ]);
+      killTop10 = killScores.map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 }));
+      const enrichedSignals = latestEnriched?.weekOf
+        ? await db.collection('pnthr_enriched_signals')
+            .find({ weekOf: latestEnriched.weekOf, signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1 } })
+            .toArray()
+        : [];
+      blCount = 0; ssCount = 0; sectorMap = {};
+      for (const sig of enrichedSignals) {
+        const sector = sig.sector || 'Unknown';
+        if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
+        if (sig.signal === 'BL') { sectorMap[sector].bl++; blCount++; }
+        else if (sig.signal === 'SS') { sectorMap[sector].ss++; ssCount++; }
+      }
     }
 
     // D1 multipliers — SPY used as the primary index reference
-    const spyAbove = apexResults.regime.spyAboveEma ?? regimeDoc?.spyAboveEma ?? null;
-    const spyRising = apexResults.regime.spyEmaRising ?? null;
+    const apexRegime = liveApex?.regime || {};
+    const spyAbove = apexRegime.spyAboveEma ?? regimeDoc?.spyAboveEma ?? null;
+    const spyRising = apexRegime.spyEmaRising ?? null;
     let indexScore = 0;
     if (spyAbove === false && spyRising === false) indexScore = -2;
     else if (spyAbove === false) indexScore = -1;
@@ -2136,10 +2154,10 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       regime: {
         ...(regimeDoc || {}),
         indexPosition: spyAbove ? 'above' : spyAbove === false ? 'below' : 'unknown',
-        spyAboveEma: apexResults.regime.spyAboveEma,
-        spyEmaRising: apexResults.regime.spyEmaRising,
-        qqqAboveEma: apexResults.regime.qqqAboveEma,
-        qqqEmaRising: apexResults.regime.qqqEmaRising,
+        spyAboveEma: apexRegime.spyAboveEma ?? regimeDoc?.spyAboveEma,
+        spyEmaRising: apexRegime.spyEmaRising ?? regimeDoc?.spyEmaRising,
+        qqqAboveEma: apexRegime.qqqAboveEma ?? regimeDoc?.qqqAboveEma,
+        qqqEmaRising: apexRegime.qqqEmaRising ?? regimeDoc?.qqqEmaRising,
         blCount, ssCount, ssD1, blD1, regimeScore,
       },
       killTop10,

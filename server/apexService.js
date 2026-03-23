@@ -1011,3 +1011,9 @@ export async function getApexResults(
 export function clearApexCache() {
   apexCache = { weekKey: null, results: null };
 }
+
+// Return the in-memory apex cache without triggering any computation.
+// Returns null when Kill page hasn't been visited this server session.
+export function getCachedApexResults() {
+  return apexCache.results ?? null;
+}

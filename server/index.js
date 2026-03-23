@@ -1138,8 +1138,14 @@ async function getSP500Constituents(FMP_API_KEY) {
   const res = await fetch(`https://financialmodelingprep.com/api/v3/sp500_constituent?apikey=${FMP_API_KEY}`);
   if (!res.ok) throw new Error(`FMP SP500 constituent ${res.status}`);
   const data = await res.json();
-  sp500Cache = { date: today, constituents: data };
-  return data;
+  // Normalize sector names at ingestion — FMP uses 'Consumer Cyclical', 'Consumer Defensive', etc.
+  // All downstream code (badge counts + sector stocks) then uses canonical GICS names directly.
+  const normalized = data.map(c => {
+    warnUnknownSector(c.sector, `sp500_constituent/${c.symbol}`);
+    return { ...c, sector: normalizeSector(c.sector) };
+  });
+  sp500Cache = { date: today, constituents: normalized };
+  return normalized;
 }
 
 // Sector signal counts — pre-computed in background at startup, cached weekly
@@ -1156,8 +1162,8 @@ async function computeSectorSignalCounts() {
 
     const tickersBySector = {};
     for (const c of constituents) {
-      warnUnknownSector(c.sector, `SP500constituent/${c.symbol}`);
-      const sectorKey = gicsToKey[normalizeSector(c.sector)];
+      // c.sector is already normalized by getSP500Constituents
+      const sectorKey = gicsToKey[c.sector];
       if (!sectorKey) continue;
       if (!tickersBySector[sectorKey]) tickersBySector[sectorKey] = [];
       tickersBySector[sectorKey].push(c.symbol);
@@ -1203,10 +1209,10 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
     const FMP_API_KEY = process.env.FMP_API_KEY;
     const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
 
-    // 1. Get S&P 500 constituents and filter to this GICS sector
-    // FMP's constituent list uses its own names (e.g. "Consumer Cyclical") — normalize before comparing.
+    // 1. Get S&P 500 constituents and filter to this GICS sector.
+    // Sectors are normalized at cache time by getSP500Constituents — plain equality works.
     const constituents = await getSP500Constituents(FMP_API_KEY);
-    const sectorConstituents = constituents.filter(c => normalizeSector(c.sector) === gicsSector);
+    const sectorConstituents = constituents.filter(c => c.sector === gicsSector);
     if (sectorConstituents.length === 0) return res.json({ stocks: [], signals: {} });
 
     const tickers = sectorConstituents.map(c => c.symbol);

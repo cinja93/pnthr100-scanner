@@ -2,11 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { fetchPulse, fetchLiveVix, fetchSignalStocks } from '../services/api';
 import ChartModal from './ChartModal';
 
-function formatTimestamp(date) {
-  if (!date) return 'Loading...';
-  const day = date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
-  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'America/New_York' });
-  return `${day} at ${time} ET`;
+function formatScoresLabel(data) {
+  if (!data) return 'Scores: Loading...';
+  if (data.dataSource === 'live_apex') {
+    // Live scoring — show today at the time scores were computed
+    const d = data.scoresAsOf ? new Date(data.scoresAsOf) : new Date();
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' });
+    return `Scores: Live as of ${time} ET`;
+  }
+  // Friday pipeline — show the weekOf date clearly
+  if (data.weekOf) {
+    // weekOf is 'YYYY-MM-DD'; parse as local date to avoid UTC-off-by-one
+    const [y, m, d] = data.weekOf.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    return `Scores: ${label} (Fri pipeline)`;
+  }
+  return 'Scores: Fri pipeline';
+}
+
+function formatLoadedAt(date) {
+  if (!date) return '';
+  return 'Loaded: ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'America/New_York' }) + ' ET';
 }
 
 export default function PulsePage({ onNavigate }) {
@@ -61,10 +78,10 @@ export default function PulsePage({ onNavigate }) {
         status={data.statusLight}
         message={data.statusMessage}
         positions={data.positions}
+        pulseData={data}
         lastRefresh={lastRefresh}
         isRefreshing={isRefreshing}
         onRefresh={refreshPulse}
-        killDataLive={data.killDataLive}
       />
 
       {/* TIER 1: Market environment — SPY, QQQ, Regime, VIX */}
@@ -111,16 +128,20 @@ export default function PulsePage({ onNavigate }) {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function StatusLight({ status, message, positions, lastRefresh, isRefreshing, onRefresh, killDataLive }) {
+function StatusLight({ status, message, positions, pulseData, lastRefresh, isRefreshing, onRefresh }) {
   const color = status === 'RED' ? '#dc3545' : status === 'YELLOW' ? '#ffc107' : '#28a745';
   const pulse = status !== 'GREEN';
   const [hovRefresh, setHovRefresh] = useState(false);
 
+  const isLive = pulseData?.dataSource === 'live_apex';
   const dataBadge = isRefreshing
     ? { dot: '#ffc107', label: 'Refreshing...', anim: true }
-    : killDataLive
+    : isLive
       ? { dot: '#28a745', label: 'Live',         anim: false }
       : { dot: '#ffc107', label: 'Fri Pipeline', anim: false };
+
+  const scoresLabel = isRefreshing ? 'Scores: Refreshing...' : formatScoresLabel(pulseData);
+  const loadedLabel = formatLoadedAt(lastRefresh);
 
   return (
     <div style={{
@@ -172,10 +193,12 @@ function StatusLight({ status, message, positions, lastRefresh, isRefreshing, on
         </button>
       </div>
 
-      {/* Row 2: timestamp · data source badge */}
+      {/* Row 2: scores vintage · prices · loaded-at · data badge */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px 7px', borderTop: `1px solid ${color}11` }}>
-        <span style={{ color: '#555', fontSize: 11, fontFamily: 'monospace' }}>
-          {formatTimestamp(lastRefresh)}
+        <span style={{ color: isLive ? '#6bcb77' : '#888', fontSize: 11, fontFamily: 'monospace' }}>
+          {scoresLabel}
+          <span style={{ color: '#444', marginLeft: 12 }}>· Prices: Live</span>
+          {loadedLabel && <span style={{ color: '#333', marginLeft: 12 }}>· {loadedLabel}</span>}
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
           <span style={{

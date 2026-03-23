@@ -2238,10 +2238,22 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       } catch { /* best-effort */ }
     }
 
+    // Data freshness metadata — client shows "Scores: Fri Mar 20" vs "Scores: Live"
+    const dataSource = liveApex ? 'live_apex' : 'friday_pipeline';
+    const scoresAsOf = liveApex
+      ? new Date().toISOString()
+      : (regimeDoc?.weekOf ? `${regimeDoc.weekOf}T16:15:00` : null);
+    const weekOf = liveApex
+      ? new Date().toISOString().split('T')[0]
+      : (regimeDoc?.weekOf ?? null);
+
     res.json({
       statusLight: 'GREEN',
       statusMessage: 'ALL SYSTEMS OPERATIONAL',
       killDataLive: !!liveApex,
+      dataSource,
+      scoresAsOf,
+      weekOf,
       regime: {
         ...(regimeDoc || {}),
         indexPosition: spyAbove ? 'above' : spyAbove === false ? 'below' : 'unknown',

@@ -8,7 +8,7 @@ import { getSignals, getCachedSignals } from './signalService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
-import { getEtfStocks } from './etfService.js';
+import { getEtfStocks, ALL_ETF_TICKER_SET, getCachedEtfResults } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
@@ -45,6 +45,7 @@ import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
 import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateToken, resolveRole, generateApprovalToken, verifyApprovalToken } from './auth.js';
+import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
 import { sendApprovalRequestEmail, sendWelcomeEmail, sendDenialEmail } from './emailService.js';
 import { ibkrSync } from './ibkrSync.js';
 import {
@@ -70,13 +71,6 @@ import {
 
 const app = express();
 const PORT = 3000;
-
-// Normalize FMP/Morningstar sector names to official S&P 500 GICS names
-function normalizeSector(sector) {
-  if (sector === 'Consumer Cyclical')  return 'Consumer Discretionary';
-  if (sector === 'Consumer Defensive') return 'Consumer Staples';
-  return sector;
-}
 
 // Middleware
 // Helmet — secure HTTP headers (XSS, clickjacking, MIME sniffing, etc.)
@@ -1144,8 +1138,14 @@ async function getSP500Constituents(FMP_API_KEY) {
   const res = await fetch(`https://financialmodelingprep.com/api/v3/sp500_constituent?apikey=${FMP_API_KEY}`);
   if (!res.ok) throw new Error(`FMP SP500 constituent ${res.status}`);
   const data = await res.json();
-  sp500Cache = { date: today, constituents: data };
-  return data;
+  // Normalize sector names at ingestion — FMP uses 'Consumer Cyclical', 'Consumer Defensive', etc.
+  // All downstream code (badge counts + sector stocks) then uses canonical GICS names directly.
+  const normalized = data.map(c => {
+    warnUnknownSector(c.sector, `sp500_constituent/${c.symbol}`);
+    return { ...c, sector: normalizeSector(c.sector) };
+  });
+  sp500Cache = { date: today, constituents: normalized };
+  return normalized;
 }
 
 // Sector signal counts — pre-computed in background at startup, cached weekly
@@ -1162,6 +1162,7 @@ async function computeSectorSignalCounts() {
 
     const tickersBySector = {};
     for (const c of constituents) {
+      // c.sector is already normalized by getSP500Constituents
       const sectorKey = gicsToKey[c.sector];
       if (!sectorKey) continue;
       if (!tickersBySector[sectorKey]) tickersBySector[sectorKey] = [];
@@ -1208,7 +1209,8 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
     const FMP_API_KEY = process.env.FMP_API_KEY;
     const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
 
-    // 1. Get S&P 500 constituents and filter to this GICS sector
+    // 1. Get S&P 500 constituents and filter to this GICS sector.
+    // Sectors are normalized at cache time by getSP500Constituents — plain equality works.
     const constituents = await getSP500Constituents(FMP_API_KEY);
     const sectorConstituents = constituents.filter(c => c.sector === gicsSector);
     if (sectorConstituents.length === 0) return res.json({ stocks: [], signals: {} });
@@ -2019,6 +2021,70 @@ app.post('/api/signal-history/changelog', authenticateJWT, requireAdmin, async (
   }
 });
 
+// ── Pulse cache warmers — background, non-blocking ────────────────────────────
+// Triggered by /api/pulse when caches are cold so the dashboard is self-sufficient.
+// Uses a guard flag to prevent duplicate in-flight computations.
+
+let _apexWarmInProgress = false;
+async function warmApexCacheIfCold() {
+  const { getCachedApexResults: _getApex } = await import('./apexService.js');
+  if (_getApex() || _apexWarmInProgress) return;
+  _apexWarmInProgress = true;
+  console.log('[PULSE] Warming apex cache in background...');
+  try {
+    const [specLongs, specShorts] = await Promise.all([getSp400Longs(), getSp400Shorts()]);
+    const stocks = await getJungleStocks(specLongs, specShorts);
+    const tickers = stocks.map(s => s.ticker);
+    const stockMeta = {};
+    for (const s of stocks) {
+      stockMeta[s.ticker] = {
+        companyName: s.companyName, sector: s.sector, exchange: s.exchange,
+        currentPrice: s.currentPrice, ytdReturn: s.ytdReturn,
+        isSp500: s.isSp500, isDow30: s.isDow30, isNasdaq100: s.isNasdaq100,
+        universe: s.universe, rankList: s.rankList ?? null,
+        rank: null, rankChange: undefined,
+      };
+    }
+    try {
+      const latestRanking = await getMostRecentRanking();
+      if (latestRanking) {
+        for (const e of (latestRanking.rankings || [])) {
+          if (stockMeta[e.ticker]) { stockMeta[e.ticker].rank = e.rank ?? null; stockMeta[e.ticker].rankChange = e.rankChange ?? undefined; stockMeta[e.ticker].rankList = 'LONG'; }
+        }
+        for (const e of (latestRanking.shortRankings || [])) {
+          if (stockMeta[e.ticker]) { stockMeta[e.ticker].rank = e.rank ?? null; stockMeta[e.ticker].rankChange = e.rankChange ?? undefined; stockMeta[e.ticker].rankList = 'SHORT'; }
+        }
+      }
+    } catch { /* rankings are enrichment only */ }
+    const jungleSignals = await getSignals(tickers);
+    let preyResults = null, huntTickers = new Set();
+    try { preyResults = await getPreyResults(tickers, stockMeta, jungleSignals); } catch (e) { console.warn('[PULSE] prey failed:', e.message); }
+    try { const h = await getEmaCrossoverStocks(); huntTickers = new Set((h?.stocks || []).map(s => s.ticker || s)); } catch {}
+    const { getApexResults: _ga } = await import('./apexService.js');
+    await _ga(tickers, stockMeta, jungleSignals, preyResults, huntTickers);
+    console.log('[PULSE] ✅ Apex cache warmed');
+  } catch (err) {
+    console.error('[PULSE] Apex warm failed:', err.message);
+  } finally {
+    _apexWarmInProgress = false;
+  }
+}
+
+let _etfWarmInProgress = false;
+async function warmEtfCacheIfCold() {
+  if (getCachedEtfResults() || _etfWarmInProgress) return;
+  _etfWarmInProgress = true;
+  console.log('[PULSE] Warming ETF cache in background...');
+  try {
+    await getEtfStocks();
+    console.log('[PULSE] ✅ ETF cache warmed');
+  } catch (err) {
+    console.error('[PULSE] ETF warm failed:', err.message);
+  } finally {
+    _etfWarmInProgress = false;
+  }
+}
+
 // ── PNTHR's Pulse — Mission Control Dashboard ─────────────────────────────────
 app.get('/api/pulse', authenticateJWT, async (req, res) => {
   try {
@@ -2026,36 +2092,182 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     const db = await connectToDatabase();
     const userId = req.user.userId;
 
-    const [regimeDoc, killScores, signals, positions, userProfile, marketSnapshot] = await Promise.all([
+    // Fire cache warming in background if caches are cold (non-blocking — pulse responds immediately)
+    const { getCachedApexResults: _checkApex } = await import('./apexService.js');
+    const apexCold = !_checkApex();
+    const etfCold  = !getCachedEtfResults();
+    if (apexCold) warmApexCacheIfCold().catch(() => {});
+    if (etfCold)  warmEtfCacheIfCold().catch(() => {});
+    const cacheWarming = apexCold || etfCold;
+
+    // DB queries for regime prices, portfolio, and macro snapshot
+    const [regimeDoc, positions, userProfile, marketSnapshot] = await Promise.all([
       db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } }),
-      db.collection('pnthr_kill_scores').find({ killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
-      db.collection('pnthr679_signals').find({ status: 'OPEN' }).toArray(),
       db.collection('pnthr_portfolio').find({ ownerId: userId, status: { $ne: 'closed' } }).toArray(),
       db.collection('user_profiles').findOne({ userId }),
       db.collection('pnthr_weekly_market_snapshot').findOne({}, { sort: { weekOf: -1 } }),
     ]);
 
-    const nav = userProfile?.accountSize || 100000;
+    // Live apex cache (populated when Kill page is visited this session).
+    // Falls back to Friday pipeline DB data when cache is cold.
+    const { getCachedApexResults } = await import('./apexService.js');
+    const liveApex = getCachedApexResults();
 
-    // Signal breadth by sector
-    const sectorMap = {};
-    let blCount = 0, ssCount = 0;
-    for (const sig of signals) {
-      const s = sig.sector || 'Unknown';
-      if (!sectorMap[s]) sectorMap[s] = { bl: 0, ss: 0 };
-      if (sig.signal === 'BL') { sectorMap[s].bl++; blCount++; }
-      else if (sig.signal === 'SS') { sectorMap[s].ss++; ssCount++; }
+    let killTop10, blCount, ssCount, sectorMap;
+    if (liveApex) {
+      killTop10 = liveApex.stocks
+        .filter(s => s.isTop10)
+        .map(s => ({
+          killRank: s.killRank, ticker: s.ticker, signal: s.signal,
+          totalScore: s.apexScore, tier: s.tier, sector: s.sector,
+          currentPrice: s.currentPrice, rankChange: s.rankChange ?? null,
+        }));
+      blCount = liveApex.regime?.blCount || 0;
+      ssCount = liveApex.regime?.ssCount || 0;
+      sectorMap = {};
+      for (const s of liveApex.stocks) {
+        if (!s.signal || s.overextended) continue;
+        const sector = s.sector || 'Unknown';
+        if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
+        if (s.signal === 'BL') sectorMap[sector].bl++;
+        else if (s.signal === 'SS') sectorMap[sector].ss++;
+      }
+    } else {
+      // Cold server — fall back to Friday pipeline data.
+      // pnthr_kill_scores has sector + signal for the full scored universe.
+      const [top10Scores, allKillSignals] = await Promise.all([
+        db.collection('pnthr_kill_scores').find({ killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
+        db.collection('pnthr_kill_scores')
+          .find({ signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1, weekOf: 1 } })
+          .sort({ weekOf: -1 }).limit(700).toArray(),
+      ]);
+      killTop10 = top10Scores.map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 }));
+      blCount = 0; ssCount = 0; sectorMap = {};
+      for (const s of allKillSignals) {
+        const sector = s.sector || 'Unknown';
+        if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
+        if (s.signal === 'BL') { sectorMap[sector].bl++; blCount++; }
+        else if (s.signal === 'SS') { sectorMap[sector].ss++; ssCount++; }
+      }
+      // regimeDoc has authoritative counts from the signal state machine
+      if (blCount === 0 && ssCount === 0) {
+        blCount = regimeDoc?.blCount ?? 0;
+        ssCount = regimeDoc?.ssCount ?? 0;
+      }
     }
 
-    // Portfolio heat calculation
-    const livePos = positions.filter(p => {
-      const fills = p.fills || [];
-      return fills.some(f => f.filled);
+    // New signals this week (signalAge 0–1) — stocks from apex cache, ETFs from etf cache
+    // ETFs are a separate scoring universe and never appear in the apex/kill results.
+    function calcSignalAge(signalDate) {
+      if (!signalDate) return 99;
+      try {
+        const sigMs  = new Date(signalDate + 'T12:00:00').getTime();
+        // Current week Monday
+        const now = new Date();
+        const dow = now.getDay();
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+        monday.setHours(12, 0, 0, 0);
+        return Math.max(0, Math.round((monday.getTime() - sigMs) / (7 * 24 * 60 * 60 * 1000)));
+      } catch { return 99; }
+    }
+    function mapNewSig(s) {
+      return { ticker: s.ticker, sector: s.sector, currentPrice: s.currentPrice,
+        totalScore: s.apexScore ?? s.totalScore ?? 0, tier: s.tier, signal: s.signal,
+        signalAge: s.signalAge, killRank: s.killRank ?? null };
+    }
+    const sortByScore = (a, b) => ((b.totalScore || 0) - (a.totalScore || 0));
+
+    // ── Stocks: from apex cache (live) or Friday DB ──
+    let newBLStocks = [], newSSStocks = [];
+    if (liveApex) {
+      const fresh = liveApex.stocks.filter(s => !s.overextended && (s.signalAge ?? 99) <= 1);
+      newBLStocks = fresh.filter(s => s.signal === 'BL').map(mapNewSig).sort(sortByScore);
+      newSSStocks = fresh.filter(s => s.signal === 'SS').map(mapNewSig).sort(sortByScore);
+    } else {
+      const dbFresh = await db.collection('pnthr_kill_scores')
+        .find({ signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: 1 } })
+        .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
+        .toArray();
+      newBLStocks = dbFresh.filter(s => s.signal === 'BL')
+        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
+      newSSStocks = dbFresh.filter(s => s.signal === 'SS')
+        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
+    }
+
+    // ── ETFs: from the ETF cache (populated when /api/etf-stocks is visited) ──
+    let newBLEtfs = [], newSSEtfs = [];
+    const cachedEtf = getCachedEtfResults();
+    if (cachedEtf) {
+      const { stocks: etfStocks, signals: etfSignals } = cachedEtf;
+      const freshEtfs = etfStocks
+        .map(s => {
+          const sig = etfSignals?.[s.ticker];
+          if (!sig?.signal || sig.signal === 'BE' || sig.signal === 'SE') return null;
+          const signalAge = calcSignalAge(sig.signalDate);
+          if (signalAge > 1) return null;
+          return {
+            ticker: s.ticker,
+            sector: s.category || s.sector || 'ETF',
+            currentPrice: s.currentPrice,
+            totalScore: 0,   // ETFs not Kill-scored
+            tier: null,
+            signal: sig.signal === 'BUY' ? 'BL' : sig.signal === 'SELL' ? 'SS' : sig.signal,
+            signalAge,
+            killRank: null,
+          };
+        })
+        .filter(Boolean);
+      newBLEtfs = freshEtfs.filter(s => s.signal === 'BL');
+      newSSEtfs = freshEtfs.filter(s => s.signal === 'SS');
+    }
+
+    // D1 multipliers — matches apexService calcD1() sign convention:
+    //   bearish market → negative regimeScore → ssD1 > 1.0 (amplifies SS), blD1 < 1.0 (dampens BL)
+    const apexRegime = liveApex?.regime || {};
+    const spyAbove = apexRegime.spyAboveEma ?? regimeDoc?.spyAboveEma ?? null;
+    const spyRising = apexRegime.spyEmaRising ?? (
+      regimeDoc?.indexSlope === 'rising' ? true :
+      regimeDoc?.indexSlope === 'falling' ? false : null
+    );
+    let indexScore = 0;
+    if (spyAbove === false && spyRising === false) indexScore = -2;
+    else if (spyAbove === false) indexScore = -1;
+    else if (spyAbove === true && spyRising === true) indexScore = 2;
+    else if (spyAbove === true) indexScore = 1;
+    const openRatio = ssCount / Math.max(blCount, 1);
+    let ratioScore = 0;
+    if (blCount + ssCount > 0) {
+      // High SS:BL ratio → bearish (negative); low ratio → bullish (positive)
+      if (openRatio > 3) ratioScore = -2;
+      else if (openRatio > 2) ratioScore = -1;
+      else if (openRatio < 0.5) ratioScore = 2;
+      else if (openRatio < 1) ratioScore = 1;
+    }
+    const regimeScore = indexScore + ratioScore;
+    const ssD1 = Math.max(0.70, Math.min(1.30, Math.round((1.0 - regimeScore * 0.06) * 100) / 100));
+    const blD1 = Math.max(0.70, Math.min(1.30, Math.round((1.0 + regimeScore * 0.06) * 100) / 100));
+
+    const nav = userProfile?.accountSize || 100000;
+
+    // fills can be an array (new lot system) OR an object keyed by lot number (old style)
+    // commandCenter uses Object.values(fills) — match that pattern
+    function getFillsArray(p) {
+      if (Array.isArray(p.fills)) return p.fills;
+      if (p.fills && typeof p.fills === 'object') return Object.values(p.fills);
+      return [];
+    }
+
+    // Portfolio heat — all positions with any filled lot OR direct shares field
+    const filledPos = positions.filter(p => {
+      const fills = getFillsArray(p);
+      return fills.some(f => f.filled) || (p.shares > 0);
     });
     let stockRisk = 0, etfRisk = 0;
-    for (const p of livePos) {
-      const fills = p.fills || [];
-      const totalShares = fills.filter(f => f.filled).reduce((s, f) => s + (f.shares || 0), 0);
+    for (const p of filledPos) {
+      const fills = getFillsArray(p);
+      const filledShares = fills.filter(f => f.filled).reduce((s, f) => s + (+f.shares || 0), 0);
+      const totalShares = filledShares || (p.shares || 0);
       const stop = p.stopPrice || 0;
       const avg = p.avgCost || p.entryPrice || 0;
       const risk = totalShares * Math.abs(avg - stop);
@@ -2073,8 +2285,8 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
 
     // Lots ready
     const lotsReady = [];
-    for (const p of livePos) {
-      const fills = p.fills || [];
+    for (const p of filledPos) {
+      const fills = getFillsArray(p);
       for (const f of fills) {
         if (f.filled) continue;
         const priorFilled = f.lot === 1 || fills.find(x => x.lot === f.lot - 1)?.filled;
@@ -2084,39 +2296,183 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       }
     }
 
-    const shortCount = livePos.filter(p => p.direction === 'SHORT').length;
-    const longCount = livePos.filter(p => p.direction === 'LONG').length;
+    const shortCount = positions.filter(p => p.direction === 'SHORT').length;
+    const longCount = positions.filter(p => p.direction === 'LONG').length;
+    const recycledCount = filledPos.filter(p => {
+      const fills = getFillsArray(p);
+      const filledShares = fills.filter(f => f.filled).reduce((s, f) => s + (+f.shares || 0), 0);
+      const totalShares = filledShares || (p.shares || 0);
+      const stop = p.stopPrice || 0;
+      const avg = p.avgCost || p.entryPrice || 0;
+      const isShort = p.direction === 'SHORT';
+      return totalShares > 0 && (isShort ? stop <= avg : stop >= avg);
+    }).length;
+
+    // SPY/QQQ index data from apex cache
+    const apexIndexData = liveApex?.indexData || {};
+
+    // Live macro data from FMP — 10Y, DXY, and SPY/QQQ prices when apex cache is cold
+    const FMP_KEY = process.env.FMP_API_KEY;
+    let treasury10y = marketSnapshot?.treasury10y ?? null;
+    let dxy = marketSnapshot?.dxy ?? null;
+    const needSpyQqq = !apexIndexData.SPY && !regimeDoc?.spy;
+    let spyLivePrice = null, qqqLivePrice = null;
+    const fmpFetches = [];
+    if (treasury10y == null) fmpFetches.push(['t10', `https://financialmodelingprep.com/api/v3/quote/%5ETNX?apikey=${FMP_KEY}`]);
+    if (dxy == null) fmpFetches.push(['dxy', `https://financialmodelingprep.com/api/v3/quote/DX-Y.NYB?apikey=${FMP_KEY}`]);
+    if (needSpyQqq) {
+      fmpFetches.push(['spy', `https://financialmodelingprep.com/api/v3/quote/SPY?apikey=${FMP_KEY}`]);
+      fmpFetches.push(['qqq', `https://financialmodelingprep.com/api/v3/quote/QQQ?apikey=${FMP_KEY}`]);
+    }
+    if (fmpFetches.length > 0) {
+      try {
+        const results = await Promise.all(fmpFetches.map(([, url]) => fetch(url)));
+        for (let i = 0; i < fmpFetches.length; i++) {
+          if (!results[i].ok) continue;
+          const data = await results[i].json();
+          const price = data[0]?.price ?? null;
+          const [key] = fmpFetches[i];
+          if (key === 't10') treasury10y = price;
+          else if (key === 'dxy') dxy = price;
+          else if (key === 'spy') spyLivePrice = price;
+          else if (key === 'qqq') qqqLivePrice = price;
+        }
+      } catch { /* best-effort */ }
+    }
+
+    // Always-fetch market gauge data: NYSE, NASDAQ, IWM, GLD
+    let marketGauges = { nyse: null, nasdaq: null, iwm: null, gld: null };
+    try {
+      const mgRes = await fetch(
+        `https://financialmodelingprep.com/api/v3/quote/%5ENYA,%5EIXIC,IWM,GLD?apikey=${FMP_KEY}`
+      );
+      if (mgRes.ok) {
+        const mgData = await mgRes.json();
+        function extractMg(symbol) {
+          const q = mgData.find(x => x.symbol === symbol || x.symbol === symbol.replace('%5E', '^'));
+          if (!q) return null;
+          return {
+            price: q.price ?? null,
+            change: q.change ?? null,
+            changePct: q.changesPercentage ?? null,
+            name: q.name ?? symbol,
+          };
+        }
+        marketGauges = {
+          nyse:   extractMg('%5ENYA')  || extractMg('^NYA'),
+          nasdaq: extractMg('%5EIXIC') || extractMg('^IXIC'),
+          iwm:    extractMg('IWM'),
+          gld:    extractMg('GLD'),
+        };
+        // Try alternate symbol names if not found
+        if (!marketGauges.nyse)   marketGauges.nyse   = mgData.find(q => q.symbol === '^NYA')  ? { price: mgData.find(q=>q.symbol==='^NYA').price,   changePct: mgData.find(q=>q.symbol==='^NYA').changesPercentage   } : null;
+        if (!marketGauges.nasdaq) marketGauges.nasdaq = mgData.find(q => q.symbol === '^IXIC') ? { price: mgData.find(q=>q.symbol==='^IXIC').price, changePct: mgData.find(q=>q.symbol==='^IXIC').changesPercentage } : null;
+        console.log('[PULSE] marketGauges fetched:', Object.entries(marketGauges).map(([k,v]) => `${k}:${v?.price ?? 'null'}`).join(' '));
+      }
+    } catch (e) {
+      console.warn('[PULSE] marketGauges fetch failed:', e.message);
+    }
+
+    // Data freshness metadata — client shows "Scores: Fri Mar 20" vs "Scores: Live"
+    const dataSource = liveApex ? 'live_apex' : 'friday_pipeline';
+    const scoresAsOf = liveApex
+      ? new Date().toISOString()
+      : (regimeDoc?.weekOf ? `${regimeDoc.weekOf}T16:15:00` : null);
+    const weekOf = liveApex
+      ? new Date().toISOString().split('T')[0]
+      : (regimeDoc?.weekOf ?? null);
 
     res.json({
-      statusLight: 'GREEN',
-      statusMessage: 'ALL SYSTEMS OPERATIONAL',
-      regime: regimeDoc || null,
-      killTop10: killScores,
+      statusLight: cacheWarming ? 'YELLOW' : 'GREEN',
+      statusMessage: cacheWarming ? 'SCORING ENGINE WARMING UP' : 'ALL SYSTEMS OPERATIONAL',
+      killDataLive: !!liveApex,
+      cacheWarming,
+      apexWarmInProgress: _apexWarmInProgress,
+      etfWarmInProgress: _etfWarmInProgress,
+      dataSource,
+      scoresAsOf,
+      weekOf,
+      regime: {
+        ...(regimeDoc || {}),
+        indexPosition: spyAbove ? 'above' : spyAbove === false ? 'below' : 'unknown',
+        spyAboveEma: apexRegime.spyAboveEma ?? regimeDoc?.spyAboveEma,
+        spyEmaRising: apexRegime.spyEmaRising ?? regimeDoc?.spyEmaRising,
+        qqqAboveEma: apexRegime.qqqAboveEma ?? regimeDoc?.qqqAboveEma,
+        qqqEmaRising: apexRegime.qqqEmaRising ?? regimeDoc?.qqqEmaRising,
+        blCount, ssCount, ssD1, blD1, regimeScore,
+        spy: apexIndexData.SPY
+          ? { close: apexIndexData.SPY.price, ema21: apexIndexData.SPY.ema21 }
+          : (regimeDoc?.spy ?? (spyLivePrice != null ? { close: spyLivePrice, ema21: null } : null)),
+        qqq: apexIndexData.QQQ
+          ? { close: apexIndexData.QQQ.price, ema21: apexIndexData.QQQ.ema21 }
+          : (regimeDoc?.qqq ?? (qqqLivePrice != null ? { close: qqqLivePrice, ema21: null } : null)),
+      },
+      killTop10,
+      newSignals: {
+        blStocks: newBLStocks,
+        blEtfs:   newBLEtfs,
+        ssStocks: newSSStocks,
+        ssEtfs:   newSSEtfs,
+      },
       signals: {
         blCount, ssCount,
         ratio: ssCount / Math.max(blCount, 1),
         bySector: sectorMap,
       },
       positions: {
-        total: livePos.length,
+        total: positions.length,
         short: shortCount,
         long: longCount,
-        recycled: livePos.filter(p => {
-          const fills = p.fills || [];
-          const totalShares = fills.filter(f => f.filled).reduce((s, f) => s + (f.shares || 0), 0);
-          const stop = p.stopPrice || 0;
-          const avg = p.avgCost || p.entryPrice || 0;
-          const isShort = p.direction === 'SHORT';
-          return totalShares > 0 && (isShort ? stop <= avg : stop >= avg);
-        }).length,
+        recycled: recycledCount,
         heat: { stockRisk, etfRisk, totalRisk, stockRiskPct, etfRiskPct, totalRiskPct },
         nav,
       },
       lotsReady: lotsReady.slice(0, 5),
-      marketSnapshot: marketSnapshot || null,
+      marketSnapshot: { ...(marketSnapshot || {}), treasury10y, dxy },
+      marketGauges,
     });
   } catch (err) {
     console.error('[/api/pulse]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Pulse signal drill-down — all BL or SS stocks ─────────────────────────────
+app.get('/api/pulse/signal-stocks', authenticateJWT, async (req, res) => {
+  try {
+    const { signal } = req.query;
+    if (!['BL', 'SS'].includes(signal)) return res.status(400).json({ error: 'signal must be BL or SS' });
+
+    const { getCachedApexResults } = await import('./apexService.js');
+    const liveApex = getCachedApexResults();
+
+    let stocks;
+    if (liveApex) {
+      stocks = liveApex.stocks
+        .filter(s => s.signal === signal && !s.overextended)
+        .map(s => ({
+          ticker: s.ticker,
+          sector: s.sector,
+          currentPrice: s.currentPrice,
+          totalScore: +(s.apexScore || 0).toFixed(1),
+          tier: s.tier,
+          signalAge: s.signalAge ?? null,
+          killRank: s.killRank ?? null,
+        }))
+        .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+    } else {
+      const { connectToDatabase } = await import('./database.js');
+      const db = await connectToDatabase();
+      const rows = await db.collection('pnthr_kill_scores')
+        .find({ signal }, { projection: { ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, tier: 1, signalAge: 1, killRank: 1 } })
+        .sort({ killRank: 1 })
+        .toArray();
+      stocks = rows.map(s => ({ ...s, totalScore: +(s.totalScore ?? 0).toFixed(1) }));
+    }
+
+    res.json({ signal, stocks, count: stocks.length });
+  } catch (err) {
+    console.error('[/api/pulse/signal-stocks]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

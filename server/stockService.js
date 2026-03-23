@@ -2,18 +2,12 @@ import dotenv from 'dotenv';
 import { getAllTickers, getDow30Tickers, getSp500Tickers, getNasdaq100Tickers } from './constituents.js';
 import { addRankingComparison, addShortRankingComparison, autoSaveRankingIfFriday } from './rankingService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
+import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
 
 dotenv.config();
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
-
-// Normalize FMP/Morningstar sector names to official S&P 500 GICS names
-function normalizeSector(sector) {
-  if (sector === 'Consumer Cyclical')  return 'Consumer Discretionary';
-  if (sector === 'Consumer Defensive') return 'Consumer Staples';
-  return sector;
-}
 
 // Get the last trading day of the previous year (Dec 31, 2025)
 function getYearStartDate() {
@@ -299,6 +293,7 @@ export async function getTopStocks() {
       const currentPrice = quoteData.price;
       const ytdReturn = ((currentPrice - yearStartPrice) / yearStartPrice) * 100;
       const sym = quoteData.symbol;
+      warnUnknownSector(profileData?.sector, `getTopStocks/${sym}`);
       stockData.push({
         ticker: sym,
         companyName: profileData?.companyName || quoteData.name || '',
@@ -418,6 +413,7 @@ export async function getJungleStocks(specLongs = [], specShorts = []) {
                        : specShortsSet.has(ticker) ? 'sp400Short'
                        : 'sp517';
 
+    warnUnknownSector(p?.sector, `getJungleStocks/${q.symbol}`);
     stocks.push({
       ticker:      q.symbol,
       companyName: p?.companyName || q.name || '',

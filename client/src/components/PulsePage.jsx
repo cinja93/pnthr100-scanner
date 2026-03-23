@@ -1,18 +1,77 @@
 import React, { useState, useEffect } from 'react';
-import { fetchPulse, fetchLiveVix } from '../services/api';
+import { fetchPulse, fetchLiveVix, fetchSignalStocks } from '../services/api';
 import ChartModal from './ChartModal';
+
+function formatScoresLabel(data) {
+  if (!data) return 'Scores: Loading...';
+  if (data.dataSource === 'live_apex') {
+    // Live scoring — show today at the time scores were computed
+    const d = data.scoresAsOf ? new Date(data.scoresAsOf) : new Date();
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' });
+    return `Scores: Live as of ${time} ET`;
+  }
+  // Friday pipeline — show the weekOf date clearly
+  if (data.weekOf) {
+    // weekOf is 'YYYY-MM-DD'; parse as local date to avoid UTC-off-by-one
+    const [y, m, d] = data.weekOf.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    return `Scores: ${label} (Fri pipeline)`;
+  }
+  return 'Scores: Fri pipeline';
+}
+
+function formatLoadedAt(date) {
+  if (!date) return '';
+  return 'Loaded: ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'America/New_York' }) + ' ET';
+}
 
 export default function PulsePage({ onNavigate }) {
   const [data, setData] = useState(null);
   const [vix, setVix] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [chartStock, setChartStock] = useState(null);
+  const [error, setError] = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [chartList, setChartList] = useState([]);
+  const [chartIndex, setChartIndex] = useState(0);
+  const [signalModal, setSignalModal] = useState(null);
+  const autoRefreshTimer = React.useRef(null);
+
+  async function refreshPulse() {
+    if (isRefreshing) return;
+    if (autoRefreshTimer.current) { clearTimeout(autoRefreshTimer.current); autoRefreshTimer.current = null; }
+    setIsRefreshing(true);
+    try {
+      const [pulse, vixData] = await Promise.all([fetchPulse(), fetchLiveVix()]);
+      setData(pulse);
+      setVix(vixData);
+      setLastRefresh(new Date());
+      // If still warming, schedule another check in 90s
+      if (pulse.cacheWarming) {
+        autoRefreshTimer.current = setTimeout(refreshPulse, 90_000);
+      }
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     Promise.all([fetchPulse(), fetchLiveVix()])
-      .then(([pulse, vixData]) => { setData(pulse); setVix(vixData); })
-      .catch(console.error)
+      .then(([pulse, vixData]) => {
+        setData(pulse);
+        setVix(vixData);
+        setLastRefresh(new Date());
+        // Auto-refresh once warming completes (~90s for apex + ETF)
+        if (pulse.cacheWarming) {
+          autoRefreshTimer.current = setTimeout(refreshPulse, 90_000);
+        }
+      })
+      .catch(err => { console.error(err); setError(err.message); })
       .finally(() => setLoading(false));
+    return () => { if (autoRefreshTimer.current) clearTimeout(autoRefreshTimer.current); };
   }, []);
 
   if (loading) return (
@@ -22,45 +81,65 @@ export default function PulsePage({ onNavigate }) {
   );
   if (!data) return (
     <div style={{ background: '#0a0a0a', minHeight: '100vh', color: '#ff6b6b', padding: 40, fontFamily: 'monospace' }}>
-      Failed to load Pulse data.
+      <div>Failed to load Pulse data.</div>
+      {error && <div style={{ marginTop: 12, fontSize: 13, color: '#ff9999', background: '#1a0000', padding: '10px 14px', borderRadius: 6, maxWidth: 600 }}>{error}</div>}
     </div>
   );
 
   return (
     <div style={{ background: '#0a0a0a', minHeight: '100vh', padding: '16px 24px', fontFamily: 'monospace' }}>
       {/* STATUS LIGHT */}
-      <StatusLight status={data.statusLight} message={data.statusMessage} positions={data.positions} />
+      <StatusLight
+        status={data.statusLight}
+        message={data.statusMessage}
+        positions={data.positions}
+        pulseData={data}
+        lastRefresh={lastRefresh}
+        isRefreshing={isRefreshing}
+        onRefresh={refreshPulse}
+      />
 
-      {/* TIER 1: 5-second read */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      {/* TIER 1: Market gauges — SPY, QQQ, NYSE, NASDAQ, IWM, GLD + VIX */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <SpyGauge regime={data.regime} />
         <QqqGauge regime={data.regime} />
-        <RegimeIndicator regime={data.regime} signals={data.signals} />
+        <MarketGauge label="NYSE" subLabel="Composite" data={data.marketGauges?.nyse} />
+        <MarketGauge label="NASDAQ" subLabel="Composite" data={data.marketGauges?.nasdaq} />
+        <MarketGauge label="IWM" subLabel="Russell 2000" data={data.marketGauges?.iwm} />
+        <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} />
         <VixThermometer vix={vix} />
-        <HeatGauge positions={data.positions} />
       </div>
+      {/* Regime + Portfolio Heat compact strip */}
+      <RegimeStrip regime={data.regime} signals={data.signals} positions={data.positions} />
 
-      {/* TIER 2: 30-second scan */}
+      {/* TIER 2: Signal intelligence — Kill Top 10, Sector Pulse, Signal Breadth, Macro */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-        <KillTop10 killTop10={data.killTop10} onTickerClick={setChartStock} />
-        <SectorHeatmap signals={data.signals} />
+        <KillTop10 killTop10={data.killTop10} onTickerClick={s => { setChartList([s]); setChartIndex(0); }} killDataLive={data.killDataLive} />
+        <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} />
       </div>
-      <SignalBreadthBar signals={data.signals} />
+      <NewSignalsPanel
+        newSignals={data.newSignals}
+        onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }}
+      />
+      <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
       <MacroStrip marketSnapshot={data.marketSnapshot} />
 
-      {/* TIER 3: Action items */}
-      <div style={{ display: 'flex', gap: 16, marginTop: 16, flexWrap: 'wrap' }}>
-        <LotsReady lotsReady={data.lotsReady} onNavigate={onNavigate} />
-        <RiskAlertsPanel positions={data.positions} />
-        <PositionsSummary positions={data.positions} onNavigate={onNavigate} />
-      </div>
+      {/* TIER 3: Portfolio — Heat gauge + positions + alerts/lots in one band */}
+      <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} />
 
-      {chartStock && (
+      {signalModal && (
+        <SignalStockModal
+          signal={signalModal}
+          onClose={() => setSignalModal(null)}
+          onTickerClick={(stocks, idx) => { setSignalModal(null); setChartList(stocks); setChartIndex(idx); }}
+        />
+      )}
+      {chartList.length > 0 && (
         <ChartModal
-          stocks={[chartStock]}
-          initialIndex={0}
+          stocks={chartList}
+          initialIndex={chartIndex}
           earnings={{}}
-          onClose={() => setChartStock(null)}
+          onClose={() => { setChartList([]); setChartIndex(0); }}
         />
       )}
     </div>
@@ -69,32 +148,99 @@ export default function PulsePage({ onNavigate }) {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function StatusLight({ status, message, positions }) {
+function StatusLight({ status, message, positions, pulseData, lastRefresh, isRefreshing, onRefresh }) {
   const color = status === 'RED' ? '#dc3545' : status === 'YELLOW' ? '#ffc107' : '#28a745';
   const pulse = status !== 'GREEN';
+  const [hovRefresh, setHovRefresh] = useState(false);
+
+  const isLive = pulseData?.dataSource === 'live_apex';
+  const dataBadge = isRefreshing
+    ? { dot: '#ffc107', label: 'Refreshing...', anim: true }
+    : isLive
+      ? { dot: '#28a745', label: 'Live',         anim: false }
+      : { dot: '#ffc107', label: 'Fri Pipeline', anim: false };
+
+  const isWarming = pulseData?.cacheWarming && !isRefreshing;
+  const scoresLabel = isRefreshing ? 'Scores: Refreshing...'
+    : isWarming ? 'Scores: Computing live scores... (auto-refreshes in ~90s)'
+    : formatScoresLabel(pulseData);
+  const loadedLabel = formatLoadedAt(lastRefresh);
+
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-      padding: '10px 24px', marginBottom: 16, borderRadius: 8,
+      marginBottom: 16, borderRadius: 8,
       border: `1px solid ${color}22`,
       background: `${color}11`,
-      animation: pulse ? 'pulse 2s ease-in-out infinite' : 'none',
+      animation: pulse ? 'statusPulse 2s ease-in-out infinite' : 'none',
+      overflow: 'hidden',
     }}>
-      <style>{`@keyframes pulse { 0%,100% { opacity:0.8 } 50% { opacity:1 } }`}</style>
-      <div style={{ width: 12, height: 12, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}` }} />
-      <span style={{ color, fontWeight: 700, fontSize: 14, letterSpacing: 2 }}>{message}</span>
-      {positions && (
-        <span style={{ color: '#888', fontSize: 12, marginLeft: 16 }}>
-          {positions.total} positions · {Math.round((positions.heat?.totalRiskPct || 0) * 10) / 10}% heat
+      <style>{`
+        @keyframes statusPulse { 0%,100% { opacity:0.85 } 50% { opacity:1 } }
+        @keyframes spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
+      `}</style>
+
+      {/* Row 1: status dot · message · positions · heat · REFRESH */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '9px 18px', gap: 10 }}>
+        <div style={{ width: 11, height: 11, borderRadius: '50%', background: color, boxShadow: `0 0 7px ${color}`, flexShrink: 0 }} />
+        <span style={{ color, fontWeight: 700, fontSize: 13, letterSpacing: 2, flex: 1 }}>{message}</span>
+        {positions && (
+          <span style={{ color: '#777', fontSize: 12 }}>
+            {positions.total} positions · {Math.round((positions.heat?.totalRiskPct || 0) * 10) / 10}% heat
+          </span>
+        )}
+        <button
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          onMouseEnter={() => setHovRefresh(true)}
+          onMouseLeave={() => setHovRefresh(false)}
+          style={{
+            background: hovRefresh ? 'rgba(255,215,0,0.1)' : 'transparent',
+            border: '1px solid #FFD700',
+            color: '#FFD700',
+            padding: '3px 10px',
+            borderRadius: 4,
+            cursor: isRefreshing ? 'wait' : 'pointer',
+            fontSize: 11,
+            fontFamily: 'monospace',
+            fontWeight: 700,
+            letterSpacing: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            boxShadow: hovRefresh ? '0 0 8px rgba(255,215,0,0.2)' : 'none',
+            transition: 'all 0.15s',
+          }}
+        >
+          <span style={{ display: 'inline-block', animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }}>↻</span>
+          {isRefreshing ? 'REFRESHING...' : 'REFRESH'}
+        </button>
+      </div>
+
+      {/* Row 2: scores vintage · prices · loaded-at · data badge */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px 7px', borderTop: `1px solid ${color}11` }}>
+        <span style={{ color: isLive ? '#6bcb77' : '#888', fontSize: 11, fontFamily: 'monospace' }}>
+          {scoresLabel}
+          <span style={{ color: '#444', marginLeft: 12 }}>· Prices: Live</span>
+          {loadedLabel && <span style={{ color: '#333', marginLeft: 12 }}>· {loadedLabel}</span>}
         </span>
-      )}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+          <span style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: dataBadge.dot,
+            boxShadow: `0 0 5px ${dataBadge.dot}`,
+            animation: dataBadge.anim ? 'statusPulse 1s ease-in-out infinite' : 'none',
+            flexShrink: 0,
+          }} />
+          <span style={{ color: dataBadge.dot, fontFamily: 'monospace' }}>Data: {dataBadge.label}</span>
+        </span>
+      </div>
     </div>
   );
 }
 
-function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subValue, subValueColor }) {
-  const W = 180, H = 110;
-  const cx = W / 2, cy = H - 10, r = 80;
+function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subValue, subValueColor, gaugeW, gaugeH }) {
+  const W = gaugeW ?? 180, H = gaugeH ?? 110;
+  const cx = W / 2, cy = H - 10, r = Math.round(W * 80 / 180);
 
   const toAngle = (v) => {
     const pct = Math.max(0, Math.min(1, (v - min) / (max - min)));
@@ -121,9 +267,10 @@ function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subV
           const a1 = toAngle(z.from), a2 = toAngle(z.to);
           return <path key={i} d={arcPath(a1, a2)} fill="none" stroke={z.color} strokeWidth={12} opacity={0.7} />;
         })}
-        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#FFD700" strokeWidth={2.5} strokeLinecap="round" />
-        <circle cx={cx} cy={cy} r={8} fill="#FFD700" />
-        <circle cx={cx} cy={cy} r={4} fill="#0a0a0a" />
+        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#FFD700" strokeWidth={3} strokeLinecap="round" />
+        {/* PNTHR head pivot */}
+        <circle cx={cx} cy={cy} r={13} fill="#0a0a0a" stroke="#FFD700" strokeWidth={1.5} />
+        <image href="/favicon.png" x={cx - 10} y={cy - 10} width={20} height={20} />
       </svg>
       <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginTop: 4 }}>{label}</div>
       <div style={{ color: '#fff', fontSize: 20, fontWeight: 800 }}>{displayValue ?? '—'}</div>
@@ -135,7 +282,7 @@ function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subV
 
 function SpyGauge({ regime }) {
   const spy = regime?.spy;
-  const sep = spy ? +((spy.close - spy.ema21) / spy.ema21 * 100).toFixed(1) : null;
+  const sep = (spy?.close && spy?.ema21 > 0) ? +((spy.close - spy.ema21) / spy.ema21 * 100).toFixed(1) : null;
   // Compute separation from stored regime fields (indexPosition/spyAboveEma)
   const pos = regime?.indexPosition;
   const zones = [
@@ -151,8 +298,9 @@ function SpyGauge({ regime }) {
     <SemiGauge
       value={needleVal} min={-20} max={20} zones={zones}
       label="SPY"
+      gaugeW={150} gaugeH={100}
       displayValue={spy?.close ? `$${spy.close.toFixed(2)}` : (pos ? (pos === 'above' ? '▲ ABOVE' : '▼ BELOW') : '—')}
-      subLabel={spy?.ema21 ? `vs $${spy.ema21.toFixed(2)} EMA` : (regime?.weekOf ? `Week ${regime.weekOf}` : 'No data')}
+      subLabel={spy?.ema21 > 0 ? `vs $${spy.ema21.toFixed(2)} EMA` : (spy?.close ? 'EMA pending' : regime?.weekOf ? `Week ${regime.weekOf}` : 'No data')}
       subValue={sep !== null ? `${sep > 0 ? '+' : ''}${sep}%` : (pos ? `${pos} EMA` : null)}
       subValueColor={sep !== null ? (sep >= 0 ? '#28a745' : '#dc3545') : (pos === 'above' ? '#28a745' : '#dc3545')}
     />
@@ -161,7 +309,7 @@ function SpyGauge({ regime }) {
 
 function QqqGauge({ regime }) {
   const qqq = regime?.qqq;
-  const sep = qqq ? +((qqq.close - qqq.ema21) / qqq.ema21 * 100).toFixed(1) : null;
+  const sep = (qqq?.close && qqq?.ema21 > 0) ? +((qqq.close - qqq.ema21) / qqq.ema21 * 100).toFixed(1) : null;
   const pos = regime?.qqqAboveEma != null ? (regime.qqqAboveEma ? 'above' : 'below') : null;
   const zones = [
     { from: -20, to: -10, color: '#dc3545' },
@@ -175,8 +323,9 @@ function QqqGauge({ regime }) {
     <SemiGauge
       value={needleVal} min={-20} max={20} zones={zones}
       label="QQQ"
+      gaugeW={150} gaugeH={100}
       displayValue={qqq?.close ? `$${qqq.close.toFixed(2)}` : (pos ? (pos === 'above' ? '▲ ABOVE' : '▼ BELOW') : '—')}
-      subLabel={qqq?.ema21 ? `vs $${qqq.ema21.toFixed(2)} EMA` : (regime?.weekOf ? `Week ${regime.weekOf}` : 'No data')}
+      subLabel={qqq?.ema21 > 0 ? `vs $${qqq.ema21.toFixed(2)} EMA` : (qqq?.close ? 'EMA pending' : regime?.weekOf ? `Week ${regime.weekOf}` : 'No data')}
       subValue={sep !== null ? `${sep > 0 ? '+' : ''}${sep}%` : (pos ? `${pos} EMA` : null)}
       subValueColor={sep !== null ? (sep >= 0 ? '#28a745' : '#dc3545') : (pos === 'above' ? '#28a745' : '#dc3545')}
     />
@@ -192,20 +341,22 @@ function RegimeIndicator({ regime, signals }) {
   const label = isBear ? 'BEARISH' : isBull ? 'BULLISH' : 'NEUTRAL';
   const labelColor = isBear ? '#ff6b6b' : isBull ? '#6bcb77' : '#888';
 
-  // Compute D1 from blCount/ssCount ratio stored in regime
-  const blCnt = regime?.blCount || 0;
-  const ssCnt = regime?.ssCount || 0;
-  const totalSigs = blCnt + ssCnt;
-  const ssRatio = totalSigs > 0 ? ssCnt / totalSigs : 0.5;
-  // Regime score: -5 to +5 based on SPY/QQQ position and signal mix
-  const regimeScore = isBull ? 2 + (ssRatio < 0.4 ? 2 : 0) : isBear ? -2 - (ssRatio > 0.6 ? 2 : 0) : 0;
-  const d1 = Math.max(0.70, Math.min(1.30, Math.round((1.0 + regimeScore * 0.06) * 100) / 100));
+  const ssD1 = regime?.ssD1 ?? null;
+  const blD1 = regime?.blD1 ?? null;
 
   return (
-    <div style={{ flex: 1, minWidth: 200, background: bg, border: `2px solid ${border}33`, borderRadius: 12, padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+    <div style={{ flex: 1, minWidth: 200, background: bg, border: `2px solid ${border}33`, borderRadius: 12, padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
       <div style={{ color: '#888', fontSize: 11, letterSpacing: 2, fontWeight: 700 }}>⚡ REGIME</div>
       <div style={{ color: labelColor, fontSize: 28, fontWeight: 900, letterSpacing: 4 }}>{label}</div>
-      <div style={{ color: '#FFD700', fontSize: 16, fontWeight: 700 }}>D1 = {d1.toFixed(2)}x</div>
+      {ssD1 !== null && blD1 !== null ? (
+        <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
+          <span style={{ color: '#ff6b6b', fontWeight: 700 }}>SS {ssD1.toFixed(2)}×</span>
+          <span style={{ color: '#555' }}>|</span>
+          <span style={{ color: '#6bcb77', fontWeight: 700 }}>BL {blD1.toFixed(2)}×</span>
+        </div>
+      ) : (
+        <div style={{ color: '#FFD700', fontSize: 13, fontWeight: 700 }}>D1 computing...</div>
+      )}
       <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#888' }}>
         {regime?.weekOf && <span>Week {regime.weekOf}</span>}
         {signals && <span>SS:BL {(signals.ratio || 0).toFixed(1)}:1</span>}
@@ -214,6 +365,115 @@ function RegimeIndicator({ regime, signals }) {
         <span style={{ color: isBear ? '#ff6b6b' : '#6bcb77' }}>SPY {isBear ? '▼ below' : '▲ above'}</span>
         <span style={{ color: regime?.qqqAboveEma === false ? '#ff6b6b' : '#6bcb77' }}>QQQ {regime?.qqqAboveEma === false ? '▼ below' : '▲ above'}</span>
       </div>
+    </div>
+  );
+}
+
+// Equity zones (red left, green right)
+const EQUITY_ZONES = [
+  { from: -10, to: -5,  color: '#dc3545' },
+  { from: -5,  to: -2,  color: '#ff6b6b' },
+  { from: -2,  to:  2,  color: '#555' },
+  { from:  2,  to:  5,  color: '#6bcb77' },
+  { from:  5,  to:  10, color: '#28a745' },
+];
+// Gold zones (gray left, gold right)
+const GOLD_ZONES = [
+  { from: -10, to: -2,  color: '#444' },
+  { from: -2,  to:  2,  color: '#666' },
+  { from:  2,  to:  5,  color: '#C8A000' },
+  { from:  5,  to:  10, color: '#FFD700' },
+];
+
+function MarketGauge({ label, subLabel, data, isGold }) {
+  const price = data?.price ?? null;
+  const changePct = data?.changePct ?? null;
+  const needleVal = changePct !== null ? Math.max(-10, Math.min(10, changePct)) : 0;
+  const zones = isGold ? GOLD_ZONES : EQUITY_ZONES;
+
+  function fmtPrice(p) {
+    if (p == null) return '—';
+    if (p >= 1000) return p.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    return `$${p.toFixed(2)}`;
+  }
+
+  const pctColor = changePct === null ? '#888' : changePct >= 0 ? '#6bcb77' : '#ff6b6b';
+  const arrow = changePct === null ? '' : changePct >= 0 ? '▲' : '▼';
+
+  return (
+    <SemiGauge
+      value={needleVal} min={-10} max={10} zones={zones}
+      label={label}
+      gaugeW={150} gaugeH={100}
+      displayValue={price !== null ? fmtPrice(price) : '—'}
+      subLabel={subLabel}
+      subValue={changePct !== null ? `${arrow} ${Math.abs(changePct).toFixed(2)}%` : 'No data'}
+      subValueColor={pctColor}
+    />
+  );
+}
+
+function RegimeStrip({ regime, signals, positions }) {
+  const pos = regime?.indexPosition || 'unknown';
+  const isBear = pos === 'below';
+  const isBull = pos === 'above';
+  const label = isBear ? 'BEARISH' : isBull ? 'BULLISH' : 'NEUTRAL';
+  const labelColor = isBear ? '#ff6b6b' : isBull ? '#6bcb77' : '#888';
+  const borderColor = isBear ? '#dc3545' : isBull ? '#28a745' : '#555';
+  const bg = isBear ? 'rgba(220,53,69,0.07)' : isBull ? 'rgba(40,167,69,0.07)' : 'rgba(100,100,100,0.07)';
+  const ssD1 = regime?.ssD1 ?? null;
+  const blD1 = regime?.blD1 ?? null;
+  const ratio = signals?.ratio ?? null;
+  const heat = positions?.heat;
+  const nav = positions?.nav ?? 100000;
+  const capacity = heat ? ((0.15 * nav) - heat.totalRisk).toFixed(0) : null;
+
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      background: bg, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`,
+      borderRadius: 4, padding: '9px 18px', marginBottom: 12,
+    }}>
+      {/* Left: Regime */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <span style={{ color: labelColor, fontWeight: 900, fontSize: 15, fontFamily: 'monospace', letterSpacing: 2 }}>
+          ⚡ {label}
+        </span>
+        {ssD1 !== null && blD1 !== null ? (
+          <span style={{ fontSize: 12 }}>
+            <span style={{ color: '#ff6b6b', fontWeight: 700 }}>SS {ssD1.toFixed(2)}×</span>
+            <span style={{ color: '#333', margin: '0 6px' }}>|</span>
+            <span style={{ color: '#6bcb77', fontWeight: 700 }}>BL {blD1.toFixed(2)}×</span>
+          </span>
+        ) : null}
+        <span style={{ color: '#555', fontSize: 11 }}>
+          {ratio !== null ? `SS:BL ${ratio.toFixed(1)}:1` : ''}
+          {regime?.weekOf ? ` · Week ${regime.weekOf}` : ''}
+        </span>
+        <span style={{ fontSize: 11 }}>
+          <span style={{ color: isBear ? '#ff6b6b' : '#6bcb77' }}>SPY {isBear ? '▼' : '▲'}</span>
+          <span style={{ color: '#333', margin: '0 5px' }}>·</span>
+          <span style={{ color: regime?.qqqAboveEma === false ? '#ff6b6b' : '#6bcb77' }}>
+            QQQ {regime?.qqqAboveEma === false ? '▼' : '▲'}
+          </span>
+        </span>
+      </div>
+      {/* Right: Portfolio Heat */}
+      {heat && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+          <span style={{ color: '#555', fontSize: 11 }}>
+            Stk {heat.stockRiskPct?.toFixed(1)}%/10% · ETF {heat.etfRiskPct?.toFixed(1)}%/5%
+          </span>
+          <span style={{ color: '#FFD700', fontWeight: 700, fontSize: 13, fontFamily: 'monospace' }}>
+            Heat: {heat.totalRiskPct?.toFixed(1)}% / 15%
+          </span>
+          {capacity && (
+            <span style={{ color: '#28a745', fontSize: 11 }}>
+              ${Number(capacity).toLocaleString()} cap
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -240,7 +500,13 @@ function VixThermometer({ vix }) {
         {zones.map((z, i) => {
           const yTop = by + bh * (1 - z.to / maxVix);
           const yBot = by + bh * (1 - z.from / maxVix);
-          return <rect key={i} x={bx} y={yTop} width={bw} height={yBot - yTop} fill={z.color} opacity={0.2} rx={2} />;
+          const yMid = (yTop + yBot) / 2;
+          return (
+            <g key={i}>
+              <rect x={bx} y={yTop} width={bw} height={yBot - yTop} fill={z.color} opacity={0.2} rx={2} />
+              <text x={bx + bw + 5} y={yMid + 3} fill={z.color} fontSize={7} opacity={0.85}>{z.label}</text>
+            </g>
+          );
         })}
         <rect x={bx + 2} y={by + bh * (1 - fillPct / 100)} width={bw - 4} height={bh * (fillPct / 100)} fill={zoneColor} opacity={0.8} rx={2} />
         <rect x={bx} y={by} width={bw} height={bh} fill="none" stroke="#444" strokeWidth={1.5} rx={3} />
@@ -293,7 +559,7 @@ function HeatGauge({ positions }) {
   );
 }
 
-function KillTop10({ killTop10, onTickerClick }) {
+function KillTop10({ killTop10, onTickerClick, killDataLive }) {
   const tierShort = (tier) => {
     if (!tier) return '';
     if (tier.includes('ALPHA')) return 'ALPHA';
@@ -305,7 +571,11 @@ function KillTop10({ killTop10, onTickerClick }) {
 
   return (
     <div style={{ flex: 1, minWidth: 280, background: '#111', borderRadius: 12, padding: '14px 16px', maxWidth: 380 }}>
-      <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, letterSpacing: 2, marginBottom: 10 }}>⚡ PNTHR KILL TOP 10</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>⚡ PNTHR KILL TOP 10</span>
+        {killDataLive === false && <span style={{ color: '#555', fontSize: 10, background: '#1a1a1a', padding: '1px 6px', borderRadius: 4 }}>Fri pipeline</span>}
+        {killDataLive === true && <span style={{ color: '#28a745', fontSize: 10 }}>● live</span>}
+      </div>
       {(!killTop10 || killTop10.length === 0) && <div style={{ color: '#555', fontSize: 12 }}>No kill scores yet.</div>}
       {(killTop10 || []).map((s, i) => {
         const isAlpha = (s.tier || '').includes('ALPHA');
@@ -329,46 +599,156 @@ function KillTop10({ killTop10, onTickerClick }) {
   );
 }
 
-function SectorHeatmap({ signals }) {
-  const sectorAbbrevs = {
-    'Technology': 'TECH',
-    'Healthcare': 'HLTH',
-    'Financial Services': 'FIN',
-    'Industrials': 'IND',
-    'Consumer Staples': 'CONS',
-    'Energy': 'ENER',
-    'Utilities': 'UTIL',
-    'Basic Materials': 'MATL',
-    'Communication Services': 'COMM',
-    'Real Estate': 'REAL',
-    'Consumer Cyclical': 'COND',
-  };
-  const bySector = signals?.bySector || {};
-  const sectors = Object.keys(sectorAbbrevs);
+// ── PNTHR Sector Mini-Gauge ────────────────────────────────────────────────────
+function PNTHRMiniGauge({ label, bl, ss, highlight, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  const total = bl + ss;
+  const ssRatio = total > 0 ? ss / total : 0.5;
+  const W = 160, H = 96;
+  const cx = W / 2, cy = H - 10, r = 66;
 
-  const getColor = (bl, ss) => {
-    const total = bl + ss;
-    if (total === 0) return '#1a1a1a';
-    const ssRatio = ss / total;
-    if (ssRatio > 0.8) return 'rgba(220,53,69,0.35)';
-    if (ssRatio > 0.6) return 'rgba(220,53,69,0.2)';
-    if (ssRatio < 0.2) return 'rgba(40,167,69,0.35)';
-    if (ssRatio < 0.4) return 'rgba(40,167,69,0.2)';
-    return 'rgba(100,100,100,0.2)';
+  const toAngle = (v) => Math.PI + v * Math.PI;
+  const arcPath = (a1, a2) => {
+    const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+    const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+    const large = Math.abs(a2 - a1) > Math.PI ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
+  };
+
+  // Left = bearish (red), right = bullish (green) — matches SPY/QQQ convention
+  // Needle tracks BL ratio: 0 = all SS (left/bearish), 1 = all BL (right/bullish)
+  const blRatio = total > 0 ? bl / total : 0.5;
+  const zones = [
+    { from: 0,    to: 0.30, color: '#DC3545' },  // strongly bearish (left)
+    { from: 0.30, to: 0.45, color: '#FF6B6B' },  // leaning bearish
+    { from: 0.45, to: 0.55, color: '#555555' },  // neutral
+    { from: 0.55, to: 0.70, color: '#6BCB77' },  // leaning bullish
+    { from: 0.70, to: 1.00, color: '#28A745' },  // strongly bullish (right)
+  ];
+
+  const angle = toAngle(blRatio);
+  const nx = cx + r * 0.78 * Math.cos(angle);
+  const ny = cy + r * 0.78 * Math.sin(angle);
+
+  const netPct = total > 0 ? Math.abs(ss - bl) / total * 100 : 0;
+  const isBearish = ss >= bl;
+  const dir = total === 0 ? '—' : `${netPct.toFixed(0)}% ${isBearish ? 'SS' : 'BL'}`;
+  const dirColor = total === 0 ? '#555' : isBearish ? '#ff6b6b' : '#6bcb77';
+  const textY = cy - r * 0.58;
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        background: highlight ? '#161610' : '#111',
+        borderRadius: 10, padding: '8px 4px 8px',
+        border: hovered ? '1px solid rgba(255,215,0,0.45)' : highlight ? '1px solid #FFD70033' : '1px solid transparent',
+        cursor: onClick ? 'pointer' : 'default',
+        transform: hovered && onClick ? 'scale(1.03)' : 'scale(1)',
+        filter: hovered && onClick ? 'drop-shadow(0 0 5px rgba(255,215,0,0.25))' : 'none',
+        transition: 'transform 0.15s ease, border-color 0.15s ease, filter 0.15s ease',
+      }}
+    >
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+        {/* Background track */}
+        <path d={arcPath(Math.PI, 2 * Math.PI)} fill="none" stroke="#1e1e1e" strokeWidth={13} />
+        {/* Color zones */}
+        {zones.map((z, i) => (
+          <path key={i} d={arcPath(toAngle(z.from), toAngle(z.to))} fill="none" stroke={z.color} strokeWidth={11} opacity={0.75} />
+        ))}
+        {/* BL/SS counts inside arc */}
+        <text x={cx} y={textY} textAnchor="middle" fill="#ccc" fontSize={11} fontFamily="monospace" fontWeight={600}>
+          {`↑${bl} ↓${ss}`}
+        </text>
+        {/* Needle */}
+        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#FFD700" strokeWidth={3} strokeLinecap="round" />
+        {/* PNTHR head pivot */}
+        <circle cx={cx} cy={cy} r={13} fill="#0a0a0a" stroke="#FFD700" strokeWidth={1.5} />
+        <image href="/favicon.png" x={cx - 11} y={cy - 11} width={22} height={22} />
+      </svg>
+      <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, textAlign: 'center', lineHeight: 1.2, marginTop: -2, padding: '0 4px' }}>{label}</div>
+      <div style={{ color: dirColor, fontSize: 11, fontWeight: 600, marginTop: 2 }}>{dir}</div>
+    </div>
+  );
+}
+
+const ALIASES = {
+  'Consumer Defensive': 'Consumer Staples',
+  'Consumer Discretionary': 'Consumer Cyclical',
+};
+const SECTOR_CONFIG = [
+  { key: 'Technology',             label: 'Technology'            },
+  { key: 'Healthcare',             label: 'Healthcare'            },
+  { key: 'Financial Services',     label: 'Financials'            },
+  { key: 'Industrials',            label: 'Industrials'           },
+  { key: 'Consumer Staples',       label: 'Consumer Staples'      },
+  { key: 'Energy',                 label: 'Energy'                },
+  { key: 'Utilities',              label: 'Utilities'             },
+  { key: 'Basic Materials',        label: 'Basic Materials'       },
+  { key: 'Communication Services', label: 'Communication'         },
+  { key: 'Real Estate',            label: 'Real Estate'           },
+  { key: 'Consumer Cyclical',      label: 'Consumer Disc.'        },
+  { key: '__ALL__',                label: 'ALL SECTORS'           },
+];
+
+// Maps Pulse sector keys to SectorPage ETF tickers (sessionStorage handshake)
+const SECTOR_KEY_TO_ETF = {
+  'Technology':             'XLK',
+  'Healthcare':             'XLV',
+  'Financial Services':     'XLF',
+  'Industrials':            'XLI',
+  'Consumer Staples':       'XLP',
+  'Energy':                 'XLE',
+  'Utilities':              'XLU',
+  'Basic Materials':        'XLB',
+  'Communication Services': 'XLC',
+  'Real Estate':            'XLRE',
+  'Consumer Cyclical':      'XLY',
+};
+
+function SectorPulse({ signals, killDataLive, onNavigate }) {
+  const rawBySector = signals?.bySector || {};
+  const bySector = {};
+  for (const [sector, counts] of Object.entries(rawBySector)) {
+    const canonical = ALIASES[sector] || sector;
+    if (!bySector[canonical]) bySector[canonical] = { bl: 0, ss: 0 };
+    bySector[canonical].bl += counts.bl || 0;
+    bySector[canonical].ss += counts.ss || 0;
+  }
+
+  const handleSectorClick = (key) => {
+    if (key === '__ALL__') {
+      onNavigate?.('sectors');
+      return;
+    }
+    const etf = SECTOR_KEY_TO_ETF[key];
+    if (etf) sessionStorage.setItem('pnthr-sector-etf', etf);
+    onNavigate?.('sectors');
   };
 
   return (
-    <div style={{ flex: 1, minWidth: 280, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, letterSpacing: 2, marginBottom: 10 }}>⚡ SECTOR SIGNALS</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
-        {sectors.map(sec => {
-          const d = bySector[sec] || { bl: 0, ss: 0 };
+    <div style={{ flex: 1, minWidth: 600, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>⚡ PNTHR SECTOR PULSE</span>
+        {killDataLive === false && <span style={{ color: '#555', fontSize: 10, background: '#1a1a1a', padding: '1px 6px', borderRadius: 4 }}>Fri pipeline</span>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 6 }}>
+        {SECTOR_CONFIG.map(({ key, label }) => {
+          const d = key === '__ALL__'
+            ? { bl: signals?.blCount || 0, ss: signals?.ssCount || 0 }
+            : (bySector[key] || { bl: 0, ss: 0 });
           return (
-            <div key={sec} style={{ background: getColor(d.bl, d.ss), borderRadius: 6, padding: '6px 4px', textAlign: 'center', border: '1px solid #222' }}>
-              <div style={{ color: '#aaa', fontSize: 9, fontWeight: 700 }}>{sectorAbbrevs[sec]}</div>
-              <div style={{ color: '#6bcb77', fontSize: 9 }}>↑{d.bl}</div>
-              <div style={{ color: '#ff6b6b', fontSize: 9 }}>↓{d.ss}</div>
-            </div>
+            <PNTHRMiniGauge
+              key={key}
+              label={label}
+              bl={d.bl}
+              ss={d.ss}
+              highlight={key === '__ALL__'}
+              onClick={() => handleSectorClick(key)}
+            />
           );
         })}
       </div>
@@ -376,21 +756,183 @@ function SectorHeatmap({ signals }) {
   );
 }
 
-function SignalBreadthBar({ signals }) {
+// ── New Signals This Week Panel ────────────────────────────────────────────────
+function NewSignalsPanel({ newSignals, onTickerClick }) {
+  if (!newSignals) return null;
+  const { blStocks = [], blEtfs = [], ssStocks = [], ssEtfs = [] } = newSignals;
+  const hasStocks = blStocks.length > 0 || ssStocks.length > 0;
+  const hasEtfs   = blEtfs.length > 0 || ssEtfs.length > 0;
+  if (!hasStocks && !hasEtfs) return (
+    <div style={{ background: '#111', borderRadius: 12, padding: '12px 16px', marginBottom: 12, color: '#444', fontSize: 12, fontFamily: 'monospace' }}>
+      <span style={{ color: '#FFD700', letterSpacing: 2, fontSize: 11 }}>⚡ NEW SIGNALS THIS WEEK</span>
+      <span style={{ marginLeft: 16 }}>No new signals this week.</span>
+    </div>
+  );
+
+  // Separate chart lists: stocks-only for BL/SS columns, ETF-only for ETF box
+  function toChartItem(s) { return { ticker: s.ticker, symbol: s.ticker, currentPrice: s.currentPrice, signal: s.signal, sector: s.sector }; }
+  const blStockChartList = blStocks.map(toChartItem);
+  const ssStockChartList = ssStocks.map(toChartItem);
+  const blEtfChartList   = blEtfs.map(toChartItem);
+  const ssEtfChartList   = ssEtfs.map(toChartItem);
+
+  // ── Stock row (Kill-scored, has tier badge) ──
+  function StockRow({ s, idx, chartList }) {
+    const t = tierBadge(s.tier);
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 10px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer', transition: 'background 0.15s' }}
+        onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        onClick={() => onTickerClick(chartList, idx)}
+      >
+        <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 50, fontFamily: 'monospace' }}>{s.ticker}</span>
+        <span style={{ color: '#555', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector || '—'}</span>
+        <span style={{ color: '#ccc', fontSize: 12, minWidth: 60, textAlign: 'right', fontFamily: 'monospace' }}>{s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}</span>
+        <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, minWidth: 40, textAlign: 'right', fontFamily: 'monospace' }}>{s.totalScore != null ? s.totalScore.toFixed(1) : '—'}</span>
+        <span style={{ minWidth: 84 }}>{t}</span>
+        <span style={{ color: '#FFD700', fontSize: 11 }}>▸</span>
+      </div>
+    );
+  }
+
+  // ── Stock column (BL or SS) — stocks only, no ETFs ──
+  function StockColumn({ direction, stocks, chartList }) {
+    const borderColor = direction === 'BL' ? '#28a745' : '#dc3545';
+    const headerBg    = direction === 'BL' ? 'rgba(40,167,69,0.12)' : 'rgba(220,53,69,0.12)';
+    const badgeColor  = direction === 'BL' ? '#6bcb77' : '#ff6b6b';
+    const label       = direction === 'BL' ? 'NEW BUY LONG (BL+1)' : 'NEW SELL SHORT (SS+1)';
+    return (
+      <div style={{ flex: 1, minWidth: 0, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`, borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: headerBg, padding: '6px 10px' }}>
+          <span style={{ color: badgeColor, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>{label}</span>
+          <span style={{ color: '#444', fontSize: 10, marginLeft: 8 }}>STOCKS ({stocks.length})</span>
+        </div>
+        {stocks.length > 0
+          ? stocks.map((s, i) => <StockRow key={s.ticker} s={s} idx={i} chartList={chartList} />)
+          : <div style={{ padding: '10px 14px', color: '#333', fontSize: 12 }}>No new {direction} signals this week.</div>
+        }
+      </div>
+    );
+  }
+
+  // ── ETF row (no Kill score — show price + category + ▸) ──
+  function EtfRow({ s, idx, chartList }) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #222', cursor: 'pointer', transition: 'background 0.15s' }}
+        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,215,0,0.04)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        onClick={() => onTickerClick(chartList, idx)}
+      >
+        <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 12, width: 52, fontFamily: 'monospace', flexShrink: 0 }}>{s.ticker}</span>
+        <span style={{ color: '#888', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector || '—'}</span>
+        <span style={{ color: '#e8e8e8', fontSize: 12, minWidth: 72, textAlign: 'right', fontFamily: 'monospace', flexShrink: 0 }}>
+          {s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}
+        </span>
+        <span style={{ color: '#FFD700', marginLeft: 10, fontSize: 11, flexShrink: 0 }}>▸</span>
+      </div>
+    );
+  }
+
+  // ── ETF box (full width, yellow top border) ──
+  function EtfBox() {
+    if (!hasEtfs) return null;
+    return (
+      <div style={{ background: '#1e1e1e', border: '1px solid #333', borderTop: '2px solid #FFD700', borderRadius: 6, padding: '12px 16px', marginTop: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <span style={{ color: '#FFD700', fontFamily: 'monospace', fontWeight: 700, fontSize: 12, letterSpacing: 1 }}>⚡ ETF NEW SIGNALS</span>
+          <span style={{ background: '#FFD700', color: '#000', fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 3, letterSpacing: 1 }}>ETF</span>
+          <span style={{ color: '#555', fontSize: 11 }}>
+            BL+1 ({blEtfs.length}) | SS+1 ({ssEtfs.length})
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 24 }}>
+          {/* BL ETFs */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: '#28a745', fontSize: 11, fontWeight: 700, borderBottom: '1px solid #28a74544', paddingBottom: 5, marginBottom: 8 }}>
+              BL+1 ETFs ({blEtfs.length})
+            </div>
+            {blEtfs.length > 0
+              ? blEtfs.map((s, i) => <EtfRow key={s.ticker} s={s} idx={i} chartList={blEtfChartList} />)
+              : <div style={{ color: '#444', fontSize: 11, fontStyle: 'italic' }}>No new BL ETF signals</div>
+            }
+          </div>
+          {/* SS ETFs */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: '#dc3545', fontSize: 11, fontWeight: 700, borderBottom: '1px solid #dc354544', paddingBottom: 5, marginBottom: 8 }}>
+              SS+1 ETFs ({ssEtfs.length})
+            </div>
+            {ssEtfs.length > 0
+              ? ssEtfs.map((s, i) => <EtfRow key={s.ticker} s={s} idx={i} chartList={ssEtfChartList} />)
+              : <div style={{ color: '#444', fontSize: 11, fontStyle: 'italic' }}>No new SS ETF signals</div>
+            }
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: '#111', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
+      {/* Header: Stocks counts | ETFs counts */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ color: '#FFD700', fontSize: 11, letterSpacing: 2, fontFamily: 'monospace', fontWeight: 700 }}>⚡ NEW SIGNALS THIS WEEK</span>
+        <span style={{ color: '#444', fontSize: 11 }}>Stocks:</span>
+        <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>{blStocks.length} BL+1</span>
+        <span style={{ color: '#333', fontSize: 11 }}>|</span>
+        <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>{ssStocks.length} SS+1</span>
+        {hasEtfs && <>
+          <span style={{ color: '#333', fontSize: 11, margin: '0 4px' }}>·</span>
+          <span style={{ color: '#444', fontSize: 11 }}>ETFs:</span>
+          <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>{blEtfs.length} BL+1</span>
+          <span style={{ color: '#333', fontSize: 11 }}>|</span>
+          <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>{ssEtfs.length} SS+1</span>
+        </>}
+      </div>
+      {/* Stock columns */}
+      <div style={{ display: 'flex', gap: 12 }}>
+        <StockColumn direction="BL" stocks={blStocks} chartList={blStockChartList} />
+        <StockColumn direction="SS" stocks={ssStocks} chartList={ssStockChartList} />
+      </div>
+      {/* ETF box — full width, below stocks, hidden when empty */}
+      <EtfBox />
+    </div>
+  );
+}
+
+function SignalBreadthBar({ signals, onSignalClick }) {
+  const [hovBl, setHovBl] = useState(false);
+  const [hovSs, setHovSs] = useState(false);
   const bl = signals?.blCount || 0, ss = signals?.ssCount || 0;
   const total = bl + ss;
   const blPct = total > 0 ? (bl / total) * 100 : 50;
+
   return (
     <div style={{ background: '#111', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
       <div style={{ color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 8 }}>⚡ SIGNAL BREADTH</div>
-      <div style={{ display: 'flex', height: 18, borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
-        <div style={{ width: `${blPct}%`, background: '#28a745', opacity: 0.7 }} />
-        <div style={{ width: `${100 - blPct}%`, background: '#dc3545', opacity: 0.7 }} />
+      <div style={{ display: 'flex', height: 22, borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
+        <div
+          onClick={() => onSignalClick?.('BL')}
+          onMouseEnter={() => setHovBl(true)}
+          onMouseLeave={() => setHovBl(false)}
+          style={{ width: `${blPct}%`, background: '#28a745', opacity: hovBl ? 1 : 0.7, cursor: 'pointer', transition: 'opacity 0.15s' }}
+        />
+        <div
+          onClick={() => onSignalClick?.('SS')}
+          onMouseEnter={() => setHovSs(true)}
+          onMouseLeave={() => setHovSs(false)}
+          style={{ width: `${100 - blPct}%`, background: '#dc3545', opacity: hovSs ? 1 : 0.7, cursor: 'pointer', transition: 'opacity 0.15s' }}
+        />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#ccc' }}>
-        <span style={{ color: '#6bcb77' }}>{bl} BL</span>
+        <span
+          onClick={() => onSignalClick?.('BL')}
+          style={{ color: '#6bcb77', cursor: 'pointer', fontWeight: 700, textDecoration: 'underline', textDecorationColor: 'rgba(107,203,119,0.4)' }}
+        >{bl} BL</span>
         <span style={{ color: '#888', fontSize: 11 }}>Ratio: {(signals?.ratio || 0).toFixed(1)}:1 SS:BL</span>
-        <span style={{ color: '#ff6b6b' }}>{ss} SS</span>
+        <span
+          onClick={() => onSignalClick?.('SS')}
+          style={{ color: '#ff6b6b', cursor: 'pointer', fontWeight: 700, textDecoration: 'underline', textDecorationColor: 'rgba(255,107,107,0.4)' }}
+        >{ss} SS</span>
       </div>
     </div>
   );
@@ -410,54 +952,195 @@ function MacroStrip({ marketSnapshot }) {
   );
 }
 
-function LotsReady({ lotsReady, onNavigate }) {
+// ── Signal Stock Drill-Down Modal ──────────────────────────────────────────────
+const TIER_BADGE = {
+  'ALPHA PNTHR KILL': { bg: 'rgba(212,160,23,0.25)', color: '#FFD700' },
+  'STRIKING':         { bg: 'rgba(40,167,69,0.2)',   color: '#6bcb77' },
+  'HUNTING':          { bg: 'rgba(32,120,55,0.2)',   color: '#4a9',   },
+  'POUNCING':         { bg: 'rgba(20,160,140,0.2)',  color: '#4dd',   },
+  'COILING':          { bg: 'rgba(30,100,180,0.2)',  color: '#69b',   },
+  'STALKING':         { bg: 'rgba(80,80,120,0.2)',   color: '#99a',   },
+};
+
+function tierBadge(tier) {
+  if (!tier) return null;
+  const key = Object.keys(TIER_BADGE).find(k => tier.includes(k)) || null;
+  const { bg, color } = key ? TIER_BADGE[key] : { bg: '#1a1a1a', color: '#666' };
+  const short = tier.includes('ALPHA') ? 'ALPHA' : tier.split(' ')[0];
+  return <span style={{ background: bg, color, fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>{short}</span>;
+}
+
+const SORT_COLS = ['ticker', 'sector', 'currentPrice', 'totalScore', 'tier', 'signalAge'];
+
+function SignalStockModal({ signal, onClose, onTickerClick }) {
+  const [stocks, setStocks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sortCol, setSortCol] = useState('totalScore');
+  const [sortDir, setSortDir] = useState(-1); // -1 = desc, 1 = asc
+
+  useEffect(() => {
+    setLoading(true);
+    fetchSignalStocks(signal)
+      .then(data => setStocks(data.stocks || []))
+      .catch(err => console.error(err))
+      .finally(() => setLoading(false));
+  }, [signal]);
+
+  const sorted = [...stocks].sort((a, b) => {
+    const av = a[sortCol] ?? '', bv = b[sortCol] ?? '';
+    if (typeof av === 'number') return (av - bv) * sortDir;
+    return String(av).localeCompare(String(bv)) * sortDir;
+  });
+
+  const handleSort = (col) => {
+    if (sortCol === col) setSortDir(d => d * -1);
+    else { setSortCol(col); setSortDir(-1); }
+  };
+
+  const isBL = signal === 'BL';
+  const headerColor = isBL ? '#6bcb77' : '#ff6b6b';
+  const headerBg = isBL ? 'rgba(40,167,69,0.12)' : 'rgba(220,53,69,0.12)';
+
+  const ColHeader = ({ col, label }) => (
+    <th
+      onClick={() => handleSort(col)}
+      style={{ padding: '8px 10px', textAlign: 'left', color: sortCol === col ? '#FFD700' : '#666', fontWeight: 700, fontSize: 11, letterSpacing: 1, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+    >
+      {label}{sortCol === col ? (sortDir === -1 ? ' ↓' : ' ↑') : ''}
+    </th>
+  );
+
   return (
-    <div style={{ flex: 1, minWidth: 220, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 8 }}>LOTS READY</div>
-      {(!lotsReady || lotsReady.length === 0)
-        ? <div style={{ color: '#555', fontSize: 12 }}>No lots pending.</div>
-        : lotsReady.map((l, i) => (
-          <div key={i} style={{ marginBottom: 6 }}>
-            <span style={{ color: '#6bcb77', fontWeight: 700 }}>▶ {l.ticker}</span>
-            <span style={{ color: '#888', fontSize: 11 }}> Lot {l.lot} — ${l.triggerPrice}</span>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#0f0f0f', border: `1px solid ${headerColor}33`, borderRadius: 12, width: '100%', maxWidth: 860, maxHeight: '85vh', display: 'flex', flexDirection: 'column', fontFamily: 'monospace' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #1a1a1a', background: headerBg, borderRadius: '12px 12px 0 0' }}>
+          <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 14, letterSpacing: 2 }}>
+            ⚡ {loading ? '...' : sorted.length} {isBL ? 'BUY LONG (BL)' : 'SELL SHORT (SS)'} SIGNALS
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* Table */}
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {loading ? (
+            <div style={{ color: '#555', textAlign: 'center', padding: 40, fontSize: 13 }}>Loading signals...</div>
+          ) : sorted.length === 0 ? (
+            <div style={{ color: '#555', textAlign: 'center', padding: 40, fontSize: 13 }}>No {signal} signals in current data.</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ position: 'sticky', top: 0, background: '#0f0f0f', borderBottom: '1px solid #222' }}>
+                <tr>
+                  <ColHeader col="ticker" label="TICKER" />
+                  <ColHeader col="sector" label="SECTOR" />
+                  <ColHeader col="currentPrice" label="PRICE" />
+                  <ColHeader col="totalScore" label="KILL SCORE" />
+                  <ColHeader col="tier" label="TIER" />
+                  <ColHeader col="signalAge" label="AGE" />
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((s, i) => (
+                  <tr key={s.ticker} style={{ borderBottom: '1px solid #111', background: i % 2 === 0 ? 'transparent' : '#0a0a0a' }}>
+                    <td style={{ padding: '7px 10px' }}>
+                      <span
+                        onClick={() => {
+                          const chartStocks = sorted.map(x => ({ ticker: x.ticker, symbol: x.ticker, currentPrice: x.currentPrice, signal, sector: x.sector }));
+                          onTickerClick(chartStocks, i);
+                        }}
+                        style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(212,160,23,0.4)' }}
+                      >{s.ticker}</span>
+                    </td>
+                    <td style={{ padding: '7px 10px', color: '#888', fontSize: 12 }}>{s.sector || '—'}</td>
+                    <td style={{ padding: '7px 10px', color: '#ccc', fontSize: 12 }}>{s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}</td>
+                    <td style={{ padding: '7px 10px', color: '#fff', fontWeight: 700, fontSize: 13 }}>{s.totalScore?.toFixed(1) ?? '—'}</td>
+                    <td style={{ padding: '7px 10px' }}>{tierBadge(s.tier)}</td>
+                    <td style={{ padding: '7px 10px', color: '#555', fontSize: 11 }}>{s.signalAge != null ? `${s.signalAge}w` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!loading && sorted.length > 0 && (
+          <div style={{ padding: '10px 20px', borderTop: '1px solid #1a1a1a', color: '#555', fontSize: 11, textAlign: 'right' }}>
+            Sorted by {sortCol} {sortDir === -1 ? '↓' : '↑'} · Click column headers to sort · Click ticker for chart
           </div>
-        ))
-      }
-      <div onClick={() => onNavigate?.('command')} style={{ marginTop: 10, color: '#FFD700', fontSize: 11, cursor: 'pointer' }}>GO TO COMMAND →</div>
-    </div>
-  );
-}
-
-function RiskAlertsPanel({ positions }) {
-  const alerts = [];
-  if (positions?.heat?.stockRiskPct > 10) alerts.push({ icon: '🔴', text: `Stock risk ${positions.heat.stockRiskPct.toFixed(1)}% exceeds 10% cap` });
-  if (positions?.heat?.etfRiskPct > 5) alerts.push({ icon: '🔴', text: `ETF risk ${positions.heat.etfRiskPct.toFixed(1)}% exceeds 5% cap` });
-  if (positions?.heat?.totalRiskPct > 13) alerts.push({ icon: '🟡', text: `Total heat ${positions.heat.totalRiskPct.toFixed(1)}% approaching 15% cap` });
-
-  return (
-    <div style={{ flex: 1, minWidth: 220, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 8 }}>RISK ALERTS</div>
-      {alerts.length === 0
-        ? <div style={{ color: '#28a745', fontSize: 12 }}>✅ No active alerts. All clear.</div>
-        : alerts.map((a, i) => <div key={i} style={{ fontSize: 12, color: '#ccc', marginBottom: 4 }}>{a.icon} {a.text}</div>)
-      }
-      <div style={{ marginTop: 10, color: '#FFD700', fontSize: 11, cursor: 'pointer' }}>VIEW RISK ADVISOR →</div>
-    </div>
-  );
-}
-
-function PositionsSummary({ positions, onNavigate }) {
-  const heat = positions?.heat || {};
-  return (
-    <div style={{ flex: 1, minWidth: 220, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 8 }}>POSITIONS</div>
-      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 4 }}>{positions?.total || 0} Active</div>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>{positions?.short || 0} Short · {positions?.long || 0} Long</div>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>{positions?.recycled || 0} Recycled ($0 risk)</div>
-      <div style={{ fontSize: 12, color: '#ccc', marginTop: 6 }}>
-        Heat: <strong style={{ color: heat.totalRiskPct > 10 ? '#ff8c00' : '#6bcb77' }}>{(heat.totalRiskPct || 0).toFixed(1)}%</strong> / 15%
+        )}
       </div>
-      <div onClick={() => onNavigate?.('command')} style={{ marginTop: 10, color: '#FFD700', fontSize: 11, cursor: 'pointer' }}>GO TO COMMAND →</div>
+    </div>
+  );
+}
+
+// ── Tier 3: Combined Portfolio Status panel ────────────────────────────────────
+function PortfolioStatus({ positions, lotsReady, onNavigate }) {
+  const heat = positions?.heat || {};
+  const nav = positions?.nav || 100000;
+
+  const alerts = [];
+  if (heat.stockRiskPct > 10) alerts.push({ icon: '🔴', text: `Stock risk ${heat.stockRiskPct.toFixed(1)}% exceeds 10% cap` });
+  if (heat.etfRiskPct > 5) alerts.push({ icon: '🔴', text: `ETF risk ${heat.etfRiskPct.toFixed(1)}% exceeds 5% cap` });
+  if (heat.totalRiskPct > 13) alerts.push({ icon: '🟡', text: `Total heat ${heat.totalRiskPct.toFixed(1)}% approaching 15% cap` });
+
+  const lotsCount = lotsReady?.length || 0;
+  if (lotsCount > 0) alerts.push({ icon: '🟢', text: `${lotsCount} lot${lotsCount > 1 ? 's' : ''} READY to fill` });
+
+  const remaining = Math.max(0, 15 - (heat.totalRiskPct || 0));
+
+  return (
+    <div style={{ background: '#111', borderRadius: 12, padding: '16px 20px', marginTop: 12 }}>
+      <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 14 }}>⚡ PNTHR PORTFOLIO STATUS</div>
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+
+        {/* Heat Gauge */}
+        <HeatGauge positions={positions} />
+
+        {/* Positions Summary */}
+        <div style={{ minWidth: 180, display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8 }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{positions?.total || 0} Active</div>
+          <div style={{ fontSize: 13, color: '#888' }}>{positions?.short || 0} Short · {positions?.long || 0} Long</div>
+          {(positions?.recycled || 0) > 0 && (
+            <div style={{ fontSize: 12, color: '#555' }}>{positions.recycled} Recycled ($0 risk)</div>
+          )}
+          <div style={{ fontSize: 13, color: '#ccc', marginTop: 4 }}>
+            Stock: <strong style={{ color: heat.stockRiskPct > 10 ? '#ff8c00' : '#ccc' }}>{(heat.stockRiskPct || 0).toFixed(1)}%</strong>
+            <span style={{ color: '#555' }}> / 10%</span>
+          </div>
+          <div style={{ fontSize: 13, color: '#ccc' }}>
+            ETF: <strong style={{ color: heat.etfRiskPct > 5 ? '#ff8c00' : '#ccc' }}>{(heat.etfRiskPct || 0).toFixed(1)}%</strong>
+            <span style={{ color: '#555' }}> / 5%</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#28a745', marginTop: 2 }}>
+            ${Math.round(remaining / 100 * nav).toLocaleString()} capacity left
+          </div>
+          <div onClick={() => onNavigate?.('command')} style={{ marginTop: 8, color: '#FFD700', fontSize: 11, cursor: 'pointer', letterSpacing: 1 }}>GO TO COMMAND →</div>
+        </div>
+
+        {/* Alerts + Lots Ready */}
+        <div style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 8 }}>
+          <div style={{ color: '#888', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, marginBottom: 4 }}>ALERTS & LOTS</div>
+          {alerts.length === 0
+            ? <div style={{ color: '#28a745', fontSize: 12 }}>✅ No active alerts. All clear.</div>
+            : alerts.map((a, i) => (
+              <div key={i} style={{ fontSize: 12, color: '#ccc' }}>{a.icon} {a.text}</div>
+            ))
+          }
+          {lotsCount > 0 && (
+            <div style={{ marginTop: 6 }}>
+              {(lotsReady || []).map((l, i) => (
+                <div key={i} style={{ fontSize: 12, color: '#6bcb77', marginBottom: 2 }}>
+                  ▶ {l.ticker} Lot {l.lot} @ ${l.triggerPrice}
+                </div>
+              ))}
+            </div>
+          )}
+          <div onClick={() => onNavigate?.('command')} style={{ marginTop: 8, color: '#FFD700', fontSize: 11, cursor: 'pointer', letterSpacing: 1 }}>VIEW RISK ADVISOR →</div>
+        </div>
+
+      </div>
     </div>
   );
 }

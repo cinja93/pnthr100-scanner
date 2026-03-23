@@ -125,6 +125,13 @@ async function fetchBulkQuotes(tickers) {
 // Export the canonical ETF ticker set so other modules (e.g. pulse) can classify ETFs
 export const ALL_ETF_TICKER_SET = new Set(ALL_ETF_TICKERS);
 
+// Returns the cached ETF results without triggering a refetch — null if cache is cold.
+// Same pattern as getCachedApexResults() in apexService.js.
+export function getCachedEtfResults() {
+  if (!etfCache.data) return null;
+  return etfCache.data; // { stocks, signals, categories }
+}
+
 export async function getEtfStocks(forceRefresh = false) {
   if (!forceRefresh && etfCache.data && Date.now() - etfCache.timestamp < CACHE_TTL_MS) {
     console.log('📊 ETF 140: serving from cache');

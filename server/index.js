@@ -8,7 +8,7 @@ import { getSignals, getCachedSignals } from './signalService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
-import { getEtfStocks, ALL_ETF_TICKER_SET } from './etfService.js';
+import { getEtfStocks, ALL_ETF_TICKER_SET, getCachedEtfResults } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
@@ -2084,37 +2084,70 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       }
     }
 
-    // New signals this week (signalAge 0–1) — split by direction and stock vs ETF
-    // Use the canonical 140-ticker ETF list from etfService (same source as the ETF page)
-    const PULSE_ETF_SET = ALL_ETF_TICKER_SET;
+    // New signals this week (signalAge 0–1) — stocks from apex cache, ETFs from etf cache
+    // ETFs are a separate scoring universe and never appear in the apex/kill results.
+    function calcSignalAge(signalDate) {
+      if (!signalDate) return 99;
+      try {
+        const sigMs  = new Date(signalDate + 'T12:00:00').getTime();
+        // Current week Monday
+        const now = new Date();
+        const dow = now.getDay();
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+        monday.setHours(12, 0, 0, 0);
+        return Math.max(0, Math.round((monday.getTime() - sigMs) / (7 * 24 * 60 * 60 * 1000)));
+      } catch { return 99; }
+    }
     function mapNewSig(s) {
       return { ticker: s.ticker, sector: s.sector, currentPrice: s.currentPrice,
-        totalScore: s.apexScore, tier: s.tier, signal: s.signal,
+        totalScore: s.apexScore ?? s.totalScore ?? 0, tier: s.tier, signal: s.signal,
         signalAge: s.signalAge, killRank: s.killRank ?? null };
     }
-    let newBLStocks = [], newBLEtfs = [], newSSStocks = [], newSSEtfs = [];
+    const sortByScore = (a, b) => ((b.totalScore || 0) - (a.totalScore || 0));
+
+    // ── Stocks: from apex cache (live) or Friday DB ──
+    let newBLStocks = [], newSSStocks = [];
     if (liveApex) {
       const fresh = liveApex.stocks.filter(s => !s.overextended && (s.signalAge ?? 99) <= 1);
-      const sortByScore = (a, b) => (b.totalScore || 0) - (a.totalScore || 0);
-      const blFresh = fresh.filter(s => s.signal === 'BL').map(mapNewSig).sort(sortByScore);
-      const ssFresh = fresh.filter(s => s.signal === 'SS').map(mapNewSig).sort(sortByScore);
-      newBLStocks = blFresh.filter(s => !PULSE_ETF_SET.has(s.ticker));
-      newBLEtfs   = blFresh.filter(s =>  PULSE_ETF_SET.has(s.ticker));
-      newSSStocks = ssFresh.filter(s => !PULSE_ETF_SET.has(s.ticker));
-      newSSEtfs   = ssFresh.filter(s =>  PULSE_ETF_SET.has(s.ticker));
+      newBLStocks = fresh.filter(s => s.signal === 'BL').map(mapNewSig).sort(sortByScore);
+      newSSStocks = fresh.filter(s => s.signal === 'SS').map(mapNewSig).sort(sortByScore);
     } else {
-      // Cold cache — fall back to Friday pipeline DB with signalAge field
       const dbFresh = await db.collection('pnthr_kill_scores')
         .find({ signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: 1 } })
         .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
         .toArray();
-      const sortByScore = (a, b) => ((b.totalScore || b.apexScore || 0) - (a.totalScore || a.apexScore || 0));
-      const blFresh = dbFresh.filter(s => s.signal === 'BL').sort(sortByScore);
-      const ssFresh = dbFresh.filter(s => s.signal === 'SS').sort(sortByScore);
-      newBLStocks = blFresh.filter(s => !PULSE_ETF_SET.has(s.ticker));
-      newBLEtfs   = blFresh.filter(s =>  PULSE_ETF_SET.has(s.ticker));
-      newSSStocks = ssFresh.filter(s => !PULSE_ETF_SET.has(s.ticker));
-      newSSEtfs   = ssFresh.filter(s =>  PULSE_ETF_SET.has(s.ticker));
+      newBLStocks = dbFresh.filter(s => s.signal === 'BL')
+        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
+      newSSStocks = dbFresh.filter(s => s.signal === 'SS')
+        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
+    }
+
+    // ── ETFs: from the ETF cache (populated when /api/etf-stocks is visited) ──
+    let newBLEtfs = [], newSSEtfs = [];
+    const cachedEtf = getCachedEtfResults();
+    if (cachedEtf) {
+      const { stocks: etfStocks, signals: etfSignals } = cachedEtf;
+      const freshEtfs = etfStocks
+        .map(s => {
+          const sig = etfSignals?.[s.ticker];
+          if (!sig?.signal || sig.signal === 'BE' || sig.signal === 'SE') return null;
+          const signalAge = calcSignalAge(sig.signalDate);
+          if (signalAge > 1) return null;
+          return {
+            ticker: s.ticker,
+            sector: s.category || s.sector || 'ETF',
+            currentPrice: s.currentPrice,
+            totalScore: 0,   // ETFs not Kill-scored
+            tier: null,
+            signal: sig.signal === 'BUY' ? 'BL' : sig.signal === 'SELL' ? 'SS' : sig.signal,
+            signalAge,
+            killRank: null,
+          };
+        })
+        .filter(Boolean);
+      newBLEtfs = freshEtfs.filter(s => s.signal === 'BL');
+      newSSEtfs = freshEtfs.filter(s => s.signal === 'SS');
     }
 
     // D1 multipliers — matches apexService calcD1() sign convention:

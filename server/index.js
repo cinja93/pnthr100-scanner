@@ -45,6 +45,7 @@ import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
 import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateToken, resolveRole, generateApprovalToken, verifyApprovalToken } from './auth.js';
+import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
 import { sendApprovalRequestEmail, sendWelcomeEmail, sendDenialEmail } from './emailService.js';
 import { ibkrSync } from './ibkrSync.js';
 import {
@@ -70,13 +71,6 @@ import {
 
 const app = express();
 const PORT = 3000;
-
-// Normalize FMP/Morningstar sector names to official S&P 500 GICS names
-function normalizeSector(sector) {
-  if (sector === 'Consumer Cyclical')  return 'Consumer Discretionary';
-  if (sector === 'Consumer Defensive') return 'Consumer Staples';
-  return sector;
-}
 
 // Middleware
 // Helmet — secure HTTP headers (XSS, clickjacking, MIME sniffing, etc.)
@@ -1162,6 +1156,7 @@ async function computeSectorSignalCounts() {
 
     const tickersBySector = {};
     for (const c of constituents) {
+      warnUnknownSector(c.sector, `SP500constituent/${c.symbol}`);
       const sectorKey = gicsToKey[normalizeSector(c.sector)];
       if (!sectorKey) continue;
       if (!tickersBySector[sectorKey]) tickersBySector[sectorKey] = [];

@@ -152,3 +152,16 @@ export const KILL_CONFIG = {
 //             D8: NEW weights — SPRINT=2, HUNT=2, others=1 (was +3 flat for all)
 //             Formula: (D2+D3+D4+D5+D6+D7+D8) × D1 (MULTIPLICATIVE — not additive)
 //
+// 2026-03-23  v3.2: Centralized sector name normalization (Scott)
+//             BUG_FIX / MEDIUM impact
+//             FMP returns "Consumer Cyclical" / "Consumer Defensive" from company
+//             profiles; GICS standard is "Consumer Discretionary" / "Consumer Staples".
+//             Duplicate normalizeSector() existed in index.js and stockService.js.
+//             Two call sites used it inconsistently → Consumer Discretionary sector
+//             cards showed zero signal badges on the Sectors page.
+//             Fix: created server/sectorUtils.js as single source of truth.
+//             Exports: normalizeSector(), warnUnknownSector(), SECTOR_NORMALIZE_MAP,
+//             KNOWN_SECTORS. Both index.js and stockService.js now import from there.
+//             warnUnknownSector() logs once per process for any sector string not in
+//             the map so new FMP renames surface immediately in server logs.
+//

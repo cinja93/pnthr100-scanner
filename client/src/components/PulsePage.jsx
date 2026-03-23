@@ -99,15 +99,25 @@ export default function PulsePage({ onNavigate }) {
         onRefresh={refreshPulse}
       />
 
-      {/* TIER 1: Market gauges — SPY, QQQ, NYSE, NASDAQ, IWM, GLD + VIX */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      {/* TIER 1a: Equity gauges — SPY, QQQ, NYSE, NASDAQ, IWM, DJI + VIX */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <SpyGauge regime={data.regime} />
         <QqqGauge regime={data.regime} />
         <MarketGauge label="NYSE" subLabel="Composite" data={data.marketGauges?.nyse} />
         <MarketGauge label="NASDAQ" subLabel="Composite" data={data.marketGauges?.nasdaq} />
         <MarketGauge label="IWM" subLabel="Russell 2000" data={data.marketGauges?.iwm} />
-        <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} />
+        <MarketGauge label="DJI" subLabel="Dow Jones" data={data.marketGauges?.dji} />
         <VixThermometer vix={vix} />
+      </div>
+      {/* TIER 1b: Macro gauges — GLD, WTI Crude, USD, Fed Rate, 2Y, 10Y, 30Y */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} />
+        <MarketGauge label="WTI" subLabel="Crude Oil" data={data.marketGauges?.crude} />
+        <MarketGauge label="USD" subLabel="Dollar Index" data={data.marketGauges?.usd} isIndex={true} />
+        <YieldGauge label="FED" subLabel="Fed Rate (1mo)" data={data.treasuryYields?.fed} />
+        <YieldGauge label="2Y" subLabel="2-Year Yield" data={data.treasuryYields?.y2} />
+        <YieldGauge label="10Y" subLabel="10-Year Yield" data={data.treasuryYields?.y10} />
+        <YieldGauge label="30Y" subLabel="30-Year Yield" data={data.treasuryYields?.y30} />
       </div>
       {/* Regime + Portfolio Heat compact strip */}
       <RegimeStrip regime={data.regime} signals={data.signals} positions={data.positions} />
@@ -385,7 +395,7 @@ const GOLD_ZONES = [
   { from:  5,  to:  10, color: '#FFD700' },
 ];
 
-function MarketGauge({ label, subLabel, data, isGold }) {
+function MarketGauge({ label, subLabel, data, isGold, isIndex }) {
   const price = data?.price ?? null;
   const changePct = data?.changePct ?? null;
   const needleVal = changePct !== null ? Math.max(-10, Math.min(10, changePct)) : 0;
@@ -393,7 +403,7 @@ function MarketGauge({ label, subLabel, data, isGold }) {
 
   function fmtPrice(p) {
     if (p == null) return '—';
-    if (p >= 1000) return p.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    if (p >= 1000 || isIndex) return p.toLocaleString('en-US', { maximumFractionDigits: 2 });
     return `$${p.toFixed(2)}`;
   }
 
@@ -409,6 +419,35 @@ function MarketGauge({ label, subLabel, data, isGold }) {
       subLabel={subLabel}
       subValue={changePct !== null ? `${arrow} ${Math.abs(changePct).toFixed(2)}%` : 'No data'}
       subValueColor={pctColor}
+    />
+  );
+}
+
+// Yield zones: green=low/accommodative → red=high/restrictive
+const YIELD_ZONES = [
+  { from: 0, to: 2, color: '#28a745' },
+  { from: 2, to: 4, color: '#ffc107' },
+  { from: 4, to: 6, color: '#ff8c00' },
+  { from: 6, to: 8, color: '#dc3545' },
+];
+
+function YieldGauge({ label, subLabel, data }) {
+  const rate = data?.rate ?? null;
+  const changeBps = data?.changeBps ?? null;
+  const subValue = rate !== null
+    ? (changeBps !== null ? `${changeBps >= 0 ? '+' : ''}${changeBps}bps` : '—')
+    : 'No data';
+  // Rising yields = tightening = bearish for stocks/bonds → red; falling = green
+  const subValueColor = changeBps === null ? '#888' : changeBps > 0 ? '#ff6b6b' : changeBps < 0 ? '#6bcb77' : '#888';
+  return (
+    <SemiGauge
+      value={rate ?? 0} min={0} max={8} zones={YIELD_ZONES}
+      label={label}
+      gaugeW={150} gaugeH={100}
+      displayValue={rate !== null ? `${rate.toFixed(2)}%` : '—'}
+      subLabel={subLabel}
+      subValue={subValue}
+      subValueColor={subValueColor}
     />
   );
 }

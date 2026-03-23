@@ -2340,11 +2340,11 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       } catch { /* best-effort */ }
     }
 
-    // Always-fetch market gauge data: NYSE, NASDAQ, IWM, GLD
-    let marketGauges = { nyse: null, nasdaq: null, iwm: null, gld: null };
+    // Always-fetch market gauge data: NYSE, NASDAQ, IWM, GLD, DJI, WTI Crude, USD
+    let marketGauges = { nyse: null, nasdaq: null, iwm: null, gld: null, dji: null, crude: null, usd: null };
     try {
       const mgRes = await fetch(
-        `https://financialmodelingprep.com/api/v3/quote/%5ENYA,%5EIXIC,IWM,GLD?apikey=${FMP_KEY}`
+        `https://financialmodelingprep.com/api/v3/quote/%5ENYA,%5EIXIC,IWM,GLD,%5EDJI,USOIL,DX-Y.NYB?apikey=${FMP_KEY}`
       );
       if (mgRes.ok) {
         const mgData = await mgRes.json();
@@ -2363,6 +2363,9 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
           nasdaq: extractMg('%5EIXIC') || extractMg('^IXIC'),
           iwm:    extractMg('IWM'),
           gld:    extractMg('GLD'),
+          dji:    extractMg('%5EDJI')  || extractMg('^DJI'),
+          crude:  extractMg('USOIL'),
+          usd:    extractMg('DX-Y.NYB'),
         };
         // Try alternate symbol names if not found
         if (!marketGauges.nyse)   marketGauges.nyse   = mgData.find(q => q.symbol === '^NYA')  ? { price: mgData.find(q=>q.symbol==='^NYA').price,   changePct: mgData.find(q=>q.symbol==='^NYA').changesPercentage   } : null;
@@ -2371,6 +2374,34 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       }
     } catch (e) {
       console.warn('[PULSE] marketGauges fetch failed:', e.message);
+    }
+
+    // Treasury yields: Fed (1mo proxy), 2Y, 10Y, 30Y
+    let treasuryYields = { fed: null, y2: null, y10: null, y30: null };
+    try {
+      const toDate  = new Date().toISOString().slice(0, 10);
+      const fromDate = new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10);
+      const tRes = await fetch(
+        `https://financialmodelingprep.com/api/v4/treasury?from=${fromDate}&to=${toDate}&apikey=${FMP_KEY}`
+      );
+      if (tRes.ok) {
+        const tData = await tRes.json();
+        if (Array.isArray(tData) && tData.length >= 1) {
+          const latest = tData[0];
+          const prev   = tData[1] || null;
+          const bps = (val, prevVal) =>
+            val != null && prevVal != null ? +((val - prevVal) * 100).toFixed(1) : null;
+          treasuryYields = {
+            fed: latest.month1 != null ? { rate: latest.month1, changeBps: bps(latest.month1, prev?.month1) } : null,
+            y2:  latest.year2  != null ? { rate: latest.year2,  changeBps: bps(latest.year2,  prev?.year2)  } : null,
+            y10: latest.year10 != null ? { rate: latest.year10, changeBps: bps(latest.year10, prev?.year10) } : null,
+            y30: latest.year30 != null ? { rate: latest.year30, changeBps: bps(latest.year30, prev?.year30) } : null,
+          };
+          console.log('[PULSE] treasury yields:', JSON.stringify(treasuryYields));
+        }
+      }
+    } catch (e) {
+      console.warn('[PULSE] treasury yields fetch failed:', e.message);
     }
 
     // Data freshness metadata — client shows "Scores: Fri Mar 20" vs "Scores: Live"
@@ -2430,6 +2461,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       lotsReady: lotsReady.slice(0, 5),
       marketSnapshot: { ...(marketSnapshot || {}), treasury10y, dxy },
       marketGauges,
+      treasuryYields,
     });
   } catch (err) {
     console.error('[/api/pulse]', err.message);

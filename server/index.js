@@ -2026,14 +2026,19 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     const db = await connectToDatabase();
     const userId = req.user.userId;
 
-    const [regimeDoc, killScores, signals, positions, userProfile, marketSnapshot] = await Promise.all([
+    const [regimeDoc, killScores, positions, userProfile, marketSnapshot, latestEnriched] = await Promise.all([
       db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } }),
       db.collection('pnthr_kill_scores').find({ killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
-      db.collection('pnthr679_signals').find({ status: 'OPEN' }).toArray(),
       db.collection('pnthr_portfolio').find({ ownerId: userId, status: { $ne: 'closed' } }).toArray(),
       db.collection('user_profiles').findOne({ userId }),
       db.collection('pnthr_weekly_market_snapshot').findOne({}, { sort: { weekOf: -1 } }),
+      db.collection('pnthr_enriched_signals').findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } }),
     ]);
+    const signals = latestEnriched?.weekOf
+      ? await db.collection('pnthr_enriched_signals')
+          .find({ weekOf: latestEnriched.weekOf, signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1 } })
+          .toArray()
+      : [];
 
     const nav = userProfile?.accountSize || 100000;
 

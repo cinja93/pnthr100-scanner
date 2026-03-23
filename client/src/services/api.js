@@ -543,7 +543,11 @@ export async function addChangelogEntry(entry) {
 
 export async function fetchPulse() {
   const res = await fetch(`${API_BASE}/api/pulse`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to load Pulse data');
+  if (!res.ok) {
+    let msg = `Pulse API error ${res.status}`;
+    try { const body = await res.json(); if (body?.error) msg += `: ${body.error}`; } catch {}
+    throw new Error(msg);
+  }
   return res.json();
 }
 

@@ -6,12 +6,13 @@ export default function PulsePage({ onNavigate }) {
   const [data, setData] = useState(null);
   const [vix, setVix] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [chartStock, setChartStock] = useState(null);
 
   useEffect(() => {
     Promise.all([fetchPulse(), fetchLiveVix()])
       .then(([pulse, vixData]) => { setData(pulse); setVix(vixData); })
-      .catch(console.error)
+      .catch(err => { console.error(err); setError(err.message); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -22,7 +23,8 @@ export default function PulsePage({ onNavigate }) {
   );
   if (!data) return (
     <div style={{ background: '#0a0a0a', minHeight: '100vh', color: '#ff6b6b', padding: 40, fontFamily: 'monospace' }}>
-      Failed to load Pulse data.
+      <div>Failed to load Pulse data.</div>
+      {error && <div style={{ marginTop: 12, fontSize: 13, color: '#ff9999', background: '#1a0000', padding: '10px 14px', borderRadius: 6, maxWidth: 600 }}>{error}</div>}
     </div>
   );
 

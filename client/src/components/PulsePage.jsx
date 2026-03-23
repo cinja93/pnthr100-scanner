@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchPulse, fetchLiveVix } from '../services/api';
+import { fetchPulse, fetchLiveVix, fetchSignalStocks } from '../services/api';
 import ChartModal from './ChartModal';
 
 export default function PulsePage({ onNavigate }) {
@@ -8,6 +8,7 @@ export default function PulsePage({ onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartStock, setChartStock] = useState(null);
+  const [signalModal, setSignalModal] = useState(null); // 'BL' | 'SS' | null
 
   useEffect(() => {
     Promise.all([fetchPulse(), fetchLiveVix()])
@@ -46,12 +47,19 @@ export default function PulsePage({ onNavigate }) {
         <KillTop10 killTop10={data.killTop10} onTickerClick={setChartStock} killDataLive={data.killDataLive} />
         <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} />
       </div>
-      <SignalBreadthBar signals={data.signals} />
+      <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
       <MacroStrip marketSnapshot={data.marketSnapshot} />
 
       {/* TIER 3: Portfolio — Heat gauge + positions + alerts/lots in one band */}
       <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} />
 
+      {signalModal && (
+        <SignalStockModal
+          signal={signalModal}
+          onClose={() => setSignalModal(null)}
+          onTickerClick={(stock) => { setSignalModal(null); setChartStock(stock); }}
+        />
+      )}
       {chartStock && (
         <ChartModal
           stocks={[chartStock]}
@@ -496,21 +504,40 @@ function SectorPulse({ signals, killDataLive, onNavigate }) {
   );
 }
 
-function SignalBreadthBar({ signals }) {
+function SignalBreadthBar({ signals, onSignalClick }) {
+  const [hovBl, setHovBl] = useState(false);
+  const [hovSs, setHovSs] = useState(false);
   const bl = signals?.blCount || 0, ss = signals?.ssCount || 0;
   const total = bl + ss;
   const blPct = total > 0 ? (bl / total) * 100 : 50;
+
   return (
     <div style={{ background: '#111', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
       <div style={{ color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 8 }}>⚡ SIGNAL BREADTH</div>
-      <div style={{ display: 'flex', height: 18, borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
-        <div style={{ width: `${blPct}%`, background: '#28a745', opacity: 0.7 }} />
-        <div style={{ width: `${100 - blPct}%`, background: '#dc3545', opacity: 0.7 }} />
+      <div style={{ display: 'flex', height: 22, borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
+        <div
+          onClick={() => onSignalClick?.('BL')}
+          onMouseEnter={() => setHovBl(true)}
+          onMouseLeave={() => setHovBl(false)}
+          style={{ width: `${blPct}%`, background: '#28a745', opacity: hovBl ? 1 : 0.7, cursor: 'pointer', transition: 'opacity 0.15s' }}
+        />
+        <div
+          onClick={() => onSignalClick?.('SS')}
+          onMouseEnter={() => setHovSs(true)}
+          onMouseLeave={() => setHovSs(false)}
+          style={{ width: `${100 - blPct}%`, background: '#dc3545', opacity: hovSs ? 1 : 0.7, cursor: 'pointer', transition: 'opacity 0.15s' }}
+        />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#ccc' }}>
-        <span style={{ color: '#6bcb77' }}>{bl} BL</span>
+        <span
+          onClick={() => onSignalClick?.('BL')}
+          style={{ color: '#6bcb77', cursor: 'pointer', fontWeight: 700, textDecoration: 'underline', textDecorationColor: 'rgba(107,203,119,0.4)' }}
+        >{bl} BL</span>
         <span style={{ color: '#888', fontSize: 11 }}>Ratio: {(signals?.ratio || 0).toFixed(1)}:1 SS:BL</span>
-        <span style={{ color: '#ff6b6b' }}>{ss} SS</span>
+        <span
+          onClick={() => onSignalClick?.('SS')}
+          style={{ color: '#ff6b6b', cursor: 'pointer', fontWeight: 700, textDecoration: 'underline', textDecorationColor: 'rgba(255,107,107,0.4)' }}
+        >{ss} SS</span>
       </div>
     </div>
   );
@@ -526,6 +553,126 @@ function MacroStrip({ marketSnapshot }) {
       <span>10Y: <strong style={{ color: '#ccc' }}>{t10 ? `${t10.toFixed(2)}%` : '—'}</strong></span>
       <span>DXY: <strong style={{ color: '#ccc' }}>{dxy ? dxy.toFixed(1) : '—'}</strong></span>
       <span style={{ marginLeft: 'auto' }}>Week of <strong style={{ color: '#FFD700' }}>{weekOf || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</strong></span>
+    </div>
+  );
+}
+
+// ── Signal Stock Drill-Down Modal ──────────────────────────────────────────────
+const TIER_BADGE = {
+  'ALPHA PNTHR KILL': { bg: 'rgba(212,160,23,0.25)', color: '#FFD700' },
+  'STRIKING':         { bg: 'rgba(40,167,69,0.2)',   color: '#6bcb77' },
+  'HUNTING':          { bg: 'rgba(32,120,55,0.2)',   color: '#4a9',   },
+  'POUNCING':         { bg: 'rgba(20,160,140,0.2)',  color: '#4dd',   },
+  'COILING':          { bg: 'rgba(30,100,180,0.2)',  color: '#69b',   },
+  'STALKING':         { bg: 'rgba(80,80,120,0.2)',   color: '#99a',   },
+};
+
+function tierBadge(tier) {
+  if (!tier) return null;
+  const key = Object.keys(TIER_BADGE).find(k => tier.includes(k)) || null;
+  const { bg, color } = key ? TIER_BADGE[key] : { bg: '#1a1a1a', color: '#666' };
+  const short = tier.includes('ALPHA') ? 'ALPHA' : tier.split(' ')[0];
+  return <span style={{ background: bg, color, fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>{short}</span>;
+}
+
+const SORT_COLS = ['ticker', 'sector', 'currentPrice', 'totalScore', 'tier', 'signalAge'];
+
+function SignalStockModal({ signal, onClose, onTickerClick }) {
+  const [stocks, setStocks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sortCol, setSortCol] = useState('totalScore');
+  const [sortDir, setSortDir] = useState(-1); // -1 = desc, 1 = asc
+
+  useEffect(() => {
+    setLoading(true);
+    fetchSignalStocks(signal)
+      .then(data => setStocks(data.stocks || []))
+      .catch(err => console.error(err))
+      .finally(() => setLoading(false));
+  }, [signal]);
+
+  const sorted = [...stocks].sort((a, b) => {
+    const av = a[sortCol] ?? '', bv = b[sortCol] ?? '';
+    if (typeof av === 'number') return (av - bv) * sortDir;
+    return String(av).localeCompare(String(bv)) * sortDir;
+  });
+
+  const handleSort = (col) => {
+    if (sortCol === col) setSortDir(d => d * -1);
+    else { setSortCol(col); setSortDir(-1); }
+  };
+
+  const isBL = signal === 'BL';
+  const headerColor = isBL ? '#6bcb77' : '#ff6b6b';
+  const headerBg = isBL ? 'rgba(40,167,69,0.12)' : 'rgba(220,53,69,0.12)';
+
+  const ColHeader = ({ col, label }) => (
+    <th
+      onClick={() => handleSort(col)}
+      style={{ padding: '8px 10px', textAlign: 'left', color: sortCol === col ? '#FFD700' : '#666', fontWeight: 700, fontSize: 11, letterSpacing: 1, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+    >
+      {label}{sortCol === col ? (sortDir === -1 ? ' ↓' : ' ↑') : ''}
+    </th>
+  );
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#0f0f0f', border: `1px solid ${headerColor}33`, borderRadius: 12, width: '100%', maxWidth: 860, maxHeight: '85vh', display: 'flex', flexDirection: 'column', fontFamily: 'monospace' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #1a1a1a', background: headerBg, borderRadius: '12px 12px 0 0' }}>
+          <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 14, letterSpacing: 2 }}>
+            ⚡ {loading ? '...' : sorted.length} {isBL ? 'BUY LONG (BL)' : 'SELL SHORT (SS)'} SIGNALS
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* Table */}
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {loading ? (
+            <div style={{ color: '#555', textAlign: 'center', padding: 40, fontSize: 13 }}>Loading signals...</div>
+          ) : sorted.length === 0 ? (
+            <div style={{ color: '#555', textAlign: 'center', padding: 40, fontSize: 13 }}>No {signal} signals in current data.</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ position: 'sticky', top: 0, background: '#0f0f0f', borderBottom: '1px solid #222' }}>
+                <tr>
+                  <ColHeader col="ticker" label="TICKER" />
+                  <ColHeader col="sector" label="SECTOR" />
+                  <ColHeader col="currentPrice" label="PRICE" />
+                  <ColHeader col="totalScore" label="KILL SCORE" />
+                  <ColHeader col="tier" label="TIER" />
+                  <ColHeader col="signalAge" label="AGE" />
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((s, i) => (
+                  <tr key={s.ticker} style={{ borderBottom: '1px solid #111', background: i % 2 === 0 ? 'transparent' : '#0a0a0a' }}>
+                    <td style={{ padding: '7px 10px' }}>
+                      <span
+                        onClick={() => onTickerClick({ ticker: s.ticker, symbol: s.ticker, currentPrice: s.currentPrice, signal, sector: s.sector })}
+                        style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(212,160,23,0.4)' }}
+                      >{s.ticker}</span>
+                    </td>
+                    <td style={{ padding: '7px 10px', color: '#888', fontSize: 12 }}>{s.sector || '—'}</td>
+                    <td style={{ padding: '7px 10px', color: '#ccc', fontSize: 12 }}>{s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}</td>
+                    <td style={{ padding: '7px 10px', color: '#fff', fontWeight: 700, fontSize: 13 }}>{s.totalScore?.toFixed(1) ?? '—'}</td>
+                    <td style={{ padding: '7px 10px' }}>{tierBadge(s.tier)}</td>
+                    <td style={{ padding: '7px 10px', color: '#555', fontSize: 11 }}>{s.signalAge != null ? `${s.signalAge}w` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!loading && sorted.length > 0 && (
+          <div style={{ padding: '10px 20px', borderTop: '1px solid #1a1a1a', color: '#555', fontSize: 11, textAlign: 'right' }}>
+            Sorted by {sortCol} {sortDir === -1 ? '↓' : '↑'} · Click column headers to sort · Click ticker for chart
+          </div>
+        )}
+      </div>
     </div>
   );
 }

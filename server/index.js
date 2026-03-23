@@ -2242,6 +2242,46 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
   }
 });
 
+// ── Pulse signal drill-down — all BL or SS stocks ─────────────────────────────
+app.get('/api/pulse/signal-stocks', authenticateJWT, async (req, res) => {
+  try {
+    const { signal } = req.query;
+    if (!['BL', 'SS'].includes(signal)) return res.status(400).json({ error: 'signal must be BL or SS' });
+
+    const { getCachedApexResults } = await import('./apexService.js');
+    const liveApex = getCachedApexResults();
+
+    let stocks;
+    if (liveApex) {
+      stocks = liveApex.stocks
+        .filter(s => s.signal === signal && !s.overextended)
+        .map(s => ({
+          ticker: s.ticker,
+          sector: s.sector,
+          currentPrice: s.currentPrice,
+          totalScore: +(s.apexScore || 0).toFixed(1),
+          tier: s.tier,
+          signalAge: s.signalAge ?? null,
+          killRank: s.killRank ?? null,
+        }))
+        .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+    } else {
+      const { connectToDatabase } = await import('./database.js');
+      const db = await connectToDatabase();
+      const rows = await db.collection('pnthr_kill_scores')
+        .find({ signal }, { projection: { ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, tier: 1, signalAge: 1, killRank: 1 } })
+        .sort({ killRank: 1 })
+        .toArray();
+      stocks = rows.map(s => ({ ...s, totalScore: +(s.totalScore ?? 0).toFixed(1) }));
+    }
+
+    res.json({ signal, stocks, count: stocks.length });
+  } catch (err) {
+    console.error('[/api/pulse/signal-stocks]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Live VIX quote ─────────────────────────────────────────────────────────────
 app.get('/api/market-data/vix', authenticateJWT, async (req, res) => {
   try {

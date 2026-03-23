@@ -651,9 +651,9 @@ function PNTHRMiniGauge({ label, bl, ss, highlight, onClick }) {
   const nx = cx + r * 0.78 * Math.cos(angle);
   const ny = cy + r * 0.78 * Math.sin(angle);
 
-  const netPct = total > 0 ? Math.abs(ss - bl) / total * 100 : 0;
   const isBearish = ss >= bl;
-  const dir = total === 0 ? '—' : `${netPct.toFixed(0)}% ${isBearish ? 'SS' : 'BL'}`;
+  const domPct = total > 0 ? Math.round((isBearish ? ss : bl) / total * 100) : 0;
+  const dir = total === 0 ? '—' : `${domPct}% ${isBearish ? 'SS' : 'BL'}`;
   const dirColor = total === 0 ? '#555' : isBearish ? '#ff6b6b' : '#6bcb77';
   const textY = cy - r * 0.58;
 

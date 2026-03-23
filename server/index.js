@@ -2023,42 +2023,72 @@ app.post('/api/signal-history/changelog', authenticateJWT, requireAdmin, async (
 app.get('/api/pulse', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
+    const { getApexResults } = await import('./apexService.js');
     const db = await connectToDatabase();
     const userId = req.user.userId;
 
-    const [regimeDoc, killScores, positions, userProfile, marketSnapshot, latestEnriched] = await Promise.all([
+    // DB queries for regime prices, portfolio, and macro snapshot
+    const [regimeDoc, positions, userProfile, marketSnapshot] = await Promise.all([
       db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } }),
-      db.collection('pnthr_kill_scores').find({ killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
       db.collection('pnthr_portfolio').find({ ownerId: userId, status: { $ne: 'closed' } }).toArray(),
       db.collection('user_profiles').findOne({ userId }),
       db.collection('pnthr_weekly_market_snapshot').findOne({}, { sort: { weekOf: -1 } }),
-      db.collection('pnthr_enriched_signals').findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } }),
     ]);
-    const signals = latestEnriched?.weekOf
-      ? await db.collection('pnthr_enriched_signals')
-          .find({ weekOf: latestEnriched.weekOf, signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1 } })
-          .toArray()
-      : [];
+
+    // Live apex scores (weekly cache — same data as Kill page)
+    const apexResults = await getApexResults();
+    const killTop10 = apexResults.stocks
+      .filter(s => s.isTop10)
+      .map(s => ({
+        killRank: s.killRank,
+        ticker: s.ticker,
+        signal: s.signal,
+        totalScore: s.apexScore,
+        tier: s.tier,
+        sector: s.sector,
+        currentPrice: s.currentPrice,
+        rankChange: s.rankChange ?? null,
+      }));
+
+    // Signal breadth + sector heatmap from live apex stocks
+    const blCount = apexResults.regime.blCount || 0;
+    const ssCount = apexResults.regime.ssCount || 0;
+    const sectorMap = {};
+    for (const s of apexResults.stocks) {
+      if (!s.signal || s.overextended) continue;
+      const sector = s.sector || 'Unknown';
+      if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
+      if (s.signal === 'BL') sectorMap[sector].bl++;
+      else if (s.signal === 'SS') sectorMap[sector].ss++;
+    }
+
+    // D1 multipliers — SPY used as the primary index reference
+    const spyAbove = apexResults.regime.spyAboveEma ?? regimeDoc?.spyAboveEma ?? null;
+    const spyRising = apexResults.regime.spyEmaRising ?? null;
+    let indexScore = 0;
+    if (spyAbove === false && spyRising === false) indexScore = -2;
+    else if (spyAbove === false) indexScore = -1;
+    else if (spyAbove === true && spyRising === true) indexScore = 2;
+    else if (spyAbove === true) indexScore = 1;
+    const openRatio = ssCount / Math.max(blCount, 1);
+    let ratioScore = 0;
+    if (openRatio > 3) ratioScore = -2;
+    else if (openRatio > 2) ratioScore = -1;
+    else if (openRatio < 0.5) ratioScore = 2;
+    else if (openRatio < 1) ratioScore = 1;
+    const regimeScore = indexScore + ratioScore;
+    const ssD1 = Math.max(0.70, Math.min(1.30, Math.round((1.0 - regimeScore * 0.06) * 100) / 100));
+    const blD1 = Math.max(0.70, Math.min(1.30, Math.round((1.0 + regimeScore * 0.06) * 100) / 100));
 
     const nav = userProfile?.accountSize || 100000;
 
-    // Signal breadth by sector
-    const sectorMap = {};
-    let blCount = 0, ssCount = 0;
-    for (const sig of signals) {
-      const s = sig.sector || 'Unknown';
-      if (!sectorMap[s]) sectorMap[s] = { bl: 0, ss: 0 };
-      if (sig.signal === 'BL') { sectorMap[s].bl++; blCount++; }
-      else if (sig.signal === 'SS') { sectorMap[s].ss++; ssCount++; }
-    }
-
-    // Portfolio heat calculation
-    const livePos = positions.filter(p => {
+    // Portfolio: all active positions for count, filled lots for heat
+    const filledPos = positions.filter(p => {
       const fills = Array.isArray(p.fills) ? p.fills : [];
       return fills.some(f => f.filled);
     });
     let stockRisk = 0, etfRisk = 0;
-    for (const p of livePos) {
+    for (const p of filledPos) {
       const fills = Array.isArray(p.fills) ? p.fills : [];
       const totalShares = fills.filter(f => f.filled).reduce((s, f) => s + (f.shares || 0), 0);
       const stop = p.stopPrice || 0;
@@ -2076,9 +2106,9 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     const etfRiskPct = +((etfRisk / nav) * 100).toFixed(2);
     const totalRiskPct = +((totalRisk / nav) * 100).toFixed(2);
 
-    // Lots ready
+    // Lots ready (from filled positions)
     const lotsReady = [];
-    for (const p of livePos) {
+    for (const p of filledPos) {
       const fills = Array.isArray(p.fills) ? p.fills : [];
       for (const f of fills) {
         if (f.filled) continue;
@@ -2089,31 +2119,40 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       }
     }
 
-    const shortCount = livePos.filter(p => p.direction === 'SHORT').length;
-    const longCount = livePos.filter(p => p.direction === 'LONG').length;
+    const shortCount = positions.filter(p => p.direction === 'SHORT').length;
+    const longCount = positions.filter(p => p.direction === 'LONG').length;
+    const recycledCount = filledPos.filter(p => {
+      const fills = Array.isArray(p.fills) ? p.fills : [];
+      const totalShares = fills.filter(f => f.filled).reduce((s, f) => s + (f.shares || 0), 0);
+      const stop = p.stopPrice || 0;
+      const avg = p.avgCost || p.entryPrice || 0;
+      const isShort = p.direction === 'SHORT';
+      return totalShares > 0 && (isShort ? stop <= avg : stop >= avg);
+    }).length;
 
     res.json({
       statusLight: 'GREEN',
       statusMessage: 'ALL SYSTEMS OPERATIONAL',
-      regime: regimeDoc || null,
-      killTop10: killScores,
+      regime: {
+        ...(regimeDoc || {}),
+        indexPosition: spyAbove ? 'above' : spyAbove === false ? 'below' : 'unknown',
+        spyAboveEma: apexResults.regime.spyAboveEma,
+        spyEmaRising: apexResults.regime.spyEmaRising,
+        qqqAboveEma: apexResults.regime.qqqAboveEma,
+        qqqEmaRising: apexResults.regime.qqqEmaRising,
+        blCount, ssCount, ssD1, blD1, regimeScore,
+      },
+      killTop10,
       signals: {
         blCount, ssCount,
         ratio: ssCount / Math.max(blCount, 1),
         bySector: sectorMap,
       },
       positions: {
-        total: livePos.length,
+        total: positions.length,
         short: shortCount,
         long: longCount,
-        recycled: livePos.filter(p => {
-          const fills = Array.isArray(p.fills) ? p.fills : [];
-          const totalShares = fills.filter(f => f.filled).reduce((s, f) => s + (f.shares || 0), 0);
-          const stop = p.stopPrice || 0;
-          const avg = p.avgCost || p.entryPrice || 0;
-          const isShort = p.direction === 'SHORT';
-          return totalShares > 0 && (isShort ? stop <= avg : stop >= avg);
-        }).length,
+        recycled: recycledCount,
         heat: { stockRisk, etfRisk, totalRisk, stockRiskPct, etfRiskPct, totalRiskPct },
         nav,
       },

@@ -123,9 +123,10 @@ function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subV
           const a1 = toAngle(z.from), a2 = toAngle(z.to);
           return <path key={i} d={arcPath(a1, a2)} fill="none" stroke={z.color} strokeWidth={12} opacity={0.7} />;
         })}
-        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#FFD700" strokeWidth={2.5} strokeLinecap="round" />
-        <circle cx={cx} cy={cy} r={8} fill="#FFD700" />
-        <circle cx={cx} cy={cy} r={4} fill="#0a0a0a" />
+        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#FFD700" strokeWidth={3} strokeLinecap="round" />
+        {/* PNTHR head pivot */}
+        <circle cx={cx} cy={cy} r={13} fill="#0a0a0a" stroke="#FFD700" strokeWidth={1.5} />
+        <image href="/favicon.png" x={cx - 10} y={cy - 10} width={20} height={20} />
       </svg>
       <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginTop: 4 }}>{label}</div>
       <div style={{ color: '#fff', fontSize: 20, fontWeight: 800 }}>{displayValue ?? '—'}</div>
@@ -194,20 +195,22 @@ function RegimeIndicator({ regime, signals }) {
   const label = isBear ? 'BEARISH' : isBull ? 'BULLISH' : 'NEUTRAL';
   const labelColor = isBear ? '#ff6b6b' : isBull ? '#6bcb77' : '#888';
 
-  // Compute D1 from blCount/ssCount ratio stored in regime
-  const blCnt = regime?.blCount || 0;
-  const ssCnt = regime?.ssCount || 0;
-  const totalSigs = blCnt + ssCnt;
-  const ssRatio = totalSigs > 0 ? ssCnt / totalSigs : 0.5;
-  // Regime score: -5 to +5 based on SPY/QQQ position and signal mix
-  const regimeScore = isBull ? 2 + (ssRatio < 0.4 ? 2 : 0) : isBear ? -2 - (ssRatio > 0.6 ? 2 : 0) : 0;
-  const d1 = Math.max(0.70, Math.min(1.30, Math.round((1.0 + regimeScore * 0.06) * 100) / 100));
+  const ssD1 = regime?.ssD1 ?? null;
+  const blD1 = regime?.blD1 ?? null;
 
   return (
-    <div style={{ flex: 1, minWidth: 200, background: bg, border: `2px solid ${border}33`, borderRadius: 12, padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+    <div style={{ flex: 1, minWidth: 200, background: bg, border: `2px solid ${border}33`, borderRadius: 12, padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
       <div style={{ color: '#888', fontSize: 11, letterSpacing: 2, fontWeight: 700 }}>⚡ REGIME</div>
       <div style={{ color: labelColor, fontSize: 28, fontWeight: 900, letterSpacing: 4 }}>{label}</div>
-      <div style={{ color: '#FFD700', fontSize: 16, fontWeight: 700 }}>D1 = {d1.toFixed(2)}x</div>
+      {ssD1 !== null && blD1 !== null ? (
+        <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
+          <span style={{ color: '#ff6b6b', fontWeight: 700 }}>SS {ssD1.toFixed(2)}×</span>
+          <span style={{ color: '#555' }}>|</span>
+          <span style={{ color: '#6bcb77', fontWeight: 700 }}>BL {blD1.toFixed(2)}×</span>
+        </div>
+      ) : (
+        <div style={{ color: '#FFD700', fontSize: 13, fontWeight: 700 }}>D1 computing...</div>
+      )}
       <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#888' }}>
         {regime?.weekOf && <span>Week {regime.weekOf}</span>}
         {signals && <span>SS:BL {(signals.ratio || 0).toFixed(1)}:1</span>}
@@ -242,7 +245,13 @@ function VixThermometer({ vix }) {
         {zones.map((z, i) => {
           const yTop = by + bh * (1 - z.to / maxVix);
           const yBot = by + bh * (1 - z.from / maxVix);
-          return <rect key={i} x={bx} y={yTop} width={bw} height={yBot - yTop} fill={z.color} opacity={0.2} rx={2} />;
+          const yMid = (yTop + yBot) / 2;
+          return (
+            <g key={i}>
+              <rect x={bx} y={yTop} width={bw} height={yBot - yTop} fill={z.color} opacity={0.2} rx={2} />
+              <text x={bx + bw + 5} y={yMid + 3} fill={z.color} fontSize={7} opacity={0.85}>{z.label}</text>
+            </g>
+          );
         })}
         <rect x={bx + 2} y={by + bh * (1 - fillPct / 100)} width={bw - 4} height={bh * (fillPct / 100)} fill={zoneColor} opacity={0.8} rx={2} />
         <rect x={bx} y={by} width={bw} height={bh} fill="none" stroke="#444" strokeWidth={1.5} rx={3} />

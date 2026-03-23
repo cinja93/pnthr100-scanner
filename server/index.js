@@ -2054,12 +2054,12 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
 
     // Portfolio heat calculation
     const livePos = positions.filter(p => {
-      const fills = p.fills || [];
+      const fills = Array.isArray(p.fills) ? p.fills : [];
       return fills.some(f => f.filled);
     });
     let stockRisk = 0, etfRisk = 0;
     for (const p of livePos) {
-      const fills = p.fills || [];
+      const fills = Array.isArray(p.fills) ? p.fills : [];
       const totalShares = fills.filter(f => f.filled).reduce((s, f) => s + (f.shares || 0), 0);
       const stop = p.stopPrice || 0;
       const avg = p.avgCost || p.entryPrice || 0;
@@ -2079,7 +2079,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     // Lots ready
     const lotsReady = [];
     for (const p of livePos) {
-      const fills = p.fills || [];
+      const fills = Array.isArray(p.fills) ? p.fills : [];
       for (const f of fills) {
         if (f.filled) continue;
         const priorFilled = f.lot === 1 || fills.find(x => x.lot === f.lot - 1)?.filled;
@@ -2107,7 +2107,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         short: shortCount,
         long: longCount,
         recycled: livePos.filter(p => {
-          const fills = p.fills || [];
+          const fills = Array.isArray(p.fills) ? p.fills : [];
           const totalShares = fills.filter(f => f.filled).reduce((s, f) => s + (f.shares || 0), 0);
           const stop = p.stopPrice || 0;
           const avg = p.avgCost || p.entryPrice || 0;

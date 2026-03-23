@@ -48,6 +48,10 @@ export default function PulsePage({ onNavigate }) {
         <KillTop10 killTop10={data.killTop10} onTickerClick={s => { setChartList([s]); setChartIndex(0); }} killDataLive={data.killDataLive} />
         <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} />
       </div>
+      <NewSignalsPanel
+        newSignals={data.newSignals}
+        onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }}
+      />
       <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
       <MacroStrip marketSnapshot={data.marketSnapshot} />
 
@@ -500,6 +504,111 @@ function SectorPulse({ signals, killDataLive, onNavigate }) {
             />
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ── New Signals This Week Panel ────────────────────────────────────────────────
+function NewSignalsPanel({ newSignals, onTickerClick }) {
+  if (!newSignals) return null;
+  const { blStocks = [], blEtfs = [], ssStocks = [], ssEtfs = [] } = newSignals;
+  const totalBL = blStocks.length + blEtfs.length;
+  const totalSS = ssStocks.length + ssEtfs.length;
+  if (totalBL === 0 && totalSS === 0) return (
+    <div style={{ background: '#111', borderRadius: 12, padding: '12px 16px', marginBottom: 12, color: '#444', fontSize: 12, fontFamily: 'monospace' }}>
+      <span style={{ color: '#FFD700', letterSpacing: 2, fontSize: 11 }}>⚡ NEW SIGNALS THIS WEEK</span>
+      <span style={{ marginLeft: 16 }}>No new signals this week.</span>
+    </div>
+  );
+
+  // Build chart list for navigation within each direction group
+  function makeChartList(stocks) {
+    return stocks.map(s => ({ ticker: s.ticker, symbol: s.ticker, currentPrice: s.currentPrice, signal: s.signal, sector: s.sector }));
+  }
+  const blAll  = [...blStocks, ...blEtfs];
+  const ssAll  = [...ssStocks, ...ssEtfs];
+  const blChartList = makeChartList(blAll);
+  const ssChartList = makeChartList(ssAll);
+
+  function NewSigRow({ s, idx, chartList }) {
+    const t = tierBadge(s.tier);
+    return (
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 10px',
+          borderBottom: '1px solid #1a1a1a', cursor: 'pointer',
+          transition: 'background 0.15s' }}
+        onMouseEnter={e => e.currentTarget.style.background = '#1e1e1e'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        onClick={() => onTickerClick(chartList, idx)}
+      >
+        <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 48, fontFamily: 'monospace' }}>{s.ticker}</span>
+        <span style={{ color: '#555', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector || '—'}</span>
+        <span style={{ color: '#ccc', fontSize: 12, minWidth: 58, textAlign: 'right', fontFamily: 'monospace' }}>
+          {s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}
+        </span>
+        <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, minWidth: 42, textAlign: 'right', fontFamily: 'monospace' }}>
+          {s.totalScore != null ? s.totalScore.toFixed(1) : '—'}
+        </span>
+        <span style={{ minWidth: 80 }}>{t}</span>
+        <span style={{ color: '#FFD700', fontSize: 12 }}>▸</span>
+      </div>
+    );
+  }
+
+  function SignalSection({ label, stocks, etfs, direction }) {
+    const borderColor = direction === 'BL' ? '#28a745' : '#dc3545';
+    const headerBg    = direction === 'BL' ? 'rgba(40,167,69,0.12)' : 'rgba(220,53,69,0.12)';
+    const badgeColor  = direction === 'BL' ? '#6bcb77' : '#ff6b6b';
+    const chartList   = direction === 'BL' ? blChartList : ssChartList;
+    const label2      = direction === 'BL' ? 'NEW BUY LONG (BL+1)' : 'NEW SELL SHORT (SS+1)';
+    const all = [...stocks, ...etfs];
+    if (all.length === 0) return (
+      <div style={{ flex: 1, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`, borderRadius: 8, padding: '10px 14px', color: '#444', fontSize: 12 }}>
+        <div style={{ color: badgeColor, fontSize: 11, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>{label2}</div>
+        <div style={{ color: '#333' }}>No new {direction === 'BL' ? 'BL' : 'SS'} signals.</div>
+      </div>
+    );
+    const stockOffset = 0;
+    const etfOffset   = stocks.length;
+    return (
+      <div style={{ flex: 1, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`, borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: headerBg, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: badgeColor, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>{label2}</span>
+        </div>
+        {stocks.length > 0 && (
+          <>
+            <div style={{ padding: '4px 10px 2px', color: '#444', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', background: '#0d0d0d' }}>
+              Stocks ({stocks.length})
+            </div>
+            {stocks.map((s, i) => <NewSigRow key={s.ticker} s={s} idx={stockOffset + i} chartList={chartList} />)}
+          </>
+        )}
+        {etfs.length > 0 && (
+          <>
+            <div style={{ padding: '4px 10px 2px', color: '#444', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', background: '#0d0d0d' }}>
+              ETFs ({etfs.length})
+            </div>
+            {etfs.map((s, i) => <NewSigRow key={s.ticker} s={s} idx={etfOffset + i} chartList={chartList} />)}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: '#111', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+        <span style={{ color: '#FFD700', fontSize: 11, letterSpacing: 2, fontFamily: 'monospace' }}>⚡ NEW SIGNALS THIS WEEK</span>
+        {totalBL > 0 && <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>{totalBL} BL+1</span>}
+        {totalBL > 0 && totalSS > 0 && <span style={{ color: '#333', fontSize: 11 }}>|</span>}
+        {totalSS > 0 && <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>{totalSS} SS+1</span>}
+      </div>
+      {/* Two columns: BL | SS */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <SignalSection direction="BL" stocks={blStocks} etfs={blEtfs} />
+        <SignalSection direction="SS" stocks={ssStocks} etfs={ssEtfs} />
       </div>
     </div>
   );

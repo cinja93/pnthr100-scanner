@@ -2084,6 +2084,42 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       }
     }
 
+    // New signals this week (signalAge 0–1) — split by direction and stock vs ETF
+    const PULSE_ETF_SET = new Set(['SPY','QQQ','IWM','DIA','MDY','TLT','GLD','SLV','USO',
+      'XLE','XLF','XLK','XLV','XLP','XLI','XLU','XLB','XLC','XLRE','XLY',
+      'ARKK','ARKW','ARKG','KWEB','EEM','EFA','VNQ','IBB','SMH','SOXX',
+      'XBI','XOP','OIH','JETS','HACK','BOTZ',
+    ]);
+    function mapNewSig(s) {
+      return { ticker: s.ticker, sector: s.sector, currentPrice: s.currentPrice,
+        totalScore: s.apexScore, tier: s.tier, signal: s.signal,
+        signalAge: s.signalAge, killRank: s.killRank ?? null };
+    }
+    let newBLStocks = [], newBLEtfs = [], newSSStocks = [], newSSEtfs = [];
+    if (liveApex) {
+      const fresh = liveApex.stocks.filter(s => !s.overextended && (s.signalAge ?? 99) <= 1);
+      const sortByScore = (a, b) => (b.totalScore || 0) - (a.totalScore || 0);
+      const blFresh = fresh.filter(s => s.signal === 'BL').map(mapNewSig).sort(sortByScore);
+      const ssFresh = fresh.filter(s => s.signal === 'SS').map(mapNewSig).sort(sortByScore);
+      newBLStocks = blFresh.filter(s => !PULSE_ETF_SET.has(s.ticker));
+      newBLEtfs   = blFresh.filter(s =>  PULSE_ETF_SET.has(s.ticker));
+      newSSStocks = ssFresh.filter(s => !PULSE_ETF_SET.has(s.ticker));
+      newSSEtfs   = ssFresh.filter(s =>  PULSE_ETF_SET.has(s.ticker));
+    } else {
+      // Cold cache — fall back to Friday pipeline DB with signalAge field
+      const dbFresh = await db.collection('pnthr_kill_scores')
+        .find({ signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: 1 } })
+        .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
+        .toArray();
+      const sortByScore = (a, b) => ((b.totalScore || b.apexScore || 0) - (a.totalScore || a.apexScore || 0));
+      const blFresh = dbFresh.filter(s => s.signal === 'BL').sort(sortByScore);
+      const ssFresh = dbFresh.filter(s => s.signal === 'SS').sort(sortByScore);
+      newBLStocks = blFresh.filter(s => !PULSE_ETF_SET.has(s.ticker));
+      newBLEtfs   = blFresh.filter(s =>  PULSE_ETF_SET.has(s.ticker));
+      newSSStocks = ssFresh.filter(s => !PULSE_ETF_SET.has(s.ticker));
+      newSSEtfs   = ssFresh.filter(s =>  PULSE_ETF_SET.has(s.ticker));
+    }
+
     // D1 multipliers — matches apexService calcD1() sign convention:
     //   bearish market → negative regimeScore → ssD1 > 1.0 (amplifies SS), blD1 < 1.0 (dampens BL)
     const apexRegime = liveApex?.regime || {};
@@ -2222,6 +2258,12 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
           : (regimeDoc?.qqq ?? (qqqLivePrice != null ? { close: qqqLivePrice, ema21: null } : null)),
       },
       killTop10,
+      newSignals: {
+        blStocks: newBLStocks,
+        blEtfs:   newBLEtfs,
+        ssStocks: newSSStocks,
+        ssEtfs:   newSSEtfs,
+      },
       signals: {
         blCount, ssCount,
         ratio: ssCount / Math.max(blCount, 1),

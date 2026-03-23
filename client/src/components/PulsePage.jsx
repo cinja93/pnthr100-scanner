@@ -33,16 +33,15 @@ export default function PulsePage({ onNavigate }) {
       {/* STATUS LIGHT */}
       <StatusLight status={data.statusLight} message={data.statusMessage} positions={data.positions} />
 
-      {/* TIER 1: 5-second read */}
+      {/* TIER 1: Market environment — SPY, QQQ, Regime, VIX */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <SpyGauge regime={data.regime} />
         <QqqGauge regime={data.regime} />
         <RegimeIndicator regime={data.regime} signals={data.signals} />
         <VixThermometer vix={vix} />
-        <HeatGauge positions={data.positions} />
       </div>
 
-      {/* TIER 2: 30-second scan */}
+      {/* TIER 2: Signal intelligence — Kill Top 10, Sector Pulse, Signal Breadth, Macro */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
         <KillTop10 killTop10={data.killTop10} onTickerClick={setChartStock} killDataLive={data.killDataLive} />
         <SectorPulse signals={data.signals} killDataLive={data.killDataLive} />
@@ -50,12 +49,8 @@ export default function PulsePage({ onNavigate }) {
       <SignalBreadthBar signals={data.signals} />
       <MacroStrip marketSnapshot={data.marketSnapshot} />
 
-      {/* TIER 3: Action items */}
-      <div style={{ display: 'flex', gap: 16, marginTop: 16, flexWrap: 'wrap' }}>
-        <LotsReady lotsReady={data.lotsReady} onNavigate={onNavigate} />
-        <RiskAlertsPanel positions={data.positions} />
-        <PositionsSummary positions={data.positions} onNavigate={onNavigate} />
-      </div>
+      {/* TIER 3: Portfolio — Heat gauge + positions + alerts/lots in one band */}
+      <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} />
 
       {chartStock && (
         <ChartModal
@@ -345,7 +340,7 @@ function KillTop10({ killTop10, onTickerClick, killDataLive }) {
 }
 
 // ── PNTHR Sector Mini-Gauge ────────────────────────────────────────────────────
-function PNTHRMiniGauge({ label, bl, ss }) {
+function PNTHRMiniGauge({ label, bl, ss, highlight }) {
   const total = bl + ss;
   const ssRatio = total > 0 ? ss / total : 0.5;
   const W = 160, H = 96;
@@ -359,16 +354,18 @@ function PNTHRMiniGauge({ label, bl, ss }) {
     return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
   };
 
-  // Left = bullish (green), right = bearish (red); needle tracks SS ratio 0→1
+  // Left = bearish (red), right = bullish (green) — matches SPY/QQQ convention
+  // Needle tracks BL ratio: 0 = all SS (left/bearish), 1 = all BL (right/bullish)
+  const blRatio = total > 0 ? bl / total : 0.5;
   const zones = [
-    { from: 0,    to: 0.30, color: '#28A745' },
-    { from: 0.30, to: 0.45, color: '#6BCB77' },
-    { from: 0.45, to: 0.55, color: '#555555' },
-    { from: 0.55, to: 0.70, color: '#FF6B6B' },
-    { from: 0.70, to: 1.00, color: '#DC3545' },
+    { from: 0,    to: 0.30, color: '#DC3545' },  // strongly bearish (left)
+    { from: 0.30, to: 0.45, color: '#FF6B6B' },  // leaning bearish
+    { from: 0.45, to: 0.55, color: '#555555' },  // neutral
+    { from: 0.55, to: 0.70, color: '#6BCB77' },  // leaning bullish
+    { from: 0.70, to: 1.00, color: '#28A745' },  // strongly bullish (right)
   ];
 
-  const angle = toAngle(ssRatio);
+  const angle = toAngle(blRatio);
   const nx = cx + r * 0.78 * Math.cos(angle);
   const ny = cy + r * 0.78 * Math.sin(angle);
 
@@ -379,7 +376,7 @@ function PNTHRMiniGauge({ label, bl, ss }) {
   const textY = cy - r * 0.58;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', borderRadius: 10, padding: '8px 4px 8px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: highlight ? '#161610' : '#111', borderRadius: 10, padding: '8px 4px 8px', border: highlight ? '1px solid #FFD70033' : '1px solid transparent' }}>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
         {/* Background track */}
         <path d={arcPath(Math.PI, 2 * Math.PI)} fill="none" stroke="#1e1e1e" strokeWidth={13} />
@@ -419,6 +416,7 @@ const SECTOR_CONFIG = [
   { key: 'Communication Services', label: 'Communication'         },
   { key: 'Real Estate',            label: 'Real Estate'           },
   { key: 'Consumer Cyclical',      label: 'Consumer Disc.'        },
+  { key: '__ALL__',                label: 'ALL SECTORS'           },
 ];
 
 function SectorPulse({ signals, killDataLive }) {
@@ -439,8 +437,13 @@ function SectorPulse({ signals, killDataLive }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 6 }}>
         {SECTOR_CONFIG.map(({ key, label }) => {
-          const d = bySector[key] || { bl: 0, ss: 0 };
-          return <PNTHRMiniGauge key={key} label={label} bl={d.bl} ss={d.ss} />;
+          let d;
+          if (key === '__ALL__') {
+            d = { bl: signals?.blCount || 0, ss: signals?.ssCount || 0 };
+          } else {
+            d = bySector[key] || { bl: 0, ss: 0 };
+          }
+          return <PNTHRMiniGauge key={key} label={label} bl={d.bl} ss={d.ss} highlight={key === '__ALL__'} />;
         })}
       </div>
     </div>
@@ -481,54 +484,72 @@ function MacroStrip({ marketSnapshot }) {
   );
 }
 
-function LotsReady({ lotsReady, onNavigate }) {
-  return (
-    <div style={{ flex: 1, minWidth: 220, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 8 }}>LOTS READY</div>
-      {(!lotsReady || lotsReady.length === 0)
-        ? <div style={{ color: '#555', fontSize: 12 }}>No lots pending.</div>
-        : lotsReady.map((l, i) => (
-          <div key={i} style={{ marginBottom: 6 }}>
-            <span style={{ color: '#6bcb77', fontWeight: 700 }}>▶ {l.ticker}</span>
-            <span style={{ color: '#888', fontSize: 11 }}> Lot {l.lot} — ${l.triggerPrice}</span>
-          </div>
-        ))
-      }
-      <div onClick={() => onNavigate?.('command')} style={{ marginTop: 10, color: '#FFD700', fontSize: 11, cursor: 'pointer' }}>GO TO COMMAND →</div>
-    </div>
-  );
-}
-
-function RiskAlertsPanel({ positions }) {
-  const alerts = [];
-  if (positions?.heat?.stockRiskPct > 10) alerts.push({ icon: '🔴', text: `Stock risk ${positions.heat.stockRiskPct.toFixed(1)}% exceeds 10% cap` });
-  if (positions?.heat?.etfRiskPct > 5) alerts.push({ icon: '🔴', text: `ETF risk ${positions.heat.etfRiskPct.toFixed(1)}% exceeds 5% cap` });
-  if (positions?.heat?.totalRiskPct > 13) alerts.push({ icon: '🟡', text: `Total heat ${positions.heat.totalRiskPct.toFixed(1)}% approaching 15% cap` });
-
-  return (
-    <div style={{ flex: 1, minWidth: 220, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 8 }}>RISK ALERTS</div>
-      {alerts.length === 0
-        ? <div style={{ color: '#28a745', fontSize: 12 }}>✅ No active alerts. All clear.</div>
-        : alerts.map((a, i) => <div key={i} style={{ fontSize: 12, color: '#ccc', marginBottom: 4 }}>{a.icon} {a.text}</div>)
-      }
-      <div style={{ marginTop: 10, color: '#FFD700', fontSize: 11, cursor: 'pointer' }}>VIEW RISK ADVISOR →</div>
-    </div>
-  );
-}
-
-function PositionsSummary({ positions, onNavigate }) {
+// ── Tier 3: Combined Portfolio Status panel ────────────────────────────────────
+function PortfolioStatus({ positions, lotsReady, onNavigate }) {
   const heat = positions?.heat || {};
+  const nav = positions?.nav || 100000;
+
+  const alerts = [];
+  if (heat.stockRiskPct > 10) alerts.push({ icon: '🔴', text: `Stock risk ${heat.stockRiskPct.toFixed(1)}% exceeds 10% cap` });
+  if (heat.etfRiskPct > 5) alerts.push({ icon: '🔴', text: `ETF risk ${heat.etfRiskPct.toFixed(1)}% exceeds 5% cap` });
+  if (heat.totalRiskPct > 13) alerts.push({ icon: '🟡', text: `Total heat ${heat.totalRiskPct.toFixed(1)}% approaching 15% cap` });
+
+  const lotsCount = lotsReady?.length || 0;
+  if (lotsCount > 0) alerts.push({ icon: '🟢', text: `${lotsCount} lot${lotsCount > 1 ? 's' : ''} READY to fill` });
+
+  const remaining = Math.max(0, 15 - (heat.totalRiskPct || 0));
+
   return (
-    <div style={{ flex: 1, minWidth: 220, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 8 }}>POSITIONS</div>
-      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 4 }}>{positions?.total || 0} Active</div>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>{positions?.short || 0} Short · {positions?.long || 0} Long</div>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 2 }}>{positions?.recycled || 0} Recycled ($0 risk)</div>
-      <div style={{ fontSize: 12, color: '#ccc', marginTop: 6 }}>
-        Heat: <strong style={{ color: heat.totalRiskPct > 10 ? '#ff8c00' : '#6bcb77' }}>{(heat.totalRiskPct || 0).toFixed(1)}%</strong> / 15%
+    <div style={{ background: '#111', borderRadius: 12, padding: '16px 20px', marginTop: 12 }}>
+      <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 14 }}>⚡ PNTHR PORTFOLIO STATUS</div>
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+
+        {/* Heat Gauge */}
+        <HeatGauge positions={positions} />
+
+        {/* Positions Summary */}
+        <div style={{ minWidth: 180, display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8 }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{positions?.total || 0} Active</div>
+          <div style={{ fontSize: 13, color: '#888' }}>{positions?.short || 0} Short · {positions?.long || 0} Long</div>
+          {(positions?.recycled || 0) > 0 && (
+            <div style={{ fontSize: 12, color: '#555' }}>{positions.recycled} Recycled ($0 risk)</div>
+          )}
+          <div style={{ fontSize: 13, color: '#ccc', marginTop: 4 }}>
+            Stock: <strong style={{ color: heat.stockRiskPct > 10 ? '#ff8c00' : '#ccc' }}>{(heat.stockRiskPct || 0).toFixed(1)}%</strong>
+            <span style={{ color: '#555' }}> / 10%</span>
+          </div>
+          <div style={{ fontSize: 13, color: '#ccc' }}>
+            ETF: <strong style={{ color: heat.etfRiskPct > 5 ? '#ff8c00' : '#ccc' }}>{(heat.etfRiskPct || 0).toFixed(1)}%</strong>
+            <span style={{ color: '#555' }}> / 5%</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#28a745', marginTop: 2 }}>
+            ${Math.round(remaining / 100 * nav).toLocaleString()} capacity left
+          </div>
+          <div onClick={() => onNavigate?.('command')} style={{ marginTop: 8, color: '#FFD700', fontSize: 11, cursor: 'pointer', letterSpacing: 1 }}>GO TO COMMAND →</div>
+        </div>
+
+        {/* Alerts + Lots Ready */}
+        <div style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 8 }}>
+          <div style={{ color: '#888', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, marginBottom: 4 }}>ALERTS & LOTS</div>
+          {alerts.length === 0
+            ? <div style={{ color: '#28a745', fontSize: 12 }}>✅ No active alerts. All clear.</div>
+            : alerts.map((a, i) => (
+              <div key={i} style={{ fontSize: 12, color: '#ccc' }}>{a.icon} {a.text}</div>
+            ))
+          }
+          {lotsCount > 0 && (
+            <div style={{ marginTop: 6 }}>
+              {(lotsReady || []).map((l, i) => (
+                <div key={i} style={{ fontSize: 12, color: '#6bcb77', marginBottom: 2 }}>
+                  ▶ {l.ticker} Lot {l.lot} @ ${l.triggerPrice}
+                </div>
+              ))}
+            </div>
+          )}
+          <div onClick={() => onNavigate?.('command')} style={{ marginTop: 8, color: '#FFD700', fontSize: 11, cursor: 'pointer', letterSpacing: 1 }}>VIEW RISK ADVISOR →</div>
+        </div>
+
       </div>
-      <div onClick={() => onNavigate?.('command')} style={{ marginTop: 10, color: '#FFD700', fontSize: 11, cursor: 'pointer' }}>GO TO COMMAND →</div>
     </div>
   );
 }

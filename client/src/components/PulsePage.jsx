@@ -44,7 +44,7 @@ export default function PulsePage({ onNavigate }) {
       {/* TIER 2: Signal intelligence — Kill Top 10, Sector Pulse, Signal Breadth, Macro */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
         <KillTop10 killTop10={data.killTop10} onTickerClick={setChartStock} killDataLive={data.killDataLive} />
-        <SectorPulse signals={data.signals} killDataLive={data.killDataLive} />
+        <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} />
       </div>
       <SignalBreadthBar signals={data.signals} />
       <MacroStrip marketSnapshot={data.marketSnapshot} />
@@ -340,7 +340,8 @@ function KillTop10({ killTop10, onTickerClick, killDataLive }) {
 }
 
 // ── PNTHR Sector Mini-Gauge ────────────────────────────────────────────────────
-function PNTHRMiniGauge({ label, bl, ss, highlight }) {
+function PNTHRMiniGauge({ label, bl, ss, highlight, onClick }) {
+  const [hovered, setHovered] = useState(false);
   const total = bl + ss;
   const ssRatio = total > 0 ? ss / total : 0.5;
   const W = 160, H = 96;
@@ -376,7 +377,21 @@ function PNTHRMiniGauge({ label, bl, ss, highlight }) {
   const textY = cy - r * 0.58;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: highlight ? '#161610' : '#111', borderRadius: 10, padding: '8px 4px 8px', border: highlight ? '1px solid #FFD70033' : '1px solid transparent' }}>
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        background: highlight ? '#161610' : '#111',
+        borderRadius: 10, padding: '8px 4px 8px',
+        border: hovered ? '1px solid rgba(255,215,0,0.45)' : highlight ? '1px solid #FFD70033' : '1px solid transparent',
+        cursor: onClick ? 'pointer' : 'default',
+        transform: hovered && onClick ? 'scale(1.03)' : 'scale(1)',
+        filter: hovered && onClick ? 'drop-shadow(0 0 5px rgba(255,215,0,0.25))' : 'none',
+        transition: 'transform 0.15s ease, border-color 0.15s ease, filter 0.15s ease',
+      }}
+    >
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
         {/* Background track */}
         <path d={arcPath(Math.PI, 2 * Math.PI)} fill="none" stroke="#1e1e1e" strokeWidth={13} />
@@ -419,7 +434,22 @@ const SECTOR_CONFIG = [
   { key: '__ALL__',                label: 'ALL SECTORS'           },
 ];
 
-function SectorPulse({ signals, killDataLive }) {
+// Maps Pulse sector keys to SectorPage ETF tickers (sessionStorage handshake)
+const SECTOR_KEY_TO_ETF = {
+  'Technology':             'XLK',
+  'Healthcare':             'XLV',
+  'Financial Services':     'XLF',
+  'Industrials':            'XLI',
+  'Consumer Staples':       'XLP',
+  'Energy':                 'XLE',
+  'Utilities':              'XLU',
+  'Basic Materials':        'XLB',
+  'Communication Services': 'XLC',
+  'Real Estate':            'XLRE',
+  'Consumer Cyclical':      'XLY',
+};
+
+function SectorPulse({ signals, killDataLive, onNavigate }) {
   const rawBySector = signals?.bySector || {};
   const bySector = {};
   for (const [sector, counts] of Object.entries(rawBySector)) {
@@ -429,6 +459,16 @@ function SectorPulse({ signals, killDataLive }) {
     bySector[canonical].ss += counts.ss || 0;
   }
 
+  const handleSectorClick = (key) => {
+    if (key === '__ALL__') {
+      onNavigate?.('sectors');
+      return;
+    }
+    const etf = SECTOR_KEY_TO_ETF[key];
+    if (etf) sessionStorage.setItem('pnthr-sector-etf', etf);
+    onNavigate?.('sectors');
+  };
+
   return (
     <div style={{ flex: 1, minWidth: 600, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
@@ -437,13 +477,19 @@ function SectorPulse({ signals, killDataLive }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 6 }}>
         {SECTOR_CONFIG.map(({ key, label }) => {
-          let d;
-          if (key === '__ALL__') {
-            d = { bl: signals?.blCount || 0, ss: signals?.ssCount || 0 };
-          } else {
-            d = bySector[key] || { bl: 0, ss: 0 };
-          }
-          return <PNTHRMiniGauge key={key} label={label} bl={d.bl} ss={d.ss} highlight={key === '__ALL__'} />;
+          const d = key === '__ALL__'
+            ? { bl: signals?.blCount || 0, ss: signals?.ssCount || 0 }
+            : (bySector[key] || { bl: 0, ss: 0 });
+          return (
+            <PNTHRMiniGauge
+              key={key}
+              label={label}
+              bl={d.bl}
+              ss={d.ss}
+              highlight={key === '__ALL__'}
+              onClick={() => handleSectorClick(key)}
+            />
+          );
         })}
       </div>
     </div>

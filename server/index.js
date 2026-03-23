@@ -2059,30 +2059,37 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         else if (s.signal === 'SS') sectorMap[sector].ss++;
       }
     } else {
-      // Cold server — fall back to Friday pipeline data
-      const [killScores, latestEnriched] = await Promise.all([
+      // Cold server — fall back to Friday pipeline data.
+      // pnthr_kill_scores has sector + signal for the full scored universe.
+      const [top10Scores, allKillSignals] = await Promise.all([
         db.collection('pnthr_kill_scores').find({ killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
-        db.collection('pnthr_enriched_signals').findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } }),
+        db.collection('pnthr_kill_scores')
+          .find({ signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1, weekOf: 1 } })
+          .sort({ weekOf: -1 }).limit(700).toArray(),
       ]);
-      killTop10 = killScores.map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 }));
-      const enrichedSignals = latestEnriched?.weekOf
-        ? await db.collection('pnthr_enriched_signals')
-            .find({ weekOf: latestEnriched.weekOf, signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1 } })
-            .toArray()
-        : [];
+      killTop10 = top10Scores.map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 }));
       blCount = 0; ssCount = 0; sectorMap = {};
-      for (const sig of enrichedSignals) {
-        const sector = sig.sector || 'Unknown';
+      for (const s of allKillSignals) {
+        const sector = s.sector || 'Unknown';
         if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
-        if (sig.signal === 'BL') { sectorMap[sector].bl++; blCount++; }
-        else if (sig.signal === 'SS') { sectorMap[sector].ss++; ssCount++; }
+        if (s.signal === 'BL') { sectorMap[sector].bl++; blCount++; }
+        else if (s.signal === 'SS') { sectorMap[sector].ss++; ssCount++; }
+      }
+      // regimeDoc has authoritative counts from the signal state machine
+      if (blCount === 0 && ssCount === 0) {
+        blCount = regimeDoc?.blCount ?? 0;
+        ssCount = regimeDoc?.ssCount ?? 0;
       }
     }
 
-    // D1 multipliers — SPY used as the primary index reference
+    // D1 multipliers — matches apexService calcD1() sign convention:
+    //   bearish market → negative regimeScore → ssD1 > 1.0 (amplifies SS), blD1 < 1.0 (dampens BL)
     const apexRegime = liveApex?.regime || {};
     const spyAbove = apexRegime.spyAboveEma ?? regimeDoc?.spyAboveEma ?? null;
-    const spyRising = apexRegime.spyEmaRising ?? null;
+    const spyRising = apexRegime.spyEmaRising ?? (
+      regimeDoc?.indexSlope === 'rising' ? true :
+      regimeDoc?.indexSlope === 'falling' ? false : null
+    );
     let indexScore = 0;
     if (spyAbove === false && spyRising === false) indexScore = -2;
     else if (spyAbove === false) indexScore = -1;
@@ -2090,10 +2097,13 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     else if (spyAbove === true) indexScore = 1;
     const openRatio = ssCount / Math.max(blCount, 1);
     let ratioScore = 0;
-    if (openRatio > 3) ratioScore = -2;
-    else if (openRatio > 2) ratioScore = -1;
-    else if (openRatio < 0.5) ratioScore = 2;
-    else if (openRatio < 1) ratioScore = 1;
+    if (blCount + ssCount > 0) {
+      // High SS:BL ratio → bearish (negative); low ratio → bullish (positive)
+      if (openRatio > 3) ratioScore = -2;
+      else if (openRatio > 2) ratioScore = -1;
+      else if (openRatio < 0.5) ratioScore = 2;
+      else if (openRatio < 1) ratioScore = 1;
+    }
     const regimeScore = indexScore + ratioScore;
     const ssD1 = Math.max(0.70, Math.min(1.30, Math.round((1.0 - regimeScore * 0.06) * 100) / 100));
     const blD1 = Math.max(0.70, Math.min(1.30, Math.round((1.0 + regimeScore * 0.06) * 100) / 100));
@@ -2158,33 +2168,42 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       return totalShares > 0 && (isShort ? stop <= avg : stop >= avg);
     }).length;
 
-    // Live 10Y and DXY from FMP (fallback for when Friday pipeline hasn't run)
+    // SPY/QQQ index data from apex cache
+    const apexIndexData = liveApex?.indexData || {};
+
+    // Live macro data from FMP — 10Y, DXY, and SPY/QQQ prices when apex cache is cold
+    const FMP_KEY = process.env.FMP_API_KEY;
     let treasury10y = marketSnapshot?.treasury10y ?? null;
     let dxy = marketSnapshot?.dxy ?? null;
-    if (treasury10y == null || dxy == null) {
+    const needSpyQqq = !apexIndexData.SPY && !regimeDoc?.spy;
+    let spyLivePrice = null, qqqLivePrice = null;
+    const fmpFetches = [];
+    if (treasury10y == null) fmpFetches.push(['t10', `https://financialmodelingprep.com/api/v3/quote/%5ETNX?apikey=${FMP_KEY}`]);
+    if (dxy == null) fmpFetches.push(['dxy', `https://financialmodelingprep.com/api/v3/quote/DX-Y.NYB?apikey=${FMP_KEY}`]);
+    if (needSpyQqq) {
+      fmpFetches.push(['spy', `https://financialmodelingprep.com/api/v3/quote/SPY?apikey=${FMP_KEY}`]);
+      fmpFetches.push(['qqq', `https://financialmodelingprep.com/api/v3/quote/QQQ?apikey=${FMP_KEY}`]);
+    }
+    if (fmpFetches.length > 0) {
       try {
-        const FMP_KEY = process.env.FMP_API_KEY;
-        const [t10Res, dxyRes] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/api/v3/quote/%5ETNX?apikey=${FMP_KEY}`),
-          fetch(`https://financialmodelingprep.com/api/v3/quote/DX-Y.NYB?apikey=${FMP_KEY}`),
-        ]);
-        if (treasury10y == null && t10Res.ok) {
-          const t10Data = await t10Res.json();
-          treasury10y = t10Data[0]?.price ?? null;
-        }
-        if (dxy == null && dxyRes.ok) {
-          const dxyData = await dxyRes.json();
-          dxy = dxyData[0]?.price ?? null;
+        const results = await Promise.all(fmpFetches.map(([, url]) => fetch(url)));
+        for (let i = 0; i < fmpFetches.length; i++) {
+          if (!results[i].ok) continue;
+          const data = await results[i].json();
+          const price = data[0]?.price ?? null;
+          const [key] = fmpFetches[i];
+          if (key === 't10') treasury10y = price;
+          else if (key === 'dxy') dxy = price;
+          else if (key === 'spy') spyLivePrice = price;
+          else if (key === 'qqq') qqqLivePrice = price;
         }
       } catch { /* best-effort */ }
     }
 
-    // SPY/QQQ index data from apex cache
-    const apexIndexData = liveApex?.indexData || {};
-
     res.json({
       statusLight: 'GREEN',
       statusMessage: 'ALL SYSTEMS OPERATIONAL',
+      killDataLive: !!liveApex,
       regime: {
         ...(regimeDoc || {}),
         indexPosition: spyAbove ? 'above' : spyAbove === false ? 'below' : 'unknown',
@@ -2193,8 +2212,12 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         qqqAboveEma: apexRegime.qqqAboveEma ?? regimeDoc?.qqqAboveEma,
         qqqEmaRising: apexRegime.qqqEmaRising ?? regimeDoc?.qqqEmaRising,
         blCount, ssCount, ssD1, blD1, regimeScore,
-        spy: apexIndexData.SPY ? { close: apexIndexData.SPY.price, ema21: apexIndexData.SPY.ema21 } : (regimeDoc?.spy ?? null),
-        qqq: apexIndexData.QQQ ? { close: apexIndexData.QQQ.price, ema21: apexIndexData.QQQ.ema21 } : (regimeDoc?.qqq ?? null),
+        spy: apexIndexData.SPY
+          ? { close: apexIndexData.SPY.price, ema21: apexIndexData.SPY.ema21 }
+          : (regimeDoc?.spy ?? (spyLivePrice != null ? { close: spyLivePrice, ema21: null } : null)),
+        qqq: apexIndexData.QQQ
+          ? { close: apexIndexData.QQQ.price, ema21: apexIndexData.QQQ.ema21 }
+          : (regimeDoc?.qqq ?? (qqqLivePrice != null ? { close: qqqLivePrice, ema21: null } : null)),
       },
       killTop10,
       signals: {

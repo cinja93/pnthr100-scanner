@@ -44,8 +44,8 @@ export default function PulsePage({ onNavigate }) {
 
       {/* TIER 2: 30-second scan */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-        <KillTop10 killTop10={data.killTop10} onTickerClick={setChartStock} />
-        <SectorHeatmap signals={data.signals} />
+        <KillTop10 killTop10={data.killTop10} onTickerClick={setChartStock} killDataLive={data.killDataLive} />
+        <SectorPulse signals={data.signals} killDataLive={data.killDataLive} />
       </div>
       <SignalBreadthBar signals={data.signals} />
       <MacroStrip marketSnapshot={data.marketSnapshot} />
@@ -304,7 +304,7 @@ function HeatGauge({ positions }) {
   );
 }
 
-function KillTop10({ killTop10, onTickerClick }) {
+function KillTop10({ killTop10, onTickerClick, killDataLive }) {
   const tierShort = (tier) => {
     if (!tier) return '';
     if (tier.includes('ALPHA')) return 'ALPHA';
@@ -316,7 +316,11 @@ function KillTop10({ killTop10, onTickerClick }) {
 
   return (
     <div style={{ flex: 1, minWidth: 280, background: '#111', borderRadius: 12, padding: '14px 16px', maxWidth: 380 }}>
-      <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, letterSpacing: 2, marginBottom: 10 }}>⚡ PNTHR KILL TOP 10</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>⚡ PNTHR KILL TOP 10</span>
+        {killDataLive === false && <span style={{ color: '#555', fontSize: 10, background: '#1a1a1a', padding: '1px 6px', borderRadius: 4 }}>Fri pipeline</span>}
+        {killDataLive === true && <span style={{ color: '#28a745', fontSize: 10 }}>● live</span>}
+      </div>
       {(!killTop10 || killTop10.length === 0) && <div style={{ color: '#555', fontSize: 12 }}>No kill scores yet.</div>}
       {(killTop10 || []).map((s, i) => {
         const isAlpha = (s.tier || '').includes('ALPHA');
@@ -340,64 +344,105 @@ function KillTop10({ killTop10, onTickerClick }) {
   );
 }
 
-function SectorHeatmap({ signals }) {
-  const sectorAbbrevs = {
-    'Technology': 'TECH',
-    'Healthcare': 'HLTH',
-    'Financial Services': 'FIN',
-    'Industrials': 'IND',
-    'Consumer Staples': 'CONS',
-    'Consumer Defensive': 'CONS',   // FMP name alias
-    'Energy': 'ENER',
-    'Utilities': 'UTIL',
-    'Basic Materials': 'MATL',
-    'Communication Services': 'COMM',
-    'Real Estate': 'REAL',
-    'Consumer Cyclical': 'COND',
-    'Consumer Discretionary': 'COND', // GICS name alias
+// ── PNTHR Sector Mini-Gauge ────────────────────────────────────────────────────
+function PNTHRMiniGauge({ abbrev, bl, ss }) {
+  const total = bl + ss;
+  const ssRatio = total > 0 ? ss / total : 0.5;
+  const W = 120, H = 72;
+  const cx = W / 2, cy = H - 8, r = 50;
+
+  const toAngle = (v) => Math.PI + v * Math.PI;
+  const arcPath = (a1, a2) => {
+    const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+    const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+    const large = Math.abs(a2 - a1) > Math.PI ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
   };
 
-  // Normalize bySector keys: merge alias names into canonical
+  // Left = bullish (green), right = bearish (red); needle tracks SS ratio 0→1
+  const zones = [
+    { from: 0,    to: 0.30, color: '#28A745' },
+    { from: 0.30, to: 0.45, color: '#6BCB77' },
+    { from: 0.45, to: 0.55, color: '#555555' },
+    { from: 0.55, to: 0.70, color: '#FF6B6B' },
+    { from: 0.70, to: 1.00, color: '#DC3545' },
+  ];
+
+  const angle = toAngle(ssRatio);
+  const nx = cx + r * 0.78 * Math.cos(angle);
+  const ny = cy + r * 0.78 * Math.sin(angle);
+
+  const netPct = total > 0 ? Math.abs(ss - bl) / total * 100 : 0;
+  const isBearish = ss >= bl;
+  const dir = total === 0 ? '—' : `${netPct.toFixed(0)}% ${isBearish ? 'SS' : 'BL'}`;
+  const dirColor = total === 0 ? '#555' : isBearish ? '#ff6b6b' : '#6bcb77';
+
+  // Text position: inside arc, just above center
+  const textY = cy - r * 0.60;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', borderRadius: 8, padding: '6px 2px 5px' }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+        {/* Background track */}
+        <path d={arcPath(Math.PI, 2 * Math.PI)} fill="none" stroke="#1e1e1e" strokeWidth={11} />
+        {/* Color zones */}
+        {zones.map((z, i) => (
+          <path key={i} d={arcPath(toAngle(z.from), toAngle(z.to))} fill="none" stroke={z.color} strokeWidth={9} opacity={0.75} />
+        ))}
+        {/* BL/SS counts inside arc */}
+        <text x={cx} y={textY} textAnchor="middle" fill="#777" fontSize={9} fontFamily="monospace" fontWeight={600}>
+          {`↑${bl} ↓${ss}`}
+        </text>
+        {/* Needle */}
+        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#FFD700" strokeWidth={2.5} strokeLinecap="round" />
+        {/* PNTHR head pivot */}
+        <circle cx={cx} cy={cy} r={10} fill="#0a0a0a" stroke="#FFD700" strokeWidth={1.5} />
+        <image href="/favicon.png" x={cx - 8} y={cy - 8} width={16} height={16} />
+      </svg>
+      <div style={{ color: '#FCF000', fontSize: 9, fontWeight: 700, letterSpacing: 1.5, marginTop: -3 }}>{abbrev}</div>
+      <div style={{ color: dirColor, fontSize: 9, fontWeight: 600 }}>{dir}</div>
+    </div>
+  );
+}
+
+const ALIASES = {
+  'Consumer Defensive': 'Consumer Staples',
+  'Consumer Discretionary': 'Consumer Cyclical',
+};
+const SECTOR_CONFIG = [
+  { key: 'Technology',            abbrev: 'TECH' },
+  { key: 'Healthcare',            abbrev: 'HLTH' },
+  { key: 'Financial Services',    abbrev: 'FIN'  },
+  { key: 'Industrials',           abbrev: 'IND'  },
+  { key: 'Consumer Staples',      abbrev: 'CONS' },
+  { key: 'Energy',                abbrev: 'ENER' },
+  { key: 'Utilities',             abbrev: 'UTIL' },
+  { key: 'Basic Materials',       abbrev: 'MATL' },
+  { key: 'Communication Services',abbrev: 'COMM' },
+  { key: 'Real Estate',           abbrev: 'REAL' },
+  { key: 'Consumer Cyclical',     abbrev: 'COND' },
+];
+
+function SectorPulse({ signals, killDataLive }) {
   const rawBySector = signals?.bySector || {};
   const bySector = {};
   for (const [sector, counts] of Object.entries(rawBySector)) {
-    const abbrev = sectorAbbrevs[sector];
-    if (!abbrev) continue;
-    // Find canonical sector name for this abbrev
-    const canonical = Object.keys(sectorAbbrevs).find(k => sectorAbbrevs[k] === abbrev && !['Consumer Defensive', 'Consumer Discretionary'].includes(k)) || sector;
+    const canonical = ALIASES[sector] || sector;
     if (!bySector[canonical]) bySector[canonical] = { bl: 0, ss: 0 };
     bySector[canonical].bl += counts.bl || 0;
     bySector[canonical].ss += counts.ss || 0;
   }
 
-  const sectors = ['Technology', 'Healthcare', 'Financial Services', 'Industrials',
-    'Consumer Staples', 'Energy', 'Utilities', 'Basic Materials',
-    'Communication Services', 'Real Estate', 'Consumer Cyclical'];
-
-  const getColor = (bl, ss) => {
-    const total = bl + ss;
-    if (total === 0) return '#1a1a1a';
-    const ssRatio = ss / total;
-    if (ssRatio > 0.8) return 'rgba(220,53,69,0.35)';
-    if (ssRatio > 0.6) return 'rgba(220,53,69,0.2)';
-    if (ssRatio < 0.2) return 'rgba(40,167,69,0.35)';
-    if (ssRatio < 0.4) return 'rgba(40,167,69,0.2)';
-    return 'rgba(100,100,100,0.2)';
-  };
-
   return (
-    <div style={{ flex: 1, minWidth: 280, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, letterSpacing: 2, marginBottom: 10 }}>⚡ SECTOR SIGNALS</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 4 }}>
-        {sectors.map(sec => {
-          const d = bySector[sec] || { bl: 0, ss: 0 };
-          return (
-            <div key={sec} style={{ background: getColor(d.bl, d.ss), borderRadius: 6, padding: '5px 3px', textAlign: 'center', border: '1px solid #222', minWidth: 0 }}>
-              <div style={{ color: '#ccc', fontSize: 9, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sectorAbbrevs[sec]}</div>
-              <div style={{ color: '#6bcb77', fontSize: 9 }}>↑{d.bl}</div>
-              <div style={{ color: '#ff6b6b', fontSize: 9 }}>↓{d.ss}</div>
-            </div>
-          );
+    <div style={{ flex: 1, minWidth: 480, background: '#111', borderRadius: 12, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>⚡ PNTHR SECTOR PULSE</span>
+        {killDataLive === false && <span style={{ color: '#555', fontSize: 10, background: '#1a1a1a', padding: '1px 6px', borderRadius: 4 }}>Fri pipeline</span>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+        {SECTOR_CONFIG.map(({ key, abbrev }) => {
+          const d = bySector[key] || { bl: 0, ss: 0 };
+          return <PNTHRMiniGauge key={key} abbrev={abbrev} bl={d.bl} ss={d.ss} />;
         })}
       </div>
     </div>

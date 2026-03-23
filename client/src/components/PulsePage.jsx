@@ -714,9 +714,17 @@ function NewSignalsPanel({ newSignals, onTickerClick }) {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
         <span style={{ color: '#FFD700', fontSize: 11, letterSpacing: 2, fontFamily: 'monospace' }}>⚡ NEW SIGNALS THIS WEEK</span>
-        {totalBL > 0 && <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>{totalBL} BL+1</span>}
+        {totalBL > 0 && (
+          <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>
+            {totalBL} BL+1{blEtfs.length > 0 ? <span style={{ color: '#4a9', fontWeight: 400 }}> ({blEtfs.length} ETF{blEtfs.length !== 1 ? 's' : ''})</span> : null}
+          </span>
+        )}
         {totalBL > 0 && totalSS > 0 && <span style={{ color: '#333', fontSize: 11 }}>|</span>}
-        {totalSS > 0 && <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>{totalSS} SS+1</span>}
+        {totalSS > 0 && (
+          <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>
+            {totalSS} SS+1{ssEtfs.length > 0 ? <span style={{ color: '#c66', fontWeight: 400 }}> ({ssEtfs.length} ETF{ssEtfs.length !== 1 ? 's' : ''})</span> : null}
+          </span>
+        )}
       </div>
       {/* Two columns: BL | SS */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>

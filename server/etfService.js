@@ -122,6 +122,9 @@ async function fetchBulkQuotes(tickers) {
   return results;
 }
 
+// Export the canonical ETF ticker set so other modules (e.g. pulse) can classify ETFs
+export const ALL_ETF_TICKER_SET = new Set(ALL_ETF_TICKERS);
+
 export async function getEtfStocks(forceRefresh = false) {
   if (!forceRefresh && etfCache.data && Date.now() - etfCache.timestamp < CACHE_TTL_MS) {
     console.log('📊 ETF 140: serving from cache');

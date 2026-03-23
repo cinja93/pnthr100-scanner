@@ -8,7 +8,7 @@ import { getSignals, getCachedSignals } from './signalService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
-import { getEtfStocks } from './etfService.js';
+import { getEtfStocks, ALL_ETF_TICKER_SET } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
@@ -2085,11 +2085,8 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     }
 
     // New signals this week (signalAge 0–1) — split by direction and stock vs ETF
-    const PULSE_ETF_SET = new Set(['SPY','QQQ','IWM','DIA','MDY','TLT','GLD','SLV','USO',
-      'XLE','XLF','XLK','XLV','XLP','XLI','XLU','XLB','XLC','XLRE','XLY',
-      'ARKK','ARKW','ARKG','KWEB','EEM','EFA','VNQ','IBB','SMH','SOXX',
-      'XBI','XOP','OIH','JETS','HACK','BOTZ',
-    ]);
+    // Use the canonical 140-ticker ETF list from etfService (same source as the ETF page)
+    const PULSE_ETF_SET = ALL_ETF_TICKER_SET;
     function mapNewSig(s) {
       return { ticker: s.ticker, sector: s.sector, currentPrice: s.currentPrice,
         totalScore: s.apexScore, tier: s.tier, signal: s.signal,

@@ -12,6 +12,7 @@
 
 import { connectToDatabase, getUserProfile, upsertUserProfile } from './database.js';
 import { createJournalEntry } from './journalService.js';
+import { fetchMarketSnapshot, getSectorEtf } from './marketSnapshot.js';
 
 // ── GET /api/settings/nav ─────────────────────────────────────────────────────
 
@@ -154,10 +155,20 @@ export async function pendingEntryConfirm(req, res) {
       { $set: { status: 'CONFIRMED', confirmedAt: new Date(), positionId: posId } }
     );
 
-    // Auto-create journal entry for newly confirmed position
+    // Auto-create journal entry for newly confirmed position.
+    // Fetch market + sector snapshot at the moment of entry (best-effort).
     try {
-      const killData = entry.killScore ? { totalScore: entry.killScore, tier: entry.killTier, killRank: entry.killRank || null } : null;
-      await createJournalEntry(db, position, req.user.userId, killData);
+      const killData = entry.killScore
+        ? { totalScore: entry.killScore, tier: entry.killTier, killRank: entry.killRank || null }
+        : null;
+      const marketAtEntry = await fetchMarketSnapshot(position.sector || null).catch(() => ({}));
+      const sectorAtEntry = position.sector && position.sector !== '—' ? {
+        name:        position.sector,
+        etfTicker:   getSectorEtf(position.sector),
+        etfPrice:    marketAtEntry.sectorPrice    || null,
+        etfChange1D: marketAtEntry.sectorChange1D || null,
+      } : null;
+      await createJournalEntry(db, position, req.user.userId, killData, marketAtEntry, sectorAtEntry);
     } catch (e) { console.warn('[JOURNAL] Auto-create failed:', e.message); }
 
     res.json({ success: true, positionId: posId });

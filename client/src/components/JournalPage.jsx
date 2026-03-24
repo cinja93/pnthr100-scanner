@@ -177,32 +177,83 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
         </div>
       )}
 
-      {/* ── Market at Exit ────────────────────────────────────────────────── */}
-      {mkt && (mkt.spyPrice || mkt.qqqPrice) && (
-        <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 6, padding: '10px 12px', marginTop: 12, marginBottom: 4 }}>
-          {sectionHdr('Market at Exit')}
-          <div style={{ display: 'flex', gap: 20, fontSize: 11, color: '#aaa', flexWrap: 'wrap' }}>
-            {mkt.spyPrice && (
-              <span>SPY <span style={{ color: '#fff', fontWeight: 700 }}>${mkt.spyPrice.toFixed(2)}</span>
-                {mkt.spyChange1D != null && (
-                  <span style={{ color: mkt.spyChange1D >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
-                    {mkt.spyChange1D >= 0 ? '▲' : '▼'} {Math.abs(mkt.spyChange1D).toFixed(1)}%
-                  </span>
-                )}
+      {/* ── Market + Sector Conditions (entry and/or exit) ────────────────── */}
+      {(() => {
+        const entryMkt = entry.entry?.marketAtEntry;
+        const entrySec = entry.entry?.sectorAtEntry;
+        const hasEntry = entryMkt && (entryMkt.spyPrice || entryMkt.qqqPrice);
+        const hasExit  = mkt && (mkt.spyPrice || mkt.qqqPrice);
+        if (!hasEntry && !hasExit) return null;
+
+        const SnapRow = ({ snap, sec }) => (
+          <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#aaa', flexWrap: 'wrap', alignItems: 'center' }}>
+            {snap.spyPrice && (
+              <span>SPY <span style={{ color: '#fff', fontWeight: 700 }}>${snap.spyPrice.toFixed(2)}</span>
+                {snap.spyVsEma != null
+                  ? <span style={{ color: snap.spyPosition === 'above' ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
+                      {snap.spyVsEma >= 0 ? '+' : ''}{snap.spyVsEma.toFixed(1)}% EMA
+                    </span>
+                  : snap.spyChange1D != null &&
+                    <span style={{ color: snap.spyChange1D >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
+                      {snap.spyChange1D >= 0 ? '▲' : '▼'}{Math.abs(snap.spyChange1D).toFixed(1)}%
+                    </span>
+                }
               </span>
             )}
-            {mkt.qqqPrice && (
-              <span>QQQ <span style={{ color: '#fff', fontWeight: 700 }}>${mkt.qqqPrice.toFixed(2)}</span>
-                {mkt.qqqChange1D != null && (
-                  <span style={{ color: mkt.qqqChange1D >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
-                    {mkt.qqqChange1D >= 0 ? '▲' : '▼'} {Math.abs(mkt.qqqChange1D).toFixed(1)}%
+            {snap.qqqPrice && (
+              <span>QQQ <span style={{ color: '#fff', fontWeight: 700 }}>${snap.qqqPrice.toFixed(2)}</span>
+                {snap.qqqVsEma != null
+                  ? <span style={{ color: snap.qqqPosition === 'above' ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
+                      {snap.qqqVsEma >= 0 ? '+' : ''}{snap.qqqVsEma.toFixed(1)}% EMA
+                    </span>
+                  : snap.qqqChange1D != null &&
+                    <span style={{ color: snap.qqqChange1D >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
+                      {snap.qqqChange1D >= 0 ? '▲' : '▼'}{Math.abs(snap.qqqChange1D).toFixed(1)}%
+                    </span>
+                }
+              </span>
+            )}
+            {snap.vix != null && (
+              <span>VIX <span style={{ color: snap.vix >= 25 ? '#ff6b6b' : snap.vix >= 18 ? '#ff8c00' : '#aaa', fontWeight: 700 }}>{snap.vix.toFixed(1)}</span></span>
+            )}
+            {snap.regime && (
+              <span style={{
+                background: snap.regime === 'BULLISH' ? 'rgba(107,203,119,0.12)' : snap.regime === 'BEARISH' ? 'rgba(255,107,107,0.12)' : 'rgba(255,140,0,0.12)',
+                color: snap.regime === 'BULLISH' ? '#6bcb77' : snap.regime === 'BEARISH' ? '#ff6b6b' : '#ff8c00',
+                fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 4, letterSpacing: 1,
+              }}>{snap.regime}</span>
+            )}
+            {sec?.etfTicker && sec.etfPrice != null && (
+              <span style={{ color: '#555', borderLeft: '1px solid #1a1a1a', paddingLeft: 12 }}>
+                {sec.etfTicker} <span style={{ color: '#aaa', fontWeight: 700 }}>${sec.etfPrice.toFixed(2)}</span>
+                {sec.etfChange1D != null && (
+                  <span style={{ color: sec.etfChange1D >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
+                    {sec.etfChange1D >= 0 ? '▲' : '▼'}{Math.abs(sec.etfChange1D).toFixed(1)}%
                   </span>
                 )}
               </span>
             )}
           </div>
-        </div>
-      )}
+        );
+
+        return (
+          <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 6, padding: '10px 12px', marginTop: 12, marginBottom: 4 }}>
+            {sectionHdr('Market Conditions')}
+            {hasEntry && (
+              <>
+                {hasExit && <div style={{ color: '#444', fontSize: 9, letterSpacing: 1, marginBottom: 3 }}>AT ENTRY</div>}
+                <SnapRow snap={entryMkt} sec={entrySec} />
+              </>
+            )}
+            {hasExit && (
+              <>
+                {hasEntry && <div style={{ color: '#444', fontSize: 9, letterSpacing: 1, marginTop: 8, marginBottom: 3 }}>AT EXIT</div>}
+                <SnapRow snap={mkt} sec={null} />
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Wash Rule ─────────────────────────────────────────────────────── */}
       {entry.washRule?.isLoss && (

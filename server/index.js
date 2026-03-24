@@ -2774,6 +2774,131 @@ app.get('/api/pulse/signal-stocks', authenticateJWT, async (req, res) => {
   }
 });
 
+// ── Developing Signals — intra-week 3/4 condition detection ───────────────────
+// Mon–Thu: stocks where 3 of 4 BL (or SS) conditions are confirmed intra-week.
+// The 4th condition (weekly close) is still pending (resolves Friday close).
+// Returns { status: 'OK'|'COLD', bl: [...], ss: [...] }
+app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
+  try {
+    const FMP_API_KEY = process.env.FMP_API_KEY;
+    const { getCachedSignals } = await import('./signalService.js');
+    const signalMap = getCachedSignals();
+
+    if (!signalMap || Object.keys(signalMap).length === 0) {
+      return res.json({ status: 'COLD', bl: [], ss: [], message: 'Signal cache warming — check back in ~2 min' });
+    }
+
+    // ── Build candidate lists (emaRising filter) ──────────────────────────────
+    // BL developing: NOT already BL + EMA rising (slope up)
+    // SS developing: NOT already SS + EMA falling (slope down)
+    const blCandidates = [];
+    const ssCandidates = [];
+    for (const [ticker, s] of Object.entries(signalMap)) {
+      if (!s.ema21) continue;
+      if (s.signal !== 'BL' && s.emaRising === true) {
+        blCandidates.push({ ticker, ema21: s.ema21 });
+      }
+      if (s.signal !== 'SS' && s.emaRising === false) {
+        ssCandidates.push({ ticker, ema21: s.ema21 });
+      }
+    }
+
+    // ── Sector lookup from pnthr_kill_scores (most recent entries) ────────────
+    const allCandidateTickers = [...new Set([
+      ...blCandidates.map(c => c.ticker),
+      ...ssCandidates.map(c => c.ticker),
+    ])];
+    const sectorMap = {};
+    try {
+      const { connectToDatabase } = await import('./database.js');
+      const db = await connectToDatabase();
+      const sectorDocs = await db.collection('pnthr_kill_scores')
+        .aggregate([
+          { $match: { ticker: { $in: allCandidateTickers } } },
+          { $sort: { createdAt: -1 } },
+          { $group: { _id: '$ticker', sector: { $first: '$sector' } } },
+        ])
+        .toArray();
+      for (const d of sectorDocs) sectorMap[d._id] = d.sector;
+    } catch (e) { console.warn('[developing-signals] sector lookup failed:', e.message); }
+
+    // ── Fetch today's quotes in chunks of 100 ────────────────────────────────
+    const CHUNK_SIZE = 100;
+    const quoteMap = {};
+    const tickersToQuote = allCandidateTickers.slice(0, 500); // safety cap
+    for (let i = 0; i < tickersToQuote.length; i += CHUNK_SIZE) {
+      const chunk = tickersToQuote.slice(i, i + CHUNK_SIZE);
+      try {
+        const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_API_KEY}`);
+        if (r.ok) {
+          const data = await r.json();
+          if (Array.isArray(data)) {
+            for (const q of data) quoteMap[q.symbol] = q;
+          }
+        }
+      } catch (e) { console.warn('[developing-signals] quote chunk failed:', e.message); }
+    }
+
+    // ── Apply developing BL check ─────────────────────────────────────────────
+    // 3/4 conditions confirmed: (1) price > ema21, (2) ema rising, (3) dayLow > ema × 1.01
+    // Condition 4 (weekly close above EMA) pending until Friday
+    const STOCK_THRESHOLD = 0.01; // 1% daylight for stocks
+    const devBL = [];
+    for (const c of blCandidates) {
+      const q = quoteMap[c.ticker];
+      if (!q?.price || !q?.dayLow) continue;
+      const price  = q.price;
+      const dayLow = q.dayLow;
+      // Must have crossed above EMA intra-week
+      if (price <= c.ema21) continue;
+      // Must NOT be overextended (>20% above EMA)
+      if (price > c.ema21 * 1.20) continue;
+      // Daylight: today's low stays above EMA + threshold
+      if (dayLow <= c.ema21 * (1 + STOCK_THRESHOLD)) continue;
+      devBL.push({
+        ticker:       c.ticker,
+        sector:       sectorMap[c.ticker] || '—',
+        price,
+        dayLow,
+        ema21:        c.ema21,
+        pctAboveEma:  +((price - c.ema21) / c.ema21 * 100).toFixed(1),
+      });
+    }
+    devBL.sort((a, b) => a.pctAboveEma - b.pctAboveEma); // tightest to EMA first = freshest
+
+    // ── Apply developing SS check ─────────────────────────────────────────────
+    // 3/4 conditions confirmed: (1) price < ema21, (2) ema falling, (3) dayHigh < ema × 0.99
+    const devSS = [];
+    for (const c of ssCandidates) {
+      const q = quoteMap[c.ticker];
+      if (!q?.price || !q?.dayHigh) continue;
+      const price   = q.price;
+      const dayHigh = q.dayHigh;
+      // Must have crossed below EMA intra-week
+      if (price >= c.ema21) continue;
+      // Must NOT be overextended (>20% below EMA)
+      if (price < c.ema21 * 0.80) continue;
+      // Daylight: today's high stays below EMA - threshold
+      if (dayHigh >= c.ema21 * (1 - STOCK_THRESHOLD)) continue;
+      devSS.push({
+        ticker:       c.ticker,
+        sector:       sectorMap[c.ticker] || '—',
+        price,
+        dayHigh,
+        ema21:        c.ema21,
+        pctBelowEma:  +((c.ema21 - price) / c.ema21 * 100).toFixed(1),
+      });
+    }
+    devSS.sort((a, b) => a.pctBelowEma - b.pctBelowEma); // tightest to EMA first
+
+    console.log(`[developing-signals] BL candidates: ${blCandidates.length} → ${devBL.length} developing | SS candidates: ${ssCandidates.length} → ${devSS.length} developing`);
+    res.json({ status: 'OK', bl: devBL, ss: devSS });
+  } catch (err) {
+    console.error('[/api/pulse/developing-signals]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Live VIX quote ─────────────────────────────────────────────────────────────
 app.get('/api/market-data/vix', authenticateJWT, async (req, res) => {
   try {

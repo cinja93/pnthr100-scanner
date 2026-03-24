@@ -557,6 +557,12 @@ export async function fetchSignalStocks(signal) {
   return res.json();
 }
 
+export async function fetchDevelopingSignals() {
+  const res = await fetch(`${API_BASE}/api/pulse/developing-signals`, { headers: authHeaders() });
+  if (!res.ok) return { status: 'ERROR', bl: [], ss: [] };
+  return res.json();
+}
+
 export async function fetchLiveVix() {
   const res = await fetch(`${API_BASE}/api/market-data/vix`, { headers: authHeaders() });
   if (!res.ok) return { close: null, change: null };

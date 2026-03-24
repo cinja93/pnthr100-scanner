@@ -1,6 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { fetchPulse, fetchLiveVix, fetchSignalStocks } from '../services/api';
+import { fetchPulse, fetchLiveVix, fetchSignalStocks, fetchDevelopingSignals } from '../services/api';
 import ChartModal from './ChartModal';
+
+// Returns true if developing signals should be shown (Mon–Thu anytime; Fri before 4:15 PM ET)
+function shouldShowDevelopingSignals() {
+  const now = new Date();
+  // Convert to ET offset (EST = UTC-5, EDT = UTC-4)
+  // Use Intl to get current ET hour/day
+  const etStr = now.toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: false });
+  // etStr like "Mon, 14:30"
+  const etDay = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'short' }); // "Mon"
+  const etHour = parseInt(now.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }), 10);
+  const etMin  = parseInt(now.toLocaleTimeString('en-US', { timeZone: 'America/New_York', minute: '2-digit', hour12: false }), 10);
+  const dayMap = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
+  const dow = dayMap[etDay] ?? 0;
+  if (dow === 0 || dow === 6) return false;       // weekend
+  if (dow >= 1 && dow <= 4) return true;           // Mon–Thu always show
+  if (dow === 5) {                                 // Friday
+    const totalMin = etHour * 60 + etMin;
+    return totalMin < 16 * 60 + 15;               // before 4:15 PM ET
+  }
+  return false;
+}
 
 function formatScoresLabel(data) {
   if (!data) return 'Scores: Loading...';
@@ -36,7 +57,23 @@ export default function PulsePage({ onNavigate }) {
   const [chartList, setChartList] = useState([]);
   const [chartIndex, setChartIndex] = useState(0);
   const [signalModal, setSignalModal] = useState(null);
+  const [devSignals, setDevSignals] = useState(null);
+  const [devLoading, setDevLoading] = useState(false);
   const autoRefreshTimer = React.useRef(null);
+  const showDev = shouldShowDevelopingSignals();
+
+  async function loadDevSignals() {
+    if (!shouldShowDevelopingSignals()) return;
+    setDevLoading(true);
+    try {
+      const result = await fetchDevelopingSignals();
+      setDevSignals(result);
+    } catch (err) {
+      console.warn('Developing signals fetch failed:', err);
+    } finally {
+      setDevLoading(false);
+    }
+  }
 
   async function refreshPulse() {
     if (isRefreshing) return;
@@ -56,6 +93,8 @@ export default function PulsePage({ onNavigate }) {
     } finally {
       setIsRefreshing(false);
     }
+    // Re-fetch developing signals on manual refresh
+    loadDevSignals();
   }
 
   useEffect(() => {
@@ -71,6 +110,8 @@ export default function PulsePage({ onNavigate }) {
       })
       .catch(err => { console.error(err); setError(err.message); })
       .finally(() => setLoading(false));
+    // Load developing signals in parallel (separate request — may take longer)
+    loadDevSignals();
     return () => { if (autoRefreshTimer.current) clearTimeout(autoRefreshTimer.current); };
   }, []);
 
@@ -135,6 +176,13 @@ export default function PulsePage({ onNavigate }) {
         newSignals={data.newSignals}
         onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }}
       />
+      {showDev && (
+        <DevelopingSignalsPanel
+          devSignals={devSignals}
+          loading={devLoading}
+          onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }}
+        />
+      )}
       <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
       <MacroStrip marketSnapshot={data.marketSnapshot} />
 
@@ -933,6 +981,130 @@ function NewSignalsPanel({ newSignals, onTickerClick }) {
       </div>
       {/* ETF box — full width, below stocks, hidden when empty */}
       <EtfBox />
+    </div>
+  );
+}
+
+// ── Developing Signals Panel ───────────────────────────────────────────────────
+function DevelopingSignalsPanel({ devSignals, loading, onTickerClick }) {
+  const status = devSignals?.status;
+  const bl = devSignals?.bl || [];
+  const ss = devSignals?.ss || [];
+  const hasAny = bl.length > 0 || ss.length > 0;
+
+  // CSS for pulsing "developing" animation (injected once)
+  const pulseStyle = `
+    @keyframes devPulse {
+      0%, 100% { opacity: 0.85; }
+      50% { opacity: 1; }
+    }
+    .dev-bl-row { animation: devPulse 2.5s ease-in-out infinite; background: rgba(40,167,69,0.04); }
+    .dev-ss-row { animation: devPulse 2.5s ease-in-out infinite; background: rgba(220,53,69,0.04); }
+    .dev-bl-row:hover { background: rgba(40,167,69,0.1) !important; animation: none; }
+    .dev-ss-row:hover { background: rgba(220,53,69,0.1) !important; animation: none; }
+  `;
+
+  function DevRow({ s, dir, idx, chartList }) {
+    const isBL = dir === 'BL';
+    const rowClass = isBL ? 'dev-bl-row' : 'dev-ss-row';
+    const accentColor = isBL ? '#6bcb77' : '#ff6b6b';
+    const pctLabel = isBL
+      ? `+${s.pctAboveEma}% above EMA`
+      : `-${s.pctBelowEma}% below EMA`;
+    const daylightLabel = isBL
+      ? `Low $${(+s.dayLow).toFixed(2)}`
+      : `High $${(+s.dayHigh).toFixed(2)}`;
+
+    return (
+      <div
+        className={rowClass}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer', transition: 'background 0.15s' }}
+        onClick={() => onTickerClick(chartList, idx)}
+      >
+        {/* Dashed DEVELOPING badge */}
+        <span style={{ border: `1px dashed ${accentColor}88`, color: accentColor, fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3, letterSpacing: 1, flexShrink: 0 }}>
+          DEV
+        </span>
+        <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 52, fontFamily: 'monospace' }}>{s.ticker}</span>
+        <span style={{ color: '#555', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector || '—'}</span>
+        <span style={{ color: '#ccc', fontSize: 12, minWidth: 60, textAlign: 'right', fontFamily: 'monospace' }}>${(+s.price).toFixed(2)}</span>
+        <span style={{ color: accentColor, fontSize: 11, minWidth: 100, textAlign: 'right', fontFamily: 'monospace' }}>{pctLabel}</span>
+        <span style={{ color: '#666', fontSize: 10, minWidth: 80, textAlign: 'right', fontFamily: 'monospace' }}>{daylightLabel}</span>
+        <span style={{ color: '#555', fontSize: 11, minWidth: 56, textAlign: 'right', fontFamily: 'monospace' }}>EMA ${(+s.ema21).toFixed(2)}</span>
+        <span style={{ color: accentColor, fontSize: 11 }}>▸</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: '#111', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
+      <style>{pulseStyle}</style>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ color: '#FFD700', fontSize: 11, letterSpacing: 2, fontFamily: 'monospace', fontWeight: 700 }}>
+          ⏳ DEVELOPING SIGNALS
+        </span>
+        <span style={{ background: 'rgba(255,215,0,0.1)', border: '1px solid #FFD70044', color: '#FFD700', fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, letterSpacing: 1 }}>
+          3 OF 4 CONDITIONS MET
+        </span>
+        {!loading && hasAny && (
+          <>
+            <span style={{ color: '#444', fontSize: 11 }}>Developing:</span>
+            <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>{bl.length} BL</span>
+            <span style={{ color: '#333', fontSize: 11 }}>|</span>
+            <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>{ss.length} SS</span>
+          </>
+        )}
+        {loading && <span style={{ color: '#555', fontSize: 11 }}>Scanning...</span>}
+        {!loading && status === 'COLD' && (
+          <span style={{ color: '#555', fontSize: 11 }}>Signal cache warming — check back in ~2 min</span>
+        )}
+        {!loading && status === 'OK' && !hasAny && (
+          <span style={{ color: '#444', fontSize: 11 }}>No developing signals detected</span>
+        )}
+        <span style={{ marginLeft: 'auto', color: '#333', fontSize: 10 }}>
+          ⏳ awaiting Friday weekly close
+        </span>
+      </div>
+
+      {loading && (
+        <div style={{ color: '#444', fontSize: 12, padding: '8px 10px' }}>
+          Analyzing intra-week conditions...
+        </div>
+      )}
+
+      {!loading && hasAny && (
+        <div style={{ display: 'flex', gap: 12 }}>
+          {/* BL Column */}
+          <div style={{ flex: 1, minWidth: 0, border: '1px solid #28a74533', borderLeft: '3px solid #28a745', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ background: 'rgba(40,167,69,0.08)', padding: '5px 10px' }}>
+              <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>DEVELOPING BL</span>
+              <span style={{ color: '#444', fontSize: 10, marginLeft: 8 }}>({bl.length}) price ↑ EMA · slope ↑ · daylight ✓</span>
+            </div>
+            {bl.length > 0
+              ? (() => {
+                  const chartList = bl.map(s => ({ ticker: s.ticker, symbol: s.ticker, currentPrice: s.price, signal: 'BL', sector: s.sector }));
+                  return bl.map((s, i) => <DevRow key={s.ticker} s={s} dir="BL" idx={i} chartList={chartList} />);
+                })()
+              : <div style={{ padding: '10px 14px', color: '#333', fontSize: 12 }}>No developing BL signals</div>
+            }
+          </div>
+          {/* SS Column */}
+          <div style={{ flex: 1, minWidth: 0, border: '1px solid #dc354533', borderLeft: '3px solid #dc3545', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ background: 'rgba(220,53,69,0.08)', padding: '5px 10px' }}>
+              <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>DEVELOPING SS</span>
+              <span style={{ color: '#444', fontSize: 10, marginLeft: 8 }}>({ss.length}) price ↓ EMA · slope ↓ · daylight ✓</span>
+            </div>
+            {ss.length > 0
+              ? (() => {
+                  const chartList = ss.map(s => ({ ticker: s.ticker, symbol: s.ticker, currentPrice: s.price, signal: 'SS', sector: s.sector }));
+                  return ss.map((s, i) => <DevRow key={s.ticker} s={s} dir="SS" idx={i} chartList={chartList} />);
+                })()
+              : <div style={{ padding: '10px 14px', color: '#333', fontSize: 12 }}>No developing SS signals</div>
+            }
+          </div>
+        </div>
+      )}
     </div>
   );
 }

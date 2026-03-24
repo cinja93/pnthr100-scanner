@@ -275,9 +275,12 @@ function runStateMachine(weeklyBars, isETF = false) {
     }
   }
 
+  // EMA slope direction — used for developing signal detection (intra-week)
+  const emaRising = emas.length >= 2 ? emas[emas.length - 1] > emas[emas.length - 2] : null;
+
   if (!lastEvent) {
     const lastEma = emas[emas.length - 1];
-    return { signal: null, ema21: parseFloat(lastEma.toFixed(4)), stopPrice: null, currentWeekStop: null };
+    return { signal: null, ema21: parseFloat(lastEma.toFixed(4)), stopPrice: null, currentWeekStop: null, emaRising };
   }
 
   const lastBar = weeklyBars[weeklyBars.length - 1];
@@ -294,6 +297,7 @@ function runStateMachine(weeklyBars, isETF = false) {
   // NEW signal = BL or SS that fired on the very last (rightmost) completed bar
   const isActiveSignal = lastEvent.signal === 'BL' || lastEvent.signal === 'SS';
   lastEvent.isNew = isActiveSignal && lastEvent.signalDate === lastBar.weekStart;
+  lastEvent.emaRising = emaRising;
 
   return lastEvent;
 }

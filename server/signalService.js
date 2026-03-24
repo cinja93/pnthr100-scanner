@@ -400,6 +400,7 @@ export function getCachedSignals() {
       pnthrStop:       s.pnthrStop ?? null,
       currentWeekStop: s.currentWeekStop ?? null,
       ema21:           s.ema21,
+      emaRising:       s.emaRising ?? null,
       signalDate:      s.signalDate || null,
       isNewSignal:     s.isNew ?? false,
       profitDollar:    s.profitDollar ?? null,
@@ -407,4 +408,12 @@ export function getCachedSignals() {
     };
   }
   return result;
+}
+
+// Force-clear signal cache so next getSignals() call recomputes with latest code.
+// Used by developing-signals endpoint when cache predates emaRising field.
+export function clearSignalCache() {
+  signalCache    = { weekKey: null, signals: {} };
+  etfSignalCache = { weekKey: null, signals: {} };
+  console.log('[signalService] Cache cleared — will recompute on next getSignals() call');
 }

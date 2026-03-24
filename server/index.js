@@ -2788,6 +2788,17 @@ app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
       return res.json({ status: 'COLD', bl: [], ss: [], message: 'Signal cache warming — check back in ~2 min' });
     }
 
+    // ── Check if cache has emaRising (new field added with this feature) ────────
+    // Old cache entries (pre-deploy) won't have it; force recompute if missing.
+    const entries = Object.values(signalMap);
+    const hasEmaRising = entries.some(s => s.emaRising != null);
+    if (!hasEmaRising) {
+      // Cache predates emaRising — clear it so next getSignals() call recomputes
+      const { clearSignalCache } = await import('./signalService.js').catch(() => ({}));
+      if (typeof clearSignalCache === 'function') clearSignalCache();
+      return res.json({ status: 'STALE', bl: [], ss: [], message: 'Signal cache refreshing — hit REFRESH in ~90s' });
+    }
+
     // ── Build candidate lists (emaRising filter) ──────────────────────────────
     // BL developing: NOT already BL + EMA rising (slope up)
     // SS developing: NOT already SS + EMA falling (slope down)

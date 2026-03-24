@@ -47,6 +47,14 @@ export async function ibkrSync(req, res) {
     );
 
     // 3. Cross-reference: update current price + P&L on matching PNTHR positions
+    //
+    // SACRED FIELDS — NEVER touched here (user-edited, must survive all syncs):
+    //   fills[1-5].price/shares/date/filled, stopPrice, originalStop,
+    //   entryPrice, direction, signal, exits[].price/shares
+    //
+    // SAFE auto-update fields (written here):
+    //   currentPrice, ibkrAvgCost, ibkrShares, ibkrSyncedAt,
+    //   ibkrUnrealizedPNL, ibkrMarketValue
     const pnthrPositions = await db.collection('pnthr_portfolio')
       .find({ ownerId: userId, status: 'ACTIVE' })
       .toArray();

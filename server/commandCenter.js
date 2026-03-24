@@ -277,6 +277,32 @@ export async function positionsGetAll(req, res) {
 
 // ── POST /api/positions ───────────────────────────────────────────────────────
 // Create a new position or update an existing one (by id).
+//
+// SACRED FIELDS — this handler persists user-edited data, so these must come
+// through from the client and be saved as-is:
+//   fills[1-5].price/shares/date/filled, stopPrice, originalStop,
+//   entryPrice, direction, signal, exits[].price/shares
+//
+// TRANSIENT DISPLAY FIELDS — computed server-side, must NOT be persisted from
+// the client payload (they would overwrite values written by IBKR sync or
+// the price-refresh endpoint):
+//   priceSource, dayHigh, dayLow, tradingDaysActive, feastAlert, feastRSI
+//   (ibkrAvgCost, ibkrShares, ibkrSyncedAt are excluded below for same reason)
+
+// Fields that are computed/transient on the server and must never be saved back
+// from the client payload into MongoDB.
+const TRANSIENT_FIELDS = new Set([
+  'priceSource', 'dayHigh', 'dayLow', 'tradingDaysActive',
+  'feastAlert', 'feastRSI',
+  // IBKR fields are written exclusively by ibkrSync.js — reject any client values
+  'ibkrAvgCost', 'ibkrShares', 'ibkrSyncedAt', 'ibkrUnrealizedPNL', 'ibkrMarketValue',
+]);
+
+function stripTransientFields(obj) {
+  const clean = { ...obj };
+  for (const key of TRANSIENT_FIELDS) delete clean[key];
+  return clean;
+}
 
 export async function positionsSave(req, res) {
   try {
@@ -291,9 +317,12 @@ export async function positionsSave(req, res) {
     let warning = null;
 
     if (position.id) {
+      // Strip transient/IBKR display fields — they must not overwrite values
+      // written by ibkrSync.js or the price-refresh endpoint.
+      const saveData = stripTransientFields(position);
       await db.collection('pnthr_portfolio').updateOne(
         { id: position.id },
-        { $set: { ...position, updatedAt: new Date() } },
+        { $set: { ...saveData, updatedAt: new Date() } },
         { upsert: true }
       );
     } else {

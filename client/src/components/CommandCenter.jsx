@@ -1573,6 +1573,86 @@ export default function CommandCenter() {
   const refreshFnRef  = useRef(null);
   const flashTimerRef = useRef(null);
 
+  // ── Safe price-only merge ─────────────────────────────────────────────────
+  // NEVER replace positions wholesale from a server response — that would
+  // overwrite sacred user-edited fields (fills, stopPrice, entryPrice, etc.)
+  // that may have been updated locally but not yet round-tripped.
+  //
+  // Sacred fields — NEVER overwrite from a server fetch:
+  //   fills[1-5].price/shares/date/filled, stopPrice, originalStop,
+  //   entryPrice, direction, signal, exits[].price/shares
+  //
+  // Safe to overwrite from server:
+  //   currentPrice, ibkrAvgCost, ibkrShares, ibkrSyncedAt, ibkrUnrealizedPNL,
+  //   ibkrMarketValue, priceSource, dayHigh, dayLow,
+  //   tradingDaysActive, feastAlert, feastRSI
+  const mergeServerPrices = useCallback((prev, serverPositions) => {
+    const freshMap = {};
+    for (const fp of serverPositions) freshMap[fp.id] = fp;
+    return prev.map(p => {
+      const fp = freshMap[p.id];
+      if (!fp) return p;
+      // Spread kept fields from prev (preserves sacred fields),
+      // then only patch the safe auto-update fields from server.
+      return {
+        ...p, // ← sacred fields come from local state, NOT server
+        currentPrice:       fp.currentPrice       ?? p.currentPrice,
+        priceSource:        fp.priceSource        ?? p.priceSource,
+        dayHigh:            fp.dayHigh            ?? p.dayHigh,
+        dayLow:             fp.dayLow             ?? p.dayLow,
+        ibkrAvgCost:        fp.ibkrAvgCost        ?? p.ibkrAvgCost,
+        ibkrShares:         fp.ibkrShares         ?? p.ibkrShares,
+        ibkrSyncedAt:       fp.ibkrSyncedAt       ?? p.ibkrSyncedAt,
+        ibkrUnrealizedPNL:  fp.ibkrUnrealizedPNL  ?? p.ibkrUnrealizedPNL,
+        ibkrMarketValue:    fp.ibkrMarketValue     ?? p.ibkrMarketValue,
+        tradingDaysActive:  fp.tradingDaysActive   ?? p.tradingDaysActive,
+        feastAlert:         fp.feastAlert          ?? p.feastAlert,
+        feastRSI:           fp.feastRSI            ?? p.feastRSI,
+      };
+    });
+  }, []);
+
+  // ── Merge after a partial/full exit ──────────────────────────────────────
+  // Like mergeServerPrices but also syncs server-authoritative exit-tracking
+  // fields (status, exits[], remainingShares, realizedPnl, closedAt).
+  // Sacred user-edited fields (fills, stopPrice, entryPrice, direction, etc.)
+  // are still taken from local state, not the server response.
+  const mergeAfterExit = useCallback((prev, serverPositions) => {
+    const freshMap = {};
+    for (const fp of serverPositions) freshMap[fp.id] = fp;
+    return prev.map(p => {
+      const fp = freshMap[p.id];
+      if (!fp) return p;
+      return {
+        ...p, // sacred fields from local state
+        // Price / IBKR fields
+        currentPrice:       fp.currentPrice       ?? p.currentPrice,
+        priceSource:        fp.priceSource        ?? p.priceSource,
+        dayHigh:            fp.dayHigh            ?? p.dayHigh,
+        dayLow:             fp.dayLow             ?? p.dayLow,
+        ibkrAvgCost:        fp.ibkrAvgCost        ?? p.ibkrAvgCost,
+        ibkrShares:         fp.ibkrShares         ?? p.ibkrShares,
+        ibkrSyncedAt:       fp.ibkrSyncedAt       ?? p.ibkrSyncedAt,
+        ibkrUnrealizedPNL:  fp.ibkrUnrealizedPNL  ?? p.ibkrUnrealizedPNL,
+        ibkrMarketValue:    fp.ibkrMarketValue     ?? p.ibkrMarketValue,
+        tradingDaysActive:  fp.tradingDaysActive   ?? p.tradingDaysActive,
+        feastAlert:         fp.feastAlert          ?? p.feastAlert,
+        feastRSI:           fp.feastRSI            ?? p.feastRSI,
+        // Exit-tracking fields — server is authoritative after recordExit writes
+        status:             fp.status              ?? p.status,
+        exits:              fp.exits               ?? p.exits,
+        remainingShares:    fp.remainingShares     ?? p.remainingShares,
+        totalExitedShares:  fp.totalExitedShares   ?? p.totalExitedShares,
+        totalFilledShares:  fp.totalFilledShares   ?? p.totalFilledShares,
+        avgExitPrice:       fp.avgExitPrice        ?? p.avgExitPrice,
+        realizedPnl:        fp.realizedPnl         ?? p.realizedPnl,
+        closedAt:           fp.closedAt            ?? p.closedAt,
+        washRule:           fp.washRule            ?? p.washRule,
+        outcome:            fp.outcome             ?? p.outcome,
+      };
+    });
+  }, []);
+
   const refreshPrices = useCallback(async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -1580,22 +1660,19 @@ export default function CommandCenter() {
       const data = await apiGet('/api/positions');
       if (data.positions?.length) {
         setPositions(prev => {
-          const freshMap = {};
-          for (const fp of data.positions) freshMap[fp.id] = fp;
+          // Track price changes for flash animation before merging
           const changed = new Set();
-          const merged = prev.map(p => {
-            const fp = freshMap[p.id];
-            if (!fp) return p;
-            if (fp.currentPrice !== p.currentPrice) changed.add(p.ticker);
-            return { ...p, currentPrice: fp.currentPrice, feastAlert: fp.feastAlert,
-                     feastRSI: fp.feastRSI, tradingDaysActive: fp.tradingDaysActive };
-          });
+          for (const fp of data.positions) {
+            const local = prev.find(p => p.id === fp.id);
+            if (local && fp.currentPrice !== local.currentPrice) changed.add(local.ticker);
+          }
           if (changed.size > 0) {
             setFlashedTickers(changed);
             if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
             flashTimerRef.current = setTimeout(() => setFlashedTickers(new Set()), 2500);
           }
-          return merged;
+          // Use safe merge — never overwrite sacred fields (fills, stops, etc.)
+          return mergeServerPrices(prev, data.positions);
         });
       }
       setLastRefresh(new Date());
@@ -1714,11 +1791,22 @@ export default function CommandCenter() {
   const handleConfirmEntry = useCallback(async (id, fillData) => {
     await confirmPendingEntry(id, fillData);
     setPendingEntries(prev => prev.filter(e => e.id !== id));
-    // Re-fetch positions so the new one appears immediately
+    // Re-fetch positions so the new one appears immediately.
+    // Use safe merge so existing positions keep their sacred fields (fills, stops, etc.)
+    // The newly confirmed position has no prior local state so it's appended cleanly.
     apiGet('/api/positions')
-      .then(data => { if (data.positions?.length) setPositions(data.positions); })
+      .then(data => {
+        if (!data.positions?.length) return;
+        setPositions(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          // Merge prices for existing positions; append brand-new ones
+          const merged = mergeServerPrices(prev, data.positions);
+          const newPositions = data.positions.filter(fp => !existingIds.has(fp.id));
+          return [...merged, ...newPositions];
+        });
+      })
       .catch(() => {});
-  }, []);
+  }, [mergeServerPrices]);
 
   const handleDismissEntry = useCallback(async (id) => {
     await dismissPendingEntry(id);
@@ -1888,7 +1976,13 @@ export default function CommandCenter() {
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
                     onDelete={handleDeletePosition}
                     onExitConfirmed={() => {
-                      apiGet('/api/positions').then(data => { if (data.positions?.length) setPositions(data.positions); }).catch(() => {});
+                      // Re-fetch after an exit to sync status/remainingShares/exits from DB.
+                      // Use mergeAfterExit: updates price fields + exit-tracking fields
+                      // but NEVER overwrites sacred user-edited fields (fills, stops, etc.)
+                      apiGet('/api/positions').then(data => {
+                        if (!data.positions?.length) return;
+                        setPositions(prev => mergeAfterExit(prev, data.positions));
+                      }).catch(() => {});
                     }}
                     flashed={flashedTickers.has(p.ticker)}
                     onOpenChart={(clicked) => {

@@ -221,7 +221,7 @@ export async function positionsGetAll(req, res) {
     if (!db) return res.status(503).json({ positions: [], error: 'DB unavailable' });
 
     const positions = await db.collection('pnthr_portfolio')
-      .find({ status: 'ACTIVE', ownerId: req.user.userId }).sort({ createdAt: -1 }).toArray();
+      .find({ status: { $nin: ['CLOSED'] }, ownerId: req.user.userId }).sort({ createdAt: -1 }).toArray();
 
     const tickers = [...new Set(positions.map(p => p.ticker))];
     let live = {};

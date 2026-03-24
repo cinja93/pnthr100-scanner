@@ -489,7 +489,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {activePage === 'jungle' && <JunglePage />}
 
           {/* PNTHR Command Center */}
-          {activePage === 'command' && <CommandCenter />}
+          {activePage === 'command' && <CommandCenter onNavigate={navigate} />}
 
           {/* PNTHR Journal */}
           {activePage === 'journal' && <JournalPage onNavigate={navigate} />}

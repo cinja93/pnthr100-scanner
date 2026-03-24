@@ -1157,8 +1157,9 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                     body: JSON.stringify(exitData),
                   });
                   if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+                  const result = await res.json();
                   setExitPanelOpen(false);
-                  onExitConfirmed?.();
+                  onExitConfirmed?.(result);
                 }}
               />
             </div>
@@ -1592,7 +1593,7 @@ function isMarketHours() {
 
 // ── Main Command Center ───────────────────────────────────────────────────────
 
-export default function CommandCenter() {
+export default function CommandCenter({ onNavigate }) {
   const { currentUser, updateCurrentUser } = useAuth();
   const [nav,           setNav]           = useState(() => currentUser?.accountSize ?? 100000);
   const navSaveTimer    = useRef(null);
@@ -1616,6 +1617,7 @@ export default function CommandCenter() {
   const [saving,          setSaving]          = useState(false);
   const [sectorWarning,   setSectorWarning]   = useState(null);
   const [chartModal,      setChartModal]      = useState(null); // { stocks, index }
+  const [closedToast,     setClosedToast]     = useState(null); // { ticker, avgCost, exitPrice, pnlDollar, pnlPct }
 
   const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
   const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
@@ -2071,14 +2073,31 @@ export default function CommandCenter() {
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
                     onClearOverride={clearOverride}
                     onDelete={handleDeletePosition}
-                    onExitConfirmed={() => {
-                      // Re-fetch after an exit to sync status/remainingShares/exits from DB.
-                      // Use mergeAfterExit: updates price fields + exit-tracking fields
-                      // but NEVER overwrites sacred user-edited fields (fills, stops, etc.)
-                      apiGet('/api/positions').then(data => {
-                        if (!data.positions?.length) return;
-                        setPositions(prev => mergeAfterExit(prev, data.positions));
-                      }).catch(() => {});
+                    onExitConfirmed={async (exitResult) => {
+                      // Fetch fresh positions — server excludes CLOSED ones from this query.
+                      const data = await apiGet('/api/positions').catch(() => null);
+                      const freshPositions = data?.positions || [];
+
+                      if (exitResult?.status === 'CLOSED') {
+                        // Full exit: remove this position from Command view, show toast.
+                        // p.id + avgCostOf(p) captured from the map closure.
+                        const avg = avgCostOf(p);
+                        setPositions(prev => prev.filter(x => x.id !== p.id));
+                        setClosedToast({
+                          ticker:     p.ticker,
+                          avgCost:    avg,
+                          exitPrice:  exitResult.exitRecord?.price,
+                          pnlDollar:  exitResult.exitRecord?.pnl?.dollar,
+                          pnlPct:     exitResult.exitRecord?.pnl?.pct,
+                        });
+                        setTimeout(() => setClosedToast(null), 10000);
+                      } else {
+                        // Partial exit: merge updated fields (remainingShares, exits, P&L)
+                        // but preserve sacred user-edited fields (fills, stops, etc.)
+                        if (freshPositions.length) {
+                          setPositions(prev => mergeAfterExit(prev, freshPositions));
+                        }
+                      }
                     }}
                     flashed={flashedTickers.has(p.ticker)}
                     onOpenChart={(clicked) => {
@@ -2107,6 +2126,47 @@ export default function CommandCenter() {
           onClose={() => setChartModal(null)}
         />
       )}
+
+      {/* Closed position toast — shown after a full exit, auto-dismisses in 10s */}
+      {closedToast && (() => {
+        const { ticker, avgCost, exitPrice, pnlDollar, pnlPct } = closedToast;
+        const isGain = (pnlDollar ?? 0) >= 0;
+        const pnlColor = isGain ? '#28a745' : '#dc3545';
+        return (
+          <div style={{
+            position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 300, background: '#1a1a1a', border: `1px solid ${pnlColor}`,
+            borderRadius: 10, padding: '14px 20px', minWidth: 280, maxWidth: 380,
+            boxShadow: `0 4px 24px rgba(0,0,0,0.6), 0 0 0 1px ${pnlColor}22`,
+          }}>
+            <button onClick={() => setClosedToast(null)} style={{
+              position: 'absolute', top: 8, right: 10, background: 'none', border: 'none',
+              color: '#555', cursor: 'pointer', fontSize: 14, lineHeight: 1,
+            }}>✕</button>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>✓ Position closed</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 6 }}>{ticker}</div>
+            {avgCost != null && exitPrice != null && (
+              <div style={{ fontSize: 12, color: '#aaa', marginBottom: 4, fontFamily: 'monospace' }}>
+                Avg cost ${avgCost.toFixed(2)} → Exit ${Number(exitPrice).toFixed(2)}
+              </div>
+            )}
+            {pnlDollar != null && (
+              <div style={{ fontSize: 14, fontWeight: 700, color: pnlColor, marginBottom: 10 }}>
+                P&L: {isGain ? '+' : ''}${pnlDollar.toFixed(2)}
+                {pnlPct != null && <span style={{ fontSize: 12, marginLeft: 6 }}>({isGain ? '+' : ''}{pnlPct.toFixed(1)}%)</span>}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: '#555', marginBottom: onNavigate ? 8 : 0 }}>Moved to PNTHR Journal</div>
+            {onNavigate && (
+              <button onClick={() => { setClosedToast(null); onNavigate('journal'); }}
+                style={{ background: 'none', border: '1px solid #444', borderRadius: 4, color: '#FFD700',
+                  fontSize: 11, fontWeight: 700, padding: '4px 10px', cursor: 'pointer', letterSpacing: '0.05em' }}>
+                VIEW IN JOURNAL →
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

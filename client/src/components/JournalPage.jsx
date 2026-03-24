@@ -22,6 +22,132 @@ const REASON_COLORS = {
 
 const SUGGESTED_TAGS = ['kill-top-10', 'earnings-play', 'sector-rotation', 'breakout', 'mean-reversion', 'scalp'];
 
+// ── TradeDetail — defined OUTSIDE JournalPage to prevent remount on every keystroke ──
+function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, addTag, removeTag }) {
+  const disc = entry.discipline;
+  return (
+    <div style={{ background: '#0d0d0d', border: '1px solid #222', borderRadius: 8, padding: 16, marginTop: 2 }}>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>ENTRY</div>
+          <div style={{ fontSize: 12, color: '#ccc' }}>
+            Filled: {entry.entry?.fillDate || '—'} @ ${entry.entry?.fillPrice?.toFixed(2) || '—'}
+          </div>
+          {entry.entry?.stopPrice && <div style={{ fontSize: 11, color: '#888' }}>Stop: ${entry.entry.stopPrice.toFixed(2)}</div>}
+          {entry.entry?.killRank && <div style={{ fontSize: 11, color: '#FFD700' }}>Kill #{entry.entry.killRank} — {entry.entry.killTier}</div>}
+        </div>
+        <div>
+          <div style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>LOTS FILLED</div>
+          {(entry.lots || []).map(lot => (
+            <div key={lot.lot} style={{ fontSize: 11, color: '#ccc' }}>
+              #{lot.lot} {lot.shares} shr @ ${lot.price?.toFixed(2)} · {lot.date}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {(entry.exits || []).length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 4 }}>EXITS</div>
+          {(entry.exits || []).map(ex => (
+            <div key={ex.id} style={{ display: 'flex', gap: 10, fontSize: 11, color: '#ccc', padding: '2px 0', alignItems: 'center' }}>
+              <span style={{ color: '#555', minWidth: 24 }}>{ex.id}</span>
+              <span>{ex.shares} shr @ ${ex.price?.toFixed(2)}</span>
+              <span style={{ color: '#555' }}>·</span>
+              <span>{ex.date}</span>
+              <span style={{ color: REASON_COLORS[ex.reason] || '#888', fontWeight: 700 }}>{ex.reason}{ex.isOverride ? ' ⚠' : ''}</span>
+              <span style={{ color: ex.pnl?.dollar >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 'auto' }}>
+                {ex.pnl?.dollar >= 0 ? '+' : ''}{ex.pnl?.dollar?.toFixed(2)} ({ex.pnl?.pct >= 0 ? '+' : ''}{ex.pnl?.pct?.toFixed(1)}%)
+              </span>
+              {ex.note && <span style={{ color: '#555', fontSize: 10, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ex.note}>"{ex.note}"</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {disc?.totalScore != null && (
+        <div style={{ background: '#111', borderRadius: 6, padding: '10px 14px', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <span style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>DISCIPLINE SCORE</span>
+            <span style={{ color: DISC_COLORS(disc.totalScore), fontSize: 20, fontWeight: 900 }}>{disc.totalScore}/100</span>
+          </div>
+          <div style={{ display: 'flex', gap: 20, fontSize: 11, flexWrap: 'wrap' }}>
+            <div>Entry: <span style={{ color: '#fff', fontWeight: 700 }}>{disc.entryScore}/30</span></div>
+            <div>Hold: <span style={{ color: '#fff', fontWeight: 700 }}>{disc.holdScore}/30</span></div>
+            <div>Exit: <span style={{ color: '#fff', fontWeight: 700 }}>{disc.exitScore}/40</span></div>
+            {disc.overrideCount > 0 && <div style={{ color: '#dc3545' }}>⚠ {disc.overrideCount} override{disc.overrideCount > 1 ? 's' : ''}</div>}
+          </div>
+        </div>
+      )}
+      {disc?.totalScore == null && entry.performance?.status !== 'CLOSED' && (
+        <div style={{ color: '#555', fontSize: 11, marginBottom: 12 }}>Discipline score: Pending (calculated on close)</div>
+      )}
+
+      {entry.whatIf?.signalExitDate && (entry.discipline?.overrideCount || 0) > 0 && (
+        <div style={{ background: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.2)', borderRadius: 6, padding: '10px 14px', marginBottom: 12 }}>
+          <div style={{ color: '#dc3545', fontSize: 10, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>WHAT IF — GHOST COMPARISON</div>
+          <div style={{ fontSize: 11, color: '#ccc' }}>
+            If you had held to the SIGNAL exit ({entry.whatIf.signalExitDate} @ ${entry.whatIf.signalExitPrice?.toFixed(2)}):
+            would have been {entry.whatIf.signalExitPnl >= 0 ? '+' : ''}{entry.whatIf.signalExitPnl?.toFixed(1)}%
+          </div>
+          {entry.whatIf.overrideCostDollar != null && (
+            <div style={{ fontSize: 11, color: '#ff8c00', marginTop: 4 }}>
+              Cost of override: {entry.whatIf.overrideCostDollar >= 0 ? '+' : ''}${entry.whatIf.overrideCostDollar?.toFixed(2)} left on table
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>NOTES</div>
+        {(entry.notes || []).length === 0 && <div style={{ color: '#444', fontSize: 11 }}>No notes yet.</div>}
+        {(entry.notes || []).map(note => (
+          <div key={note.id} style={{ padding: '6px 0', borderBottom: '1px solid #1a1a1a' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
+              <span style={{ color: '#555', fontSize: 10 }}>{note.timestamp ? new Date(note.timestamp).toLocaleString() : ''}</span>
+              <span style={{ background: '#1a1a1a', color: note.type === 'OVERRIDE' ? '#dc3545' : '#888', fontSize: 9, padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>{note.type}</span>
+              <button onClick={() => deleteNote(entry._id, note.id)}
+                style={{ background: 'none', border: 'none', color: '#333', cursor: 'pointer', fontSize: 11, marginLeft: 'auto' }}>✕</button>
+            </div>
+            <div style={{ color: '#ccc', fontSize: 12 }}>{note.text}</div>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <input
+            value={noteInputs[entry._id] || ''}
+            onChange={e => setNoteInputs(p => ({ ...p, [entry._id]: e.target.value }))}
+            placeholder="Add a note..."
+            style={{ flex: 1, background: '#1a1a1a', border: '1px solid #333', color: '#fff', borderRadius: 4, padding: '5px 8px', fontSize: 12 }}
+          />
+          <button onClick={() => addNote(entry._id, 'MID_TRADE')}
+            style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+            ADD
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>TAGS</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {(entry.tags || []).map(tag => (
+            <span key={tag} style={{ background: '#1a1a1a', border: '1px solid #333', color: '#aaa', fontSize: 10, padding: '2px 8px', borderRadius: 4, display: 'flex', gap: 4, alignItems: 'center' }}>
+              {tag}
+              <button onClick={() => removeTag(entry._id, tag)}
+                style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', padding: 0, fontSize: 10 }}>✕</button>
+            </span>
+          ))}
+          {SUGGESTED_TAGS.filter(t => !(entry.tags || []).includes(t)).slice(0, 4).map(t => (
+            <button key={t} onClick={() => addTag(entry._id, t)}
+              style={{ background: 'none', border: '1px dashed #333', color: '#555', fontSize: 9, padding: '2px 6px', borderRadius: 4, cursor: 'pointer' }}>
+              + {t}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function JournalPage({ onNavigate }) {
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState('trades');
@@ -164,132 +290,6 @@ export default function JournalPage({ onNavigate }) {
       ))}
     </div>
   );
-
-  const TradeDetail = ({ entry }) => {
-    const pnl = entry.performance?.totalPnlDollar ?? entry.performance?.realizedPnlDollar ?? null;
-    const disc = entry.discipline;
-    return (
-      <div style={{ background: '#0d0d0d', border: '1px solid #222', borderRadius: 8, padding: 16, marginTop: 2 }}>
-        <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>ENTRY</div>
-            <div style={{ fontSize: 12, color: '#ccc' }}>
-              Filled: {entry.entry?.fillDate || '—'} @ ${entry.entry?.fillPrice?.toFixed(2) || '—'}
-            </div>
-            {entry.entry?.stopPrice && <div style={{ fontSize: 11, color: '#888' }}>Stop: ${entry.entry.stopPrice.toFixed(2)}</div>}
-            {entry.entry?.killRank && <div style={{ fontSize: 11, color: '#FFD700' }}>Kill #{entry.entry.killRank} — {entry.entry.killTier}</div>}
-          </div>
-          <div>
-            <div style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>LOTS FILLED</div>
-            {(entry.lots || []).map(lot => (
-              <div key={lot.lot} style={{ fontSize: 11, color: '#ccc' }}>
-                #{lot.lot} {lot.shares} shr @ ${lot.price?.toFixed(2)} · {lot.date}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {(entry.exits || []).length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 4 }}>EXITS</div>
-            {(entry.exits || []).map(ex => (
-              <div key={ex.id} style={{ display: 'flex', gap: 10, fontSize: 11, color: '#ccc', padding: '2px 0', alignItems: 'center' }}>
-                <span style={{ color: '#555', minWidth: 24 }}>{ex.id}</span>
-                <span>{ex.shares} shr @ ${ex.price?.toFixed(2)}</span>
-                <span style={{ color: '#555' }}>·</span>
-                <span>{ex.date}</span>
-                <span style={{ color: REASON_COLORS[ex.reason] || '#888', fontWeight: 700 }}>{ex.reason}{ex.isOverride ? ' ⚠' : ''}</span>
-                <span style={{ color: ex.pnl?.dollar >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 'auto' }}>
-                  {ex.pnl?.dollar >= 0 ? '+' : ''}{ex.pnl?.dollar?.toFixed(2)} ({ex.pnl?.pct >= 0 ? '+' : ''}{ex.pnl?.pct?.toFixed(1)}%)
-                </span>
-                {ex.note && <span style={{ color: '#555', fontSize: 10, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ex.note}>"{ex.note}"</span>}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {disc?.totalScore != null && (
-          <div style={{ background: '#111', borderRadius: 6, padding: '10px 14px', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <span style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>DISCIPLINE SCORE</span>
-              <span style={{ color: DISC_COLORS(disc.totalScore), fontSize: 20, fontWeight: 900 }}>{disc.totalScore}/100</span>
-            </div>
-            <div style={{ display: 'flex', gap: 20, fontSize: 11, flexWrap: 'wrap' }}>
-              <div>Entry: <span style={{ color: '#fff', fontWeight: 700 }}>{disc.entryScore}/30</span></div>
-              <div>Hold: <span style={{ color: '#fff', fontWeight: 700 }}>{disc.holdScore}/30</span></div>
-              <div>Exit: <span style={{ color: '#fff', fontWeight: 700 }}>{disc.exitScore}/40</span></div>
-              {disc.overrideCount > 0 && <div style={{ color: '#dc3545' }}>⚠ {disc.overrideCount} override{disc.overrideCount > 1 ? 's' : ''}</div>}
-            </div>
-          </div>
-        )}
-        {disc?.totalScore == null && entry.performance?.status !== 'CLOSED' && (
-          <div style={{ color: '#555', fontSize: 11, marginBottom: 12 }}>Discipline score: Pending (calculated on close)</div>
-        )}
-
-        {entry.whatIf?.signalExitDate && (entry.discipline?.overrideCount || 0) > 0 && (
-          <div style={{ background: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.2)', borderRadius: 6, padding: '10px 14px', marginBottom: 12 }}>
-            <div style={{ color: '#dc3545', fontSize: 10, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>WHAT IF — GHOST COMPARISON</div>
-            <div style={{ fontSize: 11, color: '#ccc' }}>
-              If you had held to the SIGNAL exit ({entry.whatIf.signalExitDate} @ ${entry.whatIf.signalExitPrice?.toFixed(2)}):
-              would have been {entry.whatIf.signalExitPnl >= 0 ? '+' : ''}{entry.whatIf.signalExitPnl?.toFixed(1)}%
-            </div>
-            {entry.whatIf.overrideCostDollar != null && (
-              <div style={{ fontSize: 11, color: '#ff8c00', marginTop: 4 }}>
-                Cost of override: {entry.whatIf.overrideCostDollar >= 0 ? '+' : ''}${entry.whatIf.overrideCostDollar?.toFixed(2)} left on table
-              </div>
-            )}
-          </div>
-        )}
-
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>NOTES</div>
-          {(entry.notes || []).length === 0 && <div style={{ color: '#444', fontSize: 11 }}>No notes yet.</div>}
-          {(entry.notes || []).map(note => (
-            <div key={note.id} style={{ padding: '6px 0', borderBottom: '1px solid #1a1a1a' }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
-                <span style={{ color: '#555', fontSize: 10 }}>{note.timestamp ? new Date(note.timestamp).toLocaleString() : ''}</span>
-                <span style={{ background: '#1a1a1a', color: note.type === 'OVERRIDE' ? '#dc3545' : '#888', fontSize: 9, padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>{note.type}</span>
-                <button onClick={() => deleteNote(entry._id, note.id)}
-                  style={{ background: 'none', border: 'none', color: '#333', cursor: 'pointer', fontSize: 11, marginLeft: 'auto' }}>✕</button>
-              </div>
-              <div style={{ color: '#ccc', fontSize: 12 }}>{note.text}</div>
-            </div>
-          ))}
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <input
-              value={noteInputs[entry._id] || ''}
-              onChange={e => setNoteInputs(p => ({ ...p, [entry._id]: e.target.value }))}
-              placeholder="Add a note..."
-              style={{ flex: 1, background: '#1a1a1a', border: '1px solid #333', color: '#fff', borderRadius: 4, padding: '5px 8px', fontSize: 12 }}
-            />
-            <button onClick={() => addNote(entry._id, 'MID_TRADE')}
-              style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-              ADD
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>TAGS</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            {(entry.tags || []).map(tag => (
-              <span key={tag} style={{ background: '#1a1a1a', border: '1px solid #333', color: '#aaa', fontSize: 10, padding: '2px 8px', borderRadius: 4, display: 'flex', gap: 4, alignItems: 'center' }}>
-                {tag}
-                <button onClick={() => removeTag(entry._id, tag)}
-                  style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', padding: 0, fontSize: 10 }}>✕</button>
-              </span>
-            ))}
-            {SUGGESTED_TAGS.filter(t => !(entry.tags || []).includes(t)).slice(0, 4).map(t => (
-              <button key={t} onClick={() => addTag(entry._id, t)}
-                style={{ background: 'none', border: '1px dashed #333', color: '#555', fontSize: 9, padding: '2px 6px', borderRadius: 4, cursor: 'pointer' }}>
-                + {t}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const AnalyticsTab = () => (
     <div>
@@ -545,7 +545,7 @@ export default function JournalPage({ onNavigate }) {
                             {isExpanded && (
                               <tr>
                                 <td colSpan={10} style={{ padding: '0 8px 8px', background: '#0d0d0d' }}>
-                                  <TradeDetail entry={entry} />
+                                  <TradeDetail entry={entry} noteInputs={noteInputs} setNoteInputs={setNoteInputs} addNote={addNote} deleteNote={deleteNote} addTag={addTag} removeTag={removeTag} />
                                 </td>
                               </tr>
                             )}

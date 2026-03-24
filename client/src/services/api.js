@@ -571,6 +571,13 @@ export async function fetchLiveVix() {
 
 // ── Journal ───────────────────────────────────────────────────────────────────
 
+export async function fetchWashRules(ticker = null) {
+  const qs = ticker ? `?ticker=${encodeURIComponent(ticker)}` : '';
+  const res = await fetch(`${API_BASE}/api/wash-rules${qs}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function fetchJournal(filters = {}) {
   const params = new URLSearchParams();
   if (filters.status)    params.set('status', filters.status);

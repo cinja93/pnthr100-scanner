@@ -1932,6 +1932,36 @@ app.post('/api/journal/weekly-reviews', authenticateJWT, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/wash-rules — active wash sale windows for current user; ?ticker=X to filter
+app.get('/api/wash-rules', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const now = new Date();
+    const filter = {
+      ownerId: req.user.userId,
+      'washSale.isLoss': true,
+      $or: [
+        { 'washSale.expiryDate': { $gt: now } },
+        { 'washSale.triggered': true },
+      ],
+    };
+    if (req.query.ticker) filter.ticker = req.query.ticker.toUpperCase();
+    const rules = await db.collection('pnthr_journal').find(filter)
+      .project({ ticker: 1, direction: 1, washSale: 1, 'performance.realizedPnlDollar': 1 })
+      .sort({ 'washSale.expiryDate': 1 })
+      .toArray();
+    const enriched = rules.map(r => ({
+      ...r,
+      washSale: {
+        ...r.washSale,
+        daysRemaining: Math.max(0, Math.ceil((new Date(r.washSale.expiryDate) - now) / (1000 * 60 * 60 * 24))),
+      },
+    }));
+    res.json(enriched);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/journal/:id — single entry
 app.get('/api/journal/:id', authenticateJWT, async (req, res) => {
   try {

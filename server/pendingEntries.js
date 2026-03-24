@@ -155,6 +155,8 @@ export async function pendingEntryConfirm(req, res) {
       { $set: { status: 'CONFIRMED', confirmedAt: new Date(), positionId: posId } }
     );
 
+    let washWarning = null;
+
     // Auto-create journal entry for newly confirmed position.
     // Fetch market + sector snapshot at the moment of entry (best-effort).
     try {
@@ -171,7 +173,37 @@ export async function pendingEntryConfirm(req, res) {
       await createJournalEntry(db, position, req.user.userId, killData, marketAtEntry, sectorAtEntry);
     } catch (e) { console.warn('[JOURNAL] Auto-create failed:', e.message); }
 
-    res.json({ success: true, positionId: posId });
+    // Check for active wash sale rule — mark triggered if re-entering during window.
+    try {
+      const now = new Date();
+      const activeWash = await db.collection('pnthr_journal').findOne({
+        ticker:                position.ticker,
+        ownerId:               req.user.userId,
+        'washSale.isLoss':     true,
+        'washSale.expiryDate': { $gt: now },
+        'washSale.triggered':  false,
+      });
+      if (activeWash) {
+        washWarning = {
+          ticker:        position.ticker,
+          lossAmount:    activeWash.washSale.lossAmount,
+          exitDate:      activeWash.washSale.exitDate,
+          expiryDate:    activeWash.washSale.expiryDate,
+          daysRemaining: Math.ceil((new Date(activeWash.washSale.expiryDate) - now) / (1000 * 60 * 60 * 24)),
+        };
+        await db.collection('pnthr_journal').updateOne(
+          { _id: activeWash._id },
+          { $set: { 'washSale.triggered': true, 'washSale.triggeredDate': now, 'washSale.triggeredEntryId': posId } }
+        );
+        // Tag the new journal entry so it surfaces in the Journal wash filters
+        await db.collection('pnthr_journal').updateOne(
+          { positionId: posId, ownerId: req.user.userId },
+          { $addToSet: { tags: 'wash-sale' } }
+        );
+      }
+    } catch (e) { console.warn('[PE] Wash rule check failed:', e.message); }
+
+    res.json({ success: true, positionId: posId, washWarning });
   } catch (err) {
     console.error('[PE] pendingEntryConfirm error:', err);
     res.status(500).json({ error: err.message });

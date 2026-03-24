@@ -1618,6 +1618,7 @@ export default function CommandCenter({ onNavigate }) {
   const [sectorWarning,   setSectorWarning]   = useState(null);
   const [chartModal,      setChartModal]      = useState(null); // { stocks, index }
   const [closedToast,     setClosedToast]     = useState(null); // { ticker, avgCost, exitPrice, pnlDollar, pnlPct }
+  const [washWarning,     setWashWarning]     = useState(null); // { ticker, lossAmount, exitDate, expiryDate, daysRemaining, pendingId, fillData }
 
   const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
   const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
@@ -1885,7 +1886,31 @@ export default function CommandCenter({ onNavigate }) {
     } catch { /* non-fatal */ }
   }, [setSectorWarning]);
 
-  const handleConfirmEntry = useCallback(async (id, fillData) => {
+  const handleConfirmEntry = useCallback(async (id, fillData, forceConfirm = false) => {
+    // Pre-check for active wash sale window — show warning modal before confirming
+    if (!forceConfirm) {
+      const pEntry = pendingEntries.find(e => e.id === id);
+      if (pEntry?.ticker) {
+        try {
+          const rules = await fetch(`${API_BASE}/api/wash-rules?ticker=${encodeURIComponent(pEntry.ticker)}`, { headers: authHeaders() })
+            .then(r => r.ok ? r.json() : []).catch(() => []);
+          const active = rules.find(w => !w.washSale?.triggered && (w.washSale?.daysRemaining ?? 0) > 0);
+          if (active) {
+            setWashWarning({
+              ticker:        pEntry.ticker,
+              lossAmount:    active.washSale.lossAmount,
+              exitDate:      active.washSale.exitDate,
+              expiryDate:    active.washSale.expiryDate,
+              daysRemaining: active.washSale.daysRemaining,
+              pendingId:     id,
+              fillData,
+            });
+            return;
+          }
+        } catch { /* non-fatal — proceed with confirm */ }
+      }
+    }
+    setWashWarning(null);
     await confirmPendingEntry(id, fillData);
     setPendingEntries(prev => prev.filter(e => e.id !== id));
     // Re-fetch positions so the new one appears immediately.
@@ -1903,7 +1928,7 @@ export default function CommandCenter({ onNavigate }) {
         });
       })
       .catch(() => {});
-  }, [mergeServerPrices]);
+  }, [pendingEntries, mergeServerPrices]);
 
   const handleDismissEntry = useCallback(async (id) => {
     await dismissPendingEntry(id);
@@ -2126,6 +2151,46 @@ export default function CommandCenter({ onNavigate }) {
           onClose={() => setChartModal(null)}
         />
       )}
+
+      {/* Wash sale warning modal — requires user acknowledgement before confirming entry */}
+      {washWarning && (() => {
+        const { ticker, lossAmount, exitDate, expiryDate, daysRemaining } = washWarning;
+        const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—';
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 400,
+            background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{
+              background: '#1a1a1a', border: '1px solid #dc3545', borderRadius: 10,
+              padding: '24px 28px', maxWidth: 440, width: '90vw',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.8)',
+            }}>
+              <div style={{ color: '#dc3545', fontWeight: 800, fontSize: '1.1rem', marginBottom: 12, letterSpacing: '0.03em' }}>
+                ⚠ WASH SALE WARNING
+              </div>
+              <div style={{ color: '#ccc', lineHeight: 1.75, fontSize: 13, marginBottom: 20 }}>
+                <b style={{ color: '#FFD700' }}>{ticker}</b> closed at a loss of{' '}
+                <b style={{ color: '#dc3545' }}>-${Math.abs(lossAmount || 0).toFixed(2)}</b> on {fmtD(exitDate)}.<br/>
+                Re-entering before <b style={{ color: '#FFD700' }}>{fmtD(expiryDate)}</b> ({daysRemaining}d remaining)
+                will trigger a wash sale, <b style={{ color: '#fff' }}>disallowing that tax loss.</b>
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button
+                  onClick={() => handleConfirmEntry(washWarning.pendingId, washWarning.fillData, true)}
+                  style={{ background: '#dc3545', color: '#fff', padding: '8px 20px', borderRadius: 6, border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: 12, letterSpacing: '0.05em' }}>
+                  ENTER ANYWAY
+                </button>
+                <button
+                  onClick={() => setWashWarning(null)}
+                  style={{ background: 'transparent', color: '#888', padding: '8px 20px', borderRadius: 6, border: '1px solid #444', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>
+                  CANCEL
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Closed position toast — shown after a full exit, auto-dismisses in 10s */}
       {closedToast && (() => {

@@ -255,25 +255,38 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
         );
       })()}
 
-      {/* ── Wash Rule ─────────────────────────────────────────────────────── */}
-      {entry.washRule?.isLoss && (
-        <div style={{ background: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.3)', borderRadius: 6, padding: '10px 14px', marginTop: 12, marginBottom: 4 }}>
-          <div style={{ color: '#dc3545', fontWeight: 800, fontSize: 12, marginBottom: 4 }}>⚠ WASH RULE ACTIVE</div>
-          <div style={{ fontSize: 11, color: '#ccc' }}>
-            Loss: ${Math.abs(entry.performance?.realizedPnlDollar || 0).toFixed(2)}
+      {/* ── Wash Sale ─────────────────────────────────────────────────────── */}
+      {(entry.washSale?.isLoss || entry.washRule?.isLoss) && (() => {
+        const ws = entry.washSale?.isLoss ? entry.washSale : entry.washRule;
+        const expiry = ws.expiryDate ? new Date(ws.expiryDate) : null;
+        const now = new Date();
+        const daysLeft = expiry ? Math.max(0, Math.ceil((expiry - now) / 86400000)) : null;
+        const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—';
+        const isTriggered = ws.triggered;
+        const isExpired = expiry && expiry <= now && !isTriggered;
+        const lossAmt = Math.abs(ws.lossAmount ?? entry.performance?.realizedPnlDollar ?? 0);
+        return (
+          <div style={{ borderLeft: '3px solid #dc3545', borderRadius: '0 6px 6px 0', background: isTriggered ? 'rgba(220,53,69,0.1)' : 'rgba(220,53,69,0.04)', padding: '10px 14px', marginTop: 12, marginBottom: 4 }}>
+            <div style={{ color: '#dc3545', fontWeight: 800, fontSize: 12, marginBottom: 5 }}>
+              {isTriggered ? '⚠ WASH SALE TRIGGERED' : isExpired ? '✓ WASH WINDOW CLEARED' : `⚠ WASH WINDOW ACTIVE — ${daysLeft}d remaining`}
+            </div>
+            {isTriggered
+              ? <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.7 }}>
+                  Triggered{ws.triggeredDate ? ` on ${fmtD(ws.triggeredDate)}` : ''} — new {entry.ticker} position opened during wash window.<br/>
+                  <span style={{ color: '#dc3545' }}>-${lossAmt.toFixed(2)} loss is disallowed for tax purposes.</span>
+                </div>
+              : isExpired
+                ? <div style={{ fontSize: 11, color: '#6bcb77' }}>
+                    Window {fmtD(ws.exitDate)} → {fmtD(ws.expiryDate)} expired without re-entry. Loss is claimable.
+                  </div>
+                : <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.7 }}>
+                    Window: {fmtD(ws.exitDate)} → {fmtD(ws.expiryDate)}<br/>
+                    Do NOT re-enter <b style={{ color: '#fff' }}>{entry.ticker}</b> before <b style={{ color: '#FFD700' }}>{fmtD(ws.expiryDate)}</b> or -${lossAmt.toFixed(2)} loss will be disallowed.
+                  </div>
+            }
           </div>
-          {entry.washRule.expiryDate && (
-            <>
-              <div style={{ fontSize: 11, color: '#ccc', marginTop: 2 }}>
-                Do NOT re-enter <b style={{ color: '#fff' }}>{entry.ticker}</b> before <b style={{ color: '#FFD700' }}>{entry.washRule.expiryDate}</b>
-              </div>
-              <div style={{ fontSize: 10, color: '#555', marginTop: 4 }}>
-                Wash sale rule: 30 days from final exit date {entry.washRule.finalExitDate || ''}
-              </div>
-            </>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Notes ─────────────────────────────────────────────────────────── */}
       <div style={{ marginTop: 14, marginBottom: 12 }}>
@@ -346,6 +359,7 @@ export default function JournalPage({ onNavigate }) {
   const [savingReview, setSavingReview] = useState(false);
   const [migrating, setMigrating] = useState(false);
   const [migrateResult, setMigrateResult] = useState(null);
+  const [washRules, setWashRules] = useState([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -363,6 +377,13 @@ export default function JournalPage({ onNavigate }) {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // Fetch active wash rules when analytics tab is loaded
+  useEffect(() => {
+    if (tab !== 'analytics') return;
+    fetch(`${API_BASE}/api/wash-rules`, { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : []).then(setWashRules).catch(() => {});
+  }, [tab]);
 
   const filtered = entries.filter(e => {
     if (filterStatus === 'ALL') return true;
@@ -513,19 +534,52 @@ export default function JournalPage({ onNavigate }) {
 
       <div style={{ background: '#111', borderRadius: 10, padding: '14px 16px' }}>
         <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 800, letterSpacing: 1, marginBottom: 10 }}>WASH RULES</div>
-        {entries.filter(e => e.washRule?.isLoss && !e.washRule?.expired).length === 0
+        {washRules.length === 0
           ? <div style={{ color: '#555', fontSize: 12 }}>No active wash rules.</div>
-          : entries.filter(e => e.washRule?.isLoss && !e.washRule?.expired).map(e => {
-              const expiry = e.washRule.expiryDate;
-              const daysLeft = expiry ? Math.max(0, Math.ceil((new Date(expiry) - new Date()) / 86400000)) : null;
+          : (() => {
+              const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—';
+              const getWashColor = (days) => days <= 3 ? '#dc3545' : days <= 7 ? '#fd7e14' : '#FFD700';
               return (
-                <div key={e._id} style={{ display: 'flex', gap: 16, fontSize: 12, padding: '6px 0', borderBottom: '1px solid #1a1a1a' }}>
-                  <span style={{ color: '#FFD700', fontWeight: 800, minWidth: 50 }}>{e.ticker}</span>
-                  <span style={{ color: '#dc3545' }}>⚠ {daysLeft}d remaining</span>
-                  <span style={{ color: '#555' }}>Expires {expiry}</span>
-                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #222' }}>
+                      {['TICKER', 'LOSS', 'EXIT DATE', 'EXPIRES', 'REMAINING', 'STATUS'].map(h => (
+                        <th key={h} style={{ textAlign: 'left', padding: '4px 8px', color: '#555', fontWeight: 700, fontSize: 10, letterSpacing: 1 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {washRules.map(r => {
+                      const ws = r.washSale;
+                      const days = ws.daysRemaining ?? 0;
+                      const isTriggered = ws.triggered;
+                      const isExpired = !isTriggered && days === 0;
+                      const [statusLabel, statusColor, statusBg] = isTriggered
+                        ? ['TRIGGERED', '#dc3545', 'rgba(220,53,69,0.2)']
+                        : isExpired
+                          ? ['CLEAR', '#6bcb77', 'rgba(107,203,119,0.15)']
+                          : ['ACTIVE', '#FFD700', 'rgba(255,215,0,0.15)'];
+                      return (
+                        <tr key={r._id} style={{ borderBottom: '1px solid #1a1a1a' }}>
+                          <td style={{ padding: '7px 8px', color: '#FFD700', fontWeight: 800 }}>{r.ticker}</td>
+                          <td style={{ padding: '7px 8px', color: '#dc3545' }}>-${Math.abs(ws.lossAmount || 0).toFixed(2)}</td>
+                          <td style={{ padding: '7px 8px', color: '#888' }}>{fmtD(ws.exitDate)}</td>
+                          <td style={{ padding: '7px 8px', color: '#888' }}>{fmtD(ws.expiryDate)}</td>
+                          <td style={{ padding: '7px 8px', color: isTriggered ? '#555' : getWashColor(days), fontWeight: 700 }}>
+                            {isTriggered ? '—' : `${days}d`}
+                          </td>
+                          <td style={{ padding: '7px 8px' }}>
+                            <span style={{ background: statusBg, color: statusColor, padding: '2px 8px', borderRadius: 4, fontWeight: 700, fontSize: 10, letterSpacing: 0.5 }}>
+                              {statusLabel}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               );
-            })
+            })()
         }
       </div>
     </div>
@@ -676,10 +730,11 @@ export default function JournalPage({ onNavigate }) {
                         const isExpanded = expandedId === entry._id;
                         const pnl = entry.performance?.realizedPnlDollar;
                         const disc = entry.discipline?.totalScore;
-                        const wash = entry.washRule;
-                        const washDays = wash?.isLoss && wash?.expiryDate
-                          ? Math.max(0, Math.ceil((new Date(wash.expiryDate) - new Date()) / 86400000))
-                          : null;
+                        const wash = entry.washSale?.isLoss ? entry.washSale : entry.washRule;
+                        const washExpiry = wash?.isLoss && wash?.expiryDate ? new Date(wash.expiryDate) : null;
+                        const washDays = washExpiry ? Math.max(0, Math.ceil((washExpiry - new Date()) / 86400000)) : null;
+                        const washTriggered = wash?.triggered;
+                        const washExpired = washExpiry && washExpiry <= new Date() && !washTriggered;
                         return (
                           <React.Fragment key={entry._id}>
                             <tr
@@ -711,9 +766,15 @@ export default function JournalPage({ onNavigate }) {
                                   : <span style={{ color: '#555' }}>—</span>}
                               </td>
                               <td style={tdStyle}>
-                                {washDays != null && washDays > 0
-                                  ? <span style={{ color: '#dc3545', fontWeight: 700 }}>{washDays}d</span>
-                                  : <span style={{ color: '#333' }}>—</span>}
+                                {washTriggered
+                                  ? <span title={wash.triggeredDate ? `Triggered ${new Date(wash.triggeredDate).toLocaleDateString()}` : 'Wash sale triggered'}
+                                      style={{ background: 'rgba(220,53,69,0.2)', color: '#dc3545', padding: '2px 8px', borderRadius: 4, fontWeight: 600, fontSize: '0.75rem' }}>WASH</span>
+                                  : washDays != null && washDays > 0
+                                    ? <span title={washExpiry ? `Expires ${washExpiry.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'})}` : ''}
+                                        style={{ color: '#FFD700', fontWeight: 600, fontSize: '0.85rem' }}>{washDays}d</span>
+                                    : washExpired
+                                      ? <span title={washExpiry ? `Expired ${washExpiry.toLocaleDateString()}` : ''} style={{ color: '#28a745', fontSize: '0.85rem' }}>✓</span>
+                                      : <span style={{ color: '#333' }}>—</span>}
                               </td>
                               <td style={tdStyle}>
                                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

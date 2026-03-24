@@ -1811,6 +1811,18 @@ app.get('/api/journal', authenticateJWT, async (req, res) => {
       .limit(Number(limit))
       .toArray();
     res.json(entries);
+    // Lazy backfill: compute discipline score for any closed trade that's missing it.
+    // Fire-and-forget after response — doesn't affect response time.
+    const needsScore = entries.filter(
+      e => e.performance?.status === 'CLOSED' && e.discipline?.totalScore == null
+    );
+    if (needsScore.length) {
+      setImmediate(async () => {
+        for (const e of needsScore) {
+          try { await calculateDisciplineScore(db, e._id.toString()); } catch { /* ignore */ }
+        }
+      });
+    }
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

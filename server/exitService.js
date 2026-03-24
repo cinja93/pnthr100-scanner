@@ -5,23 +5,7 @@
 // Exits are stored in position.exits[] and mirrored to pnthr_journal.
 // ─────────────────────────────────────────────────────────────────────────────
 import { calculateDisciplineScore } from './journalService.js';
-
-// ── Market snapshot at exit — SPY + QQQ prices captured automatically ─────────
-async function fetchMarketSnapshot() {
-  const key = process.env.FMP_API_KEY;
-  if (!key) return {};
-  try {
-    const url = `https://financialmodelingprep.com/api/v3/quote/SPY,QQQ?apikey=${key}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    const data = await res.json();
-    const snap = {};
-    for (const q of (Array.isArray(data) ? data : [])) {
-      if (q.symbol === 'SPY') { snap.spyPrice = q.price; snap.spyChange1D = q.changesPercentage; }
-      if (q.symbol === 'QQQ') { snap.qqqPrice = q.price; snap.qqqChange1D = q.changesPercentage; }
-    }
-    return snap;
-  } catch { return {}; }
-}
+import { fetchMarketSnapshot } from './marketSnapshot.js';
 
 function getFillsArray(fills) {
   if (!fills) return [];
@@ -71,7 +55,7 @@ async function recordExit(db, positionId, userId, exitData) {
   const exitId = `E${existingExits.length + 1}`;
 
   // Capture market snapshot at exit time (best-effort, non-blocking for exit flow)
-  const marketAtExit = await fetchMarketSnapshot().catch(() => ({}));
+  const marketAtExit = await fetchMarketSnapshot(position.sector || null).catch(() => ({}));
 
   const exitRecord = {
     id: exitId,

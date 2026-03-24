@@ -22,73 +22,152 @@ const REASON_COLORS = {
 
 const SUGGESTED_TAGS = ['kill-top-10', 'earnings-play', 'sector-rotation', 'breakout', 'mean-reversion', 'scalp'];
 
+// ── DisciplineCheck — one row of the checklist ───────────────────────────────
+function DisciplineCheck({ passed, na, label, detail }) {
+  const icon  = na ? '—' : passed ? '✓' : '✗';
+  const color = na ? '#444' : passed ? '#6bcb77' : '#ff6b6b';
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0', borderBottom: '1px solid #111' }}>
+      <span style={{ color, fontSize: 13, width: 16, textAlign: 'center', flexShrink: 0, fontWeight: 700 }}>{icon}</span>
+      <span style={{ color: na ? '#555' : '#ccc', fontSize: 11, flex: 1 }}>{label}</span>
+      <span style={{ color: '#555', fontSize: 10, textAlign: 'right' }}>{detail}</span>
+    </div>
+  );
+}
+
 // ── TradeDetail — defined OUTSIDE JournalPage to prevent remount on every keystroke ──
 function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, addTag, removeTag }) {
   const disc = entry.discipline;
+  const eb   = disc?.entryBreakdown || {};
+  const hb   = disc?.holdBreakdown  || {};
+  const xb   = disc?.exitBreakdown  || {};
+  const exits = entry.exits || [];
+  const finalExit = exits.find(e => e.isFinalExit) || exits[exits.length - 1];
+  const mkt = finalExit?.marketAtExit;
+  const isClosed = entry.performance?.status === 'CLOSED';
+
+  // Derive human-readable discipline check values from breakdown scores
+  const checks = {
+    confirmedSignal: eb.confirmedSignal != null ? { passed: eb.confirmedSignal >= 10, detail: entry.entry?.killRank ? `Kill #${entry.entry.killRank} · ${entry.entry.killTier || ''}` : 'No PNTHR signal at entry' } : null,
+    entryTiming:     eb.entryTiming    != null ? { passed: eb.entryTiming >= 10,     detail: eb.entryTiming >= 10 ? 'Within 1 week of signal' : 'Late entry' }                      : null,
+    slippage:        eb.slippage       != null ? { passed: eb.slippage >= 3,          detail: 'Fill vs signal price' }                                                                 : null,
+    sizing:          eb.sizingAdherence != null ? { passed: eb.sizingAdherence >= 5,  detail: `${entry.totalFilledShares || '—'} shares filled` }                                     : null,
+    heldDrawdown:    hb.heldThroughDrawdown != null ? { passed: hb.heldThroughDrawdown >= 10, detail: 'No panic exit on drawdown' }                                                    : null,
+    pyramiding:      hb.pyramidingFollowed  != null ? { passed: hb.pyramidingFollowed >= 10,  detail: `${(entry.lots || []).length} lot${(entry.lots || []).length !== 1 ? 's' : ''} filled` } : null,
+    stopMaintained:  hb.stopMaintained      != null ? { passed: hb.stopMaintained >= 10,      detail: `Stop $${entry.entry?.stopPrice?.toFixed(2) || '—'}` }                          : null,
+    followedSignal:  xb.followedSignal  != null ? { passed: xb.followedSignal >= 16,  detail: exits.map(e => e.reason).join(', ') || '—' }                                             : null,
+    feastFollowed:   xb.feastFollowed   != null ? { passed: xb.feastFollowed >= 10,   na: !exits.some(e => e.reason === 'FEAST'), detail: exits.some(e => e.reason === 'FEAST') ? 'FEAST rule executed' : 'N/A — RSI never triggered' } : null,
+    staleHunt:       xb.staleHuntFollowed != null ? { na: true, detail: (entry.performance?.holdingDays || 0) < 20 ? 'N/A — closed before day 20' : 'Timer respected' }               : null,
+    exitSlippage:    xb.exitSlippage    != null ? { passed: xb.exitSlippage >= 3,     detail: 'Exit price vs stop/signal' }                                                             : null,
+  };
+  const hasChecks = Object.values(checks).some(c => c !== null);
+
+  const NOTE_TYPE_COLORS = { EXIT: '#ff8c00', OVERRIDE: '#dc3545', MID_TRADE: '#888', ENTRY: '#6bcb77' };
+  const sectionHdr = (label) => (
+    <div style={{ color: '#555', fontSize: 9, letterSpacing: 2, fontWeight: 700, marginBottom: 6, marginTop: 14, textTransform: 'uppercase' }}>{label}</div>
+  );
+
   return (
     <div style={{ background: '#0d0d0d', border: '1px solid #222', borderRadius: 8, padding: 16, marginTop: 2 }}>
-      <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+
+      {/* ── Entry + Lots ──────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 16, marginBottom: 4, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>ENTRY</div>
+          {sectionHdr('Entry')}
           <div style={{ fontSize: 12, color: '#ccc' }}>
             Filled: {entry.entry?.fillDate || '—'} @ ${entry.entry?.fillPrice?.toFixed(2) || '—'}
           </div>
           {entry.entry?.stopPrice && <div style={{ fontSize: 11, color: '#888' }}>Stop: ${entry.entry.stopPrice.toFixed(2)}</div>}
-          {entry.entry?.killRank && <div style={{ fontSize: 11, color: '#FFD700' }}>Kill #{entry.entry.killRank} — {entry.entry.killTier}</div>}
+          {entry.entry?.killRank
+            ? <div style={{ fontSize: 11, color: '#FFD700' }}>Kill #{entry.entry.killRank} — {entry.entry.killTier}</div>
+            : <div style={{ fontSize: 11, color: '#555' }}>No PNTHR signal</div>}
         </div>
         <div>
-          <div style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>LOTS FILLED</div>
+          {sectionHdr('Lots Filled')}
           {(entry.lots || []).map(lot => (
             <div key={lot.lot} style={{ fontSize: 11, color: '#ccc' }}>
-              #{lot.lot} {lot.shares} shr @ ${lot.price?.toFixed(2)} · {lot.date}
+              #{lot.lot} · {lot.shares} shr @ ${lot.price?.toFixed(2)} · {lot.date}
             </div>
           ))}
+          {(entry.lots || []).length === 0 && <div style={{ fontSize: 11, color: '#444' }}>No lots recorded</div>}
         </div>
       </div>
 
-      {(entry.exits || []).length > 0 && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 4 }}>EXITS</div>
-          {(entry.exits || []).map(ex => (
-            <div key={ex.id} style={{ display: 'flex', gap: 10, fontSize: 11, color: '#ccc', padding: '2px 0', alignItems: 'center' }}>
-              <span style={{ color: '#555', minWidth: 24 }}>{ex.id}</span>
-              <span>{ex.shares} shr @ ${ex.price?.toFixed(2)}</span>
-              <span style={{ color: '#555' }}>·</span>
-              <span>{ex.date}</span>
-              <span style={{ color: REASON_COLORS[ex.reason] || '#888', fontWeight: 700 }}>{ex.reason}{ex.isOverride ? ' ⚠' : ''}</span>
-              <span style={{ color: ex.pnl?.dollar >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 'auto' }}>
-                {ex.pnl?.dollar >= 0 ? '+' : ''}{ex.pnl?.dollar?.toFixed(2)} ({ex.pnl?.pct >= 0 ? '+' : ''}{ex.pnl?.pct?.toFixed(1)}%)
-              </span>
-              {ex.note && <span style={{ color: '#555', fontSize: 10, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ex.note}>"{ex.note}"</span>}
+      {/* ── Exits ─────────────────────────────────────────────────────────── */}
+      {exits.length > 0 && (
+        <div style={{ marginBottom: 4 }}>
+          {sectionHdr('Exits')}
+          {exits.map(ex => (
+            <div key={ex.id}>
+              <div style={{ display: 'flex', gap: 10, fontSize: 11, color: '#ccc', padding: '3px 0', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ color: '#444', minWidth: 24 }}>{ex.id}</span>
+                <span>{ex.shares} shr @ ${ex.price?.toFixed(2)}</span>
+                <span style={{ color: '#333' }}>·</span>
+                <span style={{ color: '#888' }}>{ex.date}</span>
+                <span style={{ color: REASON_COLORS[ex.reason] || '#888', fontWeight: 700 }}>{ex.reason}{ex.isOverride ? ' ⚠' : ''}</span>
+                <span style={{ color: (ex.pnl?.dollar ?? 0) >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 'auto' }}>
+                  {(ex.pnl?.dollar ?? 0) >= 0 ? '+' : ''}${ex.pnl?.dollar?.toFixed(2)} ({(ex.pnl?.pct ?? 0) >= 0 ? '+' : ''}{ex.pnl?.pct?.toFixed(1)}%)
+                </span>
+              </div>
+              {ex.note && (
+                <div style={{ fontSize: 11, color: '#888', padding: '2px 0 4px 28px', fontStyle: 'italic' }}>"{ex.note}"</div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {disc?.totalScore != null && (
-        <div style={{ background: '#111', borderRadius: 6, padding: '10px 14px', marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <span style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>DISCIPLINE SCORE</span>
-            <span style={{ color: DISC_COLORS(disc.totalScore), fontSize: 20, fontWeight: 900 }}>{disc.totalScore}/100</span>
-          </div>
-          <div style={{ display: 'flex', gap: 20, fontSize: 11, flexWrap: 'wrap' }}>
-            <div>Entry: <span style={{ color: '#fff', fontWeight: 700 }}>{disc.entryScore}/30</span></div>
-            <div>Hold: <span style={{ color: '#fff', fontWeight: 700 }}>{disc.holdScore}/30</span></div>
-            <div>Exit: <span style={{ color: '#fff', fontWeight: 700 }}>{disc.exitScore}/40</span></div>
-            {disc.overrideCount > 0 && <div style={{ color: '#dc3545' }}>⚠ {disc.overrideCount} override{disc.overrideCount > 1 ? 's' : ''}</div>}
-          </div>
+      {/* ── Discipline Checklist ──────────────────────────────────────────── */}
+      {hasChecks && (
+        <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 6, padding: '10px 12px', marginTop: 12, marginBottom: 4 }}>
+          {sectionHdr('Entry Discipline')}
+          {checks.confirmedSignal && <DisciplineCheck {...checks.confirmedSignal} label="Confirmed PNTHR Signal?" />}
+          {checks.entryTiming     && <DisciplineCheck {...checks.entryTiming}     label="Entry within 1 week of signal?" />}
+          {checks.slippage        && <DisciplineCheck {...checks.slippage}        label="Slippage < 0.5%?" />}
+          {checks.sizing          && <DisciplineCheck {...checks.sizing}          label="Sized per Vitality Rule?" />}
+
+          {sectionHdr('Hold Discipline')}
+          {checks.heldDrawdown   && <DisciplineCheck {...checks.heldDrawdown}   label="Held through first drawdown?" />}
+          {checks.pyramiding     && <DisciplineCheck {...checks.pyramiding}     label="Pyramiding followed?" />}
+          {checks.stopMaintained && <DisciplineCheck {...checks.stopMaintained} label="Stop maintained?" />}
+
+          {sectionHdr('Exit Discipline')}
+          {checks.followedSignal && <DisciplineCheck {...checks.followedSignal} label="Exited on system signal?" />}
+          {checks.feastFollowed  && <DisciplineCheck {...checks.feastFollowed}  label="FEAST rule followed?" />}
+          {checks.staleHunt      && <DisciplineCheck {...checks.staleHunt}      label="Stale hunt (day 20) followed?" na />}
+          {checks.exitSlippage   && <DisciplineCheck {...checks.exitSlippage}   label="Exit slippage < 0.5%?" />}
         </div>
       )}
-      {disc?.totalScore == null && entry.performance?.status !== 'CLOSED' && (
-        <div style={{ color: '#555', fontSize: 11, marginBottom: 12 }}>Discipline score: Pending (calculated on close)</div>
+
+      {/* ── Discipline Score ──────────────────────────────────────────────── */}
+      {disc?.totalScore != null ? (
+        <div style={{ background: '#111', borderRadius: 6, padding: '10px 14px', marginTop: 12, marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+            <span style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>DISCIPLINE SCORE</span>
+            <span style={{ color: DISC_COLORS(disc.totalScore), fontSize: 22, fontWeight: 900 }}>{disc.totalScore}/100</span>
+          </div>
+          <div style={{ display: 'flex', gap: 20, fontSize: 11, flexWrap: 'wrap' }}>
+            <div>Entry: <span style={{ color: DISC_COLORS((disc.entryScore / 30) * 100), fontWeight: 700 }}>{disc.entryScore ?? '—'}/30</span></div>
+            <div>Hold:  <span style={{ color: DISC_COLORS((disc.holdScore  / 30) * 100), fontWeight: 700 }}>{disc.holdScore  ?? '—'}/30</span></div>
+            <div>Exit:  <span style={{ color: DISC_COLORS((disc.exitScore  / 40) * 100), fontWeight: 700 }}>{disc.exitScore  ?? '—'}/40</span></div>
+            {(disc.overrideCount || 0) > 0 && <div style={{ color: '#dc3545' }}>⚠ {disc.overrideCount} MANUAL override{disc.overrideCount > 1 ? 's' : ''}</div>}
+          </div>
+        </div>
+      ) : (
+        <div style={{ color: '#444', fontSize: 11, marginTop: 8 }}>
+          {isClosed ? 'Discipline score: calculating…' : 'Discipline score: pending close'}
+        </div>
       )}
 
-      {entry.whatIf?.signalExitDate && (entry.discipline?.overrideCount || 0) > 0 && (
-        <div style={{ background: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.2)', borderRadius: 6, padding: '10px 14px', marginBottom: 12 }}>
+      {/* ── Ghost Comparison ──────────────────────────────────────────────── */}
+      {entry.whatIf?.signalExitDate && (disc?.overrideCount || 0) > 0 && (
+        <div style={{ background: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.2)', borderRadius: 6, padding: '10px 14px', marginTop: 12, marginBottom: 4 }}>
           <div style={{ color: '#dc3545', fontSize: 10, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>WHAT IF — GHOST COMPARISON</div>
           <div style={{ fontSize: 11, color: '#ccc' }}>
-            If you had held to the SIGNAL exit ({entry.whatIf.signalExitDate} @ ${entry.whatIf.signalExitPrice?.toFixed(2)}):
-            would have been {entry.whatIf.signalExitPnl >= 0 ? '+' : ''}{entry.whatIf.signalExitPnl?.toFixed(1)}%
+            If held to SIGNAL exit ({entry.whatIf.signalExitDate} @ ${entry.whatIf.signalExitPrice?.toFixed(2)}):&nbsp;
+            <span style={{ color: (entry.whatIf.signalExitPnl || 0) >= 0 ? '#6bcb77' : '#ff6b6b' }}>
+              {(entry.whatIf.signalExitPnl || 0) >= 0 ? '+' : ''}{entry.whatIf.signalExitPnl?.toFixed(1)}%
+            </span>
           </div>
           {entry.whatIf.overrideCostDollar != null && (
             <div style={{ fontSize: 11, color: '#ff8c00', marginTop: 4 }}>
@@ -98,18 +177,120 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
         </div>
       )}
 
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>NOTES</div>
-        {(entry.notes || []).length === 0 && <div style={{ color: '#444', fontSize: 11 }}>No notes yet.</div>}
+      {/* ── Market + Sector Conditions (entry and/or exit) ────────────────── */}
+      {(() => {
+        const entryMkt = entry.entry?.marketAtEntry;
+        const entrySec = entry.entry?.sectorAtEntry;
+        const hasEntry = entryMkt && (entryMkt.spyPrice || entryMkt.qqqPrice);
+        const hasExit  = mkt && (mkt.spyPrice || mkt.qqqPrice);
+        if (!hasEntry && !hasExit) return null;
+
+        const SnapRow = ({ snap, sec }) => (
+          <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#aaa', flexWrap: 'wrap', alignItems: 'center' }}>
+            {snap.spyPrice && (
+              <span>SPY <span style={{ color: '#fff', fontWeight: 700 }}>${snap.spyPrice.toFixed(2)}</span>
+                {snap.spyVsEma != null
+                  ? <span style={{ color: snap.spyPosition === 'above' ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
+                      {snap.spyVsEma >= 0 ? '+' : ''}{snap.spyVsEma.toFixed(1)}% EMA
+                    </span>
+                  : snap.spyChange1D != null &&
+                    <span style={{ color: snap.spyChange1D >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
+                      {snap.spyChange1D >= 0 ? '▲' : '▼'}{Math.abs(snap.spyChange1D).toFixed(1)}%
+                    </span>
+                }
+              </span>
+            )}
+            {snap.qqqPrice && (
+              <span>QQQ <span style={{ color: '#fff', fontWeight: 700 }}>${snap.qqqPrice.toFixed(2)}</span>
+                {snap.qqqVsEma != null
+                  ? <span style={{ color: snap.qqqPosition === 'above' ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
+                      {snap.qqqVsEma >= 0 ? '+' : ''}{snap.qqqVsEma.toFixed(1)}% EMA
+                    </span>
+                  : snap.qqqChange1D != null &&
+                    <span style={{ color: snap.qqqChange1D >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
+                      {snap.qqqChange1D >= 0 ? '▲' : '▼'}{Math.abs(snap.qqqChange1D).toFixed(1)}%
+                    </span>
+                }
+              </span>
+            )}
+            {snap.vix != null && (
+              <span>VIX <span style={{ color: snap.vix >= 25 ? '#ff6b6b' : snap.vix >= 18 ? '#ff8c00' : '#aaa', fontWeight: 700 }}>{snap.vix.toFixed(1)}</span></span>
+            )}
+            {snap.regime && (
+              <span style={{
+                background: snap.regime === 'BULLISH' ? 'rgba(107,203,119,0.12)' : snap.regime === 'BEARISH' ? 'rgba(255,107,107,0.12)' : 'rgba(255,140,0,0.12)',
+                color: snap.regime === 'BULLISH' ? '#6bcb77' : snap.regime === 'BEARISH' ? '#ff6b6b' : '#ff8c00',
+                fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 4, letterSpacing: 1,
+              }}>{snap.regime}</span>
+            )}
+            {sec?.etfTicker && sec.etfPrice != null && (
+              <span style={{ color: '#555', borderLeft: '1px solid #1a1a1a', paddingLeft: 12 }}>
+                {sec.etfTicker} <span style={{ color: '#aaa', fontWeight: 700 }}>${sec.etfPrice.toFixed(2)}</span>
+                {sec.etfChange1D != null && (
+                  <span style={{ color: sec.etfChange1D >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 4 }}>
+                    {sec.etfChange1D >= 0 ? '▲' : '▼'}{Math.abs(sec.etfChange1D).toFixed(1)}%
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+        );
+
+        return (
+          <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 6, padding: '10px 12px', marginTop: 12, marginBottom: 4 }}>
+            {sectionHdr('Market Conditions')}
+            {hasEntry && (
+              <>
+                {hasExit && <div style={{ color: '#444', fontSize: 9, letterSpacing: 1, marginBottom: 3 }}>AT ENTRY</div>}
+                <SnapRow snap={entryMkt} sec={entrySec} />
+              </>
+            )}
+            {hasExit && (
+              <>
+                {hasEntry && <div style={{ color: '#444', fontSize: 9, letterSpacing: 1, marginTop: 8, marginBottom: 3 }}>AT EXIT</div>}
+                <SnapRow snap={mkt} sec={null} />
+              </>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ── Wash Rule ─────────────────────────────────────────────────────── */}
+      {entry.washRule?.isLoss && (
+        <div style={{ background: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.3)', borderRadius: 6, padding: '10px 14px', marginTop: 12, marginBottom: 4 }}>
+          <div style={{ color: '#dc3545', fontWeight: 800, fontSize: 12, marginBottom: 4 }}>⚠ WASH RULE ACTIVE</div>
+          <div style={{ fontSize: 11, color: '#ccc' }}>
+            Loss: ${Math.abs(entry.performance?.realizedPnlDollar || 0).toFixed(2)}
+          </div>
+          {entry.washRule.expiryDate && (
+            <>
+              <div style={{ fontSize: 11, color: '#ccc', marginTop: 2 }}>
+                Do NOT re-enter <b style={{ color: '#fff' }}>{entry.ticker}</b> before <b style={{ color: '#FFD700' }}>{entry.washRule.expiryDate}</b>
+              </div>
+              <div style={{ fontSize: 10, color: '#555', marginTop: 4 }}>
+                Wash sale rule: 30 days from final exit date {entry.washRule.finalExitDate || ''}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Notes ─────────────────────────────────────────────────────────── */}
+      <div style={{ marginTop: 14, marginBottom: 12 }}>
+        {sectionHdr('Notes')}
+        {(entry.notes || []).length === 0 && <div style={{ color: '#333', fontSize: 11 }}>No notes yet.</div>}
         {(entry.notes || []).map(note => (
-          <div key={note.id} style={{ padding: '6px 0', borderBottom: '1px solid #1a1a1a' }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
-              <span style={{ color: '#555', fontSize: 10 }}>{note.timestamp ? new Date(note.timestamp).toLocaleString() : ''}</span>
-              <span style={{ background: '#1a1a1a', color: note.type === 'OVERRIDE' ? '#dc3545' : '#888', fontSize: 9, padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>{note.type}</span>
+          <div key={note.id} style={{ padding: '6px 0', borderBottom: '1px solid #111' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 3 }}>
+              <span style={{ color: '#444', fontSize: 10 }}>{note.timestamp ? new Date(note.timestamp).toLocaleString() : ''}</span>
+              <span style={{
+                background: '#111', color: NOTE_TYPE_COLORS[note.type] || '#888',
+                fontSize: 9, padding: '1px 6px', borderRadius: 4, fontWeight: 700,
+              }}>{note.type}</span>
               <button onClick={() => deleteNote(entry._id, note.id)}
                 style={{ background: 'none', border: 'none', color: '#333', cursor: 'pointer', fontSize: 11, marginLeft: 'auto' }}>✕</button>
             </div>
-            <div style={{ color: '#ccc', fontSize: 12 }}>{note.text}</div>
+            <div style={{ color: '#ccc', fontSize: 12, lineHeight: 1.5 }}>{note.text}</div>
           </div>
         ))}
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
@@ -117,7 +298,7 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
             value={noteInputs[entry._id] || ''}
             onChange={e => setNoteInputs(p => ({ ...p, [entry._id]: e.target.value }))}
             placeholder="Add a note..."
-            style={{ flex: 1, background: '#1a1a1a', border: '1px solid #333', color: '#fff', borderRadius: 4, padding: '5px 8px', fontSize: 12 }}
+            style={{ flex: 1, background: '#111', border: '1px solid #222', color: '#fff', borderRadius: 4, padding: '5px 8px', fontSize: 12 }}
           />
           <button onClick={() => addNote(entry._id, 'MID_TRADE')}
             style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
@@ -126,19 +307,20 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
         </div>
       </div>
 
+      {/* ── Tags ──────────────────────────────────────────────────────────── */}
       <div>
-        <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>TAGS</div>
+        {sectionHdr('Tags')}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           {(entry.tags || []).map(tag => (
-            <span key={tag} style={{ background: '#1a1a1a', border: '1px solid #333', color: '#aaa', fontSize: 10, padding: '2px 8px', borderRadius: 4, display: 'flex', gap: 4, alignItems: 'center' }}>
+            <span key={tag} style={{ background: '#111', border: '1px solid #222', color: '#aaa', fontSize: 10, padding: '2px 8px', borderRadius: 4, display: 'flex', gap: 4, alignItems: 'center' }}>
               {tag}
               <button onClick={() => removeTag(entry._id, tag)}
-                style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', padding: 0, fontSize: 10 }}>✕</button>
+                style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: 0, fontSize: 10 }}>✕</button>
             </span>
           ))}
           {SUGGESTED_TAGS.filter(t => !(entry.tags || []).includes(t)).slice(0, 4).map(t => (
             <button key={t} onClick={() => addTag(entry._id, t)}
-              style={{ background: 'none', border: '1px dashed #333', color: '#555', fontSize: 9, padding: '2px 6px', borderRadius: 4, cursor: 'pointer' }}>
+              style={{ background: 'none', border: '1px dashed #222', color: '#444', fontSize: 9, padding: '2px 6px', borderRadius: 4, cursor: 'pointer' }}>
               + {t}
             </button>
           ))}

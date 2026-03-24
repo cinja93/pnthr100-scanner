@@ -23,10 +23,7 @@ import ChartModal from './ChartModal';
 function getDisplayPrice(p) {
   const ov = p.manualPriceOverride;
   if (!ov?.active) return p.currentPrice ?? 0;
-  const reached = p.direction === 'LONG'
-    ? (p.currentPrice ?? 0) >= ov.price
-    : (p.currentPrice ?? 0) <= ov.price;
-  return reached ? (p.currentPrice ?? 0) : ov.price;
+  return ov.price; // always use override while active; cleared by ✕ or when FMP catches up
 }
 
 function highestFilledLot(p) {
@@ -528,6 +525,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const [twsAvg,        setTwsAvg]        = useState('');
   const [ratchetRec,    setRatchetRec]    = useState(null);
   const [exitPanelOpen, setExitPanelOpen] = useState(false);
+  const [localPrice,    setLocalPrice]    = useState(null); // null = not actively editing
 
   const sizingStop = position.originalStop || position.stopPrice;
   const pc   = sizePosition({ netLiquidity, entryPrice: position.entryPrice, stopPrice: sizingStop, maxGapPct: position.maxGapPct || 0, direction: position.direction });
@@ -578,9 +576,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   // displayPrice: uses manual override if active (and market hasn't caught up yet)
   // Used for all lot-trigger calculations and P&L display when override is active.
   const displayPrice   = getDisplayPrice(position);
-  const overrideActive = position.manualPriceOverride?.active &&
-    !(isLong ? (position.currentPrice ?? 0) >= position.manualPriceOverride.price
-             : (position.currentPrice ?? 0) <= position.manualPriceOverride.price);
+  const overrideActive = !!(position.manualPriceOverride?.active);
 
   const pnl     = isLong ? ((displayPrice - avg) / avg * 100) : ((avg - displayPrice) / avg * 100);
   const pnl$    = isLong ? (displayPrice - avg) * totShr       : (avg - displayPrice) * totShr;
@@ -769,14 +765,30 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
               )}
             </div>
             <input type="number" step="0.01"
-              key={position.id + '-price-' + (overrideActive ? position.manualPriceOverride.price : position.currentPrice)}
-              defaultValue={displayPrice}
-              onBlur={e => { const v = parseFloat(e.target.value); if (v && v !== displayPrice) onUpdatePrice(position.id, v); }}
-              onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat(e.target.value); if (v) { onUpdatePrice(position.id, v); e.target.blur(); } } }}
+              value={localPrice ?? displayPrice.toFixed(2)}
+              onChange={e => setLocalPrice(e.target.value)}
+              onBlur={() => {
+                const v = parseFloat(localPrice);
+                if (localPrice !== null && !isNaN(v) && v > 0 && v !== displayPrice) {
+                  onUpdatePrice(position.id, v);
+                }
+                setLocalPrice(null);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  const v = parseFloat(localPrice);
+                  if (localPrice !== null && !isNaN(v) && v > 0 && v !== displayPrice) {
+                    onUpdatePrice(position.id, v);
+                  }
+                  setLocalPrice(null);
+                  if (e.key === 'Enter') e.target.blur();
+                }
+                if (e.key === 'Escape') { setLocalPrice(null); e.target.blur(); }
+              }}
               style={{ background: 'rgba(255,255,255,0.06)',
                 border: overrideActive ? '1px solid rgba(255,215,0,0.5)' : '1px solid rgba(255,255,255,0.15)',
                 borderRadius: 4, padding: '2px 6px',
-                color: overrideActive ? '#FFD700' : '#e8e6e3',
+                color: (localPrice !== null || overrideActive) ? '#FFD700' : '#e8e6e3',
                 fontSize: 15, fontFamily: 'monospace', fontWeight: 700, width: 80,
                 textAlign: 'right', outline: 'none',
                 MozAppearance: 'textfield', WebkitAppearance: 'none' }}
@@ -1145,8 +1157,9 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                     body: JSON.stringify(exitData),
                   });
                   if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+                  const result = await res.json();
                   setExitPanelOpen(false);
-                  onExitConfirmed?.();
+                  onExitConfirmed?.(result);
                 }}
               />
             </div>
@@ -1580,7 +1593,7 @@ function isMarketHours() {
 
 // ── Main Command Center ───────────────────────────────────────────────────────
 
-export default function CommandCenter() {
+export default function CommandCenter({ onNavigate }) {
   const { currentUser, updateCurrentUser } = useAuth();
   const [nav,           setNav]           = useState(() => currentUser?.accountSize ?? 100000);
   const navSaveTimer    = useRef(null);
@@ -1604,6 +1617,7 @@ export default function CommandCenter() {
   const [saving,          setSaving]          = useState(false);
   const [sectorWarning,   setSectorWarning]   = useState(null);
   const [chartModal,      setChartModal]      = useState(null); // { stocks, index }
+  const [closedToast,     setClosedToast]     = useState(null); // { ticker, avgCost, exitPrice, pnlDollar, pnlPct }
 
   const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
   const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
@@ -1695,6 +1709,18 @@ export default function CommandCenter() {
     });
   }, []);
 
+  // ── Surgical patch — sends ONLY the specified fields ──────────────────────
+  // Safe for concurrent updates because each call touches different fields.
+  // Two racing patches to fills vs stopPrice can never overwrite each other.
+  // MUST be declared before refreshPrices (used in its dep array + body).
+  const patchPosition = useCallback(async (id, fields) => {
+    setSaving(true);
+    try {
+      await apiPost('/api/positions', { id, ...fields });
+    } catch { /* non-fatal */ }
+    setSaving(false);
+  }, []);
+
   const refreshPrices = useCallback(async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -1718,14 +1744,16 @@ export default function CommandCenter() {
           }
           // Use safe merge — never overwrite sacred fields (fills, stops, etc.)
           const merged = mergeServerPrices(prev, data.positions);
-          // Auto-deactivate overrides where live price has reached the target
+          // Auto-deactivate overrides when FMP price comes within 0.1% of the override
+          // (i.e. the data feed caught up to what the user typed). No direction logic —
+          // the user may enter a price in either direction relative to the stale feed.
           return merged.map(p => {
             const ov = p.manualPriceOverride;
             if (!ov?.active) return p;
-            const reached = p.direction === 'LONG'
-              ? (p.currentPrice ?? 0) >= ov.price
-              : (p.currentPrice ?? 0) <= ov.price;
-            if (!reached) return p;
+            const livePrice = p.currentPrice ?? 0;
+            if (!livePrice || !ov.price) return p;
+            const pctDiff = Math.abs(livePrice - ov.price) / ov.price;
+            if (pctDiff > 0.001) return p; // FMP hasn't caught up yet — keep override
             toDeactivate.push(p.id);
             return { ...p, manualPriceOverride: { ...ov, active: false } };
           });
@@ -1797,17 +1825,6 @@ export default function CommandCenter() {
     try {
       await apiPost('/api/positions', position);
     } catch { /* non-fatal — UI stays updated */ }
-    setSaving(false);
-  }, []);
-
-  // ── Surgical patch — sends ONLY the specified fields ──────────────────────
-  // Safe for concurrent updates because each call touches different fields.
-  // Two racing patches to fills vs stopPrice can never overwrite each other.
-  const patchPosition = useCallback(async (id, fields) => {
-    setSaving(true);
-    try {
-      await apiPost('/api/positions', { id, ...fields });
-    } catch { /* non-fatal */ }
     setSaving(false);
   }, []);
 
@@ -2056,14 +2073,31 @@ export default function CommandCenter() {
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
                     onClearOverride={clearOverride}
                     onDelete={handleDeletePosition}
-                    onExitConfirmed={() => {
-                      // Re-fetch after an exit to sync status/remainingShares/exits from DB.
-                      // Use mergeAfterExit: updates price fields + exit-tracking fields
-                      // but NEVER overwrites sacred user-edited fields (fills, stops, etc.)
-                      apiGet('/api/positions').then(data => {
-                        if (!data.positions?.length) return;
-                        setPositions(prev => mergeAfterExit(prev, data.positions));
-                      }).catch(() => {});
+                    onExitConfirmed={async (exitResult) => {
+                      // Fetch fresh positions — server excludes CLOSED ones from this query.
+                      const data = await apiGet('/api/positions').catch(() => null);
+                      const freshPositions = data?.positions || [];
+
+                      if (exitResult?.status === 'CLOSED') {
+                        // Full exit: remove this position from Command view, show toast.
+                        // p.id + avgCostOf(p) captured from the map closure.
+                        const avg = avgCostOf(p);
+                        setPositions(prev => prev.filter(x => x.id !== p.id));
+                        setClosedToast({
+                          ticker:     p.ticker,
+                          avgCost:    avg,
+                          exitPrice:  exitResult.exitRecord?.price,
+                          pnlDollar:  exitResult.exitRecord?.pnl?.dollar,
+                          pnlPct:     exitResult.exitRecord?.pnl?.pct,
+                        });
+                        setTimeout(() => setClosedToast(null), 10000);
+                      } else {
+                        // Partial exit: merge updated fields (remainingShares, exits, P&L)
+                        // but preserve sacred user-edited fields (fills, stops, etc.)
+                        if (freshPositions.length) {
+                          setPositions(prev => mergeAfterExit(prev, freshPositions));
+                        }
+                      }
                     }}
                     flashed={flashedTickers.has(p.ticker)}
                     onOpenChart={(clicked) => {
@@ -2092,6 +2126,47 @@ export default function CommandCenter() {
           onClose={() => setChartModal(null)}
         />
       )}
+
+      {/* Closed position toast — shown after a full exit, auto-dismisses in 10s */}
+      {closedToast && (() => {
+        const { ticker, avgCost, exitPrice, pnlDollar, pnlPct } = closedToast;
+        const isGain = (pnlDollar ?? 0) >= 0;
+        const pnlColor = isGain ? '#28a745' : '#dc3545';
+        return (
+          <div style={{
+            position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 300, background: '#1a1a1a', border: `1px solid ${pnlColor}`,
+            borderRadius: 10, padding: '14px 20px', minWidth: 280, maxWidth: 380,
+            boxShadow: `0 4px 24px rgba(0,0,0,0.6), 0 0 0 1px ${pnlColor}22`,
+          }}>
+            <button onClick={() => setClosedToast(null)} style={{
+              position: 'absolute', top: 8, right: 10, background: 'none', border: 'none',
+              color: '#555', cursor: 'pointer', fontSize: 14, lineHeight: 1,
+            }}>✕</button>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>✓ Position closed</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 6 }}>{ticker}</div>
+            {avgCost != null && exitPrice != null && (
+              <div style={{ fontSize: 12, color: '#aaa', marginBottom: 4, fontFamily: 'monospace' }}>
+                Avg cost ${avgCost.toFixed(2)} → Exit ${Number(exitPrice).toFixed(2)}
+              </div>
+            )}
+            {pnlDollar != null && (
+              <div style={{ fontSize: 14, fontWeight: 700, color: pnlColor, marginBottom: 10 }}>
+                P&L: {isGain ? '+' : ''}${pnlDollar.toFixed(2)}
+                {pnlPct != null && <span style={{ fontSize: 12, marginLeft: 6 }}>({isGain ? '+' : ''}{pnlPct.toFixed(1)}%)</span>}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: '#555', marginBottom: onNavigate ? 8 : 0 }}>Moved to PNTHR Journal</div>
+            {onNavigate && (
+              <button onClick={() => { setClosedToast(null); onNavigate('journal'); }}
+                style={{ background: 'none', border: '1px solid #444', borderRadius: 4, color: '#FFD700',
+                  fontSize: 11, fontWeight: 700, padding: '4px 10px', cursor: 'pointer', letterSpacing: '0.05em' }}>
+                VIEW IN JOURNAL →
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

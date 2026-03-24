@@ -7,7 +7,7 @@
 import { connectToDatabase } from './database.js';
 import { ObjectId } from 'mongodb';
 
-export async function createJournalEntry(db, position, userId, killData = null) {
+export async function createJournalEntry(db, position, userId, killData = null, marketAtEntry = null, sectorAtEntry = null) {
   // Check if entry already exists
   const existing = await db.collection('pnthr_journal').findOne({
     positionId: position.id.toString(),
@@ -25,14 +25,16 @@ export async function createJournalEntry(db, position, userId, killData = null) 
     ticker: position.ticker,
     direction: position.direction,
     entry: {
-      signalType: position.direction === 'LONG' ? 'BL' : 'SS',
-      fillDate: lot1?.date || null,
-      fillPrice: lot1?.price || position.entryPrice || null,
-      stopPrice: position.stopPrice || null,
-      killRank: killData?.killRank || null,
-      killScore: killData?.totalScore || null,
-      killTier: killData?.tier || null,
-      isKillTop10: killData?.killRank ? killData.killRank <= 10 : false,
+      signalType:    position.direction === 'LONG' ? 'BL' : 'SS',
+      fillDate:      lot1?.date || null,
+      fillPrice:     lot1?.price || position.entryPrice || null,
+      stopPrice:     position.stopPrice || null,
+      killRank:      killData?.killRank  || null,
+      killScore:     killData?.totalScore || null,
+      killTier:      killData?.tier      || null,
+      isKillTop10:   killData?.killRank ? killData.killRank <= 10 : false,
+      marketAtEntry: marketAtEntry || null,
+      sectorAtEntry: sectorAtEntry || null,
     },
     lots: fills.map((f, i) => ({ lot: i + 1, shares: f.shares, price: f.price, date: f.date })),
     totalFilledShares: fills.reduce((s, f) => s + (f.shares || 0), 0),

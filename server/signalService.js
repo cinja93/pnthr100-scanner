@@ -278,9 +278,18 @@ function runStateMachine(weeklyBars, isETF = false) {
   // EMA slope direction — used for developing signal detection (intra-week)
   const emaRising = emas.length >= 2 ? emas[emas.length - 1] > emas[emas.length - 2] : null;
 
+  // Last completed weekly bar (n-2 relative to current in-progress bar at n-1)
+  // Used by developing-signals to check proximity to last week's high/low.
+  const n = weeklyBars.length;
+  const prevWeekBar   = n >= 2 ? weeklyBars[n - 2] : null;
+  const lastWeekHigh  = prevWeekBar ? +prevWeekBar.high.toFixed(4)  : null;
+  const lastWeekLow   = prevWeekBar ? +prevWeekBar.low.toFixed(4)   : null;
+  const lastWeekClose = prevWeekBar ? +prevWeekBar.close.toFixed(4) : null; // proxy for week open
+
   if (!lastEvent) {
     const lastEma = emas[emas.length - 1];
-    return { signal: null, ema21: parseFloat(lastEma.toFixed(4)), stopPrice: null, currentWeekStop: null, emaRising };
+    return { signal: null, ema21: parseFloat(lastEma.toFixed(4)), stopPrice: null, currentWeekStop: null,
+             emaRising, lastWeekHigh, lastWeekLow, lastWeekClose };
   }
 
   const lastBar = weeklyBars[weeklyBars.length - 1];
@@ -297,7 +306,10 @@ function runStateMachine(weeklyBars, isETF = false) {
   // NEW signal = BL or SS that fired on the very last (rightmost) completed bar
   const isActiveSignal = lastEvent.signal === 'BL' || lastEvent.signal === 'SS';
   lastEvent.isNew = isActiveSignal && lastEvent.signalDate === lastBar.weekStart;
-  lastEvent.emaRising = emaRising;
+  lastEvent.emaRising    = emaRising;
+  lastEvent.lastWeekHigh  = lastWeekHigh;
+  lastEvent.lastWeekLow   = lastWeekLow;
+  lastEvent.lastWeekClose = lastWeekClose;
 
   return lastEvent;
 }
@@ -400,7 +412,10 @@ export function getCachedSignals() {
       pnthrStop:       s.pnthrStop ?? null,
       currentWeekStop: s.currentWeekStop ?? null,
       ema21:           s.ema21,
-      emaRising:       s.emaRising ?? null,
+      emaRising:       s.emaRising      ?? null,
+      lastWeekHigh:    s.lastWeekHigh   ?? null,
+      lastWeekLow:     s.lastWeekLow    ?? null,
+      lastWeekClose:   s.lastWeekClose  ?? null,
       signalDate:      s.signalDate || null,
       isNewSignal:     s.isNew ?? false,
       profitDollar:    s.profitDollar ?? null,

@@ -2788,29 +2788,30 @@ app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
       return res.json({ status: 'COLD', bl: [], ss: [], message: 'Signal cache warming — check back in ~2 min' });
     }
 
-    // ── Check if cache has emaRising (new field added with this feature) ────────
-    // Old cache entries (pre-deploy) won't have it; force recompute if missing.
+    // ── Check if cache has new fields (lastWeekHigh added with tighter detection) ─
+    // Old cache entries won't have lastWeekHigh; force recompute if missing.
     const entries = Object.values(signalMap);
-    const hasEmaRising = entries.some(s => s.emaRising != null);
-    if (!hasEmaRising) {
-      // Cache predates emaRising — clear it so next getSignals() call recomputes
+    const hasFreshFields = entries.some(s => s.lastWeekHigh != null);
+    if (!hasFreshFields) {
       const { clearSignalCache } = await import('./signalService.js').catch(() => ({}));
       if (typeof clearSignalCache === 'function') clearSignalCache();
       return res.json({ status: 'STALE', bl: [], ss: [], message: 'Signal cache refreshing — hit REFRESH in ~90s' });
     }
 
-    // ── Build candidate lists (emaRising filter) ──────────────────────────────
-    // BL developing: NOT already BL + EMA rising (slope up)
-    // SS developing: NOT already SS + EMA falling (slope down)
+    // ── Build candidate lists ─────────────────────────────────────────────────
+    // BL candidates: NOT already BL + EMA rising + has last-week candle data
+    // SS candidates: NOT already SS + EMA falling + has last-week candle data
     const blCandidates = [];
     const ssCandidates = [];
     for (const [ticker, s] of Object.entries(signalMap)) {
-      if (!s.ema21) continue;
+      if (!s.ema21 || !s.lastWeekHigh || !s.lastWeekLow || !s.lastWeekClose) continue;
       if (s.signal !== 'BL' && s.emaRising === true) {
-        blCandidates.push({ ticker, ema21: s.ema21 });
+        blCandidates.push({ ticker, ema21: s.ema21,
+          lastWeekHigh: s.lastWeekHigh, lastWeekLow: s.lastWeekLow, lastWeekClose: s.lastWeekClose });
       }
       if (s.signal !== 'SS' && s.emaRising === false) {
-        ssCandidates.push({ ticker, ema21: s.ema21 });
+        ssCandidates.push({ ticker, ema21: s.ema21,
+          lastWeekHigh: s.lastWeekHigh, lastWeekLow: s.lastWeekLow, lastWeekClose: s.lastWeekClose });
       }
     }
 
@@ -2864,57 +2865,75 @@ app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
       } catch (e) { console.warn('[developing-signals] quote chunk failed:', e.message); }
     }
 
-    // ── Apply developing BL check ─────────────────────────────────────────────
-    // 3/4 conditions confirmed: (1) price > ema21, (2) ema rising, (3) dayLow > ema × 1.01
-    // Condition 4 (weekly close above EMA) pending until Friday
-    const STOCK_THRESHOLD = 0.01; // 1% daylight for stocks
+    // ── Apply tighter developing BL check ────────────────────────────────────
+    // All conditions must be true:
+    //   A. EMA slope rising (already filtered in candidates)
+    //   B. Within 2% of last week's high (approaching or past breakout)
+    //   C. Price > last Friday's close (week trending up)
+    //   D. Price within 2% below EMA (not too far to trigger)
+    //   E. Not overextended (|priceVsEma| ≤ 20%)
+    // Sort: closest to (or past) last week's high first
     const devBL = [];
     for (const c of blCandidates) {
       const q = quoteMap[c.ticker];
-      if (!q?.price || !q?.dayLow) continue;
-      const price  = q.price;
-      const dayLow = q.dayLow;
-      // Must have crossed above EMA intra-week
-      if (price <= c.ema21) continue;
-      // Must NOT be overextended (>20% above EMA)
-      if (price > c.ema21 * 1.20) continue;
-      // Daylight: today's low stays above EMA + threshold
-      if (dayLow <= c.ema21 * (1 + STOCK_THRESHOLD)) continue;
+      if (!q?.price) continue;
+      const price     = q.price;
+      const weekOpen  = c.lastWeekClose; // last Friday's close as week-open proxy
+      // B: within 2% below last week's high (negative = already past it — highest priority)
+      const pctFromHigh = +((c.lastWeekHigh - price) / c.lastWeekHigh * 100).toFixed(2);
+      if (pctFromHigh > 2) continue;
+      // C: week trending up
+      if (price <= weekOpen) continue;
+      // D+E: price within [-2%, +20%] of EMA
+      const priceVsEma = +((price - c.ema21) / c.ema21 * 100).toFixed(2);
+      if (priceVsEma < -2 || priceVsEma > 20) continue;
       devBL.push({
         ticker:       c.ticker,
         sector:       sectorMap[c.ticker] || '—',
         price,
-        dayLow,
         ema21:        c.ema21,
-        pctAboveEma:  +((price - c.ema21) / c.ema21 * 100).toFixed(1),
+        lastWeekHigh: c.lastWeekHigh,
+        pctFromHigh,               // <0 = already past last week's high
+        priceVsEma,
+        weekTrending: true,
       });
     }
-    devBL.sort((a, b) => a.pctAboveEma - b.pctAboveEma); // tightest to EMA first = freshest
+    devBL.sort((a, b) => a.pctFromHigh - b.pctFromHigh); // past high first, then closest
 
-    // ── Apply developing SS check ─────────────────────────────────────────────
-    // 3/4 conditions confirmed: (1) price < ema21, (2) ema falling, (3) dayHigh < ema × 0.99
+    // ── Apply tighter developing SS check ────────────────────────────────────
+    // All conditions must be true:
+    //   A. EMA slope falling (already filtered in candidates)
+    //   B. Within 2% of last week's low (approaching or past breakdown)
+    //   C. Price < last Friday's close (week trending down)
+    //   D. Price within 2% above EMA (not too far to trigger)
+    //   E. Not overextended (|priceVsEma| ≤ 20%)
+    // Sort: closest to (or past) last week's low first
     const devSS = [];
     for (const c of ssCandidates) {
       const q = quoteMap[c.ticker];
-      if (!q?.price || !q?.dayHigh) continue;
-      const price   = q.price;
-      const dayHigh = q.dayHigh;
-      // Must have crossed below EMA intra-week
-      if (price >= c.ema21) continue;
-      // Must NOT be overextended (>20% below EMA)
-      if (price < c.ema21 * 0.80) continue;
-      // Daylight: today's high stays below EMA - threshold
-      if (dayHigh >= c.ema21 * (1 - STOCK_THRESHOLD)) continue;
+      if (!q?.price) continue;
+      const price    = q.price;
+      const weekOpen = c.lastWeekClose;
+      // B: within 2% above last week's low (negative = already below it)
+      const pctFromLow = +((price - c.lastWeekLow) / c.lastWeekLow * 100).toFixed(2);
+      if (pctFromLow > 2) continue;
+      // C: week trending down
+      if (price >= weekOpen) continue;
+      // D+E: price within [-20%, +2%] of EMA
+      const priceVsEma = +((price - c.ema21) / c.ema21 * 100).toFixed(2);
+      if (priceVsEma > 2 || priceVsEma < -20) continue;
       devSS.push({
-        ticker:       c.ticker,
-        sector:       sectorMap[c.ticker] || '—',
+        ticker:      c.ticker,
+        sector:      sectorMap[c.ticker] || '—',
         price,
-        dayHigh,
-        ema21:        c.ema21,
-        pctBelowEma:  +((c.ema21 - price) / c.ema21 * 100).toFixed(1),
+        ema21:       c.ema21,
+        lastWeekLow: c.lastWeekLow,
+        pctFromLow,                // <0 = already past last week's low
+        priceVsEma,
+        weekTrending: true,
       });
     }
-    devSS.sort((a, b) => a.pctBelowEma - b.pctBelowEma); // tightest to EMA first
+    devSS.sort((a, b) => a.pctFromLow - b.pctFromLow); // past low first, then closest
 
     console.log(`[developing-signals] BL candidates: ${blCandidates.length} → ${devBL.length} developing | SS candidates: ${ssCandidates.length} → ${devSS.length} developing`);
     res.json({ status: 'OK', bl: devBL, ss: devSS });

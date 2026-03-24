@@ -1029,30 +1029,50 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick }) {
     const isBL = dir === 'BL';
     const rowClass = isBL ? 'dev-bl-row' : 'dev-ss-row';
     const accentColor = isBL ? '#6bcb77' : '#ff6b6b';
-    const pctLabel = isBL
-      ? `+${s.pctAboveEma}% above EMA`
-      : `-${s.pctBelowEma}% below EMA`;
-    const daylightLabel = isBL
-      ? `Low $${(+s.dayLow).toFixed(2)}`
-      : `High $${(+s.dayHigh).toFixed(2)}`;
+
+    // Proximity label — negative pct means price has ALREADY passed last week's high/low
+    const pct = isBL ? s.pctFromHigh : s.pctFromLow;
+    const pastLevel = pct < 0;
+    let proximityLabel, proximityColor;
+    if (isBL) {
+      proximityLabel = pastLevel
+        ? `▲ PAST ${Math.abs(pct).toFixed(1)}% past last wk high`
+        : `${pct.toFixed(1)}% from last wk high`;
+      proximityColor = pastLevel ? '#FFD700' : accentColor;
+    } else {
+      proximityLabel = pastLevel
+        ? `▼ PAST ${Math.abs(pct).toFixed(1)}% past last wk low`
+        : `${pct.toFixed(1)}% from last wk low`;
+      proximityColor = pastLevel ? '#FFD700' : accentColor;
+    }
 
     return (
       <div
         className={rowClass}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer', transition: 'background 0.15s' }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+          borderBottom: '1px solid #1a1a1a', cursor: 'pointer', transition: 'background 0.15s',
+          // Gold left accent for stocks that have already passed the trigger level
+          borderLeft: pastLevel ? `3px solid #FFD700` : undefined,
+        }}
         onClick={() => onTickerClick(chartList, idx)}
       >
-        {/* Dashed DEVELOPING badge */}
+        {/* DEV badge */}
         <span style={{ border: `1px dashed ${accentColor}88`, color: accentColor, fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3, letterSpacing: 1, flexShrink: 0 }}>
           DEV
         </span>
         <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 52, fontFamily: 'monospace' }}>{s.ticker}</span>
         <span style={{ color: '#555', fontSize: 11, minWidth: 58, maxWidth: 58, flexShrink: 0, whiteSpace: 'nowrap' }}>{abbrevSector(s.sector)}</span>
         <span style={{ color: '#ccc', fontSize: 12, minWidth: 60, textAlign: 'right', fontFamily: 'monospace' }}>${(+s.price).toFixed(2)}</span>
-        <span style={{ color: accentColor, fontSize: 11, minWidth: 100, textAlign: 'right', fontFamily: 'monospace' }}>{pctLabel}</span>
-        <span style={{ color: '#666', fontSize: 10, minWidth: 80, textAlign: 'right', fontFamily: 'monospace' }}>{daylightLabel}</span>
-        <span style={{ color: '#555', fontSize: 11, minWidth: 56, textAlign: 'right', fontFamily: 'monospace' }}>EMA ${(+s.ema21).toFixed(2)}</span>
-        <span style={{ color: accentColor, fontSize: 11 }}>▸</span>
+        {/* Proximity to trigger level */}
+        <span style={{ color: proximityColor, fontSize: 11, flex: 1, textAlign: 'right', fontFamily: 'monospace', fontWeight: pastLevel ? 700 : 400 }}>
+          {proximityLabel}
+        </span>
+        {/* Week direction confirmation */}
+        <span style={{ color: isBL ? '#6bcb7799' : '#ff6b6b99', fontSize: 10, minWidth: 54, textAlign: 'right', flexShrink: 0 }}>
+          {isBL ? 'Week ↑ ✓' : 'Week ↓ ✓'}
+        </span>
+        <span style={{ color: accentColor, fontSize: 11, flexShrink: 0 }}>▸</span>
       </div>
     );
   }
@@ -1100,7 +1120,7 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick }) {
           <div style={{ flex: 1, minWidth: 0, border: '1px solid #28a74533', borderLeft: '3px solid #28a745', borderRadius: 8, overflow: 'hidden' }}>
             <div style={{ background: 'rgba(40,167,69,0.08)', padding: '5px 10px' }}>
               <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>DEVELOPING BL</span>
-              <span style={{ color: '#444', fontSize: 10, marginLeft: 8 }}>({bl.length}) price ↑ EMA · slope ↑ · daylight ✓</span>
+              <span style={{ color: '#444', fontSize: 10, marginLeft: 8 }}>({bl.length}) slope ↑ · near last wk high · week trending ↑</span>
             </div>
             {bl.length > 0
               ? (() => {
@@ -1114,7 +1134,7 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick }) {
           <div style={{ flex: 1, minWidth: 0, border: '1px solid #dc354533', borderLeft: '3px solid #dc3545', borderRadius: 8, overflow: 'hidden' }}>
             <div style={{ background: 'rgba(220,53,69,0.08)', padding: '5px 10px' }}>
               <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>DEVELOPING SS</span>
-              <span style={{ color: '#444', fontSize: 10, marginLeft: 8 }}>({ss.length}) price ↓ EMA · slope ↓ · daylight ✓</span>
+              <span style={{ color: '#444', fontSize: 10, marginLeft: 8 }}>({ss.length}) slope ↓ · near last wk low · week trending ↓</span>
             </div>
             {ss.length > 0
               ? (() => {

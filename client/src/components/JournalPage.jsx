@@ -427,6 +427,18 @@ export default function JournalPage({ onNavigate }) {
         </div>
       </div>
 
+      {/* Migration result toast */}
+      {migrateResult && (
+        <div style={{ background: migrateResult.error ? 'rgba(220,53,69,0.15)' : 'rgba(40,167,69,0.15)', border: `1px solid ${migrateResult.error ? '#dc3545' : '#28a745'}`, borderRadius: 6, padding: '8px 14px', marginBottom: 10, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: migrateResult.error ? '#ff6b6b' : '#6bcb77' }}>
+            {migrateResult.error
+              ? `Error: ${migrateResult.error}`
+              : `✓ Done — ${migrateResult.created} entries created, ${migrateResult.claimed || 0} positions claimed, ${migrateResult.skipped} already existed (${migrateResult.total} total)`}
+          </span>
+          <button onClick={() => setMigrateResult(null)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14 }}>✕</button>
+        </div>
+      )}
+
       {loading ? (
         <div style={{ color: '#555', textAlign: 'center', padding: 40 }}>Loading journal...</div>
       ) : (

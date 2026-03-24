@@ -1815,22 +1815,34 @@ app.get('/api/journal', authenticateJWT, async (req, res) => {
 });
 
 // POST /api/journal/migrate — one-time backfill: create journal entries for existing positions (admin only)
+// Also claims orphaned positions (no ownerId — created before per-user scoping)
 app.post('/api/journal/migrate', authenticateJWT, requireAdmin, async (req, res) => {
   try {
+    const userId = req.user.userId;
+    // Find positions owned by this user OR orphaned (no ownerId — pre-scoping era)
     const positions = await db.collection('pnthr_portfolio')
-      .find({ ownerId: req.user.userId })
+      .find({ $or: [{ ownerId: userId }, { ownerId: { $exists: false } }, { ownerId: null }] })
       .toArray();
-    let created = 0, skipped = 0;
+    let created = 0, skipped = 0, claimed = 0;
     for (const pos of positions) {
+      // Claim orphaned positions for this user
+      if (!pos.ownerId) {
+        await db.collection('pnthr_portfolio').updateOne(
+          { _id: pos._id },
+          { $set: { ownerId: userId } }
+        );
+        claimed++;
+        pos.ownerId = userId;
+      }
       const existing = await db.collection('pnthr_journal').findOne({
         positionId: pos._id.toString(),
-        ownerId: req.user.userId,
+        ownerId: userId,
       });
       if (existing) { skipped++; continue; }
-      await createJournalEntry(db, pos, req.user.userId, null);
+      await createJournalEntry(db, pos, userId, null);
       created++;
     }
-    res.json({ ok: true, created, skipped, total: positions.length });
+    res.json({ ok: true, created, skipped, claimed, total: positions.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

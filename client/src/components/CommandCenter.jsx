@@ -15,6 +15,20 @@ import ChartModal from './ChartModal';
 
 // ── Risk Advisor Helpers ──────────────────────────────────────────────────────
 
+// ── Manual price override helper ──────────────────────────────────────────────
+// Returns the price to use for display and lot-trigger calculations.
+// If a manualPriceOverride is active AND the live market price hasn't yet
+// reached the override level, the override price is used.
+// Once the market catches up (or the override is cleared), live price resumes.
+function getDisplayPrice(p) {
+  const ov = p.manualPriceOverride;
+  if (!ov?.active) return p.currentPrice ?? 0;
+  const reached = p.direction === 'LONG'
+    ? (p.currentPrice ?? 0) >= ov.price
+    : (p.currentPrice ?? 0) <= ov.price;
+  return reached ? (p.currentPrice ?? 0) : ov.price;
+}
+
 function highestFilledLot(p) {
   let high = 0;
   for (let i = 1; i <= 5; i++) if (p.fills?.[i]?.filled) high = i;
@@ -123,7 +137,7 @@ function runRiskAdvisor(positions, nav) {
       const lot1Price = p.fills?.[1]?.price;
       if (!lot1Price) continue;
       const trigger = p.direction === 'LONG' ? +(lot1Price * 1.03).toFixed(2) : +(lot1Price * 0.97).toFixed(2);
-      const priceReady = p.direction === 'LONG' ? (p.currentPrice ?? 0) >= trigger : (p.currentPrice ?? 0) <= trigger;
+      const priceReady = p.direction === 'LONG' ? getDisplayPrice(p) >= trigger : getDisplayPrice(p) <= trigger;
       if (priceReady) {
         const sizing = sizePosition({ netLiquidity: nav, entryPrice: p.entryPrice, stopPrice: p.stopPrice, maxGapPct: p.maxGapPct || 0, direction: p.direction });
         const lot2Shares = Math.round(sizing.totalShares * 0.30);
@@ -504,7 +518,7 @@ function ExitPanel({ position, onClose, onConfirm }) {
 
 // ── Pyramid Card (position row) ───────────────────────────────────────────────
 
-function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onDelete, onExitConfirmed, flashed, onOpenChart }) {
+function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onClearOverride, onDelete, onExitConfirmed, flashed, onOpenChart }) {
   const [expanded,      setExpanded]      = useState(false);
   const [editing,       setEditing]       = useState(null);
   const [ev,            setEv]            = useState({});
@@ -560,13 +574,21 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const totShr  = lots.reduce((s, l) => s + (l.filled ? l.actualShares : 0), 0);
   const totCost = lots.reduce((s, l) => s + (l.filled ? l.costBasis    : 0), 0);
   const avg     = totShr > 0 ? totCost / totShr : position.entryPrice;
-  const pnl     = isLong ? ((position.currentPrice - avg) / avg * 100) : ((avg - position.currentPrice) / avg * 100);
-  const pnl$    = isLong ? (position.currentPrice - avg) * totShr       : (avg - position.currentPrice) * totShr;
+
+  // displayPrice: uses manual override if active (and market hasn't caught up yet)
+  // Used for all lot-trigger calculations and P&L display when override is active.
+  const displayPrice   = getDisplayPrice(position);
+  const overrideActive = position.manualPriceOverride?.active &&
+    !(isLong ? (position.currentPrice ?? 0) >= position.manualPriceOverride.price
+             : (position.currentPrice ?? 0) <= position.manualPriceOverride.price);
+
+  const pnl     = isLong ? ((displayPrice - avg) / avg * 100) : ((avg - displayPrice) / avg * 100);
+  const pnl$    = isLong ? (displayPrice - avg) * totShr       : (avg - displayPrice) * totShr;
   const pC      = pnl >= 0 ? '#28a745' : '#dc3545';
-  const posVal  = totShr * position.currentPrice;
+  const posVal  = totShr * displayPrice;
   const next    = lots.find(l => l.lot === highFilled + 1);
-  const nextDist = next ? (isLong ? (next.triggerPrice - position.currentPrice) / position.currentPrice * 100
-                                  : (position.currentPrice - next.triggerPrice) / position.currentPrice * 100) : null;
+  const nextDist = next ? (isLong ? (next.triggerPrice - displayPrice) / displayPrice * 100
+                                  : (displayPrice - next.triggerPrice) / displayPrice * 100) : null;
   // tradingDaysActive is computed server-side from createdAt; fall back to daysActive for legacy docs
   const tradDays  = position.tradingDaysActive ?? position.daysActive ?? 0;
   const t2met     = tradDays >= 5;
@@ -734,17 +756,37 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
             </div>
           )}
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 10, color: '#666' }}>Current</div>
-            <input type="number" step="0.01" key={position.id + '-price-' + position.currentPrice}
-              defaultValue={position.currentPrice}
-              onBlur={e => { const v = parseFloat(e.target.value); if (v && v !== position.currentPrice) onUpdatePrice(position.id, v); }}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+              <span style={{ fontSize: 10, color: overrideActive ? '#FFD700' : '#666' }}>
+                {overrideActive ? '📌 MANUAL' : 'Current'}
+              </span>
+              {overrideActive && (
+                <button
+                  onClick={() => onClearOverride(position.id)}
+                  title="Reset to live market price"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#555', fontSize: 10, padding: '0 2px', lineHeight: 1 }}
+                >✕</button>
+              )}
+            </div>
+            <input type="number" step="0.01"
+              key={position.id + '-price-' + (overrideActive ? position.manualPriceOverride.price : position.currentPrice)}
+              defaultValue={displayPrice}
+              onBlur={e => { const v = parseFloat(e.target.value); if (v && v !== displayPrice) onUpdatePrice(position.id, v); }}
               onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat(e.target.value); if (v) { onUpdatePrice(position.id, v); e.target.blur(); } } }}
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: 4, padding: '2px 6px', color: '#e8e6e3', fontSize: 15, fontFamily: 'monospace',
-                fontWeight: 700, width: 80, textAlign: 'right', outline: 'none',
+              style={{ background: 'rgba(255,255,255,0.06)',
+                border: overrideActive ? '1px solid rgba(255,215,0,0.5)' : '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 4, padding: '2px 6px',
+                color: overrideActive ? '#FFD700' : '#e8e6e3',
+                fontSize: 15, fontFamily: 'monospace', fontWeight: 700, width: 80,
+                textAlign: 'right', outline: 'none',
                 MozAppearance: 'textfield', WebkitAppearance: 'none' }}
               onFocus={e => { e.target.style.borderColor = '#FFD700'; e.target.style.color = '#FFD700'; }}
             />
+            {overrideActive && (
+              <div style={{ fontSize: 9, color: '#444', fontFamily: 'monospace', textAlign: 'right', marginTop: 1 }}>
+                mkt: ${(position.currentPrice ?? 0).toFixed(2)}
+              </div>
+            )}
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 10, color: '#666' }}>P&L</div>
@@ -862,14 +904,14 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                   if (l.filled) return 'FILLED';
                   if (l.lot === 2) {
                     if (!t2met) return 'GATE';
-                    const priceReached = position.currentPrice &&
-                      (isLong ? position.currentPrice >= l.triggerPrice : position.currentPrice <= l.triggerPrice);
+                    const priceReached = displayPrice &&
+                      (isLong ? displayPrice >= l.triggerPrice : displayPrice <= l.triggerPrice);
                     return priceReached ? 'READY' : 'WAITING';
                   }
                   const priorFilled = position.fills?.[l.lot - 1]?.filled ?? false;
                   if (!priorFilled) return 'LOCKED';
-                  const priceReached = position.currentPrice &&
-                    (isLong ? position.currentPrice >= l.triggerPrice : position.currentPrice <= l.triggerPrice);
+                  const priceReached = displayPrice &&
+                    (isLong ? displayPrice >= l.triggerPrice : displayPrice <= l.triggerPrice);
                   return priceReached ? 'READY' : 'WAITING';
                 };
                 const lotStatus = getLotStatus();
@@ -1659,6 +1701,9 @@ export default function CommandCenter() {
     try {
       const data = await apiGet('/api/positions');
       if (data.positions?.length) {
+        // Collect IDs where the market just caught up to a manual override
+        // (computed outside setPositions so we can patch DB after state update)
+        const toDeactivate = [];
         setPositions(prev => {
           // Track price changes for flash animation before merging
           const changed = new Set();
@@ -1672,8 +1717,23 @@ export default function CommandCenter() {
             flashTimerRef.current = setTimeout(() => setFlashedTickers(new Set()), 2500);
           }
           // Use safe merge — never overwrite sacred fields (fills, stops, etc.)
-          return mergeServerPrices(prev, data.positions);
+          const merged = mergeServerPrices(prev, data.positions);
+          // Auto-deactivate overrides where live price has reached the target
+          return merged.map(p => {
+            const ov = p.manualPriceOverride;
+            if (!ov?.active) return p;
+            const reached = p.direction === 'LONG'
+              ? (p.currentPrice ?? 0) >= ov.price
+              : (p.currentPrice ?? 0) <= ov.price;
+            if (!reached) return p;
+            toDeactivate.push(p.id);
+            return { ...p, manualPriceOverride: { ...ov, active: false } };
+          });
         });
+        // Patch DB for any auto-deactivated overrides (outside state update, safe)
+        for (const id of toDeactivate) {
+          patchPosition(id, { 'manualPriceOverride.active': false }).catch(() => {});
+        }
       }
       setLastRefresh(new Date());
       // Sync NAV from server (picks up IBKR NetLiquidation updates)
@@ -1694,7 +1754,7 @@ export default function CommandCenter() {
       } catch { /* silent */ }
     } catch { /* silent — prices stay as-is */ }
     setRefreshing(false);
-  }, [refreshing, nav]);
+  }, [refreshing, nav, mergeServerPrices, patchPosition]);
 
   // Keep ref in sync so the interval always calls the latest closure
   useEffect(() => { refreshFnRef.current = refreshPrices; }, [refreshPrices]);
@@ -1772,9 +1832,19 @@ export default function CommandCenter() {
   }, [patchPosition]);
 
   const updatePrice = useCallback((id, newPrice) => {
-    setPositions(prev => prev.map(x => x.id === id ? { ...x, currentPrice: newPrice } : x));
-    // Don't auto-save price (FMP provides live prices; only save if no live data)
-  }, []);
+    // Save as a manual override — persists through price refreshes until
+    // the live market price reaches the override level (or user clears it).
+    const override = { price: newPrice, setAt: new Date().toISOString(), active: true };
+    setPositions(prev => prev.map(x => x.id === id ? { ...x, manualPriceOverride: override } : x));
+    patchPosition(id, { manualPriceOverride: override });
+  }, [patchPosition]);
+
+  const clearOverride = useCallback((id) => {
+    setPositions(prev => prev.map(x => x.id === id
+      ? { ...x, manualPriceOverride: x.manualPriceOverride ? { ...x.manualPriceOverride, active: false } : null }
+      : x));
+    patchPosition(id, { 'manualPriceOverride.active': false });
+  }, [patchPosition]);
 
   const handleDeletePosition = useCallback(async (id) => {
     try {
@@ -1984,6 +2054,7 @@ export default function CommandCenter() {
                 {positions.map(p => (
                   <PyramidCard key={p.id} position={p} netLiquidity={nav}
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
+                    onClearOverride={clearOverride}
                     onDelete={handleDeletePosition}
                     onExitConfirmed={() => {
                       // Re-fetch after an exit to sync status/remainingShares/exits from DB.

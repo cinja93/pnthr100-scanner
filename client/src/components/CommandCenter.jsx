@@ -1695,6 +1695,18 @@ export default function CommandCenter() {
     });
   }, []);
 
+  // ── Surgical patch — sends ONLY the specified fields ──────────────────────
+  // Safe for concurrent updates because each call touches different fields.
+  // Two racing patches to fills vs stopPrice can never overwrite each other.
+  // MUST be declared before refreshPrices (used in its dep array + body).
+  const patchPosition = useCallback(async (id, fields) => {
+    setSaving(true);
+    try {
+      await apiPost('/api/positions', { id, ...fields });
+    } catch { /* non-fatal */ }
+    setSaving(false);
+  }, []);
+
   const refreshPrices = useCallback(async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -1797,17 +1809,6 @@ export default function CommandCenter() {
     try {
       await apiPost('/api/positions', position);
     } catch { /* non-fatal — UI stays updated */ }
-    setSaving(false);
-  }, []);
-
-  // ── Surgical patch — sends ONLY the specified fields ──────────────────────
-  // Safe for concurrent updates because each call touches different fields.
-  // Two racing patches to fills vs stopPrice can never overwrite each other.
-  const patchPosition = useCallback(async (id, fields) => {
-    setSaving(true);
-    try {
-      await apiPost('/api/positions', { id, ...fields });
-    } catch { /* non-fatal */ }
     setSaving(false);
   }, []);
 

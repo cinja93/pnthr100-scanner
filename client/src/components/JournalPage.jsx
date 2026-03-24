@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
+import { useAuth } from '../AuthContext';
 
 const DISC_COLORS = (score) => {
   if (score == null) return '#555';
@@ -22,6 +23,7 @@ const REASON_COLORS = {
 const SUGGESTED_TAGS = ['kill-top-10', 'earnings-play', 'sector-rotation', 'breakout', 'mean-reversion', 'scalp'];
 
 export default function JournalPage({ onNavigate }) {
+  const { isAdmin } = useAuth();
   const [tab, setTab] = useState('trades');
   const [entries, setEntries] = useState([]);
   const [analytics, setAnalytics] = useState(null);
@@ -34,6 +36,8 @@ export default function JournalPage({ onNavigate }) {
   const [noteInputs, setNoteInputs] = useState({});
   const [weeklyReflection, setWeeklyReflection] = useState('');
   const [savingReview, setSavingReview] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -112,6 +116,19 @@ export default function JournalPage({ onNavigate }) {
     return d.toISOString().split('T')[0];
   };
 
+  const runMigration = async () => {
+    if (!confirm('Create journal entries for all existing positions that don\'t have one yet?')) return;
+    setMigrating(true);
+    setMigrateResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/journal/migrate`, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      setMigrateResult(data);
+      if (data.created > 0) fetchData();
+    } catch (e) { setMigrateResult({ error: e.message }); }
+    setMigrating(false);
+  };
+
   const saveWeeklyReview = async () => {
     setSavingReview(true);
     const weekOf = getMondayOfCurrentWeek();
@@ -133,15 +150,16 @@ export default function JournalPage({ onNavigate }) {
   const DisciplineStrip = () => (
     <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
       {[
-        { label: 'OVERALL SCORE', value: analytics?.avgDisciplineScore != null ? `${analytics.avgDisciplineScore}/100` : '—', color: DISC_COLORS(analytics?.avgDisciplineScore) },
-        { label: 'CLEAN STREAK', value: analytics?.streak != null ? `${analytics.streak} trades` : '—', color: '#6bcb77' },
-        { label: 'OVERRIDES / MO', value: analytics?.overridesThisMonth != null ? String(analytics.overridesThisMonth) : '—', color: analytics?.overridesThisMonth > 0 ? '#ff8c00' : '#6bcb77' },
-        { label: 'WIN RATE (DISC)', value: analytics?.disciplineWinRate != null ? `${analytics.disciplineWinRate}%` : '—', color: '#6bcb77' },
-        { label: 'WIN RATE (OVRD)', value: analytics?.overrideWinRate != null ? `${analytics.overrideWinRate}%` : '—', color: '#ff8c00' },
+        { label: 'OVERALL SCORE', value: analytics?.avgDisciplineScore != null ? `${analytics.avgDisciplineScore}/100` : '0/100', color: analytics?.avgDisciplineScore != null ? DISC_COLORS(analytics.avgDisciplineScore) : '#555', sub: 'avg · last 20 trades' },
+        { label: 'CLEAN STREAK', value: analytics?.streak != null ? `${analytics.streak}` : '0', color: '#6bcb77', sub: 'trades no overrides' },
+        { label: 'OVERRIDES / MO', value: analytics?.overridesThisMonth != null ? String(analytics.overridesThisMonth) : '0', color: analytics?.overridesThisMonth > 0 ? '#ff8c00' : '#6bcb77', sub: 'this month' },
+        { label: 'WIN RATE (DISC)', value: analytics?.disciplineWinRate != null ? `${analytics.disciplineWinRate}%` : 'No data', color: '#6bcb77', sub: 'score ≥ 80' },
+        { label: 'WIN RATE (OVRD)', value: analytics?.overrideWinRate != null ? `${analytics.overrideWinRate}%` : 'No data', color: '#ff8c00', sub: 'override trades' },
       ].map(card => (
         <div key={card.label} style={{ background: '#111', borderRadius: 10, padding: '12px 18px', flex: '1 1 140px', minWidth: 120 }}>
           <div style={{ color: '#555', fontSize: 9, letterSpacing: 2, fontWeight: 700, marginBottom: 4 }}>{card.label}</div>
           <div style={{ color: card.color, fontSize: 22, fontWeight: 900 }}>{card.value}</div>
+          {card.sub && <div style={{ color: '#444', fontSize: 9, marginTop: 2 }}>{card.sub}</div>}
         </div>
       ))}
     </div>
@@ -389,13 +407,20 @@ export default function JournalPage({ onNavigate }) {
   );
 
   return (
-    <div style={{ padding: '0 16px 32px', maxWidth: 1200, color: '#fff' }}>
+    <div style={{ padding: '0 16px 32px', maxWidth: 1200, color: '#fff', background: '#0a0a0a', minHeight: '100vh' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
         <div>
           <div style={{ color: '#FFD700', fontSize: 18, fontWeight: 900, letterSpacing: 2 }}>PNTHR JOURNAL</div>
           <div style={{ color: '#555', fontSize: 11 }}>Trade analysis · Discipline tracking · Pattern recognition</div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          {isAdmin && entries.length > 0 && (
+            <button onClick={runMigration} disabled={migrating}
+              style={{ background: 'transparent', border: '1px solid #333', color: '#555', borderRadius: 6, padding: '4px 10px', fontSize: 10, cursor: migrating ? 'not-allowed' : 'pointer' }}
+              title="Create journal entries for any positions missing one">
+              {migrating ? '...' : '↺ sync positions'}
+            </button>
+          )}
           {tabBtn('trades', 'TRADES')}
           {tabBtn('analytics', 'ANALYTICS')}
           {tabBtn('weekly', 'WEEKLY REVIEW')}
@@ -421,8 +446,24 @@ export default function JournalPage({ onNavigate }) {
               </div>
 
               {sorted.length === 0 ? (
-                <div style={{ color: '#555', textAlign: 'center', padding: 40, fontSize: 14 }}>
-                  No journal entries yet. Journal entries are auto-created when you confirm a position in Command.
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <div style={{ color: '#555', fontSize: 14, marginBottom: 16 }}>
+                    No journal entries yet. Journal entries are auto-created when you confirm a position in Command.
+                  </div>
+                  {isAdmin && (
+                    <div>
+                      <div style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>Have existing positions? Import them now:</div>
+                      <button onClick={runMigration} disabled={migrating}
+                        style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 6, padding: '7px 20px', fontSize: 12, fontWeight: 800, cursor: migrating ? 'not-allowed' : 'pointer', letterSpacing: 1 }}>
+                        {migrating ? 'IMPORTING...' : '⚡ IMPORT EXISTING POSITIONS'}
+                      </button>
+                      {migrateResult && (
+                        <div style={{ marginTop: 8, fontSize: 12, color: migrateResult.error ? '#ff6b6b' : '#6bcb77' }}>
+                          {migrateResult.error ? `Error: ${migrateResult.error}` : `✓ Created ${migrateResult.created} entries (${migrateResult.skipped} already existed)`}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden' }}>

@@ -364,28 +364,53 @@ function ExitPanel({ position, onClose, onConfirm }) {
   })();
   const remaining = position.remainingShares != null ? position.remainingShares : totalFilled;
 
-  const [shares,    setShares]    = useState('');
-  const [price,     setPrice]     = useState('');
-  const [date,      setDate]      = useState(new Date().toISOString().split('T')[0]);
-  const [reason,    setReason]    = useState('SIGNAL');
-  const [note,      setNote]      = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [err,       setErr]       = useState('');
+  // avg cost for impact preview
+  const avgCost = (() => {
+    let cost = 0, sh = 0;
+    for (let i = 1; i <= 5; i++) { const f = position.fills?.[i]; if (f?.filled && f.price) { cost += f.price * +(f.shares ?? 0); sh += +(f.shares ?? 0); } }
+    return sh > 0 ? cost / sh : (position.entryPrice || 0);
+  })();
 
-  const REASONS = ['SIGNAL', 'FEAST', 'STOP_HIT', 'STALE_HUNT', 'MANUAL'];
+  const nowTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+  const [shares,     setShares]     = useState('');
+  const [price,      setPrice]      = useState(position.currentPrice ? position.currentPrice.toFixed(2) : '');
+  const [date,       setDate]       = useState(new Date().toISOString().split('T')[0]);
+  const [time,       setTime]       = useState(nowTime);
+  const [reason,     setReason]     = useState('SIGNAL');
+  const [note,       setNote]       = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err,        setErr]        = useState('');
+
+  const REASONS = [
+    { value: 'SIGNAL',     label: 'SIGNAL — PNTHR exit signal (BE/SE) fired' },
+    { value: 'FEAST',      label: 'FEAST — RSI extreme, selling per FEAST rule' },
+    { value: 'STOP_HIT',   label: 'STOP_HIT — Stop price was hit' },
+    { value: 'STALE_HUNT', label: 'STALE_HUNT — 20-day timer expired' },
+    { value: 'MANUAL',     label: 'MANUAL — Discretionary override ⚠' },
+  ];
+
+  const sharesNum   = parseFloat(shares) || 0;
+  const priceNum    = parseFloat(price)  || 0;
+  const isManual    = reason === 'MANUAL';
+  const canSubmit   = sharesNum > 0 && sharesNum <= remaining && priceNum > 0 && date && (!isManual || note.trim());
+
+  // Impact preview
+  const diff        = position.direction === 'SHORT' ? avgCost - priceNum : priceNum - avgCost;
+  const pnlDollar   = diff * sharesNum;
+  const pnlPct      = avgCost > 0 ? diff / avgCost * 100 : 0;
+  const afterRemain = remaining - sharesNum;
 
   async function handleSubmit(e) {
     e.preventDefault();
     setErr('');
-    const sharesNum = parseFloat(shares);
-    const priceNum  = parseFloat(price);
     if (!sharesNum || sharesNum <= 0) return setErr('Shares must be > 0');
     if (!priceNum  || priceNum  <= 0) return setErr('Price must be > 0');
     if (sharesNum > remaining)        return setErr(`Max ${remaining} shares remaining`);
-    if (reason === 'MANUAL' && !note.trim()) return setErr('Note required for manual exits');
+    if (isManual && !note.trim())     return setErr('Note required for manual exits');
     setSubmitting(true);
     try {
-      await onConfirm({ shares: sharesNum, price: priceNum, date, reason, note: note.trim() || undefined });
+      await onConfirm({ shares: sharesNum, price: priceNum, date, time, reason, note: note.trim() || undefined });
     } catch (ex) {
       setErr(ex.message || 'Exit failed');
     } finally {
@@ -394,39 +419,83 @@ function ExitPanel({ position, onClose, onConfirm }) {
   }
 
   const labelSt = { color: '#888', fontSize: 11, marginBottom: 2 };
-  const inputSt = { background: '#111', border: '1px solid #333', color: '#fff', borderRadius: 4, padding: '4px 8px', fontSize: 12, width: '100%' };
+  const inputSt = { background: '#111', border: '1px solid #333', color: '#fff', borderRadius: 4, padding: '4px 8px', fontSize: 12, width: '100%', boxSizing: 'border-box' };
   const colSt   = { display: 'flex', flexDirection: 'column', gap: 2 };
 
   return (
     <form onSubmit={handleSubmit} style={{ background: '#0d0d0d', border: '1px solid #FFD700', borderRadius: 8, padding: '12px 14px', marginTop: 4 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <span style={{ color: '#FFD700', fontWeight: 700, fontSize: 12, letterSpacing: 1 }}>EXIT SHARES — {remaining} remaining</span>
+        <span style={{ color: '#FFD700', fontWeight: 700, fontSize: 12, letterSpacing: 1 }}>
+          EXIT SHARES — {position.ticker}
+          <span style={{ color: '#555', fontWeight: 400, marginLeft: 8 }}>{remaining} remaining · avg ${avgCost.toFixed(2)}</span>
+        </span>
         <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14 }}>✕</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
-        <div style={colSt}><label style={labelSt}>SHARES</label><input style={inputSt} type="number" min="1" step="1" value={shares} onChange={e => setShares(e.target.value)} placeholder="e.g. 50" required /></div>
-        <div style={colSt}><label style={labelSt}>PRICE</label><input style={inputSt} type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 123.45" required /></div>
-        <div style={colSt}><label style={labelSt}>DATE</label><input style={inputSt} type="date" value={date} onChange={e => setDate(e.target.value)} required /></div>
-      </div>
-
+      {/* Shares + quick % buttons */}
       <div style={{ ...colSt, marginBottom: 8 }}>
-        <label style={labelSt}>REASON</label>
-        <select style={inputSt} value={reason} onChange={e => setReason(e.target.value)}>
-          {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-        </select>
+        <label style={labelSt}>SHARES TO EXIT</label>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input style={{ ...inputSt, width: 90 }} type="number" min="1" step="1" value={shares} onChange={e => setShares(e.target.value)} placeholder="0" required />
+          <span style={{ color: '#444', fontSize: 11 }}>of {remaining}</span>
+          {[25, 50, 75, 100].map(pct => (
+            <button key={pct} type="button"
+              onClick={() => setShares(String(Math.floor(remaining * pct / 100) || 1))}
+              style={{ background: '#1a1a1a', border: '1px solid #444', color: '#FFD700', borderRadius: 4, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 700 }}>
+              {pct}%
+            </button>
+          ))}
+        </div>
       </div>
 
-      {reason === 'MANUAL' && (
-        <div style={{ ...colSt, marginBottom: 8 }}>
-          <label style={labelSt}>NOTE (required for manual exits)</label>
-          <input style={inputSt} type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Why overriding signal?" />
+      {/* Price + Date + Time */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+        <div style={colSt}><label style={labelSt}>EXIT PRICE</label><input style={inputSt} type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" required /></div>
+        <div style={colSt}><label style={labelSt}>DATE</label><input style={inputSt} type="date" value={date} onChange={e => setDate(e.target.value)} required /></div>
+        <div style={colSt}><label style={labelSt}>TIME</label><input style={inputSt} type="text" value={time} onChange={e => setTime(e.target.value)} placeholder="10:32 AM" /></div>
+      </div>
+
+      {/* Reason */}
+      <div style={{ ...colSt, marginBottom: 8 }}>
+        <label style={labelSt}>EXIT REASON</label>
+        <select style={{ ...inputSt, cursor: 'pointer' }} value={reason} onChange={e => setReason(e.target.value)}>
+          {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
+        {isManual && <div style={{ color: '#FFD700', fontSize: 10, marginTop: 3 }}>⚠ This exit will be flagged as an OVERRIDE in your PNTHR Journal</div>}
+      </div>
+
+      {/* Note — always visible, required for MANUAL */}
+      <div style={{ ...colSt, marginBottom: 8 }}>
+        <label style={{ ...labelSt, color: isManual ? '#dc3545' : '#888' }}>
+          {isManual ? '⚠ REQUIRED — EXPLAIN YOUR OVERRIDE' : 'NOTE (optional)'}
+        </label>
+        <textarea
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          rows={2}
+          placeholder={isManual ? 'What are you seeing? Why are you overriding the system?' : 'What are you seeing? (optional)'}
+          style={{ ...inputSt, resize: 'vertical', border: isManual && !note.trim() ? '2px solid #dc3545' : '1px solid #333' }}
+        />
+      </div>
+
+      {/* Impact preview */}
+      {sharesNum > 0 && priceNum > 0 && (
+        <div style={{ background: '#111', borderRadius: 6, padding: '8px 12px', marginBottom: 8, fontSize: 11 }}>
+          <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>IMPACT PREVIEW</div>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            <span>P&L: <b style={{ color: pnlDollar >= 0 ? '#6bcb77' : '#ff6b6b' }}>
+              {pnlDollar >= 0 ? '+' : ''}${pnlDollar.toFixed(2)} ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%)
+            </b></span>
+            <span>Remaining: <b style={{ color: '#fff' }}>{Math.max(0, afterRemain)} shr</b></span>
+            {afterRemain <= 0 && sharesNum > 0 && <span style={{ color: '#FFD700', fontWeight: 700 }}>⚡ FINAL EXIT</span>}
+          </div>
         </div>
       )}
 
       {err && <div style={{ color: '#ff6b6b', fontSize: 11, marginBottom: 6 }}>{err}</div>}
 
-      <button type="submit" disabled={submitting} style={{ width: '100%', background: submitting ? '#333' : '#FFD700', color: '#000', border: 'none', borderRadius: 5, padding: '7px 0', fontWeight: 700, fontSize: 12, cursor: submitting ? 'not-allowed' : 'pointer', letterSpacing: 1 }}>
+      <button type="submit" disabled={submitting || !canSubmit}
+        style={{ width: '100%', background: canSubmit && !submitting ? '#FFD700' : '#333', color: canSubmit && !submitting ? '#000' : '#555', border: 'none', borderRadius: 5, padding: '7px 0', fontWeight: 700, fontSize: 12, cursor: canSubmit && !submitting ? 'pointer' : 'not-allowed', letterSpacing: 1 }}>
         {submitting ? 'RECORDING…' : 'RECORD EXIT'}
       </button>
     </form>

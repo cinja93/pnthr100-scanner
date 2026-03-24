@@ -1814,6 +1814,26 @@ app.get('/api/journal', authenticateJWT, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/journal/migrate — one-time backfill: create journal entries for existing positions (admin only)
+app.post('/api/journal/migrate', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const positions = await db.collection('pnthr_portfolio')
+      .find({ ownerId: req.user.userId })
+      .toArray();
+    let created = 0, skipped = 0;
+    for (const pos of positions) {
+      const existing = await db.collection('pnthr_journal').findOne({
+        positionId: pos._id.toString(),
+        ownerId: req.user.userId,
+      });
+      if (existing) { skipped++; continue; }
+      await createJournalEntry(db, pos, req.user.userId, null);
+      created++;
+    }
+    res.json({ ok: true, created, skipped, total: positions.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/journal/analytics — discipline stats (must be before /:id)
 app.get('/api/journal/analytics', authenticateJWT, async (req, res) => {
   try {

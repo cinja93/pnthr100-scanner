@@ -128,7 +128,7 @@ export default function PulsePage({ onNavigate }) {
 
       {/* TIER 2: Signal intelligence — Kill Top 10, Sector Pulse, Signal Breadth, Macro */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-        <KillTop10 killTop10={data.killTop10} onTickerClick={s => { setChartList([s]); setChartIndex(0); }} killDataLive={data.killDataLive} />
+        <KillTop10 killTop10={data.killTop10} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} killDataLive={data.killDataLive} />
         <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} />
       </div>
       <NewSignalsPanel
@@ -594,6 +594,16 @@ function KillTop10({ killTop10, onTickerClick, killDataLive }) {
     return tier.slice(0, 5);
   };
 
+  // Build full chart-ready array once so every click gets the complete list
+  const chartStocks = (killTop10 || []).map(x => ({
+    ticker: x.ticker,
+    symbol: x.ticker,
+    currentPrice: x.currentPrice,
+    signal: x.signal,
+    sector: x.sector,
+    stopPrice: x.stopPrice || null,
+  }));
+
   return (
     <div style={{ flex: 1, minWidth: 280, background: '#111', borderRadius: 12, padding: '14px 16px', maxWidth: 380 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -610,7 +620,7 @@ function KillTop10({ killTop10, onTickerClick, killDataLive }) {
             <span style={{ color: i === 0 ? '#FFD700' : '#555', fontSize: 11, minWidth: 18 }}>#{s.killRank || i + 1}</span>
             <span
               style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 52, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(212,160,23,0.4)' }}
-              onClick={() => onTickerClick({ ticker: s.ticker, symbol: s.ticker, currentPrice: s.currentPrice, signal: s.signal, sector: s.sector })}
+              onClick={() => onTickerClick(chartStocks, i)}
             >{s.ticker}</span>
             <span style={{ color: '#ccc', fontSize: 12, minWidth: 44 }}>{(s.totalScore || 0).toFixed(1)}</span>
             <span style={{ background: isAlpha ? 'rgba(212,160,23,0.2)' : 'rgba(40,167,69,0.15)', color: isAlpha ? '#FFD700' : '#6bcb77', fontSize: 9, padding: '2px 5px', borderRadius: 4, minWidth: 40, textAlign: 'center' }}>{tierShort(s.tier)}</span>
@@ -655,10 +665,13 @@ function PNTHRMiniGauge({ label, bl, ss, highlight, onClick }) {
   const nx = cx + r * 0.78 * Math.cos(angle);
   const ny = cy + r * 0.78 * Math.sin(angle);
 
-  const isBearish = ss >= bl;
-  const domPct = total > 0 ? Math.round((isBearish ? ss : bl) / total * 100) : 0;
-  const dir = total === 0 ? '—' : `${domPct}% ${isBearish ? 'SS' : 'BL'}`;
-  const dirColor = total === 0 ? '#555' : isBearish ? '#ff6b6b' : '#6bcb77';
+  const blN = Number(bl) || 0;
+  const ssN = Number(ss) || 0;
+  const tot = blN + ssN;
+  const ssPct = tot > 0 ? Math.round((ssN / tot) * 100) : 0;
+  const blPct = tot > 0 ? Math.round((blN / tot) * 100) : 0;
+  const dir = tot === 0 ? '—' : ssPct > blPct ? `${ssPct}% SS` : blPct > ssPct ? `${blPct}% BL` : '50/50';
+  const dirColor = tot === 0 ? '#555' : ssPct > blPct ? '#ff6b6b' : blPct > ssPct ? '#6bcb77' : '#aaa';
   const textY = cy - r * 0.58;
 
   return (

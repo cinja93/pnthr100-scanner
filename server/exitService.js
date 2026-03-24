@@ -172,6 +172,30 @@ async function syncExitToJournal(db, positionId, userId, exitRecord, remainingSh
       }
     } catch (e) { console.warn('[EXIT] Discipline score calc failed:', e.message); }
   }
+
+  // When trade closes at a loss, record 30-day wash sale window on journal entry.
+  if (status === 'CLOSED' && realizedDollar < 0) {
+    try {
+      const exitDate = new Date(exitRecord.date);
+      const expiryDate = new Date(exitDate);
+      expiryDate.setDate(expiryDate.getDate() + 30);
+      await db.collection('pnthr_journal').updateOne(
+        { positionId: positionId.toString(), ownerId: userId },
+        {
+          $set: {
+            'washSale.isLoss':          true,
+            'washSale.lossAmount':      +realizedDollar.toFixed(2),
+            'washSale.exitDate':        exitDate,
+            'washSale.expiryDate':      expiryDate,
+            'washSale.triggered':       false,
+            'washSale.triggeredDate':   null,
+            'washSale.triggeredEntryId': null,
+            updatedAt: new Date(),
+          },
+        }
+      );
+    } catch (e) { console.warn('[EXIT] washSale journal update failed:', e.message); }
+  }
 }
 
 export { recordExit, calcAvgCost, calcTotalFilled, calcExitPnl };

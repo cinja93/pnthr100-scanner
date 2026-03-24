@@ -310,22 +310,31 @@ export async function positionsSave(req, res) {
     if (!db) return res.status(503).json({ error: 'DB unavailable' });
 
     const position = req.body;
-    if (!position.ticker || !position.direction) {
-      return res.status(400).json({ error: 'ticker and direction are required' });
-    }
 
     let warning = null;
 
     if (position.id) {
+      // ── Surgical patch (update existing position) ──────────────────────────
       // Strip transient/IBKR display fields — they must not overwrite values
       // written by ibkrSync.js or the price-refresh endpoint.
+      // Only the fields present in the request body are written ($set is surgical).
+      // This means concurrent patches to different fields (fills vs stopPrice)
+      // can never overwrite each other — the permanent fix for the revert bug.
       const saveData = stripTransientFields(position);
+      // Guard: never allow a partial patch to clobber entryPrice or originalStop
+      // unless those fields were explicitly included in this save payload.
+      // (Full-position saves from createPosition always include them.)
       await db.collection('pnthr_portfolio').updateOne(
-        { id: position.id },
-        { $set: { ...saveData, updatedAt: new Date() } },
-        { upsert: true }
+        { id: position.id, ownerId: req.user.userId },
+        { $set: { ...saveData, updatedAt: new Date() } }
+        // No { upsert: true } — updates should only touch existing positions.
+        // New positions use the insertOne path below.
       );
     } else {
+      // ── New position — ticker and direction are required ────────────────────
+      if (!position.ticker || !position.direction) {
+        return res.status(400).json({ error: 'ticker and direction are required for new positions' });
+      }
       // ── Sector concentration check (warn, not block) ────────────────────────
       if (position.sector && position.sector !== '—') {
         const sectorCount = await db.collection('pnthr_portfolio').countDocuments({

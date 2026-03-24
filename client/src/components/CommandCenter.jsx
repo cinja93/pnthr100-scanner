@@ -1729,7 +1729,9 @@ export default function CommandCenter() {
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save position changes to API (debounced via a brief timeout)
+  // ── Full-document save — used ONLY for new position creation ─────────────────
+  // Do NOT use this for updates — it sends the full position object which can
+  // race with concurrent saves and overwrite fields edited by another call.
   const persistPosition = useCallback(async (position) => {
     setSaving(true);
     try {
@@ -1738,28 +1740,36 @@ export default function CommandCenter() {
     setSaving(false);
   }, []);
 
+  // ── Surgical patch — sends ONLY the specified fields ──────────────────────
+  // Safe for concurrent updates because each call touches different fields.
+  // Two racing patches to fills vs stopPrice can never overwrite each other.
+  const patchPosition = useCallback(async (id, fields) => {
+    setSaving(true);
+    try {
+      await apiPost('/api/positions', { id, ...fields });
+    } catch { /* non-fatal */ }
+    setSaving(false);
+  }, []);
+
   const updateFills = useCallback((id, updates) => {
     // updates may be a plain fills object (legacy) or { fills, direction, signal }
-    const fills     = updates?.fills ?? updates;
+    const fills       = updates?.fills ?? updates;
     const extraFields = updates?.fills ? { direction: updates.direction, signal: updates.signal } : {};
     // strip undefined keys so we don't overwrite good values with undefined
     Object.keys(extraFields).forEach(k => extraFields[k] === undefined && delete extraFields[k]);
-    setPositions(prev => {
-      const updated = prev.map(x => x.id === id ? { ...x, fills, ...extraFields } : x);
-      const pos = updated.find(x => x.id === id);
-      if (pos) persistPosition(pos);
-      return updated;
-    });
-  }, [persistPosition]);
+    // State update (local, instant)
+    setPositions(prev => prev.map(x => x.id === id ? { ...x, fills, ...extraFields } : x));
+    // Surgical save — only sends fills (and optional direction/signal), never the full position.
+    // This prevents a concurrent updateStop from overwriting fills, and vice-versa.
+    patchPosition(id, { fills, ...extraFields });
+  }, [patchPosition]);
 
   const updateStop = useCallback((id, newStop) => {
-    setPositions(prev => {
-      const updated = prev.map(x => x.id === id ? { ...x, stopPrice: newStop } : x);
-      const pos = updated.find(x => x.id === id);
-      if (pos) persistPosition(pos);
-      return updated;
-    });
-  }, [persistPosition]);
+    // State update (local, instant)
+    setPositions(prev => prev.map(x => x.id === id ? { ...x, stopPrice: newStop } : x));
+    // Surgical save — only sends stopPrice. Never touches fills or entryPrice.
+    patchPosition(id, { stopPrice: newStop });
+  }, [patchPosition]);
 
   const updatePrice = useCallback((id, newPrice) => {
     setPositions(prev => prev.map(x => x.id === id ? { ...x, currentPrice: newPrice } : x));

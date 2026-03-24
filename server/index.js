@@ -2814,7 +2814,12 @@ app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
       }
     }
 
-    // ── Sector lookup from pnthr_kill_scores (most recent entries) ────────────
+    // ── Sector lookup — two-pass for full coverage ────────────────────────────
+    // Developing signal stocks have no CURRENT signal so won't be in this week's
+    // kill_scores. Use:
+    //   1. All historical kill_scores entries (any week a stock ever had a signal)
+    //   2. Live apex cache (currently signaled stocks — confirms current sectors)
+    // This covers virtually every stock in the 679 universe.
     const allCandidateTickers = [...new Set([
       ...blCandidates.map(c => c.ticker),
       ...ssCandidates.map(c => c.ticker),
@@ -2823,14 +2828,23 @@ app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
     try {
       const { connectToDatabase } = await import('./database.js');
       const db = await connectToDatabase();
+      // Pass 1: historical kill_scores — group by ticker, grab most-recent sector
+      // No ticker filter — we want all 679 stocks' historical sector data in one shot
       const sectorDocs = await db.collection('pnthr_kill_scores')
         .aggregate([
-          { $match: { ticker: { $in: allCandidateTickers } } },
           { $sort: { createdAt: -1 } },
           { $group: { _id: '$ticker', sector: { $first: '$sector' } } },
         ])
         .toArray();
-      for (const d of sectorDocs) sectorMap[d._id] = d.sector;
+      for (const d of sectorDocs) if (d.sector) sectorMap[d._id] = d.sector;
+      // Pass 2: live apex cache — catches any sector that changed since last pipeline
+      const { getCachedApexResults } = await import('./apexService.js');
+      const liveApex = getCachedApexResults();
+      if (liveApex?.stocks) {
+        for (const s of liveApex.stocks) {
+          if (s.sector) sectorMap[s.ticker] = s.sector; // apex overrides historical
+        }
+      }
     } catch (e) { console.warn('[developing-signals] sector lookup failed:', e.message); }
 
     // ── Fetch today's quotes in chunks of 100 ────────────────────────────────

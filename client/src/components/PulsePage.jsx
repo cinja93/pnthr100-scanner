@@ -985,6 +985,27 @@ function NewSignalsPanel({ newSignals, onTickerClick }) {
   );
 }
 
+// ── Sector abbreviations for compact display ──────────────────────────────────
+const SECTOR_ABBREV = {
+  'Technology':             'Tech',
+  'Healthcare':             'Health',
+  'Financial Services':     'Fin',
+  'Industrials':            'Ind',
+  'Consumer Staples':       'ConStap',
+  'Consumer Defensive':     'ConStap',
+  'Energy':                 'Energy',
+  'Utilities':              'Util',
+  'Basic Materials':        'BasMat',
+  'Communication Services': 'CommSvc',
+  'Real Estate':            'RealEst',
+  'Consumer Cyclical':      'ConDisc',
+  'Consumer Discretionary': 'ConDisc',
+};
+function abbrevSector(sector) {
+  if (!sector || sector === '—') return '—';
+  return SECTOR_ABBREV[sector] || sector.slice(0, 8);
+}
+
 // ── Developing Signals Panel ───────────────────────────────────────────────────
 function DevelopingSignalsPanel({ devSignals, loading, onTickerClick }) {
   const status = devSignals?.status;
@@ -1026,7 +1047,7 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick }) {
           DEV
         </span>
         <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 52, fontFamily: 'monospace' }}>{s.ticker}</span>
-        <span style={{ color: '#555', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector || '—'}</span>
+        <span style={{ color: '#555', fontSize: 11, minWidth: 58, maxWidth: 58, flexShrink: 0, whiteSpace: 'nowrap' }}>{abbrevSector(s.sector)}</span>
         <span style={{ color: '#ccc', fontSize: 12, minWidth: 60, textAlign: 'right', fontFamily: 'monospace' }}>${(+s.price).toFixed(2)}</span>
         <span style={{ color: accentColor, fontSize: 11, minWidth: 100, textAlign: 'right', fontFamily: 'monospace' }}>{pctLabel}</span>
         <span style={{ color: '#666', fontSize: 10, minWidth: 80, textAlign: 'right', fontFamily: 'monospace' }}>{daylightLabel}</span>

@@ -1818,28 +1818,30 @@ app.get('/api/journal', authenticateJWT, async (req, res) => {
 // Also claims orphaned positions (no ownerId — created before per-user scoping)
 app.post('/api/journal/migrate', authenticateJWT, requireAdmin, async (req, res) => {
   try {
+    const { connectToDatabase } = await import('./database.js');
+    const mdb = await connectToDatabase();
     const userId = req.user.userId;
     // Find positions owned by this user OR orphaned (no ownerId — pre-scoping era)
-    const positions = await db.collection('pnthr_portfolio')
+    const positions = await mdb.collection('pnthr_portfolio')
       .find({ $or: [{ ownerId: userId }, { ownerId: { $exists: false } }, { ownerId: null }] })
       .toArray();
     let created = 0, skipped = 0, claimed = 0;
     for (const pos of positions) {
       // Claim orphaned positions for this user
       if (!pos.ownerId) {
-        await db.collection('pnthr_portfolio').updateOne(
+        await mdb.collection('pnthr_portfolio').updateOne(
           { _id: pos._id },
           { $set: { ownerId: userId } }
         );
         claimed++;
         pos.ownerId = userId;
       }
-      const existing = await db.collection('pnthr_journal').findOne({
+      const existing = await mdb.collection('pnthr_journal').findOne({
         positionId: pos._id.toString(),
         ownerId: userId,
       });
       if (existing) { skipped++; continue; }
-      await createJournalEntry(db, pos, userId, null);
+      await createJournalEntry(mdb, pos, userId, null);
       created++;
     }
     res.json({ ok: true, created, skipped, claimed, total: positions.length });

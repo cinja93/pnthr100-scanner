@@ -23,10 +23,7 @@ import ChartModal from './ChartModal';
 function getDisplayPrice(p) {
   const ov = p.manualPriceOverride;
   if (!ov?.active) return p.currentPrice ?? 0;
-  const reached = p.direction === 'LONG'
-    ? (p.currentPrice ?? 0) >= ov.price
-    : (p.currentPrice ?? 0) <= ov.price;
-  return reached ? (p.currentPrice ?? 0) : ov.price;
+  return ov.price; // always use override while active; cleared by ✕ or when FMP catches up
 }
 
 function highestFilledLot(p) {
@@ -579,9 +576,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   // displayPrice: uses manual override if active (and market hasn't caught up yet)
   // Used for all lot-trigger calculations and P&L display when override is active.
   const displayPrice   = getDisplayPrice(position);
-  const overrideActive = position.manualPriceOverride?.active &&
-    !(isLong ? (position.currentPrice ?? 0) >= position.manualPriceOverride.price
-             : (position.currentPrice ?? 0) <= position.manualPriceOverride.price);
+  const overrideActive = !!(position.manualPriceOverride?.active);
 
   const pnl     = isLong ? ((displayPrice - avg) / avg * 100) : ((avg - displayPrice) / avg * 100);
   const pnl$    = isLong ? (displayPrice - avg) * totShr       : (avg - displayPrice) * totShr;
@@ -1747,14 +1742,16 @@ export default function CommandCenter() {
           }
           // Use safe merge — never overwrite sacred fields (fills, stops, etc.)
           const merged = mergeServerPrices(prev, data.positions);
-          // Auto-deactivate overrides where live price has reached the target
+          // Auto-deactivate overrides when FMP price comes within 0.1% of the override
+          // (i.e. the data feed caught up to what the user typed). No direction logic —
+          // the user may enter a price in either direction relative to the stale feed.
           return merged.map(p => {
             const ov = p.manualPriceOverride;
             if (!ov?.active) return p;
-            const reached = p.direction === 'LONG'
-              ? (p.currentPrice ?? 0) >= ov.price
-              : (p.currentPrice ?? 0) <= ov.price;
-            if (!reached) return p;
+            const livePrice = p.currentPrice ?? 0;
+            if (!livePrice || !ov.price) return p;
+            const pctDiff = Math.abs(livePrice - ov.price) / ov.price;
+            if (pctDiff > 0.001) return p; // FMP hasn't caught up yet — keep override
             toDeactivate.push(p.id);
             return { ...p, manualPriceOverride: { ...ov, active: false } };
           });

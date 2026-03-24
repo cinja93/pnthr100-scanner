@@ -80,6 +80,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   // Personal group — Command for everyone; History pages admin-only
   const personalItems = [
     { key: 'command',  label: 'PNTHR Command',  iconImg: true },
+    { key: 'journal',  label: 'PNTHR Journal',  icon: '📓' },
     { key: 'watchlist', label: 'Watchlist',      icon: '👁' },
   ];
   if (isAdmin) {

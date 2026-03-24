@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { connectToDatabase, getUserProfile, upsertUserProfile } from './database.js';
+import { createJournalEntry } from './journalService.js';
 
 // ── GET /api/settings/nav ─────────────────────────────────────────────────────
 
@@ -152,6 +153,12 @@ export async function pendingEntryConfirm(req, res) {
       { id: req.params.id },
       { $set: { status: 'CONFIRMED', confirmedAt: new Date(), positionId: posId } }
     );
+
+    // Auto-create journal entry for newly confirmed position
+    try {
+      const killData = entry.killScore ? { totalScore: entry.killScore, tier: entry.killTier, killRank: entry.killRank || null } : null;
+      await createJournalEntry(db, position, req.user.userId, killData);
+    } catch (e) { console.warn('[JOURNAL] Auto-create failed:', e.message); }
 
     res.json({ success: true, positionId: posId });
   } catch (err) {

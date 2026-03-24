@@ -562,3 +562,82 @@ export async function fetchLiveVix() {
   if (!res.ok) return { close: null, change: null };
   return res.json();
 }
+
+// ── Journal ───────────────────────────────────────────────────────────────────
+
+export async function fetchJournal(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.status)    params.set('status', filters.status);
+  if (filters.direction) params.set('direction', filters.direction);
+  if (filters.ticker)    params.set('ticker', filters.ticker);
+  const query = params.toString() ? `?${params}` : '';
+  const res = await fetch(`${API_BASE}/api/journal${query}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchJournalEntry(id) {
+  const res = await fetch(`${API_BASE}/api/journal/${id}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchJournalAnalytics() {
+  const res = await fetch(`${API_BASE}/api/journal/analytics`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchWeeklyReviews() {
+  const res = await fetch(`${API_BASE}/api/journal/weekly-reviews`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function saveWeeklyReview(review) {
+  const res = await fetch(`${API_BASE}/api/journal/weekly-reviews`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(review),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function addJournalNote(journalId, text) {
+  const res = await fetch(`${API_BASE}/api/journal/${journalId}/notes`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function deleteJournalNote(journalId, noteId) {
+  const res = await fetch(`${API_BASE}/api/journal/${journalId}/notes/${noteId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function addJournalTag(journalId, tag) {
+  const res = await fetch(`${API_BASE}/api/journal/${journalId}/tags`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ tag }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function deleteJournalTag(journalId, tag) {
+  const res = await fetch(`${API_BASE}/api/journal/${journalId}/tags/${encodeURIComponent(tag)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

@@ -17,6 +17,7 @@ import SearchPage from './components/SearchPage';
 import PreyPage from './components/PreyPage';
 import ApexPage from './components/ApexPage';
 import CommandCenter from './components/CommandCenter';
+import JournalPage from './components/JournalPage';
 import NewsPage from './components/NewsPage';
 import PulsePage from './components/PulsePage';
 import SignalHistoryPage from './components/SignalHistoryPage';
@@ -489,6 +490,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR Command Center */}
           {activePage === 'command' && <CommandCenter />}
+
+          {/* PNTHR Journal */}
+          {activePage === 'journal' && <JournalPage onNavigate={navigate} />}
 
           {/* Portfolio page */}
           {activePage === 'portfolio' && <PortfolioPage currentUser={currentUser} onProfileUpdate={setCurrentUser} />}

@@ -48,6 +48,8 @@ import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateTo
 import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
 import { sendApprovalRequestEmail, sendWelcomeEmail, sendDenialEmail } from './emailService.js';
 import { ibkrSync } from './ibkrSync.js';
+import { recordExit, calcAvgCost, calcTotalFilled } from './exitService.js';
+import { createJournalEntry, calculateDisciplineScore } from './journalService.js';
 import {
   getSupplementalStocks,
   addSupplementalStock,
@@ -1754,6 +1756,217 @@ app.get('/api/pending-entries',                 authenticateJWT, pendingEntriesG
 app.post('/api/pending-entries',                authenticateJWT, pendingEntriesPost);
 app.post('/api/pending-entries/:id/confirm',    authenticateJWT, pendingEntryConfirm);
 app.post('/api/pending-entries/:id/dismiss',    authenticateJWT, pendingEntryDismiss);
+
+// ── Exit Service ──────────────────────────────────────────────────────────────
+
+// POST /api/positions/:id/exit — record an exit (partial or full)
+app.post('/api/positions/:id/exit', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const { shares, price, date, time, reason, note } = req.body;
+    if (!shares || !price || !date || !reason) return res.status(400).json({ error: 'shares, price, date, reason required' });
+    if (reason === 'MANUAL' && !note) return res.status(400).json({ error: 'Note is required for MANUAL exits' });
+    const result = await recordExit(db, req.params.id, req.user.userId, { shares: Number(shares), price: Number(price), date, time, reason, note });
+    res.json(result);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// DELETE /api/positions/:id/exits/:eid — undo an exit
+app.delete('/api/positions/:id/exits/:eid', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const position = await db.collection('pnthr_portfolio').findOne({ id: req.params.id, ownerId: req.user.userId });
+    if (!position) return res.status(404).json({ error: 'Not found' });
+    const exitToRemove = (position.exits || []).find(e => e.id === req.params.eid);
+    if (!exitToRemove) return res.status(404).json({ error: 'Exit not found' });
+    const newExits = (position.exits || []).filter(e => e.id !== req.params.eid);
+    const totalFilled = position.totalFilledShares || calcTotalFilled(position);
+    const newExited = newExits.reduce((s, e) => s + e.shares, 0);
+    const newRemaining = totalFilled - newExited;
+    const realizedDollar = newExits.reduce((s, e) => s + (e.pnl?.dollar || 0), 0);
+    const newStatus = newExited === 0 ? 'ACTIVE' : newRemaining === 0 ? 'CLOSED' : 'PARTIAL';
+    await db.collection('pnthr_portfolio').updateOne(
+      { id: req.params.id, ownerId: req.user.userId },
+      { $set: { exits: newExits, remainingShares: newRemaining, totalExitedShares: newExited, status: newStatus, 'realizedPnl.dollar': realizedDollar, updatedAt: new Date() } }
+    );
+    res.json({ ok: true, remainingShares: newRemaining, status: newStatus });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Journal API ───────────────────────────────────────────────────────────────
+
+// GET /api/journal — all journal entries for user
+app.get('/api/journal', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const { status, limit = 50 } = req.query;
+    const filter = { ownerId: req.user.userId };
+    if (status) filter['performance.status'] = status;
+    const entries = await db.collection('pnthr_journal')
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .limit(Number(limit))
+      .toArray();
+    res.json(entries);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/journal/analytics — discipline stats (must be before /:id)
+app.get('/api/journal/analytics', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const entries = await db.collection('pnthr_journal')
+      .find({ ownerId: req.user.userId, 'performance.status': 'CLOSED' })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .toArray();
+
+    const scores = entries.map(e => e.discipline?.totalScore).filter(s => s != null);
+    const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+
+    const overrideEntries = entries.filter(e => (e.discipline?.overrideCount || 0) > 0);
+    const disciplinedWinners = entries.filter(e => (e.discipline?.totalScore || 0) >= 80 && (e.performance?.totalPnlDollar || 0) > 0);
+    const disciplinedTotal = entries.filter(e => (e.discipline?.totalScore || 0) >= 80);
+    const overrideWinners = overrideEntries.filter(e => (e.performance?.totalPnlDollar || 0) > 0);
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const overridesThisMonth = entries.filter(e => e.updatedAt > monthStart && (e.discipline?.overrideCount || 0) > 0);
+
+    // Streak: consecutive closed trades with no overrides (most recent first)
+    let streak = 0;
+    for (const e of entries) {
+      if ((e.discipline?.overrideCount || 0) === 0) streak++;
+      else break;
+    }
+
+    res.json({
+      avgDisciplineScore: avgScore,
+      totalTrades: entries.length,
+      streak,
+      overridesThisMonth: overridesThisMonth.length,
+      disciplineWinRate: disciplinedTotal.length ? Math.round(disciplinedWinners.length / disciplinedTotal.length * 100) : null,
+      overrideWinRate: overrideEntries.length ? Math.round(overrideWinners.length / overrideEntries.length * 100) : null,
+      overrideCostThisMonth: null,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/journal/weekly-reviews — must be before /:id
+app.get('/api/journal/weekly-reviews', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const reviews = await db.collection('pnthr_weekly_reviews')
+      .find({ ownerId: req.user.userId })
+      .sort({ weekOf: -1 })
+      .limit(12)
+      .toArray();
+    res.json(reviews);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/journal/weekly-reviews — must be before /:id
+app.post('/api/journal/weekly-reviews', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const { weekOf, reflection } = req.body;
+    if (!weekOf) return res.status(400).json({ error: 'weekOf required' });
+    await db.collection('pnthr_weekly_reviews').updateOne(
+      { ownerId: req.user.userId, weekOf },
+      { $set: { ownerId: req.user.userId, weekOf, reflection, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+      { upsert: true }
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/journal/:id — single entry
+app.get('/api/journal/:id', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const { ObjectId } = await import('mongodb');
+    const db = await connectToDatabase();
+    const entry = await db.collection('pnthr_journal').findOne({
+      _id: new ObjectId(req.params.id),
+      ownerId: req.user.userId,
+    });
+    if (!entry) return res.status(404).json({ error: 'Not found' });
+    res.json(entry);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/journal/:id/notes — add note
+app.post('/api/journal/:id/notes', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const { ObjectId } = await import('mongodb');
+    const db = await connectToDatabase();
+    const { type = 'MID_TRADE', text } = req.body;
+    if (!text) return res.status(400).json({ error: 'text required' });
+    const note = {
+      id: `N${Date.now().toString(36)}`,
+      timestamp: new Date().toISOString(),
+      type,
+      text,
+      marketSnapshot: {},
+    };
+    await db.collection('pnthr_journal').updateOne(
+      { _id: new ObjectId(req.params.id), ownerId: req.user.userId },
+      { $push: { notes: note }, $set: { updatedAt: new Date() } }
+    );
+    res.json(note);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/journal/:id/notes/:noteId
+app.delete('/api/journal/:id/notes/:noteId', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const { ObjectId } = await import('mongodb');
+    const db = await connectToDatabase();
+    await db.collection('pnthr_journal').updateOne(
+      { _id: new ObjectId(req.params.id), ownerId: req.user.userId },
+      { $pull: { notes: { id: req.params.noteId } }, $set: { updatedAt: new Date() } }
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/journal/:id/tags
+app.post('/api/journal/:id/tags', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const { ObjectId } = await import('mongodb');
+    const db = await connectToDatabase();
+    const { tag } = req.body;
+    if (!tag) return res.status(400).json({ error: 'tag required' });
+    await db.collection('pnthr_journal').updateOne(
+      { _id: new ObjectId(req.params.id), ownerId: req.user.userId },
+      { $addToSet: { tags: tag }, $set: { updatedAt: new Date() } }
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/journal/:id/tags/:tag
+app.delete('/api/journal/:id/tags/:tag', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const { ObjectId } = await import('mongodb');
+    const db = await connectToDatabase();
+    await db.collection('pnthr_journal').updateOne(
+      { _id: new ObjectId(req.params.id), ownerId: req.user.userId },
+      { $pull: { tags: req.params.tag }, $set: { updatedAt: new Date() } }
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
 app.use('/api/newsletter', newsletterRouter);

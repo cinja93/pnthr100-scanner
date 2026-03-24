@@ -354,9 +354,88 @@ async function apiPost(path, body) {
   return res.json();
 }
 
+// ── Exit Panel ────────────────────────────────────────────────────────────────
+
+function ExitPanel({ position, onClose, onConfirm }) {
+  const totalFilled = (() => {
+    let s = 0;
+    for (let i = 1; i <= 5; i++) { const f = position.fills?.[i]; if (f?.filled) s += +(f.shares ?? 0); }
+    return s;
+  })();
+  const remaining = position.remainingShares != null ? position.remainingShares : totalFilled;
+
+  const [shares,    setShares]    = useState('');
+  const [price,     setPrice]     = useState('');
+  const [date,      setDate]      = useState(new Date().toISOString().split('T')[0]);
+  const [reason,    setReason]    = useState('SIGNAL');
+  const [note,      setNote]      = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err,       setErr]       = useState('');
+
+  const REASONS = ['SIGNAL', 'FEAST', 'STOP_HIT', 'STALE_HUNT', 'MANUAL'];
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setErr('');
+    const sharesNum = parseFloat(shares);
+    const priceNum  = parseFloat(price);
+    if (!sharesNum || sharesNum <= 0) return setErr('Shares must be > 0');
+    if (!priceNum  || priceNum  <= 0) return setErr('Price must be > 0');
+    if (sharesNum > remaining)        return setErr(`Max ${remaining} shares remaining`);
+    if (reason === 'MANUAL' && !note.trim()) return setErr('Note required for manual exits');
+    setSubmitting(true);
+    try {
+      await onConfirm({ shares: sharesNum, price: priceNum, date, reason, note: note.trim() || undefined });
+    } catch (ex) {
+      setErr(ex.message || 'Exit failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const labelSt = { color: '#888', fontSize: 11, marginBottom: 2 };
+  const inputSt = { background: '#111', border: '1px solid #333', color: '#fff', borderRadius: 4, padding: '4px 8px', fontSize: 12, width: '100%' };
+  const colSt   = { display: 'flex', flexDirection: 'column', gap: 2 };
+
+  return (
+    <form onSubmit={handleSubmit} style={{ background: '#0d0d0d', border: '1px solid #FFD700', borderRadius: 8, padding: '12px 14px', marginTop: 4 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <span style={{ color: '#FFD700', fontWeight: 700, fontSize: 12, letterSpacing: 1 }}>EXIT SHARES — {remaining} remaining</span>
+        <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14 }}>✕</button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+        <div style={colSt}><label style={labelSt}>SHARES</label><input style={inputSt} type="number" min="1" step="1" value={shares} onChange={e => setShares(e.target.value)} placeholder="e.g. 50" required /></div>
+        <div style={colSt}><label style={labelSt}>PRICE</label><input style={inputSt} type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 123.45" required /></div>
+        <div style={colSt}><label style={labelSt}>DATE</label><input style={inputSt} type="date" value={date} onChange={e => setDate(e.target.value)} required /></div>
+      </div>
+
+      <div style={{ ...colSt, marginBottom: 8 }}>
+        <label style={labelSt}>REASON</label>
+        <select style={inputSt} value={reason} onChange={e => setReason(e.target.value)}>
+          {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </div>
+
+      {reason === 'MANUAL' && (
+        <div style={{ ...colSt, marginBottom: 8 }}>
+          <label style={labelSt}>NOTE (required for manual exits)</label>
+          <input style={inputSt} type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Why overriding signal?" />
+        </div>
+      )}
+
+      {err && <div style={{ color: '#ff6b6b', fontSize: 11, marginBottom: 6 }}>{err}</div>}
+
+      <button type="submit" disabled={submitting} style={{ width: '100%', background: submitting ? '#333' : '#FFD700', color: '#000', border: 'none', borderRadius: 5, padding: '7px 0', fontWeight: 700, fontSize: 12, cursor: submitting ? 'not-allowed' : 'pointer', letterSpacing: 1 }}>
+        {submitting ? 'RECORDING…' : 'RECORD EXIT'}
+      </button>
+    </form>
+  );
+}
+
 // ── Pyramid Card (position row) ───────────────────────────────────────────────
 
-function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onDelete, flashed, onOpenChart }) {
+function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onDelete, onExitConfirmed, flashed, onOpenChart }) {
   const [expanded,      setExpanded]      = useState(false);
   const [editing,       setEditing]       = useState(null);
   const [ev,            setEv]            = useState({});
@@ -365,6 +444,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const [stopVal,       setStopVal]       = useState('');
   const [twsAvg,        setTwsAvg]        = useState('');
   const [ratchetRec,    setRatchetRec]    = useState(null);
+  const [exitPanelOpen, setExitPanelOpen] = useState(false);
 
   const sizingStop = position.originalStop || position.stopPrice;
   const pc   = sizePosition({ netLiquidity, entryPrice: position.entryPrice, stopPrice: sizingStop, maxGapPct: position.maxGapPct || 0, direction: position.direction });
@@ -902,6 +982,65 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
               </button>
             </div>
           )}
+          {/* Exit Records — existing exits on this position */}
+          {(position.exits || []).length > 0 && (
+            <div style={{ margin: '0 18px 8px', borderTop: '1px solid #222', paddingTop: 8 }}>
+              {(position.exits || []).map(ex => (
+                <div key={ex.id} style={{ display: 'flex', gap: 8, fontSize: 11, color: '#aaa', padding: '2px 0', alignItems: 'center' }}>
+                  <span style={{ color: '#555', minWidth: 24 }}>{ex.id}</span>
+                  <span style={{ minWidth: 60 }}>{ex.shares} shr @ ${ex.price?.toFixed(2)}</span>
+                  <span style={{ minWidth: 60 }}>{ex.date}</span>
+                  <span style={{ color: ex.reason === 'MANUAL' ? '#ff8c00' : '#6bcb77', fontWeight: 700 }}>{ex.reason}{ex.isOverride ? ' ⚠' : ''}</span>
+                  <span style={{ color: ex.pnl?.dollar >= 0 ? '#6bcb77' : '#ff6b6b', marginLeft: 'auto' }}>
+                    {ex.pnl?.dollar >= 0 ? '+' : ''}{ex.pnl?.dollar?.toFixed(2)} ({ex.pnl?.pct >= 0 ? '+' : ''}{ex.pnl?.pct?.toFixed(1)}%)
+                  </span>
+                </div>
+              ))}
+              {position.remainingShares != null && (
+                <div style={{ marginTop: 6, fontSize: 11, color: '#888', display: 'flex', gap: 16 }}>
+                  <span>Remaining: <b style={{ color: '#fff' }}>{position.remainingShares} of {position.totalFilledShares} shr</b></span>
+                  {position.realizedPnl?.dollar != null && (
+                    <span>Realized: <b style={{ color: position.realizedPnl.dollar >= 0 ? '#6bcb77' : '#ff6b6b' }}>
+                      {position.realizedPnl.dollar >= 0 ? '+' : ''}${position.realizedPnl.dollar.toFixed(2)}
+                    </b></span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* EXIT SHARES button */}
+          {(position.remainingShares == null || position.remainingShares > 0) && (
+            <div style={{ margin: '0 18px 8px', textAlign: 'center' }}>
+              <button
+                onClick={() => setExitPanelOpen(p => !p)}
+                style={{ background: 'transparent', border: '1px solid #FFD700', color: '#FFD700', borderRadius: 6, padding: '5px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 1 }}
+              >
+                {exitPanelOpen ? '✕ CANCEL' : '+ EXIT SHARES'}
+              </button>
+            </div>
+          )}
+
+          {/* Exit Panel */}
+          {exitPanelOpen && (
+            <div style={{ margin: '0 18px 8px' }}>
+              <ExitPanel
+                position={position}
+                onClose={() => setExitPanelOpen(false)}
+                onConfirm={async (exitData) => {
+                  const res = await fetch(`${API_BASE}/api/positions/${position.id}/exit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                    body: JSON.stringify(exitData),
+                  });
+                  if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+                  setExitPanelOpen(false);
+                  onExitConfirmed?.();
+                }}
+              />
+            </div>
+          )}
+
           {/* Delete position — hard remove from DB */}
           <div style={{ padding: '10px 18px', borderTop: '1px solid rgba(255,255,255,0.04)',
             display: 'flex', justifyContent: 'flex-end' }}>
@@ -1679,6 +1818,9 @@ export default function CommandCenter() {
                   <PyramidCard key={p.id} position={p} netLiquidity={nav}
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
                     onDelete={handleDeletePosition}
+                    onExitConfirmed={() => {
+                      apiGet('/api/positions').then(data => { if (data.positions?.length) setPositions(data.positions); }).catch(() => {});
+                    }}
                     flashed={flashedTickers.has(p.ticker)}
                     onOpenChart={(clicked) => {
                       const stocks = positions.map(pos => ({

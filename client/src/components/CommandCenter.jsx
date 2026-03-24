@@ -528,6 +528,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const [twsAvg,        setTwsAvg]        = useState('');
   const [ratchetRec,    setRatchetRec]    = useState(null);
   const [exitPanelOpen, setExitPanelOpen] = useState(false);
+  const [localPrice,    setLocalPrice]    = useState(null); // null = not actively editing
 
   const sizingStop = position.originalStop || position.stopPrice;
   const pc   = sizePosition({ netLiquidity, entryPrice: position.entryPrice, stopPrice: sizingStop, maxGapPct: position.maxGapPct || 0, direction: position.direction });
@@ -769,14 +770,30 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
               )}
             </div>
             <input type="number" step="0.01"
-              key={position.id + '-price-' + (overrideActive ? position.manualPriceOverride.price : position.currentPrice)}
-              defaultValue={displayPrice}
-              onBlur={e => { const v = parseFloat(e.target.value); if (v && v !== displayPrice) onUpdatePrice(position.id, v); }}
-              onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat(e.target.value); if (v) { onUpdatePrice(position.id, v); e.target.blur(); } } }}
+              value={localPrice ?? displayPrice.toFixed(2)}
+              onChange={e => setLocalPrice(e.target.value)}
+              onBlur={() => {
+                const v = parseFloat(localPrice);
+                if (localPrice !== null && !isNaN(v) && v > 0 && v !== displayPrice) {
+                  onUpdatePrice(position.id, v);
+                }
+                setLocalPrice(null);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  const v = parseFloat(localPrice);
+                  if (localPrice !== null && !isNaN(v) && v > 0 && v !== displayPrice) {
+                    onUpdatePrice(position.id, v);
+                  }
+                  setLocalPrice(null);
+                  if (e.key === 'Enter') e.target.blur();
+                }
+                if (e.key === 'Escape') { setLocalPrice(null); e.target.blur(); }
+              }}
               style={{ background: 'rgba(255,255,255,0.06)',
                 border: overrideActive ? '1px solid rgba(255,215,0,0.5)' : '1px solid rgba(255,255,255,0.15)',
                 borderRadius: 4, padding: '2px 6px',
-                color: overrideActive ? '#FFD700' : '#e8e6e3',
+                color: (localPrice !== null || overrideActive) ? '#FFD700' : '#e8e6e3',
                 fontSize: 15, fontFamily: 'monospace', fontWeight: 700, width: 80,
                 textAlign: 'right', outline: 'none',
                 MozAppearance: 'textfield', WebkitAppearance: 'none' }}

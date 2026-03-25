@@ -735,7 +735,7 @@ export default function JournalPage({ onNavigate }) {
           <span style={{ color: migrateResult.error ? '#ff6b6b' : '#6bcb77' }}>
             {migrateResult.error
               ? `Error: ${migrateResult.error}`
-              : `✓ Done — ${migrateResult.created} entries created, ${migrateResult.claimed || 0} positions claimed, ${migrateResult.skipped} already existed (${migrateResult.total} total)`}
+              : `✓ Done — ${migrateResult.created} new, ${migrateResult.updated || 0} refreshed from Command, ${migrateResult.claimed || 0} claimed (${migrateResult.total} total)`}
           </span>
           <button onClick={() => setMigrateResult(null)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14 }}>✕</button>
         </div>
@@ -773,7 +773,7 @@ export default function JournalPage({ onNavigate }) {
                       </button>
                       {migrateResult && (
                         <div style={{ marginTop: 8, fontSize: 12, color: migrateResult.error ? '#ff6b6b' : '#6bcb77' }}>
-                          {migrateResult.error ? `Error: ${migrateResult.error}` : `✓ Created ${migrateResult.created} entries (${migrateResult.skipped} already existed)`}
+                          {migrateResult.error ? `Error: ${migrateResult.error}` : `✓ ${migrateResult.created} new, ${migrateResult.updated || 0} refreshed from Command`}
                         </div>
                       )}
                     </div>

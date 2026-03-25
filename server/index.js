@@ -1837,7 +1837,7 @@ app.post('/api/journal/migrate', authenticateJWT, requireAdmin, async (req, res)
     const positions = await mdb.collection('pnthr_portfolio')
       .find({ $or: [{ ownerId: userId }, { ownerId: { $exists: false } }, { ownerId: null }] })
       .toArray();
-    let created = 0, skipped = 0, claimed = 0;
+    let created = 0, updated = 0, claimed = 0;
     for (const pos of positions) {
       // Claim orphaned positions for this user
       if (!pos.ownerId) {
@@ -1852,11 +1852,37 @@ app.post('/api/journal/migrate', authenticateJWT, requireAdmin, async (req, res)
         positionId: pos._id.toString(),
         ownerId: userId,
       });
-      if (existing) { skipped++; continue; }
-      await createJournalEntry(mdb, pos, userId, null);
-      created++;
+
+      // Build position-derived fields from live portfolio data (sacred source of truth)
+      const fills = Object.values(pos.fills || {}).filter(f => f && f.filled && f.price);
+      const lot1  = fills[0] || null;
+      const positionFields = {
+        'entry.fillDate':                lot1?.date  || existing?.entry?.fillDate  || null,
+        'entry.fillPrice':               lot1?.price || pos.entryPrice             || existing?.entry?.fillPrice || null,
+        'entry.stopPrice':               pos.stopPrice                             || existing?.entry?.stopPrice || null,
+        lots:                            fills.map((f, i) => ({ lot: i + 1, shares: f.shares, price: f.price, date: f.date })),
+        totalFilledShares:               fills.reduce((s, f) => s + (f.shares || 0), 0),
+        exits:                           pos.exits || existing?.exits || [],
+        'performance.status':            pos.status || existing?.performance?.status || 'ACTIVE',
+        'performance.remainingShares':   pos.remainingShares ?? fills.reduce((s, f) => s + (f.shares || 0), 0),
+        'performance.avgExitPrice':      pos.avgExitPrice    || existing?.performance?.avgExitPrice || null,
+        'performance.realizedPnlDollar': pos.realizedPnl?.dollar ?? existing?.performance?.realizedPnlDollar ?? 0,
+        updatedAt: new Date(),
+      };
+
+      if (existing) {
+        // Refresh position-derived fields — never touch notes, tags, discipline, washRule, whatIf
+        await mdb.collection('pnthr_journal').updateOne(
+          { _id: existing._id },
+          { $set: positionFields }
+        );
+        updated++;
+      } else {
+        await createJournalEntry(mdb, pos, userId, null);
+        created++;
+      }
     }
-    res.json({ ok: true, created, skipped, claimed, total: positions.length });
+    res.json({ ok: true, created, updated, claimed, total: positions.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

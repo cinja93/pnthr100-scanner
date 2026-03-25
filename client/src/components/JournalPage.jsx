@@ -280,7 +280,12 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
         const expiryDay = expiry ? new Date(expiry.toISOString().split('T')[0] + 'T00:00:00.000Z') : null;
         const todayDay  = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
         const daysLeft  = expiryDay ? Math.max(0, Math.round((expiryDay - todayDay) / 86400000)) : null;
-        const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—';
+        // Use UTC date parts to avoid timezone shift (midnight UTC shows as prior day in ET)
+        const fmtD = (d) => {
+          if (!d) return '—';
+          const dt = new Date(d);
+          return `${String(dt.getUTCMonth()+1).padStart(2,'0')}/${String(dt.getUTCDate()).padStart(2,'0')}/${dt.getUTCFullYear()}`;
+        };
         const isTriggered = ws.triggered;
         const isExpired = expiry && expiry <= now && !isTriggered;
         const lossAmt = Math.abs(ws.lossAmount ?? entry.performance?.realizedPnlDollar ?? 0);

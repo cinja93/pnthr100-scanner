@@ -678,18 +678,19 @@ export default function ScorecardGrid({ onTickerClick }) {
                 {/* ── Section B label ── */}
                 <tr>
                   <td colSpan={TOTAL_COLS} style={{
-                    backgroundColor: 'rgba(70,70,70,0.07)',
-                    borderBottom: '1px solid #252525',
+                    backgroundColor: 'rgba(80,80,80,0.12)',
+                    borderTop: '1px solid #2a2a2a',
+                    borderBottom: '1px solid #2a2a2a',
                     padding: '3px 12px',
-                    color: '#444', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.12em',
+                    color: '#666', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.12em',
                   }}>
                     SECTION B · MARKET CONDITIONS
                   </td>
                 </tr>
 
                 {/* ── Section B AT ENTRY ── */}
-                <tr style={{ backgroundColor: '#121212' }}>
-                  <td style={{ ...cell, ...sticky, color: '#3a3a3a', fontSize: '0.6rem', fontStyle: 'italic', paddingLeft: 10 }}>AT ENTRY</td>
+                <tr style={{ backgroundColor: '#131313' }}>
+                  <td style={{ ...cell, ...sticky, color: '#555', fontSize: '0.6rem', fontStyle: 'italic', paddingLeft: 10 }}>AT ENTRY</td>
                   <td colSpan={A_COLS.length} style={{ padding: '4px 10px', borderBottom: '1px solid #1e1e1e' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
                       {B_COLS.map(k => { const el = BCell({ id: k, snap: snapE, dir }); return el ? <React.Fragment key={k}>{el}</React.Fragment> : null; })}
@@ -699,7 +700,7 @@ export default function ScorecardGrid({ onTickerClick }) {
 
                 {/* ── Section B AT EXIT ── */}
                 <tr style={{ backgroundColor: '#0f0f0f' }}>
-                  <td style={{ ...cell, ...sticky, color: '#3a3a3a', fontSize: '0.6rem', fontStyle: 'italic', paddingLeft: 10 }}>AT EXIT</td>
+                  <td style={{ ...cell, ...sticky, color: '#555', fontSize: '0.6rem', fontStyle: 'italic', paddingLeft: 10 }}>AT EXIT</td>
                   <td colSpan={A_COLS.length} style={{ padding: '4px 10px', borderBottom: '1px solid #1e1e1e' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
                       {B_COLS.map(k => { const el = BCell({ id: k, snap: snapX, dir }); return el ? <React.Fragment key={k}>{el}</React.Fragment> : null; })}
@@ -709,7 +710,7 @@ export default function ScorecardGrid({ onTickerClick }) {
 
                 {/* ── Section B notes ── */}
                 <tr style={{ backgroundColor: 'rgba(255,255,255,0.01)' }}>
-                  <td style={{ ...cell, ...sticky, color: '#3a3a3a', fontSize: '0.6rem', fontStyle: 'italic', paddingLeft: 10 }}>
+                  <td style={{ ...cell, ...sticky, color: '#555', fontSize: '0.6rem', fontStyle: 'italic', paddingLeft: 10 }}>
                     B NOTES
                   </td>
                   <td colSpan={A_COLS.length} style={{ padding: '3px 10px', borderBottom: '1px solid #1e1e1e' }}>

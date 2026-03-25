@@ -290,6 +290,8 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   // ── SIZE IT / QUEUE IT state ─────────────────────────────────────────────────
   const [sizePanel, setSizePanel] = useState(null);
   const [sizeLoading, setSizeLoading] = useState(false);
+  // ── Wash rule warning ────────────────────────────────────────────────────────
+  const [washWarning, setWashWarning] = useState(null);
   const positionsCache = useRef(null);
   const navCache = useRef(null);
   const chartContainerRef = useRef(null);
@@ -302,6 +304,20 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
 
   // Reset SIZE IT panel when navigating to a new stock
   useEffect(() => { setSizePanel(null); }, [currentIndex]);
+
+  // ── Check wash rule whenever ticker changes (including Prev/Next navigation) ──
+  useEffect(() => {
+    const ticker = stocks[currentIndex]?.ticker;
+    if (!ticker) { setWashWarning(null); return; }
+    fetch(`${API_BASE}/api/wash-rules?ticker=${encodeURIComponent(ticker)}`, { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        const active    = data.find(w => !w.washSale?.triggered && (w.washSale?.daysRemaining ?? 0) > 0);
+        const triggered = data.find(w =>  w.washSale?.triggered);
+        setWashWarning(active || triggered || null);
+      })
+      .catch(() => setWashWarning(null));
+  }, [currentIndex]);
 
   // Fetch data when stock changes
   useEffect(() => {
@@ -760,6 +776,28 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
             </div>
           </div>
           <div className={styles.headerActions}>
+            {/* ── Wash Rule Warning Badge ── */}
+            {washWarning && (() => {
+              const ws = washWarning.washSale;
+              if (ws?.triggered) {
+                return (
+                  <span className={styles.washBadgeTriggered} title={`Wash sale triggered — the prior loss on ${washWarning.ticker} is disallowed for tax purposes`}>
+                    ⚠ WASH TRIGGERED
+                  </span>
+                );
+              }
+              const days    = ws?.daysRemaining ?? 0;
+              const urgent  = days <= 7;
+              const loss    = ws?.lossAmount != null ? ` · -$${Math.abs(ws.lossAmount).toFixed(2)} loss` : '';
+              return (
+                <span
+                  className={urgent ? styles.washBadgeUrgent : styles.washBadge}
+                  title={`Wash sale window active${loss}. Re-entering before ${ws?.expiryDate ? new Date(ws.expiryDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'} will disallow the prior loss for tax purposes.`}
+                >
+                  ⚠ WASH RULE — {days}d
+                </span>
+              );
+            })()}
             {isAuthenticated && (
               <>
                 <button

@@ -1746,18 +1746,31 @@ export default function CommandCenter({ onNavigate }) {
           }
           // Use safe merge — never overwrite sacred fields (fills, stops, etc.)
           const merged = mergeServerPrices(prev, data.positions);
-          // Auto-deactivate overrides when FMP price comes within 0.1% of the override
-          // (i.e. the data feed caught up to what the user typed). No direction logic —
-          // the user may enter a price in either direction relative to the stale feed.
+          // Auto-deactivate overrides using timestamp priority:
+          // Live price wins if it arrived AFTER the override was set.
+          // This handles the common case of setting an after-hours override
+          // that should clear automatically once the market opens and live
+          // prices flow in. Overrides set during this session (no setAt, or
+          // setAt >= refreshedAt) are kept — user just set them intentionally.
+          const refreshedAt = new Date();
           return merged.map(p => {
             const ov = p.manualPriceOverride;
             if (!ov?.active) return p;
             const livePrice = p.currentPrice ?? 0;
             if (!livePrice || !ov.price) return p;
+            // If the override has a timestamp and the live refresh is newer → live wins
+            const overrideSetAt = ov.setAt ? new Date(ov.setAt) : null;
+            if (overrideSetAt && refreshedAt > overrideSetAt) {
+              toDeactivate.push(p.id);
+              return { ...p, manualPriceOverride: { ...ov, active: false } };
+            }
+            // Legacy fallback: deactivate if live price within 0.1% of override
             const pctDiff = Math.abs(livePrice - ov.price) / ov.price;
-            if (pctDiff > 0.001) return p; // FMP hasn't caught up yet — keep override
-            toDeactivate.push(p.id);
-            return { ...p, manualPriceOverride: { ...ov, active: false } };
+            if (pctDiff <= 0.001) {
+              toDeactivate.push(p.id);
+              return { ...p, manualPriceOverride: { ...ov, active: false } };
+            }
+            return p;
           });
         });
         // Patch DB for any auto-deactivated overrides (outside state update, safe)

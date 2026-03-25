@@ -782,7 +782,23 @@ export async function getApexResults(
   huntTickers      = new Set(),
 ) {
   const weekKey = getLastFriday();
-  if (apexCache.weekKey === weekKey && apexCache.results) return apexCache.results;
+  if (apexCache.weekKey === weekKey && apexCache.results) {
+    // Apex scoring is stable intraweek, but stop prices update daily as FMP data
+    // refreshes. Always patch stopPrice/pnthrStop from the fresh signal cache so
+    // Kill page and Search always show identical stop values.
+    if (jungleSignals && Object.keys(jungleSignals).length > 0) {
+      return {
+        ...apexCache.results,
+        stocks: apexCache.results.stocks.map(s => {
+          const sig = jungleSignals[s.ticker];
+          if (!sig) return s;
+          const freshStop = sig.pnthrStop ?? sig.stopPrice ?? null;
+          return freshStop != null ? { ...s, stopPrice: freshStop, pnthrStop: freshStop } : s;
+        }),
+      };
+    }
+    return apexCache.results;
+  }
 
   // Build prey presence — determines the universe + D8 scores
   const preyPresenceMap = buildPreyPresence(preyResults, huntTickers, stockMeta);

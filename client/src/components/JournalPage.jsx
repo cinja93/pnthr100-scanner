@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 import { useAuth } from '../AuthContext';
+import ScorecardGrid from './ScorecardGrid';
 
 const DISC_COLORS = (score) => {
   if (score == null) return '#555';
@@ -713,6 +714,8 @@ export default function JournalPage({ onNavigate }) {
                     </div>
                   )}
                 </div>
+              ) : filterStatus === 'CLOSED' ? (
+                <ScorecardGrid />
               ) : (
                 <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>

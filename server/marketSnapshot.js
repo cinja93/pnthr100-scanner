@@ -5,7 +5,8 @@
 // consistent market context without each service reinventing FMP fetching.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
+const FMP_BASE  = 'https://financialmodelingprep.com/api/v3';
+const FMP_BASE4 = 'https://financialmodelingprep.com/api/v4';
 const TIMEOUT_MS = 6000;
 
 export const SECTOR_ETF = {
@@ -41,18 +42,26 @@ export async function fetchMarketSnapshot(sectorName = null) {
   const key = process.env.FMP_API_KEY;
   if (!key) return {};
 
-  const etf    = sectorName ? getSectorEtf(sectorName) : null;
+  const etf     = sectorName ? getSectorEtf(sectorName) : null;
   const tickers = ['SPY', 'QQQ', '%5EVIX', etf].filter(Boolean).join(',');
+
+  // Treasury: use today ± 5 days to ensure we always get a recent data point
+  const today = new Date();
+  const from  = new Date(today); from.setDate(from.getDate() - 5);
+  const toStr   = today.toISOString().split('T')[0];
+  const fromStr = from.toISOString().split('T')[0];
 
   const get = (url) =>
     fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
       .then(r => r.ok ? r.json() : [])
       .catch(() => []);
 
-  const [quotes, spyEmaData, qqqEmaData] = await Promise.all([
+  const [quotes, spyEmaData, qqqEmaData, commodityQuotes, treasuryData] = await Promise.all([
     get(`${FMP_BASE}/quote/${tickers}?apikey=${key}`),
     get(`${FMP_BASE}/technical_indicator/1day/SPY?type=ema&period=21&limit=1&apikey=${key}`),
     get(`${FMP_BASE}/technical_indicator/1day/QQQ?type=ema&period=21&limit=1&apikey=${key}`),
+    get(`${FMP_BASE}/quote/DX-Y.NYB,CL=F,GC=F?apikey=${key}`),
+    get(`${FMP_BASE4}/treasury?from=${fromStr}&to=${toStr}&apikey=${key}`),
   ]);
 
   const snap = {};
@@ -98,6 +107,27 @@ export async function fetchMarketSnapshot(sectorName = null) {
       snap.spyPosition === 'below' && snap.qqqPosition === 'below' ? 'BEARISH' : 'MIXED';
   } else if (snap.spyPosition) {
     snap.regime = snap.spyPosition === 'above' ? 'BULLISH' : 'BEARISH';
+  }
+
+  // ── Commodities (DXY, Crude, Gold) ──────────────────────────────────────────
+  for (const q of (Array.isArray(commodityQuotes) ? commodityQuotes : [])) {
+    if (q.symbol === 'DX-Y.NYB') snap.dxy      = q.price != null ? +q.price.toFixed(3) : null;
+    if (q.symbol === 'CL=F')     snap.crudeOil  = q.price != null ? +q.price.toFixed(2) : null;
+    if (q.symbol === 'GC=F')     snap.gold      = q.price != null ? +q.price.toFixed(2) : null;
+  }
+
+  // ── Treasury yields (most recent data point) ────────────────────────────────
+  // FMP returns array sorted ascending by date; take the last entry.
+  const tRow = Array.isArray(treasuryData) && treasuryData.length
+    ? treasuryData[treasuryData.length - 1]
+    : null;
+  if (tRow) {
+    snap.treasury2Y  = tRow.year2  != null ? +Number(tRow.year2).toFixed(3)  : null;
+    snap.treasury10Y = tRow.year10 != null ? +Number(tRow.year10).toFixed(3) : null;
+    snap.treasury30Y = tRow.year30 != null ? +Number(tRow.year30).toFixed(3) : null;
+    if (snap.treasury2Y != null && snap.treasury10Y != null) {
+      snap.spread2Y10Y = +((snap.treasury10Y - snap.treasury2Y).toFixed(3));
+    }
   }
 
   return snap;

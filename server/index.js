@@ -1962,6 +1962,44 @@ app.get('/api/wash-rules', authenticateJWT, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/journal/closed-scorecard — all CLOSED journal entries for scorecard grid (must be before /:id)
+app.get('/api/journal/closed-scorecard', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+
+    const entries = await db.collection('pnthr_journal')
+      .find({ ownerId: req.user.userId, 'performance.status': 'CLOSED' })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.json(entries);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/journal/:id/scorecard-notes — save tradeNotes and/or macroNotes (must be before /:id)
+app.patch('/api/journal/:id/scorecard-notes', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const { ObjectId } = await import('mongodb');
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+
+    const { tradeNotes, macroNotes } = req.body;
+    const setFields = { updatedAt: new Date() };
+    if (tradeNotes !== undefined) setFields.tradeNotes = tradeNotes;
+    if (macroNotes !== undefined) setFields.macroNotes = macroNotes;
+
+    const result = await db.collection('pnthr_journal').updateOne(
+      { _id: new ObjectId(req.params.id), ownerId: req.user.userId },
+      { $set: setFields }
+    );
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Entry not found' });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/journal/:id — single entry
 app.get('/api/journal/:id', authenticateJWT, async (req, res) => {
   try {

@@ -43,6 +43,7 @@ function filledSharesOf(p) {
 }
 
 function avgCostOf(p) {
+  if (p.manualAvgCost) return +p.manualAvgCost;
   let cost = 0, shares = 0;
   for (let i = 1; i <= 5; i++) {
     const f = p.fills?.[i];
@@ -516,7 +517,7 @@ function ExitPanel({ position, onClose, onConfirm }) {
 
 // ── Pyramid Card (position row) ───────────────────────────────────────────────
 
-function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onClearOverride, onDelete, onExitConfirmed, flashed, onOpenChart }) {
+function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onClearOverride, onDelete, onExitConfirmed, flashed, onOpenChart, onField }) {
   const [expanded,      setExpanded]      = useState(false);
   const [editing,       setEditing]       = useState(null);
   const [ev,            setEv]            = useState({});
@@ -527,6 +528,8 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const [ratchetRec,    setRatchetRec]    = useState(null);
   const [exitPanelOpen, setExitPanelOpen] = useState(false);
   const [localPrice,    setLocalPrice]    = useState(null); // null = not actively editing
+  const [editingAvgCost, setEditingAvgCost] = useState(false);
+  const [avgCostInput,   setAvgCostInput]   = useState('');
 
   const sizingStop = position.originalStop || position.stopPrice;
   const pc   = sizePosition({ netLiquidity, entryPrice: position.entryPrice, stopPrice: sizingStop, maxGapPct: position.maxGapPct || 0, direction: position.direction });
@@ -850,9 +853,45 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
             {totShr > 0 && (
               <span style={{ fontWeight: 700, fontSize: 12 }}>
                 <span style={{ color: '#555' }}>Avg Cost: </span>
-                <b style={{ color: '#FFD700' }}>${avg.toFixed(2)}</b>
-                <span style={{ color: '#555', fontWeight: 400 }}> ({totShr} shr)</span>
-                {position.ibkrAvgCost && (() => {
+                {editingAvgCost ? (
+                  <>
+                    <input
+                      type="number" step="0.01"
+                      value={avgCostInput}
+                      onChange={e => setAvgCostInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const v = parseFloat(avgCostInput);
+                          if (v > 0) { onField(position.id, { manualAvgCost: v }); }
+                          setEditingAvgCost(false);
+                        }
+                        if (e.key === 'Escape') setEditingAvgCost(false);
+                      }}
+                      autoFocus
+                      style={{ width: 72, fontSize: 11, background: '#222', border: '1px solid #FFD700', color: '#FFD700', borderRadius: 3, padding: '1px 4px', fontFamily: 'monospace' }}
+                    />
+                    <button onClick={() => { const v = parseFloat(avgCostInput); if (v > 0) { onField(position.id, { manualAvgCost: v }); } setEditingAvgCost(false); }}
+                      style={{ marginLeft: 4, fontSize: 10, background: '#FFD700', color: '#000', border: 'none', borderRadius: 3, padding: '1px 6px', cursor: 'pointer', fontWeight: 700 }}>✓</button>
+                    <button onClick={() => setEditingAvgCost(false)}
+                      style={{ marginLeft: 2, fontSize: 10, background: '#333', color: '#aaa', border: 'none', borderRadius: 3, padding: '1px 6px', cursor: 'pointer' }}>✕</button>
+                  </>
+                ) : (
+                  <>
+                    <b style={{ color: '#FFD700' }}>${avg.toFixed(2)}</b>
+                    <span style={{ color: '#555', fontWeight: 400 }}> ({totShr} shr)</span>
+                    {position.manualAvgCost && (
+                      <span style={{ color: '#6ea8fe', marginLeft: 4, fontSize: 10, fontWeight: 400 }}>
+                        IBKR override
+                        <button onClick={() => onField(position.id, { manualAvgCost: null })}
+                          style={{ marginLeft: 3, fontSize: 9, background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: 0 }}>×</button>
+                      </span>
+                    )}
+                    <button onClick={() => { setAvgCostInput(avg.toFixed(2)); setEditingAvgCost(true); }}
+                      style={{ marginLeft: 5, fontSize: 9, background: 'none', border: '1px solid #333', color: '#555', borderRadius: 3, padding: '0 4px', cursor: 'pointer', lineHeight: '14px' }}
+                      title="Override avg cost (e.g. match IBKR)">✎</button>
+                  </>
+                )}
+                {!editingAvgCost && position.ibkrAvgCost && !position.manualAvgCost && (() => {
                   const ibkrAvg  = +position.ibkrAvgCost;
                   const diff     = Math.abs(ibkrAvg - avg);
                   const diffPct  = avg > 0 ? diff / avg * 100 : 0;
@@ -1863,6 +1902,11 @@ export default function CommandCenter({ onNavigate }) {
     patchPosition(id, { stopPrice: newStop });
   }, [patchPosition]);
 
+  const updateField = useCallback((id, fields) => {
+    setPositions(prev => prev.map(x => x.id === id ? { ...x, ...fields } : x));
+    patchPosition(id, fields);
+  }, [patchPosition]);
+
   const updatePrice = useCallback((id, newPrice) => {
     // Save as a manual override — persists through price refreshes until
     // the live market price reaches the override level (or user clears it).
@@ -2111,7 +2155,7 @@ export default function CommandCenter({ onNavigate }) {
                 {positions.map(p => (
                   <PyramidCard key={p.id} position={p} netLiquidity={nav}
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
-                    onClearOverride={clearOverride}
+                    onClearOverride={clearOverride} onField={updateField}
                     onDelete={handleDeletePosition}
                     onExitConfirmed={async (exitResult) => {
                       // Fetch fresh positions — server excludes CLOSED ones from this query.

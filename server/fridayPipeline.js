@@ -155,6 +155,13 @@ export async function runFridayKillPipeline() {
     const { stocks: scored, contextSummary, regime } = apexResults;
     console.log(`   Scored: ${scored.length} stocks`);
 
+    // Track tickers that failed to score (signal error, missing data, etc.)
+    const scoredTickers  = new Set(scored.map(s => s.ticker));
+    const failedTickers  = tickers.filter(t => !scoredTickers.has(t));
+    if (failedTickers.length > 0) {
+      console.error(`[Kill Pipeline] ⚠ ${failedTickers.length} tickers failed to score: ${failedTickers.slice(0, 20).join(', ')}${failedTickers.length > 20 ? '...' : ''}`);
+    }
+
     // ── 5. Persist to MongoDB ─────────────────────────────────────────────
     console.log('5. Saving to MongoDB...');
 
@@ -362,14 +369,17 @@ export async function runFridayKillPipeline() {
     try {
       const alphaCount = scored.filter(s => s.tier === 'ALPHA PNTHR KILL').length;
       const strCount   = scored.filter(s => s.tier === 'STRIKING').length;
+      const failureNote = failedTickers.length > 0
+        ? ` WARN: ${failedTickers.length} tickers failed (${failedTickers.slice(0, 10).join(', ')}${failedTickers.length > 10 ? '...' : ''}).`
+        : '';
       await db.collection('pnthr_system_changelog').insertOne({
         date:        weekOf,
         version:     null,
-        category:    'PIPELINE',
-        impact:      'LOW',
-        description: `Friday pipeline completed. ${scored.length} scored, ${alphaCount} ALPHA, ${strCount} STRIKING. VIX: ${macroContext.vix ?? 'n/a'}. BL: ${regime?.blCount ?? 0}, SS: ${regime?.ssCount ?? 0}.`,
+        category:    failedTickers.length > 0 ? 'PIPELINE_WARNING' : 'PIPELINE',
+        impact:      failedTickers.length > 10 ? 'MEDIUM' : 'LOW',
+        description: `Friday pipeline completed. ${scored.length} scored, ${alphaCount} ALPHA, ${strCount} STRIKING. VIX: ${macroContext.vix ?? 'n/a'}. BL: ${regime?.blCount ?? 0}, SS: ${regime?.ssCount ?? 0}.${failureNote}`,
         changedBy:   'PIPELINE',
-        details:     '',
+        details:     failedTickers.length > 0 ? `Failed tickers: ${failedTickers.join(', ')}` : '',
         createdAt:   new Date(),
       });
     } catch (err) {

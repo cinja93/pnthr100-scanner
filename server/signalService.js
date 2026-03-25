@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { computeWilderATR, blInitStop, ssInitStop } from './stopCalculation.js';
+
 // ── PNTHR Phase 1 Signal Engine ───────────────────────────────────────────────
 //
 // Generates BL (Buy Long) and SS (Sell Short) signals from 21-week EMA logic.
@@ -91,48 +93,6 @@ function aggregateWeeklyBars(daily) {
   }
 
   return Object.values(weekMap).sort((a, b) => (a.weekStart > b.weekStart ? 1 : -1));
-}
-
-// Wilder's ATR(period) over weekly bars.
-// Returns array indexed by bar index; atrArr[i] = ATR through bar i (null until seeded).
-function computeWilderATR(weeklyBars, period = 3) {
-  const n = weeklyBars.length;
-  const atrArr = new Array(n).fill(null);
-  if (n < period + 1) return atrArr;
-  const trs = new Array(n).fill(0);
-  for (let i = 1; i < n; i++) {
-    const cur = weeklyBars[i], prev = weeklyBars[i - 1];
-    trs[i] = Math.max(cur.high - cur.low, Math.abs(cur.high - prev.close), Math.abs(cur.low - prev.close));
-  }
-  let atr = 0;
-  for (let i = 1; i <= period; i++) atr += trs[i];
-  atr /= period;
-  atrArr[period] = atr;
-  for (let i = period + 1; i < n; i++) {
-    atr = (atr * 2 + trs[i]) / 3;
-    atrArr[i] = atr;
-  }
-  return atrArr;
-}
-
-// Initial PNTHR stop for a new BL entry:
-//   structural: lowest low of the prior 2 completed weeks − $0.01
-//   ATR floor:  entry close − Wilder ATR(3)
-//   Take the higher of the two (most conservative = tighter stop for a long).
-function blInitStop(twoWeekLow, entryClose, atr) {
-  const structural = parseFloat((twoWeekLow - 0.01).toFixed(2));
-  const atrBased   = atr != null ? parseFloat((entryClose - atr).toFixed(2)) : -Infinity;
-  return parseFloat(Math.max(structural, atrBased).toFixed(2));
-}
-
-// Initial PNTHR stop for a new SS entry:
-//   structural: highest high of the prior 2 completed weeks + $0.01
-//   ATR ceiling: entry close + Wilder ATR(3)
-//   Take the lower of the two (most conservative = tighter stop for a short).
-function ssInitStop(twoWeekHigh, entryClose, atr) {
-  const structural = parseFloat((twoWeekHigh + 0.01).toFixed(2));
-  const atrBased   = atr != null ? parseFloat((entryClose + atr).toFixed(2)) : Infinity;
-  return parseFloat(Math.min(structural, atrBased).toFixed(2));
 }
 
 // Compute EMA series from an array of closes.

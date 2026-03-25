@@ -16,6 +16,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { connectToDatabase } from './database.js';
+import { normalizeSector } from './sectorUtils.js';
 
 const FMP_API_KEY  = process.env.FMP_API_KEY;
 const FMP_BASE     = 'https://financialmodelingprep.com';
@@ -66,7 +67,7 @@ async function fetchProfile(ticker) {
     const data = await fmpGet('/stable/profile', { symbol: ticker });
     if (!Array.isArray(data) || !data[0]) return null;
     const p = data[0];
-    return { sector: p.sector, exchange: p.exchangeShortName, companyName: p.companyName, marketCap: p.mktCap };
+    return { sector: normalizeSector(p.sector), exchange: p.exchangeShortName, companyName: p.companyName, marketCap: p.mktCap };
   } catch { return null; }
 }
 
@@ -498,7 +499,7 @@ export async function tickerHandler(req, res) {
       found:            !!(q || k),
       currentPrice:     q?.price      || null,
       maxGapPct,
-      sector:           p?.sector     || '',
+      sector:           normalizeSector(p?.sector || ''),
       exchange:         p?.exchange   || '',
       companyName:      p?.companyName || '',
       ema21:            e?.current    || null,
@@ -585,6 +586,7 @@ export async function ensureCommandCenterIndexes() {
     const portfolio = db.collection('pnthr_portfolio');
     await portfolio.createIndex({ id: 1 }, { unique: true, sparse: true });
     await portfolio.createIndex({ status: 1, ticker: 1 });
+    await portfolio.createIndex({ ownerId: 1, status: 1 }); // per-user queries
 
     // Kill scores
     const scores = db.collection('pnthr_kill_scores');
@@ -610,6 +612,32 @@ export async function ensureCommandCenterIndexes() {
     const candles = db.collection('pnthr_candle_cache');
     await candles.createIndex({ ticker: 1 }, { unique: true });
     await candles.createIndex({ cachedAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
+
+    // User profiles
+    const profiles = db.collection('user_profiles');
+    await profiles.createIndex({ userId: 1 }, { unique: true, sparse: true });
+    await profiles.createIndex({ email: 1 }, { unique: true, sparse: true });
+
+    // Kill regime — one doc per weekOf
+    const regimeColl = db.collection('pnthr_kill_regime');
+    await regimeColl.createIndex({ weekOf: -1 });
+
+    // Signal history archive
+    const signalHistory = db.collection('signal_history');
+    await signalHistory.createIndex({ weekOf: -1 });
+
+    // Portfolio returns
+    const portfolioReturns = db.collection('pnthr_portfolio_returns');
+    await portfolioReturns.createIndex({ ownerId: 1, date: -1 });
+
+    // Journal — per-user queries + ticker lookups
+    const journal = db.collection('pnthr_journal');
+    await journal.createIndex({ ownerId: 1, 'performance.status': 1 });
+    await journal.createIndex({ ticker: 1, ownerId: 1 });
+
+    // Pending entries
+    const pending = db.collection('pnthr_pending_entries');
+    await pending.createIndex({ ownerId: 1, status: 1 });
 
     console.log('[CC] Command Center MongoDB indexes ensured');
   } catch (e) {

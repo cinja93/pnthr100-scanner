@@ -7,7 +7,7 @@ const NAV_GROUPS = [
   {
     groupLabel: 'This Week',
     items: [
-      { key: 'pulse',    label: "PNTHR's Pulse",  icon: '⚡' },
+      { key: 'pulse',    label: 'PNTHR Pulse',  iconImg: true },
       { key: 'perch',    label: 'PNTHR Perch',    iconImg: true },
       { key: 'earnings', label: 'Earnings Week',  icon: '📅' },
     ],
@@ -80,7 +80,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   // Personal group — Command for everyone; History pages admin-only
   const personalItems = [
     { key: 'command',  label: 'PNTHR Command',  iconImg: true },
-    { key: 'journal',  label: 'PNTHR Journal',  icon: '📓' },
+    { key: 'journal',  label: 'PNTHR Journal',  iconImg: true },
     { key: 'watchlist', label: 'Watchlist',      icon: '👁' },
   ];
   if (isAdmin) {

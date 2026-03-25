@@ -250,10 +250,15 @@ export async function positionsGetAll(req, res) {
       const rsi       = rsiMap[p.ticker] ?? null;
       const ibkrFresh = p.ibkrSyncedAt &&
         (Date.now() - new Date(p.ibkrSyncedAt).getTime()) < IBKR_FRESH_MS;
+      // FMP is the real-time price source. IBKR updatePortfolio prices update only
+      // when TWS refreshes its portfolio view (every few minutes), so always prefer
+      // the live FMP quote. IBKR avg cost / shares still used for P&L accuracy.
+      const livePrice   = live[p.ticker]?.price || null;
+      const ibkrPrice   = ibkrFresh ? p.currentPrice : null;
       return {
         ...p,
-        currentPrice:      ibkrFresh ? p.currentPrice : (live[p.ticker]?.price || p.currentPrice),
-        priceSource:       ibkrFresh ? 'ibkr' : (live[p.ticker] ? 'live' : 'stored'),
+        currentPrice:      livePrice ?? ibkrPrice ?? p.currentPrice,
+        priceSource:       livePrice ? (ibkrFresh ? 'fmp+ibkr' : 'live') : (ibkrFresh ? 'ibkr' : 'stored'),
         dayHigh:           live[p.ticker]?.dayHigh  || null,
         dayLow:            live[p.ticker]?.dayLow   || null,
         tradingDaysActive: tradingDaysSince(p.createdAt),

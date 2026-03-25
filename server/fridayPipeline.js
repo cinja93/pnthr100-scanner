@@ -397,6 +397,36 @@ export async function runFridayKillPipeline() {
       }
     }
 
+    // ── Portfolio Return Snapshot (per user who has an accountSize) ──────────
+    try {
+      const { connectToDatabase } = await import('./database.js');
+      const db = await connectToDatabase();
+      const profiles = await db.collection('user_profiles').find({ accountSize: { $gt: 0 } }).toArray();
+      for (const profile of profiles) {
+        const ownerId   = profile.userId || profile._id?.toString();
+        const currentNav = profile.accountSize;
+        const last = await db.collection('pnthr_portfolio_returns')
+          .findOne({ ownerId }, { sort: { date: -1 } });
+        const first = await db.collection('pnthr_portfolio_returns')
+          .findOne({ ownerId }, { sort: { date: 1 } });
+        const prevNav      = last?.nav || currentNav;
+        const inceptionNav = first?.nav || currentNav;
+        const weeklyReturn = ((currentNav - prevNav) / prevNav) * 100;
+        const cumulativeReturn = ((currentNav - inceptionNav) / inceptionNav) * 100;
+        await db.collection('pnthr_portfolio_returns').insertOne({
+          ownerId,
+          date: new Date(),
+          nav: currentNav,
+          weeklyReturn:     +weeklyReturn.toFixed(4),
+          cumulativeReturn: +cumulativeReturn.toFixed(4),
+          riskFreeRate:     0, // updated separately via treasury fetch if needed
+        });
+        console.log(`[Portfolio] Snapshot saved for ${ownerId}: weekly=${weeklyReturn.toFixed(2)}%`);
+      }
+    } catch (e) {
+      console.warn('[Portfolio] Return snapshot failed:', e.message);
+    }
+
   } catch (err) {
     console.error('[Kill Pipeline] Pipeline failed:', err);
   }

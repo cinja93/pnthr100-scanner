@@ -13,6 +13,7 @@
 import { connectToDatabase, getUserProfile, upsertUserProfile } from './database.js';
 import { createJournalEntry } from './journalService.js';
 import { fetchMarketSnapshot, getSectorEtf } from './marketSnapshot.js';
+import { fetchTechnicalSnapshot } from './technicalSnapshot.js';
 
 // ── GET /api/settings/nav ─────────────────────────────────────────────────────
 
@@ -172,6 +173,55 @@ export async function pendingEntryConfirm(req, res) {
       } : null;
       await createJournalEntry(db, position, req.user.userId, killData, marketAtEntry, sectorAtEntry);
     } catch (e) { console.warn('[JOURNAL] Auto-create failed:', e.message); }
+
+    // Capture navAtEntry + isETF + technicals at entry (best-effort).
+    try {
+      const userProfile = await getUserProfile(req.user.userId);
+      const techAtEntry = await fetchTechnicalSnapshot(position.ticker).catch(() => null);
+      await db.collection('pnthr_journal').updateOne(
+        { positionId: posId, ownerId: req.user.userId },
+        { $set: {
+            navAtEntry:  userProfile?.accountSize ?? null,
+            isETF:       position.isETF || false,
+            ...(techAtEntry ? { techAtEntry } : {}),
+        }}
+      );
+    } catch (e) { console.warn('[PE] navAtEntry/tech capture failed:', e.message); }
+
+    // Capture kill score context + exchange from pnthr_kill_scores (best-effort).
+    try {
+      const killScoreDoc = await db.collection('pnthr_kill_scores').findOne(
+        { ticker: position.ticker },
+        { sort: { createdAt: -1 } }
+      );
+      if (killScoreDoc) {
+        let pipelineMaxScore = null;
+        if (killScoreDoc.weekOf) {
+          const maxDocs = await db.collection('pnthr_kill_scores')
+            .find({ weekOf: killScoreDoc.weekOf })
+            .sort({ totalScore: -1 }).limit(1).toArray();
+          pipelineMaxScore = maxDocs[0]?.totalScore ?? null;
+        }
+        const killScoreAtEntry = {
+          totalScore:      killScoreDoc.totalScore      ?? null,
+          pipelineMaxScore,
+          rank:            killScoreDoc.killRank         ?? null,
+          rankChange:      null,
+          tier:            killScoreDoc.tier             ?? null,
+          signal:          killScoreDoc.signal           ?? null,
+          signalAge:       killScoreDoc.signalAge        ?? null,
+          d1:              killScoreDoc.preMultiplier    ?? null,
+          dimensions:      killScoreDoc.scoreDetail      ?? null,
+          weekOf:          killScoreDoc.weekOf           ?? null,
+        };
+        const updateFields = { killScoreAtEntry };
+        if (killScoreDoc.exchange) updateFields.exchange = killScoreDoc.exchange;
+        await db.collection('pnthr_journal').updateOne(
+          { positionId: posId, ownerId: req.user.userId },
+          { $set: updateFields }
+        );
+      }
+    } catch (e) { console.warn('[PE] Kill score capture failed:', e.message); }
 
     // Check for active wash sale rule — mark triggered if re-entering during window.
     try {

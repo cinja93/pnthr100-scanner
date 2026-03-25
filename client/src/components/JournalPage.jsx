@@ -6,6 +6,7 @@ import { API_BASE, authHeaders } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ScorecardGrid from './ScorecardGrid';
 import ClosedTradeCards from './ClosedTradeCards';
+import pantherHead from '../assets/panther head.png';
 
 const DISC_COLORS = (score) => {
   if (score == null) return '#555';
@@ -704,12 +705,15 @@ export default function JournalPage({ onNavigate }) {
 
   return (
     <div style={{ padding: '0 16px 32px', maxWidth: 1200, color: '#fff', background: '#0a0a0a', minHeight: '100vh' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '24px 8px 16px', marginBottom: 16, gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ color: '#FFD700', fontSize: 18, fontWeight: 900, letterSpacing: 2 }}>PNTHR JOURNAL</div>
-          <div style={{ color: '#555', fontSize: 11 }}>Trade analysis · Discipline tracking · Pattern recognition</div>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 22, fontWeight: 700, color: '#fcf000', margin: '0 0 4px 0' }}>
+            <img src={pantherHead} alt="PNTHR" style={{ height: 36, width: 'auto' }} />
+            PNTHR JOURNAL
+          </h1>
+          <p style={{ color: '#aaaaaa', fontSize: 13, margin: 0 }}>Trade analysis · Discipline tracking · Pattern recognition</p>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isAdmin && entries.length > 0 && (
             <button onClick={runMigration} disabled={migrating}
               style={{ background: 'transparent', border: '1px solid #333', color: '#555', borderRadius: 6, padding: '4px 10px', fontSize: 10, cursor: migrating ? 'not-allowed' : 'pointer' }}

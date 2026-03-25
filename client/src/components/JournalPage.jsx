@@ -704,8 +704,9 @@ export default function JournalPage({ onNavigate }) {
   );
 
   return (
-    <div style={{ padding: '0 16px 32px', maxWidth: 1200, color: '#fff', background: '#0a0a0a', minHeight: '100vh' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '24px 8px 16px', marginBottom: 16, gap: 16, flexWrap: 'wrap' }}>
+    <div style={{ padding: '0 0 32px', maxWidth: 1200, color: '#fff', background: '#0a0a0a', minHeight: '100vh' }}>
+      {/* ── Header — matches PNTHR Kill style ─────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '24px 24px 16px', background: '#111111', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 22, fontWeight: 700, color: '#fcf000', margin: '0 0 4px 0' }}>
             <img src={pantherHead} alt="PNTHR" style={{ height: 36, width: 'auto' }} />
@@ -716,7 +717,7 @@ export default function JournalPage({ onNavigate }) {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isAdmin && entries.length > 0 && (
             <button onClick={runMigration} disabled={migrating}
-              style={{ background: 'transparent', border: '1px solid #333', color: '#555', borderRadius: 6, padding: '4px 10px', fontSize: 10, cursor: migrating ? 'not-allowed' : 'pointer' }}
+              style={{ background: 'transparent', border: '1px solid #444', color: '#666', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: migrating ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
               title="Create journal entries for any positions missing one">
               {migrating ? '...' : '↺ sync positions'}
             </button>
@@ -727,6 +728,7 @@ export default function JournalPage({ onNavigate }) {
         </div>
       </div>
 
+      <div style={{ padding: '0 24px' }}>
       {/* Migration result toast */}
       {migrateResult && (
         <div style={{ background: migrateResult.error ? 'rgba(220,53,69,0.15)' : 'rgba(40,167,69,0.15)', border: `1px solid ${migrateResult.error ? '#dc3545' : '#28a745'}`, borderRadius: 6, padding: '8px 14px', marginBottom: 10, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -872,6 +874,7 @@ export default function JournalPage({ onNavigate }) {
           {tab === 'weekly' && <WeeklyReviewTab />}
         </>
       )}
+      </div>
     </div>
   );
 }

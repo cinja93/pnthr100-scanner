@@ -346,8 +346,10 @@ export async function getSignals(tickers, { isETF = false } = {}) {
     // Fetch through today so the current in-progress weekly bar is included.
     // isNew = true only when a BL/SS fires on that last (current-week) bar.
     const toDate  = today;
-    const fromD   = new Date(getLastFriday());
-    fromD.setDate(fromD.getDate() - WEEKS_HISTORY * 7);
+    // Use today − 5 years (same as /api/chart/:ticker) so server and client
+    // always start from the same daily bars → identical EMA seed → identical stop.
+    const fromD   = new Date();
+    fromD.setFullYear(fromD.getFullYear() - 5);
     const fromDate = fromD.toISOString().split('T')[0];
 
     console.log(`📡 EMA signals${isETF ? ' (ETF)' : ''}: computing ${missing.length} tickers (${fromDate} → ${toDate})...`);

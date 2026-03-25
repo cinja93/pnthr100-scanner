@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { calculateDisciplineScore } from './journalService.js';
 import { fetchMarketSnapshot } from './marketSnapshot.js';
+import { fetchTechnicalSnapshot } from './technicalSnapshot.js';
 
 function getFillsArray(fills) {
   if (!fills) return [];
@@ -160,8 +161,20 @@ async function syncExitToJournal(db, positionId, userId, exitRecord, remainingSh
     );
   }
 
-  // When trade is fully closed, compute the discipline score automatically.
+  // When trade is fully closed: capture technical snapshot + compute discipline score.
   if (status === 'CLOSED') {
+    // Technical snapshot at exit (best-effort, non-blocking)
+    try {
+      const techAtExit = await fetchTechnicalSnapshot(position.ticker).catch(() => null);
+      if (techAtExit) {
+        await db.collection('pnthr_journal').updateOne(
+          { positionId: positionId.toString(), ownerId: userId },
+          { $set: { techAtExit } }
+        );
+      }
+    } catch (e) { console.warn('[EXIT] Tech snapshot failed:', e.message); }
+
+    // Discipline score
     try {
       const journal = await db.collection('pnthr_journal').findOne(
         { positionId: positionId.toString(), ownerId: userId },

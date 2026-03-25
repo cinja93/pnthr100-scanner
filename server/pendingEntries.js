@@ -13,6 +13,7 @@
 import { connectToDatabase, getUserProfile, upsertUserProfile } from './database.js';
 import { createJournalEntry } from './journalService.js';
 import { fetchMarketSnapshot, getSectorEtf } from './marketSnapshot.js';
+import { fetchTechnicalSnapshot } from './technicalSnapshot.js';
 
 // ── GET /api/settings/nav ─────────────────────────────────────────────────────
 
@@ -173,14 +174,19 @@ export async function pendingEntryConfirm(req, res) {
       await createJournalEntry(db, position, req.user.userId, killData, marketAtEntry, sectorAtEntry);
     } catch (e) { console.warn('[JOURNAL] Auto-create failed:', e.message); }
 
-    // Capture navAtEntry + isETF on the journal entry (best-effort).
+    // Capture navAtEntry + isETF + technicals at entry (best-effort).
     try {
       const userProfile = await getUserProfile(req.user.userId);
+      const techAtEntry = await fetchTechnicalSnapshot(position.ticker).catch(() => null);
       await db.collection('pnthr_journal').updateOne(
         { positionId: posId, ownerId: req.user.userId },
-        { $set: { navAtEntry: userProfile?.accountSize ?? null, isETF: position.isETF || false } }
+        { $set: {
+            navAtEntry:  userProfile?.accountSize ?? null,
+            isETF:       position.isETF || false,
+            ...(techAtEntry ? { techAtEntry } : {}),
+        }}
       );
-    } catch (e) { console.warn('[PE] navAtEntry capture failed:', e.message); }
+    } catch (e) { console.warn('[PE] navAtEntry/tech capture failed:', e.message); }
 
     // Capture kill score context + exchange from pnthr_kill_scores (best-effort).
     try {

@@ -1860,6 +1860,68 @@ app.post('/api/journal/migrate', authenticateJWT, requireAdmin, async (req, res)
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/portfolio/ratios — Sharpe & Sortino from weekly portfolio return snapshots
+app.get('/api/portfolio/ratios', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+
+    const snapshots = await db.collection('pnthr_portfolio_returns')
+      .find({ ownerId: req.user.userId })
+      .sort({ date: -1 })
+      .limit(52)
+      .toArray();
+
+    if (snapshots.length < 4) {
+      return res.json({
+        current: { sharpe: null, sortino: null },
+        trailing13wk: { sharpe: null, sortino: null },
+        trailing26wk: { sharpe: null, sortino: null },
+        trailing52wk: { sharpe: null, sortino: null },
+        sinceInception: { sharpe: null, sortino: null },
+        weeksOfData: snapshots.length,
+        latestNav: snapshots[0]?.nav ?? null,
+        cumulativeReturn: snapshots[0]?.cumulativeReturn ?? null,
+        message: `Need at least 4 weeks of data (have ${snapshots.length})`,
+      });
+    }
+
+    function computeRatios(snaps) {
+      if (!snaps || snaps.length < 2) return { sharpe: null, sortino: null };
+      const returns = snaps.map(s => s.weeklyReturn);
+      const rfRates  = snaps.map(s => s.riskFreeRate || 0);
+      const excess   = returns.map((r, i) => r - rfRates[i]);
+      const avgExcess = excess.reduce((a, b) => a + b, 0) / excess.length;
+      const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+      const variance  = returns.reduce((s, r) => s + (r - avgReturn) ** 2, 0) / (returns.length - 1);
+      const stdDev    = Math.sqrt(variance);
+      const downside  = excess.filter(r => r < 0);
+      const dsVar     = downside.length > 0
+        ? downside.reduce((s, r) => s + r * r, 0) / downside.length : 0;
+      const dsDev     = Math.sqrt(dsVar);
+      const ann       = Math.sqrt(52);
+      return {
+        sharpe:  stdDev > 0    ? +((avgExcess / stdDev)  * ann).toFixed(2) : null,
+        sortino: dsDev > 0     ? +((avgExcess / dsDev)   * ann).toFixed(2) : null,
+      };
+    }
+
+    const slice = (n) => snapshots.slice(0, n);
+
+    res.json({
+      current:        computeRatios(snapshots),
+      trailing13wk:   computeRatios(slice(13)),
+      trailing26wk:   computeRatios(slice(26)),
+      trailing52wk:   computeRatios(slice(52)),
+      sinceInception: computeRatios(snapshots),
+      weeksOfData:    snapshots.length,
+      latestNav:      snapshots[0]?.nav ?? null,
+      cumulativeReturn: snapshots[0]?.cumulativeReturn ?? null,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/journal/analytics — discipline stats (must be before /:id)
 app.get('/api/journal/analytics', authenticateJWT, async (req, res) => {
   try {

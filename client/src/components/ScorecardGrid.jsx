@@ -4,6 +4,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 
+// ── Discipline score color (matches JournalPage.jsx thresholds) ───────────────
+function discColor(score) {
+  if (score == null) return '#555';
+  if (score >= 90) return '#6bcb77';  // ELITE
+  if (score >= 75) return '#FFD700';  // STRONG
+  if (score >= 60) return '#fd7e14';  // MODERATE
+  if (score >= 40) return '#dc3545';  // WEAK
+  return '#8b0000';                    // SYSTEM OVERRIDE
+}
+function discTierShort(label) {
+  if (!label) return '';
+  if (label.startsWith('ELITE'))    return 'ELITE';
+  if (label.startsWith('STRONG'))   return 'STRONG';
+  if (label.startsWith('MODERATE')) return 'MOD';
+  if (label.startsWith('WEAK'))     return 'WEAK';
+  return 'OVRD';
+}
+
 // ── Icon helpers ──────────────────────────────────────────────────────────────
 const Check = () => <span style={{ color: '#28a745', fontSize: '1rem', fontWeight: 700 }}>✓</span>;
 const XMark = () => <span style={{ color: '#dc3545', fontSize: '1rem', fontWeight: 700 }}>✗</span>;
@@ -250,6 +268,7 @@ const TIP = {
   d6:           'D6: Momentum — RSI, OBV, ADX, EMA conviction (–10 to +20 pts)',
   d7:           'D7: Rank Velocity — acceleration of rank change (–10 to +10 pts)',
   d8:           'D8: Multi-Strategy Confirmation — Prey presence (0 to 6 pts)',
+  disc:         'Discipline Score v2 (0-100). 90+=ELITE · 75+=STRONG · 60+=MODERATE · 40+=WEAK · <40=SYSTEM OVERRIDE. T1: Stock Selection (40), T2: Execution (35), T3: Exit (25)',
   pnlDollar:    'Total realized profit or loss in dollars',
   pnlPct:       'Total realized profit or loss as percentage of entry cost (Lot 1 shares × entry price)',
 };
@@ -316,6 +335,7 @@ const A_COLS = [
   { key: 'd6',           label: 'D6',       w: 38  },
   { key: 'd7',           label: 'D7',       w: 38  },
   { key: 'd8',           label: 'D8',       w: 38  },
+  { key: 'disc',         label: 'DISC',     w: 70  },
   { key: 'pnlDollar',    label: 'P&L $',    w: 78  },
   { key: 'pnlPct',       label: 'P&L %',    w: 66  },
 ];
@@ -650,11 +670,27 @@ export default function ScorecardGrid({ onTickerClick }) {
                     );
                   })}
 
-                  {/* A41: P&L $ */}
+                  {/* DISC: Discipline Score v2 */}
+                  {(() => {
+                    const ds = entry.discipline;
+                    const score = ds?.totalScore;
+                    const tier  = ds?.tierLabel;
+                    return (
+                      <td style={{ ...cell, textAlign: 'center' }}>
+                        {score != null
+                          ? <>
+                              <div style={{ color: discColor(score), fontWeight: 800, fontSize: '0.82rem', lineHeight: 1.1 }}>{score}</div>
+                              <div style={{ color: '#444', fontSize: '0.58rem', letterSpacing: '0.04em', marginTop: 1 }}>{discTierShort(tier)}</div>
+                            </>
+                          : <Dash />}
+                      </td>
+                    );
+                  })()}
+                  {/* P&L $ */}
                   <td style={{ ...cell, color: pnlColor, fontWeight: 600 }}>
                     {pnl != null ? (pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`) : <Dash />}
                   </td>
-                  {/* A42: P&L % */}
+                  {/* P&L % */}
                   <td style={{ ...cell, color: pnlPctClr, fontWeight: 600 }}>
                     {pnlPct != null ? `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%` : <Dash />}
                   </td>

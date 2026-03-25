@@ -1875,8 +1875,8 @@ app.get('/api/journal/analytics', authenticateJWT, async (req, res) => {
     const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
 
     const overrideEntries = entries.filter(e => (e.discipline?.overrideCount || 0) > 0);
-    const disciplinedWinners = entries.filter(e => (e.discipline?.totalScore || 0) >= 80 && (e.performance?.totalPnlDollar || 0) > 0);
-    const disciplinedTotal = entries.filter(e => (e.discipline?.totalScore || 0) >= 80);
+    const disciplinedWinners = entries.filter(e => (e.discipline?.totalScore || 0) >= 75 && (e.performance?.realizedPnlDollar || e.performance?.totalPnlDollar || 0) > 0);
+    const disciplinedTotal = entries.filter(e => (e.discipline?.totalScore || 0) >= 75);
     const overrideWinners = overrideEntries.filter(e => (e.performance?.totalPnlDollar || 0) > 0);
 
     const now = new Date();

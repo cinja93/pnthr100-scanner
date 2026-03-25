@@ -8,9 +8,29 @@ import ScorecardGrid from './ScorecardGrid';
 
 const DISC_COLORS = (score) => {
   if (score == null) return '#555';
-  if (score >= 80) return '#6bcb77';
-  if (score >= 60) return '#ffc107';
-  return '#ff6b6b';
+  if (score >= 90) return '#6bcb77';  // ELITE
+  if (score >= 75) return '#FFD700';  // STRONG
+  if (score >= 60) return '#fd7e14';  // MODERATE
+  if (score >= 40) return '#dc3545';  // WEAK
+  return '#8b0000';                    // SYSTEM OVERRIDE
+};
+
+// Tier background color based on % of max achieved
+const tierBg = (total, max) => {
+  if (!max) return 'rgba(255,255,255,0.03)';
+  const pct = total / max;
+  if (pct >= 0.90) return 'rgba(107,203,119,0.10)';
+  if (pct >= 0.70) return 'rgba(255,215,0,0.08)';
+  if (pct >= 0.50) return 'rgba(253,126,20,0.09)';
+  return 'rgba(220,53,69,0.10)';
+};
+const tierBorder = (total, max) => {
+  if (!max) return '#2a2a2a';
+  const pct = total / max;
+  if (pct >= 0.90) return 'rgba(107,203,119,0.25)';
+  if (pct >= 0.70) return 'rgba(255,215,0,0.20)';
+  if (pct >= 0.50) return 'rgba(253,126,20,0.22)';
+  return 'rgba(220,53,69,0.22)';
 };
 
 const REASON_COLORS = {
@@ -118,41 +138,33 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
         </div>
       )}
 
-      {/* ── Discipline Checklist ──────────────────────────────────────────── */}
-      {hasChecks && (
-        <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 6, padding: '10px 12px', marginTop: 12, marginBottom: 4 }}>
-          {sectionHdr('Entry Discipline')}
-          {checks.confirmedSignal && <DisciplineCheck {...checks.confirmedSignal} label="Confirmed PNTHR Signal?" />}
-          {checks.entryTiming     && <DisciplineCheck {...checks.entryTiming}     label="Entry within 1 week of signal?" />}
-          {checks.slippage        && <DisciplineCheck {...checks.slippage}        label="Slippage < 0.5%?" />}
-          {checks.sizing          && <DisciplineCheck {...checks.sizing}          label="Sized per Vitality Rule?" />}
-
-          {sectionHdr('Hold Discipline')}
-          {checks.heldDrawdown   && <DisciplineCheck {...checks.heldDrawdown}   label="Held through first drawdown?" />}
-          {checks.pyramiding     && <DisciplineCheck {...checks.pyramiding}     label="Pyramiding followed?" />}
-          {checks.stopMaintained && <DisciplineCheck {...checks.stopMaintained} label="Stop maintained?" />}
-
-          {sectionHdr('Exit Discipline')}
-          {checks.followedSignal && <DisciplineCheck {...checks.followedSignal} label="Exited on system signal?" />}
-          {checks.feastFollowed  && <DisciplineCheck {...checks.feastFollowed}  label="FEAST rule followed?" />}
-          {checks.staleHunt      && <DisciplineCheck {...checks.staleHunt}      label="Stale hunt (day 20) followed?" na />}
-          {checks.exitSlippage   && <DisciplineCheck {...checks.exitSlippage}   label="Exit slippage < 0.5%?" />}
-        </div>
-      )}
-
-      {/* ── Discipline Score ──────────────────────────────────────────────── */}
-      {disc?.totalScore != null ? (
-        <div style={{ background: '#111', borderRadius: 6, padding: '10px 14px', marginTop: 12, marginBottom: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-            <span style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>DISCIPLINE SCORE</span>
-            <span style={{ color: DISC_COLORS(disc.totalScore), fontSize: 22, fontWeight: 900 }}>{disc.totalScore}/100</span>
+      {/* ── Discipline Score v2 — 3-Tier Breakdown ───────────────────────── */}
+      {disc?.totalScore != null && disc?.tier1 ? (
+        <div style={{ marginTop: 12, marginBottom: 4 }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+            <span style={{ color: '#555', fontSize: 9, letterSpacing: 2, fontWeight: 700 }}>DISCIPLINE SCORE</span>
+            <span style={{ color: DISC_COLORS(disc.totalScore), fontSize: 24, fontWeight: 900 }}>{disc.totalScore}/100</span>
+            <span style={{ color: DISC_COLORS(disc.totalScore), fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>{disc.tierLabel}</span>
+            {(disc.overrideCount || 0) > 0 && <span style={{ color: '#dc3545', fontSize: 10 }}>⚠ {disc.overrideCount} override{disc.overrideCount > 1 ? 's' : ''}</span>}
           </div>
-          <div style={{ display: 'flex', gap: 20, fontSize: 11, flexWrap: 'wrap' }}>
-            <div>Entry: <span style={{ color: DISC_COLORS((disc.entryScore / 30) * 100), fontWeight: 700 }}>{disc.entryScore ?? '—'}/30</span></div>
-            <div>Hold:  <span style={{ color: DISC_COLORS((disc.holdScore  / 30) * 100), fontWeight: 700 }}>{disc.holdScore  ?? '—'}/30</span></div>
-            <div>Exit:  <span style={{ color: DISC_COLORS((disc.exitScore  / 40) * 100), fontWeight: 700 }}>{disc.exitScore  ?? '—'}/40</span></div>
-            {(disc.overrideCount || 0) > 0 && <div style={{ color: '#dc3545' }}>⚠ {disc.overrideCount} MANUAL override{disc.overrideCount > 1 ? 's' : ''}</div>}
-          </div>
+          {/* Tier cards */}
+          {[disc.tier1, disc.tier2, disc.tier3].map(tier => (
+            <div key={tier.label} style={{ background: tierBg(tier.total, tier.max), border: `1px solid ${tierBorder(tier.total, tier.max)}`, borderRadius: 6, padding: '8px 10px', marginBottom: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ color: '#888', fontSize: 9, fontWeight: 700, letterSpacing: 1 }}>{tier.label}</span>
+                <span style={{ color: DISC_COLORS(Math.round((tier.total / tier.max) * 100)), fontSize: 11, fontWeight: 700 }}>{tier.total}/{tier.max}</span>
+              </div>
+              {Object.entries(tier.components).map(([key, c]) => (
+                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '2px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: 11 }}>
+                  <span style={{ color: '#aaa', flex: 1 }}>{c.detail}</span>
+                  <span style={{ color: c.score === c.max ? '#6bcb77' : c.score === 0 ? '#dc3545' : '#fd7e14', fontWeight: 700, marginLeft: 8, whiteSpace: 'nowrap' }}>
+                    {c.score}/{c.max} <span style={{ color: '#555', fontWeight: 400, fontSize: 10 }}>{c.label}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       ) : (
         <div style={{ color: '#444', fontSize: 11, marginTop: 8 }}>
@@ -483,7 +495,7 @@ export default function JournalPage({ onNavigate }) {
         { label: 'OVERALL SCORE', value: analytics?.avgDisciplineScore != null ? `${analytics.avgDisciplineScore}/100` : '0/100', color: analytics?.avgDisciplineScore != null ? DISC_COLORS(analytics.avgDisciplineScore) : '#555', sub: 'avg · last 20 trades' },
         { label: 'CLEAN STREAK', value: analytics?.streak != null ? `${analytics.streak}` : '0', color: '#6bcb77', sub: 'trades no overrides' },
         { label: 'OVERRIDES / MO', value: analytics?.overridesThisMonth != null ? String(analytics.overridesThisMonth) : '0', color: analytics?.overridesThisMonth > 0 ? '#ff8c00' : '#6bcb77', sub: 'this month' },
-        { label: 'WIN RATE (DISC)', value: analytics?.disciplineWinRate != null ? `${analytics.disciplineWinRate}%` : 'No data', color: '#6bcb77', sub: 'score ≥ 80' },
+        { label: 'WIN RATE (DISC)', value: analytics?.disciplineWinRate != null ? `${analytics.disciplineWinRate}%` : 'No data', color: '#6bcb77', sub: 'score ≥ 75 (STRONG+)' },
         { label: 'WIN RATE (OVRD)', value: analytics?.overrideWinRate != null ? `${analytics.overrideWinRate}%` : 'No data', color: '#ff8c00', sub: 'override trades' },
       ].map(card => (
         <div key={card.label} style={{ background: '#111', borderRadius: 10, padding: '12px 18px', flex: '1 1 140px', minWidth: 120 }}>
@@ -517,9 +529,11 @@ export default function JournalPage({ onNavigate }) {
       <div style={{ background: '#111', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
         <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 800, letterSpacing: 1, marginBottom: 10 }}>DISCIPLINE vs PERFORMANCE</div>
         {[
-          { label: 'Score 80-100', color: '#6bcb77', trades: entries.filter(e => (e.discipline?.totalScore || 0) >= 80 && e.performance?.status === 'CLOSED') },
-          { label: 'Score 60-79', color: '#ffc107', trades: entries.filter(e => { const s = e.discipline?.totalScore; return s != null && s >= 60 && s < 80 && e.performance?.status === 'CLOSED'; }) },
-          { label: 'Score 0-59', color: '#dc3545', trades: entries.filter(e => { const s = e.discipline?.totalScore; return s != null && s < 60 && e.performance?.status === 'CLOSED'; }) },
+          { label: 'Score 90-100 (ELITE)',   color: '#6bcb77', trades: entries.filter(e => { const s = e.discipline?.totalScore; return s != null && s >= 90 && e.performance?.status === 'CLOSED'; }) },
+          { label: 'Score 75-89 (STRONG)',   color: '#FFD700', trades: entries.filter(e => { const s = e.discipline?.totalScore; return s != null && s >= 75 && s < 90 && e.performance?.status === 'CLOSED'; }) },
+          { label: 'Score 60-74 (MODERATE)', color: '#fd7e14', trades: entries.filter(e => { const s = e.discipline?.totalScore; return s != null && s >= 60 && s < 75 && e.performance?.status === 'CLOSED'; }) },
+          { label: 'Score 40-59 (WEAK)',     color: '#dc3545', trades: entries.filter(e => { const s = e.discipline?.totalScore; return s != null && s >= 40 && s < 60 && e.performance?.status === 'CLOSED'; }) },
+          { label: 'Score 0-39 (OVERRIDE)',  color: '#8b0000', trades: entries.filter(e => { const s = e.discipline?.totalScore; return s != null && s < 40 && e.performance?.status === 'CLOSED'; }) },
         ].map(row => {
           const winners = row.trades.filter(e => (e.performance?.realizedPnlDollar || 0) > 0);
           const winRate = row.trades.length > 0 ? Math.round(winners.length / row.trades.length * 100) : null;

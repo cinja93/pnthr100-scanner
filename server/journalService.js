@@ -6,6 +6,7 @@
 
 import { connectToDatabase } from './database.js';
 import { ObjectId } from 'mongodb';
+import { computeDisciplineScore } from './disciplineScoring.js';
 
 export async function createJournalEntry(db, position, userId, killData = null, marketAtEntry = null, sectorAtEntry = null) {
   // Check if entry already exists
@@ -63,88 +64,10 @@ export async function calculateDisciplineScore(db, journalId) {
   const journal = await db.collection('pnthr_journal').findOne({ _id: new ObjectId(journalId) });
   if (!journal) return;
 
-  const exits = journal.exits || [];
-  const lots = journal.lots || [];
-
-  // Entry score (0-30)
-  let entryScore = 0;
-  const entryBreakdown = {};
-
-  entryBreakdown.confirmedSignal = journal.entry?.killRank ? 10 : 0;
-  entryScore += entryBreakdown.confirmedSignal;
-
-  entryBreakdown.entryTiming = 10; // default; could refine with signalDate
-  entryScore += entryBreakdown.entryTiming;
-
-  entryBreakdown.slippage = 3; // default moderate
-  entryScore += entryBreakdown.slippage;
-
-  entryBreakdown.sizingAdherence = 0;
-  entryScore += entryBreakdown.sizingAdherence;
-
-  // Hold score (0-30)
-  let holdScore = 0;
-  const holdBreakdown = {};
-
-  holdBreakdown.heldThroughDrawdown = 10; // default
-  holdScore += holdBreakdown.heldThroughDrawdown;
-
-  holdBreakdown.pyramidingFollowed = Math.min(lots.length * 5, 10);
-  holdScore += holdBreakdown.pyramidingFollowed;
-
-  holdBreakdown.stopMaintained = 10;
-  holdScore += holdBreakdown.stopMaintained;
-
-  // Exit score (0-40)
-  let exitScore = 0;
-  const exitBreakdown = {};
-
-  const signalExits = exits.filter(e => ['SIGNAL', 'FEAST', 'STALE_HUNT', 'STOP_HIT'].includes(e.reason));
-  const manualExits = exits.filter(e => e.reason === 'MANUAL');
-  const totalExitShares = exits.reduce((s, e) => s + e.shares, 0);
-  const signalExitShares = signalExits.reduce((s, e) => s + e.shares, 0);
-  const signalExitPct = totalExitShares > 0 ? signalExitShares / totalExitShares : 1;
-
-  exitBreakdown.followedSignal = Math.round(signalExitPct * 20);
-  exitScore += exitBreakdown.followedSignal;
-
-  exitBreakdown.feastFollowed = exits.some(e => e.reason === 'FEAST') ? 10 : 0;
-  exitScore += exitBreakdown.feastFollowed;
-
-  exitBreakdown.staleHuntFollowed = exits.some(e => e.reason === 'STALE_HUNT') ? 5 : 0;
-
-  exitBreakdown.exitSlippage = 3;
-  exitScore += exitBreakdown.exitSlippage;
-
-  exitBreakdown.overridePenalty = manualExits.length > 0 ? -(manualExits.length * 10) : 0;
-  exitScore = Math.max(0, exitScore + exitBreakdown.overridePenalty);
-
-  const totalScore = Math.min(100, Math.max(0, entryScore + holdScore + exitScore));
-
-  const overrides = manualExits.map(e => ({
-    date: e.date,
-    type: 'EARLY_EXIT',
-    shares: e.shares,
-    note: e.note,
-    vixAtOverride: e.market?.vix || null,
-    regretCost: null,
-  }));
+  const result = computeDisciplineScore(journal);
 
   await db.collection('pnthr_journal').updateOne(
     { _id: new ObjectId(journalId) },
-    {
-      $set: {
-        'discipline.totalScore': totalScore,
-        'discipline.entryScore': entryScore,
-        'discipline.entryBreakdown': entryBreakdown,
-        'discipline.holdScore': holdScore,
-        'discipline.holdBreakdown': holdBreakdown,
-        'discipline.exitScore': exitScore,
-        'discipline.exitBreakdown': exitBreakdown,
-        'discipline.overrides': overrides,
-        'discipline.overrideCount': overrides.length,
-        updatedAt: new Date(),
-      },
-    }
+    { $set: { discipline: result, updatedAt: new Date() } }
   );
 }

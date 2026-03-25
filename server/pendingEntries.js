@@ -239,7 +239,11 @@ export async function pendingEntryConfirm(req, res) {
           lossAmount:    activeWash.washSale.lossAmount,
           exitDate:      activeWash.washSale.exitDate,
           expiryDate:    activeWash.washSale.expiryDate,
-          daysRemaining: Math.ceil((new Date(activeWash.washSale.expiryDate) - now) / (1000 * 60 * 60 * 24)),
+          daysRemaining: (() => {
+            const expiryDay = new Date(new Date(activeWash.washSale.expiryDate).toISOString().split('T')[0] + 'T00:00:00.000Z');
+            const todayDay  = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+            return Math.max(0, Math.round((expiryDay - todayDay) / 86400000));
+          })(),
         };
         await db.collection('pnthr_journal').updateOne(
           { _id: activeWash._id },

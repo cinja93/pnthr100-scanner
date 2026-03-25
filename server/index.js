@@ -2046,7 +2046,12 @@ app.get('/api/wash-rules', authenticateJWT, async (req, res) => {
       ...r,
       washSale: {
         ...r.washSale,
-        daysRemaining: Math.max(0, Math.ceil((new Date(r.washSale.expiryDate) - now) / (1000 * 60 * 60 * 24))),
+        // Normalize both to UTC midnight for clean calendar-day counting
+        daysRemaining: (() => {
+          const expiryDay = new Date(new Date(r.washSale.expiryDate).toISOString().split('T')[0] + 'T00:00:00.000Z');
+          const todayDay  = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+          return Math.max(0, Math.round((expiryDay - todayDay) / 86400000));
+        })(),
       },
     }));
     res.json(enriched);

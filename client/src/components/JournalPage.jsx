@@ -275,7 +275,11 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
         const ws = entry.washSale?.isLoss ? entry.washSale : entry.washRule;
         const expiry = ws.expiryDate ? new Date(ws.expiryDate) : null;
         const now = new Date();
-        const daysLeft = expiry ? Math.max(0, Math.ceil((expiry - now) / 86400000)) : null;
+        // Normalize both to UTC midnight for calendar-day counting
+        // (avoids time-of-day artifacts when exit was recorded mid-afternoon)
+        const expiryDay = expiry ? new Date(expiry.toISOString().split('T')[0] + 'T00:00:00.000Z') : null;
+        const todayDay  = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+        const daysLeft  = expiryDay ? Math.max(0, Math.round((expiryDay - todayDay) / 86400000)) : null;
         const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—';
         const isTriggered = ws.triggered;
         const isExpired = expiry && expiry <= now && !isTriggered;

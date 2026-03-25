@@ -50,8 +50,10 @@ function getToday() {
   return new Date().toISOString().split('T')[0];
 }
 
-async function fetchDailyBars(ticker, from, to) {
-  const url = `${FMP_BASE_URL}/historical-price-full/${ticker}?from=${from}&to=${to}&apikey=${FMP_API_KEY}`;
+async function fetchDailyBars(ticker, from) {
+  // No &to= parameter — matches /api/chart/:ticker exactly so both code paths
+  // get identical FMP data → identical weekly bars → identical PNTHR Stop.
+  const url = `${FMP_BASE_URL}/historical-price-full/${ticker}?from=${from}&apikey=${FMP_API_KEY}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`FMP ${res.status}`);
   const data = await res.json();
@@ -359,7 +361,7 @@ export async function getSignals(tickers, { isETF = false } = {}) {
       const chunk = missing.slice(i, i + concurrency);
       await Promise.all(chunk.map(async (ticker) => {
         try {
-          const daily  = await fetchDailyBars(ticker, fromDate, toDate);
+          const daily  = await fetchDailyBars(ticker, fromDate);
           const weekly = aggregateWeeklyBars(daily);
           activeCache.signals[ticker] = runStateMachine(weekly, isETF);
         } catch (err) {

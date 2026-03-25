@@ -99,9 +99,11 @@ async function recordExit(db, positionId, userId, exitData) {
 
   // Wash rule on final loss exit
   if (newRemaining === 0 && realizedDollar < 0) {
-    const finalDate = new Date(date);
+    // Normalize to UTC midnight so expiry is always a clean calendar date
+    const dateStr   = typeof date === 'string' ? date.split('T')[0] : new Date(date).toISOString().split('T')[0];
+    const finalDate = new Date(dateStr + 'T00:00:00.000Z');
     const expiryDate = new Date(finalDate);
-    expiryDate.setDate(expiryDate.getDate() + 30);
+    expiryDate.setUTCDate(expiryDate.getUTCDate() + 30);
     updateDoc.$set['washRule.isLoss'] = true;
     updateDoc.$set['washRule.finalExitDate'] = date;
     updateDoc.$set['washRule.expiryDate'] = expiryDate.toISOString().split('T')[0];
@@ -189,9 +191,11 @@ async function syncExitToJournal(db, positionId, userId, exitRecord, remainingSh
   // When trade closes at a loss, record 30-day wash sale window on journal entry.
   if (status === 'CLOSED' && realizedDollar < 0) {
     try {
-      const exitDate = new Date(exitRecord.date);
-      const expiryDate = new Date(exitDate);
-      expiryDate.setDate(expiryDate.getDate() + 30);
+      // Normalize to UTC midnight so expiry is always a clean calendar date
+      const exitDateStr = typeof exitRecord.date === 'string' ? exitRecord.date.split('T')[0] : new Date(exitRecord.date).toISOString().split('T')[0];
+      const exitDate    = new Date(exitDateStr + 'T00:00:00.000Z');
+      const expiryDate  = new Date(exitDate);
+      expiryDate.setUTCDate(expiryDate.getUTCDate() + 30);
       await db.collection('pnthr_journal').updateOne(
         { positionId: positionId.toString(), ownerId: userId },
         {

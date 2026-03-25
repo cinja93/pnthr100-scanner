@@ -103,16 +103,22 @@ function computeChecks(entry) {
   const washClean = !(entry.tags?.includes('wash-sale'));
 
   // ── Sizing check ──
+  // Mirrors sizePosition() in sizingUtils.js: min(vitality/rps, tickerCap/price) then ×gapMult.
+  // We don't store maxGapPct in the journal, so gapMult=1.0 (conservative baseline).
+  // Lot 1 expected = Math.max(1, Math.round(total × 0.15)) — same as buildLots().
   let sizingCheck  = null;
   let riskDollar   = null;
   let riskPct      = null;
   let riskCapCheck = null;
   if (nav != null && entryPrice != null && stopPrice != null && lot1Shares != null) {
-    const stopDist  = Math.abs(entryPrice - stopPrice);
-    const vitality  = nav * (isETF ? 0.005 : 0.01);
+    const stopDist    = Math.abs(entryPrice - stopPrice);
+    const vitality    = nav * (isETF ? 0.005 : 0.01);
+    const tickerCap   = nav * 0.10;
     if (stopDist > 0) {
-      const totalShares = Math.floor(vitality / stopDist);
-      const expected    = Math.floor(totalShares * 0.15);
+      const byVitality  = Math.floor(vitality / stopDist);
+      const byTickerCap = Math.floor(tickerCap / entryPrice);
+      const totalShares = Math.min(byVitality, byTickerCap);
+      const expected    = Math.max(1, Math.round(totalShares * 0.15));
       const deviation   = expected > 0 ? Math.abs(lot1Shares - expected) / expected : null;
       sizingCheck  = deviation != null ? deviation <= 0.10 : null;
       riskDollar   = +(lot1Shares * stopDist).toFixed(2);

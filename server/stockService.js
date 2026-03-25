@@ -41,12 +41,6 @@ async function fetchFMP(endpoint, retries = 3) {
   throw new Error('Max retries exceeded');
 }
 
-// Cache stop prices for the current week — keyed by last Friday's date so it
-// auto-invalidates each new week without any manual expiry logic.
-let stopPriceCache = { weekKey: null, stops: {} };
-// Same week key, but for short-scan tickers that have no laser signal (we use SELL logic: high + 0.01)
-let shortStopPriceCache = { weekKey: null, stops: {} };
-
 // Year-start price cache — Dec 31 close is constant all year; cache indefinitely
 // and only re-fetch when the calendar year rolls over or for newly-seen tickers.
 let yearStartPriceCache = { year: null, prices: {} };
@@ -89,136 +83,54 @@ async function getYearStartPrices(tickers) {
   return yearStartPriceCache.prices;
 }
 
-// Calculate stop prices for tickers that have signals using 2-week price history:
-//   BUY / YELLOW_BUY  → lowest low of the 2 most recent complete trading weeks − $0.01
-//   SELL / YELLOW_SELL → highest high of the 2 most recent complete trading weeks + $0.01
-//
-// Results are cached for the whole week so FMP is only called once per week,
-// not on every page load.
+/**
+ * Get stop prices for a set of tickers.
+ * READS from the PNTHR signal cache (via signalService → stopCalculation.js).
+ * Does NOT compute stops independently.
+ *
+ * HISTORY: Previously computed stops using a legacy formula (structural only,
+ * from daily candles — no ATR component). That produced different values from
+ * the PNTHR signal chain. As of v4.0.0, this reads from the same authoritative
+ * source as Kill, Search, and Pulse.
+ */
 export async function calculateStopPrices(signalMap) {
   const tickersWithSignals = Object.entries(signalMap).filter(([, data]) => data.signal);
   if (tickersWithSignals.length === 0) return signalMap;
 
-  // Find the most recently completed Friday
-  const today = new Date();
-  const dayOfWeek = today.getDay(); // 0=Sun … 5=Fri … 6=Sat
-  const daysToLastFriday = dayOfWeek === 5 ? 0 : (dayOfWeek + 2) % 7;
-  const lastFriday = new Date(today);
-  lastFriday.setDate(today.getDate() - daysToLastFriday);
-  const weekKey = lastFriday.toISOString().split('T')[0]; // e.g. "2026-02-20"
-
-  // Two full trading weeks = 14 calendar days back from that Friday
-  const twoWeeksBeforeFriday = new Date(lastFriday);
-  twoWeeksBeforeFriday.setDate(lastFriday.getDate() - 14);
-  const fromDate = twoWeeksBeforeFriday.toISOString().split('T')[0];
+  const { getSignals } = await import('./signalService.js');
+  const tickers = tickersWithSignals.map(([t]) => t);
+  const freshSignals = await getSignals(tickers);
 
   const result = { ...signalMap };
-
-  // Apply any already-cached stops for this week (cache is shared across long + short lists)
-  if (stopPriceCache.weekKey === weekKey) {
-    for (const [ticker, stopPrice] of Object.entries(stopPriceCache.stops)) {
-      if (result[ticker]) result[ticker] = { ...result[ticker], stopPrice };
-    }
-  } else {
-    stopPriceCache = { weekKey, stops: {} };
+  for (const [ticker] of tickersWithSignals) {
+    const fresh = freshSignals[ticker];
+    const stop = fresh?.pnthrStop ?? fresh?.stopPrice ?? null;
+    if (stop != null) result[ticker] = { ...result[ticker], stopPrice: stop };
   }
-
-  // Find tickers that still need a stop computed (not in cache or first load this week)
-  const needCompute = tickersWithSignals.filter(([ticker]) => result[ticker]?.stopPrice == null);
-  if (needCompute.length === 0) {
-    console.log(`📍 Using cached stop prices for week of ${weekKey}`);
-    return result;
-  }
-
-  console.log(`📍 Calculating stop prices for week of ${weekKey} (${fromDate} → ${weekKey})...`);
-  const newStops = {};
-
-  // Fetch 3 at a time to stay within FMP rate limits
-  for (let i = 0; i < needCompute.length; i += 3) {
-    const chunk = needCompute.slice(i, i + 3);
-    await Promise.all(chunk.map(async ([ticker, data]) => {
-      try {
-        const history = await fetchFMP(`/historical-price-full/${ticker}?from=${fromDate}&to=${weekKey}`);
-        if (!history?.historical?.length) return;
-
-        let stopPrice;
-        if (data.signal === 'BUY' || data.signal === 'YELLOW_BUY') {
-          const lowestLow = Math.min(...history.historical.map(d => d.low));
-          stopPrice = parseFloat((lowestLow - 0.01).toFixed(2));
-        } else if (data.signal === 'SELL' || data.signal === 'YELLOW_SELL') {
-          const highestHigh = Math.max(...history.historical.map(d => d.high));
-          stopPrice = parseFloat((highestHigh + 0.01).toFixed(2));
-        }
-        if (stopPrice !== undefined) {
-          result[ticker] = { ...result[ticker], stopPrice };
-          newStops[ticker] = stopPrice;
-        }
-      } catch (err) {
-        console.error(`Stop price error for ${ticker}:`, err.message);
-      }
-    }));
-    if (i + 3 < needCompute.length) {
-      await new Promise(r => setTimeout(r, 400));
-    }
-  }
-
-  // Merge into cache so long and short lists both persist
-  stopPriceCache.stops = { ...stopPriceCache.stops, ...newStops };
-  console.log(`📍 Cached stop prices for ${Object.keys(stopPriceCache.stops).length} tickers (valid until next Friday)`);
   return result;
 }
 
-// Get week key (last Friday) and fromDate (14 days before) for 2-week lookback
-function getStopPriceWeekRange() {
-  const today = new Date();
-  const dayOfWeek = today.getDay();
-  const daysToLastFriday = dayOfWeek === 5 ? 0 : (dayOfWeek + 2) % 7;
-  const lastFriday = new Date(today);
-  lastFriday.setDate(today.getDate() - daysToLastFriday);
-  const weekKey = lastFriday.toISOString().split('T')[0];
-  const twoWeeksBeforeFriday = new Date(lastFriday);
-  twoWeeksBeforeFriday.setDate(lastFriday.getDate() - 14);
-  const fromDate = twoWeeksBeforeFriday.toISOString().split('T')[0];
-  return { weekKey, fromDate };
-}
-
-// For short-scan tickers with no laser signal: compute stop as highest high + $0.01 (short exit level).
-// Cached per week like calculateStopPrices.
+/**
+ * Get stop prices for short-scan tickers.
+ * READS from the PNTHR signal cache (via signalService → stopCalculation.js).
+ * Does NOT compute stops independently.
+ *
+ * HISTORY: Same legacy formula issue as calculateStopPrices above.
+ */
 export async function getShortStopPrices(tickers) {
   if (!tickers || tickers.length === 0) return {};
-  const { weekKey, fromDate } = getStopPriceWeekRange();
+
+  const { getSignals } = await import('./signalService.js');
+  const upperTickers = tickers.map(t =>
+    (typeof t === 'string' ? t : t.ticker || t).toUpperCase()
+  );
+
+  const freshSignals = await getSignals(upperTickers);
   const result = {};
-  const upperTickers = tickers.map(t => (typeof t === 'string' ? t : t.ticker || t).toUpperCase());
-
-  if (shortStopPriceCache.weekKey !== weekKey) {
-    shortStopPriceCache = { weekKey, stops: {} };
-  }
-
   for (const ticker of upperTickers) {
-    const stopPrice = shortStopPriceCache.stops[ticker];
-    if (stopPrice != null) result[ticker] = { stopPrice };
-  }
-  const toFetch = upperTickers.filter(t => shortStopPriceCache.stops[t] == null);
-  if (toFetch.length === 0) return result;
-
-  if (toFetch.length > 0) {
-    console.log(`📍 Calculating short stop prices for ${toFetch.length} tickers (week of ${weekKey})...`);
-    for (let i = 0; i < toFetch.length; i += 3) {
-      const chunk = toFetch.slice(i, i + 3);
-      await Promise.all(chunk.map(async (ticker) => {
-        try {
-          const history = await fetchFMP(`/historical-price-full/${ticker}?from=${fromDate}&to=${weekKey}`);
-          if (!history?.historical?.length) return;
-          const highestHigh = Math.max(...history.historical.map(d => d.high));
-          const stopPrice = parseFloat((highestHigh + 0.01).toFixed(2));
-          shortStopPriceCache.stops[ticker] = stopPrice;
-          result[ticker] = { stopPrice };
-        } catch (err) {
-          console.error(`Short stop price error for ${ticker}:`, err.message);
-        }
-      }));
-      if (i + 3 < toFetch.length) await new Promise(r => setTimeout(r, 400));
-    }
+    const fresh = freshSignals[ticker];
+    const stop = fresh?.pnthrStop ?? fresh?.stopPrice ?? null;
+    if (stop != null) result[ticker] = { stopPrice: stop };
   }
   return result;
 }

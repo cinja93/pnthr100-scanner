@@ -389,7 +389,8 @@ export default function JournalPage({ onNavigate }) {
       if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
       if (reviewsRes.ok) setWeeklyReviews(await reviewsRes.json());
       if (ratiosRes.ok) setRatios(await ratiosRes.json());
-    } catch (e) { console.error('[JOURNAL]', e); }
+      else setRatios({ unavailable: true });
+    } catch (e) { console.error('[JOURNAL]', e); setRatios({ unavailable: true }); }
     setLoading(false);
   };
 
@@ -555,6 +556,8 @@ export default function JournalPage({ onNavigate }) {
         <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 800, letterSpacing: 1, marginBottom: 10 }}>RISK-ADJUSTED PERFORMANCE</div>
         {!ratios ? (
           <div style={{ color: '#555', fontSize: 12 }}>Loading…</div>
+        ) : ratios.unavailable ? (
+          <div style={{ color: '#555', fontSize: 12 }}>Unavailable — server endpoint not yet deployed. Merge <code style={{ color: '#888' }}>main → production</code> on Render to enable.</div>
         ) : ratios.message ? (
           <div style={{ color: '#555', fontSize: 12 }}>{ratios.message}</div>
         ) : (

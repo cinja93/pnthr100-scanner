@@ -173,6 +173,15 @@ export async function pendingEntryConfirm(req, res) {
       await createJournalEntry(db, position, req.user.userId, killData, marketAtEntry, sectorAtEntry);
     } catch (e) { console.warn('[JOURNAL] Auto-create failed:', e.message); }
 
+    // Capture navAtEntry + isETF on the journal entry (best-effort).
+    try {
+      const userProfile = await getUserProfile(req.user.userId);
+      await db.collection('pnthr_journal').updateOne(
+        { positionId: posId, ownerId: req.user.userId },
+        { $set: { navAtEntry: userProfile?.accountSize ?? null, isETF: position.isETF || false } }
+      );
+    } catch (e) { console.warn('[PE] navAtEntry capture failed:', e.message); }
+
     // Capture kill score context + exchange from pnthr_kill_scores (best-effort).
     try {
       const killScoreDoc = await db.collection('pnthr_kill_scores').findOne(

@@ -1848,8 +1848,11 @@ app.post('/api/journal/migrate', authenticateJWT, requireAdmin, async (req, res)
         claimed++;
         pos.ownerId = userId;
       }
+      // pos.id is the custom string ID (e.g. "m3abc1xyz") used by createJournalEntry
+      // pos._id is MongoDB ObjectId — journal entries store positionId = pos.id, not pos._id
+      const posId = pos.id || pos._id.toString();
       const existing = await mdb.collection('pnthr_journal').findOne({
-        positionId: pos._id.toString(),
+        positionId: posId,
         ownerId: userId,
       });
 

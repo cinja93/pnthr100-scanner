@@ -2147,6 +2147,127 @@ app.delete('/api/journal/:id/tags/:tag', authenticateJWT, async (req, res) => {
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
 app.use('/api/newsletter', newsletterRouter);
 
+// ── Admin: Cache Status ────────────────────────────────────────────────────────
+// Shows whether in-memory caches are warm. Helps diagnose cold-start issues.
+app.get('/api/cache-status', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+
+    // Apex cache — imported dynamically to avoid circular dep
+    const { getCachedApexResults } = await import('./apexService.js');
+    const apexResults = getCachedApexResults();
+    const apexCount   = apexResults?.stocks?.length ?? 0;
+
+    // ETF cache
+    const etfResults = getCachedEtfResults();
+    const etfCount   = Array.isArray(etfResults) ? etfResults.length
+                       : etfResults?.stocks?.length ?? 0;
+
+    // Candle cache (MongoDB)
+    const candleCount = db
+      ? await db.collection('pnthr_candle_cache').countDocuments()
+      : null;
+
+    // Regime (latest doc)
+    const regimeDoc = db
+      ? await db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } })
+      : null;
+
+    // Signal cache (in-memory, from signalService)
+    const { getCachedSignals } = await import('./signalService.js');
+    const signalSnap  = getCachedSignals();
+    const signalCount = signalSnap ? Object.keys(signalSnap).length : 0;
+
+    res.json({
+      apex: {
+        warm:        apexCount > 0,
+        count:       apexCount,
+        status:      apexCount > 0 ? 'warm' : 'cold',
+      },
+      etf: {
+        warm:        etfCount > 0,
+        count:       etfCount,
+        status:      etfCount > 0 ? 'warm' : 'cold',
+      },
+      signals: {
+        warm:        signalCount > 0,
+        count:       signalCount,
+        status:      signalCount > 0 ? 'warm' : 'cold',
+      },
+      candle: {
+        count:       candleCount,
+        status:      (candleCount ?? 0) > 0 ? 'populated' : 'empty',
+      },
+      regime: {
+        weekOf:      regimeDoc?.weekOf ?? null,
+        updatedAt:   regimeDoc?.createdAt ?? null,
+        status:      regimeDoc ? 'ok' : 'missing',
+      },
+      checkedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[cache-status]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin: Pipeline Health ─────────────────────────────────────────────────────
+// Verifies the Friday pipeline kept all collections in sync.
+app.get('/api/pipeline-health', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+
+    const [latestScores, latestRegime, latestHistory, latestSnapshot] = await Promise.all([
+      db.collection('pnthr_kill_scores').findOne({}, { sort: { createdAt: -1 } }),
+      db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } }),
+      db.collection('pnthr_kill_history').findOne({}, { sort: { createdAt: -1 } }),
+      db.collection('pnthr_weekly_market_snapshot').findOne({}, { sort: { weekOf: -1 } }),
+    ]);
+
+    const scoreWeek   = latestScores?.weekOf   ?? null;
+    const regimeWeek  = latestRegime?.weekOf    ?? null;
+    const historyWeek = latestHistory?.weekOf   ?? null;
+    const snapWeek    = latestSnapshot?.weekOf  ?? null;
+
+    // All core collections should share the same weekOf
+    const allSameWeek = !!(scoreWeek && regimeWeek && scoreWeek === regimeWeek);
+    const scoreCount  = scoreWeek
+      ? await db.collection('pnthr_kill_scores').countDocuments({ weekOf: scoreWeek })
+      : 0;
+
+    res.json({
+      healthy:  allSameWeek && scoreCount > 0,
+      weekOf:   scoreWeek,
+      scores: {
+        weekOf:    scoreWeek,
+        count:     scoreCount,
+        updatedAt: latestScores?.createdAt ?? null,
+      },
+      regime: {
+        weekOf:    regimeWeek,
+        updatedAt: latestRegime?.createdAt ?? null,
+        inSync:    regimeWeek === scoreWeek,
+      },
+      history: {
+        weekOf:    historyWeek,
+        updatedAt: latestHistory?.createdAt ?? null,
+      },
+      snapshot: {
+        weekOf:    snapWeek,
+        updatedAt: latestSnapshot?.createdAt ?? null,
+      },
+      warning: allSameWeek ? null : `Collections out of sync — scores: ${scoreWeek}, regime: ${regimeWeek}. Possible partial pipeline failure.`,
+      checkedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[pipeline-health]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -1124,7 +1124,7 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick }) {
             </div>
             {bl.length > 0
               ? (() => {
-                  const chartList = bl.map(s => ({ ticker: s.ticker, symbol: s.ticker, currentPrice: s.price, signal: 'BL', sector: s.sector }));
+                  const chartList = bl.map(s => ({ ticker: s.ticker, symbol: s.ticker, companyName: s.companyName || '', exchange: s.exchange || '', currentPrice: s.price, signal: 'BL', sector: s.sector }));
                   return bl.map((s, i) => <DevRow key={s.ticker} s={s} dir="BL" idx={i} chartList={chartList} />);
                 })()
               : <div style={{ padding: '10px 14px', color: '#333', fontSize: 12 }}>No developing BL signals</div>
@@ -1138,7 +1138,7 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick }) {
             </div>
             {ss.length > 0
               ? (() => {
-                  const chartList = ss.map(s => ({ ticker: s.ticker, symbol: s.ticker, currentPrice: s.price, signal: 'SS', sector: s.sector }));
+                  const chartList = ss.map(s => ({ ticker: s.ticker, symbol: s.ticker, companyName: s.companyName || '', exchange: s.exchange || '', currentPrice: s.price, signal: 'SS', sector: s.sector }));
                   return ss.map((s, i) => <DevRow key={s.ticker} s={s} dir="SS" idx={i} chartList={chartList} />);
                 })()
               : <div style={{ padding: '10px 14px', color: '#333', fontSize: 12 }}>No developing SS signals</div>

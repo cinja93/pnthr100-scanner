@@ -3186,6 +3186,8 @@ app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
       if (priceVsEma < -2 || priceVsEma > 20) continue;
       devBL.push({
         ticker:       c.ticker,
+        companyName:  q.name || '',
+        exchange:     q.exchange || '',
         sector:       sectorMap[c.ticker] || '—',
         price,
         ema21:        c.ema21,
@@ -3221,6 +3223,8 @@ app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
       if (priceVsEma > 2 || priceVsEma < -20) continue;
       devSS.push({
         ticker:      c.ticker,
+        companyName: q.name || '',
+        exchange:    q.exchange || '',
         sector:      sectorMap[c.ticker] || '—',
         price,
         ema21:       c.ema21,

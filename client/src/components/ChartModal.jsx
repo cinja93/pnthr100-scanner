@@ -431,7 +431,11 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
 
     // Compute signals and live stops from full history
     const { events: allDetected, pnthrStop: ps, currentWeekStop: cws, currentSignal: cs } = detectAllSignals(allWeeklyData, 21, isEtfTicker(stock?.ticker));
-    setPnthrStop(ps);
+    // Prefer server-computed stop (from Kill pipeline / signalService) — single source of truth.
+    // Fall back to client-computed only when server value is unavailable (e.g. Prey page, cold cache).
+    const serverStop = stock?.pnthrStop ?? stock?.stopPrice ?? null;
+    const resolvedStop = serverStop != null ? serverStop : ps;
+    setPnthrStop(resolvedStop);
     setCurrentWeekStop(cws);
     setCurrentSignal(cs);
     const lastEntryIdx = (() => { for (let i = allDetected.length - 1; i >= 0; i--) { if (allDetected[i].signal === 'BL' || allDetected[i].signal === 'SS') return i; } return -1; })();
@@ -519,7 +523,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
 
     // Draw stop lines only across the last 3 bars (not full chart width)
     const last3 = filtered.slice(-3);
-    if (ps != null && last3.length > 0) {
+    if (resolvedStop != null && last3.length > 0) {
       const pnthrLineSeries = chart.addSeries(LineSeries, {
         color: '#ca8a04',
         lineWidth: 2,
@@ -528,7 +532,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
         lastValueVisible: false,
         crosshairMarkerVisible: false,
       });
-      pnthrLineSeries.setData(last3.map(b => ({ time: b.time, value: ps })));
+      pnthrLineSeries.setData(last3.map(b => ({ time: b.time, value: resolvedStop })));
     }
     if (cws != null && last3.length > 0) {
       const cwsLineSeries = chart.addSeries(LineSeries, {

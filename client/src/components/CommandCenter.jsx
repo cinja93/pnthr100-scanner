@@ -575,7 +575,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const highFilled  = Math.max(...lots.filter(l => l.filled).map(l => l.lot), 0);
   const totShr  = lots.reduce((s, l) => s + (l.filled ? l.actualShares : 0), 0);
   const totCost = lots.reduce((s, l) => s + (l.filled ? l.costBasis    : 0), 0);
-  const avg     = totShr > 0 ? totCost / totShr : position.entryPrice;
+  const avg     = position.manualAvgCost ? +position.manualAvgCost : (totShr > 0 ? totCost / totShr : position.entryPrice);
 
   // displayPrice: uses manual override if active (and market hasn't caught up yet)
   // Used for all lot-trigger calculations and P&L display when override is active.

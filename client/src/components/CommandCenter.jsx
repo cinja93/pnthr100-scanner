@@ -10,6 +10,7 @@ import { API_BASE, authHeaders, updateUserProfile, fetchNav, fetchPendingEntries
 import { useAuth } from '../AuthContext';
 import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat, isEtfTicker } from '../utils/sizingUtils.js';
 import ChartModal from './ChartModal';
+import pantherHead from '../assets/panther head.png';
 
 // (buildLots, enrichLots, sizePosition, calcHeat imported from ../utils/sizingUtils.js)
 
@@ -1942,14 +1943,15 @@ export default function CommandCenter({ onNavigate }) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#09090b', color: '#e8e6e3', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-      {/* Header */}
-      <div style={{ padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.06)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* Header — matches PNTHR Kill / Journal style */}
+      <div style={{ padding: '16px 24px', background: '#111111',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <span style={{ fontSize: 17, fontWeight: 800 }}>
-            <span style={{ color: '#FFD700' }}>PNTHR</span> <span style={{ color: '#555' }}>COMMAND</span>
-          </span>
-          <div style={{ height: 18, width: 1, background: 'rgba(255,255,255,0.08)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src={pantherHead} alt="PNTHR" style={{ height: 36, width: 'auto' }} />
+            <span style={{ fontSize: 20, fontWeight: 800, color: '#fcf000', letterSpacing: '0.02em' }}>PNTHR COMMAND</span>
+          </div>
+          <div style={{ height: 20, width: 1, background: 'rgba(255,255,255,0.12)' }} />
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ background: tab === t.id ? 'rgba(255,215,0,0.08)' : 'none',

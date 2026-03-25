@@ -374,18 +374,21 @@ export default function JournalPage({ onNavigate }) {
   const [migrating, setMigrating] = useState(false);
   const [migrateResult, setMigrateResult] = useState(null);
   const [washRules, setWashRules] = useState([]);
+  const [ratios, setRatios] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [entriesRes, analyticsRes, reviewsRes] = await Promise.all([
+      const [entriesRes, analyticsRes, reviewsRes, ratiosRes] = await Promise.all([
         fetch(`${API_BASE}/api/journal`, { headers: authHeaders() }),
         fetch(`${API_BASE}/api/journal/analytics`, { headers: authHeaders() }),
         fetch(`${API_BASE}/api/journal/weekly-reviews`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/portfolio/ratios`, { headers: authHeaders() }),
       ]);
       if (entriesRes.ok) setEntries(await entriesRes.json());
       if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
       if (reviewsRes.ok) setWeeklyReviews(await reviewsRes.json());
+      if (ratiosRes.ok) setRatios(await ratiosRes.json());
     } catch (e) { console.error('[JOURNAL]', e); }
     setLoading(false);
   };
@@ -546,6 +549,44 @@ export default function JournalPage({ onNavigate }) {
             </div>
           );
         })}
+      </div>
+
+      <div style={{ background: '#111', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+        <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 800, letterSpacing: 1, marginBottom: 10 }}>RISK-ADJUSTED PERFORMANCE</div>
+        {!ratios ? (
+          <div style={{ color: '#555', fontSize: 12 }}>Loading…</div>
+        ) : ratios.message ? (
+          <div style={{ color: '#555', fontSize: 12 }}>{ratios.message}</div>
+        ) : (
+          <div>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 10 }}>
+              {[
+                { label: 'SHARPE RATIO',  value: ratios.sinceInception?.sharpe,  good: 1.0, great: 2.0, unit: '', tip: 'Annualized excess return per unit of total volatility (weekly, sqrt(52)). ≥1.0 = good, ≥2.0 = great.' },
+                { label: 'SORTINO RATIO', value: ratios.sinceInception?.sortino, good: 1.5, great: 3.0, unit: '', tip: 'Like Sharpe but penalises downside volatility only. ≥1.5 = good, ≥3.0 = great.' },
+                { label: 'WEEKS TRACKED', value: ratios.weeksOfData, good: null, great: null, unit: ' wks', tip: 'Number of weekly return snapshots used to compute ratios.' },
+              ].map(({ label, value, good, great, unit, tip }) => {
+                const color = value == null || good == null ? '#888'
+                  : value >= great ? '#6bcb77'
+                  : value >= good  ? '#FFD700'
+                  : value >= 0     ? '#fd7e14'
+                  : '#dc3545';
+                return (
+                  <div key={label} title={tip} style={{ cursor: 'help' }}>
+                    <div style={{ color: '#555', fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 2 }}>{label}</div>
+                    <div style={{ color, fontSize: 22, fontWeight: 900, lineHeight: 1.1 }}>
+                      {value != null ? `${value}${unit}` : '—'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {ratios.weeksOfData < 13 && (
+              <div style={{ color: '#555', fontSize: 11, marginTop: 4 }}>
+                Ratios based on {ratios.weeksOfData} week{ratios.weeksOfData !== 1 ? 's' : ''} of data — more meaningful after 13+ weeks.
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div style={{ background: '#111', borderRadius: 10, padding: '14px 16px' }}>

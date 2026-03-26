@@ -1224,7 +1224,7 @@ app.get('/api/sector-exposure', authenticateJWT, async (req, res) => {
       if (latestKill?.weekOf) {
         const killDocs = await db.collection('pnthr_kill_scores')
           .find({ weekOf: latestKill.weekOf },
-                { projection: { ticker: 1, totalScore: 1, killRank: 1, tier: 1, signal: 1, sector: 1 } })
+                { projection: { ticker: 1, totalScore: 1, killRank: 1, tier: 1, signal: 1, sector: 1, signalAge: 1 } })
           .toArray();
         for (const s of killDocs) {
           if (!killMap[s.ticker]) killMap[s.ticker] = s;

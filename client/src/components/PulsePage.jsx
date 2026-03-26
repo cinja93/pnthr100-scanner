@@ -1190,20 +1190,6 @@ function SignalBreadthBar({ signals, onSignalClick }) {
   );
 }
 
-function MacroStrip({ marketSnapshot }) {
-  // treasury10y is stored lowercase in the DB
-  const t10 = marketSnapshot?.treasury10y ?? marketSnapshot?.treasury10Y;
-  const dxy = marketSnapshot?.dxy;
-  const weekOf = marketSnapshot?.weekOf;
-  return (
-    <div style={{ background: '#111', borderRadius: 8, padding: '10px 16px', marginBottom: 12, display: 'flex', gap: 24, fontSize: 12, color: '#888' }}>
-      <span>10Y: <strong style={{ color: '#ccc' }}>{t10 ? `${t10.toFixed(2)}%` : '—'}</strong></span>
-      <span>DXY: <strong style={{ color: '#ccc' }}>{dxy ? dxy.toFixed(1) : '—'}</strong></span>
-      <span style={{ marginLeft: 'auto' }}>Week of <strong style={{ color: '#FFD700' }}>{weekOf || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</strong></span>
-    </div>
-  );
-}
-
 // ── Signal Stock Drill-Down Modal ──────────────────────────────────────────────
 const TIER_BADGE = {
   'ALPHA PNTHR KILL': { bg: 'rgba(212,160,23,0.25)', color: '#FFD700' },
@@ -1378,7 +1364,7 @@ function AlertStrip({ alerts, lotsReady, onNavigate }) {
           {(lotsReady || []).map(l => `${l.ticker} Lot ${l.lot}`).join(', ')}
         </span>
       )}
-      <span onClick={() => { window.location.hash = '#risk-advisor'; onNavigate?.('command'); }}
+      <span onClick={() => { sessionStorage.setItem('scrollToRiskAdvisor', '1'); onNavigate?.('command'); }}
         style={{ marginLeft: 'auto', fontSize: 12, color: '#888', cursor: 'pointer',
           textDecoration: 'underline', textDecorationColor: 'rgba(136,136,136,0.3)', textUnderlineOffset: 3 }}>
         View risk advisor →

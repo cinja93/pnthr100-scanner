@@ -547,33 +547,39 @@ export default function ApexPage() {
                 </button>
               </>
             )}
-            {/* ── Kill Search Input ─────────────────────────────────────────── */}
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input
-                type="text"
-                placeholder="Search ticker…"
-                value={killSearch}
-                onChange={e => setKillSearch(e.target.value.toUpperCase())}
-                style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  border: `1px solid ${killSearch ? 'rgba(252,240,0,0.7)' : 'rgba(255,215,0,0.3)'}`,
-                  borderRadius: 5,
-                  padding: '5px 10px',
-                  color: '#FCF000',
-                  fontSize: 13,
-                  fontFamily: 'monospace',
-                  width: 120,
-                  outline: 'none',
-                }}
-              />
-              {killSearch && (
-                <button
-                  onClick={() => setKillSearch('')}
-                  title="Clear search"
-                  style={{ background: 'none', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: '2px 4px', lineHeight: 1 }}
-                >✕</button>
-              )}
-            </div>
+          </div>
+
+          {/* ── Kill Search Bar ───────────────────────────────────────────────── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ color: '#FCF000', fontSize: 12, fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.05em', opacity: 0.8 }}>
+              FIND TICKER:
+            </span>
+            <input
+              type="text"
+              placeholder="e.g. COIN"
+              value={killSearch}
+              onChange={e => setKillSearch(e.target.value.toUpperCase())}
+              style={{
+                background: '#111',
+                border: `1.5px solid ${killSearch ? '#FCF000' : 'rgba(252,240,0,0.4)'}`,
+                borderRadius: 5,
+                padding: '6px 12px',
+                color: '#FCF000',
+                fontSize: 14,
+                fontFamily: 'monospace',
+                fontWeight: 700,
+                width: 140,
+                outline: 'none',
+                letterSpacing: '0.06em',
+              }}
+            />
+            {killSearch && (
+              <button
+                onClick={() => setKillSearch('')}
+                title="Clear search"
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid #374151', borderRadius: 4, color: '#aaa', fontSize: 13, cursor: 'pointer', padding: '4px 10px', fontFamily: 'monospace' }}
+              >✕ Clear</button>
+            )}
           </div>
 
           {/* ── Table ────────────────────────────────────────────────────────── */}

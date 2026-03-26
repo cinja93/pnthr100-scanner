@@ -14,6 +14,10 @@ import { connectToDatabase, getUserProfile, upsertUserProfile } from './database
 import { createJournalEntry } from './journalService.js';
 import { fetchMarketSnapshot, getSectorEtf } from './marketSnapshot.js';
 import { fetchTechnicalSnapshot } from './technicalSnapshot.js';
+import { normalizeSector } from './sectorUtils.js';
+
+const FMP_API_KEY = process.env.FMP_API_KEY;
+const FMP_BASE    = 'https://financialmodelingprep.com';
 
 // ── GET /api/settings/nav ─────────────────────────────────────────────────────
 
@@ -137,7 +141,7 @@ export async function pendingEntryConfirm(req, res) {
       maxGapPct:    entry.gapPct || 0,
       currentPrice: +fillPrice,
       isETF:        entry.isETF || false,
-      sector:       entry.isETF ? 'ETF' : (entry.sector || '—'),
+      sector:       entry.isETF ? 'ETF' : normalizeSector(entry.sector || ''),
       fills,
       status:       'ACTIVE',
       ownerId:      req.user.userId,
@@ -149,6 +153,21 @@ export async function pendingEntryConfirm(req, res) {
       killTier:     entry.killTier   || null,
       fromQueue:    true,
     };
+
+    // Guard: if sector is still blank/Unknown after normalization, fetch from FMP
+    if (!position.isETF && (!position.sector || position.sector === 'Unknown' || position.sector === '—')) {
+      try {
+        const url = `${FMP_BASE}/api/v3/profile/${position.ticker}?apikey=${FMP_API_KEY}`;
+        const profileRes = await fetch(url);
+        const profile = await profileRes.json();
+        const fetched = normalizeSector(profile?.[0]?.sector || '');
+        position.sector = fetched || 'Unknown';
+        console.log(`[pendingEntries] sector fallback for ${position.ticker}: "${fetched}"`);
+      } catch (e) {
+        console.warn(`[pendingEntries] sector FMP fallback failed for ${position.ticker}:`, e.message);
+        position.sector = 'Unknown';
+      }
+    }
 
     await db.collection('pnthr_portfolio').insertOne(position);
     await db.collection('pnthr_pending_entries').updateOne(

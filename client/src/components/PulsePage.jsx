@@ -186,7 +186,6 @@ export default function PulsePage({ onNavigate }) {
         />
       )}
       <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
-      <MacroStrip marketSnapshot={data.marketSnapshot} />
 
       {/* TIER 3: Portfolio — Heat gauge + positions + alerts/lots in one band */}
       <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} />

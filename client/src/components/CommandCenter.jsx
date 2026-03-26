@@ -1740,6 +1740,7 @@ export default function CommandCenter({ onNavigate }) {
   const [nav,           setNav]           = useState(() => currentUser?.accountSize ?? 100000);
   const navSaveTimer    = useRef(null);
   const navLastEditedAt = useRef(0); // timestamp of last manual NAV edit
+  const riskAdvisorRef  = useRef(null); // scroll target when arriving from Pulse "View risk advisor"
 
   // Debounce-save nav to profile whenever it changes (1s after last keystroke)
   function handleNavChange(value) {
@@ -1951,6 +1952,16 @@ export default function CommandCenter({ onNavigate }) {
     }, 60000);
     return () => clearInterval(timer);
   }, []);
+
+  // Scroll to Risk Advisor when arriving via Pulse "View risk advisor →" link
+  useEffect(() => {
+    if (!loading && window.location.hash === '#risk-advisor') {
+      window.location.hash = ''; // clear so back-nav doesn't re-trigger
+      setTimeout(() => {
+        riskAdvisorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120); // brief delay to let the DOM settle after loading flips false
+    }
+  }, [loading]);
 
   // Load positions, pending entries, and NAV on mount
   useEffect(() => {
@@ -2248,7 +2259,9 @@ export default function CommandCenter({ onNavigate }) {
             </div>
 
             {/* Risk Advisor — runs every time positions load */}
-            {!loading && <RiskAdvisor recommendations={advisorRecs} sectorRecs={sectorRecs} onOpenChart={ticker => setChartModal({ stocks: [{ ticker, symbol: ticker, currentPrice: null }], index: 0 })} />}
+            <div ref={riskAdvisorRef}>
+              {!loading && <RiskAdvisor recommendations={advisorRecs} sectorRecs={sectorRecs} onOpenChart={ticker => setChartModal({ stocks: [{ ticker, symbol: ticker, currentPrice: null }], index: 0 })} />}
+            </div>
 
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#555' }}>Loading positions…</div>

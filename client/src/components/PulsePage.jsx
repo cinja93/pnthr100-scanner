@@ -1378,7 +1378,7 @@ function AlertStrip({ alerts, lotsReady, onNavigate }) {
           {(lotsReady || []).map(l => `${l.ticker} Lot ${l.lot}`).join(', ')}
         </span>
       )}
-      <span onClick={() => onNavigate?.('command')}
+      <span onClick={() => { window.location.hash = '#risk-advisor'; onNavigate?.('command'); }}
         style={{ marginLeft: 'auto', fontSize: 12, color: '#888', cursor: 'pointer',
           textDecoration: 'underline', textDecorationColor: 'rgba(136,136,136,0.3)', textUnderlineOffset: 3 }}>
         View risk advisor →

@@ -76,19 +76,29 @@ export default function QueueReviewPanel({ onClose }) {
   const totalOver = prTotalPct > TOTAL_CAP;
   const overCap   = stockOver || etfOver || totalOver;
 
-  // ── Sector concentration — ETFs exempt ────────────────────────────────────
-  const sectorCounts = {};
-  for (const p of activePosns) {
-    if (p.isETF) continue;
-    const s = p.sector || 'Unknown';
-    sectorCounts[s] = (sectorCounts[s] || 0) + 1;
+  // ── Sector net directional exposure — ETFs exempt ─────────────────────────
+  // Net Exposure = |longs - shorts|; limit is 3
+  const sectorMap = {};
+  function addToSector(ticker, sector, direction, isETF) {
+    if (isETF) return;
+    const s   = sector || 'Unknown';
+    const dir = (direction || '').toUpperCase();
+    if (!sectorMap[s]) sectorMap[s] = { longs: [], shorts: [] };
+    if (dir === 'LONG') sectorMap[s].longs.push(ticker);
+    else sectorMap[s].shorts.push(ticker);
   }
-  for (const q of items) {
-    if (q.isETF) continue;
-    const s = q.sector || 'Unknown';
-    sectorCounts[s] = (sectorCounts[s] || 0) + 1;
-  }
-  const saturatedSectors = Object.entries(sectorCounts).filter(([, c]) => c > 3);
+  for (const p of activePosns) addToSector(p.ticker, p.sector, p.direction, p.isETF);
+  for (const q of items)       addToSector(q.ticker, q.sector, q.direction, q.isETF);
+
+  const saturatedSectors = Object.entries(sectorMap)
+    .map(([sector, { longs, shorts }]) => ({
+      sector,
+      longs:       longs.length,
+      shorts:      shorts.length,
+      netExposure: Math.abs(longs.length - shorts.length),
+      netDir:      longs.length >= shorts.length ? 'LONG' : 'SHORT',
+    }))
+    .filter(s => s.netExposure > 3);
 
   // ── Option A: suggest positions to close to get under each cap ────────────
   // Only close stocks to make room for stock queue, ETFs for ETF queue
@@ -142,7 +152,7 @@ export default function QueueReviewPanel({ onClose }) {
   }
 
   // ── Overall canSend ───────────────────────────────────────────────────────
-  const canSend = !overCap && saturatedSectors.length === 0;
+  const canSend = !overCap && saturatedSectors.length === 0; // only block on CRITICAL (net > 3)
 
   // ── Send handler ──────────────────────────────────────────────────────────
   async function handleSend() {
@@ -262,14 +272,14 @@ export default function QueueReviewPanel({ onClose }) {
               cap={TOTAL_CAP} warn={totalOver} />
           </div>
 
-          {/* Sector concentration */}
+          {/* Sector net exposure — only shown when CRITICAL (net > 3) */}
           {saturatedSectors.length > 0 && (
-            <div style={{ background: 'rgba(255,193,7,0.08)', border: '1px solid rgba(255,193,7,0.25)',
+            <div style={{ background: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.35)',
               borderRadius: 6, padding: '8px 12px', marginTop: 10, fontSize: 11 }}>
-              <div style={{ color: '#ffc107', fontWeight: 700, marginBottom: 4 }}>⚠ SECTOR CONCENTRATION (stocks only — ETFs exempt):</div>
-              {saturatedSectors.map(([sector, count]) => (
-                <div key={sector} style={{ color: '#aaa', marginLeft: 8 }}>
-                  {sector}: {count} stock position{count !== 1 ? 's' : ''} (max 3) — remove {count - 3} {sector} entry or close existing
+              <div style={{ color: '#dc3545', fontWeight: 700, marginBottom: 4 }}>● SECTOR NET EXPOSURE CRITICAL (stocks only — ETFs exempt):</div>
+              {saturatedSectors.map(s => (
+                <div key={s.sector} style={{ color: '#aaa', marginLeft: 8 }}>
+                  {s.sector}: {s.longs}L / {s.shorts}S = net {s.netExposure} {s.netDir} — add {s.netExposure - 2} {s.netDir === 'LONG' ? 'short' : 'long'}{s.netExposure - 2 > 1 ? 's' : ''} or remove from queue
                 </div>
               ))}
             </div>

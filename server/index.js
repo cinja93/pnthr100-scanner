@@ -46,6 +46,7 @@ import { generateIssue, getMostRecentFriday } from './newsletterService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
 import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateToken, resolveRole, generateApprovalToken, verifyApprovalToken } from './auth.js';
 import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
+import { calculateSectorExposure, generateSectorRecommendations } from './sectorExposure.js';
 import { sendApprovalRequestEmail, sendWelcomeEmail, sendDenialEmail } from './emailService.js';
 import { ibkrSync } from './ibkrSync.js';
 import { recordExit, calcAvgCost, calcTotalFilled } from './exitService.js';
@@ -1198,6 +1199,44 @@ async function computeSectorSignalCounts() {
 // GET /api/sector-signal-counts — returns instantly from cache (computed at startup)
 app.get('/api/sector-signal-counts', async (req, res) => {
   res.json(sectorSignalCountsCache); // null until background job finishes (~2 min after start)
+});
+
+// GET /api/sector-exposure — net directional exposure per sector for Risk Advisor v2
+app.get('/api/sector-exposure', authenticateJWT, async (req, res) => {
+  try {
+    const db = client.db('pnthr');
+    const positions = await db.collection('pnthr_portfolio')
+      .find({ ownerId: req.user.userId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
+      .toArray();
+
+    const exposure = calculateSectorExposure(positions);
+
+    // Build kill score map keyed by ticker (most recent score per ticker)
+    const killDocs = await db.collection('pnthr_kill_scores')
+      .find({}, { projection: { ticker: 1, totalScore: 1, killRank: 1, tier: 1, signal: 1, sector: 1 } })
+      .sort({ createdAt: -1 })
+      .toArray();
+    const killMap = {};
+    for (const s of killDocs) {
+      if (!killMap[s.ticker]) killMap[s.ticker] = s; // keep most recent only
+    }
+
+    const recommendations = generateSectorRecommendations(exposure, killMap);
+
+    res.json({
+      exposure,
+      recommendations,
+      summary: {
+        totalSectors: Object.keys(exposure).length,
+        criticalCount: recommendations.filter(r => r.level === 'CRITICAL').length,
+        atLimitCount:  recommendations.filter(r => r.level === 'AT_LIMIT').length,
+        clearCount:    Object.values(exposure).filter(e => e.level === 'CLEAR').length,
+      },
+    });
+  } catch (err) {
+    console.error('[SECTOR-EXPOSURE] Error:', err);
+    res.status(500).json({ error: 'Failed to compute sector exposure' });
+  }
 });
 
 // GET /api/sector-stocks/:sectorKey

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchPulse, fetchLiveVix, fetchSignalStocks, fetchDevelopingSignals } from '../services/api';
+import { fetchPulse, fetchLiveVix, fetchSignalStocks, fetchDevelopingSignals, fetchSectorExposure } from '../services/api';
 import ChartModal from './ChartModal';
 
 // Returns true if developing signals should be shown (Mon–Thu anytime; Fri before 4:15 PM ET)
@@ -57,8 +57,9 @@ export default function PulsePage({ onNavigate }) {
   const [chartList, setChartList] = useState([]);
   const [chartIndex, setChartIndex] = useState(0);
   const [signalModal, setSignalModal] = useState(null);
-  const [devSignals, setDevSignals] = useState(null);
-  const [devLoading, setDevLoading] = useState(false);
+  const [devSignals,      setDevSignals]      = useState(null);
+  const [devLoading,      setDevLoading]      = useState(false);
+  const [sectorExposure,  setSectorExposure]  = useState(null);
   const autoRefreshTimer = React.useRef(null);
   const showDev = shouldShowDevelopingSignals();
 
@@ -98,10 +99,11 @@ export default function PulsePage({ onNavigate }) {
   }
 
   useEffect(() => {
-    Promise.all([fetchPulse(), fetchLiveVix()])
-      .then(([pulse, vixData]) => {
+    Promise.all([fetchPulse(), fetchLiveVix(), fetchSectorExposure().catch(() => null)])
+      .then(([pulse, vixData, secExp]) => {
         setData(pulse);
         setVix(vixData);
+        if (secExp) setSectorExposure(secExp);
         setLastRefresh(new Date());
         // Auto-refresh once warming completes (~90s for apex + ETF)
         if (pulse.cacheWarming) {
@@ -187,7 +189,7 @@ export default function PulsePage({ onNavigate }) {
       <MacroStrip marketSnapshot={data.marketSnapshot} />
 
       {/* TIER 3: Portfolio — Heat gauge + positions + alerts/lots in one band */}
-      <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} />
+      <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} />
 
       {signalModal && (
         <SignalStockModal
@@ -1327,7 +1329,7 @@ function SignalStockModal({ signal, onClose, onTickerClick }) {
 }
 
 // ── Tier 3: Combined Portfolio Status panel ────────────────────────────────────
-function PortfolioStatus({ positions, lotsReady, onNavigate }) {
+function PortfolioStatus({ positions, lotsReady, onNavigate, sectorExposure }) {
   const heat = positions?.heat || {};
   const nav = positions?.nav || 100000;
 
@@ -1392,6 +1394,35 @@ function PortfolioStatus({ positions, lotsReady, onNavigate }) {
         </div>
 
       </div>
+
+      {/* Sector Exposure summary — shown when at least one sector has data */}
+      {sectorExposure?.exposure && Object.keys(sectorExposure.exposure).length > 0 && (
+        <div style={{ marginTop: 14, borderTop: '1px solid #222', paddingTop: 12 }}>
+          <div style={{ color: '#888', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, marginBottom: 8 }}>SECTOR EXPOSURE</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 20px' }}>
+            {Object.entries(sectorExposure.exposure)
+              .sort((a, b) => b[1].netExposure - a[1].netExposure)
+              .map(([sector, d]) => {
+                const color = d.level === 'CRITICAL' ? '#dc3545' : d.level === 'AT_LIMIT' ? '#ffc107' : '#28a745';
+                const icon  = d.level === 'CRITICAL' ? '●' : d.level === 'AT_LIMIT' ? '⚠' : '✓';
+                return (
+                  <div key={sector} style={{ fontSize: 11, display: 'flex', gap: 6, alignItems: 'center', minWidth: 220 }}>
+                    <span style={{ color, fontWeight: 700, minWidth: 10 }}>{icon}</span>
+                    <span style={{ color: '#ccc', minWidth: 160 }}>{sector}</span>
+                    <span style={{ color: '#555', fontFamily: 'monospace' }}>{d.longCount}L/{d.shortCount}S</span>
+                    <span style={{ color, fontWeight: 600, fontFamily: 'monospace' }}>net {d.netExposure}</span>
+                    {d.level !== 'CLEAR' && (
+                      <span style={{ fontSize: 9, background: color, color: '#000', padding: '1px 5px', borderRadius: 3, fontWeight: 700 }}>
+                        {d.level === 'CRITICAL' ? 'CRITICAL' : 'AT LIMIT'}
+                      </span>
+                    )}
+                  </div>
+                );
+              })
+            }
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1797,6 +1797,31 @@ app.get('/api/positions',           authenticateJWT, positionsGetAll);
 app.post('/api/positions',          authenticateJWT, positionsSave);
 app.post('/api/positions/close',    authenticateJWT, positionsClose);
 app.delete('/api/positions/:id',    authenticateJWT, positionsDelete);
+
+// PATCH /api/positions/:id/direction — explicit user-initiated direction correction
+app.patch('/api/positions/:id/direction', authenticateJWT, async (req, res) => {
+  try {
+    const { direction } = req.body;
+    if (!['LONG', 'SHORT'].includes(direction)) {
+      return res.status(400).json({ error: 'direction must be LONG or SHORT' });
+    }
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const result = await db.collection('pnthr_portfolio').updateOne(
+      { id: req.params.id, ownerId: req.user.userId },
+      { $set: { direction, updatedAt: new Date() } }
+    );
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Position not found' });
+    // Also update journal entry so direction badge + discipline scoring stay correct
+    await db.collection('pnthr_journal').updateMany(
+      { positionId: req.params.id, userId: req.user.userId },
+      { $set: { direction, 'entry.direction': direction, updatedAt: new Date() } }
+    );
+    res.json({ success: true, direction });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.post('/api/ibkr/sync',          authenticateJWT, ibkrSync);
 app.get('/api/ticker/:symbol',      authenticateJWT, tickerHandler);
 app.get('/api/regime',              authenticateJWT, regimeHandler);

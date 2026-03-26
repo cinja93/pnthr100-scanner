@@ -619,7 +619,7 @@ function ExitPanel({ position, onClose, onConfirm }) {
 
 // ── Pyramid Card (position row) ───────────────────────────────────────────────
 
-function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onClearOverride, onDelete, onExitConfirmed, flashed, onOpenChart, onField }) {
+function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onClearOverride, onDelete, onExitConfirmed, flashed, onOpenChart, onField, onDirectionChange }) {
   const [expanded,      setExpanded]      = useState(false);
   const [editing,       setEditing]       = useState(null);
   const [ev,            setEv]            = useState({});
@@ -826,7 +826,22 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
             title={`View ${position.ticker} chart`}
             style={{ fontSize: 17, fontWeight: 800, fontFamily: 'monospace', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(212,160,23,0.4)', textUnderlineOffset: 3 }}
           >{position.ticker}</span>
-          <SigBadge d={position.direction} />
+          {onDirectionChange ? (
+            <span
+              onClick={() => {
+                const newDir = position.direction === 'LONG' ? 'SHORT' : 'LONG';
+                if (window.confirm(`Change ${position.ticker} from ${position.direction} to ${newDir}?`)) {
+                  onDirectionChange(position.id, newDir);
+                }
+              }}
+              title="Click to correct direction (LONG ⇄ SHORT)"
+              style={{ cursor: 'pointer' }}>
+              <SigBadge d={position.direction} />
+              <span style={{ fontSize: 9, color: '#444', marginLeft: 2 }}>⇄</span>
+            </span>
+          ) : (
+            <SigBadge d={position.direction} />
+          )}
           {isRecycled && <Badge color="#0f5132" bg="#d1e7dd" small>RECYCLED</Badge>}
           {!isRecycled && actualRisk > 0 && <Badge color="#ffc107" bg="rgba(255,193,7,0.1)" small>${actualRisk.toFixed(0)} AT RISK</Badge>}
           {hasFloor && <Badge color="#28a745" bg="rgba(40,167,69,0.1)" small>FLOOR +${pnlFloor.toFixed(0)}</Badge>}
@@ -1740,6 +1755,7 @@ export default function CommandCenter({ onNavigate }) {
   const [nav,           setNav]           = useState(() => currentUser?.accountSize ?? 100000);
   const navSaveTimer    = useRef(null);
   const navLastEditedAt = useRef(0); // timestamp of last manual NAV edit
+  const riskAdvisorRef  = useRef(null); // scroll target when arriving from Pulse "View risk advisor"
 
   // Debounce-save nav to profile whenever it changes (1s after last keystroke)
   function handleNavChange(value) {
@@ -1951,6 +1967,16 @@ export default function CommandCenter({ onNavigate }) {
     }, 60000);
     return () => clearInterval(timer);
   }, []);
+
+  // Scroll to Risk Advisor when arriving via Pulse "View risk advisor →" link
+  useEffect(() => {
+    if (!loading && window.location.hash === '#risk-advisor') {
+      window.location.hash = ''; // clear so back-nav doesn't re-trigger
+      setTimeout(() => {
+        riskAdvisorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120); // brief delay to let the DOM settle after loading flips false
+    }
+  }, [loading]);
 
   // Load positions, pending entries, and NAV on mount
   useEffect(() => {
@@ -2248,7 +2274,9 @@ export default function CommandCenter({ onNavigate }) {
             </div>
 
             {/* Risk Advisor — runs every time positions load */}
-            {!loading && <RiskAdvisor recommendations={advisorRecs} sectorRecs={sectorRecs} onOpenChart={ticker => setChartModal({ stocks: [{ ticker, symbol: ticker, currentPrice: null }], index: 0 })} />}
+            <div ref={riskAdvisorRef}>
+              {!loading && <RiskAdvisor recommendations={advisorRecs} sectorRecs={sectorRecs} onOpenChart={ticker => setChartModal({ stocks: [{ ticker, symbol: ticker, currentPrice: null }], index: 0 })} />}
+            </div>
 
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#555' }}>Loading positions…</div>
@@ -2263,6 +2291,16 @@ export default function CommandCenter({ onNavigate }) {
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
                     onClearOverride={clearOverride} onField={updateField}
                     onDelete={handleDeletePosition}
+                    onDirectionChange={async (id, newDir) => {
+                      try {
+                        await fetch(`${API_BASE}/api/positions/${id}/direction`, {
+                          method: 'PATCH',
+                          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ direction: newDir }),
+                        });
+                        setPositions(prev => prev.map(pos => pos.id === id ? { ...pos, direction: newDir } : pos));
+                      } catch { alert('Failed to update direction. Please try again.'); }
+                    }}
                     onExitConfirmed={async (exitResult) => {
                       // Fetch fresh positions — server excludes CLOSED ones from this query.
                       const data = await apiGet('/api/positions').catch(() => null);

@@ -628,6 +628,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const [stopVal,       setStopVal]       = useState('');
   const [twsAvg,        setTwsAvg]        = useState('');
   const [ratchetRec,    setRatchetRec]    = useState(null);
+  const [ratchetModal,  setRatchetModal]  = useState(null); // { n, updates, ratchetLevel }
   const [exitPanelOpen, setExitPanelOpen] = useState(false);
   const [localPrice,    setLocalPrice]    = useState(null); // null = not actively editing
   const [editingAvgCost, setEditingAvgCost] = useState(false);
@@ -726,19 +727,42 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const save = (n) => {
     const nf = { ...position.fills };
     nf[n] = { filled: true, price: +ev.price, shares: +ev.shares, date: ev.date };
-    // Build updates object — direction only included when it changed on Lot 1
     const updates = { fills: nf };
     if (n === 1 && editDirection !== position.direction) {
       updates.direction = editDirection;
       updates.signal    = editDirection === 'LONG' ? 'BL' : 'SS';
     }
+
+    // Lots 2+: show ratchet confirmation modal before saving
+    if (n >= 2) {
+      // Ratchet levels: Lot 3 → Lot 1 fill, Lot 4 → Lot 2 fill, Lot 5 → Lot 3 fill
+      const ratchetLevel = n === 3 ? (lots[0]?.actualPrice || null)
+                         : n === 4 ? (lots[1]?.actualPrice || null)
+                         : n === 5 ? (lots[2]?.actualPrice || null)
+                         : null;
+      setRatchetModal({ n, updates, ratchetLevel: ratchetLevel ? +ratchetLevel : null });
+      return; // wait for modal confirmation
+    }
+
+    // Lot 1: save immediately (no ratchet)
     onUpdate(position.id, updates);
     if (n === 1 && editingStop) { const v = parseFloat(stopVal); if (v) onUpdateStop(position.id, v); }
-    // Show ratchet recommendation when Lot 3, 4, or 5 is filled
-    if (n >= 3) {
-      const rec = checkRatchet(nf, position.direction, position.stopPrice);
-      if (rec) setRatchetRec(rec);
+    setEditing(null); setEditingStop(false); setTwsAvg('');
+  };
+
+  const commitFill = (withRatchet) => {
+    if (!ratchetModal) return;
+    onUpdate(position.id, ratchetModal.updates);
+    if (withRatchet && ratchetModal.ratchetLevel) {
+      const isLongDir = position.direction === 'LONG';
+      const protectedStop = isLongDir
+        ? Math.max(ratchetModal.ratchetLevel, position.stopPrice)
+        : Math.min(ratchetModal.ratchetLevel, position.stopPrice);
+      if (protectedStop !== position.stopPrice) {
+        onUpdateStop(position.id, protectedStop);
+      }
     }
+    setRatchetModal(null);
     setEditing(null); setEditingStop(false); setTwsAvg('');
   };
   const unfill = (n) => {
@@ -1138,9 +1162,17 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                               onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat(stopVal); if (v) { onUpdateStop(position.id, v); setEditingStop(false); } } if (e.key === 'Escape') setEditingStop(false); }}
                               style={{ ...fI, width: 70, color: '#FFD700', border: '1px solid rgba(255,215,0,0.5)' }} />
                           : <span style={{ fontWeight: 700, fontSize: 13, color: isRecycled ? '#28a745' : '#dc3545' }}>${position.stopPrice}</span>
-                      ) : (
-                        <span style={{ fontSize: 11, color: '#666' }}>${l.recommendedStop}</span>
-                      )}
+                      ) : (() => {
+                        // 3B: Never show a stop value that's LESS protective than current stop
+                        const rawRec = l.recommendedStop;
+                        const protectedStop = isLong
+                          ? Math.max(rawRec, position.stopPrice)
+                          : Math.min(rawRec, position.stopPrice);
+                        const alreadyProtected = rawRec !== position.stopPrice && protectedStop === position.stopPrice;
+                        return alreadyProtected
+                          ? <span style={{ fontSize: 10, color: '#28a745' }}>✓ ${position.stopPrice}</span>
+                          : <span style={{ fontSize: 11, color: '#666' }}>${protectedStop}</span>;
+                      })()}
                     </td>
                     <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                       {ed ? (
@@ -1236,6 +1268,77 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
               })}
             </tbody>
           </table>
+          {/* Ratchet confirmation modal — shown before saving Lot 2+ fills */}
+          {ratchetModal && (() => {
+            const { n, ratchetLevel } = ratchetModal;
+            const isLong = position.direction === 'LONG';
+            const curStop = position.stopPrice;
+            const isLot2 = n === 2;
+            const alreadyProtected = ratchetLevel && (isLong ? curStop >= ratchetLevel : curStop <= ratchetLevel);
+            const needsRatchet = !isLot2 && ratchetLevel && !alreadyProtected;
+            const protectedStop = needsRatchet
+              ? (isLong ? Math.max(ratchetLevel, curStop) : Math.min(ratchetLevel, curStop))
+              : null;
+            return (
+              <div style={{ margin: '0 18px 8px', padding: '14px 16px',
+                background: '#1a1a1a', border: '2px solid rgba(255,193,7,0.5)',
+                borderRadius: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#FFD700', marginBottom: 8, letterSpacing: '0.06em' }}>
+                  ⚡ LOT {n} FILL — STOP CHECK
+                </div>
+                {isLot2 && (
+                  <>
+                    <div style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>
+                      Current stop: <b style={{ color: '#dc3545' }}>${curStop}</b>
+                      <span style={{ color: '#555', marginLeft: 8 }}>· No ratchet required at Lot 2</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#666', marginBottom: 12 }}>
+                      Next ratchet at Lot 3 → move stop to Lot 1 fill price (breakeven).
+                    </div>
+                    <button onClick={() => commitFill(false)}
+                      style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 4, padding: '5px 16px', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
+                      CONFIRM FILL ✓
+                    </button>
+                  </>
+                )}
+                {!isLot2 && alreadyProtected && (
+                  <>
+                    <div style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>
+                      Current stop: <b style={{ color: '#28a745' }}>${curStop}</b>
+                      {ratchetLevel && <span style={{ color: '#28a745', marginLeft: 8 }}>✓ Already protected (≥ Lot {n-2} fill ${ratchetLevel})</span>}
+                    </div>
+                    <button onClick={() => commitFill(false)}
+                      style={{ background: '#28a745', color: '#fff', border: 'none', borderRadius: 4, padding: '5px 16px', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
+                      CONFIRM FILL ✓
+                    </button>
+                  </>
+                )}
+                {needsRatchet && (
+                  <>
+                    <div style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>
+                      Current stop: <b style={{ color: '#dc3545' }}>${curStop}</b>
+                      <span style={{ color: '#ffc107', marginLeft: 8 }}>→ Recommended: ${protectedStop} (Lot {n-2} fill)</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => commitFill(true)}
+                        style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 4, padding: '5px 16px', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
+                        FILL + RATCHET STOP → ${protectedStop}
+                      </button>
+                      <button onClick={() => commitFill(false)}
+                        style={{ background: 'rgba(255,255,255,0.08)', color: '#aaa', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4, padding: '5px 12px', fontSize: 11, cursor: 'pointer' }}>
+                        Fill without ratchet
+                      </button>
+                      <button onClick={() => setRatchetModal(null)}
+                        style={{ background: 'none', color: '#666', border: 'none', fontSize: 12, cursor: 'pointer', marginLeft: 4 }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Stop ratchet recommendation — shown after Lot 3/4/5 fill */}
           {ratchetRec && (
             <div style={{
@@ -1970,11 +2073,11 @@ export default function CommandCenter({ onNavigate }) {
 
   // Scroll to Risk Advisor when arriving via Pulse "View risk advisor →" link
   useEffect(() => {
-    if (!loading && window.location.hash === '#risk-advisor') {
-      window.location.hash = ''; // clear so back-nav doesn't re-trigger
+    if (!loading && sessionStorage.getItem('scrollToRiskAdvisor')) {
+      sessionStorage.removeItem('scrollToRiskAdvisor');
       setTimeout(() => {
         riskAdvisorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 120); // brief delay to let the DOM settle after loading flips false
+      }, 300); // wait for DOM + positions to render
     }
   }, [loading]);
 

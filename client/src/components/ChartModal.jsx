@@ -928,10 +928,6 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                   <span style={{ fontSize: 11, color: tierColor, fontWeight: 700, border: `1px solid ${tierColor}`, borderRadius: 3, padding: '2px 7px', opacity: 0.85 }}>
                     {tier}
                   </span>
-                  {/* DEBUG — remove after confirming direction toggle is correct */}
-                  <span style={{ fontSize: 9, color: '#555', fontFamily: 'monospace' }}>
-                    dir:{sizePanel.dirSource} | stop:${sizePanel.stop} ({sizePanel.direction})
-                  </span>
                 </div>
                 <div style={{ display: 'flex', gap: 28, alignItems: 'baseline' }}>
                   <div>

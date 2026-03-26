@@ -6,6 +6,7 @@
 // Writes ONLY to that user's data — impossible to touch another user's records.
 
 import { connectToDatabase, upsertUserProfile } from './database.js';
+import { validatePortfolioUpdate } from './portfolioGuard.js';
 
 // ── POST /api/ibkr/sync ───────────────────────────────────────────────────────
 export async function ibkrSync(req, res) {
@@ -100,10 +101,16 @@ export async function ibkrSync(req, res) {
         };
         if (validPrice) $setFields.currentPrice = ibkr.marketPrice;
 
+        const updateDoc = { $set: $setFields };
+        try { validatePortfolioUpdate(updateDoc, 'ibkr-sync'); }
+        catch (guardErr) {
+          console.error(`[IBKR] Guard blocked update for ${pp.ticker}: ${guardErr.message}`);
+          return null; // skip this position rather than overwrite sacred fields
+        }
         return {
           updateOne: {
             filter: { id: pp.id, ownerId: userId },
-            update: { $set: $setFields },
+            update: updateDoc,
           },
         };
       })

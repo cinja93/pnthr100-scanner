@@ -389,6 +389,33 @@ export function getCachedSignals() {
   return result;
 }
 
+/**
+ * Return a Set of tickers currently showing developing signal characteristics.
+ * Uses the in-memory signal cache — no FMP calls, synchronous, safe to call at confirm time.
+ *
+ * A developing ticker has:
+ *   - BL developing: EMA rising (emaRising === true) but no confirmed BL signal yet
+ *   - SS developing: EMA falling (emaRising === false) but no confirmed SS signal yet
+ *   - has lastWeekHigh or lastWeekLow (confirms candle data was available for the check)
+ *
+ * This is the fast approximation used at CONFIRM ENTRY to set entryContext.
+ * The full within-2%-of-high check runs only in the Pulse developing signals API.
+ */
+export function getDevelopingSignalTickers() {
+  const signalMap = getCachedSignals();
+  if (!signalMap) return new Set();
+  const tickers = new Set();
+  for (const [ticker, s] of Object.entries(signalMap)) {
+    if (s.signal !== 'BL' && s.emaRising === true && s.lastWeekHigh != null) {
+      tickers.add(ticker.toUpperCase());
+    }
+    if (s.signal !== 'SS' && s.emaRising === false && s.lastWeekLow != null) {
+      tickers.add(ticker.toUpperCase());
+    }
+  }
+  return tickers;
+}
+
 // Force-clear signal cache so next getSignals() call recomputes with latest code.
 // Used by developing-signals endpoint when cache predates emaRising field.
 export function clearSignalCache() {

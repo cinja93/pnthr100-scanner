@@ -15,6 +15,7 @@ import { createJournalEntry } from './journalService.js';
 import { fetchMarketSnapshot, getSectorEtf } from './marketSnapshot.js';
 import { fetchTechnicalSnapshot } from './technicalSnapshot.js';
 import { normalizeSector } from './sectorUtils.js';
+import { getDevelopingSignalTickers } from './signalService.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE    = 'https://financialmodelingprep.com';
@@ -153,6 +154,28 @@ export async function pendingEntryConfirm(req, res) {
       killTier:     entry.killTier   || null,
       fromQueue:    true,
     };
+
+    // ── Determine entryContext for discipline scoring ─────────────────────────
+    // Set at confirm time and never changed — reflects what the trader knew at entry.
+    {
+      const signalData = entry.signal || entry.pnthrSignal;
+      const signalAge  = entry.signalAge || entry.weeksSince || 0;
+      if (signalData === 'BL' || signalData === 'SS') {
+        position.entryContext = signalAge <= 1 ? 'CONFIRMED_SIGNAL' : 'STALE_SIGNAL';
+      } else {
+        // No confirmed signal — check developing signals cache (fast, no FMP)
+        try {
+          const devTickers = getDevelopingSignalTickers();
+          position.entryContext = devTickers.has(position.ticker.toUpperCase())
+            ? 'DEVELOPING_SIGNAL'
+            : 'NO_SIGNAL';
+        } catch (e) {
+          console.warn('[ENTRY CONTEXT] developing check failed:', e.message);
+          position.entryContext = 'NO_SIGNAL';
+        }
+      }
+      console.log(`[CONFIRM ENTRY] ${position.ticker}: entryContext=${position.entryContext} signal=${signalData || 'none'}`);
+    }
 
     // Guard: if sector is still blank/Unknown after normalization, fetch from FMP
     if (!position.isETF && (!position.sector || position.sector === 'Unknown' || position.sector === '—')) {

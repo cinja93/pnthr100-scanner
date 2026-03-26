@@ -8,7 +8,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── T1-A: Signal Quality (0-15 pts) ──────────────────────────────────────────
-function scoreSignalQuality(signal, signalAge, direction) {
+// NOTE: entryContext is set at CONFIRM ENTRY time and never changes.
+// Even if the stock subsequently confirms as BL+1, the entry context
+// remains DEVELOPING_SIGNAL because that's what the trader knew at entry.
+function scoreSignalQuality(signal, signalAge, direction, entryContext) {
+  // Developing signal: 3/4 conditions met at time of entry — system-aware, informed entry
+  if (entryContext === 'DEVELOPING_SIGNAL') {
+    return {
+      score:  10,
+      label:  'DEVELOPING',
+      detail: 'Entered on a developing signal (3/4 conditions met, within 2% of trigger). System-aware entry pending confirmation.',
+    };
+  }
+
   if (!signal || signal === 'PAUSE' || signal === 'NO_SIGNAL') {
     return { score: 0, label: 'NO SIGNAL', detail: 'Entered without a PNTHR signal' };
   }
@@ -199,8 +211,9 @@ export function computeDisciplineScore(journal) {
   const direction  = journal.direction || 'LONG';
   const exchange   = journal.exchange  || '';
   const isETF      = journal.isETF    || false;
-  const signal     = journal.signal   || null;
-  const signalAge  = journal.signalAge ?? null;
+  const signal      = journal.signal      || null;
+  const signalAge   = journal.signalAge   ?? null;
+  const entryContext = journal.entryContext ?? null;
   const hasSignal  = !!(signal && signal !== 'PAUSE' && signal !== 'NO_SIGNAL');
   const lots       = Array.isArray(journal.lots)  ? journal.lots  : [];
   const exits      = Array.isArray(journal.exits) ? journal.exits : [];
@@ -234,7 +247,7 @@ export function computeDisciplineScore(journal) {
   }
 
   // === TIER 1: STOCK SELECTION (40 pts) ===
-  const t1a = scoreSignalQuality(signal, signalAge, direction);
+  const t1a = scoreSignalQuality(signal, signalAge, direction, entryContext);
   const t1b = scoreKillContext(killScore);
   const t1c = scoreIndexTrend(direction, marketE, exchange);
   const t1d = scoreSectorTrend(direction, marketE);

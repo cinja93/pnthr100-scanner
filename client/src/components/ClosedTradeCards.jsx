@@ -87,8 +87,10 @@ function computeChecks(entry) {
 
   const sig    = entry.signal;
   const sigAge = entry.signalAge ?? 0;
+  const entryCtx = entry.entryContext || null;
   let signalCheck = null;
-  if (!sig || sig === 'PAUSE' || sig === 'NO_SIGNAL') signalCheck = 'warn';
+  if (entryCtx === 'DEVELOPING_SIGNAL') signalCheck = 'developing';
+  else if (!sig || sig === 'PAUSE' || sig === 'NO_SIGNAL') signalCheck = 'warn';
   else if ((dir === 'LONG' && sig === 'BL' && sigAge <= 1) || (dir === 'SHORT' && sig === 'SS' && sigAge <= 1)) signalCheck = true;
   else signalCheck = false;
 
@@ -156,11 +158,12 @@ function computeChecks(entry) {
 
 // ── CheckItem ─────────────────────────────────────────────────────────────────
 function CheckItem({ label, value, tooltip }) {
-  const display = value === true    ? { icon: '✓', color: '#28a745' }
-                : value === false   ? { icon: '✗', color: '#dc3545' }
-                : value === 'warn'  ? { icon: '⚠', color: '#FFD700' }
-                : value === 'na'    ? { icon: 'N/A', color: '#444' }
-                : /* null */          { icon: '—', color: '#333' };
+  const display = value === true          ? { icon: '✓', color: '#28a745' }
+                : value === false         ? { icon: '✗', color: '#dc3545' }
+                : value === 'warn'        ? { icon: '⚠', color: '#FFD700' }
+                : value === 'developing'  ? { icon: '◆', color: '#FFD700' }
+                : value === 'na'          ? { icon: 'N/A', color: '#444' }
+                : /* null */                { icon: '—', color: '#333' };
   return (
     <div title={tooltip} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 38, cursor: 'help' }}>
       <span style={{ color: display.color, fontSize: '0.95rem', fontWeight: 700, lineHeight: 1 }}>{display.icon}</span>
@@ -183,7 +186,7 @@ function ScoreTierBox({ title, subtotal, max, components }) {
           <span style={{ color: '#888' }}>{c.name}</span>
           <span style={{ display: 'flex', gap: 6 }}>
             <span style={{ color: '#666' }}>{c.score}/{c.max}</span>
-            <span style={{ color: c.score >= c.max ? '#28a745' : c.score > 0 ? '#FFD700' : '#dc3545', fontWeight: 600 }}>{c.label}</span>
+            <span style={{ color: c.label === 'DEVELOPING' ? '#FFD700' : c.score >= c.max ? '#28a745' : c.score > 0 ? '#FFD700' : '#dc3545', fontWeight: 600 }}>{c.label === 'DEVELOPING' ? '◆ DEVELOPING' : c.label}</span>
           </span>
         </div>
       ))}

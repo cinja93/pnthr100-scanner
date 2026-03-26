@@ -602,7 +602,7 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
           {entry.exchange && <span style={{ color: '#555', fontSize: '0.75rem' }}>{entry.exchange}</span>}
           {entry.userConfirmed?.confirmedAt && (
             <span
-              onClick={() => setShowCompleteScore(v => !v)}
+              onClick={e => { e.stopPropagation(); setShowCompleteScore(v => !v); }}
               title="Click to review or correct your confirmed answers"
               style={{ background: 'rgba(212,160,23,0.15)', border: '1px solid #D4A017', color: '#FFD700', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer' }}
             >

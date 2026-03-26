@@ -449,7 +449,7 @@ function CompleteYourScore({ entry, questions, reviewMode, onSave }) {
       });
       if (!res.ok) throw new Error('Failed to save');
       const { newScore } = await res.json();
-      onSave?.(entry._id, newScore);
+      onSave?.(entry._id, newScore, answers);
     } catch (e) {
       alert('Failed to save score: ' + e.message);
     } finally {
@@ -777,8 +777,20 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
               entry={entry}
               questions={activeQs}
               reviewMode={isReviewMode}
-              onSave={(id, newScore) => {
-                setEntry(prev => ({ ...prev, discipline: newScore, userConfirmed: { ...prev.userConfirmed, confirmedAt: new Date() } }));
+              onSave={(id, newScore, sentAnswers) => {
+                setEntry(prev => ({
+                  ...prev,
+                  discipline: newScore,
+                  userConfirmed: {
+                    ...prev.userConfirmed,
+                    confirmedAt: new Date(),
+                    ...(sentAnswers?.signal      != null ? { signal:      sentAnswers.signal      } : {}),
+                    ...(sentAnswers?.killScore   != null ? { killScore:   sentAnswers.killScore   } : {}),
+                    ...(sentAnswers?.indexTrend  != null ? { indexTrend:  sentAnswers.indexTrend  } : {}),
+                    ...(sentAnswers?.sectorTrend != null ? { sectorTrend: sentAnswers.sectorTrend } : {}),
+                    ...(sentAnswers?.sizing      != null ? { sizing:      sentAnswers.sizing      } : {}),
+                  },
+                }));
                 setShowCompleteScore(false);
                 onConfirmScore?.(id, newScore);
               }}

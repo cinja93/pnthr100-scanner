@@ -207,8 +207,8 @@ function DataCell({ label, value, color, tooltip }) {
 // ── ConditionRow ──────────────────────────────────────────────────────────────
 function ConditionRow({ label, value, detail, badge, badgeColor, color }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0', fontSize: '0.78rem' }}>
-      <span style={{ color: '#777', minWidth: 64, flexShrink: 0 }}>{label}</span>
+    <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', columnGap: 10, padding: '1px 0', fontSize: '0.78rem' }}>
+      <span style={{ color: '#777', flexShrink: 0 }}>{label}</span>
       <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
         {badge && <span style={{ background: badgeColor, color: '#000', padding: '1px 5px', borderRadius: 3, fontSize: '0.66rem', fontWeight: 700 }}>{badge}</span>}
         {value != null && <span style={{ color: color || '#ccc' }}>{value}</span>}
@@ -247,7 +247,7 @@ function MarketColumn({ snap, tech, dir, label }) {
   const vixZ = snap.vix ? getVixZone(snap.vix) : null;
 
   return (
-    <div style={{ padding: '12px 14px', flex: 1 }}>
+    <div style={{ padding: '12px 14px', flex: 1, maxWidth: 480 }}>
       <div style={{ color: label === 'AT ENTRY' ? '#D4A017' : '#777', fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', marginBottom: 8 }}>{label}</div>
 
       <div style={{ color: '#555', fontSize: '0.62rem', letterSpacing: '0.06em', marginBottom: 3 }}>MARKET</div>
@@ -420,26 +420,26 @@ function getReviewQuestions(entry) {
   ];
 }
 
-function CompleteYourScore({ entry, disc, onSave, forceOpen }) {
-  // Pre-populate from existing userConfirmed so corrections show current selections
+// questions and reviewMode are now passed from the parent (TradeCard) so the
+// parent controls exactly what to show — no internal re-derivation needed.
+function CompleteYourScore({ entry, questions, reviewMode, onSave }) {
+  // Pre-populate from existing userConfirmed so saved answers show highlighted
   const [answers, setAnswers] = useState(() => {
     const uc = entry.userConfirmed || {};
     return {
-      ...(uc.signal     != null ? { signal:      uc.signal     } : {}),
-      ...(uc.killScore  != null ? { killScore:   uc.killScore  } : {}),
-      ...(uc.indexTrend != null ? { indexTrend:  uc.indexTrend } : {}),
-      ...(uc.sectorTrend!= null ? { sectorTrend: uc.sectorTrend} : {}),
-      ...(uc.sizing     != null ? { sizing:      uc.sizing     } : {}),
+      ...(uc.signal      != null ? { signal:      uc.signal      } : {}),
+      ...(uc.killScore   != null ? { killScore:   uc.killScore   } : {}),
+      ...(uc.indexTrend  != null ? { indexTrend:  uc.indexTrend  } : {}),
+      ...(uc.sectorTrend != null ? { sectorTrend: uc.sectorTrend } : {}),
+      ...(uc.sizing      != null ? { sizing:      uc.sizing      } : {}),
     };
   });
-  const [saving, setSaving]   = useState(false);
-  const questions = getScoreQuestions(entry, disc);
+  const [saving, setSaving] = useState(false);
 
-  // When forceOpen is true (VERIFIED badge clicked) always render even if no new questions
-  if (questions.length === 0 && !forceOpen) return null;
+  const hasAnswers = Object.keys(answers).length > 0;
 
   const handleSave = async () => {
-    if (Object.keys(answers).length === 0) return;
+    if (!hasAnswers) return;
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/api/journal/${entry._id}/confirm-score`, {
@@ -457,28 +457,21 @@ function CompleteYourScore({ entry, disc, onSave, forceOpen }) {
     }
   };
 
-  const isReview = forceOpen && entry.userConfirmed?.confirmedAt;
-  const hasAnswers = Object.keys(answers).length > 0;
-
-  // Review mode: show full question set from userConfirmed keys (disc scores already confirmed, not UNKNOWN)
-  // Normal mode: only show questions for fields that still need data
-  const displayQuestions = isReview ? getReviewQuestions(entry) : questions;
-
   return (
-    <div style={{ border: `1px solid ${isReview ? '#D4A017' : '#D4A017'}`, borderRadius: 8, padding: 16, backgroundColor: 'rgba(212,160,23,0.05)', margin: '10px 14px' }}>
+    <div style={{ border: '1px solid #D4A017', borderRadius: 8, padding: 16, backgroundColor: 'rgba(212,160,23,0.05)', margin: '10px 14px' }}>
       <div style={{ color: '#FFD700', fontWeight: 700, fontSize: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span>{isReview ? '✎' : '?'}</span>
-        {isReview
+        <span>{reviewMode ? '✎' : '?'}</span>
+        {reviewMode
           ? 'REVIEW CONFIRMED ANSWERS — click any option to correct it'
           : `COMPLETE YOUR SCORE — ${questions.length} field${questions.length > 1 ? 's' : ''} need confirmation`}
       </div>
       <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>
-        {isReview
+        {reviewMode
           ? 'Your previously confirmed answers are highlighted. Change any selection and hit SAVE AND RESCORE.'
           : "Some data wasn't captured automatically at entry. Confirm these to get an accurate discipline score."}
       </div>
 
-      {displayQuestions.map(q => (
+      {questions.map(q => (
         <div key={q.id} style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 13, color: '#ccc', marginBottom: 6 }}>{q.question}</div>
           {q.type === 'single_select' && (
@@ -521,7 +514,7 @@ function CompleteYourScore({ entry, disc, onSave, forceOpen }) {
         </div>
       ))}
 
-      <button onClick={handleSave} disabled={(isReview ? !hasAnswers : !hasAnswers) || saving}
+      <button onClick={handleSave} disabled={!hasAnswers || saving}
         style={{
           padding: '7px 18px', borderRadius: 5, fontWeight: 700, fontSize: 12,
           cursor: hasAnswers && !saving ? 'pointer' : 'default',
@@ -772,16 +765,26 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
         </div>
 
         {/* ── Complete Your Score / Review Confirmed Answers ── */}
-        <CompleteYourScore
-          entry={entry}
-          disc={disc}
-          forceOpen={showCompleteScore}
-          onSave={(id, newScore) => {
-            setEntry(prev => ({ ...prev, discipline: newScore, userConfirmed: { ...prev.userConfirmed, confirmedAt: new Date() } }));
-            setShowCompleteScore(false);
-            onConfirmScore?.(id, newScore);
-          }}
-        />
+        {(() => {
+          const normalQs = getScoreQuestions(entry, disc);
+          const isReviewMode = showCompleteScore && !!entry.userConfirmed?.confirmedAt;
+          const reviewQs = isReviewMode ? getReviewQuestions(entry) : [];
+          const activeQs = isReviewMode ? reviewQs : normalQs;
+          const shouldShow = normalQs.length > 0 || showCompleteScore;
+          if (!shouldShow) return null;
+          return (
+            <CompleteYourScore
+              entry={entry}
+              questions={activeQs}
+              reviewMode={isReviewMode}
+              onSave={(id, newScore) => {
+                setEntry(prev => ({ ...prev, discipline: newScore, userConfirmed: { ...prev.userConfirmed, confirmedAt: new Date() } }));
+                setShowCompleteScore(false);
+                onConfirmScore?.(id, newScore);
+              }}
+            />
+          );
+        })()}
       </>}
     </div>
   );

@@ -1204,7 +1204,7 @@ app.get('/api/sector-signal-counts', async (req, res) => {
 // GET /api/sector-exposure — net directional exposure per sector for Risk Advisor v2
 app.get('/api/sector-exposure', authenticateJWT, async (req, res) => {
   try {
-    const db = client.db('pnthr');
+    const db = await connectToDatabase();
     const positions = await db.collection('pnthr_portfolio')
       .find({ ownerId: req.user.userId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
       .toArray();

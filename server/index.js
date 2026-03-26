@@ -1204,6 +1204,7 @@ app.get('/api/sector-signal-counts', async (req, res) => {
 // GET /api/sector-exposure — net directional exposure per sector for Risk Advisor v2
 app.get('/api/sector-exposure', authenticateJWT, async (req, res) => {
   try {
+    const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
     if (!db) return res.status(503).json({ error: 'Database unavailable' });
 

@@ -274,7 +274,16 @@ export default function ApexPage() {
   const [chartStocks, setChartStocks] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: 'apexScore', dir: 'desc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
+  const [killSearch, setKillSearch] = useState('');
   const sortedRef = useRef([]);
+  const searchRowRef = useRef(null);
+
+  // Auto-scroll to exact match when search has exactly one result
+  useEffect(() => {
+    if (killSearchTrim && displaySorted.length === 1 && searchRowRef.current) {
+      searchRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [killSearch]);
 
   async function openHealth() {
     setHealthOpen(true);
@@ -384,7 +393,13 @@ export default function ApexPage() {
     return true;
   });
 
+  // Kill search: filter within already-filtered+sorted results
   const sorted = sortStocks(filtered, sortConfig);
+  const killSearchTrim = killSearch.trim();
+  const displaySorted = killSearchTrim
+    ? sorted.filter(s => s.ticker.includes(killSearchTrim))
+    : sorted;
+  const killSearchNotFound = killSearchTrim && displaySorted.length === 0;
 
   function handleRowClick(stock, idx, list) {
     setChartStocks(list);
@@ -491,30 +506,55 @@ export default function ApexPage() {
             </button>
           </div>
 
-          {/* ── L / S / All Tabs + Formula Guide button ─────────────────────── */}
-          <div className={styles.sideTabs}>
-            {[['all', 'All'], ['long', 'Longs (BL)'], ['short', 'Shorts (SS)']].map(([key, label]) => (
-              <button
-                key={key}
-                className={`${styles.sideTab} ${side === key ? styles.sideTabActive : ''}`}
-                onClick={() => setSide(key)}
-              >
-                {label}
-                {key === 'long' && (
-                  <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.bl, e)} title="What is a BL signal?">ⓘ</span>
-                )}
-                {key === 'short' && (
-                  <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.ss, e)} title="What is an SS signal?">ⓘ</span>
-                )}
-                <span className={styles.sideTabCount}>
-                  {key === 'all' ? filtered.length
-                    : key === 'long'  ? stocks.filter(s => s.signal === 'BL' && (tierFilter === 'all' || s.tier === tierFilter)).length
-                    : stocks.filter(s => s.signal === 'SS' && (tierFilter === 'all' || s.tier === tierFilter)).length}
-                </span>
-              </button>
-            ))}
+          {/* ── Controls Bar: Signal tabs · Search · Admin tools ─────────────── */}
+          <div className={styles.controlsBar}>
+
+            {/* Left: Signal filter tabs */}
+            <div className={styles.controlsLeft}>
+              {[['all', 'All'], ['long', 'Longs (BL)'], ['short', 'Shorts (SS)']].map(([key, label]) => (
+                <button
+                  key={key}
+                  className={`${styles.sideTab} ${side === key ? styles.sideTabActive : ''}`}
+                  onClick={() => setSide(key)}
+                >
+                  {label}
+                  {key === 'long' && (
+                    <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.bl, e)} title="What is a BL signal?">ⓘ</span>
+                  )}
+                  {key === 'short' && (
+                    <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.ss, e)} title="What is an SS signal?">ⓘ</span>
+                  )}
+                  <span className={styles.sideTabCount}>
+                    {key === 'all' ? filtered.length
+                      : key === 'long'  ? stocks.filter(s => s.signal === 'BL' && (tierFilter === 'all' || s.tier === tierFilter)).length
+                      : stocks.filter(s => s.signal === 'SS' && (tierFilter === 'all' || s.tier === tierFilter)).length}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Divider */}
+            <div className={styles.controlsDivider} />
+
+            {/* Centre: Ticker search */}
+            <div className={styles.controlsSearch}>
+              <span className={styles.controlsSearchLabel}>FIND:</span>
+              <input
+                type="text"
+                placeholder="e.g. COIN"
+                value={killSearch}
+                onChange={e => setKillSearch(e.target.value.toUpperCase())}
+                className={styles.killSearchInput}
+                style={{ borderColor: killSearch ? '#FCF000' : 'rgba(252,240,0,0.35)' }}
+              />
+              {killSearch && (
+                <button onClick={() => setKillSearch('')} className={styles.killSearchClear} title="Clear">✕</button>
+              )}
+            </div>
+
+            {/* Right: Admin tools */}
             {isAdmin && (
-              <>
+              <div className={styles.controlsRight}>
                 <button
                   ref={formulaBtnRef}
                   className={`${styles.formulaTabBtn}${formulaOpen ? ` ${styles.formulaTabBtnActive}` : ''}`}
@@ -530,12 +570,19 @@ export default function ApexPage() {
                 >
                   ⚡ System Health
                 </button>
-              </>
+              </div>
             )}
           </div>
 
           {/* ── Table ────────────────────────────────────────────────────────── */}
-          {sorted.length === 0 ? (
+          {killSearchNotFound ? (
+            <div className={styles.emptyState}>
+              <span style={{ color: '#FCF000', fontFamily: 'monospace', fontSize: 15 }}>
+                {killSearch}
+              </span>
+              <span style={{ color: '#888', marginLeft: 8 }}>— Not found in PNTHR Kill universe.</span>
+            </div>
+          ) : displaySorted.length === 0 ? (
             <div className={styles.emptyState}>No stocks match the current filters.</div>
           ) : (
             <div className={styles.tableWrap}>
@@ -557,17 +604,20 @@ export default function ApexPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(() => { sortedRef.current = sorted; return null; })()}
-                  {sorted.map((stock, idx) => {
+                  {(() => { sortedRef.current = displaySorted; return null; })()}
+                  {displaySorted.map((stock, idx) => {
                     const tier = getTierConfig(stock.tier);
                     const wks  = computeWeeksAgo(stock.signalDate);
                     const isTop10 = stock.isTop10;
                     const isOverextended = stock.overextended === true;
+                    const isSearchMatch = killSearchTrim && stock.ticker === killSearchTrim;
                     return (
                       <tr
                         id={`aprow-${stock.ticker}`}
                         key={stock.ticker}
+                        ref={isSearchMatch ? searchRowRef : null}
                         className={`${styles.row}${selectedTicker === stock.ticker ? ` ${styles.selectedRow}` : ''}${isTop10 ? ` ${styles.top10Row}` : ''}${isOverextended ? ` ${styles.overextendedRow}` : ''}`}
+                        style={isSearchMatch ? { outline: '2px solid #FCF000', outlineOffset: '-2px' } : undefined}
                         onClick={() => setSelectedTicker(stock.ticker)}
                         title={isOverextended ? `${stock.companyName || stock.ticker} — OVEREXTENDED: ${stock.scores?.d3?.separationPct ?? ''}% from EMA` : stock.companyName || stock.ticker}
                       >

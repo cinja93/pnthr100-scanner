@@ -17,6 +17,7 @@ dotenv.config();
 
 import { connectToDatabase } from './database.js';
 import { normalizeSector } from './sectorUtils.js';
+import { calculateSectorExposure } from './sectorExposure.js';
 
 const FMP_API_KEY  = process.env.FMP_API_KEY;
 const FMP_BASE     = 'https://financialmodelingprep.com';
@@ -341,17 +342,27 @@ export async function positionsSave(req, res) {
       if (!position.ticker || !position.direction) {
         return res.status(400).json({ error: 'ticker and direction are required for new positions' });
       }
-      // ── Sector concentration check (warn, not block) ────────────────────────
+      // ── Sector net-exposure check (warn, not block) ─────────────────────────
       if (position.sector && position.sector !== '—') {
-        const sectorCount = await db.collection('pnthr_portfolio').countDocuments({
-          status: 'ACTIVE',
-          sector: position.sector,
-          ownerId: req.user.userId,
-        });
-        if (sectorCount >= 3) {
+        const existingPositions = await db.collection('pnthr_portfolio')
+          .find({ ownerId: req.user.userId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
+          .toArray();
+        const exposure    = calculateSectorExposure(existingPositions);
+        const sectorName  = normalizeSector(position.sector);
+        const sectorData  = exposure[sectorName] || { longCount: 0, shortCount: 0, netExposure: 0 };
+        const newDir      = (position.direction || '').toUpperCase();
+        const projLongs   = sectorData.longCount  + (newDir === 'LONG'  ? 1 : 0);
+        const projShorts  = sectorData.shortCount + (newDir === 'SHORT' ? 1 : 0);
+        const projNet     = Math.abs(projLongs - projShorts);
+        if (projNet > 3) {
           warning = {
             type:    'SECTOR_CONCENTRATION',
-            message: `${sectorCount} active positions already in ${position.sector}. Max recommended: 2.`,
+            message: `Adding this ${newDir} in ${sectorName} would bring net exposure to ${projNet} (limit: 3). Consider balancing with a ${newDir === 'LONG' ? 'short' : 'long'} in ${sectorName}.`,
+          };
+        } else if (projNet === 3) {
+          warning = {
+            type:    'SECTOR_AT_LIMIT',
+            message: `${sectorName} will be at net exposure limit (${projLongs}L / ${projShorts}S = net 3). No further ${newDir.toLowerCase()}s without adding a ${newDir === 'LONG' ? 'short' : 'long'}.`,
           };
         }
       }

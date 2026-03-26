@@ -425,6 +425,14 @@ export async function saveSignalHistorySnapshot() {
   return res.json();
 }
 
+// ── Sector Exposure (Risk Advisor v2) ─────────────────────────────────────────
+
+export async function fetchSectorExposure() {
+  const res = await fetch(`${API_BASE}/api/sector-exposure`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json(); // { exposure, recommendations, summary }
+}
+
 // ── Pending Entries & NAV Settings ────────────────────────────────────────────
 
 export async function fetchNav() {

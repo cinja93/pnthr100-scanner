@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from 'react';
-import { API_BASE, authHeaders, updateUserProfile, fetchNav, fetchPendingEntries, confirmPendingEntry, dismissPendingEntry, deletePosition } from '../services/api.js';
+import { API_BASE, authHeaders, updateUserProfile, fetchNav, fetchPendingEntries, confirmPendingEntry, dismissPendingEntry, deletePosition, fetchSectorExposure } from '../services/api.js';
 import { useAuth } from '../AuthContext';
 import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat, isEtfTicker } from '../utils/sizingUtils.js';
 import ChartModal from './ChartModal';
@@ -43,6 +43,7 @@ function filledSharesOf(p) {
 }
 
 function avgCostOf(p) {
+  if (p.manualAvgCost) return +p.manualAvgCost;
   let cost = 0, shares = 0;
   for (let i = 1; i <= 5; i++) {
     const f = p.fills?.[i];
@@ -98,21 +99,38 @@ function runRiskAdvisor(positions, nav) {
     });
   }
 
-  // Rule 2: Sector Concentration (>3 per sector) — ETFs exempt (they ARE the diversification)
+  // Rule 2: Sector Net Directional Exposure — ETFs exempt
+  // Net Exposure = |longs - shorts|; limit is 3; CRITICAL if ≥4, AT_LIMIT if =3
   const bySector = {};
   for (const p of livePos) {
-    if (p.isETF || isEtfTicker(p.ticker)) continue; // ETFs tracked by dollar risk cap, not sector count
+    if (p.isETF || isEtfTicker(p.ticker)) continue;
     const s = p.sector || 'Unknown';
-    (bySector[s] = bySector[s] || []).push(p);
+    if (!bySector[s]) bySector[s] = { longs: [], shorts: [] };
+    const dir = (p.direction || '').toUpperCase();
+    if (dir === 'LONG') bySector[s].longs.push(p);
+    else bySector[s].shorts.push(p);
   }
-  for (const [sector, sPos] of Object.entries(bySector)) {
-    if (sPos.length > 3) {
-      const excess = sPos.length - 3;
-      const weakest = [...sPos].sort((a, b) => pnlPctOf(a) - pnlPctOf(b)).slice(0, excess);
+  for (const [sector, { longs, shorts }] of Object.entries(bySector)) {
+    const netExposure  = Math.abs(longs.length - shorts.length);
+    const netDirection = longs.length >= shorts.length ? 'LONG' : 'SHORT';
+    if (netExposure >= 4) {
+      const excess   = netExposure - 2;
+      const heavySide = netDirection === 'LONG' ? longs : shorts;
+      const weakest  = [...heavySide].sort((a, b) => pnlPctOf(a) - pnlPctOf(b)).slice(0, excess);
       recs.push({
-        priority: 'HIGH', type: 'SECTOR_CONCENTRATION',
-        message: `${sector}: ${sPos.length} positions (max 3). ${excess} must close.`,
+        priority: 'CRITICAL', type: 'SECTOR_NET_EXPOSURE',
+        sector, netExposure, netDirection,
+        longCount: longs.length, shortCount: shorts.length,
+        message: `${sector}: net ${netExposure} ${netDirection} (${longs.length}L / ${shorts.length}S). Close ${excess} or add ${excess} ${netDirection === 'LONG' ? 'short' : 'long'}${excess > 1 ? 's' : ''}.`,
         actions: weakest.map(p => ({ ticker: p.ticker, action: 'CLOSE', shares: filledSharesOf(p), reason: `Weakest in ${sector} at ${pnlPctOf(p).toFixed(1)}%` })),
+      });
+    } else if (netExposure === 3) {
+      recs.push({
+        priority: 'HIGH', type: 'SECTOR_NET_EXPOSURE',
+        sector, netExposure, netDirection,
+        longCount: longs.length, shortCount: shorts.length,
+        message: `${sector}: at net exposure limit (${longs.length}L / ${shorts.length}S = net 3 ${netDirection}). No new ${netDirection.toLowerCase()}s without a balancing ${netDirection === 'LONG' ? 'short' : 'long'}.`,
+        actions: [],
       });
     }
   }
@@ -280,6 +298,48 @@ function RiskAdvisor({ recommendations }) {
         <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.2)' }}>
           {recommendations.map((rec, i) => {
             const s = PRIORITY_STYLE[rec.priority] || PRIORITY_STYLE.HIGH;
+
+            // Rich display for net directional exposure recs
+            if (rec.type === 'SECTOR_NET_EXPOSURE') {
+              const isCrit = rec.priority === 'CRITICAL';
+              const accentColor = isCrit ? '#dc3545' : '#ffc107';
+              return (
+                <div key={i} style={{ background: s.bg, border: `1px solid ${accentColor}`, borderRadius: 8, padding: '10px 14px' }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: accentColor }}>
+                      {isCrit ? '●' : '⚠'} {rec.sector.toUpperCase()} — Net Exposure: {rec.netExposure} {rec.netDirection}
+                    </span>
+                    <span style={{ fontSize: 10, background: accentColor, color: '#000', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
+                      {isCrit ? 'CRITICAL' : 'AT LIMIT'}
+                    </span>
+                  </div>
+                  {/* Breakdown */}
+                  <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
+                    Positions: {rec.longCount} long / {rec.shortCount} short = net {rec.netExposure}
+                  </div>
+                  {/* Actions */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {rec.actions.length > 0 && (
+                      <div style={{ fontSize: 11, color: '#dc3545', fontWeight: 600, marginBottom: 2 }}>
+                        OPTION A: Close weakest {rec.netDirection.toLowerCase()} positions →
+                      </div>
+                    )}
+                    {rec.actions.map((a, j) => (
+                      <div key={j} style={{ fontSize: 11, color: s.text, fontFamily: 'monospace',
+                        paddingLeft: 8, borderLeft: `2px solid ${accentColor}` }}>
+                        → {formatAction(a)}
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 11, color: '#28a745', fontWeight: 600, marginTop: rec.actions.length > 0 ? 6 : 0 }}>
+                      {isCrit ? 'OPTION B:' : '►'} Add {rec.netDirection === 'LONG' ? 'short' : 'long'} position{rec.netExposure - 2 > 1 ? 's' : ''} in {rec.sector} to balance exposure
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            // Default renderer for all other rec types
             return (
               <div key={i} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: '10px 14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -516,7 +576,7 @@ function ExitPanel({ position, onClose, onConfirm }) {
 
 // ── Pyramid Card (position row) ───────────────────────────────────────────────
 
-function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onClearOverride, onDelete, onExitConfirmed, flashed, onOpenChart }) {
+function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onClearOverride, onDelete, onExitConfirmed, flashed, onOpenChart, onField }) {
   const [expanded,      setExpanded]      = useState(false);
   const [editing,       setEditing]       = useState(null);
   const [ev,            setEv]            = useState({});
@@ -527,6 +587,8 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const [ratchetRec,    setRatchetRec]    = useState(null);
   const [exitPanelOpen, setExitPanelOpen] = useState(false);
   const [localPrice,    setLocalPrice]    = useState(null); // null = not actively editing
+  const [editingAvgCost, setEditingAvgCost] = useState(false);
+  const [avgCostInput,   setAvgCostInput]   = useState('');
 
   const sizingStop = position.originalStop || position.stopPrice;
   const pc   = sizePosition({ netLiquidity, entryPrice: position.entryPrice, stopPrice: sizingStop, maxGapPct: position.maxGapPct || 0, direction: position.direction });
@@ -572,7 +634,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const highFilled  = Math.max(...lots.filter(l => l.filled).map(l => l.lot), 0);
   const totShr  = lots.reduce((s, l) => s + (l.filled ? l.actualShares : 0), 0);
   const totCost = lots.reduce((s, l) => s + (l.filled ? l.costBasis    : 0), 0);
-  const avg     = totShr > 0 ? totCost / totShr : position.entryPrice;
+  const avg     = position.manualAvgCost ? +position.manualAvgCost : (totShr > 0 ? totCost / totShr : position.entryPrice);
 
   // displayPrice: uses manual override if active (and market hasn't caught up yet)
   // Used for all lot-trigger calculations and P&L display when override is active.
@@ -850,9 +912,45 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
             {totShr > 0 && (
               <span style={{ fontWeight: 700, fontSize: 12 }}>
                 <span style={{ color: '#555' }}>Avg Cost: </span>
-                <b style={{ color: '#FFD700' }}>${avg.toFixed(2)}</b>
-                <span style={{ color: '#555', fontWeight: 400 }}> ({totShr} shr)</span>
-                {position.ibkrAvgCost && (() => {
+                {editingAvgCost ? (
+                  <>
+                    <input
+                      type="number" step="0.01"
+                      value={avgCostInput}
+                      onChange={e => setAvgCostInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const v = parseFloat(avgCostInput);
+                          if (v > 0) { onField(position.id, { manualAvgCost: v }); }
+                          setEditingAvgCost(false);
+                        }
+                        if (e.key === 'Escape') setEditingAvgCost(false);
+                      }}
+                      autoFocus
+                      style={{ width: 72, fontSize: 11, background: '#222', border: '1px solid #FFD700', color: '#FFD700', borderRadius: 3, padding: '1px 4px', fontFamily: 'monospace' }}
+                    />
+                    <button onClick={() => { const v = parseFloat(avgCostInput); if (v > 0) { onField(position.id, { manualAvgCost: v }); } setEditingAvgCost(false); }}
+                      style={{ marginLeft: 4, fontSize: 10, background: '#FFD700', color: '#000', border: 'none', borderRadius: 3, padding: '1px 6px', cursor: 'pointer', fontWeight: 700 }}>✓</button>
+                    <button onClick={() => setEditingAvgCost(false)}
+                      style={{ marginLeft: 2, fontSize: 10, background: '#333', color: '#aaa', border: 'none', borderRadius: 3, padding: '1px 6px', cursor: 'pointer' }}>✕</button>
+                  </>
+                ) : (
+                  <>
+                    <b style={{ color: '#FFD700' }}>${avg.toFixed(2)}</b>
+                    <span style={{ color: '#555', fontWeight: 400 }}> ({totShr} shr)</span>
+                    {position.manualAvgCost && (
+                      <span style={{ color: '#6ea8fe', marginLeft: 4, fontSize: 10, fontWeight: 400 }}>
+                        IBKR override
+                        <button onClick={() => onField(position.id, { manualAvgCost: null })}
+                          style={{ marginLeft: 3, fontSize: 9, background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: 0 }}>×</button>
+                      </span>
+                    )}
+                    <button onClick={() => { setAvgCostInput(avg.toFixed(2)); setEditingAvgCost(true); }}
+                      style={{ marginLeft: 5, fontSize: 9, background: 'none', border: '1px solid #333', color: '#555', borderRadius: 3, padding: '0 4px', cursor: 'pointer', lineHeight: '14px' }}
+                      title="Override avg cost (e.g. match IBKR)">✎</button>
+                  </>
+                )}
+                {!editingAvgCost && position.ibkrAvgCost && !position.manualAvgCost && (() => {
                   const ibkrAvg  = +position.ibkrAvgCost;
                   const diff     = Math.abs(ibkrAvg - avg);
                   const diffPct  = avg > 0 ? diff / avg * 100 : 0;
@@ -1863,6 +1961,11 @@ export default function CommandCenter({ onNavigate }) {
     patchPosition(id, { stopPrice: newStop });
   }, [patchPosition]);
 
+  const updateField = useCallback((id, fields) => {
+    setPositions(prev => prev.map(x => x.id === id ? { ...x, ...fields } : x));
+    patchPosition(id, fields);
+  }, [patchPosition]);
+
   const updatePrice = useCallback((id, newPrice) => {
     // Save as a manual override — persists through price refreshes until
     // the live market price reaches the override level (or user clears it).
@@ -1893,7 +1996,7 @@ export default function CommandCenter({ onNavigate }) {
     setTab('positions');
     try {
       const result = await apiPost('/api/positions', pos);
-      if (result.warning?.type === 'SECTOR_CONCENTRATION') {
+      if (result.warning?.type === 'SECTOR_CONCENTRATION' || result.warning?.type === 'SECTOR_AT_LIMIT') {
         setSectorWarning(result.warning.message);
         setTimeout(() => setSectorWarning(null), 10000);
       }
@@ -2111,7 +2214,7 @@ export default function CommandCenter({ onNavigate }) {
                 {positions.map(p => (
                   <PyramidCard key={p.id} position={p} netLiquidity={nav}
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
-                    onClearOverride={clearOverride}
+                    onClearOverride={clearOverride} onField={updateField}
                     onDelete={handleDeletePosition}
                     onExitConfirmed={async (exitResult) => {
                       // Fetch fresh positions — server excludes CLOSED ones from this query.

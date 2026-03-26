@@ -338,33 +338,46 @@ function RiskAdvisor({ recommendations, sectorRecs = [], onOpenChart }) {
                     ))}
                   </div>
                   {/* Option B — Kill pipeline candidates */}
-                  <div>
-                    <div style={{ fontSize: 11, color: '#28a745', fontWeight: 600, marginBottom: candidates.length > 0 ? 6 : 0 }}>
-                      {isCrit ? 'OPTION B:' : '►'} Add {rec.netExposure - 2} {oppositeDir} position{rec.netExposure - 2 > 1 ? 's' : ''} in {rec.sector} to balance exposure →
-                    </div>
-                    {candidates.length > 0 ? candidates.map((c, j) => (
-                      <div key={c.ticker} style={{ display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '4px 0 4px 12px', borderLeft: '2px solid #28a745', marginBottom: 3 }}>
-                        <span style={{ color: '#888', fontSize: 11, width: 16 }}>{j + 1}.</span>
-                        <span style={{ color: '#FFD700', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
-                          onClick={() => onOpenChart?.(c.ticker)}>
-                          {c.ticker}
-                        </span>
-                        <span style={{ color: '#888', fontSize: 11 }}>Kill #{c.rank}</span>
-                        <span style={{ color: '#aaa', fontSize: 11 }}>Score: {c.killScore}</span>
-                        <span style={{ color: '#b8860b', fontSize: 10 }}>{c.tier}</span>
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
-                          color: c.signal === 'SS' ? '#dc3545' : '#28a745',
-                          border: `1px solid ${c.signal === 'SS' ? 'rgba(220,53,69,0.3)' : 'rgba(40,167,69,0.3)'}` }}>
-                          {c.signal}{c.signalAge != null ? `+${c.signalAge}` : ''}
-                        </span>
+                  {(() => {
+                    const needed = rec.netExposure - 2;
+                    const oppSignal = rec.netDirection === 'LONG' ? 'SS' : 'BL';
+                    return (
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: candidates.length > 0 ? 6 : 4 }}>
+                          <span style={{ fontSize: 11, color: '#28a745', fontWeight: 600 }}>
+                            {isCrit ? 'OPTION B:' : '►'} Add {needed} {oppositeDir} position{needed > 1 ? 's' : ''} in {rec.sector} to balance exposure →
+                          </span>
+                          {candidates.length > 0 && candidates.length < needed && (
+                            <span style={{ fontSize: 10, color: '#ffc107', fontStyle: 'italic' }}>
+                              ({candidates.length} of {needed} {oppSignal} candidates found)
+                            </span>
+                          )}
+                        </div>
+                        {candidates.length > 0 ? candidates.map((c, j) => (
+                          <div key={c.ticker} style={{ display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '4px 0 4px 12px', borderLeft: '2px solid #28a745', marginBottom: 3 }}>
+                            <span style={{ color: '#888', fontSize: 11, width: 16 }}>{j + 1}.</span>
+                            <span style={{ color: '#FFD700', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                              onClick={() => onOpenChart?.(c.ticker)}>
+                              {c.ticker}
+                            </span>
+                            {c.rank != null && <span style={{ color: '#888', fontSize: 11 }}>Kill #{c.rank}</span>}
+                            <span style={{ color: '#aaa', fontSize: 11 }}>Score: {c.killScore}</span>
+                            {c.tier && <span style={{ color: '#b8860b', fontSize: 10 }}>{c.tier}</span>}
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
+                              color: c.signal === 'SS' ? '#dc3545' : '#28a745',
+                              border: `1px solid ${c.signal === 'SS' ? 'rgba(220,53,69,0.3)' : 'rgba(40,167,69,0.3)'}` }}>
+                              {c.signal}{c.signalAge === 0 ? ' NEW' : c.signalAge != null ? ` ${c.signalAge}w` : ''}
+                            </span>
+                          </div>
+                        )) : (
+                          <div style={{ fontSize: 11, color: '#555', fontStyle: 'italic', paddingLeft: 12 }}>
+                            No {oppSignal} candidates currently scored in {rec.sector}. Check the Kill page.
+                          </div>
+                        )}
                       </div>
-                    )) : (
-                      <div style={{ fontSize: 11, color: '#555', fontStyle: 'italic', paddingLeft: 12 }}>
-                        No {rec.netDirection === 'LONG' ? 'SS' : 'BL'} candidates currently scored in {rec.sector}. Check the Kill page.
-                      </div>
-                    )}
-                  </div>
+                    );
+                  })()}
                 </div>
               );
             }

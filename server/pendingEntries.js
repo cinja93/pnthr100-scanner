@@ -207,7 +207,27 @@ export async function pendingEntryConfirm(req, res) {
       const killData = entry.killScore
         ? { totalScore: entry.killScore, tier: entry.killTier, killRank: entry.killRank || null }
         : null;
-      const marketAtEntry = await fetchMarketSnapshot(position.sector || null).catch(() => ({}));
+      let marketAtEntry = await fetchMarketSnapshot(position.sector || null).catch(() => ({}));
+
+      // Fallback: if FMP snapshot has no SPY position data, use latest regime doc
+      if (!marketAtEntry?.spyPosition) {
+        console.warn(`[CONFIRM ENTRY] Live market snapshot incomplete for ${position.ticker}, trying regime fallback`);
+        try {
+          const regime = await db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } });
+          if (regime) {
+            marketAtEntry = {
+              ...marketAtEntry,
+              spyPosition: regime.spyPosition || (regime.spyPrice > regime.spyEma21 ? 'above' : null) || null,
+              qqqPosition: regime.qqqPosition || (regime.qqqPrice > regime.qqqEma21 ? 'above' : null) || null,
+              regime:      regime.regime      || marketAtEntry?.regime || null,
+              _source:     'regime_fallback',
+            };
+            console.log(`[CONFIRM ENTRY] Used regime fallback for market data: spy=${marketAtEntry.spyPosition}, qqq=${marketAtEntry.qqqPosition}`);
+          }
+        } catch (e) {
+          console.error(`[CONFIRM ENTRY] Regime fallback failed:`, e.message);
+        }
+      }
       const sectorAtEntry = position.sector && position.sector !== '—' ? {
         name:        position.sector,
         etfTicker:   getSectorEtf(position.sector),
@@ -259,6 +279,17 @@ export async function pendingEntryConfirm(req, res) {
         };
         const updateFields = { killScoreAtEntry };
         if (killScoreDoc.exchange) updateFields.exchange = killScoreDoc.exchange;
+
+        // Also set top-level signal + signalAge if not already captured from queue entry
+        const journalSignal    = entry.signal    || entry.pnthrSignal    || killScoreDoc.signal    || null;
+        const journalSignalAge = entry.signalAge ?? entry.weeksSince ?? killScoreDoc.signalAge ?? null;
+        if (journalSignal)             updateFields.signal    = journalSignal;
+        if (journalSignalAge != null)  updateFields.signalAge = journalSignalAge;
+        if (journalSignal && journalSignalAge != null) {
+          const ctx = journalSignalAge <= 1 ? 'CONFIRMED_SIGNAL' : 'STALE_SIGNAL';
+          updateFields.entryContext = ctx;
+        }
+
         await db.collection('pnthr_journal').updateOne(
           { positionId: posId, ownerId: req.user.userId },
           { $set: updateFields }

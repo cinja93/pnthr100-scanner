@@ -381,8 +381,10 @@ export default function JournalPage({ onNavigate }) {
   const [noteInputs, setNoteInputs] = useState({});
   const [weeklyReflection, setWeeklyReflection] = useState('');
   const [savingReview, setSavingReview] = useState(false);
-  const [migrating, setMigrating] = useState(false);
+  const [migrating,  setMigrating]  = useState(false);
   const [migrateResult, setMigrateResult] = useState(null);
+  const [rescoring,  setRescoring]  = useState(false);
+  const [rescoreResult, setRescoreResult] = useState(null);
   const [washRules, setWashRules] = useState([]);
   const [ratios, setRatios] = useState(null);
 
@@ -471,6 +473,19 @@ export default function JournalPage({ onNavigate }) {
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     d.setDate(diff);
     return d.toISOString().split('T')[0];
+  };
+
+  const runRescoreAll = async () => {
+    if (!confirm('Rescore all closed trades? This will backfill missing signal/market data from Kill scores and regime, then recompute discipline scores.')) return;
+    setRescoring(true);
+    setRescoreResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/journal/rescore-all`, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      setRescoreResult(data);
+      if (data.success) fetchData();
+    } catch (e) { setRescoreResult({ error: e.message }); }
+    setRescoring(false);
   };
 
   const runMigration = async () => {
@@ -785,6 +800,13 @@ export default function JournalPage({ onNavigate }) {
               {migrating ? '...' : '↺ sync positions'}
             </button>
           )}
+          {isAdmin && entries.some(e => e.performance?.status === 'CLOSED') && (
+            <button onClick={runRescoreAll} disabled={rescoring}
+              style={{ background: 'transparent', border: '1px solid rgba(212,160,23,0.4)', color: '#b8860b', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: rescoring ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+              title="Backfill missing signal/market data and recompute all discipline scores">
+              {rescoring ? '...' : '⚡ rescore closed'}
+            </button>
+          )}
           {tabBtn('trades', 'TRADES')}
           {tabBtn('analytics', 'ANALYTICS')}
           {tabBtn('weekly', 'WEEKLY REVIEW')}
@@ -792,6 +814,19 @@ export default function JournalPage({ onNavigate }) {
       </div>
 
       <div style={{ padding: '0 24px' }}>
+      {/* Rescore result toast */}
+      {rescoreResult && (
+        <div style={{ background: rescoreResult.error ? 'rgba(220,53,69,0.15)' : 'rgba(212,160,23,0.12)', border: `1px solid ${rescoreResult.error ? '#dc3545' : '#D4A017'}`, borderRadius: 6, padding: '8px 14px', marginBottom: 10, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: rescoreResult.error ? '#ff6b6b' : '#FFD700' }}>
+            {rescoreResult.error
+              ? `Rescore error: ${rescoreResult.error}`
+              : `⚡ Rescored ${rescoreResult.count} trade${rescoreResult.count !== 1 ? 's' : ''}: ${rescoreResult.results?.map(r => `${r.ticker} ${r.newScore}${r.fixes?.length ? ` (+${r.fixes.join(',')})` : ''}`).join(', ')}`
+            }
+          </span>
+          <button onClick={() => setRescoreResult(null)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14 }}>✕</button>
+        </div>
+      )}
+
       {/* Migration result toast */}
       {migrateResult && (
         <div style={{ background: migrateResult.error ? 'rgba(220,53,69,0.15)' : 'rgba(40,167,69,0.15)', border: `1px solid ${migrateResult.error ? '#dc3545' : '#28a745'}`, borderRadius: 6, padding: '8px 14px', marginBottom: 10, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

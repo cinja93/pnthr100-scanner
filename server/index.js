@@ -2173,6 +2173,169 @@ app.patch('/api/journal/:id/scorecard-notes', authenticateJWT, async (req, res) 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/journal/rescore-all — rescore all closed journal entries; backfills signal from killScore (admin)
+app.post('/api/journal/rescore-all', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const { computeDisciplineScore } = await import('./disciplineScoring.js');
+    const db = await connectToDatabase();
+
+    const entries = await db.collection('pnthr_journal')
+      .find({ ownerId: req.user.userId, 'performance.status': 'CLOSED' })
+      .toArray();
+
+    const results = [];
+    for (const entry of entries) {
+      const fixes = {};
+
+      // Auto-backfill: copy signal/signalAge from killScoreAtEntry if missing at top level
+      if (!entry.signal && entry.killScoreAtEntry?.signal) {
+        fixes.signal    = entry.killScoreAtEntry.signal;
+        fixes.signalAge = entry.killScoreAtEntry.signalAge ?? null;
+        if (fixes.signal && (fixes.signalAge ?? 0) <= 1) {
+          fixes.entryContext = 'CONFIRMED_SIGNAL';
+        } else if (fixes.signal) {
+          fixes.entryContext = 'STALE_SIGNAL';
+        }
+        console.log(`[RESCORE] ${entry.ticker}: backfilled signal=${fixes.signal} signalAge=${fixes.signalAge} from killScore`);
+      }
+
+      // Auto-backfill: copy spyPosition/qqqPosition into marketAtEntry if empty
+      if (!entry.marketAtEntry?.spyPosition) {
+        try {
+          const regime = await db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } });
+          if (regime) {
+            fixes.marketAtEntry = {
+              ...(entry.marketAtEntry || {}),
+              spyPosition: regime.spyPosition || null,
+              qqqPosition: regime.qqqPosition || null,
+              regime:      regime.regime || null,
+              _source:     'regime_fallback_rescore',
+            };
+            console.log(`[RESCORE] ${entry.ticker}: backfilled market data from regime doc`);
+          }
+        } catch {}
+      }
+
+      if (Object.keys(fixes).length > 0) {
+        await db.collection('pnthr_journal').updateOne(
+          { _id: entry._id },
+          { $set: { ...fixes, updatedAt: new Date() } }
+        );
+        Object.assign(entry, fixes);
+      }
+
+      const newScore = computeDisciplineScore(entry);
+      await db.collection('pnthr_journal').updateOne(
+        { _id: entry._id },
+        { $set: { discipline: newScore, updatedAt: new Date() } }
+      );
+
+      results.push({ ticker: entry.ticker, oldScore: entry.discipline?.totalScore, newScore: newScore.totalScore, tierLabel: newScore.tierLabel, fixes: Object.keys(fixes) });
+    }
+
+    res.json({ success: true, count: results.length, results });
+  } catch (e) {
+    console.error('[journal/rescore-all]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/journal/:id/confirm-score — user confirms missing data, triggers rescore
+app.put('/api/journal/:id/confirm-score', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const { ObjectId } = await import('mongodb');
+    const { computeDisciplineScore } = await import('./disciplineScoring.js');
+    const db = await connectToDatabase();
+
+    const entry = await db.collection('pnthr_journal').findOne({
+      _id: new ObjectId(req.params.id),
+      ownerId: req.user.userId,
+    });
+    if (!entry) return res.status(404).json({ error: 'Journal entry not found' });
+
+    const { answers } = req.body;
+    if (!answers || typeof answers !== 'object') return res.status(400).json({ error: 'answers required' });
+
+    const updates = {
+      userConfirmed: { ...(entry.userConfirmed || {}), confirmedAt: new Date() },
+    };
+
+    // Signal answer
+    if (answers.signal) {
+      const sigMap = {
+        'BL+1': { signal: 'BL', signalAge: 1, entryContext: 'CONFIRMED_SIGNAL' },
+        'BL+2': { signal: 'BL', signalAge: 2, entryContext: 'STALE_SIGNAL' },
+        'BL+3': { signal: 'BL', signalAge: 3, entryContext: 'STALE_SIGNAL' },
+        'SS+1': { signal: 'SS', signalAge: 1, entryContext: 'CONFIRMED_SIGNAL' },
+        'SS+2': { signal: 'SS', signalAge: 2, entryContext: 'STALE_SIGNAL' },
+        'SS+3': { signal: 'SS', signalAge: 3, entryContext: 'STALE_SIGNAL' },
+        'DEVELOPING': { signal: null, signalAge: null, entryContext: 'DEVELOPING_SIGNAL' },
+        'NONE': { signal: null, signalAge: null, entryContext: 'NO_SIGNAL' },
+      };
+      const sigData = sigMap[answers.signal] || {};
+      Object.assign(updates, sigData);
+      updates.userConfirmed.signal = answers.signal;
+    }
+
+    // Kill score answer
+    if (answers.killScore) {
+      const ks = answers.killScore;
+      if (ks.inPipeline === 'Yes') {
+        updates.killScoreAtEntry = {
+          ...(entry.killScoreAtEntry || {}),
+          totalScore: ks.killScore ? +ks.killScore : (entry.killScoreAtEntry?.totalScore || null),
+          rank:       ks.killRank  ? +ks.killRank  : (entry.killScoreAtEntry?.rank       || null),
+          tier:       (ks.killTier && ks.killTier !== "Don't remember") ? ks.killTier : (entry.killScoreAtEntry?.tier || null),
+        };
+      } else if (ks.inPipeline === 'No') {
+        updates.killScoreAtEntry = null;
+      }
+      updates.userConfirmed.killScore = ks;
+    }
+
+    // Index trend answer
+    if (answers.indexTrend) {
+      updates.userConfirmed.indexTrend = answers.indexTrend;
+      if (answers.indexTrend === 'WITH')    updates.userConfirmed.indexTrendAligned = true;
+      if (answers.indexTrend === 'AGAINST') updates.userConfirmed.indexTrendAligned = false;
+    }
+
+    // Sector trend answer
+    if (answers.sectorTrend) {
+      updates.userConfirmed.sectorTrend = answers.sectorTrend;
+      if (answers.sectorTrend === 'WITH')    updates.userConfirmed.sectorTrendAligned = true;
+      if (answers.sectorTrend === 'AGAINST') updates.userConfirmed.sectorTrendAligned = false;
+    }
+
+    // Sizing answer
+    if (answers.sizing) {
+      updates.userConfirmed.sizing = answers.sizing;
+      updates.userConfirmed.sizingCorrect = ['EXACT', 'WITHIN_10'].includes(answers.sizing);
+    }
+
+    // Save confirmations
+    await db.collection('pnthr_journal').updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: { ...updates, updatedAt: new Date() } }
+    );
+
+    // Fetch updated entry and rescore
+    const updatedEntry = await db.collection('pnthr_journal').findOne({ _id: new ObjectId(req.params.id) });
+    const newScore = computeDisciplineScore(updatedEntry);
+    await db.collection('pnthr_journal').updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: { discipline: newScore, updatedAt: new Date() } }
+    );
+
+    res.json({ success: true, newScore });
+  } catch (e) {
+    console.error('[journal/confirm-score]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/journal/:id — single entry
 app.get('/api/journal/:id', authenticateJWT, async (req, res) => {
   try {

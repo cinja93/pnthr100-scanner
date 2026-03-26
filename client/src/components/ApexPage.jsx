@@ -506,30 +506,55 @@ export default function ApexPage() {
             </button>
           </div>
 
-          {/* ── L / S / All Tabs + Formula Guide button ─────────────────────── */}
-          <div className={styles.sideTabs}>
-            {[['all', 'All'], ['long', 'Longs (BL)'], ['short', 'Shorts (SS)']].map(([key, label]) => (
-              <button
-                key={key}
-                className={`${styles.sideTab} ${side === key ? styles.sideTabActive : ''}`}
-                onClick={() => setSide(key)}
-              >
-                {label}
-                {key === 'long' && (
-                  <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.bl, e)} title="What is a BL signal?">ⓘ</span>
-                )}
-                {key === 'short' && (
-                  <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.ss, e)} title="What is an SS signal?">ⓘ</span>
-                )}
-                <span className={styles.sideTabCount}>
-                  {key === 'all' ? filtered.length
-                    : key === 'long'  ? stocks.filter(s => s.signal === 'BL' && (tierFilter === 'all' || s.tier === tierFilter)).length
-                    : stocks.filter(s => s.signal === 'SS' && (tierFilter === 'all' || s.tier === tierFilter)).length}
-                </span>
-              </button>
-            ))}
+          {/* ── Controls Bar: Signal tabs · Search · Admin tools ─────────────── */}
+          <div className={styles.controlsBar}>
+
+            {/* Left: Signal filter tabs */}
+            <div className={styles.controlsLeft}>
+              {[['all', 'All'], ['long', 'Longs (BL)'], ['short', 'Shorts (SS)']].map(([key, label]) => (
+                <button
+                  key={key}
+                  className={`${styles.sideTab} ${side === key ? styles.sideTabActive : ''}`}
+                  onClick={() => setSide(key)}
+                >
+                  {label}
+                  {key === 'long' && (
+                    <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.bl, e)} title="What is a BL signal?">ⓘ</span>
+                  )}
+                  {key === 'short' && (
+                    <span className={styles.infoIconSpan} onClick={e => showInfo(UI_DEFS.ss, e)} title="What is an SS signal?">ⓘ</span>
+                  )}
+                  <span className={styles.sideTabCount}>
+                    {key === 'all' ? filtered.length
+                      : key === 'long'  ? stocks.filter(s => s.signal === 'BL' && (tierFilter === 'all' || s.tier === tierFilter)).length
+                      : stocks.filter(s => s.signal === 'SS' && (tierFilter === 'all' || s.tier === tierFilter)).length}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Divider */}
+            <div className={styles.controlsDivider} />
+
+            {/* Centre: Ticker search */}
+            <div className={styles.controlsSearch}>
+              <span className={styles.controlsSearchLabel}>FIND:</span>
+              <input
+                type="text"
+                placeholder="e.g. COIN"
+                value={killSearch}
+                onChange={e => setKillSearch(e.target.value.toUpperCase())}
+                className={styles.killSearchInput}
+                style={{ borderColor: killSearch ? '#FCF000' : 'rgba(252,240,0,0.35)' }}
+              />
+              {killSearch && (
+                <button onClick={() => setKillSearch('')} className={styles.killSearchClear} title="Clear">✕</button>
+              )}
+            </div>
+
+            {/* Right: Admin tools */}
             {isAdmin && (
-              <>
+              <div className={styles.controlsRight}>
                 <button
                   ref={formulaBtnRef}
                   className={`${styles.formulaTabBtn}${formulaOpen ? ` ${styles.formulaTabBtnActive}` : ''}`}
@@ -545,40 +570,7 @@ export default function ApexPage() {
                 >
                   ⚡ System Health
                 </button>
-              </>
-            )}
-          </div>
-
-          {/* ── Kill Search Bar ───────────────────────────────────────────────── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <span style={{ color: '#FCF000', fontSize: 12, fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.05em', opacity: 0.8 }}>
-              FIND TICKER:
-            </span>
-            <input
-              type="text"
-              placeholder="e.g. COIN"
-              value={killSearch}
-              onChange={e => setKillSearch(e.target.value.toUpperCase())}
-              style={{
-                background: '#111',
-                border: `1.5px solid ${killSearch ? '#FCF000' : 'rgba(252,240,0,0.4)'}`,
-                borderRadius: 5,
-                padding: '6px 12px',
-                color: '#FCF000',
-                fontSize: 14,
-                fontFamily: 'monospace',
-                fontWeight: 700,
-                width: 140,
-                outline: 'none',
-                letterSpacing: '0.06em',
-              }}
-            />
-            {killSearch && (
-              <button
-                onClick={() => setKillSearch('')}
-                title="Clear search"
-                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid #374151', borderRadius: 4, color: '#aaa', fontSize: 13, cursor: 'pointer', padding: '4px 10px', fontFamily: 'monospace' }}
-              >✕ Clear</button>
+              </div>
             )}
           </div>
 

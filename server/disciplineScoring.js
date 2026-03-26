@@ -56,7 +56,15 @@ function scoreKillContext(killScoreAtEntry) {
 
 // ── T1-C: Index Trend Alignment (0-8 pts) ────────────────────────────────────
 // Uses stored sectorPosition ('above'/'below') since price vs EMA is pre-computed
-function scoreIndexTrend(direction, marketAtEntry, exchange) {
+function scoreIndexTrend(direction, marketAtEntry, exchange, userConfirmed) {
+  // userConfirmed overrides take priority over auto-detection
+  if (userConfirmed?.indexTrendAligned === true) {
+    return { score: 8, label: 'WITH TREND', detail: 'User confirmed: traded with index trend' };
+  }
+  if (userConfirmed?.indexTrendAligned === false) {
+    return { score: 0, label: 'AGAINST TREND', detail: 'User confirmed: traded against index trend' };
+  }
+
   const isNasdaq  = (exchange || '').toUpperCase() === 'NASDAQ';
   const position  = isNasdaq ? marketAtEntry?.qqqPosition : marketAtEntry?.spyPosition;
   const indexName = isNasdaq ? 'QQQ' : 'SPY';
@@ -72,7 +80,14 @@ function scoreIndexTrend(direction, marketAtEntry, exchange) {
 }
 
 // ── T1-D: Sector Trend Alignment (0-7 pts) ───────────────────────────────────
-function scoreSectorTrend(direction, marketAtEntry) {
+function scoreSectorTrend(direction, marketAtEntry, userConfirmed) {
+  // userConfirmed overrides take priority over auto-detection
+  if (userConfirmed?.sectorTrendAligned === true) {
+    return { score: 7, label: 'WITH SECTOR', detail: 'User confirmed: traded with sector trend' };
+  }
+  if (userConfirmed?.sectorTrendAligned === false) {
+    return { score: 0, label: 'AGAINST SECTOR', detail: 'User confirmed: traded against sector trend' };
+  }
   const position = marketAtEntry?.sectorPosition;
   const etf      = marketAtEntry?.sectorEtf || 'sector ETF';
   if (!position) {
@@ -87,7 +102,15 @@ function scoreSectorTrend(direction, marketAtEntry) {
 }
 
 // ── T2-A: Position Sizing (0-8 pts) ──────────────────────────────────────────
-function scoreSizing(actualShares, expectedShares) {
+function scoreSizing(actualShares, expectedShares, userConfirmed) {
+  // userConfirmed overrides take priority over auto-detection
+  if (userConfirmed?.sizingCorrect === true) {
+    return { score: 8, label: 'CONFIRMED', detail: 'User confirmed: used SIZE IT recommendation' };
+  }
+  if (userConfirmed?.sizingCorrect === false) {
+    return { score: 0, label: 'WRONG SIZE', detail: 'User confirmed: deviated from SIZE IT recommendation' };
+  }
+
   if (!expectedShares || expectedShares <= 0) {
     return { score: 4, label: 'N/A', detail: 'Expected size unavailable — neutral score' };
   }
@@ -161,28 +184,33 @@ function scoreHeldDrawdown(exits, entryPrice, direction) {
 
 // ── T3-A: Exit Method (0-12 pts) ─────────────────────────────────────────────
 function scoreExitMethod(exitReason, pnlDollars) {
-  switch (exitReason) {
+  const reason = (exitReason || '').toUpperCase().trim();
+  switch (reason) {
     case 'SIGNAL':     return { score: 12, label: 'SIGNAL EXIT', detail: 'Exited on system BE/SE signal — maximum discipline' };
     case 'FEAST':      return { score: 12, label: 'FEAST RULE',  detail: 'FEAST triggered (RSI > 85) — system rule followed' };
     case 'STALE_HUNT': return { score: 10, label: 'STALE HUNT',  detail: '20-day stale hunt liquidation — trade never confirmed' };
-    case 'STOP_HIT':   return { score: 10, label: 'STOP HIT',    detail: 'Stop hit — system protected capital as designed' };
+    case 'STOP_HIT':     return { score: 10, label: 'STOP HIT',     detail: 'Stop hit — system protected capital as designed' };
+    case 'RISK_ADVISOR': return { score: 10, label: 'RISK ADVISOR', detail: 'Closed per Risk Advisor recommendation — sector/heat risk management' };
     case 'MANUAL':
       return (pnlDollars ?? 0) > 0
         ? { score: 4, label: 'MANUAL +$', detail: 'Manual exit at profit — overrode system but at least made money' }
         : { score: 0, label: 'MANUAL -$', detail: 'Manual exit at loss — worst case: overrode system AND lost money' };
-    default: return { score: 5, label: 'UNKNOWN', detail: `Exit reason: ${exitReason || 'not recorded'}` };
+    default:
+      console.warn(`[scoreExitMethod] Unrecognized exit reason: "${exitReason}"`);
+      return { score: 5, label: 'UNKNOWN', detail: `Exit reason: ${exitReason || 'not recorded'}` };
   }
 }
 
 // ── T3-B: Signal Timing (0-8 pts) ────────────────────────────────────────────
 function scoreSignalTiming(exitReason) {
-  if (exitReason === 'SIGNAL') {
+  const reason = (exitReason || '').toUpperCase().trim();
+  if (reason === 'SIGNAL') {
     return { score: 8, label: 'ON SIGNAL',   detail: 'Exited on the system exit signal — perfect timing' };
   }
-  if (['STOP_HIT', 'FEAST', 'STALE_HUNT'].includes(exitReason)) {
+  if (['STOP_HIT', 'FEAST', 'STALE_HUNT', 'RISK_ADVISOR'].includes(reason)) {
     return { score: 6, label: 'SYSTEM RULE', detail: 'Exited via system rule (not primary signal, but disciplined)' };
   }
-  if (exitReason === 'MANUAL') {
+  if (reason === 'MANUAL') {
     return { score: 0, label: 'EARLY EXIT',  detail: 'Manually exited before any system signal fired' };
   }
   return { score: 4, label: 'UNKNOWN', detail: 'Exit timing unclear' };
@@ -246,14 +274,16 @@ export function computeDisciplineScore(journal) {
     slippagePct = (Math.abs(slip) / signalPrice) * 100;
   }
 
+  const userConfirmed = journal.userConfirmed || {};
+
   // === TIER 1: STOCK SELECTION (40 pts) ===
   const t1a = scoreSignalQuality(signal, signalAge, direction, entryContext);
   const t1b = scoreKillContext(killScore);
-  const t1c = scoreIndexTrend(direction, marketE, exchange);
-  const t1d = scoreSectorTrend(direction, marketE);
+  const t1c = scoreIndexTrend(direction, marketE, exchange, userConfirmed);
+  const t1d = scoreSectorTrend(direction, marketE, userConfirmed);
 
   // === TIER 2: EXECUTION (35 pts) ===
-  const t2a = scoreSizing(actualLot1, expectedLot1);
+  const t2a = scoreSizing(actualLot1, expectedLot1, userConfirmed);
   const t2b = scoreRiskCap(riskDollars, nav, isETF);
   const t2c = scoreSlippage(slippagePct, hasSignal);
   const t2d = scorePyramiding(lots, mfe, entryPrice, direction);

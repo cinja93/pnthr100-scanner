@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchPulse, fetchLiveVix, fetchSignalStocks, fetchDevelopingSignals, fetchSectorExposure } from '../services/api';
+import { useAnalyzeContext } from '../contexts/AnalyzeContext';
+import { computeAnalyzeScore } from '../utils/analyzeScore';
 import ChartModal from './ChartModal';
 
 // Returns true if developing signals should be shown (Mon–Thu anytime; Fri before 4:15 PM ET)
@@ -48,6 +50,7 @@ function formatLoadedAt(date) {
 }
 
 export default function PulsePage({ onNavigate }) {
+  const { analyzeContext } = useAnalyzeContext() || {};
   const [data, setData] = useState(null);
   const [vix, setVix] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -171,18 +174,20 @@ export default function PulsePage({ onNavigate }) {
 
       {/* TIER 2: Signal intelligence — Kill Top 10, Sector Pulse, Signal Breadth, Macro */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-        <KillTop10 killTop10={data.killTop10} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} killDataLive={data.killDataLive} />
+        <KillTop10 killTop10={data.killTop10} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} killDataLive={data.killDataLive} analyzeContext={analyzeContext} />
         <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} />
       </div>
       <NewSignalsPanel
         newSignals={data.newSignals}
         onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }}
+        analyzeContext={analyzeContext}
       />
       {showDev && (
         <DevelopingSignalsPanel
           devSignals={devSignals}
           loading={devLoading}
           onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }}
+          analyzeContext={analyzeContext}
         />
       )}
       <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
@@ -633,7 +638,7 @@ function HeatGauge({ positions }) {
   );
 }
 
-function KillTop10({ killTop10, onTickerClick, killDataLive }) {
+function KillTop10({ killTop10, onTickerClick, killDataLive, analyzeContext }) {
   const tierShort = (tier) => {
     if (!tier) return '';
     if (tier.includes('ALPHA')) return 'ALPHA';
@@ -664,6 +669,7 @@ function KillTop10({ killTop10, onTickerClick, killDataLive }) {
       {(killTop10 || []).map((s, i) => {
         const isAlpha = (s.tier || '').includes('ALPHA');
         const rc = s.rankChange;
+        const ar = analyzeContext ? computeAnalyzeScore(s, analyzeContext) : null;
         return (
           <div key={s.ticker} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #1a1a1a' }}>
             <span style={{ color: i === 0 ? '#FFD700' : '#555', fontSize: 11, minWidth: 18 }}>#{s.killRank || i + 1}</span>
@@ -675,6 +681,7 @@ function KillTop10({ killTop10, onTickerClick, killDataLive }) {
             <span style={{ background: isAlpha ? 'rgba(212,160,23,0.2)' : 'rgba(40,167,69,0.15)', color: isAlpha ? '#FFD700' : '#6bcb77', fontSize: 9, padding: '2px 5px', borderRadius: 4, minWidth: 40, textAlign: 'center' }}>{tierShort(s.tier)}</span>
             <span style={{ background: s.signal === 'SS' ? 'rgba(220,53,69,0.2)' : 'rgba(40,167,69,0.2)', color: s.signal === 'SS' ? '#ff6b6b' : '#6bcb77', fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>{s.signal}</span>
             {rc != null && rc !== 0 && <span style={{ color: rc > 0 ? '#28a745' : '#dc3545', fontSize: 10 }}>{rc > 0 ? '▲' : '▼'}{Math.abs(rc)}</span>}
+            {ar && <span style={{ color: ar.color, fontSize: 10, fontWeight: 700, fontFamily: 'monospace', marginLeft: 'auto' }} title={ar.warnings?.length ? ar.warnings[0] : `Pre-trade: ${ar.pct}%`}>{ar.pct}{ar.warnings?.length > 0 ? '⚠' : ''}</span>}
           </div>
         );
       })}
@@ -844,7 +851,7 @@ function SectorPulse({ signals, killDataLive, onNavigate }) {
 }
 
 // ── New Signals This Week Panel ────────────────────────────────────────────────
-function NewSignalsPanel({ newSignals, onTickerClick }) {
+function NewSignalsPanel({ newSignals, onTickerClick, analyzeContext }) {
   if (!newSignals) return null;
   const { blStocks = [], blEtfs = [], ssStocks = [], ssEtfs = [] } = newSignals;
   const hasStocks = blStocks.length > 0 || ssStocks.length > 0;
@@ -866,6 +873,7 @@ function NewSignalsPanel({ newSignals, onTickerClick }) {
   // ── Stock row (Kill-scored, has tier badge) ──
   function StockRow({ s, idx, chartList }) {
     const t = tierBadge(s.tier);
+    const ar = analyzeContext ? computeAnalyzeScore(s, analyzeContext) : null;
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 10px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer', transition: 'background 0.15s' }}
         onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
@@ -877,6 +885,7 @@ function NewSignalsPanel({ newSignals, onTickerClick }) {
         <span style={{ color: '#ccc', fontSize: 12, minWidth: 60, textAlign: 'right', fontFamily: 'monospace' }}>{s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}</span>
         <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, minWidth: 40, textAlign: 'right', fontFamily: 'monospace' }}>{s.totalScore != null ? s.totalScore.toFixed(1) : '—'}</span>
         <span style={{ minWidth: 84 }}>{t}</span>
+        {ar && <span style={{ color: ar.color, fontSize: 11, fontWeight: 700, fontFamily: 'monospace', minWidth: 32, textAlign: 'right' }} title={ar.warnings?.length ? ar.warnings[0] : `Pre-trade: ${ar.pct}%`}>{ar.pct}{ar.warnings?.length > 0 ? '⚠' : ''}</span>}
         <span style={{ color: '#FFD700', fontSize: 11 }}>▸</span>
       </div>
     );
@@ -1008,7 +1017,7 @@ function abbrevSector(sector) {
 }
 
 // ── Developing Signals Panel ───────────────────────────────────────────────────
-function DevelopingSignalsPanel({ devSignals, loading, onTickerClick }) {
+function DevelopingSignalsPanel({ devSignals, loading, onTickerClick, analyzeContext }) {
   const status = devSignals?.status;
   const bl = devSignals?.bl || [];
   const ss = devSignals?.ss || [];
@@ -1030,6 +1039,8 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick }) {
     const isBL = dir === 'BL';
     const rowClass = isBL ? 'dev-bl-row' : 'dev-ss-row';
     const accentColor = isBL ? '#6bcb77' : '#ff6b6b';
+    const devStock = { ...s, signal: dir, isDeveloping: true, currentPrice: s.price };
+    const ar = analyzeContext ? computeAnalyzeScore(devStock, analyzeContext) : null;
 
     // Proximity label — negative pct means price has ALREADY passed last week's high/low
     const pct = isBL ? s.pctFromHigh : s.pctFromLow;
@@ -1073,6 +1084,11 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick }) {
         <span style={{ color: isBL ? '#6bcb7799' : '#ff6b6b99', fontSize: 10, minWidth: 54, textAlign: 'right', flexShrink: 0 }}>
           {isBL ? 'Week ↑ ✓' : 'Week ↓ ✓'}
         </span>
+        {ar && (
+          <span style={{ color: ar.color, fontSize: 10, fontWeight: 700, fontFamily: 'monospace', flexShrink: 0 }} title={ar.warnings?.length ? ar.warnings[0] : `Pre-trade: ${ar.pct}%`}>
+            {ar.pct}{ar.warnings?.length > 0 ? '⚠' : ''}
+          </span>
+        )}
         <span style={{ color: accentColor, fontSize: 11, flexShrink: 0 }}>▸</span>
       </div>
     );

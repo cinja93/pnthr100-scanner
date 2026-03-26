@@ -94,7 +94,7 @@ function computeChecks(entry) {
   else if ((dir === 'LONG' && sig === 'BL' && sigAge <= 1) || (dir === 'SHORT' && sig === 'SS' && sigAge <= 1)) signalCheck = true;
   else signalCheck = false;
 
-  const systemExits   = ['SIGNAL', 'STOP_HIT', 'FEAST', 'STALE_HUNT'];
+  const systemExits   = ['SIGNAL', 'STOP_HIT', 'FEAST', 'STALE_HUNT', 'RISK_ADVISOR'];
   const exitCheck     = exitReason ? systemExits.includes(exitReason) : null;
   const notEarlyCheck = exitReason === 'MANUAL' ? false : (exitReason ? true : null);
   const onSignalCheck = exitReason === 'SIGNAL';
@@ -287,8 +287,181 @@ function MarketColumn({ snap, tech, dir, label }) {
   );
 }
 
+// ── CompleteYourScore ─────────────────────────────────────────────────────────
+function getScoreQuestions(entry, disc) {
+  const questions = [];
+  if (!disc) return questions;
+
+  if (disc.tier1?.components?.signalQuality?.label === 'NO SIGNAL' && !entry.userConfirmed?.signal) {
+    questions.push({
+      id: 'signal',
+      question: `What was the PNTHR signal for ${entry.ticker} when you entered?`,
+      type: 'single_select',
+      options: [
+        { value: 'BL+1', label: 'BL+1 (fresh buy long)' },
+        { value: 'BL+2', label: 'BL+2 (1 week old)' },
+        { value: 'BL+3', label: 'BL+3+ (2+ weeks old)' },
+        { value: 'SS+1', label: 'SS+1 (fresh sell short)' },
+        { value: 'SS+2', label: 'SS+2 (1 week old)' },
+        { value: 'SS+3', label: 'SS+3+ (2+ weeks old)' },
+        { value: 'DEVELOPING', label: 'Developing signal (3/4 conditions met)' },
+        { value: 'NONE', label: 'No PNTHR signal' },
+      ],
+    });
+  }
+
+  if (disc.tier1?.components?.killContext?.label === 'NOT SCORED' && !entry.userConfirmed?.killScore) {
+    questions.push({
+      id: 'killScore',
+      question: `Was ${entry.ticker} in the Kill pipeline when you entered?`,
+      type: 'multi_field',
+      fields: [
+        { key: 'inPipeline', label: 'In Kill pipeline?', type: 'select', options: ['Yes', 'No', "Don't remember"] },
+        { key: 'killScore',  label: 'Kill score', type: 'number', placeholder: 'e.g., 98.6' },
+        { key: 'killRank',   label: 'Kill rank',  type: 'number', placeholder: 'e.g., 19' },
+        { key: 'killTier',   label: 'Tier', type: 'select', options: ['ALPHA PNTHR KILL','STRIKING','HUNTING','POUNCING','COILING','STALKING','TRACKING','PROWLING','STIRRING','DORMANT',"Don't remember"] },
+      ],
+    });
+  }
+
+  if (disc.tier1?.components?.indexTrend?.label === 'UNKNOWN' && !entry.userConfirmed?.indexTrend) {
+    questions.push({
+      id: 'indexTrend',
+      question: `Was the market (SPY/QQQ) trending WITH or AGAINST your ${entry.direction} trade in ${entry.ticker}?`,
+      type: 'single_select',
+      options: [
+        { value: 'WITH',    label: 'With trend (index supported my direction)' },
+        { value: 'AGAINST', label: 'Against trend (I went against the index)' },
+        { value: 'UNKNOWN', label: "Don't remember" },
+      ],
+    });
+  }
+
+  if (disc.tier1?.components?.sectorTrend?.label === 'UNKNOWN' && !entry.userConfirmed?.sectorTrend) {
+    questions.push({
+      id: 'sectorTrend',
+      question: `Was the ${entry.sector || 'sector'} trending WITH or AGAINST your ${entry.direction} trade?`,
+      type: 'single_select',
+      options: [
+        { value: 'WITH',    label: 'With sector trend' },
+        { value: 'AGAINST', label: 'Against sector trend' },
+        { value: 'UNKNOWN', label: "Don't remember" },
+      ],
+    });
+  }
+
+  if (disc.tier2?.components?.sizing?.label === 'N/A' && !entry.userConfirmed?.sizing) {
+    questions.push({
+      id: 'sizing',
+      question: 'Did you use SIZE IT for the recommended position size?',
+      type: 'single_select',
+      options: [
+        { value: 'EXACT',     label: 'Yes, exact SIZE IT recommendation' },
+        { value: 'WITHIN_10', label: 'Yes, within 10% of SIZE IT' },
+        { value: 'WITHIN_20', label: 'Close, within 20%' },
+        { value: 'NO',        label: 'No, I adjusted significantly' },
+      ],
+    });
+  }
+
+  return questions;
+}
+
+function CompleteYourScore({ entry, disc, onSave }) {
+  const [answers, setAnswers] = useState({});
+  const [saving, setSaving]   = useState(false);
+  const questions = getScoreQuestions(entry, disc);
+
+  if (questions.length === 0) return null;
+
+  const handleSave = async () => {
+    if (Object.keys(answers).length === 0) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/journal/${entry._id}/confirm-score`, {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      const { newScore } = await res.json();
+      onSave?.(entry._id, newScore);
+    } catch (e) {
+      alert('Failed to save score: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ border: '1px solid #D4A017', borderRadius: 8, padding: 16, backgroundColor: 'rgba(212,160,23,0.05)', margin: '10px 14px' }}>
+      <div style={{ color: '#FFD700', fontWeight: 700, fontSize: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span>?</span>
+        COMPLETE YOUR SCORE — {questions.length} field{questions.length > 1 ? 's' : ''} need confirmation
+      </div>
+      <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>
+        Some data wasn't captured automatically at entry. Confirm these to get an accurate discipline score.
+      </div>
+
+      {questions.map(q => (
+        <div key={q.id} style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 13, color: '#ccc', marginBottom: 6 }}>{q.question}</div>
+          {q.type === 'single_select' && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {q.options.map(opt => (
+                <button key={opt.value}
+                  onClick={() => setAnswers(a => ({ ...a, [q.id]: opt.value }))}
+                  style={{
+                    padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    background:  answers[q.id] === opt.value ? 'rgba(212,160,23,0.2)' : 'transparent',
+                    border: `1px solid ${answers[q.id] === opt.value ? '#D4A017' : '#444'}`,
+                    color:  answers[q.id] === opt.value ? '#FFD700' : '#888',
+                  }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {q.type === 'multi_field' && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
+              {q.fields.map(f => (
+                <div key={f.key}>
+                  <div style={{ fontSize: 10, color: '#666', marginBottom: 2 }}>{f.label}</div>
+                  {f.type === 'select' ? (
+                    <select
+                      onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...(a[q.id] || {}), [f.key]: e.target.value } }))}
+                      style={{ padding: '3px 6px', fontSize: 11, background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: 3 }}>
+                      <option value="">Select…</option>
+                      {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input type={f.type} placeholder={f.placeholder}
+                      onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...(a[q.id] || {}), [f.key]: e.target.value } }))}
+                      style={{ padding: '3px 6px', fontSize: 11, background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: 3, width: 80 }} />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+
+      <button onClick={handleSave} disabled={Object.keys(answers).length === 0 || saving}
+        style={{
+          padding: '7px 18px', borderRadius: 5, fontWeight: 700, fontSize: 12, cursor: Object.keys(answers).length > 0 ? 'pointer' : 'default',
+          background: Object.keys(answers).length > 0 ? 'rgba(212,160,23,0.15)' : 'transparent',
+          border: `1px solid ${Object.keys(answers).length > 0 ? '#D4A017' : '#333'}`,
+          color:  Object.keys(answers).length > 0 ? '#FFD700' : '#555',
+        }}>
+        {saving ? 'SAVING…' : 'SAVE AND RESCORE'}
+      </button>
+    </div>
+  );
+}
+
 // ── TradeCard ─────────────────────────────────────────────────────────────────
-function TradeCard({ entry, onTickerClick, saveNotes }) {
+function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmScore }) {
+  const [entry, setEntry] = useState(initialEntry);
   const [expanded, setExpanded] = useState(true);
   const [localNotes, setLocalNotes] = useState({ tradeNotes: entry.tradeNotes || '', macroNotes: entry.macroNotes || '' });
 
@@ -357,6 +530,11 @@ function TradeCard({ entry, onTickerClick, saveNotes }) {
           </span>
           <span style={{ color: '#777', fontSize: '0.8rem' }}>{fmtDate(entry.entry?.fillDate || entry.createdAt)} → {fmtDate(lastExit?.date)}</span>
           {entry.exchange && <span style={{ color: '#555', fontSize: '0.75rem' }}>{entry.exchange}</span>}
+          {entry.userConfirmed?.confirmedAt && (
+            <span style={{ background: 'rgba(212,160,23,0.15)', border: '1px solid #D4A017', color: '#FFD700', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em' }}>
+              VERIFIED
+            </span>
+          )}
           {entry.sector   && <span style={{ color: '#555', fontSize: '0.75rem' }}>{entry.sector}</span>}
           {calDays != null && <span style={{ color: '#555', fontSize: '0.72rem' }}>{calDays}d</span>}
         </div>
@@ -511,6 +689,16 @@ function TradeCard({ entry, onTickerClick, saveNotes }) {
             />
           </div>
         </div>
+
+        {/* ── Complete Your Score (only when questions exist) ── */}
+        <CompleteYourScore
+          entry={entry}
+          disc={disc}
+          onSave={(id, newScore) => {
+            setEntry(prev => ({ ...prev, discipline: newScore, userConfirmed: { ...prev.userConfirmed, confirmedAt: new Date() } }));
+            onConfirmScore?.(id, newScore);
+          }}
+        />
       </>}
     </div>
   );
@@ -544,8 +732,13 @@ export default function ClosedTradeCards({ onTickerClick }) {
 
   return (
     <div style={{ padding: '0 0 24px' }}>
-      {entries.map(entry => (
-        <TradeCard key={entry._id} entry={entry} onTickerClick={onTickerClick} saveNotes={saveNotes} />
+      {entries.map(e => (
+        <TradeCard key={e._id} entry={e} onTickerClick={onTickerClick}
+          saveNotes={saveNotes}
+          onConfirmScore={(id, newScore) => {
+            setEntries(prev => prev.map(x => x._id?.toString() === id?.toString() ? { ...x, discipline: newScore } : x));
+          }}
+        />
       ))}
     </div>
   );

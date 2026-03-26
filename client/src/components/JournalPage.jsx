@@ -381,8 +381,10 @@ export default function JournalPage({ onNavigate }) {
   const [noteInputs, setNoteInputs] = useState({});
   const [weeklyReflection, setWeeklyReflection] = useState('');
   const [savingReview, setSavingReview] = useState(false);
-  const [migrating, setMigrating] = useState(false);
+  const [migrating,  setMigrating]  = useState(false);
   const [migrateResult, setMigrateResult] = useState(null);
+  const [rescoring,  setRescoring]  = useState(false);
+  const [rescoreResult, setRescoreResult] = useState(null);
   const [washRules, setWashRules] = useState([]);
   const [ratios, setRatios] = useState(null);
 
@@ -471,6 +473,19 @@ export default function JournalPage({ onNavigate }) {
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     d.setDate(diff);
     return d.toISOString().split('T')[0];
+  };
+
+  const runRescoreAll = async () => {
+    if (!confirm('Rescore all closed trades? This will backfill missing signal/market data from Kill scores and regime, then recompute discipline scores.')) return;
+    setRescoring(true);
+    setRescoreResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/journal/rescore-all`, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      setRescoreResult(data);
+      if (data.success) fetchData();
+    } catch (e) { setRescoreResult({ error: e.message }); }
+    setRescoring(false);
   };
 
   const runMigration = async () => {
@@ -602,6 +617,60 @@ export default function JournalPage({ onNavigate }) {
         )}
       </div>
 
+      {/* Risk Advisor Exits */}
+      {(() => {
+        const raExitEntries = entries.filter(e =>
+          e.performance?.status === 'CLOSED' &&
+          e.exits?.some(x => x.reason === 'RISK_ADVISOR')
+        );
+        const total = raExitEntries.length;
+        const avgPnl = total > 0
+          ? raExitEntries.reduce((sum, e) => {
+              const pnlPct = e.performance?.realizedPnlDollar != null && e.entry?.fillPrice
+                ? (e.performance.realizedPnlDollar / (e.entry.fillPrice * (e.totalFilledShares || 1))) * 100
+                : null;
+              return sum + (pnlPct ?? 0);
+            }, 0) / total
+          : null;
+        return (
+          <div style={{ background: 'rgba(220,53,69,0.05)', border: '1px solid rgba(220,53,69,0.15)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+            <div style={{ color: '#dc3545', fontSize: 12, fontWeight: 800, letterSpacing: 1, marginBottom: 12 }}>RISK ADVISOR EXITS</div>
+            {total === 0 ? (
+              <div style={{ color: '#555', fontSize: 12 }}>No Risk Advisor exits yet. When you close positions via Risk Advisor recommendation, they'll be tracked here.</div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>TOTAL RA EXITS</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#e8e6e3' }}>{total}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>AVG P&L ON RA EXITS</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: avgPnl == null ? '#888' : avgPnl >= 0 ? '#28a745' : '#dc3545' }}>
+                      {avgPnl == null ? '—' : `${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(1)}%`}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>DISCIPLINE SCORE</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#FFD700' }}>
+                      {total > 0
+                        ? (() => {
+                            const avgScore = raExitEntries.reduce((sum, e) => sum + (e.discipline?.tier3?.components?.exitMethod?.score ?? 0), 0) / total;
+                            return `${avgScore.toFixed(0)}/12`;
+                          })()
+                        : '—'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: '#444', fontStyle: 'italic' }}>
+                  Risk Advisor exits score 10/12 on T3-A (vs 0/12 for manual exits at a loss). Following the system is disciplined risk management.
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
+
       <div style={{ background: '#111', borderRadius: 10, padding: '14px 16px' }}>
         <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 800, letterSpacing: 1, marginBottom: 10 }}>WASH RULES</div>
         {washRules.length === 0
@@ -731,6 +800,13 @@ export default function JournalPage({ onNavigate }) {
               {migrating ? '...' : '↺ sync positions'}
             </button>
           )}
+          {isAdmin && entries.some(e => e.performance?.status === 'CLOSED') && (
+            <button onClick={runRescoreAll} disabled={rescoring}
+              style={{ background: 'transparent', border: '1px solid rgba(212,160,23,0.4)', color: '#b8860b', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: rescoring ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+              title="Backfill missing signal/market data and recompute all discipline scores">
+              {rescoring ? '...' : '⚡ rescore closed'}
+            </button>
+          )}
           {tabBtn('trades', 'TRADES')}
           {tabBtn('analytics', 'ANALYTICS')}
           {tabBtn('weekly', 'WEEKLY REVIEW')}
@@ -738,6 +814,19 @@ export default function JournalPage({ onNavigate }) {
       </div>
 
       <div style={{ padding: '0 24px' }}>
+      {/* Rescore result toast */}
+      {rescoreResult && (
+        <div style={{ background: rescoreResult.error ? 'rgba(220,53,69,0.15)' : 'rgba(212,160,23,0.12)', border: `1px solid ${rescoreResult.error ? '#dc3545' : '#D4A017'}`, borderRadius: 6, padding: '8px 14px', marginBottom: 10, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: rescoreResult.error ? '#ff6b6b' : '#FFD700' }}>
+            {rescoreResult.error
+              ? `Rescore error: ${rescoreResult.error}`
+              : `⚡ Rescored ${rescoreResult.count} trade${rescoreResult.count !== 1 ? 's' : ''}: ${rescoreResult.results?.map(r => `${r.ticker} ${r.newScore}${r.fixes?.length ? ` (+${r.fixes.join(',')})` : ''}`).join(', ')}`
+            }
+          </span>
+          <button onClick={() => setRescoreResult(null)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14 }}>✕</button>
+        </div>
+      )}
+
       {/* Migration result toast */}
       {migrateResult && (
         <div style={{ background: migrateResult.error ? 'rgba(220,53,69,0.15)' : 'rgba(40,167,69,0.15)', border: `1px solid ${migrateResult.error ? '#dc3545' : '#28a745'}`, borderRadius: 6, padding: '8px 14px', marginBottom: 10, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

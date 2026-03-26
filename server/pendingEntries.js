@@ -16,6 +16,7 @@ import { fetchMarketSnapshot, getSectorEtf } from './marketSnapshot.js';
 import { fetchTechnicalSnapshot } from './technicalSnapshot.js';
 import { normalizeSector } from './sectorUtils.js';
 import { getDevelopingSignalTickers } from './signalService.js';
+import { calculateSectorExposure } from './sectorExposure.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE    = 'https://financialmodelingprep.com';
@@ -206,7 +207,27 @@ export async function pendingEntryConfirm(req, res) {
       const killData = entry.killScore
         ? { totalScore: entry.killScore, tier: entry.killTier, killRank: entry.killRank || null }
         : null;
-      const marketAtEntry = await fetchMarketSnapshot(position.sector || null).catch(() => ({}));
+      let marketAtEntry = await fetchMarketSnapshot(position.sector || null).catch(() => ({}));
+
+      // Fallback: if FMP snapshot has no SPY position data, use latest regime doc
+      if (!marketAtEntry?.spyPosition) {
+        console.warn(`[CONFIRM ENTRY] Live market snapshot incomplete for ${position.ticker}, trying regime fallback`);
+        try {
+          const regime = await db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } });
+          if (regime) {
+            marketAtEntry = {
+              ...marketAtEntry,
+              spyPosition: regime.spyPosition || (regime.spyPrice > regime.spyEma21 ? 'above' : null) || null,
+              qqqPosition: regime.qqqPosition || (regime.qqqPrice > regime.qqqEma21 ? 'above' : null) || null,
+              regime:      regime.regime      || marketAtEntry?.regime || null,
+              _source:     'regime_fallback',
+            };
+            console.log(`[CONFIRM ENTRY] Used regime fallback for market data: spy=${marketAtEntry.spyPosition}, qqq=${marketAtEntry.qqqPosition}`);
+          }
+        } catch (e) {
+          console.error(`[CONFIRM ENTRY] Regime fallback failed:`, e.message);
+        }
+      }
       const sectorAtEntry = position.sector && position.sector !== '—' ? {
         name:        position.sector,
         etfTicker:   getSectorEtf(position.sector),
@@ -258,12 +279,52 @@ export async function pendingEntryConfirm(req, res) {
         };
         const updateFields = { killScoreAtEntry };
         if (killScoreDoc.exchange) updateFields.exchange = killScoreDoc.exchange;
+
+        // Also set top-level signal + signalAge if not already captured from queue entry
+        const journalSignal    = entry.signal    || entry.pnthrSignal    || killScoreDoc.signal    || null;
+        const journalSignalAge = entry.signalAge ?? entry.weeksSince ?? killScoreDoc.signalAge ?? null;
+        if (journalSignal)             updateFields.signal    = journalSignal;
+        if (journalSignalAge != null)  updateFields.signalAge = journalSignalAge;
+        if (journalSignal && journalSignalAge != null) {
+          const ctx = journalSignalAge <= 1 ? 'CONFIRMED_SIGNAL' : 'STALE_SIGNAL';
+          updateFields.entryContext = ctx;
+        }
+
         await db.collection('pnthr_journal').updateOne(
           { positionId: posId, ownerId: req.user.userId },
           { $set: updateFields }
         );
       }
     } catch (e) { console.warn('[PE] Kill score capture failed:', e.message); }
+
+    // ── Persist analyzeScore snapshot from queue entry ────────────────────────
+    // When the user ran ANALYZE before queuing, we receive a pre-trade snapshot.
+    // Store it on the journal entry + use it to backfill missing signal/exchange data.
+    try {
+      if (entry.analyzeScore && typeof entry.analyzeScore === 'object') {
+        const as = entry.analyzeScore;
+        const analyzeUpdate = {
+          analyzeScoreAtEntry: {
+            score:       as.score       ?? null,
+            max:         as.max         ?? 53,
+            pct:         as.pct         ?? null,
+            projected:   as.projected   ?? null,
+            composite:   as.composite   ?? null,
+            warnings:    as.warnings    ?? [],
+            direction:   as.direction   ?? null,
+            computedAt:  as.computedAt  ?? new Date(),
+          },
+        };
+        // Backfill signal if not yet set from kill score capture
+        if (!entry.signal && as.direction) {
+          analyzeUpdate.direction = as.direction;
+        }
+        await db.collection('pnthr_journal').updateOne(
+          { positionId: posId, ownerId: req.user.userId },
+          { $set: analyzeUpdate }
+        );
+      }
+    } catch (e) { console.warn('[PE] analyzeScore capture failed:', e.message); }
 
     // Check for active wash sale rule — mark triggered if re-entering during window.
     try {
@@ -299,7 +360,29 @@ export async function pendingEntryConfirm(req, res) {
       }
     } catch (e) { console.warn('[PE] Wash rule check failed:', e.message); }
 
-    res.json({ success: true, positionId: posId, washWarning });
+    // Check sector concentration AFTER saving — warn but don't block.
+    let sectorWarning = null;
+    if (!position.isETF) {
+      try {
+        const existingPositions = await db.collection('pnthr_portfolio')
+          .find({ ownerId: req.user.userId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
+          .toArray();
+        const exposure = calculateSectorExposure(existingPositions);
+        const thisSector = position.sector;
+        const data = exposure[thisSector] || { longCount: 0, shortCount: 0, netExposure: 0 };
+        if (data.netExposure > 3) {
+          sectorWarning = {
+            sector:           thisSector,
+            currentExposure:  `${data.longCount}L/${data.shortCount}S (net ${data.netExposure})`,
+            netExposure:      data.netExposure,
+            level:            data.netExposure >= 4 ? 'CRITICAL' : 'WARNING',
+            message:          `${thisSector} is now at net ${data.netExposure} ${data.netDirection}. Consider adding a ${position.direction === 'LONG' ? 'short' : 'long'} to balance.`,
+          };
+        }
+      } catch (e) { console.warn('[PE] sector check failed:', e.message); }
+    }
+
+    res.json({ success: true, positionId: posId, washWarning, sectorWarning });
   } catch (err) {
     console.error('[PE] pendingEntryConfirm error:', err);
     res.status(500).json({ error: err.message });

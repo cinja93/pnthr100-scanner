@@ -16,6 +16,7 @@ import { fetchMarketSnapshot, getSectorEtf } from './marketSnapshot.js';
 import { fetchTechnicalSnapshot } from './technicalSnapshot.js';
 import { normalizeSector } from './sectorUtils.js';
 import { getDevelopingSignalTickers } from './signalService.js';
+import { calculateSectorExposure } from './sectorExposure.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE    = 'https://financialmodelingprep.com';
@@ -299,7 +300,29 @@ export async function pendingEntryConfirm(req, res) {
       }
     } catch (e) { console.warn('[PE] Wash rule check failed:', e.message); }
 
-    res.json({ success: true, positionId: posId, washWarning });
+    // Check sector concentration AFTER saving — warn but don't block.
+    let sectorWarning = null;
+    if (!position.isETF) {
+      try {
+        const existingPositions = await db.collection('pnthr_portfolio')
+          .find({ ownerId: req.user.userId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
+          .toArray();
+        const exposure = calculateSectorExposure(existingPositions);
+        const thisSector = position.sector;
+        const data = exposure[thisSector] || { longCount: 0, shortCount: 0, netExposure: 0 };
+        if (data.netExposure > 3) {
+          sectorWarning = {
+            sector:           thisSector,
+            currentExposure:  `${data.longCount}L/${data.shortCount}S (net ${data.netExposure})`,
+            netExposure:      data.netExposure,
+            level:            data.netExposure >= 4 ? 'CRITICAL' : 'WARNING',
+            message:          `${thisSector} is now at net ${data.netExposure} ${data.netDirection}. Consider adding a ${position.direction === 'LONG' ? 'short' : 'long'} to balance.`,
+          };
+        }
+      } catch (e) { console.warn('[PE] sector check failed:', e.message); }
+    }
+
+    res.json({ success: true, positionId: posId, washWarning, sectorWarning });
   } catch (err) {
     console.error('[PE] pendingEntryConfirm error:', err);
     res.status(500).json({ error: err.message });

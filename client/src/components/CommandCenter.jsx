@@ -259,7 +259,7 @@ const PRIORITY_STYLE = {
   ACTION:   { bg: 'rgba(40,167,69,0.08)', border: 'rgba(40,167,69,0.3)',  badge: '#28a745', text: '#4ade80' },
 };
 
-function RiskAdvisor({ recommendations, sectorRecs = [], onOpenChart }) {
+function RiskAdvisor({ recommendations, sectorRecs = [], onOpenChart, positions = [], onRiskAdvisorClose }) {
   const [open, setOpen] = useState(() => {
     try { return localStorage.getItem('pnthr_advisor_open') !== 'false'; } catch { return true; }
   });
@@ -330,12 +330,28 @@ function RiskAdvisor({ recommendations, sectorRecs = [], onOpenChart }) {
                         OPTION A: Close weakest {rec.netDirection.toLowerCase()} positions →
                       </div>
                     )}
-                    {rec.actions.map((a, j) => (
-                      <div key={j} style={{ fontSize: 11, color: s.text, fontFamily: 'monospace',
-                        paddingLeft: 8, borderLeft: `2px solid ${accentColor}` }}>
-                        → {formatAction(a)}
-                      </div>
-                    ))}
+                    {rec.actions.map((a, j) => {
+                      const pos = (a.action === 'CLOSE' || a.action === 'LIQUIDATE') ? positions.find(p => p.ticker === a.ticker) : null;
+                      return (
+                        <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 8,
+                          fontSize: 11, color: s.text, fontFamily: 'monospace',
+                          paddingLeft: 8, borderLeft: `2px solid ${accentColor}` }}>
+                          <span style={{ flex: 1 }}>→ {formatAction(a)}</span>
+                          {pos && onRiskAdvisorClose && (
+                            <button
+                              onClick={() => onRiskAdvisorClose(pos, rec.sector, rec.netExposure)}
+                              style={{
+                                background: 'rgba(220,53,69,0.15)', border: '1px solid #dc3545',
+                                color: '#dc3545', padding: '2px 10px', borderRadius: 4,
+                                fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'sans-serif',
+                                flexShrink: 0,
+                              }}>
+                              CLOSE
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   {/* Option B — Kill pipeline candidates */}
                   {(() => {
@@ -498,16 +514,18 @@ function ExitPanel({ position, onClose, onConfirm }) {
   const [err,        setErr]        = useState('');
 
   const REASONS = [
-    { value: 'SIGNAL',     label: 'SIGNAL — PNTHR exit signal (BE/SE) fired' },
-    { value: 'FEAST',      label: 'FEAST — RSI extreme, selling per FEAST rule' },
-    { value: 'STOP_HIT',   label: 'STOP_HIT — Stop price was hit' },
-    { value: 'STALE_HUNT', label: 'STALE_HUNT — 20-day timer expired' },
-    { value: 'MANUAL',     label: 'MANUAL — Discretionary override ⚠' },
+    { value: 'SIGNAL',       label: 'SIGNAL — PNTHR exit signal (BE/SE) fired' },
+    { value: 'FEAST',        label: 'FEAST — RSI extreme, selling per FEAST rule' },
+    { value: 'STOP_HIT',     label: 'STOP_HIT — Stop price was hit' },
+    { value: 'STALE_HUNT',   label: 'STALE_HUNT — 20-day timer expired' },
+    { value: 'RISK_ADVISOR', label: 'RISK ADVISOR — Sector/heat risk management' },
+    { value: 'MANUAL',       label: 'MANUAL — Discretionary override ⚠' },
   ];
 
   const sharesNum   = parseFloat(shares) || 0;
   const priceNum    = parseFloat(price)  || 0;
   const isManual    = reason === 'MANUAL';
+  const isRiskAdvisor = reason === 'RISK_ADVISOR';
   const canSubmit   = sharesNum > 0 && sharesNum <= remaining && priceNum > 0 && date && (!isManual || note.trim());
 
   // Impact preview
@@ -581,14 +599,14 @@ function ExitPanel({ position, onClose, onConfirm }) {
 
       {/* Note — always visible, required for MANUAL */}
       <div style={{ ...colSt, marginBottom: 8 }}>
-        <label style={{ ...labelSt, color: isManual ? '#dc3545' : '#888' }}>
-          {isManual ? '⚠ REQUIRED — EXPLAIN YOUR OVERRIDE' : 'NOTE (optional)'}
+        <label style={{ ...labelSt, color: isManual ? '#dc3545' : isRiskAdvisor ? '#dc3545' : '#888' }}>
+          {isManual ? '⚠ REQUIRED — EXPLAIN YOUR OVERRIDE' : isRiskAdvisor ? 'RISK ADVISOR NOTE (optional)' : 'NOTE (optional)'}
         </label>
         <textarea
           value={note}
           onChange={e => setNote(e.target.value)}
           rows={2}
-          placeholder={isManual ? 'What are you seeing? Why are you overriding the system?' : 'What are you seeing? (optional)'}
+          placeholder={isManual ? 'What are you seeing? Why are you overriding the system?' : isRiskAdvisor ? 'Sector concentration context (auto-filled if opened from Risk Advisor)' : 'What are you seeing? (optional)'}
           style={{ ...inputSt, resize: 'vertical', border: isManual && !note.trim() ? '2px solid #dc3545' : '1px solid #333' }}
         />
       </div>
@@ -1877,10 +1895,11 @@ export default function CommandCenter({ onNavigate }) {
   const [tab,             setTab]             = useState('positions');
   const [loading,         setLoading]         = useState(true);
   const [saving,          setSaving]          = useState(false);
-  const [sectorWarning,   setSectorWarning]   = useState(null);
-  const [chartModal,      setChartModal]      = useState(null); // { stocks, index }
-  const [closedToast,     setClosedToast]     = useState(null); // { ticker, avgCost, exitPrice, pnlDollar, pnlPct }
-  const [washWarning,     setWashWarning]     = useState(null); // { ticker, lossAmount, exitDate, expiryDate, daysRemaining, pendingId, fillData }
+  const [sectorWarning,         setSectorWarning]         = useState(null);
+  const [chartModal,            setChartModal]            = useState(null); // { stocks, index }
+  const [closedToast,           setClosedToast]           = useState(null); // { ticker, avgCost, exitPrice, pnlDollar, pnlPct }
+  const [washWarning,           setWashWarning]           = useState(null); // { ticker, lossAmount, exitDate, expiryDate, daysRemaining, pendingId, fillData }
+  const [riskAdvisorExitModal,  setRiskAdvisorExitModal]  = useState(null); // { position, shares, price, date, reason, note }
 
   const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
   const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
@@ -2204,7 +2223,8 @@ export default function CommandCenter({ onNavigate }) {
       }
     }
     setWashWarning(null);
-    await confirmPendingEntry(id, fillData);
+    const confirmResult = await confirmPendingEntry(id, fillData);
+    if (confirmResult?.sectorWarning) setSectorWarning(confirmResult.sectorWarning);
     setPendingEntries(prev => prev.filter(e => e.id !== id));
     // Re-fetch positions so the new one appears immediately.
     // Use safe merge so existing positions keep their sacred fields (fills, stops, etc.)
@@ -2344,13 +2364,13 @@ export default function CommandCenter({ onNavigate }) {
 
           {/* Sector concentration warning banner */}
             {sectorWarning && (
-              <div style={{ background: 'rgba(255,193,7,0.1)', border: '1px solid rgba(255,193,7,0.3)',
+              <div style={{ background: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.3)',
                 borderRadius: 8, padding: '10px 16px', marginBottom: 14,
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                fontSize: 12, color: '#ffc107', fontWeight: 600 }}>
-                <span>⚠ SECTOR CONCENTRATION: {sectorWarning}</span>
+                fontSize: 12, color: '#ff6b6b', fontWeight: 600 }}>
+                <span>⚠ SECTOR CONCENTRATION: {typeof sectorWarning === 'string' ? sectorWarning : sectorWarning.message}</span>
                 <button onClick={() => setSectorWarning(null)}
-                  style={{ background: 'none', border: 'none', color: '#ffc107', cursor: 'pointer',
+                  style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer',
                     fontSize: 18, lineHeight: 1, padding: '0 4px' }}>×</button>
               </div>
             )}
@@ -2378,7 +2398,23 @@ export default function CommandCenter({ onNavigate }) {
 
             {/* Risk Advisor — runs every time positions load */}
             <div ref={riskAdvisorRef}>
-              {!loading && <RiskAdvisor recommendations={advisorRecs} sectorRecs={sectorRecs} onOpenChart={ticker => setChartModal({ stocks: [{ ticker, symbol: ticker, currentPrice: null }], index: 0 })} />}
+              {!loading && <RiskAdvisor
+                recommendations={advisorRecs}
+                sectorRecs={sectorRecs}
+                positions={positions}
+                onOpenChart={ticker => setChartModal({ stocks: [{ ticker, symbol: ticker, currentPrice: null }], index: 0 })}
+                onRiskAdvisorClose={(pos, sector, netExposure) => {
+                  const totalShares = Object.values(pos.fills || {}).filter(f => f?.filled).reduce((s, f) => s + (+(f.shares ?? 0)), 0);
+                  setRiskAdvisorExitModal({
+                    position:    pos,
+                    shares:      totalShares,
+                    price:       pos.currentPrice ? pos.currentPrice.toFixed(2) : '',
+                    date:        new Date().toISOString().split('T')[0],
+                    reason:      'RISK_ADVISOR',
+                    note:        `Sector concentration: ${sector} at net ${netExposure}. Closed per Risk Advisor recommendation.`,
+                  });
+                }}
+              />}
             </div>
 
             {loading ? (
@@ -2490,6 +2526,104 @@ export default function CommandCenter({ onNavigate }) {
                 <button
                   onClick={() => setWashWarning(null)}
                   style={{ background: 'transparent', color: '#888', padding: '8px 20px', borderRadius: 6, border: '1px solid #444', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>
+                  CANCEL
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Risk Advisor Exit modal — one-click close from Risk Advisor recommendation */}
+      {riskAdvisorExitModal && (() => {
+        const { position, shares, price, date, reason, note } = riskAdvisorExitModal;
+        const avgCost = (() => {
+          let cost = 0, sh = 0;
+          for (let i = 1; i <= 5; i++) { const f = position.fills?.[i]; if (f?.filled && f.price) { cost += f.price * +(f.shares ?? 0); sh += +(f.shares ?? 0); } }
+          return sh > 0 ? cost / sh : (position.entryPrice || 0);
+        })();
+        const priceNum = parseFloat(price) || 0;
+        const diff = position.direction === 'SHORT' ? avgCost - priceNum : priceNum - avgCost;
+        const pnlDollar = diff * shares;
+        const pnlPct = avgCost > 0 ? diff / avgCost * 100 : 0;
+        const pnlColor = pnlDollar >= 0 ? '#28a745' : '#dc3545';
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#1a1a1a', border: '1px solid #dc3545', borderRadius: 10, padding: '24px 28px', maxWidth: 480, width: '90vw', boxShadow: '0 8px 32px rgba(0,0,0,0.8)' }}>
+              <div style={{ color: '#dc3545', fontWeight: 800, fontSize: '1rem', marginBottom: 6, letterSpacing: '0.05em' }}>
+                RISK ADVISOR EXIT — {position.ticker}
+              </div>
+              <div style={{ color: '#888', fontSize: 12, marginBottom: 16 }}>
+                Close {shares} shares · Sector concentration risk
+              </div>
+
+              {/* P&L preview */}
+              <div style={{ background: '#111', borderRadius: 6, padding: '8px 12px', marginBottom: 16, fontSize: 12, display: 'flex', gap: 20 }}>
+                <span>Current P&L: <b style={{ color: pnlColor }}>{pnlDollar >= 0 ? '+' : ''}${pnlDollar.toFixed(2)} ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%)</b></span>
+                <span style={{ color: '#555' }}>{shares} shr @ avg ${avgCost.toFixed(2)}</span>
+              </div>
+
+              {/* Exit price + date */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <div style={{ color: '#888', fontSize: 11, marginBottom: 3 }}>EXIT PRICE</div>
+                  <input
+                    type="number" step="0.01" value={price}
+                    onChange={e => setRiskAdvisorExitModal(prev => ({ ...prev, price: e.target.value }))}
+                    style={{ background: '#111', border: '1px solid #444', color: '#fff', borderRadius: 4, padding: '5px 8px', fontSize: 13, width: '100%', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <div style={{ color: '#888', fontSize: 11, marginBottom: 3 }}>DATE</div>
+                  <input
+                    type="date" value={date}
+                    onChange={e => setRiskAdvisorExitModal(prev => ({ ...prev, date: e.target.value }))}
+                    style={{ background: '#111', border: '1px solid #444', color: '#fff', borderRadius: 4, padding: '5px 8px', fontSize: 13, width: '100%', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              {/* Note */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ color: '#888', fontSize: 11, marginBottom: 3 }}>NOTE <span style={{ color: '#555' }}>(optional)</span></div>
+                <textarea
+                  value={note}
+                  onChange={e => setRiskAdvisorExitModal(prev => ({ ...prev, note: e.target.value }))}
+                  rows={2}
+                  style={{ background: '#111', border: '1px solid #333', color: '#ccc', borderRadius: 4, padding: '5px 8px', fontSize: 12, width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  disabled={!price || !date}
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${API_BASE}/api/positions/${position.id}/exit`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                        body: JSON.stringify({ shares, price: +price, date, reason, note }),
+                      });
+                      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Exit failed'); }
+                      const result = await res.json();
+                      setRiskAdvisorExitModal(null);
+                      // Handle exit result same as normal flow
+                      if (result?.status === 'CLOSED') {
+                        setPositions(prev => prev.filter(x => x.id !== position.id));
+                        setClosedToast({ ticker: position.ticker, avgCost, exitPrice: +price, pnlDollar, pnlPct });
+                        setTimeout(() => setClosedToast(null), 10000);
+                      } else {
+                        const data = await apiGet('/api/positions').catch(() => null);
+                        if (data?.positions?.length) setPositions(prev => mergeAfterExit(prev, data.positions));
+                      }
+                    } catch (ex) { alert(ex.message || 'Exit failed'); }
+                  }}
+                  style={{ background: '#dc3545', color: '#fff', padding: '9px 20px', borderRadius: 6, border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: 12, letterSpacing: '0.05em', opacity: (!price || !date) ? 0.5 : 1 }}>
+                  CONFIRM EXIT
+                </button>
+                <button
+                  onClick={() => setRiskAdvisorExitModal(null)}
+                  style={{ background: 'transparent', color: '#888', padding: '9px 20px', borderRadius: 6, border: '1px solid #444', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>
                   CANCEL
                 </button>
               </div>

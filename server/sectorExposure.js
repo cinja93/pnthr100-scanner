@@ -119,6 +119,8 @@ export function generateSectorRecommendations(sectorExposure, killMap = {}) {
     });
 
     // Option B: Add opposite-direction positions to balance
+    // Show enough candidates to fully balance (at least 3 for options, up to netExposure)
+    const candidateCount = Math.max(3, data.netExposure);
     const sectorCandidates = Object.values(killMap)
       .filter(s =>
         normalizeSector(s.sector) === sector &&
@@ -127,23 +129,22 @@ export function generateSectorRecommendations(sectorExposure, killMap = {}) {
         !data.shorts.includes(s.ticker)
       )
       .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
-      .slice(0, 3);
+      .slice(0, candidateCount);
 
-    if (sectorCandidates.length > 0) {
-      rec.options.push({
-        type:    'BALANCE',
-        action:  `Add ${excess} ${oppositeLabel} position${excess > 1 ? 's' : ''} in ${sector} to balance exposure`,
-        detail:  `Top ${oppositeSignal} candidates:`,
-        tickers: sectorCandidates.map(c => c.ticker),
-        candidateDetails: sectorCandidates.map(c => ({
-          ticker:    c.ticker,
-          signal:    c.signal,
-          killScore: Math.round(c.totalScore || 0),
-          rank:      c.killRank,
-          tier:      c.tier,
-        })),
-      });
-    }
+    rec.options.push({
+      type:    'BALANCE',
+      action:  `Add ${excess} ${oppositeLabel} position${excess > 1 ? 's' : ''} in ${sector} to balance exposure`,
+      detail:  `Top ${oppositeSignal} candidates:`,
+      tickers: sectorCandidates.map(c => c.ticker),
+      candidateDetails: sectorCandidates.map(c => ({
+        ticker:    c.ticker,
+        signal:    c.signal,
+        killScore: Math.round(c.totalScore || 0),
+        rank:      c.killRank,
+        tier:      c.tier,
+        signalAge: c.signalAge ?? null,
+      })),
+    });
 
     // Option C: AT_LIMIT — hold guidance
     if (data.level === 'AT_LIMIT') {

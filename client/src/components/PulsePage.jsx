@@ -1328,100 +1328,212 @@ function SignalStockModal({ signal, onClose, onTickerClick }) {
   );
 }
 
-// ── Tier 3: Combined Portfolio Status panel ────────────────────────────────────
+// ── Tier 3 sub-components ──────────────────────────────────────────────────────
+
+const SECTOR_SHORT_NAMES = {
+  'Communication Services': 'Comm Services',
+  'Consumer Discretionary': 'Cons Discret',
+  'Consumer Staples':       'Cons Staples',
+  'Financial Services':     'Financial Svcs',
+  'Information Technology': 'Technology',
+  'Basic Materials':        'Materials',
+};
+function getSectorDisplayName(s) { return SECTOR_SHORT_NAMES[s] || s; }
+
+function MetricCard({ label, value, valueColor, context, showBar, barPct, barColor }) {
+  return (
+    <div style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, padding: '12px 14px' }}>
+      <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: valueColor || '#e8e6e3', lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>{context}</div>
+      {showBar && (
+        <div style={{ marginTop: 8, height: 4, backgroundColor: '#2a2a2a', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${Math.min(barPct, 100)}%`, backgroundColor: barColor, borderRadius: 2 }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AlertStrip({ alerts, lotsReady, onNavigate }) {
+  const lotsCount = lotsReady?.length || 0;
+  const hasCritical = alerts.some(a => a.level === 'CRITICAL');
+  const hasHigh     = alerts.some(a => a.level === 'HIGH');
+  const totalAlerts = alerts.length + (lotsCount > 0 ? 1 : 0);
+
+  const level = totalAlerts === 0 ? 'CLEAR' : hasCritical ? 'CRITICAL' : hasHigh ? 'HIGH' : 'NORMAL';
+  const cfg = {
+    CLEAR:    { bg: 'rgba(40,167,69,0.08)',   border: 'rgba(40,167,69,0.25)',   dot: '#28a745', text: '#28a745', msg: 'No active alerts. All clear.' },
+    NORMAL:   { bg: 'rgba(255,215,0,0.08)',   border: 'rgba(255,215,0,0.25)',   dot: '#FFD700', text: '#FFD700', msg: `${lotsCount} lot${lotsCount > 1 ? 's' : ''} READY to fill` },
+    HIGH:     { bg: 'rgba(253,126,20,0.08)',  border: 'rgba(253,126,20,0.25)',  dot: '#fd7e14', text: '#fd7e14', msg: `${alerts.length} alert${alerts.length > 1 ? 's' : ''} — action needed` },
+    CRITICAL: { bg: 'rgba(220,53,69,0.08)',   border: 'rgba(220,53,69,0.25)',   dot: '#dc3545', text: '#dc3545', msg: `${alerts.length} alert${alerts.length > 1 ? 's' : ''} — immediate action required` },
+  }[level];
+
+  return (
+    <div style={{ padding: '10px 14px', backgroundColor: cfg.bg, border: `1px solid ${cfg.border}`,
+      borderRadius: 8, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: cfg.dot, flexShrink: 0 }} />
+      <span style={{ fontSize: 13, color: cfg.text }}>{cfg.msg}</span>
+      {lotsCount > 0 && level === 'NORMAL' && (
+        <span style={{ fontSize: 11, color: '#555', marginLeft: 4 }}>
+          {(lotsReady || []).map(l => `${l.ticker} Lot ${l.lot}`).join(', ')}
+        </span>
+      )}
+      <span onClick={() => onNavigate?.('command')}
+        style={{ marginLeft: 'auto', fontSize: 12, color: '#888', cursor: 'pointer',
+          textDecoration: 'underline', textDecorationColor: 'rgba(136,136,136,0.3)', textUnderlineOffset: 3 }}>
+        View risk advisor →
+      </span>
+    </div>
+  );
+}
+
+function SectorCard({ sector, data }) {
+  const isCrit  = data.level === 'CRITICAL';
+  const isLimit = data.level === 'AT_LIMIT';
+  const dot     = isCrit ? '#dc3545' : isLimit ? '#FFD700' : '#28a745';
+  const netClr  = isCrit ? '#dc3545' : isLimit ? '#FFD700' : '#28a745';
+  const bg      = isCrit ? 'rgba(220,53,69,0.06)' : isLimit ? 'rgba(255,215,0,0.04)' : '#1a1a1a';
+  const border  = isCrit ? 'rgba(220,53,69,0.25)' : isLimit ? 'rgba(255,215,0,0.15)' : '#2a2a2a';
+  const name    = getSectorDisplayName(sector);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px',
+      backgroundColor: bg, border: `1px solid ${border}`, borderRadius: 6 }}
+      title={`${sector}: ${data.longCount}L / ${data.shortCount}S — net exposure ${data.netExposure} ${data.netDirection}`}>
+      <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: dot, flexShrink: 0 }} />
+      <span style={{ fontSize: 12, color: '#e8e6e3', fontWeight: 600, flex: 1,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+      <span style={{ fontSize: 11, color: '#888', whiteSpace: 'nowrap' }}>{data.longCount}L/{data.shortCount}S</span>
+      <span style={{ fontSize: 11, fontWeight: 600, color: netClr, whiteSpace: 'nowrap' }}>net {data.netExposure}</span>
+    </div>
+  );
+}
+
+function SectorExposureGrid({ sectorExposure }) {
+  const sorted = Object.entries(sectorExposure)
+    .sort(([, a], [, b]) => {
+      const order = { CRITICAL: 0, AT_LIMIT: 1, CLEAR: 2 };
+      const d = (order[a.level] ?? 2) - (order[b.level] ?? 2);
+      return d !== 0 ? d : b.netExposure - a.netExposure;
+    });
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: '#888', letterSpacing: '0.06em', marginBottom: 10 }}>SECTOR EXPOSURE</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+        {sorted.map(([sector, data]) => <SectorCard key={sector} sector={sector} data={data} />)}
+      </div>
+    </div>
+  );
+}
+
+// ── Tier 3: Portfolio Status panel (redesigned) ────────────────────────────────
 function PortfolioStatus({ positions, lotsReady, onNavigate, sectorExposure }) {
   const heat = positions?.heat || {};
-  const nav = positions?.nav || 100000;
+  const nav  = positions?.nav  || 100000;
 
+  const stockPct = heat.stockRiskPct || 0;
+  const etfPct   = heat.etfRiskPct   || 0;
+  const totalPct = heat.totalRiskPct || 0;
+  const remaining = Math.max(0, 15 - totalPct);
+  const capacityLeft = Math.round(remaining / 100 * nav);
+
+  // Build alert list for AlertStrip
   const alerts = [];
-  if (heat.stockRiskPct > 10) alerts.push({ icon: '🔴', text: `Stock risk ${heat.stockRiskPct.toFixed(1)}% exceeds 10% cap` });
-  if (heat.etfRiskPct > 5) alerts.push({ icon: '🔴', text: `ETF risk ${heat.etfRiskPct.toFixed(1)}% exceeds 5% cap` });
-  if (heat.totalRiskPct > 13) alerts.push({ icon: '🟡', text: `Total heat ${heat.totalRiskPct.toFixed(1)}% approaching 15% cap` });
+  if (stockPct > 10) alerts.push({ level: 'CRITICAL', text: `Stock heat ${stockPct.toFixed(1)}% exceeds 10% cap` });
+  if (etfPct   > 5)  alerts.push({ level: 'CRITICAL', text: `ETF heat ${etfPct.toFixed(1)}% exceeds 5% cap` });
+  if (totalPct > 13) alerts.push({ level: 'HIGH',     text: `Total heat ${totalPct.toFixed(1)}% approaching 15% cap` });
+  if (sectorExposure?.recommendations) {
+    for (const r of sectorExposure.recommendations) {
+      alerts.push({ level: r.level === 'CRITICAL' ? 'CRITICAL' : 'HIGH', text: r.sector });
+    }
+  }
 
-  const lotsCount = lotsReady?.length || 0;
-  if (lotsCount > 0) alerts.push({ icon: '🟢', text: `${lotsCount} lot${lotsCount > 1 ? 's' : ''} READY to fill` });
+  // Status dot color
+  const hasCrit  = alerts.some(a => a.level === 'CRITICAL');
+  const hasHigh  = alerts.some(a => a.level === 'HIGH');
+  const dotColor = hasCrit ? '#dc3545' : hasHigh ? '#FFD700' : '#28a745';
 
-  const remaining = Math.max(0, 15 - (heat.totalRiskPct || 0));
+  const totalHeatColor = totalPct < 10 ? '#28a745' : totalPct < 13 ? '#FFD700' : '#dc3545';
 
   return (
     <div style={{ background: '#111', borderRadius: 12, padding: '16px 20px', marginTop: 12 }}>
-      <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 14 }}>⚡ PNTHR PORTFOLIO STATUS</div>
-      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
 
-        {/* Heat Gauge */}
-        <HeatGauge positions={positions} />
-
-        {/* Positions Summary */}
-        <div style={{ minWidth: 180, display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8 }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{positions?.total || 0} Active</div>
-          <div style={{ fontSize: 13, color: '#888' }}>{positions?.short || 0} Short · {positions?.long || 0} Long</div>
-          {(positions?.recycled || 0) > 0 && (
-            <div style={{ fontSize: 12, color: '#555' }}>{positions.recycled} Recycled ($0 risk)</div>
-          )}
-          <div style={{ fontSize: 13, color: '#ccc', marginTop: 4 }}>
-            Stock: <strong style={{ color: heat.stockRiskPct > 10 ? '#ff8c00' : '#ccc' }}>{(heat.stockRiskPct || 0).toFixed(1)}%</strong>
-            <span style={{ color: '#555' }}> / 10%</span>
-          </div>
-          <div style={{ fontSize: 13, color: '#ccc' }}>
-            ETF: <strong style={{ color: heat.etfRiskPct > 5 ? '#ff8c00' : '#ccc' }}>{(heat.etfRiskPct || 0).toFixed(1)}%</strong>
-            <span style={{ color: '#555' }}> / 5%</span>
-          </div>
-          <div style={{ fontSize: 12, color: '#28a745', marginTop: 2 }}>
-            ${Math.round(remaining / 100 * nav).toLocaleString()} capacity left
-          </div>
-          <div onClick={() => onNavigate?.('command')} style={{ marginTop: 8, color: '#FFD700', fontSize: 11, cursor: 'pointer', letterSpacing: 1 }}>GO TO COMMAND →</div>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: dotColor }} />
+          <span style={{ color: '#FFD700', fontSize: 15, fontWeight: 700, letterSpacing: '0.06em' }}>
+            PNTHR PORTFOLIO STATUS
+          </span>
         </div>
-
-        {/* Alerts + Lots Ready */}
-        <div style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 8 }}>
-          <div style={{ color: '#888', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, marginBottom: 4 }}>ALERTS & LOTS</div>
-          {alerts.length === 0
-            ? <div style={{ color: '#28a745', fontSize: 12 }}>✅ No active alerts. All clear.</div>
-            : alerts.map((a, i) => (
-              <div key={i} style={{ fontSize: 12, color: '#ccc' }}>{a.icon} {a.text}</div>
-            ))
-          }
-          {lotsCount > 0 && (
-            <div style={{ marginTop: 6 }}>
-              {(lotsReady || []).map((l, i) => (
-                <div key={i} style={{ fontSize: 12, color: '#6bcb77', marginBottom: 2 }}>
-                  ▶ {l.ticker} Lot {l.lot} @ ${l.triggerPrice}
-                </div>
-              ))}
-            </div>
-          )}
-          <div onClick={() => onNavigate?.('command')} style={{ marginTop: 8, color: '#FFD700', fontSize: 11, cursor: 'pointer', letterSpacing: 1 }}>VIEW RISK ADVISOR →</div>
-        </div>
-
+        <button onClick={() => onNavigate?.('command')}
+          style={{ fontSize: 12, padding: '4px 12px', backgroundColor: 'transparent',
+            border: '1px solid rgba(255,215,0,0.3)', borderRadius: 5, color: '#FFD700', cursor: 'pointer' }}>
+          GO TO COMMAND →
+        </button>
       </div>
 
-      {/* Sector Exposure summary — shown when at least one sector has data */}
-      {sectorExposure?.exposure && Object.keys(sectorExposure.exposure).length > 0 && (
-        <div style={{ marginTop: 14, borderTop: '1px solid #222', paddingTop: 12 }}>
-          <div style={{ color: '#888', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, marginBottom: 8 }}>SECTOR EXPOSURE</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 20px' }}>
-            {Object.entries(sectorExposure.exposure)
-              .sort((a, b) => b[1].netExposure - a[1].netExposure)
-              .map(([sector, d]) => {
-                const color = d.level === 'CRITICAL' ? '#dc3545' : d.level === 'AT_LIMIT' ? '#ffc107' : '#28a745';
-                const icon  = d.level === 'CRITICAL' ? '●' : d.level === 'AT_LIMIT' ? '⚠' : '✓';
-                return (
-                  <div key={sector} style={{ fontSize: 11, display: 'flex', gap: 6, alignItems: 'center', minWidth: 220 }}>
-                    <span style={{ color, fontWeight: 700, minWidth: 10 }}>{icon}</span>
-                    <span style={{ color: '#ccc', minWidth: 160 }}>{sector}</span>
-                    <span style={{ color: '#555', fontFamily: 'monospace' }}>{d.longCount}L/{d.shortCount}S</span>
-                    <span style={{ color, fontWeight: 600, fontFamily: 'monospace' }}>net {d.netExposure}</span>
-                    {d.level !== 'CLEAR' && (
-                      <span style={{ fontSize: 9, background: color, color: '#000', padding: '1px 5px', borderRadius: 3, fontWeight: 700 }}>
-                        {d.level === 'CRITICAL' ? 'CRITICAL' : 'AT LIMIT'}
-                      </span>
-                    )}
-                  </div>
-                );
-              })
-            }
+      {/* Four metric cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 16 }}>
+        <MetricCard
+          label="Active"
+          value={positions?.total || 0}
+          context={`${positions?.long || 0} long · ${positions?.short || 0} short`}
+        />
+        <MetricCard
+          label="Portfolio heat"
+          value={`${totalPct.toFixed(1)}%`}
+          valueColor={totalHeatColor}
+          context="of 15% max"
+          showBar barPct={(totalPct / 15) * 100} barColor={totalHeatColor}
+        />
+        <MetricCard
+          label="Recycled"
+          value={positions?.recycled || 0}
+          valueColor="#28a745"
+          context="$0 risk positions"
+        />
+        <MetricCard
+          label="Capacity left"
+          value={`$${capacityLeft.toLocaleString()}`}
+          context={`stk ${stockPct.toFixed(1)}/10% · ETF ${etfPct.toFixed(1)}/5%`}
+        />
+      </div>
+
+      {/* Dual heat breakdown bars */}
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16,
+        padding: '8px 14px', backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#888', marginBottom: 4 }}>
+            <span>Stock heat: {stockPct.toFixed(1)}%</span><span>10% cap</span>
+          </div>
+          <div style={{ height: 6, backgroundColor: '#2a2a2a', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: '100%', borderRadius: 3,
+              width: `${Math.min((stockPct / 10) * 100, 100)}%`,
+              backgroundColor: stockPct < 7 ? '#28a745' : stockPct < 9 ? '#FFD700' : '#dc3545' }} />
           </div>
         </div>
+        <div style={{ width: 1, height: 28, backgroundColor: '#333' }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#888', marginBottom: 4 }}>
+            <span>ETF heat: {etfPct.toFixed(1)}%</span><span>5% cap</span>
+          </div>
+          <div style={{ height: 6, backgroundColor: '#2a2a2a', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: '100%', borderRadius: 3,
+              width: `${Math.min((etfPct / 5) * 100, 100)}%`,
+              backgroundColor: etfPct < 3 ? '#28a745' : etfPct < 4.5 ? '#FFD700' : '#dc3545' }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Alert strip */}
+      <AlertStrip alerts={alerts} lotsReady={lotsReady} onNavigate={onNavigate} />
+
+      {/* Sector exposure grid */}
+      {sectorExposure?.exposure && Object.keys(sectorExposure.exposure).length > 0 && (
+        <SectorExposureGrid sectorExposure={sectorExposure.exposure} />
       )}
     </div>
   );

@@ -259,7 +259,7 @@ const PRIORITY_STYLE = {
   ACTION:   { bg: 'rgba(40,167,69,0.08)', border: 'rgba(40,167,69,0.3)',  badge: '#28a745', text: '#4ade80' },
 };
 
-function RiskAdvisor({ recommendations }) {
+function RiskAdvisor({ recommendations, sectorRecs = [], onOpenChart }) {
   const [open, setOpen] = useState(() => {
     try { return localStorage.getItem('pnthr_advisor_open') !== 'false'; } catch { return true; }
   });
@@ -303,6 +303,11 @@ function RiskAdvisor({ recommendations }) {
             if (rec.type === 'SECTOR_NET_EXPOSURE') {
               const isCrit = rec.priority === 'CRITICAL';
               const accentColor = isCrit ? '#dc3545' : '#ffc107';
+              // Look up enriched server rec for this sector (has candidateDetails from Kill pipeline)
+              const serverRec  = sectorRecs.find(r => r.sector === rec.sector);
+              const balanceOpt = serverRec?.options?.find(o => o.type === 'BALANCE');
+              const candidates = balanceOpt?.candidateDetails || [];
+              const oppositeDir = rec.netDirection === 'LONG' ? 'short' : 'long';
               return (
                 <div key={i} style={{ background: s.bg, border: `1px solid ${accentColor}`, borderRadius: 8, padding: '10px 14px' }}>
                   {/* Header */}
@@ -318,8 +323,8 @@ function RiskAdvisor({ recommendations }) {
                   <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
                     Positions: {rec.longCount} long / {rec.shortCount} short = net {rec.netExposure}
                   </div>
-                  {/* Actions */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {/* Option A */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 8 }}>
                     {rec.actions.length > 0 && (
                       <div style={{ fontSize: 11, color: '#dc3545', fontWeight: 600, marginBottom: 2 }}>
                         OPTION A: Close weakest {rec.netDirection.toLowerCase()} positions →
@@ -331,9 +336,34 @@ function RiskAdvisor({ recommendations }) {
                         → {formatAction(a)}
                       </div>
                     ))}
-                    <div style={{ fontSize: 11, color: '#28a745', fontWeight: 600, marginTop: rec.actions.length > 0 ? 6 : 0 }}>
-                      {isCrit ? 'OPTION B:' : '►'} Add {rec.netDirection === 'LONG' ? 'short' : 'long'} position{rec.netExposure - 2 > 1 ? 's' : ''} in {rec.sector} to balance exposure
+                  </div>
+                  {/* Option B — Kill pipeline candidates */}
+                  <div>
+                    <div style={{ fontSize: 11, color: '#28a745', fontWeight: 600, marginBottom: candidates.length > 0 ? 6 : 0 }}>
+                      {isCrit ? 'OPTION B:' : '►'} Add {rec.netExposure - 2} {oppositeDir} position{rec.netExposure - 2 > 1 ? 's' : ''} in {rec.sector} to balance exposure →
                     </div>
+                    {candidates.length > 0 ? candidates.map((c, j) => (
+                      <div key={c.ticker} style={{ display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '4px 0 4px 12px', borderLeft: '2px solid #28a745', marginBottom: 3 }}>
+                        <span style={{ color: '#888', fontSize: 11, width: 16 }}>{j + 1}.</span>
+                        <span style={{ color: '#FFD700', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                          onClick={() => onOpenChart?.(c.ticker)}>
+                          {c.ticker}
+                        </span>
+                        <span style={{ color: '#888', fontSize: 11 }}>Kill #{c.rank}</span>
+                        <span style={{ color: '#aaa', fontSize: 11 }}>Score: {c.killScore}</span>
+                        <span style={{ color: '#b8860b', fontSize: 10 }}>{c.tier}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
+                          color: c.signal === 'SS' ? '#dc3545' : '#28a745',
+                          border: `1px solid ${c.signal === 'SS' ? 'rgba(220,53,69,0.3)' : 'rgba(40,167,69,0.3)'}` }}>
+                          {c.signal}{c.signalAge != null ? `+${c.signalAge}` : ''}
+                        </span>
+                      </div>
+                    )) : (
+                      <div style={{ fontSize: 11, color: '#555', fontStyle: 'italic', paddingLeft: 12 }}>
+                        No {rec.netDirection === 'LONG' ? 'SS' : 'BL'} candidates currently scored in {rec.sector}. Check the Kill page.
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1711,6 +1741,7 @@ export default function CommandCenter({ onNavigate }) {
   }
   const [positions,       setPositions]       = useState([]);
   const [pendingEntries,  setPendingEntries]  = useState([]);
+  const [sectorRecs,      setSectorRecs]      = useState([]); // enriched recs from /api/sector-exposure (has candidateDetails)
   const [tab,             setTab]             = useState('positions');
   const [loading,         setLoading]         = useState(true);
   const [saving,          setSaving]          = useState(false);
@@ -1916,6 +1947,9 @@ export default function CommandCenter({ onNavigate }) {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+    fetchSectorExposure()
+      .then(data => { if (data?.recommendations?.length) setSectorRecs(data.recommendations); })
+      .catch(() => {});
     fetchPendingEntries()
       .then(data => { if (Array.isArray(data)) setPendingEntries(data); })
       .catch(() => {});
@@ -2201,7 +2235,7 @@ export default function CommandCenter({ onNavigate }) {
             </div>
 
             {/* Risk Advisor — runs every time positions load */}
-            {!loading && <RiskAdvisor recommendations={advisorRecs} />}
+            {!loading && <RiskAdvisor recommendations={advisorRecs} sectorRecs={sectorRecs} onOpenChart={ticker => setChartModal({ stocks: [{ ticker, symbol: ticker, currentPrice: null }], index: 0 })} />}
 
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#555' }}>Loading positions…</div>

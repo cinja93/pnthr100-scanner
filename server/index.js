@@ -93,7 +93,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
 // MongoDB injection guard — strips $ and . from req.body, query, params
 app.use(mongoSanitize());

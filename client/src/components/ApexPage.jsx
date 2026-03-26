@@ -274,7 +274,16 @@ export default function ApexPage() {
   const [chartStocks, setChartStocks] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: 'apexScore', dir: 'desc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
+  const [killSearch, setKillSearch] = useState('');
   const sortedRef = useRef([]);
+  const searchRowRef = useRef(null);
+
+  // Auto-scroll to exact match when search has exactly one result
+  useEffect(() => {
+    if (killSearchTrim && displaySorted.length === 1 && searchRowRef.current) {
+      searchRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [killSearch]);
 
   async function openHealth() {
     setHealthOpen(true);
@@ -384,7 +393,13 @@ export default function ApexPage() {
     return true;
   });
 
+  // Kill search: filter within already-filtered+sorted results
   const sorted = sortStocks(filtered, sortConfig);
+  const killSearchTrim = killSearch.trim();
+  const displaySorted = killSearchTrim
+    ? sorted.filter(s => s.ticker.includes(killSearchTrim))
+    : sorted;
+  const killSearchNotFound = killSearchTrim && displaySorted.length === 0;
 
   function handleRowClick(stock, idx, list) {
     setChartStocks(list);
@@ -532,10 +547,44 @@ export default function ApexPage() {
                 </button>
               </>
             )}
+            {/* ── Kill Search Input ─────────────────────────────────────────── */}
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="text"
+                placeholder="Search ticker…"
+                value={killSearch}
+                onChange={e => setKillSearch(e.target.value.toUpperCase())}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: `1px solid ${killSearch ? 'rgba(252,240,0,0.7)' : 'rgba(255,215,0,0.3)'}`,
+                  borderRadius: 5,
+                  padding: '5px 10px',
+                  color: '#FCF000',
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                  width: 120,
+                  outline: 'none',
+                }}
+              />
+              {killSearch && (
+                <button
+                  onClick={() => setKillSearch('')}
+                  title="Clear search"
+                  style={{ background: 'none', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: '2px 4px', lineHeight: 1 }}
+                >✕</button>
+              )}
+            </div>
           </div>
 
           {/* ── Table ────────────────────────────────────────────────────────── */}
-          {sorted.length === 0 ? (
+          {killSearchNotFound ? (
+            <div className={styles.emptyState}>
+              <span style={{ color: '#FCF000', fontFamily: 'monospace', fontSize: 15 }}>
+                {killSearch}
+              </span>
+              <span style={{ color: '#888', marginLeft: 8 }}>— Not found in PNTHR Kill universe.</span>
+            </div>
+          ) : displaySorted.length === 0 ? (
             <div className={styles.emptyState}>No stocks match the current filters.</div>
           ) : (
             <div className={styles.tableWrap}>
@@ -557,17 +606,20 @@ export default function ApexPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(() => { sortedRef.current = sorted; return null; })()}
-                  {sorted.map((stock, idx) => {
+                  {(() => { sortedRef.current = displaySorted; return null; })()}
+                  {displaySorted.map((stock, idx) => {
                     const tier = getTierConfig(stock.tier);
                     const wks  = computeWeeksAgo(stock.signalDate);
                     const isTop10 = stock.isTop10;
                     const isOverextended = stock.overextended === true;
+                    const isSearchMatch = killSearchTrim && stock.ticker === killSearchTrim;
                     return (
                       <tr
                         id={`aprow-${stock.ticker}`}
                         key={stock.ticker}
+                        ref={isSearchMatch ? searchRowRef : null}
                         className={`${styles.row}${selectedTicker === stock.ticker ? ` ${styles.selectedRow}` : ''}${isTop10 ? ` ${styles.top10Row}` : ''}${isOverextended ? ` ${styles.overextendedRow}` : ''}`}
+                        style={isSearchMatch ? { outline: '2px solid #FCF000', outlineOffset: '-2px' } : undefined}
                         onClick={() => setSelectedTicker(stock.ticker)}
                         title={isOverextended ? `${stock.companyName || stock.ticker} — OVEREXTENDED: ${stock.scores?.d3?.separationPct ?? ''}% from EMA` : stock.companyName || stock.ticker}
                       >

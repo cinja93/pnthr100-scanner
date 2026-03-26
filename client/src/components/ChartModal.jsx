@@ -879,18 +879,44 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                   </span>
                   <button
                     onClick={() => setSizePanel(p => {
-                      const newDir  = p.direction === 'LONG' ? 'SHORT' : 'LONG';
-                      // Use the chart's PNTHR stop (ATR-based) if available, else ±2%
-                      const newStop = p.chartPnthrStop
-                        ? p.chartPnthrStop
-                        : newDir === 'SHORT'
+                      const newDir = p.direction === 'LONG' ? 'SHORT' : 'LONG';
+
+                      // Recompute PNTHR stop for the new direction using loaded weekly data
+                      let newStop;
+                      if (allWeeklyData.length >= 4) {
+                        const atrArr      = computeWilderATR(allWeeklyData);
+                        const lastIdx     = allWeeklyData.length - 1;
+                        const prev1       = allWeeklyData[lastIdx - 1];
+                        const prev2       = allWeeklyData[lastIdx - 2];
+                        const current     = allWeeklyData[lastIdx];
+                        const atr         = atrArr[lastIdx] ?? atrArr[lastIdx - 1] ?? null;
+                        const twoWeekLow  = Math.min(prev1.low,  prev2.low);
+                        const twoWeekHigh = Math.max(prev1.high, prev2.high);
+                        if (newDir === 'LONG') {
+                          newStop = blInitStop(twoWeekLow, current.close, atr);
+                        } else {
+                          newStop = ssInitStop(twoWeekHigh, current.close, atr);
+                        }
+                      } else if (p.chartPnthrStop) {
+                        newStop = p.chartPnthrStop;
+                      } else {
+                        newStop = newDir === 'SHORT'
                           ? +(p.entry * 1.02).toFixed(2)
                           : +(p.entry * 0.98).toFixed(2);
-                      const sizing  = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir, isETF: p.isETF });
-                      const lot1    = Math.max(1, Math.round(sizing.totalShares * 0.15));
-                      return { ...p, direction: newDir, adjustedStop: newStop, stop: newStop,
-                        totalShares: sizing.totalShares, lot1Shares: lot1, vitality: sizing.vitality,
-                        risk$: +(lot1 * Math.abs(p.entry - newStop)).toFixed(0) };
+                      }
+
+                      const sizing = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir, isETF: p.isETF });
+                      const lot1   = Math.max(1, Math.round(sizing.totalShares * 0.15));
+                      return {
+                        ...p,
+                        direction:    newDir,
+                        adjustedStop: newStop,
+                        stop:         newStop,
+                        totalShares:  sizing.totalShares,
+                        lot1Shares:   lot1,
+                        vitality:     sizing.vitality,
+                        risk$:        +(lot1 * Math.abs(p.entry - newStop)).toFixed(0),
+                      };
                     })}
                     title="Click to flip LONG ↔ SHORT"
                     style={{ background: sizePanel.direction === 'SHORT' ? 'rgba(220,53,69,0.15)' : 'rgba(40,167,69,0.15)',
@@ -902,9 +928,9 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                   <span style={{ fontSize: 11, color: tierColor, fontWeight: 700, border: `1px solid ${tierColor}`, borderRadius: 3, padding: '2px 7px', opacity: 0.85 }}>
                     {tier}
                   </span>
-                  {/* DEBUG — remove after confirming direction is correct */}
+                  {/* DEBUG — remove after confirming direction toggle is correct */}
                   <span style={{ fontSize: 9, color: '#555', fontFamily: 'monospace' }}>
-                    dir:{sizePanel.dirSource} | stop:{sizePanel.chartPnthrStop ? `chart$${sizePanel.chartPnthrStop}` : 'no-chart-stop'}
+                    dir:{sizePanel.dirSource} | stop:${sizePanel.stop} ({sizePanel.direction})
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: 28, alignItems: 'baseline' }}>

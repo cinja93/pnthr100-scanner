@@ -467,11 +467,11 @@ export async function createPendingEntries(entries) {
   return res.json();
 }
 
-export async function confirmPendingEntry(id, { fillPrice, shares, date, stop }) {
+export async function confirmPendingEntry(id, { fillPrice, shares, date, stop, direction }) {
   const res = await fetch(`${API_BASE}/api/pending-entries/${id}/confirm`, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fillPrice, shares, date, stop }),
+    body: JSON.stringify({ fillPrice, shares, date, stop, direction }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();

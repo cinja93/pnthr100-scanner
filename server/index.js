@@ -1205,20 +1205,32 @@ app.get('/api/sector-signal-counts', async (req, res) => {
 app.get('/api/sector-exposure', authenticateJWT, async (req, res) => {
   try {
     const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'Database unavailable' });
+
+    // Step 1: fetch user positions
     const positions = await db.collection('pnthr_portfolio')
       .find({ ownerId: req.user.userId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
       .toArray();
 
+    // Step 2: compute net exposure (pure function — no DB)
     const exposure = calculateSectorExposure(positions);
 
-    // Build kill score map keyed by ticker (most recent score per ticker)
-    const killDocs = await db.collection('pnthr_kill_scores')
-      .find({}, { projection: { ticker: 1, totalScore: 1, killRank: 1, tier: 1, signal: 1, sector: 1 } })
-      .sort({ createdAt: -1 })
-      .toArray();
-    const killMap = {};
-    for (const s of killDocs) {
-      if (!killMap[s.ticker]) killMap[s.ticker] = s; // keep most recent only
+    // Step 3: fetch latest week's kill scores for recommendations (limit to most recent weekOf)
+    let killMap = {};
+    try {
+      const latestKill = await db.collection('pnthr_kill_scores')
+        .findOne({}, { sort: { createdAt: -1 }, projection: { weekOf: 1 } });
+      if (latestKill?.weekOf) {
+        const killDocs = await db.collection('pnthr_kill_scores')
+          .find({ weekOf: latestKill.weekOf },
+                { projection: { ticker: 1, totalScore: 1, killRank: 1, tier: 1, signal: 1, sector: 1 } })
+          .toArray();
+        for (const s of killDocs) {
+          if (!killMap[s.ticker]) killMap[s.ticker] = s;
+        }
+      }
+    } catch (killErr) {
+      console.warn('[SECTOR-EXPOSURE] Kill scores unavailable — recommendations will be limited:', killErr.message);
     }
 
     const recommendations = generateSectorRecommendations(exposure, killMap);
@@ -1234,8 +1246,8 @@ app.get('/api/sector-exposure', authenticateJWT, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[SECTOR-EXPOSURE] Error:', err);
-    res.status(500).json({ error: 'Failed to compute sector exposure' });
+    console.error('[SECTOR-EXPOSURE] Error:', err.message, err.stack);
+    res.status(500).json({ error: 'Failed to compute sector exposure', detail: err.message });
   }
 });
 

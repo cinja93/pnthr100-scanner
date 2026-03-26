@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { AuthContext } from './AuthContext';
 import { QueueProvider, useQueue } from './contexts/QueueContext';
+import { AnalyzeProvider } from './contexts/AnalyzeContext';
 import QueueReviewPanel from './components/QueueReviewPanel';
 import StockTable from './components/StockTable';
 import ChartModal from './components/ChartModal';
@@ -141,9 +142,11 @@ function App() {
   }
   return (
     <AuthContext.Provider value={{ currentUser, isAdmin, updateCurrentUser }}>
-      <QueueProvider>
-        <AppInner currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />
-      </QueueProvider>
+      <AnalyzeProvider>
+        <QueueProvider>
+          <AppInner currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />
+        </QueueProvider>
+      </AnalyzeProvider>
     </AuthContext.Provider>
   );
 }

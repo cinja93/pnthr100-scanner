@@ -3,6 +3,8 @@ import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
 import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchKillPipeline, fetchNav, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, calcHeat, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils.js';
 import { useQueue } from '../contexts/QueueContext';
+import { useAnalyzeContext } from '../contexts/AnalyzeContext';
+import { computeAnalyzeScore } from '../utils/analyzeScore';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
 import KillBadge from './KillBadge';
@@ -270,6 +272,7 @@ function formatWeekDate(timeStr) {
 
 export default function ChartModal({ stocks, initialIndex, earnings = {}, onClose, onWatchlistChange }) {
   const { isAuthenticated, queuedTickers, toggleQueue, nav: contextNav } = useQueue() || {};
+  const { analyzeContext } = useAnalyzeContext() || {};
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [range, setRange] = useState('12m');
   const [allWeeklyData, setAllWeeklyData] = useState([]);
@@ -290,6 +293,9 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   // ── SIZE IT / QUEUE IT state ─────────────────────────────────────────────────
   const [sizePanel, setSizePanel] = useState(null);
   const [sizeLoading, setSizeLoading] = useState(false);
+  // ── ANALYZE panel state ──────────────────────────────────────────────────────
+  const [analyzeOpen, setAnalyzeOpen] = useState(false);
+  const analyzeResultRef = useRef(null);
   // ── Wash rule warning ────────────────────────────────────────────────────────
   const [washWarning, setWashWarning] = useState(null);
   const positionsCache = useRef(null);
@@ -302,8 +308,8 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   const stock = stocks[currentIndex];
   const inWatchlist = stock ? watchlistSet.has(stock.ticker) : false;
 
-  // Reset SIZE IT panel when navigating to a new stock
-  useEffect(() => { setSizePanel(null); }, [currentIndex]);
+  // Reset SIZE IT + ANALYZE panels when navigating to a new stock
+  useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; }, [currentIndex]);
 
   // ── Check wash rule whenever ticker changes (including Prev/Next navigation) ──
   useEffect(() => {
@@ -756,6 +762,20 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
         isETF:            sizePanel.isETF || false,
         sector:           sizePanel.isETF ? 'ETF' : (stock.sector || '—'),
         companyName:      stock.companyName || '',
+        exchange:         stock.exchange || '',
+        signalAge:        stock.signalAge ?? stock.weeksSince ?? null,
+        analyzeScore:     analyzeResultRef.current
+          ? {
+              score:     analyzeResultRef.current.score,
+              max:       analyzeResultRef.current.max,
+              pct:       analyzeResultRef.current.pct,
+              projected: analyzeResultRef.current.projected,
+              composite: analyzeResultRef.current.composite,
+              warnings:  analyzeResultRef.current.warnings,
+              direction: analyzeResultRef.current.direction,
+              computedAt: new Date().toISOString(),
+            }
+          : null,
         queuedAt:         Date.now(),
       });
     }
@@ -804,6 +824,36 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
             })()}
             {isAuthenticated && (
               <>
+                {/* ── ANALYZE button ── */}
+                {analyzeContext && (() => {
+                  const ar = computeAnalyzeScore(stock, analyzeContext);
+                  if (!ar) return null;
+                  const hasWarnings = ar.warnings.length > 0;
+                  return (
+                    <button
+                      onClick={() => {
+                        analyzeResultRef.current = ar;
+                        setAnalyzeOpen(prev => !prev);
+                        setSizePanel(null); // close SIZE IT if open
+                      }}
+                      title={hasWarnings ? ar.warnings[0] : `Pre-trade score: ${ar.score}/${ar.max}`}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 5,
+                        padding: '5px 12px',
+                        backgroundColor: analyzeOpen ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)',
+                        border: `1.5px solid ${ar.color}`,
+                        borderRadius: 5, color: ar.color, fontSize: 11, fontWeight: 800,
+                        cursor: 'pointer', fontFamily: 'monospace', letterSpacing: '0.04em',
+                      }}
+                    >
+                      ANALYZE
+                      <span style={{ backgroundColor: ar.color, color: '#000', padding: '1px 5px', borderRadius: 3, fontSize: 11, fontWeight: 800 }}>
+                        {ar.pct}
+                      </span>
+                      {hasWarnings && <span style={{ fontSize: 10 }}>⚠</span>}
+                    </button>
+                  );
+                })()}
                 <button
                   onClick={handleSizeIt}
                   disabled={sizeLoading}
@@ -841,6 +891,87 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
             <button className={styles.closeBtn} onClick={onClose} title="Close">×</button>
           </div>
         </div>
+
+        {/* ANALYZE panel — expands on click, closes when SIZE IT opens */}
+        {isAuthenticated && analyzeOpen && analyzeResultRef.current && (() => {
+          const ar = analyzeResultRef.current;
+          function ScoreLine({ label, comp, max: lineMax }) {
+            const s = comp?.score ?? 0;
+            const lbl = comp?.label ?? '—';
+            const lineColor = s >= lineMax * 0.7 ? '#28a745' : s > 0 ? '#FFD700' : '#dc3545';
+            return (
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12 }}>
+                <span style={{ color: '#888' }}>{label}</span>
+                <span style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ color: '#aaa' }}>{s}/{lineMax}</span>
+                  <span style={{ color: lineColor, fontWeight: 600, minWidth: 80, textAlign: 'right' }}>{lbl}</span>
+                </span>
+              </div>
+            );
+          }
+          return (
+            <div style={{ backgroundColor: '#111', borderBottom: `2px solid ${ar.color}`, padding: '16px 20px' }}>
+              {/* Header row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ color: '#FFD700', fontSize: 14, fontWeight: 700 }}>PRE-TRADE ANALYSIS — {stock.ticker}</span>
+                  <span style={{ backgroundColor: ar.color, color: '#000', padding: '3px 10px', borderRadius: 5, fontSize: 13, fontWeight: 800 }}>{ar.pct}%</span>
+                </div>
+                <span style={{ color: '#888', fontSize: 11 }}>Projected full score: {ar.projected.low}–{ar.projected.high}/100</span>
+              </div>
+              {/* Two-column layout */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div>
+                  <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 6 }}>STOCK SELECTION</div>
+                  <ScoreLine label="Signal Quality"  comp={ar.components.signalQuality} max={15} />
+                  <ScoreLine label="Kill Context"    comp={ar.components.killContext}   max={10} />
+                  <ScoreLine label="Index Trend"     comp={ar.components.indexTrend}    max={8}  />
+                  <ScoreLine label="Sector Trend"    comp={ar.components.sectorTrend}   max={7}  />
+                  <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginTop: 10, marginBottom: 6 }}>EXECUTION (PROJECTED)</div>
+                  <ScoreLine label="Position Sizing" comp={ar.components.sizing}        max={8}  />
+                  <ScoreLine label="Risk Cap"        comp={ar.components.riskCap}       max={5}  />
+                </div>
+                <div>
+                  {ar.warnings.length > 0 ? (
+                    <>
+                      <div style={{ color: '#dc3545', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 6 }}>WARNINGS</div>
+                      {ar.warnings.map((w, i) => (
+                        <div key={i} style={{ fontSize: 11, color: '#ccc', padding: '3px 0 3px 8px', borderLeft: '2px solid #dc3545', marginBottom: 4 }}>{w}</div>
+                      ))}
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 12, color: '#28a745', padding: 12, backgroundColor: 'rgba(40,167,69,0.08)', borderRadius: 6, textAlign: 'center' }}>
+                      No warnings. Strong candidate for entry.
+                    </div>
+                  )}
+                  {ar.components.sectorExposure?.level !== 'CLEAR' && (
+                    <div style={{ marginTop: 10, padding: '8px 12px',
+                      backgroundColor: ar.components.sectorExposure.level === 'CRITICAL' ? 'rgba(220,53,69,0.08)' : 'rgba(255,215,0,0.08)',
+                      border: `1px solid ${ar.components.sectorExposure.level === 'CRITICAL' ? 'rgba(220,53,69,0.25)' : 'rgba(255,215,0,0.25)'}`,
+                      borderRadius: 6, fontSize: 11, color: '#ccc' }}>
+                      {stock.sector} goes to net {ar.components.sectorExposure.netAfter} ({ar.components.sectorExposure.currentLongs}L/{ar.components.sectorExposure.currentShorts}S → +1)
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 14, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => { setAnalyzeOpen(false); handleSizeIt(); }}
+                  style={{ padding: '7px 18px', backgroundColor: 'rgba(212,160,23,0.15)', border: '1.5px solid #D4A017', color: '#FFD700', borderRadius: 5, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                >
+                  SIZE IT →
+                </button>
+                <button
+                  onClick={() => setAnalyzeOpen(false)}
+                  style={{ padding: '7px 18px', backgroundColor: 'transparent', border: '1px solid #444', color: '#888', borderRadius: 5, fontSize: 12, cursor: 'pointer' }}
+                >
+                  CLOSE
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* SIZE IT panel — two-row data card */}
         {isAuthenticated && sizePanel && (() => {

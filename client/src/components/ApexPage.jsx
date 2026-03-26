@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { useQueue } from '../contexts/QueueContext';
+import { useAnalyzeContext } from '../contexts/AnalyzeContext';
+import { computeAnalyzeScore } from '../utils/analyzeScore';
 import ChartModal from './ChartModal';
 import KillBadge from './KillBadge';
 import { fetchApexStocks, API_BASE, authHeaders } from '../services/api';
@@ -152,6 +154,8 @@ function sortStocks(stocks, { key, dir }) {
         const bType2 = SIG_ORDER2[b.signal] ?? 99;
         av = aW2 * 10000 + aType2; bv = bW2 * 10000 + bType2; break;
       }
+      case 'analyzeScore': av = a.analyzeScore ?? -1;  bv = b.analyzeScore ?? -1;  break;
+      case 'composite':    av = a.composite   ?? -1;  bv = b.composite   ?? -1;  break;
       default: av = 0; bv = 0;
     }
     if (typeof av === 'string') return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
@@ -257,6 +261,7 @@ const UI_DEFS = {
 export default function ApexPage() {
   const { isAdmin } = useAuth();
   const { queue, toggleQueue, queuedTickers } = useQueue();
+  const { analyzeContext } = useAnalyzeContext() || {};
   const [data, setData]             = useState(null);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
@@ -384,7 +389,24 @@ export default function ApexPage() {
     );
   }
 
-  const stocks = data?.stocks || [];
+  const rawStocks = data?.stocks || [];
+
+  // Enrich every stock with Analyze score + composite for sorting/display
+  const stocks = useMemo(() => {
+    if (!analyzeContext || !rawStocks.length) return rawStocks;
+    const maxScore = Math.max(...rawStocks.map(s => s.apexScore || 0));
+    return rawStocks.map(s => {
+      const enriched = { ...s, pipelineMaxScore: maxScore };
+      const ar = computeAnalyzeScore(enriched, analyzeContext);
+      return {
+        ...s,
+        analyzeScore: ar?.pct ?? null,
+        analyzeResult: ar,
+        composite: ar?.composite ?? null,
+      };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, analyzeContext]);
 
   const filtered = stocks.filter(s => {
     if (side === 'long'  && s.signal !== 'BL') return false;
@@ -600,6 +622,8 @@ export default function ApexPage() {
                     <SortTh col="ytd"       label={<>YTD<br/>Return</>}  title="Sort by YTD Return" />
                     <SortTh col="signal"    label={<>PNTHR<br/>Signal</>} title="Sort by Signal" />
                     <SortTh col="wks"       label={<>Wks<br/>Since</>}   title="Sort by Weeks Since Signal" />
+                    <SortTh col="analyzeScore" label={<>Ana&shy;lyze</>}  title="Sort by Analyze pre-trade score" />
+                    <SortTh col="composite"    label={<>Com&shy;posite</>} title="Sort by Composite (Kill × Analyze%)" />
                     <th className={`${styles.thStatic} ${styles.thDetail}`} style={{ textAlign: 'center' }}>Score<br/>Detail</th>
                   </tr>
                 </thead>
@@ -722,6 +746,24 @@ export default function ApexPage() {
                           {wks != null
                             ? <span className={stock.signal === 'BL' ? styles.wksBL : styles.wksSS}>{stock.signal}+{wks}</span>
                             : '—'}
+                        </td>
+
+                        {/* Analyze pre-trade score */}
+                        <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 700 }}>
+                          {stock.analyzeScore != null ? (
+                            <span
+                              style={{ color: stock.analyzeResult?.color || '#888' }}
+                              title={stock.analyzeResult?.warnings?.length ? stock.analyzeResult.warnings.join('\n') : `Pre-trade score: ${stock.analyzeScore}%`}
+                            >
+                              {stock.analyzeScore}%
+                              {stock.analyzeResult?.warnings?.length > 0 && <span style={{ marginLeft: 2, fontSize: 10 }}>⚠</span>}
+                            </span>
+                          ) : '—'}
+                        </td>
+
+                        {/* Composite: Kill × Analyze% */}
+                        <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 700, color: '#FFD700' }}>
+                          {stock.composite != null ? stock.composite : '—'}
                         </td>
 
                         {/* Score Detail hover */}

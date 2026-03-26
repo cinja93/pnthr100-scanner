@@ -297,6 +297,35 @@ export async function pendingEntryConfirm(req, res) {
       }
     } catch (e) { console.warn('[PE] Kill score capture failed:', e.message); }
 
+    // ── Persist analyzeScore snapshot from queue entry ────────────────────────
+    // When the user ran ANALYZE before queuing, we receive a pre-trade snapshot.
+    // Store it on the journal entry + use it to backfill missing signal/exchange data.
+    try {
+      if (entry.analyzeScore && typeof entry.analyzeScore === 'object') {
+        const as = entry.analyzeScore;
+        const analyzeUpdate = {
+          analyzeScoreAtEntry: {
+            score:       as.score       ?? null,
+            max:         as.max         ?? 53,
+            pct:         as.pct         ?? null,
+            projected:   as.projected   ?? null,
+            composite:   as.composite   ?? null,
+            warnings:    as.warnings    ?? [],
+            direction:   as.direction   ?? null,
+            computedAt:  as.computedAt  ?? new Date(),
+          },
+        };
+        // Backfill signal if not yet set from kill score capture
+        if (!entry.signal && as.direction) {
+          analyzeUpdate.direction = as.direction;
+        }
+        await db.collection('pnthr_journal').updateOne(
+          { positionId: posId, ownerId: req.user.userId },
+          { $set: analyzeUpdate }
+        );
+      }
+    } catch (e) { console.warn('[PE] analyzeScore capture failed:', e.message); }
+
     // Check for active wash sale rule — mark triggered if re-entering during window.
     try {
       const now = new Date();

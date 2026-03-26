@@ -1074,12 +1074,38 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
               <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeSE}`}>SE</span>
             )}
             <span className={styles.currentPrice}>${stock.currentPrice?.toLocaleString()}</span>
-            {pnthrStop != null && (
-              <span className={styles.stopBadge}>PNTHR Stop: ${pnthrStop.toFixed(2)}</span>
-            )}
-            {currentWeekStop != null && (
-              <span className={styles.stopBadgeCurr}>Curr Stop: ${currentWeekStop.toFixed(2)}</span>
-            )}
+            {(() => {
+              // When SIZE IT is open, reflect its direction in the stop badges
+              const sizePanelDir = sizePanel?.direction; // 'LONG' | 'SHORT' | null
+              const signalDir    = currentSignal === 'BL' ? 'LONG' : currentSignal === 'SS' ? 'SHORT' : null;
+              const overridden   = sizePanelDir && signalDir && sizePanelDir !== signalDir;
+
+              const displayPnthrStop = overridden ? sizePanel.adjustedStop : pnthrStop;
+              const displayCurrStop  = (() => {
+                if (!overridden || !allWeeklyData.length) return currentWeekStop;
+                const lastBar = allWeeklyData[allWeeklyData.length - 1];
+                return sizePanelDir === 'LONG'
+                  ? parseFloat((lastBar.low  - 0.01).toFixed(2))
+                  : parseFloat((lastBar.high + 0.01).toFixed(2));
+              })();
+
+              return (
+                <>
+                  {displayPnthrStop != null && (
+                    <span className={styles.stopBadge}>
+                      PNTHR Stop: ${displayPnthrStop.toFixed(2)}
+                      {overridden && <span style={{ fontSize: 9, opacity: 0.65, marginLeft: 4 }}>({sizePanelDir})</span>}
+                    </span>
+                  )}
+                  {displayCurrStop != null && (
+                    <span className={styles.stopBadgeCurr}>
+                      Curr Stop: ${displayCurrStop.toFixed(2)}
+                      {overridden && <span style={{ fontSize: 9, opacity: 0.65, marginLeft: 4 }}>({sizePanelDir})</span>}
+                    </span>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
 

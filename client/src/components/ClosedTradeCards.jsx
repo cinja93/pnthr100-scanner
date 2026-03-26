@@ -367,6 +367,59 @@ function getScoreQuestions(entry, disc) {
   return questions;
 }
 
+// Returns ALL scoreable questions regardless of disc state — used in review mode
+// so the user can correct any previously confirmed answer.
+function getReviewQuestions(entry) {
+  return [
+    {
+      id: 'signal',
+      question: `What was the PNTHR signal for ${entry.ticker} when you entered?`,
+      type: 'single_select',
+      options: [
+        { value: 'BL+1',        label: 'BL+1 (fresh buy long)' },
+        { value: 'BL+2',        label: 'BL+2 (1 week old)' },
+        { value: 'BL+3',        label: 'BL+3+ (2+ weeks old)' },
+        { value: 'SS+1',        label: 'SS+1 (fresh sell short)' },
+        { value: 'SS+2',        label: 'SS+2 (1 week old)' },
+        { value: 'SS+3',        label: 'SS+3+ (2+ weeks old)' },
+        { value: 'DEVELOPING',  label: 'Developing signal (3/4 conditions met)' },
+        { value: 'NONE',        label: 'No PNTHR signal' },
+      ],
+    },
+    {
+      id: 'indexTrend',
+      question: `Was the market (SPY/QQQ) trending WITH or AGAINST your ${entry.direction} trade?`,
+      type: 'single_select',
+      options: [
+        { value: 'WITH',    label: 'With trend (index supported my direction)' },
+        { value: 'AGAINST', label: 'Against trend (I went against the index)' },
+        { value: 'UNKNOWN', label: "Don't remember" },
+      ],
+    },
+    {
+      id: 'sectorTrend',
+      question: `Was the ${entry.sector || 'sector'} trending WITH or AGAINST your ${entry.direction} trade?`,
+      type: 'single_select',
+      options: [
+        { value: 'WITH',    label: 'With sector trend' },
+        { value: 'AGAINST', label: 'Against sector trend' },
+        { value: 'UNKNOWN', label: "Don't remember" },
+      ],
+    },
+    {
+      id: 'sizing',
+      question: 'Did you use SIZE IT for the recommended position size?',
+      type: 'single_select',
+      options: [
+        { value: 'EXACT',     label: 'Yes, exact SIZE IT recommendation' },
+        { value: 'WITHIN_10', label: 'Yes, within 10% of SIZE IT' },
+        { value: 'WITHIN_20', label: 'Close, within 20%' },
+        { value: 'NO',        label: 'No, I adjusted significantly' },
+      ],
+    },
+  ];
+}
+
 function CompleteYourScore({ entry, disc, onSave, forceOpen }) {
   // Pre-populate from existing userConfirmed so corrections show current selections
   const [answers, setAnswers] = useState(() => {
@@ -407,10 +460,9 @@ function CompleteYourScore({ entry, disc, onSave, forceOpen }) {
   const isReview = forceOpen && entry.userConfirmed?.confirmedAt;
   const hasAnswers = Object.keys(answers).length > 0;
 
-  // When reviewing verified entry, show all questions (not just unconfirmed ones)
-  const displayQuestions = isReview && questions.length === 0
-    ? getScoreQuestions({ ...entry, userConfirmed: {} }, disc) // strip confirmations to get full question list
-    : questions;
+  // Review mode: show full question set from userConfirmed keys (disc scores already confirmed, not UNKNOWN)
+  // Normal mode: only show questions for fields that still need data
+  const displayQuestions = isReview ? getReviewQuestions(entry) : questions;
 
   return (
     <div style={{ border: `1px solid ${isReview ? '#D4A017' : '#D4A017'}`, borderRadius: 8, padding: 16, backgroundColor: 'rgba(212,160,23,0.05)', margin: '10px 14px' }}>

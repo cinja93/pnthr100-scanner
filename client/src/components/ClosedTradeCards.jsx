@@ -206,6 +206,7 @@ function DataCell({ label, value, color, tooltip }) {
 
 // ── ConditionRow ──────────────────────────────────────────────────────────────
 function ConditionRow({ label, value, detail, badge, badgeColor, color }) {
+  if (value == null && !badge && !detail) return null;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', columnGap: 10, padding: '1px 0', fontSize: '0.78rem' }}>
       <span style={{ color: '#777', flexShrink: 0 }}>{label}</span>
@@ -220,7 +221,7 @@ function ConditionRow({ label, value, detail, badge, badgeColor, color }) {
 
 // ── TechSection ───────────────────────────────────────────────────────────────
 function TechSection({ tech }) {
-  if (!tech) return <div style={{ color: '#444', fontSize: '0.72rem', fontStyle: 'italic' }}>Technical data not available</div>;
+  if (!tech) return null;
   const rsiColor = tech.rsi14 > 70 ? '#dc3545' : tech.rsi14 < 30 ? '#28a745' : '#ccc';
   const adxColor = tech.adx > 25 ? '#28a745' : '#fd7e14';
   const obvColor = tech.obvTrend === 'RISING' ? '#28a745' : tech.obvTrend === 'DECLINING' ? '#dc3545' : '#888';
@@ -246,28 +247,35 @@ function MarketColumn({ snap, tech, dir, label }) {
   const getVixZone    = v => v <= 15 ? { z: 'CALM', c: '#28a745' } : v <= 20 ? { z: 'NORMAL', c: '#FFD700' } : v <= 30 ? { z: 'ELEVATED', c: '#fd7e14' } : { z: 'FEAR', c: '#dc3545' };
   const vixZ = snap.vix ? getVixZone(snap.vix) : null;
 
+  const hasMarket  = snap.spyPrice != null || snap.qqqPrice != null || snap.vix != null || !!snap.regime;
+  const hasYields  = snap.treasury2Y != null || snap.treasury10Y != null || snap.treasury30Y != null ||
+                     snap.spread2Y10Y != null || snap.dxy != null || snap.crudeOil != null || snap.gold != null;
+
   return (
     <div style={{ padding: '12px 14px', flex: 1, maxWidth: 480 }}>
       <div style={{ color: label === 'AT ENTRY' ? '#D4A017' : '#777', fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', marginBottom: 8 }}>{label}</div>
 
-      <div style={{ color: '#555', fontSize: '0.62rem', letterSpacing: '0.06em', marginBottom: 3 }}>MARKET</div>
-      <ConditionRow label="SPY"    value={snap.spyPrice != null ? `$${fmtNum(snap.spyPrice)}` : null}
-        detail={snap.spyVsEma != null ? `${snap.spyVsEma >= 0 ? '+' : ''}${fmtNum(snap.spyVsEma)}% EMA` : null} />
-      <ConditionRow label="QQQ"    value={snap.qqqPrice != null ? `$${fmtNum(snap.qqqPrice)}` : null}
-        detail={snap.qqqVsEma != null ? `${snap.qqqVsEma >= 0 ? '+' : ''}${fmtNum(snap.qqqVsEma)}% EMA` : null} />
-      {snap.vix != null && <ConditionRow label="VIX" value={fmtNum(snap.vix, 1)}
-        badge={vixZ?.z} badgeColor={vixZ?.c} />}
-      {snap.regime && <ConditionRow label="REGIME" badge={snap.regime} badgeColor={getRegimeColor(snap.regime)} />}
+      {hasMarket && <>
+        <div style={{ color: '#555', fontSize: '0.62rem', letterSpacing: '0.06em', marginBottom: 3 }}>MARKET</div>
+        <ConditionRow label="SPY" value={snap.spyPrice != null ? `$${fmtNum(snap.spyPrice)}` : null}
+          detail={snap.spyVsEma != null ? `${snap.spyVsEma >= 0 ? '+' : ''}${fmtNum(snap.spyVsEma)}% EMA` : null} />
+        <ConditionRow label="QQQ" value={snap.qqqPrice != null ? `$${fmtNum(snap.qqqPrice)}` : null}
+          detail={snap.qqqVsEma != null ? `${snap.qqqVsEma >= 0 ? '+' : ''}${fmtNum(snap.qqqVsEma)}% EMA` : null} />
+        {snap.vix != null && <ConditionRow label="VIX" value={fmtNum(snap.vix, 1)} badge={vixZ?.z} badgeColor={vixZ?.c} />}
+        {snap.regime && <ConditionRow label="REGIME" badge={snap.regime} badgeColor={getRegimeColor(snap.regime)} />}
+      </>}
 
-      <div style={{ color: '#555', fontSize: '0.62rem', letterSpacing: '0.06em', marginBottom: 3, marginTop: 8 }}>YIELDS & MACRO</div>
-      {snap.treasury2Y  != null && <ConditionRow label="2Y"     value={`${fmtNum(snap.treasury2Y)}%`} />}
-      {snap.treasury10Y != null && <ConditionRow label="10Y"    value={`${fmtNum(snap.treasury10Y)}%`} />}
-      {snap.treasury30Y != null && <ConditionRow label="30Y"    value={`${fmtNum(snap.treasury30Y)}%`} />}
-      {snap.spread2Y10Y != null && <ConditionRow label="2Y-10Y" value={`${snap.spread2Y10Y >= 0 ? '+' : ''}${fmtNum(snap.spread2Y10Y, 3)}%`}
-        color={snap.spread2Y10Y < 0 ? '#dc3545' : '#28a745'} />}
-      {snap.dxy      != null && <ConditionRow label="DXY"   value={fmtNum(snap.dxy)} />}
-      {snap.crudeOil != null && <ConditionRow label="CRUDE" value={`$${fmtNum(snap.crudeOil)}`} />}
-      {snap.gold     != null && <ConditionRow label="GOLD"  value={`$${Math.round(snap.gold).toLocaleString()}`} />}
+      {hasYields && <>
+        <div style={{ color: '#555', fontSize: '0.62rem', letterSpacing: '0.06em', marginBottom: 3, marginTop: 8 }}>YIELDS & MACRO</div>
+        {snap.treasury2Y  != null && <ConditionRow label="2Y"     value={`${fmtNum(snap.treasury2Y)}%`} />}
+        {snap.treasury10Y != null && <ConditionRow label="10Y"    value={`${fmtNum(snap.treasury10Y)}%`} />}
+        {snap.treasury30Y != null && <ConditionRow label="30Y"    value={`${fmtNum(snap.treasury30Y)}%`} />}
+        {snap.spread2Y10Y != null && <ConditionRow label="2Y-10Y" value={`${snap.spread2Y10Y >= 0 ? '+' : ''}${fmtNum(snap.spread2Y10Y, 3)}%`}
+          color={snap.spread2Y10Y < 0 ? '#dc3545' : '#28a745'} />}
+        {snap.dxy      != null && <ConditionRow label="DXY"   value={fmtNum(snap.dxy)} />}
+        {snap.crudeOil != null && <ConditionRow label="CRUDE" value={`$${fmtNum(snap.crudeOil)}`} />}
+        {snap.gold     != null && <ConditionRow label="GOLD"  value={`$${Math.round(snap.gold).toLocaleString()}`} />}
+      </>}
 
       {snap.sectorEtf && <>
         <div style={{ color: '#555', fontSize: '0.62rem', letterSpacing: '0.06em', marginBottom: 3, marginTop: 8 }}>SECTOR</div>
@@ -700,7 +708,7 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 10 }}>
             <DataCell label="ENTRY PRICE" value={entryPrice != null ? fmtDollar(entryPrice) : '—'} />
             <DataCell label="EXIT PRICE"  value={exitPrice  != null ? fmtDollar(exitPrice)  : '—'} />
-            <DataCell label="SIGNAL PRICE" value={entry.signalPrice != null ? fmtDollar(entry.signalPrice) : 'N/A'} />
+            {entry.signalPrice != null && <DataCell label="SIGNAL PRICE" value={fmtDollar(entry.signalPrice)} />}
             <DataCell label="STOP PRICE"  value={entry.entry?.stopPrice != null ? fmtDollar(entry.entry.stopPrice) : '—'} />
 
             <DataCell label="LOT 1 SHARES" value={lots[0]?.shares ?? '—'} />
@@ -710,13 +718,13 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
 
             <DataCell label="RISK $"   value={chk.riskDollar != null ? `$${Math.abs(chk.riskDollar).toFixed(2)}` : '—'} />
             <DataCell label="RISK %"   value={chk.riskPct != null ? `${chk.riskPct.toFixed(2)}%` : '—'} />
-            <DataCell label="MFE" value={entry.mfe?.price != null ? `${fmtDollar(entry.mfe.price)} (${entry.mfe.percent?.toFixed(2)}%)` : '—'} color="#28a745" />
-            <DataCell label="MAE" value={entry.mae?.price != null ? `${fmtDollar(entry.mae.price)} (${entry.mae.percent?.toFixed(2)}%)` : '—'} color="#dc3545" />
+            {entry.mfe?.price != null && <DataCell label="MFE" value={`${fmtDollar(entry.mfe.price)} (${entry.mfe.percent?.toFixed(2)}%)`} color="#28a745" />}
+            {entry.mae?.price != null && <DataCell label="MAE" value={`${fmtDollar(entry.mae.price)} (${entry.mae.percent?.toFixed(2)}%)`} color="#dc3545" />}
 
-            <DataCell label="CAPTURE RATIO" value={captureRatio != null ? `${captureRatio}%` : '—'} tooltip="Exit P&L as % of MFE. 100% = captured the entire move." />
             <DataCell label="CALENDAR DAYS" value={calDays != null ? `${calDays}d` : '—'} />
             <DataCell label="TRADING DAYS"  value={tradDays != null ? `${tradDays}d` : '—'} />
-            <DataCell label="NAV AT ENTRY"  value={entry.navAtEntry != null ? `$${entry.navAtEntry.toLocaleString()}` : '—'} />
+            {captureRatio != null && <DataCell label="CAPTURE RATIO" value={`${captureRatio}%`} tooltip="Exit P&L as % of MFE. 100% = captured the entire move." />}
+            {entry.navAtEntry != null && <DataCell label="NAV AT ENTRY" value={`$${entry.navAtEntry.toLocaleString()}`} />}
           </div>
 
           {/* Forward returns */}

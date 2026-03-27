@@ -757,24 +757,16 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
         totalTargetShares: sizePanel.totalShares,
         lot1Shares:       sizePanel.lot1Shares,
         riskPerPosition:  sizePanel.risk$,
-        killScore:        stock.apexScore ?? stock.killScore ?? null,
+        killScore:        stock.totalScore ?? stock.apexScore ?? stock.killScore ?? null,
         killTier:         stock.tier ?? null,
         isETF:            sizePanel.isETF || false,
         sector:           sizePanel.isETF ? 'ETF' : (stock.sector || '—'),
         companyName:      stock.companyName || '',
         exchange:         stock.exchange || '',
         signalAge:        stock.signalAge ?? stock.weeksSince ?? null,
+        killRank:         stock.killRank ?? stock.rank ?? null,
         analyzeScore:     analyzeResultRef.current
-          ? {
-              score:     analyzeResultRef.current.score,
-              max:       analyzeResultRef.current.max,
-              pct:       analyzeResultRef.current.pct,
-              projected: analyzeResultRef.current.projected,
-              composite: analyzeResultRef.current.composite,
-              warnings:  analyzeResultRef.current.warnings,
-              direction: analyzeResultRef.current.direction,
-              computedAt: new Date().toISOString(),
-            }
+          ? { ...analyzeResultRef.current, computedAt: new Date().toISOString() }
           : null,
         queuedAt:         Date.now(),
       });

@@ -683,8 +683,25 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
         <div style={{ padding: '8px 14px', borderBottom: '1px solid #1e1e1e' }}>
           {kse?.totalScore != null ? (
             <>
-              <div style={{ display: 'flex', gap: 20, marginBottom: 6, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 20, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <DataCell label="KILL SCORE" value={`${Math.round(kse.totalScore)}${kse.pipelineMaxScore ? `/${Math.round(kse.pipelineMaxScore)}` : ''}`} color="#FFD700" />
+                {kse.source && (
+                  <span style={{
+                    fontSize: 9,
+                    color: kse.source === 'ANALYZE_SNAPSHOT' ? '#28a745'
+                         : kse.source === 'QUEUE_ENTRY'      ? '#FFD700'
+                         : kse.source === 'MONGODB_PIPELINE'  ? '#888'
+                         : '#dc3545',
+                    fontFamily: 'monospace',
+                    marginLeft: 8,
+                    opacity: 0.8,
+                  }}>
+                    {kse.source === 'ANALYZE_SNAPSHOT' ? '● live capture'
+                     : kse.source === 'QUEUE_ENTRY'    ? '● queue data'
+                     : kse.source === 'MONGODB_PIPELINE' ? '● pipeline data'
+                     : '● unknown source'}
+                  </span>
+                )}
                 {kse.rank     != null && <DataCell label="RANK"   value={`#${kse.rank}`} />}
                 {kse.rankChange != null && <DataCell label="ΔRANK"  value={kse.rankChange > 0 ? `+${kse.rankChange}` : String(kse.rankChange)} color={kse.rankChange > 0 ? '#28a745' : '#dc3545'} />}
                 {kse.tier      && <DataCell label="TIER"  value={kse.tier} color="#FFD700" />}

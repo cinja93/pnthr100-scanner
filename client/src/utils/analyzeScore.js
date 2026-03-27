@@ -229,6 +229,70 @@ export function computeAnalyzeScore(stock, context) {
     warnings,
     color,
     direction,
+
+    // ── Snapshot of everything on screen at analysis time ──────────────────
+    rawData: {
+      kill: {
+        totalScore:       stock.totalScore ?? stock.killScore ?? stock.apexScore ?? null,
+        pipelineMaxScore: stock.pipelineMaxScore ?? stock.maxScore ?? null,
+        rank:             stock.killRank ?? stock.rank ?? null,
+        rankChange:       stock.rankChange ?? null,
+        tier:             stock.tier ?? stock.killTier ?? null,
+        d1:               stock.d1 ?? stock.dimensions?.d1 ?? null,
+        d2:               stock.d2 ?? stock.dimensions?.d2 ?? null,
+        d3:               stock.d3 ?? stock.dimensions?.d3 ?? null,
+        d4:               stock.d4 ?? stock.dimensions?.d4 ?? null,
+        d5:               stock.d5 ?? stock.dimensions?.d5 ?? null,
+        d6:               stock.d6 ?? stock.dimensions?.d6 ?? null,
+        d7:               stock.d7 ?? stock.dimensions?.d7 ?? null,
+        d8:               stock.d8 ?? stock.dimensions?.d8 ?? null,
+      },
+      signal: {
+        type:         signal,
+        age:          signalAge,
+        price:        stock.signalPrice ?? stock.entryPrice ?? null,
+        isNew:        stock.isNewSignal || (signalAge != null && signalAge <= 1),
+        isDeveloping: stock.isDeveloping || false,
+      },
+      market: {
+        spy: {
+          price:      context.regime?.spyPrice ?? null,
+          ema21:      context.regime?.spyEma ?? null,
+          separation: context.regime?.spySeparation ?? null,
+          aboveEma:   context.regime?.live?.spy?.position === 'above',
+          slope:      context.regime?.spyEmaRising ?? null,
+        },
+        qqq: {
+          price:      context.regime?.qqqPrice ?? null,
+          ema21:      context.regime?.qqqEma ?? null,
+          separation: context.regime?.qqqSeparation ?? null,
+          aboveEma:   context.regime?.live?.qqq?.position === 'above',
+          slope:      context.regime?.qqqEmaRising ?? null,
+        },
+        vix:    context.regime?.vix ?? null,
+        regime: context.regime?.regime ?? context.regime?.label ?? null,
+      },
+      stock: {
+        ticker:       stock.ticker,
+        exchange:     stock.exchange || null,
+        sector:       stock.sector || null,
+        currentPrice: stock.currentPrice || stock.price || null,
+        stopPrice:    stock.stopPrice || stock.pnthrStop || null,
+      },
+      sectorExposure: {
+        sector:        sector,
+        currentLongs:  sectorData?.longCount ?? null,
+        currentShorts: sectorData?.shortCount ?? null,
+        netExposure:   sectorData?.netExposure ?? null,
+        projectedNet:  sectorImpact?.netAfter ?? null,
+      },
+      wash: {
+        active:        !washStatus.clean,
+        daysRemaining: washStatus.daysRemaining,
+      },
+      nav: context.nav ?? null,
+      analyzedAt: new Date().toISOString(),
+    },
   };
 }
 

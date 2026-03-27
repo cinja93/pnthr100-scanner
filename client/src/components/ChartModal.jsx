@@ -4,7 +4,8 @@ import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, re
 import { sizePosition, calcHeat, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils.js';
 import { useQueue } from '../contexts/QueueContext';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
-import { computeAnalyzeScore } from '../utils/analyzeScore';
+import { computeAnalyzeScore, computeETFAnalyzeScore } from '../utils/analyzeScore';
+import { isClassifiedETF } from '../utils/etfClassification';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
 import KillBadge from './KillBadge';
@@ -833,7 +834,11 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
               <>
                 {/* ── ANALYZE button ── */}
                 {analyzeContext && (() => {
-                  const ar = computeAnalyzeScore(enrichedStock, analyzeContext);
+                  const isETFStock = enrichedStock?.isETF || enrichedStock?.type === 'etf'
+                    || isEtfTicker(enrichedStock?.ticker) || isClassifiedETF(enrichedStock?.ticker);
+                  const ar = isETFStock
+                    ? computeETFAnalyzeScore(enrichedStock, analyzeContext)
+                    : computeAnalyzeScore(enrichedStock, analyzeContext);
                   if (!ar) return null;
                   const hasWarnings = ar.warnings.length > 0;
                   return (
@@ -929,11 +934,13 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
               {/* Two-column layout */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                 <div>
-                  <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 6 }}>STOCK SELECTION</div>
+                  <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 6 }}>
+                    {ar.isETF ? `ETF SELECTION${ar.assetClass ? ` [${ar.assetClass}]` : ''}` : 'STOCK SELECTION'}
+                  </div>
                   <ScoreLine label="Signal Quality"  comp={ar.components.signalQuality} max={15} />
-                  <ScoreLine label="Kill Context"    comp={ar.components.killContext}   max={10} />
-                  <ScoreLine label="Index Trend"     comp={ar.components.indexTrend}    max={8}  />
-                  <ScoreLine label="Sector Trend"    comp={ar.components.sectorTrend}   max={7}  />
+                  <ScoreLine label={ar.isETF ? 'ETF Trend'       : 'Kill Context'}  comp={ar.isETF ? ar.components.trendAlignment : ar.components.killContext}   max={10} />
+                  <ScoreLine label={ar.isETF ? 'Macro Alignment' : 'Index Trend'}   comp={ar.isETF ? ar.components.macroAlignment : ar.components.indexTrend}    max={8}  />
+                  <ScoreLine label={ar.isETF ? 'Vol & Momentum'  : 'Sector Trend'}  comp={ar.isETF ? ar.components.volMomentum   : ar.components.sectorTrend}    max={7}  />
                   <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginTop: 10, marginBottom: 6 }}>EXECUTION (PROJECTED)</div>
                   <ScoreLine label="Position Sizing" comp={ar.components.sizing}        max={8}  />
                   <ScoreLine label="Risk Cap"        comp={ar.components.riskCap}       max={5}  />

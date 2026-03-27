@@ -218,15 +218,17 @@ app.get('/temp-reset', async (req, res) => {
     const { connectToDatabase } = await import('./database.js');
     const { default: bcrypt } = await import('bcryptjs');
     const db = await connectToDatabase();
-    // Search all collections for documents with an email field
+    // Show which database we're connected to and all collections
+    const dbName = db.databaseName;
     const collections = await db.listCollections().toArray();
+    const colNames = collections.map(c => c.name);
     const found = {};
     for (const col of collections) {
-      const docs = await db.collection(col.name).find({ email: { $exists: true } }, { projection: { email: 1, status: 1, role: 1, hashedPassword: 1 } }).limit(10).toArray();
-      if (docs.length > 0) found[col.name] = docs.map(d => ({ email: d.email, status: d.status, role: d.role, hasPassword: !!d.hashedPassword }));
+      const count = await db.collection(col.name).countDocuments();
+      found[col.name] = count;
     }
     if (!req.query.email) {
-      return res.json({ message: 'Collections with email field:', found });
+      return res.json({ dbName, colNames, documentCounts: found });
     }
     const hash = await bcrypt.hash('Kx450f@mx679', 12);
     const col = req.query.col || 'users';

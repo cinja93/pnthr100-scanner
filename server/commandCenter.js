@@ -545,6 +545,7 @@ export async function regimeHandler(req, res) {
     const latest = db ? await db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } }) : null;
 
     // Live SPY/QQQ check
+    // CRITICAL: never fall back to EMA=0 — that makes every stock "above" the EMA
     let live = null;
     try {
       const [spyEma, qqqEma, quotes] = await Promise.all([
@@ -552,21 +553,38 @@ export async function regimeHandler(req, res) {
         fetchEMA21('QQQ'),
         fetchQuotes(['SPY', 'QQQ']),
       ]);
+
+      const spyPrice  = quotes['SPY']?.price || null;
+      const qqqPrice  = quotes['QQQ']?.price || null;
+      const spyEma21  = spyEma?.current || null;   // null if FMP failed — do NOT default to 0
+      const qqqEma21  = qqqEma?.current || null;
+
+      // If FMP EMA fetch failed, fall back to stored Friday boolean (stale but correct direction)
+      // Never use 0 as a fallback — price > 0 always, so EMA=0 would always say "above"
+      const spyPos = spyEma21 ? (spyPrice >= spyEma21 ? 'above' : 'below')
+                              : (latest?.spyAboveEma != null ? (latest.spyAboveEma ? 'above' : 'below') : null);
+      const qqqPos = qqqEma21 ? (qqqPrice >= qqqEma21 ? 'above' : 'below')
+                              : (latest?.qqqAboveEma != null ? (latest.qqqAboveEma ? 'above' : 'below') : null);
+
+      console.log(`[REGIME] SPY price=${spyPrice} ema21=${spyEma21} pos=${spyPos} | QQQ price=${qqqPrice} ema21=${qqqEma21} pos=${qqqPos}`);
+
       live = {
         spy: {
-          price:    quotes['SPY']?.price || 0,
-          ema21:    spyEma?.current || latest?.spy?.ema21 || 0,
-          position: (quotes['SPY']?.price || 0) >= (spyEma?.current || 0) ? 'above' : 'below',
+          price:     spyPrice || 0,
+          ema21:     spyEma21 || 0,
+          position:  spyPos,
           changePct: quotes['SPY']?.changePct || 0,
         },
         qqq: {
-          price:    quotes['QQQ']?.price || 0,
-          ema21:    qqqEma?.current || latest?.qqq?.ema21 || 0,
-          position: (quotes['QQQ']?.price || 0) >= (qqqEma?.current || 0) ? 'above' : 'below',
+          price:     qqqPrice || 0,
+          ema21:     qqqEma21 || 0,
+          position:  qqqPos,
           changePct: quotes['QQQ']?.changePct || 0,
         },
       };
-    } catch { /* live data optional */ }
+    } catch (e) {
+      console.error('[REGIME] Live data fetch failed:', e.message);
+    }
 
     res.json({
       friday: latest ? {

@@ -1269,28 +1269,46 @@ app.get('/api/sector-ema', authenticateJWT, async (req, res) => {
       'Real Estate':            'XLRE',
     };
 
+    // getSignals() only covers the 679-stock universe — ETFs are NOT in it.
+    // Fetch sector ETF data directly from FMP instead.
+    const FMP_KEY  = process.env.FMP_API_KEY;
+    const FMP_HOST = 'https://financialmodelingprep.com';
     const etfTickers = Object.values(SECTOR_ETFS);
-    const signals = await getSignals(etfTickers);
+
+    // Batch quote fetch (one call for all 11 ETFs)
+    const quotesRaw = await fetch(`${FMP_HOST}/api/v3/quote/${etfTickers.join(',')}?apikey=${FMP_KEY}`)
+      .then(r => r.ok ? r.json() : []).catch(() => []);
+    const priceMap = {};
+    for (const q of (Array.isArray(quotesRaw) ? quotesRaw : [])) priceMap[q.symbol] = q.price;
+
+    // 21-week EMA per ETF (parallel, one FMP call each)
+    const emaEntries = await Promise.all(
+      etfTickers.map(async etf => {
+        try {
+          const url = `${FMP_HOST}/stable/technical-indicators/ema?symbol=${etf}&periodLength=21&timeframe=1week&apikey=${FMP_KEY}`;
+          const data = await fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
+          const ema21 = Array.isArray(data) && data[0]?.ema ? +data[0].ema : null;
+          return [etf, ema21];
+        } catch { return [etf, null]; }
+      })
+    );
+    const emaMap = Object.fromEntries(emaEntries);
 
     const result = {};
     for (const [sector, etf] of Object.entries(SECTOR_ETFS)) {
-      const sig = signals[etf.toUpperCase()] || signals[etf] || null;
-      if (sig) {
-        const price = sig.currentPrice ?? sig.price ?? null;
-        const ema21 = sig.ema21 ?? null;
-        result[sector] = {
-          etf,
-          price,
-          ema21,
-          aboveEma:   price != null && ema21 != null ? price > ema21 : null,
-          signal:     sig.signal || null,
-          separation: price && ema21 ? +((price - ema21) / ema21 * 100).toFixed(2) : null,
-        };
-      } else {
-        console.warn(`[SECTOR-EMA] No signal data for ${etf} (${sector})`);
-        result[sector] = { etf, price: null, ema21: null, aboveEma: null, signal: null, separation: null };
-      }
+      const price = priceMap[etf] ?? null;
+      const ema21 = emaMap[etf]  ?? null;
+      result[sector] = {
+        etf,
+        price,
+        ema21,
+        aboveEma:   price != null && ema21 != null ? price > ema21 : null,
+        signal:     null,
+        separation: price && ema21 ? +((price - ema21) / ema21 * 100).toFixed(2) : null,
+      };
+      if (ema21 == null) console.warn(`[SECTOR-EMA] No EMA data for ${etf} (${sector})`);
     }
+    console.log('[SECTOR-EMA]', Object.entries(result).map(([s, d]) => `${d.etf}:${d.aboveEma}`).join(' '));
 
     res.json(result);
   } catch (err) {

@@ -267,13 +267,21 @@ export async function pendingEntryConfirm(req, res) {
     // Source 1: Analyze snapshot
     if (raw?.market?.spy?.aboveEma != null || raw?.market?.regime) {
       marketAtEntry = {
-        spy:    raw.market.spy    || null,
-        qqq:    raw.market.qqq    || null,
+        spy:    raw.market.spy || null,
+        qqq:    raw.market.qqq || null,
         vix:    raw.market.vix != null ? { close: raw.market.vix } : null,
         regime: raw.market.regime ? { label: raw.market.regime } : null,
+        // Compatibility fields for disciplineScoring.js
+        spyPosition: raw.market.spy?.aboveEma === true ? 'above'
+                   : raw.market.spy?.aboveEma === false ? 'below' : null,
+        qqqPosition: raw.market.qqq?.aboveEma === true ? 'above'
+                   : raw.market.qqq?.aboveEma === false ? 'below' : null,
+        sectorPosition: raw.sector?.aboveEma === true ? 'above'
+                      : raw.sector?.aboveEma === false ? 'below' : null,
+        sectorEtf: raw.sector?.etf || null,
         source: 'ANALYZE_SNAPSHOT',
       };
-      console.log(`[CONFIRM] ${entry.ticker}: Market from Analyze snapshot — regime=${raw.market.regime}`);
+      console.log(`[CONFIRM] ${entry.ticker}: Market from Analyze snapshot — regime=${raw.market.regime}, sectorPosition=${marketAtEntry.sectorPosition}`);
     }
 
     // Source 2: Live FMP snapshot (enriches with sector ETF, yields, etc.)

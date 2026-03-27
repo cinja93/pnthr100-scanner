@@ -69,7 +69,7 @@ function scoreIndexTrend(direction, marketAtEntry, exchange, userConfirmed) {
   const position  = isNasdaq ? marketAtEntry?.qqqPosition : marketAtEntry?.spyPosition;
   const indexName = isNasdaq ? 'QQQ' : 'SPY';
   if (!position) {
-    return { score: 4, label: 'UNKNOWN', detail: `${indexName} data unavailable at entry — neutral score` };
+    return { score: 0, label: 'ERROR', detail: `${indexName} position data missing at entry — data pipeline failure` };
   }
   const above   = position === 'above';
   const aligned = (direction === 'LONG' && above) || (direction === 'SHORT' && !above);
@@ -91,7 +91,7 @@ function scoreSectorTrend(direction, marketAtEntry, userConfirmed) {
   const position = marketAtEntry?.sectorPosition;
   const etf      = marketAtEntry?.sectorEtf || 'sector ETF';
   if (!position) {
-    return { score: 3, label: 'UNKNOWN', detail: 'Sector data unavailable — neutral score' };
+    return { score: 0, label: 'ERROR', detail: `Sector position data missing at entry — data pipeline failure` };
   }
   const above   = position === 'above';
   const aligned = (direction === 'LONG' && above) || (direction === 'SHORT' && !above);
@@ -112,7 +112,7 @@ function scoreSizing(actualShares, expectedShares, userConfirmed) {
   }
 
   if (!expectedShares || expectedShares <= 0) {
-    return { score: 4, label: 'N/A', detail: 'Expected size unavailable — neutral score' };
+    return { score: 0, label: 'ERROR', detail: 'Expected size unavailable — NAV or stop data missing at entry' };
   }
   const dev = Math.abs(actualShares - expectedShares) / expectedShares;
   if (dev <= 0.10) return { score: 8, label: 'CORRECT',    detail: `${actualShares} shr vs ${expectedShares} expected (within 10%)` };
@@ -123,7 +123,7 @@ function scoreSizing(actualShares, expectedShares, userConfirmed) {
 // ── T2-B: Risk Cap Compliance (0-5 pts) ──────────────────────────────────────
 function scoreRiskCap(riskDollars, nav, isEtf) {
   if (!nav || nav <= 0) {
-    return { score: 2, label: 'N/A', detail: 'NAV unavailable — neutral score' };
+    return { score: 0, label: 'ERROR', detail: 'NAV missing at entry — data pipeline failure' };
   }
   const cap     = isEtf ? nav * 0.005 : nav * 0.01;
   const within  = riskDollars <= cap;
@@ -196,8 +196,8 @@ function scoreExitMethod(exitReason, pnlDollars) {
         ? { score: 4, label: 'MANUAL +$', detail: 'Manual exit at profit — overrode system but at least made money' }
         : { score: 0, label: 'MANUAL -$', detail: 'Manual exit at loss — worst case: overrode system AND lost money' };
     default:
-      console.warn(`[scoreExitMethod] Unrecognized exit reason: "${exitReason}"`);
-      return { score: 5, label: 'UNKNOWN', detail: `Exit reason: ${exitReason || 'not recorded'}` };
+      console.error(`[scoreExitMethod] Unrecognized exit reason: "${exitReason}"`);
+      return { score: 0, label: 'ERROR', detail: `Exit reason not recorded — data pipeline failure (got: "${exitReason || 'empty'}")` };
   }
 }
 
@@ -213,7 +213,7 @@ function scoreSignalTiming(exitReason) {
   if (reason === 'MANUAL') {
     return { score: 0, label: 'EARLY EXIT',  detail: 'Manually exited before any system signal fired' };
   }
-  return { score: 4, label: 'UNKNOWN', detail: 'Exit timing unclear' };
+  return { score: 0, label: 'ERROR', detail: 'Exit reason not recorded — data pipeline failure' };
 }
 
 // ── T3-C: Wash Rule Compliance (0-5 pts) ─────────────────────────────────────

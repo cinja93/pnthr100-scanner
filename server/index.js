@@ -1252,6 +1252,53 @@ app.get('/api/sector-exposure', authenticateJWT, async (req, res) => {
   }
 });
 
+// GET /api/sector-ema — sector ETF vs 21-week EMA for all 11 sectors
+app.get('/api/sector-ema', authenticateJWT, async (req, res) => {
+  try {
+    const SECTOR_ETFS = {
+      'Technology':             'XLK',
+      'Healthcare':             'XLV',
+      'Financial Services':     'XLF',
+      'Industrials':            'XLI',
+      'Consumer Staples':       'XLP',
+      'Consumer Discretionary': 'XLY',
+      'Energy':                 'XLE',
+      'Utilities':              'XLU',
+      'Basic Materials':        'XLB',
+      'Communication Services': 'XLC',
+      'Real Estate':            'XLRE',
+    };
+
+    const etfTickers = Object.values(SECTOR_ETFS);
+    const signals = await getSignals(etfTickers);
+
+    const result = {};
+    for (const [sector, etf] of Object.entries(SECTOR_ETFS)) {
+      const sig = signals[etf.toUpperCase()] || signals[etf] || null;
+      if (sig) {
+        const price = sig.currentPrice ?? sig.price ?? null;
+        const ema21 = sig.ema21 ?? null;
+        result[sector] = {
+          etf,
+          price,
+          ema21,
+          aboveEma:   price != null && ema21 != null ? price > ema21 : null,
+          signal:     sig.signal || null,
+          separation: price && ema21 ? +((price - ema21) / ema21 * 100).toFixed(2) : null,
+        };
+      } else {
+        console.warn(`[SECTOR-EMA] No signal data for ${etf} (${sector})`);
+        result[sector] = { etf, price: null, ema21: null, aboveEma: null, signal: null, separation: null };
+      }
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error('[SECTOR-EMA] Error:', err);
+    res.status(500).json({ error: 'Failed to compute sector EMA data' });
+  }
+});
+
 // GET /api/sector-stocks/:sectorKey
 // Returns S&P 500 stocks in the given GICS sector, ranked by YTD return.
 app.get('/api/sector-stocks/:sectorKey', async (req, res) => {

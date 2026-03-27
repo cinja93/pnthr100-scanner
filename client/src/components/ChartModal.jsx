@@ -947,20 +947,39 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                 </div>
               </div>
               {/* Action buttons */}
-              <div style={{ display: 'flex', gap: 10, marginTop: 14, justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => { setAnalyzeOpen(false); handleSizeIt(); }}
-                  style={{ padding: '7px 18px', backgroundColor: 'rgba(212,160,23,0.15)', border: '1.5px solid #D4A017', color: '#FFD700', borderRadius: 5, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
-                >
-                  SIZE IT →
-                </button>
-                <button
-                  onClick={() => setAnalyzeOpen(false)}
-                  style={{ padding: '7px 18px', backgroundColor: 'transparent', border: '1px solid #444', color: '#888', borderRadius: 5, fontSize: 12, cursor: 'pointer' }}
-                >
-                  CLOSE
-                </button>
-              </div>
+              {(() => {
+                const errorFields = Object.entries(ar.components || {})
+                  .filter(([, c]) => c?.label === 'ERROR');
+                const hasErrors = errorFields.length > 0;
+                return (
+                  <div style={{ marginTop: 14 }}>
+                    {hasErrors && (
+                      <div style={{ padding: '10px 14px', backgroundColor: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.4)', borderRadius: 6, color: '#dc3545', fontSize: 11, marginBottom: 10 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠ Cannot proceed — data pipeline failure:</div>
+                        {errorFields.map(([key, c]) => (
+                          <div key={key} style={{ paddingLeft: 10, marginTop: 2, color: '#ff6b7a' }}>• {c.detail}</div>
+                        ))}
+                        <div style={{ marginTop: 6, color: '#888', fontSize: 10 }}>Try refreshing the page. If the error persists, the data pipeline needs attention.</div>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={hasErrors ? undefined : () => { setAnalyzeOpen(false); handleSizeIt(); }}
+                        disabled={hasErrors}
+                        style={{ padding: '7px 18px', backgroundColor: hasErrors ? 'rgba(60,60,60,0.5)' : 'rgba(212,160,23,0.15)', border: `1.5px solid ${hasErrors ? '#555' : '#D4A017'}`, color: hasErrors ? '#555' : '#FFD700', borderRadius: 5, fontWeight: 700, fontSize: 12, cursor: hasErrors ? 'not-allowed' : 'pointer' }}
+                      >
+                        SIZE IT →
+                      </button>
+                      <button
+                        onClick={() => setAnalyzeOpen(false)}
+                        style={{ padding: '7px 18px', backgroundColor: 'transparent', border: '1px solid #444', color: '#888', borderRadius: 5, fontSize: 12, cursor: 'pointer' }}
+                      >
+                        CLOSE
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}

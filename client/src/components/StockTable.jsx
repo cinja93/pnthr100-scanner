@@ -56,7 +56,7 @@ function matchesPinSignal(sigData, pinSignal) {
   return sigData.signal === pinSignal;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank' }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null }) {
   const [sortConfig, setSortConfig] = useState({ key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
   const listRef = useRef([]);
@@ -181,6 +181,13 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
       return (aVal < bVal ? -1 : aVal > bVal ? 1 : 0) * dir;
     }
 
+    // Analyze score (from analyzeScores prop — ETF page)
+    if (sortConfig.key === 'analyzeScore') {
+      const aVal = analyzeScores?.[a.ticker]?.pct ?? -1;
+      const bVal = analyzeScores?.[b.ticker]?.pct ?? -1;
+      return (aVal - bVal) * dir;
+    }
+
     const aValue = a[sortConfig.key];
     const bValue = b[sortConfig.key];
 
@@ -259,7 +266,8 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
     (!onRemove ? 1 : 0) +
     (!hideSector ? 1 : 0) +
     (onRemove ? 1 : 0) +
-    (hideEarnings ? -1 : 0);
+    (hideEarnings ? -1 : 0) +
+    (analyzeScores ? 1 : 0);
 
   return (
     <div className={styles.tableContainer} style={compact ? { minHeight: 0 } : undefined}>
@@ -296,6 +304,11 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             <th onClick={() => handleSort('riskPct')} className={styles.sortable}>
               Risk % {getSortIndicator('riskPct')}
             </th>
+            {analyzeScores && (
+              <th onClick={() => handleSort('analyzeScore')} className={styles.sortable} style={{ textAlign: 'center', backgroundColor: '#0a0a0a' }}>
+                Analyze % {getSortIndicator('analyzeScore')}
+              </th>
+            )}
             <th onClick={() => handleSort('signal')} className={`${styles.signalColumn} ${styles.sortable}`}>
               PNTHR Signal {getSortIndicator('signal')}
             </th>
@@ -415,9 +428,10 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                     <td className={styles.stopPriceCell}><span className={styles.loadingDots}>···</span></td>
                     <td className={styles.riskCell}><span className={styles.loadingDots}>···</span></td>
                     <td className={styles.riskCell}><span className={styles.loadingDots}>···</span></td>
+                    {analyzeScores && <td><span className={styles.loadingDots}>···</span></td>}
                   </>
                 ) : (signalData?.signal === 'BE' || signalData?.signal === 'SE') ? (
-                  <td colSpan={3} className={styles.pauseCell}>
+                  <td colSpan={analyzeScores ? 4 : 3} className={styles.pauseCell}>
                     <span className={styles.pauseBadge}>⏸ PAUSE</span>
                   </td>
                 ) : (
@@ -431,6 +445,19 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                     <td className={styles.riskCell}>
                       {riskPct != null ? `${riskPct.toFixed(2)}%` : '—'}
                     </td>
+                    {analyzeScores && (() => {
+                      const as = analyzeScores[stock.ticker];
+                      return (
+                        <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 700, backgroundColor: '#0a0a0a' }}>
+                          {as
+                            ? <span style={{ color: as.color }} title={as.warnings?.length ? as.warnings.join('\n') : `Pre-trade score: ${as.pct}%`}>
+                                {as.pct}%
+                                {as.warnings?.length > 0 && <span style={{ marginLeft: 2, fontSize: 10 }}>⚠</span>}
+                              </span>
+                            : <span style={{ color: '#555' }}>—</span>}
+                        </td>
+                      );
+                    })()}
                   </>
                 )}
                 <td className={styles.signalColumn}>

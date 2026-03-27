@@ -348,6 +348,10 @@ export async function getSignals(tickers, { isETF = false } = {}) {
       pnthrStop:        s.pnthrStop ?? null,
       currentWeekStop:  s.currentWeekStop ?? null,
       ema21:            s.ema21,
+      emaRising:        s.emaRising      ?? null, // true/false/null — EMA slope direction
+      lastWeekHigh:     s.lastWeekHigh   ?? null, // previous completed week's high
+      lastWeekLow:      s.lastWeekLow    ?? null, // previous completed week's low
+      lastWeekClose:    s.lastWeekClose  ?? null, // previous completed week's close
       signalDate:       s.signalDate || null, // YYYY-MM-DD (Monday of signal week)
       isNewSignal:      s.isNew ?? false,
       profitPercentage: null,

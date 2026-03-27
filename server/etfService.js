@@ -165,6 +165,8 @@ export async function getEtfStocks(forceRefresh = false) {
         category: TICKER_CATEGORY[ticker] || 'ETF',
         currentPrice: parseFloat(Number(q.price).toFixed(2)),
         ytdReturn: ytdMap[ticker] != null ? parseFloat(Number(ytdMap[ticker]).toFixed(2)) : null,
+        // Volume ratio for Momentum Quality scoring (volume / avgVolume from FMP quote)
+        volumeRatio: (q.volume && q.avgVolume) ? parseFloat((q.volume / q.avgVolume).toFixed(2)) : null,
       };
     })
     .filter(Boolean);

@@ -2,10 +2,26 @@ import { useState, useEffect, useMemo } from 'react';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
 import { fetchEtfStocks, fetchEarnings } from '../services/api';
+import { useAnalyzeContext } from '../contexts/AnalyzeContext';
+import { computeETFAnalyzeScore } from '../utils/analyzeScore';
 import styles from './EtfPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
+// Inclusive weeks since signal date (signal week = week 1). Same logic as StockTable.
+function weeksAgo(signalDate) {
+  if (!signalDate) return null;
+  const signalMonday = new Date(signalDate + 'T12:00:00');
+  const today = new Date();
+  const dow = today.getDay();
+  const currentMonday = new Date(today);
+  currentMonday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+  currentMonday.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((currentMonday - signalMonday) / (1000 * 60 * 60 * 24));
+  return Math.floor(diffDays / 7) + 1;
+}
+
 export default function EtfPage() {
+  const { analyzeContext } = useAnalyzeContext() || {};
   const [stocks, setStocks]           = useState([]);
   const [signals, setSignals]         = useState({});
   const [categories, setCategories]   = useState([]);
@@ -35,6 +51,37 @@ export default function EtfPage() {
       setLoading(false);
     }
   }
+
+  // Compute ETF Analyze score for every ETF row using AnalyzeContext + signal enrichment.
+  // Fields derived from signals: ema21, emaRising→emaSlope proxy, lastWeekHigh/Low/Close.
+  // volumeRatio comes from etfService (FMP quote volume/avgVolume). rsi14 unavailable at
+  // table level (no chart data fetched) — scoring function gives partial credit gracefully.
+  const analyzeScores = useMemo(() => {
+    if (!analyzeContext || !stocks.length) return {};
+    const result = {};
+    for (const stock of stocks) {
+      const sigData  = signals[stock.ticker];
+      const signalAge = weeksAgo(sigData?.signalDate);
+      const enriched = {
+        ...stock,
+        signal:        sigData?.signal        || null,
+        signalAge,
+        weeksInSignal: signalAge,
+        ema21:         sigData?.ema21         ?? null,
+        // emaRising (boolean) → small proxy slope: direction correct, magnitude conservative (1pt)
+        emaSlope:      sigData?.emaRising != null
+                         ? (sigData.emaRising ? 0.3 : -0.3)
+                         : null,
+        weekHigh:      sigData?.lastWeekHigh  ?? null,
+        weekLow:       sigData?.lastWeekLow   ?? null,
+        close:         sigData?.lastWeekClose ?? stock.currentPrice ?? null,
+        // volumeRatio from etfService (q.volume/q.avgVolume); rsi14 unavailable without chart
+      };
+      const ar = computeETFAnalyzeScore(enriched, analyzeContext);
+      if (ar) result[stock.ticker] = { pct: ar.pct, color: ar.color, warnings: ar.warnings };
+    }
+    return result;
+  }, [stocks, signals, analyzeContext]);
 
   const filteredStocks = useMemo(() => {
     if (activeCategory === 'All') return stocks;
@@ -117,6 +164,7 @@ export default function EtfPage() {
           scanType="long"
           rankLabel="ETF Performance Rank"
           groupByCategory={activeCategory === 'All'}
+          analyzeScores={analyzeScores}
         />
       )}
 

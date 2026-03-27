@@ -1904,6 +1904,7 @@ export default function CommandCenter({ onNavigate }) {
   const [closedToast,           setClosedToast]           = useState(null); // { ticker, avgCost, exitPrice, pnlDollar, pnlPct }
   const [washWarning,           setWashWarning]           = useState(null); // { ticker, lossAmount, exitDate, expiryDate, daysRemaining, pendingId, fillData }
   const [riskAdvisorExitModal,  setRiskAdvisorExitModal]  = useState(null); // { position, shares, price, date, reason, note }
+  const [ibkrLastSync,          setIbkrLastSync]          = useState(null); // global ibkrLastSync from user_profiles
 
   const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
   const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
@@ -2072,6 +2073,7 @@ export default function CommandCenter({ onNavigate }) {
             setNav(profile.nav);
             updateCurrentUser({ accountSize: profile.nav });
           }
+          if (profile?.ibkrLastSync) setIbkrLastSync(new Date(profile.ibkrLastSync));
         }
       } catch { /* silent */ }
       // Re-sync pending entries so queue is never stale after a remount or nav change
@@ -2118,13 +2120,14 @@ export default function CommandCenter({ onNavigate }) {
     fetchPendingEntries()
       .then(data => { if (Array.isArray(data)) setPendingEntries(data); })
       .catch(() => {});
-    // Pull latest NAV on mount (picks up IBKR sync that happened before opening Command)
+    // Pull latest NAV + IBKR last sync on mount
     fetchNav()
       .then(profile => {
         if (profile?.nav) {
           setNav(profile.nav);
           updateCurrentUser({ accountSize: profile.nav });
         }
+        if (profile?.ibkrLastSync) setIbkrLastSync(new Date(profile.ibkrLastSync));
       })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2287,9 +2290,9 @@ export default function CommandCenter({ onNavigate }) {
               {heat.stockRiskPct}% stocks · {heat.etfRiskPct}% ETFs · {heat.totalRiskPct}% total
             </span>
           </div>
-          {/* IBKR sync indicator — visible when any position has been synced from TWS */}
+          {/* IBKR sync indicator — shows last sync time from bridge */}
           {(() => {
-            const ibkrTs = positions.find(p => p.ibkrSyncedAt)?.ibkrSyncedAt;
+            const ibkrTs = ibkrLastSync || positions.find(p => p.ibkrSyncedAt)?.ibkrSyncedAt;
             if (!ibkrTs) return null;
             const secsAgo = Math.round((Date.now() - new Date(ibkrTs).getTime()) / 1000);
             const fresh   = secsAgo < 300;
@@ -2301,14 +2304,18 @@ export default function CommandCenter({ onNavigate }) {
               </div>
             );
           })()}
-          {/* Refresh controls */}
+          {/* Refresh controls — LIVE is green only when market is open AND IBKR is actively syncing */}
+          {(() => {
+            const ibkrTs    = ibkrLastSync || positions.find(p => p.ibkrSyncedAt)?.ibkrSyncedAt;
+            const ibkrFresh = ibkrTs && (Date.now() - new Date(ibkrTs).getTime()) < 300000;
+            const market    = isMarketHours();
+            const color     = market && ibkrFresh ? '#28a745' : market && !ibkrFresh ? '#FFD700' : '#555';
+            const glow      = market && ibkrFresh ? '0 0 5px #28a745' : 'none';
+            const label     = market && ibkrFresh ? 'LIVE' : market ? 'LIVE (no IBKR)' : 'CLOSED';
+            return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 6, height: 6, borderRadius: 3,
-              background: isMarketHours() ? '#28a745' : '#555',
-              boxShadow: isMarketHours() ? '0 0 5px #28a745' : 'none' }} />
-            <span style={{ fontSize: 10, color: isMarketHours() ? '#28a745' : '#555' }}>
-              {isMarketHours() ? 'LIVE' : 'CLOSED'}
-            </span>
+            <div style={{ width: 6, height: 6, borderRadius: 3, background: color, boxShadow: glow }} />
+            <span style={{ fontSize: 10, color }}>{label}</span>
             <button onClick={refreshPrices} disabled={refreshing}
               title="Refresh prices"
               style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4,
@@ -2323,6 +2330,8 @@ export default function CommandCenter({ onNavigate }) {
               </span>
             )}
           </div>
+            );
+          })()}
           <span style={{ fontSize: 11, color: '#555' }}>NAV</span>
           <input type="number" value={nav} onChange={e => handleNavChange(+e.target.value || 0)} onBlur={e => saveNavNow(+e.target.value || 0)}
             style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',

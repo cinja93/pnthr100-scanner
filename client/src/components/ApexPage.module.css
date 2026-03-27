@@ -415,7 +415,13 @@
 }
 
 /* ── Analyze / Composite cells — always dark regardless of row highlight ────── */
-.analyzeCell {
+/* Must beat .top10Row td (0,1,1) and .row.selectedRow td (0,2,1) with !important */
+.analyzeCell,
+.top10Row td.analyzeCell,
+.top10Row:hover td.analyzeCell,
+.row.selectedRow td.analyzeCell,
+.row.selectedRow:hover td.analyzeCell,
+.overextendedRow td.analyzeCell {
   background: #111 !important;
 }
 

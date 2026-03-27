@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
 import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchKillPipeline, fetchNav, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, calcHeat, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils.js';
@@ -307,6 +307,21 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
 
   const stock = stocks[currentIndex];
   const inWatchlist = stock ? watchlistSet.has(stock.ticker) : false;
+
+  // Enrich stock with chart-detected signal so Analyze always uses the correct direction.
+  // The page data (Kill table, Search results, etc.) often lacks the signal field or has stale data.
+  // detectAllSignals() runs from actual weekly candles and is authoritative — use its result.
+  // currentSignal is 'BL'/'SS' only when there's an active open position (badge-matching).
+  const enrichedStock = useMemo(() => {
+    if (!stock) return stock;
+    const activeSignal = (currentSignal === 'BL' || currentSignal === 'SS') ? currentSignal : null;
+    // No chart signal yet (loading) or signal matches — either way pass through the best value
+    return {
+      ...stock,
+      // Chart-detected signal is authoritative. Falls back to page data if chart not loaded yet.
+      signal: activeSignal || stock.signal || stock.pnthrSignal || null,
+    };
+  }, [stock, currentSignal]);
 
   // Reset SIZE IT + ANALYZE panels when navigating to a new stock
   useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; }, [currentIndex]);
@@ -818,7 +833,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
               <>
                 {/* ── ANALYZE button ── */}
                 {analyzeContext && (() => {
-                  const ar = computeAnalyzeScore(stock, analyzeContext);
+                  const ar = computeAnalyzeScore(enrichedStock, analyzeContext);
                   if (!ar) return null;
                   const hasWarnings = ar.warnings.length > 0;
                   return (

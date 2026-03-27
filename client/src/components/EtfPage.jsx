@@ -68,7 +68,11 @@ export default function EtfPage() {
         signalAge,
         weeksInSignal: signalAge,
         ema21:         sigData?.ema21         ?? null,
-        // emaRising (boolean) → small proxy slope: direction correct, magnitude conservative (1pt)
+        // emaSlope proxy: emaRising boolean → ±0.3% so direction is correct but magnitude
+        // is conservative — ETF Trend Sub-B will score 1pt max (|0.3| < 0.5 threshold).
+        // Real slopes for trending ETFs are 0.5–1.5%, worth 2–3pts. To fix: expose the
+        // actual slope % from signalService (last two EMA values → % change) and return
+        // it from getSignals() alongside emaRising. Same calc ChartModal already does.
         emaSlope:      sigData?.emaRising != null
                          ? (sigData.emaRising ? 0.3 : -0.3)
                          : null,

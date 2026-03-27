@@ -239,6 +239,12 @@ function runStateMachine(weeklyBars, isETF = false) {
 
   // EMA slope direction — used for developing signal detection (intra-week)
   const emaRising = emas.length >= 2 ? emas[emas.length - 1] > emas[emas.length - 2] : null;
+  // FUTURE: expose emaSlope as actual % change so ETF Trend Sub-B can score 2-3pts for strong trends.
+  // const emaSlope = emas.length >= 2
+  //   ? parseFloat(((emas[emas.length-1] - emas[emas.length-2]) / emas[emas.length-2] * 100).toFixed(4))
+  //   : null;
+  // Then add emaSlope to the lastEvent and getSignals() return map alongside emaRising.
+  // EtfPage.jsx enriched.emaSlope would then use sigData.emaSlope directly.
 
   // Last completed weekly bar (n-2 relative to current in-progress bar at n-1)
   // Used by developing-signals to check proximity to last week's high/low.

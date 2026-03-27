@@ -1883,11 +1883,15 @@ export default function CommandCenter({ onNavigate }) {
     setNav(value);
     navLastEditedAt.current = Date.now(); // mark manual edit so auto-sync won't overwrite
     if (navSaveTimer.current) clearTimeout(navSaveTimer.current);
-    navSaveTimer.current = setTimeout(() => {
-      updateUserProfile({ accountSize: value })
-        .then(() => updateCurrentUser({ accountSize: value }))
-        .catch(() => {}); // silent — UI still works even if save fails
-    }, 1000);
+    navSaveTimer.current = setTimeout(() => saveNavNow(value), 1000);
+  }
+
+  // Immediate save — used on blur so refreshing right after editing still persists
+  function saveNavNow(value) {
+    if (navSaveTimer.current) { clearTimeout(navSaveTimer.current); navSaveTimer.current = null; }
+    updateUserProfile({ accountSize: value })
+      .then(() => updateCurrentUser({ accountSize: value }))
+      .catch(() => {}); // silent — UI still works even if save fails
   }
   const [positions,       setPositions]       = useState([]);
   const [pendingEntries,  setPendingEntries]  = useState([]);
@@ -2320,7 +2324,7 @@ export default function CommandCenter({ onNavigate }) {
             )}
           </div>
           <span style={{ fontSize: 11, color: '#555' }}>NAV</span>
-          <input type="number" value={nav} onChange={e => handleNavChange(+e.target.value || 0)}
+          <input type="number" value={nav} onChange={e => handleNavChange(+e.target.value || 0)} onBlur={e => saveNavNow(+e.target.value || 0)}
             style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: 6, padding: '5px 10px', color: '#FFD700', fontSize: 13, fontFamily: 'monospace',
               width: 120, textAlign: 'right', outline: 'none', fontWeight: 700 }} />

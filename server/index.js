@@ -1252,6 +1252,90 @@ app.get('/api/sector-exposure', authenticateJWT, async (req, res) => {
   }
 });
 
+// GET /api/sector-ema — sector ETF vs 21-week EMA for all 11 sectors
+app.get('/api/sector-ema', authenticateJWT, async (req, res) => {
+  try {
+    const SECTOR_ETFS = {
+      'Technology':             'XLK',
+      'Healthcare':             'XLV',
+      'Financial Services':     'XLF',
+      'Industrials':            'XLI',
+      'Consumer Staples':       'XLP',
+      'Consumer Discretionary': 'XLY',
+      'Energy':                 'XLE',
+      'Utilities':              'XLU',
+      'Basic Materials':        'XLB',
+      'Communication Services': 'XLC',
+      'Real Estate':            'XLRE',
+    };
+
+    // FMP stable EMA endpoint returns "Invalid timeframe" for weekly.
+    // Compute 21-week EMA from daily candles instead — guaranteed to work for any ETF.
+    const FMP_KEY  = process.env.FMP_API_KEY;
+    const FMP_HOST = 'https://financialmodelingprep.com';
+    const etfTickers = Object.values(SECTOR_ETFS);
+
+    // Helper: compute 21-week EMA from 250 daily candles
+    async function computeEtfEma(etf) {
+      try {
+        const url = `${FMP_HOST}/api/v3/historical-price-full/${etf}?timeseries=250&apikey=${FMP_KEY}`;
+        const data = await fetch(url, { signal: AbortSignal.timeout(8000) })
+          .then(r => r.ok ? r.json() : null).catch(() => null);
+        const daily = data?.historical;
+        if (!Array.isArray(daily) || daily.length < 110) return null;
+
+        // Group into weeks by Monday — take last close of each week
+        const weekMap = {};
+        for (const bar of [...daily].reverse()) {
+          const d  = new Date(bar.date);
+          const ms = d.getTime() - d.getDay() * 86400000; // shift to Sunday epoch
+          weekMap[ms] = bar.close;                         // overwrite = last day of week wins
+        }
+        const closes = Object.keys(weekMap).sort((a, b) => +a - +b).map(k => weekMap[k]);
+        if (closes.length < 22) return null;
+
+        // Seed with simple average of first 21 weeks, then roll forward
+        let ema = closes.slice(0, 21).reduce((s, v) => s + v, 0) / 21;
+        const k = 2 / 22;
+        for (let i = 21; i < closes.length; i++) ema = closes[i] * k + ema * (1 - k);
+        return +ema.toFixed(2);
+      } catch { return null; }
+    }
+
+    // Batch quote fetch (one call for all 11 ETFs) + candle-based EMA in parallel
+    const [quotesRaw, emaEntries] = await Promise.all([
+      fetch(`${FMP_HOST}/api/v3/quote/${etfTickers.join(',')}?apikey=${FMP_KEY}`)
+        .then(r => r.ok ? r.json() : []).catch(() => []),
+      Promise.all(etfTickers.map(async etf => [etf, await computeEtfEma(etf)])),
+    ]);
+
+    const priceMap = {};
+    for (const q of (Array.isArray(quotesRaw) ? quotesRaw : [])) priceMap[q.symbol] = q.price;
+    const emaMap = Object.fromEntries(emaEntries);
+
+    const result = {};
+    for (const [sector, etf] of Object.entries(SECTOR_ETFS)) {
+      const price = priceMap[etf] ?? null;
+      const ema21 = emaMap[etf]  ?? null;
+      result[sector] = {
+        etf,
+        price,
+        ema21,
+        aboveEma:   price != null && ema21 != null ? price > ema21 : null,
+        signal:     null,
+        separation: price && ema21 ? +((price - ema21) / ema21 * 100).toFixed(2) : null,
+      };
+    }
+    console.log('[SECTOR-EMA]', Object.entries(result).map(([s, d]) =>
+      `${d.etf}:price=${d.price?.toFixed(0)} ema=${d.ema21} above=${d.aboveEma}`).join(' | '));
+
+    res.json(result);
+  } catch (err) {
+    console.error('[SECTOR-EMA] Error:', err);
+    res.status(500).json({ error: 'Failed to compute sector EMA data' });
+  }
+});
+
 // GET /api/sector-stocks/:sectorKey
 // Returns S&P 500 stocks in the given GICS sector, ranked by YTD return.
 app.get('/api/sector-stocks/:sectorKey', async (req, res) => {

@@ -20,7 +20,7 @@ export function AnalyzeProvider({ children }) {
   useEffect(() => {
     async function loadContext() {
       try {
-        const [sectorRes, washRes, navRes, regimeRes] = await Promise.all([
+        const [sectorRes, washRes, navRes, regimeRes, sectorEmaRes] = await Promise.all([
           fetch(`${API_BASE}/api/sector-exposure`, { headers: authHeaders() })
             .then(r => r.ok ? r.json() : null)
             .catch(() => null),
@@ -33,6 +33,9 @@ export function AnalyzeProvider({ children }) {
           fetch(`${API_BASE}/api/regime`, { headers: authHeaders() })
             .then(r => r.ok ? r.json() : null)
             .catch(() => null),
+          fetch(`${API_BASE}/api/sector-ema`, { headers: authHeaders() })
+            .then(r => r.ok ? r.json() : {})
+            .catch(() => ({})),
         ]);
 
         // Build wash ticker set for fast O(1) lookup
@@ -49,6 +52,7 @@ export function AnalyzeProvider({ children }) {
           washTickers,
           nav: navRes?.nav || null,
           regime: regimeRes || null,
+          sectorEma: sectorEmaRes || {},
           loadedAt: new Date(),
         });
       } catch (e) {

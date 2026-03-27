@@ -92,42 +92,58 @@ export function computeAnalyzeScore(stock, context) {
   components.killContext = t1b;
 
   // T1-C: Index Trend (0-8)
-  // Regime endpoint returns: { friday, live: { spy: { position: 'above'|'below' }, qqq: { position } } }
-  let t1c = { score: 4, label: 'UNKNOWN', detail: 'Index data unavailable' };
+  const exch = (stock.exchange || '').toUpperCase();
+  const isNasdaq = exch === 'NASDAQ';
+  const indexName = isNasdaq ? 'QQQ' : 'SPY';
+
+  let t1c;
   if (context.regime) {
-    const exchange = (stock.exchange || '').toUpperCase();
-    const isNasdaq = exchange === 'NASDAQ';
-
-    const spyAbove = context.regime.live?.spy?.position === 'above';
-    const qqqAbove = context.regime.live?.qqq?.position === 'above';
-
-    // Primary: use exchange-matched index
+    // Try live position first, fall back to aboveEma flag
+    const spyAbove = context.regime.live?.spy?.position != null
+      ? context.regime.live.spy.position === 'above'
+      : context.regime.spyAboveEma ?? null;
+    const qqqAbove = context.regime.live?.qqq?.position != null
+      ? context.regime.live.qqq.position === 'above'
+      : context.regime.qqqAboveEma ?? null;
     const primaryAbove = isNasdaq ? qqqAbove : spyAbove;
-    const indexName = isNasdaq ? 'QQQ' : 'SPY';
 
-    // Check if we have valid regime data
-    const hasLiveData = context.regime.live?.spy?.position != null;
-    if (hasLiveData) {
+    if (primaryAbove != null) {
       const aligned = (direction === 'LONG' && primaryAbove) || (direction === 'SHORT' && !primaryAbove);
       if (aligned) {
-        t1c = { score: 8, label: 'WITH TREND', detail: `${direction} with ${indexName} trend` };
+        t1c = { score: 8, label: 'WITH TREND', detail: `${direction} with ${indexName} ${primaryAbove ? 'above' : 'below'} 21 EMA` };
       } else {
-        t1c = { score: 0, label: 'AGAINST', detail: `${direction} against ${indexName} trend` };
+        t1c = { score: 0, label: 'AGAINST', detail: `${direction} against ${indexName} ${primaryAbove ? 'above' : 'below'} 21 EMA` };
         warnings.push(`Trading ${direction} against ${indexName} — ${indexName} is ${primaryAbove ? 'above' : 'below'} 21 EMA`);
       }
+    } else {
+      console.error(`[ANALYZE] Regime loaded but ${indexName} EMA position is null`);
+      t1c = { score: 0, label: 'ERROR', detail: `${indexName} EMA data missing — data pipeline failure` };
+      warnings.push(`DATA ERROR: ${indexName} EMA unavailable. Score penalized. Report to admin.`);
     }
+  } else {
+    console.error('[ANALYZE] No regime data in AnalyzeContext');
+    t1c = { score: 0, label: 'ERROR', detail: 'Market regime data missing — AnalyzeContext failed to load' };
+    warnings.push('DATA ERROR: Market regime unavailable. Score penalized. Check API connection.');
   }
   score += t1c.score;
   components.indexTrend = t1c;
 
   // T1-D: Sector Trend (0-7)
-  let t1d = { score: 3, label: 'UNKNOWN', detail: 'Sector data unavailable' };
-  if (stock.sectorAboveEma != null) {
-    const aligned = (direction === 'LONG' && stock.sectorAboveEma) || (direction === 'SHORT' && !stock.sectorAboveEma);
-    t1d = aligned
-      ? { score: 7, label: 'WITH SECTOR', detail: `${direction} with ${sector} trend` }
-      : { score: 0, label: 'AGAINST', detail: `${direction} against ${sector} trend` };
-    if (!aligned) warnings.push(`Trading ${direction} against ${sector} sector trend`);
+  const sectorInfo = context.sectorEma?.[sector];
+
+  let t1d;
+  if (sectorInfo?.aboveEma != null) {
+    const aligned = (direction === 'LONG' && sectorInfo.aboveEma) || (direction === 'SHORT' && !sectorInfo.aboveEma);
+    if (aligned) {
+      t1d = { score: 7, label: 'WITH SECTOR', detail: `${direction} with ${sector} (${sectorInfo.etf} ${sectorInfo.aboveEma ? 'above' : 'below'} 21 EMA, ${sectorInfo.separation ?? '?'}%)` };
+    } else {
+      t1d = { score: 0, label: 'AGAINST', detail: `${direction} against ${sector} (${sectorInfo.etf} ${sectorInfo.aboveEma ? 'above' : 'below'} 21 EMA)` };
+      warnings.push(`Trading ${direction} against ${sector} — ${sectorInfo.etf} is ${sectorInfo.aboveEma ? 'above' : 'below'} 21 EMA`);
+    }
+  } else {
+    console.error(`[ANALYZE] No sector EMA data for "${sector}" — data bug`);
+    t1d = { score: 0, label: 'ERROR', detail: `Sector EMA data missing for ${sector} — data pipeline failure` };
+    warnings.push(`DATA ERROR: Sector EMA unavailable for ${sector}. Score penalized.`);
   }
   score += t1d.score;
   components.sectorTrend = t1d;
@@ -229,6 +245,82 @@ export function computeAnalyzeScore(stock, context) {
     warnings,
     color,
     direction,
+
+    // ── Snapshot of everything on screen at analysis time ──────────────────
+    rawData: {
+      kill: {
+        totalScore:       stock.totalScore ?? stock.killScore ?? stock.apexScore ?? null,
+        pipelineMaxScore: stock.pipelineMaxScore ?? stock.maxScore ?? null,
+        rank:             stock.killRank ?? stock.rank ?? null,
+        rankChange:       stock.rankChange ?? null,
+        tier:             stock.tier ?? stock.killTier ?? null,
+        d1:               stock.d1 ?? stock.dimensions?.d1 ?? null,
+        d2:               stock.d2 ?? stock.dimensions?.d2 ?? null,
+        d3:               stock.d3 ?? stock.dimensions?.d3 ?? null,
+        d4:               stock.d4 ?? stock.dimensions?.d4 ?? null,
+        d5:               stock.d5 ?? stock.dimensions?.d5 ?? null,
+        d6:               stock.d6 ?? stock.dimensions?.d6 ?? null,
+        d7:               stock.d7 ?? stock.dimensions?.d7 ?? null,
+        d8:               stock.d8 ?? stock.dimensions?.d8 ?? null,
+      },
+      signal: {
+        type:         signal,
+        age:          signalAge,
+        price:        stock.signalPrice ?? stock.entryPrice ?? null,
+        isNew:        stock.isNewSignal || (signalAge != null && signalAge <= 1),
+        isDeveloping: stock.isDeveloping || false,
+      },
+      market: {
+        spy: {
+          price:      context.regime?.spyPrice ?? null,
+          ema21:      context.regime?.spyEma ?? null,
+          separation: context.regime?.spySeparation ?? null,
+          aboveEma:   context.regime?.live?.spy?.position != null
+                        ? context.regime.live.spy.position === 'above'
+                        : context.regime?.spyAboveEma ?? null,
+          slope:      context.regime?.spyEmaRising ?? null,
+        },
+        qqq: {
+          price:      context.regime?.qqqPrice ?? null,
+          ema21:      context.regime?.qqqEma ?? null,
+          separation: context.regime?.qqqSeparation ?? null,
+          aboveEma:   context.regime?.live?.qqq?.position != null
+                        ? context.regime.live.qqq.position === 'above'
+                        : context.regime?.qqqAboveEma ?? null,
+          slope:      context.regime?.qqqEmaRising ?? null,
+        },
+        vix:    context.regime?.vix ?? null,
+        regime: context.regime?.regime ?? context.regime?.label ?? null,
+      },
+      sector: {
+        name:       sector,
+        etf:        sectorInfo?.etf        ?? null,
+        price:      sectorInfo?.price      ?? null,
+        ema21:      sectorInfo?.ema21      ?? null,
+        aboveEma:   sectorInfo?.aboveEma   ?? null,
+        separation: sectorInfo?.separation ?? null,
+      },
+      stock: {
+        ticker:       stock.ticker,
+        exchange:     stock.exchange || null,
+        sector:       stock.sector || null,
+        currentPrice: stock.currentPrice || stock.price || null,
+        stopPrice:    stock.stopPrice || stock.pnthrStop || null,
+      },
+      sectorExposure: {
+        sector:        sector,
+        currentLongs:  sectorData?.longCount ?? null,
+        currentShorts: sectorData?.shortCount ?? null,
+        netExposure:   sectorData?.netExposure ?? null,
+        projectedNet:  sectorImpact?.netAfter ?? null,
+      },
+      wash: {
+        active:        !washStatus.clean,
+        daysRemaining: washStatus.daysRemaining,
+      },
+      nav: context.nav ?? null,
+      analyzedAt: new Date().toISOString(),
+    },
   };
 }
 

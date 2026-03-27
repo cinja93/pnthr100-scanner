@@ -72,12 +72,34 @@ async function fetchProfile(ticker) {
   } catch { return null; }
 }
 
-// 21-week EMA (current + previous for slope)
+// 21-week EMA — computed from 250 daily candles (FMP stable weekly timeframe param is broken)
 async function fetchEMA21(ticker) {
   try {
-    const data = await fmpGet('/stable/technical-indicators/ema', { symbol: ticker, periodLength: 21, timeframe: '1week' });
-    if (!Array.isArray(data) || data.length < 2) return null;
-    return { current: data[0]?.ema, previous: data[1]?.ema };
+    const url = fmpUrl(`/api/v3/historical-price-full/${ticker}`, { timeseries: '250' });
+    const data = await fetch(url, { signal: AbortSignal.timeout(8000) })
+      .then(r => r.ok ? r.json() : null).catch(() => null);
+    const daily = data?.historical;
+    if (!Array.isArray(daily) || daily.length < 110) return null;
+
+    // Group daily bars into weeks (by Sunday epoch) — last close of each week wins
+    const weekMap = {};
+    for (const bar of [...daily].reverse()) {
+      const d  = new Date(bar.date);
+      const ms = d.getTime() - d.getDay() * 86400000;
+      weekMap[ms] = bar.close;
+    }
+    const closes = Object.keys(weekMap).sort((a, b) => +a - +b).map(k => weekMap[k]);
+    if (closes.length < 22) return null;
+
+    // Seed with simple avg of first 21 weeks, then roll forward
+    let ema  = closes.slice(0, 21).reduce((s, v) => s + v, 0) / 21;
+    let prev = ema;
+    const k  = 2 / 22;
+    for (let i = 21; i < closes.length; i++) {
+      prev = ema;
+      ema  = closes[i] * k + ema * (1 - k);
+    }
+    return { current: +ema.toFixed(2), previous: +prev.toFixed(2) };
   } catch { return null; }
 }
 
@@ -545,6 +567,7 @@ export async function regimeHandler(req, res) {
     const latest = db ? await db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } }) : null;
 
     // Live SPY/QQQ check
+    // CRITICAL: never fall back to EMA=0 — that makes every stock "above" the EMA
     let live = null;
     try {
       const [spyEma, qqqEma, quotes] = await Promise.all([
@@ -552,21 +575,38 @@ export async function regimeHandler(req, res) {
         fetchEMA21('QQQ'),
         fetchQuotes(['SPY', 'QQQ']),
       ]);
+
+      const spyPrice  = quotes['SPY']?.price || null;
+      const qqqPrice  = quotes['QQQ']?.price || null;
+      const spyEma21  = spyEma?.current || null;   // null if FMP failed — do NOT default to 0
+      const qqqEma21  = qqqEma?.current || null;
+
+      // If FMP EMA fetch failed, fall back to stored Friday boolean (stale but correct direction)
+      // Never use 0 as a fallback — price > 0 always, so EMA=0 would always say "above"
+      const spyPos = spyEma21 ? (spyPrice >= spyEma21 ? 'above' : 'below')
+                              : (latest?.spyAboveEma != null ? (latest.spyAboveEma ? 'above' : 'below') : null);
+      const qqqPos = qqqEma21 ? (qqqPrice >= qqqEma21 ? 'above' : 'below')
+                              : (latest?.qqqAboveEma != null ? (latest.qqqAboveEma ? 'above' : 'below') : null);
+
+      console.log(`[REGIME] SPY price=${spyPrice} ema21=${spyEma21} pos=${spyPos} | QQQ price=${qqqPrice} ema21=${qqqEma21} pos=${qqqPos}`);
+
       live = {
         spy: {
-          price:    quotes['SPY']?.price || 0,
-          ema21:    spyEma?.current || latest?.spy?.ema21 || 0,
-          position: (quotes['SPY']?.price || 0) >= (spyEma?.current || 0) ? 'above' : 'below',
+          price:     spyPrice || 0,
+          ema21:     spyEma21 || 0,
+          position:  spyPos,
           changePct: quotes['SPY']?.changePct || 0,
         },
         qqq: {
-          price:    quotes['QQQ']?.price || 0,
-          ema21:    qqqEma?.current || latest?.qqq?.ema21 || 0,
-          position: (quotes['QQQ']?.price || 0) >= (qqqEma?.current || 0) ? 'above' : 'below',
+          price:     qqqPrice || 0,
+          ema21:     qqqEma21 || 0,
+          position:  qqqPos,
           changePct: quotes['QQQ']?.changePct || 0,
         },
       };
-    } catch { /* live data optional */ }
+    } catch (e) {
+      console.error('[REGIME] Live data fetch failed:', e.message);
+    }
 
     res.json({
       friday: latest ? {

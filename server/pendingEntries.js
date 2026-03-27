@@ -126,8 +126,227 @@ export async function pendingEntryConfirm(req, res) {
     const { fillPrice, shares, date, stop, direction } = req.body;
     if (!fillPrice || !shares) return res.status(400).json({ error: 'fillPrice and shares are required' });
 
-    // Allow direction override at confirm time (e.g. user flips LONG → SHORT)
     const resolvedDirection = (direction === 'LONG' || direction === 'SHORT') ? direction : entry.direction;
+
+    // ═══════════════════════════════════════════════════════════════
+    // DATA POPULATION — ANALYZE SNAPSHOT IS PRIMARY SOURCE
+    // ═══════════════════════════════════════════════════════════════
+
+    const analyze = entry.analyzeScore || null;
+    const raw     = analyze?.rawData   || null;
+
+    // ── Kill Score Cascade ──────────────────────────────────────────────────
+    let killScoreAtEntry = null;
+
+    // Source 1: Analyze snapshot rawData (what was live on screen)
+    if (raw?.kill?.totalScore != null) {
+      killScoreAtEntry = {
+        totalScore:       raw.kill.totalScore,
+        pipelineMaxScore: raw.kill.pipelineMaxScore ?? null,
+        rank:             raw.kill.rank      ?? null,
+        rankChange:       raw.kill.rankChange ?? null,
+        tier:             raw.kill.tier       ?? null,
+        d1: raw.kill.d1 ?? null, d2: raw.kill.d2 ?? null,
+        d3: raw.kill.d3 ?? null, d4: raw.kill.d4 ?? null,
+        d5: raw.kill.d5 ?? null, d6: raw.kill.d6 ?? null,
+        d7: raw.kill.d7 ?? null, d8: raw.kill.d8 ?? null,
+        signal:      raw.signal?.type  ?? null,
+        signalAge:   raw.signal?.age   ?? null,
+        signalPrice: raw.signal?.price ?? null,
+        source:      'ANALYZE_SNAPSHOT',
+      };
+      console.log(`[CONFIRM] ${entry.ticker}: Kill from Analyze snapshot — score=${killScoreAtEntry.totalScore}, rank=${killScoreAtEntry.rank}`);
+    }
+
+    // Source 2: Queue entry fields
+    if (!killScoreAtEntry && entry.killScore != null) {
+      killScoreAtEntry = {
+        totalScore:       entry.killScore,
+        pipelineMaxScore: null,
+        rank:             entry.killRank  || null,
+        rankChange:       null,
+        tier:             entry.killTier  || null,
+        d1: null, d2: null, d3: null, d4: null,
+        d5: null, d6: null, d7: null, d8: null,
+        signal:      entry.signal    || null,
+        signalAge:   entry.signalAge ?? null,
+        signalPrice: null,
+        source:      'QUEUE_ENTRY',
+      };
+      console.log(`[CONFIRM] ${entry.ticker}: Kill from queue entry — score=${entry.killScore}`);
+    }
+
+    // Source 3: MongoDB pipeline (last resort)
+    if (!killScoreAtEntry) {
+      try {
+        const killDoc = await db.collection('pnthr_kill_scores')
+          .findOne({ ticker: entry.ticker.toUpperCase() }, { sort: { createdAt: -1 } });
+        if (killDoc) {
+          let pipelineMaxScore = null;
+          if (killDoc.weekOf) {
+            const maxDoc = await db.collection('pnthr_kill_scores')
+              .findOne({ weekOf: killDoc.weekOf }, { sort: { totalScore: -1 } });
+            pipelineMaxScore = maxDoc?.totalScore ?? null;
+          }
+          killScoreAtEntry = {
+            totalScore:       killDoc.totalScore   ?? null,
+            pipelineMaxScore,
+            rank:             killDoc.killRank      ?? null,
+            rankChange:       killDoc.rankChange    ?? null,
+            tier:             killDoc.tier           ?? null,
+            d1: killDoc.preMultiplier ?? null,
+            d2: null, d3: null, d4: null,
+            d5: null, d6: null, d7: null, d8: null,
+            signal:      killDoc.signal    ?? null,
+            signalAge:   killDoc.signalAge ?? null,
+            signalPrice: killDoc.signalPrice ?? null,
+            source:      'MONGODB_PIPELINE',
+          };
+          console.log(`[CONFIRM] ${entry.ticker}: Kill from MongoDB pipeline — score=${killScoreAtEntry.totalScore}`);
+        }
+      } catch (e) {
+        console.warn(`[CONFIRM] ${entry.ticker}: MongoDB Kill lookup failed:`, e.message);
+      }
+    }
+
+    if (!killScoreAtEntry) {
+      console.warn(`[CONFIRM] ${entry.ticker}: No Kill score from any source`);
+    }
+
+    // ── Signal Cascade ──────────────────────────────────────────────────────
+    let signal     = null;
+    let signalAge  = null;
+    let entryContext = 'NO_SIGNAL';
+
+    if (raw?.signal?.type) {
+      signal      = raw.signal.type;
+      signalAge   = raw.signal.age ?? null;
+      entryContext = raw.signal.isDeveloping ? 'DEVELOPING_SIGNAL'
+        : (signal === 'BL' || signal === 'SS')
+          ? ((signalAge != null && signalAge <= 1) ? 'CONFIRMED_SIGNAL' : 'STALE_SIGNAL')
+          : 'NO_SIGNAL';
+      console.log(`[CONFIRM] ${entry.ticker}: Signal from Analyze — ${signal}+${signalAge}, ctx=${entryContext}`);
+    } else if (entry.signal) {
+      signal      = entry.signal;
+      signalAge   = entry.signalAge ?? null;
+      entryContext = (signalAge || 0) <= 1 ? 'CONFIRMED_SIGNAL' : 'STALE_SIGNAL';
+      console.log(`[CONFIRM] ${entry.ticker}: Signal from queue entry — ${signal}`);
+    } else if (killScoreAtEntry?.signal) {
+      signal      = killScoreAtEntry.signal;
+      signalAge   = killScoreAtEntry.signalAge ?? null;
+      entryContext = (signalAge || 0) <= 1 ? 'CONFIRMED_SIGNAL' : 'STALE_SIGNAL';
+      console.log(`[CONFIRM] ${entry.ticker}: Signal from Kill data — ${signal}`);
+    } else {
+      try {
+        const devTickers = getDevelopingSignalTickers();
+        if (devTickers.has(entry.ticker.toUpperCase())) entryContext = 'DEVELOPING_SIGNAL';
+      } catch (e) { /* ignore */ }
+    }
+
+    // ── Sector Resolution ──────────────────────────────────────────────────
+    let resolvedSector = raw?.stock?.sector || entry.sector || null;
+    if (entry.isETF) {
+      resolvedSector = 'ETF';
+    } else if (!resolvedSector || resolvedSector === '—' || resolvedSector === '') {
+      try {
+        const url = `${FMP_BASE}/api/v3/profile/${entry.ticker}?apikey=${FMP_API_KEY}`;
+        const profileRes = await fetch(url);
+        const profile = await profileRes.json();
+        resolvedSector = normalizeSector(profile?.[0]?.sector || '') || 'Unknown';
+        console.log(`[CONFIRM] ${entry.ticker}: Sector from FMP profile — ${resolvedSector}`);
+      } catch (e) {
+        resolvedSector = 'Unknown';
+      }
+    } else {
+      resolvedSector = normalizeSector(resolvedSector);
+    }
+
+    // ── Market Data Cascade ────────────────────────────────────────────────
+    let marketAtEntry = {};
+
+    // Source 1: Analyze snapshot
+    if (raw?.market?.spy?.aboveEma != null || raw?.market?.regime) {
+      marketAtEntry = {
+        spy:    raw.market.spy || null,
+        qqq:    raw.market.qqq || null,
+        vix:    raw.market.vix != null ? { close: raw.market.vix } : null,
+        regime: raw.market.regime ? { label: raw.market.regime } : null,
+        // Compatibility fields for disciplineScoring.js
+        spyPosition: raw.market.spy?.aboveEma === true ? 'above'
+                   : raw.market.spy?.aboveEma === false ? 'below' : null,
+        qqqPosition: raw.market.qqq?.aboveEma === true ? 'above'
+                   : raw.market.qqq?.aboveEma === false ? 'below' : null,
+        sectorPosition: raw.sector?.aboveEma === true ? 'above'
+                      : raw.sector?.aboveEma === false ? 'below' : null,
+        sectorEtf: raw.sector?.etf || null,
+        source: 'ANALYZE_SNAPSHOT',
+      };
+      console.log(`[CONFIRM] ${entry.ticker}: Market from Analyze snapshot — regime=${raw.market.regime}, sectorPosition=${marketAtEntry.sectorPosition}`);
+    }
+
+    // Source 2: Live FMP snapshot (enriches with sector ETF, yields, etc.)
+    try {
+      const liveSnapshot = await fetchMarketSnapshot(resolvedSector || null).catch(() => ({}));
+      if (liveSnapshot && Object.keys(liveSnapshot).length > 0) {
+        marketAtEntry = {
+          ...marketAtEntry,
+          ...liveSnapshot,
+          // Keep analyze snapshot SPY/QQQ/regime as they reflect decision time
+          spy:    marketAtEntry.spy    || liveSnapshot.spy    || null,
+          qqq:    marketAtEntry.qqq    || liveSnapshot.qqq    || null,
+          regime: marketAtEntry.regime || (liveSnapshot.regime ? { label: liveSnapshot.regime } : null),
+          source: marketAtEntry.source || 'LIVE_SNAPSHOT',
+        };
+      }
+    } catch (e) {
+      console.warn(`[CONFIRM] ${entry.ticker}: Live market snapshot failed:`, e.message);
+    }
+
+    // Source 3: Regime fallback
+    if (!marketAtEntry.spy && !marketAtEntry.spyPosition) {
+      try {
+        const regime = await db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } });
+        if (regime) {
+          marketAtEntry = {
+            ...marketAtEntry,
+            spyPosition: regime.spyAboveEma ? 'above' : 'below',
+            qqqPosition: regime.qqqAboveEma ? 'above' : 'below',
+            regime:      regime.regime || null,
+            source:      marketAtEntry.source || 'REGIME_FALLBACK',
+          };
+          console.log(`[CONFIRM] ${entry.ticker}: Market from regime fallback`);
+        }
+      } catch (e) {
+        console.error(`[CONFIRM] ${entry.ticker}: All market data sources failed`);
+      }
+    }
+
+    // ── Exchange & NAV ──────────────────────────────────────────────────────
+    const exchange   = raw?.stock?.exchange || entry.exchange || null;
+    let   navAtEntry = raw?.nav ?? null;
+    if (!navAtEntry) {
+      try {
+        const userProfile = await getUserProfile(req.user.userId);
+        navAtEntry = userProfile?.accountSize ?? null;
+      } catch (e) { /* ignore */ }
+    }
+
+    // ── Analyze Score snapshot ──────────────────────────────────────────────
+    const analyzeScoreAtEntry = analyze ? {
+      score:      analyze.score     ?? null,
+      max:        analyze.max       ?? 53,
+      pct:        analyze.pct       ?? null,
+      projected:  analyze.projected ?? null,
+      composite:  analyze.composite ?? null,
+      warnings:   analyze.warnings  ?? [],
+      direction:  analyze.direction ?? null,
+      computedAt: analyze.rawData?.analyzedAt || analyze.computedAt || new Date().toISOString(),
+      source:     'ANALYZE',
+    } : null;
+
+    // ═══════════════════════════════════════════════════════════════
+    // BUILD POSITION
+    // ═══════════════════════════════════════════════════════════════
 
     const posId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     const fills = { 1: { filled: true, price: +fillPrice, shares: +shares, date: date || new Date().toISOString().split('T')[0] } };
@@ -143,55 +362,21 @@ export async function pendingEntryConfirm(req, res) {
       maxGapPct:    entry.gapPct || 0,
       currentPrice: +fillPrice,
       isETF:        entry.isETF || false,
-      sector:       entry.isETF ? 'ETF' : normalizeSector(entry.sector || ''),
+      sector:       resolvedSector,
+      exchange,
       fills,
       status:       'ACTIVE',
       ownerId:      req.user.userId,
       createdAt:    new Date(),
       updatedAt:    new Date(),
       outcome:      { exitPrice: null, profitPct: null, profitDollar: null, holdingDays: null, exitReason: null },
-      // Preserve Kill metadata
       killScore:    entry.killScore  || null,
       killTier:     entry.killTier   || null,
+      entryContext,
+      signal,
+      signalAge,
       fromQueue:    true,
     };
-
-    // ── Determine entryContext for discipline scoring ─────────────────────────
-    // Set at confirm time and never changed — reflects what the trader knew at entry.
-    {
-      const signalData = entry.signal || entry.pnthrSignal;
-      const signalAge  = entry.signalAge || entry.weeksSince || 0;
-      if (signalData === 'BL' || signalData === 'SS') {
-        position.entryContext = signalAge <= 1 ? 'CONFIRMED_SIGNAL' : 'STALE_SIGNAL';
-      } else {
-        // No confirmed signal — check developing signals cache (fast, no FMP)
-        try {
-          const devTickers = getDevelopingSignalTickers();
-          position.entryContext = devTickers.has(position.ticker.toUpperCase())
-            ? 'DEVELOPING_SIGNAL'
-            : 'NO_SIGNAL';
-        } catch (e) {
-          console.warn('[ENTRY CONTEXT] developing check failed:', e.message);
-          position.entryContext = 'NO_SIGNAL';
-        }
-      }
-      console.log(`[CONFIRM ENTRY] ${position.ticker}: entryContext=${position.entryContext} signal=${signalData || 'none'}`);
-    }
-
-    // Guard: if sector is still blank/Unknown after normalization, fetch from FMP
-    if (!position.isETF && (!position.sector || position.sector === 'Unknown' || position.sector === '—')) {
-      try {
-        const url = `${FMP_BASE}/api/v3/profile/${position.ticker}?apikey=${FMP_API_KEY}`;
-        const profileRes = await fetch(url);
-        const profile = await profileRes.json();
-        const fetched = normalizeSector(profile?.[0]?.sector || '');
-        position.sector = fetched || 'Unknown';
-        console.log(`[pendingEntries] sector fallback for ${position.ticker}: "${fetched}"`);
-      } catch (e) {
-        console.warn(`[pendingEntries] sector FMP fallback failed for ${position.ticker}:`, e.message);
-        position.sector = 'Unknown';
-      }
-    }
 
     await db.collection('pnthr_portfolio').insertOne(position);
     await db.collection('pnthr_pending_entries').updateOne(
@@ -201,132 +386,43 @@ export async function pendingEntryConfirm(req, res) {
 
     let washWarning = null;
 
-    // Auto-create journal entry for newly confirmed position.
-    // Fetch market + sector snapshot at the moment of entry (best-effort).
+    // ── Create Journal Entry with all captured data ─────────────────────────
     try {
-      const killData = entry.killScore
-        ? { totalScore: entry.killScore, tier: entry.killTier, killRank: entry.killRank || null }
-        : null;
-      let marketAtEntry = await fetchMarketSnapshot(position.sector || null).catch(() => ({}));
-
-      // Fallback: if FMP snapshot has no SPY position data, use latest regime doc
-      if (!marketAtEntry?.spyPosition) {
-        console.warn(`[CONFIRM ENTRY] Live market snapshot incomplete for ${position.ticker}, trying regime fallback`);
-        try {
-          const regime = await db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } });
-          if (regime) {
-            marketAtEntry = {
-              ...marketAtEntry,
-              spyPosition: regime.spyPosition || (regime.spyPrice > regime.spyEma21 ? 'above' : null) || null,
-              qqqPosition: regime.qqqPosition || (regime.qqqPrice > regime.qqqEma21 ? 'above' : null) || null,
-              regime:      regime.regime      || marketAtEntry?.regime || null,
-              _source:     'regime_fallback',
-            };
-            console.log(`[CONFIRM ENTRY] Used regime fallback for market data: spy=${marketAtEntry.spyPosition}, qqq=${marketAtEntry.qqqPosition}`);
-          }
-        } catch (e) {
-          console.error(`[CONFIRM ENTRY] Regime fallback failed:`, e.message);
-        }
-      }
-      const sectorAtEntry = position.sector && position.sector !== '—' ? {
-        name:        position.sector,
-        etfTicker:   getSectorEtf(position.sector),
+      const sectorAtEntry = resolvedSector && resolvedSector !== '—' ? {
+        name:        resolvedSector,
+        etfTicker:   getSectorEtf(resolvedSector),
         etfPrice:    marketAtEntry.sectorPrice    || null,
         etfChange1D: marketAtEntry.sectorChange1D || null,
       } : null;
-      await createJournalEntry(db, position, req.user.userId, killData, marketAtEntry, sectorAtEntry);
-    } catch (e) { console.warn('[JOURNAL] Auto-create failed:', e.message); }
 
-    // Capture navAtEntry + isETF + technicals at entry (best-effort).
+      await createJournalEntry(db, position, req.user.userId, null, marketAtEntry, sectorAtEntry, {
+        killScoreAtEntry,
+        signal,
+        signalAge,
+        exchange,
+        navAtEntry,
+        marketAtEntry,
+        analyzeScoreAtEntry,
+        dataSource: killScoreAtEntry?.source || 'UNKNOWN',
+      });
+    } catch (e) {
+      console.warn('[JOURNAL] Auto-create failed:', e.message);
+    }
+
+    // ── Async: fetch technical snapshot and update journal ──────────────────
     try {
-      const userProfile = await getUserProfile(req.user.userId);
       const techAtEntry = await fetchTechnicalSnapshot(position.ticker).catch(() => null);
-      await db.collection('pnthr_journal').updateOne(
-        { positionId: posId, ownerId: req.user.userId },
-        { $set: {
-            navAtEntry:  userProfile?.accountSize ?? null,
-            isETF:       position.isETF || false,
-            ...(techAtEntry ? { techAtEntry } : {}),
-        }}
-      );
-    } catch (e) { console.warn('[PE] navAtEntry/tech capture failed:', e.message); }
-
-    // Capture kill score context + exchange from pnthr_kill_scores (best-effort).
-    try {
-      const killScoreDoc = await db.collection('pnthr_kill_scores').findOne(
-        { ticker: position.ticker },
-        { sort: { createdAt: -1 } }
-      );
-      if (killScoreDoc) {
-        let pipelineMaxScore = null;
-        if (killScoreDoc.weekOf) {
-          const maxDocs = await db.collection('pnthr_kill_scores')
-            .find({ weekOf: killScoreDoc.weekOf })
-            .sort({ totalScore: -1 }).limit(1).toArray();
-          pipelineMaxScore = maxDocs[0]?.totalScore ?? null;
-        }
-        const killScoreAtEntry = {
-          totalScore:      killScoreDoc.totalScore      ?? null,
-          pipelineMaxScore,
-          rank:            killScoreDoc.killRank         ?? null,
-          rankChange:      null,
-          tier:            killScoreDoc.tier             ?? null,
-          signal:          killScoreDoc.signal           ?? null,
-          signalAge:       killScoreDoc.signalAge        ?? null,
-          d1:              killScoreDoc.preMultiplier    ?? null,
-          dimensions:      killScoreDoc.scoreDetail      ?? null,
-          weekOf:          killScoreDoc.weekOf           ?? null,
-        };
-        const updateFields = { killScoreAtEntry };
-        if (killScoreDoc.exchange) updateFields.exchange = killScoreDoc.exchange;
-
-        // Also set top-level signal + signalAge if not already captured from queue entry
-        const journalSignal    = entry.signal    || entry.pnthrSignal    || killScoreDoc.signal    || null;
-        const journalSignalAge = entry.signalAge ?? entry.weeksSince ?? killScoreDoc.signalAge ?? null;
-        if (journalSignal)             updateFields.signal    = journalSignal;
-        if (journalSignalAge != null)  updateFields.signalAge = journalSignalAge;
-        if (journalSignal && journalSignalAge != null) {
-          const ctx = journalSignalAge <= 1 ? 'CONFIRMED_SIGNAL' : 'STALE_SIGNAL';
-          updateFields.entryContext = ctx;
-        }
-
+      if (techAtEntry) {
         await db.collection('pnthr_journal').updateOne(
           { positionId: posId, ownerId: req.user.userId },
-          { $set: updateFields }
+          { $set: { techAtEntry, isETF: position.isETF || false } }
         );
       }
-    } catch (e) { console.warn('[PE] Kill score capture failed:', e.message); }
+    } catch (e) {
+      console.warn('[PE] techAtEntry capture failed:', e.message);
+    }
 
-    // ── Persist analyzeScore snapshot from queue entry ────────────────────────
-    // When the user ran ANALYZE before queuing, we receive a pre-trade snapshot.
-    // Store it on the journal entry + use it to backfill missing signal/exchange data.
-    try {
-      if (entry.analyzeScore && typeof entry.analyzeScore === 'object') {
-        const as = entry.analyzeScore;
-        const analyzeUpdate = {
-          analyzeScoreAtEntry: {
-            score:       as.score       ?? null,
-            max:         as.max         ?? 53,
-            pct:         as.pct         ?? null,
-            projected:   as.projected   ?? null,
-            composite:   as.composite   ?? null,
-            warnings:    as.warnings    ?? [],
-            direction:   as.direction   ?? null,
-            computedAt:  as.computedAt  ?? new Date(),
-          },
-        };
-        // Backfill signal if not yet set from kill score capture
-        if (!entry.signal && as.direction) {
-          analyzeUpdate.direction = as.direction;
-        }
-        await db.collection('pnthr_journal').updateOne(
-          { positionId: posId, ownerId: req.user.userId },
-          { $set: analyzeUpdate }
-        );
-      }
-    } catch (e) { console.warn('[PE] analyzeScore capture failed:', e.message); }
-
-    // Check for active wash sale rule — mark triggered if re-entering during window.
+    // ── Wash sale check ─────────────────────────────────────────────────────
     try {
       const now = new Date();
       const activeWash = await db.collection('pnthr_journal').findOne({
@@ -352,7 +448,6 @@ export async function pendingEntryConfirm(req, res) {
           { _id: activeWash._id },
           { $set: { 'washSale.triggered': true, 'washSale.triggeredDate': now, 'washSale.triggeredEntryId': posId } }
         );
-        // Tag the new journal entry so it surfaces in the Journal wash filters
         await db.collection('pnthr_journal').updateOne(
           { positionId: posId, ownerId: req.user.userId },
           { $addToSet: { tags: 'wash-sale' } }
@@ -360,7 +455,7 @@ export async function pendingEntryConfirm(req, res) {
       }
     } catch (e) { console.warn('[PE] Wash rule check failed:', e.message); }
 
-    // Check sector concentration AFTER saving — warn but don't block.
+    // ── Sector concentration check ──────────────────────────────────────────
     let sectorWarning = null;
     if (!position.isETF) {
       try {

@@ -101,20 +101,24 @@ function computeChecks(entry) {
   const washClean     = !(entry.tags?.includes('wash-sale'));
 
   let sizingCheck = null, riskDollar = null, riskPct = null, riskCapCheck = null;
-  if (nav != null && entryPrice != null && stopPrice != null && lot1Shares != null) {
-    const stopDist    = Math.abs(entryPrice - stopPrice);
-    const vitality    = nav * (isETF ? 0.005 : 0.01);
-    const tickerCap   = nav * 0.10;
+  // Risk $ only needs entry + stop + shares — no NAV required
+  if (entryPrice != null && stopPrice != null && lot1Shares != null) {
+    const stopDist = Math.abs(entryPrice - stopPrice);
     if (stopDist > 0) {
-      const byV = Math.floor(vitality / stopDist);
-      const byC = Math.floor(tickerCap / entryPrice);
-      const tot = Math.min(byV, byC);
-      const exp = Math.max(1, Math.round(tot * 0.15));
-      const dev = exp > 0 ? Math.abs(lot1Shares - exp) / exp : null;
-      sizingCheck  = dev != null ? dev <= 0.10 : null;
-      riskDollar   = +(lot1Shares * stopDist).toFixed(2);
-      riskPct      = +(riskDollar / nav * 100).toFixed(3);
-      riskCapCheck = riskDollar <= vitality;
+      riskDollar = +(lot1Shares * stopDist).toFixed(2);
+      // Risk % (portfolio) and sizing checks require NAV
+      if (nav != null) {
+        const vitality  = nav * (isETF ? 0.005 : 0.01);
+        const tickerCap = nav * 0.10;
+        const byV = Math.floor(vitality / stopDist);
+        const byC = Math.floor(tickerCap / entryPrice);
+        const tot = Math.min(byV, byC);
+        const exp = Math.max(1, Math.round(tot * 0.15));
+        const dev = exp > 0 ? Math.abs(lot1Shares - exp) / exp : null;
+        sizingCheck  = dev != null ? dev <= 0.10 : null;
+        riskPct      = +(riskDollar / nav * 100).toFixed(3);
+        riskCapCheck = riskDollar <= vitality;
+      }
     }
   }
 
@@ -206,9 +210,10 @@ function DataCell({ label, value, color, tooltip }) {
 
 // ── ConditionRow ──────────────────────────────────────────────────────────────
 function ConditionRow({ label, value, detail, badge, badgeColor, color }) {
+  if (value == null && !badge && !detail) return null;
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0', fontSize: '0.78rem' }}>
-      <span style={{ color: '#777', minWidth: 64, flexShrink: 0 }}>{label}</span>
+    <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', columnGap: 10, padding: '1px 0', fontSize: '0.78rem' }}>
+      <span style={{ color: '#777', flexShrink: 0 }}>{label}</span>
       <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
         {badge && <span style={{ background: badgeColor, color: '#000', padding: '1px 5px', borderRadius: 3, fontSize: '0.66rem', fontWeight: 700 }}>{badge}</span>}
         {value != null && <span style={{ color: color || '#ccc' }}>{value}</span>}
@@ -220,7 +225,7 @@ function ConditionRow({ label, value, detail, badge, badgeColor, color }) {
 
 // ── TechSection ───────────────────────────────────────────────────────────────
 function TechSection({ tech }) {
-  if (!tech) return <div style={{ color: '#444', fontSize: '0.72rem', fontStyle: 'italic' }}>Technical data not available</div>;
+  if (!tech) return null;
   const rsiColor = tech.rsi14 > 70 ? '#dc3545' : tech.rsi14 < 30 ? '#28a745' : '#ccc';
   const adxColor = tech.adx > 25 ? '#28a745' : '#fd7e14';
   const obvColor = tech.obvTrend === 'RISING' ? '#28a745' : tech.obvTrend === 'DECLINING' ? '#dc3545' : '#888';
@@ -246,28 +251,35 @@ function MarketColumn({ snap, tech, dir, label }) {
   const getVixZone    = v => v <= 15 ? { z: 'CALM', c: '#28a745' } : v <= 20 ? { z: 'NORMAL', c: '#FFD700' } : v <= 30 ? { z: 'ELEVATED', c: '#fd7e14' } : { z: 'FEAR', c: '#dc3545' };
   const vixZ = snap.vix ? getVixZone(snap.vix) : null;
 
+  const hasMarket  = snap.spyPrice != null || snap.qqqPrice != null || snap.vix != null || !!snap.regime;
+  const hasYields  = snap.treasury2Y != null || snap.treasury10Y != null || snap.treasury30Y != null ||
+                     snap.spread2Y10Y != null || snap.dxy != null || snap.crudeOil != null || snap.gold != null;
+
   return (
-    <div style={{ padding: '12px 14px', flex: 1 }}>
+    <div style={{ padding: '12px 14px', flex: 1, maxWidth: 480 }}>
       <div style={{ color: label === 'AT ENTRY' ? '#D4A017' : '#777', fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', marginBottom: 8 }}>{label}</div>
 
-      <div style={{ color: '#555', fontSize: '0.62rem', letterSpacing: '0.06em', marginBottom: 3 }}>MARKET</div>
-      <ConditionRow label="SPY"    value={snap.spyPrice != null ? `$${fmtNum(snap.spyPrice)}` : null}
-        detail={snap.spyVsEma != null ? `${snap.spyVsEma >= 0 ? '+' : ''}${fmtNum(snap.spyVsEma)}% EMA` : null} />
-      <ConditionRow label="QQQ"    value={snap.qqqPrice != null ? `$${fmtNum(snap.qqqPrice)}` : null}
-        detail={snap.qqqVsEma != null ? `${snap.qqqVsEma >= 0 ? '+' : ''}${fmtNum(snap.qqqVsEma)}% EMA` : null} />
-      {snap.vix != null && <ConditionRow label="VIX" value={fmtNum(snap.vix, 1)}
-        badge={vixZ?.z} badgeColor={vixZ?.c} />}
-      {snap.regime && <ConditionRow label="REGIME" badge={snap.regime} badgeColor={getRegimeColor(snap.regime)} />}
+      {hasMarket && <>
+        <div style={{ color: '#555', fontSize: '0.62rem', letterSpacing: '0.06em', marginBottom: 3 }}>MARKET</div>
+        <ConditionRow label="SPY" value={snap.spyPrice != null ? `$${fmtNum(snap.spyPrice)}` : null}
+          detail={snap.spyVsEma != null ? `${snap.spyVsEma >= 0 ? '+' : ''}${fmtNum(snap.spyVsEma)}% EMA` : null} />
+        <ConditionRow label="QQQ" value={snap.qqqPrice != null ? `$${fmtNum(snap.qqqPrice)}` : null}
+          detail={snap.qqqVsEma != null ? `${snap.qqqVsEma >= 0 ? '+' : ''}${fmtNum(snap.qqqVsEma)}% EMA` : null} />
+        {snap.vix != null && <ConditionRow label="VIX" value={fmtNum(snap.vix, 1)} badge={vixZ?.z} badgeColor={vixZ?.c} />}
+        {snap.regime && <ConditionRow label="REGIME" badge={snap.regime} badgeColor={getRegimeColor(snap.regime)} />}
+      </>}
 
-      <div style={{ color: '#555', fontSize: '0.62rem', letterSpacing: '0.06em', marginBottom: 3, marginTop: 8 }}>YIELDS & MACRO</div>
-      {snap.treasury2Y  != null && <ConditionRow label="2Y"     value={`${fmtNum(snap.treasury2Y)}%`} />}
-      {snap.treasury10Y != null && <ConditionRow label="10Y"    value={`${fmtNum(snap.treasury10Y)}%`} />}
-      {snap.treasury30Y != null && <ConditionRow label="30Y"    value={`${fmtNum(snap.treasury30Y)}%`} />}
-      {snap.spread2Y10Y != null && <ConditionRow label="2Y-10Y" value={`${snap.spread2Y10Y >= 0 ? '+' : ''}${fmtNum(snap.spread2Y10Y, 3)}%`}
-        color={snap.spread2Y10Y < 0 ? '#dc3545' : '#28a745'} />}
-      {snap.dxy      != null && <ConditionRow label="DXY"   value={fmtNum(snap.dxy)} />}
-      {snap.crudeOil != null && <ConditionRow label="CRUDE" value={`$${fmtNum(snap.crudeOil)}`} />}
-      {snap.gold     != null && <ConditionRow label="GOLD"  value={`$${Math.round(snap.gold).toLocaleString()}`} />}
+      {hasYields && <>
+        <div style={{ color: '#555', fontSize: '0.62rem', letterSpacing: '0.06em', marginBottom: 3, marginTop: 8 }}>YIELDS & MACRO</div>
+        {snap.treasury2Y  != null && <ConditionRow label="2Y"     value={`${fmtNum(snap.treasury2Y)}%`} />}
+        {snap.treasury10Y != null && <ConditionRow label="10Y"    value={`${fmtNum(snap.treasury10Y)}%`} />}
+        {snap.treasury30Y != null && <ConditionRow label="30Y"    value={`${fmtNum(snap.treasury30Y)}%`} />}
+        {snap.spread2Y10Y != null && <ConditionRow label="2Y-10Y" value={`${snap.spread2Y10Y >= 0 ? '+' : ''}${fmtNum(snap.spread2Y10Y, 3)}%`}
+          color={snap.spread2Y10Y < 0 ? '#dc3545' : '#28a745'} />}
+        {snap.dxy      != null && <ConditionRow label="DXY"   value={fmtNum(snap.dxy)} />}
+        {snap.crudeOil != null && <ConditionRow label="CRUDE" value={`$${fmtNum(snap.crudeOil)}`} />}
+        {snap.gold     != null && <ConditionRow label="GOLD"  value={`$${Math.round(snap.gold).toLocaleString()}`} />}
+      </>}
 
       {snap.sectorEtf && <>
         <div style={{ color: '#555', fontSize: '0.62rem', letterSpacing: '0.06em', marginBottom: 3, marginTop: 8 }}>SECTOR</div>
@@ -367,15 +379,79 @@ function getScoreQuestions(entry, disc) {
   return questions;
 }
 
-function CompleteYourScore({ entry, disc, onSave }) {
-  const [answers, setAnswers] = useState({});
-  const [saving, setSaving]   = useState(false);
-  const questions = getScoreQuestions(entry, disc);
+// Returns ALL scoreable questions regardless of disc state — used in review mode
+// so the user can correct any previously confirmed answer.
+function getReviewQuestions(entry) {
+  return [
+    {
+      id: 'signal',
+      question: `What was the PNTHR signal for ${entry.ticker} when you entered?`,
+      type: 'single_select',
+      options: [
+        { value: 'BL+1',        label: 'BL+1 (fresh buy long)' },
+        { value: 'BL+2',        label: 'BL+2 (1 week old)' },
+        { value: 'BL+3',        label: 'BL+3+ (2+ weeks old)' },
+        { value: 'SS+1',        label: 'SS+1 (fresh sell short)' },
+        { value: 'SS+2',        label: 'SS+2 (1 week old)' },
+        { value: 'SS+3',        label: 'SS+3+ (2+ weeks old)' },
+        { value: 'DEVELOPING',  label: 'Developing signal (3/4 conditions met)' },
+        { value: 'NONE',        label: 'No PNTHR signal' },
+      ],
+    },
+    {
+      id: 'indexTrend',
+      question: `Was the market (SPY/QQQ) trending WITH or AGAINST your ${entry.direction} trade?`,
+      type: 'single_select',
+      options: [
+        { value: 'WITH',    label: 'With trend (index supported my direction)' },
+        { value: 'AGAINST', label: 'Against trend (I went against the index)' },
+        { value: 'UNKNOWN', label: "Don't remember" },
+      ],
+    },
+    {
+      id: 'sectorTrend',
+      question: `Was the ${entry.sector || 'sector'} trending WITH or AGAINST your ${entry.direction} trade?`,
+      type: 'single_select',
+      options: [
+        { value: 'WITH',    label: 'With sector trend' },
+        { value: 'AGAINST', label: 'Against sector trend' },
+        { value: 'UNKNOWN', label: "Don't remember" },
+      ],
+    },
+    {
+      id: 'sizing',
+      question: 'Did you use SIZE IT for the recommended position size?',
+      type: 'single_select',
+      options: [
+        { value: 'EXACT',     label: 'Yes, exact SIZE IT recommendation' },
+        { value: 'WITHIN_10', label: 'Yes, within 10% of SIZE IT' },
+        { value: 'WITHIN_20', label: 'Close, within 20%' },
+        { value: 'NO',        label: 'No, I adjusted significantly' },
+      ],
+    },
+  ];
+}
 
-  if (questions.length === 0) return null;
+// questions and reviewMode are now passed from the parent (TradeCard) so the
+// parent controls exactly what to show — no internal re-derivation needed.
+function CompleteYourScore({ entry, questions, reviewMode, onSave }) {
+  // Pre-populate from existing userConfirmed so saved answers show highlighted
+  const [answers, setAnswers] = useState(() => {
+    const uc = entry.userConfirmed || {};
+    return {
+      ...(uc.signal      != null ? { signal:      uc.signal      } : {}),
+      ...(uc.killScore   != null ? { killScore:   uc.killScore   } : {}),
+      ...(uc.indexTrend  != null ? { indexTrend:  uc.indexTrend  } : {}),
+      ...(uc.sectorTrend != null ? { sectorTrend: uc.sectorTrend } : {}),
+      ...(uc.sizing      != null ? { sizing:      uc.sizing      } : {}),
+    };
+  });
+  const [saving, setSaving] = useState(false);
+
+  const hasAnswers = Object.keys(answers).length > 0;
 
   const handleSave = async () => {
-    if (Object.keys(answers).length === 0) return;
+    if (!hasAnswers) return;
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/api/journal/${entry._id}/confirm-score`, {
@@ -385,7 +461,7 @@ function CompleteYourScore({ entry, disc, onSave }) {
       });
       if (!res.ok) throw new Error('Failed to save');
       const { newScore } = await res.json();
-      onSave?.(entry._id, newScore);
+      onSave?.(entry._id, newScore, answers);
     } catch (e) {
       alert('Failed to save score: ' + e.message);
     } finally {
@@ -396,11 +472,15 @@ function CompleteYourScore({ entry, disc, onSave }) {
   return (
     <div style={{ border: '1px solid #D4A017', borderRadius: 8, padding: 16, backgroundColor: 'rgba(212,160,23,0.05)', margin: '10px 14px' }}>
       <div style={{ color: '#FFD700', fontWeight: 700, fontSize: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span>?</span>
-        COMPLETE YOUR SCORE — {questions.length} field{questions.length > 1 ? 's' : ''} need confirmation
+        <span>{reviewMode ? '✎' : '?'}</span>
+        {reviewMode
+          ? 'REVIEW CONFIRMED ANSWERS — click any option to correct it'
+          : `COMPLETE YOUR SCORE — ${questions.length} field${questions.length > 1 ? 's' : ''} need confirmation`}
       </div>
       <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>
-        Some data wasn't captured automatically at entry. Confirm these to get an accurate discipline score.
+        {reviewMode
+          ? 'Your previously confirmed answers are highlighted. Change any selection and hit SAVE AND RESCORE.'
+          : "Some data wasn't captured automatically at entry. Confirm these to get an accurate discipline score."}
       </div>
 
       {questions.map(q => (
@@ -446,12 +526,13 @@ function CompleteYourScore({ entry, disc, onSave }) {
         </div>
       ))}
 
-      <button onClick={handleSave} disabled={Object.keys(answers).length === 0 || saving}
+      <button onClick={handleSave} disabled={!hasAnswers || saving}
         style={{
-          padding: '7px 18px', borderRadius: 5, fontWeight: 700, fontSize: 12, cursor: Object.keys(answers).length > 0 ? 'pointer' : 'default',
-          background: Object.keys(answers).length > 0 ? 'rgba(212,160,23,0.15)' : 'transparent',
-          border: `1px solid ${Object.keys(answers).length > 0 ? '#D4A017' : '#333'}`,
-          color:  Object.keys(answers).length > 0 ? '#FFD700' : '#555',
+          padding: '7px 18px', borderRadius: 5, fontWeight: 700, fontSize: 12,
+          cursor: hasAnswers && !saving ? 'pointer' : 'default',
+          background: hasAnswers ? 'rgba(212,160,23,0.15)' : 'transparent',
+          border: `1px solid ${hasAnswers ? '#D4A017' : '#333'}`,
+          color:  hasAnswers ? '#FFD700' : '#555',
         }}>
         {saving ? 'SAVING…' : 'SAVE AND RESCORE'}
       </button>
@@ -463,6 +544,7 @@ function CompleteYourScore({ entry, disc, onSave }) {
 function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmScore }) {
   const [entry, setEntry] = useState(initialEntry);
   const [expanded, setExpanded] = useState(true);
+  const [showCompleteScore, setShowCompleteScore] = useState(false);
   const [localNotes, setLocalNotes] = useState({ tradeNotes: entry.tradeNotes || '', macroNotes: entry.macroNotes || '' });
 
   const disc      = entry.discipline || {};
@@ -531,8 +613,12 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
           <span style={{ color: '#777', fontSize: '0.8rem' }}>{fmtDate(entry.entry?.fillDate || entry.createdAt)} → {fmtDate(lastExit?.date)}</span>
           {entry.exchange && <span style={{ color: '#555', fontSize: '0.75rem' }}>{entry.exchange}</span>}
           {entry.userConfirmed?.confirmedAt && (
-            <span style={{ background: 'rgba(212,160,23,0.15)', border: '1px solid #D4A017', color: '#FFD700', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em' }}>
-              VERIFIED
+            <span
+              onClick={e => { e.stopPropagation(); setShowCompleteScore(v => !v); }}
+              title="Click to review or correct your confirmed answers"
+              style={{ background: 'rgba(212,160,23,0.15)', border: '1px solid #D4A017', color: '#FFD700', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer' }}
+            >
+              VERIFIED ✎
             </span>
           )}
           {entry.sector   && <span style={{ color: '#555', fontSize: '0.75rem' }}>{entry.sector}</span>}
@@ -597,8 +683,25 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
         <div style={{ padding: '8px 14px', borderBottom: '1px solid #1e1e1e' }}>
           {kse?.totalScore != null ? (
             <>
-              <div style={{ display: 'flex', gap: 20, marginBottom: 6, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 20, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <DataCell label="KILL SCORE" value={`${Math.round(kse.totalScore)}${kse.pipelineMaxScore ? `/${Math.round(kse.pipelineMaxScore)}` : ''}`} color="#FFD700" />
+                {kse.source && (
+                  <span style={{
+                    fontSize: 9,
+                    color: kse.source === 'ANALYZE_SNAPSHOT' ? '#28a745'
+                         : kse.source === 'QUEUE_ENTRY'      ? '#FFD700'
+                         : kse.source === 'MONGODB_PIPELINE'  ? '#888'
+                         : '#dc3545',
+                    fontFamily: 'monospace',
+                    marginLeft: 8,
+                    opacity: 0.8,
+                  }}>
+                    {kse.source === 'ANALYZE_SNAPSHOT' ? '● live capture'
+                     : kse.source === 'QUEUE_ENTRY'    ? '● queue data'
+                     : kse.source === 'MONGODB_PIPELINE' ? '● pipeline data'
+                     : '● unknown source'}
+                  </span>
+                )}
                 {kse.rank     != null && <DataCell label="RANK"   value={`#${kse.rank}`} />}
                 {kse.rankChange != null && <DataCell label="ΔRANK"  value={kse.rankChange > 0 ? `+${kse.rankChange}` : String(kse.rankChange)} color={kse.rankChange > 0 ? '#28a745' : '#dc3545'} />}
                 {kse.tier      && <DataCell label="TIER"  value={kse.tier} color="#FFD700" />}
@@ -626,7 +729,7 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 10 }}>
             <DataCell label="ENTRY PRICE" value={entryPrice != null ? fmtDollar(entryPrice) : '—'} />
             <DataCell label="EXIT PRICE"  value={exitPrice  != null ? fmtDollar(exitPrice)  : '—'} />
-            <DataCell label="SIGNAL PRICE" value={entry.signalPrice != null ? fmtDollar(entry.signalPrice) : 'N/A'} />
+            {entry.signalPrice != null && <DataCell label="SIGNAL PRICE" value={fmtDollar(entry.signalPrice)} />}
             <DataCell label="STOP PRICE"  value={entry.entry?.stopPrice != null ? fmtDollar(entry.entry.stopPrice) : '—'} />
 
             <DataCell label="LOT 1 SHARES" value={lots[0]?.shares ?? '—'} />
@@ -636,13 +739,13 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
 
             <DataCell label="RISK $"   value={chk.riskDollar != null ? `$${Math.abs(chk.riskDollar).toFixed(2)}` : '—'} />
             <DataCell label="RISK %"   value={chk.riskPct != null ? `${chk.riskPct.toFixed(2)}%` : '—'} />
-            <DataCell label="MFE" value={entry.mfe?.price != null ? `${fmtDollar(entry.mfe.price)} (${entry.mfe.percent?.toFixed(2)}%)` : '—'} color="#28a745" />
-            <DataCell label="MAE" value={entry.mae?.price != null ? `${fmtDollar(entry.mae.price)} (${entry.mae.percent?.toFixed(2)}%)` : '—'} color="#dc3545" />
+            {entry.mfe?.price != null && <DataCell label="MFE" value={`${fmtDollar(entry.mfe.price)} (${entry.mfe.percent?.toFixed(2)}%)`} color="#28a745" />}
+            {entry.mae?.price != null && <DataCell label="MAE" value={`${fmtDollar(entry.mae.price)} (${entry.mae.percent?.toFixed(2)}%)`} color="#dc3545" />}
 
-            <DataCell label="CAPTURE RATIO" value={captureRatio != null ? `${captureRatio}%` : '—'} tooltip="Exit P&L as % of MFE. 100% = captured the entire move." />
             <DataCell label="CALENDAR DAYS" value={calDays != null ? `${calDays}d` : '—'} />
             <DataCell label="TRADING DAYS"  value={tradDays != null ? `${tradDays}d` : '—'} />
-            <DataCell label="NAV AT ENTRY"  value={entry.navAtEntry != null ? `$${entry.navAtEntry.toLocaleString()}` : '—'} />
+            {captureRatio != null && <DataCell label="CAPTURE RATIO" value={`${captureRatio}%`} tooltip="Exit P&L as % of MFE. 100% = captured the entire move." />}
+            {entry.navAtEntry != null && <DataCell label="NAV AT ENTRY" value={`$${entry.navAtEntry.toLocaleString()}`} />}
           </div>
 
           {/* Forward returns */}
@@ -690,15 +793,39 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
           </div>
         </div>
 
-        {/* ── Complete Your Score (only when questions exist) ── */}
-        <CompleteYourScore
-          entry={entry}
-          disc={disc}
-          onSave={(id, newScore) => {
-            setEntry(prev => ({ ...prev, discipline: newScore, userConfirmed: { ...prev.userConfirmed, confirmedAt: new Date() } }));
-            onConfirmScore?.(id, newScore);
-          }}
-        />
+        {/* ── Complete Your Score / Review Confirmed Answers ── */}
+        {(() => {
+          const normalQs = getScoreQuestions(entry, disc);
+          const isReviewMode = showCompleteScore && !!entry.userConfirmed?.confirmedAt;
+          const reviewQs = isReviewMode ? getReviewQuestions(entry) : [];
+          const activeQs = isReviewMode ? reviewQs : normalQs;
+          const shouldShow = normalQs.length > 0 || showCompleteScore;
+          if (!shouldShow) return null;
+          return (
+            <CompleteYourScore
+              entry={entry}
+              questions={activeQs}
+              reviewMode={isReviewMode}
+              onSave={(id, newScore, sentAnswers) => {
+                setEntry(prev => ({
+                  ...prev,
+                  discipline: newScore,
+                  userConfirmed: {
+                    ...prev.userConfirmed,
+                    confirmedAt: new Date(),
+                    ...(sentAnswers?.signal      != null ? { signal:      sentAnswers.signal      } : {}),
+                    ...(sentAnswers?.killScore   != null ? { killScore:   sentAnswers.killScore   } : {}),
+                    ...(sentAnswers?.indexTrend  != null ? { indexTrend:  sentAnswers.indexTrend  } : {}),
+                    ...(sentAnswers?.sectorTrend != null ? { sectorTrend: sentAnswers.sectorTrend } : {}),
+                    ...(sentAnswers?.sizing      != null ? { sizing:      sentAnswers.sizing      } : {}),
+                  },
+                }));
+                setShowCompleteScore(false);
+                onConfirmScore?.(id, newScore);
+              }}
+            />
+          );
+        })()}
       </>}
     </div>
   );

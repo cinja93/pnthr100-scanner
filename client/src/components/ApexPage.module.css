@@ -414,6 +414,17 @@
   background: #dcfce7 !important;
 }
 
+/* ── Analyze / Composite cells — always dark regardless of row highlight ────── */
+/* Must beat .top10Row td (0,1,1) and .row.selectedRow td (0,2,1) with !important */
+.analyzeCell,
+.top10Row td.analyzeCell,
+.top10Row:hover td.analyzeCell,
+.row.selectedRow td.analyzeCell,
+.row.selectedRow:hover td.analyzeCell,
+.overextendedRow td.analyzeCell {
+  background: #111 !important;
+}
+
 /* ── OVEREXTENDED Row — greyed-out, move already happened ──────────────────── */
 .overextendedRow td {
   opacity: 0.45;
@@ -421,6 +432,15 @@
 .overextendedRow:hover td {
   opacity: 0.65;
   background-color: #f0f0f0 !important;
+}
+/* When selected (clicked), swap blue bg for neutral gray + raise opacity */
+.row.selectedRow.overextendedRow td {
+  background: #dde0e4 !important;
+  opacity: 0.80;
+}
+.row.selectedRow.overextendedRow:hover td {
+  background: #c8cdd4 !important;
+  opacity: 0.85;
 }
 
 /* ── Score Badge — pill shape to fit larger numbers ──────────────────────────── */

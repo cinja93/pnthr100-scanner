@@ -202,18 +202,87 @@
   text-transform: uppercase;
 }
 
-/* ── L/S/All Tabs ────────────────────────────────────────────────────────────── */
-.sideTabs {
+/* ── Unified Controls Bar ─────────────────────────────────────────────────────── */
+.controlsBar {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 0;
   margin-bottom: 16px;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 6px 10px;
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
+.controlsLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.controlsDivider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255,255,255,0.1);
+  margin: 0 12px;
+  flex-shrink: 0;
+}
+.controlsSearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.controlsSearchLabel {
+  color: #FCF000;
+  font-size: 10px;
+  font-weight: 800;
+  font-family: monospace;
+  letter-spacing: 0.1em;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+.killSearchInput {
+  background: rgba(0,0,0,0.4);
+  border: 1.5px solid rgba(252,240,0,0.35);
+  border-radius: 5px;
+  padding: 5px 11px;
+  color: #FCF000;
+  font-size: 13px;
+  font-family: monospace;
+  font-weight: 700;
+  width: 120px;
+  outline: none;
+  letter-spacing: 0.07em;
+  transition: border-color 0.15s;
+}
+.killSearchInput::placeholder { color: rgba(252,240,0,0.3); font-weight: 400; }
+.killSearchInput:focus { border-color: #FCF000; }
+.killSearchClear {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.killSearchClear:hover { color: #fff; }
+.controlsRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* ── Signal filter tabs ───────────────────────────────────────────────────────── */
 .sideTab {
-  background: #1f2937;
-  color: #9ca3af;
-  border: 1px solid #374151;
-  border-radius: 6px;
-  padding: 7px 16px;
+  background: transparent;
+  color: #6b7280;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 5px 13px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -222,25 +291,24 @@
   gap: 6px;
   transition: all 0.15s;
 }
-.sideTab:hover { background: #374151; color: #fff; }
-.sideTabActive { background: #374151; color: #fcf000; border-color: #fcf000; }
+.sideTab:hover { background: #1f2937; color: #fff; border-color: #374151; }
+.sideTabActive { background: #1f2937; color: #fcf000; border-color: #374151; }
 .sideTabCount {
   background: #374151;
-  color: #fff;
+  color: #9ca3af;
   border-radius: 10px;
   padding: 1px 7px;
   font-size: 11px;
 }
-.sideTabActive .sideTabCount { background: #4b5563; }
+.sideTabActive .sideTabCount { color: #fff; }
 
-/* ── Scoring Guide button — lives in the tabs row, right-aligned ────────────── */
+/* ── Scoring Guide / System Health buttons ───────────────────────────────────── */
 .formulaTabBtn {
-  margin-left: auto;
   background: #1f2937;
   color: #9ca3af;
   border: 1px solid #374151;
   border-radius: 6px;
-  padding: 7px 14px;
+  padding: 5px 12px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -249,6 +317,7 @@
   gap: 5px;
   transition: all 0.15s;
   letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 .formulaTabBtn:hover { background: #374151; color: #fff; border-color: #555; }
 .formulaTabBtnActive { background: #1e3a5f !important; color: #fcf000 !important; border-color: #fcf000 !important; }
@@ -353,8 +422,7 @@
   opacity: 0.65;
   background-color: #f0f0f0 !important;
 }
-/* When selected (clicked/highlighted) override the blue selectedRow background
-   with a neutral gray and raise opacity so colored text stays readable */
+/* When selected (clicked), swap blue bg for neutral gray + raise opacity */
 .row.selectedRow.overextendedRow td {
   background: #dde0e4 !important;
   opacity: 0.80;

@@ -749,7 +749,7 @@ export default function ApexPage() {
                         </td>
 
                         {/* Analyze pre-trade score */}
-                        <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 700, backgroundColor: '#111' }}>
+                        <td className={styles.analyzeCell} style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 700 }}>
                           {stock.analyzeScore != null ? (
                             <span
                               style={{ color: stock.analyzeResult?.color || '#888' }}
@@ -762,7 +762,7 @@ export default function ApexPage() {
                         </td>
 
                         {/* Composite: Kill × Analyze% */}
-                        <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 700, color: '#FFD700', backgroundColor: '#111' }}>
+                        <td className={styles.analyzeCell} style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 700, color: '#FFD700' }}>
                           {stock.composite != null ? stock.composite : '—'}
                         </td>
 

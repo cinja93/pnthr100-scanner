@@ -414,6 +414,11 @@
   background: #dcfce7 !important;
 }
 
+/* ── Analyze / Composite cells — always dark regardless of row highlight ────── */
+.analyzeCell {
+  background: #111 !important;
+}
+
 /* ── OVEREXTENDED Row — greyed-out, move already happened ──────────────────── */
 .overextendedRow td {
   opacity: 0.45;

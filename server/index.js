@@ -211,31 +211,6 @@ function page(title, color, body) {
   </body></html>`;
 }
 
-// ── TEMPORARY PASSWORD RESET — DELETE AFTER USE ──────────────────────────────
-app.get('/temp-reset', async (req, res) => {
-  if (req.query.token !== 'pnthr-reset-2026') return res.status(403).send('Forbidden');
-  try {
-    const { connectToDatabase } = await import('./database.js');
-    const { default: bcrypt } = await import('bcryptjs');
-    const db = await connectToDatabase();
-    // Show user_profiles to identify accounts, or create a new user
-    const profiles = await db.collection('user_profiles').find({}).toArray();
-    if (!req.query.email) {
-      return res.json({ message: 'user_profiles contents (users collection is empty):', profiles });
-    }
-    // Create a fresh user account in the users collection
-    const hash = await bcrypt.hash('Kx450f@mx679', 12);
-    const email = req.query.email.toLowerCase().trim();
-    const existing = await db.collection('users').findOne({ email });
-    if (existing) {
-      await db.collection('users').updateOne({ email }, { $set: { hashedPassword: hash } });
-      return res.json({ success: true, message: `Password updated for existing user ${email}` });
-    }
-    await db.collection('users').insertOne({ email, hashedPassword: hash, name: email, role: 'member', status: 'active', createdAt: new Date() });
-    res.json({ success: true, message: `New user created for ${email}. Try logging in now. Delete this endpoint!` });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-// ─────────────────────────────────────────────────────────────────────────────
 
 app.post('/auth/login', authLimiter, async (req, res) => {
   try {

@@ -52,15 +52,36 @@ function aggregateToWeekly(dailyData) {
     monday.setDate(date.getDate() - (dow === 0 ? 6 : dow - 1));
     const weekKey = monday.toISOString().split('T')[0];
     if (!weeksMap.has(weekKey)) {
-      weeksMap.set(weekKey, { time: weekKey, open: day.open, high: day.high, low: day.low, close: day.close });
+      weeksMap.set(weekKey, { time: weekKey, open: day.open, high: day.high, low: day.low, close: day.close, volume: day.volume || 0 });
     } else {
       const w = weeksMap.get(weekKey);
       w.high = Math.max(w.high, day.high);
       w.low = Math.min(w.low, day.low);
       w.close = day.close;
+      w.volume = (w.volume || 0) + (day.volume || 0);
     }
   }
   return [...weeksMap.values()];
+}
+
+// Wilder RSI(period) on weekly closes. Returns the current RSI value or null.
+function calculateRSI(weeklyData, period = 14) {
+  if (weeklyData.length < period + 1) return null;
+  const closes = weeklyData.map(d => d.close);
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const chg = closes[i] - closes[i - 1];
+    if (chg > 0) avgGain += chg; else avgLoss += Math.abs(chg);
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  for (let i = period + 1; i < closes.length; i++) {
+    const chg = closes[i] - closes[i - 1];
+    avgGain = (avgGain * (period - 1) + Math.max(chg, 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + Math.max(-chg, 0)) / period;
+  }
+  if (avgLoss === 0) return 100;
+  return parseFloat((100 - 100 / (1 + avgGain / avgLoss)).toFixed(2));
 }
 
 function calculateEMA(weeklyData, period) {
@@ -309,20 +330,53 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   const stock = stocks[currentIndex];
   const inWatchlist = stock ? watchlistSet.has(stock.ticker) : false;
 
-  // Enrich stock with chart-detected signal so Analyze always uses the correct direction.
-  // The page data (Kill table, Search results, etc.) often lacks the signal field or has stale data.
-  // detectAllSignals() runs from actual weekly candles and is authoritative — use its result.
-  // currentSignal is 'BL'/'SS' only when there's an active open position (badge-matching).
+  // Enrich stock with chart-detected signal AND chart-computed metrics so Analyze always has
+  // correct data. Page data often lacks signal, ema21, rsi14, weekly OHLC, and volumeRatio.
+  // All derived from allWeeklyData — already loaded to draw the chart, no extra API calls.
   const enrichedStock = useMemo(() => {
     if (!stock) return stock;
     const activeSignal = (currentSignal === 'BL' || currentSignal === 'SS') ? currentSignal : null;
-    // No chart signal yet (loading) or signal matches — either way pass through the best value
-    return {
+    const base = {
       ...stock,
       // Chart-detected signal is authoritative. Falls back to page data if chart not loaded yet.
       signal: activeSignal || stock.signal || stock.pnthrSignal || null,
     };
-  }, [stock, currentSignal]);
+
+    if (allWeeklyData.length >= 22) {
+      // EMA21 — same series drawn on chart; last two values give current value + slope
+      const ema21Series = calculateEMA(allWeeklyData, 21);
+      const lastEma = ema21Series.at(-1)?.value ?? null;
+      const prevEma = ema21Series.at(-2)?.value ?? null;
+      if (lastEma) {
+        base.ema21 = lastEma;
+        if (prevEma) base.emaSlope = parseFloat(((lastEma - prevEma) / prevEma * 100).toFixed(4));
+      }
+
+      // Most recent weekly bar → weekHigh/weekLow for conviction; weekly close if missing
+      const lastBar = allWeeklyData.at(-1);
+      if (lastBar) {
+        base.weekHigh = lastBar.high;
+        base.weekLow  = lastBar.low;
+        if (!base.close) base.close = lastBar.close; // weekly close; currentPrice kept for EMA checks
+
+        // Volume ratio: last week vs 10-week prior average
+        const lastVol = lastBar.volume || 0;
+        if (lastVol > 0 && allWeeklyData.length >= 11) {
+          const priorVols = allWeeklyData.slice(-11, -1).map(d => d.volume || 0);
+          const avgVol = priorVols.reduce((s, v) => s + v, 0) / priorVols.length;
+          if (avgVol > 0) base.volumeRatio = parseFloat((lastVol / avgVol).toFixed(2));
+        }
+      }
+
+      // RSI14 on weekly closes (Wilder smoothing)
+      if (allWeeklyData.length >= 16) {
+        const rsi = calculateRSI(allWeeklyData, 14);
+        if (rsi !== null) base.rsi14 = rsi;
+      }
+    }
+
+    return base;
+  }, [stock, currentSignal, allWeeklyData]);
 
   // Reset SIZE IT + ANALYZE panels when navigating to a new stock
   useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; }, [currentIndex]);

@@ -211,6 +211,28 @@ function page(title, color, body) {
   </body></html>`;
 }
 
+// ── TEMPORARY PASSWORD RESET — DELETE AFTER USE ──────────────────────────────
+app.get('/temp-reset', async (req, res) => {
+  if (req.query.token !== 'pnthr-reset-2026') return res.status(403).send('Forbidden');
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const { default: bcrypt } = await import('bcryptjs');
+    const db = await connectToDatabase();
+    const users = await db.collection('users').find({}, { projection: { email: 1, status: 1 } }).toArray();
+    if (!req.query.email) {
+      return res.json({ message: 'Users found — add &email=YOUR_EMAIL to reset', users });
+    }
+    const hash = await bcrypt.hash('Kx450f@mx679', 12);
+    const result = await db.collection('users').updateOne(
+      { email: req.query.email.toLowerCase().trim() },
+      { $set: { hashedPassword: hash } }
+    );
+    if (result.matchedCount === 0) return res.json({ error: 'Email not found', users });
+    res.json({ success: true, message: `Password reset for ${req.query.email}. Now delete this endpoint!` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.post('/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;

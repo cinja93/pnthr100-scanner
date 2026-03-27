@@ -218,17 +218,24 @@ app.get('/temp-reset', async (req, res) => {
     const { connectToDatabase } = await import('./database.js');
     const { default: bcrypt } = await import('bcryptjs');
     const db = await connectToDatabase();
-    const users = await db.collection('users').find({}, { projection: { email: 1, status: 1 } }).toArray();
+    // Search all collections for documents with an email field
+    const collections = await db.listCollections().toArray();
+    const found = {};
+    for (const col of collections) {
+      const docs = await db.collection(col.name).find({ email: { $exists: true } }, { projection: { email: 1, status: 1, role: 1, hashedPassword: 1 } }).limit(10).toArray();
+      if (docs.length > 0) found[col.name] = docs.map(d => ({ email: d.email, status: d.status, role: d.role, hasPassword: !!d.hashedPassword }));
+    }
     if (!req.query.email) {
-      return res.json({ message: 'Users found — add &email=YOUR_EMAIL to reset', users });
+      return res.json({ message: 'Collections with email field:', found });
     }
     const hash = await bcrypt.hash('Kx450f@mx679', 12);
-    const result = await db.collection('users').updateOne(
+    const col = req.query.col || 'users';
+    const result = await db.collection(col).updateOne(
       { email: req.query.email.toLowerCase().trim() },
       { $set: { hashedPassword: hash } }
     );
-    if (result.matchedCount === 0) return res.json({ error: 'Email not found', users });
-    res.json({ success: true, message: `Password reset for ${req.query.email}. Now delete this endpoint!` });
+    if (result.matchedCount === 0) return res.json({ error: 'Email not found in ' + col, found });
+    res.json({ success: true, message: `Password reset for ${req.query.email} in ${col}. Delete this endpoint now!` });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // ─────────────────────────────────────────────────────────────────────────────

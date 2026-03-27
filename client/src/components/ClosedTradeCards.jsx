@@ -121,6 +121,9 @@ function computeChecks(entry) {
       }
     }
   }
+  // User-confirmed answer overrides auto-calculation
+  if (entry.userConfirmed?.sizingCorrect === true)  sizingCheck = true;
+  if (entry.userConfirmed?.sizingCorrect === false) sizingCheck = false;
 
   const signalPrice = entry.signalPrice ?? null;
   const slipNA = entry.hasOwnProperty?.('signalPrice') && signalPrice === null;

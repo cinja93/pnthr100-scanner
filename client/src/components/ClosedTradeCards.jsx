@@ -101,20 +101,24 @@ function computeChecks(entry) {
   const washClean     = !(entry.tags?.includes('wash-sale'));
 
   let sizingCheck = null, riskDollar = null, riskPct = null, riskCapCheck = null;
-  if (nav != null && entryPrice != null && stopPrice != null && lot1Shares != null) {
-    const stopDist    = Math.abs(entryPrice - stopPrice);
-    const vitality    = nav * (isETF ? 0.005 : 0.01);
-    const tickerCap   = nav * 0.10;
+  // Risk $ only needs entry + stop + shares — no NAV required
+  if (entryPrice != null && stopPrice != null && lot1Shares != null) {
+    const stopDist = Math.abs(entryPrice - stopPrice);
     if (stopDist > 0) {
-      const byV = Math.floor(vitality / stopDist);
-      const byC = Math.floor(tickerCap / entryPrice);
-      const tot = Math.min(byV, byC);
-      const exp = Math.max(1, Math.round(tot * 0.15));
-      const dev = exp > 0 ? Math.abs(lot1Shares - exp) / exp : null;
-      sizingCheck  = dev != null ? dev <= 0.10 : null;
-      riskDollar   = +(lot1Shares * stopDist).toFixed(2);
-      riskPct      = +(riskDollar / nav * 100).toFixed(3);
-      riskCapCheck = riskDollar <= vitality;
+      riskDollar = +(lot1Shares * stopDist).toFixed(2);
+      // Risk % (portfolio) and sizing checks require NAV
+      if (nav != null) {
+        const vitality  = nav * (isETF ? 0.005 : 0.01);
+        const tickerCap = nav * 0.10;
+        const byV = Math.floor(vitality / stopDist);
+        const byC = Math.floor(tickerCap / entryPrice);
+        const tot = Math.min(byV, byC);
+        const exp = Math.max(1, Math.round(tot * 0.15));
+        const dev = exp > 0 ? Math.abs(lot1Shares - exp) / exp : null;
+        sizingCheck  = dev != null ? dev <= 0.10 : null;
+        riskPct      = +(riskDollar / nav * 100).toFixed(3);
+        riskCapCheck = riskDollar <= vitality;
+      }
     }
   }
 

@@ -72,12 +72,34 @@ async function fetchProfile(ticker) {
   } catch { return null; }
 }
 
-// 21-week EMA (current + previous for slope)
+// 21-week EMA — computed from 250 daily candles (FMP stable weekly timeframe param is broken)
 async function fetchEMA21(ticker) {
   try {
-    const data = await fmpGet('/stable/technical-indicators/ema', { symbol: ticker, periodLength: 21, timeframe: '1week' });
-    if (!Array.isArray(data) || data.length < 2) return null;
-    return { current: data[0]?.ema, previous: data[1]?.ema };
+    const url = fmpUrl(`/api/v3/historical-price-full/${ticker}`, { timeseries: '250' });
+    const data = await fetch(url, { signal: AbortSignal.timeout(8000) })
+      .then(r => r.ok ? r.json() : null).catch(() => null);
+    const daily = data?.historical;
+    if (!Array.isArray(daily) || daily.length < 110) return null;
+
+    // Group daily bars into weeks (by Sunday epoch) — last close of each week wins
+    const weekMap = {};
+    for (const bar of [...daily].reverse()) {
+      const d  = new Date(bar.date);
+      const ms = d.getTime() - d.getDay() * 86400000;
+      weekMap[ms] = bar.close;
+    }
+    const closes = Object.keys(weekMap).sort((a, b) => +a - +b).map(k => weekMap[k]);
+    if (closes.length < 22) return null;
+
+    // Seed with simple avg of first 21 weeks, then roll forward
+    let ema  = closes.slice(0, 21).reduce((s, v) => s + v, 0) / 21;
+    let prev = ema;
+    const k  = 2 / 22;
+    for (let i = 21; i < closes.length; i++) {
+      prev = ema;
+      ema  = closes[i] * k + ema * (1 - k);
+    }
+    return { current: +ema.toFixed(2), previous: +prev.toFixed(2) };
   } catch { return null; }
 }
 

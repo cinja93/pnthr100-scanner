@@ -2931,8 +2931,25 @@ async function warmApexCacheIfCold() {
     try { preyResults = await getPreyResults(tickers, stockMeta, jungleSignals); } catch (e) { console.warn('[PULSE] prey failed:', e.message); }
     try { const h = await getEmaCrossoverStocks(); huntTickers = new Set((h?.stocks || []).map(s => s.ticker || s)); } catch {}
     const { getApexResults: _ga } = await import('./apexService.js');
-    await _ga(tickers, stockMeta, jungleSignals, preyResults, huntTickers);
+    const _apexRes = await _ga(tickers, stockMeta, jungleSignals, preyResults, huntTickers);
     console.log('[PULSE] ✅ Apex cache warmed');
+    // Persist SPY/QQQ EMA to regime doc so pulse works on next cold start
+    try {
+      const _iSPY = _apexRes?.indexData?.SPY;
+      const _iQQQ = _apexRes?.indexData?.QQQ;
+      if (_iSPY || _iQQQ) {
+        const _db = await connectToDatabase();
+        if (_db) {
+          const _latest = await _db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } });
+          if (_latest?._id) {
+            const _upd = {};
+            if (_iSPY) _upd.spy = { close: _iSPY.price, ema21: _iSPY.ema21 };
+            if (_iQQQ) _upd.qqq = { close: _iQQQ.price, ema21: _iQQQ.ema21 };
+            await _db.collection('pnthr_kill_regime').updateOne({ _id: _latest._id }, { $set: _upd });
+          }
+        }
+      }
+    } catch { /* non-fatal */ }
   } catch (err) {
     console.error('[PULSE] Apex warm failed:', err.message);
   } finally {

@@ -218,26 +218,21 @@ app.get('/temp-reset', async (req, res) => {
     const { connectToDatabase } = await import('./database.js');
     const { default: bcrypt } = await import('bcryptjs');
     const db = await connectToDatabase();
-    // Show which database we're connected to and all collections
-    const dbName = db.databaseName;
-    const collections = await db.listCollections().toArray();
-    const colNames = collections.map(c => c.name);
-    const found = {};
-    for (const col of collections) {
-      const count = await db.collection(col.name).countDocuments();
-      found[col.name] = count;
-    }
+    // Show user_profiles to identify accounts, or create a new user
+    const profiles = await db.collection('user_profiles').find({}).toArray();
     if (!req.query.email) {
-      return res.json({ dbName, colNames, documentCounts: found });
+      return res.json({ message: 'user_profiles contents (users collection is empty):', profiles });
     }
+    // Create a fresh user account in the users collection
     const hash = await bcrypt.hash('Kx450f@mx679', 12);
-    const col = req.query.col || 'users';
-    const result = await db.collection(col).updateOne(
-      { email: req.query.email.toLowerCase().trim() },
-      { $set: { hashedPassword: hash } }
-    );
-    if (result.matchedCount === 0) return res.json({ error: 'Email not found in ' + col, found });
-    res.json({ success: true, message: `Password reset for ${req.query.email} in ${col}. Delete this endpoint now!` });
+    const email = req.query.email.toLowerCase().trim();
+    const existing = await db.collection('users').findOne({ email });
+    if (existing) {
+      await db.collection('users').updateOne({ email }, { $set: { hashedPassword: hash } });
+      return res.json({ success: true, message: `Password updated for existing user ${email}` });
+    }
+    await db.collection('users').insertOne({ email, hashedPassword: hash, name: email, role: 'member', status: 'active', createdAt: new Date() });
+    res.json({ success: true, message: `New user created for ${email}. Try logging in now. Delete this endpoint!` });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // ─────────────────────────────────────────────────────────────────────────────

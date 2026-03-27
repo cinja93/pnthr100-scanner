@@ -212,32 +212,6 @@ function page(title, color, body) {
 }
 
 
-// ── TEMPORARY USER RELINK — DELETE AFTER USE ─────────────────────────────────
-app.get('/temp-relink', async (req, res) => {
-  if (req.query.token !== 'pnthr-relink-2026') return res.status(403).send('Forbidden');
-  try {
-    const { connectToDatabase } = await import('./database.js');
-    const db = await connectToDatabase();
-    // Find the new user account
-    const user = await db.collection('users').findOne({ email: 'scott@pnthrfunds.com' });
-    if (!user) return res.json({ error: 'User not found in users collection' });
-    const newId = user._id.toString();
-    const oldId = '69a6742eff539c389087fef1';
-    if (req.query.confirm !== '1') {
-      // Preview mode — show what would change
-      const profileCount = await db.collection('user_profiles').countDocuments({ userId: oldId });
-      const portfolioCount = await db.collection('pnthr_portfolio').countDocuments({ ownerId: oldId });
-      const journalCount = await db.collection('pnthr_journal').countDocuments({ ownerId: oldId });
-      return res.json({ newUserId: newId, oldUserId: oldId, profileDocs: profileCount, portfolioDocs: portfolioCount, journalDocs: journalCount, action: 'Add ?confirm=1 to execute' });
-    }
-    // Execute relink
-    const p1 = await db.collection('user_profiles').updateMany({ userId: oldId }, { $set: { userId: newId } });
-    const p2 = await db.collection('pnthr_portfolio').updateMany({ ownerId: oldId }, { $set: { ownerId: newId } });
-    const p3 = await db.collection('pnthr_journal').updateMany({ ownerId: oldId }, { $set: { ownerId: newId } });
-    res.json({ success: true, profilesUpdated: p1.modifiedCount, portfolioUpdated: p2.modifiedCount, journalUpdated: p3.modifiedCount });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-// ─────────────────────────────────────────────────────────────────────────────
 
 app.post('/auth/login', authLimiter, async (req, res) => {
   try {

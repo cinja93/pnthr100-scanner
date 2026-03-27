@@ -280,53 +280,66 @@ function scoreETFMacroAlignment(stock, context, assetClass, direction) {
   return { score: pts, max: 8, label, detail: `${assetClass} macro context`, warnings };
 }
 
-function scoreETFVolatilityMomentum(stock, direction) {
+function scoreETFMomentumQuality(stock, direction) {
   const warnings = [];
   let pts = 0;
 
-  // 1. RSI alignment (0-3)
+  // Sub-A: RSI positioning (0-3 pts) — is entry timing good within the trend?
   const rsi = stock.rsi14 ?? stock.rsi ?? null;
   if (rsi != null) {
     if (direction === 'LONG') {
-      if (rsi >= 40 && rsi <= 65) pts += 3;
-      else if (rsi >= 30 && rsi < 40) pts += 2;
-      else if (rsi > 65 && rsi <= 75) pts += 1;
-      else if (rsi > 75) { pts += 0; warnings.push(`RSI at ${Math.round(rsi)} — overbought risk for LONG entry`); }
-      else pts += 1; // deep oversold
+      if (rsi >= 40 && rsi <= 65)     pts += 3; // ideal entry zone
+      else if (rsi >= 30 && rsi < 40) pts += 2; // oversold, bounce potential
+      else if (rsi > 65 && rsi <= 75) pts += 1; // momentum but extended
+      else if (rsi < 30)              pts += 1; // deeply oversold, risky
+      // rsi > 75: 0 pts — overbought
+      if (rsi > 75) warnings.push(`RSI at ${Math.round(rsi)} — overbought risk for LONG entry`);
     } else {
-      if (rsi >= 35 && rsi <= 60) pts += 3;
-      else if (rsi > 60 && rsi <= 70) pts += 2;
-      else if (rsi < 35 && rsi >= 25) pts += 1;
-      else if (rsi < 25) { pts += 0; warnings.push(`RSI at ${Math.round(rsi)} — oversold risk for SHORT entry`); }
-      else pts += 1;
+      if (rsi >= 35 && rsi <= 60)     pts += 3; // ideal entry zone
+      else if (rsi > 60 && rsi <= 70) pts += 2; // overbought, drop potential
+      else if (rsi >= 25 && rsi < 35) pts += 1; // has momentum but extended
+      else if (rsi > 70)              pts += 1; // deeply overbought, risky
+      // rsi < 25: 0 pts — oversold squeeze risk
+      if (rsi < 25) warnings.push(`RSI at ${Math.round(rsi)} — oversold risk for SHORT entry`);
     }
   } else {
-    pts += 1; // RSI often unavailable for ETFs — partial credit
+    warnings.push('RSI unavailable');
+    // 0 pts — no partial credit; RSI is widely available for ETFs
   }
 
-  // 2. Volume confirmation (0-2)
+  // Sub-B: Close conviction (0-2 pts) — mirrors D3 Sub-A from Kill scoring
+  // Where did the ETF close within its most recent weekly bar?
+  const weekHigh  = stock.weekHigh  ?? stock.high  ?? null;
+  const weekLow   = stock.weekLow   ?? stock.low   ?? null;
+  const closePrice = stock.close ?? stock.currentPrice ?? null;
+  if (weekHigh && weekLow && closePrice && weekHigh !== weekLow) {
+    let conviction;
+    if (direction === 'LONG') {
+      conviction = (closePrice - weekLow) / (weekHigh - weekLow);
+    } else {
+      conviction = (weekHigh - closePrice) / (weekHigh - weekLow);
+    }
+    if (conviction >= 0.7)      pts += 2; // bulls/bears dominated the bar
+    else if (conviction >= 0.4) pts += 1; // neutral close
+    // < 0.4: 0 pts — weak close for the direction
+  } else {
+    // Weekly bar data unavailable — not an error for ETFs, partial credit
+    warnings.push('Weekly bar data unavailable for conviction check');
+  }
+
+  // Sub-C: Volume health (0-2 pts) — is volume confirming the move?
   const volRatio = stock.volumeRatio ?? stock.relativeVolume ?? null;
   if (volRatio != null) {
-    if (volRatio >= 1.5) pts += 2;
-    else if (volRatio >= 1.0) pts += 1;
+    if (volRatio >= 1.5)      pts += 2; // strong confirmation
+    else if (volRatio >= 1.0) pts += 1; // normal
+    // < 1.0: 0 pts — thin volume, weak conviction
   } else {
-    pts += 1; // volume data often unavailable — partial credit, not ERROR
-  }
-
-  // 3. ATR stability (0-2) — low ATR% = stable trend
-  const atr = stock.atr14 ?? stock.atr ?? null;
-  const price = stock.currentPrice ?? stock.price ?? stock.close ?? null;
-  if (atr && price) {
-    const atrPct = (atr / price) * 100;
-    if (atrPct <= 2.0) pts += 2;
-    else if (atrPct <= 4.0) pts += 1;
-  } else {
-    pts += 1; // partial credit
+    pts += 1; // volume often unavailable for ETFs — partial credit, not ERROR
   }
 
   pts = Math.min(pts, 7);
   const label = pts >= 5 ? 'STRONG' : pts >= 3 ? 'MODERATE' : 'WEAK';
-  return { score: pts, max: 7, label, detail: 'RSI, volume, ATR stability', warnings };
+  return { score: pts, max: 7, label, detail: 'RSI positioning, close conviction, volume', warnings };
 }
 
 // ─── ETF wash + exposure check (shared with equity, same logic) ─────────────
@@ -365,15 +378,15 @@ export function computeETFAnalyzeScore(stock, context) {
   const signalQuality  = scoreETFSignalQuality(stock, direction);
   const trendAlignment = scoreETFTrendAlignment(stock, direction);
   const macroAlignment = scoreETFMacroAlignment(stock, context, assetClass, direction);
-  const volMomentum    = scoreETFVolatilityMomentum(stock, direction);
+  const momentumQuality = scoreETFMomentumQuality(stock, direction);
 
-  components.signalQuality  = { score: signalQuality.score,  label: signalQuality.label,  detail: signalQuality.detail,  max: 15 };
-  components.trendAlignment = { score: trendAlignment.score, label: trendAlignment.label, detail: trendAlignment.detail, max: 10 };
-  components.macroAlignment = { score: macroAlignment.score, label: macroAlignment.label, detail: macroAlignment.detail, max: 8  };
-  components.volMomentum    = { score: volMomentum.score,    label: volMomentum.label,    detail: volMomentum.detail,    max: 7  };
+  components.signalQuality  = { score: signalQuality.score,   label: signalQuality.label,   detail: signalQuality.detail,   max: 15 };
+  components.trendAlignment = { score: trendAlignment.score,  label: trendAlignment.label,  detail: trendAlignment.detail,  max: 10 };
+  components.macroAlignment = { score: macroAlignment.score,  label: macroAlignment.label,  detail: macroAlignment.detail,  max: 8  };
+  components.momentumQuality = { score: momentumQuality.score, label: momentumQuality.label, detail: momentumQuality.detail, max: 7  };
 
   allWarnings.push(...signalQuality.warnings, ...trendAlignment.warnings,
-                   ...macroAlignment.warnings, ...volMomentum.warnings);
+                   ...macroAlignment.warnings, ...momentumQuality.warnings);
 
   // EXECUTION (13 pts — identical to equity)
   components.sizing  = { score: 8, label: 'SIZE IT',    detail: 'Projected: will use SIZE IT recommendation', max: 8 };

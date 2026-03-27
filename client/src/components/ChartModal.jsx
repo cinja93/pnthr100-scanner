@@ -940,7 +940,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                   <ScoreLine label="Signal Quality"  comp={ar.components.signalQuality} max={15} />
                   <ScoreLine label={ar.isETF ? 'ETF Trend'       : 'Kill Context'}  comp={ar.isETF ? ar.components.trendAlignment : ar.components.killContext}   max={10} />
                   <ScoreLine label={ar.isETF ? 'Macro Alignment' : 'Index Trend'}   comp={ar.isETF ? ar.components.macroAlignment : ar.components.indexTrend}    max={8}  />
-                  <ScoreLine label={ar.isETF ? 'Vol & Momentum'  : 'Sector Trend'}  comp={ar.isETF ? ar.components.volMomentum   : ar.components.sectorTrend}    max={7}  />
+                  <ScoreLine label={ar.isETF ? 'Momentum Quality' : 'Sector Trend'}  comp={ar.isETF ? ar.components.momentumQuality : ar.components.sectorTrend}  max={7}  />
                   <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginTop: 10, marginBottom: 6 }}>EXECUTION (PROJECTED)</div>
                   <ScoreLine label="Position Sizing" comp={ar.components.sizing}        max={8}  />
                   <ScoreLine label="Risk Cap"        comp={ar.components.riskCap}       max={5}  />

@@ -152,7 +152,7 @@ export async function runFridayKillPipeline() {
     console.log('4. Running PNTHR Kill v3 scoring engine...');
     // Force a fresh score (bypass in-memory cache) by calling with fresh data
     const apexResults = await getApexResults(tickers, stockMeta, jungleSignals, preyResults, huntTickers);
-    const { stocks: scored, contextSummary, regime } = apexResults;
+    const { stocks: scored, contextSummary, regime, indexData: apexIndexData = {} } = apexResults;
     console.log(`   Scored: ${scored.length} stocks`);
 
     // Track tickers that failed to score (signal error, missing data, etc.)
@@ -209,6 +209,8 @@ export async function runFridayKillPipeline() {
           spyEmaRising:  contextSummary.spyEmaRising,
           qqqAboveEma:   contextSummary.qqqAboveEma,
           qqqEmaRising:  contextSummary.qqqEmaRising,
+          spy: apexIndexData.SPY ? { close: apexIndexData.SPY.price, ema21: apexIndexData.SPY.ema21 } : undefined,
+          qqq: apexIndexData.QQQ ? { close: apexIndexData.QQQ.price, ema21: apexIndexData.QQQ.ema21 } : undefined,
           blCount:       regime?.blCount    ?? 0,
           ssCount:       regime?.ssCount    ?? 0,
           newBlCount:    regime?.newBlCount ?? 0,
@@ -260,12 +262,12 @@ export async function runFridayKillPipeline() {
         {
           $set: {
             weekOf,
-            spyPrice:     null, // apex doesn't return raw prices in contextSummary
-            spyEma21:     null,
+            spyPrice:     apexIndexData.SPY?.price  ?? null,
+            spyEma21:     apexIndexData.SPY?.ema21  ?? null,
             spyAboveEma:  contextSummary.spyAboveEma,
             spyEmaRising: contextSummary.spyEmaRising,
-            qqqPrice:     null,
-            qqqEma21:     null,
+            qqqPrice:     apexIndexData.QQQ?.price  ?? null,
+            qqqEma21:     apexIndexData.QQQ?.ema21  ?? null,
             qqqAboveEma:  contextSummary.qqqAboveEma,
             qqqEmaRising: contextSummary.qqqEmaRising,
             vix:          macroContext.vix,

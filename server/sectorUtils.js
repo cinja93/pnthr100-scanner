@@ -24,11 +24,24 @@ export const SECTOR_NORMALIZE_MAP = {
   'Consumer Defensive':         'Consumer Staples',
   'Financial Services':         'Financial Services', // already canonical — explicit for logging guard
   'Financials':                 'Financial Services', // appears in some FMP endpoints
+  'Financial':                  'Financial Services',
   'Health Care':                'Healthcare',
   'Information Technology':     'Technology',
   'Materials':                  'Basic Materials',
   'Communication':              'Communication Services',
   'Telecommunication Services': 'Communication Services',
+
+  // FMP ETF category names — commodity/thematic ETFs use non-GICS strings
+  'Energy & Infrastructure':    'Energy',              // USO, UNG, XOP, OIH
+  'Natural Resources':          'Energy',              // broad commodity ETFs
+  'Precious Metals':            'Basic Materials',     // GLD, SLV, GDX, GDXJ
+  'Technology & Communications': 'Technology',         // thematic tech ETFs
+  'Healthcare & Biotech':       'Healthcare',          // XBI, IBB, ARKG
+  'Industrial & Services':      'Industrials',         // thematic industrial ETFs
+  'Consumer & Retail':          'Consumer Discretionary', // XRT, IBUY
+  'Autos & Transportation':     'Industrials',         // CARZ, IYT
+  'Banks & Credit':             'Financial Services',  // KBE, KRE
+  'Insurance':                  'Financial Services',
 
   // Identity mappings — canonical names pass through unchanged
   'Technology':                 'Technology',

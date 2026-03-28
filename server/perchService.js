@@ -426,7 +426,7 @@ Write the newsletter in this section structure:
 4. Stocks to Watch: Long Side (top 3-5 long setups, brief thesis per stock)
 5. Stocks to Watch: Short Side (top 3-5 short setups, include a sentence explaining short selling for unfamiliar readers)
 6. From the Archives (ONLY if data provided above -- 2 sentences max)
-7. The Week Ahead (1-2 forward-looking paragraphs)
+7. The Week Ahead (1-2 forward-looking paragraphs, close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott)
 8. Legal Disclaimer (use this EXACTLY as written below):
 
 ${disclaimer}

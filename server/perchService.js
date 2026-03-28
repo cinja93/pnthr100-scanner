@@ -168,31 +168,34 @@ async function getNewSignalsSummary(db, weekOf) {
 }
 
 async function getTradeOfWeek(db, weekOf) {
-  // Trade of the Week = most profitable model exit THIS WEEK
-  // Primary source: signal_history (live; Monday weekOf)
-  const monWeekOf = fridayToMonday(weekOf);
-  const rows = await db.collection('signal_history')
-    .find({ weekOf: monWeekOf, signal: { $in: ['BE', 'SE'] }, profitPct: { $gt: 0 } })
+  // Trade of the Week = most profitable CONFIRMED exit in pnthr679_trade_archive
+  // where exitDate falls within the current week (Monday-Friday).
+  // closeConvictionPct >= 8 ensures we're in the 70%+ win rate universe, not the 42% baseline.
+  const { weekStart, weekEnd } = weekBounds(weekOf);
+
+  const rows = await db.collection('pnthr679_trade_archive')
+    .find({
+      exitDate:           { $gte: weekStart, $lte: weekEnd },
+      exitSignal:         { $in: ['BE', 'SE'] },
+      closeConvictionPct: { $gte: 8 },
+      profitPct:          { $gt: 0 },
+    })
     .sort({ profitPct: -1 })
-    .limit(5)
+    .limit(1)
     .toArray();
 
   if (rows.length === 0) return null;
   const best = rows[0];
 
-  // Enrich with sector/price from kill_scores (current week may not have it, try previous)
-  const meta = await db.collection('pnthr_kill_scores')
-    .findOne({ ticker: best.ticker }, { sort: { weekOf: -1 } });
-
   return {
     ticker:       best.ticker,
-    sector:       meta?.sector ?? 'Unknown',
-    direction:    best.signal === 'BE' ? 'LONG' : 'SHORT',
-    exitDate:     best.signalDate ?? monWeekOf,
+    sector:       best.sector ?? 'Unknown',
+    direction:    best.signal === 'BL' ? 'LONG' : 'SHORT',
+    entryDate:    best.entryDate instanceof Date ? best.entryDate.toISOString().split('T')[0] : best.entryDate,
+    exitDate:     best.exitDate  instanceof Date ? best.exitDate.toISOString().split('T')[0]  : best.exitDate,
     profitPct:    best.profitPct,
-    profitDollar: best.profitDollar,
-    holdingWeeks: null,  // not stored in signal_history
-    bigWinner:    (best.profitPct ?? 0) >= 20,
+    holdingWeeks: best.holdingWeeks ?? null,
+    bigWinner:    best.bigWinner ?? (best.profitPct >= 20),
   };
 }
 

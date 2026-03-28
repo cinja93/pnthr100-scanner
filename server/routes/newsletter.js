@@ -2,13 +2,14 @@
 import { Router } from 'express';
 import { authenticateJWT, requireAdmin } from '../auth.js';
 import {
-  generateIssue,
   listIssues,
   getIssue,
   updateIssueNarrative,
   publishIssue,
   getMostRecentFriday,
 } from '../newsletterService.js';
+import { generatePerch } from '../perchService.js';
+import { connectToDatabase } from '../database.js';
 
 const router = Router();
 
@@ -35,13 +36,36 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/newsletter/generate — ADMIN ONLY
+// POST /api/newsletter/generate -- ADMIN ONLY
+// Uses perchService v3: MongoDB Kill scores, regime, signal_history, trade archive
 router.post('/generate', authenticateJWT, requireAdmin, async (req, res) => {
   try {
-    const weekOf = req.body.weekOf || getMostRecentFriday();
-    console.log(`[Newsletter] Generating issue for week of ${weekOf}...`);
-    const issue = await generateIssue(weekOf);
-    res.json(issue);
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'Database unavailable' });
+
+    console.log('[Newsletter] Generating Perch v3 issue...');
+    const { narrative, metadata, blacklistViolations } = await generatePerch(db);
+    const weekOf = req.body.weekOf || metadata.weekOf || getMostRecentFriday();
+
+    // Save to newsletter_issues (same collection -- frontend unchanged)
+    const col = db.collection('newsletter_issues');
+    const existing = await col.findOne({ weekOf });
+    const doc = {
+      weekOf,
+      status: 'draft',
+      narrative,
+      generatedAt: new Date(),
+      generatorVersion: 'perch-v3',
+      metadata,
+      ...(blacklistViolations.length > 0 && { blacklistViolations }),
+    };
+
+    if (existing) {
+      await col.updateOne({ weekOf }, { $set: doc });
+      return res.json({ ...existing, ...doc, _id: existing._id });
+    }
+    const result = await col.insertOne(doc);
+    res.json({ ...doc, _id: result.insertedId });
   } catch (err) {
     console.error('Newsletter generate error:', err);
     res.status(500).json({ error: 'Failed to generate newsletter: ' + err.message });

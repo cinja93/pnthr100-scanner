@@ -418,15 +418,17 @@ ${totwSection}
 
 ${archiveSection}
 
-Write the newsletter in this section structure. Do NOT include a title, headline, or date at the top — the frontend already displays the branded header. Start directly with section 1:
+Write the newsletter using the section structure below. IMPORTANT: Do NOT include a top-level title (no "# PNTHR's Perch") and do NOT include a date line (no "Week of...") — the frontend header already shows those. Start the output directly with the first ## section heading.
 
-1. The Opening (2-3 paragraphs, set the tone, take a position on what the week means)
-2. Where the Money Is Moving (3-4 paragraphs, sector rotation story)
-3. Trade of the Week (1-2 paragraphs + callout -- ONLY if data provided above)
-4. Stocks to Watch: Long Side (top 3-5 long setups, brief thesis per stock)
-5. Stocks to Watch: Short Side (top 3-5 short setups, include a sentence explaining short selling for unfamiliar readers)
-6. From the Archives (ONLY if data provided above -- 2 sentences max)
-7. The Week Ahead (1-2 forward-looking paragraphs, close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott)
+Use ## for each section heading exactly as shown:
+
+1. ## THE OPENING (2-3 paragraphs, set the tone, take a position on what the week means)
+2. ## WHERE THE MONEY IS MOVING (3-4 paragraphs, sector rotation story)
+3. ## TRADE OF THE WEEK (1-2 paragraphs + callout -- ONLY if data provided above)
+4. ## STOCKS TO WATCH: LONG SIDE (top 3-5 long setups, brief thesis per stock)
+5. ## STOCKS TO WATCH: SHORT SIDE (top 3-5 short setups, include a sentence explaining short selling for unfamiliar readers)
+6. ## FROM THE ARCHIVES (ONLY if data provided above -- 2 sentences max)
+7. ## THE WEEK AHEAD (1-2 forward-looking paragraphs, close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott)
 8. Legal Disclaimer (use this EXACTLY as written below):
 
 ${disclaimer}

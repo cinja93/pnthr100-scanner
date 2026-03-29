@@ -21,6 +21,8 @@ import { getMostRecentRanking }   from './database.js';
 import { connectToDatabase }      from './database.js';
 import { checkCaseStudyEntries }  from './killHistory.js';
 import { saveWeeklySnapshot, getCurrentWeekOf } from './signalHistoryService.js';
+import { getKillTestSettings, serverSizePosition, buildServerLotConfig } from './killTestSettings.js';
+import { checkFeastAlerts } from './killTestDailyUpdate.js';
 
 // ── Compute weekOf (last Friday) ─────────────────────────────────────────────
 
@@ -140,7 +142,7 @@ const KILL_THRESHOLD     = 100;
 const ANALYZE_THRESHOLD  = 80;
 const COMPOSITE_THRESHOLD = 75;
 
-async function updateKillAppearances(db, scored, weekOf, regime, jungleSignals = {}) {
+async function updateKillAppearances(db, scored, weekOf, regime, jungleSignals = {}, settings = null) {
   // Apply all three thresholds: Kill > 100, Analyze > 80%, Composite > 75
   const qualifying = scored.filter(s => {
     if (!s.signal || (s.signal !== 'BL' && s.signal !== 'SS')) return false;
@@ -177,6 +179,37 @@ async function updateKillAppearances(db, scored, weekOf, regime, jungleSignals =
       : null;
 
     if (!existing) {
+      // ── Compute lot config using sizePosition (same logic as Size It) ─────
+      let lotConfig = null;
+      let lotFills  = null;
+      if (settings && price && stopPrice) {
+        const sized = serverSizePosition({
+          nav:        settings.nav,
+          entryPrice: price,
+          stopPrice,
+          riskPct:    settings.riskPctPerTrade,
+        });
+        if (sized && sized.totalShares > 0) {
+          const lots = buildServerLotConfig(sized.totalShares, price, s.signal);
+          lotConfig = {
+            nav:           settings.nav,
+            riskPct:       settings.riskPctPerTrade,
+            totalShares:   sized.totalShares,
+            maxRiskDollar: sized.maxRiskDollar,
+            lots,
+          };
+          // Lot 1 filled immediately at appearance price
+          const lot1 = lots[0];
+          lotFills = {
+            lot1: { filled: true, fillDate: weekOf, fillPrice: price, shares: lot1.targetShares, costBasis: +(lot1.targetShares * price).toFixed(2) },
+            lot2: { filled: false, fillDate: null, fillPrice: null, shares: lots[1].targetShares, costBasis: 0 },
+            lot3: { filled: false, fillDate: null, fillPrice: null, shares: lots[2].targetShares, costBasis: 0 },
+            lot4: { filled: false, fillDate: null, fillPrice: null, shares: lots[3].targetShares, costBasis: 0 },
+            lot5: { filled: false, fillDate: null, fillPrice: null, shares: lots[4].targetShares, costBasis: 0 },
+          };
+        }
+      }
+
       // First time this stock has qualified — NEVER overwrite this record
       await db.collection('pnthr_kill_appearances').insertOne({
         ticker:               s.ticker,
@@ -197,6 +230,22 @@ async function updateKillAppearances(db, scored, weekOf, regime, jungleSignals =
         firstConvictionPct:   s.scoreDetail?.d3?.convictionPct ?? null,
         firstSlopePct:        s.scoreDetail?.d3?.slopePct ?? null,
         firstSeparationPct:   s.scoreDetail?.d3?.separationPct ?? null,
+        // Lot simulation
+        lotConfig,
+        lotFills,
+        currentStop:     stopPrice,
+        currentAvgCost:  price,
+        currentShares:   lotConfig ? lotConfig.lots[0].targetShares : null,
+        lotsFilledCount: 1,
+        // Feast alert tracking
+        feastFired:     false,
+        feastDate:      null,
+        feastRsi:       null,
+        feastExitPrice: null,
+        feastExitShares: 0,
+        // P&L tracking
+        currentPnlPct:    0,
+        currentPnlDollar: 0,
         // Last seen (updated weekly while signal stays active)
         lastSeenDate:         weekOf,
         lastSeenPrice:        price,
@@ -208,9 +257,12 @@ async function updateKillAppearances(db, scored, weekOf, regime, jungleSignals =
         // Outcome (filled in later when signal exits)
         exitDate:             null,
         exitPrice:            null,
+        exitReason:           null,
         profitPct:            null,
+        profitDollar:         null,
         holdingWeeks:         null,
         isWinner:             null,
+        dailySnapshots:       [],
         createdAt:            new Date(),
         updatedAt:            new Date(),
       });
@@ -535,9 +587,17 @@ export async function runFridayKillPipeline() {
     // Records the EXACT date and price when a stock first hits STRIKING+ (≥100)
     // This is the true "entry baseline" for forward performance tracking.
     try {
-      await updateKillAppearances(db, scored, weekOf, contextSummary, jungleSignals);
+      const ktSettings = await getKillTestSettings();
+      await updateKillAppearances(db, scored, weekOf, contextSummary, jungleSignals, ktSettings);
     } catch (err) {
       console.error('[Kill Pipeline] Appearances update failed (non-fatal):', err.message);
+    }
+
+    // ── 5e. Kill Test Feast Alert check (weekly RSI from scored data) ─────────
+    try {
+      await checkFeastAlerts(db, scored, weekOf);
+    } catch (err) {
+      console.error('[Kill Pipeline] Feast alert check failed (non-fatal):', err.message);
     }
 
     // ── 6. Case Study Entries ──────────────────────────────────────────────

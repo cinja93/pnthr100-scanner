@@ -24,6 +24,8 @@ import {
   ensureCommandCenterIndexes,
 } from './commandCenter.js';
 import { runFridayKillPipeline } from './fridayPipeline.js';
+import { getKillTestSettings, saveKillTestSettings } from './killTestSettings.js';
+import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import {
   checkCaseStudyEntries,
   createKillHistoryIndexes,
@@ -1799,6 +1801,27 @@ app.get('/api/kill-appearances', authenticateJWT, requireAdmin, async (req, res)
   }
 });
 
+// ── Kill Test Settings ────────────────────────────────────────────────────────
+app.get('/api/kill-test/settings', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const settings = await getKillTestSettings();
+    res.json(settings);
+  } catch (err) {
+    console.error('[kill-test/settings GET]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/kill-test/settings', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const settings = await saveKillTestSettings(req.body);
+    res.json(settings);
+  } catch (err) {
+    console.error('[kill-test/settings PATCH]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Scoring Engine Health ───────────────────────────────────────────────────────
 app.get('/api/scoring-health', authenticateJWT, requireAdmin, async (req, res) => {
   try {
@@ -2658,6 +2681,17 @@ cron.schedule('15 16 * * 5', async () => {
     await runFridayKillPipeline();
   } catch (err) {
     console.error('[Kill Pipeline] Failed:', err.message);
+  }
+}, { timezone: 'America/New_York' });
+
+// ── Cron: Kill Test daily price tracking Mon–Fri at 4:30pm ET ───────────────
+// Fetches OHLC for active appearances, processes lot fills, stop hits, P&L
+cron.schedule('30 16 * * 1-5', async () => {
+  try {
+    console.log('[KillTest Daily] Starting daily price tracking...');
+    await runKillTestDailyUpdate();
+  } catch (err) {
+    console.error('[KillTest Daily] Failed:', err.message);
   }
 }, { timezone: 'America/New_York' });
 

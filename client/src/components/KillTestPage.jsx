@@ -325,7 +325,7 @@ function FilterPanel({ vals, setVals, onApply, onReset, matchCount, totalCount }
       value={vals[key]}
       onChange={e => setVals(v => ({ ...v, [key]: e.target.value }))}
       style={{
-        width: 64, background: '#1a1a1a', border: `1px solid rgba(255,255,255,0.14)`,
+        width: 64, background: '#1a1a1a', border: `1px solid rgba(252,240,0,0.5)`,
         borderRadius: 5, color: '#fff', fontSize: 12, padding: '5px 7px', outline: 'none',
       }}
     />

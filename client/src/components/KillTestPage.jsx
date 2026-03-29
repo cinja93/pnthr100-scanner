@@ -144,17 +144,24 @@ function TierBadge({ tier }) {
 }
 
 // ── Score pills ───────────────────────────────────────────────────────────────
+const fmtScore = (n) => n == null ? '—' : Number.isInteger(n) ? `${n}.0` : String(n);
+
 function ScorePills({ kill, analyze, composite }) {
+  const pill = (bg, color) => ({
+    fontSize: 10, padding: '2px 0', borderRadius: 3, fontWeight: 700,
+    background: bg, color,
+    display: 'inline-block', textAlign: 'center',
+  });
   return (
-    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 10, padding: '2px 5px', borderRadius: 3, background: `rgba(252,240,0,0.1)`, color: Y, fontWeight: 700 }}>
-        K:{kill ?? '—'}
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'nowrap' }}>
+      <span style={{ ...pill(`rgba(252,240,0,0.1)`, Y), minWidth: 52 }}>
+        K:{fmtScore(kill)}
       </span>
-      <span style={{ fontSize: 10, padding: '2px 5px', borderRadius: 3, background: 'rgba(40,167,69,0.1)', color: '#4fc870', fontWeight: 700 }}>
+      <span style={{ ...pill('rgba(40,167,69,0.1)', '#4fc870'), minWidth: 44 }}>
         A:{analyze ?? '—'}%
       </span>
-      <span style={{ fontSize: 10, padding: '2px 5px', borderRadius: 3, background: 'rgba(0,150,255,0.1)', color: '#48b0ff', fontWeight: 700 }}>
-        C:{composite ?? '—'}
+      <span style={{ ...pill('rgba(0,150,255,0.1)', '#48b0ff'), minWidth: 44 }}>
+        C:{fmtScore(composite)}
       </span>
     </div>
   );

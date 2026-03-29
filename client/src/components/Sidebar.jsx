@@ -85,7 +85,8 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   ];
   if (isAdmin) {
     personalItems.push({ key: 'history',        label: 'PNTHR Kill History',  icon: '📊' });
-    personalItems.push({ key: 'signal-history', label: 'Signal History', icon: '📋' });
+    personalItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test',     icon: '🎯' });
+    personalItems.push({ key: 'signal-history', label: 'Signal History',      icon: '📋' });
   }
 
   const personalGroup = firstName

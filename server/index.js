@@ -1783,6 +1783,21 @@ app.get('/api/kill-history',              authenticateJWT, killHistoryGetAll);
 app.get('/api/kill-history/active',       authenticateJWT, killHistoryGetActive);
 app.get('/api/kill-history/track-record', authenticateJWT, killHistoryGetTrackRecord);
 
+// ── PNTHR Kill Test — Appearance Tracking ──────────────────────────────────────
+app.get('/api/kill-appearances', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db   = await connectToDatabase();
+    const docs = await db.collection('pnthr_kill_appearances')
+      .find({})
+      .sort({ firstAppearanceDate: -1, firstKillRank: 1 })
+      .toArray();
+    res.json(docs);
+  } catch (err) {
+    console.error('[kill-appearances]', err);
+    res.status(500).json({ error: 'Failed to load kill appearances' });
+  }
+});
+
 // ── Scoring Engine Health ───────────────────────────────────────────────────────
 app.get('/api/scoring-health', authenticateJWT, requireAdmin, async (req, res) => {
   try {

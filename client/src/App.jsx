@@ -23,6 +23,7 @@ import NewsPage from './components/NewsPage';
 import PulsePage from './components/PulsePage';
 import SignalHistoryPage from './components/SignalHistoryPage';
 import HistoryPage from './components/HistoryPage';
+import KillTestPage from './components/KillTestPage';
 import LoginPage from './components/LoginPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
@@ -503,6 +504,12 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR Kill History — admin only */}
           {activePage === 'history' && (isAdmin
             ? <HistoryPage />
+            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
+          )}
+
+          {/* PNTHR Kill Test — admin only */}
+          {activePage === 'kill-test' && (isAdmin
+            ? <KillTestPage />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 

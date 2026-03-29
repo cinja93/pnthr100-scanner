@@ -171,15 +171,17 @@ async function computePositionSnapshot(appearances, monthStr, settings, useLastS
 }
 
 // ── Generate a single month's snapshot ───────────────────────────────────────
-async function generateOneMonthSnapshot(db, monthStr, settings, prevSnapshot) {
+async function generateOneMonthSnapshot(db, monthStr, settings, prevSnapshot, tickerFilter = null) {
   const [y, m] = monthStr.split('-').map(Number);
   const monthEndDate = lastDayOfMonth(y, m);
   const isCurrentMonth = monthStr === currentMonthKey();
 
   // Get all appearances that existed at any point this month
-  const allAppr = await db.collection('pnthr_kill_appearances').find({
-    firstAppearanceDate: { $lte: monthEndDate },
-  }).toArray();
+  const baseQuery = { firstAppearanceDate: { $lte: monthEndDate } };
+  if (tickerFilter && tickerFilter.length > 0) {
+    baseQuery.ticker = { $in: tickerFilter };
+  }
+  const allAppr = await db.collection('pnthr_kill_appearances').find(baseQuery).toArray();
 
   // Split into open-at-month-end vs closed-by-month-end
   const openAtEnd   = allAppr.filter(a => !a.exitDate || a.exitDate > monthEndDate);
@@ -239,7 +241,7 @@ async function generateOneMonthSnapshot(db, monthStr, settings, prevSnapshot) {
 }
 
 // ── Main: generate all missing monthly snapshots ──────────────────────────────
-export async function generateMonthlySnapshots(db = null, forceMonth = null) {
+export async function generateMonthlySnapshots(db = null, forceMonth = null, tickerFilter = null, scenarioKey = 'all') {
   const ownDb = !db;
   if (!db) {
     db = await connectToDatabase();
@@ -249,8 +251,12 @@ export async function generateMonthlySnapshots(db = null, forceMonth = null) {
   const settings = await getKillTestSettings();
 
   // Find the earliest appearance date to know where to start
+  const earliestQuery = {};
+  if (tickerFilter && tickerFilter.length > 0) {
+    earliestQuery.ticker = { $in: tickerFilter };
+  }
   const earliest = await db.collection('pnthr_kill_appearances')
-    .findOne({}, { sort: { firstAppearanceDate: 1 } });
+    .findOne(earliestQuery, { sort: { firstAppearanceDate: 1 } });
   if (!earliest) return null;
 
   const startMonth = monthKey(earliest.firstAppearanceDate);
@@ -260,7 +266,7 @@ export async function generateMonthlySnapshots(db = null, forceMonth = null) {
   const monthsToProcess = [];
   let cur = startMonth;
   while (cur <= endMonth) {
-    const existing = await db.collection('pnthr_kill_test_monthly').findOne({ month: cur });
+    const existing = await db.collection('pnthr_kill_test_monthly').findOne({ scenarioKey, month: cur });
     if (!existing || cur === endMonth) monthsToProcess.push(cur); // always regenerate current month
     cur = addMonths(cur, 1);
   }
@@ -268,27 +274,28 @@ export async function generateMonthlySnapshots(db = null, forceMonth = null) {
   if (monthsToProcess.length === 0) return null;
 
   let prevSnapshot = await db.collection('pnthr_kill_test_monthly')
-    .findOne({ month: { $lt: monthsToProcess[0] } }, { sort: { month: -1 } });
+    .findOne({ scenarioKey, month: { $lt: monthsToProcess[0] } }, { sort: { month: -1 } });
 
   const saved = [];
   for (const month of monthsToProcess) {
     try {
-      const snap = await generateOneMonthSnapshot(db, month, settings, prevSnapshot);
+      const snap = await generateOneMonthSnapshot(db, month, settings, prevSnapshot, tickerFilter);
+      const snapWithKey = { ...snap, scenarioKey };
       await db.collection('pnthr_kill_test_monthly').updateOne(
-        { month },
-        { $set: snap },
+        { scenarioKey, month },
+        { $set: snapWithKey },
         { upsert: true }
       );
-      prevSnapshot = snap;
-      saved.push(snap);
-      console.log(`[KillTest Monthly] ${month}: $${snap.portfolioValue.toLocaleString()} | ${snap.monthlyReturn >= 0 ? '+' : ''}${snap.monthlyReturn.toFixed(2)}%`);
+      prevSnapshot = snapWithKey;
+      saved.push(snapWithKey);
+      console.log(`[KillTest Monthly][${scenarioKey}] ${month}: $${snap.portfolioValue.toLocaleString()} | ${snap.monthlyReturn >= 0 ? '+' : ''}${snap.monthlyReturn.toFixed(2)}%`);
     } catch (err) {
-      console.error(`[KillTest Monthly] ${month} failed:`, err.message);
+      console.error(`[KillTest Monthly][${scenarioKey}] ${month} failed:`, err.message);
     }
   }
 
   // Recompute metrics after updating snapshots
-  await computeAndSaveMetrics(db, settings);
+  await computeAndSaveMetrics(db, settings, scenarioKey);
 
   return saved;
 }
@@ -383,17 +390,17 @@ function findPeakToValley(snapshots, drawdowns) {
 }
 
 // ── Compute and save all analytics metrics ────────────────────────────────────
-export async function computeAndSaveMetrics(db, settings = null) {
+export async function computeAndSaveMetrics(db, settings = null, scenarioKey = 'all') {
   if (!settings) settings = await getKillTestSettings();
 
   const snapshots = await db.collection('pnthr_kill_test_monthly')
-    .find({}).sort({ month: 1 }).toArray();
+    .find({ scenarioKey }).sort({ month: 1 }).toArray();
 
   if (snapshots.length < 2) {
     // Not enough data for meaningful metrics yet
     await db.collection('pnthr_kill_test_metrics').updateOne(
-      {},
-      { $set: { asOf: currentMonthKey(), status: 'INSUFFICIENT_DATA', minMonthsRequired: 2, monthsAvailable: snapshots.length, updatedAt: new Date() } },
+      { scenarioKey },
+      { $set: { scenarioKey, asOf: currentMonthKey(), status: 'INSUFFICIENT_DATA', minMonthsRequired: 2, monthsAvailable: snapshots.length, updatedAt: new Date() } },
       { upsert: true }
     );
     return;
@@ -485,6 +492,7 @@ export async function computeAndSaveMetrics(db, settings = null) {
 
   // ── Assemble metrics doc ──────────────────────────────────────────────
   const metrics = {
+    scenarioKey,
     asOf:            currentMonthKey(),
     status:          'OK',
     monthsAvailable: n,
@@ -521,12 +529,12 @@ export async function computeAndSaveMetrics(db, settings = null) {
   };
 
   await db.collection('pnthr_kill_test_metrics').updateOne(
-    {},
+    { scenarioKey },
     { $set: metrics },
     { upsert: true }
   );
 
-  console.log(`[KillTest Metrics] Sharpe: ${sharpe} | Sortino: ${sortino} | Calmar: ${calmarAnnual} | MaxDD: ${maxMonthlyDrawdown}%`);
+  console.log(`[KillTest Metrics][${scenarioKey}] Sharpe: ${sharpe} | Sortino: ${sortino} | Calmar: ${calmarAnnual} | MaxDD: ${maxMonthlyDrawdown}%`);
   return metrics;
 }
 
@@ -534,9 +542,17 @@ export async function computeAndSaveMetrics(db, settings = null) {
 
 export async function killTestMonthlyGet(req, res) {
   try {
-    const db   = await connectToDatabase();
+    const db          = await connectToDatabase();
+    const scenarioKey = req.query.scenarioKey || 'all';
+
+    // Migrate existing docs missing scenarioKey (one-time migration)
+    await db.collection('pnthr_kill_test_monthly').updateMany(
+      { scenarioKey: { $exists: false } },
+      { $set: { scenarioKey: 'all' } }
+    );
+
     const rows = await db.collection('pnthr_kill_test_monthly')
-      .find({}).sort({ month: 1 }).toArray();
+      .find({ scenarioKey }).sort({ month: 1 }).toArray();
     res.json(rows);
   } catch (err) {
     console.error('[kill-test/monthly]', err);
@@ -546,8 +562,16 @@ export async function killTestMonthlyGet(req, res) {
 
 export async function killTestMetricsGet(req, res) {
   try {
-    const db      = await connectToDatabase();
-    const metrics = await db.collection('pnthr_kill_test_metrics').findOne({});
+    const db          = await connectToDatabase();
+    const scenarioKey = req.query.scenarioKey || 'all';
+
+    // Migrate existing docs missing scenarioKey (one-time migration)
+    await db.collection('pnthr_kill_test_metrics').updateMany(
+      { scenarioKey: { $exists: false } },
+      { $set: { scenarioKey: 'all' } }
+    );
+
+    const metrics = await db.collection('pnthr_kill_test_metrics').findOne({ scenarioKey });
     res.json(metrics ?? { status: 'NO_DATA' });
   } catch (err) {
     console.error('[kill-test/metrics]', err);
@@ -557,9 +581,42 @@ export async function killTestMetricsGet(req, res) {
 
 export async function killTestMonthlyGenerate(req, res) {
   try {
-    const db      = await connectToDatabase();
-    const results = await generateMonthlySnapshots(db);
-    res.json({ ok: true, monthsGenerated: results?.length ?? 0, results });
+    const db = await connectToDatabase();
+
+    // Read filter params from request body
+    const { killMin, killMax, analyzeMin, analyzeMax, compositeMin, compositeMax } = req.body ?? {};
+
+    // Determine scenarioKey
+    const hasFilter = [killMin, killMax, analyzeMin, analyzeMax, compositeMin, compositeMax].some(v => v != null && v !== '');
+    const scenarioKey = hasFilter
+      ? `k${killMin ?? '*'}-${killMax ?? '*'}_a${analyzeMin ?? '*'}-${analyzeMax ?? '*'}_c${compositeMin ?? '*'}-${compositeMax ?? '*'}`
+      : 'all';
+
+    // Build tickerFilter by loading all appearances and filtering by score criteria
+    let tickerFilter = null;
+    if (hasFilter) {
+      const allAppr = await db.collection('pnthr_kill_appearances').find({}).toArray();
+      const filtered = allAppr.filter(a => {
+        if (killMin      != null && killMin      !== '' && (a.firstKillScore      ?? 0) < +killMin)      return false;
+        if (killMax      != null && killMax      !== '' && (a.firstKillScore      ?? 0) > +killMax)      return false;
+        if (analyzeMin   != null && analyzeMin   !== '' && (a.firstAnalyzeScore   ?? 0) < +analyzeMin)   return false;
+        if (analyzeMax   != null && analyzeMax   !== '' && (a.firstAnalyzeScore   ?? 0) > +analyzeMax)   return false;
+        if (compositeMin != null && compositeMin !== '' && (a.firstCompositeScore ?? 0) < +compositeMin) return false;
+        if (compositeMax != null && compositeMax !== '' && (a.firstCompositeScore ?? 0) > +compositeMax) return false;
+        return true;
+      });
+      tickerFilter = filtered.map(a => a.ticker);
+    }
+
+    const results = await generateMonthlySnapshots(db, null, tickerFilter, scenarioKey);
+
+    // Fetch the saved monthly + metrics to return
+    const [monthly, metrics] = await Promise.all([
+      db.collection('pnthr_kill_test_monthly').find({ scenarioKey }).sort({ month: 1 }).toArray(),
+      db.collection('pnthr_kill_test_metrics').findOne({ scenarioKey }),
+    ]);
+
+    res.json({ ok: true, scenarioKey, monthsGenerated: results?.length ?? 0, results, monthly, metrics });
   } catch (err) {
     console.error('[kill-test/monthly/generate]', err);
     res.status(500).json({ error: err.message });

@@ -316,6 +316,63 @@ function SettingsPanel({ settings, onSave, onCancel }) {
   );
 }
 
+// ── Filter panel ──────────────────────────────────────────────────────────────
+function FilterPanel({ vals, setVals, onApply, onReset, matchCount, totalCount }) {
+  const input = (key, placeholder) => (
+    <input
+      type="number"
+      placeholder={placeholder}
+      value={vals[key]}
+      onChange={e => setVals(v => ({ ...v, [key]: e.target.value }))}
+      style={{
+        width: 64, background: '#1a1a1a', border: `1px solid rgba(255,255,255,0.14)`,
+        borderRadius: 5, color: '#fff', fontSize: 12, padding: '5px 7px', outline: 'none',
+      }}
+    />
+  );
+  const row = (label, minKey, maxKey, color) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color, width: 72, letterSpacing: '0.04em' }}>{label}</span>
+      <span style={{ fontSize: 10, color: '#555' }}>min</span>
+      {input(minKey, 'any')}
+      <span style={{ fontSize: 10, color: '#555' }}>max</span>
+      {input(maxKey, 'any')}
+    </div>
+  );
+  return (
+    <div style={{
+      background: '#111', border: `1px solid rgba(255,255,255,0.14)`, borderRadius: 8,
+      padding: '16px 20px', marginBottom: 16, display: 'flex', gap: 24, alignItems: 'flex-end', flexWrap: 'wrap',
+    }}>
+      <div>
+        <div style={{ fontSize: 10, color: '#fcf000', fontWeight: 700, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          Score Filters
+        </div>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+          {row('KILL',      'killMin',      'killMax',      '#fcf000')}
+          {row('ANALYZE',   'analyzeMin',   'analyzeMax',   '#4fc870')}
+          {row('COMPOSITE', 'compositeMin', 'compositeMax', '#48b0ff')}
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onApply} style={{
+            background: '#fcf000', color: '#000', fontWeight: 800, fontSize: 12,
+            border: 'none', borderRadius: 6, padding: '7px 18px', cursor: 'pointer', letterSpacing: '0.05em',
+          }}>APPLY</button>
+          <button onClick={onReset} style={{
+            background: 'transparent', color: '#666', fontWeight: 600, fontSize: 12,
+            border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: '7px 14px', cursor: 'pointer',
+          }}>Reset</button>
+        </div>
+        <div style={{ fontSize: 11, color: '#555' }}>
+          {matchCount} of {totalCount} appearances match
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Active appearances table ───────────────────────────────────────────────────
 function ActiveTable({ rows, settings }) {
   if (!rows.length) return (
@@ -640,7 +697,7 @@ function DDRow({ label, value, tooltip }) {
 }
 
 // ── Portfolio Analytics Tab ───────────────────────────────────────────────────
-function AnalyticsTab({ metrics, monthly, settings, onGenerate, generating }) {
+function AnalyticsTab({ metrics, monthly, settings, onGenerate, generating, scenarioKey }) {
   const hasData = metrics?.status === 'OK' && metrics.monthsAvailable >= 2;
   const n       = metrics?.monthsAvailable ?? 0;
 
@@ -651,6 +708,12 @@ function AnalyticsTab({ metrics, monthly, settings, onGenerate, generating }) {
   if (!hasData) {
     return (
       <div style={{ padding: 32 }}>
+        {/* Scenario banner (filtered view) */}
+        {scenarioKey !== 'all' && (
+          <div style={{ background: 'rgba(252,240,0,0.06)', border: '1px solid rgba(252,240,0,0.2)', borderRadius: 6, padding: '10px 16px', marginBottom: 16, fontSize: 12, color: '#fcf000' }}>
+            ⚡ Analytics for filtered scenario — only appearances matching current score filters are included.
+          </div>
+        )}
         {/* Status banner */}
         <div style={{ background: '#1a1100', border: `1px solid rgba(252,240,0,0.2)`, borderRadius: 8, padding: '16px 20px', marginBottom: 24 }}>
           <div style={{ color: Y, fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
@@ -684,6 +747,13 @@ function AnalyticsTab({ metrics, monthly, settings, onGenerate, generating }) {
 
   return (
     <div style={{ padding: '24px 28px' }}>
+
+      {/* ── Scenario banner (filtered view) ───────────────────────────── */}
+      {scenarioKey !== 'all' && (
+        <div style={{ background: 'rgba(252,240,0,0.06)', border: '1px solid rgba(252,240,0,0.2)', borderRadius: 6, padding: '10px 16px', marginBottom: 16, fontSize: 12, color: '#fcf000' }}>
+          ⚡ Analytics for filtered scenario — only appearances matching current score filters are included.
+        </div>
+      )}
 
       {/* ── Equity curve ──────────────────────────────────────────────── */}
       <div style={{ background: '#111', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '16px 20px', marginBottom: 24 }}>
@@ -927,6 +997,10 @@ export default function KillTestPage() {
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [refreshing,    setRefreshing]    = useState(false);
   const [refreshedAt,   setRefreshedAt]   = useState(null);
+  const [showFilter,     setShowFilter]     = useState(false);
+  const [filterVals,     setFilterVals]     = useState({ killMin: '', killMax: '', analyzeMin: '', analyzeMax: '', compositeMin: '', compositeMax: '' });
+  const [filtersApplied, setFiltersApplied] = useState(false);
+  const [activeFilters,  setActiveFilters]  = useState({ killMin: '', killMax: '', analyzeMin: '', analyzeMax: '', compositeMin: '', compositeMax: '' });
 
   // Load appearances + settings on mount
   useEffect(() => {
@@ -951,15 +1025,27 @@ export default function KillTestPage() {
     load();
   }, []);
 
-  // Lazy-load analytics when tab is opened
+  // scenarioKey derived from activeFilters
+  const scenarioKey = useMemo(() => {
+    if (!filtersApplied) return 'all';
+    const { killMin, killMax, analyzeMin, analyzeMax, compositeMin, compositeMax } = activeFilters;
+    const hasAny = [killMin, killMax, analyzeMin, analyzeMax, compositeMin, compositeMax].some(v => v !== '');
+    if (!hasAny) return 'all';
+    return `k${killMin||'*'}-${killMax||'*'}_a${analyzeMin||'*'}-${analyzeMax||'*'}_c${compositeMin||'*'}-${compositeMax||'*'}`;
+  }, [filtersApplied, activeFilters]);
+
+  // Lazy-load analytics when tab is opened or scenarioKey changes
   useEffect(() => {
-    if (tab !== 'analytics' || monthly.length > 0) return;
+    if (tab !== 'analytics') return;
+    // reset when scenarioKey changes
+    setMonthly([]);
+    setMetrics(null);
     async function loadAnalytics() {
       try {
         setAnalyticsLoading(true);
         const [mRes, meRes] = await Promise.all([
-          fetch(`${API_BASE}/api/kill-test/monthly`, { headers: authHeaders() }),
-          fetch(`${API_BASE}/api/kill-test/metrics`, { headers: authHeaders() }),
+          fetch(`${API_BASE}/api/kill-test/monthly?scenarioKey=${encodeURIComponent(scenarioKey)}`, { headers: authHeaders() }),
+          fetch(`${API_BASE}/api/kill-test/metrics?scenarioKey=${encodeURIComponent(scenarioKey)}`, { headers: authHeaders() }),
         ]);
         if (mRes.ok)  setMonthly(await mRes.json());
         if (meRes.ok) setMetrics(await meRes.json());
@@ -967,26 +1053,24 @@ export default function KillTestPage() {
       finally { setAnalyticsLoading(false); }
     }
     loadAnalytics();
-  }, [tab]);
+  }, [tab, scenarioKey]);
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true);
     try {
       const res = await fetch(`${API_BASE}/api/kill-test/monthly/generate`, {
-        method: 'POST', headers: authHeaders(),
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(filtersApplied ? activeFilters : {}),
       });
       if (res.ok) {
-        // Reload analytics data
-        const [mRes, meRes] = await Promise.all([
-          fetch(`${API_BASE}/api/kill-test/monthly`, { headers: authHeaders() }),
-          fetch(`${API_BASE}/api/kill-test/metrics`, { headers: authHeaders() }),
-        ]);
-        if (mRes.ok)  setMonthly(await mRes.json());
-        if (meRes.ok) setMetrics(await meRes.json());
+        const { monthly: m, metrics: me } = await res.json();
+        if (m)  setMonthly(m);
+        if (me) setMetrics(me);
       }
     } catch { /* non-fatal */ }
     finally { setGenerating(false); }
-  }, []);
+  }, [filtersApplied, activeFilters]);
 
   const handleSaveSettings = async (vals) => {
     const res = await fetch(`${API_BASE}/api/kill-test/settings`, {
@@ -1042,8 +1126,22 @@ export default function KillTestPage() {
     }
   }, []);
 
-  const active = useMemo(() => data.filter(r => !r.exitDate), [data]);
-  const closed = useMemo(() => data.filter(r =>  r.exitDate), [data]);
+  const filteredData = useMemo(() => {
+    if (!filtersApplied) return data;
+    const { killMin, killMax, analyzeMin, analyzeMax, compositeMin, compositeMax } = activeFilters;
+    return data.filter(r => {
+      if (killMin      !== '' && (r.firstKillScore      ?? 0) < +killMin)      return false;
+      if (killMax      !== '' && (r.firstKillScore      ?? 0) > +killMax)      return false;
+      if (analyzeMin   !== '' && (r.firstAnalyzeScore   ?? 0) < +analyzeMin)   return false;
+      if (analyzeMax   !== '' && (r.firstAnalyzeScore   ?? 0) > +analyzeMax)   return false;
+      if (compositeMin !== '' && (r.firstCompositeScore ?? 0) < +compositeMin) return false;
+      if (compositeMax !== '' && (r.firstCompositeScore ?? 0) > +compositeMax) return false;
+      return true;
+    });
+  }, [data, filtersApplied, activeFilters]);
+
+  const active = useMemo(() => filteredData.filter(r => !r.exitDate), [filteredData]);
+  const closed = useMemo(() => filteredData.filter(r =>  r.exitDate), [filteredData]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -1145,6 +1243,20 @@ export default function KillTestPage() {
               <div>Sweep: <span style={{ color: TEXT, fontWeight: 600 }}>{settings.sweepRate}% | Rf {settings.riskFreeRate}%</span></div>
             </div>
           )}
+          {/* Filter button */}
+          <button
+            onClick={() => setShowFilter(v => !v)}
+            style={{
+              background: filtersApplied ? 'rgba(252,240,0,0.12)' : 'rgba(255,255,255,0.05)',
+              border: `1px solid ${filtersApplied ? '#fcf000' : 'rgba(255,255,255,0.08)'}`,
+              borderRadius: 8, padding: '8px 14px', cursor: 'pointer',
+              color: filtersApplied ? '#fcf000' : '#666', fontSize: 13, fontWeight: 700,
+              fontFamily: 'inherit',
+            }}
+          >
+            {filtersApplied ? `⚡ Filtered (${active.length + closed.length})` : '⚡ Filter'}
+          </button>
+
           {/* Refresh prices button */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
             <button
@@ -1189,6 +1301,58 @@ export default function KillTestPage() {
           onSave={handleSaveSettings}
           onCancel={() => setShowSettings(false)}
         />
+      )}
+
+      {/* ── Filter panel ───────────────────────────────────────────────── */}
+      {showFilter && (
+        <FilterPanel
+          vals={filterVals}
+          setVals={setFilterVals}
+          onApply={() => {
+            setActiveFilters({ ...filterVals });
+            setFiltersApplied(true);
+            setShowFilter(false);
+            // Reset analytics so they reload for new scenarioKey
+            setMonthly([]);
+            setMetrics(null);
+          }}
+          onReset={() => {
+            const empty = { killMin: '', killMax: '', analyzeMin: '', analyzeMax: '', compositeMin: '', compositeMax: '' };
+            setFilterVals(empty);
+            setActiveFilters(empty);
+            setFiltersApplied(false);
+            setMonthly([]);
+            setMetrics(null);
+          }}
+          matchCount={filteredData.length}
+          totalCount={data.length}
+        />
+      )}
+
+      {/* Active filter banner */}
+      {filtersApplied && (
+        <div style={{
+          background: 'rgba(252,240,0,0.06)', border: '1px solid rgba(252,240,0,0.2)',
+          borderRadius: 6, padding: '8px 14px', marginBottom: 12,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <span style={{ fontSize: 12, color: '#fcf000', fontWeight: 600 }}>
+            ⚡ Filters active — showing {filteredData.length} of {data.length} appearances · Portfolio Analytics will recalculate for this subset
+          </span>
+          <button
+            onClick={() => {
+              const empty = { killMin: '', killMax: '', analyzeMin: '', analyzeMax: '', compositeMin: '', compositeMax: '' };
+              setFilterVals(empty);
+              setActiveFilters(empty);
+              setFiltersApplied(false);
+              setMonthly([]);
+              setMetrics(null);
+            }}
+            style={{ background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', fontSize: 12 }}
+          >
+            ✕ Clear
+          </button>
+        </div>
       )}
 
       {/* ── Stats row ──────────────────────────────────────────────────── */}
@@ -1283,6 +1447,7 @@ export default function KillTestPage() {
             settings={settings}
             onGenerate={handleGenerate}
             generating={generating}
+            scenarioKey={scenarioKey}
           />
         )}
       </div>

@@ -629,69 +629,73 @@ export async function regimeHandler(req, res) {
 // Called once on server startup to ensure Command Center indexes exist.
 
 export async function ensureCommandCenterIndexes() {
-  try {
-    const db = await connectToDatabase();
-    if (!db) return;
+  const db = await connectToDatabase();
+  if (!db) return;
 
-    // Portfolio
-    const portfolio = db.collection('pnthr_portfolio');
-    await portfolio.createIndex({ id: 1 }, { unique: true, sparse: true });
-    await portfolio.createIndex({ status: 1, ticker: 1 });
-    await portfolio.createIndex({ ownerId: 1, status: 1 }); // per-user queries
-
-    // Kill scores
-    const scores = db.collection('pnthr_kill_scores');
-    await scores.createIndex({ weekOf: 1, totalScore: -1 });
-    await scores.createIndex({ weekOf: 1, ticker: 1 });
-    await scores.createIndex({ weekOf: 1, confirmation: 1 });
-    await scores.createIndex({ ticker: 1, weekOf: -1 });
-
-    // Kill regime
-    const regime = db.collection('pnthr_kill_regime');
-    await regime.createIndex({ weekOf: 1 }, { unique: true });
-
-    // Kill history
-    const history = db.collection('pnthr_kill_history');
-    await history.createIndex({ weekOf: 1, ticker: 1 });
-    await history.createIndex({ ticker: 1, weekOf: -1 });
-
-    // Gap risk cache
-    const gapRisk = db.collection('pnthr_gap_risk');
-    await gapRisk.createIndex({ ticker: 1 }, { unique: true });
-
-    // FMP candle cache — TTL index auto-expires docs after 7 days
-    const candles = db.collection('pnthr_candle_cache');
-    await candles.createIndex({ ticker: 1 }, { unique: true });
-    await candles.createIndex({ cachedAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
-
-    // User profiles
-    const profiles = db.collection('user_profiles');
-    await profiles.createIndex({ userId: 1 }, { unique: true, sparse: true });
-    await profiles.createIndex({ email: 1 }, { unique: true, sparse: true });
-
-    // Kill regime — one doc per weekOf
-    const regimeColl = db.collection('pnthr_kill_regime');
-    await regimeColl.createIndex({ weekOf: -1 });
-
-    // Signal history archive
-    const signalHistory = db.collection('signal_history');
-    await signalHistory.createIndex({ weekOf: -1 });
-
-    // Portfolio returns
-    const portfolioReturns = db.collection('pnthr_portfolio_returns');
-    await portfolioReturns.createIndex({ ownerId: 1, date: -1 });
-
-    // Journal — per-user queries + ticker lookups
-    const journal = db.collection('pnthr_journal');
-    await journal.createIndex({ ownerId: 1, 'performance.status': 1 });
-    await journal.createIndex({ ticker: 1, ownerId: 1 });
-
-    // Pending entries
-    const pending = db.collection('pnthr_pending_entries');
-    await pending.createIndex({ ownerId: 1, status: 1 });
-
-    console.log('[CC] Command Center MongoDB indexes ensured');
-  } catch (e) {
-    console.warn('[CC] Index creation failed (non-fatal):', e.message);
+  // Helper: create one index, skip silently if it already exists with different options
+  // (MongoDB error code 85 = IndexOptionsConflict, 86 = IndexKeySpecsConflict)
+  async function idx(collection, spec, opts = {}) {
+    try {
+      await collection.createIndex(spec, opts);
+    } catch (e) {
+      if (e.code === 85 || e.code === 86) return; // index already exists — fine
+      console.warn(`[CC] Index warning on ${collection.collectionName}:`, e.message);
+    }
   }
+
+  // Portfolio
+  const portfolio = db.collection('pnthr_portfolio');
+  await idx(portfolio, { id: 1 },             { unique: true, sparse: true });
+  await idx(portfolio, { status: 1, ticker: 1 });
+  await idx(portfolio, { ownerId: 1, status: 1 });
+
+  // Kill scores
+  const scores = db.collection('pnthr_kill_scores');
+  await idx(scores, { weekOf: 1, totalScore: -1 });
+  await idx(scores, { weekOf: 1, ticker: 1 });
+  await idx(scores, { weekOf: 1, confirmation: 1 });
+  await idx(scores, { ticker: 1, weekOf: -1 });
+
+  // Kill regime
+  const regime = db.collection('pnthr_kill_regime');
+  await idx(regime, { weekOf: 1 }, { unique: true });
+  await idx(regime, { weekOf: -1 });
+
+  // Kill history
+  const history = db.collection('pnthr_kill_history');
+  await idx(history, { weekOf: 1, ticker: 1 });
+  await idx(history, { ticker: 1, weekOf: -1 });
+
+  // Gap risk cache
+  const gapRisk = db.collection('pnthr_gap_risk');
+  await idx(gapRisk, { ticker: 1 }, { unique: true });
+
+  // FMP candle cache — TTL index auto-expires docs after 7 days
+  const candles = db.collection('pnthr_candle_cache');
+  await idx(candles, { ticker: 1 },    { unique: true });
+  await idx(candles, { cachedAt: 1 },  { expireAfterSeconds: 7 * 24 * 60 * 60 });
+
+  // User profiles
+  const profiles = db.collection('user_profiles');
+  await idx(profiles, { userId: 1 }, { unique: true, sparse: true });
+  await idx(profiles, { email: 1 },  { unique: true, sparse: true });
+
+  // Signal history archive
+  const signalHistory = db.collection('signal_history');
+  await idx(signalHistory, { weekOf: -1 });
+
+  // Portfolio returns
+  const portfolioReturns = db.collection('pnthr_portfolio_returns');
+  await idx(portfolioReturns, { ownerId: 1, date: -1 });
+
+  // Journal
+  const journal = db.collection('pnthr_journal');
+  await idx(journal, { ownerId: 1, 'performance.status': 1 });
+  await idx(journal, { ticker: 1, ownerId: 1 });
+
+  // Pending entries
+  const pending = db.collection('pnthr_pending_entries');
+  await idx(pending, { ownerId: 1, status: 1 });
+
+  console.log('[CC] Command Center MongoDB indexes ensured');
 }

@@ -60,9 +60,9 @@ const BG3    = 'rgba(255,255,255,0.04)';
 const BORDER = 'rgba(255,255,255,0.08)';
 const BORDER2= 'rgba(255,255,255,0.14)';
 const ROW_ALT= 'rgba(255,255,255,0.025)';
-const TEXT   = '#ccc';
-const DIM    = '#666';
-const SUBDIM = '#444';
+const TEXT   = '#ddd';
+const DIM    = '#999';
+const SUBDIM = '#666';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtPrice   = (n) => n == null ? '—' : `$${Number(n).toFixed(2)}`;
@@ -226,7 +226,7 @@ function StatCard({ label, value, sub, color, dollar, barPct, barCap, barColor }
           <div style={{ width: `${filled}%`, height: '100%', background: barColor || ORANGE, borderRadius: 2, transition: 'width 0.4s' }} />
         </div>
       )}
-      {sub && <div style={{ fontSize: 11, color: '#555', marginTop: 3 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>{sub}</div>}
     </div>
   );
 }
@@ -254,7 +254,7 @@ function SettingsPanel({ settings, onSave, onCancel }) {
         />
         {suffix && <span style={{ color: DIM, fontSize: 12 }}>{suffix}</span>}
       </div>
-      {hint && <div style={{ fontSize: 10, color: '#555' }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 10, color: '#888' }}>{hint}</div>}
     </div>
   );
 
@@ -333,9 +333,9 @@ function FilterPanel({ vals, setVals, onApply, onReset, matchCount, totalCount }
   const row = (label, minKey, maxKey, color) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <span style={{ fontSize: 11, fontWeight: 700, color, width: 72, letterSpacing: '0.04em' }}>{label}</span>
-      <span style={{ fontSize: 10, color: '#555' }}>min</span>
+      <span style={{ fontSize: 10, color: '#888' }}>min</span>
       {input(minKey, 'any')}
-      <span style={{ fontSize: 10, color: '#555' }}>max</span>
+      <span style={{ fontSize: 10, color: '#888' }}>max</span>
       {input(maxKey, 'any')}
     </div>
   );
@@ -365,7 +365,7 @@ function FilterPanel({ vals, setVals, onApply, onReset, matchCount, totalCount }
             border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: '7px 14px', cursor: 'pointer',
           }}>Reset</button>
         </div>
-        <div style={{ fontSize: 11, color: '#555' }}>
+        <div style={{ fontSize: 11, color: '#888' }}>
           {matchCount} of {totalCount} appearances match
         </div>
       </div>
@@ -653,10 +653,10 @@ function MetricCard({ label, value, sub, color, tooltip, wide }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
         <span style={{ fontSize: 10, color: DIM, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
-        {tooltip && <span style={{ fontSize: 9, color: '#555', cursor: 'help' }}>ⓘ</span>}
+        {tooltip && <span style={{ fontSize: 9, color: '#888', cursor: 'help' }}>ⓘ</span>}
       </div>
       <div style={{ fontSize: 22, fontWeight: 800, color: color || '#fff', lineHeight: 1.1 }}>{value ?? '—'}</div>
-      {sub && <div style={{ fontSize: 11, color: '#555', marginTop: 3 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>{sub}</div>}
       {tip && tooltip && (
         <div style={{
           position: 'absolute', bottom: '110%', left: 0, background: '#1e1e1e',
@@ -681,7 +681,7 @@ function DDRow({ label, value, tooltip }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, position: 'relative' }}>
         <span style={{ fontSize: 13, color: TEXT }}>{label}</span>
-        {tooltip && <span style={{ fontSize: 9, color: '#555', cursor: 'help' }}>ⓘ</span>}
+        {tooltip && <span style={{ fontSize: 9, color: '#888', cursor: 'help' }}>ⓘ</span>}
         {tip && (
           <div style={{
             position: 'absolute', top: '100%', left: 0, background: '#1e1e1e',

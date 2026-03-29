@@ -123,21 +123,19 @@ async function refreshSp400Cache() {
 
     // Fallback endpoint if primary returned nothing usable
     if (!constituents || constituents.length === 0) {
-      console.warn('⚠️  S&P 400: primary endpoint empty/wrong format — trying v4 index-constituent...');
-      console.warn('    Raw response type:', typeof raw, '| keys:', raw && typeof raw === 'object' ? Object.keys(raw).slice(0,5).join(', ') : String(raw).slice(0, 80));
       try {
         const alt = await fetchFMP('/v4/index-constituent?index=sp400');
         if (Array.isArray(alt) && alt.length > 0) {
           constituents = alt;
           console.log(`📊 S&P 400: fallback endpoint returned ${alt.length} constituents`);
         }
-      } catch (altErr) {
-        console.warn('⚠️  S&P 400: fallback endpoint also failed:', altErr.message);
-      }
+      } catch { /* fallback also unavailable */ }
     }
 
     if (!constituents || constituents.length === 0) {
-      console.error('❌ S&P 400 constituent list empty or wrong format — both endpoints failed; keeping hardcoded fallback');
+      // FMP plan doesn't include S&P 400 constituent endpoints — using hardcoded fallback list.
+      // This is expected; the hardcoded list in speculative162.js is the active universe.
+      console.log('📊 S&P 400: constituent API unavailable on current FMP plan — using hardcoded fallback list');
       return;
     }
 

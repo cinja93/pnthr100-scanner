@@ -67,6 +67,99 @@ async function fetchMacroContext() {
   return result;
 }
 
+// ── Kill Appearances: first-time STRIKING+ qualification tracker ──────────────
+// Threshold: totalScore >= 100 (STRIKING or ALPHA PNTHR KILL)
+// Logic:
+//   - If no existing appearance for this ticker+signal within 8 weeks → new record
+//   - If existing record found → update lastSeen fields only (preserve first appearance)
+// This gives us the exact date + price a stock FIRST qualified for action.
+
+const APPEARANCE_THRESHOLD = 100;
+
+async function updateKillAppearances(db, scored, weekOf) {
+  const qualifying = scored.filter(s =>
+    s.apexScore >= APPEARANCE_THRESHOLD &&
+    (s.signal === 'BL' || s.signal === 'SS')
+  );
+
+  if (qualifying.length === 0) return;
+
+  const eightWeeksAgo = new Date(weekOf);
+  eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
+  const cutoff = eightWeeksAgo.toISOString().split('T')[0];
+
+  let newCount     = 0;
+  let updatedCount = 0;
+
+  for (const s of qualifying) {
+    // Look for an active appearance record (same signal, seen within last 8 weeks)
+    const existing = await db.collection('pnthr_kill_appearances').findOne({
+      ticker: s.ticker,
+      signal: s.signal,
+      lastSeenDate: { $gte: cutoff },
+    });
+
+    if (!existing) {
+      // First time this stock has qualified at this threshold in this signal cycle
+      await db.collection('pnthr_kill_appearances').insertOne({
+        ticker:               s.ticker,
+        signal:               s.signal,
+        sector:               s.sector ?? null,
+        exchange:             s.exchange ?? null,
+        // First appearance snapshot — NEVER overwritten
+        firstAppearanceDate:  weekOf,
+        firstAppearancePrice: s.currentPrice ?? null,
+        firstKillScore:       s.apexScore,
+        firstKillRank:        s.killRank ?? null,
+        firstTier:            s.tier,
+        firstSignalAge:       s.signalAge ?? null,
+        firstConvictionPct:   s.scoreDetail?.d3?.convictionPct ?? null,
+        firstSlopePct:        s.scoreDetail?.d3?.slopePct ?? null,
+        firstSeparationPct:   s.scoreDetail?.d3?.separationPct ?? null,
+        // Last seen (updated weekly while signal stays active)
+        lastSeenDate:         weekOf,
+        lastSeenPrice:        s.currentPrice ?? null,
+        lastKillScore:        s.apexScore,
+        lastKillRank:         s.killRank ?? null,
+        // Outcome (filled in later when signal exits)
+        exitDate:             null,
+        exitPrice:            null,
+        profitPct:            null,
+        holdingWeeks:         null,
+        isWinner:             null,
+        createdAt:            new Date(),
+        updatedAt:            new Date(),
+      });
+      newCount++;
+    } else {
+      // Already on the list — update lastSeen only
+      await db.collection('pnthr_kill_appearances').updateOne(
+        { _id: existing._id },
+        {
+          $set: {
+            lastSeenDate:  weekOf,
+            lastSeenPrice: s.currentPrice ?? null,
+            lastKillScore: s.apexScore,
+            lastKillRank:  s.killRank ?? null,
+            updatedAt:     new Date(),
+          },
+        }
+      );
+      updatedCount++;
+    }
+  }
+
+  console.log(`   Kill Appearances: ${newCount} new, ${updatedCount} updated (${qualifying.length} qualifying stocks)`);
+
+  // Ensure indexes exist
+  try {
+    await db.collection('pnthr_kill_appearances').createIndex(
+      { ticker: 1, signal: 1, lastSeenDate: -1 }
+    );
+    await db.collection('pnthr_kill_appearances').createIndex({ firstAppearanceDate: -1 });
+  } catch { /* indexes may already exist */ }
+}
+
 // ── Main Pipeline ─────────────────────────────────────────────────────────────
 
 export async function runFridayKillPipeline() {
@@ -349,6 +442,15 @@ export async function runFridayKillPipeline() {
       console.log(`   Saved ${enrichedSaved} enriched signal records`);
     } catch (err) {
       console.error('[Kill Pipeline] Enriched signals save failed (non-fatal):', err.message);
+    }
+
+    // ── 5d. Kill Appearances — first-time qualification tracking ─────────────
+    // Records the EXACT date and price when a stock first hits STRIKING+ (≥100)
+    // This is the true "entry baseline" for forward performance tracking.
+    try {
+      await updateKillAppearances(db, scored, weekOf);
+    } catch (err) {
+      console.error('[Kill Pipeline] Appearances update failed (non-fatal):', err.message);
     }
 
     // ── 6. Case Study Entries ──────────────────────────────────────────────

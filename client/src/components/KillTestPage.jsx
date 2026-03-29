@@ -11,6 +11,44 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { authHeaders, API_BASE } from '../services/api';
 
+// ── Lot sizing constants (mirrors server killTestSettings.js) ─────────────────
+const STRIKE_PCT = [0.15, 0.30, 0.25, 0.20, 0.10]; // cumul: 15, 45, 70, 90, 100%
+
+// Client-side sizePosition (mirrors serverSizePosition)
+function clientSizePosition(nav, entryPrice, stopPrice, riskPct = 1) {
+  if (!entryPrice || !stopPrice || !nav || nav <= 0) return null;
+  const rps = Math.abs(entryPrice - stopPrice);
+  if (rps <= 0) return null;
+  const vitality    = nav * (riskPct / 100);
+  const tickerCap   = nav * 0.10;
+  const totalShares = Math.floor(Math.min(Math.floor(vitality / rps), Math.floor(tickerCap / entryPrice)));
+  if (totalShares <= 0) return null;
+  return { totalShares, maxRiskDollar: +(totalShares * rps).toFixed(2) };
+}
+
+// Actual dollar risk for ONE appearance given current lot fills + current NAV.
+// Uses firstStopPrice for sizing (original stop = conservative — ignores ratchets).
+// filledPct = cumulative STRIKE_PCT of filled lots.
+function computeActualRisk(rec, settings) {
+  if (!settings || !rec.firstAppearancePrice || !rec.firstStopPrice) return null;
+  const sized = clientSizePosition(
+    settings.nav, rec.firstAppearancePrice, rec.firstStopPrice, settings.riskPctPerTrade
+  );
+  if (!sized) return null;
+
+  // Sum STRIKE_PCT for each filled lot
+  let filledPct = 0;
+  const fills = rec.lotFills ?? { lot1: { filled: true } }; // default: Lot 1
+  for (let i = 0; i < 5; i++) {
+    if (fills[`lot${i + 1}`]?.filled) filledPct += STRIKE_PCT[i];
+  }
+  if (filledPct === 0) filledPct = STRIKE_PCT[0]; // safety: Lot 1 always entered
+
+  const actualRiskDollar = +(filledPct * sized.maxRiskDollar).toFixed(2);
+  const actualRiskPct    = +(actualRiskDollar / settings.nav * 100).toFixed(3);
+  return { actualRiskDollar, actualRiskPct, maxRiskDollar: sized.maxRiskDollar, filledPct };
+}
+
 // ── Brand palette ─────────────────────────────────────────────────────────────
 const Y      = '#fcf000';   // PNTHR yellow
 const GREEN  = '#28a745';
@@ -166,7 +204,8 @@ function PnlCell({ pct, dollar, isOpen }) {
 }
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, color, dollar }) {
+function StatCard({ label, value, sub, color, dollar, barPct, barCap, barColor }) {
+  const filled = barPct != null && barCap != null ? Math.min(barPct / barCap * 100, 100) : null;
   return (
     <div style={{
       background: BG3, border: `1px solid ${BORDER}`, borderRadius: 8,
@@ -175,6 +214,11 @@ function StatCard({ label, value, sub, color, dollar }) {
       <div style={{ fontSize: 10, color: DIM, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 800, color: color || '#fff', lineHeight: 1.1 }}>{value ?? '—'}</div>
       {dollar != null && <div style={{ fontSize: 12, color: dollar > 0 ? '#4fc870' : dollar < 0 ? '#e06060' : DIM, marginTop: 2, fontWeight: 600 }}>{fmtDollar(dollar)}</div>}
+      {filled != null && (
+        <div style={{ marginTop: 6, height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ width: `${filled}%`, height: '100%', background: barColor || ORANGE, borderRadius: 2, transition: 'width 0.4s' }} />
+        </div>
+      )}
       {sub && <div style={{ fontSize: 11, color: '#555', marginTop: 3 }}>{sub}</div>}
     </div>
   );
@@ -266,7 +310,7 @@ function SettingsPanel({ settings, onSave, onCancel }) {
 }
 
 // ── Active appearances table ───────────────────────────────────────────────────
-function ActiveTable({ rows }) {
+function ActiveTable({ rows, settings }) {
   if (!rows.length) return (
     <div style={{ padding: '48px 0', textAlign: 'center', color: SUBDIM, fontSize: 13 }}>
       No active appearances — qualifying stocks will appear here each Friday after market close.
@@ -349,6 +393,16 @@ function ActiveTable({ rows }) {
                   }}>
                     {fmtRisk(r.firstRiskPct)}
                   </span>
+                  {(() => {
+                    const risk = computeActualRisk(r, settings);
+                    if (!risk) return null;
+                    const pctColor = risk.actualRiskPct >= 0.8 ? ORANGE : '#4fc870';
+                    return (
+                      <div style={{ fontSize: 10, color: pctColor, marginTop: 2, fontWeight: 600 }}>
+                        ${risk.actualRiskDollar.toFixed(0)} · {risk.actualRiskPct.toFixed(2)}% NAV
+                      </div>
+                    );
+                  })()}
                 </TD>
                 <TD><ScorePills kill={r.firstKillScore} analyze={r.firstAnalyzeScore} composite={r.firstCompositeScore} /></TD>
                 <TD><TierBadge tier={r.firstTier} /></TD>
@@ -980,6 +1034,20 @@ export default function KillTestPage() {
     return { winRate, avgProfitPct, totalPnlDollar, avgRisk, avgActivePnl, activeDollarPnl, lotsStats };
   }, [active, closed]);
 
+  // Portfolio heat — actual $ at risk based on current lot fills + current NAV
+  // (separate memo so it updates when settings.nav changes)
+  const portfolioHeat = useMemo(() => {
+    if (!settings || !active.length) return null;
+    let totalRisk = 0, counted = 0;
+    for (const r of active) {
+      const risk = computeActualRisk(r, settings);
+      if (risk) { totalRisk += risk.actualRiskDollar; counted++; }
+    }
+    const heatPct = +(totalRisk / settings.nav * 100).toFixed(2);
+    const cap     = settings.portfolioRiskCap ?? 10;
+    return { dollar: +totalRisk.toFixed(2), pct: heatPct, cap, counted };
+  }, [active, settings]);
+
   // Tab style
   const tabStyle = (key) => ({
     padding: '9px 22px', cursor: 'pointer', border: 'none', fontSize: 13,
@@ -1077,7 +1145,29 @@ export default function KillTestPage() {
           label="Avg Stop Dist."
           value={stats.avgRisk != null ? `${stats.avgRisk}%` : '—'}
           color={ORANGE}
-          sub="entry→stop · $risk always 1%"
+          sub="entry→stop distance"
+        />
+        <StatCard
+          label="Portfolio Heat"
+          value={portfolioHeat != null ? `${portfolioHeat.pct}%` : '—'}
+          sub={portfolioHeat != null
+            ? `$${portfolioHeat.dollar.toLocaleString(undefined, { maximumFractionDigits: 0 })} actual at risk · cap ${portfolioHeat.cap}%`
+            : 'actual $ at risk / NAV'
+          }
+          color={
+            portfolioHeat == null ? '#fff'
+            : portfolioHeat.pct >= portfolioHeat.cap * 0.9 ? RED
+            : portfolioHeat.pct >= portfolioHeat.cap * 0.7 ? ORANGE
+            : GREEN
+          }
+          barPct={portfolioHeat?.pct}
+          barCap={portfolioHeat?.cap}
+          barColor={
+            portfolioHeat == null ? ORANGE
+            : portfolioHeat.pct >= portfolioHeat.cap * 0.9 ? RED
+            : portfolioHeat.pct >= portfolioHeat.cap * 0.7 ? ORANGE
+            : GREEN
+          }
         />
         <StatCard
           label="Active P&L"
@@ -1114,7 +1204,7 @@ export default function KillTestPage() {
         padding: tab === 'analytics' ? 0 : '4px 0',
       }}>
         {tab === 'active' ? (
-          <ActiveTable rows={active} />
+          <ActiveTable rows={active} settings={settings} />
         ) : tab === 'closed' ? (
           <ClosedTable rows={closed} />
         ) : analyticsLoading ? (

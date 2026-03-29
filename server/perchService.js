@@ -418,7 +418,7 @@ ${totwSection}
 
 ${archiveSection}
 
-Write the newsletter in this section structure:
+Write the newsletter in this section structure. Do NOT include a title, headline, or date at the top — the frontend already displays the branded header. Start directly with section 1:
 
 1. The Opening (2-3 paragraphs, set the tone, take a position on what the week means)
 2. Where the Money Is Moving (3-4 paragraphs, sector rotation story)

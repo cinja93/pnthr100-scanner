@@ -26,6 +26,7 @@ import {
 import { runFridayKillPipeline } from './fridayPipeline.js';
 import { getKillTestSettings, saveKillTestSettings } from './killTestSettings.js';
 import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
+import { killTestMonthlyGet, killTestMetricsGet, killTestMonthlyGenerate, generateMonthlySnapshots } from './killTestMonthly.js';
 import {
   checkCaseStudyEntries,
   createKillHistoryIndexes,
@@ -1822,6 +1823,11 @@ app.patch('/api/kill-test/settings', authenticateJWT, requireAdmin, async (req, 
   }
 });
 
+// ── Kill Test Monthly Snapshots & Analytics Metrics ───────────────────────────
+app.get('/api/kill-test/monthly',          authenticateJWT, requireAdmin, killTestMonthlyGet);
+app.get('/api/kill-test/metrics',          authenticateJWT, requireAdmin, killTestMetricsGet);
+app.post('/api/kill-test/monthly/generate', authenticateJWT, requireAdmin, killTestMonthlyGenerate);
+
 // ── Scoring Engine Health ───────────────────────────────────────────────────────
 app.get('/api/scoring-health', authenticateJWT, requireAdmin, async (req, res) => {
   try {
@@ -2681,6 +2687,20 @@ cron.schedule('15 16 * * 5', async () => {
     await runFridayKillPipeline();
   } catch (err) {
     console.error('[Kill Pipeline] Failed:', err.message);
+  }
+}, { timezone: 'America/New_York' });
+
+// ── Cron: Kill Test monthly portfolio snapshot — first Friday of month, 6 PM ET
+// Generates equity curve snapshot + recomputes all analytics metrics
+cron.schedule('0 18 1-7 * 5', async () => {
+  try {
+    console.log('[KillTest Monthly] Generating monthly snapshot...');
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    await generateMonthlySnapshots(db);
+    console.log('[KillTest Monthly] Done.');
+  } catch (err) {
+    console.error('[KillTest Monthly] Failed:', err.message);
   }
 }, { timezone: 'America/New_York' });
 

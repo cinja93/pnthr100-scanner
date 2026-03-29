@@ -19,7 +19,7 @@
  */
 
 import { normalizeSector } from './sectorUtils';
-import { getETFAssetClass, isClassifiedETF } from './etfClassification';
+import { getETFAssetClass, isClassifiedETF, ETF_SECTOR_BENCHMARK, BENCHMARK_TO_SECTOR_KEY } from './etfClassification';
 import { isEtfTicker } from './sizingUtils';
 
 // ─── ETF routing gate ───────────────────────────────────────────────────────
@@ -107,177 +107,118 @@ function scoreETFTrendAlignment(stock, direction) {
 
   if (!price || !ema) {
     warnings.push('Price or EMA unavailable for trend alignment');
-    return { score: 2, max: 10, label: 'PARTIAL', detail: 'EMA data missing — partial credit', warnings };
+    return { score: 5, max: 10, label: 'PARTIAL', detail: 'EMA data missing — partial credit', warnings };
   }
 
-  let pts = 0;
-  // 1. Price vs EMA (0-4)
   const priceAboveEma = price > ema;
-  const aligned = (direction === 'LONG' && priceAboveEma) || (direction === 'SHORT' && !priceAboveEma);
-  if (aligned) pts += 4;
+  const etfTrend = priceAboveEma ? 'LONG' : 'SHORT';
+  const aligned = etfTrend === direction;
 
-  // 2. EMA slope (0-3) — use emaRising if available
-  const emaRising = stock.emaRising ?? stock.emaSlope ?? null;
-  if (emaRising != null) {
-    const slopeAligned = (direction === 'LONG' && emaRising) || (direction === 'SHORT' && !emaRising);
-    if (slopeAligned) pts += 3;
-    else if (emaRising == null) pts += 1;
+  if (aligned) {
+    return {
+      score: 10, max: 10, label: 'ALIGNED',
+      detail: `Price ${priceAboveEma ? 'above' : 'below'} 21 EMA — ${etfTrend} trend confirmed`,
+      warnings,
+    };
   } else {
-    pts += 1; // partial if unknown
+    warnings.push(`ETF trend is ${etfTrend} (price ${priceAboveEma ? 'above' : 'below'} EMA) — trading against trend`);
+    return {
+      score: 0, max: 10, label: 'AGAINST',
+      detail: `Price ${priceAboveEma ? 'above' : 'below'} 21 EMA — trend is ${etfTrend}, trade direction is ${direction}`,
+      warnings,
+    };
   }
-
-  // 3. Trend duration (0-3)
-  const weeks = stock.signalAge ?? stock.weeksSince ?? null;
-  if (weeks != null) {
-    if (weeks >= 4) pts += 3;
-    else if (weeks >= 2) pts += 2;
-    else if (weeks >= 1) pts += 1;
-  } else {
-    pts += 1; // partial
-  }
-
-  const label = pts >= 8 ? 'STRONG' : pts >= 5 ? 'ALIGNED' : pts >= 1 ? 'WEAK' : 'AGAINST';
-  return { score: Math.min(pts, 10), max: 10, label, detail: `ETF own-trend alignment`, warnings };
 }
 
-function scoreETFMacroAlignment(stock, context, assetClass, direction) {
+function scoreETFMacroAlignment(stock, context, ticker, direction) {
   const warnings = [];
-  let pts = 0;
 
-  const spyAbove = context.regime?.live?.spy?.position != null
-    ? context.regime.live.spy.position === 'above'
-    : context.regime?.spyAboveEma ?? null;
-  const qqqAbove = context.regime?.live?.qqq?.position != null
-    ? context.regime.live.qqq.position === 'above'
-    : context.regime?.qqqAboveEma ?? null;
+  // Determine this ETF's own EMA direction
+  const price = stock.currentPrice || stock.price || stock.close;
+  const ema   = stock.ema21;
+  if (!price || !ema) {
+    return { score: 4, max: 8, label: 'PARTIAL', detail: 'EMA data missing — neutral', warnings };
+  }
+  const etfAboveEma = price > ema;
 
-  switch (assetClass) {
+  // Look up the benchmark for this ETF
+  // ETF_SECTOR_BENCHMARK[ticker] is:
+  //   same ticker   → pure sector ETF (always synced with itself)
+  //   sector ticker → compare against that sector ETF's EMA direction
+  //   'SPY'         → compare against SPY EMA direction
+  //   null          → independent asset (bonds/currencies/crypto) — no comparison
+  const benchmark = ETF_SECTOR_BENCHMARK[ticker] ?? null;
 
-    case 'COMMODITY': {
-      // Commodities are independent of equity indices — use own price momentum
-      // Price vs EMA direction is already confirmed in trendAlignment; give base credit
-      pts = 4; // base: commodity operates independently
-      const ret4w = stock.return4w ?? stock.weeklyReturn4 ?? null;
-      if (ret4w != null) {
-        const aligned = (direction === 'LONG' && ret4w > 0) || (direction === 'SHORT' && ret4w < 0);
-        pts += aligned ? 4 : 1;
-      } else {
-        pts += 2; // unknown = neutral partial
-        warnings.push('Commodity ETF — macro alignment based on own momentum');
-      }
-      break;
-    }
+  // Independent assets (bonds, currencies, crypto) — scored on own trend only
+  if (benchmark === null) {
+    const tradeAligned = (direction === 'LONG' && etfAboveEma) || (direction === 'SHORT' && !etfAboveEma);
+    return {
+      score: tradeAligned ? 6 : 2, max: 8,
+      label: tradeAligned ? 'OWN TREND' : 'AGAINST',
+      detail: `Independent asset — no sector benchmark; price ${etfAboveEma ? 'above' : 'below'} 21 EMA`,
+      warnings,
+    };
+  }
 
-    case 'BOND': {
-      // Bonds: INVERSE equity regime alignment (bear market = bond rally)
-      if (spyAbove != null) {
-        const spyBearish = !spyAbove;
-        // Bond LONG aligns with bearish equity (flight to safety)
-        const aligned = (direction === 'LONG' && spyBearish) || (direction === 'SHORT' && !spyBearish);
-        pts += aligned ? 5 : 2;
-      } else {
-        pts += 3; // regime unknown = neutral
-        warnings.push('Bond ETF — inverse equity regime alignment applied');
-      }
-      pts += 3; // base: bond ETFs have independent duration risk
-      break;
-    }
-
-    case 'SECTOR': {
-      // Sector ETFs ARE equities — same regime logic as stocks
-      if (spyAbove != null && qqqAbove != null) {
-        const bearish = !spyAbove || !qqqAbove;
-        const aligned = (direction === 'LONG' && !bearish) || (direction === 'SHORT' && bearish);
-        if (aligned) {
-          const bothAligned = (direction === 'LONG' && spyAbove && qqqAbove) ||
-                              (direction === 'SHORT' && !spyAbove && !qqqAbove);
-          pts += bothAligned ? 8 : 5;
-        } else {
-          warnings.push(`Trading ${direction} against equity regime (SPY/QQQ)`);
-        }
-      } else if (spyAbove != null) {
-        const aligned = (direction === 'LONG' && spyAbove) || (direction === 'SHORT' && !spyAbove);
-        pts += aligned ? 6 : 0;
-      } else {
-        pts += 3; // regime unknown
-        warnings.push('Regime data unavailable for sector ETF');
-      }
-      break;
-    }
-
-    case 'INDEX': {
-      // Index ETFs (SPY, QQQ, DIA, IWM) — circular to check regime against itself
-      // Use trend duration as self-referential macro signal
-      pts += 4; // base: index ETFs ARE the market
-      warnings.push('Index ETF — trend duration used for self-referential macro alignment');
-      const weeks = stock.signalAge ?? stock.weeksSince ?? null;
-      if (weeks != null) {
-        if (weeks >= 4) pts += 4;
-        else if (weeks >= 2) pts += 2;
-      } else {
-        pts += 1;
-      }
-      break;
-    }
-
-    case 'INTERNATIONAL': {
-      // International: partial correlation with US regime + own momentum
-      if (spyAbove != null) {
-        const aligned = (direction === 'LONG' && spyAbove) || (direction === 'SHORT' && !spyAbove);
-        pts += aligned ? 4 : 2; // International decorrelates — partial even if against
-      } else {
-        pts += 3;
-      }
-      const ret4w = stock.return4w ?? null;
-      if (ret4w != null) {
-        const momentumAligned = (direction === 'LONG' && ret4w > 0) || (direction === 'SHORT' && ret4w < 0);
-        pts += momentumAligned ? 4 : 1;
-      } else {
-        pts += 2; // partial
-      }
-      break;
-    }
-
-    case 'CURRENCY': {
-      // Currencies: DXY correlation — USD bull = UUP LONG aligns with risk-off
-      // Simplified: use regime as partial signal, give base credit for independent FX trends
-      if (spyAbove != null) {
-        // Risk-off (spy below) → USD tends to rally; risk-on → commodity currencies rally
-        const riskOff = !spyAbove;
-        const usdBull = ['UUP'].includes((stock.ticker || '').toUpperCase());
-        // For non-USD ETFs, inverse the logic
-        const aligned = usdBull
-          ? ((direction === 'LONG' && riskOff) || (direction === 'SHORT' && !riskOff))
-          : ((direction === 'LONG' && !riskOff) || (direction === 'SHORT' && riskOff));
-        pts += aligned ? 5 : 2;
-      } else {
-        pts += 3;
-      }
-      pts += 3; // base: currency trends are independent of equity indices
-      break;
-    }
-
-    case 'THEMATIC':
-    default: {
-      // Thematic: similar to sector — check regime
-      if (spyAbove != null && qqqAbove != null) {
-        const bearish = !spyAbove || !qqqAbove;
-        const aligned = (direction === 'LONG' && !bearish) || (direction === 'SHORT' && bearish);
-        pts += aligned ? 6 : 2;
-      } else if (spyAbove != null) {
-        const aligned = (direction === 'LONG' && spyAbove) || (direction === 'SHORT' && !spyAbove);
-        pts += aligned ? 5 : 2;
-      } else {
-        pts += 3;
-      }
-      pts += 2; // base: thematic has own momentum
-      break;
+  // Pure sector ETF (XLK, XLE, etc.) — compares against itself
+  if (benchmark === ticker) {
+    const tradeAligned = (direction === 'LONG' && etfAboveEma) || (direction === 'SHORT' && !etfAboveEma);
+    if (tradeAligned) {
+      return { score: 8, max: 8, label: 'ALIGNED', detail: `${ticker} IS the sector benchmark — trend confirms direction`, warnings };
+    } else {
+      warnings.push(`Trading ${direction} against ${ticker} sector trend`);
+      return { score: 0, max: 8, label: 'AGAINST', detail: `${ticker} IS the sector benchmark — trading against its own trend`, warnings };
     }
   }
 
-  pts = Math.min(pts, 8);
-  const label = pts >= 6 ? 'ALIGNED' : pts >= 3 ? 'PARTIAL' : 'AGAINST';
-  return { score: pts, max: 8, label, detail: `${assetClass} macro context`, warnings };
+  // Get benchmark EMA position
+  let benchmarkAboveEma = null;
+  let benchmarkLabel = benchmark;
+
+  if (benchmark === 'SPY') {
+    benchmarkAboveEma = context.regime?.live?.spy?.position != null
+      ? context.regime.live.spy.position === 'above'
+      : context.regime?.spyAboveEma ?? null;
+  } else {
+    const sectorKey = BENCHMARK_TO_SECTOR_KEY[benchmark];
+    if (sectorKey && context.sectorEma?.[sectorKey] != null) {
+      benchmarkAboveEma = context.sectorEma[sectorKey].aboveEma ?? null;
+    }
+  }
+
+  if (benchmarkAboveEma === null) {
+    return { score: 4, max: 8, label: 'PARTIAL', detail: `${benchmarkLabel} EMA data unavailable — neutral`, warnings };
+  }
+
+  // Are the ETF and its benchmark moving in the same direction?
+  const inSync = etfAboveEma === benchmarkAboveEma;
+  const sectorTrend = benchmarkAboveEma ? 'LONG' : 'SHORT';
+  const tradeAligned = (direction === 'LONG' && benchmarkAboveEma) || (direction === 'SHORT' && !benchmarkAboveEma);
+
+  if (inSync && tradeAligned) {
+    // ETF and benchmark both confirm trade direction
+    return {
+      score: 8, max: 8, label: 'ALIGNED',
+      detail: `${ticker} and ${benchmark} both ${sectorTrend} — sector confirms trade`,
+      warnings,
+    };
+  } else if (inSync && !tradeAligned) {
+    // ETF and benchmark are synced but both point against the trade
+    warnings.push(`${ticker} and ${benchmark} both ${sectorTrend} — trading ${direction} against sector`);
+    return {
+      score: 2, max: 8, label: 'AGAINST',
+      detail: `${ticker} and ${benchmark} in sync but ${sectorTrend} — sector opposes ${direction} trade`,
+      warnings,
+    };
+  } else {
+    // ETF and benchmark are diverging — mixed signal
+    warnings.push(`${ticker} (${etfAboveEma ? 'above' : 'below'} EMA) diverging from ${benchmark} (${benchmarkAboveEma ? 'above' : 'below'} EMA)`);
+    return {
+      score: 0, max: 8, label: 'CONFLICTED',
+      detail: `${ticker} and ${benchmark} moving in opposite directions — sector signal unclear`,
+      warnings,
+    };
+  }
 }
 
 function scoreETFMomentumQuality(stock, direction) {
@@ -377,7 +318,7 @@ export function computeETFAnalyzeScore(stock, context) {
   // ETF SELECTION (40 pts)
   const signalQuality  = scoreETFSignalQuality(stock, direction);
   const trendAlignment = scoreETFTrendAlignment(stock, direction);
-  const macroAlignment = scoreETFMacroAlignment(stock, context, assetClass, direction);
+  const macroAlignment = scoreETFMacroAlignment(stock, context, ticker, direction);
   const momentumQuality = scoreETFMomentumQuality(stock, direction);
 
   components.signalQuality  = { score: signalQuality.score,   label: signalQuality.label,   detail: signalQuality.detail,   max: 15 };

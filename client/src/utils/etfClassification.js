@@ -207,3 +207,92 @@ export function isClassifiedETF(ticker) {
   if (!ticker) return false;
   return ticker.toUpperCase() in ETF_ASSET_CLASS;
 }
+
+// ─── Macro Alignment: ETF → S&P 500 Sector Benchmark ───────────────────────
+// Each ETF is compared against its corresponding S&P 500 sector ETF.
+// Logic: is this ETF's price direction (above/below 21 EMA) in sync with its sector benchmark?
+// Pure sector ETFs (XLK, XLE, etc.) compare against themselves — always in sync.
+// Broad market / factor / international ETFs compare against SPY.
+// Bonds, currencies, crypto → null (independent, no sector benchmark).
+export const ETF_SECTOR_BENCHMARK = {
+  // ── Pure S&P 500 Sector ETFs — compare against themselves ───────────────
+  XLK: 'XLK', XLI: 'XLI', XLF: 'XLF', XLV: 'XLV',
+  XLY: 'XLY', XLP: 'XLP', XLRE: 'XLRE', XLB: 'XLB',
+  XLU: 'XLU', XLC: 'XLC', XLE: 'XLE',
+
+  // ── Real Estate ─────────────────────────────────────────────────────────
+  VNQ:  'XLRE',
+
+  // ── Technology & Innovation → XLK ───────────────────────────────────────
+  MAGS: 'XLK', IETC: 'XLK', SMH:  'XLK', XSD:  'XLK', SOXX: 'XLK',
+  VGT:  'XLK', IGV:  'XLK', AIQ:  'XLK', ARTY: 'XLK', CHAT: 'XLK',
+  QTUM: 'XLK', HACK: 'XLK', CLOU: 'XLK', DTCR: 'XLK',
+  BLOK: 'XLK', BKCH: 'XLK', FITE: 'XLK', BOTZ: 'XLK', ROBO: 'XLK',
+
+  // ── Communication Services → XLC ────────────────────────────────────────
+  SOCL: 'XLC', XTL: 'XLC',
+
+  // ── Industrials → XLI ───────────────────────────────────────────────────
+  XAR:  'XLI', ITA:  'XLI', ARKX: 'XLI', JEDI: 'XLI',
+  PAVE: 'XLI', JETS: 'XLI', IGF:  'XLI',
+
+  // ── Energy → XLE ────────────────────────────────────────────────────────
+  XOP:  'XLE', OIH:  'XLE', USAI: 'XLE', LNGX: 'XLE',
+  RSHO: 'XLE', USO:  'XLE', UNG:  'XLE',
+
+  // ── Utilities → XLU ─────────────────────────────────────────────────────
+  NUKZ: 'XLU', POWR: 'XLU', GRID: 'XLU', WTRE: 'XLU',
+
+  // ── Materials → XLB ─────────────────────────────────────────────────────
+  XME:  'XLB', PICK: 'XLB', REMX: 'XLB', GDX:  'XLB',
+  SIL:  'XLB', SLVP: 'XLB', COPJ: 'XLB', COPX: 'XLB',
+  SLX:  'XLB', URA:  'XLB', LIT:  'XLB', SETM: 'XLB',
+  IBAT: 'XLB', GLD:  'XLB', SLV:  'XLB', USCI: 'XLB', DBA: 'XLB',
+
+  // ── Health Care → XLV ───────────────────────────────────────────────────
+  XHE:  'XLV', XBI:  'XLV', IHE:  'XLV',
+
+  // ── Consumer Discretionary → XLY ────────────────────────────────────────
+  ITB:  'XLY', XHB:  'XLY',
+
+  // ── Consumer Staples → XLP ──────────────────────────────────────────────
+  MOO:  'XLP',
+
+  // ── Broad market / factor / international → SPY ─────────────────────────
+  SPY:  'SPY', VOO:  'SPY', RSP:  'SPY', ONEQ: 'SPY', QQQ:  'SPY',
+  NYA:  'SPY', DIA:  'SPY', VTI:  'SPY', IWB:  'SPY', IWV:  'SPY',
+  IWM:  'SPY', IJR:  'SPY', TOPT: 'SPY', IJH:  'SPY', FRTY: 'SPY',
+  SPMO: 'SPY', XMMO: 'SPY', QUAL: 'SPY', MGK:  'SPY', VUG:  'SPY',
+  SCHG: 'SPY', QQQM: 'SPY', SCHD: 'SPY', VIG:  'SPY', DGRO: 'SPY',
+  NOBL: 'SPY', USMV: 'SPY', VYM:  'SPY', NANC: 'SPY',
+  // International
+  EEM:  'SPY', IDMO: 'SPY', SPEU: 'SPY', AIA:  'SPY', INDA: 'SPY',
+  EPI:  'SPY', FXI:  'SPY', YINN: 'SPY', EWJ:  'SPY', EWY:  'SPY',
+  EWC:  'SPY', FLMX: 'SPY', ARGT: 'SPY', EWZ:  'SPY', EWP:  'SPY',
+  GREK: 'SPY', EIS:  'SPY', EPU:  'SPY',
+
+  // ── Independent assets — no sector benchmark ────────────────────────────
+  // Bonds
+  LQD: null, HYG: null, SHY: null, IEF: null, TLT:  null,
+  VTEB: null, MUB: null, PZA: null,
+  // Currencies
+  UUP: null, UDN: null, FXY: null, FXE: null, FXB:  null,
+  FXF: null, FXC: null, FXA: null,
+  // Crypto
+  IBIT: null, BTCO: null, XRPC: null,
+};
+
+// Reverse lookup: sector ETF ticker → key used in context.sectorEma
+export const BENCHMARK_TO_SECTOR_KEY = {
+  XLK:  'Technology',
+  XLV:  'Healthcare',
+  XLF:  'Financial Services',
+  XLI:  'Industrials',
+  XLP:  'Consumer Staples',
+  XLY:  'Consumer Discretionary',
+  XLE:  'Energy',
+  XLU:  'Utilities',
+  XLB:  'Basic Materials',
+  XLC:  'Communication Services',
+  XLRE: 'Real Estate',
+};

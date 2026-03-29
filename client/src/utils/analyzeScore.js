@@ -149,31 +149,26 @@ function scoreETFMacroAlignment(stock, context, ticker, direction) {
   //   null          → independent asset (bonds/currencies/crypto) — no comparison
   const benchmark = ETF_SECTOR_BENCHMARK[ticker] ?? null;
 
-  // Independent assets (bonds, currencies, crypto) — scored on own trend only
+  // Independent assets (bonds, currencies, crypto) — no sector benchmark
   if (benchmark === null) {
-    const tradeAligned = (direction === 'LONG' && etfAboveEma) || (direction === 'SHORT' && !etfAboveEma);
     return {
-      score: tradeAligned ? 6 : 2, max: 8,
-      label: tradeAligned ? 'OWN TREND' : 'AGAINST',
-      detail: `Independent asset — no sector benchmark; price ${etfAboveEma ? 'above' : 'below'} 21 EMA`,
+      score: 4, max: 8, label: 'INDEPENDENT',
+      detail: `No sector benchmark — independent asset class`,
       warnings,
     };
   }
 
-  // Pure sector ETF (XLK, XLE, etc.) — compares against itself
+  // Pure sector ETF (XLK, XLE, etc.) — IS the benchmark; always in alignment with itself
   if (benchmark === ticker) {
-    const tradeAligned = (direction === 'LONG' && etfAboveEma) || (direction === 'SHORT' && !etfAboveEma);
-    if (tradeAligned) {
-      return { score: 8, max: 8, label: 'ALIGNED', detail: `${ticker} IS the sector benchmark — trend confirms direction`, warnings };
-    } else {
-      warnings.push(`Trading ${direction} against ${ticker} sector trend`);
-      return { score: 0, max: 8, label: 'AGAINST', detail: `${ticker} IS the sector benchmark — trading against its own trend`, warnings };
-    }
+    return {
+      score: 8, max: 8, label: 'ALIGNED',
+      detail: `${ticker} IS the sector benchmark`,
+      warnings,
+    };
   }
 
   // Get benchmark EMA position
   let benchmarkAboveEma = null;
-  let benchmarkLabel = benchmark;
 
   if (benchmark === 'SPY') {
     benchmarkAboveEma = context.regime?.live?.spy?.position != null
@@ -187,31 +182,22 @@ function scoreETFMacroAlignment(stock, context, ticker, direction) {
   }
 
   if (benchmarkAboveEma === null) {
-    return { score: 4, max: 8, label: 'PARTIAL', detail: `${benchmarkLabel} EMA data unavailable — neutral`, warnings };
+    return { score: 4, max: 8, label: 'PARTIAL', detail: `${benchmark} EMA data unavailable — neutral`, warnings };
   }
 
-  // Are the ETF and its benchmark moving in the same direction?
+  // Core question: are the ETF and its benchmark moving in the same direction?
+  // Both above EMA (LONG sync) or both below EMA (SHORT sync) = IN ALIGNMENT.
+  // Trade direction conflict is already captured by ETF Trend — no double-penalty here.
   const inSync = etfAboveEma === benchmarkAboveEma;
   const sectorTrend = benchmarkAboveEma ? 'LONG' : 'SHORT';
-  const tradeAligned = (direction === 'LONG' && benchmarkAboveEma) || (direction === 'SHORT' && !benchmarkAboveEma);
 
-  if (inSync && tradeAligned) {
-    // ETF and benchmark both confirm trade direction
+  if (inSync) {
     return {
       score: 8, max: 8, label: 'ALIGNED',
-      detail: `${ticker} and ${benchmark} both ${sectorTrend} — sector confirms trade`,
-      warnings,
-    };
-  } else if (inSync && !tradeAligned) {
-    // ETF and benchmark are synced but both point against the trade
-    warnings.push(`${ticker} and ${benchmark} both ${sectorTrend} — trading ${direction} against sector`);
-    return {
-      score: 2, max: 8, label: 'AGAINST',
-      detail: `${ticker} and ${benchmark} in sync but ${sectorTrend} — sector opposes ${direction} trade`,
+      detail: `${ticker} and ${benchmark} both ${sectorTrend} — in alignment`,
       warnings,
     };
   } else {
-    // ETF and benchmark are diverging — mixed signal
     warnings.push(`${ticker} (${etfAboveEma ? 'above' : 'below'} EMA) diverging from ${benchmark} (${benchmarkAboveEma ? 'above' : 'below'} EMA)`);
     return {
       score: 0, max: 8, label: 'CONFLICTED',

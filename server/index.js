@@ -1791,10 +1791,50 @@ app.get('/api/kill-appearances', authenticateJWT, requireAdmin, async (req, res)
   try {
     const { connectToDatabase } = await import('./database.js');
     const db   = await connectToDatabase();
-    const docs = await db.collection('pnthr_kill_appearances')
+    const col  = db.collection('pnthr_kill_appearances');
+    const docs = await col
       .find({})
       .sort({ firstAppearanceDate: -1, firstKillRank: 1 })
       .toArray();
+
+    // ── Lazy migration: ensure every appearance has lotFills with Lot 1 filled ──
+    // Appearances created before the lot system lack this field. Lot 1 is always
+    // filled at firstAppearancePrice on firstAppearanceDate by definition.
+    const needsFill = docs.filter(d => !d.lotFills);
+    if (needsFill.length) {
+      const { ObjectId } = await import('mongodb');
+      const bulkOps = needsFill.map(d => ({
+        updateOne: {
+          filter: { _id: d._id },
+          update: {
+            $set: {
+              lotFills: {
+                lot1: { filled: true,  fillDate: d.firstAppearanceDate, fillPrice: d.firstAppearancePrice },
+                lot2: { filled: false, fillDate: null, fillPrice: null },
+                lot3: { filled: false, fillDate: null, fillPrice: null },
+                lot4: { filled: false, fillDate: null, fillPrice: null },
+                lot5: { filled: false, fillDate: null, fillPrice: null },
+              },
+              lotsFilledCount: 1,
+            },
+          },
+        },
+      }));
+      await col.bulkWrite(bulkOps);
+      console.log(`[kill-appearances] Backfilled lotFills for ${needsFill.length} appearances`);
+      // Patch in-memory docs so response is immediately correct
+      needsFill.forEach(d => {
+        d.lotFills = {
+          lot1: { filled: true,  fillDate: d.firstAppearanceDate, fillPrice: d.firstAppearancePrice },
+          lot2: { filled: false, fillDate: null, fillPrice: null },
+          lot3: { filled: false, fillDate: null, fillPrice: null },
+          lot4: { filled: false, fillDate: null, fillPrice: null },
+          lot5: { filled: false, fillDate: null, fillPrice: null },
+        };
+        d.lotsFilledCount = d.lotsFilledCount ?? 1;
+      });
+    }
+
     res.json(docs);
   } catch (err) {
     console.error('[kill-appearances]', err);

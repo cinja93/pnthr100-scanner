@@ -474,10 +474,16 @@ export async function generatePerch(db) {
     messages: [{ role: 'user', content: userPrompt }],
   });
 
-  const narrative = response.content
+  let narrative = response.content
     .filter(b => b.type === 'text')
     .map(b => b.text)
     .join('\n');
+
+  // Strip redundant title/date lines — the frontend header already shows these
+  narrative = narrative
+    .replace(/^#\s+PNTHR['']s Perch\s*\n+/i, '')
+    .replace(/^Week of [A-Za-z]+ \d+,\s*\d+\s*\n+/m, '')
+    .trimStart();
 
   // 4. Blacklist check
   const violations = checkBlacklist(narrative);

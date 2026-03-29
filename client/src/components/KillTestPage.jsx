@@ -184,6 +184,7 @@ function StatCard({ label, value, sub, color, dollar }) {
 function SettingsPanel({ settings, onSave, onCancel }) {
   const [vals, setVals] = useState({ ...settings });
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   const field = (key, label, suffix = '', hint = '') => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
@@ -208,7 +209,14 @@ function SettingsPanel({ settings, onSave, onCancel }) {
 
   const handleSave = async () => {
     setSaving(true);
-    try { await onSave(vals); } finally { setSaving(false); }
+    setSaveError(null);
+    try {
+      await onSave(vals);
+    } catch (err) {
+      setSaveError(err.message || 'Save failed — check console');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -226,7 +234,7 @@ function SettingsPanel({ settings, onSave, onCancel }) {
         {field('sweepRate',        'IBKR Sweep Rate',     '%',   'Idle cash interest')}
         {field('riskFreeRate',     'Risk-Free Rate',      '%',   '2-yr Treasury yield')}
       </div>
-      <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+      <div style={{ display: 'flex', gap: 10, marginTop: 18, alignItems: 'center', flexWrap: 'wrap' }}>
         <button
           onClick={handleSave}
           disabled={saving}
@@ -247,6 +255,11 @@ function SettingsPanel({ settings, onSave, onCancel }) {
         >
           Cancel
         </button>
+        {saveError && (
+          <span style={{ fontSize: 12, color: RED, fontWeight: 600 }}>
+            ✗ {saveError}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -918,7 +931,11 @@ export default function KillTestPage() {
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body:    JSON.stringify(vals),
     });
-    if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const j = await res.json(); msg = j.error || msg; } catch {}
+      throw new Error(msg);
+    }
     const updated = await res.json();
     setSettings(updated);
     setShowSettings(false);

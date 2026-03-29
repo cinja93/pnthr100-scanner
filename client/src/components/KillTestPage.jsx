@@ -133,7 +133,7 @@ function LotDots({ lotFills }) {
         return (
           <span
             key={n}
-            title={filled ? `Lot ${n}: $${fill.fillPrice} (${fill.shares} shr)` : `Lot ${n}: pending`}
+            title={filled ? `Lot ${n}: filled @ $${fill.fillPrice ?? '?'}${fill.fillDate ? ` on ${fill.fillDate}` : ''}` : `Lot ${n}: pending`}
             style={{
               width: 10, height: 10, borderRadius: '50%',
               background: filled ? (n <= 3 ? Y : '#00c864') : SUBDIM,

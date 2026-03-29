@@ -150,7 +150,7 @@ function processLotTriggers(appearance, lotFills, lotConfig, ohlc, today) {
           // shares/costBasis intentionally NOT stored — recomputed from settings at query time
         },
       };
-      newFills.push({ lotNum: i + 1, fillPrice, shares: lot.targetShares });
+      newFills.push({ lotNum: i + 1, fillPrice: trigger, shares: lot.targetShares });
     }
   }
 

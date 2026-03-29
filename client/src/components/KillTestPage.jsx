@@ -284,7 +284,7 @@ function ActiveTable({ rows }) {
             <TH>Appeared</TH>
             <TH align="right">Appearance Price</TH>
             <TH align="right">Stop</TH>
-            <TH align="right">Risk %</TH>
+            <TH align="right" style={{ cursor: 'help' }} title="Distance from entry to stop as % of entry price. Dollar risk is always 1% of NAV regardless of this value — wider stops = fewer shares.">Stop Dist. %</TH>
             <TH>Kill / Analyze / Composite</TH>
             <TH>Tier</TH>
             <TH>Lots</TH>
@@ -1074,10 +1074,10 @@ export default function KillTestPage() {
           sub="closed trades"
         />
         <StatCard
-          label="Avg Risk"
+          label="Avg Stop Dist."
           value={stats.avgRisk != null ? `${stats.avgRisk}%` : '—'}
           color={ORANGE}
-          sub="at appearance"
+          sub="entry→stop · $risk always 1%"
         />
         <StatCard
           label="Active P&L"

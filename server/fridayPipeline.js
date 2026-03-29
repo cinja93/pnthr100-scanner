@@ -67,20 +67,89 @@ async function fetchMacroContext() {
   return result;
 }
 
-// ── Kill Appearances: first-time STRIKING+ qualification tracker ──────────────
-// Threshold: totalScore >= 100 (STRIKING or ALPHA PNTHR KILL)
+// ── Server-side Analyze score approximation ───────────────────────────────────
+// Mirrors client-side computeAnalyzeScore() using data available in the pipeline.
+// T1-A Signal Quality: signal + signalAge
+// T1-B Kill Context:   tier / totalScore
+// T1-C Index Trend:    regime spyAboveEma / qqqAboveEma vs direction
+// T1-D Sector Trend:   D2 score proxy (>0 = aligned, <0 = against, 0 = neutral)
+// T2   Execution:      always projected full (8+5 = 13 pts)
+// Max = 53 pts
+function computeServerAnalyzeScore(stock, regime) {
+  const signal    = (stock.signal || '').toUpperCase();
+  const direction = signal === 'BL' ? 'LONG' : 'SHORT';
+
+  // Parse numeric signalAge (stored as integer in pnthr_kill_scores)
+  const signalAge = typeof stock.signalAge === 'number'
+    ? stock.signalAge
+    : parseInt((stock.signalAge || '').replace(/\D/g, '')) || 0;
+
+  let s = 0;
+
+  // T1-A: Signal Quality (0-15)
+  if (signal === 'BL' || signal === 'SS') {
+    if      (signalAge <= 1) s += 15; // FRESH
+    else if (signalAge === 2) s += 8; // RECENT
+    else if (signalAge === 3) s += 3; // STALE
+    // age 4+: 0 pts — EXPIRED
+  }
+
+  // T1-B: Kill Context (0-10)
+  const ks = stock.apexScore ?? stock.totalScore ?? 0;
+  if      (ks >= 130) s += 10;
+  else if (ks >= 100) s += 7;
+  else if (ks >= 80)  s += 4;
+  else if (ks >= 50)  s += 2;
+  else                s += 1;
+
+  // T1-C: Index Trend (0-8) — NASDAQ stocks route to QQQ, others to SPY
+  const isNasdaq     = (stock.exchange || '').toUpperCase() === 'NASDAQ';
+  const primaryAbove = isNasdaq ? (regime?.qqqAboveEma ?? null) : (regime?.spyAboveEma ?? null);
+  if (primaryAbove !== null) {
+    const aligned = (direction === 'LONG' && primaryAbove) || (direction === 'SHORT' && !primaryAbove);
+    s += aligned ? 8 : 0;
+  }
+
+  // T1-D: Sector Trend (0-7) — D2 score proxy
+  // D2 > 0 = sector aligned with signal direction
+  // D2 < 0 = sector against
+  // D2 = 0 = neutral / no data → partial credit
+  const d2 = stock.dimensions?.d2?.score ?? stock.scoreDetail?.d2?.score ?? null;
+  if      (d2 === null) s += 3; // no sector data — neutral
+  else if (d2 > 0)      s += 7; // sector aligned
+  else if (d2 === 0)    s += 3; // neutral
+  else                  s += 0; // sector against
+
+  // T2: Execution — always projected at full (sizing + risk cap = 13 pts)
+  s += 13;
+
+  const max = 53;
+  const pct = Math.round((s / max) * 100);
+  const composite = Math.round(ks * (pct / 100));
+  return { analyzeScore: pct, compositeScore: composite };
+}
+
+// ── Kill Appearances: first-qualification tracking ────────────────────────────
+// Thresholds: Kill score > 100 AND Analyze > 80% AND Composite > 75
 // Logic:
 //   - If no existing appearance for this ticker+signal within 8 weeks → new record
 //   - If existing record found → update lastSeen fields only (preserve first appearance)
 // This gives us the exact date + price a stock FIRST qualified for action.
 
-const APPEARANCE_THRESHOLD = 100;
+const KILL_THRESHOLD     = 100;
+const ANALYZE_THRESHOLD  = 80;
+const COMPOSITE_THRESHOLD = 75;
 
-async function updateKillAppearances(db, scored, weekOf) {
-  const qualifying = scored.filter(s =>
-    s.apexScore >= APPEARANCE_THRESHOLD &&
-    (s.signal === 'BL' || s.signal === 'SS')
-  );
+async function updateKillAppearances(db, scored, weekOf, regime) {
+  // Apply all three thresholds: Kill > 100, Analyze > 80%, Composite > 75
+  const qualifying = scored.filter(s => {
+    if (!s.signal || (s.signal !== 'BL' && s.signal !== 'SS')) return false;
+    if ((s.apexScore ?? 0) <= KILL_THRESHOLD) return false;
+    const { analyzeScore, compositeScore } = computeServerAnalyzeScore(s, regime);
+    s._analyzeScore   = analyzeScore;
+    s._compositeScore = compositeScore;
+    return analyzeScore > ANALYZE_THRESHOLD && compositeScore > COMPOSITE_THRESHOLD;
+  });
 
   if (qualifying.length === 0) return;
 
@@ -100,19 +169,21 @@ async function updateKillAppearances(db, scored, weekOf) {
     });
 
     if (!existing) {
-      // First time this stock has qualified at this threshold in this signal cycle
+      // First time this stock has qualified — NEVER overwrite this record
       await db.collection('pnthr_kill_appearances').insertOne({
         ticker:               s.ticker,
         signal:               s.signal,
         sector:               s.sector ?? null,
         exchange:             s.exchange ?? null,
-        // First appearance snapshot — NEVER overwritten
+        // First appearance snapshot
         firstAppearanceDate:  weekOf,
         firstAppearancePrice: s.currentPrice ?? null,
         firstKillScore:       s.apexScore,
         firstKillRank:        s.killRank ?? null,
         firstTier:            s.tier,
         firstSignalAge:       s.signalAge ?? null,
+        firstAnalyzeScore:    s._analyzeScore,
+        firstCompositeScore:  s._compositeScore,
         firstConvictionPct:   s.scoreDetail?.d3?.convictionPct ?? null,
         firstSlopePct:        s.scoreDetail?.d3?.slopePct ?? null,
         firstSeparationPct:   s.scoreDetail?.d3?.separationPct ?? null,
@@ -121,6 +192,8 @@ async function updateKillAppearances(db, scored, weekOf) {
         lastSeenPrice:        s.currentPrice ?? null,
         lastKillScore:        s.apexScore,
         lastKillRank:         s.killRank ?? null,
+        lastAnalyzeScore:     s._analyzeScore,
+        lastCompositeScore:   s._compositeScore,
         // Outcome (filled in later when signal exits)
         exitDate:             null,
         exitPrice:            null,
@@ -132,16 +205,18 @@ async function updateKillAppearances(db, scored, weekOf) {
       });
       newCount++;
     } else {
-      // Already on the list — update lastSeen only
+      // Already on the list — update lastSeen only, preserve first appearance
       await db.collection('pnthr_kill_appearances').updateOne(
         { _id: existing._id },
         {
           $set: {
-            lastSeenDate:  weekOf,
-            lastSeenPrice: s.currentPrice ?? null,
-            lastKillScore: s.apexScore,
-            lastKillRank:  s.killRank ?? null,
-            updatedAt:     new Date(),
+            lastSeenDate:       weekOf,
+            lastSeenPrice:      s.currentPrice ?? null,
+            lastKillScore:      s.apexScore,
+            lastKillRank:       s.killRank ?? null,
+            lastAnalyzeScore:   s._analyzeScore,
+            lastCompositeScore: s._compositeScore,
+            updatedAt:          new Date(),
           },
         }
       );
@@ -448,7 +523,7 @@ export async function runFridayKillPipeline() {
     // Records the EXACT date and price when a stock first hits STRIKING+ (≥100)
     // This is the true "entry baseline" for forward performance tracking.
     try {
-      await updateKillAppearances(db, scored, weekOf);
+      await updateKillAppearances(db, scored, weekOf, contextSummary);
     } catch (err) {
       console.error('[Kill Pipeline] Appearances update failed (non-fatal):', err.message);
     }

@@ -85,14 +85,23 @@ async function computePositionSnapshot(appearances, monthStr, settings, useLastS
   const monthEndDate = lastDayOfMonth(...monthStr.split('-').map(Number));
 
   for (const appr of appearances) {
-    if (!appr.lotFills) continue;
     const isShort = appr.signal === 'SS';
+
+    // ── Lot fills: build default if missing (Lot 1 always filled at appearance) ──
+    const lotFills = appr.lotFills ?? {
+      lot1: { filled: true,  fillDate: appr.firstAppearanceDate, fillPrice: appr.firstAppearancePrice },
+      lot2: { filled: false, fillDate: null, fillPrice: null },
+      lot3: { filled: false, fillDate: null, fillPrice: null },
+      lot4: { filled: false, fillDate: null, fillPrice: null },
+      lot5: { filled: false, fillDate: null, fillPrice: null },
+    };
 
     // ── Dynamically recompute shares from current NAV + risk% ──────────────
     // This is the key: we do NOT use stored lotFills.shares (baked-in at creation).
     // We recalculate from current settings so NAV changes are fully retroactive.
     const entry = appr.firstAppearancePrice;
-    const stop  = appr.firstStopPrice;
+    // Fallback chain for stop price: stored firstStopPrice → currentStop → skip
+    const stop  = appr.firstStopPrice ?? appr.currentStop ?? null;
     if (!entry || !stop) continue;
 
     const sized = serverSizePosition({
@@ -109,7 +118,7 @@ async function computePositionSnapshot(appearances, monthStr, settings, useLastS
     let shares = 0, cost = 0;
     for (let i = 0; i < 5; i++) {
       const fillKey = `lot${i + 1}`;
-      const fill    = appr.lotFills[fillKey];
+      const fill    = lotFills[fillKey];
       if (!fill?.filled || !fill.fillDate) continue;
       if (fill.fillDate > monthEndDate) continue; // lot filled after this month — skip
 
@@ -125,24 +134,30 @@ async function computePositionSnapshot(appearances, monthStr, settings, useLastS
     const avgCost = cost / shares;
 
     // Get month-end price
+    // Fallback chain: lastSeenPrice → dailySnapshot close → FMP fetch → appearance price
+    // Using appearance price as last resort gives 0% unrealized P&L (conservative)
+    // rather than excluding the position from capital calculations entirely.
     let endPrice = null;
-    if (useLastSeen) {
-      endPrice = appr.lastSeenPrice;
-    } else {
-      // Try dailySnapshots first (most efficient)
-      const monthEnd = lastDayOfMonth(...monthStr.split('-').map(Number));
-      const snap = (appr.dailySnapshots || [])
-        .filter(s => s.date <= monthEnd)
-        .sort((a, b) => b.date.localeCompare(a.date))[0];
-      endPrice = snap?.close ?? appr.lastSeenPrice;
 
-      // If no snapshot, fetch from FMP (only for past months)
-      if (!endPrice) {
-        endPrice = await fetchMonthEndPrice(appr.ticker, monthStr);
-      }
+    // Try lastSeenPrice first (always fastest, already fetched)
+    endPrice = appr.lastSeenPrice ?? null;
+
+    if (!endPrice) {
+      // Try dailySnapshots (most recent bar at or before month end)
+      const snap = (appr.dailySnapshots || [])
+        .filter(s => s.date <= monthEndDate)
+        .sort((a, b) => b.date.localeCompare(a.date))[0];
+      endPrice = snap?.close ?? null;
     }
 
-    if (!endPrice) continue;
+    if (!endPrice) {
+      // Fetch from FMP (works for both current and past months)
+      endPrice = await fetchMonthEndPrice(appr.ticker, monthStr);
+    }
+
+    // Final fallback: use appearance price → unrealized P&L = 0 for this position,
+    // but it IS included in totalInvested so idle cash is correctly reduced.
+    if (!endPrice) endPrice = entry;
 
     const pnl = isShort
       ? (avgCost - endPrice) * shares
@@ -177,9 +192,9 @@ async function generateOneMonthSnapshot(db, monthStr, settings, prevSnapshot) {
   // Realized P&L this month only
   const realizedThisMonth = closedThisMonth.reduce((s, a) => s + (a.profitDollar || 0), 0);
 
-  // Open positions snapshot
+  // Open positions snapshot (useLastSeen param removed — now uses unified fallback chain)
   const { totalInvested, unrealizedPnl, openTickers } = await computePositionSnapshot(
-    openAtEnd, monthStr, settings, isCurrentMonth
+    openAtEnd, monthStr, settings
   );
 
   // Idle cash = NAV + realized gains - invested capital (can go negative if overallocated)

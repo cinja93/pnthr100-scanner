@@ -198,14 +198,15 @@ async function updateKillAppearances(db, scored, weekOf, regime, jungleSignals =
             maxRiskDollar: sized.maxRiskDollar,
             lots,
           };
-          // Lot 1 filled immediately at appearance price
-          const lot1 = lots[0];
+          // Lot 1 filled immediately at appearance price.
+          // Store ONLY fillDate + fillPrice (historical facts).
+          // shares/costBasis are intentionally omitted — recomputed from settings dynamically.
           lotFills = {
-            lot1: { filled: true, fillDate: weekOf, fillPrice: price, shares: lot1.targetShares, costBasis: +(lot1.targetShares * price).toFixed(2) },
-            lot2: { filled: false, fillDate: null, fillPrice: null, shares: lots[1].targetShares, costBasis: 0 },
-            lot3: { filled: false, fillDate: null, fillPrice: null, shares: lots[2].targetShares, costBasis: 0 },
-            lot4: { filled: false, fillDate: null, fillPrice: null, shares: lots[3].targetShares, costBasis: 0 },
-            lot5: { filled: false, fillDate: null, fillPrice: null, shares: lots[4].targetShares, costBasis: 0 },
+            lot1: { filled: true,  fillDate: weekOf, fillPrice: price },
+            lot2: { filled: false, fillDate: null,   fillPrice: null  },
+            lot3: { filled: false, fillDate: null,   fillPrice: null  },
+            lot4: { filled: false, fillDate: null,   fillPrice: null  },
+            lot5: { filled: false, fillDate: null,   fillPrice: null  },
           };
         }
       }

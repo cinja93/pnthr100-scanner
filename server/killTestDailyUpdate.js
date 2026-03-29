@@ -59,10 +59,12 @@ async function fetchDailyOHLC(ticker, dateStr) {
   }
 }
 
-// ── Ensure lot config exists on appearance ────────────────────────────────────
-// For appearances created before lot tracking was added, compute it retroactively
-function ensureLotConfig(appearance, settings) {
-  if (appearance.lotConfig) return appearance.lotConfig;
+// ── Compute lot config from CURRENT settings (always recomputed — never cached) ─
+// DESIGN INTENT: Share counts are a pure function of (NAV, riskPct, entry, stop).
+// We NEVER trust the stored lotConfig.totalShares because the user may have changed
+// NAV or riskPct. Changing settings must retroactively rescale all P&L.
+// The only historical facts we preserve are: fillDate and fillPrice.
+function computeLotConfig(appearance, settings) {
   const { nav, riskPctPerTrade } = settings;
   const entry = appearance.firstAppearancePrice;
   const stop  = appearance.firstStopPrice;
@@ -74,31 +76,34 @@ function ensureLotConfig(appearance, settings) {
   const lots = buildServerLotConfig(sized.totalShares, entry, appearance.signal);
   return {
     nav,
-    riskPct:     riskPctPerTrade,
-    totalShares: sized.totalShares,
+    riskPct:       riskPctPerTrade,
+    totalShares:   sized.totalShares,
     maxRiskDollar: sized.maxRiskDollar,
     lots,
   };
 }
 
-// ── Ensure initial lot fills exist ────────────────────────────────────────────
-// Lot 1 is always filled immediately at first appearance
-function ensureInitialLotFills(appearance, lotConfig) {
-  if (appearance.lotFills) return appearance.lotFills;
-  if (!lotConfig) return null;
-  const lot1 = lotConfig.lots[0];
+// ── Ensure initial lot fill DATES exist (date/price only — no shares stored) ──
+// Lot 1 is always filled immediately at first appearance.
+// We store only (filled, fillDate, fillPrice) — NOT shares or costBasis,
+// because those are recomputed from current settings dynamically.
+function ensureInitialLotFills(appearance) {
+  if (appearance.lotFills) {
+    // Strip stale shares/costBasis from stored fills — they will be recomputed
+    const cleaned = {};
+    for (let i = 1; i <= 5; i++) {
+      const k = `lot${i}`;
+      const f = appearance.lotFills[k];
+      if (f) cleaned[k] = { filled: !!f.filled, fillDate: f.fillDate ?? null, fillPrice: f.fillPrice ?? null };
+    }
+    return cleaned;
+  }
   return {
-    lot1: {
-      filled:    true,
-      fillDate:  appearance.firstAppearanceDate,
-      fillPrice: appearance.firstAppearancePrice,
-      shares:    lot1.targetShares,
-      costBasis: +(lot1.targetShares * appearance.firstAppearancePrice).toFixed(2),
-    },
-    lot2: { filled: false, fillDate: null, fillPrice: null, shares: lotConfig.lots[1].targetShares, costBasis: 0 },
-    lot3: { filled: false, fillDate: null, fillPrice: null, shares: lotConfig.lots[2].targetShares, costBasis: 0 },
-    lot4: { filled: false, fillDate: null, fillPrice: null, shares: lotConfig.lots[3].targetShares, costBasis: 0 },
-    lot5: { filled: false, fillDate: null, fillPrice: null, shares: lotConfig.lots[4].targetShares, costBasis: 0 },
+    lot1: { filled: true,  fillDate: appearance.firstAppearanceDate, fillPrice: appearance.firstAppearancePrice },
+    lot2: { filled: false, fillDate: null, fillPrice: null },
+    lot3: { filled: false, fillDate: null, fillPrice: null },
+    lot4: { filled: false, fillDate: null, fillPrice: null },
+    lot5: { filled: false, fillDate: null, fillPrice: null },
   };
 }
 
@@ -136,15 +141,13 @@ function processLotTriggers(appearance, lotFills, lotConfig, ohlc, today) {
       : ohlc.high >= trigger; // BL: price rises to or above trigger
 
     if (hit) {
-      const fillPrice = trigger; // fill at trigger price
       updated = {
         ...updated,
         [key]: {
           filled:    true,
           fillDate:  today,
-          fillPrice,
-          shares:    lot.targetShares,
-          costBasis: +(lot.targetShares * fillPrice).toFixed(2),
+          fillPrice: trigger,
+          // shares/costBasis intentionally NOT stored — recomputed from settings at query time
         },
       };
       newFills.push({ lotNum: i + 1, fillPrice, shares: lot.targetShares });
@@ -154,15 +157,20 @@ function processLotTriggers(appearance, lotFills, lotConfig, ohlc, today) {
   return { lotFills: updated, newFills };
 }
 
-// ── Compute current position metrics from lot fills ───────────────────────────
-function computePositionMetrics(lotFills) {
-  if (!lotFills) return { totalShares: 0, totalCost: 0, avgCost: 0, lotsFilledCount: 0 };
+// ── Compute current position metrics from lot fills + current lot config ───────
+// shares come from lotConfig (dynamic, based on current NAV)
+// prices come from lotFills (historical facts: fillDate, fillPrice)
+function computePositionMetrics(lotFills, lotConfig) {
+  if (!lotFills || !lotConfig) return { totalShares: 0, totalCost: 0, avgCost: 0, lotsFilledCount: 0 };
   let totalShares = 0, totalCost = 0, lotsFilledCount = 0;
-  for (let i = 1; i <= 5; i++) {
-    const f = lotFills[`lot${i}`];
-    if (f?.filled) {
-      totalShares    += f.shares || 0;
-      totalCost      += f.costBasis || 0;
+  for (let i = 0; i < 5; i++) {
+    const f    = lotFills[`lot${i + 1}`];
+    const lot  = lotConfig.lots[i];
+    if (f?.filled && lot) {
+      const lotShares = lot.targetShares;
+      const fillPrice = f.fillPrice ?? lot.triggerPrice;
+      totalShares    += lotShares;
+      totalCost      += lotShares * fillPrice;
       lotsFilledCount++;
     }
   }
@@ -219,8 +227,8 @@ export async function runKillTestDailyUpdate() {
       }
 
       const isShort   = appr.signal === 'SS';
-      const lotConfig = ensureLotConfig(appr, settings);
-      let lotFills    = ensureInitialLotFills(appr, lotConfig);
+      const lotConfig = computeLotConfig(appr, settings);   // always recomputed from current NAV
+      let lotFills    = ensureInitialLotFills(appr);         // historical dates/prices only
 
       // ── 1. Check lot triggers ─────────────────────────────────────────
       const { lotFills: updatedFills, newFills } = processLotTriggers(
@@ -246,8 +254,8 @@ export async function runKillTestDailyUpdate() {
         ? ohlc.high >= currentStop
         : ohlc.low  <= currentStop;
 
-      // ── 4. Compute position metrics ───────────────────────────────────
-      const { totalShares, totalCost, avgCost, lotsFilledCount } = computePositionMetrics(lotFills);
+      // ── 4. Compute position metrics (shares from current NAV, prices from history)
+      const { totalShares, totalCost, avgCost, lotsFilledCount } = computePositionMetrics(lotFills, lotConfig);
       const exitPrice = stopHit ? currentStop : null;
       const closePrice = stopHit ? exitPrice : ohlc.close;
       const { pnlPct, pnlDollar } = computePnl(avgCost, closePrice, totalShares, appr.signal);

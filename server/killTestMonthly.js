@@ -73,24 +73,51 @@ async function fetchMonthEndPrice(ticker, monthStr) {
 }
 
 // ── Compute invested capital & unrealized P&L for a set of appearances ────────
-// Uses last-known price from dailySnapshots or fetches from FMP for historical months
-async function computePositionSnapshot(appearances, monthStr, useLastSeen = false) {
+// IMPORTANT: Share counts are ALWAYS recomputed from current settings NAV + riskPct.
+// Only fillDate and fillPrice are treated as historical facts.
+// This ensures changing NAV retroactively rescales all P&L correctly.
+async function computePositionSnapshot(appearances, monthStr, settings, useLastSeen = false) {
   let totalInvested = 0;
   let unrealizedPnl = 0;
   const openTickers = [];
+
+  const { serverSizePosition, buildServerLotConfig } = await import('./killTestSettings.js');
+  const monthEndDate = lastDayOfMonth(...monthStr.split('-').map(Number));
 
   for (const appr of appearances) {
     if (!appr.lotFills) continue;
     const isShort = appr.signal === 'SS';
 
-    // Compute invested capital from filled lots
+    // ── Dynamically recompute shares from current NAV + risk% ──────────────
+    // This is the key: we do NOT use stored lotFills.shares (baked-in at creation).
+    // We recalculate from current settings so NAV changes are fully retroactive.
+    const entry = appr.firstAppearancePrice;
+    const stop  = appr.firstStopPrice;
+    if (!entry || !stop) continue;
+
+    const sized = serverSizePosition({
+      nav:        settings.nav,
+      entryPrice: entry,
+      stopPrice:  stop,
+      riskPct:    settings.riskPctPerTrade,
+    });
+    if (!sized || sized.totalShares <= 0) continue;
+
+    const lots = buildServerLotConfig(sized.totalShares, entry, appr.signal);
+
+    // Compute shares and cost from which lots were triggered by month end
     let shares = 0, cost = 0;
-    for (let i = 1; i <= 5; i++) {
-      const f = appr.lotFills[`lot${i}`];
-      if (f?.filled && f.fillDate && f.fillDate <= lastDayOfMonth(...monthStr.split('-').map(Number))) {
-        shares += f.shares || 0;
-        cost   += f.costBasis || 0;
-      }
+    for (let i = 0; i < 5; i++) {
+      const fillKey = `lot${i + 1}`;
+      const fill    = appr.lotFills[fillKey];
+      if (!fill?.filled || !fill.fillDate) continue;
+      if (fill.fillDate > monthEndDate) continue; // lot filled after this month — skip
+
+      // Use historical fill price (real fact) × dynamically-computed share count
+      const lotShares = lots[i].targetShares;
+      const fillPrice = fill.fillPrice ?? entry;
+      shares += lotShares;
+      cost   += lotShares * fillPrice;
     }
     if (shares === 0) continue;
 
@@ -152,7 +179,7 @@ async function generateOneMonthSnapshot(db, monthStr, settings, prevSnapshot) {
 
   // Open positions snapshot
   const { totalInvested, unrealizedPnl, openTickers } = await computePositionSnapshot(
-    openAtEnd, monthStr, isCurrentMonth
+    openAtEnd, monthStr, settings, isCurrentMonth
   );
 
   // Idle cash = NAV + realized gains - invested capital (can go negative if overallocated)

@@ -100,34 +100,23 @@ function scoreETFSignalQuality(stock, direction) {
   return { score: Math.min(pts, 15), max: 15, label, detail: `${signal}${signalAge != null ? '+' + signalAge : ''} signal`, warnings };
 }
 
-function scoreETFTrendAlignment(stock, direction) {
-  const warnings = [];
+// ETF Trend: direction indicator only — no scoring.
+// Price above 21 EMA = LONG trend; price below = SHORT trend.
+// This direction feeds Signal Quality and Macro Alignment checks.
+// Trade direction conflict is NOT penalized here — Macro Alignment handles alignment.
+function scoreETFTrendAlignment(stock) {
   const price = stock.currentPrice || stock.price || stock.close;
-  const ema = stock.ema21;
-
+  const ema   = stock.ema21;
   if (!price || !ema) {
-    warnings.push('Price or EMA unavailable for trend alignment');
-    return { score: 5, max: 10, label: 'PARTIAL', detail: 'EMA data missing — partial credit', warnings };
+    return { score: 0, max: 0, label: 'UNKNOWN', detail: 'EMA data missing', warnings: [] };
   }
-
-  const priceAboveEma = price > ema;
-  const etfTrend = priceAboveEma ? 'LONG' : 'SHORT';
-  const aligned = etfTrend === direction;
-
-  if (aligned) {
-    return {
-      score: 10, max: 10, label: 'ALIGNED',
-      detail: `Price ${priceAboveEma ? 'above' : 'below'} 21 EMA — ${etfTrend} trend confirmed`,
-      warnings,
-    };
-  } else {
-    warnings.push(`ETF trend is ${etfTrend} (price ${priceAboveEma ? 'above' : 'below'} EMA) — trading against trend`);
-    return {
-      score: 0, max: 10, label: 'AGAINST',
-      detail: `Price ${priceAboveEma ? 'above' : 'below'} 21 EMA — trend is ${etfTrend}, trade direction is ${direction}`,
-      warnings,
-    };
-  }
+  const direction = price > ema ? 'LONG' : 'SHORT';
+  return {
+    score: 0, max: 0,
+    label: direction,
+    detail: `Price ${price > ema ? 'above' : 'below'} 21 EMA`,
+    warnings: [],
+  };
 }
 
 function scoreETFMacroAlignment(stock, context, ticker, direction) {
@@ -295,22 +284,29 @@ export function computeETFAnalyzeScore(stock, context) {
   if (!stock || !context) return null;
 
   const ticker = (stock.ticker || stock.symbol || '').toUpperCase();
-  const direction = inferDirection(stock);
   const assetClass = getETFAssetClass(ticker) || 'THEMATIC';
+
+  // ETF direction is determined by price vs 21 EMA — not by signal.
+  // Price above EMA = LONG trend; price below = SHORT trend.
+  const price = stock.currentPrice || stock.price || stock.close;
+  const ema   = stock.ema21;
+  const direction = (price && ema)
+    ? (price > ema ? 'LONG' : 'SHORT')
+    : inferDirection(stock); // fallback to signal if EMA unavailable
 
   const components = {};
   const allWarnings = [];
 
-  // ETF SELECTION (40 pts)
-  const signalQuality  = scoreETFSignalQuality(stock, direction);
-  const trendAlignment = scoreETFTrendAlignment(stock, direction);
-  const macroAlignment = scoreETFMacroAlignment(stock, context, ticker, direction);
+  // ETF SELECTION — Signal Quality (15), ETF Trend (0, direction only), Macro Alignment (8), Momentum (7)
+  const signalQuality   = scoreETFSignalQuality(stock, direction);
+  const trendAlignment  = scoreETFTrendAlignment(stock);           // direction indicator, no score
+  const macroAlignment  = scoreETFMacroAlignment(stock, context, ticker, direction);
   const momentumQuality = scoreETFMomentumQuality(stock, direction);
 
-  components.signalQuality  = { score: signalQuality.score,   label: signalQuality.label,   detail: signalQuality.detail,   max: 15 };
-  components.trendAlignment = { score: trendAlignment.score,  label: trendAlignment.label,  detail: trendAlignment.detail,  max: 10 };
-  components.macroAlignment = { score: macroAlignment.score,  label: macroAlignment.label,  detail: macroAlignment.detail,  max: 8  };
-  components.momentumQuality = { score: momentumQuality.score, label: momentumQuality.label, detail: momentumQuality.detail, max: 7  };
+  components.signalQuality   = { score: signalQuality.score,    label: signalQuality.label,    detail: signalQuality.detail,    max: 15 };
+  components.trendAlignment  = { score: 0,                      label: trendAlignment.label,   detail: trendAlignment.detail,   max: 0  }; // display only
+  components.macroAlignment  = { score: macroAlignment.score,   label: macroAlignment.label,   detail: macroAlignment.detail,   max: 8  };
+  components.momentumQuality = { score: momentumQuality.score,  label: momentumQuality.label,  detail: momentumQuality.detail,  max: 7  };
 
   allWarnings.push(...signalQuality.warnings, ...trendAlignment.warnings,
                    ...macroAlignment.warnings, ...momentumQuality.warnings);
@@ -333,7 +329,7 @@ export function computeETFAnalyzeScore(stock, context) {
   const score = Object.values(components)
     .filter(c => c.max)
     .reduce((s, c) => s + (c.score || 0), 0);
-  const max = 53;
+  const max = 43; // 15 (signal) + 8 (macro) + 7 (momentum) + 8 (sizing) + 5 (risk) — ETF Trend is display-only
   const pct = Math.round((score / max) * 100);
   const color = pct >= 80 ? '#28a745' : pct >= 60 ? '#FFD700' : '#dc3545';
 

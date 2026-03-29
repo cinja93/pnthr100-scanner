@@ -964,6 +964,19 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
           function ScoreLine({ label, comp, max: lineMax }) {
             const s = comp?.score ?? 0;
             const lbl = comp?.label ?? '—';
+            // Direction-only row (max=0): ETF Trend shows LONG/SHORT with no score fraction
+            if (!lineMax) {
+              const dirColor = lbl === 'LONG' ? '#28a745' : lbl === 'SHORT' ? '#dc3545' : '#888';
+              return (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12 }}>
+                  <span style={{ color: '#888' }}>{label}</span>
+                  <span style={{ display: 'flex', gap: 8 }}>
+                    <span style={{ color: '#555' }}>—</span>
+                    <span style={{ color: dirColor, fontWeight: 600, minWidth: 80, textAlign: 'right' }}>{lbl}</span>
+                  </span>
+                </div>
+              );
+            }
             const lineColor = s >= lineMax * 0.7 ? '#28a745' : s > 0 ? '#FFD700' : '#dc3545';
             return (
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12 }}>
@@ -992,7 +1005,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                     {ar.isETF ? `ETF SELECTION${ar.assetClass ? ` [${ar.assetClass}]` : ''}` : 'STOCK SELECTION'}
                   </div>
                   <ScoreLine label="Signal Quality"  comp={ar.components.signalQuality} max={15} />
-                  <ScoreLine label={ar.isETF ? 'ETF Trend'       : 'Kill Context'}  comp={ar.isETF ? ar.components.trendAlignment : ar.components.killContext}   max={10} />
+                  <ScoreLine label={ar.isETF ? 'ETF Trend'       : 'Kill Context'}  comp={ar.isETF ? ar.components.trendAlignment : ar.components.killContext}   max={ar.isETF ? 0 : 10} />
                   <ScoreLine label={ar.isETF ? 'Macro Alignment' : 'Index Trend'}   comp={ar.isETF ? ar.components.macroAlignment : ar.components.indexTrend}    max={8}  />
                   <ScoreLine label={ar.isETF ? 'Momentum Quality' : 'Sector Trend'}  comp={ar.isETF ? ar.components.momentumQuality : ar.components.sectorTrend}  max={7}  />
                   <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginTop: 10, marginBottom: 6 }}>EXECUTION (PROJECTED)</div>

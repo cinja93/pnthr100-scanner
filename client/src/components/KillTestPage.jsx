@@ -925,6 +925,8 @@ export default function KillTestPage() {
   const [tab,           setTab]           = useState('active');
   const [showSettings,  setShowSettings]  = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [refreshing,    setRefreshing]    = useState(false);
+  const [refreshedAt,   setRefreshedAt]   = useState(null);
 
   // Load appearances + settings on mount
   useEffect(() => {
@@ -1003,6 +1005,42 @@ export default function KillTestPage() {
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 3000);
   };
+
+  const handleRefreshPrices = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/kill-test/refresh-prices`, {
+        method: 'POST', headers: authHeaders(),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { prices, refreshedAt: ts } = await res.json();
+
+      // Merge new prices + P&L into local data without a full reload
+      setData(prev => prev.map(r => {
+        const price = prices[r.ticker];
+        if (price == null || r.exitDate) return r;
+        const isShort   = r.signal === 'SS';
+        const avgCost   = r.currentAvgCost ?? r.firstAppearancePrice;
+        const shares    = r.currentShares  ?? 0;
+        const pnlPct    = avgCost
+          ? isShort ? ((avgCost - price) / avgCost) * 100
+                    : ((price - avgCost) / avgCost) * 100
+          : 0;
+        const pnlDollar = isShort ? (avgCost - price) * shares : (price - avgCost) * shares;
+        return {
+          ...r,
+          lastSeenPrice:    price,
+          currentPnlPct:    +pnlPct.toFixed(2),
+          currentPnlDollar: +pnlDollar.toFixed(2),
+        };
+      }));
+      setRefreshedAt(ts ? new Date(ts) : new Date());
+    } catch (err) {
+      console.error('[refresh-prices]', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   const active = useMemo(() => data.filter(r => !r.exitDate), [data]);
   const closed = useMemo(() => data.filter(r =>  r.exitDate), [data]);
@@ -1107,6 +1145,28 @@ export default function KillTestPage() {
               <div>Sweep: <span style={{ color: TEXT, fontWeight: 600 }}>{settings.sweepRate}% | Rf {settings.riskFreeRate}%</span></div>
             </div>
           )}
+          {/* Refresh prices button */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+            <button
+              onClick={handleRefreshPrices}
+              disabled={refreshing}
+              style={{
+                background: refreshing ? 'rgba(255,255,255,0.04)' : 'rgba(40,167,69,0.1)',
+                border: `1px solid ${refreshing ? BORDER : 'rgba(40,167,69,0.35)'}`,
+                borderRadius: 8, padding: '8px 14px', cursor: refreshing ? 'default' : 'pointer',
+                color: refreshing ? DIM : '#4fc870', fontSize: 13, fontWeight: 700,
+                fontFamily: 'inherit', transition: 'all 0.2s',
+              }}
+            >
+              {refreshing ? '⟳ Refreshing…' : '↻ Refresh Prices'}
+            </button>
+            {refreshedAt && !refreshing && (
+              <span style={{ fontSize: 10, color: SUBDIM }}>
+                Updated {refreshedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' })}
+              </span>
+            )}
+          </div>
+
           <button
             onClick={() => setShowSettings(v => !v)}
             style={{

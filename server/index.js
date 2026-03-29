@@ -1863,6 +1863,88 @@ app.patch('/api/kill-test/settings', authenticateJWT, requireAdmin, async (req, 
   }
 });
 
+// ── Kill Test: Live Price Refresh ─────────────────────────────────────────────
+// Fetches current quotes from FMP for all active appearances, updates
+// lastSeenPrice / currentPnlPct / currentPnlDollar in MongoDB, returns price map.
+app.post('/api/kill-test/refresh-prices', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db  = await connectToDatabase();
+    const col = db.collection('pnthr_kill_appearances');
+
+    // Active appearances only
+    const active = await col.find({ exitDate: null }).toArray();
+    if (!active.length) return res.json({ prices: {}, updated: 0 });
+
+    const tickers = [...new Set(active.map(a => a.ticker))];
+    const key     = process.env.FMP_API_KEY;
+    if (!key) return res.status(500).json({ error: 'FMP_API_KEY not configured' });
+
+    // Batch quotes — FMP supports up to ~500 tickers comma-separated
+    const priceMap = {};
+    for (let i = 0; i < tickers.length; i += 200) {
+      const chunk = tickers.slice(i, i + 200).join(',');
+      try {
+        const r    = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk}?apikey=${key}`);
+        const data = await r.json();
+        if (Array.isArray(data)) {
+          for (const q of data) {
+            if (q.symbol && q.price != null) priceMap[q.symbol] = q.price;
+          }
+        }
+      } catch (err) {
+        console.error('[refresh-prices] FMP batch error:', err.message);
+      }
+    }
+
+    // Update each active appearance in MongoDB
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    let updated = 0;
+    const bulkOps = [];
+
+    for (const appr of active) {
+      const price = priceMap[appr.ticker];
+      if (price == null) continue;
+
+      const isShort    = appr.signal === 'SS';
+      const avgCost    = appr.currentAvgCost ?? appr.firstAppearancePrice;
+      const shares     = appr.currentShares  ?? 0;
+      const pnlPct     = avgCost
+        ? isShort
+          ? ((avgCost - price) / avgCost) * 100
+          : ((price - avgCost) / avgCost) * 100
+        : 0;
+      const pnlDollar  = isShort
+        ? (avgCost - price) * shares
+        : (price - avgCost) * shares;
+
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: appr._id },
+          update: {
+            $set: {
+              lastSeenPrice:    price,
+              lastSeenDate:     today,
+              currentPnlPct:    +pnlPct.toFixed(2),
+              currentPnlDollar: +pnlDollar.toFixed(2),
+              updatedAt:        new Date(),
+            },
+          },
+        },
+      });
+      updated++;
+    }
+
+    if (bulkOps.length) await col.bulkWrite(bulkOps);
+
+    console.log(`[kill-test/refresh-prices] Updated ${updated} prices`);
+    res.json({ prices: priceMap, updated, refreshedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('[kill-test/refresh-prices]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Kill Test Monthly Snapshots & Analytics Metrics ───────────────────────────
 app.get('/api/kill-test/monthly',          authenticateJWT, requireAdmin, killTestMonthlyGet);
 app.get('/api/kill-test/metrics',          authenticateJWT, requireAdmin, killTestMetricsGet);

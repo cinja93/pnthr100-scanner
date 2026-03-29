@@ -72,11 +72,36 @@ async function backfill() {
   await db.collection('pnthr_kill_appearances').drop().catch(() => {});
   console.log('Dropped existing pnthr_kill_appearances collection');
 
-  // Load regime data per week
+  // Load regime data per week (Friday dates)
   const regimeDocs = await db.collection('pnthr_kill_regime').find({}).toArray();
   const regimeByWeek = {};
-  for (const r of regimeDocs) {
-    regimeByWeek[r.weekOf] = r;
+  for (const r of regimeDocs) regimeByWeek[r.weekOf] = r;
+
+  // Load signal_history stop prices (Monday dates = Friday - 4 days)
+  // Build a map: ticker -> weekOf(Monday) -> stopPrice
+  function fridayToMonday(friday) {
+    const d = new Date(friday);
+    d.setDate(d.getDate() - 4);
+    return d.toISOString().split('T')[0];
+  }
+
+  const weeks = await db.collection('pnthr_kill_scores').distinct('weekOf');
+  const mondayDates = weeks.map(fridayToMonday);
+
+  const sigHistoryDocs = await db.collection('signal_history')
+    .find({ weekOf: { $in: mondayDates } }, { projection: { ticker: 1, weekOf: 1, stopPrice: 1 } })
+    .toArray();
+
+  // stopMap[ticker][mondayDate] = stopPrice
+  const stopMap = {};
+  for (const doc of sigHistoryDocs) {
+    if (!stopMap[doc.ticker]) stopMap[doc.ticker] = {};
+    stopMap[doc.ticker][doc.weekOf] = doc.stopPrice ?? null;
+  }
+
+  function getStopPrice(ticker, fridayDate) {
+    const monday = fridayToMonday(fridayDate);
+    return stopMap[ticker]?.[monday] ?? null;
   }
 
   // Get all Kill score records sorted oldest-first
@@ -119,13 +144,21 @@ async function backfill() {
     }
 
     if (!appearanceMap.has(key)) {
+      const price     = rec.currentPrice ?? null;
+      const stopPrice = getStopPrice(rec.ticker, rec.weekOf);
+      const riskPct   = (price && stopPrice)
+        ? +Math.abs((price - stopPrice) / price * 100).toFixed(2)
+        : null;
+
       appearanceMap.set(key, {
         ticker:               rec.ticker,
         signal:               rec.signal,
         sector:               rec.sector ?? null,
         exchange:             rec.exchange ?? null,
         firstAppearanceDate:  rec.weekOf,
-        firstAppearancePrice: rec.currentPrice ?? null,
+        firstAppearancePrice: price,
+        firstStopPrice:       stopPrice,
+        firstRiskPct:         riskPct,
         firstKillScore:       rec.totalScore,
         firstKillRank:        rec.killRank ?? null,
         firstTier:            rec.tier,
@@ -136,7 +169,8 @@ async function backfill() {
         firstSlopePct:        rec.slopePct ?? rec.dimensions?.d3?.slopePct ?? null,
         firstSeparationPct:   rec.separationPct ?? rec.dimensions?.d3?.separationPct ?? null,
         lastSeenDate:         rec.weekOf,
-        lastSeenPrice:        rec.currentPrice ?? null,
+        lastSeenPrice:        price,
+        lastStopPrice:        stopPrice,
         lastKillScore:        rec.totalScore,
         lastKillRank:         rec.killRank ?? null,
         lastAnalyzeScore:     rec._analyzeScore,
@@ -153,6 +187,7 @@ async function backfill() {
       const entry = appearanceMap.get(key);
       entry.lastSeenDate       = rec.weekOf;
       entry.lastSeenPrice      = rec.currentPrice ?? null;
+      entry.lastStopPrice      = getStopPrice(rec.ticker, rec.weekOf);
       entry.lastKillScore      = rec.totalScore;
       entry.lastKillRank       = rec.killRank ?? null;
       entry.lastAnalyzeScore   = rec._analyzeScore;
@@ -184,10 +219,13 @@ async function backfill() {
   console.log('\n── Appearance Records ────────────────────────────────────────────────');
   for (const a of all) {
     const price = a.firstAppearancePrice ? `$${a.firstAppearancePrice.toFixed(2)}` : 'N/A';
+    const stop  = a.firstStopPrice ? `$${a.firstStopPrice.toFixed(2)}` : 'N/A';
+    const risk  = a.firstRiskPct != null ? `${a.firstRiskPct}%` : 'N/A';
     console.log(
       `${a.ticker.padEnd(6)} ${a.signal} | ${a.firstAppearanceDate} @ ${price.padEnd(10)} ` +
+      `Stop:${stop.padEnd(9)} Risk:${risk.padEnd(6)} ` +
       `| Kill:${String(a.firstKillScore).padEnd(6)} Analyze:${a.firstAnalyzeScore}% ` +
-      `Composite:${a.firstCompositeScore} | Rank:#${a.firstKillRank ?? '?'} | ${a.firstTier}`
+      `Composite:${a.firstCompositeScore}`
     );
   }
 

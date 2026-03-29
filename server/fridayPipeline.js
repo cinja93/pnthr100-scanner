@@ -140,7 +140,7 @@ const KILL_THRESHOLD     = 100;
 const ANALYZE_THRESHOLD  = 80;
 const COMPOSITE_THRESHOLD = 75;
 
-async function updateKillAppearances(db, scored, weekOf, regime) {
+async function updateKillAppearances(db, scored, weekOf, regime, jungleSignals = {}) {
   // Apply all three thresholds: Kill > 100, Analyze > 80%, Composite > 75
   const qualifying = scored.filter(s => {
     if (!s.signal || (s.signal !== 'BL' && s.signal !== 'SS')) return false;
@@ -168,6 +168,14 @@ async function updateKillAppearances(db, scored, weekOf, regime) {
       lastSeenDate: { $gte: cutoff },
     });
 
+    // Look up stop price from signal service
+    const sigData   = jungleSignals[s.ticker] ?? {};
+    const stopPrice = sigData.stopPrice ?? null;
+    const price     = s.currentPrice ?? null;
+    const riskPct   = (price && stopPrice)
+      ? +Math.abs((price - stopPrice) / price * 100).toFixed(2)
+      : null;
+
     if (!existing) {
       // First time this stock has qualified — NEVER overwrite this record
       await db.collection('pnthr_kill_appearances').insertOne({
@@ -177,7 +185,9 @@ async function updateKillAppearances(db, scored, weekOf, regime) {
         exchange:             s.exchange ?? null,
         // First appearance snapshot
         firstAppearanceDate:  weekOf,
-        firstAppearancePrice: s.currentPrice ?? null,
+        firstAppearancePrice: price,
+        firstStopPrice:       stopPrice,
+        firstRiskPct:         riskPct,
         firstKillScore:       s.apexScore,
         firstKillRank:        s.killRank ?? null,
         firstTier:            s.tier,
@@ -189,7 +199,8 @@ async function updateKillAppearances(db, scored, weekOf, regime) {
         firstSeparationPct:   s.scoreDetail?.d3?.separationPct ?? null,
         // Last seen (updated weekly while signal stays active)
         lastSeenDate:         weekOf,
-        lastSeenPrice:        s.currentPrice ?? null,
+        lastSeenPrice:        price,
+        lastStopPrice:        stopPrice,
         lastKillScore:        s.apexScore,
         lastKillRank:         s.killRank ?? null,
         lastAnalyzeScore:     s._analyzeScore,
@@ -211,7 +222,8 @@ async function updateKillAppearances(db, scored, weekOf, regime) {
         {
           $set: {
             lastSeenDate:       weekOf,
-            lastSeenPrice:      s.currentPrice ?? null,
+            lastSeenPrice:      price,
+            lastStopPrice:      stopPrice,
             lastKillScore:      s.apexScore,
             lastKillRank:       s.killRank ?? null,
             lastAnalyzeScore:   s._analyzeScore,
@@ -523,7 +535,7 @@ export async function runFridayKillPipeline() {
     // Records the EXACT date and price when a stock first hits STRIKING+ (≥100)
     // This is the true "entry baseline" for forward performance tracking.
     try {
-      await updateKillAppearances(db, scored, weekOf, contextSummary);
+      await updateKillAppearances(db, scored, weekOf, contextSummary, jungleSignals);
     } catch (err) {
       console.error('[Kill Pipeline] Appearances update failed (non-fatal):', err.message);
     }

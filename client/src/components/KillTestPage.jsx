@@ -21,6 +21,15 @@ const BORDER  = 'rgba(255,255,255,0.08)';
 const ROW_ALT = 'rgba(255,255,255,0.02)';
 
 const fmtPrice = (n) => n == null ? '—' : `$${Number(n).toFixed(2)}`;
+const fmtTimestamp = (iso) => {
+  if (!iso) return 'Fri 4:15 PM ET (exact time unavailable)';
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short', month: 'short', day: 'numeric', year: '2-digit',
+    hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short',
+  });
+};
 const fmtPct   = (n) => n == null ? '—' : `${n >= 0 ? '+' : ''}${Number(n).toFixed(2)}%`;
 const fmtRisk  = (n) => n == null ? '—' : `${Number(n).toFixed(2)}%`;
 const fmtDate  = (s) => s ? new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—';
@@ -147,7 +156,7 @@ function ActiveTable({ rows }) {
             <TH>Ticker</TH>
             <TH>Signal</TH>
             <TH>Appeared</TH>
-            <TH align="right">Entry Price</TH>
+            <TH align="right">Appearance Price (Fri Close)</TH>
             <TH align="right">Stop</TH>
             <TH align="right">Risk %</TH>
             <TH>Kill / Analyze / Composite</TH>
@@ -178,7 +187,14 @@ function ActiveTable({ rows }) {
                     </span>
                   )}
                 </TD>
-                <TD align="right" style={{ fontWeight: 700, color: '#fff' }}>{fmtPrice(r.firstAppearancePrice)}</TD>
+                <TD align="right">
+                  <span
+                    style={{ fontWeight: 700, color: '#fff', borderBottom: '1px dotted #555', cursor: 'help' }}
+                    title={`Captured: ${fmtTimestamp(r.createdAt)}`}
+                  >
+                    {fmtPrice(r.firstAppearancePrice)}
+                  </span>
+                </TD>
                 <TD align="right" style={{ color: ORANGE }}>{fmtPrice(r.firstStopPrice)}</TD>
                 <TD align="right">
                   <span style={{ color: r.firstRiskPct > 15 ? RED : r.firstRiskPct > 10 ? ORANGE : '#aaa', fontWeight: 600 }}>
@@ -216,10 +232,10 @@ function ClosedTable({ rows }) {
             <TH>Signal</TH>
             <TH>Appeared</TH>
             <TH>Exited</TH>
-            <TH align="right">Entry</TH>
+            <TH align="right">Appearance Price (Fri Close)</TH>
             <TH align="right">Stop</TH>
             <TH align="right">Risk %</TH>
-            <TH>Scores at Entry</TH>
+            <TH>Scores at Appearance</TH>
             <TH align="right">Exit Price</TH>
             <TH align="right">Profit %</TH>
             <TH align="center">Weeks</TH>
@@ -238,7 +254,14 @@ function ClosedTable({ rows }) {
                 <TD><SignalBadge signal={r.signal} /></TD>
                 <TD style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.firstAppearanceDate)}</TD>
                 <TD style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.exitDate)}</TD>
-                <TD align="right" style={{ fontWeight: 700, color: '#fff' }}>{fmtPrice(r.firstAppearancePrice)}</TD>
+                <TD align="right">
+                  <span
+                    style={{ fontWeight: 700, color: '#fff', borderBottom: '1px dotted #555', cursor: 'help' }}
+                    title={`Captured: ${fmtTimestamp(r.createdAt)}`}
+                  >
+                    {fmtPrice(r.firstAppearancePrice)}
+                  </span>
+                </TD>
                 <TD align="right" style={{ color: ORANGE }}>{fmtPrice(r.firstStopPrice)}</TD>
                 <TD align="right">
                   <span style={{ color: r.firstRiskPct > 15 ? RED : r.firstRiskPct > 10 ? ORANGE : '#aaa', fontWeight: 600 }}>

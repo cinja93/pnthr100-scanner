@@ -108,12 +108,40 @@ async function refreshSp400Cache() {
 
   try {
     // Step 1: Get S&P 400 constituent list
-    const constituents = await fetchFMP('/sp400_constituent');
-    if (!Array.isArray(constituents) || constituents.length === 0) {
-      console.error('❌ S&P 400 constituent list empty or wrong format');
+    // FMP sometimes wraps the array in an object or changes endpoint format
+    let raw = await fetchFMP('/sp400_constituent');
+
+    // Handle object wrapper — e.g. { "symbolsList": [...] } or { "sp400": [...] }
+    let constituents = null;
+    if (Array.isArray(raw)) {
+      constituents = raw;
+    } else if (raw && typeof raw === 'object') {
+      // Try common wrapper keys
+      const arrayVal = Object.values(raw).find(v => Array.isArray(v) && v.length > 0);
+      if (arrayVal) constituents = arrayVal;
+    }
+
+    // Fallback endpoint if primary returned nothing usable
+    if (!constituents || constituents.length === 0) {
+      console.warn('⚠️  S&P 400: primary endpoint empty/wrong format — trying v4 index-constituent...');
+      console.warn('    Raw response type:', typeof raw, '| keys:', raw && typeof raw === 'object' ? Object.keys(raw).slice(0,5).join(', ') : String(raw).slice(0, 80));
+      try {
+        const alt = await fetchFMP('/v4/index-constituent?index=sp400');
+        if (Array.isArray(alt) && alt.length > 0) {
+          constituents = alt;
+          console.log(`📊 S&P 400: fallback endpoint returned ${alt.length} constituents`);
+        }
+      } catch (altErr) {
+        console.warn('⚠️  S&P 400: fallback endpoint also failed:', altErr.message);
+      }
+    }
+
+    if (!constituents || constituents.length === 0) {
+      console.error('❌ S&P 400 constituent list empty or wrong format — both endpoints failed; keeping hardcoded fallback');
       return;
     }
-    const tickers = [...new Set(constituents.map(c => c.symbol).filter(Boolean))];
+
+    const tickers = [...new Set(constituents.map(c => c.symbol ?? c.ticker ?? c).filter(s => typeof s === 'string'))];
     console.log(`📊 S&P 400: ${tickers.length} constituent tickers`);
 
     // Step 2: Bulk quotes for current price

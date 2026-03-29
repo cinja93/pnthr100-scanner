@@ -100,6 +100,54 @@ function scoreETFSignalQuality(stock, direction) {
   return { score: Math.min(pts, 15), max: 15, label, detail: `${signal}${signalAge != null ? '+' + signalAge : ''} signal`, warnings };
 }
 
+// EMA Slope: is the 21-week EMA itself rising or falling, and how steeply?
+// Scored 0-10 based on slope direction alignment with ETF trend + slope magnitude.
+// emaSlope = % change from previous week's EMA to current (from signalService or ChartModal).
+function scoreETFEmaSlope(stock, direction) {
+  const slope = stock.emaSlope ?? null;
+
+  if (slope === null) {
+    // emaRising boolean fallback
+    const rising = stock.emaRising ?? null;
+    if (rising === null) {
+      return { score: 5, max: 10, label: 'UNKNOWN', detail: 'EMA slope data unavailable — partial credit', warnings: [] };
+    }
+    const slopeDir = rising ? 'LONG' : 'SHORT';
+    const aligned  = slopeDir === direction;
+    return {
+      score: aligned ? 7 : 0, max: 10,
+      label: aligned ? (rising ? 'RISING' : 'FALLING') : 'FIGHTING',
+      detail: `EMA ${rising ? 'rising' : 'falling'} (direction only — magnitude unavailable)`,
+      warnings: [],
+    };
+  }
+
+  const slopeDir = slope >= 0 ? 'LONG' : 'SHORT';
+  const aligned  = slopeDir === direction;
+  const magnitude = Math.abs(slope);
+
+  if (!aligned) {
+    return {
+      score: 0, max: 10, label: 'FIGHTING',
+      detail: `EMA slope ${slope > 0 ? '+' : ''}${slope.toFixed(3)}% — ${slopeDir} slope, trading ${direction}`,
+      warnings: [],
+    };
+  }
+
+  // Aligned — score by magnitude
+  let pts, label;
+  if (magnitude >= 1.0)      { pts = 10; label = 'STRONG';   }
+  else if (magnitude >= 0.5) { pts = 8;  label = 'MODERATE'; }
+  else if (magnitude >= 0.2) { pts = 6;  label = 'MILD';     }
+  else                       { pts = 3;  label = 'FLAT';      }
+
+  return {
+    score: pts, max: 10, label,
+    detail: `EMA slope ${slope > 0 ? '+' : ''}${slope.toFixed(3)}% — ${label.toLowerCase()} ${slopeDir.toLowerCase()} momentum`,
+    warnings: [],
+  };
+}
+
 // ETF Trend: direction indicator only — no scoring.
 // Price above 21 EMA = LONG trend; price below = SHORT trend.
 // This direction feeds Signal Quality and Macro Alignment checks.
@@ -297,14 +345,16 @@ export function computeETFAnalyzeScore(stock, context) {
   const components = {};
   const allWarnings = [];
 
-  // ETF SELECTION — Signal Quality (15), ETF Trend (0, direction only), Macro Alignment (8), Momentum (7)
+  // ETF SELECTION — Signal Quality (15), ETF Trend (direction only, 0), EMA Slope (10), Macro Alignment (8), Momentum (7)
   const signalQuality   = scoreETFSignalQuality(stock, direction);
   const trendAlignment  = scoreETFTrendAlignment(stock);           // direction indicator, no score
+  const emaSlope        = scoreETFEmaSlope(stock, direction);      // 0-10 pts
   const macroAlignment  = scoreETFMacroAlignment(stock, context, ticker, direction);
   const momentumQuality = scoreETFMomentumQuality(stock, direction);
 
   components.signalQuality   = { score: signalQuality.score,    label: signalQuality.label,    detail: signalQuality.detail,    max: 15 };
   components.trendAlignment  = { score: 0,                      label: trendAlignment.label,   detail: trendAlignment.detail,   max: 0  }; // display only
+  components.emaSlope        = { score: emaSlope.score,         label: emaSlope.label,         detail: emaSlope.detail,         max: 10 };
   components.macroAlignment  = { score: macroAlignment.score,   label: macroAlignment.label,   detail: macroAlignment.detail,   max: 8  };
   components.momentumQuality = { score: momentumQuality.score,  label: momentumQuality.label,  detail: momentumQuality.detail,  max: 7  };
 
@@ -329,7 +379,7 @@ export function computeETFAnalyzeScore(stock, context) {
   const score = Object.values(components)
     .filter(c => c.max)
     .reduce((s, c) => s + (c.score || 0), 0);
-  const max = 43; // 15 (signal) + 8 (macro) + 7 (momentum) + 8 (sizing) + 5 (risk) — ETF Trend is display-only
+  const max = 53; // 15 (signal) + 10 (ema slope) + 8 (macro) + 7 (momentum) + 8 (sizing) + 5 (risk)
   const pct = Math.round((score / max) * 100);
   const color = pct >= 80 ? '#28a745' : pct >= 60 ? '#FFD700' : '#dc3545';
 

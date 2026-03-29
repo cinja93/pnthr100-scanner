@@ -237,14 +237,11 @@ function runStateMachine(weeklyBars, isETF = false) {
     }
   }
 
-  // EMA slope direction — used for developing signal detection (intra-week)
+  // EMA slope direction + magnitude
   const emaRising = emas.length >= 2 ? emas[emas.length - 1] > emas[emas.length - 2] : null;
-  // FUTURE: expose emaSlope as actual % change so ETF Trend Sub-B can score 2-3pts for strong trends.
-  // const emaSlope = emas.length >= 2
-  //   ? parseFloat(((emas[emas.length-1] - emas[emas.length-2]) / emas[emas.length-2] * 100).toFixed(4))
-  //   : null;
-  // Then add emaSlope to the lastEvent and getSignals() return map alongside emaRising.
-  // EtfPage.jsx enriched.emaSlope would then use sigData.emaSlope directly.
+  const emaSlope  = emas.length >= 2
+    ? parseFloat(((emas[emas.length - 1] - emas[emas.length - 2]) / emas[emas.length - 2] * 100).toFixed(4))
+    : null; // % change in EMA week-over-week (positive = rising, negative = falling)
 
   // Last completed weekly bar (n-2 relative to current in-progress bar at n-1)
   // Used by developing-signals to check proximity to last week's high/low.
@@ -257,7 +254,7 @@ function runStateMachine(weeklyBars, isETF = false) {
   if (!lastEvent) {
     const lastEma = emas[emas.length - 1];
     return { signal: null, ema21: parseFloat(lastEma.toFixed(4)), stopPrice: null, currentWeekStop: null,
-             emaRising, lastWeekHigh, lastWeekLow, lastWeekClose };
+             emaRising, emaSlope, lastWeekHigh, lastWeekLow, lastWeekClose };
   }
 
   const lastBar = weeklyBars[weeklyBars.length - 1];
@@ -275,6 +272,7 @@ function runStateMachine(weeklyBars, isETF = false) {
   const isActiveSignal = lastEvent.signal === 'BL' || lastEvent.signal === 'SS';
   lastEvent.isNew = isActiveSignal && lastEvent.signalDate === lastBar.weekStart;
   lastEvent.emaRising    = emaRising;
+  lastEvent.emaSlope     = emaSlope;
   lastEvent.lastWeekHigh  = lastWeekHigh;
   lastEvent.lastWeekLow   = lastWeekLow;
   lastEvent.lastWeekClose = lastWeekClose;
@@ -355,6 +353,7 @@ export async function getSignals(tickers, { isETF = false } = {}) {
       currentWeekStop:  s.currentWeekStop ?? null,
       ema21:            s.ema21,
       emaRising:        s.emaRising      ?? null, // true/false/null — EMA slope direction
+      emaSlope:         s.emaSlope       ?? null, // % change in EMA week-over-week
       lastWeekHigh:     s.lastWeekHigh   ?? null, // previous completed week's high
       lastWeekLow:      s.lastWeekLow    ?? null, // previous completed week's low
       lastWeekClose:    s.lastWeekClose  ?? null, // previous completed week's close
@@ -387,6 +386,7 @@ export function getCachedSignals() {
       currentWeekStop: s.currentWeekStop ?? null,
       ema21:           s.ema21,
       emaRising:       s.emaRising      ?? null,
+      emaSlope:        s.emaSlope       ?? null,
       lastWeekHigh:    s.lastWeekHigh   ?? null,
       lastWeekLow:     s.lastWeekLow    ?? null,
       lastWeekClose:   s.lastWeekClose  ?? null,

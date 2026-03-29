@@ -1005,9 +1005,10 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                     {ar.isETF ? `ETF SELECTION${ar.assetClass ? ` [${ar.assetClass}]` : ''}` : 'STOCK SELECTION'}
                   </div>
                   <ScoreLine label="Signal Quality"  comp={ar.components.signalQuality} max={15} />
-                  <ScoreLine label={ar.isETF ? 'ETF Trend'       : 'Kill Context'}  comp={ar.isETF ? ar.components.trendAlignment : ar.components.killContext}   max={ar.isETF ? 0 : 10} />
-                  <ScoreLine label={ar.isETF ? 'Macro Alignment' : 'Index Trend'}   comp={ar.isETF ? ar.components.macroAlignment : ar.components.indexTrend}    max={8}  />
-                  <ScoreLine label={ar.isETF ? 'Momentum Quality' : 'Sector Trend'}  comp={ar.isETF ? ar.components.momentumQuality : ar.components.sectorTrend}  max={7}  />
+                  <ScoreLine label={ar.isETF ? 'ETF Trend'        : 'Kill Context'}   comp={ar.isETF ? ar.components.trendAlignment  : ar.components.killContext}    max={ar.isETF ? 0 : 10} />
+                  {ar.isETF && <ScoreLine label="EMA Slope"        comp={ar.components.emaSlope}                                                                    max={10} />}
+                  <ScoreLine label={ar.isETF ? 'Macro Alignment'  : 'Index Trend'}   comp={ar.isETF ? ar.components.macroAlignment  : ar.components.indexTrend}    max={8}  />
+                  <ScoreLine label={ar.isETF ? 'Momentum Quality' : 'Sector Trend'}  comp={ar.isETF ? ar.components.momentumQuality : ar.components.sectorTrend}   max={7}  />
                   <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginTop: 10, marginBottom: 6 }}>EXECUTION (PROJECTED)</div>
                   <ScoreLine label="Position Sizing" comp={ar.components.sizing}        max={8}  />
                   <ScoreLine label="Risk Cap"        comp={ar.components.riskCap}       max={5}  />

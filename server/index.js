@@ -1786,6 +1786,7 @@ app.get('/api/kill-history/track-record', authenticateJWT, killHistoryGetTrackRe
 // ── PNTHR Kill Test — Appearance Tracking ──────────────────────────────────────
 app.get('/api/kill-appearances', authenticateJWT, requireAdmin, async (req, res) => {
   try {
+    const { connectToDatabase } = await import('./database.js');
     const db   = await connectToDatabase();
     const docs = await db.collection('pnthr_kill_appearances')
       .find({})

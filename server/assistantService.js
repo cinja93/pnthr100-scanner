@@ -910,6 +910,9 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
   }
 
   // ── Kill signals chip sections ────────────────────────────────────────────
+  // Exclude tickers already held in Command Center — no point re-entering
+  const heldTickers = new Set(activePosns.map(p => p.ticker.toUpperCase()));
+
   let killLabel, killChipSections;
 
   if (!killSignals.length) {
@@ -917,18 +920,26 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
     killChipSections = [];
   } else {
     const blAll = killSignals
-      .filter(s => s.signal === 'BL')
+      .filter(s => s.signal === 'BL' && !heldTickers.has(s.ticker.toUpperCase()))
       .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0));
     const ssAll = killSignals
-      .filter(s => s.signal === 'SS')
+      .filter(s => s.signal === 'SS' && !heldTickers.has(s.ticker.toUpperCase()))
       .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0));
 
-    killLabel = `Kill signals: ${blAll.length} BL · ${ssAll.length} SS — top setups by Kill Score below`;
+    const blTotal = killSignals.filter(s => s.signal === 'BL').length;
+    const ssTotal = killSignals.filter(s => s.signal === 'SS').length;
+    const blHeld  = blTotal - blAll.length;
+    const ssHeld  = ssTotal - ssAll.length;
+    const heldNote = (blHeld + ssHeld) > 0
+      ? ` (${blHeld + ssHeld} already held excluded)`
+      : '';
+
+    killLabel = `Kill signals: ${blAll.length} new BL · ${ssAll.length} new SS — top setups by Kill Score below${heldNote}`;
     killChipSections = [];
 
     if (blAll.length) {
       killChipSections.push({
-        title:    `▲ TOP 5 BL — Kill Score  (${blAll.length} total)`,
+        title:    `▲ TOP 5 BL — Kill Score  (${blAll.length} new, not yet held)`,
         subtitle: 'Click any ticker to open chart → check Analyze + Composite before entering',
         direction: 'BL',
         chips:    blAll.slice(0, 5).map(toChip),
@@ -936,7 +947,7 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
     }
     if (ssAll.length) {
       killChipSections.push({
-        title:    `▼ TOP 5 SS — Kill Score  (${ssAll.length} total)`,
+        title:    `▼ TOP 5 SS — Kill Score  (${ssAll.length} new, not yet held)`,
         subtitle: 'Click any ticker to open chart → check Analyze + Composite before shorting',
         direction: 'SS',
         chips:    ssAll.slice(0, 5).map(toChip),
@@ -993,6 +1004,7 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
   const sectorChipSections = [];
   for (const [sec, v] of risingSectors) {
     const chips = (sectorBLMap[sec] || [])
+      .filter(s => !heldTickers.has(s.ticker.toUpperCase()))
       .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
       .slice(0, 3)
       .map(toChip);
@@ -1006,6 +1018,7 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
   }
   for (const [sec, v] of fallingSectors) {
     const chips = (sectorSSMap[sec] || [])
+      .filter(s => !heldTickers.has(s.ticker.toUpperCase()))
       .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
       .slice(0, 3)
       .map(toChip);

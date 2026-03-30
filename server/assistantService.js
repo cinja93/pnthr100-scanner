@@ -861,11 +861,9 @@ const BUILT_IN_ROUTINES = [
 
   // ── Monday ──
   { id: 'mon_stop_sync',      dayOfWeek: 1, label: 'Run Monday Stop Sync — update IBKR stops to match PNTHR' },
-  { id: 'mon_weekly_plan',    dayOfWeek: 1, label: 'Review Kill page — any new BL/SS signals to act on?' },
+  // mon_weekly_plan, mon_sector_review, mon_earnings_scan → computed smart routines (see buildRoutineContext)
   { id: 'mon_heat_check',     dayOfWeek: 1, label: 'Check portfolio heat — are you within 15% cap?' },
   { id: 'mon_regime',         dayOfWeek: 1, label: 'Check market regime — SPY/QQQ above or below 21W EMA?' },
-  { id: 'mon_sector_review',  dayOfWeek: 1, label: 'Review sector concentration — any sector at 3+ net?' },
-  { id: 'mon_earnings_scan',  dayOfWeek: 1, label: 'Scan earnings calendar for held positions this week' },
 
   // ── Wednesday ──
   { id: 'wed_mid_week',       dayOfWeek: 3, label: 'Mid-week position review — any lot triggers approaching?' },
@@ -879,14 +877,170 @@ const BUILT_IN_ROUTINES = [
   { id: 'fri_ibkr_token',     dayOfWeek: 5, label: 'Check IBKR bridge token expiry — renew if < 2 weeks' },
 ];
 
+// ── Smart Routine Context ─────────────────────────────────────────────────────
+
+/**
+ * Build context object for smart Monday routines.
+ * Fetches earnings and computes sector summary so routines show specific data.
+ *
+ * @param {object[]} activePosns  — active PNTHR portfolio positions
+ * @param {object[]} killSignals  — from getCachedSignalStocks() in apexService
+ * @returns {object} context for getRoutineTasks()
+ */
+export async function buildRoutineContext(activePosns, killSignals = []) {
+  const tickers = activePosns.map(p => p.ticker.toUpperCase());
+  const earningsMap = await fetchEarningsMap(tickers).catch(() => ({}));
+
+  // ── Kill signals summary ──────────────────────────────────────────────────
+  const blStocks = killSignals.filter(s => s.signal === 'BL').slice(0, 5);
+  const ssStocks = killSignals.filter(s => s.signal === 'SS').slice(0, 5);
+  const blTotal  = killSignals.filter(s => s.signal === 'BL').length;
+  const ssTotal  = killSignals.filter(s => s.signal === 'SS').length;
+
+  function tierShort(tier) {
+    if (!tier) return '';
+    // "ALPHA PNTHR KILL" → "ALPHA", "STRIKING" → "STRIKING", etc.
+    return tier.split(' ')[0];
+  }
+
+  let killDetail;
+  if (!killSignals.length) {
+    killDetail = 'Kill cache is cold — open Kill page to trigger computation';
+  } else {
+    const parts = [];
+    if (blStocks.length) {
+      const names = blStocks.map(s => `${s.ticker} (${tierShort(s.tier)})`).join(' · ');
+      const more  = blTotal > blStocks.length ? ` +${blTotal - blStocks.length} more` : '';
+      parts.push(`BL: ${names}${more}`);
+    } else {
+      parts.push('BL: none');
+    }
+    if (ssStocks.length) {
+      const names = ssStocks.map(s => `${s.ticker} (${tierShort(s.tier)})`).join(' · ');
+      const more  = ssTotal > ssStocks.length ? ` +${ssTotal - ssStocks.length} more` : '';
+      parts.push(`SS: ${names}${more}`);
+    } else {
+      parts.push('SS: none');
+    }
+    killDetail = parts.join('  ·  ');
+  }
+
+  const killLabel = blTotal + ssTotal > 0
+    ? `Kill signals: ${blTotal} BL · ${ssTotal} SS in Kill universe`
+    : 'Kill signals: No BL/SS signals in Kill today';
+
+  // ── Sector concentration summary ─────────────────────────────────────────
+  const sectorNet = {};
+  for (const p of activePosns) {
+    const sec = p.sector;
+    if (!sec || sec === '—') continue;
+    if (!sectorNet[sec]) sectorNet[sec] = { longs: 0, shorts: 0 };
+    if (p.direction === 'LONG') sectorNet[sec].longs++;
+    else sectorNet[sec].shorts++;
+  }
+
+  let sectorLabel, sectorDetail;
+  const sectorEntries = Object.entries(sectorNet);
+  if (!sectorEntries.length) {
+    sectorLabel = 'Sector concentration — no active positions';
+    sectorDetail = null;
+  } else {
+    const atCap = sectorEntries.filter(([, c]) => Math.abs(c.longs - c.shorts) >= 3);
+    sectorLabel = atCap.length > 0
+      ? `Sector concentration: ⚠ ${atCap.map(([s]) => s.split(' ')[0]).join(', ')} AT CAP`
+      : 'Sector concentration — all sectors under cap';
+    sectorDetail = sectorEntries
+      .sort((a, b) => {
+        const na = Math.abs(a[1].longs - a[1].shorts);
+        const nb = Math.abs(b[1].longs - b[1].shorts);
+        return nb - na; // highest net first
+      })
+      .map(([sec, c]) => {
+        const net = Math.abs(c.longs - c.shorts);
+        const name = sec.length > 12 ? sec.split(' ').slice(0, 2).join(' ') : sec;
+        const capFlag = net >= 3 ? ' ⚠ AT CAP' : '';
+        return `${name}: ${c.longs}L/${c.shorts}S${capFlag}`;
+      })
+      .join('  ·  ');
+  }
+
+  // ── Earnings for held positions this week ─────────────────────────────────
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const sevenDays = new Date(today);
+  sevenDays.setDate(today.getDate() + 7);
+
+  const earningsThisWeek = activePosns
+    .filter(p => {
+      const earnDate = earningsMap[p.ticker.toUpperCase()];
+      if (!earnDate) return false;
+      const d = new Date(earnDate + 'T00:00:00');
+      return d >= today && d <= sevenDays;
+    })
+    .map(p => ({ ticker: p.ticker, date: earningsMap[p.ticker.toUpperCase()] }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  let earningsLabel, earningsDetail;
+  if (!earningsThisWeek.length) {
+    earningsLabel = 'Earnings check: No held positions reporting this week ✓';
+    earningsDetail = null;
+  } else {
+    const names = earningsThisWeek.map(e => {
+      const d = new Date(e.date + 'T00:00:00');
+      const dow = d.toLocaleDateString('en-US', { weekday: 'short' });
+      return `${e.ticker} (${dow})`;
+    }).join(' · ');
+    earningsLabel = `Earnings this week: ${earningsThisWeek.map(e => e.ticker).join(', ')} — decide hold or exit`;
+    earningsDetail = names + ' — see tasks above for action steps';
+  }
+
+  return {
+    killLabel, killDetail,
+    sectorLabel, sectorDetail,
+    earningsLabel, earningsDetail,
+  };
+}
+
 /**
  * Get routine tasks for a given day of week (0=Sun..6=Sat).
+ * Pass context (from buildRoutineContext) to inject smart Monday routines.
  * Returns daily tasks + day-specific tasks.
+ *
+ * @param {number}  dayOfWeek  0=Sun..6=Sat
+ * @param {object}  context    optional — from buildRoutineContext()
  */
-export function getRoutineTasks(dayOfWeek) {
-  return BUILT_IN_ROUTINES.filter(r =>
+export function getRoutineTasks(dayOfWeek, context = {}) {
+  const base = BUILT_IN_ROUTINES.filter(r =>
     r.dayOfWeek === null || r.dayOfWeek === dayOfWeek
   );
+
+  // Inject smart Monday routines after mon_stop_sync
+  if (dayOfWeek === 1) {
+    const {
+      killLabel    = 'Kill signals: Review Kill page for new BL/SS signals',
+      killDetail   = null,
+      sectorLabel  = 'Sector concentration — review for any sector at 3+ net',
+      sectorDetail = null,
+      earningsLabel = 'Earnings check — scan calendar for held positions this week',
+      earningsDetail = null,
+    } = context;
+
+    const smartRoutines = [
+      { id: 'mon_weekly_plan',   dayOfWeek: 1, label: killLabel,    detail: killDetail },
+      { id: 'mon_sector_review', dayOfWeek: 1, label: sectorLabel,  detail: sectorDetail },
+      { id: 'mon_earnings_scan', dayOfWeek: 1, label: earningsLabel, detail: earningsDetail },
+    ];
+
+    // Insert smart routines after mon_stop_sync
+    const stopSyncIdx = base.findIndex(r => r.id === 'mon_stop_sync');
+    if (stopSyncIdx >= 0) {
+      base.splice(stopSyncIdx + 1, 0, ...smartRoutines);
+    } else {
+      base.push(...smartRoutines);
+    }
+  }
+
+  return base;
 }
 
 // ── Completed Records ─────────────────────────────────────────────────────────

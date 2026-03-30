@@ -376,7 +376,7 @@ const s = {
   },
   routineItem: (done) => ({
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 10,
     padding: '9px 14px',
     borderTop: '1px solid #161616',
@@ -393,11 +393,22 @@ const s = {
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    marginTop: 1,
   }),
   routineText: (done) => ({
     fontSize: 13,
     color: done ? '#555' : '#bbb',
     textDecoration: done ? 'line-through' : 'none',
+  }),
+  routineDetail: (done) => ({
+    fontSize: 11,
+    color: done ? '#444' : '#666',
+    marginTop: 3,
+    fontFamily: 'monospace',
+    letterSpacing: '0.01em',
+    lineHeight: 1.4,
+    textDecoration: done ? 'line-through' : 'none',
+    wordBreak: 'break-word',
   }),
 
   // Completed section
@@ -644,7 +655,10 @@ function RoutineSection({ routines, dayLabel: dayLabelStr, completedIds, onToggl
           <div style={s.routineCheckbox(completedIds.has(r.id))}>
             {completedIds.has(r.id) && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
           </div>
-          <span style={s.routineText(completedIds.has(r.id))}>{r.label}</span>
+          <div style={{ flex: 1 }}>
+            <div style={s.routineText(completedIds.has(r.id))}>{r.label}</div>
+            {r.detail && <div style={s.routineDetail(completedIds.has(r.id))}>{r.detail}</div>}
+          </div>
         </div>
       ))}
     </div>

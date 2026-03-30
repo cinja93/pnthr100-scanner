@@ -12,7 +12,7 @@ import { getEtfStocks, ALL_ETF_TICKER_SET, getCachedEtfResults } from './etfServ
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
-import { getApexResults, clearApexCache, getCachedTickerKillData } from './apexService.js';
+import { getApexResults, clearApexCache, getCachedTickerKillData, getCachedSignalStocks } from './apexService.js';
 import {
   killPipelineHandler,
   positionsGetAll,
@@ -59,6 +59,7 @@ import {
   markTaskComplete,
   getTodayCompleted,
   ensureAssistantIndexes,
+  buildRoutineContext,
 } from './assistantService.js';
 import { recordExit, calcAvgCost, calcTotalFilled } from './exitService.js';
 import { createJournalEntry, calculateDisciplineScore } from './journalService.js';
@@ -3905,12 +3906,29 @@ app.get('/api/assistant/stop-sync', async (req, res) => {
   }
 });
 
-// GET /api/assistant/routines — day-of-week routine checklist
+// GET /api/assistant/routines — day-of-week routine checklist (smart on Mondays)
 app.get('/api/assistant/routines', async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
     const dow = new Date().getDay();
-    const routines = getRoutineTasks(dow);
+
+    let context = {};
+    // On Mondays (and any day), build smart context so the 3 key routines show specific data
+    try {
+      const { connectToDatabase: _rdb } = await import('./database.js');
+      const rdb = await _rdb();
+      if (rdb) {
+        const activePosns = await rdb.collection('pnthr_portfolio')
+          .find({ status: { $nin: ['CLOSED'] }, ownerId: req.user.userId })
+          .toArray();
+        const killSignals = getCachedSignalStocks();
+        context = await buildRoutineContext(activePosns, killSignals);
+      }
+    } catch (ctxErr) {
+      console.warn('[assistant/routines] context build failed:', ctxErr.message);
+    }
+
+    const routines = getRoutineTasks(dow, context);
     res.json({ routines, dayOfWeek: dow });
   } catch (err) {
     console.error('[assistant/routines]', err.message);

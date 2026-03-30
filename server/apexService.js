@@ -1045,3 +1045,13 @@ export function getCachedTickerKillData(ticker) {
   if (!cached?.stocks) return null;
   return cached.stocks.find(s => s.ticker === ticker.toUpperCase()) ?? null;
 }
+
+// Return all stocks from the cache that have an active BL or SS signal,
+// sorted by killRank ascending (best rank first). Used by the Assistant.
+export function getCachedSignalStocks() {
+  const cached = apexCache.results;
+  if (!cached?.stocks) return [];
+  return cached.stocks
+    .filter(s => (s.signal === 'BL' || s.signal === 'SS') && s.totalScore !== -99)
+    .sort((a, b) => (a.killRank ?? 9999) - (b.killRank ?? 9999));
+}

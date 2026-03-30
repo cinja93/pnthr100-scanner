@@ -3922,6 +3922,11 @@ app.get('/api/assistant/routines', async (req, res) => {
           .find({ status: { $nin: ['CLOSED'] }, ownerId: req.user.userId })
           .toArray();
         const killSignals = getCachedSignalStocks();
+        // Auto-warm Kill cache if cold — don't await (runs in background ~60s)
+        if (!killSignals.length) {
+          console.log('[routines] Kill cache cold — triggering background computation');
+          getApexResults(false).catch(e => console.warn('[routines] apex warm-up failed:', e.message));
+        }
         context = await buildRoutineContext(activePosns, killSignals);
       }
     } catch (ctxErr) {

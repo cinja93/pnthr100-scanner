@@ -17,6 +17,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
+import ChartModal from './ChartModal';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -638,9 +639,83 @@ function StopSyncRow({ row, isDone, onToggle }) {
   );
 }
 
+// ── Chip Section ──────────────────────────────────────────────────────────────
+
+function ChipSection({ section, onChipClick, busyTicker }) {
+  return (
+    <div style={{
+      padding: '10px 14px 12px',
+      borderTop: '1px solid #1a1a1a',
+      background: '#0f0f0f',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+        <span style={{
+          fontSize: 10,
+          fontWeight: 800,
+          color: section.direction === 'BL' ? '#28a745' : section.direction === 'SS' ? '#ef5350' : '#888',
+          letterSpacing: '0.08em',
+        }}>
+          {section.title}
+        </span>
+      </div>
+      {section.subtitle && (
+        <div style={{ fontSize: 10, color: '#444', marginBottom: 8, fontStyle: 'italic' }}>
+          {section.subtitle}
+        </div>
+      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {section.chips.map(chip => {
+          const isBL   = chip.direction === 'BL';
+          const isBusy = busyTicker === chip.ticker;
+          return (
+            <button
+              key={chip.ticker}
+              onClick={(e) => { e.stopPropagation(); onChipClick(chip); }}
+              disabled={isBusy}
+              title={`${chip.ticker} — Kill #${chip.rank ?? '?'} · Score ${chip.score} · ${chip.tier} · ${chip.price != null ? '$' + chip.price : ''}`}
+              style={{
+                background:    isBL ? 'rgba(40,167,69,0.10)' : 'rgba(239,83,80,0.10)',
+                border:        `1px solid ${isBL ? 'rgba(40,167,69,0.35)' : 'rgba(239,83,80,0.35)'}`,
+                borderRadius:  6,
+                padding:       '5px 10px',
+                cursor:        isBusy ? 'wait' : 'pointer',
+                display:       'flex',
+                alignItems:    'center',
+                gap:           5,
+                opacity:       isBusy ? 0.6 : 1,
+                transition:    'opacity 0.15s',
+              }}
+            >
+              <span style={{ fontWeight: 800, fontSize: 12, color: '#fff', letterSpacing: '0.03em' }}>
+                {chip.ticker}
+              </span>
+              {chip.rank != null && (
+                <span style={{ fontSize: 10, color: '#555' }}>#{chip.rank}</span>
+              )}
+              <span style={{ fontSize: 10, color: '#fcf000', fontWeight: 700 }}>{chip.score}</span>
+              <span style={{
+                fontSize: 9,
+                color: isBL ? '#28a745' : '#ef5350',
+                fontWeight: 700,
+                letterSpacing: '0.05em',
+              }}>
+                {chip.tier}
+              </span>
+              {chip.price != null && (
+                <span style={{ fontSize: 10, color: '#666' }}>${chip.price}</span>
+              )}
+              <span style={{ fontSize: 9, color: '#333' }}>↗</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Routine Checklist ─────────────────────────────────────────────────────────
 
-function RoutineSection({ routines, dayLabel: dayLabelStr, completedIds, onToggle }) {
+function RoutineSection({ routines, dayLabel: dayLabelStr, completedIds, onToggle, onChipClick, busyTicker }) {
   const [expanded, setExpanded] = useState(true);
   const doneCount = routines.filter(r => completedIds.has(r.id)).length;
 
@@ -651,14 +726,25 @@ function RoutineSection({ routines, dayLabel: dayLabelStr, completedIds, onToggl
         <span style={{ fontSize: 11, color: '#444' }}>{expanded ? '▼' : '▶'}</span>
       </div>
       {expanded && routines.map(r => (
-        <div key={r.id} style={s.routineItem(completedIds.has(r.id))} onClick={() => onToggle(r.id)}>
-          <div style={s.routineCheckbox(completedIds.has(r.id))}>
-            {completedIds.has(r.id) && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
+        <div key={r.id}>
+          <div style={s.routineItem(completedIds.has(r.id))} onClick={() => onToggle(r.id)}>
+            <div style={s.routineCheckbox(completedIds.has(r.id))}>
+              {completedIds.has(r.id) && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={s.routineText(completedIds.has(r.id))}>{r.label}</div>
+              {r.detail && <div style={s.routineDetail(completedIds.has(r.id))}>{r.detail}</div>}
+            </div>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={s.routineText(completedIds.has(r.id))}>{r.label}</div>
-            {r.detail && <div style={s.routineDetail(completedIds.has(r.id))}>{r.detail}</div>}
-          </div>
+          {/* Chip sections — rendered outside the checkbox row so clicks don't toggle */}
+          {r.chipSections?.length > 0 && !completedIds.has(r.id) && r.chipSections.map((section, si) => (
+            <ChipSection
+              key={si}
+              section={section}
+              onChipClick={onChipClick}
+              busyTicker={busyTicker}
+            />
+          ))}
         </div>
       ))}
     </div>
@@ -708,6 +794,8 @@ export default function AssistantPage() {
   const [error,          setError]          = useState(null);
   const [refreshCountdown, setRefreshCountdown] = useState(REFRESH_INTERVAL);
   const [lastRefreshed,    setLastRefreshed]    = useState(null);
+  const [chartStock,  setChartStock]  = useState(null);
+  const [chartBusy,   setChartBusy]   = useState(null); // ticker currently loading
 
   // ── Data Fetching ──────────────────────────────────────────────────────────
 
@@ -863,6 +951,29 @@ export default function AssistantPage() {
       } catch { /* best effort */ }
     }
     setSyncDoneMap(map);
+  }
+
+  // ── Open Chart from Chip Click ─────────────────────────────────────────────
+
+  async function handleChipClick(chip) {
+    if (chartBusy) return;
+    setChartBusy(chip.ticker);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/apex/ticker/${encodeURIComponent(chip.ticker)}`,
+        { headers: authHeaders() }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.found && data.stock) {
+          setChartStock(data.stock);
+        }
+      }
+    } catch (e) {
+      console.error('[AssistantPage] chip chart fetch error:', e);
+    } finally {
+      setChartBusy(null);
+    }
   }
 
   // ── Partition Tasks ────────────────────────────────────────────────────────
@@ -1035,12 +1146,25 @@ export default function AssistantPage() {
             dayLabel={routineDayLbl}
             completedIds={routineIds}
             onToggle={handleToggleRoutine}
+            onChipClick={handleChipClick}
+            busyTicker={chartBusy}
           />
         </>
       )}
 
       {/* ── Completed Today ────────────────────────────────────────────────── */}
       <CompletedSection completed={completed} />
+
+      {/* Chart Modal — opened from chip clicks */}
+      {chartStock && (
+        <ChartModal
+          stocks={[chartStock]}
+          initialIndex={0}
+          signals={{}}
+          earnings={{}}
+          onClose={() => setChartStock(null)}
+        />
+      )}
 
     </div>
   );

@@ -891,78 +891,131 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
   const tickers = activePosns.map(p => p.ticker.toUpperCase());
   const earningsMap = await fetchEarningsMap(tickers).catch(() => ({}));
 
-  // ── Kill signals summary ──────────────────────────────────────────────────
-  const blStocks = killSignals.filter(s => s.signal === 'BL').slice(0, 5);
-  const ssStocks = killSignals.filter(s => s.signal === 'SS').slice(0, 5);
-  const blTotal  = killSignals.filter(s => s.signal === 'BL').length;
-  const ssTotal  = killSignals.filter(s => s.signal === 'SS').length;
-
+  // ── Chip helper ───────────────────────────────────────────────────────────
   function tierShort(tier) {
     if (!tier) return '';
-    // "ALPHA PNTHR KILL" → "ALPHA", "STRIKING" → "STRIKING", etc.
-    return tier.split(' ')[0];
+    return tier.split(' ')[0]; // 'ALPHA PNTHR KILL' → 'ALPHA'
   }
 
-  let killDetail;
+  function toChip(s) {
+    return {
+      ticker:    s.ticker,
+      score:     Math.round(s.totalScore ?? 0),
+      tier:      tierShort(s.tier),
+      rank:      s.killRank,
+      direction: s.signal,
+      price:     s.currentPrice ? +Number(s.currentPrice).toFixed(2) : null,
+      sector:    s.sector || null,
+    };
+  }
+
+  // ── Kill signals chip sections ────────────────────────────────────────────
+  let killLabel, killChipSections;
+
   if (!killSignals.length) {
-    killDetail = 'Kill cache is cold — open Kill page to trigger computation';
+    killLabel = 'Kill signals: Computing... auto-refreshes in ~60s';
+    killChipSections = [];
   } else {
-    const parts = [];
-    if (blStocks.length) {
-      const names = blStocks.map(s => `${s.ticker} (${tierShort(s.tier)})`).join(' · ');
-      const more  = blTotal > blStocks.length ? ` +${blTotal - blStocks.length} more` : '';
-      parts.push(`BL: ${names}${more}`);
-    } else {
-      parts.push('BL: none');
+    const blAll = killSignals
+      .filter(s => s.signal === 'BL')
+      .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0));
+    const ssAll = killSignals
+      .filter(s => s.signal === 'SS')
+      .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0));
+
+    killLabel = `Kill signals: ${blAll.length} BL · ${ssAll.length} SS — top setups by Kill Score below`;
+    killChipSections = [];
+
+    if (blAll.length) {
+      killChipSections.push({
+        title:    `▲ TOP 5 BL — Kill Score  (${blAll.length} total)`,
+        subtitle: 'Click any ticker to open chart → check Analyze + Composite before entering',
+        direction: 'BL',
+        chips:    blAll.slice(0, 5).map(toChip),
+      });
     }
-    if (ssStocks.length) {
-      const names = ssStocks.map(s => `${s.ticker} (${tierShort(s.tier)})`).join(' · ');
-      const more  = ssTotal > ssStocks.length ? ` +${ssTotal - ssStocks.length} more` : '';
-      parts.push(`SS: ${names}${more}`);
-    } else {
-      parts.push('SS: none');
+    if (ssAll.length) {
+      killChipSections.push({
+        title:    `▼ TOP 5 SS — Kill Score  (${ssAll.length} total)`,
+        subtitle: 'Click any ticker to open chart → check Analyze + Composite before shorting',
+        direction: 'SS',
+        chips:    ssAll.slice(0, 5).map(toChip),
+      });
     }
-    killDetail = parts.join('  ·  ');
   }
 
-  const killLabel = blTotal + ssTotal > 0
-    ? `Kill signals: ${blTotal} BL · ${ssTotal} SS in Kill universe`
-    : 'Kill signals: No BL/SS signals in Kill today';
-
-  // ── Sector concentration summary ─────────────────────────────────────────
-  const sectorNet = {};
-  for (const p of activePosns) {
-    const sec = p.sector;
+  // ── Sector analysis chip sections ─────────────────────────────────────────
+  // Group Kill signals by sector
+  const sectorBLMap = {};
+  const sectorSSMap = {};
+  for (const s of killSignals) {
+    const sec = s.sector;
     if (!sec || sec === '—') continue;
-    if (!sectorNet[sec]) sectorNet[sec] = { longs: 0, shorts: 0 };
-    if (p.direction === 'LONG') sectorNet[sec].longs++;
-    else sectorNet[sec].shorts++;
+    if (s.signal === 'BL') {
+      if (!sectorBLMap[sec]) sectorBLMap[sec] = [];
+      sectorBLMap[sec].push(s);
+    } else if (s.signal === 'SS') {
+      if (!sectorSSMap[sec]) sectorSSMap[sec] = [];
+      sectorSSMap[sec].push(s);
+    }
   }
 
-  let sectorLabel, sectorDetail;
-  const sectorEntries = Object.entries(sectorNet);
-  if (!sectorEntries.length) {
-    sectorLabel = 'Sector concentration — no active positions';
-    sectorDetail = null;
-  } else {
-    const atCap = sectorEntries.filter(([, c]) => Math.abs(c.longs - c.shorts) >= 3);
-    sectorLabel = atCap.length > 0
-      ? `Sector concentration: ⚠ ${atCap.map(([s]) => s.split(' ')[0]).join(', ')} AT CAP`
-      : 'Sector concentration — all sectors under cap';
-    sectorDetail = sectorEntries
-      .sort((a, b) => {
-        const na = Math.abs(a[1].longs - a[1].shorts);
-        const nb = Math.abs(b[1].longs - b[1].shorts);
-        return nb - na; // highest net first
-      })
-      .map(([sec, c]) => {
-        const net = Math.abs(c.longs - c.shorts);
-        const name = sec.length > 12 ? sec.split(' ').slice(0, 2).join(' ') : sec;
-        const capFlag = net >= 3 ? ' ⚠ AT CAP' : '';
-        return `${name}: ${c.longs}L/${c.shorts}S${capFlag}`;
-      })
-      .join('  ·  ');
+  // Compute sector strength: sum of Kill scores for BL vs SS
+  const allSectors = new Set([...Object.keys(sectorBLMap), ...Object.keys(sectorSSMap)]);
+  const sectorStats = {};
+  for (const sec of allSectors) {
+    const blStocks = sectorBLMap[sec] || [];
+    const ssStocks = sectorSSMap[sec] || [];
+    const blStrength = blStocks.reduce((sum, s) => sum + (s.totalScore ?? 0), 0);
+    const ssStrength = ssStocks.reduce((sum, s) => sum + (s.totalScore ?? 0), 0);
+    sectorStats[sec] = { blStrength, ssStrength, blCount: blStocks.length, ssCount: ssStocks.length };
   }
+
+  // Rising sectors: BL strength > SS strength, sorted by net BL strength
+  const risingSectors = Object.entries(sectorStats)
+    .filter(([, v]) => v.blStrength > v.ssStrength && v.blCount >= 2)
+    .sort(([, a], [, b]) => (b.blStrength - b.ssStrength) - (a.blStrength - a.ssStrength))
+    .slice(0, 4);
+
+  // Falling sectors: SS strength > BL strength, sorted by net SS strength
+  const fallingSectors = Object.entries(sectorStats)
+    .filter(([, v]) => v.ssStrength > v.blStrength && v.ssCount >= 2)
+    .sort(([, a], [, b]) => (b.ssStrength - b.blStrength) - (a.ssStrength - a.blStrength))
+    .slice(0, 4);
+
+  const sectorChipSections = [];
+  for (const [sec, v] of risingSectors) {
+    const chips = (sectorBLMap[sec] || [])
+      .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
+      .slice(0, 3)
+      .map(toChip);
+    if (chips.length) {
+      sectorChipSections.push({
+        title:    `↑ ${sec} — ${v.blCount} BL signals`,
+        direction: 'BL',
+        chips,
+      });
+    }
+  }
+  for (const [sec, v] of fallingSectors) {
+    const chips = (sectorSSMap[sec] || [])
+      .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
+      .slice(0, 3)
+      .map(toChip);
+    if (chips.length) {
+      sectorChipSections.push({
+        title:    `↓ ${sec} — ${v.ssCount} SS signals`,
+        direction: 'SS',
+        chips,
+      });
+    }
+  }
+
+  const sectorLabel = sectorChipSections.length > 0
+    ? `Sector scan: ${risingSectors.length} rising · ${fallingSectors.length} falling — top picks below`
+    : killSignals.length === 0
+      ? 'Sector scan: Computing... auto-refreshes in ~60s'
+      : 'Sector scan: Balanced — no dominant rising or falling sectors';
 
   // ── Earnings for held positions this week ─────────────────────────────────
   const today = new Date();
@@ -991,13 +1044,16 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
       return `${e.ticker} (${dow})`;
     }).join(' · ');
     earningsLabel = `Earnings this week: ${earningsThisWeek.map(e => e.ticker).join(', ')} — decide hold or exit`;
-    earningsDetail = names + ' — see tasks above for action steps';
+    earningsDetail = names + ' — see P1/P2 tasks above for action steps';
   }
 
   return {
-    killLabel, killDetail,
-    sectorLabel, sectorDetail,
-    earningsLabel, earningsDetail,
+    killLabel,
+    killChipSections,
+    sectorLabel,
+    sectorChipSections,
+    earningsLabel,
+    earningsDetail,
   };
 }
 
@@ -1017,18 +1073,36 @@ export function getRoutineTasks(dayOfWeek, context = {}) {
   // Inject smart Monday routines after mon_stop_sync
   if (dayOfWeek === 1) {
     const {
-      killLabel    = 'Kill signals: Review Kill page for new BL/SS signals',
-      killDetail   = null,
-      sectorLabel  = 'Sector concentration — review for any sector at 3+ net',
-      sectorDetail = null,
-      earningsLabel = 'Earnings check — scan calendar for held positions this week',
-      earningsDetail = null,
+      killLabel        = 'Kill signals: Review Kill page for new BL/SS signals',
+      killChipSections = [],
+      sectorLabel      = 'Sector concentration — review for any sector at 3+ net',
+      sectorChipSections = [],
+      earningsLabel    = 'Earnings check — scan calendar for held positions this week',
+      earningsDetail   = null,
     } = context;
 
     const smartRoutines = [
-      { id: 'mon_weekly_plan',   dayOfWeek: 1, label: killLabel,    detail: killDetail },
-      { id: 'mon_sector_review', dayOfWeek: 1, label: sectorLabel,  detail: sectorDetail },
-      { id: 'mon_earnings_scan', dayOfWeek: 1, label: earningsLabel, detail: earningsDetail },
+      {
+        id:           'mon_weekly_plan',
+        dayOfWeek:    1,
+        label:        killLabel,
+        detail:       null,
+        chipSections: killChipSections,
+      },
+      {
+        id:           'mon_sector_review',
+        dayOfWeek:    1,
+        label:        sectorLabel,
+        detail:       null,
+        chipSections: sectorChipSections,
+      },
+      {
+        id:           'mon_earnings_scan',
+        dayOfWeek:    1,
+        label:        earningsLabel,
+        detail:       earningsDetail || null,
+        chipSections: [],
+      },
     ];
 
     // Insert smart routines after mon_stop_sync

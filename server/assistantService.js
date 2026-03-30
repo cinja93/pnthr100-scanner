@@ -939,12 +939,12 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
       ? ` (${blHeld + ssHeld} already held excluded)`
       : '';
 
-    killLabel = `Kill signals: ${blAll.length} BL · ${ssAll.length} SS — STRIKING+ tier, analyze ≥ 90% below${heldNote}`;
+    killLabel = `Kill signals: ${blAll.length} BL · ${ssAll.length} SS — STRIKING+ tier, analyze ≥ 80% below${heldNote}`;
     killChipSections = [];
 
     if (blAll.length) {
       killChipSections.push({
-        title:    `▲ TOP BL — STRIKING+ · Analyze ≥ 90%  (${blAll.length} candidates)`,
+        title:    `▲ TOP BL — STRIKING+ · Analyze ≥ 80%  (${blAll.length} candidates)`,
         subtitle: 'Click any ticker to open chart → check Analyze + Composite before entering',
         direction: 'BL',
         chips:    blAll.slice(0, 15).map(toChip),
@@ -952,7 +952,7 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
     }
     if (ssAll.length) {
       killChipSections.push({
-        title:    `▼ TOP SS — STRIKING+ · Analyze ≥ 90%  (${ssAll.length} candidates)`,
+        title:    `▼ TOP SS — STRIKING+ · Analyze ≥ 80%  (${ssAll.length} candidates)`,
         subtitle: 'Click any ticker to open chart → check Analyze + Composite before shorting',
         direction: 'SS',
         chips:    ssAll.slice(0, 15).map(toChip),

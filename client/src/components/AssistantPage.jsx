@@ -825,17 +825,20 @@ function ChipSection({ section, onChipClick, busyTicker }) {
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {section.chips.map(chip => {
-          const isBL   = chip.direction === 'BL';
-          const isBusy = busyTicker === chip.ticker;
+          const isBL      = chip.direction === 'BL';
+          const isBusy    = busyTicker === chip.ticker;
+          const pct       = chip.analyzePct ?? null;
+          // Analyze score color: green ≥ 90%, yellow 80-89%
+          const pctColor  = pct != null ? (pct >= 90 ? '#28a745' : '#FFD700') : '#555';
           return (
             <button
               key={chip.ticker}
               onClick={(e) => { e.stopPropagation(); onChipClick(chip); }}
               disabled={isBusy}
-              title={`${chip.ticker} — Kill #${chip.rank ?? '?'} · Score ${chip.score} · ${chip.tier} · ${chip.price != null ? '$' + chip.price : ''}`}
+              title={`${chip.ticker} — Kill #${chip.rank ?? '?'} · Kill ${chip.score} · ${chip.tier}${pct != null ? ' · Analyze ' + pct + '%' : ''} · ${chip.price != null ? '$' + chip.price : ''}`}
               style={{
-                background:    isBL ? 'rgba(40,167,69,0.10)' : 'rgba(239,83,80,0.10)',
-                border:        `1px solid ${isBL ? 'rgba(40,167,69,0.35)' : 'rgba(239,83,80,0.35)'}`,
+                background:   isBL ? 'rgba(40,167,69,0.10)' : 'rgba(239,83,80,0.10)',
+                border:       `1px solid ${isBL ? 'rgba(40,167,69,0.35)' : 'rgba(239,83,80,0.35)'}`,
                 borderRadius:  6,
                 padding:       '5px 10px',
                 cursor:        isBusy ? 'wait' : 'pointer',
@@ -861,6 +864,11 @@ function ChipSection({ section, onChipClick, busyTicker }) {
               }}>
                 {chip.tier}
               </span>
+              {pct != null && (
+                <span style={{ fontSize: 10, fontWeight: 700, color: pctColor }}>
+                  {pct}%
+                </span>
+              )}
               {chip.price != null && (
                 <span style={{ fontSize: 10, color: '#666' }}>${chip.price}</span>
               )}
@@ -977,25 +985,27 @@ export default function AssistantPage() {
       const filteredSections = routine.chipSections.map(section => {
         if (!section.chips?.length) return section;
 
-        // Score every candidate chip in this section
+        // Score every candidate chip in this section.
+        // Threshold: >= 80% analyze (catches RECENT signals too, not just FRESH).
+        // Chips with pct >= 90 are green; 80-89 are yellow — score shown on chip.
         const scored = section.chips
           .map(chip => {
             // Build a minimal stock-like object for computeAnalyzeScore
             const stockObj = {
-              ticker:      chip.ticker,
-              signal:      chip.direction,  // 'BL' or 'SS'
-              signalAge:   chip.signalAge,
-              weeksSince:  chip.signalAge,
-              totalScore:  chip.score,
-              killScore:   chip.score,
-              sector:      chip.sector,
-              exchange:    chip.exchange,
+              ticker:       chip.ticker,
+              signal:       chip.direction,  // 'BL' or 'SS'
+              signalAge:    chip.signalAge,
+              weeksSince:   chip.signalAge,
+              totalScore:   chip.score,
+              killScore:    chip.score,
+              sector:       chip.sector,
+              exchange:     chip.exchange,
               currentPrice: chip.price,
             };
             const result = computeAnalyzeScore(stockObj, analyzeCtx);
-            return { chip, pct: result?.pct ?? 0 };
+            return { chip: { ...chip, analyzePct: result?.pct ?? 0 }, pct: result?.pct ?? 0 };
           })
-          .filter(({ pct }) => pct >= 90)
+          .filter(({ pct }) => pct >= 80)
           .sort((a, b) => b.pct - a.pct)
           .slice(0, 5);
 

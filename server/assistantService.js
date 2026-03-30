@@ -899,13 +899,15 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
 
   function toChip(s) {
     return {
-      ticker:    s.ticker,
-      score:     Math.round(s.totalScore ?? 0),
-      tier:      tierShort(s.tier),
-      rank:      s.killRank,
-      direction: s.signal,
-      price:     s.currentPrice ? +Number(s.currentPrice).toFixed(2) : null,
-      sector:    s.sector || null,
+      ticker:     s.ticker,
+      score:      Math.round(s.totalScore ?? 0),
+      tier:       tierShort(s.tier),
+      rank:       s.killRank,
+      direction:  s.signal,
+      price:      s.currentPrice ? +Number(s.currentPrice).toFixed(2) : null,
+      sector:     s.sector     || null,
+      exchange:   s.exchange   || null,
+      signalAge:  s.signalAge  ?? null,
     };
   }
 
@@ -919,38 +921,41 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
     killLabel = 'Kill signals: Computing... auto-refreshes in ~60s';
     killChipSections = [];
   } else {
+    // Filter to STRIKING+ tier only (totalScore >= 100); client will further
+    // filter to analyze score >= 90%, so we send top 15 as the candidate pool.
     const blAll = killSignals
-      .filter(s => s.signal === 'BL' && !heldTickers.has(s.ticker.toUpperCase()))
+      .filter(s => s.signal === 'BL' && (s.totalScore ?? 0) >= 100 && !heldTickers.has(s.ticker.toUpperCase()))
       .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0));
     const ssAll = killSignals
-      .filter(s => s.signal === 'SS' && !heldTickers.has(s.ticker.toUpperCase()))
+      .filter(s => s.signal === 'SS' && (s.totalScore ?? 0) >= 100 && !heldTickers.has(s.ticker.toUpperCase()))
       .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0));
 
-    const blTotal = killSignals.filter(s => s.signal === 'BL').length;
-    const ssTotal = killSignals.filter(s => s.signal === 'SS').length;
-    const blHeld  = blTotal - blAll.length;
-    const ssHeld  = ssTotal - ssAll.length;
+    // Count how many STRIKING+ were excluded because already held
+    const blStriking = killSignals.filter(s => s.signal === 'BL' && (s.totalScore ?? 0) >= 100).length;
+    const ssStriking = killSignals.filter(s => s.signal === 'SS' && (s.totalScore ?? 0) >= 100).length;
+    const blHeld  = blStriking - blAll.length;
+    const ssHeld  = ssStriking - ssAll.length;
     const heldNote = (blHeld + ssHeld) > 0
       ? ` (${blHeld + ssHeld} already held excluded)`
       : '';
 
-    killLabel = `Kill signals: ${blAll.length} new BL · ${ssAll.length} new SS — top setups by Kill Score below${heldNote}`;
+    killLabel = `Kill signals: ${blAll.length} BL · ${ssAll.length} SS — STRIKING+ tier, analyze ≥ 90% below${heldNote}`;
     killChipSections = [];
 
     if (blAll.length) {
       killChipSections.push({
-        title:    `▲ TOP 5 BL — Kill Score  (${blAll.length} new, not yet held)`,
+        title:    `▲ TOP BL — STRIKING+ · Analyze ≥ 90%  (${blAll.length} candidates)`,
         subtitle: 'Click any ticker to open chart → check Analyze + Composite before entering',
         direction: 'BL',
-        chips:    blAll.slice(0, 5).map(toChip),
+        chips:    blAll.slice(0, 15).map(toChip),
       });
     }
     if (ssAll.length) {
       killChipSections.push({
-        title:    `▼ TOP 5 SS — Kill Score  (${ssAll.length} new, not yet held)`,
+        title:    `▼ TOP SS — STRIKING+ · Analyze ≥ 90%  (${ssAll.length} candidates)`,
         subtitle: 'Click any ticker to open chart → check Analyze + Composite before shorting',
         direction: 'SS',
-        chips:    ssAll.slice(0, 5).map(toChip),
+        chips:    ssAll.slice(0, 15).map(toChip),
       });
     }
   }
@@ -1003,10 +1008,11 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
 
   const sectorChipSections = [];
   for (const [sec, v] of risingSectors) {
+    // Send up to 8 candidates so client can filter by analyze >= 90% and still have picks
     const chips = (sectorBLMap[sec] || [])
-      .filter(s => !heldTickers.has(s.ticker.toUpperCase()))
+      .filter(s => (s.totalScore ?? 0) >= 100 && !heldTickers.has(s.ticker.toUpperCase()))
       .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
-      .slice(0, 3)
+      .slice(0, 8)
       .map(toChip);
     if (chips.length) {
       sectorChipSections.push({
@@ -1018,9 +1024,9 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
   }
   for (const [sec, v] of fallingSectors) {
     const chips = (sectorSSMap[sec] || [])
-      .filter(s => !heldTickers.has(s.ticker.toUpperCase()))
+      .filter(s => (s.totalScore ?? 0) >= 100 && !heldTickers.has(s.ticker.toUpperCase()))
       .sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
-      .slice(0, 3)
+      .slice(0, 8)
       .map(toChip);
     if (chips.length) {
       sectorChipSections.push({

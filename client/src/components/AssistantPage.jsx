@@ -15,9 +15,11 @@
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 import ChartModal from './ChartModal';
+import { useAnalyzeContext } from '../contexts/AnalyzeContext';
+import { computeAnalyzeScore } from '../utils/analyzeScore';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -797,6 +799,54 @@ export default function AssistantPage() {
   const [chartStock,  setChartStock]  = useState(null);
   const [chartBusy,   setChartBusy]   = useState(null); // ticker currently loading
 
+  // Analyze context for scoring chips
+  const analyzeCtx = useAnalyzeContext();
+
+  // ── Filter chip sections to analyze >= 90% ────────────────────────────────
+  // Runs whenever routines or analyze context updates. For each routine that has
+  // chipSections, scores every candidate chip and keeps only those with pct >= 90.
+  // Shows up to 5 per section. ETF chips use the same function (max 53 pts).
+  const filteredRoutines = useMemo(() => {
+    // If analyze context isn't loaded yet, show chips unfiltered so the user
+    // isn't left staring at empty sections while context loads.
+    if (!analyzeCtx || !routines.length) return routines;
+
+    return routines.map(routine => {
+      if (!routine.chipSections?.length) return routine;
+
+      const filteredSections = routine.chipSections.map(section => {
+        if (!section.chips?.length) return section;
+
+        // Score every candidate chip in this section
+        const scored = section.chips
+          .map(chip => {
+            // Build a minimal stock-like object for computeAnalyzeScore
+            const stockObj = {
+              ticker:      chip.ticker,
+              signal:      chip.direction,  // 'BL' or 'SS'
+              signalAge:   chip.signalAge,
+              weeksSince:  chip.signalAge,
+              totalScore:  chip.score,
+              killScore:   chip.score,
+              sector:      chip.sector,
+              exchange:    chip.exchange,
+              currentPrice: chip.price,
+            };
+            const result = computeAnalyzeScore(stockObj, analyzeCtx);
+            return { chip, pct: result?.pct ?? 0 };
+          })
+          .filter(({ pct }) => pct >= 90)
+          .sort((a, b) => b.pct - a.pct)
+          .slice(0, 5);
+
+        // If none pass, show empty section (will be hidden by ChipSection if chips=[])
+        return { ...section, chips: scored.map(({ chip }) => chip) };
+      }).filter(section => section.chips?.length > 0);
+
+      return { ...routine, chipSections: filteredSections };
+    });
+  }, [routines, analyzeCtx]);
+
   // ── Data Fetching ──────────────────────────────────────────────────────────
 
   const fetchAll = useCallback(async () => {
@@ -1140,7 +1190,7 @@ export default function AssistantPage() {
       )}
 
       {/* ── Routines ───────────────────────────────────────────────────────── */}
-      {routines.length > 0 && (
+      {filteredRoutines.length > 0 && (
         <>
           <div style={s.sectionHeader}>
             <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[4] }}>
@@ -1148,7 +1198,7 @@ export default function AssistantPage() {
             </span>
           </div>
           <RoutineSection
-            routines={routines}
+            routines={filteredRoutines}
             dayLabel={routineDayLbl}
             completedIds={routineIds}
             onToggle={handleToggleRoutine}

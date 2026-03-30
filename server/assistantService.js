@@ -532,35 +532,72 @@ export async function generateAssistantTasks(userId, positions, nav) {
       });
     }
 
-    // ── P2: LOT_GATE_CLEAR (gate cleared today, price not yet there) ──────────
-    // Check if Lot 2 just became time-eligible but price hasn't hit trigger
+    // ── P2: LOT_GATE_CLEAR (gate open, price not yet at trigger) ─────────────
+    // Shows every day the gate is open and Lot 2 hasn't been hit yet.
+    // On Day 10+ escalates to LOT_GATE_NO_TRIGGER (P2 with reassessment guidance).
     {
       const lot2 = fills[2];
       if (!lot2?.filled && fills[1]?.filled) {
         const lot1FillDate = fills[1]?.date || pos.createdAt;
         const tradDays     = tradingDaysSince(lot1FillDate);
-        if (tradDays === 5) {
-          // Gate cleared TODAY (exactly 5 days)
+        if (tradDays >= 5) {
           const trigger  = lotTrigger(anchor, 1, isLong);
           const priceHit = cp != null && (isLong ? cp >= trigger : cp <= trigger);
           if (!priceHit) {
-            const shares = lotTargetShares(totalShares, 1);
-            tasks.push({
-              id:              `lot_gate_clear_${ticker}_2`,
-              priority:        2,
-              type:            'LOT_GATE_CLEAR',
-              ticker,
-              badge:           'GATE OPEN',
-              headline:        `${ticker}: Lot 2 time gate opens today. Trigger price: ${fmt$(trigger)}. Watch for it.`,
-              instructions:    [
-                `Lot 2 for ${ticker} is now time-eligible — the 5 trading day gate has cleared.`,
-                `Trigger price: ${fmt$(trigger)}. If price reaches this level, buy ${shares} shares in IBKR and record the fill.`,
-              ],
-              confirmQuestion: 'Noted — you\'re watching for the Lot 2 trigger.',
-              data:            { trigger, shares, tradDays },
-              dayOfWeek:       null,
-              autoClears:      false,
-            });
+            const shares    = lotTargetShares(totalShares, 1);
+            const remaining = 20 - tradDays;
+            const isDay10Plus = tradDays >= 10;
+
+            if (isDay10Plus) {
+              // ── LOT_GATE_NO_TRIGGER — momentum reassessment alert ────────
+              const urgency = tradDays >= 14 ? 'CONSIDER EXITING' : 'REASSESS NOW';
+              tasks.push({
+                id:       `lot_gate_no_trigger_${ticker}_2`,
+                priority: 2,
+                type:     'LOT_GATE_NO_TRIGGER',
+                ticker,
+                badge:    urgency,
+                headline: `${ticker}: Day ${tradDays} — Lot 2 gate open ${tradDays - 5} days, trigger ${fmt$(trigger)} still not hit. Reassess.`,
+                instructions: [
+                  `1. ${ticker} entered ${tradDays} trading days ago. Lot 2 gate opened ${tradDays - 5} days ago.`,
+                  `2. Lot 2 trigger of ${fmt$(trigger)} (${isLong ? '+3%' : '-3%'} from entry) has NOT been reached — the stock has not confirmed the move.`,
+                  `3. This is a momentum warning. A stock that can't move ${isLong ? '+3%' : '-3%'} in ${tradDays - 5} days may be losing conviction.`,
+                  `4. Check the chart: Is price still ${isLong ? 'above' : 'below'} the 21W EMA? Is the EMA slope still ${isLong ? 'up' : 'down'}?`,
+                  `5. If YES (signal intact): hold and continue watching for the trigger. ${remaining} trading days remain before stale hunt deadline.`,
+                  `6. If NO (signal weakening or price drifting back): consider exiting voluntarily now rather than waiting for the Day 20 forced exit.`,
+                  tradDays >= 14
+                    ? `7. ⚠ Day ${tradDays}/20 — you have ${remaining} trading days left. Voluntary exit now is strongly recommended if the move hasn't materialized.`
+                    : `7. You have ${remaining} trading days remaining before the mandatory stale hunt exit at Day 20.`,
+                ],
+                confirmQuestion: `Have you reviewed ${ticker}'s chart and decided whether to hold or exit early?`,
+                data:            { trigger, shares, tradDays, remaining, daysGateOpen: tradDays - 5 },
+                dayOfWeek:       null,
+                autoClears:      false,
+              });
+            } else {
+              // ── LOT_GATE_CLEAR — informational (Days 5-9) ───────────────
+              const openedDaysAgo = tradDays - 5;
+              const gateDesc = openedDaysAgo === 0 ? 'opens today' : `opened ${openedDaysAgo} day${openedDaysAgo > 1 ? 's' : ''} ago`;
+              tasks.push({
+                id:       `lot_gate_clear_${ticker}_2`,
+                priority: 2,
+                type:     'LOT_GATE_CLEAR',
+                ticker,
+                badge:    'GATE OPEN',
+                headline: `${ticker}: Lot 2 gate ${gateDesc}. Trigger ${fmt$(trigger)} not yet hit — Day ${tradDays}/20.`,
+                instructions: [
+                  `1. The 5-day time gate for ${ticker} Lot 2 has cleared (Day ${tradDays} since entry).`,
+                  `2. Lot 2 trigger: ${fmt$(trigger)} (${isLong ? '+3%' : '-3%'} from entry). Buy ${shares} shares when price reaches this level.`,
+                  `3. If price hits ${fmt$(trigger)}: buy ${shares} shares in IBKR, then record the Lot 2 fill in Command.`,
+                  `4. Momentum guidance: if the trigger isn't hit by Day 10, you'll receive a reassessment alert.`,
+                  `5. Stale hunt clock: Day ${tradDays} of 20 — ${remaining} trading days remaining before mandatory exit.`,
+                ],
+                confirmQuestion: `Noted — you're watching for ${ticker} Lot 2 trigger at ${fmt$(trigger)}.`,
+                data:            { trigger, shares, tradDays, remaining },
+                dayOfWeek:       null,
+                autoClears:      false,
+              });
+            }
           }
         }
       }

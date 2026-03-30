@@ -692,7 +692,7 @@ export default function ApexPage() {
                         {/* Ticker + tags + prey strategies — click opens chart */}
                         <td
                           className={`${styles.tickerCell} ${styles.tickerClickable}`}
-                          onClick={e => { e.stopPropagation(); setSelectedTicker(stock.ticker); handleRowClick(stock, idx, sorted); }}
+                          onClick={e => { e.stopPropagation(); setSelectedTicker(stock.ticker); handleRowClick(stock, idx, displaySorted); }}
                           title="Click to view chart"
                         >
                           <div className={styles.tickerRow}>

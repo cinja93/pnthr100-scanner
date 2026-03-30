@@ -123,7 +123,7 @@ export async function pendingEntryConfirm(req, res) {
     });
     if (!entry) return res.status(404).json({ error: 'Pending entry not found' });
 
-    const { fillPrice, shares, date, stop, direction } = req.body;
+    const { fillPrice, shares, date, stop, direction, userConfirmed } = req.body;
     if (!fillPrice || !shares) return res.status(400).json({ error: 'fillPrice and shares are required' });
 
     const resolvedDirection = (direction === 'LONG' || direction === 'SHORT') ? direction : entry.direction;
@@ -404,6 +404,7 @@ export async function pendingEntryConfirm(req, res) {
         marketAtEntry,
         analyzeScoreAtEntry,
         dataSource: killScoreAtEntry?.source || 'UNKNOWN',
+        userConfirmed: userConfirmed || null,
       });
     } catch (e) {
       console.warn('[JOURNAL] Auto-create failed:', e.message);

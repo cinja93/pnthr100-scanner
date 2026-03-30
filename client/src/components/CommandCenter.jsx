@@ -1495,6 +1495,21 @@ function PendingCard({ entry, nav, onConfirm, onDismiss }) {
   const [saving,    setSaving]    = useState(false);
   const stopUserEdited            = useRef(false);
 
+  // ── Entry Conditions — pre-populate from Analyze snapshot ─────────────────
+  const raw           = entry.analyzeScore?.rawData || {};
+  const isNasdaq      = (entry.exchange || '').toUpperCase() === 'NASDAQ';
+  const indexEtfName  = isNasdaq ? 'QQQ' : 'SPY';
+  const indexAbove    = isNasdaq ? (raw.market?.qqq?.aboveEma ?? null) : (raw.market?.spy?.aboveEma ?? null);
+  const sectorAbove   = raw.sector?.aboveEma ?? null;
+  const sectorEtfName = raw.sector?.etf || (entry.sector ? `${entry.sector} ETF` : 'Sector ETF');
+  const initDir       = entry.direction || 'LONG';
+  const condAuto      = { index: indexAbove != null, sector: sectorAbove != null };
+  const [conditions, setConditions] = useState({
+    indexTrendAligned:  indexAbove  != null ? (initDir === 'LONG' ? indexAbove  : !indexAbove)  : null,
+    sectorTrendAligned: sectorAbove != null ? (initDir === 'LONG' ? sectorAbove : !sectorAbove) : null,
+    sizingCorrect: true,
+  });
+
   // On mount: fetch live PNTHR stop for this ticker and use it as the default
   // (unless the user has already edited the stop field manually)
   useEffect(() => {
@@ -1532,7 +1547,15 @@ function PendingCard({ entry, nav, onConfirm, onDismiss }) {
     if (!fillPrice || !shares) return;
     setSaving(true);
     try {
-      await onConfirm(entry.id, { fillPrice: +fillPrice, shares: +shares, date, stop: +stop || undefined, direction });
+      await onConfirm(entry.id, {
+        fillPrice: +fillPrice, shares: +shares, date, stop: +stop || undefined, direction,
+        userConfirmed: {
+          indexTrendAligned:  conditions.indexTrendAligned,
+          sectorTrendAligned: conditions.sectorTrendAligned,
+          sizingCorrect:      conditions.sizingCorrect,
+          confirmedAt:        new Date().toISOString(),
+        },
+      });
     } catch { /* non-fatal */ }
     setSaving(false);
   };
@@ -1612,6 +1635,40 @@ function PendingCard({ entry, nav, onConfirm, onDismiss }) {
             Total target: <span style={{ color: '#888' }}>{entry.totalTargetShares} shr</span>
           </div>
         )}
+      </div>
+
+      {/* ── Entry Conditions ───────────────────────────────────────────────── */}
+      <div style={{ padding: '8px 18px 12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 7 }}>
+          Entry Conditions
+          <span style={{ color: '#28a745', marginLeft: 5 }}>⚡</span>
+          <span style={{ color: '#444', fontWeight: 400 }}> = auto-detected from Analyze · click to override</span>
+        </div>
+        {[
+          { key: 'indexTrendAligned',  label: `${indexEtfName} above 21W EMA at entry?`,    auto: condAuto.index  },
+          { key: 'sectorTrendAligned', label: `${sectorEtfName} above 21W EMA at entry?`,   auto: condAuto.sector },
+          { key: 'sizingCorrect',      label: 'Used SIZE IT for Lot 1?',                     auto: false           },
+        ].map(({ key, label, auto }) => (
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+            <span style={{ fontSize: 10, color: '#777', flex: 1 }}>
+              {label}
+              {auto && <span style={{ color: '#28a745', marginLeft: 4, fontSize: 9 }}>⚡</span>}
+            </span>
+            {[true, false].map(val => (
+              <button key={String(val)} onClick={() => setConditions(c => ({ ...c, [key]: val }))}
+                style={{
+                  background: conditions[key] === val
+                    ? (val ? 'rgba(40,167,69,0.75)' : 'rgba(220,53,69,0.75)')
+                    : 'rgba(255,255,255,0.05)',
+                  color: conditions[key] === val ? '#fff' : '#444',
+                  border: 'none', borderRadius: 3, padding: '2px 10px',
+                  fontSize: 10, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em',
+                }}>
+                {val ? 'YES' : 'NO'}
+              </button>
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -1037,3 +1037,11 @@ export function clearApexCache() {
 export function getCachedApexResults() {
   return apexCache.results ?? null;
 }
+
+// Look up a single ticker's Kill score from the in-memory cache.
+// Returns null when cache is cold (no computation triggered).
+export function getCachedTickerKillData(ticker) {
+  const cached = apexCache.results;
+  if (!cached?.stocks) return null;
+  return cached.stocks.find(s => s.ticker === ticker.toUpperCase()) ?? null;
+}

@@ -12,7 +12,7 @@ import { getEtfStocks, ALL_ETF_TICKER_SET, getCachedEtfResults } from './etfServ
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
-import { getApexResults, clearApexCache } from './apexService.js';
+import { getApexResults, clearApexCache, getCachedTickerKillData } from './apexService.js';
 import {
   killPipelineHandler,
   positionsGetAll,
@@ -1779,6 +1779,13 @@ app.get('/api/apex', authenticateJWT, async (req, res) => {
     console.error('Error in /api/apex:', err);
     res.status(500).json({ error: 'PNTHR Kill scan failed' });
   }
+});
+
+// ── PNTHR Kill — single ticker lookup from cache (no recompute) ──────────────
+app.get('/api/apex/ticker/:ticker', authenticateJWT, (req, res) => {
+  const stock = getCachedTickerKillData(req.params.ticker);
+  if (!stock) return res.json({ found: false });
+  res.json({ found: true, stock });
 });
 
 // ── PNTHR Kill History (Case Studies + Track Record) ───────────────────────────

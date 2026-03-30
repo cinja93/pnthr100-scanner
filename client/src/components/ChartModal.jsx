@@ -312,6 +312,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   const [watchlistSaving, setWatchlistSaving] = useState(false);
   const [inEarningsWindow, setInEarningsWindow] = useState(false);
   const [killRankMap, setKillRankMap] = useState(_killRankMap); // start from cache if already loaded
+  const [fetchedKillData, setFetchedKillData] = useState(null); // Kill score fetched when not on Kill page
   // ── SIZE IT / QUEUE IT state ─────────────────────────────────────────────────
   const [sizePanel, setSizePanel] = useState(null);
   const [sizeLoading, setSizeLoading] = useState(false);
@@ -375,11 +376,40 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       }
     }
 
+    // Merge Kill pipeline data when not available from the source page (e.g. Search)
+    if (fetchedKillData && base.totalScore == null && base.killScore == null && base.apexScore == null) {
+      base.totalScore       = fetchedKillData.totalScore       ?? fetchedKillData.apexScore ?? null;
+      base.pipelineMaxScore = fetchedKillData.pipelineMaxScore ?? fetchedKillData.maxScore  ?? null;
+      base.killRank         = fetchedKillData.killRank         ?? fetchedKillData.rank       ?? null;
+      base.rankChange       = fetchedKillData.rankChange       ?? null;
+      base.tier             = fetchedKillData.tier             ?? null;
+      base.d1               = fetchedKillData.d1               ?? null;
+      base.d2               = fetchedKillData.d2               ?? null;
+      base.d3               = fetchedKillData.d3               ?? null;
+      base.d6               = fetchedKillData.d6               ?? null;
+      base.d7               = fetchedKillData.d7               ?? null;
+      base.d8               = fetchedKillData.d8               ?? null;
+    }
+
     return base;
-  }, [stock, currentSignal, allWeeklyData]);
+  }, [stock, currentSignal, allWeeklyData, fetchedKillData]);
 
   // Reset SIZE IT + ANALYZE panels when navigating to a new stock
-  useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; }, [currentIndex]);
+  useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; setFetchedKillData(null); }, [currentIndex]);
+
+  // ── Fetch Kill score from cache when stock doesn't have it (e.g. opened from Search) ──
+  useEffect(() => {
+    const s = stocks[currentIndex];
+    if (!s?.ticker) return;
+    // Already has Kill data — no fetch needed
+    if (s.totalScore != null || s.killScore != null || s.apexScore != null) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/api/apex/ticker/${encodeURIComponent(s.ticker)}`, { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (!cancelled && data?.found) setFetchedKillData(data.stock); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [currentIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Check wash rule whenever ticker changes (including Prev/Next navigation) ──
   useEffect(() => {

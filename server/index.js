@@ -52,6 +52,14 @@ import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
 import { calculateSectorExposure, generateSectorRecommendations } from './sectorExposure.js';
 import { sendApprovalRequestEmail, sendWelcomeEmail, sendDenialEmail } from './emailService.js';
 import { ibkrSync } from './ibkrSync.js';
+import {
+  generateAssistantTasks,
+  getStopSyncRows,
+  getRoutineTasks,
+  markTaskComplete,
+  getTodayCompleted,
+  ensureAssistantIndexes,
+} from './assistantService.js';
 import { recordExit, calcAvgCost, calcTotalFilled } from './exitService.js';
 import { createJournalEntry, calculateDisciplineScore } from './journalService.js';
 import {
@@ -3800,6 +3808,147 @@ app.get('/api/market-data/vix', authenticateJWT, async (req, res) => {
   }
 });
 
+// ── PNTHR Assistant API ───────────────────────────────────────────────────────
+// All endpoints available to ALL authenticated users (admin + member).
+
+// GET /api/assistant/tasks — generate prioritized task list for current user
+app.get('/api/assistant/tasks', async (req, res) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+
+    // Fetch active positions (same enrichment as positionsGetAll)
+    const { connectToDatabase: _getDb } = await import('./database.js');
+    const db = await _getDb();
+    if (!db) return res.status(503).json({ tasks: [], error: 'DB unavailable' });
+
+    const positionsRaw = await db.collection('pnthr_portfolio')
+      .find({ status: { $nin: ['CLOSED'] }, ownerId: req.user.userId })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    // Fetch live prices for current price comparisons
+    const tickers = [...new Set(positionsRaw.map(p => p.ticker))];
+    let live = {};
+    if (tickers.length) {
+      try {
+        const FMP_KEY = process.env.FMP_API_KEY;
+        const qUrl = `https://financialmodelingprep.com/stable/quote?symbol=${tickers.join(',')}&apikey=${FMP_KEY}`;
+        const qRes = await fetch(qUrl, { signal: AbortSignal.timeout(8000) });
+        if (qRes.ok) {
+          const qData = await qRes.json();
+          if (Array.isArray(qData)) {
+            for (const q of qData) live[q.symbol] = q.price;
+          }
+        }
+      } catch { /* non-fatal */ }
+    }
+
+    // Fetch RSI for feast detection
+    const rsiMap = {};
+    if (tickers.length) {
+      const FMP_KEY = process.env.FMP_API_KEY;
+      await Promise.allSettled(tickers.map(async t => {
+        try {
+          const url = `https://financialmodelingprep.com/stable/technical-indicators/rsi?symbol=${t}&periodLength=14&timeframe=1week&apikey=${FMP_KEY}`;
+          const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+          if (r.ok) {
+            const d = await r.json();
+            if (Array.isArray(d) && d[0]) rsiMap[t] = d[0].rsi ?? null;
+          }
+        } catch { /* ignore */ }
+      }));
+    }
+
+    // Enrich positions with live data
+    const positions = positionsRaw.map(p => ({
+      ...p,
+      currentPrice: live[p.ticker] ?? p.currentPrice,
+      feastAlert:   rsiMap[p.ticker] != null && rsiMap[p.ticker] > 85,
+      feastRSI:     rsiMap[p.ticker] ?? null,
+    }));
+
+    // Fetch NAV from user profile
+    const profileDoc = await db.collection('user_profiles').findOne({ userId: req.user.userId });
+    const nav = profileDoc?.accountSize ?? 100000;
+
+    const tasks = await generateAssistantTasks(req.user.userId, positions, nav);
+    res.json({ tasks, count: tasks.length, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('[assistant/tasks]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/assistant/stop-sync — compare PNTHR stop vs position.stopPrice
+app.get('/api/assistant/stop-sync', async (req, res) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+
+    const { connectToDatabase: _getDb2 } = await import('./database.js');
+    const db = await _getDb2();
+    if (!db) return res.status(503).json({ rows: [], error: 'DB unavailable' });
+
+    const positions = await db.collection('pnthr_portfolio')
+      .find({ status: { $nin: ['CLOSED'] }, ownerId: req.user.userId })
+      .toArray();
+
+    const rows = await getStopSyncRows(positions);
+
+    // Day-of-week label
+    const dow = new Date().getDay(); // 0=Sun, 1=Mon...
+    const label = dow === 1 ? 'MONDAY STOP SYNC' : 'STOP CHECK';
+
+    res.json({ rows, label, dayOfWeek: dow });
+  } catch (err) {
+    console.error('[assistant/stop-sync]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/assistant/routines — day-of-week routine checklist
+app.get('/api/assistant/routines', async (req, res) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+    const dow = new Date().getDay();
+    const routines = getRoutineTasks(dow);
+    res.json({ routines, dayOfWeek: dow });
+  } catch (err) {
+    console.error('[assistant/routines]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/assistant/complete — mark a task done
+app.post('/api/assistant/complete', async (req, res) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+    const { taskId, taskType, ticker } = req.body;
+    if (!taskId) return res.status(400).json({ error: 'taskId required' });
+    const dow = new Date().getDay();
+    await markTaskComplete(req.user.userId, taskId, taskType, ticker, dow);
+    res.json({ ok: true });
+  } catch (err) {
+    // Duplicate key = already completed today — treat as success
+    if (err.code === 11000) return res.json({ ok: true, alreadyDone: true });
+    console.error('[assistant/complete]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/assistant/completed — today's completed tasks
+app.get('/api/assistant/completed', async (req, res) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+    const completed = await getTodayCompleted(req.user.userId);
+    res.json({ completed });
+  } catch (err) {
+    console.error('[assistant/completed]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 API available at http://localhost:${PORT}/api/stocks`);
@@ -3810,6 +3959,7 @@ app.listen(PORT, () => {
   ensureCommandCenterIndexes().catch(() => {});
   createPendingEntriesIndexes().catch(() => {});
   createKillHistoryIndexes().catch(() => {});
+  ensureAssistantIndexes().catch(() => {});
 });
 
 // Scheduled Friday auto-save: checks every 30 minutes.

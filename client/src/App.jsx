@@ -24,6 +24,7 @@ import PulsePage from './components/PulsePage';
 import SignalHistoryPage from './components/SignalHistoryPage';
 import HistoryPage from './components/HistoryPage';
 import KillTestPage from './components/KillTestPage';
+import AssistantPage from './components/AssistantPage';
 import LoginPage from './components/LoginPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
@@ -482,6 +483,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR PREY page */}
           {activePage === 'prey' && <PreyPage onNavigate={navigate} />}
+
+          {/* PNTHR Assistant — Daily Task Co-Pilot */}
+          {activePage === 'assistant' && <AssistantPage />}
 
           {/* PNTHR's Pulse mission control */}
           {activePage === 'pulse' && <PulsePage onNavigate={navigate} />}

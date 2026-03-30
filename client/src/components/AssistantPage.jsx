@@ -1087,20 +1087,26 @@ export default function AssistantPage() {
           </div>
           {syncExpanded && (
             <>
-              {stopSyncRows.map(row => (
-                <StopSyncRow
-                  key={row.ticker}
-                  row={row}
-                  isDone={!!syncDoneMap[row.ticker]}
-                  onToggle={handleToggleStopSync}
-                />
-              ))}
-              {syncNeedsCount > 0 && (
-                <div style={s.syncFooter}>
-                  <button style={s.syncAllBtn} onClick={handleMarkAllSynced}>
-                    MARK ALL STOPS UPDATED ✓
-                  </button>
+              {syncNeedsCount === 0 ? (
+                <div style={{ padding: '14px 16px', fontSize: 12, color: '#28a745' }}>
+                  ✓ All {stopSyncRows.length} stops are up to date — nothing to sync today.
                 </div>
+              ) : (
+                <>
+                  {stopSyncRows.filter(r => r.needsUpdate && !syncDoneMap[r.ticker]).map(row => (
+                    <StopSyncRow
+                      key={row.ticker}
+                      row={row}
+                      isDone={false}
+                      onToggle={handleToggleStopSync}
+                    />
+                  ))}
+                  <div style={s.syncFooter}>
+                    <button style={s.syncAllBtn} onClick={handleMarkAllSynced}>
+                      MARK ALL STOPS UPDATED ✓
+                    </button>
+                  </div>
+                </>
               )}
             </>
           )}

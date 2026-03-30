@@ -736,8 +736,8 @@ function RoutineSection({ routines, dayLabel: dayLabelStr, completedIds, onToggl
               {r.detail && <div style={s.routineDetail(completedIds.has(r.id))}>{r.detail}</div>}
             </div>
           </div>
-          {/* Chip sections — rendered outside the checkbox row so clicks don't toggle */}
-          {r.chipSections?.length > 0 && !completedIds.has(r.id) && r.chipSections.map((section, si) => (
+          {/* Chip sections — always visible so picks are accessible even after checking off */}
+          {r.chipSections?.length > 0 && r.chipSections.map((section, si) => (
             <ChipSection
               key={si}
               section={section}

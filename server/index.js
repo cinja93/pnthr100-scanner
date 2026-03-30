@@ -12,7 +12,7 @@ import { getEtfStocks, ALL_ETF_TICKER_SET, getCachedEtfResults } from './etfServ
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
-import { getApexResults, clearApexCache, getCachedTickerKillData, getCachedSignalStocks } from './apexService.js';
+import { getApexResults, clearApexCache, getCachedTickerKillData, getCachedSignalStocks, triggerApexWarmup } from './apexService.js';
 import {
   killPipelineHandler,
   positionsGetAll,
@@ -3922,10 +3922,10 @@ app.get('/api/assistant/routines', async (req, res) => {
           .find({ status: { $nin: ['CLOSED'] }, ownerId: req.user.userId })
           .toArray();
         const killSignals = getCachedSignalStocks();
-        // Auto-warm Kill cache if cold — don't await (runs in background ~60s)
+        // Auto-warm Kill cache if cold — fires in background, doesn't block response
         if (!killSignals.length) {
-          console.log('[routines] Kill cache cold — triggering background computation');
-          getApexResults(false).catch(e => console.warn('[routines] apex warm-up failed:', e.message));
+          console.log('[routines] Kill cache cold — triggering background warm-up');
+          triggerApexWarmup(); // intentionally not awaited
         }
         context = await buildRoutineContext(activePosns, killSignals);
       }

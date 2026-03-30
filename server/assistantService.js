@@ -960,27 +960,34 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
     }
   }
 
-  // Compute sector strength: sum of Kill scores for BL vs SS
+  // Compute sector signal counts (use count not score-sum — DORMANT stocks have
+  // negative Kill scores which would corrupt a score-sum-based comparison).
   const allSectors = new Set([...Object.keys(sectorBLMap), ...Object.keys(sectorSSMap)]);
   const sectorStats = {};
   for (const sec of allSectors) {
     const blStocks = sectorBLMap[sec] || [];
     const ssStocks = sectorSSMap[sec] || [];
-    const blStrength = blStocks.reduce((sum, s) => sum + (s.totalScore ?? 0), 0);
-    const ssStrength = ssStocks.reduce((sum, s) => sum + (s.totalScore ?? 0), 0);
-    sectorStats[sec] = { blStrength, ssStrength, blCount: blStocks.length, ssCount: ssStocks.length };
+    // Use best killRank (lowest number = best) as secondary sort metric
+    const bestBLRank = blStocks.length ? Math.min(...blStocks.map(s => s.killRank ?? 9999)) : 9999;
+    const bestSSRank = ssStocks.length ? Math.min(...ssStocks.map(s => s.killRank ?? 9999)) : 9999;
+    sectorStats[sec] = {
+      blCount: blStocks.length,
+      ssCount: ssStocks.length,
+      bestBLRank,
+      bestSSRank,
+    };
   }
 
-  // Rising sectors: BL strength > SS strength, sorted by net BL strength
+  // Rising sectors: more BL signals than SS, at least 2 BL, sorted by BL count then best BL rank
   const risingSectors = Object.entries(sectorStats)
-    .filter(([, v]) => v.blStrength > v.ssStrength && v.blCount >= 2)
-    .sort(([, a], [, b]) => (b.blStrength - b.ssStrength) - (a.blStrength - a.ssStrength))
+    .filter(([, v]) => v.blCount > v.ssCount && v.blCount >= 2)
+    .sort(([, a], [, b]) => b.blCount !== a.blCount ? b.blCount - a.blCount : a.bestBLRank - b.bestBLRank)
     .slice(0, 4);
 
-  // Falling sectors: SS strength > BL strength, sorted by net SS strength
+  // Falling sectors: more SS signals than BL, at least 2 SS, sorted by SS count then best SS rank
   const fallingSectors = Object.entries(sectorStats)
-    .filter(([, v]) => v.ssStrength > v.blStrength && v.ssCount >= 2)
-    .sort(([, a], [, b]) => (b.ssStrength - b.blStrength) - (a.ssStrength - a.blStrength))
+    .filter(([, v]) => v.ssCount > v.blCount && v.ssCount >= 2)
+    .sort(([, a], [, b]) => b.ssCount !== a.ssCount ? b.ssCount - a.ssCount : a.bestSSRank - b.bestSSRank)
     .slice(0, 4);
 
   const sectorChipSections = [];

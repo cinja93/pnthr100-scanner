@@ -1055,3 +1055,37 @@ export function getCachedSignalStocks() {
     .filter(s => (s.signal === 'BL' || s.signal === 'SS') && s.totalScore !== -99)
     .sort((a, b) => (a.killRank ?? 9999) - (b.killRank ?? 9999));
 }
+
+// Self-contained Kill cache warm-up for use by the Assistant service.
+// Loads all required jungle data then triggers getApexResults.
+// Safe to fire-and-forget (all errors caught internally).
+export async function triggerApexWarmup() {
+  if (apexCache.weekKey === getLastFriday() && apexCache.results) {
+    return; // Already warm — nothing to do
+  }
+  try {
+    const { getJungleStocks } = await import('./stockService.js');
+    const { getSp400Longs, getSp400Shorts } = await import('./sp400Service.js');
+    const { getSignals } = await import('./signalService.js');
+    const [specLongs, specShorts] = await Promise.all([
+      getSp400Longs().catch(() => []),
+      getSp400Shorts().catch(() => []),
+    ]);
+    const stocks = await getJungleStocks(specLongs, specShorts);
+    const tickers = stocks.map(s => s.ticker);
+    const stockMeta = {};
+    for (const s of stocks) {
+      stockMeta[s.ticker] = {
+        companyName: s.companyName, sector: s.sector, exchange: s.exchange,
+        currentPrice: s.currentPrice, ytdReturn: s.ytdReturn,
+        isSp500: s.isSp500, isDow30: s.isDow30, isNasdaq100: s.isNasdaq100,
+        universe: s.universe, rankList: s.rankList ?? null, rank: null,
+      };
+    }
+    const jungleSignals = await getSignals(tickers);
+    await getApexResults(tickers, stockMeta, jungleSignals, null, new Set());
+    console.log('[apexService] triggerApexWarmup: Kill cache warmed successfully');
+  } catch (err) {
+    console.warn('[apexService] triggerApexWarmup failed:', err.message);
+  }
+}

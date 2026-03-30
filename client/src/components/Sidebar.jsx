@@ -84,9 +84,9 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
     { key: 'watchlist', label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' },
   ];
   if (isAdmin) {
-    personalItems.push({ key: 'history',        label: 'PNTHR Kill 10',  icon: '📊' });
-    personalItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test',     icon: '🎯' });
-    personalItems.push({ key: 'signal-history', label: 'PNTHR History',      icon: '📋' });
+    personalItems.push({ key: 'history',        label: 'PNTHR Kill 10',  iconImg: true });
+    personalItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test',     iconImg: true });
+    personalItems.push({ key: 'signal-history', label: 'PNTHR History',      iconImg: true });
   }
 
   const personalGroup = firstName

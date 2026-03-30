@@ -10,7 +10,7 @@ const NAV_GROUPS = [
       { key: 'assistant', label: 'PNTHR Assistant', iconImg: true },
       { key: 'pulse',    label: 'PNTHR Pulse',  iconImg: true },
       { key: 'perch',    label: 'PNTHR Perch',    iconImg: true },
-      { key: 'earnings', label: 'Earnings Week',  icon: '📅' },
+      { key: 'earnings', label: 'PNTHR Calendar',  icon: '📅' },
     ],
   },
   {

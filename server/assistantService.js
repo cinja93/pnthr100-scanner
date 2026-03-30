@@ -1083,6 +1083,124 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
   };
 }
 
+// ── Position Health — Daily RSI Alerts ────────────────────────────────────────
+//
+// Checks daily RSI-14 for every active Command position.
+//   BL (LONG) position: alert when daily RSI > 75  → overbought, feast zone
+//   SS (SHORT) position: alert when daily RSI < 25  → oversold, short squeeze risk
+//
+// Returns array of alert objects with today's RSI, yesterday's RSI, and delta.
+
+const RSI_BL_ALERT = 75;
+const RSI_SS_ALERT = 25;
+
+function computeDailyRSI14(closes) {
+  const n = closes.length;
+  if (n < 15) return [];
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i <= 14; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) avgGain += d; else avgLoss += Math.abs(d);
+  }
+  avgGain /= 14; avgLoss /= 14;
+  const rsi = new Array(n).fill(null);
+  rsi[14] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  for (let i = 15; i < n; i++) {
+    const d = closes[i] - closes[i - 1];
+    avgGain = (avgGain * 13 + Math.max(d, 0))  / 14;
+    avgLoss = (avgLoss * 13 + Math.max(-d, 0)) / 14;
+    rsi[i]  = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+  return rsi;
+}
+
+async function fetchDailyRSIForTicker(ticker) {
+  try {
+    const to   = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 60); // 60 calendar days ≈ 42 trading days — enough for RSI-14
+    const fmt = d => d.toISOString().split('T')[0];
+    const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?from=${fmt(from)}&to=${fmt(to)}&apikey=${FMP_API_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Sort ascending (FMP returns newest-first)
+    const daily = (data?.historical || []).slice().sort((a, b) => a.date > b.date ? 1 : -1);
+    if (daily.length < 16) return null;
+    const closes = daily.map(b => b.close);
+    const rsis   = computeDailyRSI14(closes);
+    // Walk backwards to find last two valid RSI values
+    let today = null, yesterday = null;
+    for (let i = rsis.length - 1; i >= 0; i--) {
+      if (rsis[i] != null) {
+        if (today === null)     { today = rsis[i]; }
+        else if (yesterday === null) { yesterday = rsis[i]; break; }
+      }
+    }
+    return { today, yesterday };
+  } catch (err) {
+    console.warn(`[positionHealth] RSI fetch failed for ${ticker}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Get RSI health alerts for all active positions owned by userId.
+ * Runs RSI fetches in parallel; returns alerts only for positions breaching thresholds.
+ */
+export async function getPositionHealthAlerts(userId) {
+  const db = await connectToDatabase();
+  if (!db) return [];
+
+  const positions = await db.collection('pnthr_portfolio')
+    .find({ status: { $nin: ['CLOSED'] }, ownerId: userId })
+    .toArray();
+
+  if (!positions.length) return [];
+
+  // Fetch RSI for all positions in parallel
+  const results = await Promise.allSettled(
+    positions.map(async pos => {
+      const ticker    = (pos.ticker || '').toUpperCase();
+      const direction = (pos.direction || '').toUpperCase() === 'SHORT' ? 'SS' : 'BL';
+      const rsiData   = await fetchDailyRSIForTicker(ticker);
+      return { pos, ticker, direction, rsiData };
+    })
+  );
+
+  const alerts = [];
+  for (const result of results) {
+    if (result.status !== 'fulfilled') continue;
+    const { pos, ticker, direction, rsiData } = result.value;
+    if (!rsiData || rsiData.today == null) continue;
+
+    const { today: rsi, yesterday: rsiYest } = rsiData;
+    const isBLAlert = direction === 'BL' && rsi > RSI_BL_ALERT;
+    const isSSAlert = direction === 'SS' && rsi < RSI_SS_ALERT;
+    if (!isBLAlert && !isSSAlert) continue;
+
+    const delta = rsiYest != null ? +(rsi - rsiYest).toFixed(1) : null;
+    alerts.push({
+      ticker,
+      direction,
+      rsi:          +rsi.toFixed(1),
+      rsiYesterday: rsiYest != null ? +rsiYest.toFixed(1) : null,
+      delta,
+      alertType:    isBLAlert ? 'BL_OVERBOUGHT' : 'SS_OVERSOLD',
+      companyName:  pos.companyName || null,
+    });
+  }
+
+  // Sort: most extreme RSI first (lowest for SS, highest for BL)
+  alerts.sort((a, b) => {
+    if (a.alertType === 'SS_OVERSOLD'  && b.alertType === 'SS_OVERSOLD')  return a.rsi - b.rsi;
+    if (a.alertType === 'BL_OVERBOUGHT' && b.alertType === 'BL_OVERBOUGHT') return b.rsi - a.rsi;
+    return 0;
+  });
+
+  return alerts;
+}
+
 /**
  * Get routine tasks for a given day of week (0=Sun..6=Sat).
  * Pass context (from buildRoutineContext) to inject smart Monday routines.

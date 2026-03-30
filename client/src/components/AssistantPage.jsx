@@ -525,6 +525,90 @@ const s = {
     fontSize: 13,
     marginBottom: 16,
   },
+
+  // Command Health section
+  healthSection: {
+    background: '#111',
+    border: '1px solid #1e1e1e',
+    borderRadius: 6,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  healthHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '10px 14px',
+    cursor: 'pointer',
+    userSelect: 'none',
+    borderBottom: '1px solid #1e1e1e',
+  },
+  healthHeaderLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  healthLabel: {
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: '0.1em',
+    color: '#FCF000',
+  },
+  healthCount: {
+    fontSize: 11,
+    color: '#555',
+  },
+  healthRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '10px 14px',
+    borderBottom: '1px solid #161616',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  healthRowLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  healthTicker: {
+    fontSize: 13,
+    fontWeight: 800,
+    color: '#fff',
+    letterSpacing: '0.04em',
+  },
+  healthRsiValue: (alertType) => ({
+    fontSize: 13,
+    fontWeight: 800,
+    color: alertType === 'BL_OVERBOUGHT' ? '#fd7e14' : '#ef5350',
+  }),
+  healthDelta: (positive) => ({
+    fontSize: 11,
+    color: positive ? '#ef5350' : '#28a745',
+    fontWeight: 700,
+  }),
+  healthNote: (alertType) => ({
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.07em',
+    color: alertType === 'BL_OVERBOUGHT' ? '#fd7e14' : '#ef5350',
+    background: alertType === 'BL_OVERBOUGHT' ? 'rgba(253,126,20,0.1)' : 'rgba(239,83,80,0.1)',
+    border: `1px solid ${alertType === 'BL_OVERBOUGHT' ? 'rgba(253,126,20,0.3)' : 'rgba(239,83,80,0.3)'}`,
+    borderRadius: 4,
+    padding: '2px 7px',
+  }),
+  healthAllClear: {
+    padding: '12px 14px',
+    fontSize: 12,
+    color: '#28a745',
+  },
+  healthLoading: {
+    padding: '12px 14px',
+    fontSize: 12,
+    color: '#555',
+    fontStyle: 'italic',
+  },
 };
 
 // ── Confirmation Modal ─────────────────────────────────────────────────────────
@@ -636,6 +720,80 @@ function StopSyncRow({ row, isDone, onToggle }) {
         <span style={s.syncNeedsUpdate}>{arrow} needs update</span>
       ) : (
         <span style={s.syncOk}>✓</span>
+      )}
+    </div>
+  );
+}
+
+// ── Command Health Section ────────────────────────────────────────────────────
+// Shows daily RSI alerts for every active Command position.
+// BL > 75 = overbought / FEAST zone. SS < 25 = oversold / short squeeze risk.
+
+function HealthAlertRow({ alert }) {
+  const isBL     = alert.alertType === 'BL_OVERBOUGHT';
+  const dirColor = isBL ? '#28a745' : '#ef5350';
+  const deltaPos = alert.delta != null && alert.delta > 0; // positive delta = rising RSI
+  const deltaStr = alert.delta != null
+    ? `${alert.delta > 0 ? '+' : ''}${alert.delta} from yesterday`
+    : 'no yesterday data';
+
+  return (
+    <div style={s.healthRow}>
+      <div style={s.healthRowLeft}>
+        {/* Direction badge */}
+        <span style={{
+          fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 4,
+          background: isBL ? 'rgba(40,167,69,0.15)' : 'rgba(239,83,80,0.15)',
+          color: dirColor, border: `1px solid ${isBL ? 'rgba(40,167,69,0.35)' : 'rgba(239,83,80,0.35)'}`,
+          letterSpacing: '0.06em',
+        }}>
+          {alert.direction}
+        </span>
+        <span style={s.healthTicker}>{alert.ticker}</span>
+        {alert.companyName && (
+          <span style={{ fontSize: 11, color: '#444' }}>{alert.companyName}</span>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={s.healthRsiValue(alert.alertType)}>
+          RSI @ {alert.rsi}
+        </span>
+        {alert.delta != null && (
+          <span style={s.healthDelta(deltaPos)}>
+            Net {deltaStr}
+          </span>
+        )}
+        <span style={s.healthNote(alert.alertType)}>
+          {isBL ? '⚠ OVERBOUGHT' : '⚠ SQUEEZE RISK'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function CommandHealthSection({ alerts, loading }) {
+  const [expanded, setExpanded] = useState(true);
+  const alertCount = alerts?.length ?? 0;
+
+  return (
+    <div style={s.healthSection}>
+      <div style={s.healthHeader} onClick={() => setExpanded(e => !e)}>
+        <div style={s.healthHeaderLeft}>
+          <span style={{ fontSize: 11, color: '#444' }}>{expanded ? '▼' : '▶'}</span>
+          <span style={s.healthLabel}>COMMAND HEALTH</span>
+          <span style={s.healthCount}>
+            ({alertCount > 0
+              ? `${alertCount} RSI alert${alertCount !== 1 ? 's' : ''}`
+              : loading ? 'loading…' : 'all clear'})
+          </span>
+        </div>
+      </div>
+      {expanded && (
+        loading
+          ? <div style={s.healthLoading}>Checking RSI for all Command positions…</div>
+          : alertCount === 0
+            ? <div style={s.healthAllClear}>✓ All Command positions have RSI within normal range</div>
+            : alerts.map(alert => <HealthAlertRow key={alert.ticker + alert.direction} alert={alert} />)
       )}
     </div>
   );
@@ -798,6 +956,8 @@ export default function AssistantPage() {
   const [lastRefreshed,    setLastRefreshed]    = useState(null);
   const [chartStock,  setChartStock]  = useState(null);
   const [chartBusy,   setChartBusy]   = useState(null); // ticker currently loading
+  const [healthAlerts,    setHealthAlerts]    = useState([]);
+  const [healthLoading,   setHealthLoading]   = useState(true);
 
   // Analyze context for scoring chips
   const analyzeCtx = useAnalyzeContext();
@@ -852,6 +1012,15 @@ export default function AssistantPage() {
   const fetchAll = useCallback(async () => {
     try {
       setError(null);
+      // Fire health fetch immediately but don't await it here — it's slower (FMP per position).
+      // It resolves independently and updates its own loading state.
+      setHealthLoading(true);
+      fetch(`${API_BASE}/api/assistant/position-health`, { headers: authHeaders() })
+        .then(r => r.ok ? r.json() : { alerts: [] })
+        .then(d => setHealthAlerts(d.alerts || []))
+        .catch(() => setHealthAlerts([]))
+        .finally(() => setHealthLoading(false));
+
       const [tasksRes, syncRes, routinesRes, completedRes] = await Promise.all([
         fetch(`${API_BASE}/api/assistant/tasks`,    { headers: authHeaders() }),
         fetch(`${API_BASE}/api/assistant/stop-sync`, { headers: authHeaders() }),
@@ -1121,6 +1290,9 @@ export default function AssistantPage() {
           ))}
         </>
       )}
+
+      {/* ── Command Health ─────────────────────────────────────────────────── */}
+      <CommandHealthSection alerts={healthAlerts} loading={healthLoading} />
 
       {/* ── Stop Sync ──────────────────────────────────────────────────────── */}
       {stopSyncRows.length > 0 && (

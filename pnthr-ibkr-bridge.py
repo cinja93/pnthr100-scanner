@@ -36,7 +36,7 @@ except ImportError:
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env.bridge'))
 except ImportError:
     pass  # python-dotenv optional — env vars can be set manually
 

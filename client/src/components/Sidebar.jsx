@@ -81,12 +81,12 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   const personalItems = [
     { key: 'command',  label: 'PNTHR Command',  iconImg: true },
     { key: 'journal',  label: 'PNTHR Journal',  iconImg: true },
-    { key: 'watchlist', label: 'Watchlist',      icon: '👁' },
+    { key: 'watchlist', label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' },
   ];
   if (isAdmin) {
-    personalItems.push({ key: 'history',        label: 'PNTHR Kill History',  icon: '📊' });
+    personalItems.push({ key: 'history',        label: 'PNTHR Kill 10',  icon: '📊' });
     personalItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test',     icon: '🎯' });
-    personalItems.push({ key: 'signal-history', label: 'Signal History',      icon: '📋' });
+    personalItems.push({ key: 'signal-history', label: 'PNTHR History',      icon: '📋' });
   }
 
   const personalGroup = firstName

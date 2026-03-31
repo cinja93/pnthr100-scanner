@@ -130,14 +130,15 @@ function App() {
     setCurrentUser(null);
   }
 
+  // useCallback must be declared before any conditional returns (Rules of Hooks)
+  const updateCurrentUser = useCallback((updates) => {
+    setCurrentUser(prev => ({ ...prev, ...updates }));
+  }, []); // setCurrentUser is stable from useState — no deps needed
+
   if (authLoading) return null; // brief flash while validating token
   if (!authToken) return <LoginPage onLogin={handleLogin} />;
 
   const isAdmin = currentUser?.role === 'admin';
-  // useCallback keeps the reference stable so context consumers don't re-render unnecessarily
-  const updateCurrentUser = useCallback((updates) => {
-    setCurrentUser(prev => ({ ...prev, ...updates }));
-  }, []); // setCurrentUser is stable from useState — no deps needed
   return (
     <AuthContext.Provider value={{ currentUser, isAdmin, updateCurrentUser }}>
       <AnalyzeProvider>

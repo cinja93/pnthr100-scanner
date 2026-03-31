@@ -4,7 +4,26 @@
 // stacked trade cards. No horizontal scrolling. 7 sections per card.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Component } from 'react';
+
+// ── TradeCard ErrorBoundary ────────────────────────────────────────────────────
+// Catches render errors on a per-card basis so one bad entry never kills the
+// entire CLOSED tab (and the whole app).
+class TradeCardBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(err) { return { error: err }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ background: '#1a0a0a', border: '1px solid #7b2e2e', borderRadius: 8, marginBottom: 12, padding: '14px 18px' }}>
+          <span style={{ color: '#dc3545', fontWeight: 700, fontSize: 12 }}>⚠ Could not render trade card</span>
+          <span style={{ color: '#666', fontSize: 11, marginLeft: 10 }}>{this.state.error?.message}</span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import { API_BASE, authHeaders } from '../services/api';
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
@@ -188,15 +207,19 @@ function ScoreTierBox({ title, subtotal, max, components }) {
         <span style={{ color: s.text, fontWeight: 700, fontSize: '0.68rem', letterSpacing: '0.08em' }}>{title}</span>
         <span style={{ color: s.text, fontWeight: 700, fontSize: '0.85rem' }}>{subtotal}/{max}</span>
       </div>
-      {components.map(c => (
-        <div key={c.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0', fontSize: '0.72rem' }}>
-          <span style={{ color: '#888' }}>{c.name}</span>
-          <span style={{ display: 'flex', gap: 6 }}>
-            <span style={{ color: '#666' }}>{c.score}/{c.max}</span>
-            <span style={{ color: c.label === 'DEVELOPING' ? '#FFD700' : c.score >= c.max ? '#28a745' : c.score > 0 ? '#FFD700' : '#dc3545', fontWeight: 600 }}>{c.label === 'DEVELOPING' ? '◆ DEVELOPING' : c.label}</span>
-          </span>
-        </div>
-      ))}
+      {components.map((c, i) => {
+        const lbl = typeof c.label === 'string' ? c.label : (c.label != null ? String(c.label) : '—');
+        const nm  = typeof c.name  === 'string' ? c.name  : (c.name  != null ? String(c.name)  : '—');
+        return (
+          <div key={nm + i} style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0', fontSize: '0.72rem' }}>
+            <span style={{ color: '#888' }}>{nm}</span>
+            <span style={{ display: 'flex', gap: 6 }}>
+              <span style={{ color: '#666' }}>{c.score}/{c.max}</span>
+              <span style={{ color: lbl === 'DEVELOPING' ? '#FFD700' : c.score >= c.max ? '#28a745' : c.score > 0 ? '#FFD700' : '#dc3545', fontWeight: 600 }}>{lbl === 'DEVELOPING' ? '◆ DEVELOPING' : lbl}</span>
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -206,7 +229,7 @@ function DataCell({ label, value, color, tooltip }) {
   return (
     <div title={tooltip} style={{ cursor: tooltip ? 'help' : 'default' }}>
       <div style={{ color: '#555', fontSize: '0.6rem', letterSpacing: '0.05em', marginBottom: 2 }}>{label}</div>
-      <div style={{ color: color || '#ccc', fontSize: '0.82rem', fontWeight: 500 }}>{value ?? '—'}</div>
+      <div style={{ color: color || '#ccc', fontSize: '0.82rem', fontWeight: 500 }}>{value != null && typeof value === 'object' ? JSON.stringify(value) : (value ?? '—')}</div>
     </div>
   );
 }
@@ -859,17 +882,18 @@ export default function ClosedTradeCards({ onTickerClick, focusPositionId }) {
       {sortedEntries.map(e => {
         const isFocused = focusPositionId && e.positionId?.toString() === focusPositionId?.toString();
         return (
-          <TradeCard
-            key={e._id}
-            entry={e}
-            onTickerClick={onTickerClick}
-            saveNotes={saveNotes}
-            focusRef={isFocused ? focusRef : null}
-            autoExpand={isFocused}
-            onConfirmScore={(id, newScore) => {
-              setEntries(prev => prev.map(x => x._id?.toString() === id?.toString() ? { ...x, discipline: newScore } : x));
-            }}
-          />
+          <TradeCardBoundary key={e._id}>
+            <TradeCard
+              entry={e}
+              onTickerClick={onTickerClick}
+              saveNotes={saveNotes}
+              focusRef={isFocused ? focusRef : null}
+              autoExpand={isFocused}
+              onConfirmScore={(id, newScore) => {
+                setEntries(prev => prev.map(x => x._id?.toString() === id?.toString() ? { ...x, discipline: newScore } : x));
+              }}
+            />
+          </TradeCardBoundary>
         );
       })}
     </div>

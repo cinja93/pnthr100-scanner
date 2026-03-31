@@ -37,10 +37,16 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
     .toArray();
   const processedIds = new Set(processedDocs.map(d => d.execId));
 
-  // Index active PNTHR positions by ticker
-  const positionByTicker = {};
+  // Index active PNTHR positions by TICKER+DIRECTION (compound key).
+  // This prevents LONG and SHORT positions on the same ticker from colliding —
+  // if a user held OLLI SHORT previously and now holds OLLI LONG, both are
+  // tracked correctly. The exec.side tells us which direction is being closed:
+  //   SLD (sold)   → closing a LONG position
+  //   BOT (bought) → closing a SHORT position
+  const positionByTickerDir = {};
   for (const p of pnthrPositions) {
-    positionByTicker[p.ticker?.toUpperCase()] = p;
+    const key = `${p.ticker?.toUpperCase()}_${p.direction?.toUpperCase()}`;
+    positionByTickerDir[key] = p;
   }
 
   const autoClosed = [];
@@ -48,18 +54,12 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
   for (const exec of executions) {
     if (processedIds.has(exec.execId)) continue; // already handled
 
-    const symbol = exec.symbol?.toUpperCase();
-    const pnthr  = positionByTicker[symbol];
-    if (!pnthr) continue; // not a tracked position
+    const symbol     = exec.symbol?.toUpperCase();
+    const closingDir = exec.side === 'SLD' ? 'LONG' : exec.side === 'BOT' ? 'SHORT' : null;
+    if (!closingDir) continue; // unknown side — skip
 
-    const isLong  = pnthr.direction === 'LONG';
-    const isShort = pnthr.direction === 'SHORT';
-
-    // SLD closes LONG; BOT closes SHORT
-    const isClosingTrade =
-      (exec.side === 'SLD' && isLong) ||
-      (exec.side === 'BOT' && isShort);
-    if (!isClosingTrade) continue;
+    const pnthr = positionByTickerDir[`${symbol}_${closingDir}`];
+    if (!pnthr) continue; // no matching PNTHR position for this direction
 
     // Count PNTHR-tracked filled shares
     const fills     = pnthr.fills || {};
@@ -80,10 +80,10 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
       .reduce((s, f) => s + (f.filled ? (+f.shares || 0) * (+f.price || 0) : 0), 0);
     const avgCost      = pnthrShares > 0 ? totalCost / pnthrShares : pnthr.entryPrice;
     const exitPrice    = exec.price;
-    const profitPct    = isLong
+    const profitPct    = closingDir === 'LONG'
       ? (exitPrice - avgCost) / avgCost * 100
       : (avgCost - exitPrice) / avgCost * 100;
-    const profitDollar = isLong
+    const profitDollar = closingDir === 'LONG'
       ? (exitPrice - avgCost) * pnthrShares
       : (avgCost - exitPrice) * pnthrShares;
     const holdingDays  = Math.floor((Date.now() - new Date(pnthr.createdAt).getTime()) / 86400000);
@@ -124,7 +124,7 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
         pnl: {
           dollar:   +profitDollar.toFixed(2),
           pct:      +profitPct.toFixed(2),
-          perShare: +(isLong ? exitPrice - avgCost : avgCost - exitPrice).toFixed(4),
+          perShare: +(closingDir === 'LONG' ? exitPrice - avgCost : avgCost - exitPrice).toFixed(4),
         },
         remainingShares: 0,
         marketAtExit:    {},

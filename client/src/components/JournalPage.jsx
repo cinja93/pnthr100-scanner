@@ -418,6 +418,8 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [migrateResult, setMigrateResult] = useState(null);
   const [rescoring,  setRescoring]  = useState(false);
   const [rescoreResult, setRescoreResult] = useState(null);
+  const [ibkrRepairing, setIbkrRepairing] = useState(false);
+  const [ibkrRepairResult, setIbkrRepairResult] = useState(null);
   const [washRules, setWashRules] = useState([]);
   const [ratios, setRatios] = useState(null);
 
@@ -519,6 +521,19 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
       if (data.success) fetchData();
     } catch (e) { setRescoreResult({ error: e.message }); }
     setRescoring(false);
+  };
+
+  const runIbkrRepair = async () => {
+    if (!confirm('Repair IBKR journal entries?\n\nThis will:\n• Create journal entries for positions added directly (not via confirm flow)\n• Fix any direction/price mismatches from wrong position matches\n• Sync exit data for any trades missing it\n\nSafe to run multiple times.')) return;
+    setIbkrRepairing(true);
+    setIbkrRepairResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/journal/repair-ibkr`, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      setIbkrRepairResult(data);
+      if (data.repaired > 0) setTimeout(fetchData, 500);
+    } catch (e) { setIbkrRepairResult({ error: e.message }); }
+    setIbkrRepairing(false);
   };
 
   const runMigration = async () => {
@@ -858,6 +873,22 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
               </button>
             </HoverTooltip>
           )}
+          {isAdmin && (
+            <HoverTooltip lines={[
+              'REPAIR IBKR TRADES',
+              'Fixes journal entries for all IBKR auto-closed positions.',
+              'WHEN TO USE:',
+              '• A trade shows wrong direction or price (e.g. OLLI showing SHORT)',
+              '• A trade is missing from the journal after IBKR auto-close',
+              '• After adding a position directly without using the confirm flow',
+              'Safe to run multiple times — already-correct entries are skipped.',
+            ]}>
+              <button onClick={runIbkrRepair} disabled={ibkrRepairing}
+                style={{ background: 'transparent', border: '1px solid rgba(220,53,69,0.4)', color: '#9b2335', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: ibkrRepairing ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                {ibkrRepairing ? '...' : '🔧 repair IBKR'}
+              </button>
+            </HoverTooltip>
+          )}
           {tabBtn('trades', 'TRADES')}
           {tabBtn('analytics', 'ANALYTICS')}
           {tabBtn('weekly', 'WEEKLY REVIEW')}
@@ -875,6 +906,27 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
             }
           </span>
           <button onClick={() => setRescoreResult(null)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14 }}>✕</button>
+        </div>
+      )}
+
+      {/* IBKR repair result toast */}
+      {ibkrRepairResult && (
+        <div style={{ background: ibkrRepairResult.error ? 'rgba(220,53,69,0.15)' : 'rgba(40,167,69,0.15)', border: `1px solid ${ibkrRepairResult.error ? '#dc3545' : '#28a745'}`, borderRadius: 6, padding: '8px 14px', marginBottom: 10, fontSize: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <span style={{ color: ibkrRepairResult.error ? '#ff6b6b' : '#6bcb77', fontWeight: 700 }}>
+              {ibkrRepairResult.error
+                ? `🔧 Repair error: ${ibkrRepairResult.error}`
+                : `🔧 Repaired ${ibkrRepairResult.repaired} of ${ibkrRepairResult.total} IBKR trades`}
+            </span>
+            <button onClick={() => setIbkrRepairResult(null)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 14, marginLeft: 12 }}>✕</button>
+          </div>
+          {ibkrRepairResult.log?.length > 0 && (
+            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {ibkrRepairResult.log.map((line, i) => (
+                <span key={i} style={{ color: line.startsWith('✅') ? '#6bcb77' : line.startsWith('❌') ? '#ff6b6b' : '#777', fontSize: 11, fontFamily: 'monospace' }}>{line}</span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

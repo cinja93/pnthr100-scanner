@@ -2425,72 +2425,77 @@ app.get('/api/journal/closed-scorecard', authenticateJWT, async (req, res) => {
       }
 
       // Fix 2: IBKR auto-closed portfolio entries whose journal was never synced
-      // (pre-fix positions closed before syncExitToJournal was added to processExecutions)
+      // or was never created (e.g. position added directly without pendingEntries flow).
       try {
         const { syncExitToJournal } = await import('./exitService.js');
+        const { createJournalEntry } = await import('./journalService.js');
         const ibkrClosed = await db.collection('pnthr_portfolio').find({
           ownerId: req.user.userId,
           status: 'CLOSED',
           autoClosedByIBKR: true,
         }).toArray();
 
-        // Query journal directly for these positions — do NOT use `entries`
-        // because entries only contains already-CLOSED journal docs; stuck ACTIVE
-        // entries would not be in it and would be incorrectly skipped.
         const ibkrPositionIds = ibkrClosed.map(p => p.id?.toString()).filter(Boolean);
-        const stuckJournalEntries = ibkrPositionIds.length
+        const existingJournals = ibkrPositionIds.length
           ? await db.collection('pnthr_journal').find({
               ownerId: req.user.userId,
               positionId: { $in: ibkrPositionIds },
             }).toArray()
           : [];
         const journalByPositionId = {};
-        for (const e of stuckJournalEntries) {
+        for (const e of existingJournals) {
           journalByPositionId[e.positionId] = e;
         }
 
         for (const pos of ibkrClosed) {
           const jEntry = journalByPositionId[pos.id?.toString()];
-          // Only repair if journal entry exists but has no exits synced yet
-          if (!jEntry) continue;
-          if (Array.isArray(jEntry.performance?.exits) && jEntry.performance.exits.length > 0) continue;
-          if (jEntry.performance?.status === 'CLOSED') continue;
 
-          const outcome = pos.outcome || {};
+          const outcome     = pos.outcome || {};
           const exitPrice   = outcome.exitPrice   ?? pos.entryPrice ?? 0;
           const exitReason  = outcome.exitReason  ?? 'MANUAL';
           const profitDollar = outcome.profitDollar ?? 0;
           const profitPct    = outcome.profitPct    ?? 0;
-
-          // Compute pnthrShares from fills
-          const fills = pos.fills || {};
-          const pnthrShares = Object.values(fills)
+          const fills        = pos.fills || {};
+          const pnthrShares  = Object.values(fills)
             .reduce((s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0);
-          const totalCost = Object.values(fills)
+          const totalCost    = Object.values(fills)
             .reduce((s, f) => s + (f.filled ? (+f.shares || 0) * (+f.price || 0) : 0), 0);
-          const avgCost = pnthrShares > 0 ? totalCost / pnthrShares : (pos.entryPrice || 0);
-          const isLong  = pos.direction === 'LONG';
+          const avgCost      = pnthrShares > 0 ? totalCost / pnthrShares : (pos.entryPrice || 0);
+          const isLong       = pos.direction === 'LONG';
+          const closedAt     = pos.closedAt ? new Date(pos.closedAt) : new Date();
 
-          const closedAt = pos.closedAt ? new Date(pos.closedAt) : new Date();
           const exitRecord = {
-            id:              'E1',
-            shares:          pnthrShares,
-            price:           exitPrice,
-            date:            closedAt.toISOString().split('T')[0],
-            time:            closedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }),
-            reason:          exitReason,
-            note:            'Auto-closed by IBKR TWS fill detection',
-            isOverride:      exitReason === 'MANUAL',
-            isFinalExit:     true,
+            id: 'E1', shares: pnthrShares, price: exitPrice,
+            date: closedAt.toISOString().split('T')[0],
+            time: closedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }),
+            reason: exitReason, note: 'Auto-closed by IBKR TWS fill detection',
+            isOverride: exitReason === 'MANUAL', isFinalExit: true,
             pnl: {
               dollar:   +profitDollar.toFixed(2),
               pct:      +profitPct.toFixed(2),
               perShare: +(isLong ? exitPrice - avgCost : avgCost - exitPrice).toFixed(4),
             },
-            remainingShares: 0,
-            marketAtExit:    {},
-            createdAt:       closedAt,
+            remainingShares: 0, marketAtExit: {}, createdAt: closedAt,
           };
+
+          if (!jEntry) {
+            // Case A: No journal entry at all — create one from portfolio data then sync exit.
+            // This happens when a position was added directly (not via pendingEntries confirm flow).
+            try {
+              await createJournalEntry(db, pos, req.user.userId);
+              await syncExitToJournal(db, pos.id, req.user.userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pos);
+              console.log(`[Journal] ✅ Created missing journal entry for IBKR-closed ${pos.ticker}`);
+            } catch (createErr) {
+              console.warn(`[Journal] Create failed for ${pos.ticker}:`, createErr.message);
+            }
+            continue;
+          }
+
+          // Case B: Journal exists — check if exit already synced (top-level exits array)
+          if (Array.isArray(jEntry.exits) && jEntry.exits.length > 0) continue;
+          if (jEntry.performance?.status === 'CLOSED') continue;
+
+          // Case C: Journal exists but exit not yet synced — sync now
           try {
             await syncExitToJournal(db, pos.id, req.user.userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pos);
             console.log(`[Journal] ✅ Repaired stuck IBKR-closed entry for ${pos.ticker}`);
@@ -2503,6 +2508,166 @@ app.get('/api/journal/closed-scorecard', authenticateJWT, async (req, res) => {
 
     res.json(entries);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/journal/repair-ibkr — one-time repair that creates/fixes journal entries for all
+// IBKR auto-closed positions. Handles three cases:
+//   A) No journal entry at all → create from portfolio position data + sync exit
+//   B) Journal exists, direction mismatch vs portfolio → patch core fields + rescore
+//   C) Journal exists, exits not synced → sync exit
+// Safe to run multiple times — already-correct entries are skipped.
+app.post('/api/journal/repair-ibkr', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const { ObjectId } = await import('mongodb');
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+
+    const { syncExitToJournal } = await import('./exitService.js');
+    const { createJournalEntry, calculateDisciplineScore } = await import('./journalService.js');
+
+    const userId = req.user.userId;
+    const log = [];
+
+    const ibkrClosed = await db.collection('pnthr_portfolio').find({
+      ownerId: userId,
+      status: 'CLOSED',
+      autoClosedByIBKR: true,
+    }).toArray();
+
+    if (!ibkrClosed.length) {
+      return res.json({ ok: true, repaired: 0, log: ['No IBKR auto-closed positions found'] });
+    }
+
+    const ibkrPositionIds = ibkrClosed.map(p => p.id?.toString()).filter(Boolean);
+    const existingJournals = await db.collection('pnthr_journal').find({
+      ownerId: userId,
+      positionId: { $in: ibkrPositionIds },
+    }).toArray();
+    const journalByPositionId = {};
+    for (const e of existingJournals) {
+      journalByPositionId[e.positionId] = e;
+    }
+
+    let repaired = 0;
+
+    for (const pos of ibkrClosed) {
+      const posId   = pos.id?.toString();
+      const jEntry  = journalByPositionId[posId];
+      const outcome = pos.outcome || {};
+
+      // Build exit record from portfolio outcome data
+      const exitPrice    = outcome.exitPrice    ?? pos.entryPrice ?? 0;
+      const exitReason   = outcome.exitReason   ?? 'MANUAL';
+      const profitDollar = outcome.profitDollar ?? 0;
+      const profitPct    = outcome.profitPct    ?? 0;
+      const fills        = pos.fills || {};
+      const pnthrShares  = Object.values(fills)
+        .reduce((s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0);
+      const totalCost    = Object.values(fills)
+        .reduce((s, f) => s + (f.filled ? (+f.shares || 0) * (+f.price || 0) : 0), 0);
+      const avgCost      = pnthrShares > 0 ? totalCost / pnthrShares : (pos.entryPrice || 0);
+      const isLong       = pos.direction === 'LONG';
+      const closedAt     = pos.closedAt ? new Date(pos.closedAt) : new Date();
+
+      const exitRecord = {
+        id: 'E1', shares: pnthrShares, price: exitPrice,
+        date: closedAt.toISOString().split('T')[0],
+        time: closedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }),
+        reason: exitReason, note: 'Auto-closed by IBKR TWS fill detection',
+        isOverride: exitReason === 'MANUAL', isFinalExit: true,
+        pnl: {
+          dollar:   +profitDollar.toFixed(2),
+          pct:      +profitPct.toFixed(2),
+          perShare: +(isLong ? exitPrice - avgCost : avgCost - exitPrice).toFixed(4),
+        },
+        remainingShares: 0, marketAtExit: {}, createdAt: closedAt,
+      };
+
+      // ── Case A: No journal entry — create from portfolio position then sync exit ──
+      if (!jEntry) {
+        try {
+          const created = await createJournalEntry(db, pos, userId);
+          await syncExitToJournal(db, posId, userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pos);
+          log.push(`✅ [${pos.ticker}] Created new journal entry + synced exit (positionId: ${posId})`);
+          repaired++;
+        } catch (e) {
+          log.push(`❌ [${pos.ticker}] Create failed: ${e.message}`);
+        }
+        continue;
+      }
+
+      // ── Case B: Journal exists but core fields are wrong (direction mismatch) ──
+      // This happens when a wrong/old position was previously linked. Overwrite with
+      // data from the correct portfolio position.
+      const directionMismatch = jEntry.direction !== pos.direction;
+      const fillsMismatch     = jEntry.lots?.length !== Object.values(fills).filter(f => f.filled).length;
+
+      if (directionMismatch) {
+        try {
+          // Rebuild core fields from the portfolio position
+          const fillEntries = Object.entries(fills)
+            .filter(([, f]) => f && f.filled && f.price)
+            .sort(([a], [b]) => +a - +b);
+          const lot1 = fillEntries[0]?.[1] || null;
+          const lotsArr = fillEntries.map(([k, f]) => ({ lot: +k, shares: f.shares, price: f.price, date: f.date }));
+
+          await db.collection('pnthr_journal').updateOne(
+            { _id: jEntry._id },
+            {
+              $set: {
+                direction:          pos.direction,
+                ticker:             pos.ticker,
+                signal:             pos.signal    || null,
+                signalAge:          pos.signalAge ?? null,
+                exchange:           pos.exchange  || null,
+                entryContext:       pos.entryContext || 'NO_SIGNAL',
+                'entry.fillDate':   lot1?.date  || null,
+                'entry.fillPrice':  lot1?.price || pos.entryPrice || null,
+                'entry.stopPrice':  pos.stopPrice || null,
+                'entry.signalType': pos.signal || (pos.direction === 'LONG' ? 'BL' : 'SS'),
+                lots:               lotsArr,
+                totalFilledShares:  fillEntries.reduce((s, [, f]) => s + (f.shares || 0), 0),
+                // Clear any exits from the old wrong position — will be re-synced below
+                exits:              [],
+                'performance.status':           'ACTIVE',
+                'performance.remainingShares':  pnthrShares,
+                'performance.avgExitPrice':     null,
+                'performance.realizedPnlDollar': 0,
+                updatedAt: new Date(),
+              },
+            }
+          );
+          // Now sync the correct exit
+          await syncExitToJournal(db, posId, userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pos);
+          log.push(`✅ [${pos.ticker}] Fixed direction mismatch (was ${jEntry.direction} → ${pos.direction}) + resynced exit`);
+          repaired++;
+        } catch (e) {
+          log.push(`❌ [${pos.ticker}] Direction fix failed: ${e.message}`);
+        }
+        continue;
+      }
+
+      // ── Case C: Journal exists, direction correct, but exit not yet synced ──
+      const hasExit = Array.isArray(jEntry.exits) && jEntry.exits.length > 0;
+      if (hasExit && jEntry.performance?.status === 'CLOSED') {
+        log.push(`⏭ [${pos.ticker}] Already correct — skipped`);
+        continue;
+      }
+      try {
+        await syncExitToJournal(db, posId, userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pos);
+        log.push(`✅ [${pos.ticker}] Synced missing exit data`);
+        repaired++;
+      } catch (e) {
+        log.push(`❌ [${pos.ticker}] Exit sync failed: ${e.message}`);
+      }
+    }
+
+    res.json({ ok: true, repaired, total: ibkrClosed.length, log });
+  } catch (e) {
+    console.error('[journal/repair-ibkr]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // PATCH /api/journal/:id/scorecard-notes — save tradeNotes and/or macroNotes (must be before /:id)

@@ -152,13 +152,19 @@ function scorePyramiding(lots, mfe, entryPrice, direction) {
     4: entryPrice * (direction === 'LONG' ? 1.10 : 0.90),
     5: entryPrice * (direction === 'LONG' ? 1.14 : 0.86),
   };
+  // Key lots by their actual lot number to handle gaps (e.g. lots 1+3 filled, 2 skipped).
+  // lot.lot is set correctly in createJournalEntry via Object.entries on position.fills.
+  const lotsByNumber = {};
+  for (const lot of (lots || [])) {
+    if (lot?.lot) lotsByNumber[lot.lot] = lot;
+  }
   const mfePrice = mfe?.price || entryPrice;
   let required = 0, correct = 0;
   for (let n = 2; n <= 5; n++) {
     const reached = direction === 'LONG' ? mfePrice >= triggers[n] : mfePrice <= triggers[n];
     if (reached) {
       required++;
-      const fill = lots?.[n - 1]; // 0-indexed
+      const fill = lotsByNumber[n]; // keyed by lot number — immune to gaps
       if (fill && fill.shares > 0) correct++;
     }
   }

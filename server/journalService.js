@@ -16,9 +16,13 @@ export async function createJournalEntry(db, position, userId, killData = null, 
   });
   if (existing) return existing;
 
-  // Fills is an object { 1: { filled, price, shares, date }, ... }
-  const fills = Object.values(position.fills || {}).filter(f => f && f.filled && f.price);
-  const lot1 = fills[0] || null;
+  // Fills is an object keyed by lot number { 1: { filled, price, shares, date }, ... }
+  // Use entries to preserve the actual lot number for correct pyramiding scoring.
+  const fillEntries = Object.entries(position.fills || {})
+    .filter(([, f]) => f && f.filled && f.price)
+    .sort(([a], [b]) => +a - +b); // ensure lot order 1→5
+  const fills = fillEntries.map(([, f]) => f);
+  const lot1  = fills[0] || null;
 
   // Kill data: prefer enrichment.killScoreAtEntry, fall back to legacy killData param
   const kse = enrichment.killScoreAtEntry || null;
@@ -30,7 +34,7 @@ export async function createJournalEntry(db, position, userId, killData = null, 
     ticker:     position.ticker,
     direction:  position.direction,
     entry: {
-      signalType:    position.direction === 'LONG' ? 'BL' : 'SS',
+      signalType:    position.signal || (position.direction === 'LONG' ? 'BL' : 'SS'),
       fillDate:      lot1?.date || null,
       fillPrice:     lot1?.price || position.entryPrice || null,
       stopPrice:     position.stopPrice || null,
@@ -41,7 +45,7 @@ export async function createJournalEntry(db, position, userId, killData = null, 
       marketAtEntry: enrichment.marketAtEntry || marketAtEntry || null,
       sectorAtEntry: sectorAtEntry || null,
     },
-    lots: fills.map((f, i) => ({ lot: i + 1, shares: f.shares, price: f.price, date: f.date })),
+    lots: fillEntries.map(([k, f]) => ({ lot: +k, shares: f.shares, price: f.price, date: f.date })),
     totalFilledShares: fills.reduce((s, f) => s + (f.shares || 0), 0),
     exits: position.exits || [],
     performance: {

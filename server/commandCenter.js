@@ -428,7 +428,7 @@ export async function positionsClose(req, res) {
     const profitDollar = isLong ? (exitPrice - avgCost) * filledShr : (avgCost - exitPrice) * filledShr;
     const holdingDays = Math.floor((Date.now() - new Date(position.createdAt).getTime()) / 86400000);
 
-    await db.collection('pnthr_portfolio').updateOne({ id }, {
+    await db.collection('pnthr_portfolio').updateOne({ id, ownerId: req.user.userId }, {
       $set: {
         status: 'CLOSED', closedAt: new Date(), updatedAt: new Date(),
         outcome: {

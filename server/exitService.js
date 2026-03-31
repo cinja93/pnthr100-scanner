@@ -119,13 +119,13 @@ async function recordExit(db, positionId, userId, exitData) {
 
   // Sync to journal (best-effort — don't fail the exit if journal sync fails)
   try {
-    await syncExitToJournal(db, positionId, userId, exitRecord, newRemaining, realizedDollar, avgExitPrice, newStatus);
+    await syncExitToJournal(db, positionId, userId, exitRecord, newRemaining, realizedDollar, avgExitPrice, newStatus, position);
   } catch (e) { console.warn('[EXIT] Journal sync failed:', e.message); }
 
   return { exitRecord, remainingShares: newRemaining, status: newStatus };
 }
 
-async function syncExitToJournal(db, positionId, userId, exitRecord, remainingShares, realizedDollar, avgExitPrice, status) {
+async function syncExitToJournal(db, positionId, userId, exitRecord, remainingShares, realizedDollar, avgExitPrice, status, position) {
   const update = {
     $push: { exits: exitRecord },
     $set: {
@@ -167,7 +167,7 @@ async function syncExitToJournal(db, positionId, userId, exitRecord, remainingSh
   if (status === 'CLOSED') {
     // Technical snapshot at exit (best-effort, non-blocking)
     try {
-      const techAtExit = await fetchTechnicalSnapshot(position.ticker).catch(() => null);
+      const techAtExit = await fetchTechnicalSnapshot(position?.ticker).catch(() => null);
       if (techAtExit) {
         await db.collection('pnthr_journal').updateOne(
           { positionId: positionId.toString(), ownerId: userId },

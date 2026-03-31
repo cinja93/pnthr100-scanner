@@ -83,23 +83,37 @@ export async function pendingEntriesPost(req, res) {
       return res.status(400).json({ error: 'Body must be a non-empty array of entries' });
     }
 
+    // Whitelist of fields allowed from the client — prevents arbitrary field injection
+    const ALLOWED_FIELDS = [
+      'ticker', 'direction', 'signal', 'signalAge', 'entryPrice', 'suggestedStop',
+      'adjustedStop', 'gapPct', 'shares', 'sector', 'exchange', 'isETF',
+      'killScore', 'killRank', 'killTier', 'analyzeScore', 'queuedAt',
+      'entryContext', 'lotPrices', 'lotShares',
+    ];
+
     const now = new Date();
-    const ops = entries.map(entry => ({
-      updateOne: {
-        filter: { ownerId: req.user.userId, ticker: entry.ticker, status: 'PENDING' },
-        update: {
-          $set: {
-            ...entry,
-            id:        entry.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-            ownerId:   req.user.userId,
-            status:    'PENDING',
-            queuedAt:  entry.queuedAt ? new Date(entry.queuedAt) : now,
-            updatedAt: now,
+    const ops = entries.map(entry => {
+      const safeEntry = {};
+      for (const key of ALLOWED_FIELDS) {
+        if (entry[key] !== undefined) safeEntry[key] = entry[key];
+      }
+      return {
+        updateOne: {
+          filter: { ownerId: req.user.userId, ticker: entry.ticker, status: 'PENDING' },
+          update: {
+            $set: {
+              ...safeEntry,
+              id:        entry.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+              ownerId:   req.user.userId,
+              status:    'PENDING',
+              queuedAt:  entry.queuedAt ? new Date(entry.queuedAt) : now,
+              updatedAt: now,
+            },
           },
+          upsert: true,
         },
-        upsert: true,
-      },
-    }));
+      };
+    });
 
     await db.collection('pnthr_pending_entries').bulkWrite(ops);
     res.json({ success: true, count: entries.length });
@@ -348,12 +362,30 @@ export async function pendingEntryConfirm(req, res) {
     // BUILD POSITION
     // ═══════════════════════════════════════════════════════════════
 
+    // ── Idempotency guard ───────────────────────────────────────────────────
+    // If a crash occurred between insertOne and the updateOne below on a prior
+    // attempt, the position already exists. In that case skip re-insertion and
+    // just ensure the pending entry is marked CONFIRMED.
+    const existingPosition = await db.collection('pnthr_portfolio').findOne({
+      pendingEntryId: req.params.id,
+      ownerId:        req.user.userId,
+    });
+    if (existingPosition) {
+      await db.collection('pnthr_pending_entries').updateOne(
+        { id: req.params.id },
+        { $set: { status: 'CONFIRMED', confirmedAt: new Date(), positionId: existingPosition.id } }
+      );
+      console.log(`[CONFIRM] ${entry.ticker}: Idempotent re-confirm — position already exists (${existingPosition.id})`);
+      return res.json({ success: true, position: existingPosition, resumed: true });
+    }
+
     const posId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     const fills = { 1: { filled: true, price: +fillPrice, shares: +shares, date: date || new Date().toISOString().split('T')[0] } };
     for (let i = 2; i <= 5; i++) fills[i] = { filled: false };
 
     const position = {
-      id:           posId,
+      id:             posId,
+      pendingEntryId: req.params.id, // idempotency key
       ticker:       entry.ticker,
       direction:    resolvedDirection,
       entryPrice:   +fillPrice,

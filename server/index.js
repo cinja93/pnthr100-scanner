@@ -4205,7 +4205,7 @@ app.get('/api/assistant/position-health', async (req, res) => {
   }
 });
 
-// GET /api/assistant/overnight-fills — positions auto-closed by IBKR in last 24h
+// GET /api/assistant/overnight-fills — positions auto-closed by IBKR in last 48h (undismissed)
 app.get('/api/assistant/overnight-fills', authenticateJWT, async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
@@ -4214,6 +4214,26 @@ app.get('/api/assistant/overnight-fills', authenticateJWT, async (req, res) => {
   } catch (err) {
     console.error('[assistant/overnight-fills]', err.message);
     res.status(500).json({ fills: [], error: err.message });
+  }
+});
+
+// POST /api/assistant/dismiss-fill — user has reviewed a fill; hide it from the list
+// Sets ibkrFillDismissedAt so getOvernightFills filters it out on next fetch.
+app.post('/api/assistant/dismiss-fill', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+    const { positionId } = req.body;
+    if (!positionId) return res.status(400).json({ error: 'positionId required' });
+    await db.collection('pnthr_portfolio').updateOne(
+      { id: positionId, ownerId: req.user.userId },
+      { $set: { ibkrFillDismissedAt: new Date() } }
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[assistant/dismiss-fill]', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

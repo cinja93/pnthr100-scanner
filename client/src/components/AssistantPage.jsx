@@ -849,9 +849,56 @@ function fmtFillTime(closedAt) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }) + ` · ${time} ET`;
 }
 
+// ── DismissBox — faded checkbox that removes a fill row when clicked ──────────
+function DismissBox({ onDismiss }) {
+  const [hover, setHover] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const handleClick = () => {
+    setChecked(true);
+    // Brief flash of the checkmark before the row disappears
+    setTimeout(onDismiss, 300);
+  };
+  return (
+    <button
+      onClick={handleClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title="Mark as reviewed — removes from this list"
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 26, height: 26, flexShrink: 0,
+        background: 'transparent',
+        border: `1px solid ${checked ? '#3a6b3a' : hover ? '#3a5a3a' : '#252525'}`,
+        borderRadius: 4, cursor: 'pointer',
+        color: checked ? '#4caf50' : hover ? '#3a6b3a' : '#333',
+        fontSize: 13, transition: 'all 0.15s ease',
+      }}
+    >
+      ✓
+    </button>
+  );
+}
+
 function RecentFillsSection({ fills, onNavigate }) {
-  const [expanded, setExpanded] = useState(true);
-  if (!fills?.length) return null;
+  const [expanded,   setExpanded]   = useState(true);
+  // Track which positionIds have been dismissed locally so the row vanishes
+  // immediately without waiting for the next data fetch.
+  const [dismissed, setDismissed] = useState(new Set());
+
+  const handleDismiss = async (positionId) => {
+    // Optimistic: remove from view right away
+    setDismissed(prev => new Set([...prev, positionId]));
+    try {
+      await fetch(`${API_BASE}/api/assistant/dismiss-fill`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ positionId }),
+      });
+    } catch { /* non-fatal — will still fall off after 48h */ }
+  };
+
+  const visible = (fills || []).filter(f => !dismissed.has(f.id));
+  if (!visible.length) return null;
 
   return (
     <div style={{
@@ -874,10 +921,10 @@ function RecentFillsSection({ fills, onNavigate }) {
           ⚡ RECENT FILLS
         </span>
         <span style={{ fontSize: 11, color: '#555' }}>
-          ({fills.length} position{fills.length !== 1 ? 's' : ''} auto-closed by IBKR)
+          ({visible.length} position{visible.length !== 1 ? 's' : ''} auto-closed by IBKR)
         </span>
       </div>
-      {expanded && fills.map(fill => {
+      {expanded && visible.map(fill => {
         const outcome  = fill.outcome || {};
         const isProfit = (outcome.profitDollar ?? 0) >= 0;
         const pnlColor = isProfit ? '#4caf50' : '#dc3545';
@@ -924,11 +971,12 @@ function RecentFillsSection({ fills, onNavigate }) {
             >
               📋 Review journal entry
             </button>
+            <DismissBox onDismiss={() => handleDismiss(fill.id)} />
           </div>
         );
       })}
       <div style={{ padding: '10px 16px', fontSize: 11, color: '#555' }}>
-        Position closed automatically when TWS fill was detected. Click to review the journal scorecard.
+        Position closed automatically when TWS fill was detected. Click ✓ to dismiss, or fills auto-expire after 48 hours.
       </div>
     </div>
   );

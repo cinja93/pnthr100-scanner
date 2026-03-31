@@ -164,19 +164,20 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
 }
 
 // ── getOvernightFills ─────────────────────────────────────────────────────────
-// Returns positions auto-closed by IBKR in the last 24 hours.
-// Used by the assistant "RECENT FILLS" section.
+// Returns positions auto-closed by IBKR in the last 48 hours that haven't been
+// manually dismissed. Used by the assistant "RECENT FILLS" section.
 //
 export async function getOvernightFills(userId) {
   try {
     const db = await connectToDatabase();
     if (!db) return [];
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
     return await db.collection('pnthr_portfolio')
       .find({
-        ownerId:           userId,
-        autoClosedByIBKR:  true,
-        closedAt:          { $gte: since },
+        ownerId:              userId,
+        autoClosedByIBKR:     true,
+        closedAt:             { $gte: since },
+        ibkrFillDismissedAt:  { $exists: false }, // hide dismissed fills
       })
       .sort({ closedAt: -1 })
       .toArray();

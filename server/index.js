@@ -2412,6 +2412,7 @@ app.get('/api/journal/closed-scorecard', authenticateJWT, async (req, res) => {
 
     // Lazy-fix any stuck entries: if exits exist and remainingShares===0 mark CLOSED server-side
     setImmediate(async () => {
+      // Fix 1: journal has exits but wrong status
       for (const e of entries) {
         if (e.performance?.status !== 'CLOSED' && Array.isArray(e.performance?.exits) && e.performance.exits.length > 0 && (e.performance?.remainingShares ?? 1) === 0) {
           try {
@@ -2422,6 +2423,72 @@ app.get('/api/journal/closed-scorecard', authenticateJWT, async (req, res) => {
           } catch { /* best-effort */ }
         }
       }
+
+      // Fix 2: IBKR auto-closed portfolio entries whose journal was never synced
+      // (pre-fix positions closed before syncExitToJournal was added to processExecutions)
+      try {
+        const { syncExitToJournal } = await import('./exitService.js');
+        const ibkrClosed = await db.collection('pnthr_portfolio').find({
+          ownerId: req.user.userId,
+          status: 'CLOSED',
+          autoClosedByIBKR: true,
+        }).toArray();
+
+        const journalByPositionId = {};
+        for (const e of entries) {
+          journalByPositionId[e.positionId] = e;
+        }
+
+        for (const pos of ibkrClosed) {
+          const jEntry = journalByPositionId[pos.id?.toString()];
+          // Only repair if journal entry exists but has no exits synced yet
+          if (!jEntry) continue;
+          if (Array.isArray(jEntry.performance?.exits) && jEntry.performance.exits.length > 0) continue;
+          if (jEntry.performance?.status === 'CLOSED') continue;
+
+          const outcome = pos.outcome || {};
+          const exitPrice   = outcome.exitPrice   ?? pos.entryPrice ?? 0;
+          const exitReason  = outcome.exitReason  ?? 'MANUAL';
+          const profitDollar = outcome.profitDollar ?? 0;
+          const profitPct    = outcome.profitPct    ?? 0;
+
+          // Compute pnthrShares from fills
+          const fills = pos.fills || {};
+          const pnthrShares = Object.values(fills)
+            .reduce((s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0);
+          const totalCost = Object.values(fills)
+            .reduce((s, f) => s + (f.filled ? (+f.shares || 0) * (+f.price || 0) : 0), 0);
+          const avgCost = pnthrShares > 0 ? totalCost / pnthrShares : (pos.entryPrice || 0);
+          const isLong  = pos.direction === 'LONG';
+
+          const closedAt = pos.closedAt ? new Date(pos.closedAt) : new Date();
+          const exitRecord = {
+            id:              'E1',
+            shares:          pnthrShares,
+            price:           exitPrice,
+            date:            closedAt.toISOString().split('T')[0],
+            time:            closedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }),
+            reason:          exitReason,
+            note:            'Auto-closed by IBKR TWS fill detection',
+            isOverride:      exitReason === 'MANUAL',
+            isFinalExit:     true,
+            pnl: {
+              dollar:   +profitDollar.toFixed(2),
+              pct:      +profitPct.toFixed(2),
+              perShare: +(isLong ? exitPrice - avgCost : avgCost - exitPrice).toFixed(4),
+            },
+            remainingShares: 0,
+            marketAtExit:    {},
+            createdAt:       closedAt,
+          };
+          try {
+            await syncExitToJournal(db, pos.id, req.user.userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pos);
+            console.log(`[Journal] ✅ Repaired stuck IBKR-closed entry for ${pos.ticker}`);
+          } catch (repairErr) {
+            console.warn(`[Journal] Repair failed for ${pos.ticker}:`, repairErr.message);
+          }
+        }
+      } catch (e2) { console.warn('[Journal] IBKR repair pass failed:', e2.message); }
     });
 
     res.json(entries);

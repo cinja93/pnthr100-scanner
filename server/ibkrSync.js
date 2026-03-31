@@ -7,6 +7,7 @@
 
 import { connectToDatabase, upsertUserProfile } from './database.js';
 import { validatePortfolioUpdate } from './portfolioGuard.js';
+import { syncExitToJournal } from './exitService.js';
 
 // ── processExecutions ─────────────────────────────────────────────────────────
 // Phase 2: Match TWS fills to PNTHR positions and auto-close on full exit.
@@ -107,6 +108,32 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
         },
       }
     );
+
+    // Sync exit to journal so the trade card shows CLOSED with P&L and triggers discipline score
+    try {
+      const exitRecord = {
+        id:              'E1',
+        shares:          pnthrShares,
+        price:           exitPrice,
+        date:            syncedAt.toISOString().split('T')[0],
+        time:            syncedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }),
+        reason:          exitReason,
+        note:            'Auto-closed by IBKR TWS fill detection',
+        isOverride:      exitReason === 'MANUAL',
+        isFinalExit:     true,
+        pnl: {
+          dollar:   +profitDollar.toFixed(2),
+          pct:      +profitPct.toFixed(2),
+          perShare: +(isLong ? exitPrice - avgCost : avgCost - exitPrice).toFixed(4),
+        },
+        remainingShares: 0,
+        marketAtExit:    {},
+        createdAt:       syncedAt,
+      };
+      await syncExitToJournal(db, pnthr.id, userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pnthr);
+    } catch (e) {
+      console.warn(`[IBKR] Journal sync failed for ${symbol}:`, e.message);
+    }
 
     // Record this execId so it is never processed again
     await db.collection('pnthr_ibkr_executions').insertOne({

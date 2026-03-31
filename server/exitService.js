@@ -215,4 +215,4 @@ async function syncExitToJournal(db, positionId, userId, exitRecord, remainingSh
   }
 }
 
-export { recordExit, calcAvgCost, calcTotalFilled, calcExitPnl };
+export { recordExit, calcAvgCost, calcTotalFilled, calcExitPnl, syncExitToJournal };

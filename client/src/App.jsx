@@ -482,7 +482,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {activePage === 'prey' && <PreyPage onNavigate={navigate} />}
 
           {/* PNTHR Assistant — Daily Task Co-Pilot */}
-          {activePage === 'assistant' && <AssistantPage />}
+          {activePage === 'assistant' && <AssistantPage onNavigate={navigate} />}
 
           {/* PNTHR's Pulse mission control */}
           {activePage === 'pulse' && <PulsePage onNavigate={navigate} />}

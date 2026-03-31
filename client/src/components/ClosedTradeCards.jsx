@@ -304,40 +304,12 @@ function MarketColumn({ snap, tech, dir, label }) {
 
 // ── CompleteYourScore ─────────────────────────────────────────────────────────
 function getScoreQuestions(entry, disc) {
+  // NOTE: signal quality and Kill score questions have been removed.
+  // Both are captured at entry confirmation time via the Analyze snapshot
+  // (4-source cascade: Analyze → queue entry → MongoDB pipeline → signal cache).
+  // Only subjective/behavioral questions remain here.
   const questions = [];
   if (!disc) return questions;
-
-  if (disc.tier1?.components?.signalQuality?.label === 'NO SIGNAL' && !entry.userConfirmed?.signal) {
-    questions.push({
-      id: 'signal',
-      question: `What was the PNTHR signal for ${entry.ticker} when you entered?`,
-      type: 'single_select',
-      options: [
-        { value: 'BL+1', label: 'BL+1 (fresh buy long)' },
-        { value: 'BL+2', label: 'BL+2 (1 week old)' },
-        { value: 'BL+3', label: 'BL+3+ (2+ weeks old)' },
-        { value: 'SS+1', label: 'SS+1 (fresh sell short)' },
-        { value: 'SS+2', label: 'SS+2 (1 week old)' },
-        { value: 'SS+3', label: 'SS+3+ (2+ weeks old)' },
-        { value: 'DEVELOPING', label: 'Developing signal (3/4 conditions met)' },
-        { value: 'NONE', label: 'No PNTHR signal' },
-      ],
-    });
-  }
-
-  if (disc.tier1?.components?.killContext?.label === 'NOT SCORED' && !entry.userConfirmed?.killScore) {
-    questions.push({
-      id: 'killScore',
-      question: `Was ${entry.ticker} in the Kill pipeline when you entered?`,
-      type: 'multi_field',
-      fields: [
-        { key: 'inPipeline', label: 'In Kill pipeline?', type: 'select', options: ['Yes', 'No', "Don't remember"] },
-        { key: 'killScore',  label: 'Kill score', type: 'number', placeholder: 'e.g., 98.6' },
-        { key: 'killRank',   label: 'Kill rank',  type: 'number', placeholder: 'e.g., 19' },
-        { key: 'killTier',   label: 'Tier', type: 'select', options: ['ALPHA PNTHR KILL','STRIKING','HUNTING','POUNCING','COILING','STALKING','TRACKING','PROWLING','STIRRING','DORMANT',"Don't remember"] },
-      ],
-    });
-  }
 
   if (disc.tier1?.components?.indexTrend?.label === 'UNKNOWN' && !entry.userConfirmed?.indexTrend) {
     questions.push({

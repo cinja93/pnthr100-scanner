@@ -849,7 +849,7 @@ function fmtFillTime(closedAt) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }) + ` · ${time} ET`;
 }
 
-function RecentFillsSection({ fills }) {
+function RecentFillsSection({ fills, onNavigate }) {
   const [expanded, setExpanded] = useState(true);
   if (!fills?.length) return null;
 
@@ -913,12 +913,17 @@ function RecentFillsSection({ fills }) {
                 {fillTime}
               </span>
             )}
-            <span style={{
-              marginLeft: 'auto', fontSize: 11, color: '#f5a623',
-              background: '#2a1e0a', borderRadius: 4, padding: '2px 8px',
-            }}>
+            <button
+              onClick={() => onNavigate?.('journal')}
+              style={{
+                marginLeft: 'auto', fontSize: 11, color: '#f5a623',
+                background: '#2a1e0a', border: '1px solid #7a4a0a',
+                borderRadius: 4, padding: '4px 10px', cursor: 'pointer',
+                fontWeight: 600, letterSpacing: '0.03em',
+              }}
+            >
               ✍ Complete journal entry
-            </span>
+            </button>
           </div>
         );
       })}
@@ -1077,7 +1082,7 @@ function CompletedSection({ completed }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function AssistantPage() {
+export default function AssistantPage({ onNavigate }) {
   const [tasks,          setTasks]          = useState([]);
   const [stopSyncRows,   setStopSyncRows]   = useState([]);
   const [stopSyncLabel,  setStopSyncLabel]  = useState('STOP CHECK');
@@ -1439,7 +1444,7 @@ export default function AssistantPage() {
       )}
 
       {/* ── Recent Fills ───────────────────────────────────────────────────── */}
-      <RecentFillsSection fills={recentFills} />
+      <RecentFillsSection fills={recentFills} onNavigate={onNavigate} />
 
       {/* ── Command Health ─────────────────────────────────────────────────── */}
       <CommandHealthSection alerts={healthAlerts} loading={healthLoading} />

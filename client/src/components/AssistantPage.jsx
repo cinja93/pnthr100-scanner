@@ -914,7 +914,7 @@ function RecentFillsSection({ fills, onNavigate }) {
               </span>
             )}
             <button
-              onClick={() => onNavigate?.('journal', { filter: 'CLOSED' })}
+              onClick={() => onNavigate?.('journal', { filter: 'CLOSED', focusId: fill.id })}
               style={{
                 marginLeft: 'auto', fontSize: 11, color: '#f5a623',
                 background: '#2a1e0a', border: '1px solid #7a4a0a',
@@ -922,13 +922,13 @@ function RecentFillsSection({ fills, onNavigate }) {
                 fontWeight: 600, letterSpacing: '0.03em',
               }}
             >
-              ✍ Complete journal entry
+              📋 Review journal entry
             </button>
           </div>
         );
       })}
       <div style={{ padding: '10px 16px', fontSize: 11, color: '#555' }}>
-        Position closed automatically when TWS fill was detected. Journal questionnaire still required.
+        Position closed automatically when TWS fill was detected. Click to review the journal scorecard.
       </div>
     </div>
   );

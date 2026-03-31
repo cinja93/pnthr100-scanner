@@ -367,7 +367,7 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
   );
 }
 
-export default function JournalPage({ onNavigate, initialFilter }) {
+export default function JournalPage({ onNavigate, initialFilter, focusPositionId }) {
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState('trades');
   const [entries, setEntries] = useState([]);
@@ -878,7 +878,7 @@ export default function JournalPage({ onNavigate, initialFilter }) {
                   )}
                 </div>
               ) : filterStatus === 'CLOSED' ? (
-                <ClosedTradeCards />
+                <ClosedTradeCards focusPositionId={focusPositionId} />
               ) : (
                 <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>

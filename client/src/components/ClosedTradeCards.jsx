@@ -4,7 +4,7 @@
 // stacked trade cards. No horizontal scrolling. 7 sections per card.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
@@ -516,12 +516,13 @@ function CompleteYourScore({ entry, questions, reviewMode, onSave }) {
 }
 
 // ── TradeCard ─────────────────────────────────────────────────────────────────
-function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmScore }) {
+function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmScore, focusRef, autoExpand }) {
   const [entry, setEntry] = useState(initialEntry);
   // Collapse by default when entry has already been confirmed by the user.
   // Open by default when it still needs questions answered.
+  // autoExpand overrides default when navigating here directly from Assistant.
   const isConfirmed = !!initialEntry.userConfirmed?.confirmedAt;
-  const [expanded, setExpanded] = useState(!isConfirmed);
+  const [expanded, setExpanded] = useState(autoExpand || !isConfirmed);
   const [showCompleteScore, setShowCompleteScore] = useState(false);
   const [localNotes, setLocalNotes] = useState({ tradeNotes: entry.tradeNotes || '', macroNotes: entry.macroNotes || '' });
 
@@ -569,7 +570,7 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
   };
 
   return (
-    <div style={{ background: '#111', border: '1px solid #222', borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
+    <div ref={focusRef} style={{ background: '#111', border: focusRef ? '1px solid #f5a623' : '1px solid #222', borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
 
       {/* ── Section 1: HEADER BAR ── */}
       <div style={{
@@ -810,9 +811,10 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-export default function ClosedTradeCards({ onTickerClick }) {
+export default function ClosedTradeCards({ onTickerClick, focusPositionId }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const focusRef = useRef(null);
 
   useEffect(() => {
     setLoading(true);
@@ -821,6 +823,15 @@ export default function ClosedTradeCards({ onTickerClick }) {
       .then(data => { setEntries(data); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
+
+  // Scroll to focused card once entries are loaded
+  useEffect(() => {
+    if (!loading && focusPositionId && focusRef.current) {
+      setTimeout(() => {
+        focusRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+    }
+  }, [loading, focusPositionId]);
 
   const saveNotes = useCallback(async (id, field, value) => {
     try {
@@ -845,14 +856,22 @@ export default function ClosedTradeCards({ onTickerClick }) {
 
   return (
     <div style={{ padding: '0 0 24px' }}>
-      {sortedEntries.map(e => (
-        <TradeCard key={e._id} entry={e} onTickerClick={onTickerClick}
-          saveNotes={saveNotes}
-          onConfirmScore={(id, newScore) => {
-            setEntries(prev => prev.map(x => x._id?.toString() === id?.toString() ? { ...x, discipline: newScore } : x));
-          }}
-        />
-      ))}
+      {sortedEntries.map(e => {
+        const isFocused = focusPositionId && e.positionId?.toString() === focusPositionId?.toString();
+        return (
+          <TradeCard
+            key={e._id}
+            entry={e}
+            onTickerClick={onTickerClick}
+            saveNotes={saveNotes}
+            focusRef={isFocused ? focusRef : null}
+            autoExpand={isFocused}
+            onConfirmScore={(id, newScore) => {
+              setEntries(prev => prev.map(x => x._id?.toString() === id?.toString() ? { ...x, discipline: newScore } : x));
+            }}
+          />
+        );
+      })}
     </div>
   );
 }

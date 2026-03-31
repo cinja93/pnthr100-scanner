@@ -1,7 +1,7 @@
 // client/src/components/JournalPage.jsx
 // ── PNTHR Journal — Trade analysis, discipline tracking, pattern recognition ──
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ScorecardGrid from './ScorecardGrid';
@@ -363,6 +363,40 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── HoverTooltip ──────────────────────────────────────────────────────────────
+function HoverTooltip({ children, lines }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      {children}
+      {visible && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 999,
+          background: '#1a1a1a', border: '1px solid #444', borderRadius: 7,
+          padding: '10px 14px', minWidth: 260, maxWidth: 320,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+          pointerEvents: 'none',
+        }}>
+          {lines.map((line, i) => (
+            <div key={i} style={{
+              fontSize: 11, lineHeight: 1.55,
+              color: line.startsWith('•') ? '#ccc' : '#888',
+              fontWeight: line.startsWith('WHEN') ? 700 : 400,
+              marginBottom: i < lines.length - 1 ? 4 : 0,
+              color: line.startsWith('WHEN') ? '#FFD700' : line.startsWith('•') ? '#ccc' : '#888',
+            }}>
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -794,18 +828,36 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isAdmin && entries.length > 0 && (
-            <button onClick={runMigration} disabled={migrating}
-              style={{ background: 'transparent', border: '1px solid #444', color: '#666', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: migrating ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
-              title="Create journal entries for any positions missing one">
-              {migrating ? '...' : '↺ sync positions'}
-            </button>
+            <HoverTooltip lines={[
+              'SYNC POSITIONS',
+              'Scans your active portfolio and creates a journal entry for any position that is missing one.',
+              'WHEN TO USE:',
+              '• After adding new positions in Command Center',
+              '• If you notice a trade is missing from the journal',
+              '• After importing older positions',
+              'Safe to run anytime — will not duplicate existing entries.',
+            ]}>
+              <button onClick={runMigration} disabled={migrating}
+                style={{ background: 'transparent', border: '1px solid #444', color: '#666', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: migrating ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                {migrating ? '...' : '↺ sync positions'}
+              </button>
+            </HoverTooltip>
           )}
           {isAdmin && entries.some(e => e.performance?.status === 'CLOSED') && (
-            <button onClick={runRescoreAll} disabled={rescoring}
-              style={{ background: 'transparent', border: '1px solid rgba(212,160,23,0.4)', color: '#b8860b', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: rescoring ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
-              title="Backfill missing signal/market data and recompute all discipline scores">
-              {rescoring ? '...' : '⚡ rescore closed'}
-            </button>
+            <HoverTooltip lines={[
+              'RESCORE CLOSED',
+              'Recalculates the discipline score on all closed trades using the latest scoring rules.',
+              'WHEN TO USE:',
+              '• After IBKR auto-closes several positions at once',
+              '• If discipline scores look wrong or missing',
+              '• After the scoring system is updated',
+              'Does not change your trade data — only recomputes scores.',
+            ]}>
+              <button onClick={runRescoreAll} disabled={rescoring}
+                style={{ background: 'transparent', border: '1px solid rgba(212,160,23,0.4)', color: '#b8860b', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: rescoring ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                {rescoring ? '...' : '⚡ rescore closed'}
+              </button>
+            </HoverTooltip>
           )}
           {tabBtn('trades', 'TRADES')}
           {tabBtn('analytics', 'ANALYTICS')}

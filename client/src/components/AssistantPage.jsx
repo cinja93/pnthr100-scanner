@@ -833,6 +833,82 @@ function CommandHealthSection({ alerts, loading }) {
   );
 }
 
+// ── Overnight Fills Section ───────────────────────────────────────────────────
+
+function OvernightFillsSection({ fills }) {
+  const [expanded, setExpanded] = useState(true);
+  if (!fills?.length) return null;
+
+  return (
+    <div style={{
+      background: '#0d1a0d',
+      border: '1px solid #1a4a1a',
+      borderRadius: 8,
+      marginBottom: 12,
+      overflow: 'hidden',
+    }}>
+      <div
+        onClick={() => setExpanded(e => !e)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '12px 16px', cursor: 'pointer',
+          borderBottom: expanded ? '1px solid #1a4a1a' : 'none',
+        }}
+      >
+        <span style={{ fontSize: 11, color: '#555' }}>{expanded ? '▼' : '▶'}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#4caf50', letterSpacing: 1 }}>
+          ⚡ OVERNIGHT FILLS
+        </span>
+        <span style={{ fontSize: 11, color: '#555' }}>
+          ({fills.length} position{fills.length !== 1 ? 's' : ''} auto-closed by IBKR)
+        </span>
+      </div>
+      {expanded && fills.map(fill => {
+        const outcome  = fill.outcome || {};
+        const isProfit = (outcome.profitDollar ?? 0) >= 0;
+        const pnlColor = isProfit ? '#4caf50' : '#dc3545';
+        const pnlSign  = isProfit ? '+' : '';
+        return (
+          <div key={fill.id || fill.ticker} style={{
+            display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10,
+            padding: '12px 16px', borderBottom: '1px solid #111',
+          }}>
+            <span style={{ fontWeight: 700, color: '#fcf000', fontSize: 13, minWidth: 60 }}>
+              {fill.ticker}
+            </span>
+            <span style={{ fontSize: 11, color: '#888', minWidth: 50 }}>
+              {fill.direction}
+            </span>
+            <span style={{ fontSize: 12, color: '#ccc' }}>
+              Exit: <strong style={{ color: '#fff' }}>${outcome.exitPrice?.toFixed(2) ?? '—'}</strong>
+            </span>
+            <span style={{
+              fontSize: 11, fontWeight: 700, color: '#fff',
+              background: outcome.exitReason === 'STOP_HIT' ? '#7b2e2e' : '#2e4a7b',
+              borderRadius: 4, padding: '2px 7px',
+            }}>
+              {outcome.exitReason === 'STOP_HIT' ? 'STOP HIT' : 'MANUAL EXIT'}
+            </span>
+            <span style={{ fontSize: 12, color: pnlColor, fontWeight: 600 }}>
+              {pnlSign}${Math.abs(outcome.profitDollar ?? 0).toFixed(0)}
+              {' '}({pnlSign}{(outcome.profitPct ?? 0).toFixed(2)}%)
+            </span>
+            <span style={{
+              marginLeft: 'auto', fontSize: 11, color: '#f5a623',
+              background: '#2a1e0a', borderRadius: 4, padding: '2px 8px',
+            }}>
+              ✍ Complete journal entry
+            </span>
+          </div>
+        );
+      })}
+      <div style={{ padding: '10px 16px', fontSize: 11, color: '#555' }}>
+        Position closed automatically when TWS fill was detected. Journal questionnaire still required.
+      </div>
+    </div>
+  );
+}
+
 // ── Chip Section ──────────────────────────────────────────────────────────────
 
 function ChipSection({ section, onChipClick, busyTicker }) {
@@ -1000,6 +1076,7 @@ export default function AssistantPage() {
   const [chartBusy,   setChartBusy]   = useState(null); // ticker currently loading
   const [healthAlerts,    setHealthAlerts]    = useState([]);
   const [healthLoading,   setHealthLoading]   = useState(true);
+  const [overnightFills,  setOvernightFills]  = useState([]);
 
   // Analyze context for scoring chips
   const analyzeCtx = useAnalyzeContext();
@@ -1064,6 +1141,12 @@ export default function AssistantPage() {
         .then(d => setHealthAlerts(d.alerts || []))
         .catch(() => setHealthAlerts([]))
         .finally(() => setHealthLoading(false));
+
+      // Overnight fills — fast DB lookup, fire independently
+      fetch(`${API_BASE}/api/assistant/overnight-fills`, { headers: authHeaders() })
+        .then(r => r.ok ? r.json() : { fills: [] })
+        .then(d => setOvernightFills(d.fills || []))
+        .catch(() => setOvernightFills([]));
 
       const [tasksRes, syncRes, routinesRes, completedRes] = await Promise.all([
         fetch(`${API_BASE}/api/assistant/tasks`,    { headers: authHeaders() }),
@@ -1334,6 +1417,9 @@ export default function AssistantPage() {
           ))}
         </>
       )}
+
+      {/* ── Overnight Fills ────────────────────────────────────────────────── */}
+      <OvernightFillsSection fills={overnightFills} />
 
       {/* ── Command Health ─────────────────────────────────────────────────── */}
       <CommandHealthSection alerts={healthAlerts} loading={healthLoading} />

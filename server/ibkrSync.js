@@ -1,5 +1,5 @@
 // server/ibkrSync.js
-// POST /api/ibkr/sync — IBKR TWS Bridge receiver (Phase 1: Read-Only)
+// POST /api/ibkr/sync — IBKR TWS Bridge receiver (Phase 2: Auto-Close from Fills)
 //
 // Called every 60s by the Python bridge running on the admin's machine.
 // Authenticates via JWT (req.user.userId = admin's ownerId).
@@ -8,6 +8,151 @@
 import { connectToDatabase, upsertUserProfile } from './database.js';
 import { validatePortfolioUpdate } from './portfolioGuard.js';
 
+// ── processExecutions ─────────────────────────────────────────────────────────
+// Phase 2: Match TWS fills to PNTHR positions and auto-close on full exit.
+// Deduplicates by execId via pnthr_ibkr_executions collection.
+//
+// Closing logic:
+//   SLD (sold) execution + ACTIVE LONG position with matching ticker → close
+//   BOT (bought) execution + ACTIVE SHORT position with matching ticker → close
+//   Shares must be within 10% of PNTHR tracked shares (guards partial fills).
+//
+// Exit reason:
+//   Fill price within 1% of stored stop → STOP_HIT
+//   Otherwise → MANUAL (discretionary exit placed directly in TWS)
+//
+async function processExecutions(db, userId, executions, pnthrPositions, syncedAt) {
+  if (!executions?.length) return [];
+
+  // Load already-processed execIds for this user
+  const processedDocs = await db.collection('pnthr_ibkr_executions')
+    .find({ ownerId: userId, execId: { $in: executions.map(e => e.execId) } })
+    .project({ execId: 1 })
+    .toArray();
+  const processedIds = new Set(processedDocs.map(d => d.execId));
+
+  // Index active PNTHR positions by ticker
+  const positionByTicker = {};
+  for (const p of pnthrPositions) {
+    positionByTicker[p.ticker?.toUpperCase()] = p;
+  }
+
+  const autoClosed = [];
+
+  for (const exec of executions) {
+    if (processedIds.has(exec.execId)) continue; // already handled
+
+    const symbol = exec.symbol?.toUpperCase();
+    const pnthr  = positionByTicker[symbol];
+    if (!pnthr) continue; // not a tracked position
+
+    const isLong  = pnthr.direction === 'LONG';
+    const isShort = pnthr.direction === 'SHORT';
+
+    // SLD closes LONG; BOT closes SHORT
+    const isClosingTrade =
+      (exec.side === 'SLD' && isLong) ||
+      (exec.side === 'BOT' && isShort);
+    if (!isClosingTrade) continue;
+
+    // Count PNTHR-tracked filled shares
+    const fills     = pnthr.fills || {};
+    const pnthrShares = Object.values(fills)
+      .reduce((s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0);
+
+    // Only auto-close when execution covers ≥ 90% of tracked shares (full exits)
+    if (pnthrShares === 0 || exec.shares < pnthrShares * 0.90) continue;
+
+    // Determine exit reason: fill within 1% of stored stop → STOP_HIT
+    const stop       = pnthr.stopPrice;
+    const exitReason = (stop != null && Math.abs(exec.price - stop) / stop < 0.01)
+      ? 'STOP_HIT'
+      : 'MANUAL';
+
+    // Calculate outcome (same math as commandCenter.positionsClose)
+    const totalCost    = Object.values(fills)
+      .reduce((s, f) => s + (f.filled ? (+f.shares || 0) * (+f.price || 0) : 0), 0);
+    const avgCost      = pnthrShares > 0 ? totalCost / pnthrShares : pnthr.entryPrice;
+    const exitPrice    = exec.price;
+    const profitPct    = isLong
+      ? (exitPrice - avgCost) / avgCost * 100
+      : (avgCost - exitPrice) / avgCost * 100;
+    const profitDollar = isLong
+      ? (exitPrice - avgCost) * pnthrShares
+      : (avgCost - exitPrice) * pnthrShares;
+    const holdingDays  = Math.floor((Date.now() - new Date(pnthr.createdAt).getTime()) / 86400000);
+
+    // Close the position
+    await db.collection('pnthr_portfolio').updateOne(
+      { id: pnthr.id, ownerId: userId },
+      {
+        $set: {
+          status:             'CLOSED',
+          closedAt:           syncedAt,
+          updatedAt:          syncedAt,
+          autoClosedByIBKR:   true,
+          ibkrExecId:         exec.execId,
+          outcome: {
+            exitPrice,
+            profitPct:    +profitPct.toFixed(2),
+            profitDollar: +profitDollar.toFixed(2),
+            holdingDays,
+            exitReason,
+          },
+        },
+      }
+    );
+
+    // Record this execId so it is never processed again
+    await db.collection('pnthr_ibkr_executions').insertOne({
+      ownerId:    userId,
+      execId:     exec.execId,
+      symbol,
+      side:       exec.side,
+      shares:     exec.shares,
+      price:      exec.price,
+      exitReason,
+      processedAt: syncedAt,
+    });
+
+    autoClosed.push({
+      ticker:      symbol,
+      direction:   pnthr.direction,
+      exitPrice,
+      exitReason,
+      profitPct:   +profitPct.toFixed(2),
+      profitDollar: +profitDollar.toFixed(2),
+      closedAt:    syncedAt.toISOString(),
+    });
+
+    console.log(`[IBKR] ⚡ Auto-closed ${symbol} (${pnthr.direction}) @ $${exitPrice} — ${exitReason}`);
+  }
+
+  return autoClosed;
+}
+
+// ── getOvernightFills ─────────────────────────────────────────────────────────
+// Returns positions auto-closed by IBKR in the last 24 hours.
+// Used by the assistant "OVERNIGHT FILLS" section.
+//
+export async function getOvernightFills(userId) {
+  try {
+    const db = await connectToDatabase();
+    if (!db) return [];
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return await db.collection('pnthr_portfolio')
+      .find({
+        ownerId:           userId,
+        autoClosedByIBKR:  true,
+        closedAt:          { $gte: since },
+      })
+      .sort({ closedAt: -1 })
+      .toArray();
+  } catch {
+    return [];
+  }
+}
+
 // ── POST /api/ibkr/sync ───────────────────────────────────────────────────────
 export async function ibkrSync(req, res) {
   try {
@@ -15,7 +160,7 @@ export async function ibkrSync(req, res) {
     if (!db) return res.status(503).json({ error: 'DB unavailable' });
 
     const userId = req.user.userId; // stamped from JWT — cannot be spoofed
-    const { timestamp, accountId, account, positions, stopOrders } = req.body;
+    const { timestamp, accountId, account, positions, stopOrders, executions } = req.body;
 
     if (!account || !Array.isArray(positions)) {
       return res.status(400).json({ error: 'account and positions[] required' });
@@ -122,7 +267,12 @@ export async function ibkrSync(req, res) {
       await db.collection('pnthr_portfolio').bulkWrite(updateOps);
     }
 
-    // 4. Identify IBKR positions not yet tracked in PNTHR (informational)
+    // 4. Phase 2: Process executions — auto-close positions from TWS fills
+    const autoClosedPositions = await processExecutions(
+      db, userId, executions, pnthrPositions, syncedAt
+    );
+
+    // 5. Identify IBKR positions not yet tracked in PNTHR (informational)
     const pnthrTickers = new Set(pnthrPositions.map(p => p.ticker?.toUpperCase()));
     const untracked    = positions
       .filter(p => p.symbol !== 'USD' && !pnthrTickers.has(p.symbol.toUpperCase()))
@@ -148,14 +298,15 @@ export async function ibkrSync(req, res) {
       }));
 
     res.json({
-      success:         true,
-      nav:             Math.round(account.netLiquidation),
-      positionsSynced: positions.length,
-      pnthrUpdated:    updateOps.length,
+      success:              true,
+      nav:                  Math.round(account.netLiquidation),
+      positionsSynced:      positions.length,
+      pnthrUpdated:         updateOps.length,
       mismatches,
       stopMismatches,
       untracked,
-      syncedAt:        syncedAt.toISOString(),
+      autoClosedPositions,
+      syncedAt:             syncedAt.toISOString(),
     });
   } catch (err) {
     console.error('[IBKR] Sync error:', err);

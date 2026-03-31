@@ -51,7 +51,7 @@ import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateTo
 import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
 import { calculateSectorExposure, generateSectorRecommendations } from './sectorExposure.js';
 import { sendApprovalRequestEmail, sendWelcomeEmail, sendDenialEmail } from './emailService.js';
-import { ibkrSync } from './ibkrSync.js';
+import { ibkrSync, getOvernightFills } from './ibkrSync.js';
 import {
   generateAssistantTasks,
   getStopSyncRows,
@@ -3953,6 +3953,18 @@ app.get('/api/assistant/position-health', async (req, res) => {
   } catch (err) {
     console.error('[assistant/position-health]', err.message);
     res.status(500).json({ alerts: [], error: err.message });
+  }
+});
+
+// GET /api/assistant/overnight-fills — positions auto-closed by IBKR in last 24h
+app.get('/api/assistant/overnight-fills', authenticateJWT, async (req, res) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+    const fills = await getOvernightFills(req.user.userId);
+    res.json({ fills });
+  } catch (err) {
+    console.error('[assistant/overnight-fills]', err.message);
+    res.status(500).json({ fills: [], error: err.message });
   }
 });
 

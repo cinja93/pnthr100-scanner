@@ -1,5 +1,5 @@
 """
-PNTHR Den — IBKR TWS Bridge (Phase 1.5: Read-Only + Stop Order Monitoring)
+PNTHR Den — IBKR TWS Bridge (Phase 2: Auto-Close from TWS Fills)
 
 Connects to TWS, reads account + positions + open stop orders every 60 seconds,
 pushes to the PNTHR Den server. Runs alongside TWS Mosaic.
@@ -30,6 +30,7 @@ from datetime import datetime, timezone, timedelta
 try:
     from ibapi.client import EClient
     from ibapi.wrapper import EWrapper
+    from ibapi.execution import ExecutionFilter
 except ImportError:
     print("[BRIDGE] ERROR: ibapi not installed. Run: pip install ibapi")
     sys.exit(1)
@@ -66,11 +67,14 @@ class PNTHRBridge(EWrapper, EClient):
         self.account_values  = {}
         self.positions       = []
         self.open_orders     = {}   # symbol → {orderId, stopPrice, action, orderType}
+        self.executions      = []   # Phase 2: fills captured via reqExecutions
         self.account_ready   = threading.Event()
         self.positions_ready = threading.Event()
         self.orders_ready    = threading.Event()
+        self.executions_ready = threading.Event()
         self.connected       = False
         self.account_id      = None
+        self._exec_req_id    = 2000  # increments each cycle to avoid stale callbacks
 
     # ── Connection lifecycle ──────────────────────────────────────────────────
     def connectAck(self):
@@ -166,6 +170,33 @@ class PNTHRBridge(EWrapper, EClient):
         """All open orders have been delivered for this request."""
         self.orders_ready.set()
 
+    # ── Execution callbacks (Phase 2) ─────────────────────────────────────────
+    def execDetails(self, reqId, contract, execution):
+        """Called once per execution when reqExecutions() is invoked."""
+        if contract.secType != 'STK':
+            return  # ignore options, futures, etc.
+        try:
+            price  = float(execution.price)
+            shares = float(execution.shares)
+        except (TypeError, ValueError):
+            return
+        if price <= 0 or shares <= 0:
+            return
+        self.executions.append({
+            'execId':   execution.execId,
+            'symbol':   contract.symbol.upper(),
+            'side':     execution.side,    # 'BOT' (bought) or 'SLD' (sold)
+            'shares':   shares,
+            'price':    round(price, 4),
+            'avgPrice': round(float(execution.avgPrice or price), 4),
+            'time':     execution.time,    # "YYYYMMDD  HH:MM:SS" format
+            'orderId':  execution.orderId,
+        })
+
+    def execDetailsEnd(self, reqId):
+        """All executions for this request have been delivered."""
+        self.executions_ready.set()
+
     # ── Payload builder ───────────────────────────────────────────────────────
     def get_payload(self):
         def _float(key):
@@ -191,6 +222,7 @@ class PNTHRBridge(EWrapper, EClient):
                 {'symbol': sym, **data}
                 for sym, data in self.open_orders.items()
             ],
+            'executions': self.executions,
         }
 
 
@@ -212,12 +244,18 @@ def push_to_pnthr(payload):
             nav         = payload['account']['netLiquidation']
             pos_count   = len(payload['positions'])
             stop_count  = len(payload.get('stopOrders', []))
+            exec_count  = len(payload.get('executions', []))
             mismatch    = len(data.get('mismatches', []))
             stop_mis    = len(data.get('stopMismatches', []))
+            auto_closed = data.get('autoClosedPositions', [])
             ts          = datetime.now().strftime('%H:%M:%S')
             mismatch_str = f" | ⚠ {mismatch} share mismatch(es)" if mismatch else ""
             stop_mis_str = f" | ⚠ {stop_mis} stop mismatch(es)" if stop_mis else ""
-            print(f"[BRIDGE] ✓ {ts}  NAV: ${nav:>12,.2f}  |  {pos_count} pos  |  {stop_count} stops{mismatch_str}{stop_mis_str}")
+            exec_str     = f" | {exec_count} fills" if exec_count else ""
+            print(f"[BRIDGE] ✓ {ts}  NAV: ${nav:>12,.2f}  |  {pos_count} pos  |  {stop_count} stops{exec_str}{mismatch_str}{stop_mis_str}")
+            if auto_closed:
+                for ac in auto_closed:
+                    print(f"[BRIDGE]   ⚡ AUTO-CLOSED {ac['ticker']} ({ac['direction']}) @ ${ac['exitPrice']:.2f} — {ac['exitReason']}")
             if data.get('untracked'):
                 syms = ', '.join(p['symbol'] for p in data['untracked'])
                 print(f"[BRIDGE]   Untracked in PNTHR: {syms}")
@@ -245,7 +283,7 @@ def is_market_hours():
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
-    print("  PNTHR Den — IBKR TWS Bridge  (Phase 1.5: + Stop Orders)")
+    print("  PNTHR Den — IBKR TWS Bridge  (Phase 2: Auto-Close from Fills)")
     print(f"  TWS:    {TWS_HOST}:{TWS_PORT}  (client ID {TWS_CLIENT_ID})")
     print(f"  Server: {PNTHR_API_URL}")
     print(f"  Sync:   every {SYNC_INTERVAL}s")
@@ -297,6 +335,15 @@ def main():
                 app.orders_ready.clear()
                 app.reqAllOpenOrders()
                 app.orders_ready.wait(timeout=5)  # orders arrive fast
+
+                # Phase 2: request today's executions (fills) from TWS.
+                # ExecutionFilter() with no args returns all fills for today.
+                # The server deduplicates by execId so sending all each cycle is safe.
+                app.executions = []
+                app.executions_ready.clear()
+                app._exec_req_id += 1
+                app.reqExecutions(app._exec_req_id, ExecutionFilter())
+                app.executions_ready.wait(timeout=5)
 
                 payload = app.get_payload()
                 if payload['account']['netLiquidation'] > 0:

@@ -548,6 +548,16 @@ export async function generateAssistantTasks(userId, positions, nav) {
             const remaining = 20 - tradDays;
             const isDay10Plus = tradDays >= 10;
 
+            // Distance from current price to trigger (shown in both task types)
+            const distStr = cp != null
+              ? (() => {
+                  const dist    = Math.abs(trigger - cp);
+                  const distPct = (dist / cp * 100).toFixed(1);
+                  const arrow   = isLong ? '↑' : '↓';
+                  return ` · ${arrow} ${fmt$(dist)} (${distPct}%) to trigger`;
+                })()
+              : '';
+
             if (isDay10Plus) {
               // ── LOT_GATE_NO_TRIGGER — momentum reassessment alert ────────
               const urgency = tradDays >= 14 ? 'CONSIDER EXITING' : 'REASSESS NOW';
@@ -557,7 +567,7 @@ export async function generateAssistantTasks(userId, positions, nav) {
                 type:     'LOT_GATE_NO_TRIGGER',
                 ticker,
                 badge:    urgency,
-                headline: `${ticker}: Day ${tradDays} — Lot 2 gate open ${tradDays - 5} days, trigger ${fmt$(trigger)} still not hit. Reassess.`,
+                headline: `${ticker}: Day ${tradDays} — Lot 2 gate open ${tradDays - 5} days, trigger ${fmt$(trigger)} still not hit${distStr}. Reassess.`,
                 instructions: [
                   `1. ${ticker} entered ${tradDays} trading days ago. Lot 2 gate opened ${tradDays - 5} days ago.`,
                   `2. Lot 2 trigger of ${fmt$(trigger)} (${isLong ? '+3%' : '-3%'} from entry) has NOT been reached — the stock has not confirmed the move.`,
@@ -570,7 +580,7 @@ export async function generateAssistantTasks(userId, positions, nav) {
                     : `7. You have ${remaining} trading days remaining before the mandatory stale hunt exit at Day 20.`,
                 ],
                 confirmQuestion: `Have you reviewed ${ticker}'s chart and decided whether to hold or exit early?`,
-                data:            { trigger, shares, tradDays, remaining, daysGateOpen: tradDays - 5 },
+                data:            { trigger, shares, tradDays, remaining, daysGateOpen: tradDays - 5, currentPrice: cp },
                 dayOfWeek:       null,
                 autoClears:      false,
               });
@@ -584,7 +594,7 @@ export async function generateAssistantTasks(userId, positions, nav) {
                 type:     'LOT_GATE_CLEAR',
                 ticker,
                 badge:    'GATE OPEN',
-                headline: `${ticker}: Lot 2 gate ${gateDesc}. Trigger ${fmt$(trigger)} not yet hit — Day ${tradDays}/20.`,
+                headline: `${ticker}: Lot 2 gate ${gateDesc}. Trigger ${fmt$(trigger)} not yet hit${distStr} — Day ${tradDays}/20.`,
                 instructions: [
                   `1. The 5-day time gate for ${ticker} Lot 2 has cleared (Day ${tradDays} since entry).`,
                   `2. Lot 2 trigger: ${fmt$(trigger)} (${isLong ? '+3%' : '-3%'} from entry). Buy ${shares} shares when price reaches this level.`,
@@ -593,7 +603,7 @@ export async function generateAssistantTasks(userId, positions, nav) {
                   `5. Stale hunt clock: Day ${tradDays} of 20 — ${remaining} trading days remaining before mandatory exit.`,
                 ],
                 confirmQuestion: `Noted — you're watching for ${ticker} Lot 2 trigger at ${fmt$(trigger)}.`,
-                data:            { trigger, shares, tradDays, remaining },
+                data:            { trigger, shares, tradDays, remaining, currentPrice: cp },
                 dayOfWeek:       null,
                 autoClears:      false,
               });

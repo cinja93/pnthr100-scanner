@@ -546,7 +546,10 @@ function CompleteYourScore({ entry, questions, reviewMode, onSave }) {
 // ── TradeCard ─────────────────────────────────────────────────────────────────
 function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmScore }) {
   const [entry, setEntry] = useState(initialEntry);
-  const [expanded, setExpanded] = useState(true);
+  // Collapse by default when entry has already been confirmed by the user.
+  // Open by default when it still needs questions answered.
+  const isConfirmed = !!initialEntry.userConfirmed?.confirmedAt;
+  const [expanded, setExpanded] = useState(!isConfirmed);
   const [showCompleteScore, setShowCompleteScore] = useState(false);
   const [localNotes, setLocalNotes] = useState({ tradeNotes: entry.tradeNotes || '', macroNotes: entry.macroNotes || '' });
 
@@ -860,9 +863,17 @@ export default function ClosedTradeCards({ onTickerClick }) {
   if (loading) return <div style={{ padding: 48, textAlign: 'center', color: '#555', fontSize: 13 }}>Loading closed trades…</div>;
   if (!entries.length) return <div style={{ padding: 48, textAlign: 'center', color: '#555', fontSize: 13 }}>No closed trades yet.</div>;
 
+  // Sort: unconfirmed (needs attention) first, newest-first within each group
+  const sortedEntries = [...entries].sort((a, b) => {
+    const aConfirmed = !!a.userConfirmed?.confirmedAt;
+    const bConfirmed = !!b.userConfirmed?.confirmedAt;
+    if (aConfirmed !== bConfirmed) return aConfirmed ? 1 : -1; // incomplete floats to top
+    return new Date(b.createdAt) - new Date(a.createdAt); // newest first within group
+  });
+
   return (
     <div style={{ padding: '0 0 24px' }}>
-      {entries.map(e => (
+      {sortedEntries.map(e => (
         <TradeCard key={e._id} entry={e} onTickerClick={onTickerClick}
           saveNotes={saveNotes}
           onConfirmScore={(id, newScore) => {

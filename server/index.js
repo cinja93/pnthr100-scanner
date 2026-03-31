@@ -2391,6 +2391,7 @@ app.get('/api/wash-rules', authenticateJWT, async (req, res) => {
 });
 
 // GET /api/journal/closed-scorecard — all CLOSED journal entries for scorecard grid (must be before /:id)
+// Also catches entries with exits that are stuck at ACTIVE due to pre-fix syncExitToJournal bug.
 app.get('/api/journal/closed-scorecard', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
@@ -2398,9 +2399,30 @@ app.get('/api/journal/closed-scorecard', authenticateJWT, async (req, res) => {
     if (!db) return res.status(503).json({ error: 'DB unavailable' });
 
     const entries = await db.collection('pnthr_journal')
-      .find({ ownerId: req.user.userId, 'performance.status': 'CLOSED' })
+      .find({
+        ownerId: req.user.userId,
+        $or: [
+          { 'performance.status': 'CLOSED' },
+          // Catch entries stuck at ACTIVE/PARTIAL that have exit data (pre-Round-1-fix positions)
+          { 'performance.exits.0': { $exists: true } },
+        ],
+      })
       .sort({ createdAt: -1 })
       .toArray();
+
+    // Lazy-fix any stuck entries: if exits exist and remainingShares===0 mark CLOSED server-side
+    setImmediate(async () => {
+      for (const e of entries) {
+        if (e.performance?.status !== 'CLOSED' && Array.isArray(e.performance?.exits) && e.performance.exits.length > 0 && (e.performance?.remainingShares ?? 1) === 0) {
+          try {
+            await db.collection('pnthr_journal').updateOne(
+              { _id: e._id },
+              { $set: { 'performance.status': 'CLOSED', updatedAt: new Date() } }
+            );
+          } catch { /* best-effort */ }
+        }
+      }
+    });
 
     res.json(entries);
   } catch (e) { res.status(500).json({ error: e.message }); }

@@ -159,16 +159,22 @@ async function updateKillAppearances(db, scored, weekOf, regime, jungleSignals =
   eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
   const cutoff = eightWeeksAgo.toISOString().split('T')[0];
 
+  // Batch: fetch ALL existing appearance records in one query instead of N findOnes
+  const existingDocs = await db.collection('pnthr_kill_appearances').find({
+    $or: qualifying.map(s => ({ ticker: s.ticker, signal: s.signal })),
+    lastSeenDate: { $gte: cutoff },
+  }).toArray();
+  const existingMap = {};
+  for (const doc of existingDocs) {
+    existingMap[`${doc.ticker}:${doc.signal}`] = doc;
+  }
+
   let newCount     = 0;
   let updatedCount = 0;
+  const appearanceOps = [];
 
   for (const s of qualifying) {
-    // Look for an active appearance record (same signal, seen within last 8 weeks)
-    const existing = await db.collection('pnthr_kill_appearances').findOne({
-      ticker: s.ticker,
-      signal: s.signal,
-      lastSeenDate: { $gte: cutoff },
-    });
+    const existing = existingMap[`${s.ticker}:${s.signal}`];
 
     // Look up stop price from signal service
     const sigData   = jungleSignals[s.ticker] ?? {};
@@ -212,7 +218,7 @@ async function updateKillAppearances(db, scored, weekOf, regime, jungleSignals =
       }
 
       // First time this stock has qualified — NEVER overwrite this record
-      await db.collection('pnthr_kill_appearances').insertOne({
+      appearanceOps.push({ insertOne: { document: {
         ticker:               s.ticker,
         signal:               s.signal,
         sector:               s.sector ?? null,
@@ -266,27 +272,34 @@ async function updateKillAppearances(db, scored, weekOf, regime, jungleSignals =
         dailySnapshots:       [],
         createdAt:            new Date(),
         updatedAt:            new Date(),
-      });
+      }}});
       newCount++;
     } else {
       // Already on the list — update lastSeen only, preserve first appearance
-      await db.collection('pnthr_kill_appearances').updateOne(
-        { _id: existing._id },
-        {
-          $set: {
-            lastSeenDate:       weekOf,
-            lastSeenPrice:      price,
-            lastStopPrice:      stopPrice,
-            lastKillScore:      s.apexScore,
-            lastKillRank:       s.killRank ?? null,
-            lastAnalyzeScore:   s._analyzeScore,
-            lastCompositeScore: s._compositeScore,
-            updatedAt:          new Date(),
+      appearanceOps.push({
+        updateOne: {
+          filter: { _id: existing._id },
+          update: {
+            $set: {
+              lastSeenDate:       weekOf,
+              lastSeenPrice:      price,
+              lastStopPrice:      stopPrice,
+              lastKillScore:      s.apexScore,
+              lastKillRank:       s.killRank ?? null,
+              lastAnalyzeScore:   s._analyzeScore,
+              lastCompositeScore: s._compositeScore,
+              updatedAt:          new Date(),
+            },
           },
-        }
-      );
+        },
+      });
       updatedCount++;
     }
+  }
+
+  // Execute all appearance inserts/updates in a single round-trip
+  if (appearanceOps.length > 0) {
+    await db.collection('pnthr_kill_appearances').bulkWrite(appearanceOps, { ordered: false });
   }
 
   console.log(`   Kill Appearances: ${newCount} new, ${updatedCount} updated (${qualifying.length} qualifying stocks)`);
@@ -474,14 +487,15 @@ export async function runFridayKillPipeline() {
       }));
 
     if (historyDocs.length > 0) {
-      // Only insert history entries that don't already exist for this weekOf+ticker
-      for (const doc of historyDocs) {
-        await db.collection('pnthr_kill_history').updateOne(
-          { weekOf: doc.weekOf, ticker: doc.ticker },
-          { $setOnInsert: doc },
-          { upsert: true }
-        );
-      }
+      // Single bulkWrite instead of N sequential updateOnes
+      const historyOps = historyDocs.map(doc => ({
+        updateOne: {
+          filter: { weekOf: doc.weekOf, ticker: doc.ticker },
+          update:  { $setOnInsert: doc },
+          upsert:  true,
+        },
+      }));
+      await db.collection('pnthr_kill_history').bulkWrite(historyOps, { ordered: false });
       console.log(`   Saved ${historyDocs.length} history entries`);
     }
 
@@ -661,8 +675,7 @@ export async function runFridayKillPipeline() {
 
     // ── Portfolio Return Snapshot (per user who has an accountSize) ──────────
     try {
-      const { connectToDatabase } = await import('./database.js');
-      const db = await connectToDatabase();
+      // db is already connected from the top of this function — no re-import needed
       const profiles = await db.collection('user_profiles').find({ accountSize: { $gt: 0 } }).toArray();
       for (const profile of profiles) {
         const ownerId   = profile.userId || profile._id?.toString();

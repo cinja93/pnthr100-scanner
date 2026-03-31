@@ -6,6 +6,19 @@ let _token = null;
 export function setAuthToken(token) { _token = token; }
 export function clearAuthToken() { _token = null; }
 
+// 401 handler — register once from App.jsx to handle expired sessions globally
+let _onUnauthorized = null;
+export function setOnUnauthorized(fn) { _onUnauthorized = fn; }
+
+// Central fetch wrapper: handles 401 so callers don't need to check individually
+export async function apiFetch(url, options = {}) {
+  const response = await fetch(url, options);
+  if (response.status === 401 && _onUnauthorized) {
+    _onUnauthorized(); // clears token + redirects to login
+  }
+  return response;
+}
+
 // Base headers included on every request
 export function authHeaders(extra = {}) {
   return {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { AuthContext } from './AuthContext';
 import { QueueProvider, useQueue } from './contexts/QueueContext';
 import { AnalyzeProvider } from './contexts/AnalyzeContext';
@@ -26,7 +26,7 @@ import HistoryPage from './components/HistoryPage';
 import KillTestPage from './components/KillTestPage';
 import AssistantPage from './components/AssistantPage';
 import LoginPage from './components/LoginPage';
-import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken, authHeaders, API_BASE } from './services/api';
+import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
 import './App.css';
 
@@ -101,8 +101,16 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null); // { email, role, accountSize, defaultPage }
   const [authLoading, setAuthLoading] = useState(true);
 
-  // On mount: validate stored token
+  // On mount: validate stored token + register 401 interceptor for expired sessions
   useEffect(() => {
+    // Any API call that gets a 401 will trigger this — clears session and shows login
+    setOnUnauthorized(() => {
+      localStorage.removeItem('pnthr_token');
+      clearAuthToken();
+      setAuthTokenState(null);
+      setCurrentUser(null);
+    });
+
     const token = localStorage.getItem('pnthr_token');
     if (!token) { setAuthLoading(false); return; }
     setAuthToken(token);
@@ -139,9 +147,10 @@ function App() {
   if (!authToken) return <LoginPage onLogin={handleLogin} />;
 
   const isAdmin = currentUser?.role === 'admin';
-  function updateCurrentUser(updates) {
+  // useCallback keeps the reference stable so context consumers don't re-render unnecessarily
+  const updateCurrentUser = useCallback((updates) => {
     setCurrentUser(prev => ({ ...prev, ...updates }));
-  }
+  }, []); // setCurrentUser is stable from useState — no deps needed
   return (
     <AuthContext.Provider value={{ currentUser, isAdmin, updateCurrentUser }}>
       <AnalyzeProvider>
@@ -279,7 +288,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         setSignalsLoading(false);
         if (scanType === 'long') computeAndSetLongStats(pnthr);
         else if (scanType === 'short') computeAndSetShortStats(pnthr);
-      });
+      }).catch(err => console.error('[App] Signal fetch error:', err));
       fetchEarnings(tickers).then(result => setEarnings(result)).catch(err => console.error('Earnings fetch error:', err));
     } catch (err) {
       setError('Failed to load stock data. Please try again later.');
@@ -315,7 +324,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         setSignalsLoading(false);
         if (scanType === 'long') computeAndSetLongStats(pnthr);
         else if (scanType === 'short') computeAndSetShortStats(pnthr);
-      });
+      }).catch(err => console.error('[App] Signal fetch error:', err));
       fetchEarnings(tickers).then(result => setEarnings(result)).catch(err => console.error('Earnings fetch error:', err));
     } catch (err) {
       setError(`Failed to load data for ${date}. Please try again.`);

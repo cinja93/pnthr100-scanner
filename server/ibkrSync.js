@@ -24,6 +24,11 @@ import { validatePortfolioUpdate } from './portfolioGuard.js';
 async function processExecutions(db, userId, executions, pnthrPositions, syncedAt) {
   if (!executions?.length) return [];
 
+  // Ensure index exists (no-op if already created; runs at most once per cold start cycle)
+  db.collection('pnthr_ibkr_executions')
+    .createIndex({ ownerId: 1, execId: 1 }, { unique: true })
+    .catch(() => {}); // fire-and-forget; unique constraint also prevents double-processing
+
   // Load already-processed execIds for this user
   const processedDocs = await db.collection('pnthr_ibkr_executions')
     .find({ ownerId: userId, execId: { $in: executions.map(e => e.execId) } })
@@ -272,13 +277,13 @@ export async function ibkrSync(req, res) {
       db, userId, executions, pnthrPositions, syncedAt
     );
 
-    // 5. Identify IBKR positions not yet tracked in PNTHR (informational)
+    // 6. Identify IBKR positions not yet tracked in PNTHR (informational)
     const pnthrTickers = new Set(pnthrPositions.map(p => p.ticker?.toUpperCase()));
     const untracked    = positions
       .filter(p => p.symbol !== 'USD' && !pnthrTickers.has(p.symbol.toUpperCase()))
       .map(p => ({ symbol: p.symbol, shares: p.shares, marketValue: p.marketValue }));
 
-    // 5. Detect stop price mismatches (IBKR live stop ≠ PNTHR stored stop)
+    // 7. Detect stop price mismatches (IBKR live stop ≠ PNTHR stored stop)
     const ibkrStopMap = {};
     for (const order of (Array.isArray(stopOrders) ? stopOrders : [])) {
       if (order.symbol) ibkrStopMap[order.symbol.toUpperCase()] = order.stopPrice;

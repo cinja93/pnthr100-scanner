@@ -26,6 +26,11 @@ import time
 import threading
 import requests
 from datetime import datetime, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo          # Python 3.9+
+    _ET = ZoneInfo('America/New_York')     # handles EST/EDT automatically
+except ImportError:
+    _ET = timezone(timedelta(hours=-4))    # fallback: EDT only (no DST awareness)
 
 try:
     from ibapi.client import EClient
@@ -270,9 +275,8 @@ def push_to_pnthr(payload):
 
 
 def is_market_hours():
-    """True during US market hours Mon–Fri 9:30–16:00 ET."""
-    et  = timezone(timedelta(hours=-4))   # EDT (UTC-4); adjust to -5 in winter if needed
-    now = datetime.now(et)
+    """True during US market hours Mon–Fri 9:30–16:00 ET (DST-aware)."""
+    now = datetime.now(_ET)
     if now.weekday() >= 5:
         return False
     open_  = now.replace(hour=9,  minute=30, second=0, microsecond=0)

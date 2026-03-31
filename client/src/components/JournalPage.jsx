@@ -1,7 +1,7 @@
 // client/src/components/JournalPage.jsx
 // ── PNTHR Journal — Trade analysis, discipline tracking, pattern recognition ──
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ScorecardGrid from './ScorecardGrid';
@@ -387,10 +387,9 @@ function HoverTooltip({ children, lines }) {
           {lines.map((line, i) => (
             <div key={i} style={{
               fontSize: 11, lineHeight: 1.55,
-              color: line.startsWith('•') ? '#ccc' : '#888',
+              color: line.startsWith('WHEN') ? '#FFD700' : line.startsWith('•') ? '#ccc' : '#888',
               fontWeight: line.startsWith('WHEN') ? 700 : 400,
               marginBottom: i < lines.length - 1 ? 4 : 0,
-              color: line.startsWith('WHEN') ? '#FFD700' : line.startsWith('•') ? '#ccc' : '#888',
             }}>
               {line}
             </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { computeWeeksAgo } from '../utils/dateUtils';
 import styles from './StockTable.module.css';
 
 import confirmedBuyIcon from './Confirmed Buy Signal.png';
@@ -23,20 +24,6 @@ function getSignalDisplay(signalData) {
 
 // Signal sort order: buys first, sells last, no signal at bottom
 const SIGNAL_ORDER = { BL: 1, BUY: 1, BE: 2, YELLOW_BUY: 3, YELLOW_SELL: 4, SE: 5, SS: 6, SELL: 6 };
-
-// Inclusive weeks since signal (signal week = week 1)
-function computeWeeksAgo(signalDate) {
-  if (!signalDate) return null;
-  const signalMonday = new Date(signalDate + 'T12:00:00');
-  const today = new Date();
-  const dow = today.getDay();
-  const daysToMonday = dow === 0 ? -6 : 1 - dow;
-  const currentMonday = new Date(today);
-  currentMonday.setDate(today.getDate() + daysToMonday);
-  currentMonday.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((currentMonday - signalMonday) / (1000 * 60 * 60 * 24));
-  return Math.floor(diffDays / 7) + 1;
-}
 
 const TODAY = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
 

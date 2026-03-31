@@ -28,6 +28,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { getMostRecentRanking, getRankingBeforeDate, connectToDatabase } from './database.js';
+import { getLastFriday, aggregateWeeklyBars, computeEMA21series } from './technicalUtils.js';
 
 const FMP_API_KEY  = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
@@ -108,15 +109,7 @@ const SECTOR_MAP = {
 const ALL_SECTOR_ETFS = ['XLK', 'XLE', 'XLV', 'XLF', 'XLY', 'XLC', 'XLI', 'XLB', 'XLRE', 'XLU', 'XLP'];
 
 // ── Date Helpers ──────────────────────────────────────────────────────────────
-
-function getLastFriday() {
-  const today = new Date();
-  const dow = today.getDay();
-  const daysBack = dow === 5 ? 0 : (dow + 2) % 7;
-  const d = new Date(today);
-  d.setDate(today.getDate() - daysBack);
-  return d.toISOString().split('T')[0];
-}
+// getLastFriday() imported from technicalUtils.js
 
 function getCurrentWeekMonday() {
   const today = new Date();
@@ -169,42 +162,10 @@ async function fetchDailyBars(ticker, from, to, retries = 3) {
   throw new Error(`FMP failed after ${retries} attempts for ${ticker}`);
 }
 
-function aggregateWeeklyBars(daily) {
-  const weekMap = {};
-  for (const bar of daily) {
-    const date = new Date(bar.date + 'T12:00:00');
-    const dow  = date.getDay();
-    const daysToMonday = dow === 0 ? -6 : 1 - dow;
-    const monday = new Date(date);
-    monday.setDate(date.getDate() + daysToMonday);
-    const key = monday.toISOString().split('T')[0];
-    if (!weekMap[key]) {
-      weekMap[key] = { weekStart: key, open: null, high: -Infinity, low: Infinity, close: null, volume: 0 };
-    }
-    const w = weekMap[key];
-    w.high   = Math.max(w.high, bar.high);
-    w.low    = Math.min(w.low,  bar.low);
-    if (w.close === null) w.close = bar.close; // first-seen = Friday close
-    w.open   = bar.open;                        // last-seen  = Monday open
-    w.volume += (bar.volume || 0);
-  }
-  return Object.values(weekMap).sort((a, b) => a.weekStart > b.weekStart ? 1 : -1);
-}
+// aggregateWeeklyBars and computeEMA21series imported from technicalUtils.js
+// Call aggregateWeeklyBars(daily, { includeVolume: true }) for OBV computation.
 
 // ── Indicator Computations ────────────────────────────────────────────────────
-
-function computeEMA21(weeklyBars) {
-  const closes = weeklyBars.map(b => b.close);
-  const n = closes.length;
-  const ema = new Array(n).fill(null);
-  if (n < 21) return ema;
-  let sum = 0;
-  for (let i = 0; i < 21; i++) sum += closes[i];
-  ema[20] = sum / 21;
-  const k = 2 / 22;
-  for (let i = 21; i < n; i++) ema[i] = closes[i] * k + ema[i - 1] * (1 - k);
-  return ema;
-}
 
 function computeOBV(weeklyBars) {
   const n = weeklyBars.length;
@@ -287,9 +248,9 @@ async function fetchStockData(ticker) {
     from.setFullYear(today.getFullYear() - 3);
     const daily = await fetchDailyBars(ticker, from.toISOString().split('T')[0], today.toISOString().split('T')[0]);
     if (!daily || daily.length < 40) return null;
-    const weekly = aggregateWeeklyBars(daily);
+    const weekly = aggregateWeeklyBars(daily, { includeVolume: true });
     if (weekly.length < 30) return null;
-    const ema21 = computeEMA21(weekly);
+    const ema21 = computeEMA21series(weekly);
     const obv   = computeOBV(weekly);
     const rsi   = computeRSI14(weekly);
     const adx   = computeADX14(weekly);

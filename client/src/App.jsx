@@ -28,6 +28,7 @@ import AssistantPage from './components/AssistantPage';
 import LoginPage from './components/LoginPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
+import { computeWeeksAgo } from './utils/dateUtils';
 import './App.css';
 
 function calcReadyLots(positions) {
@@ -81,20 +82,6 @@ const defaultFilters = {
   maxWeeksAgo: '',
 };
 
-// Compute inclusive weeks since a signal date (Monday of signal week) to current week's Monday.
-// Returns null if no signalDate.
-function computeWeeksAgo(signalDate) {
-  if (!signalDate) return null;
-  const signalMonday = new Date(signalDate + 'T12:00:00');
-  const today = new Date();
-  const dow = today.getDay(); // 0=Sun..6=Sat
-  const daysToMonday = dow === 0 ? -6 : 1 - dow;
-  const currentMonday = new Date(today);
-  currentMonday.setDate(today.getDate() + daysToMonday);
-  currentMonday.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((currentMonday - signalMonday) / (1000 * 60 * 60 * 24));
-  return Math.floor(diffDays / 7) + 1; // inclusive: signal week = week 1
-}
 
 function App() {
   const [authToken, setAuthTokenState] = useState(() => localStorage.getItem('pnthr_token'));

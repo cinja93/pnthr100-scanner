@@ -4,12 +4,15 @@
 import dotenv from 'dotenv';
 dotenv.config({ path: new URL('.env', import.meta.url).pathname });
 
+import { aggregateWeeklyBars } from './technicalUtils.js';
+
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 const EMA_PERIOD   = 21;
 const WEEKS_HISTORY = 260;
 
-// ── Helpers (mirrors signalService.js) ───────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+// aggregateWeeklyBars imported from technicalUtils.js
 
 async function fetchJSON(url) {
   const res = await fetch(url);
@@ -21,25 +24,6 @@ async function fetchDailyBars(ticker, from, to) {
   const url = `${FMP_BASE_URL}/historical-price-full/${ticker}?from=${from}&to=${to}&apikey=${FMP_API_KEY}`;
   const data = await fetchJSON(url);
   return data?.historical || [];
-}
-
-function aggregateWeeklyBars(daily) {
-  const weekMap = {};
-  for (const bar of daily) {
-    const date = new Date(bar.date + 'T12:00:00');
-    const dow  = date.getDay();
-    const daysToMonday = dow === 0 ? -6 : 1 - dow;
-    const monday = new Date(date);
-    monday.setDate(date.getDate() + daysToMonday);
-    const key = monday.toISOString().split('T')[0];
-    if (!weekMap[key]) weekMap[key] = { weekStart: key, open: null, high: -Infinity, low: Infinity, close: null };
-    const w = weekMap[key];
-    w.high  = Math.max(w.high, bar.high);
-    w.low   = Math.min(w.low,  bar.low);
-    if (w.close === null) w.close = bar.close;
-    w.open = bar.open;
-  }
-  return Object.values(weekMap).sort((a, b) => a.weekStart > b.weekStart ? 1 : -1);
 }
 
 function computeEMASeries(closes, period) {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { fetchPreyStocks, fetchEarnings, fetchEmaCrossoverStocks, fetchScannerRanks, fetchTopStocks, fetchShortStocks, fetchSignals } from '../services/api';
+import { computeWeeksAgo } from '../utils/dateUtils';
 import ChartModal from './ChartModal';
 import styles from './PreyPage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -13,19 +14,6 @@ function pct(v) {
 function price(v) {
   if (v == null) return '—';
   return `$${Number(v).toFixed(2)}`;
-}
-
-function computeWeeksAgo(signalDate) {
-  if (!signalDate) return null;
-  const signalMonday = new Date(signalDate + 'T12:00:00');
-  const today = new Date();
-  const dow = today.getDay();
-  const daysToMonday = dow === 0 ? -6 : 1 - dow;
-  const currentMonday = new Date(today);
-  currentMonday.setDate(today.getDate() + daysToMonday);
-  currentMonday.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((currentMonday - signalMonday) / (1000 * 60 * 60 * 24));
-  return Math.floor(diffDays / 7) + 1;
 }
 
 function TickerCell({ ticker, companyName, stock = {}, onChartClick }) {

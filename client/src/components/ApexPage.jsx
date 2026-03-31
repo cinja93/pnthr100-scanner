@@ -3,6 +3,7 @@ import { useAuth } from '../AuthContext';
 import { useQueue } from '../contexts/QueueContext';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
+import { computeWeeksAgo } from '../utils/dateUtils';
 import ChartModal from './ChartModal';
 import KillBadge from './KillBadge';
 import { fetchApexStocks, API_BASE, authHeaders } from '../services/api';
@@ -34,20 +35,6 @@ function getTierConfig(tierName) {
 function getTierIndex(tierName) {
   const idx = TIERS.findIndex(t => t.name === tierName);
   return idx === -1 ? 9 : idx;
-}
-
-// Weeks-ago helper
-function computeWeeksAgo(signalDate) {
-  if (!signalDate) return null;
-  const signalMonday = new Date(signalDate + 'T12:00:00');
-  const today = new Date();
-  const dow = today.getDay();
-  const daysToMonday = dow === 0 ? -6 : 1 - dow;
-  const currentMonday = new Date(today);
-  currentMonday.setDate(today.getDate() + daysToMonday);
-  currentMonday.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((currentMonday - signalMonday) / (1000 * 60 * 60 * 24));
-  return Math.floor(diffDays / 7) + 1;
 }
 
 // Format a dimension score — plain number, 1 decimal

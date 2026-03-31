@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { computeWilderATR, blInitStop, ssInitStop } from './stopCalculation.js';
+import { getLastFriday, aggregateWeeklyBars } from './technicalUtils.js';
 
 // ── PNTHR Phase 1 Signal Engine ───────────────────────────────────────────────
 //
@@ -38,15 +39,7 @@ let signalCache    = { weekKey: null, signals: {} };
 let etfSignalCache = { weekKey: null, signals: {} };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getLastFriday() {
-  const today = new Date();
-  const dow = today.getDay(); // 0=Sun … 6=Sat
-  const daysBack = dow === 5 ? 0 : (dow + 2) % 7;
-  const d = new Date(today);
-  d.setDate(today.getDate() - daysBack);
-  return d.toISOString().split('T')[0];
-}
+// getLastFriday() and aggregateWeeklyBars() imported from technicalUtils.js
 
 function getToday() {
   return new Date().toISOString().split('T')[0];
@@ -60,39 +53,6 @@ async function fetchDailyBars(ticker, from) {
   if (!res.ok) throw new Error(`FMP ${res.status}`);
   const data = await res.json();
   return data?.historical || [];
-}
-
-// Aggregate FMP daily bars (descending) into weekly bars sorted ascending.
-// Each weekly bar spans Mon–Fri:
-//   open  = Monday's open  (or first trading day of that week)
-//   high  = highest high across the week
-//   low   = lowest low across the week
-//   close = Friday's close (or last trading day of that week)
-function aggregateWeeklyBars(daily) {
-  const weekMap = {};
-
-  // FMP returns descending; iterate all bars building weekly aggregates
-  for (const bar of daily) {
-    const date = new Date(bar.date + 'T12:00:00');
-    const dow = date.getDay();
-    const daysToMonday = dow === 0 ? -6 : 1 - dow;
-    const monday = new Date(date);
-    monday.setDate(date.getDate() + daysToMonday);
-    const key = monday.toISOString().split('T')[0];
-
-    if (!weekMap[key]) {
-      weekMap[key] = { weekStart: key, open: null, high: -Infinity, low: Infinity, close: null };
-    }
-    const w = weekMap[key];
-    w.high = Math.max(w.high, bar.high);
-    w.low  = Math.min(w.low,  bar.low);
-    // First-seen = latest day of week → Friday close
-    if (w.close === null) w.close = bar.close;
-    // Last-seen  = earliest day of week → Monday open
-    w.open = bar.open;
-  }
-
-  return Object.values(weekMap).sort((a, b) => (a.weekStart > b.weekStart ? 1 : -1));
 }
 
 // Compute EMA series from an array of closes.

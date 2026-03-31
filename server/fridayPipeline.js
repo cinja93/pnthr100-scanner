@@ -23,17 +23,7 @@ import { checkCaseStudyEntries }  from './killHistory.js';
 import { saveWeeklySnapshot, getCurrentWeekOf } from './signalHistoryService.js';
 import { getKillTestSettings, serverSizePosition, buildServerLotConfig } from './killTestSettings.js';
 import { checkFeastAlerts } from './killTestDailyUpdate.js';
-
-// ── Compute weekOf (last Friday) ─────────────────────────────────────────────
-
-function getLastFriday() {
-  const today = new Date();
-  const dow = today.getDay();
-  const daysBack = dow === 5 ? 0 : (dow + 2) % 7;
-  const d = new Date(today);
-  d.setDate(today.getDate() - daysBack);
-  return d.toISOString().split('T')[0];
-}
+import { getLastFriday } from './technicalUtils.js';
 
 // ── Fetch VIX / 10Y Treasury / DXY from FMP ──────────────────────────────────
 

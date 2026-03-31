@@ -15,7 +15,7 @@ export async function ibkrSync(req, res) {
     if (!db) return res.status(503).json({ error: 'DB unavailable' });
 
     const userId = req.user.userId; // stamped from JWT — cannot be spoofed
-    const { timestamp, accountId, account, positions } = req.body;
+    const { timestamp, accountId, account, positions, stopOrders } = req.body;
 
     if (!account || !Array.isArray(positions)) {
       return res.status(400).json({ error: 'account and positions[] required' });
@@ -33,15 +33,17 @@ export async function ibkrSync(req, res) {
       });
     }
 
-    // 2. Upsert full IBKR positions snapshot (one doc per user)
+    // 2. Upsert full IBKR positions + stop orders snapshot (one doc per user)
     await db.collection('pnthr_ibkr_positions').updateOne(
       { ownerId: userId },
       {
         $set: {
-          ownerId:   userId,
+          ownerId:            userId,
           positions,
+          stopOrders:         Array.isArray(stopOrders) ? stopOrders : [],
+          stopOrdersSyncedAt: syncedAt,
           syncedAt,
-          accountId: accountId || null,
+          accountId:          accountId || null,
         },
       },
       { upsert: true }
@@ -126,12 +128,32 @@ export async function ibkrSync(req, res) {
       .filter(p => p.symbol !== 'USD' && !pnthrTickers.has(p.symbol.toUpperCase()))
       .map(p => ({ symbol: p.symbol, shares: p.shares, marketValue: p.marketValue }));
 
+    // 5. Detect stop price mismatches (IBKR live stop ≠ PNTHR stored stop)
+    const ibkrStopMap = {};
+    for (const order of (Array.isArray(stopOrders) ? stopOrders : [])) {
+      if (order.symbol) ibkrStopMap[order.symbol.toUpperCase()] = order.stopPrice;
+    }
+    const stopMismatches = pnthrPositions
+      .filter(pp => {
+        const ibkrStop  = ibkrStopMap[pp.ticker?.toUpperCase()];
+        const pnthrStop = pp.stopPrice;
+        if (ibkrStop == null || pnthrStop == null) return false;
+        return Math.abs(ibkrStop - pnthrStop) >= 0.01;
+      })
+      .map(pp => ({
+        ticker:    pp.ticker,
+        pnthrStop: pp.stopPrice,
+        ibkrStop:  ibkrStopMap[pp.ticker?.toUpperCase()],
+        diff:      +Math.abs(ibkrStopMap[pp.ticker?.toUpperCase()] - pp.stopPrice).toFixed(2),
+      }));
+
     res.json({
       success:         true,
       nav:             Math.round(account.netLiquidation),
       positionsSynced: positions.length,
       pnthrUpdated:    updateOps.length,
       mismatches,
+      stopMismatches,
       untracked,
       syncedAt:        syncedAt.toISOString(),
     });

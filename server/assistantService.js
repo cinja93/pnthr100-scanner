@@ -813,33 +813,69 @@ export async function generateAssistantTasks(userId, positions, nav) {
 // ── Stop Sync ─────────────────────────────────────────────────────────────────
 
 /**
- * Compare signal-cache stop prices with stored position stop prices.
- * Returns an array of rows for the Stop Sync UI section.
+ * Compare PNTHR stop prices against both the signal cache AND live IBKR stop orders.
  *
- * @param {object[]} positions — active positions
+ * Two checks per position:
+ *   signalNeedsUpdate — PNTHR stored stop ≠ signal-cache stop (go update PNTHR)
+ *   ibkrMismatch      — IBKR live stop order ≠ PNTHR stored stop (manual IBKR drift)
+ *
+ * needsUpdate = true when either check fires.
+ *
+ * @param {object[]} positions — active positions (already fetched from DB)
+ * @param {string}   userId    — owner ID, used to load IBKR stop orders
  * @returns {object[]} stopSyncRows
  */
-export async function getStopSyncRows(positions) {
+export async function getStopSyncRows(positions, userId) {
   const activePosns = positions.filter(p => p.status === 'ACTIVE');
   const tickers     = activePosns.map(p => p.ticker.toUpperCase());
-  const signalStops = await loadSignalStops(tickers);
+
+  // Load PNTHR signal-cache stops and IBKR stop orders in parallel
+  const [signalStops, ibkrDoc] = await Promise.all([
+    loadSignalStops(tickers),
+    userId
+      ? connectToDatabase().then(db =>
+          db?.collection('pnthr_ibkr_positions').findOne({ ownerId: userId })
+        ).catch(() => null)
+      : Promise.resolve(null),
+  ]);
+
+  // Build ticker → IBKR stop price map from stored stop orders
+  const ibkrStopMap = {};
+  for (const order of (ibkrDoc?.stopOrders || [])) {
+    if (order.symbol) ibkrStopMap[order.symbol.toUpperCase()] = order.stopPrice;
+  }
 
   return activePosns.map(p => {
     const ticker     = p.ticker.toUpperCase();
-    const currentStop = p.stopPrice ?? null;
-    const newStop     = signalStops[ticker] ?? null;
-    const diff        = currentStop != null && newStop != null
-      ? +Math.abs(currentStop - newStop).toFixed(2)
+    const pnthrStop  = p.stopPrice ?? null;
+    const signalStop = signalStops[ticker] ?? null;
+    const ibkrStop   = ibkrStopMap[ticker] ?? null;
+
+    // Check 1: does PNTHR's stored stop match the latest signal computation?
+    const signalDiff        = pnthrStop != null && signalStop != null
+      ? +Math.abs(pnthrStop - signalStop).toFixed(2)
       : null;
-    const needsUpdate = diff != null && diff >= 0.01;
+    const signalNeedsUpdate = signalDiff != null && signalDiff >= 0.01;
+
+    // Check 2: does the live IBKR stop order match the PNTHR stored stop?
+    const ibkrDiff     = pnthrStop != null && ibkrStop != null
+      ? +Math.abs(pnthrStop - ibkrStop).toFixed(2)
+      : null;
+    const ibkrMismatch = ibkrDiff != null && ibkrDiff >= 0.01;
+
+    const needsUpdate = signalNeedsUpdate || ibkrMismatch;
 
     return {
       ticker,
-      direction:    p.direction,
-      currentStop,
-      newStop,
-      diff,
+      direction:          p.direction,
+      currentStop:        pnthrStop,   // PNTHR-stored stop
+      newStop:            signalStop,  // latest signal-cache stop
+      ibkrStop,                        // live IBKR stop order price (null if none synced)
+      diff:               signalDiff,
+      ibkrDiff,
       needsUpdate,
+      signalNeedsUpdate,
+      ibkrMismatch,
     };
   }).sort((a, b) => {
     if (a.needsUpdate !== b.needsUpdate) return a.needsUpdate ? -1 : 1;

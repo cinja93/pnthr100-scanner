@@ -3894,7 +3894,7 @@ app.get('/api/assistant/stop-sync', async (req, res) => {
       .find({ status: { $nin: ['CLOSED'] }, ownerId: req.user.userId })
       .toArray();
 
-    const rows = await getStopSyncRows(positions);
+    const rows = await getStopSyncRows(positions, req.user.userId);
 
     // Day-of-week label
     const dow = new Date().getDay(); // 0=Sun, 1=Mon...

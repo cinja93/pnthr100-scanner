@@ -707,17 +707,51 @@ function StopSyncRow({ row, isDone, onToggle }) {
       </div>
       <span style={s.syncTicker}>{row.ticker}</span>
       <span style={s.syncDir}>{row.direction}</span>
+
+      {/* PNTHR stored stop → signal-cache stop */}
       <span style={s.syncStops}>
         {fmt$(row.currentStop)}
-        {row.needsUpdate && row.newStop != null && (
+        {row.signalNeedsUpdate && row.newStop != null && (
           <span style={{ color: '#fd7e14' }}> → {fmt$(row.newStop)}</span>
         )}
-        {!row.needsUpdate && (
-          <span style={{ color: '#444' }}> (unchanged)</span>
+        {!row.signalNeedsUpdate && (
+          <span style={{ color: '#444' }}> (PNTHR ✓)</span>
         )}
       </span>
+
+      {/* IBKR live stop order — only shown when bridge has synced stop orders */}
+      {row.ibkrStop != null && (
+        <span style={{
+          fontSize:   11,
+          color:      row.ibkrMismatch ? '#ef5350' : '#28a745',
+          fontWeight: row.ibkrMismatch ? 700 : 400,
+          display:    'flex',
+          alignItems: 'center',
+          gap:        5,
+        }}>
+          IBKR {fmt$(row.ibkrStop)}
+          {row.ibkrMismatch && (
+            <span style={{
+              fontSize:       9,
+              fontWeight:     800,
+              letterSpacing:  '0.06em',
+              color:          '#ef5350',
+              background:     'rgba(239,83,80,0.12)',
+              border:         '1px solid rgba(239,83,80,0.35)',
+              borderRadius:   4,
+              padding:        '2px 6px',
+              whiteSpace:     'nowrap',
+            }}>
+              ⚠ IBKR MISMATCH
+            </span>
+          )}
+        </span>
+      )}
+
       {row.needsUpdate && !isDone ? (
-        <span style={s.syncNeedsUpdate}>{arrow} needs update</span>
+        <span style={s.syncNeedsUpdate}>
+          {row.ibkrMismatch && !row.signalNeedsUpdate ? '⚠ IBKR drifted' : `${arrow} needs update`}
+        </span>
       ) : (
         <span style={s.syncOk}>✓</span>
       )}

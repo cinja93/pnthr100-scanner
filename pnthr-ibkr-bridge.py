@@ -1,7 +1,7 @@
 """
-PNTHR Den — IBKR TWS Bridge (Phase 1: Read-Only)
+PNTHR Den — IBKR TWS Bridge (Phase 1.5: Read-Only + Stop Order Monitoring)
 
-Connects to TWS, reads account + positions every 60 seconds,
+Connects to TWS, reads account + positions + open stop orders every 60 seconds,
 pushes to the PNTHR Den server. Runs alongside TWS Mosaic.
 TWS continues operating completely normally — this is a passive observer only.
 
@@ -65,8 +65,10 @@ class PNTHRBridge(EWrapper, EClient):
         EClient.__init__(self, self)
         self.account_values  = {}
         self.positions       = []
+        self.open_orders     = {}   # symbol → {orderId, stopPrice, action, orderType}
         self.account_ready   = threading.Event()
         self.positions_ready = threading.Event()
+        self.orders_ready    = threading.Event()
         self.connected       = False
         self.account_id      = None
 
@@ -136,6 +138,34 @@ class PNTHRBridge(EWrapper, EClient):
     def positionEnd(self):
         self.positions_ready.set()
 
+    # ── Open order callbacks ───────────────────────────────────────────────────
+    def openOrder(self, orderId, contract, order, orderState):
+        """Capture live stop orders placed in TWS. Called once per order."""
+        # Only capture STP and STP LMT order types with a valid stop price
+        if order.orderType not in ('STP', 'STP LMT'):
+            return
+        try:
+            stop_price = float(order.auxPrice)
+        except (TypeError, ValueError):
+            return
+        if stop_price <= 0:
+            return
+        symbol = contract.symbol.upper()
+        # If multiple stop orders exist for the same symbol, keep highest orderId
+        # (most recently placed order is usually the active one)
+        existing = self.open_orders.get(symbol)
+        if not existing or orderId > existing['orderId']:
+            self.open_orders[symbol] = {
+                'orderId':   orderId,
+                'stopPrice': round(stop_price, 4),
+                'action':    order.action,      # 'SELL' (long stop) or 'BUY' (short stop)
+                'orderType': order.orderType,
+            }
+
+    def openOrderEnd(self):
+        """All open orders have been delivered for this request."""
+        self.orders_ready.set()
+
     # ── Payload builder ───────────────────────────────────────────────────────
     def get_payload(self):
         def _float(key):
@@ -157,6 +187,10 @@ class PNTHRBridge(EWrapper, EClient):
                 'availableFunds':    _float('AvailableFunds'),
             },
             'positions': self.positions,
+            'stopOrders': [
+                {'symbol': sym, **data}
+                for sym, data in self.open_orders.items()
+            ],
         }
 
 
@@ -174,13 +208,16 @@ def push_to_pnthr(payload):
             timeout=10,
         )
         if resp.status_code == 200:
-            data      = resp.json()
-            nav       = payload['account']['netLiquidation']
-            pos_count = len(payload['positions'])
-            mismatch  = len(data.get('mismatches', []))
-            ts        = datetime.now().strftime('%H:%M:%S')
+            data        = resp.json()
+            nav         = payload['account']['netLiquidation']
+            pos_count   = len(payload['positions'])
+            stop_count  = len(payload.get('stopOrders', []))
+            mismatch    = len(data.get('mismatches', []))
+            stop_mis    = len(data.get('stopMismatches', []))
+            ts          = datetime.now().strftime('%H:%M:%S')
             mismatch_str = f" | ⚠ {mismatch} share mismatch(es)" if mismatch else ""
-            print(f"[BRIDGE] ✓ {ts}  NAV: ${nav:>12,.2f}  |  {pos_count} positions{mismatch_str}")
+            stop_mis_str = f" | ⚠ {stop_mis} stop mismatch(es)" if stop_mis else ""
+            print(f"[BRIDGE] ✓ {ts}  NAV: ${nav:>12,.2f}  |  {pos_count} pos  |  {stop_count} stops{mismatch_str}{stop_mis_str}")
             if data.get('untracked'):
                 syms = ', '.join(p['symbol'] for p in data['untracked'])
                 print(f"[BRIDGE]   Untracked in PNTHR: {syms}")
@@ -208,7 +245,7 @@ def is_market_hours():
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
-    print("  PNTHR Den — IBKR TWS Bridge  (Phase 1: Read-Only)")
+    print("  PNTHR Den — IBKR TWS Bridge  (Phase 1.5: + Stop Orders)")
     print(f"  TWS:    {TWS_HOST}:{TWS_PORT}  (client ID {TWS_CLIENT_ID})")
     print(f"  Server: {PNTHR_API_URL}")
     print(f"  Sync:   every {SYNC_INTERVAL}s")
@@ -253,6 +290,14 @@ def main():
     try:
         while True:
             if app.connected:
+                # Refresh open stop orders snapshot before building payload.
+                # reqAllOpenOrders() returns ALL orders in the account (not just
+                # this client's), so manually-placed TWS stop orders are captured.
+                app.open_orders = {}
+                app.orders_ready.clear()
+                app.reqAllOpenOrders()
+                app.orders_ready.wait(timeout=5)  # orders arrive fast
+
                 payload = app.get_payload()
                 if payload['account']['netLiquidation'] > 0:
                     push_to_pnthr(payload)

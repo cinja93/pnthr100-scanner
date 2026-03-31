@@ -2434,8 +2434,18 @@ app.get('/api/journal/closed-scorecard', authenticateJWT, async (req, res) => {
           autoClosedByIBKR: true,
         }).toArray();
 
+        // Query journal directly for these positions — do NOT use `entries`
+        // because entries only contains already-CLOSED journal docs; stuck ACTIVE
+        // entries would not be in it and would be incorrectly skipped.
+        const ibkrPositionIds = ibkrClosed.map(p => p.id?.toString()).filter(Boolean);
+        const stuckJournalEntries = ibkrPositionIds.length
+          ? await db.collection('pnthr_journal').find({
+              ownerId: req.user.userId,
+              positionId: { $in: ibkrPositionIds },
+            }).toArray()
+          : [];
         const journalByPositionId = {};
-        for (const e of entries) {
+        for (const e of stuckJournalEntries) {
           journalByPositionId[e.positionId] = e;
         }
 

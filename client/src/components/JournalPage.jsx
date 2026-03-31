@@ -367,14 +367,14 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
   );
 }
 
-export default function JournalPage({ onNavigate }) {
+export default function JournalPage({ onNavigate, initialFilter }) {
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState('trades');
   const [entries, setEntries] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [weeklyReviews, setWeeklyReviews] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState(initialFilter || 'ALL');
   const [sortField, setSortField] = useState('createdAt');
   const [sortDir, setSortDir] = useState(-1);
   const [expandedId, setExpandedId] = useState(null);

@@ -173,8 +173,14 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [activePage, setActivePage] = useState(
     () => localStorage.getItem('pnthr_page') || currentUser?.defaultPage || 'long'
   );
+  const [journalInitFilter, setJournalInitFilter] = useState(null);
 
-  function navigate(page) {
+  function navigate(page, opts) {
+    if (page === 'journal' && opts?.filter) {
+      setJournalInitFilter(opts.filter);
+    } else if (page !== 'journal') {
+      setJournalInitFilter(null);
+    }
     setActivePage(page);
     localStorage.setItem('pnthr_page', page);
   }
@@ -497,7 +503,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {activePage === 'command' && <CommandCenter onNavigate={navigate} />}
 
           {/* PNTHR Journal */}
-          {activePage === 'journal' && <JournalPage onNavigate={navigate} />}
+          {activePage === 'journal' && <JournalPage onNavigate={navigate} initialFilter={journalInitFilter} />}
 
           {/* Portfolio page */}
           {activePage === 'portfolio' && <PortfolioPage currentUser={currentUser} onProfileUpdate={setCurrentUser} />}

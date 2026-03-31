@@ -138,7 +138,7 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
 
 // ── getOvernightFills ─────────────────────────────────────────────────────────
 // Returns positions auto-closed by IBKR in the last 24 hours.
-// Used by the assistant "OVERNIGHT FILLS" section.
+// Used by the assistant "RECENT FILLS" section.
 //
 export async function getOvernightFills(userId) {
   try {

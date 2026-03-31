@@ -833,9 +833,23 @@ function CommandHealthSection({ alerts, loading }) {
   );
 }
 
-// ── Overnight Fills Section ───────────────────────────────────────────────────
+// ── Recent Fills Section ──────────────────────────────────────────────────────
 
-function OvernightFillsSection({ fills }) {
+function fmtFillTime(closedAt) {
+  if (!closedAt) return null;
+  const d = new Date(closedAt);
+  if (isNaN(d)) return null;
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' });
+  if (isToday)     return `Today · ${time} ET`;
+  if (isYesterday) return `Yesterday · ${time} ET`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }) + ` · ${time} ET`;
+}
+
+function RecentFillsSection({ fills }) {
   const [expanded, setExpanded] = useState(true);
   if (!fills?.length) return null;
 
@@ -857,7 +871,7 @@ function OvernightFillsSection({ fills }) {
       >
         <span style={{ fontSize: 11, color: '#555' }}>{expanded ? '▼' : '▶'}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: '#4caf50', letterSpacing: 1 }}>
-          ⚡ OVERNIGHT FILLS
+          ⚡ RECENT FILLS
         </span>
         <span style={{ fontSize: 11, color: '#555' }}>
           ({fills.length} position{fills.length !== 1 ? 's' : ''} auto-closed by IBKR)
@@ -868,6 +882,7 @@ function OvernightFillsSection({ fills }) {
         const isProfit = (outcome.profitDollar ?? 0) >= 0;
         const pnlColor = isProfit ? '#4caf50' : '#dc3545';
         const pnlSign  = isProfit ? '+' : '';
+        const fillTime = fmtFillTime(fill.closedAt);
         return (
           <div key={fill.id || fill.ticker} style={{
             display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10,
@@ -893,6 +908,11 @@ function OvernightFillsSection({ fills }) {
               {pnlSign}${Math.abs(outcome.profitDollar ?? 0).toFixed(0)}
               {' '}({pnlSign}{(outcome.profitPct ?? 0).toFixed(2)}%)
             </span>
+            {fillTime && (
+              <span style={{ fontSize: 11, color: '#666' }}>
+                {fillTime}
+              </span>
+            )}
             <span style={{
               marginLeft: 'auto', fontSize: 11, color: '#f5a623',
               background: '#2a1e0a', borderRadius: 4, padding: '2px 8px',
@@ -1076,7 +1096,7 @@ export default function AssistantPage() {
   const [chartBusy,   setChartBusy]   = useState(null); // ticker currently loading
   const [healthAlerts,    setHealthAlerts]    = useState([]);
   const [healthLoading,   setHealthLoading]   = useState(true);
-  const [overnightFills,  setOvernightFills]  = useState([]);
+  const [recentFills,     setRecentFills]     = useState([]);
 
   // Analyze context for scoring chips
   const analyzeCtx = useAnalyzeContext();
@@ -1142,11 +1162,11 @@ export default function AssistantPage() {
         .catch(() => setHealthAlerts([]))
         .finally(() => setHealthLoading(false));
 
-      // Overnight fills — fast DB lookup, fire independently
+      // Recent fills — fast DB lookup, fire independently
       fetch(`${API_BASE}/api/assistant/overnight-fills`, { headers: authHeaders() })
         .then(r => r.ok ? r.json() : { fills: [] })
-        .then(d => setOvernightFills(d.fills || []))
-        .catch(() => setOvernightFills([]));
+        .then(d => setRecentFills(d.fills || []))
+        .catch(() => setRecentFills([]));
 
       const [tasksRes, syncRes, routinesRes, completedRes] = await Promise.all([
         fetch(`${API_BASE}/api/assistant/tasks`,    { headers: authHeaders() }),
@@ -1418,8 +1438,8 @@ export default function AssistantPage() {
         </>
       )}
 
-      {/* ── Overnight Fills ────────────────────────────────────────────────── */}
-      <OvernightFillsSection fills={overnightFills} />
+      {/* ── Recent Fills ───────────────────────────────────────────────────── */}
+      <RecentFillsSection fills={recentFills} />
 
       {/* ── Command Health ─────────────────────────────────────────────────── */}
       <CommandHealthSection alerts={healthAlerts} loading={healthLoading} />

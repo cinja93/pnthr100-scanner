@@ -26,6 +26,16 @@ class TradeCardBoundary extends Component {
 }
 import { API_BASE, authHeaders } from '../services/api';
 
+// ── Safe string helper — prevents React Error #31 when fields contain objects ──
+function safeStr(v) {
+  if (v == null) return null;
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  // Object (e.g. {label: 'ERROR'}) — extract label if present, otherwise JSON
+  if (typeof v === 'object' && v.label != null) return String(v.label);
+  return JSON.stringify(v);
+}
+
 // ── Formatting helpers ────────────────────────────────────────────────────────
 function fmtDate(d) {
   if (!d) return '—';
@@ -237,13 +247,16 @@ function DataCell({ label, value, color, tooltip }) {
 // ── ConditionRow ──────────────────────────────────────────────────────────────
 function ConditionRow({ label, value, detail, badge, badgeColor, color }) {
   if (value == null && !badge && !detail) return null;
+  const safeBadge  = safeStr(badge);
+  const safeValue  = safeStr(value);
+  const safeDetail = safeStr(detail);
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', columnGap: 10, padding: '1px 0', fontSize: '0.78rem' }}>
       <span style={{ color: '#777', flexShrink: 0 }}>{label}</span>
       <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-        {badge && <span style={{ background: badgeColor, color: '#000', padding: '1px 5px', borderRadius: 3, fontSize: '0.66rem', fontWeight: 700 }}>{badge}</span>}
-        {value != null && <span style={{ color: color || '#ccc' }}>{value}</span>}
-        {detail && <span style={{ color: '#555', fontSize: '0.7rem' }}>{detail}</span>}
+        {safeBadge  && <span style={{ background: badgeColor, color: '#000', padding: '1px 5px', borderRadius: 3, fontSize: '0.66rem', fontWeight: 700 }}>{safeBadge}</span>}
+        {safeValue  != null && <span style={{ color: color || '#ccc' }}>{safeValue}</span>}
+        {safeDetail && <span style={{ color: '#555', fontSize: '0.7rem' }}>{safeDetail}</span>}
       </span>
     </div>
   );
@@ -334,7 +347,8 @@ function getScoreQuestions(entry, disc) {
   const questions = [];
   if (!disc) return questions;
 
-  if (disc.tier1?.components?.indexTrend?.label === 'UNKNOWN' && !entry.userConfirmed?.indexTrend) {
+  const idxLabel = disc.tier1?.components?.indexTrend?.label;
+  if ((idxLabel === 'UNKNOWN' || idxLabel === 'ERROR') && !entry.userConfirmed?.indexTrend) {
     questions.push({
       id: 'indexTrend',
       question: `Was the market (SPY/QQQ) trending WITH or AGAINST your ${entry.direction} trade in ${entry.ticker}?`,
@@ -347,7 +361,8 @@ function getScoreQuestions(entry, disc) {
     });
   }
 
-  if (disc.tier1?.components?.sectorTrend?.label === 'UNKNOWN' && !entry.userConfirmed?.sectorTrend) {
+  const sectLabel = disc.tier1?.components?.sectorTrend?.label;
+  if ((sectLabel === 'UNKNOWN' || sectLabel === 'ERROR') && !entry.userConfirmed?.sectorTrend) {
     questions.push({
       id: 'sectorTrend',
       question: `Was the ${entry.sector || 'sector'} trending WITH or AGAINST your ${entry.direction} trade?`,
@@ -610,7 +625,7 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
             {entry.ticker}
           </span>
           <span style={{ background: dir === 'LONG' ? 'rgba(40,167,69,0.25)' : 'rgba(220,53,69,0.25)', color: dir === 'LONG' ? '#28a745' : '#dc3545', padding: '2px 8px', borderRadius: 4, fontSize: '0.72rem', fontWeight: 700 }}>
-            {dir}
+            {safeStr(dir) || 'LONG'}
           </span>
           <span style={{ color: '#777', fontSize: '0.8rem' }}>{fmtDate(entry.entry?.fillDate || entry.createdAt)} → {fmtDate(lastExit?.date)}</span>
           {entry.exchange && <span style={{ color: '#555', fontSize: '0.75rem' }}>{entry.exchange}</span>}
@@ -637,7 +652,7 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
           {disc.totalScore != null && (
             <div style={{ background: getScoreColor(disc.totalScore), color: getScoreTextColor(disc.totalScore), padding: '5px 12px', borderRadius: 6, textAlign: 'center', minWidth: 72 }}>
               <div style={{ fontSize: '1.2rem', fontWeight: 700, lineHeight: 1.1 }}>{disc.totalScore}</div>
-              <div style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.04em' }}>{disc.tierLabel?.split(' ')[0]}</div>
+              <div style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.04em' }}>{typeof disc.tierLabel === 'string' ? disc.tierLabel.split(' ')[0] : ''}</div>
             </div>
           )}
           <span style={{ color: '#555', fontSize: '0.8rem' }}>{expanded ? '▼' : '▶'}</span>
@@ -673,11 +688,11 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
         {disc.tier1 && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, padding: '10px 14px', borderBottom: '1px solid #1e1e1e' }}>
             <ScoreTierBox title="STOCK SELECTION" subtotal={disc.tier1.total} max={disc.tier1.max}
-              components={Object.entries(disc.tier1.components).map(([,c]) => ({ name: c.detail?.split(' ')[0] || c.label, score: c.score, max: c.max, label: c.label }))} />
+              components={Object.entries(disc.tier1.components).map(([,c]) => ({ name: typeof c.detail === 'string' ? c.detail.split(' ')[0] : safeStr(c.label), score: c.score, max: c.max, label: c.label }))} />
             <ScoreTierBox title="EXECUTION" subtotal={disc.tier2.total} max={disc.tier2.max}
-              components={Object.entries(disc.tier2.components).map(([,c]) => ({ name: c.detail?.split(' ')[0] || c.label, score: c.score, max: c.max, label: c.label }))} />
+              components={Object.entries(disc.tier2.components).map(([,c]) => ({ name: typeof c.detail === 'string' ? c.detail.split(' ')[0] : safeStr(c.label), score: c.score, max: c.max, label: c.label }))} />
             <ScoreTierBox title="EXIT" subtotal={disc.tier3.total} max={disc.tier3.max}
-              components={Object.entries(disc.tier3.components).map(([,c]) => ({ name: c.detail?.split(' ')[0] || c.label, score: c.score, max: c.max, label: c.label }))} />
+              components={Object.entries(disc.tier3.components).map(([,c]) => ({ name: typeof c.detail === 'string' ? c.detail.split(' ')[0] : safeStr(c.label), score: c.score, max: c.max, label: c.label }))} />
           </div>
         )}
 
@@ -834,7 +849,7 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-export default function ClosedTradeCards({ onTickerClick, focusPositionId }) {
+export default function ClosedTradeCards({ onTickerClick, focusPositionId, focusTicker }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const focusRef = useRef(null);
@@ -877,10 +892,18 @@ export default function ClosedTradeCards({ onTickerClick, focusPositionId }) {
     return new Date(b.createdAt) - new Date(a.createdAt); // newest first within group
   });
 
+  // Determine if any entry matches by positionId exactly.
+  // If not, fall back to ticker match so the scroll target is always found.
+  const hasPosIdMatch = focusPositionId
+    ? sortedEntries.some(e => e.positionId?.toString() === focusPositionId?.toString())
+    : false;
+
   return (
     <div style={{ padding: '0 0 24px' }}>
       {sortedEntries.map(e => {
-        const isFocused = focusPositionId && e.positionId?.toString() === focusPositionId?.toString();
+        const isFocused = hasPosIdMatch
+          ? !!(focusPositionId && e.positionId?.toString() === focusPositionId?.toString())
+          : !!(focusTicker && e.ticker === focusTicker);
         return (
           <TradeCardBoundary key={e._id}>
             <TradeCard

@@ -400,7 +400,7 @@ function HoverTooltip({ children, lines }) {
   );
 }
 
-export default function JournalPage({ onNavigate, initialFilter, focusPositionId }) {
+export default function JournalPage({ onNavigate, initialFilter, focusPositionId, focusTicker }) {
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState('trades');
   const [entries, setEntries] = useState([]);
@@ -929,7 +929,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                   )}
                 </div>
               ) : filterStatus === 'CLOSED' ? (
-                <ClosedTradeCards focusPositionId={focusPositionId} />
+                <ClosedTradeCards focusPositionId={focusPositionId} focusTicker={focusTicker} />
               ) : (
                 <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>

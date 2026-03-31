@@ -914,7 +914,7 @@ function RecentFillsSection({ fills, onNavigate }) {
               </span>
             )}
             <button
-              onClick={() => onNavigate?.('journal', { filter: 'CLOSED', focusId: fill.id })}
+              onClick={() => onNavigate?.('journal', { filter: 'CLOSED', focusId: fill.id, focusTicker: fill.ticker })}
               style={{
                 marginLeft: 'auto', fontSize: 11, color: '#f5a623',
                 background: '#2a1e0a', border: '1px solid #7a4a0a',

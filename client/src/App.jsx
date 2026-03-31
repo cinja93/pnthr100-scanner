@@ -175,14 +175,17 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   );
   const [journalInitFilter, setJournalInitFilter] = useState(null);
   const [journalFocusId,    setJournalFocusId]    = useState(null);
+  const [journalFocusTicker, setJournalFocusTicker] = useState(null);
 
   function navigate(page, opts) {
     if (page === 'journal') {
       setJournalInitFilter(opts?.filter || null);
       setJournalFocusId(opts?.focusId || null);
+      setJournalFocusTicker(opts?.focusTicker || null);
     } else {
       setJournalInitFilter(null);
       setJournalFocusId(null);
+      setJournalFocusTicker(null);
     }
     setActivePage(page);
     localStorage.setItem('pnthr_page', page);
@@ -506,7 +509,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {activePage === 'command' && <CommandCenter onNavigate={navigate} />}
 
           {/* PNTHR Journal */}
-          {activePage === 'journal' && <JournalPage onNavigate={navigate} initialFilter={journalInitFilter} focusPositionId={journalFocusId} />}
+          {activePage === 'journal' && <JournalPage onNavigate={navigate} initialFilter={journalInitFilter} focusPositionId={journalFocusId} focusTicker={journalFocusTicker} />}
 
           {/* Portfolio page */}
           {activePage === 'portfolio' && <PortfolioPage currentUser={currentUser} onProfileUpdate={setCurrentUser} />}

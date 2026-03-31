@@ -893,7 +893,6 @@ const BUILT_IN_ROUTINES = [
   // ── Daily ──
   { id: 'daily_ibkr_check',   dayOfWeek: null, label: 'Review IBKR overnight — any exits?' },
   { id: 'daily_record_exits', dayOfWeek: null, label: 'Record any exits in Command' },
-  { id: 'daily_stop_check',   dayOfWeek: null, label: 'Verify all stop orders are live in IBKR' },
 
   // ── Monday ──
   { id: 'mon_stop_sync',      dayOfWeek: 1, label: 'Run Monday Stop Sync — update IBKR stops to match PNTHR' },

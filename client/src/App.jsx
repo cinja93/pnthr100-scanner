@@ -322,7 +322,7 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
         return (
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ color: '#ddd', fontSize: 11 }}>
-              Create <b style={{ color: '#fff' }}>{dirLabel}</b> card for <b style={{ color: '#fff' }}>{d.ticker}</b> — {d.ibkrShares} shr{costStr} — Lot 1 pre-filled from IBKR. Add stop + lots after.
+              Create <b style={{ color: '#fff' }}>{dirLabel}</b> card for <b style={{ color: '#fff' }}>{d.ticker}</b> — {d.ibkrShares} shr{costStr} — Lot 1 + PNTHR stop pre-filled. Expand lots after.
             </span>
             <button onClick={doCreate} style={btnStyle('#28a745')}>✓ YES – CREATE IT</button>
             <button onClick={() => setCreateState('idle')} style={btnStyle('#555')}>✗ CANCEL</button>

@@ -2319,8 +2319,9 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
 // ── IBKR Import Position ──────────────────────────────────────────────────────
 // POST /api/ibkr/import-position
 // Creates a minimal Command position card from live IBKR data.
-// Fills Lot 1 with the IBKR avgCost + share count; user sets stop and expands
-// lots from there. Only callable by admin (same guard as position creation).
+// Fills Lot 1 with the IBKR avgCost + share count; auto-populates the
+// PNTHR-computed ATR stop as the default stopPrice. User can then set the
+// stop order in TWS — any mismatch will be caught by the discrepancy banner.
 app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
@@ -2340,10 +2341,36 @@ app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
 
     const direction = rawShares >= 0 ? 'LONG' : 'SHORT';
     const shares    = Math.abs(rawShares);
-    const avgCost   = +(ibkrPos.avgCost)    || 0;
+    const avgCost   = +(ibkrPos.avgCost) || 0;
     const signal    = direction === 'LONG' ? 'BL' : 'SS';
     const today     = new Date().toISOString().split('T')[0];
     const now       = new Date();
+
+    // ── Compute PNTHR ATR stop (same logic as signal service) ────────────────
+    // ETF tickers use a slightly different daylight threshold in the state machine.
+    const ETF_SET = new Set([
+      'SPY','QQQ','DIA','IWM','VTI','VOO','VEA','VWO','EEM','EFA',
+      'XLE','XLF','XLK','XLV','XLP','XLI','XLU','XLB','XLC','XLRE','XLY',
+      'GLD','SLV','TLT','HYG','LQD','USO','UNG',
+      'ARKK','SOXX','SMH','IBB','XBI','KRE','XHB','ITB',
+      'GDX','GDXJ','RSP','MDY','IJR','SCHA','VB',
+      'JETS','BUZZ','KWEB','FXI','INDA',
+    ]);
+    const isETF = ETF_SET.has(ticker);
+
+    let stopPrice    = null;
+    let originalStop = null;
+    try {
+      const signals = await getSignals([ticker], { isETF });
+      const sig     = signals[ticker];
+      if (sig?.stopPrice) {
+        stopPrice    = +sig.stopPrice;
+        originalStop = +sig.stopPrice;
+      }
+    } catch (sigErr) {
+      console.warn(`[IBKR import] Could not compute PNTHR stop for ${ticker}:`, sigErr.message);
+      // Non-fatal — position is still created, user sets stop manually
+    }
 
     const position = {
       id:        Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
@@ -2351,7 +2378,8 @@ app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
       ticker,
       direction,
       signal,
-      entryPrice: avgCost,
+      entryPrice:   avgCost,
+      ...(stopPrice != null && { stopPrice, originalStop }),
       status:    'ACTIVE',
       source:    'IBKR_IMPORT',
       fills: {
@@ -2364,9 +2392,10 @@ app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
     };
 
     await db.collection('pnthr_portfolio').insertOne(position);
-    console.log(`[IBKR] 📥 Imported ${ticker} (${direction} ${shares} shr @ $${avgCost}) from IBKR for user ${userId}`);
+    const stopLog = stopPrice ? ` | PNTHR stop: $${stopPrice}` : ' | stop: not computed';
+    console.log(`[IBKR] 📥 Imported ${ticker} (${direction} ${shares} shr @ $${avgCost}${stopLog})`);
 
-    res.json({ success: true, id: position.id, ticker, direction, shares, avgCost });
+    res.json({ success: true, id: position.id, ticker, direction, shares, avgCost, stopPrice });
   } catch (err) {
     console.error('[IBKR import-position]', err);
     res.status(500).json({ error: err.message });

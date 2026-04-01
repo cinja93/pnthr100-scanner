@@ -2096,18 +2096,32 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
     const ibkrDoc = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
     if (!ibkrDoc) return res.json({ discrepancies: [], ibkrConnected: false });
 
-    const ibkrPositions = ibkrDoc.positions || [];
+    const allIbkrPositions = ibkrDoc.positions || [];
     const ibkrStops = ibkrDoc.stopOrders || [];
     const syncedAt = ibkrDoc.syncedAt || null;
     const staleMins = syncedAt ? Math.round((Date.now() - new Date(syncedAt)) / 60000) : null;
     const isStale = staleMins != null && staleMins > 10;
+
+    // ── Fix 1: Only treat positions with actual shares as "active" ─────────
+    // IBKR keeps closed positions in its feed briefly with 0 shares.
+    // Filtering these out prevents false-positive IBKR_ONLY alerts (e.g. COIN
+    // showing "24 shr" when the position was already closed to 0).
+    const ibkrPositions = allIbkrPositions.filter(ip => Math.abs(+ip.shares || 0) >= 1);
+
+    // Build a secondary map of zero-share IBKR positions so we can give a more
+    // accurate COMMAND_ONLY message ("IBKR shows 0 shares" vs "not found in IBKR").
+    const ibkrZeroShareTickers = new Set(
+      allIbkrPositions
+        .filter(ip => ip.symbol && Math.abs(+ip.shares || 0) < 1)
+        .map(ip => ip.symbol.toUpperCase())
+    );
 
     // Load PNTHR active positions
     const pnthrPositions = await db.collection('pnthr_portfolio')
       .find({ ownerId: userId, status: 'ACTIVE' })
       .toArray();
 
-    // Build lookup maps
+    // Build lookup maps (active IBKR positions only — 0-share entries excluded)
     const ibkrByTicker = {};
     for (const ip of ibkrPositions) {
       if (ip.symbol) ibkrByTicker[ip.symbol.toUpperCase()] = ip;
@@ -2146,8 +2160,12 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
       const positionId = p.id || null;
       const direction  = p.direction || 'LONG';
 
-      // A. Ticker in Command but missing from IBKR
+      // A. Ticker in Command but missing from active IBKR positions
       if (!ip) {
+        // ── Fix 2: Distinguish "IBKR shows 0 shares" vs "not in IBKR feed at all"
+        // Both mean the position was likely closed in IBKR — but the message
+        // should reflect which case it is so the user understands what happened.
+        const ibkrShowsZero = ibkrZeroShareTickers.has(ticker);
         discrepancies.push({
           type: 'TICKER_MISSING',
           severity: 'CRITICAL',
@@ -2156,8 +2174,9 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
           positionId,
           direction,
           pnthrShares: pnthrShares(p),
+          ibkrShowsZero, // true = IBKR has it at 0 shares; false = not in IBKR at all
         });
-        continue; // no further checks if ticker is missing
+        continue; // no further checks if ticker is missing from active IBKR
       }
 
       // B. Shares mismatch
@@ -2229,7 +2248,9 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
       }
     }
 
-    // A. Tickers in IBKR but not in Command (add positionId: null — untracked)
+    // A. Tickers in IBKR (with actual shares) but not in Command — untracked open position
+    // ── Fix 3: Attach isStale flag so client can note "data may be outdated"
+    const syncIsStale = staleMins != null && staleMins > 5; // 5-min freshness threshold
     for (const ticker of Object.keys(ibkrByTicker)) {
       if (!pnthrByTicker[ticker]) {
         discrepancies.push({
@@ -2239,6 +2260,8 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
           side: 'IBKR_ONLY',
           positionId: null,
           ibkrShares: Math.abs(+ibkrByTicker[ticker].shares || 0),
+          syncIsStale, // if true, banner shows "⏱ data may be outdated" note
+          staleMins,
         });
       }
     }
@@ -2247,7 +2270,7 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
     const SEVERITY_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
     discrepancies.sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
 
-    res.json({ discrepancies, ibkrConnected: true, syncedAt, isStale, staleMins });
+    res.json({ discrepancies, ibkrConnected: true, syncedAt, isStale: syncIsStale, staleMins });
   } catch (err) {
     console.error('[IBKR discrepancies]', err);
     res.status(500).json({ error: err.message });

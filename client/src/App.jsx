@@ -280,13 +280,21 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
     }
     if (d.type === 'TICKER_MISSING') {
       const isCmdOnly = d.side === 'COMMAND_ONLY';
+      // Build the contextual description based on what IBKR actually shows
+      let desc;
+      if (isCmdOnly) {
+        desc = d.ibkrShowsZero
+          ? `In Command (${d.pnthrShares} shr) — IBKR now shows 0 shares (closed there)`
+          : `In Command (${d.pnthrShares} shr) — not found in IBKR at all`;
+      } else {
+        // IBKR_ONLY — attach stale-data caveat if sync is old
+        desc = d.syncIsStale
+          ? `In IBKR (${d.ibkrShares} shr) — NOT in Command  ⏱ IBKR data is ${d.staleMins}m old, may already be closed`
+          : `In IBKR (${d.ibkrShares} shr) — NOT in Command`;
+      }
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: '#aaa', fontSize: 11 }}>
-            {isCmdOnly
-              ? `In Command (${d.pnthrShares} shr) but NOT in IBKR — may have been closed`
-              : `In IBKR (${d.ibkrShares} shr) but NOT in Command — untracked position`}
-          </span>
+          <span style={{ color: '#aaa', fontSize: 11 }}>{desc}</span>
           <button onClick={() => onNavigate('command')} style={btnStyle(color)}>
             {isCmdOnly ? 'Close in Command →' : 'Add to Command →'}
           </button>

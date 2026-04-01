@@ -638,13 +638,50 @@ function TaskCard({ task, isCompleted, onMarkDone }) {
 
   if (isCompleted) {
     return (
-      <div style={{ ...s.card(task.priority, false), opacity: 0.45 }}>
+      <div style={{ ...s.card(task.priority, expanded), opacity: 0.55 }}>
         <div style={s.cardHeader} onClick={() => setExpanded(e => !e)}>
           <span style={s.badge(task.priority)}>{task.badge}</span>
           {task.ticker && <span style={s.ticker}>{task.ticker}</span>}
           <span style={s.headline}>{task.headline}</span>
+          <span style={s.expandBtn(expanded)}>▼</span>
           <span style={s.doneTag}>✓ DONE</span>
         </div>
+        {expanded && (
+          <div style={s.cardBody}>
+            <ul style={s.instructions}>
+              {(task.instructions || []).map((step, i) => (
+                <li key={i} style={s.instructionItem}>{step}</li>
+              ))}
+            </ul>
+            {(task.data?.longTickers?.length > 0 || task.data?.shortTickers?.length > 0) && (
+              <div style={{ marginTop: 10, marginBottom: 4 }}>
+                <div style={{ fontSize: 10, color: '#555', marginBottom: 6, letterSpacing: '0.06em', fontWeight: 700 }}>
+                  POSITIONS IN THIS SECTOR
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {(task.data.longTickers || []).map(t => (
+                    <span key={t + '_L'} style={{
+                      fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 4,
+                      background: 'rgba(40,167,69,0.13)', color: '#28a745',
+                      border: '1px solid rgba(40,167,69,0.3)',
+                    }}>
+                      {t} <span style={{ fontSize: 9, fontWeight: 400, opacity: 0.7 }}>LONG</span>
+                    </span>
+                  ))}
+                  {(task.data.shortTickers || []).map(t => (
+                    <span key={t + '_S'} style={{
+                      fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 4,
+                      background: 'rgba(239,83,80,0.13)', color: '#ef5350',
+                      border: '1px solid rgba(239,83,80,0.3)',
+                    }}>
+                      {t} <span style={{ fontSize: 9, fontWeight: 400, opacity: 0.7 }}>SHORT</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }

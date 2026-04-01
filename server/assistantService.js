@@ -1189,6 +1189,34 @@ async function fetchDailyRSIForTicker(ticker) {
   }
 }
 
+// Fetch weekly RSI-14 from FMP weekly candles.
+// Uses the same Wilder RSI formula as the daily — just a different candle timeframe.
+// FMP's 1week endpoint returns newest-first; we sort ascending before computing.
+async function fetchWeeklyRSIForTicker(ticker) {
+  try {
+    const url = `https://financialmodelingprep.com/api/v3/historical-chart/1week/${ticker}?apikey=${FMP_API_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Sort ascending (FMP returns newest-first)
+    const weekly = (Array.isArray(data) ? data : []).slice().sort((a, b) => a.date > b.date ? 1 : -1);
+    if (weekly.length < 16) return null;
+    const closes = weekly.map(b => b.close);
+    const rsis   = computeDailyRSI14(closes); // same Wilder formula, weekly candles
+    let today = null, yesterday = null;
+    for (let i = rsis.length - 1; i >= 0; i--) {
+      if (rsis[i] != null) {
+        if (today === null)          { today = rsis[i]; }
+        else if (yesterday === null) { yesterday = rsis[i]; break; }
+      }
+    }
+    return { today, yesterday };
+  } catch (err) {
+    console.warn(`[positionHealth] Weekly RSI fetch failed for ${ticker}:`, err.message);
+    return null;
+  }
+}
+
 /**
  * Get RSI health alerts for all active positions owned by userId.
  * Runs RSI fetches in parallel; returns alerts only for positions breaching thresholds.
@@ -1203,20 +1231,23 @@ export async function getPositionHealthAlerts(userId) {
 
   if (!positions.length) return [];
 
-  // Fetch RSI for all positions in parallel
+  // Fetch daily + weekly RSI for all positions in parallel (both timeframes per position)
   const results = await Promise.allSettled(
     positions.map(async pos => {
       const ticker    = (pos.ticker || '').toUpperCase();
       const direction = (pos.direction || '').toUpperCase() === 'SHORT' ? 'SS' : 'BL';
-      const rsiData   = await fetchDailyRSIForTicker(ticker);
-      return { pos, ticker, direction, rsiData };
+      const [rsiData, weeklyRsiData] = await Promise.all([
+        fetchDailyRSIForTicker(ticker),
+        fetchWeeklyRSIForTicker(ticker),
+      ]);
+      return { pos, ticker, direction, rsiData, weeklyRsiData };
     })
   );
 
   const healthPositions = [];
   for (const result of results) {
     if (result.status !== 'fulfilled') continue;
-    const { pos, ticker, direction, rsiData } = result.value;
+    const { pos, ticker, direction, rsiData, weeklyRsiData } = result.value;
     if (!rsiData || rsiData.today == null) continue;
 
     const { today: rsi, yesterday: rsiYest } = rsiData;
@@ -1231,15 +1262,32 @@ export async function getPositionHealthAlerts(userId) {
       : +(RSI_SS_ALERT - rsi).toFixed(1);   // SS: 25 − RSI
 
     const delta = rsiYest != null ? +(rsi - rsiYest).toFixed(1) : null;
+
+    // Weekly RSI (informational — same 25/75 zone, updates once per week)
+    const weeklyRsi      = weeklyRsiData?.today    != null ? +weeklyRsiData.today.toFixed(1)    : null;
+    const weeklyRsiYest  = weeklyRsiData?.yesterday != null ? +weeklyRsiData.yesterday.toFixed(1) : null;
+    const weeklyDelta    = (weeklyRsi != null && weeklyRsiYest != null)
+      ? +(weeklyRsi - weeklyRsiYest).toFixed(1)
+      : null;
+    const weeklyAlertType = weeklyRsi != null
+      ? (direction === 'BL' && weeklyRsi > RSI_BL_ALERT ? 'BL_OVERBOUGHT'
+        : direction === 'SS' && weeklyRsi < RSI_SS_ALERT ? 'SS_OVERSOLD'
+        : null)
+      : null;
+
     healthPositions.push({
       ticker,
       direction,
-      rsi:                   +rsi.toFixed(1),
+      rsi,
       rsiYesterday:          rsiYest != null ? +rsiYest.toFixed(1) : null,
       delta,
       isAlert,
       alertType:             isBLAlert ? 'BL_OVERBOUGHT' : isSSAlert ? 'SS_OVERSOLD' : null,
       distanceFromThreshold,
+      weeklyRsi,
+      weeklyRsiYesterday:    weeklyRsiYest,
+      weeklyDelta,
+      weeklyAlertType,
       companyName:           pos.companyName || null,
     });
   }

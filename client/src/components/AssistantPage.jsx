@@ -811,72 +811,101 @@ function RsiGauge({ rsi, direction }) {
   );
 }
 
-// ── RsiGaugeRow — one compact line per position: ticker · direction · gauge · RSI value ──
+// ── rsiTickColor — direction-aware color for RSI tick ────────────────────────
+function rsiTickColor(rsi, direction) {
+  const isBL      = direction === 'BL';
+  const isInZone  = rsi >= 25 && rsi <= 75;
+  const isWarning = (isBL && rsi > 75) || (!isBL && rsi < 25);
+  return isInZone ? '#28a745' : isWarning ? '#ff9800' : '#4fc3f7';
+}
+
+// ── RsiGaugeRow — two compact lines per position ──────────────────────────────
+//   Line 1 (D): ticker · direction · daily gauge · RSI value · delta · alert
+//   Line 2 (W): (aligned) weekly gauge · RSI value · delta
 function RsiGaugeRow({ pos }) {
-  const isBL      = pos.direction === 'BL';
-  const dirLabel  = isBL ? 'LONG' : 'SHORT';
-  const dirColor  = isBL ? '#28a745' : '#ef5350';
-  const isInZone  = pos.rsi >= 25 && pos.rsi <= 75;
-  const isWarning = (isBL && pos.rsi > 75) || (!isBL && pos.rsi < 25);
-  const rsiColor  = isInZone  ? '#28a745'
-                  : isWarning ? '#ff9800'
-                  : '#4fc3f7';
-  const alertTag  = pos.alertType === 'BL_OVERBOUGHT' ? '⚠ FEAST'
-                  : pos.alertType === 'SS_OVERSOLD'    ? '⚠ SQUEEZE'
-                  : null;
-  const deltaStr  = pos.delta != null
-    ? `${pos.delta > 0 ? '+' : ''}${pos.delta}`
-    : null;
+  const isBL     = pos.direction === 'BL';
+  const dirLabel = isBL ? 'LONG' : 'SHORT';
+  const dirColor = isBL ? '#28a745' : '#ef5350';
+
+  // Daily
+  const dailyColor   = rsiTickColor(pos.rsi, pos.direction);
+  const dailyAlert   = pos.alertType === 'BL_OVERBOUGHT' ? '⚠ FEAST'
+                     : pos.alertType === 'SS_OVERSOLD'    ? '⚠ SQUEEZE'
+                     : null;
+  const dailyDelta   = pos.delta != null ? `${pos.delta > 0 ? '+' : ''}${pos.delta}` : null;
+
+  // Weekly
+  const hasWeekly    = pos.weeklyRsi != null;
+  const weeklyColor  = hasWeekly ? rsiTickColor(pos.weeklyRsi, pos.direction) : '#555';
+  const weeklyAlert  = pos.weeklyAlertType === 'BL_OVERBOUGHT' ? '⚠ FEAST'
+                     : pos.weeklyAlertType === 'SS_OVERSOLD'    ? '⚠ SQUEEZE'
+                     : null;
+  const weeklyDelta  = pos.weeklyDelta != null ? `${pos.weeklyDelta > 0 ? '+' : ''}${pos.weeklyDelta}` : null;
+
+  // Shared right-side column widths so daily and weekly values align
+  const rsiValWidth = 46;
+  const deltaWidth  = 28;
+  const alertWidth  = 58;
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '5px 14px',
-      borderBottom: '1px solid #161616',
-    }}>
-      {/* Ticker */}
-      <span style={{ fontSize: 12, fontWeight: 700, color: '#bbb', minWidth: 52, letterSpacing: '0.02em' }}>
-        {pos.ticker}
-      </span>
+    <div style={{ padding: '5px 14px', borderBottom: '1px solid #161616' }}>
+      {/* ── Row layout: [ticker][badge] | [gauge column] ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
 
-      {/* Direction badge */}
-      <span style={{
-        fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 3,
-        background: isBL ? 'rgba(40,167,69,0.12)' : 'rgba(239,83,80,0.12)',
-        color: dirColor,
-        border: `1px solid ${isBL ? 'rgba(40,167,69,0.28)' : 'rgba(239,83,80,0.28)'}`,
-        minWidth: 38, textAlign: 'center', letterSpacing: '0.06em', flexShrink: 0,
-      }}>
-        {dirLabel}
-      </span>
+        {/* Left: ticker + direction badge (span both gauge rows) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#bbb', minWidth: 52, letterSpacing: '0.02em' }}>
+            {pos.ticker}
+          </span>
+          <span style={{
+            fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 3,
+            background: isBL ? 'rgba(40,167,69,0.12)' : 'rgba(239,83,80,0.12)',
+            color: dirColor,
+            border: `1px solid ${isBL ? 'rgba(40,167,69,0.28)' : 'rgba(239,83,80,0.28)'}`,
+            minWidth: 38, textAlign: 'center', letterSpacing: '0.06em',
+          }}>
+            {dirLabel}
+          </span>
+        </div>
 
-      {/* Gauge bar — fills remaining space */}
-      <RsiGauge rsi={pos.rsi} direction={pos.direction} />
+        {/* Right: stacked daily + weekly gauge rows */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
 
-      {/* RSI value */}
-      <span style={{
-        fontSize: 11, fontWeight: 700, color: rsiColor,
-        minWidth: 46, textAlign: 'right', flexShrink: 0,
-      }}>
-        RSI {pos.rsi}
-      </span>
+          {/* ── Daily gauge row ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 8, color: '#555', minWidth: 10, flexShrink: 0 }}>D</span>
+            <RsiGauge rsi={pos.rsi} direction={pos.direction} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: dailyColor, minWidth: rsiValWidth, textAlign: 'right', flexShrink: 0 }}>
+              RSI {pos.rsi}
+            </span>
+            <span style={{ fontSize: 9, color: pos.delta > 0 ? '#ef5350' : '#4fc3f7', minWidth: deltaWidth, textAlign: 'right', flexShrink: 0 }}>
+              {dailyDelta || ''}
+            </span>
+            <span style={{ fontSize: 9, color: '#ff9800', minWidth: alertWidth, flexShrink: 0 }}>
+              {dailyAlert || ''}
+            </span>
+          </div>
 
-      {/* Delta from yesterday */}
-      {deltaStr && (
-        <span style={{
-          fontSize: 9, color: pos.delta > 0 ? '#ef5350' : '#4fc3f7',
-          minWidth: 30, textAlign: 'right', flexShrink: 0,
-        }}>
-          {deltaStr}
-        </span>
-      )}
+          {/* ── Weekly gauge row ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 8, color: '#555', minWidth: 10, flexShrink: 0 }}>W</span>
+            {hasWeekly
+              ? <RsiGauge rsi={pos.weeklyRsi} direction={pos.direction} />
+              : <div style={{ flex: 1, height: 8, background: '#1a1a1a', borderRadius: 3, opacity: 0.4 }} />
+            }
+            <span style={{ fontSize: 11, fontWeight: 700, color: hasWeekly ? weeklyColor : '#333', minWidth: rsiValWidth, textAlign: 'right', flexShrink: 0 }}>
+              {hasWeekly ? `RSI ${pos.weeklyRsi}` : '—'}
+            </span>
+            <span style={{ fontSize: 9, color: pos.weeklyDelta > 0 ? '#ef5350' : '#4fc3f7', minWidth: deltaWidth, textAlign: 'right', flexShrink: 0 }}>
+              {weeklyDelta || ''}
+            </span>
+            <span style={{ fontSize: 9, color: '#ff9800', minWidth: alertWidth, flexShrink: 0 }}>
+              {weeklyAlert || ''}
+            </span>
+          </div>
 
-      {/* Alert tag — only when outside zone */}
-      {alertTag && (
-        <span style={{ fontSize: 9, color: '#ff9800', minWidth: 58, flexShrink: 0 }}>
-          {alertTag}
-        </span>
-      )}
+        </div>
+      </div>
     </div>
   );
 }

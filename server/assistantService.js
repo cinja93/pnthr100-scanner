@@ -1261,13 +1261,13 @@ export async function getPositionHealthAlerts(userId) {
       ? +(rsi - RSI_BL_ALERT).toFixed(1)   // BL: RSI − 75
       : +(RSI_SS_ALERT - rsi).toFixed(1);   // SS: 25 − RSI
 
-    const delta = rsiYest != null ? +(rsi - rsiYest).toFixed(1) : null;
+    const delta = rsiYest != null ? Math.round(rsi - rsiYest) : null;
 
     // Weekly RSI (informational — same 25/75 zone, updates once per week)
-    const weeklyRsi      = weeklyRsiData?.today    != null ? +weeklyRsiData.today.toFixed(1)    : null;
-    const weeklyRsiYest  = weeklyRsiData?.yesterday != null ? +weeklyRsiData.yesterday.toFixed(1) : null;
+    const weeklyRsi      = weeklyRsiData?.today    != null ? Math.round(weeklyRsiData.today)    : null;
+    const weeklyRsiYest  = weeklyRsiData?.yesterday != null ? Math.round(weeklyRsiData.yesterday) : null;
     const weeklyDelta    = (weeklyRsi != null && weeklyRsiYest != null)
-      ? +(weeklyRsi - weeklyRsiYest).toFixed(1)
+      ? weeklyRsi - weeklyRsiYest
       : null;
     const weeklyAlertType = weeklyRsi != null
       ? (direction === 'BL' && weeklyRsi > RSI_BL_ALERT ? 'BL_OVERBOUGHT'
@@ -1278,8 +1278,8 @@ export async function getPositionHealthAlerts(userId) {
     healthPositions.push({
       ticker,
       direction,
-      rsi,
-      rsiYesterday:          rsiYest != null ? +rsiYest.toFixed(1) : null,
+      rsi:                   Math.round(rsi),
+      rsiYesterday:          rsiYest != null ? Math.round(rsiYest) : null,
       delta,
       isAlert,
       alertType:             isBLAlert ? 'BL_OVERBOUGHT' : isSSAlert ? 'SS_OVERSOLD' : null,

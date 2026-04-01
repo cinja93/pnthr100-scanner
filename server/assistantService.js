@@ -780,9 +780,9 @@ export async function generateAssistantTasks(userId, positions, nav) {
     for (const p of activePosns) {
       const sec = p.sector;
       if (!sec || sec === '—') continue;
-      if (!sectorNet[sec]) sectorNet[sec] = { longs: 0, shorts: 0 };
-      if (p.direction === 'LONG') sectorNet[sec].longs++;
-      else sectorNet[sec].shorts++;
+      if (!sectorNet[sec]) sectorNet[sec] = { longs: 0, shorts: 0, longTickers: [], shortTickers: [] };
+      if (p.direction === 'LONG') { sectorNet[sec].longs++; sectorNet[sec].longTickers.push(p.ticker); }
+      else                        { sectorNet[sec].shorts++; sectorNet[sec].shortTickers.push(p.ticker); }
     }
     for (const [sec, counts] of Object.entries(sectorNet)) {
       const net = Math.abs(counts.longs - counts.shorts);
@@ -795,13 +795,20 @@ export async function generateAssistantTasks(userId, positions, nav) {
           badge:           'SECTOR LIMIT',
           headline:        `${sec}: Net directional exposure at ${net} (cap = 3). Review concentration.`,
           instructions:    [
-            `${sec} sector has ${counts.longs} long${counts.longs !== 1 ? 's' : ''} and ${counts.shorts} short${counts.shorts !== 1 ? 's' : ''}`,
+            `${sec} sector has ${counts.longs} long${counts.longs !== 1 ? 's' : ''} and ${counts.shorts} short${counts.shorts !== 1 ? 's' : ''}.`,
             `Net directional exposure = ${net} (PNTHR cap is 3).`,
             'Consider whether a new position in this sector would violate the concentration rule.',
             'No immediate action required — this is a watch flag for new entries.',
           ],
           confirmQuestion: `Have you reviewed ${sec} sector concentration?`,
-          data:            { sector: sec, longs: counts.longs, shorts: counts.shorts, net },
+          data:            {
+            sector: sec,
+            longs:  counts.longs,
+            shorts: counts.shorts,
+            net,
+            longTickers:  counts.longTickers,
+            shortTickers: counts.shortTickers,
+          },
           dayOfWeek:       null,
           autoClears:      false,
         });

@@ -479,8 +479,9 @@ function EmaAlertBanner({ alert: a, onDismiss }) {
 function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const { isAuthenticated, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
   const isAdmin = currentUser?.role === 'admin';
-  const [lotAlerts,  setLotAlerts]  = useState([]);
-  const [positions,  setPositions]  = useState([]); // full positions for EMA alerts
+  const [lotAlerts,         setLotAlerts]         = useState([]);
+  const [positions,         setPositions]         = useState([]); // full positions for EMA alerts
+  const [commandRefreshKey, setCommandRefreshKey] = useState(0);  // increments to trigger Command refetch
 
   // ── Rolling price history (last 10 ticks per ticker, in-memory only) ────────
   const priceHistoryRef = useRef({}); // { [ticker]: [{price, time}] }
@@ -984,8 +985,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                   onDismiss={() => dismissIbkrDiscrepancy(key)}
                   onNavigate={navigate}
                   onFixed={() => {
-                    // Remove from list + re-poll to confirm
+                    // Remove from list + re-poll discrepancies + refresh Command positions
                     dismissIbkrDiscrepancy(key);
+                    setCommandRefreshKey(k => k + 1); // triggers CommandCenter refetch
                     fetchIbkrDiscrepancies()
                       .then(data => {
                         if (data.ibkrConnected) setIbkrDiscrepancies(data.discrepancies || []);
@@ -1096,7 +1098,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {activePage === 'jungle' && <JunglePage />}
 
           {/* PNTHR Command Center */}
-          {activePage === 'command' && <CommandCenter onNavigate={navigate} />}
+          {activePage === 'command' && <CommandCenter onNavigate={navigate} refreshSignal={commandRefreshKey} />}
 
           {/* PNTHR Journal */}
           {activePage === 'journal' && <JournalPage onNavigate={navigate} initialFilter={journalInitFilter} focusPositionId={journalFocusId} focusTicker={journalFocusTicker} />}

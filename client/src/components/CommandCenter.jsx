@@ -1968,7 +1968,7 @@ function isMarketHours() {
 
 // ── Main Command Center ───────────────────────────────────────────────────────
 
-export default function CommandCenter({ onNavigate }) {
+export default function CommandCenter({ onNavigate, refreshSignal }) {
   const { currentUser, updateCurrentUser } = useAuth();
   const [nav,           setNav]           = useState(() => currentUser?.accountSize ?? 100000);
   const navSaveTimer    = useRef(null);
@@ -2203,6 +2203,14 @@ export default function CommandCenter({ onNavigate }) {
       }, 300); // wait for DOM + positions to render
     }
   }, [loading]);
+
+  // Re-fetch positions when a position is created externally (e.g. IBKR import from banner)
+  useEffect(() => {
+    if (!refreshSignal) return; // skip initial mount — handled by the mount effect below
+    apiGet('/api/positions')
+      .then(data => { if (data.positions?.length) setPositions(data.positions); })
+      .catch(() => {});
+  }, [refreshSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load positions, pending entries, and NAV on mount
   useEffect(() => {

@@ -447,10 +447,16 @@ export async function pendingEntryConfirm(req, res) {
 
     // ── Build journalSnapshot for client feedback ────────────────────────────
     if (journalEntry?.entryConfirmed) {
-      const ec = journalEntry.entryConfirmed;
+      const ec    = journalEntry.entryConfirmed;
+      const isETF = ec.isETF || false;
+      // ETFs: only regime is a real captured field — all others are N/A by design
+      // Stocks: all 8 contextual fields are evaluated
       journalSnapshot = {
-        allCaptured:  ec.allCaptured,
-        fields: {
+        allCaptured: ec.allCaptured,
+        isETF,
+        fields: isETF ? {
+          regime: ec.regime != null ? { value: ec.regime, auto: true } : null,
+        } : {
           killScore:    ec.killScore    != null ? { value: ec.killScore,    auto: true } : null,
           killRank:     ec.killRank     != null ? { value: ec.killRank,     auto: true } : null,
           killTier:     ec.killTier     != null ? { value: ec.killTier,     auto: true } : null,

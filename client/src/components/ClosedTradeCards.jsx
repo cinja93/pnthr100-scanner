@@ -347,8 +347,10 @@ function getScoreQuestions(entry, disc) {
   const questions = [];
   if (!disc) return questions;
 
+  const isETF    = entry.isETF || entry.entryConfirmed?.isETF || false;
   const idxLabel = disc.tier1?.components?.indexTrend?.label;
-  if ((idxLabel === 'UNKNOWN' || idxLabel === 'ERROR') && !entry.userConfirmed?.indexTrend && !entry.entryConfirmed?.indexTrend) {
+  // ETFs don't have index trend questions (ETF IS the index — circular logic)
+  if (!isETF && (idxLabel === 'UNKNOWN' || idxLabel === 'ERROR') && !entry.userConfirmed?.indexTrend && !entry.entryConfirmed?.indexTrend) {
     questions.push({
       id: 'indexTrend',
       question: `Was the market (SPY/QQQ) trending WITH or AGAINST your ${entry.direction} trade in ${entry.ticker}?`,
@@ -362,7 +364,8 @@ function getScoreQuestions(entry, disc) {
   }
 
   const sectLabel = disc.tier1?.components?.sectorTrend?.label;
-  if ((sectLabel === 'UNKNOWN' || sectLabel === 'ERROR') && !entry.userConfirmed?.sectorTrend && !entry.entryConfirmed?.sectorTrend) {
+  // ETFs don't have sector trend questions (no GICS sector classification)
+  if (!isETF && (sectLabel === 'UNKNOWN' || sectLabel === 'ERROR') && !entry.userConfirmed?.sectorTrend && !entry.entryConfirmed?.sectorTrend) {
     questions.push({
       id: 'sectorTrend',
       question: `Was the ${entry.sector || 'sector'} trending WITH or AGAINST your ${entry.direction} trade?`,

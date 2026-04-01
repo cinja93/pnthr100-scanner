@@ -66,31 +66,41 @@ export async function createJournalEntry(db, position, userId, killData = null, 
     userConfirmed:       enrichment.userConfirmed       || null,
     dataSource:          enrichment.dataSource  || 'UNKNOWN',
     entryConfirmed: (() => {
-      const mat = enrichment.marketAtEntry || marketAtEntry || null;
-      const ec  = position.entryContext || enrichment.entryContext || null;
+      const mat   = enrichment.marketAtEntry || marketAtEntry || null;
+      const ec    = position.entryContext || enrichment.entryContext || null;
+      const isETF = !!(position.isETF || enrichment.isETF);
       const captured = {
         capturedAt:   new Date(),
-        killScore:    kse?.totalScore ?? null,
-        killRank:     kse?.rank       ?? null,
-        killTier:     kse?.tier       ?? null,
-        signal:       enrichment.signal || position.signal || null,
-        signalAge:    enrichment.signalAge ?? position.signalAge ?? null,
-        entryContext: ec,
-        indexTrend:   mat?.spyPosition    ?? null,
-        sectorTrend:  mat?.sectorPosition ?? null,
+        isETF,
+        // Kill pipeline fields — N/A for ETFs (no PNTHR Kill scoring on ETFs)
+        killScore:    isETF ? 'N/A' : (kse?.totalScore ?? null),
+        killRank:     isETF ? 'N/A' : (kse?.rank       ?? null),
+        killTier:     isETF ? 'N/A' : (kse?.tier       ?? null),
+        // Signal fields — N/A for ETFs (no BL/SS signal on ETFs)
+        signal:       isETF ? 'N/A' : (enrichment.signal || position.signal || null),
+        signalAge:    isETF ? 'N/A' : (enrichment.signalAge ?? position.signalAge ?? null),
+        entryContext: isETF ? 'N/A' : ec,
+        // Market context — index/sector trend N/A for ETFs (ETF IS the index/sector)
+        indexTrend:   isETF ? 'N/A' : (mat?.spyPosition    ?? null),
+        sectorTrend:  isETF ? 'N/A' : (mat?.sectorPosition ?? null),
+        // Regime is relevant for both stocks and ETFs
         regime:       mat?.regime?.label  ?? null,
         dataSource:   enrichment.dataSource || 'UNKNOWN',
       };
-      captured.allCaptured = !!(
-        captured.killScore   != null &&
-        captured.killRank    != null &&
-        captured.signal      != null &&
-        captured.signalAge   != null &&
-        captured.entryContext && captured.entryContext !== 'NO_SIGNAL' &&
-        captured.indexTrend  != null &&
-        captured.sectorTrend != null &&
-        captured.regime      != null
-      );
+      // ETFs: only regime matters — Kill/signal/sector fields are N/A by design
+      // Stocks: all 8 contextual fields must be present
+      captured.allCaptured = isETF
+        ? captured.regime != null
+        : !!(
+            captured.killScore   !== null &&
+            captured.killRank    !== null &&
+            captured.signal      !== null &&
+            captured.signalAge   !== null &&
+            captured.entryContext && captured.entryContext !== 'NO_SIGNAL' &&
+            captured.indexTrend  !== null &&
+            captured.sectorTrend !== null &&
+            captured.regime      !== null
+          );
       return captured;
     })(),
     discipline: { totalScore: null },

@@ -2523,16 +2523,25 @@ export default function CommandCenter({ onNavigate }) {
               );
             })()}
           {/* Journal entry snapshot banner — auto-dismisses after 9s */}
+          {/* Journal entry snapshot banner — stays until manually dismissed */}
             {journalSnapshot && (() => {
-              const { allCaptured, fields } = journalSnapshot;
-              const FIELD_LABELS = {
+              const { allCaptured, isETF, fields } = journalSnapshot;
+              const STOCK_LABELS = {
                 killScore: 'Kill score', killRank: 'Kill rank', killTier: 'Kill tier',
                 signal: 'Signal', signalAge: 'Signal age', entryContext: 'Entry context',
                 indexTrend: 'Index trend', sectorTrend: 'Sector trend', regime: 'Regime',
               };
+              const ETF_LABELS = { regime: 'Regime' };
+              const FIELD_LABELS = isETF ? ETF_LABELS : STOCK_LABELS;
               const missing = Object.entries(fields || {})
                 .filter(([, v]) => v == null)
                 .map(([k]) => FIELD_LABELS[k] || k);
+              const capturedMsg = isETF
+                ? '⚡ ETF journal snapshot captured — regime auto-saved (Kill/signal fields N/A for ETFs)'
+                : '⚡ Journal snapshot captured — Kill, signal, regime & market context auto-saved';
+              const partialMsg = isETF
+                ? '⚡ ETF journal snapshot partial — regime not captured (Kill/signal fields N/A for ETFs)'
+                : '⚡ Journal snapshot partial — some fields need manual input at close';
               return (
                 <div style={{
                   background: allCaptured ? 'rgba(40,167,69,0.1)' : 'rgba(255,193,7,0.1)',
@@ -2543,9 +2552,7 @@ export default function CommandCenter({ onNavigate }) {
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 700,
                       color: allCaptured ? '#51cf66' : '#ffd43b', marginBottom: allCaptured ? 0 : 4 }}>
-                      {allCaptured
-                        ? '⚡ Journal snapshot captured — Kill, signal, regime & market context auto-saved'
-                        : '⚡ Journal snapshot partial — some fields need manual input at close'}
+                      {allCaptured ? capturedMsg : partialMsg}
                     </div>
                     {!allCaptured && missing.length > 0 && (
                       <div style={{ fontSize: 11, color: '#999' }}>

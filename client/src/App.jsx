@@ -150,14 +150,215 @@ function App() {
   );
 }
 
-// ── IBKR Discrepancy severity config ─────────────────────────────────────────
-const IBKR_SEVERITY_COLOR = { CRITICAL: '#dc3545', HIGH: '#ff8c00', MEDIUM: '#ffc107' };
-const IBKR_SEVERITY_BG    = {
-  CRITICAL: 'rgba(220,53,69,0.12)',
-  HIGH:     'rgba(255,140,0,0.10)',
-  MEDIUM:   'rgba(255,193,7,0.08)',
-};
-const IBKR_SEVERITY_ICON  = { CRITICAL: '🚨', HIGH: '⚠️', MEDIUM: 'ℹ️' };
+// ── IBKR Discrepancy Banner ───────────────────────────────────────────────────
+// Interactive 2-step fix flow for each discrepancy type.
+// States: default → confirming → fixing → fixed (auto-dismiss)
+
+const DISC_COLOR = { CRITICAL: '#dc3545', HIGH: '#ff8c00', MEDIUM: '#ffc107' };
+const DISC_BG    = { CRITICAL: 'rgba(220,53,69,0.13)', HIGH: 'rgba(255,140,0,0.10)', MEDIUM: 'rgba(255,193,7,0.08)' };
+const DISC_ICON  = { CRITICAL: '🚨', HIGH: '⚠️', MEDIUM: 'ℹ️' };
+
+function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
+  const [uiState,   setUiState]   = useState('default');    // default | confirming | fixing | fixed
+  const [chosen,    setChosen]    = useState(null);         // 'ibkr' | 'command'
+
+  const color = DISC_COLOR[d.severity] || '#ffc107';
+  const bg    = DISC_BG[d.severity]    || 'rgba(255,193,7,0.08)';
+  const icon  = DISC_ICON[d.severity]  || '⚠️';
+
+  // ── helper to apply the fix via POST /api/positions (surgical patch) ──────
+  async function applyFix(fields) {
+    if (!d.positionId) return;
+    setUiState('fixing');
+    try {
+      const res = await fetch(`${API_BASE}/api/positions`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: d.positionId, ...fields }),
+      });
+      if (!res.ok) throw new Error('save failed');
+      setUiState('fixed');
+      setTimeout(() => onFixed(), 1500);
+    } catch {
+      setUiState('confirming'); // revert to confirm on error
+    }
+  }
+
+  // ── content per type ──────────────────────────────────────────────────────
+  function renderContent() {
+    if (uiState === 'fixing')  return <span style={{ color: '#aaa', fontSize: 11 }}>Saving…</span>;
+    if (uiState === 'fixed')   return <span style={{ color: '#28a745', fontWeight: 700, fontSize: 11 }}>✓ Fixed! Command updated.</span>;
+
+    const dirLabel = d.direction === 'SHORT' ? 'SHORT' : 'LONG';
+
+    // ── CONFIRMING step ────────────────────────────────────────────────────
+    if (uiState === 'confirming') {
+      let confirmText = '';
+      let fixFields   = {};
+      if (d.type === 'SHARES_MISMATCH') {
+        confirmText = `Fix Command: set ${d.ticker} to ${chosen === 'ibkr' ? d.ibkrShares : d.pnthrShares} shares?`;
+        fixFields   = { remainingShares: chosen === 'ibkr' ? d.ibkrShares : d.pnthrShares };
+      } else if (d.type === 'PRICE_MISMATCH') {
+        confirmText = `Fix Command avg cost for ${d.ticker} to $${chosen === 'ibkr' ? d.ibkrAvg.toFixed(2) : d.pnthrAvg.toFixed(2)}?`;
+        fixFields   = { manualAvgCost: chosen === 'ibkr' ? d.ibkrAvg : d.pnthrAvg };
+      } else if (d.type === 'STOP_MISSING' || d.type === 'STOP_MISMATCH') {
+        const newStop = chosen === 'ibkr' ? d.ibkrStop : d.pnthrStop;
+        confirmText   = `Set ${d.ticker} stop to $${(+newStop).toFixed(2)} in Command?`;
+        fixFields     = { stopPrice: +newStop };
+      }
+      return (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ color: '#ddd', fontSize: 11 }}>{confirmText}</span>
+          <button onClick={() => applyFix(fixFields)} style={btnStyle('#28a745')}>✓ YES – FIX IT</button>
+          <button onClick={() => { setUiState('default'); setChosen(null); }} style={btnStyle('#555')}>✗ NO, CANCEL</button>
+        </span>
+      );
+    }
+
+    // ── DEFAULT step — show discrepancy + choice buttons ──────────────────
+    if (d.type === 'SHARES_MISMATCH') {
+      return (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ color: '#aaa', fontSize: 11 }}>
+            {dirLabel} · <b style={{ color: '#fff' }}>{Math.abs(d.diff)}</b> share diff — which count is correct?
+          </span>
+          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('#555')}>
+            Command: {d.pnthrShares} shr
+          </button>
+          <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle(color)}>
+            IBKR: {d.ibkrShares} shr ← use this
+          </button>
+        </span>
+      );
+    }
+    if (d.type === 'PRICE_MISMATCH') {
+      return (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ color: '#aaa', fontSize: 11 }}>
+            Avg cost <b style={{ color }}>{d.diffPct}%</b> off — which is correct?
+          </span>
+          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('#555')}>
+            Command: ${d.pnthrAvg?.toFixed(2)}
+          </button>
+          <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle(color)}>
+            IBKR: ${d.ibkrAvg?.toFixed(2)} ← use this
+          </button>
+        </span>
+      );
+    }
+    if (d.type === 'STOP_MISSING') {
+      if (d.ibkrStop) {
+        return (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ color: '#aaa', fontSize: 11 }}>No stop set! IBKR has a stop order at <b style={{ color: '#fff' }}>${(+d.ibkrStop).toFixed(2)}</b></span>
+            <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle(color)}>
+              Use IBKR stop: ${(+d.ibkrStop).toFixed(2)}
+            </button>
+            <button onClick={() => onNavigate('command')} style={btnStyle('#555')}>Set manually in Command →</button>
+          </span>
+        );
+      }
+      return (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: '#aaa', fontSize: 11 }}>No stop in Command or IBKR — position is UNPROTECTED</span>
+          <button onClick={() => onNavigate('command')} style={btnStyle(color)}>Set Stop in Command →</button>
+        </span>
+      );
+    }
+    if (d.type === 'STOP_MISMATCH') {
+      return (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ color: '#aaa', fontSize: 11 }}>Stop prices differ — which is correct?</span>
+          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('#555')}>
+            Command: ${(+d.pnthrStop).toFixed(2)}
+          </button>
+          <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle(color)}>
+            IBKR: ${(+d.ibkrStop).toFixed(2)} ← use this
+          </button>
+        </span>
+      );
+    }
+    if (d.type === 'TICKER_MISSING') {
+      const isCmdOnly = d.side === 'COMMAND_ONLY';
+      return (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ color: '#aaa', fontSize: 11 }}>
+            {isCmdOnly
+              ? `In Command (${d.pnthrShares} shr) but NOT in IBKR — may have been closed`
+              : `In IBKR (${d.ibkrShares} shr) but NOT in Command — untracked position`}
+          </span>
+          <button onClick={() => onNavigate('command')} style={btnStyle(color)}>
+            {isCmdOnly ? 'Close in Command →' : 'Add to Command →'}
+          </button>
+        </span>
+      );
+    }
+    return null;
+  }
+
+  function btnStyle(borderColor) {
+    return {
+      background: 'none',
+      border: `1px solid ${borderColor}`,
+      color: borderColor === '#555' ? '#999' : borderColor,
+      borderRadius: 4,
+      padding: '3px 10px',
+      fontSize: 11,
+      cursor: 'pointer',
+      fontWeight: 600,
+      whiteSpace: 'nowrap',
+      flexShrink: 0,
+    };
+  }
+
+  return (
+    <div style={{
+      background: bg,
+      borderBottom: `1px solid ${color}33`,
+      padding: '8px 16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      fontSize: 12,
+      minHeight: 38,
+    }}>
+      {/* Severity icon */}
+      <span style={{ fontSize: 13, flexShrink: 0 }}>{icon}</span>
+
+      {/* Severity badge */}
+      <span style={{ color, fontWeight: 800, flexShrink: 0, fontSize: 10, letterSpacing: '0.06em', minWidth: 56 }}>
+        {d.severity}
+      </span>
+
+      {/* Ticker — prominent */}
+      <span style={{
+        fontWeight: 900, fontSize: 13, color: '#fff',
+        background: `${color}22`, borderRadius: 4,
+        padding: '1px 7px', flexShrink: 0, letterSpacing: '0.04em',
+      }}>
+        {d.ticker}
+      </span>
+
+      {/* Type label */}
+      <span style={{ fontSize: 10, color: '#555', flexShrink: 0, letterSpacing: '0.04em' }}>
+        {d.type.replace(/_/g, ' ')}
+      </span>
+
+      {/* Interactive content */}
+      <span style={{ flex: 1 }}>{renderContent()}</span>
+
+      {/* Dismiss button */}
+      {uiState === 'default' && (
+        <button
+          onClick={onDismiss}
+          style={{ background: 'none', border: `1px solid #333`, color: '#555', borderRadius: 4, padding: '2px 8px', fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  );
+}
 
 function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const { isAuthenticated, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
@@ -456,46 +657,60 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           </div>
         )}
 
-        {/* ── IBKR Discrepancy Banners — persistent until manually dismissed ── */}
-        {visibleDiscrepancies.map(d => {
-          const key = `${d.type}:${d.ticker}`;
-          const color = IBKR_SEVERITY_COLOR[d.severity] || '#ffc107';
-          const bg    = IBKR_SEVERITY_BG[d.severity]    || 'rgba(255,193,7,0.08)';
-          const icon  = IBKR_SEVERITY_ICON[d.severity]  || '⚠️';
-          return (
-            <div key={key} style={{
-              background: bg,
-              borderBottom: `1px solid ${color}44`,
-              padding: '9px 20px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              fontSize: 12,
-            }}>
-              <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
-              <span style={{ color, fontWeight: 800, flexShrink: 0, fontSize: 11, letterSpacing: '0.05em' }}>
-                IBKR {d.severity}
-              </span>
-              <span style={{ color: '#ddd', flex: 1 }}>{d.message}</span>
-              <button
-                onClick={() => dismissIbkrDiscrepancy(key)}
-                style={{
-                  background: 'none',
-                  border: `1px solid ${color}66`,
-                  color,
-                  borderRadius: 4,
-                  padding: '2px 10px',
-                  fontSize: 11,
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                  fontWeight: 600,
-                }}
-              >
-                DISMISS
-              </button>
-            </div>
-          );
-        })}
+        {/* ── IBKR Discrepancy Banners — interactive fix flow, persistent per session ── */}
+        {visibleDiscrepancies.length > 0 && (
+          <>
+            {/* Header bar when 3+ issues — shows count + dismiss all */}
+            {visibleDiscrepancies.length >= 3 && (
+              <div style={{
+                background: 'rgba(220,53,69,0.08)',
+                borderBottom: '1px solid rgba(220,53,69,0.15)',
+                padding: '6px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                fontSize: 11,
+              }}>
+                <span style={{ color: '#dc3545', fontWeight: 800, letterSpacing: '0.05em' }}>
+                  🔗 IBKR — {visibleDiscrepancies.length} DISCREPANCIES NEED ATTENTION
+                </span>
+                <button
+                  onClick={() => {
+                    const allKeys = visibleDiscrepancies.map(d => `${d.type}:${d.ticker}`);
+                    setDismissedKeys(prev => {
+                      const next = new Set([...prev, ...allKeys]);
+                      try { sessionStorage.setItem('pnthr_ibkr_dismissed', JSON.stringify([...next])); } catch { /* */ }
+                      return next;
+                    });
+                  }}
+                  style={{ marginLeft: 'auto', background: 'none', border: '1px solid #333', color: '#666', borderRadius: 4, padding: '2px 10px', fontSize: 10, cursor: 'pointer' }}
+                >
+                  DISMISS ALL
+                </button>
+              </div>
+            )}
+            {visibleDiscrepancies.map(d => {
+              const key = `${d.type}:${d.ticker}`;
+              return (
+                <IbkrDiscrepancyBanner
+                  key={key}
+                  d={d}
+                  onDismiss={() => dismissIbkrDiscrepancy(key)}
+                  onNavigate={navigate}
+                  onFixed={() => {
+                    // Remove from list + re-poll to confirm
+                    dismissIbkrDiscrepancy(key);
+                    fetchIbkrDiscrepancies()
+                      .then(data => {
+                        if (data.ibkrConnected) setIbkrDiscrepancies(data.discrepancies || []);
+                      })
+                      .catch(() => {});
+                  }}
+                />
+              );
+            })}
+          </>
+        )}
 
         <main className="main">
 

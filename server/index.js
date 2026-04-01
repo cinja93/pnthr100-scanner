@@ -2139,23 +2139,12 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
 
     const discrepancies = [];
 
-    // A. Tickers in IBKR but not in Command
-    for (const ticker of Object.keys(ibkrByTicker)) {
-      if (!pnthrByTicker[ticker]) {
-        discrepancies.push({
-          type: 'TICKER_MISSING',
-          severity: 'CRITICAL',
-          ticker,
-          side: 'IBKR_ONLY',
-          message: `${ticker} is open in IBKR but has no matching active Command position`,
-          ibkrShares: ibkrByTicker[ticker].shares,
-        });
-      }
-    }
-
     // Check all PNTHR active positions vs IBKR
     for (const [ticker, p] of Object.entries(pnthrByTicker)) {
       const ip = ibkrByTicker[ticker];
+      // positionId = PNTHR's string id field (used for surgical PATCH via POST /api/positions)
+      const positionId = p.id || null;
+      const direction  = p.direction || 'LONG';
 
       // A. Ticker in Command but missing from IBKR
       if (!ip) {
@@ -2164,7 +2153,8 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
           severity: 'CRITICAL',
           ticker,
           side: 'COMMAND_ONLY',
-          message: `${ticker} is in Command but not found in IBKR — may have been closed in IBKR`,
+          positionId,
+          direction,
           pnthrShares: pnthrShares(p),
         });
         continue; // no further checks if ticker is missing
@@ -2174,12 +2164,12 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
       const pShares = pnthrShares(p);
       const iShares = Math.abs(+ip.shares || 0); // IBKR uses negative for shorts
       if (pShares > 0 && iShares > 0 && pShares !== iShares) {
-        const diff = Math.abs(pShares - iShares);
         discrepancies.push({
           type: 'SHARES_MISMATCH',
-          severity: diff > 1 ? 'HIGH' : 'MEDIUM',
+          severity: Math.abs(pShares - iShares) > 1 ? 'HIGH' : 'MEDIUM',
           ticker,
-          message: `${ticker}: PNTHR shows ${pShares} shares but IBKR shows ${iShares} shares (diff: ${diff > 0 ? '+' : ''}${pShares - iShares})`,
+          positionId,
+          direction,
           pnthrShares: pShares,
           ibkrShares: iShares,
           diff: pShares - iShares,
@@ -2197,10 +2187,11 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
             type: 'PRICE_MISMATCH',
             severity: diffPct >= 0.02 ? 'HIGH' : 'MEDIUM',
             ticker,
-            message: `${ticker}: PNTHR avg cost $${pAvg.toFixed(2)} vs IBKR $${iAvg.toFixed(2)} (${(diffPct * 100).toFixed(2)}% diff — check fill prices)`,
-            pnthrAvg: pAvg,
-            ibkrAvg: iAvg,
-            diffPct: +(diffPct * 100).toFixed(2),
+            positionId,
+            direction,
+            pnthrAvg: +pAvg.toFixed(2),
+            ibkrAvg:  +iAvg.toFixed(2),
+            diffPct:  +(diffPct * 100).toFixed(2),
           });
         }
       }
@@ -2211,8 +2202,9 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
           type: 'STOP_MISSING',
           severity: 'CRITICAL',
           ticker,
-          message: `${ticker}: No stop price set in Command — position is unprotected!`,
-          ibkrStop: ibkrStopByTicker[ticker]?.stopPrice || null,
+          positionId,
+          direction,
+          ibkrStop: ibkrStopByTicker[ticker]?.stopPrice ? +ibkrStopByTicker[ticker].stopPrice : null,
         });
       } else {
         // E. Stop mismatch — IBKR has a stop order that differs from Command stop
@@ -2220,20 +2212,34 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
         if (ibkrStop?.stopPrice) {
           const pStop = +p.stopPrice;
           const iStop = +ibkrStop.stopPrice;
-          const stopDiff = Math.abs(pStop - iStop);
-          const stopDiffPct = stopDiff / pStop;
+          const stopDiffPct = Math.abs(pStop - iStop) / pStop;
           if (stopDiffPct >= 0.005) {
             discrepancies.push({
               type: 'STOP_MISMATCH',
               severity: 'HIGH',
               ticker,
-              message: `${ticker}: Command stop $${pStop.toFixed(2)} ≠ IBKR stop order $${iStop.toFixed(2)} (${(stopDiffPct * 100).toFixed(1)}% diff)`,
-              pnthrStop: pStop,
-              ibkrStop: iStop,
-              diff: +(pStop - iStop).toFixed(2),
+              positionId,
+              direction,
+              pnthrStop: +pStop.toFixed(2),
+              ibkrStop:  +iStop.toFixed(2),
+              diff:      +(pStop - iStop).toFixed(2),
             });
           }
         }
+      }
+    }
+
+    // A. Tickers in IBKR but not in Command (add positionId: null — untracked)
+    for (const ticker of Object.keys(ibkrByTicker)) {
+      if (!pnthrByTicker[ticker]) {
+        discrepancies.push({
+          type: 'TICKER_MISSING',
+          severity: 'CRITICAL',
+          ticker,
+          side: 'IBKR_ONLY',
+          positionId: null,
+          ibkrShares: Math.abs(+ibkrByTicker[ticker].shares || 0),
+        });
       }
     }
 

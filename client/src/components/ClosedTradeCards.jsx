@@ -559,11 +559,10 @@ function CompleteYourScore({ entry, questions, reviewMode, onSave }) {
 // ── TradeCard ─────────────────────────────────────────────────────────────────
 function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmScore, focusRef, autoExpand }) {
   const [entry, setEntry] = useState(initialEntry);
-  // Collapse by default when entry has already been confirmed by the user.
-  // Open by default when it still needs questions answered.
-  // autoExpand overrides default when navigating here directly from Assistant.
+  // Always start collapsed — user expands the cards they want to review.
+  // autoExpand overrides when navigating here directly from Assistant.
   const isConfirmed = !!initialEntry.userConfirmed?.confirmedAt;
-  const [expanded, setExpanded] = useState(autoExpand || !isConfirmed);
+  const [expanded, setExpanded] = useState(autoExpand || false);
   const [showCompleteScore, setShowCompleteScore] = useState(false);
   const [localNotes, setLocalNotes] = useState({ tradeNotes: entry.tradeNotes || '', macroNotes: entry.macroNotes || '' });
 
@@ -910,12 +909,11 @@ export default function ClosedTradeCards({ onTickerClick, focusPositionId, focus
   if (loading) return <div style={{ padding: 48, textAlign: 'center', color: '#555', fontSize: 13 }}>Loading closed trades…</div>;
   if (!entries.length) return <div style={{ padding: 48, textAlign: 'center', color: '#555', fontSize: 13 }}>No closed trades yet.</div>;
 
-  // Sort: unconfirmed (needs attention) first, newest-first within each group
+  // Sort by trade close date, newest first — use last exit date, fall back to createdAt
   const sortedEntries = [...entries].sort((a, b) => {
-    const aConfirmed = !!a.userConfirmed?.confirmedAt;
-    const bConfirmed = !!b.userConfirmed?.confirmedAt;
-    if (aConfirmed !== bConfirmed) return aConfirmed ? 1 : -1; // incomplete floats to top
-    return new Date(b.createdAt) - new Date(a.createdAt); // newest first within group
+    const aDate = a.exits?.[a.exits.length - 1]?.date || a.createdAt;
+    const bDate = b.exits?.[b.exits.length - 1]?.date || b.createdAt;
+    return new Date(bDate) - new Date(aDate);
   });
 
   // Determine if any entry matches by positionId exactly.

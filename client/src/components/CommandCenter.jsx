@@ -121,6 +121,8 @@ function runRiskAdvisor(positions, nav) {
         priority: 'CRITICAL', type: 'SECTOR_NET_EXPOSURE',
         sector, netExposure, netDirection,
         longCount: longs.length, shortCount: shorts.length,
+        longTickers:  longs.map(p => ({ ticker: p.ticker, price: p.currentPrice })),
+        shortTickers: shorts.map(p => ({ ticker: p.ticker, price: p.currentPrice })),
         message: `${sector}: net ${netExposure} ${netDirection} (${longs.length}L / ${shorts.length}S). Close ${excess} or add ${excess} ${netDirection === 'LONG' ? 'short' : 'long'}${excess > 1 ? 's' : ''}.`,
         actions: weakest.map(p => ({ ticker: p.ticker, action: 'CLOSE', shares: filledSharesOf(p), reason: `Weakest in ${sector} at ${pnlPctOf(p).toFixed(1)}%` })),
       });
@@ -129,6 +131,8 @@ function runRiskAdvisor(positions, nav) {
         priority: 'HIGH', type: 'SECTOR_NET_EXPOSURE',
         sector, netExposure, netDirection,
         longCount: longs.length, shortCount: shorts.length,
+        longTickers:  longs.map(p => ({ ticker: p.ticker, price: p.currentPrice })),
+        shortTickers: shorts.map(p => ({ ticker: p.ticker, price: p.currentPrice })),
         message: `${sector}: at net exposure limit (${longs.length}L / ${shorts.length}S = net 3 ${netDirection}). No new ${netDirection.toLowerCase()}s without a balancing ${netDirection === 'LONG' ? 'short' : 'long'}.`,
         actions: [],
       });
@@ -319,9 +323,29 @@ function RiskAdvisor({ recommendations, sectorRecs = [], onOpenChart, positions 
                       {isCrit ? 'CRITICAL' : 'AT LIMIT'}
                     </span>
                   </div>
-                  {/* Breakdown */}
-                  <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
-                    Positions: {rec.longCount} long / {rec.shortCount} short = net {rec.netExposure}
+                  {/* Breakdown — ticker chips */}
+                  <div style={{ fontSize: 11, color: '#888', marginBottom: 8, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                    <span>Positions:</span>
+                    {(rec.longTickers || []).map((t, idx) => (
+                      <button key={t.ticker} onClick={() => onOpenChart?.(rec.longTickers, idx)}
+                        style={{ background: 'rgba(40,167,69,0.15)', border: '1px solid rgba(40,167,69,0.4)',
+                          color: '#4ade80', padding: '1px 7px', borderRadius: 3, fontSize: 10,
+                          fontWeight: 700, cursor: 'pointer', fontFamily: 'monospace' }}>
+                        {t.ticker}
+                      </button>
+                    ))}
+                    {rec.longCount > 0 && rec.shortCount > 0 && (
+                      <span style={{ color: '#555' }}>vs</span>
+                    )}
+                    {(rec.shortTickers || []).map((t, idx) => (
+                      <button key={t.ticker} onClick={() => onOpenChart?.(rec.shortTickers, idx)}
+                        style={{ background: 'rgba(220,53,69,0.15)', border: '1px solid rgba(220,53,69,0.4)',
+                          color: '#ff6b6b', padding: '1px 7px', borderRadius: 3, fontSize: 10,
+                          fontWeight: 700, cursor: 'pointer', fontFamily: 'monospace' }}>
+                        {t.ticker}
+                      </button>
+                    ))}
+                    <span style={{ color: '#555' }}>= net {rec.netExposure} {rec.netDirection}</span>
                   </div>
                   {/* Option A */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 8 }}>
@@ -374,7 +398,10 @@ function RiskAdvisor({ recommendations, sectorRecs = [], onOpenChart, positions 
                             padding: '4px 0 4px 12px', borderLeft: '2px solid #28a745', marginBottom: 3 }}>
                             <span style={{ color: '#888', fontSize: 11, width: 16 }}>{j + 1}.</span>
                             <span style={{ color: '#FFD700', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
-                              onClick={() => onOpenChart?.(c.ticker)}>
+                              onClick={() => onOpenChart?.(
+                                candidates.map(x => ({ ticker: x.ticker, signal: x.signal, price: x.currentPrice })),
+                                j
+                              )}>
                               {c.ticker}
                             </span>
                             {c.rank != null && <span style={{ color: '#888', fontSize: 11 }}>Kill #{c.rank}</span>}
@@ -2563,7 +2590,12 @@ export default function CommandCenter({ onNavigate }) {
                 recommendations={advisorRecs}
                 sectorRecs={sectorRecs}
                 positions={positions}
-                onOpenChart={ticker => setChartModal({ stocks: [{ ticker, symbol: ticker, currentPrice: null }], index: 0 })}
+                onOpenChart={(tickerOrStocks, index = 0) => {
+                  const arr = Array.isArray(tickerOrStocks)
+                    ? tickerOrStocks.map(s => ({ ticker: s.ticker, symbol: s.ticker, signal: s.signal || null, currentPrice: s.price || null }))
+                    : [{ ticker: tickerOrStocks, symbol: tickerOrStocks, currentPrice: null }];
+                  setChartModal({ stocks: arr, index });
+                }}
                 onRiskAdvisorClose={(pos, sector, netExposure) => {
                   const totalShares = Object.values(pos.fills || {}).filter(f => f?.filled).reduce((s, f) => s + (+(f.shares ?? 0)), 0);
                   setRiskAdvisorExitModal({

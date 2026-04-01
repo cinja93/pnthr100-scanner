@@ -2551,9 +2551,98 @@ app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
       return acc;
     }, {});
 
+    // ── Auto-save DAY_TRADE rows → pnthr_day_trades ──────────────────────────
+    // Group DAY_TRADE executions by ticker+date, compute avg prices and P&L,
+    // then upsert. This runs on every trades-today poll so the journal tab
+    // always reflects the latest intraday data.
+    const dayTradeExecs = trades.filter(t => t.category === 'DAY_TRADE');
+    if (dayTradeExecs.length) {
+      const byTickerDate = {};
+      for (const t of dayTradeExecs) {
+        const rawDate = (t.time || '').trim().split(/\s+/)[0]; // "20260401"
+        const dateStr = rawDate && rawDate.length === 8
+          ? `${rawDate.slice(0,4)}-${rawDate.slice(4,6)}-${rawDate.slice(6,8)}`
+          : 'unknown';
+        const key = `${t.ticker}_${dateStr}`;
+        if (!byTickerDate[key]) byTickerDate[key] = { ticker: t.ticker, date: dateStr, execs: [] };
+        byTickerDate[key].execs.push(t);
+      }
+
+      for (const [tradeKey, data] of Object.entries(byTickerDate)) {
+        const botExecs = data.execs.filter(e => e.side === 'BOT');
+        const sldExecs = data.execs.filter(e => e.side === 'SLD');
+
+        const totalBought = botExecs.reduce((s, e) => s + (+e.shares || 0), 0);
+        const totalSold   = sldExecs.reduce((s, e) => s + (+e.shares || 0), 0);
+        const avgBuyPrice  = totalBought > 0
+          ? botExecs.reduce((s, e) => s + (+e.price || 0) * (+e.shares || 0), 0) / totalBought : 0;
+        const avgSellPrice = totalSold > 0
+          ? sldExecs.reduce((s, e) => s + (+e.price || 0) * (+e.shares || 0), 0) / totalSold : 0;
+        const netShares = Math.min(totalBought, totalSold);
+        const grossPnl  = +((avgSellPrice - avgBuyPrice) * netShares).toFixed(2);
+
+        // Direction = side of the first chronological execution
+        const sortedByTime = [...data.execs].sort((a, b) => (a.time||'').localeCompare(b.time||''));
+        const direction = sortedByTime[0]?.side === 'BOT' ? 'LONG' : 'SHORT';
+
+        const legs = data.execs.map(e => ({
+          execId: e.execId, side: e.side, shares: +e.shares, price: +e.price, time: e.time,
+        }));
+
+        await db.collection('pnthr_day_trades').updateOne(
+          { ownerId: userId, tradeKey },
+          {
+            $set: {
+              ownerId: userId, tradeKey, ticker: data.ticker, date: data.date,
+              legs, direction, totalBought, totalSold,
+              avgBuyPrice:  +avgBuyPrice.toFixed(4),
+              avgSellPrice: +avgSellPrice.toFixed(4),
+              netShares, grossPnl, updatedAt: new Date(),
+            },
+            $setOnInsert: { createdAt: new Date(), notes: '' },
+          },
+          { upsert: true }
+        );
+      }
+    }
+
     res.json({ trades, counts, ibkrConnected: true, syncedAt: ibkrDoc.syncedAt });
   } catch (err) {
     console.error('[IBKR trades-today]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Day Trades Journal ───────────────────────────────────────────────────────
+// GET /api/journal/day-trades — all day trades for user, newest first
+app.get('/api/journal/day-trades', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const trades = await db.collection('pnthr_day_trades')
+      .find({ ownerId: req.user.userId })
+      .sort({ date: -1, updatedAt: -1 })
+      .toArray();
+    res.json(trades);
+  } catch (err) {
+    console.error('[day-trades GET]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/journal/day-trades/:tradeKey/notes — save notes on a day trade
+app.patch('/api/journal/day-trades/:tradeKey/notes', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const { notes } = req.body;
+    await db.collection('pnthr_day_trades').updateOne(
+      { ownerId: req.user.userId, tradeKey: req.params.tradeKey },
+      { $set: { notes: notes || '', updatedAt: new Date() } }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[day-trades PATCH notes]', err);
     res.status(500).json({ error: err.message });
   }
 });

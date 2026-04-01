@@ -441,6 +441,8 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [ibkrRepairResult, setIbkrRepairResult] = useState(null);
   const [washRules, setWashRules] = useState([]);
   const [ratios, setRatios] = useState(null);
+  const [dayTrades, setDayTrades] = useState([]);
+  const [dayTradesLoading, setDayTradesLoading] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -467,6 +469,16 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
     if (tab !== 'analytics') return;
     fetch(`${API_BASE}/api/wash-rules`, { headers: authHeaders() })
       .then(r => r.ok ? r.json() : []).then(setWashRules).catch(() => {});
+  }, [tab]);
+
+  // Fetch day trades when day-trades tab is loaded
+  useEffect(() => {
+    if (tab !== 'dayTrades') return;
+    setDayTradesLoading(true);
+    fetch(`${API_BASE}/api/journal/day-trades`, { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { setDayTrades(d); setDayTradesLoading(false); })
+      .catch(() => setDayTradesLoading(false));
   }, [tab]);
 
   const filtered = entries.filter(e => {
@@ -841,6 +853,186 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
     );
   };
 
+  // ── DayTradesTab ──────────────────────────────────────────────────────────
+  const DayTradesTab = () => {
+    const [expandedKey, setExpandedKey] = useState(null);
+    const [noteEdit, setNoteEdit] = useState({}); // tradeKey → current text
+    const [savingNote, setSavingNote] = useState(null);
+
+    const totalPnl  = dayTrades.reduce((s, t) => s + (t.grossPnl || 0), 0);
+    const winCount  = dayTrades.filter(t => (t.grossPnl || 0) > 0).length;
+    const winRate   = dayTrades.length ? Math.round((winCount / dayTrades.length) * 100) : 0;
+    const pnlColor  = totalPnl >= 0 ? '#6bcb77' : '#ff6b6b';
+
+    function fmtTime(t) {
+      if (!t) return '';
+      const parts = t.trim().split(/\s+/);
+      return parts[parts.length - 1] || t;
+    }
+
+    async function saveNote(tradeKey) {
+      setSavingNote(tradeKey);
+      try {
+        await fetch(`${API_BASE}/api/journal/day-trades/${encodeURIComponent(tradeKey)}/notes`, {
+          method: 'PATCH',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notes: noteEdit[tradeKey] ?? '' }),
+        });
+        setDayTrades(prev => prev.map(t => t.tradeKey === tradeKey
+          ? { ...t, notes: noteEdit[tradeKey] ?? '' } : t));
+      } catch {}
+      setSavingNote(null);
+    }
+
+    if (dayTradesLoading) return (
+      <div style={{ color: '#555', textAlign: 'center', padding: 40 }}>Loading day trades...</div>
+    );
+
+    return (
+      <div>
+        {/* ── Summary strip ── */}
+        <div style={{ display: 'flex', gap: 24, marginBottom: 18, padding: '10px 0', borderBottom: '1px solid #1e1e1e', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 2 }}>TOTAL TRADES</div>
+            <div style={{ color: '#ccc', fontSize: 18, fontWeight: 700 }}>{dayTrades.length}</div>
+          </div>
+          <div>
+            <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 2 }}>WIN RATE</div>
+            <div style={{ color: winRate >= 50 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 700 }}>{winRate}%</div>
+          </div>
+          <div>
+            <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 2 }}>GROSS P&L</div>
+            <div style={{ color: pnlColor, fontSize: 18, fontWeight: 700 }}>
+              {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 2 }}>WINNERS</div>
+            <div style={{ color: '#6bcb77', fontSize: 18, fontWeight: 700 }}>{winCount}</div>
+          </div>
+          <div>
+            <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 2 }}>LOSERS</div>
+            <div style={{ color: '#ff6b6b', fontSize: 18, fontWeight: 700 }}>{dayTrades.length - winCount}</div>
+          </div>
+        </div>
+
+        {dayTrades.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 48 }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+            <div style={{ color: '#555', fontSize: 14, marginBottom: 6 }}>No day trades recorded yet.</div>
+            <div style={{ color: '#444', fontSize: 12 }}>Day trades are auto-recorded from IBKR when you open and close a position on the same day without tracking it in Command.</div>
+          </div>
+        ) : (
+          <>
+            {/* ── Header row ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: '90px 64px 54px 52px 80px 80px 80px 1fr', gap: 0, padding: '4px 8px', borderBottom: '1px solid #222', marginBottom: 2 }}>
+              {['DATE','TICKER','DIR','SHARES','AVG BUY','AVG SELL','GROSS P&L','NOTES'].map(h => (
+                <span key={h} style={{ color: '#444', fontSize: 9, fontWeight: 700, letterSpacing: 1 }}>{h}</span>
+              ))}
+            </div>
+
+            {dayTrades.map(trade => {
+              const isExpanded = expandedKey === trade.tradeKey;
+              const pnl = trade.grossPnl || 0;
+              const pnlColor = pnl > 0 ? '#6bcb77' : pnl < 0 ? '#ff6b6b' : '#888';
+              const dirColor = trade.direction === 'LONG' ? '#4fc3f7' : '#ff8c00';
+
+              return (
+                <div key={trade.tradeKey} style={{ borderBottom: '1px solid #141414' }}>
+                  {/* ── Main row ── */}
+                  <div
+                    onClick={() => setExpandedKey(isExpanded ? null : trade.tradeKey)}
+                    style={{ display: 'grid', gridTemplateColumns: '90px 64px 54px 52px 80px 80px 80px 1fr', gap: 0, padding: '7px 8px', cursor: 'pointer', background: isExpanded ? 'rgba(255,255,255,0.03)' : 'transparent', alignItems: 'center' }}
+                  >
+                    <span style={{ color: '#666', fontSize: 11, fontFamily: 'monospace' }}>{trade.date}</span>
+                    <span style={{ color: '#e0e0e0', fontSize: 12, fontWeight: 700 }}>{trade.ticker}</span>
+                    <span style={{ color: dirColor, fontSize: 10, fontWeight: 700 }}>{trade.direction}</span>
+                    <span style={{ color: '#ccc', fontSize: 11, textAlign: 'right', paddingRight: 12 }}>{trade.netShares}</span>
+                    <span style={{ color: '#ccc', fontSize: 11, fontFamily: 'monospace', textAlign: 'right', paddingRight: 12 }}>
+                      ${(trade.avgBuyPrice || 0).toFixed(2)}
+                    </span>
+                    <span style={{ color: '#ccc', fontSize: 11, fontFamily: 'monospace', textAlign: 'right', paddingRight: 12 }}>
+                      ${(trade.avgSellPrice || 0).toFixed(2)}
+                    </span>
+                    <span style={{ color: pnlColor, fontSize: 12, fontWeight: 700, fontFamily: 'monospace', textAlign: 'right', paddingRight: 12 }}>
+                      {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+                    </span>
+                    <span style={{ color: '#444', fontSize: 10, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      {trade.notes || <span style={{ color: '#2a2a2a', fontStyle: 'italic' }}>add notes…</span>}
+                    </span>
+                  </div>
+
+                  {/* ── Expanded detail ── */}
+                  {isExpanded && (
+                    <div style={{ padding: '0 8px 12px 16px', background: 'rgba(255,255,255,0.02)' }}>
+                      {/* Legs table */}
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ color: '#444', fontSize: 9, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>EXECUTIONS</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '70px 40px 52px 90px', gap: '2px 16px' }}>
+                          <span style={{ color: '#333', fontSize: 9, fontWeight: 700 }}>TIME</span>
+                          <span style={{ color: '#333', fontSize: 9, fontWeight: 700 }}>SIDE</span>
+                          <span style={{ color: '#333', fontSize: 9, fontWeight: 700 }}>SHARES</span>
+                          <span style={{ color: '#333', fontSize: 9, fontWeight: 700 }}>PRICE</span>
+                          {[...(trade.legs || [])].sort((a, b) => (a.time||'').localeCompare(b.time||'')).map((leg, i) => {
+                            const legColor = leg.side === 'BOT' ? '#4fc3f7' : '#ff8c00';
+                            return (
+                              <React.Fragment key={leg.execId || i}>
+                                <span style={{ color: '#666', fontSize: 11, fontFamily: 'monospace' }}>{fmtTime(leg.time)}</span>
+                                <span style={{ color: legColor, fontSize: 10, fontWeight: 700 }}>{leg.side}</span>
+                                <span style={{ color: '#ccc', fontSize: 11 }}>{leg.shares}</span>
+                                <span style={{ color: '#ccc', fontSize: 11, fontFamily: 'monospace' }}>${(+leg.price).toFixed(2)}</span>
+                              </React.Fragment>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* P&L breakdown */}
+                      <div style={{ display: 'flex', gap: 20, marginBottom: 10, padding: '6px 10px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, fontSize: 11 }}>
+                        <span style={{ color: '#555' }}>Bought: <span style={{ color: '#ccc' }}>{trade.totalBought} @ ${(trade.avgBuyPrice||0).toFixed(2)}</span></span>
+                        <span style={{ color: '#555' }}>Sold: <span style={{ color: '#ccc' }}>{trade.totalSold} @ ${(trade.avgSellPrice||0).toFixed(2)}</span></span>
+                        <span style={{ color: '#555' }}>Net shares: <span style={{ color: '#ccc' }}>{trade.netShares}</span></span>
+                        <span style={{ color: '#555' }}>Gross P&L: <span style={{ color: pnlColor, fontWeight: 700 }}>{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</span></span>
+                      </div>
+
+                      {/* Notes */}
+                      <div>
+                        <div style={{ color: '#444', fontSize: 9, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>NOTES</div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                          <textarea
+                            value={noteEdit[trade.tradeKey] ?? trade.notes ?? ''}
+                            onChange={e => setNoteEdit(prev => ({ ...prev, [trade.tradeKey]: e.target.value }))}
+                            placeholder="Add notes about this trade…"
+                            style={{
+                              flex: 1, background: '#111', border: '1px solid #2a2a2a', borderRadius: 4,
+                              color: '#ccc', fontSize: 11, padding: '6px 8px', resize: 'vertical', minHeight: 52,
+                              fontFamily: 'inherit',
+                            }}
+                          />
+                          <button
+                            onClick={() => saveNote(trade.tradeKey)}
+                            disabled={savingNote === trade.tradeKey}
+                            style={{
+                              background: 'transparent', border: '1px solid #444', color: '#888',
+                              borderRadius: 4, padding: '5px 10px', fontSize: 10, cursor: 'pointer', fontWeight: 700,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {savingNote === trade.tradeKey ? '...' : 'SAVE'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
+    );
+  };
+
   const tabBtn = (id, label) => (
     <button onClick={() => setTab(id)}
       style={{ background: tab === id ? '#FFD700' : 'transparent', color: tab === id ? '#000' : '#666', border: `1px solid ${tab === id ? '#FFD700' : '#333'}`, borderRadius: 6, padding: '5px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 1 }}>
@@ -911,6 +1103,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           {tabBtn('trades', 'TRADES')}
           {tabBtn('analytics', 'ANALYTICS')}
           {tabBtn('weekly', 'WEEKLY REVIEW')}
+          {tabBtn('dayTrades', 'DAY TRADES')}
         </div>
       </div>
 
@@ -1094,6 +1287,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
 
           {tab === 'analytics' && <AnalyticsTab />}
           {tab === 'weekly' && <WeeklyReviewTab />}
+          {tab === 'dayTrades' && <DayTradesTab />}
         </>
       )}
       </div>

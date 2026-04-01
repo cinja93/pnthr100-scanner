@@ -211,7 +211,9 @@ export async function ibkrSync(req, res) {
       });
     }
 
-    // 2. Upsert full IBKR positions + stop orders snapshot (one doc per user)
+    // 2. Upsert full IBKR positions + stop orders + today's executions snapshot
+    // latestExecutions stores every fill the bridge sends today — used by the
+    // trades-today reconciliation endpoint and the discrepancy IBKR_ONLY suppression.
     await db.collection('pnthr_ibkr_positions').updateOne(
       { ownerId: userId },
       {
@@ -220,6 +222,8 @@ export async function ibkrSync(req, res) {
           positions,
           stopOrders:         Array.isArray(stopOrders) ? stopOrders : [],
           stopOrdersSyncedAt: syncedAt,
+          latestExecutions:   Array.isArray(executions) ? executions : [],
+          latestExecSyncedAt: syncedAt,
           syncedAt,
           accountId:          accountId || null,
         },

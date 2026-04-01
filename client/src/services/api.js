@@ -667,6 +667,12 @@ export async function addJournalTag(journalId, tag) {
   return res.json();
 }
 
+export async function fetchIbkrTradesToday() {
+  const res = await fetch(`${API_BASE}/api/ibkr/trades-today`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function fetchIbkrDiscrepancies() {
   const res = await fetch(`${API_BASE}/api/ibkr/discrepancies`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

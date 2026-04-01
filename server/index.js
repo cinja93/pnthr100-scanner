@@ -2151,6 +2151,23 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
       return p.remainingShares ?? Object.values(p.fills || {}).filter(f => f?.filled).reduce((s, f) => s + (+f.shares || 0), 0);
     }
 
+    // Helper: compute total filled shares from PNTHR fills (ignores remainingShares)
+    function pnthrFilledShares(p) {
+      return Object.values(p.fills || {}).filter(f => f?.filled).reduce((s, f) => s + (+f.shares || 0), 0);
+    }
+
+    // Build today's sold/bought shares per ticker from stored executions.
+    // Used to suppress IBKR_ONLY alerts for positions that were closed today
+    // (e.g., COIN sold 24 shr today → not a genuine "untracked open position").
+    const todaySoldShares = {};    // ticker → total SLD shares today
+    const todayBoughtShares = {};  // ticker → total BOT shares today
+    for (const exec of (ibkrDoc.latestExecutions || [])) {
+      const sym = exec.symbol?.toUpperCase();
+      if (!sym) continue;
+      if (exec.side === 'SLD') todaySoldShares[sym]   = (todaySoldShares[sym]   || 0) + (exec.shares || 0);
+      if (exec.side === 'BOT') todayBoughtShares[sym] = (todayBoughtShares[sym] || 0) + (exec.shares || 0);
+    }
+
     const discrepancies = [];
 
     // Check all PNTHR active positions vs IBKR
@@ -2248,19 +2265,27 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
       }
     }
 
-    // A. Tickers in IBKR (with actual shares) but not in Command — untracked open position
-    // ── Fix 3: Attach isStale flag so client can note "data may be outdated"
-    const syncIsStale = staleMins != null && staleMins > 5; // 5-min freshness threshold
+    // A. Tickers in IBKR (with actual shares) but not in Command
+    const syncIsStale = staleMins != null && staleMins > 5;
     for (const ticker of Object.keys(ibkrByTicker)) {
       if (!pnthrByTicker[ticker]) {
+        const ibkrShares = Math.abs(+ibkrByTicker[ticker].shares || 0);
+        const soldToday  = todaySoldShares[ticker] || 0;
+
+        // Suppress: if total shares sold today ≈ current IBKR shares, the
+        // position is actively being/was closed — not a genuine untracked open.
+        // E.g. COIN sold 24 shr → bridge still shows 24 shr before dict fix
+        // takes effect → soldToday (24) ≥ ibkrShares (24) × 0.9 → skip alert.
+        if (soldToday >= ibkrShares * 0.9) continue;
+
         discrepancies.push({
           type: 'TICKER_MISSING',
           severity: 'CRITICAL',
           ticker,
           side: 'IBKR_ONLY',
           positionId: null,
-          ibkrShares: Math.abs(+ibkrByTicker[ticker].shares || 0),
-          syncIsStale, // if true, banner shows "⏱ data may be outdated" note
+          ibkrShares,
+          syncIsStale,
           staleMins,
         });
       }
@@ -2273,6 +2298,131 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
     res.json({ discrepancies, ibkrConnected: true, syncedAt, isStale: syncIsStale, staleMins });
   } catch (err) {
     console.error('[IBKR discrepancies]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── IBKR Trades Today Reconciliation ──────────────────────────────────────────
+// Returns today's IBKR executions categorized against Command positions:
+//   AUTO_CLOSED  — Phase 2 matched it and auto-closed the Command position ✓
+//   LOT_FILL     — BOT on an existing LONG position → adding shares (pyramiding)
+//   PARTIAL      — SLD/BOT covers < 90% of PNTHR shares → partial exit
+//   NEEDS_CLOSE  — Execution covers ≥ 90% of PNTHR shares but position still ACTIVE
+//   UNTRACKED    — No Command position for this ticker at all
+app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+
+    const ibkrDoc = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
+    if (!ibkrDoc) return res.json({ trades: [], ibkrConnected: false });
+
+    const executions = ibkrDoc.latestExecutions || [];
+    if (!executions.length) return res.json({ trades: [], ibkrConnected: true, syncedAt: ibkrDoc.syncedAt });
+
+    // Load all Command positions (active + recently closed) keyed by ticker+direction
+    const pnthrPositions = await db.collection('pnthr_portfolio')
+      .find({ ownerId: userId })
+      .toArray();
+
+    const pnthrByTickerDir = {}; // ticker_DIRECTION → position
+    const pnthrByTicker    = {}; // ticker → most recent position (for UNTRACKED check)
+    for (const p of pnthrPositions) {
+      const key = `${p.ticker?.toUpperCase()}_${p.direction?.toUpperCase()}`;
+      // Keep the most recently updated position if duplicates exist
+      if (!pnthrByTickerDir[key] || new Date(p.updatedAt) > new Date(pnthrByTickerDir[key].updatedAt)) {
+        pnthrByTickerDir[key] = p;
+      }
+      if (!pnthrByTicker[p.ticker?.toUpperCase()]) pnthrByTicker[p.ticker?.toUpperCase()] = p;
+    }
+
+    // Load already-processed execIds (auto-closed by Phase 2)
+    const processedDocs = await db.collection('pnthr_ibkr_executions')
+      .find({ ownerId: userId, execId: { $in: executions.map(e => e.execId) } })
+      .project({ execId: 1 })
+      .toArray();
+    const processedIds = new Set(processedDocs.map(d => d.execId));
+
+    // Helper: total filled shares from PNTHR fills
+    function filledShares(p) {
+      return Object.values(p.fills || {})
+        .filter(f => f?.filled)
+        .reduce((s, f) => s + (+f.shares || 0), 0);
+    }
+
+    const trades = executions.map(exec => {
+      const ticker     = exec.symbol?.toUpperCase();
+      const isSell     = exec.side === 'SLD'; // SLD = selling → closing LONG
+      const closingDir = isSell ? 'LONG' : 'SHORT'; // BOT = buying → closing SHORT
+      const openingDir = isSell ? 'SHORT' : 'LONG'; // or adding to LONG
+
+      // Determine category
+      let category, pnthrStatus = null, pnthrFilledShr = null, pnthrDir = null;
+
+      if (processedIds.has(exec.execId)) {
+        category = 'AUTO_CLOSED';
+        const p = pnthrByTickerDir[`${ticker}_${closingDir}`] || pnthrByTicker[ticker];
+        if (p) { pnthrStatus = p.status; pnthrDir = p.direction; pnthrFilledShr = filledShares(p); }
+      } else {
+        const closingPos = pnthrByTickerDir[`${ticker}_${closingDir}`]; // e.g. SLD → find LONG
+        const openingPos = pnthrByTickerDir[`${ticker}_${openingDir}`]; // e.g. BOT → find LONG (lot fill)
+
+        if (closingPos) {
+          pnthrStatus   = closingPos.status;
+          pnthrDir      = closingPos.direction;
+          pnthrFilledShr = filledShares(closingPos);
+
+          if (closingPos.status === 'CLOSED') {
+            category = 'AUTO_CLOSED'; // closed by other means (manual, prior Phase 2)
+          } else if (exec.shares >= pnthrFilledShr * 0.90) {
+            category = 'NEEDS_CLOSE'; // full exit not caught by Phase 2
+          } else {
+            category = 'PARTIAL'; // partial exit
+          }
+        } else if (!isSell && openingPos && openingPos.status === 'ACTIVE') {
+          // BOT on an active LONG position → adding lots (pyramiding)
+          category      = 'LOT_FILL';
+          pnthrStatus   = openingPos.status;
+          pnthrDir      = openingPos.direction;
+          pnthrFilledShr = filledShares(openingPos);
+        } else if (!pnthrByTicker[ticker]) {
+          category = 'UNTRACKED'; // no Command position at all
+        } else {
+          // There's a Command position but direction/status doesn't match cleanly
+          const any = pnthrByTicker[ticker];
+          pnthrStatus = any.status;
+          pnthrDir    = any.direction;
+          category    = any.status === 'CLOSED' ? 'AUTO_CLOSED' : 'UNTRACKED';
+        }
+      }
+
+      return {
+        execId:        exec.execId,
+        ticker,
+        side:          exec.side,   // 'SLD' or 'BOT'
+        shares:        exec.shares,
+        price:         exec.price,
+        time:          exec.time,   // "YYYYMMDD  HH:MM:SS"
+        category,
+        pnthrStatus,
+        pnthrDir,
+        pnthrFilledShares: pnthrFilledShr,
+      };
+    });
+
+    // Sort by time descending (most recent first)
+    trades.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
+
+    // Summary counts
+    const counts = trades.reduce((acc, t) => {
+      acc[t.category] = (acc[t.category] || 0) + 1;
+      return acc;
+    }, {});
+
+    res.json({ trades, counts, ibkrConnected: true, syncedAt: ibkrDoc.syncedAt });
+  } catch (err) {
+    console.error('[IBKR trades-today]', err);
     res.status(500).json({ error: err.message });
   }
 });

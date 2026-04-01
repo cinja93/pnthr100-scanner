@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { API_BASE, authHeaders, fetchIbkrDiscrepancies } from '../services/api';
+import { API_BASE, authHeaders, fetchIbkrDiscrepancies, fetchIbkrTradesToday } from '../services/api';
 import ChartModal from './ChartModal';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
@@ -826,6 +826,179 @@ function StopSyncRow({ row, isDone, onToggle }) {
   );
 }
 
+// ── Today's IBKR Trades Section ───────────────────────────────────────────────
+// Shows every execution today categorized against Command positions so you can
+// instantly see what auto-closed, what needs manual action, and what was traded
+// outside of PNTHR tracking.
+
+const TRADE_CAT = {
+  AUTO_CLOSED:  { label: 'Auto-closed',     color: '#28a745', bg: 'rgba(40,167,69,0.08)'  },
+  LOT_FILL:     { label: 'Lot fill',         color: '#4fc3f7', bg: 'rgba(79,195,247,0.08)' },
+  PARTIAL:      { label: 'Partial exit',     color: '#4fc3f7', bg: 'rgba(79,195,247,0.06)' },
+  NEEDS_CLOSE:  { label: 'Still ACTIVE ⚠',  color: '#ff8c00', bg: 'rgba(255,140,0,0.10)'  },
+  UNTRACKED:    { label: 'Untracked',        color: '#666',    bg: 'rgba(255,255,255,0.02)'},
+};
+
+function formatExecTime(t) {
+  // IBKR time format: "20250401  11:17:02"
+  if (!t) return '';
+  const parts = t.trim().split(/\s+/);
+  return parts[parts.length - 1] || t; // just the HH:MM:SS part
+}
+
+function TradesTodaySection({ trades, loading, ibkrConnected, onNavigate }) {
+  const [expanded, setExpanded] = useState(true);
+
+  if (!ibkrConnected) return null;
+
+  const needsClose  = trades.filter(t => t.category === 'NEEDS_CLOSE');
+  const total       = trades.length;
+  const headerColor = needsClose.length > 0 ? '#ff8c00' : total > 0 ? '#28a745' : '#444';
+
+  return (
+    <div style={{
+      margin: '10px 10px 5px',
+      borderRadius: 6,
+      border: `1px solid ${needsClose.length > 0 ? '#ff8c0044' : '#1e1e1e'}`,
+      background: '#0c0c0c',
+      overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', cursor: 'pointer', background: '#101010' }}
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span style={{ fontSize: 11, color: '#444' }}>{expanded ? '▼' : '▶'}</span>
+        <span style={{ fontWeight: 700, fontSize: 12, color: headerColor, letterSpacing: '0.04em' }}>
+          📋 TODAY'S IBKR TRADES
+        </span>
+        <span style={{ fontSize: 11, color: '#555', marginLeft: 4 }}>
+          {loading ? '(loading…)' : total === 0 ? '— no fills today' : `— ${total} fill${total !== 1 ? 's' : ''}`}
+        </span>
+        {/* Count pills */}
+        {!loading && needsClose.length > 0 && (
+          <span style={{ marginLeft: 'auto', background: '#ff8c00', color: '#000', borderRadius: 3, padding: '1px 7px', fontSize: 10, fontWeight: 700 }}>
+            {needsClose.length} NEED{needsClose.length > 1 ? 'S' : ''} ACTION
+          </span>
+        )}
+        {!loading && needsClose.length === 0 && total > 0 && (
+          <span style={{ marginLeft: 'auto', color: '#28a745', fontSize: 11, fontWeight: 700 }}>✓ all reconciled</span>
+        )}
+      </div>
+
+      {expanded && (
+        loading ? (
+          <div style={{ padding: '10px 14px', fontSize: 12, color: '#555' }}>Loading today's fills…</div>
+        ) : total === 0 ? (
+          <div style={{ padding: '10px 14px', fontSize: 12, color: '#444' }}>No IBKR fills recorded today</div>
+        ) : (
+          <div>
+            {/* Column headers */}
+            <div style={{ display: 'flex', gap: 8, padding: '5px 14px 4px', borderBottom: '1px solid #1a1a1a', fontSize: 10, color: '#444', letterSpacing: '0.05em' }}>
+              <span style={{ width: 52, flexShrink: 0 }}>TIME</span>
+              <span style={{ width: 52, flexShrink: 0 }}>TICKER</span>
+              <span style={{ width: 36, flexShrink: 0 }}>SIDE</span>
+              <span style={{ width: 44, flexShrink: 0, textAlign: 'right' }}>SHARES</span>
+              <span style={{ width: 64, flexShrink: 0, textAlign: 'right' }}>PRICE</span>
+              <span style={{ flex: 1 }}>STATUS</span>
+            </div>
+
+            {trades.map((t, i) => {
+              const cat      = TRADE_CAT[t.category] || TRADE_CAT.UNTRACKED;
+              const isSell   = t.side === 'SLD';
+              const sideColor = isSell ? '#ef5350' : '#28a745';
+              const sideLabel = isSell ? 'SELL' : 'BUY';
+
+              return (
+                <div key={t.execId || i} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 14px',
+                  borderTop: i > 0 ? '1px solid #141414' : undefined,
+                  background: cat.bg,
+                }}>
+                  {/* Time */}
+                  <span style={{ width: 52, flexShrink: 0, fontSize: 11, color: '#555', fontFamily: 'monospace' }}>
+                    {formatExecTime(t.time)}
+                  </span>
+
+                  {/* Ticker */}
+                  <span style={{ width: 52, flexShrink: 0, fontWeight: 700, fontSize: 12, color: '#e0e0e0' }}>
+                    {t.ticker}
+                  </span>
+
+                  {/* Side badge */}
+                  <span style={{
+                    width: 36, flexShrink: 0,
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+                    color: sideColor,
+                  }}>
+                    {sideLabel}
+                  </span>
+
+                  {/* Shares */}
+                  <span style={{ width: 44, flexShrink: 0, textAlign: 'right', fontSize: 12, color: '#ccc' }}>
+                    {t.shares}
+                  </span>
+
+                  {/* Price */}
+                  <span style={{ width: 64, flexShrink: 0, textAlign: 'right', fontSize: 12, color: '#bbb', fontFamily: 'monospace' }}>
+                    ${(+t.price).toFixed(2)}
+                  </span>
+
+                  {/* Status + action */}
+                  <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: cat.color,
+                      letterSpacing: '0.04em',
+                    }}>
+                      {cat.label}
+                    </span>
+
+                    {t.category === 'NEEDS_CLOSE' && (
+                      <>
+                        {t.pnthrFilledShares != null && (
+                          <span style={{ fontSize: 10, color: '#666' }}>
+                            (PNTHR: {t.pnthrFilledShares} shr)
+                          </span>
+                        )}
+                        <button
+                          onClick={() => onNavigate('command')}
+                          style={{
+                            background: 'none', border: '1px solid #ff8c00', color: '#ff8c00',
+                            borderRadius: 3, padding: '1px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 700,
+                          }}
+                        >
+                          Close in Command →
+                        </button>
+                      </>
+                    )}
+
+                    {t.category === 'PARTIAL' && t.pnthrFilledShares != null && (
+                      <span style={{ fontSize: 10, color: '#666' }}>
+                        {t.shares} of {t.pnthrFilledShares} shr
+                      </span>
+                    )}
+
+                    {t.category === 'LOT_FILL' && (
+                      <span style={{ fontSize: 10, color: '#666' }}>added to position</span>
+                    )}
+
+                    {t.category === 'UNTRACKED' && (
+                      <span style={{ fontSize: 10, color: '#555' }}>not tracked in Command</span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
 // ── IBKR Discrepancy Section ──────────────────────────────────────────────────
 // Shows all active IBKR ↔ Command mismatches: missing tickers, shares mismatch,
 // price mismatch, missing/mismatched stops. Updated on each Assistant refresh.
@@ -1473,6 +1646,8 @@ export default function AssistantPage({ onNavigate }) {
   const [ibkrDiscrepancies,  setIbkrDiscrepancies]  = useState([]);
   const [ibkrDiscLoading,    setIbkrDiscLoading]    = useState(false);
   const [ibkrConnected,      setIbkrConnected]      = useState(false);
+  const [ibkrTrades,         setIbkrTrades]         = useState([]);
+  const [ibkrTradesLoading,  setIbkrTradesLoading]  = useState(false);
 
   // Analyze context for scoring chips
   const analyzeCtx = useAnalyzeContext();
@@ -1538,7 +1713,7 @@ export default function AssistantPage({ onNavigate }) {
         .catch(() => setHealthPositions([]))
         .finally(() => setHealthLoading(false));
 
-      // IBKR discrepancy check — fire independently alongside health
+      // IBKR discrepancy check + trades-today — fire independently alongside health
       setIbkrDiscLoading(true);
       fetchIbkrDiscrepancies()
         .then(d => {
@@ -1547,6 +1722,12 @@ export default function AssistantPage({ onNavigate }) {
         })
         .catch(() => { setIbkrConnected(false); setIbkrDiscrepancies([]); })
         .finally(() => setIbkrDiscLoading(false));
+
+      setIbkrTradesLoading(true);
+      fetchIbkrTradesToday()
+        .then(d => setIbkrTrades(d.trades || []))
+        .catch(() => setIbkrTrades([]))
+        .finally(() => setIbkrTradesLoading(false));
 
       // Recent fills — fast DB lookup, fire independently
       fetch(`${API_BASE}/api/assistant/overnight-fills`, { headers: authHeaders() })
@@ -1832,6 +2013,14 @@ export default function AssistantPage({ onNavigate }) {
         discrepancies={ibkrDiscrepancies}
         loading={ibkrDiscLoading}
         ibkrConnected={ibkrConnected}
+      />
+
+      {/* ── Today's IBKR Trades reconciliation ─────────────────────────────── */}
+      <TradesTodaySection
+        trades={ibkrTrades}
+        loading={ibkrTradesLoading}
+        ibkrConnected={ibkrConnected}
+        onNavigate={onNavigate}
       />
 
       {/* ── Command Health ─────────────────────────────────────────────────── */}

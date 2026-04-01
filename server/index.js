@@ -4197,11 +4197,11 @@ app.get('/api/assistant/routines', async (req, res) => {
 app.get('/api/assistant/position-health', async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
-    const alerts = await getPositionHealthAlerts(req.user.userId);
-    res.json({ alerts, fetchedAt: new Date().toISOString() });
+    const positions = await getPositionHealthAlerts(req.user.userId);
+    res.json({ positions, fetchedAt: new Date().toISOString() });
   } catch (err) {
     console.error('[assistant/position-health]', err.message);
-    res.status(500).json({ alerts: [], error: err.message });
+    res.status(500).json({ positions: [], error: err.message });
   }
 });
 

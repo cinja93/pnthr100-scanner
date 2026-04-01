@@ -763,51 +763,139 @@ function StopSyncRow({ row, isDone, onToggle }) {
 // Shows daily RSI alerts for every active Command position.
 // BL > 75 = overbought / FEAST zone. SS < 25 = oversold / short squeeze risk.
 
-function HealthAlertRow({ alert }) {
-  const isBL     = alert.alertType === 'BL_OVERBOUGHT';
-  const dirColor = isBL ? '#28a745' : '#ef5350';
-  const deltaPos = alert.delta != null && alert.delta > 0; // positive delta = rising RSI
-  const deltaStr = alert.delta != null
-    ? `${alert.delta > 0 ? '+' : ''}${alert.delta} from yesterday`
-    : 'no yesterday data';
+// ── RsiGauge — compact horizontal bar showing RSI position relative to 25/75 zone ──
+// Bar spans 0–100. Green zone: 25–75. Tick marks actual RSI value.
+// Color logic is direction-aware:
+//   BL: tick > 75 = amber warning, tick < 25 = blue (favorable oversold)
+//   SS: tick < 25 = amber warning, tick > 75 = blue (favorable overbought)
+function RsiGauge({ rsi, direction }) {
+  const isBL      = direction === 'BL';
+  const isInZone  = rsi >= 25 && rsi <= 75;
+  const isWarning = (isBL && rsi > 75) || (!isBL && rsi < 25);
+  const tickColor = isInZone  ? '#28a745'
+                  : isWarning ? '#ff9800'
+                  : '#4fc3f7'; // favorable (oversold long / overbought short)
+  const tickPct   = Math.max(0, Math.min(100, rsi));
 
   return (
-    <div style={s.healthRow}>
-      <div style={s.healthRowLeft}>
-        {/* Direction badge */}
-        <span style={{
-          fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 4,
-          background: isBL ? 'rgba(40,167,69,0.15)' : 'rgba(239,83,80,0.15)',
-          color: dirColor, border: `1px solid ${isBL ? 'rgba(40,167,69,0.35)' : 'rgba(239,83,80,0.35)'}`,
-          letterSpacing: '0.06em',
-        }}>
-          {alert.direction}
-        </span>
-        <span style={s.healthTicker}>{alert.ticker}</span>
-        {alert.companyName && (
-          <span style={{ fontSize: 11, color: '#444' }}>{alert.companyName}</span>
-        )}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+      {/* Left label — 25 */}
+      <span style={{ fontSize: 9, color: '#3a3a3a', minWidth: 14, textAlign: 'right', flexShrink: 0 }}>25</span>
+
+      {/* Track */}
+      <div style={{ position: 'relative', height: 8, flex: 1, background: '#1c1c1c', borderRadius: 3, minWidth: 80 }}>
+        {/* Normal zone highlight 25%–75% */}
+        <div style={{
+          position: 'absolute', left: '25%', width: '50%', height: '100%',
+          background: 'rgba(40,167,69,0.12)', borderRadius: 2,
+        }} />
+        {/* Zone boundary lines */}
+        <div style={{ position: 'absolute', left: '25%', top: 0, width: 1, height: '100%', background: 'rgba(40,167,69,0.25)' }} />
+        <div style={{ position: 'absolute', left: '75%', top: 0, width: 1, height: '100%', background: 'rgba(40,167,69,0.25)' }} />
+        {/* RSI tick — slightly taller than track for visibility */}
+        <div style={{
+          position:  'absolute',
+          left:      `${tickPct}%`,
+          top:       -2, bottom: -2,
+          width:     2,
+          background: tickColor,
+          borderRadius: 1,
+          transform: 'translateX(-50%)',
+          boxShadow: `0 0 3px ${tickColor}88`,
+        }} />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={s.healthRsiValue(alert.alertType)}>
-          RSI @ {alert.rsi}
-        </span>
-        {alert.delta != null && (
-          <span style={s.healthDelta(deltaPos)}>
-            Net {deltaStr}
-          </span>
-        )}
-        <span style={s.healthNote(alert.alertType)}>
-          {isBL ? '⚠ OVERBOUGHT' : '⚠ SQUEEZE RISK'}
-        </span>
-      </div>
+
+      {/* Right label — 75 */}
+      <span style={{ fontSize: 9, color: '#3a3a3a', minWidth: 14, flexShrink: 0 }}>75</span>
     </div>
   );
 }
 
-function CommandHealthSection({ alerts, loading }) {
-  const [expanded, setExpanded] = useState(true);
-  const alertCount = alerts?.length ?? 0;
+// ── RsiGaugeRow — one compact line per position: ticker · direction · gauge · RSI value ──
+function RsiGaugeRow({ pos }) {
+  const isBL      = pos.direction === 'BL';
+  const dirLabel  = isBL ? 'LONG' : 'SHORT';
+  const dirColor  = isBL ? '#28a745' : '#ef5350';
+  const isInZone  = pos.rsi >= 25 && pos.rsi <= 75;
+  const isWarning = (isBL && pos.rsi > 75) || (!isBL && pos.rsi < 25);
+  const rsiColor  = isInZone  ? '#28a745'
+                  : isWarning ? '#ff9800'
+                  : '#4fc3f7';
+  const alertTag  = pos.alertType === 'BL_OVERBOUGHT' ? '⚠ FEAST'
+                  : pos.alertType === 'SS_OVERSOLD'    ? '⚠ SQUEEZE'
+                  : null;
+  const deltaStr  = pos.delta != null
+    ? `${pos.delta > 0 ? '+' : ''}${pos.delta}`
+    : null;
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '5px 14px',
+      borderBottom: '1px solid #161616',
+    }}>
+      {/* Ticker */}
+      <span style={{ fontSize: 12, fontWeight: 700, color: '#bbb', minWidth: 52, letterSpacing: '0.02em' }}>
+        {pos.ticker}
+      </span>
+
+      {/* Direction badge */}
+      <span style={{
+        fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 3,
+        background: isBL ? 'rgba(40,167,69,0.12)' : 'rgba(239,83,80,0.12)',
+        color: dirColor,
+        border: `1px solid ${isBL ? 'rgba(40,167,69,0.28)' : 'rgba(239,83,80,0.28)'}`,
+        minWidth: 38, textAlign: 'center', letterSpacing: '0.06em', flexShrink: 0,
+      }}>
+        {dirLabel}
+      </span>
+
+      {/* Gauge bar — fills remaining space */}
+      <RsiGauge rsi={pos.rsi} direction={pos.direction} />
+
+      {/* RSI value */}
+      <span style={{
+        fontSize: 11, fontWeight: 700, color: rsiColor,
+        minWidth: 46, textAlign: 'right', flexShrink: 0,
+      }}>
+        RSI {pos.rsi}
+      </span>
+
+      {/* Delta from yesterday */}
+      {deltaStr && (
+        <span style={{
+          fontSize: 9, color: pos.delta > 0 ? '#ef5350' : '#4fc3f7',
+          minWidth: 30, textAlign: 'right', flexShrink: 0,
+        }}>
+          {deltaStr}
+        </span>
+      )}
+
+      {/* Alert tag — only when outside zone */}
+      {alertTag && (
+        <span style={{ fontSize: 9, color: '#ff9800', minWidth: 58, flexShrink: 0 }}>
+          {alertTag}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CommandHealthSection({ positions, loading }) {
+  const [expanded, setExpanded] = useState(false);
+  const total      = positions?.length ?? 0;
+  const alertCount = positions?.filter(p => p.isAlert).length ?? 0;
+
+  // Summary text shown in header when collapsed (or while loading)
+  const summaryText = loading
+    ? 'loading…'
+    : total === 0
+      ? 'no positions'
+      : alertCount > 0
+        ? `${total} position${total !== 1 ? 's' : ''} · ${alertCount} alert${alertCount !== 1 ? 's' : ''}`
+        : `${total} position${total !== 1 ? 's' : ''} · all clear`;
+
+  const summaryColor = loading || alertCount === 0 ? '#555' : '#ff9800';
 
   return (
     <div style={s.healthSection}>
@@ -815,19 +903,17 @@ function CommandHealthSection({ alerts, loading }) {
         <div style={s.healthHeaderLeft}>
           <span style={{ fontSize: 11, color: '#444' }}>{expanded ? '▼' : '▶'}</span>
           <span style={s.healthLabel}>COMMAND HEALTH</span>
-          <span style={s.healthCount}>
-            ({alertCount > 0
-              ? `${alertCount} RSI alert${alertCount !== 1 ? 's' : ''}`
-              : loading ? 'loading…' : 'all clear'})
+          <span style={{ ...s.healthCount, color: summaryColor }}>
+            ({summaryText})
           </span>
         </div>
       </div>
       {expanded && (
         loading
           ? <div style={s.healthLoading}>Checking RSI for all Command positions…</div>
-          : alertCount === 0
-            ? <div style={s.healthAllClear}>✓ All Command positions have RSI within normal range</div>
-            : alerts.map(alert => <HealthAlertRow key={alert.ticker + alert.direction} alert={alert} />)
+          : total === 0
+            ? <div style={s.healthAllClear}>No active Command positions to display</div>
+            : positions.map(pos => <RsiGaugeRow key={pos.ticker + pos.direction} pos={pos} />)
       )}
     </div>
   );
@@ -1147,7 +1233,7 @@ export default function AssistantPage({ onNavigate }) {
   const [lastRefreshed,    setLastRefreshed]    = useState(null);
   const [chartStock,  setChartStock]  = useState(null);
   const [chartBusy,   setChartBusy]   = useState(null); // ticker currently loading
-  const [healthAlerts,    setHealthAlerts]    = useState([]);
+  const [healthPositions, setHealthPositions] = useState([]);
   const [healthLoading,   setHealthLoading]   = useState(true);
   const [recentFills,     setRecentFills]     = useState([]);
 
@@ -1210,9 +1296,9 @@ export default function AssistantPage({ onNavigate }) {
       // It resolves independently and updates its own loading state.
       setHealthLoading(true);
       fetch(`${API_BASE}/api/assistant/position-health`, { headers: authHeaders() })
-        .then(r => r.ok ? r.json() : { alerts: [] })
-        .then(d => setHealthAlerts(d.alerts || []))
-        .catch(() => setHealthAlerts([]))
+        .then(r => r.ok ? r.json() : { positions: [] })
+        .then(d => setHealthPositions(d.positions || []))
+        .catch(() => setHealthPositions([]))
         .finally(() => setHealthLoading(false));
 
       // Recent fills — fast DB lookup, fire independently
@@ -1495,7 +1581,7 @@ export default function AssistantPage({ onNavigate }) {
       <RecentFillsSection fills={recentFills} onNavigate={onNavigate} />
 
       {/* ── Command Health ─────────────────────────────────────────────────── */}
-      <CommandHealthSection alerts={healthAlerts} loading={healthLoading} />
+      <CommandHealthSection positions={healthPositions} loading={healthLoading} />
 
       {/* ── Stop Sync ──────────────────────────────────────────────────────── */}
       {stopSyncRows.length > 0 && (

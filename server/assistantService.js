@@ -1213,7 +1213,7 @@ export async function getPositionHealthAlerts(userId) {
     })
   );
 
-  const alerts = [];
+  const healthPositions = [];
   for (const result of results) {
     if (result.status !== 'fulfilled') continue;
     const { pos, ticker, direction, rsiData } = result.value;
@@ -1222,28 +1222,33 @@ export async function getPositionHealthAlerts(userId) {
     const { today: rsi, yesterday: rsiYest } = rsiData;
     const isBLAlert = direction === 'BL' && rsi > RSI_BL_ALERT;
     const isSSAlert = direction === 'SS' && rsi < RSI_SS_ALERT;
-    if (!isBLAlert && !isSSAlert) continue;
+    const isAlert   = isBLAlert || isSSAlert;
+
+    // distanceFromThreshold: positive = alerting (how far past boundary),
+    // negative = safe (how far from boundary). Used for sort — most urgent first.
+    const distanceFromThreshold = direction === 'BL'
+      ? +(rsi - RSI_BL_ALERT).toFixed(1)   // BL: RSI − 75
+      : +(RSI_SS_ALERT - rsi).toFixed(1);   // SS: 25 − RSI
 
     const delta = rsiYest != null ? +(rsi - rsiYest).toFixed(1) : null;
-    alerts.push({
+    healthPositions.push({
       ticker,
       direction,
-      rsi:          +rsi.toFixed(1),
-      rsiYesterday: rsiYest != null ? +rsiYest.toFixed(1) : null,
+      rsi:                   +rsi.toFixed(1),
+      rsiYesterday:          rsiYest != null ? +rsiYest.toFixed(1) : null,
       delta,
-      alertType:    isBLAlert ? 'BL_OVERBOUGHT' : 'SS_OVERSOLD',
-      companyName:  pos.companyName || null,
+      isAlert,
+      alertType:             isBLAlert ? 'BL_OVERBOUGHT' : isSSAlert ? 'SS_OVERSOLD' : null,
+      distanceFromThreshold,
+      companyName:           pos.companyName || null,
     });
   }
 
-  // Sort: most extreme RSI first (lowest for SS, highest for BL)
-  alerts.sort((a, b) => {
-    if (a.alertType === 'SS_OVERSOLD'  && b.alertType === 'SS_OVERSOLD')  return a.rsi - b.rsi;
-    if (a.alertType === 'BL_OVERBOUGHT' && b.alertType === 'BL_OVERBOUGHT') return b.rsi - a.rsi;
-    return 0;
-  });
+  // Sort: alerting positions first (positive distance), then by proximity to threshold.
+  // Within alerting: most extreme first. Within safe: closest to boundary first.
+  healthPositions.sort((a, b) => b.distanceFromThreshold - a.distanceFromThreshold);
 
-  return alerts;
+  return healthPositions;
 }
 
 /**

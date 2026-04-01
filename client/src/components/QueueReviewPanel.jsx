@@ -11,6 +11,7 @@
 import { useState, useEffect } from 'react';
 import { createPendingEntries, API_BASE, authHeaders, fetchNav } from '../services/api';
 import { useQueue } from '../contexts/QueueContext';
+import ChartModal from './ChartModal';
 
 // ── Dollar risk for a single existing position ─────────────────────────────────
 // Mirrors the logic inside calcHeat() in sizingUtils.js
@@ -42,6 +43,7 @@ export default function QueueReviewPanel({ onClose }) {
   const [nav, setNav]                           = useState(100000);
   const [posLoading, setPosLoading]             = useState(true);
   const [sending, setSending]                   = useState(false);
+  const [chartModal, setChartModal]             = useState(null); // { stocks, index }
 
   const items = [...queue.values()];
 
@@ -79,24 +81,27 @@ export default function QueueReviewPanel({ onClose }) {
   // ── Sector net directional exposure — ETFs exempt ─────────────────────────
   // Net Exposure = |longs - shorts|; limit is 3
   const sectorMap = {};
-  function addToSector(ticker, sector, direction, isETF) {
+  function addToSector(ticker, sector, direction, isETF, currentPrice) {
     if (isETF) return;
-    const s   = sector || 'Unknown';
-    const dir = (direction || '').toUpperCase();
+    const s      = sector || 'Unknown';
+    const dir    = (direction || '').toUpperCase();
+    const signal = dir === 'LONG' ? 'BL' : 'SS';
     if (!sectorMap[s]) sectorMap[s] = { longs: [], shorts: [] };
-    if (dir === 'LONG') sectorMap[s].longs.push(ticker);
-    else sectorMap[s].shorts.push(ticker);
+    if (dir === 'LONG') sectorMap[s].longs.push({ ticker, signal, price: currentPrice || null });
+    else sectorMap[s].shorts.push({ ticker, signal, price: currentPrice || null });
   }
-  for (const p of activePosns) addToSector(p.ticker, p.sector, p.direction, p.isETF);
-  for (const q of items)       addToSector(q.ticker, q.sector, q.direction, q.isETF);
+  for (const p of activePosns) addToSector(p.ticker, p.sector, p.direction, p.isETF, p.currentPrice);
+  for (const q of items)       addToSector(q.ticker, q.sector, q.direction, q.isETF, q.entryPrice);
 
   const saturatedSectors = Object.entries(sectorMap)
     .map(([sector, { longs, shorts }]) => ({
       sector,
-      longs:       longs.length,
-      shorts:      shorts.length,
-      netExposure: Math.abs(longs.length - shorts.length),
-      netDir:      longs.length >= shorts.length ? 'LONG' : 'SHORT',
+      longTickers:  longs,
+      shortTickers: shorts,
+      longs:        longs.length,
+      shorts:       shorts.length,
+      netExposure:  Math.abs(longs.length - shorts.length),
+      netDir:       longs.length >= shorts.length ? 'LONG' : 'SHORT',
     }))
     .filter(s => s.netExposure > 3);
 
@@ -276,10 +281,36 @@ export default function QueueReviewPanel({ onClose }) {
           {saturatedSectors.length > 0 && (
             <div style={{ background: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.35)',
               borderRadius: 6, padding: '8px 12px', marginTop: 10, fontSize: 11 }}>
-              <div style={{ color: '#dc3545', fontWeight: 700, marginBottom: 4 }}>● SECTOR NET EXPOSURE CRITICAL (stocks only — ETFs exempt):</div>
+              <div style={{ color: '#dc3545', fontWeight: 700, marginBottom: 6 }}>● SECTOR NET EXPOSURE CRITICAL (stocks only — ETFs exempt):</div>
               {saturatedSectors.map(s => (
-                <div key={s.sector} style={{ color: '#aaa', marginLeft: 8 }}>
-                  {s.sector}: {s.longs}L / {s.shorts}S = net {s.netExposure} {s.netDir} — add {s.netExposure - 2} {s.netDir === 'LONG' ? 'short' : 'long'}{s.netExposure - 2 > 1 ? 's' : ''} or remove from queue
+                <div key={s.sector} style={{ marginBottom: 8 }}>
+                  <div style={{ color: '#aaa', marginLeft: 8, marginBottom: 5 }}>
+                    {s.sector}: {s.longs}L / {s.shorts}S = net {s.netExposure} {s.netDir} — add {s.netExposure - 2} {s.netDir === 'LONG' ? 'short' : 'long'}{s.netExposure - 2 > 1 ? 's' : ''} or remove from queue
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginLeft: 8 }}>
+                    {s.longTickers.map((t, idx) => (
+                      <button key={t.ticker}
+                        onClick={() => setChartModal({ stocks: s.longTickers, index: idx })}
+                        style={{ background: 'rgba(40,167,69,0.15)', border: '1px solid rgba(40,167,69,0.4)',
+                          color: '#4ade80', padding: '2px 8px', borderRadius: 3, fontSize: 10,
+                          fontWeight: 700, cursor: 'pointer', fontFamily: 'monospace' }}>
+                        {t.ticker}
+                      </button>
+                    ))}
+                    {s.longTickers.length > 0 && s.shortTickers.length > 0 && (
+                      <span style={{ color: '#444', fontSize: 10 }}>vs</span>
+                    )}
+                    {s.shortTickers.map((t, idx) => (
+                      <button key={t.ticker}
+                        onClick={() => setChartModal({ stocks: s.shortTickers, index: idx })}
+                        style={{ background: 'rgba(220,53,69,0.15)', border: '1px solid rgba(220,53,69,0.4)',
+                          color: '#ff6b6b', padding: '2px 8px', borderRadius: 3, fontSize: 10,
+                          fontWeight: 700, cursor: 'pointer', fontFamily: 'monospace' }}>
+                        {t.ticker}
+                      </button>
+                    ))}
+                    <span style={{ color: '#555', fontSize: 10, marginLeft: 2 }}>— click to open chart</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -374,5 +405,14 @@ export default function QueueReviewPanel({ onClose }) {
         </div>
       </div>
     </div>
+
+    {/* Chart modal — opens when ticker chips are clicked */}
+    {chartModal && (
+      <ChartModal
+        stocks={chartModal.stocks.map(s => ({ ticker: s.ticker, symbol: s.ticker, signal: s.signal, currentPrice: s.price }))}
+        initialIndex={chartModal.index}
+        onClose={() => setChartModal(null)}
+      />
+    )}
   );
 }

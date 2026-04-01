@@ -565,6 +565,7 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
   const [localNotes, setLocalNotes] = useState({ tradeNotes: entry.tradeNotes || '', macroNotes: entry.macroNotes || '' });
 
   const disc      = entry.discipline || {};
+  const pendingQs = getScoreQuestions(entry, disc); // drives the header status badge
   const chk       = computeChecks(entry);
   const dir       = entry.direction || 'LONG';
   const exits     = Array.isArray(entry.exits) ? entry.exits : [];
@@ -629,15 +630,25 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
           </span>
           <span style={{ color: '#777', fontSize: '0.8rem' }}>{fmtDate(entry.entry?.fillDate || entry.createdAt)} → {fmtDate(lastExit?.date)}</span>
           {entry.exchange && <span style={{ color: '#555', fontSize: '0.75rem' }}>{entry.exchange}</span>}
-          {entry.userConfirmed?.confirmedAt && (
+          {/* Status badge: red count if questions remain, green check if all answered */}
+          {pendingQs.length > 0 ? (
+            <span
+              onClick={e => { e.stopPropagation(); setExpanded(true); }}
+              title={`${pendingQs.length} question${pendingQs.length > 1 ? 's' : ''} still need your answer — click to open`}
+              style={{ background: 'rgba(220,53,69,0.2)', border: '1px solid #dc3545', color: '#ff6b6b', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              <span style={{ background: '#dc3545', color: '#fff', borderRadius: '50%', width: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800 }}>{pendingQs.length}</span>
+              ANSWER NEEDED
+            </span>
+          ) : entry.userConfirmed?.confirmedAt ? (
             <span
               onClick={e => { e.stopPropagation(); setShowCompleteScore(v => !v); }}
-              title="Click to review or correct your confirmed answers"
-              style={{ background: 'rgba(212,160,23,0.15)', border: '1px solid #D4A017', color: '#FFD700', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer' }}
+              title="All questions answered — click to review or correct"
+              style={{ background: 'rgba(40,167,69,0.15)', border: '1px solid #28a745', color: '#6bcb77', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer' }}
             >
-              VERIFIED ✎
+              ✓ VERIFIED
             </span>
-          )}
+          ) : null}
           {entry.sector   && <span style={{ color: '#555', fontSize: '0.75rem' }}>{entry.sector}</span>}
           {calDays != null && <span style={{ color: '#555', fontSize: '0.72rem' }}>{calDays}d</span>}
         </div>

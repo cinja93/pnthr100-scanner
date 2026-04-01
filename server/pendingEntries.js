@@ -17,6 +17,7 @@ import { fetchTechnicalSnapshot } from './technicalSnapshot.js';
 import { normalizeSector } from './sectorUtils.js';
 import { getDevelopingSignalTickers } from './signalService.js';
 import { calculateSectorExposure } from './sectorExposure.js';
+import { getCachedSignalStocks } from './apexService.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE    = 'https://financialmodelingprep.com';
@@ -499,12 +500,34 @@ export async function pendingEntryConfirm(req, res) {
         const thisSector = position.sector;
         const data = exposure[thisSector] || { longCount: 0, shortCount: 0, netExposure: 0 };
         if (data.netExposure > 3) {
+          // Find top 3 opposite-direction Kill candidates in this sector
+          const oppositeSignal  = position.direction === 'LONG' ? 'SS' : 'BL';
+          const killCache       = getCachedSignalStocks();
+          const suggestions     = killCache
+            .filter(s =>
+              s.signal === oppositeSignal &&
+              s.sector  === thisSector   &&
+              !s.overextended            &&
+              s.apexScore != null
+            )
+            .sort((a, b) => (b.apexScore ?? 0) - (a.apexScore ?? 0))
+            .slice(0, 3)
+            .map(s => ({
+              ticker:       s.ticker,
+              score:        Math.round(s.apexScore ?? 0),
+              tier:         s.tier || null,
+              currentPrice: s.currentPrice ? +Number(s.currentPrice).toFixed(2) : null,
+              signal:       s.signal,
+            }));
+
           sectorWarning = {
             sector:           thisSector,
             currentExposure:  `${data.longCount}L/${data.shortCount}S (net ${data.netExposure})`,
             netExposure:      data.netExposure,
+            netDirection:     data.netDirection,
             level:            data.netExposure >= 4 ? 'CRITICAL' : 'WARNING',
-            message:          `${thisSector} is now at net ${data.netExposure} ${data.netDirection}. Consider adding a ${position.direction === 'LONG' ? 'short' : 'long'} to balance.`,
+            message:          `${thisSector} is now at net ${data.netExposure} ${data.netDirection}. Consider adding a ${oppositeSignal === 'SS' ? 'short' : 'long'} to balance.`,
+            suggestions,
           };
         }
       } catch (e) { console.warn('[PE] sector check failed:', e.message); }

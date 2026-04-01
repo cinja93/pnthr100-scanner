@@ -2432,18 +2432,65 @@ export default function CommandCenter({ onNavigate }) {
               </div>
             )}
 
-          {/* Sector concentration warning banner */}
-            {sectorWarning && (
-              <div style={{ background: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.3)',
-                borderRadius: 8, padding: '10px 16px', marginBottom: 14,
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                fontSize: 12, color: '#ff6b6b', fontWeight: 600 }}>
-                <span>⚠ SECTOR CONCENTRATION: {typeof sectorWarning === 'string' ? sectorWarning : sectorWarning.message}</span>
-                <button onClick={() => setSectorWarning(null)}
-                  style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer',
-                    fontSize: 18, lineHeight: 1, padding: '0 4px' }}>×</button>
-              </div>
-            )}
+          {/* Sector concentration warning banner — expandable with Kill candidates */}
+            {sectorWarning && (() => {
+              const warn        = typeof sectorWarning === 'string' ? { message: sectorWarning, suggestions: [] } : sectorWarning;
+              const suggestions = warn.suggestions || [];
+              const oppSignal   = warn.netDirection === 'LONG' ? 'SS' : 'BL';
+              return (
+                <div style={{ background: 'rgba(220,53,69,0.08)', border: '1px solid rgba(220,53,69,0.3)',
+                  borderRadius: 8, marginBottom: 14, overflow: 'hidden' }}>
+                  {/* Header row — always visible, click to expand */}
+                  <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center', cursor: suggestions.length ? 'pointer' : 'default' }}
+                    onClick={() => suggestions.length && setSectorWarning(w => ({ ...w, _expanded: !w._expanded }))}>
+                    <span style={{ fontSize: 12, color: '#ff6b6b', fontWeight: 600 }}>
+                      ⚠ SECTOR CONCENTRATION: {warn.message}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {suggestions.length > 0 && (
+                        <span style={{ fontSize: 10, color: '#ff6b6b', opacity: 0.7 }}>
+                          {sectorWarning._expanded ? '▲ hide' : `▼ top ${suggestions.length} ${oppSignal} to balance`}
+                        </span>
+                      )}
+                      <button onClick={e => { e.stopPropagation(); setSectorWarning(null); }}
+                        style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer',
+                          fontSize: 18, lineHeight: 1, padding: '0 4px' }}>×</button>
+                    </div>
+                  </div>
+
+                  {/* Expanded: top Kill candidates to balance the sector */}
+                  {sectorWarning._expanded && suggestions.length > 0 && (
+                    <div style={{ borderTop: '1px solid rgba(220,53,69,0.2)', padding: '10px 16px',
+                      background: 'rgba(220,53,69,0.04)' }}>
+                      <div style={{ fontSize: 10, color: '#888', marginBottom: 8, letterSpacing: '0.06em', fontWeight: 700 }}>
+                        TOP {oppSignal} CANDIDATES IN {(warn.sector || '').toUpperCase()} — click to open chart
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {suggestions.map(s => (
+                          <button key={s.ticker}
+                            onClick={() => setChartModal({ stocks: [{ ticker: s.ticker, symbol: s.ticker, signal: s.signal, currentPrice: s.currentPrice }], index: 0 })}
+                            style={{ background: 'rgba(239,83,80,0.1)', border: '1px solid rgba(239,83,80,0.35)',
+                              borderRadius: 5, padding: '6px 12px', cursor: 'pointer',
+                              display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                            <span style={{ fontSize: 13, fontWeight: 800, color: '#ef5350', letterSpacing: '0.04em' }}>
+                              {s.ticker}
+                            </span>
+                            <span style={{ fontSize: 10, color: '#888' }}>
+                              {s.tier ? s.tier.split(' ')[0] : ''} · Kill {s.score}
+                              {s.currentPrice ? ` · $${s.currentPrice}` : ''}
+                            </span>
+                          </button>
+                        ))}
+                        {suggestions.length === 0 && (
+                          <span style={{ fontSize: 11, color: '#666' }}>No {oppSignal} Kill signals found in this sector right now.</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {/* Metric cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 16 }}>
               <MC label="Net liquidity" value={`$${(nav / 1000).toFixed(0)}K`} />

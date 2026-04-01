@@ -64,6 +64,19 @@ function isRecycledPos(p) {
   return p.direction === 'LONG' ? p.stopPrice >= avg : p.stopPrice <= avg;
 }
 
+// dollarAtRisk — mirrors PyramidCard actualRisk calculation; used for default sort
+function dollarAtRisk(p) {
+  const avg = avgCostOf(p);
+  const shares = filledSharesOf(p);
+  if (!p.stopPrice || shares <= 0) return 0;
+  const isRecycled = p.direction === 'LONG' ? p.stopPrice >= avg : p.stopPrice <= avg;
+  if (isRecycled) return 0;
+  const riskPerShr = p.direction === 'LONG'
+    ? Math.max(avg - p.stopPrice, 0)
+    : Math.max(p.stopPrice - avg, 0);
+  return shares * riskPerShr;
+}
+
 function runRiskAdvisor(positions, nav) {
   const recs = [];
   if (!positions.length || !nav) return recs;
@@ -2624,7 +2637,9 @@ export default function CommandCenter({ onNavigate }) {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {positions.map(p => (
+                {(() => {
+                  const sorted = [...positions].sort((a, b) => dollarAtRisk(b) - dollarAtRisk(a));
+                  return sorted.map(p => (
                   <PyramidCard key={p.id} position={p} netLiquidity={nav}
                     onUpdate={updateFills} onUpdateStop={updateStop} onUpdatePrice={updatePrice}
                     onClearOverride={clearOverride} onField={updateField}
@@ -2667,7 +2682,7 @@ export default function CommandCenter({ onNavigate }) {
                     }}
                     flashed={flashedTickers.has(p.ticker)}
                     onOpenChart={(clicked) => {
-                      const stocks = positions.map(pos => ({
+                      const stocks = sorted.map(pos => ({
                         ticker: pos.ticker, symbol: pos.ticker,
                         currentPrice: pos.currentPrice, signal: pos.signal,
                         sector: pos.sector, stopPrice: pos.stopPrice,
@@ -2675,7 +2690,8 @@ export default function CommandCenter({ onNavigate }) {
                       const index = stocks.findIndex(s => s.ticker === clicked.ticker);
                       setChartModal({ stocks, index: Math.max(0, index) });
                     }} />
-                ))}
+                  ));
+                })()}
               </div>
             )}
           </div>

@@ -667,6 +667,12 @@ export async function addJournalTag(journalId, tag) {
   return res.json();
 }
 
+export async function fetchIbkrDiscrepancies() {
+  const res = await fetch(`${API_BASE}/api/ibkr/discrepancies`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function deleteJournalTag(journalId, tag) {
   const res = await fetch(`${API_BASE}/api/journal/${journalId}/tags/${encodeURIComponent(tag)}`, {
     method: 'DELETE',

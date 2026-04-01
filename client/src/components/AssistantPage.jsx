@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { API_BASE, authHeaders } from '../services/api';
+import { API_BASE, authHeaders, fetchIbkrDiscrepancies } from '../services/api';
 import ChartModal from './ChartModal';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
@@ -826,6 +826,133 @@ function StopSyncRow({ row, isDone, onToggle }) {
   );
 }
 
+// ── IBKR Discrepancy Section ──────────────────────────────────────────────────
+// Shows all active IBKR ↔ Command mismatches: missing tickers, shares mismatch,
+// price mismatch, missing/mismatched stops. Updated on each Assistant refresh.
+
+const DISC_SEVERITY_COLOR = { CRITICAL: '#dc3545', HIGH: '#ff8c00', MEDIUM: '#ffc107' };
+const DISC_SEVERITY_BG    = {
+  CRITICAL: 'rgba(220,53,69,0.10)',
+  HIGH:     'rgba(255,140,0,0.08)',
+  MEDIUM:   'rgba(255,193,7,0.06)',
+};
+const DISC_SEVERITY_ICON  = { CRITICAL: '🚨', HIGH: '⚠️', MEDIUM: 'ℹ️' };
+
+function IbkrDiscrepancySection({ discrepancies, loading, ibkrConnected }) {
+  const [expanded, setExpanded] = useState(true);
+
+  const critCount = discrepancies.filter(d => d.severity === 'CRITICAL').length;
+  const highCount  = discrepancies.filter(d => d.severity === 'HIGH').length;
+  const total      = discrepancies.length;
+
+  // Header color: red if any critical, orange if any high, yellow otherwise
+  const headerColor = critCount > 0 ? '#dc3545' : highCount > 0 ? '#ff8c00' : '#ffc107';
+
+  if (!ibkrConnected) return null; // IBKR not synced — no section
+
+  return (
+    <div style={{
+      margin: '10px 10px 5px',
+      borderRadius: 6,
+      border: `1px solid ${total > 0 ? headerColor + '44' : '#1e3a1e'}`,
+      background: '#0c0c0c',
+      overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', cursor: 'pointer', background: '#101010' }}
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span style={{ fontSize: 11, color: '#444' }}>{expanded ? '▼' : '▶'}</span>
+        <span style={{ fontWeight: 700, fontSize: 12, color: total > 0 ? headerColor : '#28a745', letterSpacing: '0.04em' }}>
+          🔗 IBKR DISCREPANCY CHECK
+        </span>
+        <span style={{ fontSize: 11, color: '#666', marginLeft: 4 }}>
+          {loading ? '(checking…)' : total === 0 ? '— all clear ✓' : `— ${total} issue${total !== 1 ? 's' : ''}`}
+        </span>
+        {!loading && critCount > 0 && (
+          <span style={{ marginLeft: 'auto', background: '#dc3545', color: '#fff', borderRadius: 3, padding: '1px 7px', fontSize: 10, fontWeight: 700 }}>
+            {critCount} CRITICAL
+          </span>
+        )}
+      </div>
+
+      {expanded && (
+        loading ? (
+          <div style={{ padding: '10px 14px', fontSize: 12, color: '#555' }}>Checking IBKR vs Command…</div>
+        ) : total === 0 ? (
+          <div style={{ padding: '10px 14px', fontSize: 12, color: '#28a745' }}>
+            ✓ All positions match — no discrepancies found
+          </div>
+        ) : (
+          <div>
+            {discrepancies.map((d, i) => {
+              const color = DISC_SEVERITY_COLOR[d.severity] || '#ffc107';
+              const bg    = DISC_SEVERITY_BG[d.severity]    || 'rgba(255,193,7,0.06)';
+              const icon  = DISC_SEVERITY_ICON[d.severity]  || '⚠️';
+              return (
+                <div key={i} style={{
+                  borderTop: i > 0 ? '1px solid #191919' : undefined,
+                  padding: '9px 14px',
+                  background: bg,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                }}>
+                  <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>{icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                      <span style={{ fontWeight: 700, fontSize: 12, color, letterSpacing: '0.03em' }}>
+                        {d.severity}
+                      </span>
+                      <span style={{ fontWeight: 700, fontSize: 12, color: '#e0e0e0' }}>{d.ticker}</span>
+                      <span style={{
+                        background: '#222',
+                        color: '#888',
+                        borderRadius: 3,
+                        padding: '1px 5px',
+                        fontSize: 10,
+                        letterSpacing: '0.04em',
+                      }}>
+                        {d.type.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#bbb', lineHeight: 1.4 }}>{d.message}</div>
+                    {/* Extra detail for specific types */}
+                    {d.type === 'SHARES_MISMATCH' && (
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
+                        Command: <b style={{ color: '#ddd' }}>{d.pnthrShares} shr</b> · IBKR: <b style={{ color: '#ddd' }}>{d.ibkrShares} shr</b>
+                        {' '}— Update Command lot shares to match IBKR
+                      </div>
+                    )}
+                    {d.type === 'PRICE_MISMATCH' && (
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
+                        Command avg: <b style={{ color: '#ddd' }}>${d.pnthrAvg?.toFixed(2)}</b> · IBKR avg: <b style={{ color: '#ddd' }}>${d.ibkrAvg?.toFixed(2)}</b>
+                        {' '}· Diff: <b style={{ color }}>{d.diffPct}%</b>
+                      </div>
+                    )}
+                    {d.type === 'STOP_MISSING' && d.ibkrStop && (
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
+                        IBKR has a stop order at <b style={{ color: '#ddd' }}>${(+d.ibkrStop).toFixed(2)}</b> — add this stop to Command now
+                      </div>
+                    )}
+                    {d.type === 'STOP_MISMATCH' && (
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
+                        Command: <b style={{ color: '#ddd' }}>${d.pnthrStop?.toFixed(2)}</b> · IBKR order: <b style={{ color: '#ddd' }}>${d.ibkrStop?.toFixed(2)}</b>
+                        {' '}· Diff: <b style={{ color }}>${Math.abs(d.diff || 0).toFixed(2)}</b>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
 // ── Command Health Section ────────────────────────────────────────────────────
 // Shows daily RSI alerts for every active Command position.
 // BL > 75 = overbought / FEAST zone. SS < 25 = oversold / short squeeze risk.
@@ -1343,6 +1470,9 @@ export default function AssistantPage({ onNavigate }) {
   const [healthPositions, setHealthPositions] = useState([]);
   const [healthLoading,   setHealthLoading]   = useState(true);
   const [recentFills,     setRecentFills]     = useState([]);
+  const [ibkrDiscrepancies,  setIbkrDiscrepancies]  = useState([]);
+  const [ibkrDiscLoading,    setIbkrDiscLoading]    = useState(false);
+  const [ibkrConnected,      setIbkrConnected]      = useState(false);
 
   // Analyze context for scoring chips
   const analyzeCtx = useAnalyzeContext();
@@ -1407,6 +1537,16 @@ export default function AssistantPage({ onNavigate }) {
         .then(d => setHealthPositions(d.positions || []))
         .catch(() => setHealthPositions([]))
         .finally(() => setHealthLoading(false));
+
+      // IBKR discrepancy check — fire independently alongside health
+      setIbkrDiscLoading(true);
+      fetchIbkrDiscrepancies()
+        .then(d => {
+          setIbkrConnected(!!d.ibkrConnected);
+          setIbkrDiscrepancies(d.discrepancies || []);
+        })
+        .catch(() => { setIbkrConnected(false); setIbkrDiscrepancies([]); })
+        .finally(() => setIbkrDiscLoading(false));
 
       // Recent fills — fast DB lookup, fire independently
       fetch(`${API_BASE}/api/assistant/overnight-fills`, { headers: authHeaders() })
@@ -1686,6 +1826,13 @@ export default function AssistantPage({ onNavigate }) {
 
       {/* ── Recent Fills ───────────────────────────────────────────────────── */}
       <RecentFillsSection fills={recentFills} onNavigate={onNavigate} />
+
+      {/* ── IBKR Discrepancy Check ─────────────────────────────────────────── */}
+      <IbkrDiscrepancySection
+        discrepancies={ibkrDiscrepancies}
+        loading={ibkrDiscLoading}
+        ibkrConnected={ibkrConnected}
+      />
 
       {/* ── Command Health ─────────────────────────────────────────────────── */}
       <CommandHealthSection positions={healthPositions} loading={healthLoading} />

@@ -2078,6 +2078,176 @@ app.patch('/api/positions/:id/direction', authenticateJWT, async (req, res) => {
   }
 });
 app.post('/api/ibkr/sync',          authenticateJWT, ibkrSync);
+
+// ── IBKR Discrepancy Check ─────────────────────────────────────────────────
+// Compares pnthr_ibkr_positions against pnthr_portfolio for 4 error types:
+//   A. TICKER_MISSING  — ticker in IBKR but not Command (or vice versa)
+//   B. SHARES_MISMATCH — share count differs between IBKR and Command
+//   C. PRICE_MISMATCH  — avg cost differs by ≥0.5% (beyond commission noise)
+//   D. STOP_MISSING    — Command position has no stop set (CRITICAL)
+//   E. STOP_MISMATCH   — Command stop differs from IBKR stop order
+app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+
+    // Load IBKR data (single doc per user)
+    const ibkrDoc = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
+    if (!ibkrDoc) return res.json({ discrepancies: [], ibkrConnected: false });
+
+    const ibkrPositions = ibkrDoc.positions || [];
+    const ibkrStops = ibkrDoc.stopOrders || [];
+    const syncedAt = ibkrDoc.syncedAt || null;
+    const staleMins = syncedAt ? Math.round((Date.now() - new Date(syncedAt)) / 60000) : null;
+    const isStale = staleMins != null && staleMins > 10;
+
+    // Load PNTHR active positions
+    const pnthrPositions = await db.collection('pnthr_portfolio')
+      .find({ ownerId: userId, status: 'ACTIVE' })
+      .toArray();
+
+    // Build lookup maps
+    const ibkrByTicker = {};
+    for (const ip of ibkrPositions) {
+      if (ip.symbol) ibkrByTicker[ip.symbol.toUpperCase()] = ip;
+    }
+    const ibkrStopByTicker = {};
+    for (const s of ibkrStops) {
+      if (s.symbol) ibkrStopByTicker[s.symbol.toUpperCase()] = s;
+    }
+    const pnthrByTicker = {};
+    for (const pp of pnthrPositions) {
+      if (pp.ticker) pnthrByTicker[pp.ticker.toUpperCase()] = pp;
+    }
+
+    // Helper: compute PNTHR avg cost from fills
+    function pnthrAvgCost(p) {
+      if (p.manualAvgCost) return +p.manualAvgCost;
+      let cost = 0, shares = 0;
+      for (let i = 1; i <= 5; i++) {
+        const f = p.fills?.[i];
+        if (f?.filled && f?.price && f?.shares) { cost += +f.shares * +f.price; shares += +f.shares; }
+      }
+      return shares > 0 ? cost / shares : (p.entryPrice || 0);
+    }
+
+    // Helper: compute total remaining shares in PNTHR
+    function pnthrShares(p) {
+      return p.remainingShares ?? Object.values(p.fills || {}).filter(f => f?.filled).reduce((s, f) => s + (+f.shares || 0), 0);
+    }
+
+    const discrepancies = [];
+
+    // A. Tickers in IBKR but not in Command
+    for (const ticker of Object.keys(ibkrByTicker)) {
+      if (!pnthrByTicker[ticker]) {
+        discrepancies.push({
+          type: 'TICKER_MISSING',
+          severity: 'CRITICAL',
+          ticker,
+          side: 'IBKR_ONLY',
+          message: `${ticker} is open in IBKR but has no matching active Command position`,
+          ibkrShares: ibkrByTicker[ticker].shares,
+        });
+      }
+    }
+
+    // Check all PNTHR active positions vs IBKR
+    for (const [ticker, p] of Object.entries(pnthrByTicker)) {
+      const ip = ibkrByTicker[ticker];
+
+      // A. Ticker in Command but missing from IBKR
+      if (!ip) {
+        discrepancies.push({
+          type: 'TICKER_MISSING',
+          severity: 'CRITICAL',
+          ticker,
+          side: 'COMMAND_ONLY',
+          message: `${ticker} is in Command but not found in IBKR — may have been closed in IBKR`,
+          pnthrShares: pnthrShares(p),
+        });
+        continue; // no further checks if ticker is missing
+      }
+
+      // B. Shares mismatch
+      const pShares = pnthrShares(p);
+      const iShares = Math.abs(+ip.shares || 0); // IBKR uses negative for shorts
+      if (pShares > 0 && iShares > 0 && pShares !== iShares) {
+        const diff = Math.abs(pShares - iShares);
+        discrepancies.push({
+          type: 'SHARES_MISMATCH',
+          severity: diff > 1 ? 'HIGH' : 'MEDIUM',
+          ticker,
+          message: `${ticker}: PNTHR shows ${pShares} shares but IBKR shows ${iShares} shares (diff: ${diff > 0 ? '+' : ''}${pShares - iShares})`,
+          pnthrShares: pShares,
+          ibkrShares: iShares,
+          diff: pShares - iShares,
+        });
+      }
+
+      // C. Avg cost / price mismatch
+      const pAvg = pnthrAvgCost(p);
+      const iAvg = +ip.avgCost || 0;
+      if (pAvg > 0 && iAvg > 0) {
+        const diffAbs = Math.abs(pAvg - iAvg);
+        const diffPct = diffAbs / pAvg;
+        if (diffPct >= 0.005) { // 0.5% threshold — beyond commission noise
+          discrepancies.push({
+            type: 'PRICE_MISMATCH',
+            severity: diffPct >= 0.02 ? 'HIGH' : 'MEDIUM',
+            ticker,
+            message: `${ticker}: PNTHR avg cost $${pAvg.toFixed(2)} vs IBKR $${iAvg.toFixed(2)} (${(diffPct * 100).toFixed(2)}% diff — check fill prices)`,
+            pnthrAvg: pAvg,
+            ibkrAvg: iAvg,
+            diffPct: +(diffPct * 100).toFixed(2),
+          });
+        }
+      }
+
+      // D. Stop missing in Command
+      if (!p.stopPrice || +p.stopPrice === 0) {
+        discrepancies.push({
+          type: 'STOP_MISSING',
+          severity: 'CRITICAL',
+          ticker,
+          message: `${ticker}: No stop price set in Command — position is unprotected!`,
+          ibkrStop: ibkrStopByTicker[ticker]?.stopPrice || null,
+        });
+      } else {
+        // E. Stop mismatch — IBKR has a stop order that differs from Command stop
+        const ibkrStop = ibkrStopByTicker[ticker];
+        if (ibkrStop?.stopPrice) {
+          const pStop = +p.stopPrice;
+          const iStop = +ibkrStop.stopPrice;
+          const stopDiff = Math.abs(pStop - iStop);
+          const stopDiffPct = stopDiff / pStop;
+          if (stopDiffPct >= 0.005) {
+            discrepancies.push({
+              type: 'STOP_MISMATCH',
+              severity: 'HIGH',
+              ticker,
+              message: `${ticker}: Command stop $${pStop.toFixed(2)} ≠ IBKR stop order $${iStop.toFixed(2)} (${(stopDiffPct * 100).toFixed(1)}% diff)`,
+              pnthrStop: pStop,
+              ibkrStop: iStop,
+              diff: +(pStop - iStop).toFixed(2),
+            });
+          }
+        }
+      }
+    }
+
+    // Sort: CRITICAL first, then HIGH, then MEDIUM
+    const SEVERITY_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
+    discrepancies.sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
+
+    res.json({ discrepancies, ibkrConnected: true, syncedAt, isStale, staleMins });
+  } catch (err) {
+    console.error('[IBKR discrepancies]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/ticker/:symbol',      authenticateJWT, tickerHandler);
 app.get('/api/regime',              authenticateJWT, regimeHandler);
 

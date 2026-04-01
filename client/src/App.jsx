@@ -26,7 +26,7 @@ import HistoryPage from './components/HistoryPage';
 import KillTestPage from './components/KillTestPage';
 import AssistantPage from './components/AssistantPage';
 import LoginPage from './components/LoginPage';
-import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
+import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchIbkrDiscrepancies, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
 import { computeWeeksAgo } from './utils/dateUtils';
 import './App.css';
@@ -150,6 +150,15 @@ function App() {
   );
 }
 
+// ── IBKR Discrepancy severity config ─────────────────────────────────────────
+const IBKR_SEVERITY_COLOR = { CRITICAL: '#dc3545', HIGH: '#ff8c00', MEDIUM: '#ffc107' };
+const IBKR_SEVERITY_BG    = {
+  CRITICAL: 'rgba(220,53,69,0.12)',
+  HIGH:     'rgba(255,140,0,0.10)',
+  MEDIUM:   'rgba(255,193,7,0.08)',
+};
+const IBKR_SEVERITY_ICON  = { CRITICAL: '🚨', HIGH: '⚠️', MEDIUM: 'ℹ️' };
+
 function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const { isAuthenticated, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
   const isAdmin = currentUser?.role === 'admin';
@@ -169,6 +178,44 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
     const iv = setInterval(() => { if (isMarketHoursApp()) fetchAlerts(); }, 60000);
     return () => clearInterval(iv);
   }, [isAuthenticated]);
+
+  // ── IBKR discrepancy polling ──────────────────────────────────────────────
+  // Active discrepancies; each item has { type, severity, ticker, message, ... }
+  const [ibkrDiscrepancies, setIbkrDiscrepancies] = useState([]);
+  // Per-session dismissed set — keys are `${type}:${ticker}` strings
+  const [dismissedKeys, setDismissedKeys] = useState(() => {
+    try { return new Set(JSON.parse(sessionStorage.getItem('pnthr_ibkr_dismissed') || '[]')); }
+    catch { return new Set(); }
+  });
+
+  useEffect(() => {
+    if (!isAuthenticated) { setIbkrDiscrepancies([]); return; }
+    const load = async () => {
+      try {
+        const data = await fetchIbkrDiscrepancies();
+        if (data.ibkrConnected && data.discrepancies?.length > 0) {
+          setIbkrDiscrepancies(data.discrepancies);
+        } else {
+          setIbkrDiscrepancies([]);
+        }
+      } catch { /* IBKR not synced — no banner */ }
+    };
+    load();
+    const iv = setInterval(load, 2 * 60 * 1000); // poll every 2 minutes
+    return () => clearInterval(iv);
+  }, [isAuthenticated]);
+
+  function dismissIbkrDiscrepancy(key) {
+    setDismissedKeys(prev => {
+      const next = new Set(prev);
+      next.add(key);
+      try { sessionStorage.setItem('pnthr_ibkr_dismissed', JSON.stringify([...next])); } catch { /* */ }
+      return next;
+    });
+  }
+
+  // Visible = not yet dismissed this session
+  const visibleDiscrepancies = ibkrDiscrepancies.filter(d => !dismissedKeys.has(`${d.type}:${d.ticker}`));
 
   const [activePage, setActivePage] = useState(
     () => localStorage.getItem('pnthr_page') || currentUser?.defaultPage || 'long'
@@ -408,6 +455,48 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
             </button>
           </div>
         )}
+
+        {/* ── IBKR Discrepancy Banners — persistent until manually dismissed ── */}
+        {visibleDiscrepancies.map(d => {
+          const key = `${d.type}:${d.ticker}`;
+          const color = IBKR_SEVERITY_COLOR[d.severity] || '#ffc107';
+          const bg    = IBKR_SEVERITY_BG[d.severity]    || 'rgba(255,193,7,0.08)';
+          const icon  = IBKR_SEVERITY_ICON[d.severity]  || '⚠️';
+          return (
+            <div key={key} style={{
+              background: bg,
+              borderBottom: `1px solid ${color}44`,
+              padding: '9px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: 12,
+            }}>
+              <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
+              <span style={{ color, fontWeight: 800, flexShrink: 0, fontSize: 11, letterSpacing: '0.05em' }}>
+                IBKR {d.severity}
+              </span>
+              <span style={{ color: '#ddd', flex: 1 }}>{d.message}</span>
+              <button
+                onClick={() => dismissIbkrDiscrepancy(key)}
+                style={{
+                  background: 'none',
+                  border: `1px solid ${color}66`,
+                  color,
+                  borderRadius: 4,
+                  padding: '2px 10px',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  fontWeight: 600,
+                }}
+              >
+                DISMISS
+              </button>
+            </div>
+          );
+        })}
+
         <main className="main">
 
           {/* Scanner pages (Long / Short) */}

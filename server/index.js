@@ -2269,14 +2269,25 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
     const syncIsStale = staleMins != null && staleMins > 5;
     for (const ticker of Object.keys(ibkrByTicker)) {
       if (!pnthrByTicker[ticker]) {
-        const ibkrShares = Math.abs(+ibkrByTicker[ticker].shares || 0);
-        const soldToday  = todaySoldShares[ticker] || 0;
+        const rawIbkrShares = +(ibkrByTicker[ticker].shares) || 0;
+        const ibkrShares    = Math.abs(rawIbkrShares);
+        const soldToday     = todaySoldShares[ticker]   || 0;
+        const boughtToday   = todayBoughtShares[ticker] || 0;
 
-        // Suppress: if total shares sold today ≈ current IBKR shares, the
-        // position is actively being/was closed — not a genuine untracked open.
-        // E.g. COIN sold 24 shr → bridge still shows 24 shr before dict fix
-        // takes effect → soldToday (24) ≥ ibkrShares (24) × 0.9 → skip alert.
-        if (soldToday >= ibkrShares * 0.9) continue;
+        // Direction-aware suppression: belt-and-suspenders for the narrow 60s window
+        // between a position closing and the bridge dict catching up.
+        //
+        // LONG positions (rawShares > 0) are CLOSED via SLD executions.
+        //   → suppress if soldToday ≈ ibkrShares (closing sale, not yet 0 in feed)
+        // SHORT positions (rawShares < 0) are CLOSED via BOT executions.
+        //   → suppress if boughtToday ≈ ibkrShares (buy-to-cover, not yet 0 in feed)
+        //
+        // CRITICAL: SHORT positions are OPENED via SLD executions (selling short).
+        //   → never suppress based on soldToday for a short — that's a new position!
+        //   (This was the SPY/QQQ bug: SLD to open short was suppressing the alert.)
+        const longClosedToday  = rawIbkrShares > 0 && soldToday  >= ibkrShares * 0.9;
+        const shortClosedToday = rawIbkrShares < 0 && boughtToday >= ibkrShares * 0.9;
+        if (longClosedToday || shortClosedToday) continue;
 
         discrepancies.push({
           type: 'TICKER_MISSING',

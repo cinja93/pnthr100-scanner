@@ -2319,7 +2319,6 @@ export default function CommandCenter({ onNavigate }) {
     if (confirmResult?.sectorWarning)  setSectorWarning(confirmResult.sectorWarning);
     if (confirmResult?.journalSnapshot) {
       setJournalSnapshot(confirmResult.journalSnapshot);
-      setTimeout(() => setJournalSnapshot(null), 9000);
     }
     setPendingEntries(prev => prev.filter(e => e.id !== id));
     // Re-fetch positions so the new one appears immediately.

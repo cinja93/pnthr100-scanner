@@ -1,12 +1,28 @@
 // client/src/components/JournalPage.jsx
 // ── PNTHR Journal — Trade analysis, discipline tracking, pattern recognition ──
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ScorecardGrid from './ScorecardGrid';
 import ClosedTradeCards from './ClosedTradeCards';
 import pantherHead from '../assets/panther head.png';
+
+class TradeDetailBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(err) { return { error: err }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ background: '#1a0a0a', border: '1px solid #7b2e2e', borderRadius: 6, padding: '12px 16px', margin: '4px 0' }}>
+          <div style={{ color: '#dc3545', fontWeight: 700, fontSize: 12, marginBottom: 4 }}>⚠ Could not render trade detail</div>
+          <div style={{ color: '#666', fontSize: 11 }}>{this.state.error?.message}</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const DISC_COLORS = (score) => {
   if (score == null) return '#555';
@@ -231,13 +247,16 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
             {snap.vix != null && (
               <span>VIX <span style={{ color: snap.vix >= 25 ? '#ff6b6b' : snap.vix >= 18 ? '#ff8c00' : '#aaa', fontWeight: 700 }}>{snap.vix.toFixed(1)}</span></span>
             )}
-            {snap.regime && (
-              <span style={{
-                background: snap.regime === 'BULLISH' ? 'rgba(107,203,119,0.12)' : snap.regime === 'BEARISH' ? 'rgba(255,107,107,0.12)' : 'rgba(255,140,0,0.12)',
-                color: snap.regime === 'BULLISH' ? '#6bcb77' : snap.regime === 'BEARISH' ? '#ff6b6b' : '#ff8c00',
-                fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 4, letterSpacing: 1,
-              }}>{snap.regime}</span>
-            )}
+            {snap.regime && (() => {
+              const regimeLabel = typeof snap.regime === 'object' ? (snap.regime?.label ?? '') : snap.regime;
+              return (
+                <span style={{
+                  background: regimeLabel === 'BULLISH' ? 'rgba(107,203,119,0.12)' : regimeLabel === 'BEARISH' ? 'rgba(255,107,107,0.12)' : 'rgba(255,140,0,0.12)',
+                  color: regimeLabel === 'BULLISH' ? '#6bcb77' : regimeLabel === 'BEARISH' ? '#ff6b6b' : '#ff8c00',
+                  fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 4, letterSpacing: 1,
+                }}>{regimeLabel}</span>
+              );
+            })()}
             {sec?.etfTicker && sec.etfPrice != null && (
               <span style={{ color: '#555', borderLeft: '1px solid #1a1a1a', paddingLeft: 12 }}>
                 {sec.etfTicker} <span style={{ color: '#aaa', fontWeight: 700 }}>${sec.etfPrice.toFixed(2)}</span>
@@ -1057,7 +1076,9 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                             {isExpanded && (
                               <tr>
                                 <td colSpan={10} style={{ padding: '0 8px 8px', background: '#0d0d0d' }}>
-                                  <TradeDetail entry={entry} noteInputs={noteInputs} setNoteInputs={setNoteInputs} addNote={addNote} deleteNote={deleteNote} addTag={addTag} removeTag={removeTag} />
+                                  <TradeDetailBoundary>
+                                    <TradeDetail entry={entry} noteInputs={noteInputs} setNoteInputs={setNoteInputs} addNote={addNote} deleteNote={deleteNote} addTag={addTag} removeTag={removeTag} />
+                                  </TradeDetailBoundary>
                                 </td>
                               </tr>
                             )}

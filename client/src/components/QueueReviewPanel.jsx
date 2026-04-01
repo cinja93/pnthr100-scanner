@@ -190,6 +190,7 @@ export default function QueueReviewPanel({ onClose }) {
   }
 
   return (
+    <>
     <div
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 300,
         display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -414,5 +415,6 @@ export default function QueueReviewPanel({ onClose }) {
         onClose={() => setChartModal(null)}
       />
     )}
+    </>
   );
 }

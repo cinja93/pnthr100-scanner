@@ -2296,6 +2296,9 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
           side: 'IBKR_ONLY',
           positionId: null,
           ibkrShares,
+          ibkrDirection: rawIbkrShares >= 0 ? 'LONG' : 'SHORT',
+          ibkrAvgCost:   +(ibkrByTicker[ticker].avgCost)    || null,
+          ibkrPrice:     +(ibkrByTicker[ticker].marketPrice) || null,
           syncIsStale,
           staleMins,
         });
@@ -2309,6 +2312,63 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
     res.json({ discrepancies, ibkrConnected: true, syncedAt, isStale: syncIsStale, staleMins });
   } catch (err) {
     console.error('[IBKR discrepancies]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── IBKR Import Position ──────────────────────────────────────────────────────
+// POST /api/ibkr/import-position
+// Creates a minimal Command position card from live IBKR data.
+// Fills Lot 1 with the IBKR avgCost + share count; user sets stop and expands
+// lots from there. Only callable by admin (same guard as position creation).
+app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db     = await connectToDatabase();
+    const userId = req.user.userId;
+    const ticker = (req.body.ticker || '').toUpperCase();
+    if (!ticker) return res.status(400).json({ error: 'ticker required' });
+
+    // Pull live IBKR snapshot for this user
+    const ibkrDoc = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
+    const ibkrPos = (ibkrDoc?.positions || [])
+      .find(p => p.symbol?.toUpperCase() === ticker);
+    if (!ibkrPos) return res.status(404).json({ error: `${ticker} not found in current IBKR positions` });
+
+    const rawShares = +(ibkrPos.shares) || 0;
+    if (Math.abs(rawShares) < 1) return res.status(400).json({ error: `${ticker} shows 0 shares in IBKR — already closed?` });
+
+    const direction = rawShares >= 0 ? 'LONG' : 'SHORT';
+    const shares    = Math.abs(rawShares);
+    const avgCost   = +(ibkrPos.avgCost)    || 0;
+    const signal    = direction === 'LONG' ? 'BL' : 'SS';
+    const today     = new Date().toISOString().split('T')[0];
+    const now       = new Date();
+
+    const position = {
+      id:        Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      ownerId:   userId,
+      ticker,
+      direction,
+      signal,
+      entryPrice: avgCost,
+      status:    'ACTIVE',
+      source:    'IBKR_IMPORT',
+      fills: {
+        1: { filled: true, shares, price: avgCost, date: today },
+      },
+      ibkrImportedAt: now,
+      createdAt:      now,
+      updatedAt:      now,
+      outcome: { exitPrice: null, profitPct: null, profitDollar: null, holdingDays: null, exitReason: null },
+    };
+
+    await db.collection('pnthr_portfolio').insertOne(position);
+    console.log(`[IBKR] 📥 Imported ${ticker} (${direction} ${shares} shr @ $${avgCost}) from IBKR for user ${userId}`);
+
+    res.json({ success: true, id: position.id, ticker, direction, shares, avgCost });
+  } catch (err) {
+    console.error('[IBKR import-position]', err);
     res.status(500).json({ error: err.message });
   }
 });

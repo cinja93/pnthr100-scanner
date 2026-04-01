@@ -159,8 +159,9 @@ const DISC_BG    = { CRITICAL: 'rgba(220,53,69,0.13)', HIGH: 'rgba(255,140,0,0.1
 const DISC_ICON  = { CRITICAL: '🚨', HIGH: '⚠️', MEDIUM: 'ℹ️' };
 
 function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
-  const [uiState,   setUiState]   = useState('default');    // default | confirming | fixing | fixed
-  const [chosen,    setChosen]    = useState(null);         // 'ibkr' | 'command'
+  const [uiState,     setUiState]     = useState('default');    // default | confirming | fixing | fixed
+  const [chosen,      setChosen]      = useState(null);         // 'ibkr' | 'command'
+  const [createState, setCreateState] = useState('idle');       // idle | confirming | creating | created | error
 
   const color = DISC_COLOR[d.severity] || '#ffc107';
   const bg    = DISC_BG[d.severity]    || 'rgba(255,193,7,0.08)';
@@ -280,23 +281,77 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
     }
     if (d.type === 'TICKER_MISSING') {
       const isCmdOnly = d.side === 'COMMAND_ONLY';
-      // Build the contextual description based on what IBKR actually shows
-      let desc;
+
+      // ── COMMAND_ONLY: position in Command but not (or 0) in IBKR ─────────
       if (isCmdOnly) {
-        desc = d.ibkrShowsZero
+        const desc = d.ibkrShowsZero
           ? `In Command (${d.pnthrShares} shr) — IBKR now shows 0 shares (closed there)`
           : `In Command (${d.pnthrShares} shr) — not found in IBKR at all`;
-      } else {
-        // IBKR_ONLY — attach stale-data caveat if sync is old
-        desc = d.syncIsStale
-          ? `In IBKR (${d.ibkrShares} shr) — NOT in Command  ⏱ IBKR data is ${d.staleMins}m old, may already be closed`
-          : `In IBKR (${d.ibkrShares} shr) — NOT in Command`;
+        return (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ color: '#aaa', fontSize: 11 }}>{desc}</span>
+            <button onClick={() => onNavigate('command')} style={btnStyle(color)}>Close in Command →</button>
+          </span>
+        );
       }
+
+      // ── IBKR_ONLY: position in IBKR but missing from Command ─────────────
+      // Full create flow: idle → confirming → creating → created/error
+
+      async function doCreate() {
+        setCreateState('creating');
+        try {
+          const res = await fetch(`${API_BASE}/api/ibkr/import-position`, {
+            method: 'POST',
+            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticker: d.ticker }),
+          });
+          if (!res.ok) throw new Error('import failed');
+          setCreateState('created');
+          setTimeout(() => onFixed(), 2000); // refresh discrepancies + positions
+        } catch {
+          setCreateState('error');
+        }
+      }
+
+      const dirLabel = d.ibkrDirection || 'LONG';
+      const costStr  = d.ibkrAvgCost ? ` @ $${(+d.ibkrAvgCost).toFixed(2)}` : '';
+      const staleNote = d.syncIsStale ? `  ⏱ ${d.staleMins}m old` : '';
+
+      if (createState === 'confirming') {
+        return (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ color: '#ddd', fontSize: 11 }}>
+              Create <b style={{ color: '#fff' }}>{dirLabel}</b> card for <b style={{ color: '#fff' }}>{d.ticker}</b> — {d.ibkrShares} shr{costStr} — Lot 1 pre-filled from IBKR. Add stop + lots after.
+            </span>
+            <button onClick={doCreate} style={btnStyle('#28a745')}>✓ YES – CREATE IT</button>
+            <button onClick={() => setCreateState('idle')} style={btnStyle('#555')}>✗ CANCEL</button>
+          </span>
+        );
+      }
+      if (createState === 'creating') {
+        return <span style={{ color: '#aaa', fontSize: 11 }}>Creating position in Command…</span>;
+      }
+      if (createState === 'created') {
+        return <span style={{ color: '#28a745', fontWeight: 700, fontSize: 11 }}>✓ Position created! Go to Command to set stop + expand lots.</span>;
+      }
+      if (createState === 'error') {
+        return (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#dc3545', fontSize: 11 }}>Create failed — try again</span>
+            <button onClick={() => setCreateState('confirming')} style={btnStyle('#dc3545')}>Retry</button>
+          </span>
+        );
+      }
+
+      // idle — default IBKR_ONLY view
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: '#aaa', fontSize: 11 }}>{desc}</span>
-          <button onClick={() => onNavigate('command')} style={btnStyle(color)}>
-            {isCmdOnly ? 'Close in Command →' : 'Add to Command →'}
+          <span style={{ color: '#aaa', fontSize: 11 }}>
+            In IBKR — {dirLabel} {d.ibkrShares} shr{costStr} — NOT in Command{staleNote}
+          </span>
+          <button onClick={() => setCreateState('confirming')} style={btnStyle(color)}>
+            Create in Command →
           </button>
         </span>
       );

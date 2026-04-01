@@ -2277,16 +2277,20 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
         // Direction-aware suppression: belt-and-suspenders for the narrow 60s window
         // between a position closing and the bridge dict catching up.
         //
-        // LONG positions (rawShares > 0) are CLOSED via SLD executions.
-        //   → suppress if soldToday ≈ ibkrShares (closing sale, not yet 0 in feed)
-        // SHORT positions (rawShares < 0) are CLOSED via BOT executions.
-        //   → suppress if boughtToday ≈ ibkrShares (buy-to-cover, not yet 0 in feed)
+        // LONG closed today  → rawShares > 0, soldToday ≈ ibkrShares, soldToday > boughtToday
+        //   (net selling activity = closing sale, not a re-open)
+        // SHORT closed today → rawShares < 0, boughtToday ≈ ibkrShares, boughtToday > soldToday
+        //   (net buying activity = buy-to-cover, not a fresh short)
         //
-        // CRITICAL: SHORT positions are OPENED via SLD executions (selling short).
-        //   → never suppress based on soldToday for a short — that's a new position!
-        //   (This was the SPY/QQQ bug: SLD to open short was suppressing the alert.)
-        const longClosedToday  = rawIbkrShares > 0 && soldToday  >= ibkrShares * 0.9;
-        const shortClosedToday = rawIbkrShares < 0 && boughtToday >= ibkrShares * 0.9;
+        // NEVER suppress when the net activity is a re-open:
+        //   boughtToday > soldToday for a LONG means: sold the first lot, then re-bought
+        //   e.g. SPY: BOT 2 → SLD 2 → BOT 2 again → boughtToday=4 > soldToday=2 → genuine open
+        const longClosedToday  = rawIbkrShares > 0
+          && soldToday  >= ibkrShares * 0.9
+          && boughtToday < soldToday;  // net sold → closing, not re-opening
+        const shortClosedToday = rawIbkrShares < 0
+          && boughtToday >= ibkrShares * 0.9
+          && soldToday < boughtToday;  // net bought → covering, not re-shorting
         if (longClosedToday || shortClosedToday) continue;
 
         discrepancies.push({

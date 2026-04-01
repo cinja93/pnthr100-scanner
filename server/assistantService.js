@@ -48,8 +48,8 @@ export function tradingDaysSince(date) {
  * Return today's date string in YYYY-MM-DD format (local time).
  */
 function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // Use Eastern Time so the date doesn't roll over at 8 PM ET
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // 'en-CA' → YYYY-MM-DD
 }
 
 /**
@@ -1125,6 +1125,78 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
     earningsDetail = names + ' — see P1/P2 tasks above for action steps';
   }
 
+  // ── Wednesday context ─────────────────────────────────────────────────────
+
+  // Stale positions: Day 10+ (still holding without confirmation)
+  const stalePositions = activePosns
+    .map(p => ({ ticker: p.ticker, days: tradingDaysSince(p.createdAt), direction: p.direction }))
+    .filter(p => p.days >= 10)
+    .sort((a, b) => b.days - a.days);
+
+  let wedStaleLabel;
+  if (stalePositions.length === 0) {
+    wedStaleLabel = 'Review stale positions: No positions at Day 10+ ✓';
+  } else {
+    wedStaleLabel = `Stale positions (${stalePositions.length}): ${
+      stalePositions.map(p => `${p.ticker} Day ${p.days}`).join(' · ')
+    } — still in thesis?`;
+  }
+
+  // Lot triggers approaching: next unfilled lot within 5% of current price
+  const lotApproaching = [];
+  for (const pos of activePosns) {
+    const cp     = pos.currentPrice;
+    const fills  = pos.fills || {};
+    const isLong = pos.direction === 'LONG';
+    const anchor = fills[1]?.filled && fills[1]?.price
+      ? +fills[1].price : (pos.entryPrice || 0);
+    if (!cp || !anchor) continue;
+
+    for (let lotNum = 2; lotNum <= 5; lotNum++) {
+      if (fills[lotNum]?.filled) continue;            // already filled
+      if (lotNum > 2 && !fills[lotNum - 1]?.filled) break; // prior lot not filled
+      const offset = LOT_OFFSETS[lotNum];
+      if (offset == null) break;                      // no offset defined (lot 5 edge)
+      const trigger = isLong
+        ? +(anchor * (1 + offset)).toFixed(2)
+        : +(anchor * (1 - offset)).toFixed(2);
+      const distPct = +(Math.abs(trigger - cp) / cp * 100).toFixed(1);
+      if (distPct <= 5) {
+        lotApproaching.push({ ticker: pos.ticker, lotNum, trigger, distPct });
+      }
+      break; // only the NEXT unfilled lot matters
+    }
+  }
+
+  let wedLotLabel;
+  if (lotApproaching.length === 0) {
+    wedLotLabel = 'Mid-week lot review: No lot triggers within 5% ✓';
+  } else {
+    wedLotLabel = `Lot triggers approaching (${lotApproaching.length}): ${
+      lotApproaching.map(p => `${p.ticker} Lot ${p.lotNum} $${p.trigger} (${p.distPct}% away)`).join(' · ')
+    }`;
+  }
+
+  // Newsletter: last published date
+  let wedPerchLabel = "Check PNTHR's Perch — new newsletter published?";
+  try {
+    const rdb = await connectToDatabase();
+    if (rdb) {
+      const latest = await rdb.collection('newsletter_issues')
+        .findOne({ status: 'published' }, { sort: { publishedAt: -1 }, projection: { publishedAt: 1, weekOf: 1 } });
+      if (latest?.publishedAt) {
+        const pubDate   = new Date(latest.publishedAt);
+        const daysSince = Math.floor((Date.now() - pubDate.getTime()) / 86400000);
+        const pubStr    = pubDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' });
+        wedPerchLabel   = daysSince <= 7
+          ? `PNTHR's Perch: New issue published ${pubStr} ✓ — read this week's newsletter`
+          : `PNTHR's Perch: Last published ${pubStr} (${daysSince}d ago) — check if new issue is due`;
+      }
+    }
+  } catch (e) {
+    console.warn('[buildRoutineContext] newsletter fetch failed:', e.message);
+  }
+
   return {
     killLabel,
     killChipSections,
@@ -1132,6 +1204,12 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
     sectorChipSections,
     earningsLabel,
     earningsDetail,
+    // Wednesday enrichments
+    wedStaleLabel,
+    wedLotLabel,
+    wedPerchLabel,
+    stalePositions,
+    lotApproaching,
   };
 }
 
@@ -1361,6 +1439,23 @@ export function getRoutineTasks(dayOfWeek, context = {}) {
     } else {
       base.push(...smartRoutines);
     }
+  }
+
+  // Inject smart Wednesday routines — replace static labels with data-enriched versions
+  if (dayOfWeek === 3) {
+    const {
+      wedStaleLabel = 'Review stale positions (Day 10+) — still in thesis?',
+      wedLotLabel   = 'Mid-week position review — any lot triggers approaching?',
+      wedPerchLabel = "Check PNTHR's Perch — new newsletter published?",
+    } = context;
+
+    const wedMidIdx   = base.findIndex(r => r.id === 'wed_mid_week');
+    const wedPerchIdx = base.findIndex(r => r.id === 'wed_perch_check');
+    const wedStaleIdx = base.findIndex(r => r.id === 'wed_stale_review');
+
+    if (wedMidIdx   >= 0) base[wedMidIdx]   = { ...base[wedMidIdx],   label: wedLotLabel };
+    if (wedPerchIdx >= 0) base[wedPerchIdx] = { ...base[wedPerchIdx], label: wedPerchLabel };
+    if (wedStaleIdx >= 0) base[wedStaleIdx] = { ...base[wedStaleIdx], label: wedStaleLabel };
   }
 
   return base;

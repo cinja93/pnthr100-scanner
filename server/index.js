@@ -4160,7 +4160,9 @@ app.get('/api/assistant/stop-sync', async (req, res) => {
 app.get('/api/assistant/routines', async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
-    const dow = new Date().getDay();
+    // Use Eastern Time — prevents UTC rollover showing tomorrow's routine after 8 PM ET
+    const etDayName = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long' });
+    const dow = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(etDayName);
 
     let context = {};
     // On Mondays (and any day), build smart context so the 3 key routines show specific data

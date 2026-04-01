@@ -2527,6 +2527,105 @@ app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
   }
 });
 
+// ── 21H EMA for Command positions ────────────────────────────────────────────
+// GET /api/positions/hourly-ema
+// Returns the 21-period hourly EMA for each active Command position.
+// Computed from FMP 1-hour bars, cached in memory for 60 minutes per ticker
+// so we make at most ~20 FMP calls per hour regardless of poll frequency.
+//
+// The client polls this once per hour and uses the cached values every 60s
+// alongside the IBKR live price to detect intraday EMA crossovers.
+
+const hourlyEmaCache = {}; // { [ticker]: { ema21h, computedAt } }
+
+async function computeHourlyEma21(ticker) {
+  const FMP_API_KEY = process.env.FMP_API_KEY;
+  // Fetch 10 days of hourly bars (≥80 bars — plenty to seed a 21-period EMA)
+  const from = new Date();
+  from.setDate(from.getDate() - 10);
+  const fromStr = from.toISOString().split('T')[0];
+  const url = `https://financialmodelingprep.com/api/v3/historical-chart/1hour/${ticker}?from=${fromStr}&apikey=${FMP_API_KEY}`;
+  const resp = await fetch(url);
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  if (!Array.isArray(data) || data.length < 22) return null;
+
+  // FMP returns newest-first — reverse for chronological (oldest → newest)
+  const bars = [...data].reverse();
+
+  // Filter to only market-hours bars (9:30–16:00 ET) — excludes pre/post market noise
+  const mktBars = bars.filter(b => {
+    const t = b.date ? new Date(b.date) : null;
+    if (!t) return true; // keep if can't parse
+    const et = new Date(t.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const h = et.getHours(), m = et.getMinutes();
+    const mins = h * 60 + m;
+    return mins >= 570 && mins < 960; // 9:30–15:59
+  });
+  if (mktBars.length < 22) return null;
+
+  // Compute 21-period EMA (standard exponential moving average)
+  const period = 21;
+  const k = 2 / (period + 1); // multiplier ≈ 0.0909
+
+  // Seed: SMA of first 21 closes
+  let ema = mktBars.slice(0, period).reduce((s, b) => s + b.close, 0) / period;
+
+  // Rolling EMA for all remaining bars
+  for (let i = period; i < mktBars.length; i++) {
+    ema = mktBars[i].close * k + ema * (1 - k);
+  }
+  return +ema.toFixed(4);
+}
+
+app.get('/api/positions/hourly-ema', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db     = await connectToDatabase();
+    const userId = req.user.userId;
+
+    // Get all active tickers for this user
+    const positions = await db.collection('pnthr_portfolio')
+      .find({ ownerId: userId, status: 'ACTIVE' })
+      .project({ ticker: 1 })
+      .toArray();
+
+    const tickers = [...new Set(positions.map(p => p.ticker?.toUpperCase()).filter(Boolean))];
+    const now     = Date.now();
+    const TTL     = 60 * 60 * 1000; // 60-minute cache per ticker
+
+    const result = {};
+    const stale  = tickers.filter(t => {
+      const c = hourlyEmaCache[t];
+      if (c && (now - new Date(c.computedAt).getTime()) < TTL) {
+        result[t] = c; // serve from cache
+        return false;
+      }
+      return true; // needs refresh
+    });
+
+    // Refresh stale tickers with FMP (3 at a time, 300ms pause between batches)
+    for (let i = 0; i < stale.length; i += 3) {
+      const chunk = stale.slice(i, i + 3);
+      await Promise.all(chunk.map(async t => {
+        try {
+          const ema = await computeHourlyEma21(t);
+          if (ema != null) {
+            hourlyEmaCache[t] = { ema21h: ema, computedAt: new Date().toISOString() };
+            result[t] = hourlyEmaCache[t];
+          }
+        } catch { /* non-fatal — skip ticker */ }
+      }));
+      if (i + 3 < stale.length) await new Promise(r => setTimeout(r, 300));
+    }
+
+    res.json(result); // { [TICKER]: { ema21h, computedAt } }
+  } catch (err) {
+    console.error('[hourly-ema]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/ticker/:symbol',      authenticateJWT, tickerHandler);
 app.get('/api/regime',              authenticateJWT, regimeHandler);
 

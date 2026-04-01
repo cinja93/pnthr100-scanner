@@ -679,6 +679,14 @@ export async function fetchIbkrDiscrepancies() {
   return res.json();
 }
 
+// Returns { [TICKER]: { ema21h, computedAt } } for all active Command positions.
+// Server-cached for 60 minutes per ticker — safe to call every 60s on the client.
+export async function fetchHourlyEma() {
+  const res = await fetch(`${API_BASE}/api/positions/hourly-ema`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function deleteJournalTag(journalId, tag) {
   const res = await fetch(`${API_BASE}/api/journal/${journalId}/tags/${encodeURIComponent(tag)}`, {
     method: 'DELETE',

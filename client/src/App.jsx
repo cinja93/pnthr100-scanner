@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AuthContext } from './AuthContext';
 import { QueueProvider, useQueue } from './contexts/QueueContext';
 import { AnalyzeProvider } from './contexts/AnalyzeContext';
@@ -26,7 +26,7 @@ import HistoryPage from './components/HistoryPage';
 import KillTestPage from './components/KillTestPage';
 import AssistantPage from './components/AssistantPage';
 import LoginPage from './components/LoginPage';
-import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchIbkrDiscrepancies, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
+import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
 import { computeWeeksAgo } from './utils/dateUtils';
 import './App.css';
@@ -423,25 +423,209 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
   );
 }
 
+// ── EMA Alert Banner ──────────────────────────────────────────────────────────
+// Displays a single row per active 21H EMA crossover alert.
+// Urgency levels: CRITICAL (red) | HIGH (orange) | MEDIUM (yellow) | FAVORABLE (green)
+const EMA_URGENCY_COLOR = { CRITICAL: '#dc3545', HIGH: '#fd7e14', MEDIUM: '#ffc107', FAVORABLE: '#28a745' };
+const EMA_URGENCY_BG    = { CRITICAL: 'rgba(220,53,69,0.12)', HIGH: 'rgba(253,126,20,0.10)', MEDIUM: 'rgba(255,193,7,0.08)', FAVORABLE: 'rgba(40,167,69,0.08)' };
+const EMA_URGENCY_ICON  = { CRITICAL: '⚡', HIGH: '⚠️', MEDIUM: '〰️', FAVORABLE: '✅' };
+
+function EmaAlertBanner({ alert: a, onDismiss }) {
+  const color = EMA_URGENCY_COLOR[a.urgency] || '#ffc107';
+  const bg    = EMA_URGENCY_BG[a.urgency]    || 'rgba(255,193,7,0.08)';
+  const icon  = EMA_URGENCY_ICON[a.urgency]  || '〰️';
+
+  const sideLabel = a.emaSide === 'ABOVE' ? '▲ ABOVE' : '▼ BELOW';
+  const v1Sign    = a.velocity1m >= 0 ? '+' : '';
+  const pSign     = a.pnlPerMin  >= 0 ? '+' : '';
+  const crossNote = a.crossed ? ' (just crossed)' : '';
+  const adverse   = a.isAdverse
+    ? `${sideLabel} 21H EMA — adverse for ${a.direction}${crossNote}`
+    : `${sideLabel} 21H EMA — favorable for ${a.direction}${crossNote}`;
+
+  return (
+    <div style={{
+      background: bg,
+      borderBottom: `1px solid ${color}22`,
+      borderLeft: `3px solid ${color}`,
+      padding: '5px 16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      fontSize: 11,
+      flexWrap: 'wrap',
+    }}>
+      <span style={{ color, fontWeight: 800, whiteSpace: 'nowrap' }}>{icon} {a.urgency}</span>
+      <span style={{ background: color, color: '#000', borderRadius: 3, padding: '1px 7px', fontWeight: 800, fontSize: 11, whiteSpace: 'nowrap' }}>{a.ticker}</span>
+      <span style={{ color: '#888' }}>{a.direction}</span>
+      <span style={{ color: '#ccc', flex: 1, minWidth: 180 }}>{adverse}</span>
+      <span style={{ color: '#888', whiteSpace: 'nowrap' }}>
+        velocity: <b style={{ color }}>{v1Sign}{a.velocity1m.toFixed(2)}%/min</b>
+      </span>
+      {a.dollarAtRisk > 0 && (
+        <span style={{ color: '#888', whiteSpace: 'nowrap' }}>
+          P&amp;L: <b style={{ color }}>{pSign}${Math.abs(a.pnlPerMin).toFixed(0)}/min</b>
+          &nbsp;(<b style={{ color }}>{a.riskPctPerMin.toFixed(1)}% of risk/min</b>)
+        </span>
+      )}
+      <span style={{ color: '#666', whiteSpace: 'nowrap', fontSize: 10 }}>
+        EMA: ${a.ema21h.toFixed(2)} · price: ${a.currentPrice.toFixed(2)}
+      </span>
+      <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 15, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+    </div>
+  );
+}
+
 function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const { isAuthenticated, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
   const isAdmin = currentUser?.role === 'admin';
-  const [lotAlerts, setLotAlerts] = useState([]);
+  const [lotAlerts,  setLotAlerts]  = useState([]);
+  const [positions,  setPositions]  = useState([]); // full positions for EMA alerts
+
+  // ── Rolling price history (last 10 ticks per ticker, in-memory only) ────────
+  const priceHistoryRef = useRef({}); // { [ticker]: [{price, time}] }
+  const prevEmaSideRef  = useRef({}); // { [ticker]: 'ABOVE' | 'BELOW' }
 
   useEffect(() => {
-    if (!isAuthenticated) { setLotAlerts([]); return; }
+    if (!isAuthenticated) { setLotAlerts([]); setPositions([]); return; }
     const fetchAlerts = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/positions`, { headers: authHeaders() });
         if (!res.ok) return;
         const data = await res.json();
-        setLotAlerts(calcReadyLots(data.positions || []));
+        const pos  = data.positions || [];
+        setLotAlerts(calcReadyLots(pos));
+        setPositions(pos);
+        // Update rolling price history (used for velocity computation)
+        const now = Date.now();
+        for (const p of pos) {
+          if (!p.ticker || !p.currentPrice) continue;
+          const t = p.ticker.toUpperCase();
+          if (!priceHistoryRef.current[t]) priceHistoryRef.current[t] = [];
+          priceHistoryRef.current[t].push({ price: +p.currentPrice, time: now });
+          if (priceHistoryRef.current[t].length > 10) priceHistoryRef.current[t].shift();
+        }
       } catch { /* ignore */ }
     };
     fetchAlerts();
     const iv = setInterval(() => { if (isMarketHoursApp()) fetchAlerts(); }, 60000);
     return () => clearInterval(iv);
   }, [isAuthenticated]);
+
+  // ── 21H EMA values — fetched from server (60-min server cache) ──────────────
+  const [emaValues, setEmaValues] = useState({}); // { [TICKER]: { ema21h, computedAt } }
+
+  useEffect(() => {
+    if (!isAuthenticated) { setEmaValues({}); return; }
+    const load = async () => {
+      try { setEmaValues(await fetchHourlyEma()); } catch { /* non-fatal */ }
+    };
+    load();
+    const iv = setInterval(load, 60 * 60 * 1000); // refresh every hour (server caches per-ticker anyway)
+    return () => clearInterval(iv);
+  }, [isAuthenticated]);
+
+  // ── EMA crossover alerts — computed every time positions or EMA values update ─
+  const [emaAlerts,        setEmaAlerts]        = useState([]);
+  const [dismissedEmaKeys, setDismissedEmaKeys] = useState(new Set());
+
+  useEffect(() => {
+    if (!positions.length || !Object.keys(emaValues).length) return;
+
+    const alerts = [];
+    for (const p of positions) {
+      if (p.status !== 'ACTIVE') continue;
+      const ticker  = p.ticker?.toUpperCase();
+      const emaData = emaValues[ticker];
+      if (!emaData?.ema21h || !p.currentPrice) continue;
+
+      const price   = +p.currentPrice;
+      const ema21h  = +emaData.ema21h;
+      const emaSide = price > ema21h ? 'ABOVE' : 'BELOW';
+      const prevSide  = prevEmaSideRef.current[ticker];
+      const crossed   = prevSide != null && prevSide !== emaSide;
+      prevEmaSideRef.current[ticker] = emaSide;
+
+      // Is this side adverse to the position direction?
+      const direction = p.direction || 'LONG';
+      const isAdverse = (direction === 'LONG' && emaSide === 'BELOW')
+                     || (direction === 'SHORT' && emaSide === 'ABOVE');
+
+      // Velocity from rolling price history
+      const hist = priceHistoryRef.current[ticker] || [];
+      let velocity1m = 0, velocity5m = 0;
+      if (hist.length >= 2) {
+        const prev1 = hist[hist.length - 2];
+        const cur   = hist[hist.length - 1];
+        const mins  = Math.max((cur.time - prev1.time) / 60000, 0.1);
+        velocity1m  = ((cur.price - prev1.price) / prev1.price * 100) / mins;
+      }
+      if (hist.length >= 6) {
+        const prev5 = hist[hist.length - 6];
+        const cur   = hist[hist.length - 1];
+        const mins  = Math.max((cur.time - prev5.time) / 60000, 0.1);
+        velocity5m  = ((cur.price - prev5.price) / prev5.price * 100) / mins;
+      }
+
+      // P&L velocity ($ per minute, positive = gaining)
+      const fills       = p.fills || {};
+      const filledArr   = Object.values(fills).filter(f => f?.filled);
+      const totalShares = filledArr.reduce((s, f) => s + (+f.shares || 0), 0);
+      const totalCost   = filledArr.reduce((s, f) => s + (+f.shares || 0) * (+f.price || 0), 0);
+      const avgCost     = totalShares > 0 ? totalCost / totalShares : (p.entryPrice || price);
+      const dollarPerMinPerShare = (velocity1m / 100) * price; // $/min/share
+      const pnlPerMin   = (direction === 'LONG' ? 1 : -1) * dollarPerMinPerShare * totalShares;
+
+      // Dollar at risk for this position
+      let dollarAtRisk = 0;
+      if (p.stopPrice && totalShares > 0) {
+        const riskPerShare = direction === 'LONG'
+          ? Math.max(avgCost - p.stopPrice, 0)
+          : Math.max(p.stopPrice - avgCost, 0);
+        dollarAtRisk = riskPerShare * totalShares;
+      }
+
+      // % of risk capital being lost per minute
+      const riskPctPerMin = dollarAtRisk > 0 ? Math.abs(pnlPerMin) / dollarAtRisk * 100 : 0;
+
+      // Urgency — only alert when on adverse side or just crossed favorably
+      const velMag = Math.abs(velocity5m);
+      let urgency = null;
+      if (isAdverse) {
+        if (riskPctPerMin >= 5 || velMag >= 0.5)        urgency = 'CRITICAL';
+        else if (riskPctPerMin >= 2 || velMag >= 0.2 || crossed) urgency = 'HIGH';
+        else if (crossed || velMag >= 0.05)              urgency = 'MEDIUM';
+      } else if (crossed) {
+        urgency = 'FAVORABLE'; // price returned to favorable side — quiet green alert
+      }
+      if (!urgency) continue;
+
+      // Auto-clear dismissed key if side has changed (so re-crossing re-fires)
+      const dismissKey = `${ticker}:${emaSide}`;
+      if (crossed) {
+        // When side changes, remove the OLD side's dismiss key so it can fire again later
+        const oldKey = `${ticker}:${prevSide}`;
+        setDismissedEmaKeys(prev => { const n = new Set(prev); n.delete(oldKey); return n; });
+      }
+
+      alerts.push({
+        ticker, direction, currentPrice: price, ema21h, emaSide, crossed, isAdverse,
+        velocity1m: +velocity1m.toFixed(3),
+        velocity5m: +velocity5m.toFixed(3),
+        pnlPerMin:  +pnlPerMin.toFixed(2),
+        dollarAtRisk: +dollarAtRisk.toFixed(0),
+        riskPctPerMin: +riskPctPerMin.toFixed(2),
+        urgency,
+        dismissKey,
+      });
+    }
+
+    const ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, FAVORABLE: 3 };
+    alerts.sort((a, b) => (ORDER[a.urgency] ?? 9) - (ORDER[b.urgency] ?? 9));
+    setEmaAlerts(alerts);
+  }, [positions, emaValues]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const visibleEmaAlerts = emaAlerts.filter(a => !dismissedEmaKeys.has(a.dismissKey));
 
   // ── IBKR discrepancy polling ──────────────────────────────────────────────
   // Active discrepancies; each item has { type, severity, ticker, message, ... }
@@ -718,6 +902,45 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
               GO TO COMMAND →
             </button>
           </div>
+        )}
+
+        {/* ── 21H EMA Crossover Alerts — fires when price crosses 21H EMA on active positions ── */}
+        {isAuthenticated && visibleEmaAlerts.length > 0 && (
+          <>
+            <div style={{
+              background: 'rgba(30,30,30,0.95)',
+              borderBottom: '1px solid #333',
+              padding: '5px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: 11,
+            }}>
+              <span style={{ color: '#fcf000', fontWeight: 800, letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
+                📈 21H EMA — {visibleEmaAlerts.length} ALERT{visibleEmaAlerts.length > 1 ? 'S' : ''}
+              </span>
+              {visibleEmaAlerts.some(a => a.urgency === 'CRITICAL') && (
+                <span style={{ color: '#dc3545', fontSize: 10, fontWeight: 700, animation: 'none' }}>
+                  ⚡ CRITICAL — check positions immediately
+                </span>
+              )}
+              {visibleEmaAlerts.length >= 3 && (
+                <button
+                  onClick={() => setDismissedEmaKeys(prev => new Set([...prev, ...visibleEmaAlerts.map(a => a.dismissKey)]))}
+                  style={{ marginLeft: 'auto', background: 'none', border: '1px solid #333', color: '#666', borderRadius: 4, padding: '2px 10px', fontSize: 10, cursor: 'pointer' }}
+                >
+                  DISMISS ALL
+                </button>
+              )}
+            </div>
+            {visibleEmaAlerts.map(a => (
+              <EmaAlertBanner
+                key={a.dismissKey}
+                alert={a}
+                onDismiss={() => setDismissedEmaKeys(prev => new Set([...prev, a.dismissKey]))}
+              />
+            ))}
+          </>
         )}
 
         {/* ── IBKR Discrepancy Banners — interactive fix flow, persistent per session ── */}

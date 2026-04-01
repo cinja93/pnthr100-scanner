@@ -348,7 +348,7 @@ function getScoreQuestions(entry, disc) {
   if (!disc) return questions;
 
   const idxLabel = disc.tier1?.components?.indexTrend?.label;
-  if ((idxLabel === 'UNKNOWN' || idxLabel === 'ERROR') && !entry.userConfirmed?.indexTrend) {
+  if ((idxLabel === 'UNKNOWN' || idxLabel === 'ERROR') && !entry.userConfirmed?.indexTrend && !entry.entryConfirmed?.indexTrend) {
     questions.push({
       id: 'indexTrend',
       question: `Was the market (SPY/QQQ) trending WITH or AGAINST your ${entry.direction} trade in ${entry.ticker}?`,
@@ -362,7 +362,7 @@ function getScoreQuestions(entry, disc) {
   }
 
   const sectLabel = disc.tier1?.components?.sectorTrend?.label;
-  if ((sectLabel === 'UNKNOWN' || sectLabel === 'ERROR') && !entry.userConfirmed?.sectorTrend) {
+  if ((sectLabel === 'UNKNOWN' || sectLabel === 'ERROR') && !entry.userConfirmed?.sectorTrend && !entry.entryConfirmed?.sectorTrend) {
     questions.push({
       id: 'sectorTrend',
       question: `Was the ${entry.sector || 'sector'} trending WITH or AGAINST your ${entry.direction} trade?`,
@@ -640,15 +640,27 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
               <span style={{ background: '#dc3545', color: '#fff', borderRadius: '50%', width: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800 }}>{pendingQs.length}</span>
               ANSWER NEEDED
             </span>
-          ) : entry.userConfirmed?.confirmedAt ? (
-            <span
-              onClick={e => { e.stopPropagation(); setShowCompleteScore(v => !v); }}
-              title="All questions answered — click to review or correct"
-              style={{ background: 'rgba(40,167,69,0.15)', border: '1px solid #28a745', color: '#6bcb77', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer' }}
-            >
-              ✓ VERIFIED
-            </span>
-          ) : null}
+          ) : (
+            <>
+              {entry.entryConfirmed?.allCaptured && (
+                <span
+                  title="Kill score, signal, regime, index &amp; sector trend were auto-captured at entry confirmation"
+                  style={{ background: 'rgba(0,180,255,0.12)', border: '1px solid rgba(0,180,255,0.4)', color: '#39c0ff', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em' }}
+                >
+                  ⚡ AUTO
+                </span>
+              )}
+              {entry.userConfirmed?.confirmedAt && (
+                <span
+                  onClick={e => { e.stopPropagation(); setShowCompleteScore(v => !v); }}
+                  title="All questions answered — click to review or correct"
+                  style={{ background: 'rgba(40,167,69,0.15)', border: '1px solid #28a745', color: '#6bcb77', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer' }}
+                >
+                  ✓ VERIFIED
+                </span>
+              )}
+            </>
+          )}
           {entry.sector   && <span style={{ color: '#555', fontSize: '0.75rem' }}>{entry.sector}</span>}
           {calDays != null && <span style={{ color: '#555', fontSize: '0.72rem' }}>{calDays}d</span>}
         </div>

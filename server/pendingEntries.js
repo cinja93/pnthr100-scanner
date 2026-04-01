@@ -417,7 +417,9 @@ export async function pendingEntryConfirm(req, res) {
       { $set: { status: 'CONFIRMED', confirmedAt: new Date(), positionId: posId } }
     );
 
-    let washWarning = null;
+    let washWarning    = null;
+    let journalEntry   = null;
+    let journalSnapshot = null;
 
     // ── Create Journal Entry with all captured data ─────────────────────────
     try {
@@ -428,7 +430,7 @@ export async function pendingEntryConfirm(req, res) {
         etfChange1D: marketAtEntry.sectorChange1D || null,
       } : null;
 
-      await createJournalEntry(db, position, req.user.userId, null, marketAtEntry, sectorAtEntry, {
+      journalEntry = await createJournalEntry(db, position, req.user.userId, null, marketAtEntry, sectorAtEntry, {
         killScoreAtEntry,
         signal,
         signalAge,
@@ -441,6 +443,26 @@ export async function pendingEntryConfirm(req, res) {
       });
     } catch (e) {
       console.warn('[JOURNAL] Auto-create failed:', e.message);
+    }
+
+    // ── Build journalSnapshot for client feedback ────────────────────────────
+    if (journalEntry?.entryConfirmed) {
+      const ec = journalEntry.entryConfirmed;
+      journalSnapshot = {
+        allCaptured:  ec.allCaptured,
+        fields: {
+          killScore:    ec.killScore    != null ? { value: ec.killScore,    auto: true } : null,
+          killRank:     ec.killRank     != null ? { value: ec.killRank,     auto: true } : null,
+          killTier:     ec.killTier     != null ? { value: ec.killTier,     auto: true } : null,
+          signal:       ec.signal       != null ? { value: ec.signal,       auto: true } : null,
+          signalAge:    ec.signalAge    != null ? { value: ec.signalAge,    auto: true } : null,
+          entryContext: ec.entryContext && ec.entryContext !== 'NO_SIGNAL'
+                          ? { value: ec.entryContext, auto: true } : null,
+          indexTrend:   ec.indexTrend   != null ? { value: ec.indexTrend,   auto: true } : null,
+          sectorTrend:  ec.sectorTrend  != null ? { value: ec.sectorTrend,  auto: true } : null,
+          regime:       ec.regime       != null ? { value: ec.regime,       auto: true } : null,
+        },
+      };
     }
 
     // ── Async: fetch technical snapshot and update journal ──────────────────
@@ -533,7 +555,7 @@ export async function pendingEntryConfirm(req, res) {
       } catch (e) { console.warn('[PE] sector check failed:', e.message); }
     }
 
-    res.json({ success: true, positionId: posId, washWarning, sectorWarning });
+    res.json({ success: true, positionId: posId, washWarning, sectorWarning, journalSnapshot });
   } catch (err) {
     console.error('[PE] pendingEntryConfirm error:', err);
     res.status(500).json({ error: err.message });

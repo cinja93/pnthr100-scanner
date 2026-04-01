@@ -1957,6 +1957,7 @@ export default function CommandCenter({ onNavigate }) {
   const [loading,         setLoading]         = useState(true);
   const [saving,          setSaving]          = useState(false);
   const [sectorWarning,         setSectorWarning]         = useState(null);
+  const [journalSnapshot,       setJournalSnapshot]       = useState(null); // { allCaptured, fields }
   const [chartModal,            setChartModal]            = useState(null); // { stocks, index }
   const [closedToast,           setClosedToast]           = useState(null); // { ticker, avgCost, exitPrice, pnlDollar, pnlPct }
   const [washWarning,           setWashWarning]           = useState(null); // { ticker, lossAmount, exitDate, expiryDate, daysRemaining, pendingId, fillData }
@@ -2288,7 +2289,11 @@ export default function CommandCenter({ onNavigate }) {
     }
     setWashWarning(null);
     const confirmResult = await confirmPendingEntry(id, fillData);
-    if (confirmResult?.sectorWarning) setSectorWarning(confirmResult.sectorWarning);
+    if (confirmResult?.sectorWarning)  setSectorWarning(confirmResult.sectorWarning);
+    if (confirmResult?.journalSnapshot) {
+      setJournalSnapshot(confirmResult.journalSnapshot);
+      setTimeout(() => setJournalSnapshot(null), 9000);
+    }
     setPendingEntries(prev => prev.filter(e => e.id !== id));
     // Re-fetch positions so the new one appears immediately.
     // Use safe merge so existing positions keep their sacred fields (fills, stops, etc.)
@@ -2491,6 +2496,45 @@ export default function CommandCenter({ onNavigate }) {
                 </div>
               );
             })()}
+          {/* Journal entry snapshot banner — auto-dismisses after 9s */}
+            {journalSnapshot && (() => {
+              const { allCaptured, fields } = journalSnapshot;
+              const FIELD_LABELS = {
+                killScore: 'Kill score', killRank: 'Kill rank', killTier: 'Kill tier',
+                signal: 'Signal', signalAge: 'Signal age', entryContext: 'Entry context',
+                indexTrend: 'Index trend', sectorTrend: 'Sector trend', regime: 'Regime',
+              };
+              const missing = Object.entries(fields || {})
+                .filter(([, v]) => v == null)
+                .map(([k]) => FIELD_LABELS[k] || k);
+              return (
+                <div style={{
+                  background: allCaptured ? 'rgba(40,167,69,0.1)' : 'rgba(255,193,7,0.1)',
+                  border: `1px solid ${allCaptured ? 'rgba(40,167,69,0.4)' : 'rgba(255,193,7,0.4)'}`,
+                  borderRadius: 8, marginBottom: 14, padding: '10px 14px',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700,
+                      color: allCaptured ? '#51cf66' : '#ffd43b', marginBottom: allCaptured ? 0 : 4 }}>
+                      {allCaptured
+                        ? '⚡ Journal snapshot captured — Kill, signal, regime & market context auto-saved'
+                        : '⚡ Journal snapshot partial — some fields need manual input at close'}
+                    </div>
+                    {!allCaptured && missing.length > 0 && (
+                      <div style={{ fontSize: 11, color: '#999' }}>
+                        Missing: {missing.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={() => setJournalSnapshot(null)}
+                    style={{ background: 'none', border: 'none',
+                      color: allCaptured ? '#51cf66' : '#ffd43b',
+                      cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }}>×</button>
+                </div>
+              );
+            })()}
+
             {/* Metric cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 16 }}>
               <MC label="Net liquidity" value={`$${(nav / 1000).toFixed(0)}K`} />

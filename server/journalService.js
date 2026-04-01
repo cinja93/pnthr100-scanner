@@ -65,6 +65,34 @@ export async function createJournalEntry(db, position, userId, killData = null, 
     analyzeScoreAtEntry: enrichment.analyzeScoreAtEntry || null,
     userConfirmed:       enrichment.userConfirmed       || null,
     dataSource:          enrichment.dataSource  || 'UNKNOWN',
+    entryConfirmed: (() => {
+      const mat = enrichment.marketAtEntry || marketAtEntry || null;
+      const ec  = position.entryContext || enrichment.entryContext || null;
+      const captured = {
+        capturedAt:   new Date(),
+        killScore:    kse?.totalScore ?? null,
+        killRank:     kse?.rank       ?? null,
+        killTier:     kse?.tier       ?? null,
+        signal:       enrichment.signal || position.signal || null,
+        signalAge:    enrichment.signalAge ?? position.signalAge ?? null,
+        entryContext: ec,
+        indexTrend:   mat?.spyPosition    ?? null,
+        sectorTrend:  mat?.sectorPosition ?? null,
+        regime:       mat?.regime?.label  ?? null,
+        dataSource:   enrichment.dataSource || 'UNKNOWN',
+      };
+      captured.allCaptured = !!(
+        captured.killScore   != null &&
+        captured.killRank    != null &&
+        captured.signal      != null &&
+        captured.signalAge   != null &&
+        captured.entryContext && captured.entryContext !== 'NO_SIGNAL' &&
+        captured.indexTrend  != null &&
+        captured.sectorTrend != null &&
+        captured.regime      != null
+      );
+      return captured;
+    })(),
     discipline: { totalScore: null },
     whatIf: {},
     washRule: { isLoss: false, expired: true },

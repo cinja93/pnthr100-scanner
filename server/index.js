@@ -2460,18 +2460,21 @@ app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
       // Determine category
       let category, pnthrStatus = null, pnthrFilledShr = null, pnthrDir = null;
 
+      let positionId = null, ibkrRemainingShares = null;
+
       if (processedIds.has(exec.execId)) {
         category = 'AUTO_CLOSED';
         const p = pnthrByTickerDir[`${ticker}_${closingDir}`] || pnthrByTicker[ticker];
-        if (p) { pnthrStatus = p.status; pnthrDir = p.direction; pnthrFilledShr = filledShares(p); }
+        if (p) { pnthrStatus = p.status; pnthrDir = p.direction; pnthrFilledShr = filledShares(p); positionId = p.id; }
       } else {
         const closingPos = pnthrByTickerDir[`${ticker}_${closingDir}`]; // e.g. SLD → find LONG
         const openingPos = pnthrByTickerDir[`${ticker}_${openingDir}`]; // e.g. BOT → find LONG (lot fill)
 
         if (closingPos) {
-          pnthrStatus   = closingPos.status;
-          pnthrDir      = closingPos.direction;
+          pnthrStatus    = closingPos.status;
+          pnthrDir       = closingPos.direction;
           pnthrFilledShr = filledShares(closingPos);
+          positionId     = closingPos.id;
 
           if (closingPos.status === 'CLOSED') {
             category = 'AUTO_CLOSED'; // closed by other means (manual, prior Phase 2)
@@ -2479,6 +2482,8 @@ app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
             category = 'NEEDS_CLOSE'; // full exit not caught by Phase 2
           } else {
             category = 'PARTIAL'; // partial exit
+            // Remaining shares = what was tracked minus what was just sold
+            ibkrRemainingShares = Math.max(0, pnthrFilledShr - exec.shares);
           }
         } else if (!isSell && openingPos && openingPos.status === 'ACTIVE') {
           // BOT on an active LONG position → adding lots (pyramiding)
@@ -2486,6 +2491,7 @@ app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
           pnthrStatus   = openingPos.status;
           pnthrDir      = openingPos.direction;
           pnthrFilledShr = filledShares(openingPos);
+          positionId    = openingPos.id;
         } else if (!pnthrByTicker[ticker]) {
           category = 'UNTRACKED'; // no Command position at all
         } else {
@@ -2493,6 +2499,7 @@ app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
           const any = pnthrByTicker[ticker];
           pnthrStatus = any.status;
           pnthrDir    = any.direction;
+          positionId  = any.id;
           category    = any.status === 'CLOSED' ? 'AUTO_CLOSED' : 'UNTRACKED';
         }
       }
@@ -2507,7 +2514,9 @@ app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
         category,
         pnthrStatus,
         pnthrDir,
-        pnthrFilledShares: pnthrFilledShr,
+        pnthrFilledShares:    pnthrFilledShr,
+        positionId,           // PNTHR position id — used by Sync button on PARTIAL rows
+        ibkrRemainingShares,  // calculated remaining shares after partial exit
       };
     });
 

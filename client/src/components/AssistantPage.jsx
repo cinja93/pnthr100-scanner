@@ -846,6 +846,50 @@ function formatExecTime(t) {
   return parts[parts.length - 1] || t; // just the HH:MM:SS part
 }
 
+// One-click sync button for PARTIAL exit rows.
+// Updates Command's remainingShares to match IBKR's post-sell count.
+function PartialSyncButton({ trade: t, onSynced }) {
+  const [state, setState] = useState('idle'); // idle | syncing | done | error
+
+  async function doSync() {
+    if (!t.positionId || t.ibkrRemainingShares == null) return;
+    setState('syncing');
+    try {
+      const res = await fetch(`${API_BASE}/api/positions`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: t.positionId, remainingShares: t.ibkrRemainingShares }),
+      });
+      if (!res.ok) throw new Error('save failed');
+      setState('done');
+      setTimeout(() => onSynced(), 1200);
+    } catch {
+      setState('error');
+    }
+  }
+
+  if (state === 'syncing') return <span style={{ fontSize: 10, color: '#888' }}>Syncing…</span>;
+  if (state === 'done')    return <span style={{ fontSize: 10, color: '#28a745', fontWeight: 700 }}>✓ Synced to {t.ibkrRemainingShares} shr</span>;
+  if (state === 'error')   return <span style={{ fontSize: 10, color: '#dc3545', cursor: 'pointer' }} onClick={doSync}>✗ Failed — retry</span>;
+
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontSize: 10, color: '#888' }}>{t.shares} of {t.pnthrFilledShares} shr</span>
+      {t.positionId && t.ibkrRemainingShares != null && (
+        <button
+          onClick={doSync}
+          style={{
+            background: 'none', border: '1px solid #4fc3f7', color: '#4fc3f7',
+            borderRadius: 3, padding: '1px 7px', fontSize: 10, cursor: 'pointer', fontWeight: 700,
+          }}
+        >
+          Sync {t.ibkrRemainingShares} shr → Command
+        </button>
+      )}
+    </span>
+  );
+}
+
 function TradesTodaySection({ trades, loading, ibkrConnected, onNavigate }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -976,9 +1020,7 @@ function TradesTodaySection({ trades, loading, ibkrConnected, onNavigate }) {
                     )}
 
                     {t.category === 'PARTIAL' && t.pnthrFilledShares != null && (
-                      <span style={{ fontSize: 10, color: '#666' }}>
-                        {t.shares} of {t.pnthrFilledShares} shr
-                      </span>
+                      <PartialSyncButton trade={t} onSynced={() => fetchIbkrTradesToday().then(d => setIbkrTrades(d.trades || [])).catch(() => {})} />
                     )}
 
                     {t.category === 'LOT_FILL' && (

@@ -2455,11 +2455,19 @@ app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
         .reduce((s, f) => s + (+f.shares || 0), 0);
     }
 
+    // Pre-pass: detect tickers that have both BOT and SLD today (potential day trades)
+    const tickerSides = {}; // ticker → Set of sides
+    for (const exec of executions) {
+      const t = exec.symbol?.toUpperCase();
+      if (!tickerSides[t]) tickerSides[t] = new Set();
+      tickerSides[t].add(exec.side);
+    }
+
     const trades = executions.map(exec => {
       const ticker     = exec.symbol?.toUpperCase();
-      const isSell     = exec.side === 'SLD'; // SLD = selling → closing LONG
-      const closingDir = isSell ? 'LONG' : 'SHORT'; // BOT = buying → closing SHORT
-      const openingDir = isSell ? 'SHORT' : 'LONG'; // or adding to LONG
+      const isSell     = exec.side === 'SLD'; // SLD = selling → closing LONG or opening SHORT
+      const closingDir = isSell ? 'LONG' : 'SHORT'; // SLD closes LONG; BOT closes SHORT
+      const openingDir = isSell ? 'SHORT' : 'LONG'; // SLD opens SHORT; BOT opens/adds to LONG
 
       // Determine category
       let category, pnthrStatus = null, pnthrFilledShr = null, pnthrDir = null;
@@ -2472,7 +2480,7 @@ app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
         if (p) { pnthrStatus = p.status; pnthrDir = p.direction; pnthrFilledShr = filledShares(p); positionId = p.id; }
       } else {
         const closingPos = pnthrByTickerDir[`${ticker}_${closingDir}`]; // e.g. SLD → find LONG
-        const openingPos = pnthrByTickerDir[`${ticker}_${openingDir}`]; // e.g. BOT → find LONG (lot fill)
+        const openingPos = pnthrByTickerDir[`${ticker}_${openingDir}`]; // BOT → find LONG; SLD → find SHORT
 
         if (closingPos) {
           pnthrStatus    = closingPos.status;
@@ -2485,19 +2493,29 @@ app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
           } else if (exec.shares >= pnthrFilledShr * 0.90) {
             category = 'NEEDS_CLOSE'; // full exit not caught by Phase 2
           } else {
-            category = 'PARTIAL'; // partial exit
-            // Remaining shares = what was tracked minus what was just sold
-            ibkrRemainingShares = Math.max(0, pnthrFilledShr - exec.shares);
+            // Partial exit — check if already synced via /api/ibkr/sync-partial
+            // If exec.shares + remainingShares = filledShares, this exec was already accounted for
+            const alreadySynced = closingPos.remainingShares != null &&
+              Math.abs(exec.shares + closingPos.remainingShares - pnthrFilledShr) <= 1;
+            if (alreadySynced) {
+              category = 'AUTO_CLOSED'; // partial already synced — no action needed
+            } else {
+              category = 'PARTIAL'; // partial exit — show sync button
+              ibkrRemainingShares = Math.max(0, pnthrFilledShr - exec.shares);
+            }
           }
-        } else if (!isSell && openingPos && openingPos.status === 'ACTIVE') {
-          // BOT on an active LONG position → adding lots (pyramiding)
-          category      = 'LOT_FILL';
-          pnthrStatus   = openingPos.status;
-          pnthrDir      = openingPos.direction;
+        } else if (openingPos && openingPos.status === 'ACTIVE') {
+          // BOT on LONG (pyramiding) OR SLD on SHORT (opening/adding to short)
+          pnthrStatus    = openingPos.status;
+          pnthrDir       = openingPos.direction;
           pnthrFilledShr = filledShares(openingPos);
-          positionId    = openingPos.id;
+          positionId     = openingPos.id;
+          // Distinguish new position (no fills yet) from lot fill (existing fills)
+          category = pnthrFilledShr === 0 ? 'NEW_POSITION' : 'LOT_FILL';
         } else if (!pnthrByTicker[ticker]) {
-          category = 'UNTRACKED'; // no Command position at all
+          // No Command position at all — day trade if both BOT+SLD happened today
+          const bothSides = tickerSides[ticker]?.has('BOT') && tickerSides[ticker]?.has('SLD');
+          category = bothSides ? 'DAY_TRADE' : 'UNTRACKED';
         } else {
           // There's a Command position but direction/status doesn't match cleanly
           const any = pnthrByTicker[ticker];
@@ -2536,6 +2554,41 @@ app.get('/api/ibkr/trades-today', authenticateJWT, async (req, res) => {
     res.json({ trades, counts, ibkrConnected: true, syncedAt: ibkrDoc.syncedAt });
   } catch (err) {
     console.error('[IBKR trades-today]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Partial exit sync ─────────────────────────────────────────────────────────
+// POST /api/ibkr/sync-partial
+// Atomically updates remainingShares on the position AND marks the execId as
+// processed so it won't show a sync button on the next Trades Today refresh.
+app.post('/api/ibkr/sync-partial', requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const { positionId, execId, remainingShares } = req.body;
+
+    if (!positionId || !execId || remainingShares == null) {
+      return res.status(400).json({ error: 'positionId, execId, and remainingShares are required' });
+    }
+
+    // 1. Update remainingShares on the PNTHR position
+    await db.collection('pnthr_portfolio').updateOne(
+      { id: positionId, ownerId: userId },
+      { $set: { remainingShares: +remainingShares, updatedAt: new Date() } }
+    );
+
+    // 2. Mark execId as processed so trades-today shows AUTO_CLOSED next poll
+    await db.collection('pnthr_ibkr_executions').updateOne(
+      { ownerId: userId, execId },
+      { $setOnInsert: { ownerId: userId, execId, type: 'PARTIAL_SYNC', createdAt: new Date() } },
+      { upsert: true }
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[IBKR sync-partial]', err);
     res.status(500).json({ error: err.message });
   }
 });

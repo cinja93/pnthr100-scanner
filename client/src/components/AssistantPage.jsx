@@ -832,11 +832,13 @@ function StopSyncRow({ row, isDone, onToggle }) {
 // outside of PNTHR tracking.
 
 const TRADE_CAT = {
-  AUTO_CLOSED:  { label: 'Auto-closed',     color: '#28a745', bg: 'rgba(40,167,69,0.08)'  },
-  LOT_FILL:     { label: 'Lot fill',         color: '#4fc3f7', bg: 'rgba(79,195,247,0.08)' },
-  PARTIAL:      { label: 'Partial exit',     color: '#4fc3f7', bg: 'rgba(79,195,247,0.06)' },
-  NEEDS_CLOSE:  { label: 'Still ACTIVE ⚠',  color: '#ff8c00', bg: 'rgba(255,140,0,0.10)'  },
-  UNTRACKED:    { label: 'Untracked',        color: '#666',    bg: 'rgba(255,255,255,0.02)'},
+  AUTO_CLOSED:   { label: 'Auto-closed',     color: '#28a745', bg: 'rgba(40,167,69,0.08)'  },
+  LOT_FILL:      { label: 'Lot fill',         color: '#4fc3f7', bg: 'rgba(79,195,247,0.08)' },
+  NEW_POSITION:  { label: 'New position',     color: '#4fc3f7', bg: 'rgba(79,195,247,0.08)' },
+  PARTIAL:       { label: 'Partial exit',     color: '#4fc3f7', bg: 'rgba(79,195,247,0.06)' },
+  NEEDS_CLOSE:   { label: 'Still ACTIVE ⚠',  color: '#ff8c00', bg: 'rgba(255,140,0,0.10)'  },
+  UNTRACKED:     { label: 'Untracked',        color: '#666',    bg: 'rgba(255,255,255,0.02)'},
+  DAY_TRADE:     { label: 'Day trade',        color: '#888',    bg: 'rgba(255,255,255,0.02)'},
 };
 
 function formatExecTime(t) {
@@ -847,7 +849,8 @@ function formatExecTime(t) {
 }
 
 // One-click sync button for PARTIAL exit rows.
-// Updates Command's remainingShares to match IBKR's post-sell count.
+// Updates Command's remainingShares AND marks the execId as processed so the
+// button doesn't reappear on the next Trades Today poll.
 function PartialSyncButton({ trade: t, onSynced }) {
   const [state, setState] = useState('idle'); // idle | syncing | done | error
 
@@ -855,10 +858,14 @@ function PartialSyncButton({ trade: t, onSynced }) {
     if (!t.positionId || t.ibkrRemainingShares == null) return;
     setState('syncing');
     try {
-      const res = await fetch(`${API_BASE}/api/positions`, {
+      const res = await fetch(`${API_BASE}/api/ibkr/sync-partial`, {
         method: 'POST',
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: t.positionId, remainingShares: t.ibkrRemainingShares }),
+        body: JSON.stringify({
+          positionId: t.positionId,
+          execId: t.execId,
+          remainingShares: t.ibkrRemainingShares,
+        }),
       });
       if (!res.ok) throw new Error('save failed');
       setState('done');
@@ -1027,8 +1034,16 @@ function TradesTodaySection({ trades, loading, ibkrConnected, onNavigate }) {
                       <span style={{ fontSize: 10, color: '#666' }}>added to position</span>
                     )}
 
+                    {t.category === 'NEW_POSITION' && (
+                      <span style={{ fontSize: 10, color: '#666' }}>new position created</span>
+                    )}
+
                     {t.category === 'UNTRACKED' && (
                       <span style={{ fontSize: 10, color: '#555' }}>not tracked in Command</span>
+                    )}
+
+                    {t.category === 'DAY_TRADE' && (
+                      <span style={{ fontSize: 10, color: '#666' }}>opened &amp; closed same day</span>
                     )}
                   </span>
                 </div>

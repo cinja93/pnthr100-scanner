@@ -70,7 +70,12 @@ class PNTHRBridge(EWrapper, EClient):
     def __init__(self):
         EClient.__init__(self, self)
         self.account_values  = {}
-        self.positions       = []
+        # ── positions stored as dict keyed by symbol ──────────────────────────
+        # Using a dict (not a list) means:
+        #   • Closing a position (pos=0) immediately deletes the key — no stale entries
+        #   • Re-opening the same ticker overwrites cleanly — no duplicates on reconnect
+        #   • get_payload() converts to list for the server JSON payload
+        self.positions_dict  = {}
         self.open_orders     = {}   # symbol → {orderId, stopPrice, action, orderType}
         self.executions      = []   # Phase 2: fills captured via reqExecutions
         self.account_ready   = threading.Event()
@@ -111,7 +116,7 @@ class PNTHRBridge(EWrapper, EClient):
     def _request_data(self):
         """Request fresh account + position data from TWS."""
         self.account_values  = {}
-        self.positions       = []
+        self.positions_dict  = {}  # clear dict so re-subscription starts fresh
         self.account_ready.clear()
         self.positions_ready.clear()
         self.reqAccountUpdates(True, "")   # "" = default account
@@ -125,9 +130,11 @@ class PNTHRBridge(EWrapper, EClient):
 
     def updatePortfolio(self, contract, position, marketPrice, marketValue,
                         averageCost, unrealizedPNL, realizedPNL, accountName):
+        symbol = contract.symbol
         if position != 0:
-            self.positions.append({
-                'symbol':        contract.symbol,
+            # Upsert: adds new or overwrites existing entry for this symbol
+            self.positions_dict[symbol] = {
+                'symbol':        symbol,
                 'secType':       contract.secType,
                 'currency':      contract.currency,
                 'shares':        float(position),
@@ -136,7 +143,11 @@ class PNTHRBridge(EWrapper, EClient):
                 'avgCost':       float(averageCost),
                 'unrealizedPNL': float(unrealizedPNL),
                 'realizedPNL':   float(realizedPNL),
-            })
+            }
+        else:
+            # position=0 means TWS just confirmed this position is fully closed.
+            # Remove it immediately so the next sync doesn't send stale share counts.
+            self.positions_dict.pop(symbol, None)
 
     def accountDownloadEnd(self, accountName):
         self.account_ready.set()
@@ -222,7 +233,7 @@ class PNTHRBridge(EWrapper, EClient):
                 'maintenanceMargin': _float('MaintMarginReq'),
                 'availableFunds':    _float('AvailableFunds'),
             },
-            'positions': self.positions,
+            'positions': list(self.positions_dict.values()),
             'stopOrders': [
                 {'symbol': sym, **data}
                 for sym, data in self.open_orders.items()
@@ -359,6 +370,7 @@ def main():
                 try:
                     app.connect(TWS_HOST, TWS_PORT, TWS_CLIENT_ID)
                     time.sleep(2)
+                    app.positions_dict = {}  # clear stale positions before fresh subscription
                     app.reqAccountUpdates(True, "")
                     app.reqPositions()
                     app.account_ready.wait(timeout=15)

@@ -678,10 +678,11 @@ function scoreD6(signal, data) {
 
   return {
     score,
-    subA: Math.round(subA * 10) / 10,
-    subB: Math.round(subB * 10) / 10,
-    subC: Math.round(subC * 10) / 10,
+    subA:   Math.round(subA * 10) / 10,
+    subB:   Math.round(subB * 10) / 10,
+    subC:   Math.round(subC * 10) / 10,
     subD,
+    curRsi: curRsi ?? null, // raw weekly RSI — passed through for rank tiebreaker
   };
 }
 
@@ -910,6 +911,7 @@ export async function getApexResults(
       preyStrategies: d8.strategies,
       apexScore:    total,
       preMultiplier: Math.round(preMultiplier * 10) / 10,
+      weeklyRsi:    d6.curRsi ?? null, // raw weekly RSI — used as rank tiebreaker
       confirmation: d3.confirmation,
       // Flat scores object for score detail popup
       scores: {
@@ -929,11 +931,24 @@ export async function getApexResults(
     });
   }, 20); // concurrency=20 (up from 10) — cuts FMP wall time in half
 
-  // Sort: non-overextended by score desc, then OVEREXTENDED at the very bottom
+  // Sort: non-overextended by score desc, then OVEREXTENDED at the very bottom.
+  // Tiebreaker when scores are equal: stock with more "room to run" wins.
+  //   BL: lower weekly RSI = farther from overbought (75) = more room
+  //   SS: higher weekly RSI = farther from oversold   (25) = more room
   scored.sort((a, b) => {
     if (a.overextended && !b.overextended) return 1;
     if (!a.overextended && b.overextended) return -1;
-    return b.apexScore - a.apexScore;
+    if (b.apexScore !== a.apexScore) return b.apexScore - a.apexScore;
+
+    // Tiebreaker: most room to run before overbought/oversold threshold
+    const aRsi  = a.weeklyRsi;
+    const bRsi  = b.weeklyRsi;
+    if (aRsi != null && bRsi != null) {
+      const aRoom = a.signal === 'BL' ? (75 - aRsi) : (aRsi - 25);
+      const bRoom = b.signal === 'BL' ? (75 - bRsi) : (bRsi - 25);
+      if (aRoom !== bRoom) return bRoom - aRoom; // more room = ranked higher
+    }
+    return 0;
   });
 
   // Assign kill rank only to non-overextended stocks; mark top 10

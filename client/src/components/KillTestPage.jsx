@@ -4,7 +4,7 @@
 // Admin-only page tracking stocks that first qualify on the PNTHR Kill list:
 //   Kill > 100 | Analyze > 80% | Composite > 75
 //
-// Simulates the full lot 1–5 pyramid (15/30/25/20/10%) using the same
+// Simulates the full lot 1–5 pyramid (35/25/20/12/8%) using the same
 // sizePosition() logic as PNTHR Command's Size It. Configurable NAV,
 // risk %, portfolio cap, and sweep rate.
 
@@ -12,7 +12,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { authHeaders, API_BASE } from '../services/api';
 
 // ── Lot sizing constants (mirrors server killTestSettings.js) ─────────────────
-const STRIKE_PCT = [0.15, 0.30, 0.25, 0.20, 0.10]; // cumul: 15, 45, 70, 90, 100%
+const STRIKE_PCT = [0.35, 0.25, 0.20, 0.12, 0.08]; // cumul: 35, 60, 80, 92, 100%
 
 // Client-side sizePosition (mirrors serverSizePosition)
 function clientSizePosition(nav, entryPrice, stopPrice, riskPct = 1) {
@@ -1458,7 +1458,7 @@ export default function KillTestPage() {
           Lot fills detected from daily OHLC range (4:30 PM ET). Feast: RSI &gt; 85 (BL) / &lt; 15 (SS) → 50% exit Friday.
         </span>
         <span>
-          Lot 3 fill → stop ratchets to breakeven · Lot 4 → Lot 2 fill · Lot 5 → Lot 3 fill
+          Lot 2+ fill → stop ratchets to avg cost of all filled lots (true breakeven)
         </span>
       </div>
     </div>

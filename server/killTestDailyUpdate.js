@@ -5,7 +5,7 @@
 // For every active Kill Test appearance, fetches daily OHLC and:
 //   1. Checks if any lot trigger prices were hit (intra-day high/low range)
 //   2. Checks if the stop price was hit
-//   3. Ratchets stop after lot fills (Lot 3 → breakeven, Lot 4 → L2, Lot 5 → L3)
+//   3. Ratchets stop after lot fills (Lot 2+ → avg cost of all filled lots = true breakeven)
 //   4. Saves a daily snapshot to the appearance record
 //   5. Marks exit if stop is hit (exitReason: 'STOP')
 //

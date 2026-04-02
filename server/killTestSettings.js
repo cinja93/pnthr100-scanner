@@ -56,30 +56,32 @@ export function buildServerLotConfig(totalShares, entryPrice, signal) {
 }
 
 // ── Compute ratcheted stop after lot fills ────────────────────────────────────
-// Lot 3 fill → stop moves to Lot 1 fill price (breakeven recycle)
-// Lot 4 fill → stop moves to Lot 2 fill price
-// Lot 5 fill → stop moves to Lot 3 fill price
+// Lot 2+ filled → stop moves to avg cost of all filled lots (true breakeven)
 // Rule: SS stop only moves DOWN (tightens), BL stop only moves UP
 export function computeRatchetedStop(lotFills, initialStop, signal) {
   if (!lotFills) return initialStop;
   const isShort = signal === 'SS';
-  const l1Price = lotFills.lot1?.fillPrice ?? null;
-  const l2Price = lotFills.lot2?.fillPrice ?? null;
-  const l3Price = lotFills.lot3?.fillPrice ?? null;
 
-  let ratchet = initialStop;
-
-  if (lotFills.lot5?.filled && l3Price != null) {
-    ratchet = l3Price;
-  } else if (lotFills.lot4?.filled && l2Price != null) {
-    ratchet = l2Price;
-  } else if (lotFills.lot3?.filled && l1Price != null) {
-    ratchet = l1Price; // breakeven recycle
+  // Compute avg cost of all filled lots (true breakeven)
+  let cumCost = 0, cumShr = 0;
+  for (let n = 1; n <= 5; n++) {
+    const key = `lot${n}`;
+    const lot = lotFills[key];
+    if (lot?.filled && lot?.fillPrice != null && lot?.shares > 0) {
+      cumCost += lot.shares * lot.fillPrice;
+      cumShr  += lot.shares;
+    }
   }
 
+  // No ratchet until at least 2 lots filled
+  const filledCount = Object.values(lotFills).filter(l => l?.filled).length;
+  if (filledCount < 2 || cumShr === 0) return initialStop;
+
+  const avgCost = +(cumCost / cumShr).toFixed(2);
+
   // Never move stop in unfavorable direction
-  if (isShort) return Math.min(ratchet, initialStop); // SS: stop moves down
-  else          return Math.max(ratchet, initialStop); // BL: stop moves up
+  if (isShort) return Math.min(avgCost, initialStop); // SS: stop moves down
+  else          return Math.max(avgCost, initialStop); // BL: stop moves up
 }
 
 // ── Settings CRUD ─────────────────────────────────────────────────────────────

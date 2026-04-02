@@ -268,7 +268,7 @@ export function computeDisciplineScore(journal) {
   const byVitality  = stopDist > 0 ? Math.floor(vitality / stopDist) : 0;
   const byTickerCap = entryPrice > 0 ? Math.floor((nav * 0.10) / entryPrice) : 0;
   const totalShares = Math.min(byVitality, byTickerCap);
-  const expectedLot1 = totalShares > 0 ? Math.max(1, Math.round(totalShares * 0.15)) : 0;
+  const expectedLot1 = totalShares > 0 ? Math.max(1, Math.round(totalShares * 0.35)) : 0;
   const actualLot1   = lots[0]?.shares || 0;
   const riskDollars  = actualLot1 * stopDist;
 

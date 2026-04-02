@@ -1,7 +1,7 @@
 // client/src/components/CommandCenter.jsx
 // ── PNTHR Command Center — Portfolio Management Dashboard ─────────────────────
 //
-// Tier A pyramiding: 15-30-25-20-10 · Editable fills, stops, prices
+// Tier A pyramiding: 35-25-20-12-8 · Editable fills, stops, prices
 // Live position data from /api/positions + kill signals from /api/kill-pipeline
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1755,7 +1755,7 @@ function Calculator({ netLiquidity, onCreate }) {
       <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 10, padding: 20, border: '1px solid rgba(255,255,255,0.06)', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
           <span style={{ fontSize: 14, fontWeight: 600 }}><span style={{ color: '#FFD700' }}>+</span> New position</span>
-          <Badge color="#FFD700" bg="rgba(255,215,0,0.08)" small>TIER A · 15-30-25-20-10</Badge>
+          <Badge color="#FFD700" bg="rgba(255,215,0,0.08)" small>TIER A · 35-25-20-12-8</Badge>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr 0.8fr auto', gap: 10, alignItems: 'end' }}>
           <div>

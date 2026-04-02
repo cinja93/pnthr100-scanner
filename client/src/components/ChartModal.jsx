@@ -1168,7 +1168,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                       }
 
                       const sizing = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir, isETF: p.isETF });
-                      const lot1   = Math.max(1, Math.round(sizing.totalShares * 0.15));
+                      const lot1   = Math.max(1, Math.round(sizing.totalShares * 0.35));
                       return {
                         ...p,
                         direction:    newDir,

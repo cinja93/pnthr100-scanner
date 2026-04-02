@@ -143,7 +143,7 @@ function computeChecks(entry) {
         const byV = Math.floor(vitality / stopDist);
         const byC = Math.floor(tickerCap / entryPrice);
         const tot = Math.min(byV, byC);
-        const exp = Math.max(1, Math.round(tot * 0.15));
+        const exp = Math.max(1, Math.round(tot * 0.35));
         const dev = exp > 0 ? Math.abs(lot1Shares - exp) / exp : null;
         sizingCheck  = dev != null ? dev <= 0.10 : null;
         riskPct      = +(riskDollar / nav * 100).toFixed(3);

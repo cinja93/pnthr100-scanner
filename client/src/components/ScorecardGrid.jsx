@@ -123,7 +123,7 @@ function computeChecks(entry) {
   // ── Sizing check ──
   // Mirrors sizePosition() in sizingUtils.js: min(vitality/rps, tickerCap/price) then ×gapMult.
   // We don't store maxGapPct in the journal, so gapMult=1.0 (conservative baseline).
-  // Lot 1 expected = Math.max(1, Math.round(total × 0.15)) — same as buildLots().
+  // Lot 1 expected = Math.max(1, Math.round(total × 0.35)) — same as buildLots().
   let sizingCheck  = null;
   let riskDollar   = null;
   let riskPct      = null;
@@ -136,7 +136,7 @@ function computeChecks(entry) {
       const byVitality  = Math.floor(vitality / stopDist);
       const byTickerCap = Math.floor(tickerCap / entryPrice);
       const totalShares = Math.min(byVitality, byTickerCap);
-      const expected    = Math.max(1, Math.round(totalShares * 0.15));
+      const expected    = Math.max(1, Math.round(totalShares * 0.35));
       const deviation   = expected > 0 ? Math.abs(lot1Shares - expected) / expected : null;
       sizingCheck  = deviation != null ? deviation <= 0.10 : null;
       riskDollar   = +(lot1Shares * stopDist).toFixed(2);

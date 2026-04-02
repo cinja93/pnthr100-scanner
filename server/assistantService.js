@@ -844,17 +844,36 @@ export async function generateAssistantTasks(userId, positions, nav) {
  */
 export async function getStopSyncRows(positions, userId) {
   const activePosns = positions.filter(p => p.status === 'ACTIVE');
-  const tickers     = activePosns.map(p => p.ticker.toUpperCase());
 
-  // Load PNTHR signal-cache stops and IBKR stop orders in parallel
-  const [signalStops, ibkrDoc] = await Promise.all([
-    loadSignalStops(tickers),
-    userId
-      ? connectToDatabase().then(db =>
-          db?.collection('pnthr_ibkr_positions').findOne({ ownerId: userId })
-        ).catch(() => null)
-      : Promise.resolve(null),
-  ]);
+  // Load IBKR doc first so we can filter to only IBKR-held positions before
+  // fetching signal stops (avoids fetching stops for positions already closed in IBKR)
+  const ibkrDoc = userId
+    ? await connectToDatabase()
+        .then(db => db?.collection('pnthr_ibkr_positions').findOne({ ownerId: userId }))
+        .catch(() => null)
+    : null;
+
+  // Build set of active IBKR tickers (≥1 share) so we can exclude positions
+  // that are in PNTHR but no longer held in IBKR (e.g. closed there but not yet
+  // reconciled in Command). Only filter when IBKR is synced — if bridge is down
+  // (no ibkrDoc) keep all positions so nothing is silently hidden.
+  const ibkrActiveTickers = ibkrDoc
+    ? new Set(
+        (ibkrDoc.positions || [])
+          .filter(ip => Math.abs(+ip.shares || 0) >= 1)
+          .map(ip => ip.symbol?.toUpperCase())
+          .filter(Boolean)
+      )
+    : null; // null = bridge not synced, don't filter
+
+  const syncedPosns = ibkrActiveTickers
+    ? activePosns.filter(p => ibkrActiveTickers.has(p.ticker.toUpperCase()))
+    : activePosns;
+
+  const tickers = syncedPosns.map(p => p.ticker.toUpperCase());
+
+  // Load PNTHR signal-cache stops (ibkrDoc already loaded above)
+  const signalStops = await loadSignalStops(tickers);
 
   // Build ticker → IBKR stop price map from stored stop orders
   const ibkrStopMap = {};
@@ -862,7 +881,7 @@ export async function getStopSyncRows(positions, userId) {
     if (order.symbol) ibkrStopMap[order.symbol.toUpperCase()] = order.stopPrice;
   }
 
-  return activePosns.map(p => {
+  return syncedPosns.map(p => {
     const ticker     = p.ticker.toUpperCase();
     const pnthrStop  = p.stopPrice ?? null;
     const signalStop = signalStops[ticker] ?? null;

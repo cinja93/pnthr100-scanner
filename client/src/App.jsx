@@ -470,8 +470,8 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
 // MEDIUM        → yellow bg, black text (act soon)
 // FAVORABLE     → green bg, black text  (good news)
 const EMA_BAND = {
-  CRITICAL: { bg: '#b71c1c', text: '#fff', tickerBg: 'rgba(0,0,0,0.25)', tickerText: '#fff', muted: 'rgba(255,255,255,0.75)', dim: 'rgba(255,255,255,0.55)', icon: '⚡' },
-  HIGH:     { bg: '#c62828', text: '#fff', tickerBg: 'rgba(0,0,0,0.25)', tickerText: '#fff', muted: 'rgba(255,255,255,0.75)', dim: 'rgba(255,255,255,0.55)', icon: '⚠️' },
+  CRITICAL: { bg: '#7f0000', text: '#fff', tickerBg: 'rgba(0,0,0,0.30)', tickerText: '#fff', muted: 'rgba(255,255,255,0.80)', dim: 'rgba(255,255,255,0.60)', icon: '⚡' },
+  HIGH:     { bg: '#8b0000', text: '#fff', tickerBg: 'rgba(0,0,0,0.30)', tickerText: '#fff', muted: 'rgba(255,255,255,0.80)', dim: 'rgba(255,255,255,0.60)', icon: '⚠️' },
   MEDIUM:   { bg: '#f9a825', text: '#000', tickerBg: 'rgba(0,0,0,0.15)', tickerText: '#000', muted: 'rgba(0,0,0,0.65)',       dim: 'rgba(0,0,0,0.45)',       icon: '〰️' },
   FAVORABLE:{ bg: '#2e7d32', text: '#fff', tickerBg: 'rgba(0,0,0,0.20)', tickerText: '#fff', muted: 'rgba(255,255,255,0.75)', dim: 'rgba(255,255,255,0.55)', icon: '✅' },
 };

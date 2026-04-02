@@ -1855,6 +1855,8 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                 {h.ticker && (
                   <span
                     onClick={(e) => { e.stopPropagation(); onTickerClick?.(h.ticker); }}
+                    onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; e.currentTarget.style.textDecorationColor = c.ticker; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
                     style={{
                       color: c.ticker,
                       fontWeight: 800,
@@ -1863,8 +1865,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                       flexShrink: 0,
                       minWidth: 36,
                       cursor: 'pointer',
-                      textDecoration: 'underline',
-                      textDecorationColor: 'rgba(255,255,255,0.15)',
+                      textDecoration: 'none',
                       textUnderlineOffset: 2,
                     }}
                   >

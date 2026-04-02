@@ -81,6 +81,20 @@ function ssInitStop(twoWeekHigh, entryClose, atr) {
   return parseFloat(Math.min(structural, atrBased).toFixed(2));
 }
 
+// ── Convert any date string to its Monday (week-key used by the chart) ───────
+// The chart uses Monday-based ISO strings ('YYYY-MM-DD') as time keys.
+// Journal fill/exit dates may land on any weekday — this snaps them to Monday
+// so timeToCoordinate() can find the matching bar.
+function toWeekMonday(dateStr) {
+  if (!dateStr) return null;
+  const date = new Date(dateStr + 'T00:00:00');
+  const dow = date.getDay(); // 0=Sun, 1=Mon … 6=Sat
+  const offset = dow === 0 ? 6 : dow - 1; // days back to Monday
+  const monday = new Date(date);
+  monday.setDate(date.getDate() - offset);
+  return monday.toISOString().split('T')[0];
+}
+
 // ── Signal detection (mirrors ChartModal's detectAllSignals) ─────────────────
 function detectAllSignals(weeklyData, period = 21, isETF = false) {
   if (weeklyData.length < period + 2) return { events: [], pnthrStop: null, currentWeekStop: null, activeType: null, currentSignal: null };
@@ -536,8 +550,20 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
       try {
         const c = chartRef.current;
         const s = seriesRef.current;
-        const x1 = c.timeScale().timeToCoordinate(lot1Date);
-        const x2 = c.timeScale().timeToCoordinate(exitDate);
+        // Snap dates to Monday (chart uses Monday-based week keys)
+        const lot1Monday = toWeekMonday(lot1Date);
+        const exitMonday = toWeekMonday(exitDate);
+        const x1 = c.timeScale().timeToCoordinate(lot1Monday);
+        // If same week, find the NEXT week's coordinate for a 1-bar wide box
+        let x2;
+        if (lot1Monday === exitMonday) {
+          const nextWeekBar = allWeeklyData.find(b => b.time > lot1Monday);
+          x2 = nextWeekBar
+            ? c.timeScale().timeToCoordinate(nextWeekBar.time)
+            : (x1 != null ? x1 + 12 : null);
+        } else {
+          x2 = c.timeScale().timeToCoordinate(exitMonday);
+        }
         const yTop = s.priceToCoordinate(topPrice);
         const yBot = s.priceToCoordinate(bottomPrice);
         if (x1 == null || x2 == null || yTop == null || yBot == null) {
@@ -559,7 +585,7 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
         for (let i = 1; i < lots.length; i++) {
           const lotN = lots[i];
           if (!lotN?.price || !lotN?.date) continue;
-          const xN = c.timeScale().timeToCoordinate(lotN.date);
+          const xN = c.timeScale().timeToCoordinate(toWeekMonday(lotN.date));
           const topN = isLong
             ? Math.max(+lotN.price, finalExitPrice)
             : Math.min(+lotN.price, finalExitPrice);
@@ -595,7 +621,11 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
     };
 
     chart.timeScale().subscribeVisibleTimeRangeChange(updateTradeBox);
-    setTimeout(updateTradeBox, 80);
+    // Fire at multiple points: fitContent() triggers the subscription, but
+    // priceToCoordinate may still return null until the price scale is laid out.
+    // Additional delayed calls ensure the box appears even on slow mounts.
+    setTimeout(updateTradeBox, 150);
+    setTimeout(updateTradeBox, 500);
 
     chart.timeScale().fitContent();
 
@@ -894,29 +924,35 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
                 const slippage = filled && i > 0 ? +(lot.price - trigger).toFixed(2) : null;
                 const slippageBad = isLong ? (slippage != null && slippage > 0) : (slippage != null && slippage < 0);
                 return (
-                  <div key={i} style={{ marginBottom: 5, opacity: filled ? 1 : 0.4 }}>
-                    <div style={{ color: filled ? '#e0e0e0' : '#555', fontWeight: 600 }}>
+                  <div key={i} style={{ marginBottom: 6, opacity: filled ? 1 : 0.45 }}>
+                    <div style={{ color: '#FFD700', fontWeight: 700, fontSize: 10, letterSpacing: '0.04em' }}>
                       {`LOT ${i + 1} — ${name}`}
                     </div>
                     {i === 0 ? (
-                      <div>${lot.price} × {lot.shares} shr &nbsp; {fmtDate(lot.date)}</div>
+                      <div style={{ color: '#fff' }}>
+                        ${lot.price} × {lot.shares} shr
+                        <span style={{ color: '#aaa' }}> &nbsp; {fmtDate(lot.date)}</span>
+                      </div>
                     ) : (
                       <>
-                        <div style={{ color: '#666' }}>Rec: ${trigger}</div>
+                        <div style={{ color: '#aaa' }}>Rec: <span style={{ color: '#ddd' }}>${trigger}</span></div>
                         {filled ? (
                           <>
-                            <div>
+                            <div style={{ color: '#fff' }}>
                               Fill: ${lot.price} &nbsp;
                               {slippage != null && (
-                                <span style={{ color: slippageBad ? '#dc3545' : '#6bcb77' }}>
+                                <span style={{ color: slippageBad ? '#ff6b6b' : '#6bcb77', fontWeight: 700 }}>
                                   ({slippage >= 0 ? '+' : ''}${Math.abs(slippage).toFixed(2)})
                                 </span>
                               )}
                             </div>
-                            <div>{lot.shares} shr &nbsp; {fmtDate(lot.date)} &nbsp; {sigType}+{i + 1}</div>
+                            <div style={{ color: '#aaa' }}>
+                              {lot.shares} shr &nbsp; {fmtDate(lot.date)} &nbsp;
+                              <span style={{ color: '#FFD700' }}>{sigType}+{i + 1}</span>
+                            </div>
                           </>
                         ) : (
-                          <div style={{ color: '#444' }}>— not filled</div>
+                          <div style={{ color: '#666' }}>— not filled</div>
                         )}
                       </>
                     )}
@@ -924,32 +960,32 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
                 );
               })}
 
-              <div style={{ borderTop: '1px solid #222', margin: '6px 0' }} />
+              <div style={{ borderTop: '1px solid #333', margin: '6px 0' }} />
 
               {/* Kill data at entry */}
               {entry?.entry?.killScore != null && (
-                <div style={{ marginBottom: 4 }}>
-                  <span style={{ color: '#555' }}>KILL </span>
+                <div style={{ marginBottom: 5 }}>
+                  <span style={{ color: '#aaa' }}>KILL </span>
                   <span style={{ color: '#FFD700', fontWeight: 700 }}>{entry.entry.killScore}</span>
-                  <span style={{ color: '#555' }}> &nbsp; RANK </span>
-                  <span style={{ color: '#ccc', fontWeight: 700 }}>#{entry.entry.killRank}</span>
+                  <span style={{ color: '#aaa' }}> &nbsp; RANK </span>
+                  <span style={{ color: '#fff', fontWeight: 700 }}>#{entry.entry.killRank}</span>
                   {entry.entry.killTier && (
-                    <div style={{ color: '#888', fontSize: 10 }}>{entry.entry.killTier}</div>
+                    <div style={{ color: '#bbb', fontSize: 10, marginTop: 1 }}>{entry.entry.killTier}</div>
                   )}
                 </div>
               )}
 
               {/* Hold time */}
               <div style={{ marginBottom: 4 }}>
-                <span style={{ color: '#555' }}>HOLD </span>
-                <span>{calcHoldTime(lot1?.date, lastExit?.date) || '—'}</span>
+                <span style={{ color: '#aaa' }}>HOLD </span>
+                <span style={{ color: '#fff' }}>{calcHoldTime(lot1?.date, lastExit?.date) || '—'}</span>
               </div>
 
               {/* Notes */}
               {(entry?.tradeNotes || entry?.macroNotes) && (
                 <>
-                  <div style={{ borderTop: '1px solid #222', margin: '4px 0' }} />
-                  <div style={{ color: '#888', fontSize: 10, fontStyle: 'italic', maxWidth: 220, wordBreak: 'break-word' }}>
+                  <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
+                  <div style={{ color: '#bbb', fontSize: 10, fontStyle: 'italic', maxWidth: 220, wordBreak: 'break-word', lineHeight: 1.4 }}>
                     {entry.tradeNotes || entry.macroNotes}
                   </div>
                 </>

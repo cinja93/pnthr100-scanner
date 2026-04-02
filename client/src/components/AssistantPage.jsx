@@ -2201,20 +2201,32 @@ export default function AssistantPage({ onNavigate }) {
 
   async function handleChipClick(chip) {
     if (chartBusy) return;
-    setChartBusy(chip.ticker);
+    const ticker = chip.ticker;
+    setChartBusy(ticker);
     try {
+      // Try apex cache first (has Kill scoring data)
       const res = await fetch(
-        `${API_BASE}/api/apex/ticker/${encodeURIComponent(chip.ticker)}`,
+        `${API_BASE}/api/apex/ticker/${encodeURIComponent(ticker)}`,
         { headers: authHeaders() }
       );
       if (res.ok) {
         const data = await res.json();
         if (data.found && data.stock) {
           setChartStock(data.stock);
+          return;
         }
       }
+      // Fallback: fetch basic ticker data (for developing/non-Kill stocks)
+      const res2 = await fetch(
+        `${API_BASE}/api/ticker/${encodeURIComponent(ticker)}`,
+        { headers: authHeaders() }
+      );
+      if (res2.ok) {
+        const data2 = await res2.json();
+        if (data2) setChartStock({ ticker, ...data2 });
+      }
     } catch (e) {
-      console.error('[AssistantPage] chip chart fetch error:', e);
+      console.error('[AssistantPage] chart fetch error:', e);
     } finally {
       setChartBusy(null);
     }

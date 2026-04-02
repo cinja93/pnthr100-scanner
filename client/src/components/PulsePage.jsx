@@ -175,7 +175,7 @@ export default function PulsePage({ onNavigate }) {
       {/* TIER 2: Signal intelligence — Kill Top 10, Sector Pulse, Signal Breadth, Macro */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
         <KillTop10 killTop10={data.killTop10} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} killDataLive={data.killDataLive} analyzeContext={analyzeContext} />
-        <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} />
+        <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} newSignals={data.newSignals} />
       </div>
       <NewSignalsPanel
         newSignals={data.newSignals}
@@ -691,7 +691,7 @@ function KillTop10({ killTop10, onTickerClick, killDataLive, analyzeContext }) {
 }
 
 // ── PNTHR Sector Mini-Gauge ────────────────────────────────────────────────────
-function PNTHRMiniGauge({ label, bl, ss, highlight, onClick }) {
+function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, highlight, onClick }) {
   const [hovered, setHovered] = useState(false);
   const total = bl + ss;
   const ssRatio = total > 0 ? ss / total : 0.5;
@@ -765,6 +765,32 @@ function PNTHRMiniGauge({ label, bl, ss, highlight, onClick }) {
       </svg>
       <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, textAlign: 'center', lineHeight: 1.2, marginTop: -2, padding: '0 4px' }}>{label}</div>
       <div style={{ color: dirColor, fontSize: 11, fontWeight: 600, marginTop: 2 }}>{dir}</div>
+
+      {/* New signal ratio bar */}
+      {(() => {
+        const total = newBl + newSs;
+        if (total === 0) return (
+          <div style={{ width: '90%', height: 16, marginTop: 5, borderRadius: 4, background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: '#333', fontSize: 9, letterSpacing: 1 }}>NO NEW</span>
+          </div>
+        );
+        const blPct = newBl / total * 100;
+        const ssPct = newSs / total * 100;
+        return (
+          <div style={{ width: '90%', height: 18, marginTop: 5, borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+            {newBl > 0 && (
+              <div style={{ flex: blPct, background: '#28a745', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 18 }}>
+                <span style={{ color: '#fff', fontSize: 10, fontWeight: 800, fontFamily: 'monospace' }}>{newBl}</span>
+              </div>
+            )}
+            {newSs > 0 && (
+              <div style={{ flex: ssPct, background: '#c0392b', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 18 }}>
+                <span style={{ color: '#fff', fontSize: 10, fontWeight: 800, fontFamily: 'monospace' }}>{newSs}</span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -803,7 +829,7 @@ const SECTOR_KEY_TO_ETF = {
   'Consumer Cyclical':      'XLY',
 };
 
-function SectorPulse({ signals, killDataLive, onNavigate }) {
+function SectorPulse({ signals, killDataLive, onNavigate, newSignals }) {
   const rawBySector = signals?.bySector || {};
   const bySector = {};
   for (const [sector, counts] of Object.entries(rawBySector)) {
@@ -812,6 +838,24 @@ function SectorPulse({ signals, killDataLive, onNavigate }) {
     bySector[canonical].bl += counts.bl || 0;
     bySector[canonical].ss += counts.ss || 0;
   }
+
+  // Build per-sector new signal counts from newSignals.blStocks / ssStocks
+  const newBySector = {};
+  for (const s of (newSignals?.blStocks || [])) {
+    const canonical = ALIASES[s.sector] || s.sector;
+    if (!canonical) continue;
+    if (!newBySector[canonical]) newBySector[canonical] = { bl: 0, ss: 0 };
+    newBySector[canonical].bl++;
+  }
+  for (const s of (newSignals?.ssStocks || [])) {
+    const canonical = ALIASES[s.sector] || s.sector;
+    if (!canonical) continue;
+    if (!newBySector[canonical]) newBySector[canonical] = { bl: 0, ss: 0 };
+    newBySector[canonical].ss++;
+  }
+  // ALL SECTORS totals
+  const totalNewBl = (newSignals?.blStocks || []).length;
+  const totalNewSs = (newSignals?.ssStocks || []).length;
 
   const handleSectorClick = (key) => {
     if (key === '__ALL__') {
@@ -834,12 +878,17 @@ function SectorPulse({ signals, killDataLive, onNavigate }) {
           const d = key === '__ALL__'
             ? { bl: signals?.blCount || 0, ss: signals?.ssCount || 0 }
             : (bySector[key] || { bl: 0, ss: 0 });
+          const nd = key === '__ALL__'
+            ? { bl: totalNewBl, ss: totalNewSs }
+            : (newBySector[key] || { bl: 0, ss: 0 });
           return (
             <PNTHRMiniGauge
               key={key}
               label={label}
               bl={d.bl}
               ss={d.ss}
+              newBl={nd.bl}
+              newSs={nd.ss}
               highlight={key === '__ALL__'}
               onClick={() => handleSectorClick(key)}
             />

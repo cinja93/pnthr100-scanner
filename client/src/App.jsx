@@ -466,15 +466,18 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
 
 // ── EMA Alert Banner ──────────────────────────────────────────────────────────
 // Displays a single row per active 21H EMA crossover alert.
-// Urgency levels: CRITICAL (red) | HIGH (orange) | MEDIUM (yellow) | FAVORABLE (green)
-const EMA_URGENCY_COLOR = { CRITICAL: '#dc3545', HIGH: '#fd7e14', MEDIUM: '#ffc107', FAVORABLE: '#28a745' };
-const EMA_URGENCY_BG    = { CRITICAL: 'rgba(220,53,69,0.12)', HIGH: 'rgba(253,126,20,0.10)', MEDIUM: 'rgba(255,193,7,0.08)', FAVORABLE: 'rgba(40,167,69,0.08)' };
-const EMA_URGENCY_ICON  = { CRITICAL: '⚡', HIGH: '⚠️', MEDIUM: '〰️', FAVORABLE: '✅' };
+// CRITICAL/HIGH → red bg, white text  (act now)
+// MEDIUM        → yellow bg, black text (act soon)
+// FAVORABLE     → green bg, black text  (good news)
+const EMA_BAND = {
+  CRITICAL: { bg: '#b71c1c', text: '#fff', tickerBg: 'rgba(0,0,0,0.25)', tickerText: '#fff', muted: 'rgba(255,255,255,0.75)', dim: 'rgba(255,255,255,0.55)', icon: '⚡' },
+  HIGH:     { bg: '#c62828', text: '#fff', tickerBg: 'rgba(0,0,0,0.25)', tickerText: '#fff', muted: 'rgba(255,255,255,0.75)', dim: 'rgba(255,255,255,0.55)', icon: '⚠️' },
+  MEDIUM:   { bg: '#f9a825', text: '#000', tickerBg: 'rgba(0,0,0,0.15)', tickerText: '#000', muted: 'rgba(0,0,0,0.65)',       dim: 'rgba(0,0,0,0.45)',       icon: '〰️' },
+  FAVORABLE:{ bg: '#2e7d32', text: '#fff', tickerBg: 'rgba(0,0,0,0.20)', tickerText: '#fff', muted: 'rgba(255,255,255,0.75)', dim: 'rgba(255,255,255,0.55)', icon: '✅' },
+};
 
 function EmaAlertBanner({ alert: a, onDismiss }) {
-  const color = EMA_URGENCY_COLOR[a.urgency] || '#ffc107';
-  const bg    = EMA_URGENCY_BG[a.urgency]    || 'rgba(255,193,7,0.08)';
-  const icon  = EMA_URGENCY_ICON[a.urgency]  || '〰️';
+  const band = EMA_BAND[a.urgency] || EMA_BAND.MEDIUM;
 
   const sideLabel = a.emaSide === 'ABOVE' ? '▲ ABOVE' : '▼ BELOW';
   const v1Sign    = a.velocity1m >= 0 ? '+' : '';
@@ -486,9 +489,7 @@ function EmaAlertBanner({ alert: a, onDismiss }) {
 
   return (
     <div style={{
-      background: bg,
-      borderBottom: `1px solid ${color}22`,
-      borderLeft: `3px solid ${color}`,
+      background: band.bg,
       padding: '5px 16px',
       display: 'flex',
       alignItems: 'center',
@@ -496,23 +497,23 @@ function EmaAlertBanner({ alert: a, onDismiss }) {
       fontSize: 11,
       flexWrap: 'wrap',
     }}>
-      <span style={{ color, fontWeight: 800, whiteSpace: 'nowrap' }}>{icon} {a.urgency}</span>
-      <span style={{ background: color, color: '#000', borderRadius: 3, padding: '1px 7px', fontWeight: 800, fontSize: 11, whiteSpace: 'nowrap' }}>{a.ticker}</span>
-      <span style={{ color: '#888' }}>{a.direction}</span>
-      <span style={{ color: '#ccc', flex: 1, minWidth: 180 }}>{adverse}</span>
-      <span style={{ color: '#888', whiteSpace: 'nowrap' }}>
-        velocity: <b style={{ color }}>{v1Sign}{a.velocity1m.toFixed(2)}%/min</b>
+      <span style={{ color: band.text, fontWeight: 800, whiteSpace: 'nowrap' }}>{band.icon} {a.urgency}</span>
+      <span style={{ background: band.tickerBg, color: band.tickerText, borderRadius: 3, padding: '1px 7px', fontWeight: 800, fontSize: 11, whiteSpace: 'nowrap' }}>{a.ticker}</span>
+      <span style={{ color: band.muted }}>{a.direction}</span>
+      <span style={{ color: band.text, flex: 1, minWidth: 180 }}>{adverse}</span>
+      <span style={{ color: band.muted, whiteSpace: 'nowrap' }}>
+        velocity: <b style={{ color: band.text }}>{v1Sign}{a.velocity1m.toFixed(2)}%/min</b>
       </span>
       {a.dollarAtRisk > 0 && (
-        <span style={{ color: '#888', whiteSpace: 'nowrap' }}>
-          P&amp;L: <b style={{ color }}>{pSign}${Math.abs(a.pnlPerMin).toFixed(0)}/min</b>
-          &nbsp;(<b style={{ color }}>{a.riskPctPerMin.toFixed(1)}% of risk/min</b>)
+        <span style={{ color: band.muted, whiteSpace: 'nowrap' }}>
+          P&amp;L: <b style={{ color: band.text }}>{pSign}${Math.abs(a.pnlPerMin).toFixed(0)}/min</b>
+          &nbsp;(<b style={{ color: band.text }}>{a.riskPctPerMin.toFixed(1)}% of risk/min</b>)
         </span>
       )}
-      <span style={{ color: '#666', whiteSpace: 'nowrap', fontSize: 10 }}>
+      <span style={{ color: band.dim, whiteSpace: 'nowrap', fontSize: 10 }}>
         EMA: ${a.ema21h.toFixed(2)} · price: ${a.currentPrice.toFixed(2)}
       </span>
-      <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 15, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+      <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: band.muted, cursor: 'pointer', fontSize: 15, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
     </div>
   );
 }

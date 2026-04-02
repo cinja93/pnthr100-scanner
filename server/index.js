@@ -4313,12 +4313,37 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     } else {
       const dbFresh = await db.collection('pnthr_kill_scores')
         .find({ ...weekFilter, signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: 1 } })
-        .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
+        .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, signalDate: 1, killRank: 1 })
         .toArray();
-      newBLStocks = dbFresh.filter(s => s.signal === 'BL')
-        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
-      newSSStocks = dbFresh.filter(s => s.signal === 'SS')
-        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
+
+      // signalAge is stored at pipeline-run time and becomes stale across weeks.
+      // Cross-reference signal_history to get actual signalDate so we can recompute
+      // dynamically — otherwise last week's "new" signals show as this week's.
+      const needDate = dbFresh.filter(s => !s.signalDate);
+      if (needDate.length > 0) {
+        const tickers = [...new Set(needDate.map(s => s.ticker))];
+        const shRows = await db.collection('signal_history')
+          .find({ ticker: { $in: tickers }, signal: { $in: ['BL', 'SS'] }, signalDate: { $ne: null } })
+          .sort({ savedAt: -1 })
+          .project({ ticker: 1, signal: 1, signalDate: 1 })
+          .toArray();
+        const shMap = {};
+        for (const row of shRows) {
+          const key = `${row.ticker}|${row.signal}`;
+          if (!shMap[key]) shMap[key] = row.signalDate; // most recent entry wins
+        }
+        for (const s of needDate) {
+          s.signalDate = shMap[`${s.ticker}|${s.signal}`] ?? null;
+        }
+      }
+
+      const recomputeAge = s => ({
+        ...s,
+        totalScore: s.totalScore ?? s.apexScore ?? 0,
+        signalAge: s.signalDate ? calcSignalAge(s.signalDate) : (s.signalAge ?? 99),
+      });
+      newBLStocks = dbFresh.filter(s => s.signal === 'BL').map(recomputeAge).sort(sortByScore);
+      newSSStocks = dbFresh.filter(s => s.signal === 'SS').map(recomputeAge).sort(sortByScore);
     }
 
     // ── ETFs: from the ETF cache (populated when /api/etf-stocks is visited) ──

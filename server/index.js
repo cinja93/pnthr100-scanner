@@ -2183,6 +2183,23 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
         // Both mean the position was likely closed in IBKR — but the message
         // should reflect which case it is so the user understands what happened.
         const ibkrShowsZero = ibkrZeroShareTickers.has(ticker);
+
+        // Best-effort exit price: check recent executions first (most accurate),
+        // then fall back to the zero-share IBKR entry's last market price.
+        let ibkrExitPrice = null;
+        const executions = ibkrDoc.latestExecutions || [];
+        // Find the most recent closing execution for this ticker
+        const closingSide = (direction === 'SHORT') ? 'BOT' : 'SLD';
+        const closingExec = [...executions]
+          .reverse()
+          .find(e => e.symbol?.toUpperCase() === ticker && e.side === closingSide);
+        if (closingExec?.price) {
+          ibkrExitPrice = +closingExec.price;
+        } else if (ibkrShowsZero) {
+          const zeroEntry = allIbkrPositions.find(e => e.symbol?.toUpperCase() === ticker);
+          if (zeroEntry?.marketPrice && zeroEntry.marketPrice > 0) ibkrExitPrice = +zeroEntry.marketPrice;
+        }
+
         discrepancies.push({
           type: 'TICKER_MISSING',
           severity: 'CRITICAL',
@@ -2192,6 +2209,7 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
           direction,
           pnthrShares: pnthrShares(p),
           ibkrShowsZero, // true = IBKR has it at 0 shares; false = not in IBKR at all
+          ibkrExitPrice, // best-known exit price from executions or last IBKR mark
         });
         continue; // no further checks if ticker is missing from active IBKR
       }

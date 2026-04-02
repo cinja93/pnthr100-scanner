@@ -162,6 +162,7 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
   const [uiState,     setUiState]     = useState('default');    // default | confirming | fixing | fixed
   const [chosen,      setChosen]      = useState(null);         // 'ibkr' | 'command'
   const [createState, setCreateState] = useState('idle');       // idle | confirming | creating | created | error
+  const [closeState,  setCloseState]  = useState('idle');       // idle | confirming | closing | closed | error
 
   const color = DISC_COLOR[d.severity] || '#ffc107';
   const bg    = DISC_BG[d.severity]    || 'rgba(255,193,7,0.08)';
@@ -287,10 +288,50 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
         const desc = d.ibkrShowsZero
           ? `In Command (${d.pnthrShares} shr) — IBKR now shows 0 shares (closed there)`
           : `In Command (${d.pnthrShares} shr) — not found in IBKR at all`;
+
+        async function doClose() {
+          if (!d.positionId || !d.ibkrExitPrice) return;
+          setCloseState('closing');
+          try {
+            const res = await fetch(`${API_BASE}/api/positions/close`, {
+              method: 'POST',
+              headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: d.positionId, exitPrice: d.ibkrExitPrice, exitReason: 'MANUAL' }),
+            });
+            if (!res.ok) throw new Error('close failed');
+            setCloseState('closed');
+            setTimeout(() => onFixed(), 1500);
+          } catch {
+            setCloseState('error');
+          }
+        }
+
+        if (closeState === 'closing') return <span style={{ color: '#aaa', fontSize: 11 }}>Closing…</span>;
+        if (closeState === 'closed')  return <span style={{ color: '#28a745', fontWeight: 700, fontSize: 11 }}>✓ Closed in Command.</span>;
+        if (closeState === 'error')   return (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#dc3545', fontSize: 11 }}>Close failed — try manually in Command</span>
+            <button onClick={() => onNavigate('command')} style={btnStyle('#555')}>Open Command →</button>
+          </span>
+        );
+
+        if (closeState === 'confirming') return (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ color: '#ddd', fontSize: 11 }}>
+              Close <b style={{ color: '#fff' }}>{d.ticker}</b> at <b style={{ color: '#fff' }}>${d.ibkrExitPrice?.toFixed(2)}</b> (from IBKR)?
+            </span>
+            <button onClick={doClose} style={btnStyle('#dc3545')}>✓ YES – CLOSE IT</button>
+            <button onClick={() => setCloseState('idle')} style={btnStyle('#555')}>✗ CANCEL</button>
+          </span>
+        );
+
         return (
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ color: '#aaa', fontSize: 11 }}>{desc}</span>
-            <button onClick={() => onNavigate('command')} style={btnStyle(color)}>Close in Command →</button>
+            {d.ibkrExitPrice
+              ? <button onClick={() => setCloseState('confirming')} style={btnStyle(color)}>Close in Command →</button>
+              : <button onClick={() => onNavigate('command')} style={btnStyle(color)}>Close in Command →</button>
+            }
           </span>
         );
       }

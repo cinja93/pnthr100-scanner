@@ -4840,54 +4840,31 @@ app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
       }
     }
 
-    // ── Sector lookup — two-pass for full coverage ────────────────────────────
-    // Developing signal stocks have no CURRENT signal so won't be in this week's
-    // kill_scores. Use:
-    //   1. All historical kill_scores entries (any week a stock ever had a signal)
-    //   2. Live apex cache (currently signaled stocks — confirms current sectors)
-    // This covers virtually every stock in the 679 universe.
+    // ── Fetch quotes + profiles (sector) in parallel chunks ────────────────
     const allCandidateTickers = [...new Set([
       ...blCandidates.map(c => c.ticker),
       ...ssCandidates.map(c => c.ticker),
     ])];
-    const sectorMap = {};
-    try {
-      const { connectToDatabase } = await import('./database.js');
-      const db = await connectToDatabase();
-      // Pass 1: historical kill_scores — group by ticker, grab most-recent sector
-      // No ticker filter — we want all 679 stocks' historical sector data in one shot
-      const sectorDocs = await db.collection('pnthr_kill_scores')
-        .aggregate([
-          { $sort: { createdAt: -1 } },
-          { $group: { _id: '$ticker', sector: { $first: '$sector' } } },
-        ])
-        .toArray();
-      for (const d of sectorDocs) if (d.sector) sectorMap[d._id] = d.sector;
-      // Pass 2: live apex cache — catches any sector that changed since last pipeline
-      const { getCachedApexResults } = await import('./apexService.js');
-      const liveApex = getCachedApexResults();
-      if (liveApex?.stocks) {
-        for (const s of liveApex.stocks) {
-          if (s.sector) sectorMap[s.ticker] = s.sector; // apex overrides historical
-        }
-      }
-    } catch (e) { console.warn('[developing-signals] sector lookup failed:', e.message); }
-
-    // ── Fetch today's quotes in chunks of 100 ────────────────────────────────
     const CHUNK_SIZE = 100;
     const quoteMap = {};
+    const sectorMap = {};
     const tickersToQuote = allCandidateTickers.slice(0, 500); // safety cap
     for (let i = 0; i < tickersToQuote.length; i += CHUNK_SIZE) {
       const chunk = tickersToQuote.slice(i, i + CHUNK_SIZE);
       try {
-        const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_API_KEY}`);
-        if (r.ok) {
-          const data = await r.json();
-          if (Array.isArray(data)) {
-            for (const q of data) quoteMap[q.symbol] = q;
-          }
+        const [quoteR, profileR] = await Promise.all([
+          fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_API_KEY}`),
+          fetch(`https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`),
+        ]);
+        if (quoteR.ok) {
+          const data = await quoteR.json();
+          if (Array.isArray(data)) for (const q of data) quoteMap[q.symbol] = q;
         }
-      } catch (e) { console.warn('[developing-signals] quote chunk failed:', e.message); }
+        if (profileR.ok) {
+          const data = await profileR.json();
+          if (Array.isArray(data)) for (const p of data) if (p.symbol && p.sector) sectorMap[p.symbol] = normalizeSector(p.sector);
+        }
+      } catch (e) { console.warn('[developing-signals] quote/profile chunk failed:', e.message); }
     }
 
     // ── Apply tighter developing BL check ────────────────────────────────────
@@ -5245,32 +5222,19 @@ async function fetchDevelopingSignalsCached() {
         ssCandidates.push({ ticker, ema21: s.ema21, lastWeekHigh: s.lastWeekHigh, lastWeekLow: s.lastWeekLow, lastWeekClose: s.lastWeekClose });
     }
 
-    // Sector lookup
-    const sectorMap = {};
-    try {
-      const { connectToDatabase: getDevDb } = await import('./database.js');
-      const db = await getDevDb();
-      const sectorDocs = await db.collection('pnthr_kill_scores')
-        .aggregate([{ $sort: { createdAt: -1 } }, { $group: { _id: '$ticker', sector: { $first: '$sector' } } }])
-        .toArray();
-      for (const d of sectorDocs) if (d.sector) sectorMap[d._id] = d.sector;
-      const { getCachedApexResults } = await import('./apexService.js');
-      const liveApex = getCachedApexResults();
-      if (liveApex?.stocks) for (const s of liveApex.stocks) if (s.sector) sectorMap[s.ticker] = s.sector;
-      // Pass 3: daily signals — covers all 679 stocks from the last daily job run
-      const dailySectors = await db.collection('pnthr_daily_signals')
-        .find({}, { projection: { ticker: 1, sector: 1 } }).toArray();
-      for (const d of dailySectors) if (d.sector && !sectorMap[d.ticker]) sectorMap[d.ticker] = d.sector;
-    } catch { /* non-fatal */ }
-
-    // Fetch quotes
+    // Fetch quotes + profiles (sector) in parallel chunks
     const allTickers = [...new Set([...blCandidates.map(c => c.ticker), ...ssCandidates.map(c => c.ticker)])].slice(0, 500);
     const quoteMap = {};
+    const sectorMap = {};
     for (let i = 0; i < allTickers.length; i += 100) {
       try {
         const chunk = allTickers.slice(i, i + 100);
-        const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_API_KEY}`);
-        if (r.ok) { const data = await r.json(); if (Array.isArray(data)) for (const q of data) quoteMap[q.symbol] = q; }
+        const [quoteR, profileR] = await Promise.all([
+          fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_API_KEY}`),
+          fetch(`https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`),
+        ]);
+        if (quoteR.ok) { const data = await quoteR.json(); if (Array.isArray(data)) for (const q of data) quoteMap[q.symbol] = q; }
+        if (profileR.ok) { const data = await profileR.json(); if (Array.isArray(data)) for (const p of data) if (p.symbol && p.sector) sectorMap[p.symbol] = normalizeSector(p.sector); }
       } catch { /* non-fatal */ }
     }
 

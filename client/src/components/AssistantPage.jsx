@@ -1692,9 +1692,19 @@ const HL = {
   LOW:        { bg: '#0d0d0d', text: '#616161', ticker: '#757575', badge: '#1a1a1a', badgeText: '#616161', border: '#333'    },
 };
 
+// Categories that should be grouped into a single collapsible row
+const GROUP_CATS = new Set(['TRIGGERED_BL', 'TRIGGERED_SS', 'DEV_BL', 'DEV_SS']);
+const GROUP_LABELS = {
+  TRIGGERED_BL: 'NEW BL SIGNALS',
+  TRIGGERED_SS: 'NEW SS SIGNALS',
+  DEV_BL:       'Developing BL',
+  DEV_SS:       'Developing SS',
+};
+
 function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
   const [expanded, setExpanded] = useState(true);
   const [dismissedIds, setDismissedIds] = useState(new Set());
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
 
   const visible = headlines.filter(h => !dismissedIds.has(h.id));
   const count = visible.length;
@@ -1706,11 +1716,39 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
     });
   };
 
+  // Build grouped + ungrouped items in display order
+  const { rows, groupCounts } = useMemo(() => {
+    const ungrouped = [];
+    const groups = {};  // category → [headline, ...]
+    for (const h of visible) {
+      if (GROUP_CATS.has(h.category)) {
+        if (!groups[h.category]) groups[h.category] = [];
+        groups[h.category].push(h);
+      } else {
+        ungrouped.push(h);
+      }
+    }
+    // Build final rows: ungrouped items stay as-is, groups become a single entry
+    const rows = [];
+    const seenGroups = new Set();
+    for (const h of visible) {
+      if (GROUP_CATS.has(h.category)) {
+        if (!seenGroups.has(h.category)) {
+          seenGroups.add(h.category);
+          rows.push({ type: 'group', category: h.category, items: groups[h.category] });
+        }
+      } else {
+        rows.push({ type: 'single', item: h });
+      }
+    }
+    return { rows, groupCounts: Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, v.length])) };
+  }, [visible]);
+
   const critCount = visible.filter(h => h.urgency === 'CRITICAL').length;
   const highCount = visible.filter(h => h.urgency === 'HIGH').length;
-  const sigCount  = visible.filter(h => h.urgency === 'SIGNAL').length;
-  const devBLCount = visible.filter(h => h.category === 'DEV_BL').length;
-  const devSSCount = visible.filter(h => h.category === 'DEV_SS').length;
+  const sigCount  = (groupCounts.TRIGGERED_BL || 0) + (groupCounts.TRIGGERED_SS || 0);
+  const devBLCount = groupCounts.DEV_BL || 0;
+  const devSSCount = groupCounts.DEV_SS || 0;
   const devCount   = devBLCount + devSSCount;
   const watchCount = visible.filter(h => h.urgency === 'WATCHING').length;
 
@@ -1802,16 +1840,194 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
               Scanning...
             </div>
           )}
-          {visible.map((h, i) => {
+          {rows.map((row, ri) => {
+            if (row.type === 'group') {
+              const items = row.items;
+              const sample = items[0];
+              const c = HL[sample.urgency] || HL.LOW;
+              const label = GROUP_LABELS[row.category] || row.category;
+              const isOpen = expandedGroups.has(row.category);
+              return (
+                <div key={row.category}>
+                  {/* Group header row */}
+                  <div
+                    onClick={() => setExpandedGroups(prev => {
+                      const next = new Set(prev);
+                      next.has(row.category) ? next.delete(row.category) : next.add(row.category);
+                      return next;
+                    })}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      padding: '5px 10px 5px 0',
+                      borderBottom: '1px solid rgba(255,255,255,0.03)',
+                      background: c.bg,
+                      borderLeft: `2px solid ${c.border}`,
+                      fontSize: 11,
+                      minHeight: 28,
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <span style={{
+                      color: '#3a3a3a',
+                      fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                      fontSize: 9,
+                      minWidth: 38,
+                      textAlign: 'right',
+                      flexShrink: 0,
+                      paddingLeft: 8,
+                    }}>
+                      {fmtTime(sample.time)}
+                    </span>
+                    <span style={{ fontSize: 11, flexShrink: 0, lineHeight: 1, width: 16, textAlign: 'center' }}>{sample.icon}</span>
+                    <span style={{
+                      background: c.badge,
+                      color: c.badgeText,
+                      padding: '1px 5px',
+                      borderRadius: 2,
+                      fontSize: 8,
+                      fontWeight: 800,
+                      letterSpacing: '0.04em',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      lineHeight: '14px',
+                      minWidth: 52,
+                      textAlign: 'center',
+                    }}>
+                      {sample.urgency}
+                    </span>
+                    <span style={{
+                      color: c.text,
+                      fontWeight: 700,
+                      fontSize: 10,
+                      flex: 1,
+                    }}>
+                      {items.length} {label}
+                    </span>
+                    <span style={{
+                      color: '#555',
+                      fontSize: 9,
+                      transform: isOpen ? 'rotate(180deg)' : 'none',
+                      transition: 'transform 0.15s',
+                      flexShrink: 0,
+                    }}>▾</span>
+                    {/* Dismiss entire group */}
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDismissedIds(prev => {
+                          const next = new Set(prev);
+                          for (const h of items) next.add(h.id);
+                          return next;
+                        });
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = '#ff5252'; e.currentTarget.style.opacity = 1; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = '#555'; e.currentTarget.style.opacity = 0.6; }}
+                      style={{
+                        color: '#555',
+                        opacity: 0.6,
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        padding: '0 4px',
+                        lineHeight: 1,
+                      }}
+                    >
+                      ✕
+                    </span>
+                  </div>
+
+                  {/* Expanded: scrollable ticker strip with individual items */}
+                  {isOpen && (
+                    <div style={{
+                      background: 'rgba(0,0,0,0.25)',
+                      borderLeft: `2px solid ${c.border}`,
+                      borderBottom: '1px solid rgba(255,255,255,0.03)',
+                      padding: '6px 10px',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 4,
+                      maxHeight: 180,
+                      overflowY: 'auto',
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: '#252525 transparent',
+                    }}>
+                      {items.map((h, hi) => {
+                        // Extract sector from message if present
+                        const sectorMatch = h.message.match(/— ([^,]+),/);
+                        const sector = sectorMatch ? sectorMatch[1] : null;
+                        return (
+                          <span
+                            key={h.id + hi}
+                            onClick={(e) => { e.stopPropagation(); onTickerClick?.(h.ticker); }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = c.border; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                            title={sector || h.message}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              background: 'rgba(255,255,255,0.04)',
+                              border: `1px solid ${c.border}`,
+                              borderRadius: 3,
+                              padding: '2px 8px',
+                              cursor: 'pointer',
+                              transition: 'background 0.15s',
+                            }}
+                          >
+                            <span style={{
+                              color: c.ticker,
+                              fontWeight: 800,
+                              fontSize: 10,
+                            }}>
+                              {h.ticker}
+                            </span>
+                            {sector && (
+                              <span style={{
+                                color: '#555',
+                                fontSize: 8,
+                                fontWeight: 500,
+                              }}>
+                                {sector}
+                              </span>
+                            )}
+                            {/* Dismiss individual item from group */}
+                            <span
+                              onClick={(ev) => { ev.stopPropagation(); setDismissedIds(prev => new Set(prev).add(h.id)); }}
+                              onMouseEnter={(ev) => { ev.currentTarget.style.color = '#ff5252'; }}
+                              onMouseLeave={(ev) => { ev.currentTarget.style.color = '#444'; }}
+                              style={{
+                                color: '#444',
+                                fontSize: 9,
+                                cursor: 'pointer',
+                                marginLeft: 2,
+                                lineHeight: 1,
+                              }}
+                            >
+                              ✕
+                            </span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Single (ungrouped) row
+            const h = row.item;
             const c = HL[h.urgency] || HL.LOW;
             return (
               <div
-                key={h.id + i}
+                key={h.id + ri}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 7,
-                  padding: '4px 12px 4px 0',
+                  padding: '4px 10px 4px 0',
                   borderBottom: '1px solid rgba(255,255,255,0.03)',
                   background: c.bg,
                   borderLeft: `2px solid ${c.border}`,
@@ -1893,14 +2109,14 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                 <span
                   onClick={(e) => { e.stopPropagation(); setDismissedIds(prev => new Set(prev).add(h.id)); }}
                   onMouseEnter={(e) => { e.currentTarget.style.color = '#ff5252'; e.currentTarget.style.opacity = 1; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = '#444'; e.currentTarget.style.opacity = 0.5; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = '#555'; e.currentTarget.style.opacity = 0.6; }}
                   style={{
-                    color: '#444',
-                    opacity: 0.5,
-                    fontSize: 11,
+                    color: '#555',
+                    opacity: 0.6,
+                    fontSize: 12,
                     cursor: 'pointer',
                     flexShrink: 0,
-                    padding: '0 2px',
+                    padding: '0 4px',
                     lineHeight: 1,
                   }}
                 >

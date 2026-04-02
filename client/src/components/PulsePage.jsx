@@ -33,6 +33,12 @@ function formatScoresLabel(data) {
     const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' });
     return `Scores: Live as of ${time} ET`;
   }
+  if (data.dataSource === 'daily') {
+    // Daily snapshot from 5 PM job
+    const d = data.scoresAsOf ? new Date(data.scoresAsOf) : new Date();
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' });
+    return `Signals: Daily as of ${time} ET`;
+  }
   // Friday pipeline — show the weekOf date clearly
   if (data.weekOf) {
     // weekOf is 'YYYY-MM-DD'; parse as local date to avoid UTC-off-by-one
@@ -222,11 +228,14 @@ function StatusLight({ status, message, positions, pulseData, lastRefresh, isRef
   const [hovRefresh, setHovRefresh] = useState(false);
 
   const isLive = pulseData?.dataSource === 'live_apex';
+  const isDaily = pulseData?.dataSource === 'daily';
   const dataBadge = isRefreshing
     ? { dot: '#ffc107', label: 'Refreshing...', anim: true }
     : isLive
       ? { dot: '#28a745', label: 'Live',         anim: false }
-      : { dot: '#ffc107', label: 'Fri Pipeline', anim: false };
+      : isDaily
+        ? { dot: '#28a745', label: 'Daily',       anim: false }
+        : { dot: '#ffc107', label: 'Fri Pipeline', anim: false };
 
   const isWarming = pulseData?.cacheWarming && !isRefreshing;
   const scoresLabel = isRefreshing ? 'Scores: Refreshing...'
@@ -286,7 +295,7 @@ function StatusLight({ status, message, positions, pulseData, lastRefresh, isRef
 
       {/* Row 2: scores vintage · prices · loaded-at · data badge */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px 7px', borderTop: `1px solid ${color}11` }}>
-        <span style={{ color: isLive ? '#6bcb77' : '#888', fontSize: 11, fontFamily: 'monospace' }}>
+        <span style={{ color: (isLive || isDaily) ? '#6bcb77' : '#888', fontSize: 11, fontFamily: 'monospace' }}>
           {scoresLabel}
           <span style={{ color: '#444', marginLeft: 12 }}>· Prices: Live</span>
           {loadedLabel && <span style={{ color: '#333', marginLeft: 12 }}>· {loadedLabel}</span>}
@@ -841,6 +850,7 @@ function SectorPulse({ signals, killDataLive, onNavigate, newSignals }) {
 
   // Build per-sector new signal counts from newSignals.blStocks / ssStocks
   const newBySector = {};
+  // Server pre-filters blStocks/ssStocks to last completed weekly candle only — no client filter needed.
   for (const s of (newSignals?.blStocks || [])) {
     const canonical = ALIASES[s.sector] || s.sector;
     if (!canonical) continue;
@@ -853,7 +863,6 @@ function SectorPulse({ signals, killDataLive, onNavigate, newSignals }) {
     if (!newBySector[canonical]) newBySector[canonical] = { bl: 0, ss: 0 };
     newBySector[canonical].ss++;
   }
-  // ALL SECTORS totals
   const totalNewBl = (newSignals?.blStocks || []).length;
   const totalNewSs = (newSignals?.ssStocks || []).length;
 
@@ -1070,9 +1079,11 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick, analyzeCon
   const status = devSignals?.status;
   const bl = devSignals?.bl || [];
   const ss = devSignals?.ss || [];
+  const triggeredToday = devSignals?.triggeredToday || { bl: [], ss: [] };
+  const hasTriggered = triggeredToday.bl.length > 0 || triggeredToday.ss.length > 0;
   const hasAny = bl.length > 0 || ss.length > 0;
 
-  // CSS for pulsing "developing" animation (injected once)
+  // CSS for pulsing "developing" animation and triggered rows (injected once)
   const pulseStyle = `
     @keyframes devPulse {
       0%, 100% { opacity: 0.85; }
@@ -1082,7 +1093,35 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick, analyzeCon
     .dev-ss-row { animation: devPulse 2.5s ease-in-out infinite; background: rgba(220,53,69,0.04); }
     .dev-bl-row:hover { background: rgba(40,167,69,0.1) !important; animation: none; }
     .dev-ss-row:hover { background: rgba(220,53,69,0.1) !important; animation: none; }
+    .trig-bl-row { background: rgba(40,167,69,0.1); border-left: 3px solid #28a745; }
+    .trig-ss-row { background: rgba(220,53,69,0.1); border-left: 3px solid #dc3545; }
+    .trig-bl-row:hover { background: rgba(40,167,69,0.18) !important; }
+    .trig-ss-row:hover { background: rgba(220,53,69,0.18) !important; }
   `;
+
+  function TriggeredRow({ s, dir, idx, chartList }) {
+    const isBL = dir === 'BL';
+    const accentColor = isBL ? '#6bcb77' : '#ff6b6b';
+    const rowClass = isBL ? 'trig-bl-row' : 'trig-ss-row';
+    return (
+      <div
+        className={rowClass}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+          borderBottom: '1px solid #1a1a1a', cursor: 'pointer', transition: 'background 0.15s' }}
+        onClick={() => onTickerClick(chartList, idx)}
+      >
+        <span style={{ background: accentColor, color: '#000', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3, letterSpacing: 1, flexShrink: 0 }}>
+          {isBL ? 'BL' : 'SS'}
+        </span>
+        <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 52, fontFamily: 'monospace' }}>{s.ticker}</span>
+        <span style={{ color: '#555', fontSize: 11, minWidth: 58, maxWidth: 58, flexShrink: 0, whiteSpace: 'nowrap' }}>{abbrevSector(s.sector)}</span>
+        <span style={{ color: accentColor, fontSize: 11, flex: 1, textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>
+          ✓ TRIGGERED TODAY
+        </span>
+        <span style={{ color: accentColor, fontSize: 11, flexShrink: 0 }}>▸</span>
+      </div>
+    );
+  }
 
   function DevRow({ s, dir, idx, chartList }) {
     const isBL = dir === 'BL';
@@ -1154,12 +1193,26 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick, analyzeCon
         <span style={{ background: 'rgba(255,215,0,0.1)', border: '1px solid #FFD70044', color: '#FFD700', fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, letterSpacing: 1 }}>
           3 OF 4 CONDITIONS MET
         </span>
-        {!loading && hasAny && (
+        {!loading && (hasAny || hasTriggered) && (
           <>
-            <span style={{ color: '#444', fontSize: 11 }}>Developing:</span>
-            <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>{bl.length} BL</span>
-            <span style={{ color: '#333', fontSize: 11 }}>|</span>
-            <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>{ss.length} SS</span>
+            {hasTriggered && (
+              <>
+                <span style={{ background: 'rgba(255,215,0,0.15)', border: '1px solid #FFD70066', color: '#FFD700', fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 3, letterSpacing: 1 }}>
+                  ✓ TRIGGERED
+                </span>
+                <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>{triggeredToday.bl.length} BL</span>
+                <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>{triggeredToday.ss.length} SS</span>
+                {hasAny && <span style={{ color: '#333', fontSize: 11 }}>·</span>}
+              </>
+            )}
+            {hasAny && (
+              <>
+                <span style={{ color: '#444', fontSize: 11 }}>Developing:</span>
+                <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>{bl.length} BL</span>
+                <span style={{ color: '#333', fontSize: 11 }}>|</span>
+                <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700 }}>{ss.length} SS</span>
+              </>
+            )}
           </>
         )}
         {loading && <span style={{ color: '#555', fontSize: 11 }}>Scanning...</span>}
@@ -1180,6 +1233,44 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick, analyzeCon
         </div>
       )}
 
+      {/* ── TRIGGERED TODAY ── daily job confirmed signal on today's developing candle */}
+      {!loading && hasTriggered && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ color: '#FFD700', fontSize: 10, letterSpacing: 2, fontFamily: 'monospace', fontWeight: 700, marginBottom: 6 }}>
+            ✓ TRIGGERED TODAY — weekly signal confirmed at today's close
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0, border: '1px solid #28a74555', borderLeft: '3px solid #28a745', borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ background: 'rgba(40,167,69,0.12)', padding: '5px 10px' }}>
+                <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>NEW BL</span>
+                <span style={{ color: '#555', fontSize: 10, marginLeft: 8 }}>({triggeredToday.bl.length}) crossed signal threshold today</span>
+              </div>
+              {triggeredToday.bl.length > 0
+                ? (() => {
+                    const chartList = triggeredToday.bl.map(s => ({ ticker: s.ticker, symbol: s.ticker, companyName: '', exchange: '', currentPrice: null, signal: 'BL', sector: s.sector }));
+                    return triggeredToday.bl.map((s, i) => <TriggeredRow key={s.ticker} s={s} dir="BL" idx={i} chartList={chartList} />);
+                  })()
+                : <div style={{ padding: '10px 14px', color: '#333', fontSize: 12 }}>None</div>
+              }
+            </div>
+            <div style={{ flex: 1, minWidth: 0, border: '1px solid #dc354555', borderLeft: '3px solid #dc3545', borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ background: 'rgba(220,53,69,0.12)', padding: '5px 10px' }}>
+                <span style={{ color: '#ff6b6b', fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>NEW SS</span>
+                <span style={{ color: '#555', fontSize: 10, marginLeft: 8 }}>({triggeredToday.ss.length}) crossed signal threshold today</span>
+              </div>
+              {triggeredToday.ss.length > 0
+                ? (() => {
+                    const chartList = triggeredToday.ss.map(s => ({ ticker: s.ticker, symbol: s.ticker, companyName: '', exchange: '', currentPrice: null, signal: 'SS', sector: s.sector }));
+                    return triggeredToday.ss.map((s, i) => <TriggeredRow key={s.ticker} s={s} dir="SS" idx={i} chartList={chartList} />);
+                  })()
+                : <div style={{ padding: '10px 14px', color: '#333', fontSize: 12 }}>None</div>
+              }
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DEVELOPING (3 of 4 conditions met) ── */}
       {!loading && hasAny && (
         <div style={{ display: 'flex', gap: 12 }}>
           {/* BL Column */}

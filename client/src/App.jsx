@@ -154,9 +154,12 @@ function App() {
 // Interactive 2-step fix flow for each discrepancy type.
 // States: default → confirming → fixing → fixed (auto-dismiss)
 
-const DISC_COLOR = { CRITICAL: '#dc3545', HIGH: '#ff8c00', MEDIUM: '#ffc107' };
-const DISC_BG    = { CRITICAL: 'rgba(220,53,69,0.13)', HIGH: 'rgba(255,140,0,0.10)', MEDIUM: 'rgba(255,193,7,0.08)' };
-const DISC_ICON  = { CRITICAL: '🚨', HIGH: '⚠️', MEDIUM: 'ℹ️' };
+// CRITICAL → dark red bg, white text | HIGH → PNTHR yellow bg, black text | MEDIUM → amber bg, black text
+const DISC_BAND = {
+  CRITICAL: { bg: '#7f0000', text: '#fff', muted: 'rgba(255,255,255,0.75)', tickerBg: 'rgba(0,0,0,0.30)', tickerText: '#fff', typeLbl: 'rgba(255,255,255,0.50)', icon: '🚨', onDark: true },
+  HIGH:     { bg: '#fcf000', text: '#000', muted: 'rgba(0,0,0,0.60)',       tickerBg: 'rgba(0,0,0,0.12)', tickerText: '#000', typeLbl: 'rgba(0,0,0,0.45)',         icon: '⚠️', onDark: false },
+  MEDIUM:   { bg: '#f9a825', text: '#000', muted: 'rgba(0,0,0,0.60)',       tickerBg: 'rgba(0,0,0,0.12)', tickerText: '#000', typeLbl: 'rgba(0,0,0,0.45)',         icon: 'ℹ️', onDark: false },
+};
 
 function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
   const [uiState,     setUiState]     = useState('default');    // default | confirming | fixing | fixed
@@ -164,9 +167,8 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
   const [createState, setCreateState] = useState('idle');       // idle | confirming | creating | created | error
   const [closeState,  setCloseState]  = useState('idle');       // idle | confirming | closing | closed | error
 
-  const color = DISC_COLOR[d.severity] || '#ffc107';
-  const bg    = DISC_BG[d.severity]    || 'rgba(255,193,7,0.08)';
-  const icon  = DISC_ICON[d.severity]  || '⚠️';
+  const band = DISC_BAND[d.severity] || DISC_BAND.MEDIUM;
+  const { bg, text, muted, tickerBg, tickerText, typeLbl, icon, onDark } = band;
 
   // ── helper to apply the fix via POST /api/positions (surgical patch) ──────
   async function applyFix(fields) {
@@ -188,8 +190,8 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
 
   // ── content per type ──────────────────────────────────────────────────────
   function renderContent() {
-    if (uiState === 'fixing')  return <span style={{ color: '#aaa', fontSize: 11 }}>Saving…</span>;
-    if (uiState === 'fixed')   return <span style={{ color: '#28a745', fontWeight: 700, fontSize: 11 }}>✓ Fixed! Command updated.</span>;
+    if (uiState === 'fixing')  return <span style={{ color: muted, fontSize: 11 }}>Saving…</span>;
+    if (uiState === 'fixed')   return <span style={{ color: text, fontWeight: 700, fontSize: 11 }}>✓ Fixed! Command updated.</span>;
 
     const dirLabel = d.direction === 'SHORT' ? 'SHORT' : 'LONG';
 
@@ -210,9 +212,9 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
       }
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: '#ddd', fontSize: 11 }}>{confirmText}</span>
-          <button onClick={() => applyFix(fixFields)} style={btnStyle('#28a745')}>✓ YES – FIX IT</button>
-          <button onClick={() => { setUiState('default'); setChosen(null); }} style={btnStyle('#555')}>✗ NO, CANCEL</button>
+          <span style={{ color: text, fontSize: 11 }}>{confirmText}</span>
+          <button onClick={() => applyFix(fixFields)} style={btnStyle('primary')}>✓ YES – FIX IT</button>
+          <button onClick={() => { setUiState('default'); setChosen(null); }} style={btnStyle('secondary')}>✗ NO, CANCEL</button>
         </span>
       );
     }
@@ -221,13 +223,13 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
     if (d.type === 'SHARES_MISMATCH') {
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: '#aaa', fontSize: 11 }}>
-            {dirLabel} · <b style={{ color: '#fff' }}>{Math.abs(d.diff)}</b> share diff — which count is correct?
+          <span style={{ color: muted, fontSize: 11 }}>
+            {dirLabel} · <b style={{ color: text }}>{Math.abs(d.diff)}</b> share diff — which count is correct?
           </span>
-          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('#555')}>
+          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('secondary')}>
             Command: {d.pnthrShares} shr
           </button>
-          <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle(color)}>
+          <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle('primary')}>
             IBKR: {d.ibkrShares} shr ← use this
           </button>
         </span>
@@ -236,13 +238,13 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
     if (d.type === 'PRICE_MISMATCH') {
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: '#aaa', fontSize: 11 }}>
-            Avg cost <b style={{ color }}>{d.diffPct}%</b> off — which is correct?
+          <span style={{ color: muted, fontSize: 11 }}>
+            Avg cost <b style={{ color: text }}>{d.diffPct}%</b> off — which is correct?
           </span>
-          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('#555')}>
+          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('secondary')}>
             Command: ${d.pnthrAvg?.toFixed(2)}
           </button>
-          <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle(color)}>
+          <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle('primary')}>
             IBKR: ${d.ibkrAvg?.toFixed(2)} ← use this
           </button>
         </span>
@@ -252,29 +254,29 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
       if (d.ibkrStop) {
         return (
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ color: '#aaa', fontSize: 11 }}>No stop set! IBKR has a stop order at <b style={{ color: '#fff' }}>${(+d.ibkrStop).toFixed(2)}</b></span>
-            <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle(color)}>
+            <span style={{ color: muted, fontSize: 11 }}>No stop set! IBKR has a stop order at <b style={{ color: text }}>${(+d.ibkrStop).toFixed(2)}</b></span>
+            <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle('primary')}>
               Use IBKR stop: ${(+d.ibkrStop).toFixed(2)}
             </button>
-            <button onClick={() => onNavigate('command')} style={btnStyle('#555')}>Set manually in Command →</button>
+            <button onClick={() => onNavigate('command')} style={btnStyle('secondary')}>Set manually in Command →</button>
           </span>
         );
       }
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: '#aaa', fontSize: 11 }}>No stop in Command or IBKR — position is UNPROTECTED</span>
-          <button onClick={() => onNavigate('command')} style={btnStyle(color)}>Set Stop in Command →</button>
+          <span style={{ color: muted, fontSize: 11 }}>No stop in Command or IBKR — position is UNPROTECTED</span>
+          <button onClick={() => onNavigate('command')} style={btnStyle('primary')}>Set Stop in Command →</button>
         </span>
       );
     }
     if (d.type === 'STOP_MISMATCH') {
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: '#aaa', fontSize: 11 }}>Stop prices differ — which is correct?</span>
-          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('#555')}>
+          <span style={{ color: muted, fontSize: 11 }}>Stop prices differ — which is correct?</span>
+          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('secondary')}>
             Command: ${(+d.pnthrStop).toFixed(2)}
           </button>
-          <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle(color)}>
+          <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle('primary')}>
             IBKR: ${(+d.ibkrStop).toFixed(2)} ← use this
           </button>
         </span>
@@ -306,39 +308,37 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
           }
         }
 
-        if (closeState === 'closing') return <span style={{ color: '#aaa', fontSize: 11 }}>Closing…</span>;
-        if (closeState === 'closed')  return <span style={{ color: '#28a745', fontWeight: 700, fontSize: 11 }}>✓ Closed in Command.</span>;
+        if (closeState === 'closing') return <span style={{ color: muted, fontSize: 11 }}>Closing…</span>;
+        if (closeState === 'closed')  return <span style={{ color: text, fontWeight: 700, fontSize: 11 }}>✓ Closed in Command.</span>;
         if (closeState === 'error')   return (
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#dc3545', fontSize: 11 }}>Close failed — try manually in Command</span>
-            <button onClick={() => onNavigate('command')} style={btnStyle('#555')}>Open Command →</button>
+            <span style={{ color: muted, fontSize: 11 }}>Close failed — try manually in Command</span>
+            <button onClick={() => onNavigate('command')} style={btnStyle('secondary')}>Open Command →</button>
           </span>
         );
 
         if (closeState === 'confirming') return (
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ color: '#ddd', fontSize: 11 }}>
-              Close <b style={{ color: '#fff' }}>{d.ticker}</b> at <b style={{ color: '#fff' }}>${d.ibkrExitPrice?.toFixed(2)}</b> (from IBKR)?
+            <span style={{ color: muted, fontSize: 11 }}>
+              Close <b style={{ color: text }}>{d.ticker}</b> at <b style={{ color: text }}>${d.ibkrExitPrice?.toFixed(2)}</b> (from IBKR)?
             </span>
-            <button onClick={doClose} style={btnStyle('#dc3545')}>✓ YES – CLOSE IT</button>
-            <button onClick={() => setCloseState('idle')} style={btnStyle('#555')}>✗ CANCEL</button>
+            <button onClick={doClose} style={btnStyle('danger')}>✓ YES – CLOSE IT</button>
+            <button onClick={() => setCloseState('idle')} style={btnStyle('secondary')}>✗ CANCEL</button>
           </span>
         );
 
         return (
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ color: '#aaa', fontSize: 11 }}>{desc}</span>
+            <span style={{ color: muted, fontSize: 11 }}>{desc}</span>
             {d.ibkrExitPrice
-              ? <button onClick={() => setCloseState('confirming')} style={btnStyle(color)}>Close in Command →</button>
-              : <button onClick={() => onNavigate('command')} style={btnStyle(color)}>Close in Command →</button>
+              ? <button onClick={() => setCloseState('confirming')} style={btnStyle('primary')}>Close in Command →</button>
+              : <button onClick={() => onNavigate('command')} style={btnStyle('primary')}>Close in Command →</button>
             }
           </span>
         );
       }
 
       // ── IBKR_ONLY: position in IBKR but missing from Command ─────────────
-      // Full create flow: idle → confirming → creating → created/error
-
       async function doCreate() {
         setCreateState('creating');
         try {
@@ -349,7 +349,7 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
           });
           if (!res.ok) throw new Error('import failed');
           setCreateState('created');
-          setTimeout(() => onFixed(), 2000); // refresh discrepancies + positions
+          setTimeout(() => onFixed(), 2000);
         } catch {
           setCreateState('error');
         }
@@ -362,36 +362,31 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
       if (createState === 'confirming') {
         return (
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ color: '#ddd', fontSize: 11 }}>
-              Create <b style={{ color: '#fff' }}>{dirLabel}</b> card for <b style={{ color: '#fff' }}>{d.ticker}</b> — {d.ibkrShares} shr{costStr} — Lot 1 + PNTHR stop pre-filled. Expand lots after.
+            <span style={{ color: muted, fontSize: 11 }}>
+              Create <b style={{ color: text }}>{dirLabel}</b> card for <b style={{ color: text }}>{d.ticker}</b> — {d.ibkrShares} shr{costStr} — Lot 1 + PNTHR stop pre-filled. Expand lots after.
             </span>
-            <button onClick={doCreate} style={btnStyle('#28a745')}>✓ YES – CREATE IT</button>
-            <button onClick={() => setCreateState('idle')} style={btnStyle('#555')}>✗ CANCEL</button>
+            <button onClick={doCreate} style={btnStyle('primary')}>✓ YES – CREATE IT</button>
+            <button onClick={() => setCreateState('idle')} style={btnStyle('secondary')}>✗ CANCEL</button>
           </span>
         );
       }
-      if (createState === 'creating') {
-        return <span style={{ color: '#aaa', fontSize: 11 }}>Creating position in Command…</span>;
-      }
-      if (createState === 'created') {
-        return <span style={{ color: '#28a745', fontWeight: 700, fontSize: 11 }}>✓ Position created! Go to Command to set stop + expand lots.</span>;
-      }
+      if (createState === 'creating') return <span style={{ color: muted, fontSize: 11 }}>Creating position in Command…</span>;
+      if (createState === 'created')  return <span style={{ color: text, fontWeight: 700, fontSize: 11 }}>✓ Position created! Go to Command to set stop + expand lots.</span>;
       if (createState === 'error') {
         return (
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#dc3545', fontSize: 11 }}>Create failed — try again</span>
-            <button onClick={() => setCreateState('confirming')} style={btnStyle('#dc3545')}>Retry</button>
+            <span style={{ color: muted, fontSize: 11 }}>Create failed — try again</span>
+            <button onClick={() => setCreateState('confirming')} style={btnStyle('danger')}>Retry</button>
           </span>
         );
       }
 
-      // idle — default IBKR_ONLY view
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: '#aaa', fontSize: 11 }}>
+          <span style={{ color: muted, fontSize: 11 }}>
             In IBKR — {dirLabel} {d.ibkrShares} shr{costStr} — NOT in Command{staleNote}
           </span>
-          <button onClick={() => setCreateState('confirming')} style={btnStyle(color)}>
+          <button onClick={() => setCreateState('confirming')} style={btnStyle('primary')}>
             Create in Command →
           </button>
         </span>
@@ -400,25 +395,25 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
     return null;
   }
 
-  function btnStyle(borderColor) {
-    return {
-      background: 'none',
-      border: `1px solid ${borderColor}`,
-      color: borderColor === '#555' ? '#999' : borderColor,
-      borderRadius: 4,
-      padding: '3px 10px',
-      fontSize: 11,
-      cursor: 'pointer',
-      fontWeight: 600,
-      whiteSpace: 'nowrap',
-      flexShrink: 0,
-    };
+  // Button styles that contrast against the band background
+  function btnStyle(variant) {
+    if (onDark) {
+      // Dark background (CRITICAL red) — light buttons
+      if (variant === 'primary')   return { background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.5)', color: '#fff', borderRadius: 4, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 };
+      if (variant === 'secondary') return { background: 'none', border: '1px solid rgba(255,255,255,0.25)', color: 'rgba(255,255,255,0.65)', borderRadius: 4, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 };
+      if (variant === 'danger')    return { background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', borderRadius: 4, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 };
+    } else {
+      // Light background (HIGH yellow / MEDIUM amber) — dark buttons
+      if (variant === 'primary')   return { background: '#1a1a1a', border: '1px solid #1a1a1a', color: '#fff', borderRadius: 4, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 };
+      if (variant === 'secondary') return { background: 'rgba(0,0,0,0.12)', border: '1px solid rgba(0,0,0,0.30)', color: '#000', borderRadius: 4, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 };
+      if (variant === 'danger')    return { background: '#7f0000', border: '1px solid #7f0000', color: '#fff', borderRadius: 4, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 };
+    }
+    return {};
   }
 
   return (
     <div style={{
       background: bg,
-      borderBottom: `1px solid ${color}33`,
       padding: '8px 16px',
       display: 'flex',
       alignItems: 'center',
@@ -430,21 +425,21 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
       <span style={{ fontSize: 13, flexShrink: 0 }}>{icon}</span>
 
       {/* Severity badge */}
-      <span style={{ color, fontWeight: 800, flexShrink: 0, fontSize: 10, letterSpacing: '0.06em', minWidth: 56 }}>
+      <span style={{ color: text, fontWeight: 800, flexShrink: 0, fontSize: 10, letterSpacing: '0.06em', minWidth: 56 }}>
         {d.severity}
       </span>
 
       {/* Ticker — prominent */}
       <span style={{
-        fontWeight: 900, fontSize: 13, color: '#fff',
-        background: `${color}22`, borderRadius: 4,
+        fontWeight: 900, fontSize: 13, color: tickerText,
+        background: tickerBg, borderRadius: 4,
         padding: '1px 7px', flexShrink: 0, letterSpacing: '0.04em',
       }}>
         {d.ticker}
       </span>
 
       {/* Type label */}
-      <span style={{ fontSize: 10, color: '#555', flexShrink: 0, letterSpacing: '0.04em' }}>
+      <span style={{ fontSize: 10, color: typeLbl, flexShrink: 0, letterSpacing: '0.04em' }}>
         {d.type.replace(/_/g, ' ')}
       </span>
 
@@ -455,7 +450,7 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
       {uiState === 'default' && (
         <button
           onClick={onDismiss}
-          style={{ background: 'none', border: `1px solid #333`, color: '#555', borderRadius: 4, padding: '2px 8px', fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
+          style={{ background: 'none', border: `1px solid ${onDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)'}`, color: muted, borderRadius: 4, padding: '2px 8px', fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
         >
           ✕
         </button>

@@ -1692,7 +1692,7 @@ const HL = {
   LOW:        { bg: '#0d0d0d', text: '#616161', ticker: '#757575', badge: '#1a1a1a', badgeText: '#616161', border: '#333'    },
 };
 
-function HeadlineFeed({ headlines, loading, devSignalsAge }) {
+function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
   const [expanded, setExpanded] = useState(true);
   const count = headlines.length;
 
@@ -1851,16 +1851,23 @@ function HeadlineFeed({ headlines, loading, devSignalsAge }) {
                   {h.urgency}
                 </span>
 
-                {/* Ticker */}
+                {/* Ticker — clickable to open chart */}
                 {h.ticker && (
-                  <span style={{
-                    color: c.ticker,
-                    fontWeight: 800,
-                    fontSize: 10,
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    minWidth: 36,
-                  }}>
+                  <span
+                    onClick={(e) => { e.stopPropagation(); onTickerClick?.(h.ticker); }}
+                    style={{
+                      color: c.ticker,
+                      fontWeight: 800,
+                      fontSize: 10,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      minWidth: 36,
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                      textDecorationColor: 'rgba(255,255,255,0.15)',
+                      textUnderlineOffset: 2,
+                    }}
+                  >
                     {h.ticker}
                   </span>
                 )}
@@ -2274,6 +2281,7 @@ export default function AssistantPage({ onNavigate }) {
         headlines={headlines}
         loading={headlinesLoading}
         devSignalsAge={devSignalsAge}
+        onTickerClick={(ticker) => handleChipClick({ ticker })}
       />
 
       {error && <div style={s.error}>{error}</div>}

@@ -2817,7 +2817,17 @@ app.get('/api/positions/hourly-ema', authenticateJWT, async (req, res) => {
       .project({ ticker: 1 })
       .toArray();
 
-    const tickers = [...new Set(positions.map(p => p.ticker?.toUpperCase()).filter(Boolean))];
+    // Also get positions closed today (for WATCHING alerts)
+    const todayET = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const todayStart = new Date(todayET + 'T00:00:00-04:00');
+    const closedToday = await db.collection('pnthr_portfolio')
+      .find({ ownerId: userId, status: 'CLOSED', closedAt: { $gte: todayStart } })
+      .project({ ticker: 1, direction: 1, 'outcome.exitPrice': 1, 'outcome.exitReason': 1, closedAt: 1, currentPrice: 1 })
+      .toArray();
+
+    const activeTickers = positions.map(p => p.ticker?.toUpperCase()).filter(Boolean);
+    const closedTickers = closedToday.map(p => p.ticker?.toUpperCase()).filter(Boolean);
+    const tickers = [...new Set([...activeTickers, ...closedTickers])];
     const now     = Date.now();
     const TTL     = 60 * 60 * 1000; // 60-minute cache per ticker
 
@@ -2846,7 +2856,20 @@ app.get('/api/positions/hourly-ema', authenticateJWT, async (req, res) => {
       if (i + 3 < stale.length) await new Promise(r => setTimeout(r, 300));
     }
 
-    res.json(result); // { [TICKER]: { ema21h, computedAt } }
+    // Build closed-today map: { [TICKER]: { direction, exitPrice, exitReason, closedAt } }
+    const closedTodayMap = {};
+    for (const p of closedToday) {
+      const t = p.ticker?.toUpperCase();
+      if (t) closedTodayMap[t] = {
+        direction:   p.direction || 'LONG',
+        exitPrice:   p.outcome?.exitPrice ?? null,
+        exitReason:  p.outcome?.exitReason ?? null,
+        closedAt:    p.closedAt,
+        lastPrice:   p.currentPrice ?? p.outcome?.exitPrice ?? null,
+      };
+    }
+
+    res.json({ ema: result, closedToday: closedTodayMap });
   } catch (err) {
     console.error('[hourly-ema]', err);
     res.status(500).json({ error: err.message });

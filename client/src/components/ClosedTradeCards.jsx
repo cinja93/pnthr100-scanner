@@ -25,6 +25,7 @@ class TradeCardBoundary extends Component {
   }
 }
 import { API_BASE, authHeaders } from '../services/api';
+import ClosedTradeChartModal from './ClosedTradeChartModal';
 
 // ── Safe string helper — prevents React Error #31 when fields contain objects ──
 function safeStr(v) {
@@ -557,13 +558,14 @@ function CompleteYourScore({ entry, questions, reviewMode, onSave }) {
 }
 
 // ── TradeCard ─────────────────────────────────────────────────────────────────
-function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmScore, focusRef, autoExpand }) {
+function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmScore, focusRef, autoExpand, allEntries }) {
   const [entry, setEntry] = useState(initialEntry);
   // Always start collapsed — user expands the cards they want to review.
   // autoExpand overrides when navigating here directly from Assistant.
   const isConfirmed = !!initialEntry.userConfirmed?.confirmedAt;
   const [expanded, setExpanded] = useState(autoExpand || false);
   const [showCompleteScore, setShowCompleteScore] = useState(false);
+  const [showChart, setShowChart] = useState(false);
   const [localNotes, setLocalNotes] = useState({ tradeNotes: entry.tradeNotes || '', macroNotes: entry.macroNotes || '' });
 
   const disc      = entry.discipline || {};
@@ -680,6 +682,18 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
               <div style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.04em' }}>{typeof disc.tierLabel === 'string' ? disc.tierLabel.split(' ')[0] : ''}</div>
             </div>
           )}
+          {/* Trade chart icon */}
+          <span
+            onClick={e => { e.stopPropagation(); setShowChart(true); }}
+            title="View trade chart"
+            style={{
+              fontSize: 14, cursor: 'pointer', color: '#555',
+              padding: '2px 4px', borderRadius: 4,
+              transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = '#FFD700'}
+            onMouseLeave={e => e.currentTarget.style.color = '#555'}
+          >📊</span>
           <span style={{ color: '#555', fontSize: '0.8rem' }}>{expanded ? '▼' : '▶'}</span>
         </div>
       </div>
@@ -869,6 +883,14 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
           );
         })()}
       </>}
+
+      {showChart && (
+        <ClosedTradeChartModal
+          entry={entry}
+          allEntries={allEntries || [entry]}
+          onClose={() => setShowChart(false)}
+        />
+      )}
     </div>
   );
 }
@@ -935,6 +957,7 @@ export default function ClosedTradeCards({ onTickerClick, focusPositionId, focus
               onTickerClick={onTickerClick}
               saveNotes={saveNotes}
               focusRef={isFocused ? focusRef : null}
+              allEntries={sortedEntries}
               autoExpand={isFocused}
               onConfirmScore={(id, newScore) => {
                 setEntries(prev => prev.map(x => x._id?.toString() === id?.toString() ? { ...x, discipline: newScore } : x));

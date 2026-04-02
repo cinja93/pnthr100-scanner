@@ -2304,163 +2304,265 @@ export default function AssistantPage({ onNavigate }) {
         </div>
       </div>
 
-      {/* ── Live Headline Feed ─────────────────────────────────────────────── */}
-      <HeadlineFeed
-        headlines={headlines}
-        loading={headlinesLoading}
-        devSignalsAge={devSignalsAge}
-        onTickerClick={(ticker) => handleChipClick({ ticker })}
-      />
-
       {error && <div style={s.error}>{error}</div>}
 
-      {/* ── P1: Critical ───────────────────────────────────────────────────── */}
-      {p1Tasks.length > 0 && (
-        <>
-          <div style={s.sectionHeader}>
-            <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[1] }}>
-              ● {PRIORITY_LABEL[1]} ({p1Count} open)
-            </span>
-          </div>
-          {p1Tasks.map(task => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              isCompleted={completedIds.has(task.id)}
-              onMarkDone={handleMarkDone}
-            />
-          ))}
-        </>
-      )}
+      {/* ══════════════════════════════════════════════════════════════════════
+           SECTION 1 — LIVE OPPORTUNITIES
+         ══════════════════════════════════════════════════════════════════════ */}
+      <div style={{
+        border: '1px solid rgba(252, 240, 0, 0.3)',
+        borderRadius: 8,
+        padding: '0 0 4px',
+        marginBottom: 16,
+        background: 'rgba(252, 240, 0, 0.01)',
+      }}>
+        <div style={{
+          padding: '7px 14px 5px',
+          borderBottom: '1px solid rgba(252, 240, 0, 0.12)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <span style={{
+            color: '#FCF000',
+            fontWeight: 900,
+            fontSize: 10,
+            letterSpacing: '0.14em',
+            fontFamily: "'Inter', 'Segoe UI', sans-serif",
+          }}>LIVE OPPORTUNITIES</span>
+          <span style={{
+            flex: 1,
+            height: 1,
+            background: 'linear-gradient(90deg, rgba(252,240,0,0.15), transparent 80%)',
+          }} />
+        </div>
 
-      {/* ── P2: Action ─────────────────────────────────────────────────────── */}
-      {p2Tasks.length > 0 && (
-        <>
-          <div style={s.sectionHeader}>
-            <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[2] }}>
-              ● {PRIORITY_LABEL[2]} ({p2Count} open)
-            </span>
-          </div>
-          {p2Tasks.map(task => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              isCompleted={completedIds.has(task.id)}
-              onMarkDone={handleMarkDone}
-            />
-          ))}
-        </>
-      )}
+        <div style={{ padding: '8px 10px 4px' }}>
+          {/* Live Headline Feed */}
+          <HeadlineFeed
+            headlines={headlines}
+            loading={headlinesLoading}
+            devSignalsAge={devSignalsAge}
+            onTickerClick={(ticker) => handleChipClick({ ticker })}
+          />
 
-      {/* ── Recent Fills ───────────────────────────────────────────────────── */}
-      <RecentFillsSection fills={recentFills} onNavigate={onNavigate} />
-
-      {/* ── IBKR Discrepancy Check ─────────────────────────────────────────── */}
-      <IbkrDiscrepancySection
-        discrepancies={ibkrDiscrepancies}
-        loading={ibkrDiscLoading}
-        ibkrConnected={ibkrConnected}
-      />
-
-      {/* ── Today's IBKR Trades reconciliation ─────────────────────────────── */}
-      <TradesTodaySection
-        trades={ibkrTrades}
-        loading={ibkrTradesLoading}
-        ibkrConnected={ibkrConnected}
-        onNavigate={onNavigate}
-      />
-
-      {/* ── Command Health ─────────────────────────────────────────────────── */}
-      <CommandHealthSection positions={healthPositions} loading={healthLoading} />
-
-      {/* ── Stop Sync ──────────────────────────────────────────────────────── */}
-      {stopSyncRows.length > 0 && (
-        <div style={s.syncSection}>
-          <div style={s.syncHeader} onClick={() => setSyncExpanded(e => !e)}>
-            <div style={s.syncHeaderLeft}>
-              <span style={{ fontSize: 11, color: '#444' }}>{syncExpanded ? '▼' : '▶'}</span>
-              <span style={s.syncLabel}>{stopSyncLabel}</span>
-              <span style={s.syncCount}>
-                ({stopSyncRows.length} position{stopSyncRows.length !== 1 ? 's' : ''}
-                {syncNeedsCount > 0 ? ` — ${syncNeedsCount} need updating` : ' — all synced'})
-              </span>
-            </div>
-          </div>
-          {syncExpanded && (
+          {/* P1: Critical */}
+          {p1Tasks.length > 0 && (
             <>
-              {syncNeedsCount === 0 ? (
-                <div style={{ padding: '14px 16px', fontSize: 12, color: '#28a745' }}>
-                  ✓ All {stopSyncRows.length} stops are up to date — nothing to sync today.
+              <div style={s.sectionHeader}>
+                <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[1] }}>
+                  ● {PRIORITY_LABEL[1]} ({p1Count} open)
+                </span>
+              </div>
+              {p1Tasks.map(task => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  isCompleted={completedIds.has(task.id)}
+                  onMarkDone={handleMarkDone}
+                />
+              ))}
+            </>
+          )}
+
+          {/* P2: Action */}
+          {p2Tasks.length > 0 && (
+            <>
+              <div style={s.sectionHeader}>
+                <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[2] }}>
+                  ● {PRIORITY_LABEL[2]} ({p2Count} open)
+                </span>
+              </div>
+              {p2Tasks.map(task => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  isCompleted={completedIds.has(task.id)}
+                  onMarkDone={handleMarkDone}
+                />
+              ))}
+            </>
+          )}
+
+          {/* P3: Review */}
+          {p3Tasks.length > 0 && (
+            <>
+              <div style={s.sectionHeader}>
+                <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[3] }}>
+                  ● {PRIORITY_LABEL[3]} ({p3Count} open)
+                </span>
+              </div>
+              {p3Tasks.map(task => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  isCompleted={completedIds.has(task.id)}
+                  onMarkDone={handleMarkDone}
+                />
+              ))}
+            </>
+          )}
+
+          {/* Nothing to show */}
+          {!loading && tasks.length === 0 && headlines.length === 0 && (
+            <div style={s.empty}>
+              No tasks today — portfolio is quiet. Check back after market open.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+           SECTION 2 — LIVE WATCH
+         ══════════════════════════════════════════════════════════════════════ */}
+      <div style={{
+        border: '1px solid rgba(252, 240, 0, 0.3)',
+        borderRadius: 8,
+        padding: '0 0 4px',
+        marginBottom: 16,
+        background: 'rgba(252, 240, 0, 0.01)',
+      }}>
+        <div style={{
+          padding: '7px 14px 5px',
+          borderBottom: '1px solid rgba(252, 240, 0, 0.12)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <span style={{
+            color: '#FCF000',
+            fontWeight: 900,
+            fontSize: 10,
+            letterSpacing: '0.14em',
+            fontFamily: "'Inter', 'Segoe UI', sans-serif",
+          }}>LIVE WATCH</span>
+          <span style={{
+            flex: 1,
+            height: 1,
+            background: 'linear-gradient(90deg, rgba(252,240,0,0.15), transparent 80%)',
+          }} />
+        </div>
+
+        <div style={{ padding: '8px 10px 4px' }}>
+          {/* IBKR Discrepancy Check */}
+          <IbkrDiscrepancySection
+            discrepancies={ibkrDiscrepancies}
+            loading={ibkrDiscLoading}
+            ibkrConnected={ibkrConnected}
+          />
+
+          {/* Today's IBKR Trades reconciliation */}
+          <TradesTodaySection
+            trades={ibkrTrades}
+            loading={ibkrTradesLoading}
+            ibkrConnected={ibkrConnected}
+            onNavigate={onNavigate}
+          />
+
+          {/* Command Health */}
+          <CommandHealthSection positions={healthPositions} loading={healthLoading} />
+
+          {/* Stop Sync */}
+          {stopSyncRows.length > 0 && (
+            <div style={s.syncSection}>
+              <div style={s.syncHeader} onClick={() => setSyncExpanded(e => !e)}>
+                <div style={s.syncHeaderLeft}>
+                  <span style={{ fontSize: 11, color: '#444' }}>{syncExpanded ? '▼' : '▶'}</span>
+                  <span style={s.syncLabel}>{stopSyncLabel}</span>
+                  <span style={s.syncCount}>
+                    ({stopSyncRows.length} position{stopSyncRows.length !== 1 ? 's' : ''}
+                    {syncNeedsCount > 0 ? ` — ${syncNeedsCount} need updating` : ' — all synced'})
+                  </span>
                 </div>
-              ) : (
+              </div>
+              {syncExpanded && (
                 <>
-                  {stopSyncRows.filter(r => r.needsUpdate && !syncDoneMap[r.ticker]).map(row => (
-                    <StopSyncRow
-                      key={row.ticker}
-                      row={row}
-                      isDone={false}
-                      onToggle={handleToggleStopSync}
-                    />
-                  ))}
-                  <div style={s.syncFooter}>
-                    <button style={s.syncAllBtn} onClick={handleMarkAllSynced}>
-                      MARK ALL STOPS UPDATED ✓
-                    </button>
-                  </div>
+                  {syncNeedsCount === 0 ? (
+                    <div style={{ padding: '14px 16px', fontSize: 12, color: '#28a745' }}>
+                      ✓ All {stopSyncRows.length} stops are up to date — nothing to sync today.
+                    </div>
+                  ) : (
+                    <>
+                      {stopSyncRows.filter(r => r.needsUpdate && !syncDoneMap[r.ticker]).map(row => (
+                        <StopSyncRow
+                          key={row.ticker}
+                          row={row}
+                          isDone={false}
+                          onToggle={handleToggleStopSync}
+                        />
+                      ))}
+                      <div style={s.syncFooter}>
+                        <button style={s.syncAllBtn} onClick={handleMarkAllSynced}>
+                          MARK ALL STOPS UPDATED ✓
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
+            </div>
+          )}
+
+          {/* Routines */}
+          {filteredRoutines.length > 0 && (
+            <>
+              <div style={s.sectionHeader}>
+                <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[4] }}>
+                  ● {PRIORITY_LABEL[4]}
+                </span>
+              </div>
+              <RoutineSection
+                routines={filteredRoutines}
+                dayLabel={routineDayLbl}
+                completedIds={routineIds}
+                onToggle={handleToggleRoutine}
+                onChipClick={handleChipClick}
+                busyTicker={chartBusy}
+              />
             </>
           )}
         </div>
-      )}
+      </div>
 
-      {/* ── P3: Review ─────────────────────────────────────────────────────── */}
-      {p3Tasks.length > 0 && (
-        <>
-          <div style={s.sectionHeader}>
-            <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[3] }}>
-              ● {PRIORITY_LABEL[3]} ({p3Count} open)
-            </span>
-          </div>
-          {p3Tasks.map(task => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              isCompleted={completedIds.has(task.id)}
-              onMarkDone={handleMarkDone}
-            />
-          ))}
-        </>
-      )}
-
-      {/* ── Nothing to show ────────────────────────────────────────────────── */}
-      {!loading && tasks.length === 0 && (
-        <div style={s.empty}>
-          No tasks today — portfolio is clean. Check back after market open.
+      {/* ══════════════════════════════════════════════════════════════════════
+           SECTION 3 — TODAY'S ACCOMPLISHMENTS
+         ══════════════════════════════════════════════════════════════════════ */}
+      <div style={{
+        border: '1px solid rgba(252, 240, 0, 0.3)',
+        borderRadius: 8,
+        padding: '0 0 4px',
+        marginBottom: 16,
+        background: 'rgba(252, 240, 0, 0.01)',
+      }}>
+        <div style={{
+          padding: '7px 14px 5px',
+          borderBottom: '1px solid rgba(252, 240, 0, 0.12)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <span style={{
+            color: '#FCF000',
+            fontWeight: 900,
+            fontSize: 10,
+            letterSpacing: '0.14em',
+            fontFamily: "'Inter', 'Segoe UI', sans-serif",
+          }}>TODAY'S ACCOMPLISHMENTS</span>
+          <span style={{
+            flex: 1,
+            height: 1,
+            background: 'linear-gradient(90deg, rgba(252,240,0,0.15), transparent 80%)',
+          }} />
         </div>
-      )}
 
-      {/* ── Routines ───────────────────────────────────────────────────────── */}
-      {filteredRoutines.length > 0 && (
-        <>
-          <div style={s.sectionHeader}>
-            <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[4] }}>
-              ● {PRIORITY_LABEL[4]}
-            </span>
-          </div>
-          <RoutineSection
-            routines={filteredRoutines}
-            dayLabel={routineDayLbl}
-            completedIds={routineIds}
-            onToggle={handleToggleRoutine}
-            onChipClick={handleChipClick}
-            busyTicker={chartBusy}
-          />
-        </>
-      )}
+        <div style={{ padding: '8px 10px 4px' }}>
+          {/* Recent Fills */}
+          <RecentFillsSection fills={recentFills} onNavigate={onNavigate} />
 
-      {/* ── Completed Today ────────────────────────────────────────────────── */}
-      <CompletedSection completed={completed} />
+          {/* Completed Today */}
+          <CompletedSection completed={completed} />
+        </div>
+      </div>
 
       {/* Chart Modal — opened from chip clicks */}
       {chartStock && (

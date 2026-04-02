@@ -5469,16 +5469,22 @@ app.get('/api/assistant/headlines', async (req, res) => {
     if (devData) {
       const devTime = devData.computedAt || nowISO;
       for (const s of devData.triggeredToday?.bl || []) {
-        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW BL SIGNAL — ${s.sector || '—'}, triggered on developing weekly bar`, 'TRIGGERED_BL');
+        const sec1 = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
+        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW BL SIGNAL${sec1 ? ` — ${sec1}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_BL');
       }
       for (const s of devData.triggeredToday?.ss || []) {
-        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW SS SIGNAL — ${s.sector || '—'}, triggered on developing weekly bar`, 'TRIGGERED_SS');
+        const sec1 = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
+        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW SS SIGNAL${sec1 ? ` — ${sec1}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_SS');
       }
       for (const s of devData.devBL || []) {
-        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing BL — ${s.sector}, ${s.pctFromHigh <= 0 ? 'past' : s.pctFromHigh.toFixed(1) + '% from'} last week high, price $${s.price.toFixed(2)}`, 'DEV_BL');
+        const sec2 = (s.sector && s.sector !== '—') ? `${s.sector}, ` : '';
+        const dist = s.pctFromHigh <= 0 ? 'past last week high' : `${s.pctFromHigh.toFixed(1)}% from last week high`;
+        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing BL — ${sec2}${dist}, price $${s.price.toFixed(2)}`, 'DEV_BL');
       }
       for (const s of devData.devSS || []) {
-        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing SS — ${s.sector}, ${s.pctFromLow <= 0 ? 'past' : s.pctFromLow.toFixed(1) + '% from'} last week low, price $${s.price.toFixed(2)}`, 'DEV_SS');
+        const sec2 = (s.sector && s.sector !== '—') ? `${s.sector}, ` : '';
+        const dist = s.pctFromLow <= 0 ? 'past last week low' : `${s.pctFromLow.toFixed(1)}% from last week low`;
+        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing SS — ${sec2}${dist}, price $${s.price.toFixed(2)}`, 'DEV_SS');
       }
     }
 

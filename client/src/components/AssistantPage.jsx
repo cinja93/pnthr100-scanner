@@ -2451,14 +2451,6 @@ export default function AssistantPage({ onNavigate }) {
             ibkrConnected={ibkrConnected}
           />
 
-          {/* Today's IBKR Trades reconciliation */}
-          <TradesTodaySection
-            trades={ibkrTrades}
-            loading={ibkrTradesLoading}
-            ibkrConnected={ibkrConnected}
-            onNavigate={onNavigate}
-          />
-
           {/* Command Health */}
           <CommandHealthSection positions={healthPositions} loading={healthLoading} />
 
@@ -2556,6 +2548,14 @@ export default function AssistantPage({ onNavigate }) {
         </div>
 
         <div style={{ padding: '8px 10px 4px' }}>
+          {/* Today's IBKR Trades */}
+          <TradesTodaySection
+            trades={ibkrTrades}
+            loading={ibkrTradesLoading}
+            ibkrConnected={ibkrConnected}
+            onNavigate={onNavigate}
+          />
+
           {/* Recent Fills */}
           <RecentFillsSection fills={recentFills} onNavigate={onNavigate} />
 

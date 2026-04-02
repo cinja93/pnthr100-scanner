@@ -15,7 +15,7 @@
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { API_BASE, authHeaders, fetchIbkrDiscrepancies, fetchIbkrTradesToday } from '../services/api';
 import ChartModal from './ChartModal';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
@@ -1705,6 +1705,37 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
   const [expanded, setExpanded] = useState(true);
   const [dismissedIds, setDismissedIds] = useState(new Set());
   const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const seenRef = useRef(null);  // { category: Set<ticker> } — baseline from first load
+  const [newTickers, setNewTickers] = useState(new Set()); // tickers that arrived after first load
+  const [clickedTickers, setClickedTickers] = useState(new Set()); // tickers user has opened
+
+  // Track which group tickers are new (arrived after the initial load)
+  useEffect(() => {
+    const grouped = {};
+    for (const h of headlines) {
+      if (GROUP_CATS.has(h.category) && h.ticker) {
+        if (!grouped[h.category]) grouped[h.category] = new Set();
+        grouped[h.category].add(h.ticker);
+      }
+    }
+    if (!seenRef.current) {
+      // First load — everything is "seen", nothing flashes
+      seenRef.current = {};
+      for (const [cat, tickers] of Object.entries(grouped)) {
+        seenRef.current[cat] = new Set(tickers);
+      }
+      return;
+    }
+    // Subsequent updates — find new arrivals
+    const fresh = new Set();
+    for (const [cat, tickers] of Object.entries(grouped)) {
+      const baseline = seenRef.current[cat] || new Set();
+      for (const t of tickers) {
+        if (!baseline.has(t)) fresh.add(t);
+      }
+    }
+    if (fresh.size > 0) setNewTickers(prev => new Set([...prev, ...fresh]));
+  }, [headlines]);
 
   const visible = headlines.filter(h => !dismissedIds.has(h.id));
   const count = visible.length;
@@ -1847,6 +1878,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
               const c = HL[sample.urgency] || HL.LOW;
               const label = GROUP_LABELS[row.category] || row.category;
               const isOpen = expandedGroups.has(row.category);
+              const newInGroup = items.filter(h => newTickers.has(h.ticker) && !clickedTickers.has(h.ticker)).length;
               return (
                 <div key={row.category}>
                   {/* Group header row */}
@@ -1903,8 +1935,24 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                       fontWeight: 700,
                       fontSize: 10,
                       flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
                     }}>
                       {items.length} {label}
+                      {newInGroup > 0 && (
+                        <span className="feed-chip-new" style={{
+                          background: '#FCF000',
+                          color: '#000',
+                          padding: '0 5px',
+                          borderRadius: 3,
+                          fontSize: 8,
+                          fontWeight: 900,
+                          letterSpacing: '0.05em',
+                        }}>
+                          {newInGroup} NEW
+                        </span>
+                      )}
                     </span>
                     <span style={{
                       color: '#555',
@@ -1958,19 +2006,25 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                         // Extract sector from message if present
                         const sectorMatch = h.message.match(/— ([^,]+),/);
                         const sector = sectorMatch ? sectorMatch[1] : null;
+                        const isNew = newTickers.has(h.ticker) && !clickedTickers.has(h.ticker);
                         return (
                           <span
                             key={h.id + hi}
-                            onClick={(e) => { e.stopPropagation(); onTickerClick?.(h.ticker); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setClickedTickers(prev => new Set(prev).add(h.ticker));
+                              onTickerClick?.(h.ticker);
+                            }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = c.border; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = isNew ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)'; }}
                             title={sector || h.message}
+                            className={isNew ? 'feed-chip-new' : undefined}
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 4,
-                              background: 'rgba(255,255,255,0.04)',
-                              border: `1px solid ${c.border}`,
+                              background: isNew ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
+                              border: `1px solid ${isNew ? '#FCF000' : c.border}`,
                               borderRadius: 3,
                               padding: '2px 8px',
                               cursor: 'pointer',
@@ -1986,7 +2040,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                             </span>
                             {sector && (
                               <span style={{
-                                color: '#555',
+                                color: 'rgba(255,255,255,0.7)',
                                 fontSize: 8,
                                 fontWeight: 500,
                               }}>
@@ -1997,9 +2051,9 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                             <span
                               onClick={(ev) => { ev.stopPropagation(); setDismissedIds(prev => new Set(prev).add(h.id)); }}
                               onMouseEnter={(ev) => { ev.currentTarget.style.color = '#ff5252'; }}
-                              onMouseLeave={(ev) => { ev.currentTarget.style.color = '#444'; }}
+                              onMouseLeave={(ev) => { ev.currentTarget.style.color = '#555'; }}
                               style={{
-                                color: '#444',
+                                color: '#555',
                                 fontSize: 9,
                                 cursor: 'pointer',
                                 marginLeft: 2,
@@ -2141,6 +2195,13 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
         @keyframes pulse-dot {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.3; }
+        }
+        @keyframes feed-chip-flash {
+          0%, 100% { border-color: #FCF000; box-shadow: 0 0 4px rgba(252,240,0,0.4); }
+          50% { border-color: rgba(252,240,0,0.2); box-shadow: none; }
+        }
+        .feed-chip-new {
+          animation: feed-chip-flash 1.5s ease-in-out infinite;
         }
       `}</style>
     </div>

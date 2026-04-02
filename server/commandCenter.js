@@ -369,6 +369,14 @@ export async function positionsSave(req, res) {
         }
       }
 
+      // Duplicate guard — block if an active position already exists for this ticker
+      const existingActive = await db.collection('pnthr_portfolio').findOne({
+        ticker:  position.ticker.toUpperCase(),
+        ownerId: req.user.userId,
+        status:  { $in: ['ACTIVE', 'PARTIAL'] },
+      });
+      if (existingActive) return res.status(409).json({ error: `${position.ticker} already has an active position in Command` });
+
       position.id        = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
       position.status    = 'ACTIVE';
       position.ownerId   = req.user.userId;

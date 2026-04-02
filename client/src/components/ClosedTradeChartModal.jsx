@@ -900,18 +900,62 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
           )}
 
           {/* Data panel (upper-left) */}
-          {showDataPanel && lot1Price > 0 && (
+          {showDataPanel && lot1Price > 0 && (() => {
+            // ── Summary data ──────────────────────────────────────────────
+            const avgExitPx    = entry?.performance?.avgExitPrice || finalExitPrice || 0;
+            const totalExitShr = exits.reduce((s, e) => s + (+e.shares || 0), 0) || lot1?.shares || 0;
+            const pnlDollar    = entry?.performance?.realizedPnlDollar ?? null;
+            const pnlPct       = entry?.performance?.realizedPnlPct   ?? null;
+            const pnlColor     = pnlDollar == null ? '#aaa' : pnlDollar >= 0 ? '#6bcb77' : '#ff6b6b';
+            // Entry / exit action labels
+            const entryAction  = isLong ? 'BUY LONG'       : 'SELL SHORT';
+            const exitAction   = isLong ? 'SELL EXIT'      : 'BUY TO COVER';
+            return (
             <div style={{
               position: 'absolute', left: 8, top: 8, zIndex: 10,
-              background: 'rgba(0,0,0,0.75)', border: '1px solid #333',
-              borderRadius: 6, padding: '8px 12px', minWidth: 200, maxWidth: 240,
+              background: 'rgba(0,0,0,0.80)', border: '1px solid #444',
+              borderRadius: 6, padding: '8px 12px', minWidth: 210, maxWidth: 250,
               pointerEvents: 'none', fontSize: 11, color: '#ccc',
             }}>
-              {/* Signal + entry */}
-              <div style={{ color: '#FFD700', fontWeight: 700, marginBottom: 4 }}>
+              {/* Signal + date */}
+              <div style={{ color: '#FFD700', fontWeight: 700, marginBottom: 6, fontSize: 12 }}>
                 {sigType}+1 &nbsp; {fmtDate(lot1?.date)}
               </div>
-              <div style={{ borderTop: '1px solid #222', marginBottom: 6 }} />
+
+              {/* ── Trade summary ── */}
+              <div style={{ marginBottom: 2 }}>
+                <span style={{ color: '#aaa', fontSize: 10, fontWeight: 700, letterSpacing: '0.05em' }}>
+                  {entryAction}
+                </span>
+                <span style={{ color: '#fff', fontWeight: 700, marginLeft: 6 }}>
+                  ${lot1Price.toFixed(2)}
+                </span>
+                <span style={{ color: '#aaa' }}> × {lot1?.shares} shr</span>
+              </div>
+              <div style={{ marginBottom: 4 }}>
+                <span style={{ color: '#aaa', fontSize: 10, fontWeight: 700, letterSpacing: '0.05em' }}>
+                  {exitAction}
+                </span>
+                <span style={{ color: '#fff', fontWeight: 700, marginLeft: 6 }}>
+                  ${avgExitPx > 0 ? avgExitPx.toFixed(2) : '—'}
+                </span>
+                {totalExitShr > 0 && <span style={{ color: '#aaa' }}> × {totalExitShr} shr</span>}
+              </div>
+              {/* Net result */}
+              <div style={{ color: pnlColor, fontWeight: 700, fontSize: 12, marginBottom: 6 }}>
+                {pnlDollar == null ? '—' : (
+                  <>
+                    {pnlDollar >= 0 ? '+' : ''}${Math.abs(pnlDollar).toFixed(2)}
+                    {pnlPct != null && (
+                      <span style={{ fontWeight: 400, fontSize: 10, marginLeft: 6 }}>
+                        ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div style={{ borderTop: '1px solid #333', marginBottom: 6 }} />
 
               {/* Each lot */}
               {[0, 1, 2, 3, 4].map(i => {
@@ -991,7 +1035,8 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
                 </>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* ── Navigation footer ── */}

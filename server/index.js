@@ -5217,6 +5217,287 @@ app.get('/api/assistant/completed', async (req, res) => {
   }
 });
 
+// ── Headlines Feed — aggregates all alerts into a chronological stream ────────
+// Developing signals are cached for 15 minutes; other sources are lightweight.
+let devSignalsCache = { data: null, timestamp: 0 };
+const DEV_SIGNALS_TTL = 15 * 60 * 1000; // 15 minutes
+
+async function fetchDevelopingSignalsCached() {
+  const now = Date.now();
+  if (devSignalsCache.data && (now - devSignalsCache.timestamp) < DEV_SIGNALS_TTL) {
+    return devSignalsCache.data;
+  }
+  try {
+    const FMP_API_KEY = process.env.FMP_API_KEY;
+    const { getCachedSignals } = await import('./signalService.js');
+    const signalMap = getCachedSignals();
+    if (!signalMap || Object.keys(signalMap).length === 0) return null;
+
+    const entries = Object.values(signalMap);
+    if (!entries.some(s => s.lastWeekHigh != null)) return null;
+
+    const blCandidates = [], ssCandidates = [];
+    for (const [ticker, s] of Object.entries(signalMap)) {
+      if (!s.ema21 || !s.lastWeekHigh || !s.lastWeekLow || !s.lastWeekClose) continue;
+      if (s.signal !== 'BL' && s.emaRising === true)
+        blCandidates.push({ ticker, ema21: s.ema21, lastWeekHigh: s.lastWeekHigh, lastWeekLow: s.lastWeekLow, lastWeekClose: s.lastWeekClose });
+      if (s.signal !== 'SS' && s.emaRising === false)
+        ssCandidates.push({ ticker, ema21: s.ema21, lastWeekHigh: s.lastWeekHigh, lastWeekLow: s.lastWeekLow, lastWeekClose: s.lastWeekClose });
+    }
+
+    // Sector lookup
+    const sectorMap = {};
+    try {
+      const { connectToDatabase: getDevDb } = await import('./database.js');
+      const db = await getDevDb();
+      const sectorDocs = await db.collection('pnthr_kill_scores')
+        .aggregate([{ $sort: { createdAt: -1 } }, { $group: { _id: '$ticker', sector: { $first: '$sector' } } }])
+        .toArray();
+      for (const d of sectorDocs) if (d.sector) sectorMap[d._id] = d.sector;
+      const { getCachedApexResults } = await import('./apexService.js');
+      const liveApex = getCachedApexResults();
+      if (liveApex?.stocks) for (const s of liveApex.stocks) if (s.sector) sectorMap[s.ticker] = s.sector;
+    } catch { /* non-fatal */ }
+
+    // Fetch quotes
+    const allTickers = [...new Set([...blCandidates.map(c => c.ticker), ...ssCandidates.map(c => c.ticker)])].slice(0, 500);
+    const quoteMap = {};
+    for (let i = 0; i < allTickers.length; i += 100) {
+      try {
+        const chunk = allTickers.slice(i, i + 100);
+        const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_API_KEY}`);
+        if (r.ok) { const data = await r.json(); if (Array.isArray(data)) for (const q of data) quoteMap[q.symbol] = q; }
+      } catch { /* non-fatal */ }
+    }
+
+    // Apply developing BL check
+    const devBL = [];
+    for (const c of blCandidates) {
+      const q = quoteMap[c.ticker]; if (!q?.price) continue;
+      const price = q.price, weekOpen = c.lastWeekClose;
+      const pctFromHigh = +((c.lastWeekHigh - price) / c.lastWeekHigh * 100).toFixed(2);
+      if (pctFromHigh > 2) continue;
+      if (price <= weekOpen) continue;
+      const priceVsEma = +((price - c.ema21) / c.ema21 * 100).toFixed(2);
+      if (priceVsEma < -2 || priceVsEma > 20) continue;
+      devBL.push({ ticker: c.ticker, sector: sectorMap[c.ticker] || '—', price, ema21: c.ema21, pctFromHigh, priceVsEma });
+    }
+    devBL.sort((a, b) => a.pctFromHigh - b.pctFromHigh);
+
+    // Apply developing SS check
+    const devSS = [];
+    for (const c of ssCandidates) {
+      const q = quoteMap[c.ticker]; if (!q?.price) continue;
+      const price = q.price, weekOpen = c.lastWeekClose;
+      const pctFromLow = +((price - c.lastWeekLow) / c.lastWeekLow * 100).toFixed(2);
+      if (pctFromLow > 2) continue;
+      if (price >= weekOpen) continue;
+      const priceVsEma = +((price - c.ema21) / c.ema21 * 100).toFixed(2);
+      if (priceVsEma > 2 || priceVsEma < -20) continue;
+      devSS.push({ ticker: c.ticker, sector: sectorMap[c.ticker] || '—', price, ema21: c.ema21, pctFromLow, priceVsEma });
+    }
+    devSS.sort((a, b) => a.pctFromLow - b.pctFromLow);
+
+    // Triggered today
+    let triggeredToday = { bl: [], ss: [] };
+    try {
+      const { connectToDatabase: getDevDb2 } = await import('./database.js');
+      const db2 = await getDevDb2();
+      const snap = await db2.collection('pnthr_daily_pulse_snapshot').findOne({}, { sort: { updatedAt: -1 } });
+      const ageHrs = snap ? (Date.now() - new Date(snap.updatedAt).getTime()) / 3_600_000 : 999;
+      if (ageHrs < 25) {
+        const triggered = await db2.collection('pnthr_daily_signals')
+          .find({ isNew: true }, { projection: { ticker: 1, sector: 1, signal: 1, signalDate: 1 } }).toArray();
+        triggeredToday.bl = triggered.filter(s => s.signal === 'BL').map(s => ({ ticker: s.ticker, sector: s.sector }));
+        triggeredToday.ss = triggered.filter(s => s.signal === 'SS').map(s => ({ ticker: s.ticker, sector: s.sector }));
+      }
+    } catch { /* non-fatal */ }
+
+    const result = { devBL, devSS, triggeredToday, computedAt: new Date().toISOString() };
+    devSignalsCache = { data: result, timestamp: now };
+    return result;
+  } catch (err) {
+    console.error('[headlines/devSignals]', err.message);
+    return devSignalsCache.data; // serve stale if refresh fails
+  }
+}
+
+app.get('/api/assistant/headlines', async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: 'Authentication required' });
+
+    const { connectToDatabase: getHlDb } = await import('./database.js');
+    const db = await getHlDb();
+    if (!db) return res.status(503).json({ headlines: [] });
+
+    const now     = new Date();
+    const nowISO  = now.toISOString();
+    const todayET = now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const headlines = [];
+
+    // Helper to add a headline
+    const add = (time, icon, urgency, ticker, message, category) => {
+      headlines.push({ id: `${category}:${ticker || 'SYS'}:${time}`, time, icon, urgency, ticker, message, category });
+    };
+
+    // ── 1. Position-based alerts (active positions) ──────────────────────────
+    const positions = await db.collection('pnthr_portfolio')
+      .find({ status: { $nin: ['CLOSED'] }, ownerId: userId })
+      .sort({ createdAt: -1 }).toArray();
+
+    // Fetch live prices
+    const tickers = [...new Set(positions.map(p => p.ticker).filter(Boolean))];
+    const live = {};
+    if (tickers.length) {
+      try {
+        const qRes = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${tickers.join(',')}&apikey=${process.env.FMP_API_KEY}`, { signal: AbortSignal.timeout(8000) });
+        if (qRes.ok) { const d = await qRes.json(); if (Array.isArray(d)) for (const q of d) live[q.symbol] = q.price; }
+      } catch { /* non-fatal */ }
+    }
+
+    for (const p of positions) {
+      const t     = p.ticker;
+      const price = live[t] ?? p.currentPrice;
+      const dir   = p.direction || 'LONG';
+      const isLong = dir === 'LONG';
+      if (!price || !t) continue;
+
+      // FEAST alert (RSI > 85 for longs)
+      if (p.feastAlert || p.feastRSI > 85) {
+        add(nowISO, '🔥', 'CRITICAL', t, `FEAST ALERT — Weekly RSI ${p.feastRSI?.toFixed(0) || '>85'} — SELL 50% IMMEDIATELY`, 'FEAST');
+      }
+
+      // Stop crossed
+      if (p.stopPrice) {
+        const stopHit = isLong ? price <= p.stopPrice : price >= p.stopPrice;
+        if (stopHit) add(nowISO, '🛑', 'CRITICAL', t, `STOP CROSSED — price $${price.toFixed(2)} hit stop $${p.stopPrice.toFixed(2)}`, 'STOP_CROSSED');
+        else {
+          const dist = isLong ? (price - p.stopPrice) / price * 100 : (p.stopPrice - price) / price * 100;
+          if (dist <= 2) add(nowISO, '⚠️', 'HIGH', t, `Price within ${dist.toFixed(1)}% of stop ($${price.toFixed(2)} vs $${p.stopPrice.toFixed(2)})`, 'STOP_CLOSE');
+        }
+      }
+
+      // Stale Hunt timer
+      const tradDays = p.tradingDaysActive ?? p.daysActive ?? 0;
+      if (tradDays >= 20) add(nowISO, '💀', 'CRITICAL', t, `LIQUIDATE — Day ${tradDays}/20, stale hunt limit reached`, 'STALE_HUNT');
+      else if (tradDays >= 18) add(nowISO, '⏰', 'HIGH', t, `STALE HUNT — Day ${tradDays}/20, liquidation approaching`, 'STALE_HUNT');
+      else if (tradDays >= 15) add(nowISO, '⏳', 'MEDIUM', t, `Stale Hunt warning — Day ${tradDays}/20`, 'STALE_HUNT');
+
+      // Lot ready check
+      const fills = p.fills || {};
+      const filledCount = Object.values(fills).filter(f => f?.filled).length;
+      if (filledCount === 1 && tradDays >= 5) {
+        const lot2Trigger = p.lots?.[1]?.triggerPrice;
+        if (lot2Trigger) {
+          const hit = isLong ? price >= lot2Trigger : price <= lot2Trigger;
+          if (hit) add(nowISO, '🟢', 'HIGH', t, `Lot 2 (The Stalk) READY — price $${price.toFixed(2)} past trigger $${lot2Trigger.toFixed(2)}`, 'LOT_READY');
+        }
+      }
+
+      // Ratchet due (2+ lots filled, stop not at avg cost)
+      if (filledCount >= 2 && p.stopPrice) {
+        const filledArr = Object.values(fills).filter(f => f?.filled);
+        const totShr = filledArr.reduce((s, f) => s + (+f.shares || 0), 0);
+        const totCost = filledArr.reduce((s, f) => s + (+f.shares || 0) * (+f.price || 0), 0);
+        if (totShr > 0) {
+          const avgCost = +(totCost / totShr).toFixed(2);
+          const diff = Math.abs(p.stopPrice - avgCost);
+          if (diff > 0.05) {
+            add(nowISO, '🔒', 'HIGH', t, `RATCHET DUE — stop $${p.stopPrice.toFixed(2)} should be avg cost $${avgCost.toFixed(2)} (true breakeven)`, 'RATCHET_DUE');
+          }
+        }
+      }
+    }
+
+    // ── 2. Sector concentration ──────────────────────────────────────────────
+    const sectorCounts = {};
+    for (const p of positions) {
+      if (!p.sector || p.isEtf) continue;
+      const dir = p.direction === 'SHORT' ? -1 : 1;
+      sectorCounts[p.sector] = (sectorCounts[p.sector] || 0) + dir;
+    }
+    for (const [sector, net] of Object.entries(sectorCounts)) {
+      if (Math.abs(net) > 3) {
+        add(nowISO, '⚠️', 'HIGH', null, `SECTOR RISK ${sector} — ${Math.abs(net)} net directional (cap: 3)`, 'SECTOR_RISK');
+      }
+    }
+
+    // ── 3. IBKR discrepancies ────────────────────────────────────────────────
+    try {
+      const ibkrPositions = await db.collection('pnthr_ibkr_positions').find({}).toArray();
+      for (const ib of ibkrPositions) {
+        const pnthr = positions.find(p => p.ticker === ib.ticker);
+        if (!pnthr) continue;
+        // Share mismatch
+        const ibShr = Math.abs(ib.position || 0);
+        const pnthrShr = Object.values(pnthr.fills || {}).filter(f => f?.filled).reduce((s, f) => s + (+f.shares || 0), 0);
+        if (ibShr > 0 && pnthrShr > 0 && ibShr !== pnthrShr) {
+          add(nowISO, 'ℹ️', 'LOW', ib.ticker, `IBKR share mismatch — IBKR: ${ibShr} shr, PNTHR: ${pnthrShr} shr`, 'IBKR_MISMATCH');
+        }
+        // Avg cost mismatch
+        if (ib.avgCost && pnthr.avgCost) {
+          const diff = Math.abs(ib.avgCost - pnthr.avgCost);
+          if (diff >= pnthr.avgCost * 0.001) {
+            add(nowISO, 'ℹ️', 'LOW', ib.ticker, `IBKR avg cost $${ib.avgCost.toFixed(2)} vs PNTHR $${pnthr.avgCost.toFixed(2)} ($${diff.toFixed(2)} diff)`, 'IBKR_AVG');
+          }
+        }
+      }
+    } catch { /* non-fatal */ }
+
+    // ── 4. Closed-today positions (WATCHING) ─────────────────────────────────
+    const todayStart = new Date(todayET + 'T00:00:00-04:00');
+    const closedToday = await db.collection('pnthr_portfolio')
+      .find({ ownerId: userId, status: 'CLOSED', closedAt: { $gte: todayStart } })
+      .project({ ticker: 1, direction: 1, 'outcome.exitPrice': 1, 'outcome.exitReason': 1, closedAt: 1 })
+      .toArray();
+    for (const ct of closedToday) {
+      const exitP = ct.outcome?.exitPrice;
+      const liveP = live[ct.ticker];
+      const pricePart = exitP ? ` at $${exitP.toFixed(2)}` : '';
+      const sincePart = (exitP && liveP) ? ` — now $${liveP.toFixed(2)} (${((liveP - exitP) / exitP * 100).toFixed(1)}% since exit)` : '';
+      add(ct.closedAt?.toISOString() || nowISO, '👁', 'WATCHING', ct.ticker,
+        `Closed ${ct.direction || 'LONG'}${pricePart} (${ct.outcome?.exitReason || 'MANUAL'})${sincePart}`, 'CLOSED_TODAY');
+    }
+
+    // ── 5. Developing signals + triggered today (15-min cache) ───────────────
+    const devData = await fetchDevelopingSignalsCached();
+    if (devData) {
+      const devTime = devData.computedAt || nowISO;
+      for (const s of devData.triggeredToday?.bl || []) {
+        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW BL SIGNAL — ${s.sector || '—'}, triggered on developing weekly bar`, 'TRIGGERED_BL');
+      }
+      for (const s of devData.triggeredToday?.ss || []) {
+        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW SS SIGNAL — ${s.sector || '—'}, triggered on developing weekly bar`, 'TRIGGERED_SS');
+      }
+      for (const s of devData.devBL || []) {
+        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing BL — ${s.sector}, ${s.pctFromHigh <= 0 ? 'past' : s.pctFromHigh.toFixed(1) + '% from'} last week high, price $${s.price.toFixed(2)}`, 'DEV_BL');
+      }
+      for (const s of devData.devSS || []) {
+        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing SS — ${s.sector}, ${s.pctFromLow <= 0 ? 'past' : s.pctFromLow.toFixed(1) + '% from'} last week low, price $${s.price.toFixed(2)}`, 'DEV_SS');
+      }
+    }
+
+    // ── Sort: newest first, then by urgency within same timestamp ────────────
+    const URGENCY_ORDER = { CRITICAL: 0, HIGH: 1, SIGNAL: 2, MEDIUM: 3, DEVELOPING: 4, WATCHING: 5, LOW: 6 };
+    headlines.sort((a, b) => {
+      const timeDiff = new Date(b.time) - new Date(a.time);
+      if (Math.abs(timeDiff) > 60000) return timeDiff; // >1 min apart → newest first
+      return (URGENCY_ORDER[a.urgency] ?? 9) - (URGENCY_ORDER[b.urgency] ?? 9);
+    });
+
+    res.json({
+      headlines,
+      count: headlines.length,
+      devSignalsAge: devSignalsCache.timestamp ? Math.round((Date.now() - devSignalsCache.timestamp) / 60000) : null,
+      generatedAt: nowISO,
+    });
+  } catch (err) {
+    console.error('[assistant/headlines]', err.message);
+    res.status(500).json({ error: err.message, headlines: [] });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {

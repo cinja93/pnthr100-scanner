@@ -2003,9 +2003,8 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                       scrollbarColor: '#252525 transparent',
                     }}>
                       {items.map((h, hi) => {
-                        // Extract sector from message if present
-                        const sectorMatch = h.message.match(/— ([^,]+),/);
-                        const sector = sectorMatch ? sectorMatch[1] : null;
+                        const sector = h.sector || null;
+                        const emaUp = h.sectorAboveEma;
                         const isNew = newTickers.has(h.ticker) && !clickedTickers.has(h.ticker);
                         return (
                           <span
@@ -2017,7 +2016,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                             }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = c.border; }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = isNew ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)'; }}
-                            title={sector || h.message}
+                            title={sector ? `${sector} ${emaUp === true ? '▲ above' : emaUp === false ? '▼ below' : ''} 21W EMA` : h.message}
                             className={isNew ? 'feed-chip-new' : undefined}
                             style={{
                               display: 'inline-flex',
@@ -2043,8 +2042,13 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                                 color: 'rgba(255,255,255,0.7)',
                                 fontSize: 8,
                                 fontWeight: 500,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 2,
                               }}>
                                 {sector}
+                                {emaUp === true && <span style={{ color: '#4caf50', fontSize: 8, fontWeight: 800 }}>▲</span>}
+                                {emaUp === false && <span style={{ color: '#ef5350', fontSize: 8, fontWeight: 800 }}>▼</span>}
                               </span>
                             )}
                             {/* Dismiss individual item from group */}

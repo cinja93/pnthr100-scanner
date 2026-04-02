@@ -5276,12 +5276,61 @@ async function fetchDevelopingSignalsCached() {
       if (ageHrs < 25) {
         const triggered = await db2.collection('pnthr_daily_signals')
           .find({ isNew: true }, { projection: { ticker: 1, sector: 1, signal: 1, signalDate: 1 } }).toArray();
-        triggeredToday.bl = triggered.filter(s => s.signal === 'BL').map(s => ({ ticker: s.ticker, sector: s.sector }));
-        triggeredToday.ss = triggered.filter(s => s.signal === 'SS').map(s => ({ ticker: s.ticker, sector: s.sector }));
+        // Use FMP profile sectorMap first, fall back to DB sector
+        triggeredToday.bl = triggered.filter(s => s.signal === 'BL').map(s => ({ ticker: s.ticker, sector: sectorMap[s.ticker] || s.sector || '—' }));
+        triggeredToday.ss = triggered.filter(s => s.signal === 'SS').map(s => ({ ticker: s.ticker, sector: sectorMap[s.ticker] || s.sector || '—' }));
+        // Fetch profiles for triggered tickers missing from sectorMap
+        const missingTickers = triggered.filter(s => !sectorMap[s.ticker]).map(s => s.ticker);
+        if (missingTickers.length > 0) {
+          try {
+            for (let i = 0; i < missingTickers.length; i += 100) {
+              const chunk = missingTickers.slice(i, i + 100);
+              const pr = await fetch(`https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`);
+              if (pr.ok) {
+                const pd = await pr.json();
+                if (Array.isArray(pd)) for (const p of pd) if (p.symbol && p.sector) sectorMap[p.symbol] = normalizeSector(p.sector);
+              }
+            }
+            // Re-apply sectors now that sectorMap is fuller
+            triggeredToday.bl = triggeredToday.bl.map(s => ({ ...s, sector: sectorMap[s.ticker] || s.sector }));
+            triggeredToday.ss = triggeredToday.ss.map(s => ({ ...s, sector: sectorMap[s.ticker] || s.sector }));
+          } catch { /* non-fatal */ }
+        }
       }
     } catch { /* non-fatal */ }
 
-    const result = { devBL, devSS, triggeredToday, computedAt: new Date().toISOString() };
+    // Sector EMA trend (above/below 21W EMA for each sector)
+    let sectorTrend = {};
+    try {
+      const SECTOR_ETFS = {
+        'Technology': 'XLK', 'Healthcare': 'XLV', 'Financial Services': 'XLF',
+        'Industrials': 'XLI', 'Consumer Staples': 'XLP', 'Consumer Discretionary': 'XLY',
+        'Energy': 'XLE', 'Utilities': 'XLU', 'Basic Materials': 'XLB',
+        'Communication Services': 'XLC', 'Real Estate': 'XLRE',
+      };
+      const etfTickers = Object.values(SECTOR_ETFS);
+      const [quotesRaw, emaEntries] = await Promise.all([
+        fetch(`https://financialmodelingprep.com/api/v3/quote/${etfTickers.join(',')}?apikey=${FMP_API_KEY}`)
+          .then(r => r.ok ? r.json() : []).catch(() => []),
+        Promise.all(etfTickers.map(async etf => {
+          try {
+            const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${etf}?timeseries=250&apikey=${FMP_API_KEY}`;
+            const data = await fetch(url, { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : null).catch(() => null);
+            const result = computeEMA21fromDailyBars(data?.historical ?? null);
+            return [etf, result ? result.current : null];
+          } catch { return [etf, null]; }
+        })),
+      ]);
+      const priceMap = {};
+      for (const q of (Array.isArray(quotesRaw) ? quotesRaw : [])) priceMap[q.symbol] = q.price;
+      const emaMap = Object.fromEntries(emaEntries);
+      for (const [sector, etf] of Object.entries(SECTOR_ETFS)) {
+        const price = priceMap[etf], ema21 = emaMap[etf];
+        if (price != null && ema21 != null) sectorTrend[sector] = price > ema21;
+      }
+    } catch { /* non-fatal */ }
+
+    const result = { devBL, devSS, triggeredToday, sectorTrend, computedAt: new Date().toISOString() };
     devSignalsCache = { data: result, timestamp: now };
     return result;
   } catch (err) {
@@ -5305,8 +5354,8 @@ app.get('/api/assistant/headlines', async (req, res) => {
     const headlines = [];
 
     // Helper to add a headline
-    const add = (time, icon, urgency, ticker, message, category) => {
-      headlines.push({ id: `${category}:${ticker || 'SYS'}:${time}`, time, icon, urgency, ticker, message, category });
+    const add = (time, icon, urgency, ticker, message, category, extra) => {
+      headlines.push({ id: `${category}:${ticker || 'SYS'}:${time}`, time, icon, urgency, ticker, message, category, ...extra });
     };
 
     // ── 1. Position-based alerts (active positions) ──────────────────────────
@@ -5432,23 +5481,28 @@ app.get('/api/assistant/headlines', async (req, res) => {
     const devData = await fetchDevelopingSignalsCached();
     if (devData) {
       const devTime = devData.computedAt || nowISO;
+      const st = devData.sectorTrend || {};
       for (const s of devData.triggeredToday?.bl || []) {
-        const sec1 = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
-        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW BL SIGNAL${sec1 ? ` — ${sec1}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_BL');
+        const sec = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
+        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW BL SIGNAL${sec ? ` — ${sec}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_BL',
+          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null });
       }
       for (const s of devData.triggeredToday?.ss || []) {
-        const sec1 = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
-        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW SS SIGNAL${sec1 ? ` — ${sec1}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_SS');
+        const sec = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
+        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW SS SIGNAL${sec ? ` — ${sec}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_SS',
+          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null });
       }
       for (const s of devData.devBL || []) {
-        const sec2 = (s.sector && s.sector !== '—') ? `${s.sector}, ` : '';
+        const sec = (s.sector && s.sector !== '—') ? s.sector : null;
         const dist = s.pctFromHigh <= 0 ? 'past last week high' : `${s.pctFromHigh.toFixed(1)}% from last week high`;
-        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing BL — ${sec2}${dist}, price $${s.price.toFixed(2)}`, 'DEV_BL');
+        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing BL — ${sec ? sec + ', ' : ''}${dist}, price $${s.price.toFixed(2)}`, 'DEV_BL',
+          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null });
       }
       for (const s of devData.devSS || []) {
-        const sec2 = (s.sector && s.sector !== '—') ? `${s.sector}, ` : '';
+        const sec = (s.sector && s.sector !== '—') ? s.sector : null;
         const dist = s.pctFromLow <= 0 ? 'past last week low' : `${s.pctFromLow.toFixed(1)}% from last week low`;
-        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing SS — ${sec2}${dist}, price $${s.price.toFixed(2)}`, 'DEV_SS');
+        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing SS — ${sec ? sec + ', ' : ''}${dist}, price $${s.price.toFixed(2)}`, 'DEV_SS',
+          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null });
       }
     }
 

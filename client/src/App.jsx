@@ -469,32 +469,18 @@ const EMA_BAND = {
   HIGH:     { bg: '#8b0000', text: '#fff', tickerBg: 'rgba(0,0,0,0.30)', tickerText: '#fff', muted: 'rgba(255,255,255,0.80)', dim: 'rgba(255,255,255,0.60)', icon: '⚠️' },
   MEDIUM:   { bg: '#f9a825', text: '#000', tickerBg: 'rgba(0,0,0,0.15)', tickerText: '#000', muted: 'rgba(0,0,0,0.65)',       dim: 'rgba(0,0,0,0.45)',       icon: '〰️' },
   FAVORABLE:{ bg: '#2e7d32', text: '#fff', tickerBg: 'rgba(0,0,0,0.20)', tickerText: '#fff', muted: 'rgba(255,255,255,0.75)', dim: 'rgba(255,255,255,0.55)', icon: '✅' },
-  WATCHING: { bg: '#37474f', text: '#cfd8dc', tickerBg: 'rgba(255,255,255,0.10)', tickerText: '#eceff1', muted: 'rgba(207,216,220,0.70)', dim: 'rgba(207,216,220,0.45)', icon: '👁' },
 };
 
 function EmaAlertBanner({ alert: a, onDismiss }) {
   const band = EMA_BAND[a.urgency] || EMA_BAND.MEDIUM;
-  const isWatching = a.urgency === 'WATCHING';
 
   const sideLabel = a.emaSide === 'ABOVE' ? '▲ ABOVE' : '▼ BELOW';
   const v1Sign    = a.velocity1m >= 0 ? '+' : '';
+  const pSign     = a.pnlPerMin  >= 0 ? '+' : '';
   const crossNote = a.crossed ? ' (just crossed)' : '';
-
-  let description;
-  if (isWatching) {
-    const exitNote = a.exitPrice ? ` at $${a.exitPrice.toFixed(2)}` : '';
-    const sincePct = a.exitPrice && a.currentPrice
-      ? ((a.currentPrice - a.exitPrice) / a.exitPrice * 100).toFixed(1)
-      : null;
-    const sinceNote = sincePct != null ? ` · ${sincePct >= 0 ? '+' : ''}${sincePct}% since exit` : '';
-    description = `Closed ${a.direction}${exitNote} — now ${sideLabel} 21H EMA${sinceNote}`;
-  } else {
-    description = a.isAdverse
-      ? `${sideLabel} 21H EMA — adverse for ${a.direction}${crossNote}`
-      : `${sideLabel} 21H EMA — favorable for ${a.direction}${crossNote}`;
-  }
-
-  const pSign = a.pnlPerMin >= 0 ? '+' : '';
+  const adverse   = a.isAdverse
+    ? `${sideLabel} 21H EMA — adverse for ${a.direction}${crossNote}`
+    : `${sideLabel} 21H EMA — favorable for ${a.direction}${crossNote}`;
 
   return (
     <div style={{
@@ -509,11 +495,11 @@ function EmaAlertBanner({ alert: a, onDismiss }) {
       <span style={{ color: band.text, fontWeight: 800, whiteSpace: 'nowrap' }}>{band.icon} {a.urgency}</span>
       <span style={{ background: band.tickerBg, color: band.tickerText, borderRadius: 3, padding: '1px 7px', fontWeight: 800, fontSize: 11, whiteSpace: 'nowrap' }}>{a.ticker}</span>
       <span style={{ color: band.muted }}>{a.direction}</span>
-      <span style={{ color: band.text, flex: 1, minWidth: 180 }}>{description}</span>
+      <span style={{ color: band.text, flex: 1, minWidth: 180 }}>{adverse}</span>
       <span style={{ color: band.muted, whiteSpace: 'nowrap' }}>
         velocity: <b style={{ color: band.text }}>{v1Sign}{a.velocity1m.toFixed(2)}%/min</b>
       </span>
-      {!isWatching && a.dollarAtRisk > 0 && (
+      {a.dollarAtRisk > 0 && (
         <span style={{ color: band.muted, whiteSpace: 'nowrap' }}>
           P&amp;L: <b style={{ color: band.text }}>{pSign}${Math.abs(a.pnlPerMin).toFixed(0)}/min</b>
           &nbsp;(<b style={{ color: band.text }}>{a.riskPctPerMin.toFixed(1)}% of risk/min</b>)
@@ -587,8 +573,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [dismissedEmaKeys, setDismissedEmaKeys] = useState(new Set());
 
   useEffect(() => {
-    const hasData = positions.length > 0 || Object.keys(closedTodayMap).length > 0;
-    if (!hasData || !Object.keys(emaValues).length) return;
+    if (!positions.length || !Object.keys(emaValues).length) return;
 
     const alerts = [];
     for (const p of positions) {
@@ -681,64 +666,10 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       });
     }
 
-    // ── Closed-today WATCHING alerts ──────────────────────────────────────────
-    const activeTickers = new Set(positions.filter(p => p.status === 'ACTIVE').map(p => p.ticker?.toUpperCase()));
-    for (const [ticker, ct] of Object.entries(closedTodayMap)) {
-      if (activeTickers.has(ticker)) continue; // active position takes priority
-      const emaData = emaValues[ticker];
-      if (!emaData?.ema21h) continue;
-
-      // Use price history if available (was active earlier this session), else lastPrice from server
-      const hist  = priceHistoryRef.current[ticker] || [];
-      const price = hist.length > 0 ? hist[hist.length - 1].price : (ct.lastPrice ? +ct.lastPrice : null);
-      if (!price) continue;
-
-      const rawEma  = +emaData.ema21h;
-      const k       = 2 / (21 + 1);
-      const ema21h  = +(price * k + rawEma * (1 - k)).toFixed(4);
-      const emaSide = price > ema21h ? 'ABOVE' : 'BELOW';
-      prevEmaSideRef.current[ticker] = emaSide;
-
-      // Velocity from rolling price history (may be empty if no recent data)
-      let velocity1m = 0, velocity5m = 0;
-      if (hist.length >= 2) {
-        const prev1 = hist[hist.length - 2];
-        const cur   = hist[hist.length - 1];
-        const mins  = Math.max((cur.time - prev1.time) / 60000, 0.1);
-        velocity1m  = ((cur.price - prev1.price) / prev1.price * 100) / mins;
-      }
-      if (hist.length >= 6) {
-        const prev5 = hist[hist.length - 6];
-        const cur   = hist[hist.length - 1];
-        const mins  = Math.max((cur.time - prev5.time) / 60000, 0.1);
-        velocity5m  = ((cur.price - prev5.price) / prev5.price * 100) / mins;
-      }
-
-      const dismissKey = `WATCHING:${ticker}:${emaSide}`;
-      alerts.push({
-        ticker,
-        direction:    ct.direction,
-        currentPrice: price,
-        ema21h,
-        emaSide,
-        crossed:      false,
-        isAdverse:    false,
-        velocity1m:   +velocity1m.toFixed(3),
-        velocity5m:   +velocity5m.toFixed(3),
-        pnlPerMin:    0,
-        dollarAtRisk: 0,
-        riskPctPerMin: 0,
-        urgency:      'WATCHING',
-        dismissKey,
-        exitPrice:    ct.exitPrice ? +ct.exitPrice : null,
-        exitReason:   ct.exitReason,
-      });
-    }
-
-    const ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, FAVORABLE: 3, WATCHING: 4 };
+    const ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, FAVORABLE: 3 };
     alerts.sort((a, b) => (ORDER[a.urgency] ?? 9) - (ORDER[b.urgency] ?? 9));
     setEmaAlerts(alerts);
-  }, [positions, emaValues, closedTodayMap]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [positions, emaValues]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const visibleEmaAlerts = emaAlerts.filter(a => !dismissedEmaKeys.has(a.dismissKey));
 

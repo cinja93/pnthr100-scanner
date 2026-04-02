@@ -5257,6 +5257,10 @@ async function fetchDevelopingSignalsCached() {
       const { getCachedApexResults } = await import('./apexService.js');
       const liveApex = getCachedApexResults();
       if (liveApex?.stocks) for (const s of liveApex.stocks) if (s.sector) sectorMap[s.ticker] = s.sector;
+      // Pass 3: daily signals — covers all 679 stocks from the last daily job run
+      const dailySectors = await db.collection('pnthr_daily_signals')
+        .find({}, { projection: { ticker: 1, sector: 1 } }).toArray();
+      for (const d of dailySectors) if (d.sector && !sectorMap[d.ticker]) sectorMap[d.ticker] = d.sector;
     } catch { /* non-fatal */ }
 
     // Fetch quotes

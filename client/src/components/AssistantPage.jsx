@@ -1679,24 +1679,23 @@ function CompletedSection({ completed }) {
 }
 
 // ── Headline Feed ────────────────────────────────────────────────────────────
-// Bloomberg-style scrolling alert feed at the top of the Assistant page.
-// Polls /api/assistant/headlines every 60s; developing signals cached 15 min server-side.
+// Bloomberg-style scrolling alert feed. Polls /api/assistant/headlines every 60s.
+// Developing signals cached 15 min server-side.
 
-const HEADLINE_COLORS = {
-  CRITICAL:   { bg: '#7f0000', text: '#fff',    ticker: '#ff6b6b', icon: '#ff4444', border: '#991111' },
-  HIGH:       { bg: '#4a1a00', text: '#ffd4b8', ticker: '#ffa54f', icon: '#ff8c00', border: '#663300' },
-  SIGNAL:     { bg: '#1a3300', text: '#c5e1a5', ticker: '#FCF000', icon: '#FCF000', border: '#2d5500' },
-  MEDIUM:     { bg: '#332b00', text: '#ffe082', ticker: '#ffc107', icon: '#ffc107', border: '#4d4100' },
-  DEVELOPING: { bg: '#0d1b2a', text: '#90caf9', ticker: '#64b5f6', icon: '#42a5f5', border: '#1a3a5c' },
-  WATCHING:   { bg: '#1a1f25', text: '#90a4ae', ticker: '#b0bec5', icon: '#78909c', border: '#2c3e50' },
-  LOW:        { bg: '#111', text: '#777',       ticker: '#999',    icon: '#666',    border: '#222'    },
+const HL = {
+  CRITICAL:   { bg: '#1a0000', text: '#ffcdd2', ticker: '#ff6b6b', badge: '#b71c1c', badgeText: '#fff',    border: '#d32f2f' },
+  HIGH:       { bg: '#1a0f00', text: '#ffe0b2', ticker: '#ffb74d', badge: '#4a2600', badgeText: '#ffb74d', border: '#e65100' },
+  SIGNAL:     { bg: '#0a1a00', text: '#c5e1a5', ticker: '#FCF000', badge: '#1b5e20', badgeText: '#a5d6a7', border: '#4caf50' },
+  MEDIUM:     { bg: '#1a1500', text: '#fff9c4', ticker: '#ffd54f', badge: '#3e2723', badgeText: '#ffe082', border: '#f9a825' },
+  DEVELOPING: { bg: '#0a1520', text: '#b3d9ff', ticker: '#64b5f6', badge: '#0d2137', badgeText: '#90caf9', border: '#1976d2' },
+  WATCHING:   { bg: '#12161a', text: '#90a4ae', ticker: '#b0bec5', badge: '#1c2530', badgeText: '#78909c', border: '#455a64' },
+  LOW:        { bg: '#0d0d0d', text: '#616161', ticker: '#757575', badge: '#1a1a1a', badgeText: '#616161', border: '#333'    },
 };
 
-function HeadlineFeed({ headlines, loading, devSignalsAge, onRefresh }) {
+function HeadlineFeed({ headlines, loading, devSignalsAge }) {
   const [expanded, setExpanded] = useState(true);
   const count = headlines.length;
 
-  // Format time as HH:MM ET
   const fmtTime = (iso) => {
     if (!iso) return '--:--';
     return new Date(iso).toLocaleTimeString('en-US', {
@@ -1705,127 +1704,149 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onRefresh }) {
   };
 
   const critCount = headlines.filter(h => h.urgency === 'CRITICAL').length;
+  const highCount = headlines.filter(h => h.urgency === 'HIGH').length;
   const sigCount  = headlines.filter(h => h.urgency === 'SIGNAL').length;
-  const devCount  = headlines.filter(h => h.urgency === 'DEVELOPING').length;
+  const devBLCount = headlines.filter(h => h.category === 'DEV_BL').length;
+  const devSSCount = headlines.filter(h => h.category === 'DEV_SS').length;
+  const devCount   = devBLCount + devSSCount;
+  const watchCount = headlines.filter(h => h.urgency === 'WATCHING').length;
 
   return (
     <div style={{
-      background: '#0a0a0a',
+      background: '#080808',
       border: '1px solid #1a1a1a',
-      borderRadius: 8,
-      marginBottom: 20,
+      borderRadius: 6,
+      marginBottom: 16,
       overflow: 'hidden',
     }}>
       {/* Feed header */}
       <div
         onClick={() => setExpanded(!expanded)}
         style={{
-          background: 'linear-gradient(90deg, #111 0%, #0d0d0d 100%)',
+          background: '#0e0e0e',
           borderBottom: expanded ? '1px solid #1a1a1a' : 'none',
-          padding: '10px 16px',
+          padding: '8px 14px',
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
+          gap: 8,
           cursor: 'pointer',
           userSelect: 'none',
         }}
       >
-        <span style={{ color: '#FCF000', fontWeight: 800, fontSize: 11, letterSpacing: '0.1em' }}>
+        <span style={{ color: '#FCF000', fontWeight: 800, fontSize: 10, letterSpacing: '0.12em' }}>
           LIVE FEED
         </span>
         <span style={{
-          display: 'inline-block',
-          width: 6, height: 6,
-          borderRadius: '50%',
+          display: 'inline-block', width: 5, height: 5, borderRadius: '50%',
           background: loading ? '#ffc107' : count > 0 ? '#4caf50' : '#555',
           animation: loading ? 'none' : 'pulse-dot 2s ease-in-out infinite',
           flexShrink: 0,
         }} />
+
         {critCount > 0 && (
-          <span style={{ background: '#7f0000', color: '#fff', padding: '1px 8px', borderRadius: 3, fontSize: 10, fontWeight: 800 }}>
+          <span style={{ background: '#b71c1c', color: '#fff', padding: '1px 7px', borderRadius: 3, fontSize: 9, fontWeight: 800, letterSpacing: '0.03em' }}>
             {critCount} CRITICAL
           </span>
         )}
+        {highCount > 0 && (
+          <span style={{ background: '#4a2600', color: '#ffb74d', padding: '1px 7px', borderRadius: 3, fontSize: 9, fontWeight: 700 }}>
+            {highCount} HIGH
+          </span>
+        )}
         {sigCount > 0 && (
-          <span style={{ background: '#1a3300', color: '#c5e1a5', padding: '1px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700 }}>
+          <span style={{ background: '#1b5e20', color: '#a5d6a7', padding: '1px 7px', borderRadius: 3, fontSize: 9, fontWeight: 700 }}>
             {sigCount} SIGNAL
           </span>
         )}
         {devCount > 0 && (
-          <span style={{ background: '#0d1b2a', color: '#90caf9', padding: '1px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700 }}>
-            {devCount} DEVELOPING
+          <span style={{ background: '#0d2137', color: '#90caf9', padding: '1px 7px', borderRadius: 3, fontSize: 9, fontWeight: 700 }}>
+            {devCount} DEV ({devBLCount} BL · {devSSCount} SS)
           </span>
         )}
-        <span style={{ color: '#555', fontSize: 10, marginLeft: 'auto' }}>
-          {count} headline{count !== 1 ? 's' : ''}
+        {watchCount > 0 && (
+          <span style={{ background: '#1c2530', color: '#78909c', padding: '1px 7px', borderRadius: 3, fontSize: 9, fontWeight: 600 }}>
+            {watchCount} WATCH
+          </span>
+        )}
+
+        <span style={{ color: '#444', fontSize: 9, marginLeft: 'auto', fontFamily: "'JetBrains Mono', monospace" }}>
+          {count} item{count !== 1 ? 's' : ''}
           {devSignalsAge != null && ` · signals ${devSignalsAge}m ago`}
         </span>
-        <span style={{ color: '#555', fontSize: 12, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</span>
+        <span style={{
+          color: '#444', fontSize: 10,
+          transform: expanded ? 'rotate(180deg)' : 'none',
+          transition: 'transform 0.2s',
+        }}>▾</span>
       </div>
 
-      {/* Feed body — scrollable list */}
+      {/* Feed body */}
       {expanded && (
         <div style={{
-          maxHeight: 320,
+          maxHeight: 400,
           overflowY: 'auto',
           overflowX: 'hidden',
           scrollbarWidth: 'thin',
-          scrollbarColor: '#333 #0a0a0a',
+          scrollbarColor: '#252525 #080808',
         }}>
           {count === 0 && !loading && (
-            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#444', fontSize: 12 }}>
+            <div style={{ padding: '20px 16px', textAlign: 'center', color: '#333', fontSize: 11, fontStyle: 'italic' }}>
               No alerts today. Portfolio is quiet.
             </div>
           )}
           {loading && count === 0 && (
-            <div style={{ padding: '16px', textAlign: 'center', color: '#555', fontSize: 11 }}>
+            <div style={{ padding: '14px 16px', textAlign: 'center', color: '#444', fontSize: 10 }}>
               Scanning...
             </div>
           )}
           {headlines.map((h, i) => {
-            const colors = HEADLINE_COLORS[h.urgency] || HEADLINE_COLORS.LOW;
+            const c = HL[h.urgency] || HL.LOW;
             return (
               <div
                 key={h.id + i}
                 style={{
                   display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 8,
-                  padding: '6px 16px',
-                  borderBottom: '1px solid #111',
-                  background: colors.bg,
+                  alignItems: 'center',
+                  gap: 7,
+                  padding: '4px 12px 4px 0',
+                  borderBottom: '1px solid rgba(255,255,255,0.03)',
+                  background: c.bg,
+                  borderLeft: `2px solid ${c.border}`,
                   fontSize: 11,
-                  lineHeight: 1.5,
-                  transition: 'opacity 0.3s',
+                  lineHeight: 1.45,
+                  minHeight: 26,
                 }}
               >
                 {/* Timestamp */}
                 <span style={{
-                  color: '#555',
+                  color: '#3a3a3a',
                   fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                  fontSize: 10,
-                  minWidth: 42,
+                  fontSize: 9,
+                  minWidth: 38,
+                  textAlign: 'right',
                   flexShrink: 0,
-                  paddingTop: 1,
+                  paddingLeft: 8,
                 }}>
                   {fmtTime(h.time)}
                 </span>
 
                 {/* Icon */}
-                <span style={{ fontSize: 12, flexShrink: 0, lineHeight: 1.4 }}>{h.icon}</span>
+                <span style={{ fontSize: 11, flexShrink: 0, lineHeight: 1, width: 16, textAlign: 'center' }}>{h.icon}</span>
 
                 {/* Urgency badge */}
                 <span style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  color: colors.icon,
-                  padding: '0 6px',
+                  background: c.badge,
+                  color: c.badgeText,
+                  padding: '1px 5px',
                   borderRadius: 2,
-                  fontSize: 9,
+                  fontSize: 8,
                   fontWeight: 800,
-                  letterSpacing: '0.05em',
+                  letterSpacing: '0.04em',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
-                  lineHeight: '18px',
+                  lineHeight: '14px',
+                  minWidth: 52,
+                  textAlign: 'center',
                 }}>
                   {h.urgency}
                 </span>
@@ -1833,11 +1854,12 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onRefresh }) {
                 {/* Ticker */}
                 {h.ticker && (
                   <span style={{
-                    color: colors.ticker,
+                    color: c.ticker,
                     fontWeight: 800,
-                    fontSize: 11,
+                    fontSize: 10,
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
+                    minWidth: 36,
                   }}>
                     {h.ticker}
                   </span>
@@ -1845,9 +1867,13 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onRefresh }) {
 
                 {/* Message */}
                 <span style={{
-                  color: colors.text,
+                  color: c.text,
                   flex: 1,
                   minWidth: 0,
+                  fontSize: 10,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}>
                   {h.message}
                 </span>
@@ -1857,12 +1883,12 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onRefresh }) {
         </div>
       )}
 
-      {/* Pulse line at bottom */}
+      {/* Bottom accent */}
       {expanded && count > 0 && (
         <div style={{
-          height: 2,
-          background: 'linear-gradient(90deg, transparent, #FCF000, transparent)',
-          opacity: 0.15,
+          height: 1,
+          background: 'linear-gradient(90deg, transparent 10%, #FCF000 50%, transparent 90%)',
+          opacity: 0.08,
         }} />
       )}
 
@@ -2211,13 +2237,6 @@ export default function AssistantPage({ onNavigate }) {
   return (
     <div style={s.page}>
 
-      {/* ── Live Headline Feed ─────────────────────────────────────────────── */}
-      <HeadlineFeed
-        headlines={headlines}
-        loading={headlinesLoading}
-        devSignalsAge={devSignalsAge}
-      />
-
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={s.header}>
         <div>
@@ -2249,6 +2268,13 @@ export default function AssistantPage({ onNavigate }) {
           )}
         </div>
       </div>
+
+      {/* ── Live Headline Feed ─────────────────────────────────────────────── */}
+      <HeadlineFeed
+        headlines={headlines}
+        loading={headlinesLoading}
+        devSignalsAge={devSignalsAge}
+      />
 
       {error && <div style={s.error}>{error}</div>}
 

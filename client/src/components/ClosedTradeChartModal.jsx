@@ -908,8 +908,8 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
             const pnlPct       = entry?.performance?.realizedPnlPct   ?? null;
             const pnlColor     = pnlDollar == null ? '#aaa' : pnlDollar >= 0 ? '#6bcb77' : '#ff6b6b';
             // Entry / exit action labels
-            const entryAction  = isLong ? 'BUY LONG'       : 'SELL SHORT';
-            const exitAction   = isLong ? 'SELL EXIT'      : 'BUY TO COVER';
+            const entryAction  = isLong ? 'BUY LONG'  : 'SELL SHORT';
+            const exitAction   = isLong ? 'BUY EXIT'  : 'SELL EXIT';
             return (
             <div style={{
               position: 'absolute', left: 8, top: 8, zIndex: 10,

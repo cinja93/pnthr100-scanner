@@ -841,21 +841,21 @@ function SectorPulse({ signals, killDataLive, onNavigate, newSignals }) {
 
   // Build per-sector new signal counts from newSignals.blStocks / ssStocks
   const newBySector = {};
-  for (const s of (newSignals?.blStocks || [])) {
+  for (const s of (newSignals?.blStocks || []).filter(s => s.signalAge === 0)) {
     const canonical = ALIASES[s.sector] || s.sector;
     if (!canonical) continue;
     if (!newBySector[canonical]) newBySector[canonical] = { bl: 0, ss: 0 };
     newBySector[canonical].bl++;
   }
-  for (const s of (newSignals?.ssStocks || [])) {
+  for (const s of (newSignals?.ssStocks || []).filter(s => s.signalAge === 0)) {
     const canonical = ALIASES[s.sector] || s.sector;
     if (!canonical) continue;
     if (!newBySector[canonical]) newBySector[canonical] = { bl: 0, ss: 0 };
     newBySector[canonical].ss++;
   }
-  // ALL SECTORS totals
-  const totalNewBl = (newSignals?.blStocks || []).length;
-  const totalNewSs = (newSignals?.ssStocks || []).length;
+  // ALL SECTORS totals — only signalAge === 0 (this week's new signals)
+  const totalNewBl = (newSignals?.blStocks || []).filter(s => s.signalAge === 0).length;
+  const totalNewSs = (newSignals?.ssStocks || []).filter(s => s.signalAge === 0).length;
 
   const handleSectorClick = (key) => {
     if (key === '__ALL__') {

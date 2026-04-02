@@ -4312,7 +4312,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       newSSStocks = fresh.filter(s => s.signal === 'SS').map(mapNewSig).sort(sortByScore);
     } else {
       const dbFresh = await db.collection('pnthr_kill_scores')
-        .find({ signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: 1 } })
+        .find({ ...weekFilter, signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: 1 } })
         .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
         .toArray();
       newBLStocks = dbFresh.filter(s => s.signal === 'BL')

@@ -2204,25 +2204,19 @@ export default function AssistantPage({ onNavigate }) {
     const ticker = chip.ticker;
     setChartBusy(ticker);
     try {
-      // Try apex cache first (has Kill scoring data)
-      const res = await fetch(
-        `${API_BASE}/api/apex/ticker/${encodeURIComponent(ticker)}`,
-        { headers: authHeaders() }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data.found && data.stock) {
-          setChartStock(data.stock);
-          return;
-        }
+      // Fetch both in parallel — apex has Kill scoring, ticker has full FMP data
+      const [apexRes, tickerRes] = await Promise.all([
+        fetch(`${API_BASE}/api/apex/ticker/${encodeURIComponent(ticker)}`, { headers: authHeaders() }).catch(() => null),
+        fetch(`${API_BASE}/api/ticker/${encodeURIComponent(ticker)}`, { headers: authHeaders() }).catch(() => null),
+      ]);
+      // Prefer apex (has Kill data) if found
+      if (apexRes?.ok) {
+        const data = await apexRes.json();
+        if (data.found && data.stock) { setChartStock(data.stock); return; }
       }
-      // Fallback: fetch basic ticker data (for developing/non-Kill stocks)
-      const res2 = await fetch(
-        `${API_BASE}/api/ticker/${encodeURIComponent(ticker)}`,
-        { headers: authHeaders() }
-      );
-      if (res2.ok) {
-        const data2 = await res2.json();
+      // Fallback to ticker endpoint
+      if (tickerRes?.ok) {
+        const data2 = await tickerRes.json();
         if (data2) setChartStock({ ticker, ...data2 });
       }
     } catch (e) {

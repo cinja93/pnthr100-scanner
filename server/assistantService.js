@@ -104,31 +104,24 @@ function highestFilledLot(fills) {
 
 /**
  * Compute the ratchet stop that should be in place given which lots are filled.
- * Returns { ratchetLevel, lotRule } or null if no ratchet is required yet.
+ * Returns { ratchetLevel } or null if no ratchet is required yet.
  *
- * Rules:
- *   Lot 3 filled → stop = Lot 1 fill (breakeven)
- *   Lot 4 filled → stop = Lot 2 fill
- *   Lot 5 filled → stop = Lot 3 fill
+ * Rule: Lot 2+ filled → stop = avg cost of all filled lots (true breakeven).
  */
 function computeRequiredRatchet(fills) {
   const hf = highestFilledLot(fills);
-  if (hf < 3) return null;
+  if (hf < 2) return null;
 
-  if (hf >= 5) {
-    const p = fills[3]?.price;
-    if (!p) return null;
-    return { ratchetLevel: +p, lotRule: 5 };
+  let cumCost = 0, cumShr = 0;
+  for (let n = 1; n <= 5; n++) {
+    const f = fills[n];
+    if (f?.filled && f?.price && f?.shares) {
+      cumCost += +f.shares * +f.price;
+      cumShr  += +f.shares;
+    }
   }
-  if (hf >= 4) {
-    const p = fills[2]?.price;
-    if (!p) return null;
-    return { ratchetLevel: +p, lotRule: 4 };
-  }
-  // hf === 3
-  const p = fills[1]?.price;
-  if (!p) return null;
-  return { ratchetLevel: +p, lotRule: 3 };
+  if (cumShr === 0) return null;
+  return { ratchetLevel: +(cumCost / cumShr).toFixed(2) };
 }
 
 // ── Earnings Cache ────────────────────────────────────────────────────────────
@@ -373,15 +366,15 @@ export async function generateAssistantTasks(userId, positions, nav) {
           type:            'RATCHET_DUE',
           ticker,
           badge:           'RATCHET DUE',
-          headline:        `${ticker}: Stop ratchet overdue. Move stop from ${currentStr} → ${ratchetLevelStr} (Lot ${ratchet.lotRule} rule).`,
+          headline:        `${ticker}: Stop ratchet overdue. Move stop from ${currentStr} → ${ratchetLevelStr} (avg cost breakeven).`,
           instructions:    [
             `1. In IBKR, find your ${ticker} position's stop order`,
             `2. Modify the stop price to ${ratchetLevelStr}`,
             `3. In PNTHR Command → ${ticker} → edit the Stop field → enter ${ratchetLevelStr}`,
-            `4. This locks in ${isLong ? 'breakeven' : 'profit'} on this position`,
+            `4. This guarantees breakeven — $0 loss on the total position if stopped out`,
           ],
           confirmQuestion: `Did you update the stop to ${ratchetLevelStr} in both IBKR and Command?`,
-          data:            { ratchetLevel: ratchet.ratchetLevel, currentStop: stopPrice, lotRule: ratchet.lotRule },
+          data:            { ratchetLevel: ratchet.ratchetLevel, currentStop: stopPrice },
           dayOfWeek:       null,
           autoClears:      false,
         });

@@ -267,13 +267,18 @@ function fmtDate(d) {
 // ── Hold time calculator ──────────────────────────────────────────────────────
 function calcHoldTime(fromDate, toDate) {
   if (!fromDate || !toDate) return null;
-  const ms = new Date(toDate + 'T00:00:00') - new Date(fromDate + 'T00:00:00');
+  // Strip time component — handles both 'YYYY-MM-DD' and ISO timestamps like '2026-03-27T15:30:00.000Z'
+  const from = typeof fromDate === 'string' ? fromDate.split('T')[0] : new Date(fromDate).toISOString().split('T')[0];
+  const to   = typeof toDate   === 'string' ? toDate.split('T')[0]   : new Date(toDate).toISOString().split('T')[0];
+  const ms = new Date(to + 'T00:00:00') - new Date(from + 'T00:00:00');
   if (ms <= 0) return null;
   const totalMins = Math.floor(ms / 60000);
   const days = Math.floor(totalMins / (60 * 24));
   const hrs  = Math.floor((totalMins % (60 * 24)) / 60);
   const mins = totalMins % 60;
-  return `${days}d ${hrs}h ${mins}m`;
+  if (days > 0) return `${days}d ${hrs}h`;
+  if (hrs > 0)  return `${hrs}h ${mins}m`;
+  return `${mins}m`;
 }
 
 // ── Signal badge label map ────────────────────────────────────────────────────
@@ -1019,10 +1024,23 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
                 </div>
               )}
 
-              {/* Hold time */}
+              {/* Entry stop price */}
+              {entryStopPrice > 0 && (
+                <div style={{ marginBottom: 5 }}>
+                  <span style={{ color: '#aaa' }}>ENTRY STOP </span>
+                  <span style={{ color: '#ff6b6b', fontWeight: 700 }}>${entryStopPrice.toFixed(2)}</span>
+                </div>
+              )}
+
+              {/* Hold time — try multiple date sources since exit.date may be null */}
               <div style={{ marginBottom: 4 }}>
                 <span style={{ color: '#aaa' }}>HOLD </span>
-                <span style={{ color: '#fff' }}>{calcHoldTime(lot1?.date, lastExit?.date) || '—'}</span>
+                <span style={{ color: '#fff' }}>
+                  {calcHoldTime(
+                    lot1?.date,
+                    lastExit?.date || entry?.closedAt || entry?.performance?.closedAt
+                  ) || '—'}
+                </span>
               </div>
 
               {/* Notes */}

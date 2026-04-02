@@ -1694,7 +1694,10 @@ const HL = {
 
 function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
   const [expanded, setExpanded] = useState(true);
-  const count = headlines.length;
+  const [dismissedIds, setDismissedIds] = useState(new Set());
+
+  const visible = headlines.filter(h => !dismissedIds.has(h.id));
+  const count = visible.length;
 
   const fmtTime = (iso) => {
     if (!iso) return '--:--';
@@ -1703,13 +1706,13 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
     });
   };
 
-  const critCount = headlines.filter(h => h.urgency === 'CRITICAL').length;
-  const highCount = headlines.filter(h => h.urgency === 'HIGH').length;
-  const sigCount  = headlines.filter(h => h.urgency === 'SIGNAL').length;
-  const devBLCount = headlines.filter(h => h.category === 'DEV_BL').length;
-  const devSSCount = headlines.filter(h => h.category === 'DEV_SS').length;
+  const critCount = visible.filter(h => h.urgency === 'CRITICAL').length;
+  const highCount = visible.filter(h => h.urgency === 'HIGH').length;
+  const sigCount  = visible.filter(h => h.urgency === 'SIGNAL').length;
+  const devBLCount = visible.filter(h => h.category === 'DEV_BL').length;
+  const devSSCount = visible.filter(h => h.category === 'DEV_SS').length;
   const devCount   = devBLCount + devSSCount;
-  const watchCount = headlines.filter(h => h.urgency === 'WATCHING').length;
+  const watchCount = visible.filter(h => h.urgency === 'WATCHING').length;
 
   return (
     <div style={{
@@ -1799,7 +1802,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
               Scanning...
             </div>
           )}
-          {headlines.map((h, i) => {
+          {visible.map((h, i) => {
             const c = HL[h.urgency] || HL.LOW;
             return (
               <div
@@ -1884,6 +1887,24 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                   whiteSpace: 'nowrap',
                 }}>
                   {h.message}
+                </span>
+
+                {/* Dismiss */}
+                <span
+                  onClick={(e) => { e.stopPropagation(); setDismissedIds(prev => new Set(prev).add(h.id)); }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#ff5252'; e.currentTarget.style.opacity = 1; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = '#444'; e.currentTarget.style.opacity = 0.5; }}
+                  style={{
+                    color: '#444',
+                    opacity: 0.5,
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    padding: '0 2px',
+                    lineHeight: 1,
+                  }}
+                >
+                  ✕
                 </span>
               </div>
             );

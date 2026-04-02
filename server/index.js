@@ -4233,7 +4233,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     const { getCachedApexResults } = await import('./apexService.js');
     const liveApex = getCachedApexResults();
 
-    let killTop10, blCount, ssCount, sectorMap;
+    let killTop10, blCount, ssCount, sectorMap, weekFilter = {};
     if (liveApex) {
       killTop10 = liveApex.stocks
         .filter(s => s.isTop10)
@@ -4259,7 +4259,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       const latestWeekDoc = await db.collection('pnthr_kill_scores')
         .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
       const latestWeekOf = latestWeekDoc?.weekOf ?? null;
-      const weekFilter = latestWeekOf ? { weekOf: latestWeekOf } : {};
+      weekFilter = latestWeekOf ? { weekOf: latestWeekOf } : {};
 
       const [top10Scores, allKillSignals] = await Promise.all([
         db.collection('pnthr_kill_scores').find({ ...weekFilter, killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),

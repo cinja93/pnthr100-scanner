@@ -173,28 +173,28 @@ function runRiskAdvisor(positions, nav) {
       const priceReady = p.direction === 'LONG' ? getDisplayPrice(p) >= trigger : getDisplayPrice(p) <= trigger;
       if (priceReady) {
         const sizing = sizePosition({ netLiquidity: nav, entryPrice: p.entryPrice, stopPrice: p.stopPrice, maxGapPct: p.maxGapPct || 0, direction: p.direction });
-        const lot2Shares = Math.round(sizing.totalShares * 0.30);
+        const lot2Shares = Math.round(sizing.totalShares * 0.25);
         recs.push({
           priority: 'ACTION', type: 'LOT2_READY',
           message: `${p.ticker}: Lot 2 (The Stalk) is READY. Price and time gate both confirmed.`,
-          actions: [{ ticker: p.ticker, action: 'BUY', shares: lot2Shares, price: trigger, reason: 'Scale in 30% — Lot 2 trigger met' }],
+          actions: [{ ticker: p.ticker, action: 'BUY', shares: lot2Shares, price: trigger, reason: 'Scale in 25% — Lot 2 trigger met' }],
         });
       }
     }
   }
 
-  // Rule 5: Stop Ratchet Needed (Lot 3+ filled, stop not at breakeven)
+  // Rule 5: Stop Ratchet Needed (Lot 2+ filled, stop not at avg cost breakeven)
   for (const p of positions) {
     const highLot = highestFilledLot(p);
-    const lot1Fill = p.fills?.[1]?.price;
-    if (highLot >= 3 && lot1Fill) {
-      const needsRatchet = p.direction === 'LONG' ? p.stopPrice < +lot1Fill : p.stopPrice > +lot1Fill;
-      if (needsRatchet) {
-        const newStop = +(+lot1Fill).toFixed(2);
+    if (highLot >= 2) {
+      const avg = avgCostOf(p);
+      const needsRatchet = p.direction === 'LONG' ? p.stopPrice < avg : p.stopPrice > avg;
+      if (needsRatchet && avg > 0) {
+        const newStop = +avg.toFixed(2);
         recs.push({
           priority: 'HIGH', type: 'RATCHET_NEEDED',
-          message: `${p.ticker}: At Lot ${highLot} but stop ($${p.stopPrice}) is ${p.direction === 'LONG' ? 'below' : 'above'} breakeven ($${newStop}). MOVE STOP.`,
-          actions: [{ ticker: p.ticker, action: 'MOVE_STOP', newStop, oldStop: p.stopPrice, reason: 'Breakeven ratchet overdue' }],
+          message: `${p.ticker}: At Lot ${highLot} but stop ($${p.stopPrice}) is ${p.direction === 'LONG' ? 'below' : 'above'} avg cost breakeven ($${newStop}). MOVE STOP.`,
+          actions: [{ ticker: p.ticker, action: 'MOVE_STOP', newStop, oldStop: p.stopPrice, reason: 'Avg cost breakeven ratchet overdue' }],
         });
       }
     }
@@ -793,12 +793,18 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
 
     // Lots 2+: show ratchet confirmation modal before saving
     if (n >= 2) {
-      // Ratchet levels: Lot 3 → Lot 1 fill, Lot 4 → Lot 2 fill, Lot 5 → Lot 3 fill
-      const ratchetLevel = n === 3 ? (lots[0]?.actualPrice || null)
-                         : n === 4 ? (lots[1]?.actualPrice || null)
-                         : n === 5 ? (lots[2]?.actualPrice || null)
-                         : null;
-      setRatchetModal({ n, updates, ratchetLevel: ratchetLevel ? +ratchetLevel : null });
+      // Ratchet level = avg cost of all filled lots AFTER this fill (true breakeven)
+      // Compute cumulative cost including the lot being filled now
+      let cumCost = 0, cumShr = 0;
+      for (let i = 1; i <= 5; i++) {
+        const f = i === n ? updates[n] : position.fills?.[i];
+        if (f?.filled && f?.price && f?.shares) {
+          cumCost += +f.shares * +f.price;
+          cumShr  += +f.shares;
+        }
+      }
+      const ratchetLevel = cumShr > 0 ? +(cumCost / cumShr).toFixed(2) : null;
+      setRatchetModal({ n, updates, ratchetLevel });
       return; // wait for modal confirmation
     }
 
@@ -841,28 +847,24 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
 
   // Check if a stop ratchet recommendation should show after a lot fill
   const checkRatchet = (newFills, direction, currentStop) => {
-    const filledNums = Object.entries(newFills)
-      .filter(([, f]) => f.filled && f.price)
-      .map(([k]) => +k);
-    if (!filledNums.length) return null;
-    const highFilled = Math.max(...filledNums);
-    const isLongDir  = direction === 'LONG';
-    let recStop = null, msg = null;
-    if (highFilled >= 3 && newFills[1]?.price) {
-      recStop = +newFills[1].price;
-      msg = `Lot 3 filled — ratchet stop to breakeven ($${recStop.toFixed(2)})`;
+    // Compute avg cost of all filled lots (true breakeven)
+    let cumCost = 0, cumShr = 0;
+    for (let i = 1; i <= 5; i++) {
+      const f = newFills[i];
+      if (f?.filled && f?.price && f?.shares) {
+        cumCost += +f.shares * +f.price;
+        cumShr  += +f.shares;
+      }
     }
-    if (highFilled >= 4 && newFills[2]?.price) {
-      recStop = +newFills[2].price;
-      msg = `Lot 4 filled — lock stop to Lot 2 fill ($${recStop.toFixed(2)})`;
-    }
-    if (highFilled >= 5 && newFills[3]?.price) {
-      recStop = +newFills[3].price;
-      msg = `Lot 5 filled — lock stop to Lot 3 fill ($${recStop.toFixed(2)})`;
-    }
-    if (!recStop) return null;
-    const needsRatchet = isLongDir ? currentStop < recStop : currentStop > recStop;
-    return needsRatchet ? { recStop, msg } : null;
+    if (cumShr === 0) return null;
+    const avgCost = +(cumCost / cumShr).toFixed(2);
+    const filledCount = Object.values(newFills).filter(f => f?.filled).length;
+    if (filledCount < 2) return null; // no ratchet until Lot 2
+    const isLongDir = direction === 'LONG';
+    const needsRatchet = isLongDir ? currentStop < avgCost : currentStop > avgCost;
+    return needsRatchet
+      ? { recStop: avgCost, msg: `Ratchet stop to avg cost $${avgCost} (true breakeven)` }
+      : null;
   };
 
   const staleBorderColor = staleLevel === 3 ? 'rgba(220,53,69,0.4)'
@@ -1331,9 +1333,8 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
             const { n, ratchetLevel } = ratchetModal;
             const isLong = position.direction === 'LONG';
             const curStop = position.stopPrice;
-            const isLot2 = n === 2;
             const alreadyProtected = ratchetLevel && (isLong ? curStop >= ratchetLevel : curStop <= ratchetLevel);
-            const needsRatchet = !isLot2 && ratchetLevel && !alreadyProtected;
+            const needsRatchet = ratchetLevel && !alreadyProtected;
             const protectedStop = needsRatchet
               ? (isLong ? Math.max(ratchetLevel, curStop) : Math.min(ratchetLevel, curStop))
               : null;
@@ -1344,26 +1345,11 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#FFD700', marginBottom: 8, letterSpacing: '0.06em' }}>
                   ⚡ LOT {n} FILL — STOP CHECK
                 </div>
-                {isLot2 && (
-                  <>
-                    <div style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>
-                      Current stop: <b style={{ color: '#dc3545' }}>${curStop}</b>
-                      <span style={{ color: '#555', marginLeft: 8 }}>· No ratchet required at Lot 2</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: '#666', marginBottom: 12 }}>
-                      Next ratchet at Lot 3 → move stop to Lot 1 fill price (breakeven).
-                    </div>
-                    <button onClick={() => commitFill(false)}
-                      style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 4, padding: '5px 16px', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
-                      CONFIRM FILL ✓
-                    </button>
-                  </>
-                )}
-                {!isLot2 && alreadyProtected && (
+                {alreadyProtected && (
                   <>
                     <div style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>
                       Current stop: <b style={{ color: '#28a745' }}>${curStop}</b>
-                      {ratchetLevel && <span style={{ color: '#28a745', marginLeft: 8 }}>✓ Already protected (≥ Lot {n-2} fill ${ratchetLevel})</span>}
+                      {ratchetLevel && <span style={{ color: '#28a745', marginLeft: 8 }}>✓ Already at/above avg cost breakeven (${ratchetLevel})</span>}
                     </div>
                     <button onClick={() => commitFill(false)}
                       style={{ background: '#28a745', color: '#fff', border: 'none', borderRadius: 4, padding: '5px 16px', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
@@ -1375,7 +1361,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                   <>
                     <div style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>
                       Current stop: <b style={{ color: '#dc3545' }}>${curStop}</b>
-                      <span style={{ color: '#ffc107', marginLeft: 8 }}>→ Recommended: ${protectedStop} (Lot {n-2} fill)</span>
+                      <span style={{ color: '#ffc107', marginLeft: 8 }}>→ Avg cost breakeven: ${protectedStop}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button onClick={() => commitFill(true)}
@@ -1391,6 +1377,17 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
                         Cancel
                       </button>
                     </div>
+                  </>
+                )}
+                {!ratchetLevel && (
+                  <>
+                    <div style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>
+                      Current stop: <b>${curStop}</b>
+                    </div>
+                    <button onClick={() => commitFill(false)}
+                      style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 4, padding: '5px 16px', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
+                      CONFIRM FILL ✓
+                    </button>
                   </>
                 )}
               </div>

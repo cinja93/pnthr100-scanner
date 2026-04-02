@@ -17,7 +17,7 @@ export const KT_DEFAULTS = {
 };
 
 // ── Lot sizing constants (mirrors client sizingUtils.js) ──────────────────────
-export const STRIKE_PCT   = [0.15, 0.30, 0.25, 0.20, 0.10];
+export const STRIKE_PCT   = [0.35, 0.25, 0.20, 0.12, 0.08];
 export const LOT_OFFSETS  = [0,    0.03, 0.06, 0.10, 0.14];
 export const LOT_NAMES    = ['The Scent', 'The Stalk', 'The Strike', 'The Jugular', 'The Kill'];
 

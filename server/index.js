@@ -4254,11 +4254,17 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       }
     } else {
       // Cold server — fall back to Friday pipeline data.
-      // pnthr_kill_scores has sector + signal for the full scored universe.
+      // pnthr_kill_scores retains all historical weeks — MUST filter by the most
+      // recent weekOf, otherwise top-10 rows from multiple weeks are returned.
+      const latestWeekDoc = await db.collection('pnthr_kill_scores')
+        .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
+      const latestWeekOf = latestWeekDoc?.weekOf ?? null;
+      const weekFilter = latestWeekOf ? { weekOf: latestWeekOf } : {};
+
       const [top10Scores, allKillSignals] = await Promise.all([
-        db.collection('pnthr_kill_scores').find({ killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
+        db.collection('pnthr_kill_scores').find({ ...weekFilter, killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
         db.collection('pnthr_kill_scores')
-          .find({ signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1, weekOf: 1 } })
+          .find({ ...weekFilter, signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1, weekOf: 1 } })
           .sort({ weekOf: -1 }).limit(700).toArray(),
       ]);
       killTop10 = top10Scores.map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 }));

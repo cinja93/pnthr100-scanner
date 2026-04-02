@@ -766,7 +766,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
   const hasFloor   = pnlFloor > 0;
 
   const recStop = highFilled >= 1 ? lots[Math.min(highFilled - 1, 4)].recommendedStop : position.stopPrice;
-  const recStopNote   = highFilled >= 3 ? lots[Math.min(highFilled - 1, 4)].ratchetNote : null;
+  const recStopNote   = highFilled >= 2 ? lots[Math.min(highFilled - 1, 4)].ratchetNote : null;
   const stopBelowRec  = isLong ? position.stopPrice < recStop : position.stopPrice > recStop;
   const anchorDiffers = lots[0].actualPrice && Math.abs(lots[0].actualPrice - position.entryPrice) > 0.005;
 
@@ -1394,7 +1394,7 @@ function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdateP
             );
           })()}
 
-          {/* Stop ratchet recommendation — shown after Lot 3/4/5 fill */}
+          {/* Stop ratchet recommendation — shown after Lot 2+ fill */}
           {ratchetRec && (
             <div style={{
               margin: '0 18px 8px',

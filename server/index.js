@@ -2361,6 +2361,14 @@ app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
     const rawShares = +(ibkrPos.shares) || 0;
     if (Math.abs(rawShares) < 1) return res.status(400).json({ error: `${ticker} shows 0 shares in IBKR — already closed?` });
 
+    // Duplicate guard — block if an active position already exists for this ticker
+    const existingActive = await db.collection('pnthr_portfolio').findOne({
+      ticker:  ticker,
+      ownerId: userId,
+      status:  { $in: ['ACTIVE', 'PARTIAL'] },
+    });
+    if (existingActive) return res.status(409).json({ error: `${ticker} already has an active position in Command (id: ${existingActive.id})` });
+
     const direction = rawShares >= 0 ? 'LONG' : 'SHORT';
     const shares    = Math.abs(rawShares);
     const avgCost   = +(ibkrPos.avgCost) || 0;
@@ -2420,6 +2428,52 @@ app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
     res.json({ success: true, id: position.id, ticker, direction, shares, avgCost, stopPrice });
   } catch (err) {
     console.error('[IBKR import-position]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Dedup active positions ────────────────────────────────────────────────────
+// POST /api/positions/dedup — finds tickers with multiple ACTIVE positions for
+// the requesting user and deletes extras, keeping the richest record (queue-
+// confirmed entries preferred over IBKR_IMPORT; otherwise newest wins).
+app.post('/api/positions/dedup', requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db     = await connectToDatabase();
+    const userId = req.user.userId;
+
+    const all = await db.collection('pnthr_portfolio')
+      .find({ ownerId: userId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
+      .toArray();
+
+    // Group by ticker
+    const byTicker = {};
+    for (const p of all) {
+      const t = p.ticker?.toUpperCase();
+      if (!t) continue;
+      (byTicker[t] = byTicker[t] || []).push(p);
+    }
+
+    const removed = [];
+    for (const [ticker, posns] of Object.entries(byTicker)) {
+      if (posns.length < 2) continue;
+      // Score: queue-confirmed (fromQueue) > IBKR_IMPORT > other; then newest
+      posns.sort((a, b) => {
+        const score = p => (p.fromQueue ? 2 : p.source === 'IBKR_IMPORT' ? 0 : 1);
+        if (score(b) !== score(a)) return score(b) - score(a);
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
+      // Keep first, delete rest
+      for (const dup of posns.slice(1)) {
+        await db.collection('pnthr_portfolio').deleteOne({ id: dup.id, ownerId: userId });
+        removed.push({ ticker, id: dup.id, source: dup.source || 'unknown' });
+        console.log(`[DEDUP] Removed duplicate ${ticker} position id=${dup.id} source=${dup.source}`);
+      }
+    }
+
+    res.json({ success: true, removed });
+  } catch (err) {
+    console.error('[dedup]', err);
     res.status(500).json({ error: err.message });
   }
 });

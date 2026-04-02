@@ -380,6 +380,23 @@ export async function pendingEntryConfirm(req, res) {
       return res.json({ success: true, position: existingPosition, resumed: true });
     }
 
+    // ── Duplicate ticker guard ──────────────────────────────────────────────
+    // Prevent creating a second ACTIVE position for the same ticker (e.g. if
+    // an IBKR import already created one before the queue entry was confirmed).
+    const duplicatePosition = await db.collection('pnthr_portfolio').findOne({
+      ticker:  entry.ticker.toUpperCase(),
+      ownerId: req.user.userId,
+      status:  { $in: ['ACTIVE', 'PARTIAL'] },
+    });
+    if (duplicatePosition) {
+      console.warn(`[CONFIRM] ${entry.ticker}: Duplicate blocked — active position already exists (${duplicatePosition.id})`);
+      await db.collection('pnthr_pending_entries').updateOne(
+        { id: req.params.id },
+        { $set: { status: 'CONFIRMED', confirmedAt: new Date(), positionId: duplicatePosition.id } }
+      );
+      return res.json({ success: true, position: duplicatePosition, resumed: true, duplicateBlocked: true });
+    }
+
     const posId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     const fills = { 1: { filled: true, price: +fillPrice, shares: +shares, date: date || new Date().toISOString().split('T')[0] } };
     for (let i = 2; i <= 5; i++) fills[i] = { filled: false };

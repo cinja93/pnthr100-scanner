@@ -4233,7 +4233,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     const { getCachedApexResults } = await import('./apexService.js');
     const liveApex = getCachedApexResults();
 
-    let killTop10, blCount, ssCount, sectorMap;
+    let killTop10, blCount, ssCount, sectorMap, weekFilter = {};
     if (liveApex) {
       killTop10 = liveApex.stocks
         .filter(s => s.isTop10)
@@ -4259,7 +4259,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       const latestWeekDoc = await db.collection('pnthr_kill_scores')
         .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
       const latestWeekOf = latestWeekDoc?.weekOf ?? null;
-      const weekFilter = latestWeekOf ? { weekOf: latestWeekOf } : {};
+      weekFilter = latestWeekOf ? { weekOf: latestWeekOf } : {};
 
       const [top10Scores, allKillSignals] = await Promise.all([
         db.collection('pnthr_kill_scores').find({ ...weekFilter, killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
@@ -4282,13 +4282,25 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       }
     }
 
-    // New signals this week (signalAge 0–1) — stocks from apex cache, ETFs from etf cache
-    // ETFs are a separate scoring universe and never appear in the apex/kill results.
+    // New signals: stocks that fired their signal in the most recently COMPLETED weekly candle.
+    // We anchor to lastCompletedWeekMonday (Friday - 4 days) so partial in-progress weekly candles
+    // are excluded — they produce noisy false signals mid-week. Both live and cold paths use
+    // the same anchor, keeping sector bar counts consistent with confirmed Friday-close data.
+    function getLastCompletedWeekMonday() {
+      // Walk back to the most recent Friday (or today if Friday), then subtract 4 days
+      // to get that week's Monday — the weekStart key for confirmed weekly-candle signals.
+      const today = new Date();
+      const dow = today.getDay(); // 0=Sun … 6=Sat
+      const daysToFri = dow === 5 ? 0 : (dow + 2) % 7;
+      const fri = new Date(today);
+      fri.setDate(today.getDate() - daysToFri);
+      fri.setDate(fri.getDate() - 4); // Friday - 4 = Monday of that week
+      return fri.toISOString().split('T')[0];
+    }
     function calcSignalAge(signalDate) {
       if (!signalDate) return 99;
       try {
         const sigMs  = new Date(signalDate + 'T12:00:00').getTime();
-        // Current week Monday
         const now = new Date();
         const dow = now.getDay();
         const monday = new Date(now);
@@ -4300,25 +4312,54 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     function mapNewSig(s) {
       return { ticker: s.ticker, sector: s.sector, currentPrice: s.currentPrice,
         totalScore: s.apexScore ?? s.totalScore ?? 0, tier: s.tier, signal: s.signal,
-        signalAge: s.signalAge, killRank: s.killRank ?? null };
+        signalAge: s.signalAge ?? calcSignalAge(s.signalDate), killRank: s.killRank ?? null };
     }
     const sortByScore = (a, b) => ((b.totalScore || 0) - (a.totalScore || 0));
+    const lastCompletedWeekMonday = getLastCompletedWeekMonday(); // e.g. '2026-03-23'
 
     // ── Stocks: from apex cache (live) or Friday DB ──
     let newBLStocks = [], newSSStocks = [];
     if (liveApex) {
-      const fresh = liveApex.stocks.filter(s => !s.overextended && (s.signalAge ?? 99) <= 1);
+      // Use only stocks whose signal fired in the last completed weekly candle.
+      // Excluding in-progress current-week candle avoids noisy mid-week false signals.
+      const fresh = liveApex.stocks.filter(s =>
+        !s.overextended && s.signalDate === lastCompletedWeekMonday
+      );
       newBLStocks = fresh.filter(s => s.signal === 'BL').map(mapNewSig).sort(sortByScore);
       newSSStocks = fresh.filter(s => s.signal === 'SS').map(mapNewSig).sort(sortByScore);
     } else {
+      // Cold path: use kill_scores for sector/score data, cross-ref signal_history for
+      // actual signalDate (not stored in kill_scores until next pipeline run).
       const dbFresh = await db.collection('pnthr_kill_scores')
-        .find({ signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: 1 } })
-        .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
+        .find({ ...weekFilter, signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: 1 } })
+        .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, signalDate: 1, killRank: 1 })
         .toArray();
-      newBLStocks = dbFresh.filter(s => s.signal === 'BL')
-        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
-      newSSStocks = dbFresh.filter(s => s.signal === 'SS')
-        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
+
+      // Back-fill signalDate from signal_history for stocks that predate the signalDate field.
+      const needDate = dbFresh.filter(s => !s.signalDate);
+      if (needDate.length > 0) {
+        const tickers = [...new Set(needDate.map(s => s.ticker))];
+        const shRows = await db.collection('signal_history')
+          .find({ ticker: { $in: tickers }, signal: { $in: ['BL', 'SS'] }, signalDate: { $ne: null } })
+          .sort({ savedAt: -1 })
+          .project({ ticker: 1, signal: 1, signalDate: 1 })
+          .toArray();
+        const shMap = {};
+        for (const row of shRows) {
+          const key = `${row.ticker}|${row.signal}`;
+          if (!shMap[key]) shMap[key] = row.signalDate;
+        }
+        for (const s of needDate) {
+          s.signalDate = shMap[`${s.ticker}|${s.signal}`] ?? null;
+        }
+      }
+
+      // Keep only signals from the last completed weekly candle.
+      const confirmedFresh = dbFresh.filter(s => s.signalDate === lastCompletedWeekMonday);
+      const toNewSig = s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0,
+        signalAge: calcSignalAge(s.signalDate) });
+      newBLStocks = confirmedFresh.filter(s => s.signal === 'BL').map(toNewSig).sort(sortByScore);
+      newSSStocks = confirmedFresh.filter(s => s.signal === 'SS').map(toNewSig).sort(sortByScore);
     }
 
     // ── ETFs: from the ETF cache (populated when /api/etf-stocks is visited) ──

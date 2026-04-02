@@ -411,7 +411,6 @@ export async function runFridayKillPipeline() {
         ticker:         s.ticker,
         signal:         s.signal,
         signalAge:      s.signalAge,
-        signalDate:     s.signalDate ?? null,
         totalScore:     s.apexScore,
         tier:           s.tier,
         confirmation:   s.confirmation,

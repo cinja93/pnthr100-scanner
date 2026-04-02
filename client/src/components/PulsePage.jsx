@@ -841,6 +841,7 @@ function SectorPulse({ signals, killDataLive, onNavigate, newSignals }) {
 
   // Build per-sector new signal counts from newSignals.blStocks / ssStocks
   const newBySector = {};
+  // Server pre-filters blStocks/ssStocks to last completed weekly candle only — no client filter needed.
   for (const s of (newSignals?.blStocks || [])) {
     const canonical = ALIASES[s.sector] || s.sector;
     if (!canonical) continue;
@@ -853,7 +854,6 @@ function SectorPulse({ signals, killDataLive, onNavigate, newSignals }) {
     if (!newBySector[canonical]) newBySector[canonical] = { bl: 0, ss: 0 };
     newBySector[canonical].ss++;
   }
-  // ALL SECTORS totals
   const totalNewBl = (newSignals?.blStocks || []).length;
   const totalNewSs = (newSignals?.ssStocks || []).length;
 

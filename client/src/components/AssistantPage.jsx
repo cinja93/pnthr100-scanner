@@ -1893,7 +1893,8 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
               const isOpen = expandedGroups.has(row.category);
               const newInGroup = items.filter(h => newTickers.has(h.ticker) && !clickedTickers.has(h.ticker)).length;
               const isSS = row.category === 'TRIGGERED_SS' || row.category === 'DEV_SS';
-              const tickerColor = isSS ? '#ef5350' : c.ticker;
+              const isBL = row.category === 'TRIGGERED_BL' || row.category === 'DEV_BL';
+              const tickerColor = isSS ? '#ef5350' : isBL ? '#4caf50' : c.ticker;
               return (
                 <div key={row.category}>
                   {/* Group header row */}

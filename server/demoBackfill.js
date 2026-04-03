@@ -330,6 +330,81 @@ async function main() {
       console.log(`  OPENED ${k.ticker} (${direction}) @ $${entryPrice.toFixed(2)} | Kill #${k.killRank} ${k.tier}`);
     }
 
+    // ── Check lot fills on all active positions ─────────────────────────────
+    // Pyramid into Lots 2-5 when price has moved past trigger levels
+    for (const [ticker, pos] of activePositions) {
+      if (!pos.fills?.[1]?.filled) continue; // Lot 1 not filled yet
+
+      const ks = killScores.find(k => k.ticker === ticker);
+      const currentPrice = ks?.currentPrice || pos.currentPrice || pos.entryPrice;
+      const isLong    = pos.direction === 'LONG';
+      const anchor    = pos.fills[1].price || pos.entryPrice;
+      const lot1Date  = pos.fills[1].date;
+
+      // Calculate holding weeks for time gate
+      const holdingWeeks = lot1Date
+        ? Math.round((new Date(weekOf) - new Date(lot1Date)) / (7 * 24 * 60 * 60 * 1000))
+        : 0;
+      const holdingDays = holdingWeeks * 5;
+
+      // Size the position
+      const sized = serverSizePosition({ nav, entryPrice: anchor, stopPrice: pos.stopPrice, riskPct: DEMO_RISK_PCT });
+      if (!sized) continue;
+      const totalShares = sized.totalShares;
+
+      for (let lot = 2; lot <= 5; lot++) {
+        if (pos.fills[lot]?.filled) continue; // Already filled
+        if (!pos.fills[lot - 1]?.filled) break; // Prior lot not filled
+
+        // Lot 2 has a 5-day time gate
+        if (lot === 2 && holdingDays < 5) break;
+
+        // Calculate trigger price
+        const offset = LOT_OFFSETS[lot - 1];
+        const triggerPrice = isLong
+          ? +(anchor * (1 + offset)).toFixed(2)
+          : +(anchor * (1 - offset)).toFixed(2);
+
+        // Check if price has reached trigger
+        const triggered = isLong ? currentPrice >= triggerPrice : currentPrice <= triggerPrice;
+        if (!triggered) break;
+
+        // Fill the lot
+        const lotShares = Math.max(1, Math.round(totalShares * STRIKE_PCT[lot - 1]));
+        pos.fills[lot] = { filled: true, price: triggerPrice, shares: lotShares, date: weekOf };
+
+        // Update stop: ratchet to avg cost after Lot 3+
+        if (lot >= 3) {
+          let cumCost = 0, cumShr = 0;
+          for (let n = 1; n <= 5; n++) {
+            const f = pos.fills[n];
+            if (f?.filled && f?.price && f?.shares) {
+              cumCost += f.shares * f.price;
+              cumShr  += f.shares;
+            }
+          }
+          if (cumShr > 0) {
+            const avgCost = +(cumCost / cumShr).toFixed(2);
+            pos.stopPrice = isLong
+              ? Math.max(pos.stopPrice, avgCost)
+              : Math.min(pos.stopPrice, avgCost);
+          }
+        }
+
+        // Persist to DB
+        await db.collection('pnthr_portfolio').updateOne(
+          { id: pos.id, ownerId: DEMO_OWNER_ID },
+          { $set: {
+            [`fills.${lot}`]: pos.fills[lot],
+            stopPrice: pos.stopPrice,
+            updatedAt: new Date(weekOf + 'T20:15:00Z'),
+          } }
+        );
+
+        console.log(`  LOT ${lot} FILLED: ${ticker} @ $${triggerPrice.toFixed(2)} (${lotShares} shr)`);
+      }
+    }
+
     // ── Update NAV and snapshot ──────────────────────────────────────────────
     await db.collection('user_profiles').updateOne(
       { userId: DEMO_OWNER_ID },

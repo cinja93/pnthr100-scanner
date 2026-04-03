@@ -179,13 +179,13 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               gap: 4, cursor: 'pointer', padding: '3px 0', marginBottom: 4,
-              opacity: isDemo ? 0.9 : 0.12,
+              opacity: isDemo ? 0.9 : 0.25,
               transition: 'opacity 0.3s',
             }}
           >
             <div style={{
-              width: 6, height: 6, borderRadius: '50%',
-              background: isDemo ? '#fcf000' : '#333',
+              width: 8, height: 8, borderRadius: '50%',
+              background: isDemo ? '#fcf000' : '#555',
               boxShadow: isDemo ? '0 0 6px #fcf000' : 'none',
               transition: 'all 0.3s',
             }} />

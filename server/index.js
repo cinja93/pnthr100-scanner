@@ -5495,32 +5495,29 @@ app.get('/api/assistant/headlines', async (req, res) => {
       const devExchangeMap = devData.exchangeMap || {};  // ticker → 'NASDAQ' | 'NYSE' etc
 
       // Build enrichment map from apex cache for Analyze scoring
-      const apexMap = {};  // ticker → { killScore, exchange, signalAge, maxScore }
-      let apexMaxScore = 1;
+      // NOTE: in-memory cache uses `apexScore` (not `totalScore`)
+      const apexMap = {};  // ticker → { killScore, exchange, signalAge }
       try {
         const { getCachedApexResults } = await import('./apexService.js');
         const apex = getCachedApexResults();
         if (apex?.stocks) {
-          apexMaxScore = Math.max(...apex.stocks.map(s => s.totalScore || 0), 1);
           for (const s of apex.stocks) {
-            // Skip OVEREXTENDED (score = -99, killRank = null) — chart's /api/apex/ticker
-            // also skips these, so chip must return NOT SCORED to match
-            if ((s.totalScore || 0) < 0 || s.killRank == null) continue;
+            // Skip OVEREXTENDED (apexScore = -99, killRank = null)
+            if (s.overextended || s.killRank == null) continue;
             apexMap[s.ticker] = {
-              killScore: s.totalScore || s.score || 0,
+              killScore: s.apexScore || s.totalScore || 0,
               exchange: s.exchange || '',
               signalAge: s.signalAge ?? s.weeksSince ?? null,
-              maxScore: apexMaxScore,
             };
           }
         }
       } catch { /* non-fatal */ }
 
-      // Fallback: query pnthr_kill_scores for tickers NOT in live apex cache
-      // ONLY when apex cache is warm — when cold (server just restarted), chart's
-      // /api/apex/ticker also returns found:false, so chip must match (NOT SCORED).
+      // Fallback: query pnthr_kill_scores DB for tickers NOT in live apex cache.
+      // Always runs — DB has authoritative scores from Friday pipeline even when
+      // apex cache is cold (server restart). Chart also fetches from apex/ticker
+      // endpoint which warms up quickly, so scores converge.
       const killScoreMap = {};  // ticker → { killScore, exchange, signalAge }
-      const apexCacheWarm = Object.keys(apexMap).length > 0;
       try {
         // Collect all tickers that need scoring
         const allHeadlineTickers = [
@@ -5530,7 +5527,7 @@ app.get('/api/assistant/headlines', async (req, res) => {
           ...(devData.devSS || []).map(s => s.ticker),
         ];
         const missingFromApex = allHeadlineTickers.filter(t => !apexMap[t]);
-        if (apexCacheWarm && missingFromApex.length > 0) {
+        if (missingFromApex.length > 0) {
           // Get the latest weekOf from kill_scores
           const latestDoc = await db.collection('pnthr_kill_scores')
             .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });

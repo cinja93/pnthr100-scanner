@@ -233,20 +233,28 @@ async function main() {
     // ── Open new positions for top 10 we don't hold ─────────────────────────
     // Fetch Monday opening prices — we enter at Monday open, not Friday close
     const newTickers = top10.filter(k => !activePositions.has(k.ticker)).map(k => k.ticker);
-    const mondayPrices = newTickers.length > 0 ? await fetchMondayOpenPrices(newTickers, weekOf) : {};
     const mondayDate = getNextMonday(weekOf);
+    const mondayIsInFuture = new Date(mondayDate + 'T12:00:00Z') > new Date();
+    const mondayPrices = (newTickers.length > 0 && !mondayIsInFuture)
+      ? await fetchMondayOpenPrices(newTickers, weekOf)
+      : {};
 
     for (const k of top10) {
       if (activePositions.has(k.ticker)) continue;
 
       // Use Monday open price; fall back to Friday's Kill price if FMP data unavailable
+      // If Monday hasn't happened yet, leave Lot 1 unfilled for live engine to fill
       const mondayData = mondayPrices[k.ticker];
       const entryPrice = mondayData?.open || k.currentPrice;
       const entryDate  = mondayData?.date || mondayDate;
       if (!entryPrice) continue;
 
+      const lot1Filled = !mondayIsInFuture; // Only fill if Monday has passed
+
       if (mondayData?.open) {
         console.log(`  📊 ${k.ticker}: Friday $${k.currentPrice?.toFixed(2)} → Monday open $${mondayData.open.toFixed(2)} (${mondayData.date})`);
+      } else if (mondayIsInFuture) {
+        console.log(`  ⏳ ${k.ticker}: Lot 1 pending — Monday open not yet available`);
       }
 
       const isLong    = k.signal === 'BL';
@@ -265,7 +273,9 @@ async function main() {
       const posId       = genId();
 
       const fills = {
-        1: { filled: true, price: entryPrice, shares: lot1Shares, date: entryDate },
+        1: lot1Filled
+          ? { filled: true, price: entryPrice, shares: lot1Shares, date: entryDate }
+          : { filled: false, shares: lot1Shares },
         2: { filled: false }, 3: { filled: false }, 4: { filled: false }, 5: { filled: false },
       };
 

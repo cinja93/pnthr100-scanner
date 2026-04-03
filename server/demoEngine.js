@@ -14,6 +14,7 @@
 
 import { connectToDatabase } from './database.js';
 import { serverSizePosition, buildServerLotConfig, STRIKE_PCT, LOT_OFFSETS } from './killTestSettings.js';
+import { getSignals } from './signalService.js';
 import { getLastFriday } from './technicalUtils.js';
 import { createJournalEntry } from './journalService.js';
 
@@ -334,6 +335,15 @@ async function checkExits(db, positions, quotes) {
   let nav = await getDemoNav(db);
   const closed = [];
 
+  // Fetch current signals for all position tickers to check for BE/SE
+  const tickers = positions.map(p => p.ticker);
+  let signals = {};
+  try {
+    signals = await getSignals(tickers);
+  } catch (e) {
+    console.warn('[DemoEngine] Signal fetch failed:', e.message);
+  }
+
   for (const p of positions) {
     const quote = quotes[p.ticker];
     if (!quote?.price) continue;
@@ -352,12 +362,23 @@ async function checkExits(db, positions, quotes) {
       exitPrice  = p.stopPrice;
     }
 
-    // 2. Stale hunt (Day 20+) — only close LOSING positions; let winners run
+    // 2. BE/SE signal — LONG exits on BE, SHORT exits on SE
+    if (!exitReason) {
+      const sig = signals[p.ticker]?.signal;
+      if (isLong && sig === 'BE') {
+        exitReason = 'SIGNAL';
+        exitPrice  = price;
+      } else if (!isLong && sig === 'SE') {
+        exitReason = 'SIGNAL';
+        exitPrice  = price;
+      }
+    }
+
+    // 3. Stale hunt (Day 20+) — only close LOSING positions; let winners run
     if (!exitReason) {
       const lot1Date = p.fills?.[1]?.date || p.createdAt?.toISOString?.()?.split('T')[0];
       const days = tradingDaysSince(lot1Date);
       if (days >= STALE_HUNT_LIMIT) {
-        // Calculate current P&L to decide if profitable
         const filledArr = Object.values(p.fills || {}).filter(f => f?.filled && f?.price && f?.shares);
         const totalCost = filledArr.reduce((s, f) => s + f.shares * f.price, 0);
         const totalShr  = filledArr.reduce((s, f) => s + f.shares, 0);
@@ -371,9 +392,6 @@ async function checkExits(db, positions, quotes) {
         }
       }
     }
-
-    // 3. Fell out of Kill top 10 (checked during Friday update — not here)
-    // This is handled by updateDemoPortfolio() when new Kill scores arrive
 
     if (!exitReason) continue;
 

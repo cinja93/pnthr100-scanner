@@ -111,6 +111,21 @@ async function main() {
         exitPrice  = pos.stopPrice;
       }
 
+      // Check BE/SE signal — LONG exits on signal flip to SS/BE, SHORT on flip to BL/SE
+      // In kill scores, the signal field reflects the current state machine output.
+      // A LONG entered on BL should exit if the ticker now shows BE (or flipped to SS).
+      // A SHORT entered on SS should exit if the ticker now shows SE (or flipped to BL).
+      if (!exitReason && ks) {
+        const curSignal = ks.signal;
+        if (isLong && (curSignal === 'BE' || curSignal === 'SS')) {
+          exitReason = 'SIGNAL';
+          exitPrice  = currentPrice;
+        } else if (!isLong && (curSignal === 'SE' || curSignal === 'BL')) {
+          exitReason = 'SIGNAL';
+          exitPrice  = currentPrice;
+        }
+      }
+
       // Check stale hunt (Day 20+) — only close if losing
       if (!exitReason) {
         const entryDate = pos.fills[1]?.date;

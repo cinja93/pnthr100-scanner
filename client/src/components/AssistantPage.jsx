@@ -39,6 +39,27 @@ const PRIORITY_LABEL = {
 
 const REFRESH_INTERVAL = 60; // seconds between auto-refreshes
 
+// ── CountdownTimer — isolated 1s re-renders ──────────────────────────────────
+function CountdownTimer({ refreshInterval, onRefresh, style }) {
+  const [countdown, setCountdown] = useState(refreshInterval);
+  useEffect(() => {
+    setCountdown(refreshInterval);
+  }, [refreshInterval]);
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) {
+          onRefresh();
+          return refreshInterval;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [refreshInterval, onRefresh]);
+  return <div style={style}>refreshing in {countdown}s</div>;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt$(n) {
@@ -2245,7 +2266,7 @@ export default function AssistantPage({ onNavigate }) {
   const [syncExpanded,   setSyncExpanded]   = useState(true);
   const [loading,        setLoading]        = useState(true);
   const [error,          setError]          = useState(null);
-  const [refreshCountdown, setRefreshCountdown] = useState(REFRESH_INTERVAL);
+  const [refreshKey, setRefreshKey] = useState(0); // bump to reset CountdownTimer
   const [lastRefreshed,    setLastRefreshed]    = useState(null);
   const [chartStocks, setChartStocks] = useState(null);  // array of stock objects for ChartModal
   const [chartIndex,  setChartIndex]  = useState(0);     // initial index into chartStocks
@@ -2350,37 +2371,53 @@ export default function AssistantPage({ onNavigate }) {
         .then(d => setRecentFills(d.fills || []))
         .catch(() => setRecentFills([]));
 
-      const [tasksRes, syncRes, routinesRes, completedRes] = await Promise.all([
+      const results = await Promise.allSettled([
         fetch(`${API_BASE}/api/assistant/tasks`,    { headers: authHeaders() }),
         fetch(`${API_BASE}/api/assistant/stop-sync`, { headers: authHeaders() }),
         fetch(`${API_BASE}/api/assistant/routines`, { headers: authHeaders() }),
         fetch(`${API_BASE}/api/assistant/completed`, { headers: authHeaders() }),
       ]);
 
-      if (tasksRes.ok) {
-        const d = await tasksRes.json();
+      const [tasksResult, syncResult, routinesResult, completedResult] = results;
+
+      // Tasks
+      if (tasksResult.status === 'fulfilled' && tasksResult.value.ok) {
+        const d = await tasksResult.value.json();
         setTasks(d.tasks || []);
+      } else {
+        console.warn('[AssistantPage] tasks fetch failed:', tasksResult.status === 'rejected' ? tasksResult.reason : 'non-ok response');
+        setTasks([]);
       }
 
-      if (syncRes.ok) {
-        const d = await syncRes.json();
+      // Stop sync
+      if (syncResult.status === 'fulfilled' && syncResult.value.ok) {
+        const d = await syncResult.value.json();
         setStopSyncRows(d.rows || []);
         setStopSyncLabel(d.label || 'STOP CHECK');
         const dow = d.dayOfWeek ?? new Date().getDay();
         setRoutineDayLbl(dayLabel(dow).toUpperCase());
+      } else {
+        console.warn('[AssistantPage] stop-sync fetch failed:', syncResult.status === 'rejected' ? syncResult.reason : 'non-ok response');
+        setStopSyncRows([]);
+        setStopSyncLabel('STOP CHECK');
       }
 
-      if (routinesRes.ok) {
-        const d = await routinesRes.json();
+      // Routines
+      if (routinesResult.status === 'fulfilled' && routinesResult.value.ok) {
+        const d = await routinesResult.value.json();
         setRoutines(d.routines || []);
         if (!routineDayLbl) {
           const dow = d.dayOfWeek ?? new Date().getDay();
           setRoutineDayLbl(dayLabel(dow).toUpperCase());
         }
+      } else {
+        console.warn('[AssistantPage] routines fetch failed:', routinesResult.status === 'rejected' ? routinesResult.reason : 'non-ok response');
+        setRoutines([]);
       }
 
-      if (completedRes.ok) {
-        const d = await completedRes.json();
+      // Completed
+      if (completedResult.status === 'fulfilled' && completedResult.value.ok) {
+        const d = await completedResult.value.json();
         const items = d.completed || [];
         setCompleted(items);
         const ids = new Set(items.map(c => c.taskId));
@@ -2388,6 +2425,11 @@ export default function AssistantPage({ onNavigate }) {
         // Partition routine IDs
         const rIds = new Set(items.filter(c => !c.taskType || c.taskType === 'ROUTINE').map(c => c.taskId));
         setRoutineIds(rIds);
+      } else {
+        console.warn('[AssistantPage] completed fetch failed:', completedResult.status === 'rejected' ? completedResult.reason : 'non-ok response');
+        setCompleted([]);
+        setCompletedIds(new Set());
+        setRoutineIds(new Set());
       }
 
       setLastRefreshed(new Date());
@@ -2404,19 +2446,7 @@ export default function AssistantPage({ onNavigate }) {
     fetchAll();
   }, [fetchAll]);
 
-  // Auto-refresh countdown
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setRefreshCountdown(c => {
-        if (c <= 1) {
-          fetchAll();
-          return REFRESH_INTERVAL;
-        }
-        return c - 1;
-      });
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [fetchAll]);
+  // Auto-refresh countdown moved into CountdownTimer component
 
   // ── Headlines feed — polls every 60s ───────────────────────────────────────
   useEffect(() => {
@@ -2607,11 +2637,16 @@ export default function AssistantPage({ onNavigate }) {
         <div style={s.headerRight}>
           <button
             style={s.refreshBtn}
-            onClick={() => { setLoading(true); fetchAll(); setRefreshCountdown(REFRESH_INTERVAL); }}
+            onClick={() => { setLoading(true); fetchAll(); setRefreshKey(k => k + 1); }}
           >
             ↺ Refresh
           </button>
-          <div style={s.refreshTimer}>refreshing in {refreshCountdown}s</div>
+          <CountdownTimer
+            key={refreshKey}
+            refreshInterval={REFRESH_INTERVAL}
+            onRefresh={fetchAll}
+            style={s.refreshTimer}
+          />
           {lastRefreshed && (
             <div style={s.refreshTimer}>
               last: {lastRefreshed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })}

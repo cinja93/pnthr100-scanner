@@ -10,10 +10,12 @@
 
 import { createContext, useContext, useState, useEffect } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
+import { useAuth } from '../AuthContext';
 
 const AnalyzeContext = createContext(null);
 
 export function AnalyzeProvider({ children }) {
+  const { currentUser } = useAuth() || {};
   const [analyzeContext, setAnalyzeContext] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -66,7 +68,7 @@ export function AnalyzeProvider({ children }) {
     loadContext();
     const interval = setInterval(loadContext, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentUser]); // re-run when auth state changes (login/logout)
 
   return (
     <AnalyzeContext.Provider value={{ analyzeContext, loading }}>

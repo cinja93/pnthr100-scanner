@@ -255,7 +255,8 @@ async function fetchStockData(ticker) {
     const rsi   = computeRSI14(weekly);
     const adx   = computeADX14(weekly);
     return { weekly, ema21, obv, rsi, adx };
-  } catch {
+  } catch (e) {
+    console.warn('[apex] fetchStockData failed for', ticker, e.message);
     return null;
   }
 }
@@ -1028,7 +1029,7 @@ export function getCachedSignalStocks() {
   const cached = apexCache.results;
   if (!cached?.stocks) return [];
   return cached.stocks
-    .filter(s => (s.signal === 'BL' || s.signal === 'SS') && s.totalScore !== -99)
+    .filter(s => (s.signal === 'BL' || s.signal === 'SS') && s.apexScore !== -99)
     .sort((a, b) => (a.killRank ?? 9999) - (b.killRank ?? 9999));
 }
 

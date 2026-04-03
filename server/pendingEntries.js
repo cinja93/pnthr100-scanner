@@ -254,7 +254,11 @@ export async function pendingEntryConfirm(req, res) {
     } else {
       try {
         const devTickers = getDevelopingSignalTickers();
-        if (devTickers.has(entry.ticker.toUpperCase())) entryContext = 'DEVELOPING_SIGNAL';
+        const devDirection = devTickers.get(entry.ticker.toUpperCase());
+        if (devDirection) {
+          entryContext = 'DEVELOPING_SIGNAL';
+          if (!signal) signal = devDirection; // inherit direction from developing signal
+        }
       } catch (e) { /* ignore */ }
     }
 
@@ -407,8 +411,8 @@ export async function pendingEntryConfirm(req, res) {
       ticker:       entry.ticker,
       direction:    resolvedDirection,
       entryPrice:   +fillPrice,
-      originalStop: entry.adjustedStop || entry.suggestedStop,
-      stopPrice:    stop ? +stop : (entry.adjustedStop || entry.suggestedStop),
+      originalStop: entry.adjustedStop || entry.suggestedStop || null,
+      stopPrice:    (stop && !isNaN(+stop)) ? +stop : (entry.adjustedStop || entry.suggestedStop),
       maxGapPct:    entry.gapPct || 0,
       currentPrice: +fillPrice,
       isETF:        entry.isETF || false,

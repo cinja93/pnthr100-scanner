@@ -2077,7 +2077,7 @@ app.patch('/api/positions/:id/direction', authenticateJWT, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-app.post('/api/ibkr/sync',          authenticateJWT, ibkrSync);
+app.post('/api/ibkr/sync',          authenticateJWT, requireAdmin, ibkrSync);
 
 // ── IBKR Discrepancy Check ─────────────────────────────────────────────────
 // Compares pnthr_ibkr_positions against pnthr_portfolio for 4 error types:
@@ -5452,21 +5452,23 @@ app.get('/api/assistant/headlines', async (req, res) => {
 
     // ── 3. IBKR discrepancies ────────────────────────────────────────────────
     try {
-      const ibkrPositions = await db.collection('pnthr_ibkr_positions').find({}).toArray();
-      for (const ib of ibkrPositions) {
-        const pnthr = positions.find(p => p.ticker === ib.ticker);
-        if (!pnthr) continue;
-        // Share mismatch
-        const ibShr = Math.abs(ib.position || 0);
-        const pnthrShr = Object.values(pnthr.fills || {}).filter(f => f?.filled).reduce((s, f) => s + (+f.shares || 0), 0);
-        if (ibShr > 0 && pnthrShr > 0 && ibShr !== pnthrShr) {
-          add(nowISO, 'ℹ️', 'LOW', ib.ticker, `IBKR share mismatch — IBKR: ${ibShr} shr, PNTHR: ${pnthrShr} shr`, 'IBKR_MISMATCH');
-        }
-        // Avg cost mismatch
-        if (ib.avgCost && pnthr.avgCost) {
-          const diff = Math.abs(ib.avgCost - pnthr.avgCost);
-          if (diff >= pnthr.avgCost * 0.001) {
-            add(nowISO, 'ℹ️', 'LOW', ib.ticker, `IBKR avg cost $${ib.avgCost.toFixed(2)} vs PNTHR $${pnthr.avgCost.toFixed(2)} ($${diff.toFixed(2)} diff)`, 'IBKR_AVG');
+      const ibkrDoc = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
+      if (ibkrDoc?.positions) {
+        for (const ib of ibkrDoc.positions) {
+          const pnthr = positions.find(p => p.ticker === ib.ticker);
+          if (!pnthr) continue;
+          // Share mismatch
+          const ibShr = Math.abs(ib.position || 0);
+          const pnthrShr = Object.values(pnthr.fills || {}).filter(f => f?.filled).reduce((s, f) => s + (+f.shares || 0), 0);
+          if (ibShr > 0 && pnthrShr > 0 && ibShr !== pnthrShr) {
+            add(nowISO, 'ℹ️', 'LOW', ib.ticker, `IBKR share mismatch — IBKR: ${ibShr} shr, PNTHR: ${pnthrShr} shr`, 'IBKR_MISMATCH');
+          }
+          // Avg cost mismatch
+          if (ib.avgCost && pnthr.avgCost) {
+            const diff = Math.abs(ib.avgCost - pnthr.avgCost);
+            if (diff >= pnthr.avgCost * 0.001) {
+              add(nowISO, 'ℹ️', 'LOW', ib.ticker, `IBKR avg cost $${ib.avgCost.toFixed(2)} vs PNTHR $${pnthr.avgCost.toFixed(2)} ($${diff.toFixed(2)} diff)`, 'IBKR_AVG');
+            }
           }
         }
       }

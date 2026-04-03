@@ -383,7 +383,12 @@ export async function positionsSave(req, res) {
       position.createdAt = new Date();
       position.updatedAt = new Date();
       position.outcome   = { exitPrice: null, profitPct: null, profitDollar: null, holdingDays: null, exitReason: null };
-      await db.collection('pnthr_portfolio').insertOne(position);
+      try {
+        await db.collection('pnthr_portfolio').insertOne(position);
+      } catch (insertErr) {
+        if (insertErr.code === 11000) return res.status(409).json({ error: 'Position already exists for this ticker' });
+        throw insertErr;
+      }
     }
 
     res.json({ success: true, id: position.id, warning });
@@ -406,6 +411,7 @@ export async function positionsClose(req, res) {
 
     const position = await db.collection('pnthr_portfolio').findOne({ id, ownerId: req.user.userId });
     if (!position) return res.status(404).json({ error: 'Position not found' });
+    if (position.status === 'CLOSED') return res.status(400).json({ error: 'Position already closed' });
 
     const isLong     = position.direction === 'LONG';
     const fills      = position.fills || {};
@@ -529,7 +535,7 @@ export async function tickerHandler(req, res) {
       adx:              a?.value      || null,
       adxRising:        a?.rising     || false,
       volumeRatio,
-      killScore:        k?.totalScore || null,
+      killScore:        k?.totalScore ?? null,
       killTier:         k?.tier       || null,
       killConfirmation: k?.confirmation || null,
       entryQuality:     k?.entryQuality || null,
@@ -581,13 +587,13 @@ export async function regimeHandler(req, res) {
       live = {
         spy: {
           price:     spyPrice || 0,
-          ema21:     spyEma21 || 0,
+          ema21:     spyEma21 ?? null,
           position:  spyPos,
           changePct: quotes['SPY']?.changePct || 0,
         },
         qqq: {
           price:     qqqPrice || 0,
-          ema21:     qqqEma21 || 0,
+          ema21:     qqqEma21 ?? null,
           position:  qqqPos,
           changePct: quotes['QQQ']?.changePct || 0,
         },

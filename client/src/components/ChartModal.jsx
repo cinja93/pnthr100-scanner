@@ -14,11 +14,16 @@ import KillBadge from './KillBadge';
 // Fetched once per session; Map<ticker, killRank (1-10)> for the current week's
 // top-10 stocks. This lets the badge show from ANY page, not just Kill page.
 let _killRankMap = null;
+let _killRankMapTime = 0;
 let _killRankFetching = false;
 const _killRankCallbacks = [];
+const KILL_RANK_TTL = 30 * 60 * 1000; // 30 minutes
 
 function loadKillRanks() {
-  if (_killRankMap) return Promise.resolve(_killRankMap);
+  if (_killRankMap && (Date.now() - _killRankMapTime < KILL_RANK_TTL)) return Promise.resolve(_killRankMap);
+  if (_killRankMap && (Date.now() - _killRankMapTime >= KILL_RANK_TTL)) {
+    _killRankMap = null; // TTL expired — force re-fetch
+  }
   return new Promise((resolve) => {
     _killRankCallbacks.push(resolve);
     if (_killRankFetching) return;
@@ -30,8 +35,9 @@ function loadKillRanks() {
           if (s.killRank <= 10) map.set(s.ticker, s.killRank);
         }
         _killRankMap = map;
+        _killRankMapTime = Date.now();
       })
-      .catch(() => { _killRankMap = new Map(); }) // graceful failure → no badges
+      .catch(() => { _killRankMap = new Map(); _killRankMapTime = Date.now(); }) // graceful failure → no badges
       .finally(() => {
         _killRankFetching = false;
         for (const cb of _killRankCallbacks) cb(_killRankMap);

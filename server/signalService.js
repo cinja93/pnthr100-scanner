@@ -77,7 +77,7 @@ function computeEMASeries(closes, period) {
 // BL (Launch): weekLow is 1–10% above 21-EMA, within first 3 bars of long-daylight streak
 //              (current or previous bar is the 1st or 2nd bar where low > EMA).
 // SS (Failure): weekHigh is 1–10% below 21-EMA, within first 3 bars of short-daylight streak.
-// Phase 5 exit: structural 2-week low/high + 0.1% predatory buffer, trigger on weekly close.
+// Phase 5 exit: structural 2-week low/high breach, trigger on intraweek low (BL) or intraweek high (SS).
 function runStateMachine(weeklyBars, isETF = false) {
   if (weeklyBars.length < EMA_PERIOD + 2) {
     return { signal: null, ema21: null, stopPrice: null };
@@ -360,7 +360,8 @@ export function getCachedSignals() {
 }
 
 /**
- * Return a Set of tickers currently showing developing signal characteristics.
+ * Return a Map of tickers currently showing developing signal characteristics.
+ * Keys are uppercase ticker strings, values are the developing direction ('BL' or 'SS').
  * Uses the in-memory signal cache — no FMP calls, synchronous, safe to call at confirm time.
  *
  * A developing ticker has:
@@ -368,19 +369,25 @@ export function getCachedSignals() {
  *   - SS developing: EMA falling (emaRising === false) but no confirmed SS signal yet
  *   - has lastWeekHigh or lastWeekLow (confirms candle data was available for the check)
  *
+ * If a ticker qualifies as both BL and SS developing (shouldn't happen in practice,
+ * since emaRising is a boolean), the SS entry overwrites the BL entry.
+ *
+ * The Map supports .has(ticker) just like the old Set, so existing call sites
+ * that only check presence still work. Call sites that need direction can use .get(ticker).
+ *
  * This is the fast approximation used at CONFIRM ENTRY to set entryContext.
  * The full within-2%-of-high check runs only in the Pulse developing signals API.
  */
 export function getDevelopingSignalTickers() {
   const signalMap = getCachedSignals();
-  if (!signalMap) return new Set();
-  const tickers = new Set();
+  if (!signalMap) return new Map();
+  const tickers = new Map();
   for (const [ticker, s] of Object.entries(signalMap)) {
     if (s.signal !== 'BL' && s.emaRising === true && s.lastWeekHigh != null) {
-      tickers.add(ticker.toUpperCase());
+      tickers.set(ticker.toUpperCase(), 'BL');
     }
     if (s.signal !== 'SS' && s.emaRising === false && s.lastWeekLow != null) {
-      tickers.add(ticker.toUpperCase());
+      tickers.set(ticker.toUpperCase(), 'SS');
     }
   }
   return tickers;

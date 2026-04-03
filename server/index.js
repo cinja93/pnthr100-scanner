@@ -5558,12 +5558,16 @@ app.get('/api/assistant/headlines', async (req, res) => {
         const exchange = a.exchange || devExchangeMap[ticker] || signalExchange || '';
         // killScore: use null (not 0) when no data — so client scores NOT SCORED (0 pts)
         // instead of LOW (1 pt). killScore=0 is ambiguous; null means "not in pipeline".
+        // maxScore: intentionally null — ChartModal's apex stock object doesn't have
+        // pipelineMaxScore either, so both chip and chart use tier-based scoring (ALPHA,
+        // STRIKING, COILING, etc.) for consistency. Sending maxScore would route the
+        // chip to percentage-based scoring while the chart uses tier thresholds.
         const hasKillData = apexMap[ticker] || killScoreMap[ticker];
         return {
           sector: sec,
           sectorAboveEma: sec ? (st[sec] ?? null) : null,
           killScore: hasKillData ? (a.killScore || 0) : null,
-          maxScore: hasKillData ? (a.maxScore || apexMaxScore) : null,
+          maxScore: null,
           exchange,
           signalAge: a.signalAge ?? null,
           price: price || 0,

@@ -2604,10 +2604,10 @@ export default function CommandCenter({ onNavigate, refreshSignal }) {
             {/* Metric cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 10, marginBottom: 16 }}>
               <MC label="Portfolio equity"
-                value={`$${(portfolioEquity / 1000).toFixed(0)}K`}
-                sub={`${portfolioEquity >= nav ? '+' : ''}$${((portfolioEquity - nav) / 1000).toFixed(0)}K unrealized`}
+                value={`$${Math.round(portfolioEquity / 1000).toLocaleString()}K`}
+                sub={`${portfolioEquity >= nav ? '+' : ''}$${Math.round((portfolioEquity - nav) / 1000).toLocaleString()}K unrealized`}
                 accent={portfolioEquity >= nav ? '#28a745' : '#dc3545'} />
-              <MC label="Net liquidity" value={`$${(nav / 1000).toFixed(0)}K`} />
+              <MC label="Net liquidity" value={`$${Math.round(nav / 1000).toLocaleString()}K`} />
               <MC label="Stock risk"
                 value={`$${heat.stockRisk.toLocaleString()}`}
                 sub={`${heat.stockRiskPct}% of NAV`}

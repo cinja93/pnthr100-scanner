@@ -5482,27 +5482,35 @@ app.get('/api/assistant/headlines', async (req, res) => {
     if (devData) {
       const devTime = devData.computedAt || nowISO;
       const st = devData.sectorTrend || {};
+      // Build kill score map from apex cache for Analyze scoring
+      const killMap = {};
+      try {
+        const { getCachedApexResults } = await import('./apexService.js');
+        const apex = getCachedApexResults();
+        if (apex?.stocks) for (const s of apex.stocks) killMap[s.ticker] = s.totalScore || s.score || 0;
+      } catch { /* non-fatal */ }
+
       for (const s of devData.triggeredToday?.bl || []) {
         const sec = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
         add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW BL SIGNAL${sec ? ` — ${sec}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_BL',
-          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null });
+          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null, killScore: killMap[s.ticker] || 0 });
       }
       for (const s of devData.triggeredToday?.ss || []) {
         const sec = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
         add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW SS SIGNAL${sec ? ` — ${sec}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_SS',
-          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null });
+          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null, killScore: killMap[s.ticker] || 0 });
       }
       for (const s of devData.devBL || []) {
         const sec = (s.sector && s.sector !== '—') ? s.sector : null;
         const dist = s.pctFromHigh <= 0 ? 'past last week high' : `${s.pctFromHigh.toFixed(1)}% from last week high`;
         add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing BL — ${sec ? sec + ', ' : ''}${dist}, price $${s.price.toFixed(2)}`, 'DEV_BL',
-          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null });
+          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null, killScore: killMap[s.ticker] || 0, price: s.price });
       }
       for (const s of devData.devSS || []) {
         const sec = (s.sector && s.sector !== '—') ? s.sector : null;
         const dist = s.pctFromLow <= 0 ? 'past last week low' : `${s.pctFromLow.toFixed(1)}% from last week low`;
         add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing SS — ${sec ? sec + ', ' : ''}${dist}, price $${s.price.toFixed(2)}`, 'DEV_SS',
-          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null });
+          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null, killScore: killMap[s.ticker] || 0, price: s.price });
       }
     }
 

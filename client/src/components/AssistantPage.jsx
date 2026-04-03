@@ -15,7 +15,7 @@
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { API_BASE, authHeaders, fetchIbkrDiscrepancies, fetchIbkrTradesToday } from '../services/api';
 import ChartModal from './ChartModal';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
@@ -1705,46 +1705,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
   const [expanded, setExpanded] = useState(true);
   const [dismissedIds, setDismissedIds] = useState(new Set());
   const [expandedGroups, setExpandedGroups] = useState(new Set());
-  const seenRef = useRef(null);  // { category: Set<ticker> } — baseline from first load
-  const [newTickers, setNewTickers] = useState(new Set()); // tickers that arrived after first load
   const [clickedTickers, setClickedTickers] = useState(new Set()); // tickers user has opened
-
-  // Track which group tickers are new (arrived after the initial baseline)
-  // seenRef is NOT set until we have at least one group item — prevents
-  // false "new" flashing when headlines arrive in stages (positions first,
-  // developing signals 60s later from the cached endpoint).
-  useEffect(() => {
-    const grouped = {};
-    for (const h of headlines) {
-      if (GROUP_CATS.has(h.category) && h.ticker) {
-        if (!grouped[h.category]) grouped[h.category] = new Set();
-        grouped[h.category].add(h.ticker);
-      }
-    }
-    // No group items yet — don't initialize baseline from an empty set
-    if (Object.keys(grouped).length === 0) return;
-
-    if (!seenRef.current) {
-      // First time we see group items — mark everything as baseline (no flash)
-      seenRef.current = {};
-      for (const [cat, tickers] of Object.entries(grouped)) {
-        seenRef.current[cat] = new Set(tickers);
-      }
-      return;
-    }
-    // Subsequent updates — find genuinely new arrivals
-    const fresh = new Set();
-    for (const [cat, tickers] of Object.entries(grouped)) {
-      const baseline = seenRef.current[cat] || new Set();
-      for (const t of tickers) {
-        if (!baseline.has(t)) fresh.add(t);
-      }
-      // Update baseline so a ticker only flashes once
-      if (!seenRef.current[cat]) seenRef.current[cat] = new Set();
-      for (const t of tickers) seenRef.current[cat].add(t);
-    }
-    if (fresh.size > 0) setNewTickers(prev => new Set([...prev, ...fresh]));
-  }, [headlines]);
 
   const visible = headlines.filter(h => !dismissedIds.has(h.id));
   const count = visible.length;
@@ -1772,7 +1733,14 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
         let pct = 0;
         if (analyzeCtx) {
           try {
-            const stockObj = { ticker: h.ticker, signal: direction, sector: h.sector || '', currentPrice: 0 };
+            const stockObj = {
+              ticker: h.ticker,
+              signal: direction,
+              sector: h.sector || '',
+              currentPrice: h.price || 0,
+              totalScore: h.killScore || 0,
+              killScore: h.killScore || 0,
+            };
             const result = computeAnalyzeScore(stockObj, analyzeCtx);
             pct = result?.pct ?? 0;
           } catch { /* non-fatal */ }
@@ -1900,7 +1868,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
               const c = HL[sample.urgency] || HL.LOW;
               const label = GROUP_LABELS[row.category] || row.category;
               const isOpen = expandedGroups.has(row.category);
-              const newInGroup = items.filter(h => newTickers.has(h.ticker) && !clickedTickers.has(h.ticker)).length;
+              const newInGroup = items.filter(h => !clickedTickers.has(h.ticker)).length;
               const isSS = row.category === 'TRIGGERED_SS' || row.category === 'DEV_SS';
               const isBL = row.category === 'TRIGGERED_BL' || row.category === 'DEV_BL';
               const tickerColor = isSS ? '#ef5350' : isBL ? '#4caf50' : c.ticker;
@@ -2030,7 +1998,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
                       {items.map((h, hi) => {
                         const sector = h.sector || null;
                         const emaUp = h.sectorAboveEma;
-                        const isNew = newTickers.has(h.ticker) && !clickedTickers.has(h.ticker);
+                        const isNew = !clickedTickers.has(h.ticker);
                         const aPct = h._analyzePct || 0;
                         return (
                           <span

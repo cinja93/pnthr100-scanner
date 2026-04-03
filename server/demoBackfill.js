@@ -19,6 +19,7 @@
 
 import { connectToDatabase } from './database.js';
 import { serverSizePosition, STRIKE_PCT, LOT_OFFSETS } from './killTestSettings.js';
+import { getSignals } from './signalService.js';
 
 const DEMO_OWNER_ID  = 'demo_fund';
 const DEMO_SEED_NAV  = 9_847_312.64;
@@ -128,6 +129,19 @@ async function main() {
     // ── Check exits on active positions (stop hit, stale hunt if losing) ────
     // Positions that drop from the top 10 are NOT closed — they stay open
     // and are managed by stops. The portfolio accumulates week over week.
+
+    // Fetch live signals for any active tickers not in this week's Kill scores
+    const activeTickers = [...activePositions.keys()];
+    const missingFromKill = activeTickers.filter(t => !killScores.find(k => k.ticker === t));
+    let liveSignals = {};
+    if (missingFromKill.length > 0) {
+      try {
+        liveSignals = await getSignals(missingFromKill);
+      } catch (e) {
+        console.warn('  ⚠ Signal fetch failed for missing tickers:', e.message);
+      }
+    }
+
     for (const [ticker, pos] of activePositions) {
       const ks = killScores.find(k => k.ticker === ticker);
       const currentPrice = ks?.currentPrice || pos.currentPrice || pos.entryPrice;
@@ -151,18 +165,17 @@ async function main() {
         exitPrice  = pos.stopPrice;
       }
 
-      // Check BE/SE signal — LONG exits on signal flip to SS/BE, SHORT on flip to BL/SE
-      // In kill scores, the signal field reflects the current state machine output.
-      // A LONG entered on BL should exit if the ticker now shows BE (or flipped to SS).
-      // A SHORT entered on SS should exit if the ticker now shows SE (or flipped to BL).
-      if (!exitReason && ks) {
-        const curSignal = ks.signal;
-        if (isLong && (curSignal === 'BE' || curSignal === 'SS')) {
-          exitReason = 'SIGNAL';
-          exitPrice  = currentPrice;
-        } else if (!isLong && (curSignal === 'SE' || curSignal === 'BL')) {
-          exitReason = 'SIGNAL';
-          exitPrice  = currentPrice;
+      // Check BE/SE signal — use Kill scores first, fall back to live signal service
+      if (!exitReason) {
+        const curSignal = ks?.signal || liveSignals[ticker]?.signal;
+        if (curSignal) {
+          if (isLong && (curSignal === 'BE' || curSignal === 'SS')) {
+            exitReason = 'SIGNAL';
+            exitPrice  = currentPrice;
+          } else if (!isLong && (curSignal === 'SE' || curSignal === 'BL')) {
+            exitReason = 'SIGNAL';
+            exitPrice  = currentPrice;
+          }
         }
       }
 

@@ -47,10 +47,10 @@ export async function connectToDatabase() {
       { ticker: 1, weekOf: 1 }, { unique: true }
     );
 
-    // Per-user portfolio: prevent duplicate active positions for the same ticker
+    // Per-user portfolio: non-unique index for fast lookups by ticker+owner+status
+    // Duplicate prevention handled in application code (findOne guard + try/catch on insert)
     await db.collection('pnthr_portfolio').createIndex(
-      { ticker: 1, ownerId: 1, status: 1 },
-      { unique: true, partialFilterExpression: { status: { $ne: 'CLOSED' } } }
+      { ticker: 1, ownerId: 1, status: 1 }
     );
 
     console.log('✅ Connected to MongoDB');
@@ -333,7 +333,7 @@ export async function getWatchlistTickers(userId) {
     const database = await connectToDatabase();
     if (!database) return [];
     const collection = database.collection('watchlist');
-    const uid = safeObjectId(userId);
+    const uid = /^[a-f\d]{24}$/i.test(String(userId)) ? new ObjectId(userId) : String(userId);
     const docs = await collection.find({ userId: uid }).sort({ addedAt: 1 }).toArray();
     return docs.map(doc => doc.ticker);
   } catch (error) {
@@ -347,7 +347,7 @@ export async function addToWatchlist(ticker, userId) {
     const database = await connectToDatabase();
     if (!database) throw new Error('Database not available');
     const collection = database.collection('watchlist');
-    const uid = safeObjectId(userId);
+    const uid = /^[a-f\d]{24}$/i.test(String(userId)) ? new ObjectId(userId) : String(userId);
     const upper = ticker.toUpperCase();
     const existing = await collection.findOne({ userId: uid, ticker: upper });
     if (existing) throw new Error(`${upper} is already on your watchlist`);
@@ -365,7 +365,7 @@ export async function removeFromWatchlist(ticker, userId) {
     const database = await connectToDatabase();
     if (!database) throw new Error('Database not available');
     const collection = database.collection('watchlist');
-    const uid = safeObjectId(userId);
+    const uid = /^[a-f\d]{24}$/i.test(String(userId)) ? new ObjectId(userId) : String(userId);
     const upper = ticker.toUpperCase();
     const result = await collection.deleteOne({ userId: uid, ticker: upper });
     if (result.deletedCount === 0) throw new Error(`${upper} not found in watchlist`);
@@ -425,13 +425,15 @@ export async function findUserByEmail(email) {
 export async function getUserProfile(userId) {
   const database = await connectToDatabase();
   if (!database) return null;
-  return database.collection('user_profiles').findOne({ userId: safeObjectId(userId) });
+  // Support both ObjectId user IDs and plain string IDs (e.g. 'demo_fund')
+  const uid = /^[a-f\d]{24}$/i.test(String(userId)) ? new ObjectId(userId) : String(userId);
+  return database.collection('user_profiles').findOne({ userId: uid });
 }
 
 export async function upsertUserProfile(userId, updates) {
   const database = await connectToDatabase();
   if (!database) throw new Error('Database not available');
-  const uid = safeObjectId(userId);
+  const uid = /^[a-f\d]{24}$/i.test(String(userId)) ? new ObjectId(userId) : String(userId);
   const now = new Date();
   const result = await database.collection('user_profiles').findOneAndUpdate(
     { userId: uid },

@@ -120,29 +120,27 @@ async function openDemoPositions(db, killScores, regime, nav) {
 
   if (top10.length === 0) return [];
 
-  // Fetch current prices
-  const quotes = await fetchQuotes(top10.map(k => k.ticker));
+  // Use the Kill score's current price as reference for sizing.
+  // Lot 1 fill is NOT filled now — it gets filled at Monday's open price
+  // by the price refresh loop (fillPendingLot1).
   const opened = [];
 
   for (const k of top10) {
-    const quote = quotes[k.ticker];
-    if (!quote?.price) continue;
+    const refPrice = k.currentPrice;
+    if (!refPrice) continue;
 
-    const entryPrice = quote.price;
     const isLong     = k.signal === 'BL';
     const direction  = isLong ? 'LONG' : 'SHORT';
 
-    // Compute stop from signal data in kill scores
-    // Use a conservative 3% structural stop if no signal stop available
-    const fallbackStop = isLong
-      ? +(entryPrice * 0.97).toFixed(2)
-      : +(entryPrice * 1.03).toFixed(2);
-    const stopPrice = fallbackStop;
+    // Conservative 3% structural stop from Friday's reference price
+    const stopPrice = isLong
+      ? +(refPrice * 0.97).toFixed(2)
+      : +(refPrice * 1.03).toFixed(2);
 
-    // Size the position
+    // Size the position using Friday's reference price
     const sized = serverSizePosition({
       nav,
-      entryPrice,
+      entryPrice: refPrice,
       stopPrice,
       riskPct: DEMO_RISK_PCT,
     });
@@ -152,10 +150,10 @@ async function openDemoPositions(db, killScores, regime, nav) {
     const lot1Shares  = Math.max(1, Math.round(totalShares * STRIKE_PCT[0]));
 
     const posId    = genId();
-    const entryDate = todayStr();
 
+    // Lot 1 is NOT filled yet — will be filled at Monday's open by fillPendingLot1()
     const fills = {
-      1: { filled: true,  price: entryPrice, shares: lot1Shares, date: entryDate },
+      1: { filled: false, shares: lot1Shares },
       2: { filled: false },
       3: { filled: false },
       4: { filled: false },
@@ -166,10 +164,10 @@ async function openDemoPositions(db, killScores, regime, nav) {
       id:            posId,
       ticker:        k.ticker,
       direction,
-      entryPrice,
+      entryPrice:    refPrice,  // Updated to Monday open when Lot 1 fills
       originalStop:  stopPrice,
       stopPrice,
-      currentPrice:  entryPrice,
+      currentPrice:  refPrice,
       fills,
       sector:        k.sector || null,
       exchange:      k.exchange || null,
@@ -513,10 +511,17 @@ export async function updateDemoPortfolio() {
   ]);
   const quotes = await fetchQuotes([...allTickers]);
 
-  // 6. Check exits on ALL active positions (stop hit, stale hunt if losing)
+  // 6a. Fill any pending Lot 1 from last week's Friday opens
+  await fillPendingLot1(db, quotes);
+
+  // 6b. Check exits on ALL active positions (stop hit, stale hunt if losing)
   // Positions that drop from the top 10 are NOT closed — they stay open
   // and are managed by stops. The portfolio accumulates week over week.
-  await checkExits(db, active, quotes);
+  // Re-read positions after Lot 1 fills
+  const activeWithFills = await db.collection('pnthr_portfolio')
+    .find({ ownerId: DEMO_OWNER_ID, status: { $ne: 'CLOSED' } })
+    .toArray();
+  await checkExits(db, activeWithFills, quotes);
 
   // 8. Refresh NAV after exits
   nav = await getDemoNav(db);
@@ -554,6 +559,63 @@ export async function updateDemoPortfolio() {
   console.log(`[DemoEngine] Complete in ${((Date.now() - start) / 1000).toFixed(1)}s | NAV: $${finalNav.toLocaleString()}`);
 }
 
+// ── Core: Fill Pending Lot 1 at Monday's Open ───────────────────────────────
+// Positions opened on Friday have fills.1.filled=false. On the next weekday
+// (Monday), we fill Lot 1 at the current market price (which IS Monday's open
+// if this runs early enough, or close to it).
+
+async function fillPendingLot1(db, quotes) {
+  const pending = await db.collection('pnthr_portfolio')
+    .find({
+      ownerId: DEMO_OWNER_ID,
+      status: { $ne: 'CLOSED' },
+      'fills.1.filled': false,
+    })
+    .toArray();
+
+  if (pending.length === 0) return 0;
+
+  // Only fill on weekdays (Mon-Fri)
+  const dow = new Date().getDay();
+  if (dow === 0 || dow === 6) return 0;
+
+  let filled = 0;
+  for (const p of pending) {
+    const quote = quotes[p.ticker];
+    if (!quote?.price) continue;
+
+    const fillPrice = quote.price;
+    const isLong    = p.direction === 'LONG';
+    const lot1Shares = p.fills[1]?.shares || 1;
+
+    // Recalculate stop from Monday's actual fill price (3% structural stop)
+    const newStop = isLong
+      ? +(fillPrice * 0.97).toFixed(2)
+      : +(fillPrice * 1.03).toFixed(2);
+
+    await db.collection('pnthr_portfolio').updateOne(
+      { id: p.id, ownerId: DEMO_OWNER_ID },
+      {
+        $set: {
+          'fills.1.filled': true,
+          'fills.1.price':  fillPrice,
+          'fills.1.date':   todayStr(),
+          entryPrice:       fillPrice,
+          originalStop:     newStop,
+          stopPrice:        newStop,
+          currentPrice:     fillPrice,
+          updatedAt:        new Date(),
+        },
+      }
+    );
+
+    filled++;
+    console.log(`[DemoEngine] Lot 1 filled: ${p.ticker} @ $${fillPrice.toFixed(2)} (stop $${newStop.toFixed(2)})`);
+  }
+
+  return filled;
+}
+
 // ── 15-min Price Refresh (for demo mode live feel) ───────────────────────────
 
 export async function refreshDemoPrices() {
@@ -568,6 +630,10 @@ export async function refreshDemoPrices() {
 
   const quotes = await fetchQuotes(active.map(p => p.ticker));
 
+  // Fill any pending Lot 1 positions (opened Friday, fill at Monday open)
+  await fillPendingLot1(db, quotes);
+
+  // Update current prices on all active positions
   for (const p of active) {
     const quote = quotes[p.ticker];
     if (!quote?.price) continue;
@@ -585,7 +651,11 @@ export async function refreshDemoPrices() {
   }
 
   // Also check exits and lot fills during price refresh
-  await checkExits(db, active, quotes);
+  // Re-read active positions since fillPendingLot1 may have updated fills
+  const refreshed = await db.collection('pnthr_portfolio')
+    .find({ ownerId: DEMO_OWNER_ID, status: { $ne: 'CLOSED' } })
+    .toArray();
+  await checkExits(db, refreshed, quotes);
   const stillActive = await db.collection('pnthr_portfolio')
     .find({ ownerId: DEMO_OWNER_ID, status: { $ne: 'CLOSED' } })
     .toArray();

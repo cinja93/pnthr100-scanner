@@ -23,9 +23,49 @@ import { serverSizePosition, STRIKE_PCT, LOT_OFFSETS } from './killTestSettings.
 const DEMO_OWNER_ID  = 'demo_fund';
 const DEMO_SEED_NAV  = 9_847_312.64;
 const DEMO_RISK_PCT  = 1;
+const FMP_API_KEY    = () => process.env.FMP_API_KEY;
+const FMP_BASE       = 'https://financialmodelingprep.com/api/v3';
 
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// Get the next trading day (Monday, or Tuesday if Monday is a holiday)
+function getNextMonday(fridayStr) {
+  const friday = new Date(fridayStr + 'T12:00:00Z');
+  const monday = new Date(friday);
+  monday.setDate(monday.getDate() + 3);
+  return monday.toISOString().split('T')[0];
+}
+
+// Fetch Monday opening prices for a batch of tickers after a Friday
+async function fetchMondayOpenPrices(tickers, fridayWeekOf) {
+  const mondayStr = getNextMonday(fridayWeekOf);
+  // Fetch a few days range in case Monday is a holiday
+  const endDate = new Date(mondayStr + 'T12:00:00Z');
+  endDate.setDate(endDate.getDate() + 4);
+  const endStr = endDate.toISOString().split('T')[0];
+
+  const results = {};
+  for (const ticker of tickers) {
+    try {
+      const url = `${FMP_BASE}/historical-price-full/${ticker}?from=${mondayStr}&to=${endStr}&apikey=${FMP_API_KEY()}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const bars = data?.historical || [];
+        // Bars come newest-first; find the earliest bar (first trading day after Friday)
+        bars.sort((a, b) => a.date.localeCompare(b.date));
+        const firstBar = bars[0];
+        if (firstBar?.open) {
+          results[ticker] = { open: firstBar.open, date: firstBar.date };
+        }
+      }
+    } catch (e) {
+      console.warn(`  ⚠ Failed to fetch Monday open for ${ticker}:`, e.message);
+    }
+  }
+  return results;
 }
 
 async function main() {
@@ -191,16 +231,36 @@ async function main() {
     }
 
     // ── Open new positions for top 10 we don't hold ─────────────────────────
+    // Fetch Monday opening prices — we enter at Monday open, not Friday close
+    const newTickers = top10.filter(k => !activePositions.has(k.ticker)).map(k => k.ticker);
+    const mondayDate = getNextMonday(weekOf);
+    const mondayIsInFuture = new Date(mondayDate + 'T12:00:00Z') > new Date();
+    const mondayPrices = (newTickers.length > 0 && !mondayIsInFuture)
+      ? await fetchMondayOpenPrices(newTickers, weekOf)
+      : {};
+
     for (const k of top10) {
       if (activePositions.has(k.ticker)) continue;
 
-      const entryPrice = k.currentPrice;
+      // Use Monday open price; fall back to Friday's Kill price if FMP data unavailable
+      // If Monday hasn't happened yet, leave Lot 1 unfilled for live engine to fill
+      const mondayData = mondayPrices[k.ticker];
+      const entryPrice = mondayData?.open || k.currentPrice;
+      const entryDate  = mondayData?.date || mondayDate;
       if (!entryPrice) continue;
+
+      const lot1Filled = !mondayIsInFuture; // Only fill if Monday has passed
+
+      if (mondayData?.open) {
+        console.log(`  📊 ${k.ticker}: Friday $${k.currentPrice?.toFixed(2)} → Monday open $${mondayData.open.toFixed(2)} (${mondayData.date})`);
+      } else if (mondayIsInFuture) {
+        console.log(`  ⏳ ${k.ticker}: Lot 1 pending — Monday open not yet available`);
+      }
 
       const isLong    = k.signal === 'BL';
       const direction = isLong ? 'LONG' : 'SHORT';
 
-      // Conservative 3% stop
+      // Conservative 3% stop from Monday's open price
       const stopPrice = isLong
         ? +(entryPrice * 0.97).toFixed(2)
         : +(entryPrice * 1.03).toFixed(2);
@@ -211,10 +271,11 @@ async function main() {
       const totalShares = sized.totalShares;
       const lot1Shares  = Math.max(1, Math.round(totalShares * STRIKE_PCT[0]));
       const posId       = genId();
-      const entryDate   = weekOf;
 
       const fills = {
-        1: { filled: true, price: entryPrice, shares: lot1Shares, date: entryDate },
+        1: lot1Filled
+          ? { filled: true, price: entryPrice, shares: lot1Shares, date: entryDate }
+          : { filled: false, shares: lot1Shares },
         2: { filled: false }, 3: { filled: false }, 4: { filled: false }, 5: { filled: false },
       };
 

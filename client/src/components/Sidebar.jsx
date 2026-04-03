@@ -121,7 +121,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           <span className={styles.appNameYellow}>PNTHR's</span>{' '}
           <span className={styles.appNameWhite}>Den</span>
         </div>
-        <div style={{ fontSize: 8, color: isDemo ? '#fcf000' : '#444', letterSpacing: '0.08em', textAlign: 'center', marginTop: 2, fontFamily: 'monospace' }}>
+        <div style={{ fontSize: 8, color: '#444', letterSpacing: '0.08em', textAlign: 'center', marginTop: 2, fontFamily: 'monospace' }}>
           {isDemo ? `Dv${APP_VERSION}` : `v${APP_VERSION}`}
         </div>
       </div>
@@ -179,17 +179,16 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               gap: 4, cursor: 'pointer', padding: '3px 0', marginBottom: 4,
-              opacity: isDemo ? 0.9 : 0.25,
+              opacity: 0.25,
               transition: 'opacity 0.3s',
             }}
           >
             <div style={{
               width: 8, height: 8, borderRadius: '50%',
-              background: isDemo ? '#fcf000' : '#555',
-              boxShadow: isDemo ? '0 0 6px #fcf000' : 'none',
+              background: '#555',
+              boxShadow: 'none',
               transition: 'all 0.3s',
             }} />
-            {isDemo && <span style={{ fontSize: 7, color: '#fcf000', letterSpacing: '0.1em', fontFamily: 'monospace' }}>DEMO</span>}
           </div>
         )}
         <div className={styles.loveFrame}>

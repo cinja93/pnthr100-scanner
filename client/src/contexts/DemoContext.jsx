@@ -5,12 +5,14 @@
 // When active, all user-scoped API calls append ?demo=1 so the server
 // swaps ownerId to 'demo_fund', showing the auto-traded Kill top 10 portfolio.
 //
+// Persists to localStorage so refreshing the page stays in demo mode.
 // Admin-only. Toggle is a subtle icon in the sidebar footer.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { apiFetch, authHeaders, setDemoMode } from '../services/api';
 
+const STORAGE_KEY = 'pnthr_demo_mode';
 const DemoContext = createContext({ isDemo: false, toggleDemo: () => {} });
 
 export function useDemo() {
@@ -18,7 +20,24 @@ export function useDemo() {
 }
 
 export function DemoProvider({ children }) {
-  const [isDemo, setIsDemo] = useState(false);
+  const [isDemo, setIsDemo] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const active = saved === '1';
+    // Apply immediately on load so the very first fetch calls get ?demo=1
+    if (active) setDemoMode(true);
+    return active;
+  });
+
+  // Notify server on mount if demo was persisted
+  useEffect(() => {
+    if (isDemo) {
+      apiFetch('/api/demo/toggle', {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: true }),
+      }).catch(() => {});
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleDemo = useCallback(async () => {
     const next = !isDemo;
@@ -33,6 +52,7 @@ export function DemoProvider({ children }) {
     }
     setDemoMode(next);
     setIsDemo(next);
+    localStorage.setItem(STORAGE_KEY, next ? '1' : '0');
   }, [isDemo]);
 
   return (

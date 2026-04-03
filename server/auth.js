@@ -38,6 +38,7 @@ export function resolveRole(email) {
 }
 
 // Express middleware — verifies Bearer token and sets req.user = { userId, email, role }
+// When ?demo=1 is present and user is admin, swaps userId to demo_fund.
 export function authenticateJWT(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader?.startsWith('Bearer ')) {
@@ -50,6 +51,11 @@ export function authenticateJWT(req, res, next) {
     // on the next request without requiring re-login
     const role = resolveRole(payload.email);
     req.user = { userId: payload.userId, email: payload.email, role };
+    // Demo mode: swap userId to demo_fund for admin users (exclude /api/demo/* endpoints)
+    if (req.query?.demo === '1' && role === 'admin' && !req.path?.includes('/demo')) {
+      req.user.userId = 'demo_fund';
+      req.user._isDemo = true;
+    }
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });

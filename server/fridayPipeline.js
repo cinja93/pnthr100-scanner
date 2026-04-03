@@ -23,6 +23,7 @@ import { checkCaseStudyEntries }  from './killHistory.js';
 import { saveWeeklySnapshot, getCurrentWeekOf } from './signalHistoryService.js';
 import { getKillTestSettings, serverSizePosition, buildServerLotConfig } from './killTestSettings.js';
 import { checkFeastAlerts } from './killTestDailyUpdate.js';
+import { updateDemoPortfolio } from './demoEngine.js';
 import { getLastFriday } from './technicalUtils.js';
 
 // ── Fetch VIX / 10Y Treasury / DXY from FMP ──────────────────────────────────
@@ -662,6 +663,13 @@ export async function runFridayKillPipeline() {
       for (const s of scored.slice(0, 5)) {
         console.log(`  #${scored.indexOf(s) + 1} ${s.ticker.padEnd(6)} ${s.signal} | ${s.tier.padEnd(18)} | ${s.apexScore} pts | ${s.confirmation}`);
       }
+    }
+
+    // ── Demo Fund Portfolio Update ──────────────────────────────────────────
+    try {
+      await updateDemoPortfolio();
+    } catch (err) {
+      console.error('[Kill Pipeline] Demo portfolio update failed (non-fatal):', err.message);
     }
 
     // ── Portfolio Return Snapshot (per user who has an accountSize) ──────────

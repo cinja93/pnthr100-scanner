@@ -52,6 +52,7 @@ import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
 import { calculateSectorExposure, generateSectorRecommendations } from './sectorExposure.js';
 import { sendApprovalRequestEmail, sendWelcomeEmail, sendDenialEmail } from './emailService.js';
 import { ibkrSync, getOvernightFills } from './ibkrSync.js';
+import { DEMO_OWNER_ID, startDemoPriceRefresh, stopDemoPriceRefresh } from './demoEngine.js';
 import {
   generateAssistantTasks,
   getStopSyncRows,
@@ -256,6 +257,28 @@ app.use('/api', (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
   if (apiKey && apiKey === API_KEY) return next();
   authenticateJWT(req, res, next);
+});
+
+// ── Demo mode middleware ─────────────────────────────────────────────────────
+// When ?demo=1 is present, swap req.user.userId to 'demo_fund'.
+// Only admin users can activate demo mode. The client toggles this.
+app.use('/api', (req, res, next) => {
+  if (req.query.demo === '1' && req.user?.role === 'admin') {
+    req.user.userId = DEMO_OWNER_ID;
+    req.user._isDemo = true;
+  }
+  next();
+});
+
+// ── Demo mode toggle endpoint ────────────────────────────────────────────────
+app.post('/api/demo/toggle', authenticateJWT, requireAdmin, (req, res) => {
+  const { active } = req.body;
+  if (active) {
+    startDemoPriceRefresh();
+  } else {
+    stopDemoPriceRefresh();
+  }
+  res.json({ ok: true, demoActive: !!active });
 });
 
 // Cache for stock data (refresh every 5 minutes)

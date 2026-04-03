@@ -2,6 +2,9 @@ import { useState, useRef } from 'react';
 import styles from './Sidebar.module.css';
 import pnthrLogo from '../assets/panther head.png';
 import builtWithLove from '../assets/Built with Love.jpg';
+import { useDemo } from '../contexts/DemoContext';
+
+const APP_VERSION = '4.3.0';
 
 const NAV_GROUPS = [
   {
@@ -72,6 +75,7 @@ function BatchStatsTooltip({ stats, top }) {
 }
 
 export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, onLogout, longStats, shortStats }) {
+  const { isDemo, toggleDemo } = useDemo();
   const [tooltipKey, setTooltipKey] = useState(null);
   const [tooltipTop, setTooltipTop] = useState(0);
   const btnRefs = useRef({});
@@ -109,13 +113,16 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   const activeTooltipStats = tooltipKey === 'long' ? longStats : tooltipKey === 'short' ? shortStats : null;
 
   return (
-    <aside className={styles.sidebar}>
+    <aside className={styles.sidebar} style={isDemo ? { borderTop: '2px solid #fcf000' } : undefined}>
       {/* Logo + PNTHR's Den */}
       <div className={styles.logoArea}>
         <img src={pnthrLogo} alt="PNTHR" className={styles.logo} />
         <div className={styles.appName}>
           <span className={styles.appNameYellow}>PNTHR's</span>{' '}
           <span className={styles.appNameWhite}>Den</span>
+        </div>
+        <div style={{ fontSize: 8, color: isDemo ? '#fcf000' : '#444', letterSpacing: '0.08em', textAlign: 'center', marginTop: 2, fontFamily: 'monospace' }}>
+          {isDemo ? `Dv${APP_VERSION}` : `v${APP_VERSION}`}
         </div>
       </div>
 
@@ -163,6 +170,26 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           <div className={styles.userArea}>
             <span className={styles.userEmail} title={currentUser.email}>{currentUser.email}</span>
             <button className={styles.logoutBtn} onClick={onLogout} title="Sign out">Sign out</button>
+          </div>
+        )}
+        {isAdmin && (
+          <div
+            onClick={toggleDemo}
+            title={isDemo ? 'Demo mode active' : ''}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 4, cursor: 'pointer', padding: '3px 0', marginBottom: 4,
+              opacity: isDemo ? 0.9 : 0.12,
+              transition: 'opacity 0.3s',
+            }}
+          >
+            <div style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: isDemo ? '#fcf000' : '#333',
+              boxShadow: isDemo ? '0 0 6px #fcf000' : 'none',
+              transition: 'all 0.3s',
+            }} />
+            {isDemo && <span style={{ fontSize: 7, color: '#fcf000', letterSpacing: '0.1em', fontFamily: 'monospace' }}>DEMO</span>}
           </div>
         )}
         <div className={styles.loveFrame}>

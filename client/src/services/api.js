@@ -10,9 +10,19 @@ export function clearAuthToken() { _token = null; }
 let _onUnauthorized = null;
 export function setOnUnauthorized(fn) { _onUnauthorized = fn; }
 
-// Central fetch wrapper: handles 401 so callers don't need to check individually
+// Demo mode — when active, all /api/* calls get ?demo=1 appended
+let _demoMode = false;
+export function setDemoMode(active) { _demoMode = active; }
+export function isDemoMode() { return _demoMode; }
+
+// Central fetch wrapper: handles 401 + demo param injection
 export async function apiFetch(url, options = {}) {
-  const response = await fetch(url, options);
+  let finalUrl = url;
+  if (_demoMode && finalUrl.includes('/api/')) {
+    const sep = finalUrl.includes('?') ? '&' : '?';
+    finalUrl = finalUrl + sep + 'demo=1';
+  }
+  const response = await fetch(finalUrl, options);
   if (response.status === 401 && _onUnauthorized) {
     _onUnauthorized(); // clears token + redirects to login
   }

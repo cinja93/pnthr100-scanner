@@ -5222,10 +5222,11 @@ async function fetchDevelopingSignalsCached() {
         ssCandidates.push({ ticker, ema21: s.ema21, lastWeekHigh: s.lastWeekHigh, lastWeekLow: s.lastWeekLow, lastWeekClose: s.lastWeekClose });
     }
 
-    // Fetch quotes + profiles (sector) in parallel chunks
+    // Fetch quotes + profiles (sector + exchange) in parallel chunks
     const allTickers = [...new Set([...blCandidates.map(c => c.ticker), ...ssCandidates.map(c => c.ticker)])].slice(0, 500);
     const quoteMap = {};
     const sectorMap = {};
+    const exchangeMap = {};  // ticker → 'NASDAQ' | 'NYSE' | etc
     for (let i = 0; i < allTickers.length; i += 100) {
       try {
         const chunk = allTickers.slice(i, i + 100);
@@ -5234,7 +5235,13 @@ async function fetchDevelopingSignalsCached() {
           fetch(`https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`),
         ]);
         if (quoteR.ok) { const data = await quoteR.json(); if (Array.isArray(data)) for (const q of data) quoteMap[q.symbol] = q; }
-        if (profileR.ok) { const data = await profileR.json(); if (Array.isArray(data)) for (const p of data) if (p.symbol && p.sector) sectorMap[p.symbol] = normalizeSector(p.sector); }
+        if (profileR.ok) {
+          const data = await profileR.json();
+          if (Array.isArray(data)) for (const p of data) {
+            if (p.symbol && p.sector) sectorMap[p.symbol] = normalizeSector(p.sector);
+            if (p.symbol && p.exchangeShortName) exchangeMap[p.symbol] = p.exchangeShortName.toUpperCase();
+          }
+        }
       } catch { /* non-fatal */ }
     }
 
@@ -5248,7 +5255,7 @@ async function fetchDevelopingSignalsCached() {
       if (price <= weekOpen) continue;
       const priceVsEma = +((price - c.ema21) / c.ema21 * 100).toFixed(2);
       if (priceVsEma < -2 || priceVsEma > 20) continue;
-      devBL.push({ ticker: c.ticker, sector: sectorMap[c.ticker] || '—', price, ema21: c.ema21, pctFromHigh, priceVsEma });
+      devBL.push({ ticker: c.ticker, sector: sectorMap[c.ticker] || '—', exchange: exchangeMap[c.ticker] || '', price, ema21: c.ema21, pctFromHigh, priceVsEma });
     }
     devBL.sort((a, b) => a.pctFromHigh - b.pctFromHigh);
 
@@ -5262,7 +5269,7 @@ async function fetchDevelopingSignalsCached() {
       if (price >= weekOpen) continue;
       const priceVsEma = +((price - c.ema21) / c.ema21 * 100).toFixed(2);
       if (priceVsEma > 2 || priceVsEma < -20) continue;
-      devSS.push({ ticker: c.ticker, sector: sectorMap[c.ticker] || '—', price, ema21: c.ema21, pctFromLow, priceVsEma });
+      devSS.push({ ticker: c.ticker, sector: sectorMap[c.ticker] || '—', exchange: exchangeMap[c.ticker] || '', price, ema21: c.ema21, pctFromLow, priceVsEma });
     }
     devSS.sort((a, b) => a.pctFromLow - b.pctFromLow);
 
@@ -5276,11 +5283,11 @@ async function fetchDevelopingSignalsCached() {
       if (ageHrs < 25) {
         const triggered = await db2.collection('pnthr_daily_signals')
           .find({ isNew: true }, { projection: { ticker: 1, sector: 1, signal: 1, signalDate: 1 } }).toArray();
-        // Use FMP profile sectorMap first, fall back to DB sector
-        triggeredToday.bl = triggered.filter(s => s.signal === 'BL').map(s => ({ ticker: s.ticker, sector: sectorMap[s.ticker] || s.sector || '—' }));
-        triggeredToday.ss = triggered.filter(s => s.signal === 'SS').map(s => ({ ticker: s.ticker, sector: sectorMap[s.ticker] || s.sector || '—' }));
-        // Fetch profiles for triggered tickers missing from sectorMap
-        const missingTickers = triggered.filter(s => !sectorMap[s.ticker]).map(s => s.ticker);
+        // Use FMP profile sectorMap + exchangeMap first, fall back to DB sector
+        triggeredToday.bl = triggered.filter(s => s.signal === 'BL').map(s => ({ ticker: s.ticker, sector: sectorMap[s.ticker] || s.sector || '—', exchange: exchangeMap[s.ticker] || '' }));
+        triggeredToday.ss = triggered.filter(s => s.signal === 'SS').map(s => ({ ticker: s.ticker, sector: sectorMap[s.ticker] || s.sector || '—', exchange: exchangeMap[s.ticker] || '' }));
+        // Fetch profiles for triggered tickers missing from sectorMap or exchangeMap
+        const missingTickers = triggered.filter(s => !sectorMap[s.ticker] || !exchangeMap[s.ticker]).map(s => s.ticker);
         if (missingTickers.length > 0) {
           try {
             for (let i = 0; i < missingTickers.length; i += 100) {
@@ -5288,12 +5295,15 @@ async function fetchDevelopingSignalsCached() {
               const pr = await fetch(`https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`);
               if (pr.ok) {
                 const pd = await pr.json();
-                if (Array.isArray(pd)) for (const p of pd) if (p.symbol && p.sector) sectorMap[p.symbol] = normalizeSector(p.sector);
+                if (Array.isArray(pd)) for (const p of pd) {
+                  if (p.symbol && p.sector) sectorMap[p.symbol] = normalizeSector(p.sector);
+                  if (p.symbol && p.exchangeShortName) exchangeMap[p.symbol] = p.exchangeShortName.toUpperCase();
+                }
               }
             }
-            // Re-apply sectors now that sectorMap is fuller
-            triggeredToday.bl = triggeredToday.bl.map(s => ({ ...s, sector: sectorMap[s.ticker] || s.sector }));
-            triggeredToday.ss = triggeredToday.ss.map(s => ({ ...s, sector: sectorMap[s.ticker] || s.sector }));
+            // Re-apply sectors + exchanges now that maps are fuller
+            triggeredToday.bl = triggeredToday.bl.map(s => ({ ...s, sector: sectorMap[s.ticker] || s.sector, exchange: exchangeMap[s.ticker] || s.exchange || '' }));
+            triggeredToday.ss = triggeredToday.ss.map(s => ({ ...s, sector: sectorMap[s.ticker] || s.sector, exchange: exchangeMap[s.ticker] || s.exchange || '' }));
           } catch { /* non-fatal */ }
         }
       }
@@ -5330,7 +5340,7 @@ async function fetchDevelopingSignalsCached() {
       }
     } catch { /* non-fatal */ }
 
-    const result = { devBL, devSS, triggeredToday, sectorTrend, computedAt: new Date().toISOString() };
+    const result = { devBL, devSS, triggeredToday, sectorTrend, exchangeMap, computedAt: new Date().toISOString() };
     devSignalsCache = { data: result, timestamp: now };
     return result;
   } catch (err) {
@@ -5482,33 +5492,76 @@ app.get('/api/assistant/headlines', async (req, res) => {
     if (devData) {
       const devTime = devData.computedAt || nowISO;
       const st = devData.sectorTrend || {};
+      const devExchangeMap = devData.exchangeMap || {};  // ticker → 'NASDAQ' | 'NYSE' etc
+
       // Build enrichment map from apex cache for Analyze scoring
       const apexMap = {};  // ticker → { killScore, exchange, signalAge, maxScore }
+      let apexMaxScore = 1;
       try {
         const { getCachedApexResults } = await import('./apexService.js');
         const apex = getCachedApexResults();
         if (apex?.stocks) {
-          const maxScore = Math.max(...apex.stocks.map(s => s.totalScore || 0), 1);
+          apexMaxScore = Math.max(...apex.stocks.map(s => s.totalScore || 0), 1);
           for (const s of apex.stocks) {
             apexMap[s.ticker] = {
               killScore: s.totalScore || s.score || 0,
               exchange: s.exchange || '',
               signalAge: s.signalAge ?? s.weeksSince ?? null,
-              maxScore,
+              maxScore: apexMaxScore,
             };
           }
         }
       } catch { /* non-fatal */ }
 
+      // Fallback: query pnthr_kill_scores for tickers NOT in live apex cache
+      // This gets historical Kill scores from the DB (populated every Friday)
+      const killScoreMap = {};  // ticker → { killScore, exchange, signalAge }
+      try {
+        // Collect all tickers that need scoring
+        const allHeadlineTickers = [
+          ...(devData.triggeredToday?.bl || []).map(s => s.ticker),
+          ...(devData.triggeredToday?.ss || []).map(s => s.ticker),
+          ...(devData.devBL || []).map(s => s.ticker),
+          ...(devData.devSS || []).map(s => s.ticker),
+        ];
+        const missingFromApex = allHeadlineTickers.filter(t => !apexMap[t]);
+        if (missingFromApex.length > 0) {
+          // Get the latest weekOf from kill_scores
+          const latestDoc = await db.collection('pnthr_kill_scores')
+            .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
+          if (latestDoc?.weekOf) {
+            const killDocs = await db.collection('pnthr_kill_scores')
+              .find({ weekOf: latestDoc.weekOf, ticker: { $in: missingFromApex } },
+                     { projection: { ticker: 1, totalScore: 1, score: 1, exchange: 1, signalAge: 1, weeksSince: 1 } })
+              .toArray();
+            // Also get the max score for this week for percentage calculation
+            const maxDoc = await db.collection('pnthr_kill_scores')
+              .findOne({ weekOf: latestDoc.weekOf }, { sort: { totalScore: -1 }, projection: { totalScore: 1 } });
+            const dbMaxScore = maxDoc?.totalScore || apexMaxScore;
+            for (const d of killDocs) {
+              killScoreMap[d.ticker] = {
+                killScore: d.totalScore || d.score || 0,
+                exchange: d.exchange || '',
+                signalAge: d.signalAge ?? d.weeksSince ?? null,
+                maxScore: dbMaxScore,
+              };
+            }
+          }
+        }
+      } catch (err) { console.error('[headlines] killScore fallback error:', err.message); }
+
       // Helper to build extra fields for each headline
-      const extra = (ticker, sec, price) => {
-        const a = apexMap[ticker] || {};
+      // Priority: apexMap (live) → killScoreMap (DB fallback) → devExchangeMap (FMP profile) → signal object
+      const extra = (ticker, sec, price, signalExchange) => {
+        const a = apexMap[ticker] || killScoreMap[ticker] || {};
+        // Exchange: apex > killScores DB > FMP profile (devExchangeMap) > signal object
+        const exchange = a.exchange || devExchangeMap[ticker] || signalExchange || '';
         return {
           sector: sec,
           sectorAboveEma: sec ? (st[sec] ?? null) : null,
           killScore: a.killScore || 0,
-          maxScore: a.maxScore || 0,
-          exchange: a.exchange || '',
+          maxScore: a.maxScore || apexMaxScore,
+          exchange,
           signalAge: a.signalAge ?? null,
           price: price || 0,
         };
@@ -5517,27 +5570,27 @@ app.get('/api/assistant/headlines', async (req, res) => {
       for (const s of devData.triggeredToday?.bl || []) {
         const sec = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
         // Triggered today = signalAge 0 (brand new)
-        const ex = extra(s.ticker, sec, 0);
+        const ex = extra(s.ticker, sec, 0, s.exchange);
         ex.signalAge = 0;
         add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW BL SIGNAL${sec ? ` — ${sec}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_BL', ex);
       }
       for (const s of devData.triggeredToday?.ss || []) {
         const sec = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
-        const ex = extra(s.ticker, sec, 0);
+        const ex = extra(s.ticker, sec, 0, s.exchange);
         ex.signalAge = 0;
         add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW SS SIGNAL${sec ? ` — ${sec}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_SS', ex);
       }
       for (const s of devData.devBL || []) {
         const sec = (s.sector && s.sector !== '—') ? s.sector : null;
         const dist = s.pctFromHigh <= 0 ? 'past last week high' : `${s.pctFromHigh.toFixed(1)}% from last week high`;
-        const ex = extra(s.ticker, sec, s.price);
+        const ex = extra(s.ticker, sec, s.price, s.exchange);
         ex.isDeveloping = true;  // developing signal flag
         add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing BL — ${sec ? sec + ', ' : ''}${dist}, price $${s.price.toFixed(2)}`, 'DEV_BL', ex);
       }
       for (const s of devData.devSS || []) {
         const sec = (s.sector && s.sector !== '—') ? s.sector : null;
         const dist = s.pctFromLow <= 0 ? 'past last week low' : `${s.pctFromLow.toFixed(1)}% from last week low`;
-        const ex = extra(s.ticker, sec, s.price);
+        const ex = extra(s.ticker, sec, s.price, s.exchange);
         ex.isDeveloping = true;
         add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing SS — ${sec ? sec + ', ' : ''}${dist}, price $${s.price.toFixed(2)}`, 'DEV_SS', ex);
       }

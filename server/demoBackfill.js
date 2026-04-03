@@ -373,8 +373,8 @@ async function main() {
         const lotShares = Math.max(1, Math.round(totalShares * STRIKE_PCT[lot - 1]));
         pos.fills[lot] = { filled: true, price: triggerPrice, shares: lotShares, date: weekOf };
 
-        // Update stop: ratchet to avg cost after Lot 3+
-        if (lot >= 3) {
+        // Update stop: ratchet to avg cost after Lot 2+ (matches live engine)
+        if (lot >= 2) {
           let cumCost = 0, cumShr = 0;
           for (let n = 1; n <= 5; n++) {
             const f = pos.fills[n];
@@ -471,6 +471,88 @@ async function main() {
       }
     }
     console.log(`  Updated ${priceUpdates}/${activeFinal.length} positions with live prices`);
+
+    // ── Final exit + lot fill check with live prices ──────────────────────────
+    // Re-read positions after price update and check stops/signals/lot fills
+    console.log('Checking exits and lot fills with live prices...');
+    const postsRefresh = await db.collection('pnthr_portfolio')
+      .find({ ownerId: DEMO_OWNER_ID, status: { $ne: 'CLOSED' } })
+      .toArray();
+
+    // Fetch signals for all active tickers
+    let finalSignals = {};
+    try {
+      finalSignals = await getSignals(postsRefresh.map(p => p.ticker));
+    } catch { /* best effort */ }
+
+    let finalClosed = 0;
+    for (const p of postsRefresh) {
+      const livePrice = liveQuotes[p.ticker];
+      if (!livePrice) continue;
+
+      const isLong = p.direction === 'LONG';
+      let exitReason = null;
+      let exitPrice  = null;
+
+      // Stop hit
+      if (isLong && livePrice <= p.stopPrice) {
+        exitReason = 'STOP_HIT'; exitPrice = p.stopPrice;
+      } else if (!isLong && livePrice >= p.stopPrice) {
+        exitReason = 'STOP_HIT'; exitPrice = p.stopPrice;
+      }
+
+      // Signal exit
+      if (!exitReason) {
+        const sig = finalSignals[p.ticker]?.signal;
+        if (isLong && (sig === 'BE' || sig === 'SS')) { exitReason = 'SIGNAL'; exitPrice = livePrice; }
+        else if (!isLong && (sig === 'SE' || sig === 'BL')) { exitReason = 'SIGNAL'; exitPrice = livePrice; }
+      }
+
+      if (!exitReason) continue;
+
+      // Calculate P&L
+      const filledArr = Object.values(p.fills || {}).filter(f => f?.filled && f?.price && f?.shares);
+      const totalShares = filledArr.reduce((s, f) => s + f.shares, 0);
+      const totalCost   = filledArr.reduce((s, f) => s + f.shares * f.price, 0);
+      if (totalShares === 0) continue;
+      const avgCost = totalCost / totalShares;
+      const profitPct = isLong ? ((exitPrice - avgCost) / avgCost) * 100 : ((avgCost - exitPrice) / avgCost) * 100;
+      const profitDollar = isLong ? (exitPrice - avgCost) * totalShares : (avgCost - exitPrice) * totalShares;
+
+      await db.collection('pnthr_portfolio').updateOne(
+        { id: p.id, ownerId: DEMO_OWNER_ID },
+        { $set: {
+          status: 'CLOSED', currentPrice: exitPrice, closedAt: new Date(), updatedAt: new Date(),
+          outcome: { exitPrice, profitPct: +profitPct.toFixed(2), profitDollar: +profitDollar.toFixed(2),
+            holdingDays: null, exitReason },
+        } }
+      );
+
+      await db.collection('pnthr_journal').updateOne(
+        { positionId: p.id, ownerId: DEMO_OWNER_ID },
+        { $set: {
+          'performance.status': 'CLOSED', 'performance.avgExitPrice': exitPrice,
+          'performance.totalPnlDollar': +profitDollar.toFixed(2),
+          'performance.realizedPnlDollar': +profitDollar.toFixed(2),
+          'performance.remainingShares': 0,
+          exits: [{ reason: exitReason, price: exitPrice, date: new Date(),
+            shares: totalShares, pnlDollar: +profitDollar.toFixed(2), pnlPct: +profitPct.toFixed(2) }],
+          updatedAt: new Date(),
+        } }
+      );
+
+      nav += profitDollar;
+      finalClosed++;
+      console.log(`  CLOSED ${p.ticker} (${exitReason}) — ${profitPct >= 0 ? '+' : ''}${profitPct.toFixed(1)}% ($${profitDollar.toFixed(0)})`);
+    }
+
+    if (finalClosed > 0) {
+      totalClosed += finalClosed;
+      await db.collection('user_profiles').updateOne(
+        { userId: DEMO_OWNER_ID },
+        { $set: { accountSize: +nav.toFixed(2), updatedAt: new Date() } }
+      );
+    }
   }
 
   // ── Summary ────────────────────────────────────────────────────────────────

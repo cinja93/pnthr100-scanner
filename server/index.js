@@ -5556,11 +5556,14 @@ app.get('/api/assistant/headlines', async (req, res) => {
         const a = apexMap[ticker] || killScoreMap[ticker] || {};
         // Exchange: apex > killScores DB > FMP profile (devExchangeMap) > signal object
         const exchange = a.exchange || devExchangeMap[ticker] || signalExchange || '';
+        // killScore: use null (not 0) when no data — so client scores NOT SCORED (0 pts)
+        // instead of LOW (1 pt). killScore=0 is ambiguous; null means "not in pipeline".
+        const hasKillData = apexMap[ticker] || killScoreMap[ticker];
         return {
           sector: sec,
           sectorAboveEma: sec ? (st[sec] ?? null) : null,
-          killScore: a.killScore || 0,
-          maxScore: a.maxScore || apexMaxScore,
+          killScore: hasKillData ? (a.killScore || 0) : null,
+          maxScore: hasKillData ? (a.maxScore || apexMaxScore) : null,
           exchange,
           signalAge: a.signalAge ?? null,
           price: price || 0,

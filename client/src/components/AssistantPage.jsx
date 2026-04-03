@@ -2257,8 +2257,10 @@ export default function AssistantPage({ onNavigate }) {
   const [headlinesLoading,   setHeadlinesLoading]   = useState(true);
   const [devSignalsAge,      setDevSignalsAge]      = useState(null);
 
-  // Analyze context for scoring chips
-  const analyzeCtx = useAnalyzeContext();
+  // Analyze context for scoring chips — destructure the INNER analyzeContext
+  // (useAnalyzeContext returns { analyzeContext, loading }, but computeAnalyzeScore
+  // expects the inner object with regime, sectorEma, etc.)
+  const { analyzeContext: analyzeCtx } = useAnalyzeContext() || {};
 
   // ── Filter chip sections to analyze >= 90% ────────────────────────────────
   // Runs whenever routines or analyze context updates. For each routine that has

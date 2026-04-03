@@ -1917,8 +1917,8 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                     </span>
                     <span style={{ fontSize: 11, flexShrink: 0, lineHeight: 1, width: 16, textAlign: 'center' }}>{sample.icon}</span>
                     <span style={{
-                      background: c.badge,
-                      color: c.badgeText,
+                      background: isSS ? '#b71c1c' : c.badge,
+                      color: isSS ? '#fff' : c.badgeText,
                       padding: '1px 5px',
                       borderRadius: 2,
                       fontSize: 8,
@@ -1933,7 +1933,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                       {sample.urgency}
                     </span>
                     <span style={{
-                      color: c.text,
+                      color: isSS ? '#ffcdd2' : c.text,
                       fontWeight: 700,
                       fontSize: 10,
                       flex: 1,

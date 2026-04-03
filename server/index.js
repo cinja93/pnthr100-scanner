@@ -259,18 +259,9 @@ app.use('/api', (req, res, next) => {
   authenticateJWT(req, res, next);
 });
 
-// ── Demo mode middleware ─────────────────────────────────────────────────────
-// When ?demo=1 is present, swap req.user.userId to 'demo_fund'.
-// Only admin users can activate demo mode. The client toggles this.
-app.use('/api', (req, res, next) => {
-  if (req.query.demo === '1' && req.user?.role === 'admin') {
-    req.user.userId = DEMO_OWNER_ID;
-    req.user._isDemo = true;
-  }
-  next();
-});
-
 // ── Demo mode toggle endpoint ────────────────────────────────────────────────
+// Demo userId swap is handled inside authenticateJWT (auth.js) so it applies
+// every time auth runs — both at the /api middleware level and at route level.
 app.post('/api/demo/toggle', authenticateJWT, requireAdmin, (req, res) => {
   const { active } = req.body;
   if (active) {

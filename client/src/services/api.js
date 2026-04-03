@@ -10,19 +10,31 @@ export function clearAuthToken() { _token = null; }
 let _onUnauthorized = null;
 export function setOnUnauthorized(fn) { _onUnauthorized = fn; }
 
-// Demo mode — when active, all /api/* calls get ?demo=1 appended
+// Demo mode — when active, all /api/* calls get ?demo=1 appended.
+// Patches window.fetch globally so ALL fetch calls (not just apiFetch) get the param.
 let _demoMode = false;
-export function setDemoMode(active) { _demoMode = active; }
+const _originalFetch = window.fetch.bind(window);
+
+export function setDemoMode(active) {
+  _demoMode = active;
+  if (active) {
+    window.fetch = (url, options) => {
+      let finalUrl = typeof url === 'string' ? url : url.toString();
+      if (finalUrl.includes('/api/') && !finalUrl.includes('demo=1')) {
+        const sep = finalUrl.includes('?') ? '&' : '?';
+        finalUrl = finalUrl + sep + 'demo=1';
+      }
+      return _originalFetch(finalUrl, options);
+    };
+  } else {
+    window.fetch = _originalFetch;
+  }
+}
 export function isDemoMode() { return _demoMode; }
 
-// Central fetch wrapper: handles 401 + demo param injection
+// Central fetch wrapper: handles 401 globally
 export async function apiFetch(url, options = {}) {
-  let finalUrl = url;
-  if (_demoMode && finalUrl.includes('/api/')) {
-    const sep = finalUrl.includes('?') ? '&' : '?';
-    finalUrl = finalUrl + sep + 'demo=1';
-  }
-  const response = await fetch(finalUrl, options);
+  const response = await fetch(url, options);
   if (response.status === 401 && _onUnauthorized) {
     _onUnauthorized(); // clears token + redirects to login
   }

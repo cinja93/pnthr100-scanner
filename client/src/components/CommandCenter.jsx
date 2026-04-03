@@ -2004,6 +2004,21 @@ export default function CommandCenter({ onNavigate, refreshSignal }) {
   const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
   const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
 
+  // Portfolio equity = NAV (cash + realized P&L) + unrealized P&L from open positions
+  const portfolioEquity = useMemo(() => {
+    let unrealized = 0;
+    for (const p of positions) {
+      const avg = avgCostOf(p);
+      const shares = filledSharesOf(p);
+      if (!avg || !shares || !p.currentPrice) continue;
+      const pnl = p.direction === 'SHORT'
+        ? (avg - p.currentPrice) * shares
+        : (p.currentPrice - avg) * shares;
+      unrealized += pnl;
+    }
+    return nav + unrealized;
+  }, [positions, nav]);
+
   // ── Auto-refresh state ─────────────────────────────────────────────────────
   const [lastRefresh,    setLastRefresh]    = useState(null);
   const [refreshing,     setRefreshing]     = useState(false);
@@ -2587,8 +2602,12 @@ export default function CommandCenter({ onNavigate, refreshSignal }) {
             })()}
 
             {/* Metric cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 10, marginBottom: 16 }}>
               <MC label="Net liquidity" value={`$${(nav / 1000).toFixed(0)}K`} />
+              <MC label="Portfolio equity"
+                value={`$${(portfolioEquity / 1000).toFixed(0)}K`}
+                sub={`${portfolioEquity >= nav ? '+' : ''}$${((portfolioEquity - nav) / 1000).toFixed(0)}K unrealized`}
+                accent={portfolioEquity >= nav ? '#28a745' : '#dc3545'} />
               <MC label="Stock risk"
                 value={`$${heat.stockRisk.toLocaleString()}`}
                 sub={`${heat.stockRiskPct}% of NAV`}

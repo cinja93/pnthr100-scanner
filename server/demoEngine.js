@@ -19,7 +19,7 @@ import { getLastFriday } from './technicalUtils.js';
 import { createJournalEntry } from './journalService.js';
 
 export const DEMO_OWNER_ID  = 'demo_fund';
-const DEMO_SEED_NAV         = 9_847_312.64;   // Irregular seed — looks real
+const DEMO_SEED_NAV         = 10_000_000;     // $10M seed
 const DEMO_RISK_PCT         = 1;               // 1% risk per trade
 const LOT_TIME_GATE_DAYS    = 5;               // 5 trading days before Lot 2
 const STALE_HUNT_LIMIT      = 20;              // Max trading days before liquidation

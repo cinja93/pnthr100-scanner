@@ -47,10 +47,10 @@ export async function connectToDatabase() {
       { ticker: 1, weekOf: 1 }, { unique: true }
     );
 
-    // Per-user portfolio: prevent duplicate active positions for the same ticker
+    // Per-user portfolio: non-unique index for fast lookups by ticker+owner+status
+    // Duplicate prevention handled in application code (findOne guard + try/catch on insert)
     await db.collection('pnthr_portfolio').createIndex(
-      { ticker: 1, ownerId: 1, status: 1 },
-      { unique: true, partialFilterExpression: { status: { $ne: 'CLOSED' } } }
+      { ticker: 1, ownerId: 1, status: 1 }
     );
 
     console.log('✅ Connected to MongoDB');

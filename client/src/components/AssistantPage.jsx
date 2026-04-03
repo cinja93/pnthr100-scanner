@@ -1701,7 +1701,7 @@ const GROUP_LABELS = {
   DEV_SS:       'Developing SS',
 };
 
-function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
+function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyzeCtx }) {
   const [expanded, setExpanded] = useState(true);
   const [dismissedIds, setDismissedIds] = useState(new Set());
   const [expandedGroups, setExpandedGroups] = useState(new Set());
@@ -1747,17 +1747,30 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
     });
   };
 
-  // Build grouped + ungrouped items in display order
+  // Build grouped + ungrouped items in display order, sorted by Analyze score
   const { rows, groupCounts } = useMemo(() => {
-    const ungrouped = [];
     const groups = {};  // category → [headline, ...]
     for (const h of visible) {
       if (GROUP_CATS.has(h.category)) {
         if (!groups[h.category]) groups[h.category] = [];
         groups[h.category].push(h);
-      } else {
-        ungrouped.push(h);
       }
+    }
+    // Score and sort each group by Analyze score (highest first)
+    for (const [cat, items] of Object.entries(groups)) {
+      const direction = (cat === 'TRIGGERED_SS' || cat === 'DEV_SS') ? 'SS' : 'BL';
+      for (const h of items) {
+        let pct = 0;
+        if (analyzeCtx) {
+          try {
+            const stockObj = { ticker: h.ticker, signal: direction, sector: h.sector || '', currentPrice: 0 };
+            const result = computeAnalyzeScore(stockObj, analyzeCtx);
+            pct = result?.pct ?? 0;
+          } catch { /* non-fatal */ }
+        }
+        h._analyzePct = pct;
+      }
+      items.sort((a, b) => (b._analyzePct || 0) - (a._analyzePct || 0));
     }
     // Build final rows: ungrouped items stay as-is, groups become a single entry
     const rows = [];
@@ -1773,7 +1786,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
       }
     }
     return { rows, groupCounts: Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, v.length])) };
-  }, [visible]);
+  }, [visible, analyzeCtx]);
 
   const critCount = visible.filter(h => h.urgency === 'CRITICAL').length;
   const highCount = visible.filter(h => h.urgency === 'HIGH').length;
@@ -2008,6 +2021,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                         const sector = h.sector || null;
                         const emaUp = h.sectorAboveEma;
                         const isNew = newTickers.has(h.ticker) && !clickedTickers.has(h.ticker);
+                        const aPct = h._analyzePct || 0;
                         return (
                           <span
                             key={h.id + hi}
@@ -2018,7 +2032,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                             }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = c.border; }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = isNew ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)'; }}
-                            title={sector ? `${sector} ${emaUp === true ? '▲ above' : emaUp === false ? '▼ below' : ''} 21W EMA` : h.message}
+                            title={`Analyze: ${aPct}%${sector ? ` · ${sector} ${emaUp === true ? '▲ above' : emaUp === false ? '▼ below' : ''} 21W EMA` : ''}`}
                             className={isNew ? 'feed-chip-new' : undefined}
                             style={{
                               display: 'inline-flex',
@@ -2039,6 +2053,16 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                             }}>
                               {h.ticker}
                             </span>
+                            {aPct > 0 && (
+                              <span style={{
+                                color: aPct >= 80 ? '#4caf50' : aPct >= 50 ? '#ffc107' : '#777',
+                                fontSize: 8,
+                                fontWeight: 700,
+                                fontFamily: "'JetBrains Mono', monospace",
+                              }}>
+                                {aPct}%
+                              </span>
+                            )}
                             {sector && (
                               <span style={{
                                 color: 'rgba(255,255,255,0.7)',
@@ -2627,6 +2651,7 @@ export default function AssistantPage({ onNavigate }) {
             loading={headlinesLoading}
             devSignalsAge={devSignalsAge}
             onTickerClick={(ticker) => handleChipClick({ ticker })}
+            analyzeCtx={analyzeCtx}
           />
 
           {/* P1: Critical */}

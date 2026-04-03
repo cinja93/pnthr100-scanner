@@ -22,7 +22,7 @@ import { serverSizePosition, STRIKE_PCT, LOT_OFFSETS } from './killTestSettings.
 import { getSignals } from './signalService.js';
 
 const DEMO_OWNER_ID  = 'demo_fund';
-const DEMO_SEED_NAV  = 9_847_312.64;
+const DEMO_SEED_NAV  = 10_000_000;
 const DEMO_RISK_PCT  = 1;
 const FMP_API_KEY    = () => process.env.FMP_API_KEY;
 const FMP_BASE       = 'https://financialmodelingprep.com/api/v3';

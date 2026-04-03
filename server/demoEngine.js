@@ -352,13 +352,23 @@ async function checkExits(db, positions, quotes) {
       exitPrice  = p.stopPrice;
     }
 
-    // 2. Stale hunt (Day 20+)
+    // 2. Stale hunt (Day 20+) — only close LOSING positions; let winners run
     if (!exitReason) {
       const lot1Date = p.fills?.[1]?.date || p.createdAt?.toISOString?.()?.split('T')[0];
       const days = tradingDaysSince(lot1Date);
       if (days >= STALE_HUNT_LIMIT) {
-        exitReason = 'STALE_HUNT';
-        exitPrice  = price;
+        // Calculate current P&L to decide if profitable
+        const filledArr = Object.values(p.fills || {}).filter(f => f?.filled && f?.price && f?.shares);
+        const totalCost = filledArr.reduce((s, f) => s + f.shares * f.price, 0);
+        const totalShr  = filledArr.reduce((s, f) => s + f.shares, 0);
+        if (totalShr > 0) {
+          const avgCost = totalCost / totalShr;
+          const profitable = isLong ? price > avgCost : price < avgCost;
+          if (!profitable) {
+            exitReason = 'STALE_HUNT';
+            exitPrice  = price;
+          }
+        }
       }
     }
 

@@ -373,7 +373,7 @@ async function main() {
         const lotShares = Math.max(1, Math.round(totalShares * STRIKE_PCT[lot - 1]));
         pos.fills[lot] = { filled: true, price: triggerPrice, shares: lotShares, date: weekOf };
 
-        // Update stop: ratchet to avg cost after Lot 2+ (matches live engine)
+        // Ratchet stop: Lot 2-3 → breakeven, Lot 4 → Lot 2 fill, Lot 5 → Lot 3 fill
         if (lot >= 2) {
           let cumCost = 0, cumShr = 0;
           for (let n = 1; n <= 5; n++) {
@@ -385,9 +385,17 @@ async function main() {
           }
           if (cumShr > 0) {
             const avgCost = +(cumCost / cumShr).toFixed(2);
+            let newStop;
+            if (lot === 4 && pos.fills[2]?.price) {
+              newStop = pos.fills[2].price; // Lot 4 → ratchet to Lot 2 fill
+            } else if (lot === 5 && pos.fills[3]?.price) {
+              newStop = pos.fills[3].price; // Lot 5 → ratchet to Lot 3 fill
+            } else {
+              newStop = avgCost; // Lot 2-3 → breakeven
+            }
             pos.stopPrice = isLong
-              ? Math.max(pos.stopPrice, avgCost)
-              : Math.min(pos.stopPrice, avgCost);
+              ? Math.max(pos.stopPrice, newStop)
+              : Math.min(pos.stopPrice, newStop);
           }
         }
 

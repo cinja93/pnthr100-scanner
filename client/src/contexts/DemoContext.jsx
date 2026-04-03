@@ -50,9 +50,10 @@ export function DemoProvider({ children }) {
     } catch (e) {
       console.warn('[Demo] Toggle failed:', e.message);
     }
-    setDemoMode(next);
-    setIsDemo(next);
+    // Persist BEFORE reload so the new page picks up the right mode
     localStorage.setItem(STORAGE_KEY, next ? '1' : '0');
+    // Full reload forces all components to remount and refetch with correct mode
+    window.location.reload();
   }, [isDemo]);
 
   return (

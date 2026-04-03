@@ -2029,7 +2029,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
                             onClick={(e) => {
                               e.stopPropagation();
                               setClickedTickers(prev => new Set(prev).add(h.ticker));
-                              onTickerClick?.(h.ticker);
+                              onTickerClick?.(h.ticker, items.map(x => x.ticker));
                             }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = c.border; }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = isNew ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)'; }}
@@ -2056,10 +2056,14 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
                             </span>
                             {aPct > 0 && (
                               <span style={{
-                                color: aPct >= 80 ? '#4caf50' : aPct >= 50 ? '#ffc107' : '#777',
+                                color: '#fff',
+                                background: aPct >= 80 ? '#2e7d32' : aPct >= 50 ? '#7b6b00' : '#333',
+                                padding: '0 4px',
+                                borderRadius: 2,
                                 fontSize: 8,
                                 fontWeight: 700,
                                 fontFamily: "'JetBrains Mono', monospace",
+                                lineHeight: '14px',
                               }}>
                                 {aPct}%
                               </span>
@@ -2256,8 +2260,9 @@ export default function AssistantPage({ onNavigate }) {
   const [error,          setError]          = useState(null);
   const [refreshCountdown, setRefreshCountdown] = useState(REFRESH_INTERVAL);
   const [lastRefreshed,    setLastRefreshed]    = useState(null);
-  const [chartStock,  setChartStock]  = useState(null);
-  const [chartBusy,   setChartBusy]   = useState(null); // ticker currently loading
+  const [chartStocks, setChartStocks] = useState(null);  // array of stock objects for ChartModal
+  const [chartIndex,  setChartIndex]  = useState(0);     // initial index into chartStocks
+  const [chartBusy,   setChartBusy]   = useState(null);  // ticker currently loading
   const [healthPositions, setHealthPositions] = useState([]);
   const [healthLoading,   setHealthLoading]   = useState(true);
   const [recentFills,     setRecentFills]     = useState([]);
@@ -2529,25 +2534,36 @@ export default function AssistantPage({ onNavigate }) {
 
   // ── Open Chart from Chip Click ─────────────────────────────────────────────
 
+  async function fetchStockData(ticker) {
+    const [apexRes, tickerRes] = await Promise.all([
+      fetch(`${API_BASE}/api/apex/ticker/${encodeURIComponent(ticker)}`, { headers: authHeaders() }).catch(() => null),
+      fetch(`${API_BASE}/api/ticker/${encodeURIComponent(ticker)}`, { headers: authHeaders() }).catch(() => null),
+    ]);
+    if (apexRes?.ok) {
+      const data = await apexRes.json();
+      if (data.found && data.stock) return data.stock;
+    }
+    if (tickerRes?.ok) {
+      const data2 = await tickerRes.json();
+      if (data2) return { ticker, ...data2 };
+    }
+    return { ticker };
+  }
+
   async function handleChipClick(chip) {
     if (chartBusy) return;
     const ticker = chip.ticker;
     setChartBusy(ticker);
     try {
-      // Fetch both in parallel — apex has Kill scoring, ticker has full FMP data
-      const [apexRes, tickerRes] = await Promise.all([
-        fetch(`${API_BASE}/api/apex/ticker/${encodeURIComponent(ticker)}`, { headers: authHeaders() }).catch(() => null),
-        fetch(`${API_BASE}/api/ticker/${encodeURIComponent(ticker)}`, { headers: authHeaders() }).catch(() => null),
-      ]);
-      // Prefer apex (has Kill data) if found
-      if (apexRes?.ok) {
-        const data = await apexRes.json();
-        if (data.found && data.stock) { setChartStock(data.stock); return; }
-      }
-      // Fallback to ticker endpoint
-      if (tickerRes?.ok) {
-        const data2 = await tickerRes.json();
-        if (data2) setChartStock({ ticker, ...data2 });
+      if (chip.groupTickers?.length > 1) {
+        // Fetch all group tickers in parallel for scrollable chart
+        const stocks = await Promise.all(chip.groupTickers.map(t => fetchStockData(t)));
+        const idx = chip.groupTickers.indexOf(ticker);
+        setChartStocks(stocks.filter(Boolean));
+        setChartIndex(Math.max(0, idx));
+      } else {
+        const stock = await fetchStockData(ticker);
+        if (stock) { setChartStocks([stock]); setChartIndex(0); }
       }
     } catch (e) {
       console.error('[AssistantPage] chart fetch error:', e);
@@ -2651,7 +2667,7 @@ export default function AssistantPage({ onNavigate }) {
             headlines={headlines}
             loading={headlinesLoading}
             devSignalsAge={devSignalsAge}
-            onTickerClick={(ticker) => handleChipClick({ ticker })}
+            onTickerClick={(ticker, groupTickers) => handleChipClick({ ticker, groupTickers })}
             analyzeCtx={analyzeCtx}
           />
 
@@ -2874,13 +2890,13 @@ export default function AssistantPage({ onNavigate }) {
       </div>
 
       {/* Chart Modal — opened from chip clicks */}
-      {chartStock && (
+      {chartStocks && (
         <ChartModal
-          stocks={[chartStock]}
-          initialIndex={0}
+          stocks={chartStocks}
+          initialIndex={chartIndex}
           signals={{}}
           earnings={{}}
-          onClose={() => setChartStock(null)}
+          onClose={() => setChartStocks(null)}
         />
       )}
 

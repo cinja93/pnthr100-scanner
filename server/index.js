@@ -5494,18 +5494,20 @@ app.get('/api/assistant/headlines', async (req, res) => {
       const st = devData.sectorTrend || {};
       const devExchangeMap = devData.exchangeMap || {};  // ticker → 'NASDAQ' | 'NYSE' etc
 
-      // ── Kill score enrichment from DB (persistent, survives server restarts) ──
-      // The in-memory apex cache is volatile (cold after every deploy/restart, takes
-      // minutes to warm). The chart eventually gets data once cache warms, but chips
-      // render immediately. Using pnthr_kill_scores DB directly guarantees consistency.
+      // ── Kill score enrichment: DB first, then in-memory apex cache fallback ──
+      // DB (pnthr_kill_scores) has Friday pipeline data — persistent across restarts.
+      // In-memory apex cache has LIVE scores — catches mid-week signal triggers that
+      // aren't in the DB yet. Both sources together match what the chart uses.
       const killMap = {};  // ticker → { killScore, exchange, signalAge }
+      const allHeadlineTickers = [
+        ...(devData.triggeredToday?.bl || []).map(s => s.ticker),
+        ...(devData.triggeredToday?.ss || []).map(s => s.ticker),
+        ...(devData.devBL || []).map(s => s.ticker),
+        ...(devData.devSS || []).map(s => s.ticker),
+      ];
+
+      // Source 1: DB (authoritative Friday pipeline data)
       try {
-        const allHeadlineTickers = [
-          ...(devData.triggeredToday?.bl || []).map(s => s.ticker),
-          ...(devData.triggeredToday?.ss || []).map(s => s.ticker),
-          ...(devData.devBL || []).map(s => s.ticker),
-          ...(devData.devSS || []).map(s => s.ticker),
-        ];
         if (allHeadlineTickers.length > 0) {
           const latestDoc = await db.collection('pnthr_kill_scores')
             .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
@@ -5525,6 +5527,25 @@ app.get('/api/assistant/headlines', async (req, res) => {
           }
         }
       } catch (err) { console.error('[headlines] killScore DB error:', err.message); }
+
+      // Source 2: In-memory apex cache (live scores for mid-week triggers not in DB)
+      try {
+        const { getCachedApexResults } = await import('./apexService.js');
+        const apex = getCachedApexResults();
+        if (apex?.stocks) {
+          for (const t of allHeadlineTickers) {
+            if (killMap[t]) continue; // DB already has it
+            const s = apex.stocks.find(x => x.ticker === t);
+            if (s && !s.overextended && s.killRank != null) {
+              killMap[t] = {
+                killScore: s.apexScore || 0,
+                exchange: s.exchange || '',
+                signalAge: s.signalAge ?? s.weeksSince ?? null,
+              };
+            }
+          }
+        }
+      } catch { /* non-fatal — cache may be cold */ }
 
       // Helper to build extra fields for each headline
       const extra = (ticker, sec, price, signalExchange) => {

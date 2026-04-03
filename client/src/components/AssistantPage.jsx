@@ -1709,7 +1709,10 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
   const [newTickers, setNewTickers] = useState(new Set()); // tickers that arrived after first load
   const [clickedTickers, setClickedTickers] = useState(new Set()); // tickers user has opened
 
-  // Track which group tickers are new (arrived after the initial load)
+  // Track which group tickers are new (arrived after the initial baseline)
+  // seenRef is NOT set until we have at least one group item — prevents
+  // false "new" flashing when headlines arrive in stages (positions first,
+  // developing signals 60s later from the cached endpoint).
   useEffect(() => {
     const grouped = {};
     for (const h of headlines) {
@@ -1718,21 +1721,27 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
         grouped[h.category].add(h.ticker);
       }
     }
+    // No group items yet — don't initialize baseline from an empty set
+    if (Object.keys(grouped).length === 0) return;
+
     if (!seenRef.current) {
-      // First load — everything is "seen", nothing flashes
+      // First time we see group items — mark everything as baseline (no flash)
       seenRef.current = {};
       for (const [cat, tickers] of Object.entries(grouped)) {
         seenRef.current[cat] = new Set(tickers);
       }
       return;
     }
-    // Subsequent updates — find new arrivals
+    // Subsequent updates — find genuinely new arrivals
     const fresh = new Set();
     for (const [cat, tickers] of Object.entries(grouped)) {
       const baseline = seenRef.current[cat] || new Set();
       for (const t of tickers) {
         if (!baseline.has(t)) fresh.add(t);
       }
+      // Update baseline so a ticker only flashes once
+      if (!seenRef.current[cat]) seenRef.current[cat] = new Set();
+      for (const t of tickers) seenRef.current[cat].add(t);
     }
     if (fresh.size > 0) setNewTickers(prev => new Set([...prev, ...fresh]));
   }, [headlines]);
@@ -2556,10 +2565,13 @@ export default function AssistantPage({ onNavigate }) {
     setChartBusy(ticker);
     try {
       if (chip.groupTickers?.length > 1) {
-        // Fetch all group tickers in parallel for scrollable chart
-        const stocks = await Promise.all(chip.groupTickers.map(t => fetchStockData(t)));
+        // Build array with clicked stock fetched now, others as stubs (lazy-loaded by ChartModal)
+        const clickedStock = await fetchStockData(ticker);
         const idx = chip.groupTickers.indexOf(ticker);
-        setChartStocks(stocks.filter(Boolean));
+        const stocks = chip.groupTickers.map((t, i) =>
+          i === idx ? (clickedStock || { ticker: t }) : { ticker: t, _stub: true }
+        );
+        setChartStocks(stocks);
         setChartIndex(Math.max(0, idx));
       } else {
         const stock = await fetchStockData(ticker);

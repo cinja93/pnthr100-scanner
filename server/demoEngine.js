@@ -288,7 +288,7 @@ async function checkLotFills(db, positions, quotes) {
         updatedAt: new Date(),
       };
 
-      // Ratchet stop after Lot 2+ fills (to avg cost / breakeven)
+      // Ratchet stop: Lot 2-3 → breakeven (avg cost), Lot 4 → Lot 2 fill, Lot 5 → Lot 3 fill
       if (lot >= 2) {
         const allFills = { ...p.fills };
         allFills[lot] = { filled: true, price: triggerPrice, shares: lotShares };
@@ -301,8 +301,15 @@ async function checkLotFills(db, positions, quotes) {
           }
         }
         if (cumShr > 0) {
-          const avgCost  = +(cumCost / cumShr).toFixed(2);
-          const newStop  = avgCost;
+          const avgCost = +(cumCost / cumShr).toFixed(2);
+          let newStop;
+          if (lot === 4 && allFills[2]?.price) {
+            newStop = allFills[2].price; // Lot 4 → ratchet to Lot 2 fill
+          } else if (lot === 5 && allFills[3]?.price) {
+            newStop = allFills[3].price; // Lot 5 → ratchet to Lot 3 fill
+          } else {
+            newStop = avgCost; // Lot 2-3 → breakeven
+          }
           const safeStop = isLong
             ? Math.max(p.stopPrice, newStop)
             : Math.min(p.stopPrice, newStop);

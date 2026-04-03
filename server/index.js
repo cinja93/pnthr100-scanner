@@ -5401,7 +5401,7 @@ app.get('/api/assistant/headlines', async (req, res) => {
         if (stopHit) add(nowISO, '🛑', 'CRITICAL', t, `STOP CROSSED — price $${price.toFixed(2)} hit stop $${p.stopPrice.toFixed(2)}`, 'STOP_CROSSED');
         else {
           const dist = isLong ? (price - p.stopPrice) / price * 100 : (p.stopPrice - price) / price * 100;
-          if (dist <= 2) add(nowISO, '⚠️', 'HIGH', t, `Price within ${dist.toFixed(1)}% of stop ($${price.toFixed(2)} vs $${p.stopPrice.toFixed(2)})`, 'STOP_CLOSE');
+          if (dist <= 2) add(nowISO, '⚠️', 'STOP', t, `Price within ${dist.toFixed(1)}% of stop ($${price.toFixed(2)} vs $${p.stopPrice.toFixed(2)})`, 'STOP_CLOSE');
         }
       }
 
@@ -5431,7 +5431,7 @@ app.get('/api/assistant/headlines', async (req, res) => {
           const avgCost = +(totCost / totShr).toFixed(2);
           const diff = Math.abs(p.stopPrice - avgCost);
           if (diff > 0.05) {
-            add(nowISO, '🔒', 'HIGH', t, `RATCHET DUE — stop $${p.stopPrice.toFixed(2)} should be avg cost $${avgCost.toFixed(2)} (true breakeven)`, 'RATCHET_DUE');
+            add(nowISO, '🔒', 'RATCHET', t, `RATCHET DUE — stop $${p.stopPrice.toFixed(2)} should be avg cost $${avgCost.toFixed(2)} (true breakeven)`, 'RATCHET_DUE');
           }
         }
       }
@@ -5446,7 +5446,7 @@ app.get('/api/assistant/headlines', async (req, res) => {
     }
     for (const [sector, net] of Object.entries(sectorCounts)) {
       if (Math.abs(net) > 3) {
-        add(nowISO, '⚠️', 'HIGH', null, `SECTOR RISK ${sector} — ${Math.abs(net)} net directional (cap: 3)`, 'SECTOR_RISK');
+        add(nowISO, '⚠️', 'SECTOR', null, `SECTOR RISK ${sector} — ${Math.abs(net)} net directional (cap: 3)`, 'SECTOR_RISK');
       }
     }
 

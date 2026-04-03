@@ -1685,6 +1685,9 @@ function CompletedSection({ completed }) {
 const HL = {
   CRITICAL:   { bg: '#1a0000', text: '#ffcdd2', ticker: '#ff6b6b', badge: '#b71c1c', badgeText: '#fff',    border: '#d32f2f' },
   HIGH:       { bg: '#1a0f00', text: '#ffe0b2', ticker: '#ffb74d', badge: '#4a2600', badgeText: '#ffb74d', border: '#e65100' },
+  STOP:       { bg: '#1a0f00', text: '#ffe0b2', ticker: '#ffb74d', badge: '#4a2600', badgeText: '#ffb74d', border: '#e65100' },
+  RATCHET:    { bg: '#1a0f00', text: '#ffe0b2', ticker: '#ffb74d', badge: '#4a2600', badgeText: '#ffb74d', border: '#e65100' },
+  SECTOR:     { bg: '#1a0f00', text: '#ffe0b2', ticker: '#ffb74d', badge: '#4a2600', badgeText: '#ffb74d', border: '#e65100' },
   SIGNAL:     { bg: '#0a1a00', text: '#c5e1a5', ticker: '#FCF000', badge: '#1b5e20', badgeText: '#a5d6a7', border: '#4caf50' },
   MEDIUM:     { bg: '#1a1500', text: '#fff9c4', ticker: '#ffd54f', badge: '#3e2723', badgeText: '#ffe082', border: '#f9a825' },
   DEVELOPING: { bg: '#0a1520', text: '#b3d9ff', ticker: '#64b5f6', badge: '#0d2137', badgeText: '#90caf9', border: '#1976d2' },
@@ -1773,7 +1776,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
   }, [visible, analyzeCtx]);
 
   const critCount = visible.filter(h => h.urgency === 'CRITICAL').length;
-  const highCount = visible.filter(h => h.urgency === 'HIGH').length;
+  const highCount = visible.filter(h => ['HIGH', 'STOP', 'RATCHET', 'SECTOR'].includes(h.urgency)).length;
   const sigCount  = (groupCounts.TRIGGERED_BL || 0) + (groupCounts.TRIGGERED_SS || 0);
   const devBLCount = groupCounts.DEV_BL || 0;
   const devSSCount = groupCounts.DEV_SS || 0;

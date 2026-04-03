@@ -348,6 +348,43 @@ async function main() {
     console.log(`  NAV: $${nav.toLocaleString()} | Active: ${activePositions.size} positions`);
   }
 
+  // ── Final price refresh: update all active positions with live market prices ─
+  console.log('\nRefreshing active positions with live market prices...');
+  const activeFinal = await db.collection('pnthr_portfolio')
+    .find({ ownerId: DEMO_OWNER_ID, status: { $ne: 'CLOSED' } })
+    .toArray();
+  const liveTickers = [...new Set(activeFinal.map(p => p.ticker))];
+  if (liveTickers.length > 0) {
+    const liveQuotes = {};
+    for (let i = 0; i < liveTickers.length; i += 20) {
+      const batch = liveTickers.slice(i, i + 20);
+      try {
+        const url = `${FMP_BASE}/quote/${batch.join(',')}?apikey=${FMP_API_KEY()}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          for (const q of data) {
+            liveQuotes[q.symbol] = q.price;
+          }
+        }
+      } catch (e) {
+        console.warn(`  ⚠ Live quote batch failed:`, e.message);
+      }
+    }
+    let priceUpdates = 0;
+    for (const p of activeFinal) {
+      const livePrice = liveQuotes[p.ticker];
+      if (livePrice && livePrice !== p.currentPrice) {
+        await db.collection('pnthr_portfolio').updateOne(
+          { id: p.id, ownerId: DEMO_OWNER_ID },
+          { $set: { currentPrice: livePrice, updatedAt: new Date() } }
+        );
+        priceUpdates++;
+      }
+    }
+    console.log(`  Updated ${priceUpdates}/${activeFinal.length} positions with live prices`);
+  }
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n${'═'.repeat(50)}`);
   console.log('BACKFILL COMPLETE');

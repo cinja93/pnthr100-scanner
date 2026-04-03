@@ -1879,6 +1879,8 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
               const label = GROUP_LABELS[row.category] || row.category;
               const isOpen = expandedGroups.has(row.category);
               const newInGroup = items.filter(h => newTickers.has(h.ticker) && !clickedTickers.has(h.ticker)).length;
+              const isSS = row.category === 'TRIGGERED_SS' || row.category === 'DEV_SS';
+              const tickerColor = isSS ? '#ef5350' : c.ticker;
               return (
                 <div key={row.category}>
                   {/* Group header row */}
@@ -1894,8 +1896,8 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                       gap: 7,
                       padding: '5px 10px 5px 0',
                       borderBottom: '1px solid rgba(255,255,255,0.03)',
-                      background: c.bg,
-                      borderLeft: `2px solid ${c.border}`,
+                      background: isSS ? '#1a0000' : c.bg,
+                      borderLeft: `2px solid ${isSS ? '#d32f2f' : c.border}`,
                       fontSize: 11,
                       minHeight: 28,
                       cursor: 'pointer',
@@ -1990,8 +1992,8 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                   {/* Expanded: scrollable ticker strip with individual items */}
                   {isOpen && (
                     <div style={{
-                      background: 'rgba(0,0,0,0.25)',
-                      borderLeft: `2px solid ${c.border}`,
+                      background: isSS ? 'rgba(30,0,0,0.4)' : 'rgba(0,0,0,0.25)',
+                      borderLeft: `2px solid ${isSS ? '#d32f2f' : c.border}`,
                       borderBottom: '1px solid rgba(255,255,255,0.03)',
                       padding: '6px 10px',
                       display: 'flex',
@@ -2023,7 +2025,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                               alignItems: 'center',
                               gap: 4,
                               background: isNew ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
-                              border: `1px solid ${isNew ? '#FCF000' : c.border}`,
+                              border: `1px solid ${isNew ? '#FCF000' : isSS ? 'rgba(239,83,80,0.5)' : c.border}`,
                               borderRadius: 3,
                               padding: '2px 8px',
                               cursor: 'pointer',
@@ -2031,7 +2033,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick }) {
                             }}
                           >
                             <span style={{
-                              color: c.ticker,
+                              color: tickerColor,
                               fontWeight: 800,
                               fontSize: 10,
                             }}>

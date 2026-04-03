@@ -5494,82 +5494,49 @@ app.get('/api/assistant/headlines', async (req, res) => {
       const st = devData.sectorTrend || {};
       const devExchangeMap = devData.exchangeMap || {};  // ticker → 'NASDAQ' | 'NYSE' etc
 
-      // Build enrichment map from apex cache for Analyze scoring
-      // NOTE: in-memory cache uses `apexScore` (not `totalScore`)
-      const apexMap = {};  // ticker → { killScore, exchange, signalAge }
+      // ── Kill score enrichment from DB (persistent, survives server restarts) ──
+      // The in-memory apex cache is volatile (cold after every deploy/restart, takes
+      // minutes to warm). The chart eventually gets data once cache warms, but chips
+      // render immediately. Using pnthr_kill_scores DB directly guarantees consistency.
+      const killMap = {};  // ticker → { killScore, exchange, signalAge }
       try {
-        const { getCachedApexResults } = await import('./apexService.js');
-        const apex = getCachedApexResults();
-        if (apex?.stocks) {
-          for (const s of apex.stocks) {
-            // Skip OVEREXTENDED (apexScore = -99, killRank = null)
-            if (s.overextended || s.killRank == null) continue;
-            apexMap[s.ticker] = {
-              killScore: s.apexScore || s.totalScore || 0,
-              exchange: s.exchange || '',
-              signalAge: s.signalAge ?? s.weeksSince ?? null,
-            };
-          }
-        }
-      } catch { /* non-fatal */ }
-
-      // Fallback: query pnthr_kill_scores DB for tickers NOT in live apex cache.
-      // Always runs — DB has authoritative scores from Friday pipeline even when
-      // apex cache is cold (server restart). Chart also fetches from apex/ticker
-      // endpoint which warms up quickly, so scores converge.
-      const killScoreMap = {};  // ticker → { killScore, exchange, signalAge }
-      try {
-        // Collect all tickers that need scoring
         const allHeadlineTickers = [
           ...(devData.triggeredToday?.bl || []).map(s => s.ticker),
           ...(devData.triggeredToday?.ss || []).map(s => s.ticker),
           ...(devData.devBL || []).map(s => s.ticker),
           ...(devData.devSS || []).map(s => s.ticker),
         ];
-        const missingFromApex = allHeadlineTickers.filter(t => !apexMap[t]);
-        if (missingFromApex.length > 0) {
-          // Get the latest weekOf from kill_scores
+        if (allHeadlineTickers.length > 0) {
           const latestDoc = await db.collection('pnthr_kill_scores')
             .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
           if (latestDoc?.weekOf) {
-            // Exclude OVEREXTENDED (totalScore = -99, killRank = null) — chart also
-            // excludes these from /api/apex/ticker, so chip must match
             const killDocs = await db.collection('pnthr_kill_scores')
-              .find({ weekOf: latestDoc.weekOf, ticker: { $in: missingFromApex },
+              .find({ weekOf: latestDoc.weekOf, ticker: { $in: allHeadlineTickers },
                       totalScore: { $gt: 0 }, killRank: { $ne: null } },
-                     { projection: { ticker: 1, totalScore: 1, score: 1, exchange: 1, signalAge: 1, weeksSince: 1 } })
+                     { projection: { ticker: 1, totalScore: 1, exchange: 1, signalAge: 1, weeksSince: 1 } })
               .toArray();
             for (const d of killDocs) {
-              killScoreMap[d.ticker] = {
-                killScore: d.totalScore || d.score || 0,
+              killMap[d.ticker] = {
+                killScore: d.totalScore || 0,
                 exchange: d.exchange || '',
                 signalAge: d.signalAge ?? d.weeksSince ?? null,
               };
             }
           }
         }
-      } catch (err) { console.error('[headlines] killScore fallback error:', err.message); }
+      } catch (err) { console.error('[headlines] killScore DB error:', err.message); }
 
       // Helper to build extra fields for each headline
-      // Priority: apexMap (live) → killScoreMap (DB fallback) → devExchangeMap (FMP profile) → signal object
       const extra = (ticker, sec, price, signalExchange) => {
-        const a = apexMap[ticker] || killScoreMap[ticker] || {};
-        // Exchange: apex > killScores DB > FMP profile (devExchangeMap) > signal object
-        const exchange = a.exchange || devExchangeMap[ticker] || signalExchange || '';
-        // killScore: use null (not 0) when no data — so client scores NOT SCORED (0 pts)
-        // instead of LOW (1 pt). killScore=0 is ambiguous; null means "not in pipeline".
-        // maxScore: intentionally null — ChartModal's apex stock object doesn't have
-        // pipelineMaxScore either, so both chip and chart use tier-based scoring (ALPHA,
-        // STRIKING, COILING, etc.) for consistency. Sending maxScore would route the
-        // chip to percentage-based scoring while the chart uses tier thresholds.
-        const hasKillData = apexMap[ticker] || killScoreMap[ticker];
+        const k = killMap[ticker];
+        const exchange = (k?.exchange) || devExchangeMap[ticker] || signalExchange || '';
         return {
           sector: sec,
           sectorAboveEma: sec ? (st[sec] ?? null) : null,
-          killScore: hasKillData ? (a.killScore || 0) : null,
+          killScore: k ? k.killScore : null,
           maxScore: null,
           exchange,
-          signalAge: a.signalAge ?? null,
+          signalAge: k?.signalAge ?? null,
           price: price || 0,
         };
       };

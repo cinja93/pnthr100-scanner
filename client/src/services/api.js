@@ -10,26 +10,11 @@ export function clearAuthToken() { _token = null; }
 let _onUnauthorized = null;
 export function setOnUnauthorized(fn) { _onUnauthorized = fn; }
 
-// Demo mode — when active, all /api/* calls get ?demo=1 appended.
-// Patches window.fetch globally so ALL fetch calls (not just apiFetch) get the param.
+// Demo mode — when active, all authenticated API calls include X-Demo-Mode header.
+// This is injected via authHeaders() which every authenticated fetch call uses.
 let _demoMode = false;
-const _originalFetch = window.fetch.bind(window);
 
-export function setDemoMode(active) {
-  _demoMode = active;
-  if (active) {
-    window.fetch = (url, options) => {
-      let finalUrl = typeof url === 'string' ? url : url.toString();
-      if (finalUrl.includes('/api/') && !finalUrl.includes('demo=1')) {
-        const sep = finalUrl.includes('?') ? '&' : '?';
-        finalUrl = finalUrl + sep + 'demo=1';
-      }
-      return _originalFetch(finalUrl, options);
-    };
-  } else {
-    window.fetch = _originalFetch;
-  }
-}
+export function setDemoMode(active) { _demoMode = active; }
 export function isDemoMode() { return _demoMode; }
 
 // Central fetch wrapper: handles 401 globally
@@ -41,10 +26,12 @@ export async function apiFetch(url, options = {}) {
   return response;
 }
 
-// Base headers included on every request
+// Base headers included on every request.
+// When demo mode is active, adds X-Demo-Mode header so the server swaps userId to demo_fund.
 export function authHeaders(extra = {}) {
   return {
     ...(_token ? { 'Authorization': `Bearer ${_token}` } : {}),
+    ...(_demoMode ? { 'X-Demo-Mode': '1' } : {}),
     ...extra
   };
 }

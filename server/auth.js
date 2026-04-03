@@ -52,7 +52,8 @@ export function authenticateJWT(req, res, next) {
     const role = resolveRole(payload.email);
     req.user = { userId: payload.userId, email: payload.email, role };
     // Demo mode: swap userId to demo_fund for admin users (exclude /api/demo/* endpoints)
-    if (req.query?.demo === '1' && role === 'admin' && !req.path?.includes('/demo')) {
+    const demoRequested = req.headers['x-demo-mode'] === '1' || req.query?.demo === '1';
+    if (demoRequested && role === 'admin' && !req.path?.includes('/demo')) {
       req.user.userId = 'demo_fund';
       req.user._isDemo = true;
     }

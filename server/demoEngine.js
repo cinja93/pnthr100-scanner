@@ -495,68 +495,10 @@ export async function updateDemoPortfolio() {
   ]);
   const quotes = await fetchQuotes([...allTickers]);
 
-  // 6. Close positions that dropped out of top 10
-  const top10Tickers = new Set(
-    killScores.filter(k => k.killRank && k.killRank <= 10).map(k => k.ticker)
-  );
-  const droppedPositions = active.filter(p => !top10Tickers.has(p.ticker));
-  for (const p of droppedPositions) {
-    const quote = quotes[p.ticker];
-    if (!quote?.price) continue;
-
-    const price   = quote.price;
-    const isLong  = p.direction === 'LONG';
-    const filledArr   = Object.values(p.fills || {}).filter(f => f?.filled && f?.price && f?.shares);
-    const totalShares = filledArr.reduce((s, f) => s + f.shares, 0);
-    const totalCost   = filledArr.reduce((s, f) => s + f.shares * f.price, 0);
-    if (totalShares === 0) continue;
-
-    const avgCost      = totalCost / totalShares;
-    const profitPct    = isLong ? ((price - avgCost) / avgCost) * 100 : ((avgCost - price) / avgCost) * 100;
-    const profitDollar = isLong ? (price - avgCost) * totalShares : (avgCost - price) * totalShares;
-    const lot1Date     = p.fills?.[1]?.date || p.createdAt?.toISOString?.()?.split('T')[0];
-    const holdingDays  = tradingDaysSince(lot1Date);
-
-    await db.collection('pnthr_portfolio').updateOne(
-      { id: p.id, ownerId: DEMO_OWNER_ID },
-      {
-        $set: {
-          status: 'CLOSED', currentPrice: price, closedAt: new Date(), updatedAt: new Date(),
-          outcome: {
-            exitPrice: price, profitPct: +profitPct.toFixed(2),
-            profitDollar: +profitDollar.toFixed(2), holdingDays, exitReason: 'SIGNAL',
-          },
-        },
-      }
-    );
-
-    nav += profitDollar;
-    console.log(`[DemoEngine] Closed ${p.ticker} (dropped from top 10): ${profitPct >= 0 ? '+' : ''}${profitPct.toFixed(1)}%`);
-
-    try {
-      await db.collection('pnthr_journal').updateOne(
-        { positionId: p.id, ownerId: DEMO_OWNER_ID },
-        {
-          $set: {
-            'performance.status': 'CLOSED',
-            'performance.avgExitPrice': price,
-            'performance.totalPnlDollar': +profitDollar.toFixed(2),
-            'performance.realizedPnlDollar': +profitDollar.toFixed(2),
-            'performance.remainingShares': 0,
-            exits: [{ reason: 'SIGNAL', price, date: new Date(), shares: totalShares,
-              pnlDollar: +profitDollar.toFixed(2), pnlPct: +profitPct.toFixed(2) }],
-            updatedAt: new Date(),
-          },
-        }
-      );
-    } catch { /* non-fatal */ }
-  }
-
-  await updateDemoNav(db, nav);
-
-  // 7. Check exits on remaining positions (stop hit, stale hunt)
-  const remaining = active.filter(p => top10Tickers.has(p.ticker));
-  await checkExits(db, remaining, quotes);
+  // 6. Check exits on ALL active positions (stop hit, stale hunt if losing)
+  // Positions that drop from the top 10 are NOT closed — they stay open
+  // and are managed by stops. The portfolio accumulates week over week.
+  await checkExits(db, active, quotes);
 
   // 8. Refresh NAV after exits
   nav = await getDemoNav(db);

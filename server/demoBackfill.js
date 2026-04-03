@@ -85,13 +85,12 @@ async function main() {
     const top10 = killScores.filter(k => k.killRank && k.killRank <= 10);
     const top10Tickers = new Set(top10.map(k => k.ticker));
 
-    // ── Close positions that dropped out of top 10 ──────────────────────────
+    // ── Check exits on active positions (stop hit, stale hunt if losing) ────
+    // Positions that drop from the top 10 are NOT closed — they stay open
+    // and are managed by stops. The portfolio accumulates week over week.
     for (const [ticker, pos] of activePositions) {
-      if (top10Tickers.has(ticker)) continue;
-
-      // Use the current price from this week's Kill scores (if available)
       const ks = killScores.find(k => k.ticker === ticker);
-      const exitPrice = ks?.currentPrice || pos.currentPrice || pos.entryPrice;
+      const currentPrice = ks?.currentPrice || pos.currentPrice || pos.entryPrice;
 
       const isLong      = pos.direction === 'LONG';
       const filledArr   = Object.values(pos.fills).filter(f => f?.filled && f?.price && f?.shares);
@@ -99,17 +98,47 @@ async function main() {
       const totalCost   = filledArr.reduce((s, f) => s + f.shares * f.price, 0);
       if (totalShares === 0) { activePositions.delete(ticker); continue; }
 
-      const avgCost      = totalCost / totalShares;
+      const avgCost = totalCost / totalShares;
+
+      // Check stop hit
+      let exitReason = null;
+      let exitPrice  = null;
+      if (isLong && currentPrice <= pos.stopPrice) {
+        exitReason = 'STOP_HIT';
+        exitPrice  = pos.stopPrice;
+      } else if (!isLong && currentPrice >= pos.stopPrice) {
+        exitReason = 'STOP_HIT';
+        exitPrice  = pos.stopPrice;
+      }
+
+      // Check stale hunt (Day 20+) — only close if losing
+      if (!exitReason) {
+        const entryDate = pos.fills[1]?.date;
+        const holdingWeeks = entryDate
+          ? Math.round((new Date(weekOf) - new Date(entryDate)) / (7 * 24 * 60 * 60 * 1000))
+          : 0;
+        const holdingDays = holdingWeeks * 5;
+        if (holdingDays >= 20) {
+          const profitable = isLong ? currentPrice > avgCost : currentPrice < avgCost;
+          if (!profitable) {
+            exitReason = 'STALE_HUNT';
+            exitPrice  = currentPrice;
+          }
+        }
+      }
+
+      if (!exitReason) {
+        // Update current price for tracking
+        pos.currentPrice = currentPrice;
+        continue;
+      }
+
+      // Close the position
       const profitPct    = isLong ? ((exitPrice - avgCost) / avgCost) * 100 : ((avgCost - exitPrice) / avgCost) * 100;
       const profitDollar = isLong ? (exitPrice - avgCost) * totalShares : (avgCost - exitPrice) * totalShares;
+      const entryDate    = pos.fills[1]?.date;
+      const holdingWeeks = entryDate ? Math.round((new Date(weekOf) - new Date(entryDate)) / (7 * 24 * 60 * 60 * 1000)) : 1;
 
-      // Calculate holding weeks
-      const entryDate = pos.fills[1]?.date;
-      const holdingWeeks = entryDate
-        ? Math.round((new Date(weekOf) - new Date(entryDate)) / (7 * 24 * 60 * 60 * 1000))
-        : 1;
-
-      // Close in DB
       await db.collection('pnthr_portfolio').updateOne(
         { id: pos.id, ownerId: DEMO_OWNER_ID },
         {
@@ -118,13 +147,12 @@ async function main() {
             updatedAt: new Date(weekOf + 'T20:15:00Z'),
             outcome: {
               exitPrice, profitPct: +profitPct.toFixed(2), profitDollar: +profitDollar.toFixed(2),
-              holdingDays: holdingWeeks * 5, exitReason: 'SIGNAL',
+              holdingDays: holdingWeeks * 5, exitReason,
             },
           },
         }
       );
 
-      // Close journal entry
       await db.collection('pnthr_journal').updateOne(
         { positionId: pos.id, ownerId: DEMO_OWNER_ID },
         {
@@ -134,7 +162,7 @@ async function main() {
             'performance.totalPnlDollar': +profitDollar.toFixed(2),
             'performance.realizedPnlDollar': +profitDollar.toFixed(2),
             'performance.remainingShares': 0,
-            exits: [{ reason: 'SIGNAL', price: exitPrice, date: new Date(weekOf + 'T20:15:00Z'),
+            exits: [{ reason: exitReason, price: exitPrice, date: new Date(weekOf + 'T20:15:00Z'),
               shares: totalShares, pnlDollar: +profitDollar.toFixed(2), pnlPct: +profitPct.toFixed(2) }],
             updatedAt: new Date(weekOf + 'T20:15:00Z'),
           },
@@ -144,7 +172,7 @@ async function main() {
       nav += profitDollar;
       activePositions.delete(ticker);
       totalClosed++;
-      console.log(`  CLOSED ${ticker} (${isLong ? 'LONG' : 'SHORT'}) — ${profitPct >= 0 ? '+' : ''}${profitPct.toFixed(1)}% ($${profitDollar.toFixed(0)})`);
+      console.log(`  CLOSED ${ticker} (${exitReason}) — ${profitPct >= 0 ? '+' : ''}${profitPct.toFixed(1)}% ($${profitDollar.toFixed(0)})`);
     }
 
     // ── Open new positions for top 10 we don't hold ─────────────────────────

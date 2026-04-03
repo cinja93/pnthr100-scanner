@@ -1740,6 +1740,11 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
               currentPrice: h.price || 0,
               totalScore: h.killScore || 0,
               killScore: h.killScore || 0,
+              pipelineMaxScore: h.maxScore || 0,
+              exchange: h.exchange || '',
+              signalAge: h.signalAge ?? null,
+              weeksSince: h.signalAge ?? null,
+              isDeveloping: h.isDeveloping || false,
             };
             const result = computeAnalyzeScore(stockObj, analyzeCtx);
             pct = result?.pct ?? 0;

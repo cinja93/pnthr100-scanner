@@ -5482,35 +5482,64 @@ app.get('/api/assistant/headlines', async (req, res) => {
     if (devData) {
       const devTime = devData.computedAt || nowISO;
       const st = devData.sectorTrend || {};
-      // Build kill score map from apex cache for Analyze scoring
-      const killMap = {};
+      // Build enrichment map from apex cache for Analyze scoring
+      const apexMap = {};  // ticker → { killScore, exchange, signalAge, maxScore }
       try {
         const { getCachedApexResults } = await import('./apexService.js');
         const apex = getCachedApexResults();
-        if (apex?.stocks) for (const s of apex.stocks) killMap[s.ticker] = s.totalScore || s.score || 0;
+        if (apex?.stocks) {
+          const maxScore = Math.max(...apex.stocks.map(s => s.totalScore || 0), 1);
+          for (const s of apex.stocks) {
+            apexMap[s.ticker] = {
+              killScore: s.totalScore || s.score || 0,
+              exchange: s.exchange || '',
+              signalAge: s.signalAge ?? s.weeksSince ?? null,
+              maxScore,
+            };
+          }
+        }
       } catch { /* non-fatal */ }
+
+      // Helper to build extra fields for each headline
+      const extra = (ticker, sec, price) => {
+        const a = apexMap[ticker] || {};
+        return {
+          sector: sec,
+          sectorAboveEma: sec ? (st[sec] ?? null) : null,
+          killScore: a.killScore || 0,
+          maxScore: a.maxScore || 0,
+          exchange: a.exchange || '',
+          signalAge: a.signalAge ?? null,
+          price: price || 0,
+        };
+      };
 
       for (const s of devData.triggeredToday?.bl || []) {
         const sec = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
-        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW BL SIGNAL${sec ? ` — ${sec}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_BL',
-          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null, killScore: killMap[s.ticker] || 0 });
+        // Triggered today = signalAge 0 (brand new)
+        const ex = extra(s.ticker, sec, 0);
+        ex.signalAge = 0;
+        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW BL SIGNAL${sec ? ` — ${sec}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_BL', ex);
       }
       for (const s of devData.triggeredToday?.ss || []) {
         const sec = (s.sector && s.sector !== 'Unknown' && s.sector !== '—') ? s.sector : null;
-        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW SS SIGNAL${sec ? ` — ${sec}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_SS',
-          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null, killScore: killMap[s.ticker] || 0 });
+        const ex = extra(s.ticker, sec, 0);
+        ex.signalAge = 0;
+        add(devTime, '🎯', 'SIGNAL', s.ticker, `NEW SS SIGNAL${sec ? ` — ${sec}` : ''}, triggered on developing weekly bar`, 'TRIGGERED_SS', ex);
       }
       for (const s of devData.devBL || []) {
         const sec = (s.sector && s.sector !== '—') ? s.sector : null;
         const dist = s.pctFromHigh <= 0 ? 'past last week high' : `${s.pctFromHigh.toFixed(1)}% from last week high`;
-        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing BL — ${sec ? sec + ', ' : ''}${dist}, price $${s.price.toFixed(2)}`, 'DEV_BL',
-          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null, killScore: killMap[s.ticker] || 0, price: s.price });
+        const ex = extra(s.ticker, sec, s.price);
+        ex.isDeveloping = true;  // developing signal flag
+        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing BL — ${sec ? sec + ', ' : ''}${dist}, price $${s.price.toFixed(2)}`, 'DEV_BL', ex);
       }
       for (const s of devData.devSS || []) {
         const sec = (s.sector && s.sector !== '—') ? s.sector : null;
         const dist = s.pctFromLow <= 0 ? 'past last week low' : `${s.pctFromLow.toFixed(1)}% from last week low`;
-        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing SS — ${sec ? sec + ', ' : ''}${dist}, price $${s.price.toFixed(2)}`, 'DEV_SS',
-          { sector: sec, sectorAboveEma: sec ? (st[sec] ?? null) : null, killScore: killMap[s.ticker] || 0, price: s.price });
+        const ex = extra(s.ticker, sec, s.price);
+        ex.isDeveloping = true;
+        add(devTime, '👀', 'DEVELOPING', s.ticker, `Developing SS — ${sec ? sec + ', ' : ''}${dist}, price $${s.price.toFixed(2)}`, 'DEV_SS', ex);
       }
     }
 

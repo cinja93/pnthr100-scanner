@@ -5503,6 +5503,9 @@ app.get('/api/assistant/headlines', async (req, res) => {
         if (apex?.stocks) {
           apexMaxScore = Math.max(...apex.stocks.map(s => s.totalScore || 0), 1);
           for (const s of apex.stocks) {
+            // Skip OVEREXTENDED (score = -99, killRank = null) — chart's /api/apex/ticker
+            // also skips these, so chip must return NOT SCORED to match
+            if ((s.totalScore || 0) < 0 || s.killRank == null) continue;
             apexMap[s.ticker] = {
               killScore: s.totalScore || s.score || 0,
               exchange: s.exchange || '',
@@ -5514,8 +5517,10 @@ app.get('/api/assistant/headlines', async (req, res) => {
       } catch { /* non-fatal */ }
 
       // Fallback: query pnthr_kill_scores for tickers NOT in live apex cache
-      // This gets historical Kill scores from the DB (populated every Friday)
+      // ONLY when apex cache is warm — when cold (server just restarted), chart's
+      // /api/apex/ticker also returns found:false, so chip must match (NOT SCORED).
       const killScoreMap = {};  // ticker → { killScore, exchange, signalAge }
+      const apexCacheWarm = Object.keys(apexMap).length > 0;
       try {
         // Collect all tickers that need scoring
         const allHeadlineTickers = [
@@ -5525,25 +5530,23 @@ app.get('/api/assistant/headlines', async (req, res) => {
           ...(devData.devSS || []).map(s => s.ticker),
         ];
         const missingFromApex = allHeadlineTickers.filter(t => !apexMap[t]);
-        if (missingFromApex.length > 0) {
+        if (apexCacheWarm && missingFromApex.length > 0) {
           // Get the latest weekOf from kill_scores
           const latestDoc = await db.collection('pnthr_kill_scores')
             .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
           if (latestDoc?.weekOf) {
+            // Exclude OVEREXTENDED (totalScore = -99, killRank = null) — chart also
+            // excludes these from /api/apex/ticker, so chip must match
             const killDocs = await db.collection('pnthr_kill_scores')
-              .find({ weekOf: latestDoc.weekOf, ticker: { $in: missingFromApex } },
+              .find({ weekOf: latestDoc.weekOf, ticker: { $in: missingFromApex },
+                      totalScore: { $gt: 0 }, killRank: { $ne: null } },
                      { projection: { ticker: 1, totalScore: 1, score: 1, exchange: 1, signalAge: 1, weeksSince: 1 } })
               .toArray();
-            // Also get the max score for this week for percentage calculation
-            const maxDoc = await db.collection('pnthr_kill_scores')
-              .findOne({ weekOf: latestDoc.weekOf }, { sort: { totalScore: -1 }, projection: { totalScore: 1 } });
-            const dbMaxScore = maxDoc?.totalScore || apexMaxScore;
             for (const d of killDocs) {
               killScoreMap[d.ticker] = {
                 killScore: d.totalScore || d.score || 0,
                 exchange: d.exchange || '',
                 signalAge: d.signalAge ?? d.weeksSince ?? null,
-                maxScore: dbMaxScore,
               };
             }
           }

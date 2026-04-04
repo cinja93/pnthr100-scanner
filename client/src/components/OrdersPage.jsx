@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchLatestOrders, fetchOrdersHistory, fetchOrdersGateLog, runOrdersManual } from '../services/api';
+import { fetchLatestOrders, fetchOrdersHistory, fetchOrdersGateLog, runOrdersManual, fetchBacktestTrades } from '../services/api';
 import styles from './OrdersPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -443,10 +443,22 @@ function BacktestPopup({ type, onClose }) {
   const d = type === 'BL' ? BL_BACKTEST : SS_BACKTEST;
   const label = type === 'BL' ? 'BUY LONG' : 'SELL SHORT';
   const color = '#22c55e';
+  const [trades, setTrades] = useState(null);
+  const [loadingTrades, setLoadingTrades] = useState(false);
+  const [showTrades, setShowTrades] = useState(false);
+
+  function handleShowTrades() {
+    if (trades) { setShowTrades(s => !s); return; }
+    setLoadingTrades(true);
+    fetchBacktestTrades(type)
+      .then(data => { setTrades(data.trades || []); setShowTrades(true); })
+      .catch(() => setTrades([]))
+      .finally(() => setLoadingTrades(false));
+  }
 
   return (
     <div className={styles.rulesOverlay} onClick={onClose}>
-      <div className={styles.rulesPanel} onClick={e => e.stopPropagation()}>
+      <div className={`${styles.rulesPanel} ${showTrades ? styles.rulesPanelWide : ''}`} onClick={e => e.stopPropagation()}>
         <div className={styles.rulesHeader}>
           <h2 className={styles.rulesTitle}>{label} Backtest Results</h2>
           <button className={styles.rulesClose} onClick={onClose}>X</button>
@@ -601,6 +613,55 @@ function BacktestPopup({ type, onClose }) {
               </div>
             </div>
           </div>
+
+          {/* Individual trades toggle */}
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
+            <button className={styles.rulesBtn} onClick={handleShowTrades} disabled={loadingTrades}>
+              {loadingTrades ? 'Loading...' : showTrades ? 'Hide Individual Trades' : `Show All ${d.trades} Trades`}
+            </button>
+          </div>
+
+          {showTrades && trades && (
+            <>
+              <h3 className={styles.rulesSectionTitle}>
+                All {label} Trades ({trades.length})
+              </h3>
+              <div className={styles.btTradesWrap}>
+                <table className={styles.btTable}>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Ticker</th>
+                      <th>Entry Date</th>
+                      <th>Entry $</th>
+                      <th>Exit Date</th>
+                      <th>Exit $</th>
+                      <th>P&L %</th>
+                      <th>Exit Reason</th>
+                      <th>Sector</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trades.map((t, i) => (
+                      <tr key={i} className={t.isWinner ? styles.btTradeWin : styles.btTradeLoss}>
+                        <td>{i + 1}</td>
+                        <td style={{ fontWeight: 700 }}>{t.ticker}</td>
+                        <td>{t.entryDate}</td>
+                        <td>${t.entryPrice?.toFixed(2)}</td>
+                        <td>{t.exitDate}</td>
+                        <td>${t.exitPrice?.toFixed(2)}</td>
+                        <td style={{ fontWeight: 700, color: t.profitPct >= 0 ? '#22c55e' : '#ef4444' }}>
+                          {t.profitPct >= 0 ? '+' : ''}{t.profitPct?.toFixed(2)}%
+                        </td>
+                        <td style={{ fontSize: 11 }}>{t.exitReason}</td>
+                        <td style={{ fontSize: 11 }}>{(t.sector || '').slice(0, 18)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

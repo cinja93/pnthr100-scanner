@@ -119,6 +119,17 @@ function RulesPopup({ type, onClose }) {
                 <div className={styles.ruleDesc}>Initial position is Lot 1 only (35% of full size). Lots 2-5 are added via pyramiding: 5-day time gate + 1% profitable trigger. Stop ratchets on each lot fill.</div>
               </div>
             </div>
+
+            <h3 className={styles.rulesSectionTitle}>Backtest Performance</h3>
+
+            <div className={styles.ruleCard} style={{ borderLeft: '3px solid #fcf000' }}>
+              <div>
+                <div className={styles.ruleName}>BL Filter-Then-Rank Results</div>
+                <div className={styles.ruleDesc}>
+                  58.4% win rate on 612 trades | +2.87% avg return | W/L ratio 2.14 — the macro + sector gates eliminate the majority of false breakouts that plague unfiltered long entries.
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className={styles.rulesBody}>

@@ -927,7 +927,7 @@ const BUILT_IN_ROUTINES = [
   { id: 'mon_stop_sync',      dayOfWeek: 1, label: 'Run Monday Stop Sync — update IBKR stops to match PNTHR' },
   // mon_weekly_plan, mon_sector_review, mon_earnings_scan → computed smart routines (see buildRoutineContext)
   { id: 'mon_heat_check',     dayOfWeek: 1, label: 'Check portfolio heat — are you within 15% cap?' },
-  { id: 'mon_regime',         dayOfWeek: 1, label: 'Check market regime — SPY/QQQ above or below sector EMA?' },
+  { id: 'mon_regime',         dayOfWeek: 1, label: 'Check market regime — SPY/QQQ above or below 21W EMA?' },
 
   // ── Wednesday ──
   { id: 'wed_mid_week',       dayOfWeek: 3, label: 'Mid-week position review — any lot triggers approaching?' },

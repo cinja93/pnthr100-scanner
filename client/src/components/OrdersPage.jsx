@@ -605,7 +605,7 @@ function BacktestPopup({ type, onClose }) {
           {/* Total return */}
           <div className={styles.ruleCard} style={{ borderLeft: `3px solid ${color}`, marginTop: 16 }}>
             <div>
-              <div className={styles.ruleName}>Total Cumulative Return</div>
+              <div className={styles.ruleName}>Total Cumulative Return (sum of all trade %)</div>
               <div className={styles.ruleDesc}>
                 +{d.totalReturn.toLocaleString()}% across {d.trades} trades ({d.winners}W / {d.losers}L).
                 {type === 'SS' && ' The strict crash gate ensures shorts only fire during genuine market breakdowns.'}

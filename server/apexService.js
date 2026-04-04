@@ -971,8 +971,8 @@ export async function getApexResults(
   const results = {
     stocks: scored,
     indexData: {
-      SPY: indexData['SPY'] ? { price: indexData['SPY'].price, ema21: indexData['SPY'].ema21, aboveEma: indexData['SPY'].aboveEma, emaRising: indexData['SPY'].emaRising } : null,
-      QQQ: indexData['QQQ'] ? { price: indexData['QQQ'].price, ema21: indexData['QQQ'].ema21, aboveEma: indexData['QQQ'].aboveEma, emaRising: indexData['QQQ'].emaRising } : null,
+      SPY: indexData['SPY'] ? { price: indexData['SPY'].price, ema21: indexData['SPY'].ema21, emaSlope: indexData['SPY'].emaSlope, aboveEma: indexData['SPY'].aboveEma, emaRising: indexData['SPY'].emaRising } : null,
+      QQQ: indexData['QQQ'] ? { price: indexData['QQQ'].price, ema21: indexData['QQQ'].ema21, emaSlope: indexData['QQQ'].emaSlope, aboveEma: indexData['QQQ'].aboveEma, emaRising: indexData['QQQ'].emaRising } : null,
     },
     contextSummary: {
       spyAboveEma:  indexData['SPY']?.aboveEma  ?? null,

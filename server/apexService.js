@@ -12,7 +12,7 @@
 //   D3  Entry Quality               0–85 pts      Conviction×2.5 + Slope×10 + Sep×1.5
 //   D4  Signal Freshness            -15 to +10    New signal bonus / stale signal decay
 //   D5  Rank Rise                   ±20 pts       Delta rank change, capped
-//   D6  Momentum                    0–20 pts      RSI + OBV + ADX + Volume, floored at 0
+//   D6  Momentum                    -10–20 pts    RSI + OBV + ADX + Volume, floor -10
 //   D7  Rank Velocity               ±10 pts       Acceleration of rank change
 //   D8  Multi-Strategy Prey         0–6 pts       SPRINT/HUNT=2 pts, others=1 pt
 //

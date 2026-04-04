@@ -89,7 +89,7 @@ export function getTier(score) {
 
 // ── Sector Map ────────────────────────────────────────────────────────────────
 
-const SECTOR_MAP = {
+export const SECTOR_MAP = {
   'Technology':             'XLK',
   'Energy':                 'XLE',
   'Healthcare':             'XLV',
@@ -106,7 +106,7 @@ const SECTOR_MAP = {
   'Consumer Staples':       'XLP',
 };
 
-const ALL_SECTOR_ETFS = ['XLK', 'XLE', 'XLV', 'XLF', 'XLY', 'XLC', 'XLI', 'XLB', 'XLRE', 'XLU', 'XLP'];
+export const ALL_SECTOR_ETFS = ['XLK', 'XLE', 'XLV', 'XLF', 'XLY', 'XLC', 'XLI', 'XLB', 'XLRE', 'XLU', 'XLP'];
 
 // ── Date Helpers ──────────────────────────────────────────────────────────────
 // getLastFriday() imported from technicalUtils.js
@@ -241,7 +241,7 @@ function computeADX14(weeklyBars) {
 
 // ── Data Fetcher ──────────────────────────────────────────────────────────────
 
-async function fetchStockData(ticker) {
+export async function fetchStockData(ticker) {
   try {
     const today = new Date();
     const from  = new Date(today);
@@ -264,7 +264,7 @@ async function fetchStockData(ticker) {
 // ── Index Data (D1 regime) ────────────────────────────────────────────────────
 // Returns { QQQ, SPY } each with: price, ema21 value, emaSlope %, aboveEma, emaRising
 
-async function fetchIndexData() {
+export async function fetchIndexData() {
   const result = {};
   for (const ticker of ['QQQ', 'SPY']) {
     try {
@@ -291,7 +291,7 @@ async function fetchIndexData() {
 // ── Sector Data (D2) ─────────────────────────────────────────────────────────
 // Returns map of ETF ticker → { return5D, return1M } in percent
 
-async function fetchSectorData() {
+export async function fetchSectorData() {
   const result = {};
   await Promise.all(ALL_SECTOR_ETFS.map(async etf => {
     try {

@@ -24,6 +24,7 @@ import {
   ensureCommandCenterIndexes,
 } from './commandCenter.js';
 import { runFridayKillPipeline } from './fridayPipeline.js';
+import { runOrdersPipeline, runOrdersDailyUpdate, ordersGetLatest, ordersGetGateLog, ordersGetHistory } from './ordersPipeline.js';
 import { getKillTestSettings, saveKillTestSettings } from './killTestSettings.js';
 import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import { killTestMonthlyGet, killTestMetricsGet, killTestMonthlyGenerate, generateMonthlySnapshots } from './killTestMonthly.js';
@@ -1966,6 +1967,21 @@ app.get('/api/kill-test/monthly',          authenticateJWT, requireAdmin, killTe
 app.get('/api/kill-test/metrics',          authenticateJWT, requireAdmin, killTestMetricsGet);
 app.post('/api/kill-test/monthly/generate', authenticateJWT, requireAdmin, killTestMonthlyGenerate);
 
+// ── PNTHR Orders Pipeline ─────────────────────────────────────────────────────
+app.get('/api/orders/latest',    authenticateJWT, ordersGetLatest);
+app.get('/api/orders/gate-log',  authenticateJWT, ordersGetGateLog);
+app.get('/api/orders/history',   authenticateJWT, ordersGetHistory);
+app.post('/api/admin/run-orders', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const type = req.body.type || 'WEEKLY';
+    const result = await runOrdersPipeline({ type });
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error('[Orders] Manual run failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Scoring Engine Health ───────────────────────────────────────────────────────
 app.get('/api/scoring-health', authenticateJWT, requireAdmin, async (req, res) => {
   try {
@@ -3887,6 +3903,30 @@ cron.schedule('15 16 * * 5', async () => {
     await runFridayKillPipeline();
   } catch (err) {
     console.error('[Kill Pipeline] Failed:', err.message);
+  }
+}, { timezone: 'America/New_York' });
+
+// ── Cron: PNTHR Orders — Friday 2:00 PM ET (PREVIEW) ─────────────────────────
+// Generates weekly order sheet 2 hours before close so user can set up GTD limit orders.
+cron.schedule('0 14 * * 5', async () => {
+  try {
+    console.log('[Orders] Running Friday PREVIEW pipeline...');
+    await runOrdersPipeline({ type: 'WEEKLY' });
+    console.log('[Orders] Friday PREVIEW complete.');
+  } catch (err) {
+    console.error('[Orders] Friday PREVIEW failed:', err.message);
+  }
+}, { timezone: 'America/New_York' });
+
+// ── Cron: PNTHR Orders — Daily 4:40 PM ET Mon–Fri (DAILY_UPDATE) ─────────────
+// Checks lot additions (time gate + +1% trigger), stale hunts, and exit signals.
+cron.schedule('40 16 * * 1-5', async () => {
+  try {
+    console.log('[Orders] Running daily update...');
+    await runOrdersDailyUpdate();
+    console.log('[Orders] Daily update complete.');
+  } catch (err) {
+    console.error('[Orders] Daily update failed:', err.message);
   }
 }, { timezone: 'America/New_York' });
 

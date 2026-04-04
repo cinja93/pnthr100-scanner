@@ -696,6 +696,35 @@ export async function fetchHourlyEma() {
   return res.json();
 }
 
+// ── PNTHR Orders ──
+export async function fetchLatestOrders() {
+  const res = await apiFetch(`${API_BASE}/api/orders/latest`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchOrdersHistory() {
+  const res = await apiFetch(`${API_BASE}/api/orders/history`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchOrdersGateLog() {
+  const res = await apiFetch(`${API_BASE}/api/orders/gate-log`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function runOrdersManual(type = 'WEEKLY') {
+  const res = await apiFetch(`${API_BASE}/api/admin/run-orders`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ type }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function deleteJournalTag(journalId, tag) {
   const res = await apiFetch(`${API_BASE}/api/journal/${journalId}/tags/${encodeURIComponent(tag)}`, {
     method: 'DELETE',

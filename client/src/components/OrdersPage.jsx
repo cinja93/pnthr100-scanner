@@ -193,9 +193,9 @@ function RulesPopup({ type, onClose }) {
 
             <div className={styles.ruleCard} style={{ borderLeft: '3px solid #fcf000' }}>
               <div>
-                <div className={styles.ruleName}>Filter-Then-Rank Backtest Results</div>
+                <div className={styles.ruleName}>BL Backtest Results</div>
                 <div className={styles.ruleDesc}>
-                  67.2% win rate (78.6% dollar-weighted) | +5.49% avg P&L per trade | W/L ratio 3.35:1 | Positive every year including 2022. Results independent of lot size.
+                  1,660 BL trades | 67.2% win rate | +5.60% avg P&L | W/L ratio 3.50:1 | Positive every year including 2022.
                 </div>
               </div>
             </div>
@@ -360,9 +360,9 @@ function RulesPopup({ type, onClose }) {
 
             <div className={styles.ruleCard} style={{ borderLeft: '3px solid #fcf000' }}>
               <div>
-                <div className={styles.ruleName}>Filter-Then-Rank Backtest Results</div>
+                <div className={styles.ruleName}>SS Backtest Results</div>
                 <div className={styles.ruleDesc}>
-                  67.2% win rate (78.6% dollar-weighted) | +5.49% avg P&L per trade | W/L ratio 3.35:1 | Positive every year including 2022. The strict crash gate is what makes SS work — the first time shorts have outperformed in any PNTHR backtest.
+                  143 SS trades | 67.8% win rate | +4.20% avg P&L | W/L ratio 2.13:1 | No trades in 2021/2024 (bull regime — crash gate blocked all shorts by design).
                 </div>
               </div>
             </div>

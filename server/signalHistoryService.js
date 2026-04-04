@@ -5,10 +5,11 @@
 // Jungle stocks. This builds a complete week-by-week archive over time.
 //
 // Collection: signal_history
-// Schema: { ticker, weekOf (YYYY-MM-DD Monday), signal, ema21, stopPrice,
-//           isNewSignal, signalDate, profitDollar, profitPct, savedAt }
+// Schema: { ticker, weekOf (YYYY-MM-DD Monday), signal, ema21, emaPeriod,
+//           stopPrice, isNewSignal, signalDate, profitDollar, profitPct, savedAt }
 
 import { connectToDatabase } from './database.js';
+import { DEFAULT_EMA_PERIOD } from './sectorEmaConfig.js';
 
 // Returns the Monday of the current week as YYYY-MM-DD
 export function getCurrentWeekOf() {
@@ -22,7 +23,7 @@ export function getCurrentWeekOf() {
 }
 
 // Save a full weekly snapshot for all tickers.
-// signalMap: { ticker -> { signal, ema21, stopPrice, pnthrStop,
+// signalMap: { ticker -> { signal, ema21, emaPeriod, stopPrice, pnthrStop,
 //                          isNewSignal, signalDate, profitDollar, profitPct } }
 // Upserts so it's safe to call multiple times per week.
 export async function saveWeeklySnapshot(signalMap) {
@@ -42,6 +43,7 @@ export async function saveWeeklySnapshot(signalMap) {
           weekOf,
           signal:      s.signal      ?? null,
           ema21:       s.ema21       ?? null,
+          emaPeriod:   s.emaPeriod   ?? DEFAULT_EMA_PERIOD,
           stopPrice:   s.pnthrStop   ?? s.stopPrice ?? null,
           isNewSignal: s.isNewSignal ?? false,
           signalDate:  s.signalDate  ?? null,

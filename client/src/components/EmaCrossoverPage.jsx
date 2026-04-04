@@ -47,7 +47,7 @@ export default function EmaCrossoverPage() {
         <div>
           <h1 className={styles.title}>PNTHR Hunt</h1>
           <p className={styles.subtitle}>
-            Stocks whose weekly close crossed the 21-week EMA within the past 2 weeks —
+            Stocks whose weekly close crossed the sector-optimized EMA within the past 2 weeks —
             above EMA with a BUY signal, or below EMA with a SELL signal.
             Universe: S&amp;P 500 + NASDAQ 100 + Dow 30.
           </p>

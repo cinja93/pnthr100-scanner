@@ -165,3 +165,13 @@ export const KILL_CONFIG = {
 //             warnUnknownSector() logs once per process for any sector string not in
 //             the map so new FMP renames surface immediately in server logs.
 //
+// 2026-04-04  v4.3: Per-sector optimized EMA periods (Opus)
+//             ENHANCEMENT / HIGH impact
+//             Signal detection now uses sector-optimized EMA periods instead of a
+//             fixed 21-week EMA for all stocks. Each sector has a tuned period based
+//             on backtested performance across historical BL/SS signals. Regime gates
+//             (SPY/QQQ) and sector gates remain at 21-period EMA (Phase 1).
+//             UI text updated across OrdersPage, PreyPage, AssistantPage,
+//             EmaCrossoverPage, SectorPage, disciplineScoring, newsletterService,
+//             and assistantService to reflect the new per-sector EMA system.
+//

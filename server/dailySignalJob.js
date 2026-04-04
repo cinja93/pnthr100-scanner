@@ -17,6 +17,7 @@
 
 import { connectToDatabase } from './database.js';
 import { normalizeSector }   from './sectorUtils.js';
+import { DEFAULT_EMA_PERIOD } from './sectorEmaConfig.js';
 
 // ── Sector lookup ─────────────────────────────────────────────────────────────
 // Build ticker→sector map from MongoDB (avoids expensive FMP profile API calls).
@@ -93,6 +94,7 @@ export async function runDailySignalJob() {
       signalDate: sig.signalDate || null,
       isNew:      sig.isNewSignal ?? false,
       ema21:      sig.ema21 ?? null,
+      emaPeriod:  sig.emaPeriod ?? DEFAULT_EMA_PERIOD,
       emaRising:  sig.emaRising ?? null,
       runDate,
       updatedAt:  new Date(),

@@ -18,7 +18,8 @@ dotenv.config();
 import { connectToDatabase } from './database.js';
 import { normalizeSector } from './sectorUtils.js';
 import { calculateSectorExposure } from './sectorExposure.js';
-import { computeEMA21fromDailyBars } from './technicalUtils.js';
+import { computeEMAFromDailyBars, computeEMA21fromDailyBars } from './technicalUtils.js';
+import { getSectorEmaPeriod } from './sectorEmaConfig.js';
 
 const FMP_API_KEY  = process.env.FMP_API_KEY;
 const FMP_BASE     = 'https://financialmodelingprep.com';
@@ -73,14 +74,23 @@ async function fetchProfile(ticker) {
   } catch { return null; }
 }
 
-// 21-week EMA — computed from 250 daily candles via shared computeEMA21fromDailyBars
-async function fetchEMA21(ticker) {
+// EMA from daily candles — parameterized by period.
+// Defaults to 21 for backward compatibility (regime, index).
+// Pass sector-specific period via getSectorEmaPeriod() for individual stocks.
+async function fetchEMA(ticker, period) {
   try {
     const url = fmpUrl(`/api/v3/historical-price-full/${ticker}`, { timeseries: '250' });
     const data = await fetch(url, { signal: AbortSignal.timeout(8000) })
       .then(r => r.ok ? r.json() : null).catch(() => null);
-    return computeEMA21fromDailyBars(data?.historical ?? null);
+    return period != null
+      ? computeEMAFromDailyBars(data?.historical ?? null, period)
+      : computeEMA21fromDailyBars(data?.historical ?? null);
   } catch { return null; }
+}
+
+// Backward-compat alias — regime (SPY/QQQ) always uses 21-period
+async function fetchEMA21(ticker) {
+  return fetchEMA(ticker);
 }
 
 // Weekly RSI
@@ -473,10 +483,11 @@ export async function tickerHandler(req, res) {
     const db     = await connectToDatabase();
 
     // Parallel fetch: FMP data + MongoDB Kill score + cached gap risk
-    const [quote, profile, ema, rsi, adx, killScore] = await Promise.allSettled([
+    // Profile is fetched first (with other non-EMA calls) so we know the sector
+    // before computing the sector-specific EMA period.
+    const [quote, profile, rsi, adx, killScore] = await Promise.allSettled([
       fetchQuotes([ticker]).then(r => r[ticker] || null),
       fetchProfile(ticker),
-      fetchEMA21(ticker),
       fetchRSI(ticker),
       fetchADX(ticker),
       db ? db.collection('pnthr_kill_scores').findOne({ ticker }, { sort: { weekOf: -1 } }) : null,
@@ -484,10 +495,14 @@ export async function tickerHandler(req, res) {
 
     const q = quote.value;
     const p = profile.value;
-    const e = ema.value;
     const r = rsi.value;
     const a = adx.value;
     const k = killScore.value;
+
+    // Fetch EMA with sector-specific period (requires profile for sector)
+    const sectorName = normalizeSector(p?.sector || '');
+    const emaPeriod  = getSectorEmaPeriod(sectorName);
+    const e = await fetchEMA(ticker, emaPeriod).catch(() => null);
 
     // Gap risk: check cache first, compute if stale/missing
     let maxGapPct = 0;
@@ -526,10 +541,11 @@ export async function tickerHandler(req, res) {
       found:            !!(q || k),
       currentPrice:     q?.price      || null,
       maxGapPct,
-      sector:           normalizeSector(p?.sector || ''),
+      sector:           sectorName,
       exchange:         p?.exchange   || '',
       companyName:      p?.companyName || '',
       ema21:            e?.current    || null,
+      emaPeriod,
       emaSlopePct,
       rsi:              r || null,
       adx:              a?.value      || null,

@@ -12,7 +12,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { getLastFriday, aggregateWeeklyBars, computeEMA21series } from './technicalUtils.js';
+import { getLastFriday, aggregateWeeklyBars, computeEMAseries, computeEMA21series } from './technicalUtils.js';
+import { getSectorEmaPeriod, DEFAULT_EMA_PERIOD } from './sectorEmaConfig.js';
 
 const FMP_API_KEY   = process.env.FMP_API_KEY;
 const FMP_BASE_URL  = 'https://financialmodelingprep.com/api/v3';
@@ -42,7 +43,8 @@ const SECTOR_MAP = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-// getLastFriday(), aggregateWeeklyBars(), computeEMA21series() imported from technicalUtils.js
+// getLastFriday(), aggregateWeeklyBars(), computeEMAseries() imported from technicalUtils.js
+// Per-sector EMA periods from sectorEmaConfig.js; sector ETF gates stay at EMA 21
 
 async function fetchDailyBars(ticker, from, to) {
   const url = `${FMP_BASE_URL}/historical-price-full/${ticker}?from=${from}&to=${to}&apikey=${FMP_API_KEY}`;
@@ -53,7 +55,7 @@ async function fetchDailyBars(ticker, from, to) {
 }
 
 // ── Indicator Computations ────────────────────────────────────────────────────
-// aggregateWeeklyBars and computeEMA21series imported from technicalUtils.js
+// aggregateWeeklyBars and computeEMAseries imported from technicalUtils.js
 // Call aggregateWeeklyBars(daily, { includeVolume: true }) for OBV computation.
 
 function computeOBV(weeklyBars) {
@@ -152,7 +154,7 @@ function computeMonthlyEMA21(weeklyBars) {
 
 // ── Data Fetcher ──────────────────────────────────────────────────────────────
 
-async function fetchStockData(ticker) {
+async function fetchStockData(ticker, emaPeriod = DEFAULT_EMA_PERIOD) {
   try {
     const today = new Date();
     const from  = new Date(today);
@@ -164,7 +166,7 @@ async function fetchStockData(ticker) {
     const weekly   = aggregateWeeklyBars(daily, { includeVolume: true });
     if (weekly.length < 30) return null;
 
-    const ema21      = computeEMA21series(weekly);
+    const ema21      = computeEMAseries(weekly, emaPeriod);
     const obv        = computeOBV(weekly);
     const rsi        = computeRSI14(weekly);
     const adx        = computeADX14(weekly);
@@ -175,7 +177,7 @@ async function fetchStockData(ticker) {
     const vol5   = recent.slice(-5).reduce((s, b)  => s + (b.volume || 0), 0) / 5;
     const vol20  = recent.slice(-20).reduce((s, b) => s + (b.volume || 0), 0) / 20;
 
-    return { weekly, ema21, obv, rsi, adx, monthlyData, vol5, vol20 };
+    return { weekly, ema21, obv, rsi, adx, monthlyData, vol5, vol20, emaPeriod };
   } catch {
     return null;
   }
@@ -187,7 +189,8 @@ async function runSectorSentinel() {
   const status = {}, fourWeekReturns = {};
   await Promise.all(SECTOR_ETFS.map(async etf => {
     try {
-      const data = await fetchStockData(etf);
+      // Sector ETF gates always use EMA 21 (Phase 1 — gate EMA optimization separate)
+      const data = await fetchStockData(etf, DEFAULT_EMA_PERIOD);
       if (!data) return;
       const { weekly, ema21 } = data;
       const n = weekly.length;
@@ -259,6 +262,7 @@ function runAlphaLong(ticker, sector, data, sectorStatus, sectorFW) {
   return {
     ticker, strategy: 'Alpha Long', direction: 'long',
     barNumber: barsAbove, currentPrice: cur.close, ema21: +lastEma.toFixed(2),
+    emaPeriod: data.emaPeriod,
     priceDeltaPct: +(delta * 100).toFixed(2),
     rsi: +curRsi.toFixed(1), adx: +curAdx.toFixed(1),
     obvSlope: 'positive', daylight: 'confirmed',
@@ -324,6 +328,7 @@ function runAlphaShort(ticker, sector, data, sectorStatus, sectorFW) {
   return {
     ticker, strategy: 'Alpha Short', direction: 'short',
     barNumber: barsBelow, currentPrice: cur.close, ema21: +lastEma.toFixed(2),
+    emaPeriod: data.emaPeriod,
     priceDeltaPct: +(delta * 100).toFixed(2),
     rsi: +curRsi.toFixed(1), adx: +curAdx.toFixed(1),
     obvSlope: 'negative', daylight: 'confirmed',
@@ -352,7 +357,7 @@ function getSignalBadge(weekly, signalData) {
 
 // ── Rule Set 3: PNTHR Spring Long ─────────────────────────────────────────────
 // Strategy: stock made a 26-week high, pulled back ≥8%, is still above rising
-// 21-week EMA, and is in one of three stages: COILED (setup only), GAINING
+// sector EMA, and is in one of three stages: COILED (setup only), GAINING
 // (current close > weekly open — building momentum), or LAUNCHED (current
 // close > prior week's high — trigger confirmed).
 
@@ -408,13 +413,14 @@ function runSpringLong(ticker, data) {
     status, high26: +high26.toFixed(2), pctOffHigh: +pctOffHigh.toFixed(2),
     highWeeksAgo, pctVsOpen, pctAboveTrigger,
     currentPrice: cur.close, ema21: +lastEma.toFixed(2),
+    emaPeriod: data.emaPeriod,
     priceDeltaPct: +(delta * 100).toFixed(2),
   };
 }
 
 // ── Rule Set 4: PNTHR Spring Short ────────────────────────────────────────────
 // Mirror of Spring Long: stock made a 26-week low, bounced ≥8% (the "pullback"
-// in short direction), is still below a falling 21-week EMA.
+// in short direction), is still below a falling sector EMA.
 // LAUNCHED = close < prior week's low; GAINING = close < weekly open; COILED = setup only.
 
 function runSpringShort(ticker, data) {
@@ -469,6 +475,7 @@ function runSpringShort(ticker, data) {
     status, high26: +low26.toFixed(2), pctOffHigh: +pctOffHigh.toFixed(2),
     highWeeksAgo: lowWeeksAgo, pctVsOpen, pctAboveTrigger,
     currentPrice: cur.close, ema21: +lastEma.toFixed(2),
+    emaPeriod: data.emaPeriod,
     priceDeltaPct: +(delta * 100).toFixed(2),
   };
 }
@@ -545,6 +552,7 @@ function runStalk(ticker, data) {
     bwMin52: +minBw52.toFixed(2),
     wksInSqueeze,
     ema21: +lastEma.toFixed(2),
+    emaPeriod: data.emaPeriod,
     emaSlope: +emaSlope.toFixed(2),
     emaLean: cur.close > lastEma ? 'above' : 'below',
   };
@@ -609,6 +617,7 @@ function runAttack(ticker, data) {
     expansionPct,
     wksInSqueeze,
     ema21: lastEma != null ? +lastEma.toFixed(2) : null,
+    emaPeriod: data.emaPeriod,
     emaSlope: emaSlope != null ? +emaSlope.toFixed(2) : null,
     emaLean: lastEma != null ? (cur.close > lastEma ? 'above' : 'below') : null,
   };
@@ -656,6 +665,7 @@ function runDinner(ticker, data, signalData) {
       ticker, strategy: 'BL+1', direction: 'long',
       currentPrice: cur.close,
       ema21: +lastEma.toFixed(2),
+      emaPeriod: data.emaPeriod,
       priceDeltaPct: +(delta * 100).toFixed(2),
       rsi: +lastRsi.toFixed(1),
       obvSlope: 'rising',
@@ -676,6 +686,7 @@ function runDinner(ticker, data, signalData) {
       ticker, strategy: 'SS+1', direction: 'short',
       currentPrice: cur.close,
       ema21: +lastEma.toFixed(2),
+      emaPeriod: data.emaPeriod,
       priceDeltaPct: +(delta * 100).toFixed(2),
       rsi: +lastRsi.toFixed(1),
       obvSlope: 'falling',
@@ -718,7 +729,8 @@ export async function getPreyResults(tickers, stockMeta = {}, jungleSignals = {}
   await processBatch(tickers, async ticker => {
     const meta   = stockMeta[ticker] || {};
     const sector = meta.sector || '';
-    const data   = await fetchStockData(ticker);
+    const emaPeriod = getSectorEmaPeriod(sector);
+    const data   = await fetchStockData(ticker, emaPeriod);
     if (!data) return;
 
     const aL = runAlphaLong(ticker, sector, data, sectorStatus, sectorFW);

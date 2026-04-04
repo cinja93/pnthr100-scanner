@@ -84,7 +84,7 @@ function getFilteredData(allData, timeRange) {
   return allData.filter(d => d.date >= cutoffStr);
 }
 
-// Compute EMA(105) = 21-week EMA on a {date, value} series.
+// Compute EMA(105) on a {date, value} series — used for sector gate (21-period), not signal EMA.
 // Returns a Map of date → ema value. Uses all supplied data for warm-up.
 function computeEMA105(series) {
   const k = 2 / 106; // period = 105
@@ -162,7 +162,7 @@ function SectorMiniChart({ sectorKey, chartData, emaData = [], signalCounts, onC
 
     series.setData(chartData.map(d => ({ time: d.date, value: d.value })));
 
-    // 21-week EMA overlay (dotted blue line)
+    // 21-period gate EMA overlay (dotted blue line) — sector gate EMA, not the signal EMA
     if (emaData.length > 0) {
       const emaSeries = chart.addSeries(LineSeries, {
         color: '#3b82f6',
@@ -304,7 +304,7 @@ function Sp400CenterChart({ chartData, emaData = [] }) {
 
     series.setData(chartData.map(d => ({ time: d.date, value: d.value })));
 
-    // 21-week EMA overlay (dotted blue line)
+    // 21-period gate EMA overlay (dotted blue line) — sector gate EMA, not the signal EMA
     if (emaData.length > 0) {
       const emaSeries = chart.addSeries(LineSeries, {
         color: '#3b82f6',

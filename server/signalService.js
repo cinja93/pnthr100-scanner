@@ -3,21 +3,21 @@ dotenv.config();
 
 import { computeWilderATR, blInitStop, ssInitStop } from './stopCalculation.js';
 import { getLastFriday, aggregateWeeklyBars } from './technicalUtils.js';
+import { getSectorEmaPeriod, DEFAULT_EMA_PERIOD } from './sectorEmaConfig.js';
 
 // ── PNTHR Phase 1 Signal Engine ───────────────────────────────────────────────
 //
-// Generates BL (Buy Long) and SS (Sell Short) signals from 21-week EMA logic.
-// All computations are from FMP weekly price data — no external signal database needed.
+// Generates BL (Buy Long) and SS (Sell Short) signals using sector-optimized
+// EMA periods. Each sector uses its empirically optimal EMA (18-26 weeks).
+// See sectorEmaConfig.js for the per-sector period map.
 //
 // BL (Buy Long):
-//   • Weekly close > 21-week EMA
-//   • Current EMA > Previous EMA  (slope positive)
+//   • Weekly close > sector EMA, slope up
 //   • Weekly close > highest high of the prior 2 completed weeks + $0.01
 //   → Stop: lowest low of the prior 2 completed weeks − $0.01
 //
 // SS (Sell Short):
-//   • Weekly close < 21-week EMA
-//   • Current EMA < Previous EMA  (slope negative)
+//   • Weekly close < sector EMA, slope down
 //   • Weekly close < lowest low of the prior 2 completed weeks − $0.01
 //   → Stop: highest high of the prior 2 completed weeks + $0.01
 //
@@ -28,12 +28,11 @@ import { getLastFriday, aggregateWeeklyBars } from './technicalUtils.js';
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 
-const EMA_PERIOD = 21;
 // 5-year window matches the chart's data range so server and client state machines
 // traverse the same BL/BE cycles and produce consistent signals.
 const WEEKS_HISTORY = 260;
 
-// Weekly cache keyed by last-Friday date string
+// Weekly cache keyed by today's date string
 // Two separate caches: stocks use 1% daylight zone, ETFs use 0.3%
 let signalCache    = { weekKey: null, signals: {} };
 let etfSignalCache = { weekKey: null, signals: {} };
@@ -74,22 +73,22 @@ function computeEMASeries(closes, period) {
 // Run full state machine over all completed weekly bars to find the most recent signal event.
 // Mirrors the client's detectAllSignals logic — returns BL/SS entries and BE/SE exits.
 //
-// BL (Launch): weekLow is 1–10% above 21-EMA, within first 3 bars of long-daylight streak
-//              (current or previous bar is the 1st or 2nd bar where low > EMA).
-// SS (Failure): weekHigh is 1–10% below 21-EMA, within first 3 bars of short-daylight streak.
-// Phase 5 exit: structural 2-week low/high breach, trigger on intraweek low (BL) or intraweek high (SS).
-function runStateMachine(weeklyBars, isETF = false) {
-  if (weeklyBars.length < EMA_PERIOD + 2) {
-    return { signal: null, ema21: null, stopPrice: null };
+// emaPeriod: sector-specific EMA period (default from sectorEmaConfig).
+// BL (Launch): weekLow is 1–10% above EMA, within first 3 bars of long-daylight streak.
+// SS (Failure): weekHigh is 1–10% below EMA, within first 3 bars of short-daylight streak.
+// Phase 5 exit: structural 2-week low/high breach.
+function runStateMachine(weeklyBars, isETF = false, emaPeriod = DEFAULT_EMA_PERIOD) {
+  if (weeklyBars.length < emaPeriod + 2) {
+    return { signal: null, ema21: null, stopPrice: null, emaPeriod };
   }
 
   const closes = weeklyBars.map(b => b.close);
-  const emas   = computeEMASeries(closes, EMA_PERIOD);
-  if (emas.length < 2) return { signal: null, ema21: null, stopPrice: null, currentWeekStop: null };
+  const emas   = computeEMASeries(closes, emaPeriod);
+  if (emas.length < 2) return { signal: null, ema21: null, stopPrice: null, currentWeekStop: null, emaPeriod };
   const atrArr = computeWilderATR(weeklyBars);
 
   // emas[i] aligns to weeklyBars[i + (period - 1)]
-  const emaOffset = EMA_PERIOD - 1;
+  const emaOffset = emaPeriod - 1;
 
   let position         = null;  // { type: 'BL'|'SS', entryWi: number }
   let lastEvent        = null;  // most recent emitted event
@@ -107,7 +106,7 @@ function runStateMachine(weeklyBars, isETF = false) {
   let shortTrendActive = false;
   let shortTrendCapped = false;
 
-  for (let wi = EMA_PERIOD + 1; wi < weeklyBars.length; wi++) {
+  for (let wi = emaPeriod + 1; wi < weeklyBars.length; wi++) {
     const emaIdx = wi - emaOffset;
     if (emaIdx < 1) continue;
 
@@ -214,7 +213,7 @@ function runStateMachine(weeklyBars, isETF = false) {
   if (!lastEvent) {
     const lastEma = emas[emas.length - 1];
     return { signal: null, ema21: parseFloat(lastEma.toFixed(4)), stopPrice: null, currentWeekStop: null,
-             emaRising, emaSlope, lastWeekHigh, lastWeekLow, lastWeekClose };
+             emaRising, emaSlope, lastWeekHigh, lastWeekLow, lastWeekClose, emaPeriod };
   }
 
   const lastBar = weeklyBars[weeklyBars.length - 1];
@@ -236,6 +235,7 @@ function runStateMachine(weeklyBars, isETF = false) {
   lastEvent.lastWeekHigh  = lastWeekHigh;
   lastEvent.lastWeekLow   = lastWeekLow;
   lastEvent.lastWeekClose = lastWeekClose;
+  lastEvent.emaPeriod     = emaPeriod;
 
   return lastEvent;
 }
@@ -248,10 +248,16 @@ export { runStateMachine };
 // with stopPrice already included (no separate calculateStopPrices() call needed).
 //
 // { [ticker]: { signal: 'BUY'|'SELL'|null, stopPrice: number|null,
-//               isNewSignal: false, profitPercentage: null, ema21: number|null } }
+//               isNewSignal: false, profitPercentage: null, ema21: number|null,
+//               emaPeriod: number } }
 //
 // BL → 'BUY', SS → 'SELL' to keep existing UI labels working.
-export async function getSignals(tickers, { isETF = false } = {}) {
+//
+// Options:
+//   isETF:     use 0.3% daylight zone (vs 1% for stocks)
+//   sectorMap: { TICKER: 'SectorName', ... } — for sector-specific EMA periods.
+//              Tickers not in sectorMap use DEFAULT_EMA_PERIOD (21).
+export async function getSignals(tickers, { isETF = false, sectorMap = {} } = {}) {
   if (!tickers || tickers.length === 0) return {};
 
   const today = getToday();
@@ -266,7 +272,20 @@ export async function getSignals(tickers, { isETF = false } = {}) {
   }
 
   const activeCache = isETF ? etfSignalCache : signalCache;
-  const missing = tickers.filter(t => !(t in activeCache.signals));
+
+  // Check for tickers that need recomputing: either missing from cache,
+  // or cached with a different EMA period than the sector now requires
+  const missing = tickers.filter(t => {
+    const cached = activeCache.signals[t];
+    if (!cached) return true;
+    // If sector info is provided, check that the cached period matches
+    const sector = sectorMap[t];
+    if (sector) {
+      const requiredPeriod = getSectorEmaPeriod(sector);
+      if (cached.emaPeriod && cached.emaPeriod !== requiredPeriod) return true;
+    }
+    return false;
+  });
 
   if (missing.length > 0) {
     // Fetch through today so the current in-progress weekly bar is included.
@@ -287,10 +306,12 @@ export async function getSignals(tickers, { isETF = false } = {}) {
         try {
           const daily  = await fetchDailyBars(ticker, fromDate);
           const weekly = aggregateWeeklyBars(daily);
-          activeCache.signals[ticker] = runStateMachine(weekly, isETF);
+          const sector = sectorMap[ticker];
+          const emaPeriod = sector ? getSectorEmaPeriod(sector) : DEFAULT_EMA_PERIOD;
+          activeCache.signals[ticker] = runStateMachine(weekly, isETF, emaPeriod);
         } catch (err) {
           console.error(`Signal error for ${ticker}:`, err.message);
-          activeCache.signals[ticker] = { signal: null, ema21: null, stopPrice: null };
+          activeCache.signals[ticker] = { signal: null, ema21: null, stopPrice: null, emaPeriod: DEFAULT_EMA_PERIOD };
         }
       }));
       if (i + concurrency < missing.length) {
@@ -305,13 +326,14 @@ export async function getSignals(tickers, { isETF = false } = {}) {
   // Build return map in the format the rest of the app expects
   const result = {};
   for (const ticker of tickers) {
-    const s = activeCache.signals[ticker] || { signal: null, ema21: null, stopPrice: null };
+    const s = activeCache.signals[ticker] || { signal: null, ema21: null, stopPrice: null, emaPeriod: DEFAULT_EMA_PERIOD };
     result[ticker] = {
       signal:           s.signal, // 'BL', 'SS', 'BE', 'SE', or null
       stopPrice:        s.pnthrStop ?? s.stopPrice ?? null,
       pnthrStop:        s.pnthrStop ?? null,
       currentWeekStop:  s.currentWeekStop ?? null,
       ema21:            s.ema21,
+      emaPeriod:        s.emaPeriod ?? DEFAULT_EMA_PERIOD,
       emaRising:        s.emaRising      ?? null, // true/false/null — EMA slope direction
       emaSlope:         s.emaSlope       ?? null, // % change in EMA week-over-week
       lastWeekHigh:     s.lastWeekHigh   ?? null, // previous completed week's high
@@ -345,6 +367,7 @@ export function getCachedSignals() {
       pnthrStop:       s.pnthrStop ?? null,
       currentWeekStop: s.currentWeekStop ?? null,
       ema21:           s.ema21,
+      emaPeriod:       s.emaPeriod ?? DEFAULT_EMA_PERIOD,
       emaRising:       s.emaRising      ?? null,
       emaSlope:        s.emaSlope       ?? null,
       lastWeekHigh:    s.lastWeekHigh   ?? null,
@@ -363,20 +386,6 @@ export function getCachedSignals() {
  * Return a Map of tickers currently showing developing signal characteristics.
  * Keys are uppercase ticker strings, values are the developing direction ('BL' or 'SS').
  * Uses the in-memory signal cache — no FMP calls, synchronous, safe to call at confirm time.
- *
- * A developing ticker has:
- *   - BL developing: EMA rising (emaRising === true) but no confirmed BL signal yet
- *   - SS developing: EMA falling (emaRising === false) but no confirmed SS signal yet
- *   - has lastWeekHigh or lastWeekLow (confirms candle data was available for the check)
- *
- * If a ticker qualifies as both BL and SS developing (shouldn't happen in practice,
- * since emaRising is a boolean), the SS entry overwrites the BL entry.
- *
- * The Map supports .has(ticker) just like the old Set, so existing call sites
- * that only check presence still work. Call sites that need direction can use .get(ticker).
- *
- * This is the fast approximation used at CONFIRM ENTRY to set entryContext.
- * The full within-2%-of-high check runs only in the Pulse developing signals API.
  */
 export function getDevelopingSignalTickers() {
   const signalMap = getCachedSignals();
@@ -394,7 +403,6 @@ export function getDevelopingSignalTickers() {
 }
 
 // Force-clear signal cache so next getSignals() call recomputes with latest code.
-// Used by developing-signals endpoint when cache predates emaRising field.
 export function clearSignalCache() {
   signalCache    = { weekKey: null, signals: {} };
   etfSignalCache = { weekKey: null, signals: {} };

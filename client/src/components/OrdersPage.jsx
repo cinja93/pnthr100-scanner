@@ -56,7 +56,7 @@ function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>1</div>
               <div>
                 <div className={styles.ruleName}>Active BL Signal</div>
-                <div className={styles.ruleDesc}>Stock must have a confirmed Buy Long signal (close {'>'} 21W EMA, slope up, high {'>='} 2-week high, 1-10% daylight above EMA)</div>
+                <div className={styles.ruleDesc}>Stock must have a confirmed Buy Long signal (close {'>'} sector EMA, slope up, high {'>='} 2-week high, 1-10% daylight above EMA)</div>
               </div>
             </div>
 
@@ -208,7 +208,7 @@ function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>1</div>
               <div>
                 <div className={styles.ruleName}>Active SS Signal</div>
-                <div className={styles.ruleDesc}>Stock must have a confirmed Sell Short signal (close {'<'} 21W EMA, slope down, low {'<='} 2-week low, 1-10% below EMA)</div>
+                <div className={styles.ruleDesc}>Stock must have a confirmed Sell Short signal (close {'<'} sector EMA, slope down, low {'<='} 2-week low, 1-10% below EMA)</div>
               </div>
             </div>
 
@@ -376,21 +376,21 @@ function RulesPopup({ type, onClose }) {
 // ── Backtest results popup ──────────────────────────────────────────────────
 
 const BL_BACKTEST = {
-  trades: 1660, winners: 1115, losers: 545,
-  winRate: 67.2, avgPnl: 5.60, avgWin: 9.69, avgLoss: -2.77, wlRatio: 3.50,
-  totalReturn: 9293,
+  trades: 1533, winners: 1038, losers: 495,
+  winRate: 67.7, avgPnl: 5.60, avgWin: 9.57, avgLoss: -2.71, wlRatio: 3.53,
+  totalReturn: 8589,
   years: [
-    { year: '2021', trades: 302, winPct: 67.5, avgPnl: 5.13 },
-    { year: '2022', trades: 123, winPct: 69.1, avgPnl: 4.35 },
-    { year: '2023', trades: 322, winPct: 61.8, avgPnl: 4.55 },
-    { year: '2024', trades: 444, winPct: 67.8, avgPnl: 5.23 },
-    { year: '2025', trades: 350, winPct: 70.3, avgPnl: 8.01 },
-    { year: '2026', trades: 58, winPct: 62.1, avgPnl: 5.29 },
+    { year: '2021', trades: 276, winPct: 69.6, avgPnl: 5.17 },
+    { year: '2022', trades: 118, winPct: 69.5, avgPnl: 4.57 },
+    { year: '2023', trades: 322, winPct: 62.4, avgPnl: 4.42 },
+    { year: '2024', trades: 401, winPct: 68.8, avgPnl: 5.60 },
+    { year: '2025', trades: 353, winPct: 70.8, avgPnl: 7.77 },
+    { year: '2026', trades: 63, winPct: 61.9, avgPnl: 5.02 },
   ],
   exitReasons: [
-    { reason: 'SIGNAL (BL exit)', count: 1423, winPct: 67.0, avgPnl: 5.58 },
-    { reason: 'STOP HIT', count: 234, winPct: 68.4, avgPnl: 5.78 },
-    { reason: 'STALE HUNT', count: 3, winPct: 0.0, avgPnl: -1.31 },
+    { reason: 'SIGNAL (BL exit)', count: 1301, winPct: 67.9, avgPnl: 5.67 },
+    { reason: 'STOP HIT', count: 228, winPct: 67.1, avgPnl: 5.15 },
+    { reason: 'STALE HUNT', count: 4, winPct: 0.0, avgPnl: -1.08 },
   ],
   topWinners: [
     { ticker: 'SNDK', entry: '2025-08-01', exit: '2025-11-07', pnl: 330.31 },
@@ -409,18 +409,18 @@ const BL_BACKTEST = {
 };
 
 const SS_BACKTEST = {
-  trades: 143, winners: 97, losers: 46,
-  winRate: 67.8, avgPnl: 4.20, avgWin: 7.97, avgLoss: -3.75, wlRatio: 2.13,
-  totalReturn: 601,
+  trades: 143, winners: 98, losers: 45,
+  winRate: 68.5, avgPnl: 4.33, avgWin: 7.97, avgLoss: -3.61, wlRatio: 2.21,
+  totalReturn: 619,
   years: [
-    { year: '2022', trades: 97, winPct: 68.0, avgPnl: 4.50 },
+    { year: '2022', trades: 97, winPct: 70.1, avgPnl: 4.68 },
     { year: '2023', trades: 22, winPct: 72.7, avgPnl: 4.37 },
     { year: '2025', trades: 19, winPct: 78.9, avgPnl: 5.74 },
     { year: '2026', trades: 5, winPct: 40.0, avgPnl: -1.80 },
   ],
   noTradeYears: ['2021', '2024'],
   exitReasons: [
-    { reason: 'SIGNAL (SS exit)', count: 120, winPct: 69.2, avgPnl: 4.53 },
+    { reason: 'SIGNAL (SS exit)', count: 120, winPct: 70.0, avgPnl: 4.68 },
     { reason: 'STOP HIT', count: 23, winPct: 60.9, avgPnl: 2.52 },
   ],
   topWinners: [

@@ -6,6 +6,7 @@ import { useQueue } from '../contexts/QueueContext';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeAnalyzeScore, computeETFAnalyzeScore } from '../utils/analyzeScore';
 import { isClassifiedETF } from '../utils/etfClassification';
+import { getSectorEmaPeriod } from '../utils/sectorEmaConfig';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
 import KillBadge from './KillBadge';
@@ -349,9 +350,10 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       signal: activeSignal || stock.signal || stock.pnthrSignal || null,
     };
 
-    if (allWeeklyData.length >= 22) {
-      // EMA21 — same series drawn on chart; last two values give current value + slope
-      const ema21Series = calculateEMA(allWeeklyData, 21);
+    const emaPeriod = getSectorEmaPeriod(stock?.sector);
+    if (allWeeklyData.length >= emaPeriod + 1) {
+      // Sector-specific EMA — same series drawn on chart; last two values give current value + slope
+      const ema21Series = calculateEMA(allWeeklyData, emaPeriod);
       const lastEma = ema21Series.at(-1)?.value ?? null;
       const prevEma = ema21Series.at(-2)?.value ?? null;
       if (lastEma) {
@@ -541,8 +543,11 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       });
     });
 
+    // Sector-specific EMA period for signal detection + chart drawing
+    const emaPeriod = getSectorEmaPeriod(stock?.sector);
+
     // Compute signals and live stops from full history
-    const { events: allDetected, pnthrStop: ps, currentWeekStop: cws, currentSignal: cs } = detectAllSignals(allWeeklyData, 21, isEtfTicker(stock?.ticker));
+    const { events: allDetected, pnthrStop: ps, currentWeekStop: cws, currentSignal: cs } = detectAllSignals(allWeeklyData, emaPeriod, isEtfTicker(stock?.ticker));
     // Prefer server-computed stop (from Kill pipeline / signalService) — single source of truth.
     // Fall back to client-computed only when server value is unavailable (e.g. Prey page, cold cache).
     const serverStop = stock?.pnthrStop ?? stock?.stopPrice ?? null;
@@ -617,8 +622,8 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       }
     }
 
-    // 21 EMA — calculated on full history for accuracy
-    const ema21Full = calculateEMA(allWeeklyData, 21);
+    // Sector-specific EMA — calculated on full history for accuracy
+    const ema21Full = calculateEMA(allWeeklyData, emaPeriod);
     if (ema21Full.length > 0) {
       const ema21 = ema21Full.filter(d => filteredTimes.has(d.time));
       if (ema21.length > 0) {

@@ -24,11 +24,13 @@ function formatDate(d) {
 function MacroRow({ label, price, ema21, aboveEma, emaSlope }) {
   const dir = aboveEma ? 'ABOVE' : 'BELOW';
   const cls = aboveEma ? styles.bullish : styles.bearish;
+  const slopeStr = emaSlope != null ? emaSlope.toFixed(2) : '—';
   return (
     <span>
       <strong>{label}</strong>{' '}
-      ${price?.toFixed(2)} <span className={cls}>{dir} EMA</span>{' '}
-      (slope {emaSlope?.toFixed(2)}%)
+      ${price?.toFixed(2) || '—'} <span className={cls}>{dir} EMA</span>{' '}
+      <span style={{ color: '#888' }}>${ema21?.toFixed(2) || '—'}</span>{' '}
+      (slope <span className={emaSlope > 0 ? styles.bullish : emaSlope < 0 ? styles.bearish : ''}>{slopeStr}%</span>)
     </span>
   );
 }

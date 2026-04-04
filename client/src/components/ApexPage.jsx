@@ -180,7 +180,7 @@ function PreyTags({ strategies }) {
   );
 }
 
-// ── D1–D8 Formula reference data (v3.1) ──────────────────────────────────────
+// ── D1–D8 Formula reference data (v4.2) ──────────────────────────────────────
 const FORMULA_GUIDE = [
   {
     dim: 'FORMULA · Total = (D2+D3+D4+D5+D6+D7+D8) × D1',
@@ -191,7 +191,7 @@ const FORMULA_GUIDE = [
     desc: 'Nasdaq stocks route to QQQ; NYSE/ARCA to SPY. Index EMA position + slope scored −2 to +2. SS:BL open ratio and new-signal ratio add ±1–2. regimeScore (−5 to +5) × 0.06 = adjustment. BL: 1.0 + adj; SS: 1.0 − adj.',
   },
   {
-    dim: 'D2 · Sector Alignment  (±15 pts)',
+    dim: 'D2 · Sector Alignment  (±15 pts, capped)',
     desc: 'Sector direction = sign of sector ETF 5D return. 5D component: |return5D%| × newMult × direction × 2 (new signals get 2×). 1M component: |return1M%| × direction. Total capped ±15.',
   },
   {
@@ -199,20 +199,20 @@ const FORMULA_GUIDE = [
     desc: 'Sub-A: Close conviction = (close−low)/(high−low)×100 × 2.5, cap 40 pts. Sub-B: EMA slope% × 10 (signal direction only), cap 30 pts. Sub-C: EMA separation — BELL CURVE, sweet spot 2-8%: 0-2% ramp (0→6 pts), 2-8% (6→15 pts), 8-15% decay (15→3 pts), 15-20% steep decay (3→0 pts), 20%+ = OVEREXTENDED (hard gate, disqualified). Confirmation: CONFIRMED ≥30 pts, PARTIAL ≥15, UNCONFIRMED <15.',
   },
   {
-    dim: 'OVEREXTENDED · Hard Gate (separation > 20%)',
-    desc: 'The move already happened — entering now is chasing, not hunting. Stocks with EMA separation > 20% receive score −99, are excluded from Kill rankings, and appear greyed-out at the bottom of the list. D4–D8 are not calculated.',
+    dim: 'OVEREXTENDED · Hard Gate (close separation > 20%)',
+    desc: 'The move already happened — entering now is chasing, not hunting. Stocks with close-based EMA separation > 20% receive score −99, are excluded from Kill rankings, and appear greyed-out at the bottom of the list. D4–D8 are not calculated.',
   },
   {
     dim: 'D4 · Signal Freshness  (−15 to +10 pts)',
-    desc: 'Age 0 (new this week): CONFIRMED +10, PARTIAL +6, UNCONFIRMED +3. Age 1: CONFIRMED +7, PARTIAL +4, UNCONFIRMED +2. Age 2: +4. Age 3–5: 0. Age 6–9: −3/wk. Age 10+: −5/wk, floor −15.',
+    desc: 'Age 0 (new this week): CONFIRMED +10, PARTIAL +6, UNCONFIRMED +3. Age 1: CONFIRMED +7, PARTIAL +4, UNCONFIRMED +2. Age 2: +4. Age 3–5: 0. Age 6–9: −3/wk beyond week 5. Age 10+: smooth decay −1.5/wk from −12, floor −15.',
   },
   {
     dim: 'D5 · Rank Rise  (±20 pts)',
     desc: '+1 pt per PNTHR rank position risen this week, −1 per position dropped. New entries (no prior rank): 0 pts. Capped ±20 — 55% of +30 rank jumps revert the following week.',
   },
   {
-    dim: 'D6 · Momentum  (0–20 pts)',
-    desc: 'Sub-A RSI: (RSI−50)/10 → ±5 pts (inverted for SS). Sub-B OBV: week-over-week% ÷ 5 → ±5 pts (inverted for SS). Sub-C ADX: (ADX−15)/5 → 0–5 pts, only when ADX rising above 15. Sub-D Volume: +5 if volume ratio > 1.5×. Total floored at 0.',
+    dim: 'D6 · Momentum  (−10 to +20 pts)',
+    desc: 'Sub-A RSI: (RSI−50)/10 → ±5 pts (inverted for SS). Sub-B OBV: week-over-week% ÷ 5 → ±5 pts (inverted for SS). Sub-C ADX: (ADX−15)/5 → 0–5 pts, only when ADX rising above 15. Sub-D Volume: +5 if volume ratio > 1.5×. Floor −10, cap +20.',
   },
   {
     dim: 'D7 · Rank Velocity  (±10 pts)',

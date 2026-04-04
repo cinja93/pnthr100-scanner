@@ -86,54 +86,62 @@ function RulesPopup({ type, onClose }) {
 
             <h3 className={styles.rulesSectionTitle}>Kill Score — 8 Dimensions</h3>
             <div className={styles.ruleDesc} style={{ marginBottom: 10, color: '#888', fontSize: 12 }}>
-              Formula: <strong style={{ color: '#fff' }}>Total = (D2 + D3 + D5 + D6 + D7 + D8) × D1</strong>
+              Formula: <strong style={{ color: '#fff' }}>Total = (D2 + D3 + D4 + D5 + D6 + D7 + D8) × D1</strong>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D1</div>
               <div>
                 <div className={styles.ruleName}>Regime Multiplier (0.70–1.30×)</div>
-                <div className={styles.ruleDesc}>Scales entire score by macro regime. Bullish regime amplifies BL, bearish regime suppresses. Intentional bearish bias amplifies SS in downtrends.</div>
+                <div className={styles.ruleDesc}>Scales entire score by macro regime. Index EMA position + slope scored ±2, plus SS:BL ratio adjustments. regimeScore × 0.06 = adjustment. BL: 1.0 + adj; SS: 1.0 − adj.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D2</div>
               <div>
-                <div className={styles.ruleName}>Sector Direction</div>
-                <div className={styles.ruleDesc}>Sector ETF momentum score. No cap, can be negative. Measures whether the sector is confirming or fighting the stock's direction.</div>
+                <div className={styles.ruleName}>Sector Alignment (±15 pts, capped)</div>
+                <div className={styles.ruleDesc}>5D component: |return5D%| × newMult × direction × 2 (new signals get 2×). 1M component: |return1M%| × direction. Total capped ±15.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D3</div>
               <div>
-                <div className={styles.ruleName}>Bell Curve Separation + Close Conviction</div>
-                <div className={styles.ruleDesc}>Measures price separation from EMA using bell curve distribution plus close conviction. 20% close-gap triggers OVEREXTENDED status (score = -99, blocked).</div>
+                <div className={styles.ruleName}>Entry Quality (0–85 pts) — THE KEY DIMENSION</div>
+                <div className={styles.ruleDesc}>Sub-A: Close conviction (cap 40 pts). Sub-B: EMA slope × 10, signal direction only (cap 30 pts). Sub-C: EMA separation bell curve — sweet spot 2-8% (up to 15 pts), decays 8-20%, 20%+ = OVEREXTENDED (score −99). Confirmation: ≥30=CONFIRMED, ≥15=PARTIAL, {'<'}15=UNCONFIRMED.</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>D4</div>
+              <div>
+                <div className={styles.ruleName}>Signal Freshness (−15 to +10 pts)</div>
+                <div className={styles.ruleDesc}>New signals earn bonus scaled by D3 confirmation. Age 0 CONFIRMED: +10, PARTIAL: +6, UNCONFIRMED: +3. Decays to 0 by week 3–5, then −3/wk through week 9, smooth decay to floor −15.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D5</div>
               <div>
-                <div className={styles.ruleName}>Rank Rise Delta</div>
-                <div className={styles.ruleDesc}>+1/-1 per position change in Kill rank week-over-week. Rising rank = improving relative strength. New entries start at 0.</div>
+                <div className={styles.ruleName}>Rank Rise (±20 pts, capped)</div>
+                <div className={styles.ruleDesc}>+1/-1 per position change in Kill rank week-over-week. New entries start at 0. Capped ±20 — 55% of +30 rank jumps revert the following week.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D6</div>
               <div>
-                <div className={styles.ruleName}>Momentum Composite (floor -10, cap +20)</div>
-                <div className={styles.ruleDesc}>Combines RSI, OBV (On-Balance Volume), ADX (trend strength), and EMA conviction into a single momentum reading.</div>
+                <div className={styles.ruleName}>Momentum (−10 to +20 pts)</div>
+                <div className={styles.ruleDesc}>Sub-A RSI: ±5 pts (inverted for SS). Sub-B OBV week-over-week: ±5 pts. Sub-C ADX: 0–5 pts when rising above 15. Sub-D Volume: +5 if ratio {'>'} 1.5×. Floor −10, cap +20.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D7</div>
               <div>
-                <div className={styles.ruleName}>Rank Velocity (±10)</div>
-                <div className={styles.ruleDesc}>Rate of change in rank movement. Measures acceleration — is the stock gaining momentum faster or slower than last week?</div>
+                <div className={styles.ruleName}>Rank Velocity (±10 pts)</div>
+                <div className={styles.ruleDesc}>Acceleration of rank movement: velocity = currentRankChange − previousRankChange. Score = clip(round(velocity ÷ 6), −10, +10). Rising faster than last week = positive.</div>
               </div>
             </div>
 
@@ -141,7 +149,7 @@ function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>D8</div>
               <div>
                 <div className={styles.ruleName}>Prey Presence (0–6 pts)</div>
-                <div className={styles.ruleDesc}>Bonus points if the stock appears in Prey tiers. SPRINT/HUNT +2, FEAST/ALPHA/SPRING/SNEAK +1. Tiebreaker only — Prey is not a gate.</div>
+                <div className={styles.ruleDesc}>SPRINT/HUNT +2 pts each. FEAST/ALPHA/SPRING/SNEAK +1 pt each. Maximum 6 pts. Acts as tiebreaker — most of the 679 universe scores 0 here.</div>
               </div>
             </div>
 
@@ -245,54 +253,62 @@ function RulesPopup({ type, onClose }) {
 
             <h3 className={styles.rulesSectionTitle}>Kill Score — 8 Dimensions</h3>
             <div className={styles.ruleDesc} style={{ marginBottom: 10, color: '#888', fontSize: 12 }}>
-              Formula: <strong style={{ color: '#fff' }}>Total = (D2 + D3 + D5 + D6 + D7 + D8) × D1</strong>
+              Formula: <strong style={{ color: '#fff' }}>Total = (D2 + D3 + D4 + D5 + D6 + D7 + D8) × D1</strong>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D1</div>
               <div>
                 <div className={styles.ruleName}>Regime Multiplier (0.70–1.30×)</div>
-                <div className={styles.ruleDesc}>Scales entire score by macro regime. Bearish regime amplifies SS scores via intentional bearish bias — this is where shorts get their edge.</div>
+                <div className={styles.ruleDesc}>Scales entire score by macro regime. SS: 1.0 − (regimeScore × 0.06) — bearish regime amplifies SS scores via intentional bias. This is where shorts get their edge.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D2</div>
               <div>
-                <div className={styles.ruleName}>Sector Direction</div>
-                <div className={styles.ruleDesc}>Sector ETF momentum score. No cap, can be negative. For SS, a deeply negative sector score confirms the breakdown thesis.</div>
+                <div className={styles.ruleName}>Sector Alignment (±15 pts, capped)</div>
+                <div className={styles.ruleDesc}>5D component: |return5D%| × newMult × direction × 2 (new signals get 2×). 1M component: |return1M%| × direction. For SS, a deeply negative sector confirms the breakdown thesis. Capped ±15.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D3</div>
               <div>
-                <div className={styles.ruleName}>Bell Curve Separation + Close Conviction</div>
-                <div className={styles.ruleDesc}>Measures price separation from EMA using bell curve distribution plus close conviction. 20% close-gap triggers OVEREXTENDED status (score = -99, blocked).</div>
+                <div className={styles.ruleName}>Entry Quality (0–85 pts) — THE KEY DIMENSION</div>
+                <div className={styles.ruleDesc}>Sub-A: Close conviction (cap 40 pts). Sub-B: EMA slope × 10, signal direction only (cap 30 pts). Sub-C: EMA separation bell curve — sweet spot 2-8% (up to 15 pts), decays 8-20%, 20%+ = OVEREXTENDED (score −99). Confirmation: ≥30=CONFIRMED, ≥15=PARTIAL, {'<'}15=UNCONFIRMED.</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>D4</div>
+              <div>
+                <div className={styles.ruleName}>Signal Freshness (−15 to +10 pts)</div>
+                <div className={styles.ruleDesc}>New signals earn bonus scaled by D3 confirmation. Age 0 CONFIRMED: +10, PARTIAL: +6, UNCONFIRMED: +3. Decays to 0 by week 3–5, then −3/wk through week 9, smooth decay to floor −15.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D5</div>
               <div>
-                <div className={styles.ruleName}>Rank Rise Delta</div>
-                <div className={styles.ruleDesc}>+1/-1 per position change in Kill rank week-over-week. For SS, a rising rank means the stock is weakening faster relative to peers.</div>
+                <div className={styles.ruleName}>Rank Rise (±20 pts, capped)</div>
+                <div className={styles.ruleDesc}>+1/-1 per position change in Kill rank week-over-week. For SS, a rising rank means the stock is weakening faster relative to peers. New entries start at 0. Capped ±20.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D6</div>
               <div>
-                <div className={styles.ruleName}>Momentum Composite (floor -10, cap +20)</div>
-                <div className={styles.ruleDesc}>Combines RSI, OBV (On-Balance Volume), ADX (trend strength), and EMA conviction into a single momentum reading.</div>
+                <div className={styles.ruleName}>Momentum (−10 to +20 pts)</div>
+                <div className={styles.ruleDesc}>Sub-A RSI: ±5 pts (inverted for SS). Sub-B OBV week-over-week: ±5 pts (inverted for SS). Sub-C ADX: 0–5 pts when rising above 15. Sub-D Volume: +5 if ratio {'>'} 1.5×. Floor −10, cap +20.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>D7</div>
               <div>
-                <div className={styles.ruleName}>Rank Velocity (±10)</div>
-                <div className={styles.ruleDesc}>Rate of change in rank movement. Measures acceleration — is the stock weakening faster or slower than last week?</div>
+                <div className={styles.ruleName}>Rank Velocity (±10 pts)</div>
+                <div className={styles.ruleDesc}>Acceleration of rank movement: velocity = currentRankChange − previousRankChange. Score = clip(round(velocity ÷ 6), −10, +10). Weakening faster than last week = positive for SS.</div>
               </div>
             </div>
 
@@ -300,7 +316,7 @@ function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>D8</div>
               <div>
                 <div className={styles.ruleName}>Prey Presence (0–6 pts)</div>
-                <div className={styles.ruleDesc}>Bonus points if the stock appears in Prey tiers. SPRINT/HUNT +2, FEAST/ALPHA/SPRING/SNEAK +1. Tiebreaker only — Prey is not a gate.</div>
+                <div className={styles.ruleDesc}>SPRINT/HUNT +2 pts each. FEAST/ALPHA/SPRING/SNEAK +1 pt each. Maximum 6 pts. Acts as tiebreaker — most of the 679 universe scores 0 here.</div>
               </div>
             </div>
 

@@ -236,13 +236,13 @@ const TIER_DEFS = {
   'PROWLING':         '≥10 pts — Low signal strength. Barely registering on the scoring system. The stock has a signal but almost nothing supports it.',
   'STIRRING':         '≥0 pts — Neutral. The stock has a signal but the positive and negative dimensions are roughly canceling out. No edge.',
   'DORMANT':          '<0 pts — Fighting conditions. The dimensions are working against this signal — wrong regime, misaligned sector, weak entry, stale signal. The system is actively saying "do not enter this trade."',
-  'OVEREXTENDED':     'Filtered out — The stock has moved more than 20% away from its 21-week EMA at the close. The move has already happened. Entering now would be chasing, not hunting. These stocks are removed from Kill rankings entirely. They may reappear if price reverts closer to the EMA.',
+  'OVEREXTENDED':     'Filtered out — The stock has moved more than 20% away from its sector EMA at the close. The move has already happened. Entering now would be chasing, not hunting. These stocks are removed from Kill rankings entirely. They may reappear if price reverts closer to the EMA.',
 };
 
 const UI_DEFS = {
   regime: 'Market Regime — The regime multiplier adjusts all Kill scores based on the broad market environment. When SPY and QQQ are below their falling 21-week EMAs (bear market), short signals are amplified up to 1.30× and long signals are dampened to 0.70×. When both are above rising EMAs (bull market), the reverse applies. This ensures the system favors trades aligned with the prevailing market direction.',
-  bl:     'Longs (BL) — Buy Long signals. Stocks that have crossed above their 21-week EMA with an upward-sloping EMA and confirmed entry quality. In a bear regime, these are dampened by the regime multiplier and fewer will score highly.',
-  ss:     'Shorts (SS) — Sell Short signals. Stocks that have crossed below their 21-week EMA with a downward-sloping EMA and confirmed entry quality. In a bear regime, these are amplified by the regime multiplier and will dominate the top rankings.',
+  bl:     'Longs (BL) — Buy Long signals. Stocks that have crossed above their sector EMA with an upward-sloping EMA and confirmed entry quality. In a bear regime, these are dampened by the regime multiplier and fewer will score highly.',
+  ss:     'Shorts (SS) — Sell Short signals. Stocks that have crossed below their sector EMA with a downward-sloping EMA and confirmed entry quality. In a bear regime, these are amplified by the regime multiplier and will dominate the top rankings.',
 };
 
 export default function ApexPage() {

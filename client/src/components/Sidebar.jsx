@@ -22,6 +22,7 @@ const NAV_GROUPS = [
       { key: 'search',   label: 'PNTHR Search',   iconImg: true },
       { key: 'prey',     label: 'PNTHR Prey',     iconImg: true },
       { key: 'apex',     label: 'PNTHR Kill',     iconImg: true },
+      { key: 'orders',   label: 'PNTHR Orders',   iconImg: true },
     ],
   },
   {

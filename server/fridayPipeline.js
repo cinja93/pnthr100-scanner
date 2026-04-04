@@ -25,6 +25,7 @@ import { getKillTestSettings, serverSizePosition, buildServerLotConfig } from '.
 import { checkFeastAlerts } from './killTestDailyUpdate.js';
 import { updateDemoPortfolio } from './demoEngine.js';
 import { getLastFriday } from './technicalUtils.js';
+import { runOrdersPipeline } from './ordersPipeline.js';
 
 // ── Fetch VIX / 10Y Treasury / DXY from FMP ──────────────────────────────────
 
@@ -670,6 +671,14 @@ export async function runFridayKillPipeline() {
       await updateDemoPortfolio();
     } catch (err) {
       console.error('[Kill Pipeline] Demo portfolio update failed (non-fatal):', err.message);
+    }
+
+    // ── Orders Pipeline — CONFIRMED run (post-close prices) ─────────────────
+    try {
+      await runOrdersPipeline({ type: 'CONFIRMED' });
+      console.log('[Kill Pipeline] Orders CONFIRMED run complete.');
+    } catch (err) {
+      console.error('[Kill Pipeline] Orders CONFIRMED run failed (non-fatal):', err.message);
     }
 
     // ── Portfolio Return Snapshot (per user who has an accountSize) ──────────

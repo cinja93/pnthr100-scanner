@@ -26,6 +26,7 @@ import SignalHistoryPage from './components/SignalHistoryPage';
 import HistoryPage from './components/HistoryPage';
 import KillTestPage from './components/KillTestPage';
 import AssistantPage from './components/AssistantPage';
+import OrdersPage from './components/OrdersPage';
 import LoginPage from './components/LoginPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
@@ -1129,6 +1130,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR APEX page */}
           {activePage === 'apex' && <ApexPage />}
+
+          {/* PNTHR Orders — weekly order sheet */}
+          {activePage === 'orders' && <OrdersPage />}
 
           {/* PNTHR PREY page */}
           {activePage === 'prey' && <PreyPage onNavigate={navigate} />}

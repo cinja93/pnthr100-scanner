@@ -115,7 +115,7 @@ function RulesPopup({ type, onClose }) {
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>8</div>
               <div>
-                <div className={styles.ruleName}>Lot 1 Entry ($10K)</div>
+                <div className={styles.ruleName}>Lot 1 Entry</div>
                 <div className={styles.ruleDesc}>Initial position is Lot 1 only (35% of full size). Lots 2-5 are added via pyramiding: 5-day time gate + 1% profitable trigger. Stop ratchets on each lot fill.</div>
               </div>
             </div>
@@ -213,7 +213,7 @@ function RulesPopup({ type, onClose }) {
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>9</div>
               <div>
-                <div className={styles.ruleName}>Lot 1 Entry ($10K) + Pyramiding</div>
+                <div className={styles.ruleName}>Lot 1 Entry + Pyramiding</div>
                 <div className={styles.ruleDesc}>Same lot system as longs: Lot 1 at 35%, then Lots 2-5 with 5-day gate + 1% profitable trigger. Stop ratchets DOWN on each lot fill (only tightens for shorts).</div>
               </div>
             </div>

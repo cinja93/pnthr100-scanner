@@ -445,6 +445,16 @@
   color: #111;
 }
 
+.rulesBtnBT {
+  color: #fcf000;
+  border-color: #fcf000;
+}
+
+.rulesBtnBT:hover {
+  background: #fcf000;
+  color: #111;
+}
+
 .rulesBtnSS {
   color: #ef4444;
   border-color: #ef4444;
@@ -453,6 +463,16 @@
 .rulesBtnSS:hover {
   background: #ef4444;
   color: #fff;
+}
+
+.rulesBtnSSBT {
+  color: #f97316;
+  border-color: #f97316;
+}
+
+.rulesBtnSSBT:hover {
+  background: #f97316;
+  color: #111;
 }
 
 /* ── Rules Popup ────────────────────────────────────────────────────────────── */
@@ -562,4 +582,62 @@
   font-size: 12px;
   color: #aaa;
   line-height: 1.5;
+}
+
+/* ── Backtest Stats ─────────────────────────────────────────────────────────── */
+.btStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.btStat {
+  background: #1a1a1a;
+  border-radius: 6px;
+  padding: 12px;
+  text-align: center;
+}
+
+.btStatValue {
+  font-size: 22px;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.btStatLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+.btTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.btTable th {
+  text-align: left;
+  padding: 6px 10px;
+  color: #888;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid #333;
+}
+
+.btTable td {
+  padding: 6px 10px;
+  color: #ccc;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.btTable tbody tr:hover {
+  background: #1a1a1a;
 }

@@ -417,3 +417,146 @@
   color: #ef4444;
   font-size: 14px;
 }
+
+/* ── Rules Buttons ──────────────────────────────────────────────────────────── */
+.rulesButtons {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.rulesBtn {
+  padding: 5px 12px;
+  background: #1a1a1a;
+  color: #22c55e;
+  border: 1px solid #22c55e;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+}
+
+.rulesBtn:hover {
+  background: #22c55e;
+  color: #111;
+}
+
+.rulesBtnSS {
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
+.rulesBtnSS:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* ── Rules Popup ────────────────────────────────────────────────────────────── */
+.rulesOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rulesPanel {
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 8px;
+  width: 580px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.rulesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #333;
+  position: sticky;
+  top: 0;
+  background: #111;
+  z-index: 1;
+}
+
+.rulesTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fcf000;
+  margin: 0;
+}
+
+.rulesClose {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.rulesClose:hover {
+  color: #fff;
+}
+
+.rulesBody {
+  padding: 16px 20px;
+}
+
+.rulesSectionTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fcf000;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 16px 0 10px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #333;
+}
+
+.rulesSectionTitle:first-child {
+  margin-top: 0;
+}
+
+.ruleCard {
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #1a1a1a;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.ruleNum {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #333;
+  color: #fcf000;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+
+.ruleName {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 3px;
+}
+
+.ruleDesc {
+  font-size: 12px;
+  color: #aaa;
+  line-height: 1.5;
+}

@@ -35,10 +35,200 @@ function MacroRow({ label, price, ema21, aboveEma, emaSlope }) {
   );
 }
 
+// ── Rules popup content ─────────────────────────────────────────────────────
+
+function RulesPopup({ type, onClose }) {
+  return (
+    <div className={styles.rulesOverlay} onClick={onClose}>
+      <div className={styles.rulesPanel} onClick={e => e.stopPropagation()}>
+        <div className={styles.rulesHeader}>
+          <h2 className={styles.rulesTitle}>
+            {type === 'BL' ? 'BUY LONG Order Rules' : 'SELL SHORT Order Rules'}
+          </h2>
+          <button className={styles.rulesClose} onClick={onClose}>X</button>
+        </div>
+
+        {type === 'BL' ? (
+          <div className={styles.rulesBody}>
+            <h3 className={styles.rulesSectionTitle}>Filter Gates (must pass ALL)</h3>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>1</div>
+              <div>
+                <div className={styles.ruleName}>Active BL Signal</div>
+                <div className={styles.ruleDesc}>Stock must have a confirmed Buy Long signal (close {'>'} 21W EMA, slope up, high {'>='} 2-week high, 1-10% daylight above EMA)</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>2</div>
+              <div>
+                <div className={styles.ruleName}>MACRO Gate — Index Above 21W EMA</div>
+                <div className={styles.ruleDesc}>SPY (NYSE stocks) or QQQ (NASDAQ stocks) must be trading ABOVE its 21-week EMA. If the index is below EMA, all longs in that exchange are blocked.</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>3</div>
+              <div>
+                <div className={styles.ruleName}>SECTOR Gate — Sector ETF Above 21W EMA</div>
+                <div className={styles.ruleDesc}>The stock's sector ETF (e.g., XLK for Technology, XLF for Financials) must be trading ABOVE its 21-week EMA. Buying longs in a sector that's in a downtrend is blocked.</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>4</div>
+              <div>
+                <div className={styles.ruleName}>D2 Gate — Sector Direction Score {'>='} 0</div>
+                <div className={styles.ruleDesc}>The Kill scoring D2 dimension (sector momentum) must be non-negative. A negative D2 means the sector has headwinds — longs are blocked.</div>
+              </div>
+            </div>
+
+            <h3 className={styles.rulesSectionTitle}>Ranking (after filtering)</h3>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>5</div>
+              <div>
+                <div className={styles.ruleName}>Re-rank by Kill Score</div>
+                <div className={styles.ruleDesc}>All BL stocks that pass gates 1-4 are re-ranked by their Kill score (D1-D8 composite). This filtered rank may differ from the full-universe Kill rank.</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>6</div>
+              <div>
+                <div className={styles.ruleName}>Top 10 Selected</div>
+                <div className={styles.ruleDesc}>Only the top 10 BL stocks by filtered Kill score are selected for orders. All others are passed over.</div>
+              </div>
+            </div>
+
+            <h3 className={styles.rulesSectionTitle}>Execution</h3>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>7</div>
+              <div>
+                <div className={styles.ruleName}>GTD Limit Order</div>
+                <div className={styles.ruleDesc}>Enter via GTD (Good-Til-Date) limit order in IBKR at the signal price level, expiring next Friday. If the order doesn't fill, the breakout never happened — system protected you.</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>8</div>
+              <div>
+                <div className={styles.ruleName}>Lot 1 Entry ($10K)</div>
+                <div className={styles.ruleDesc}>Initial position is Lot 1 only (35% of full size). Lots 2-5 are added via pyramiding: 5-day time gate + 1% profitable trigger. Stop ratchets on each lot fill.</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.rulesBody}>
+            <h3 className={styles.rulesSectionTitle}>Filter Gates (must pass ALL)</h3>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>1</div>
+              <div>
+                <div className={styles.ruleName}>Active SS Signal</div>
+                <div className={styles.ruleDesc}>Stock must have a confirmed Sell Short signal (close {'<'} 21W EMA, slope down, low {'<='} 2-week low, 1-10% below EMA)</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>2</div>
+              <div>
+                <div className={styles.ruleName}>MACRO Gate — Index Below 21W EMA</div>
+                <div className={styles.ruleDesc}>SPY (NYSE stocks) or QQQ (NASDAQ stocks) must be trading BELOW its 21-week EMA. Shorting when the index is in an uptrend is blocked.</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>3</div>
+              <div>
+                <div className={styles.ruleName}>SECTOR Gate — Sector ETF Below 21W EMA</div>
+                <div className={styles.ruleDesc}>The stock's sector ETF must be trading BELOW its 21-week EMA. Shorting in a sector that's trending up is blocked.</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>4</div>
+              <div>
+                <div className={styles.ruleName}>D2 Gate — Sector Direction Score {'>='} 0</div>
+                <div className={styles.ruleDesc}>The Kill scoring D2 dimension must be non-negative for the short direction. A negative D2 means the sector isn't confirming the downtrend.</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>5</div>
+              <div>
+                <div className={styles.ruleName}>SS CRASH Gate — Extreme Conditions Required</div>
+                <div className={styles.ruleDesc}>
+                  Shorts require CRASH conditions (both must be true):
+                  <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
+                    <li>Macro EMA slope falling (SPY 21W EMA declining)</li>
+                    <li>Sector 5D momentum {'<'} -3% (sector ETF dropped 3%+ in 5 trading days)</li>
+                  </ul>
+                  This is the key asymmetric gate — SS only enters during genuine market breakdowns, not mild pullbacks.
+                </div>
+              </div>
+            </div>
+
+            <h3 className={styles.rulesSectionTitle}>Ranking (after filtering)</h3>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>6</div>
+              <div>
+                <div className={styles.ruleName}>Re-rank by Kill Score</div>
+                <div className={styles.ruleDesc}>All SS stocks that pass gates 1-5 are re-ranked by Kill score within the filtered pool.</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>7</div>
+              <div>
+                <div className={styles.ruleName}>Top 5 Selected</div>
+                <div className={styles.ruleDesc}>Only the top 5 SS stocks by filtered Kill score are selected. Shorts are intentionally capped at 5 (vs 10 for longs) because crash conditions are rare and concentrated.</div>
+              </div>
+            </div>
+
+            <h3 className={styles.rulesSectionTitle}>Execution</h3>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>8</div>
+              <div>
+                <div className={styles.ruleName}>GTD Limit Order</div>
+                <div className={styles.ruleDesc}>Enter via GTD limit order in IBKR at the signal price level, expiring next Friday. Unfilled = breakdown never confirmed.</div>
+              </div>
+            </div>
+
+            <div className={styles.ruleCard}>
+              <div className={styles.ruleNum}>9</div>
+              <div>
+                <div className={styles.ruleName}>Lot 1 Entry ($10K) + Pyramiding</div>
+                <div className={styles.ruleDesc}>Same lot system as longs: Lot 1 at 35%, then Lots 2-5 with 5-day gate + 1% profitable trigger. Stop ratchets DOWN on each lot fill (only tightens for shorts).</div>
+              </div>
+            </div>
+
+            <h3 className={styles.rulesSectionTitle}>Backtest Performance</h3>
+
+            <div className={styles.ruleCard} style={{ borderLeft: '3px solid #fcf000' }}>
+              <div>
+                <div className={styles.ruleName}>SS Crash Mode Results</div>
+                <div className={styles.ruleDesc}>
+                  67.8% win rate on 143 trades | +4.20% avg return | W/L ratio 3.35 — the first time shorts have outperformed in any PNTHR backtest. The strict crash gate is what makes this work.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function OrdersPage() {
   const { isAdmin } = useAuth();
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('orders');
+  const [rulesPopup, setRulesPopup] = useState(null); // 'BL' | 'SS' | null
   const [gateData, setGateData] = useState(null);
   const [history, setHistory] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -116,8 +306,14 @@ export default function OrdersPage() {
             </span>
           )}
           <span className={styles.timestamp}>{formatDate(generatedAt)}</span>
+          <div className={styles.rulesButtons}>
+            <button className={styles.rulesBtn} onClick={() => setRulesPopup('BL')}>BL Order Rules</button>
+            <button className={`${styles.rulesBtn} ${styles.rulesBtnSS}`} onClick={() => setRulesPopup('SS')}>SS Order Rules</button>
+          </div>
         </div>
       </div>
+
+      {rulesPopup && <RulesPopup type={rulesPopup} onClose={() => setRulesPopup(null)} />}
 
       {/* Admin controls */}
       {isAdmin && (

@@ -8,6 +8,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from 'react';
 import { API_BASE, authHeaders, updateUserProfile, fetchNav, fetchPendingEntries, confirmPendingEntry, dismissPendingEntry, deletePosition, fetchSectorExposure } from '../services/api.js';
 import { useAuth } from '../AuthContext';
+import { useDemo } from '../contexts/DemoContext';
 import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat, isEtfTicker } from '../utils/sizingUtils.js';
 import ChartModal from './ChartModal';
 import pantherHead from '../assets/panther head.png';
@@ -1967,6 +1968,7 @@ function isMarketHours() {
 
 export default function CommandCenter({ onNavigate, refreshSignal }) {
   const { currentUser, updateCurrentUser } = useAuth();
+  const { isDemo } = useDemo();
   const [nav,           setNav]           = useState(() => currentUser?.accountSize ?? 100000);
   const navSaveTimer    = useRef(null);
   const navLastEditedAt = useRef(0); // timestamp of last manual NAV edit
@@ -2602,11 +2604,11 @@ export default function CommandCenter({ onNavigate, refreshSignal }) {
             })()}
 
             {/* Metric cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 10, marginBottom: 16 }}>
-              <MC label="Portfolio equity"
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isDemo ? 7 : 6}, 1fr)`, gap: 10, marginBottom: 16 }}>
+              {isDemo && <MC label="Portfolio equity"
                 value={`$${Math.round(portfolioEquity / 1000).toLocaleString()}K`}
                 sub={`${portfolioEquity >= nav ? '+' : ''}$${Math.round((portfolioEquity - nav) / 1000).toLocaleString()}K unrealized`}
-                accent={portfolioEquity >= nav ? '#28a745' : '#dc3545'} />
+                accent={portfolioEquity >= nav ? '#28a745' : '#dc3545'} />}
               <MC label="Net liquidity" value={`$${Math.round(nav / 1000).toLocaleString()}K`} />
               <MC label="Stock risk"
                 value={`$${heat.stockRisk.toLocaleString()}`}

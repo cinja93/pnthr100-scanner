@@ -492,11 +492,13 @@ function TierBadge({ t }) {
   return <Badge color={['ALPHA PNTHR KILL','STRIKING'].includes(t) ? '#000' : '#fff'} bg={bg}>{t}</Badge>;
 }
 function MC({ label, value, sub, sub2, accent }) {
+  const valLen = typeof value === 'string' ? value.length : 0;
+  const valSize = valLen > 14 ? 15 : valLen > 10 ? 18 : 22;
   return (
     <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '12px 14px',
       border: '1px solid rgba(255,255,255,0.06)' }}>
       <div style={{ fontSize: 10, color: '#777', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: accent || '#e8e6e3', marginTop: 2, fontFamily: 'monospace' }}>{value}</div>
+      <div style={{ fontSize: valSize, fontWeight: 700, color: accent || '#e8e6e3', marginTop: 2, fontFamily: 'monospace' }}>{value}</div>
       {sub  && <div style={{ fontSize: 10, color: '#555', marginTop: 2 }}>{sub}</div>}
       {sub2 && <div style={{ fontSize: 10, color: '#888', marginTop: 1 }}>{sub2}</div>}
     </div>
@@ -2606,10 +2608,12 @@ export default function CommandCenter({ onNavigate, refreshSignal }) {
             {/* Metric cards */}
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isDemo ? 7 : 6}, 1fr)`, gap: 10, marginBottom: 16 }}>
               {isDemo && <MC label="Portfolio equity"
-                value={`$${Math.round(portfolioEquity / 1000).toLocaleString()}K`}
-                sub={`${portfolioEquity >= nav ? '+' : ''}$${Math.round((portfolioEquity - nav) / 1000).toLocaleString()}K unrealized`}
+                value={`$${portfolioEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                sub={`${portfolioEquity >= nav ? '+' : ''}$${(portfolioEquity - nav).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} unrealized`}
                 accent={portfolioEquity >= nav ? '#28a745' : '#dc3545'} />}
-              <MC label="Net liquidity" value={`$${Math.round(nav / 1000).toLocaleString()}K`} />
+              <MC label={isDemo ? 'Net liquidity' : 'Net liquidity'} value={isDemo
+                ? `$${nav.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : `$${Math.round(nav / 1000).toLocaleString()}K`} />
               <MC label="Stock risk"
                 value={`$${heat.stockRisk.toLocaleString()}`}
                 sub={`${heat.stockRiskPct}% of NAV`}

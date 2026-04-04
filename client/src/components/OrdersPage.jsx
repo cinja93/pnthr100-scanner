@@ -124,9 +124,9 @@ function RulesPopup({ type, onClose }) {
 
             <div className={styles.ruleCard} style={{ borderLeft: '3px solid #fcf000' }}>
               <div>
-                <div className={styles.ruleName}>BL Filter-Then-Rank Results</div>
+                <div className={styles.ruleName}>Filter-Then-Rank Backtest Results</div>
                 <div className={styles.ruleDesc}>
-                  58.4% win rate on 612 trades | +2.87% avg return | W/L ratio 2.14 — the macro + sector gates eliminate the majority of false breakouts that plague unfiltered long entries.
+                  67.2% win rate (78.6% dollar-weighted) | +5.49% avg P&L per trade | W/L ratio 3.35:1 | Positive every year including 2022. Results independent of lot size.
                 </div>
               </div>
             </div>
@@ -222,9 +222,9 @@ function RulesPopup({ type, onClose }) {
 
             <div className={styles.ruleCard} style={{ borderLeft: '3px solid #fcf000' }}>
               <div>
-                <div className={styles.ruleName}>SS Crash Mode Results</div>
+                <div className={styles.ruleName}>Filter-Then-Rank Backtest Results</div>
                 <div className={styles.ruleDesc}>
-                  67.8% win rate on 143 trades | +4.20% avg return | W/L ratio 3.35 — the first time shorts have outperformed in any PNTHR backtest. The strict crash gate is what makes this work.
+                  67.2% win rate (78.6% dollar-weighted) | +5.49% avg P&L per trade | W/L ratio 3.35:1 | Positive every year including 2022. The strict crash gate is what makes SS work — the first time shorts have outperformed in any PNTHR backtest.
                 </div>
               </div>
             </div>

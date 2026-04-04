@@ -450,7 +450,7 @@ function SignalArchiveTab({ weeks, onWeeksChange }) {
               <div className={styles.loading}><div className={styles.spinner} /> Loading…</div>
             ) : (
               <table className={styles.drillTable}>
-                <thead><tr><th>Week Of</th><th>Signal</th><th>EMA 21</th><th>Stop</th><th>New?</th><th>Profit $</th><th>Profit %</th></tr></thead>
+                <thead><tr><th>Week Of</th><th>Signal</th><th>EMA</th><th>Stop</th><th>New?</th><th>Profit $</th><th>Profit %</th></tr></thead>
                 <tbody>
                   {tickerHistory.map(r => (
                     <tr key={r.weekOf}>
@@ -522,7 +522,7 @@ function SignalArchiveTab({ weeks, onWeeksChange }) {
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>Ticker</th><th>Signal</th><th>Signal Date</th><th>EMA 21</th>
+                    <th>Ticker</th><th>Signal</th><th>Signal Date</th><th>EMA</th>
                     <th>Stop Price</th><th>New</th>
                     <th style={{ color: '#D4A017' }}>Score Δ</th>
                     <th>Profit $</th><th>Profit %</th><th></th>

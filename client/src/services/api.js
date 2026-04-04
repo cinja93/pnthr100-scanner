@@ -715,6 +715,12 @@ export async function fetchOrdersGateLog() {
   return res.json();
 }
 
+export async function fetchBacktestTrades(signal) {
+  const res = await apiFetch(`${API_BASE}/api/backtest/trades?signal=${signal}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function runOrdersManual(type = 'WEEKLY') {
   const res = await apiFetch(`${API_BASE}/api/admin/run-orders`, {
     method: 'POST',

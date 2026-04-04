@@ -1971,6 +1971,21 @@ app.post('/api/kill-test/monthly/generate', authenticateJWT, requireAdmin, killT
 app.get('/api/orders/latest',    authenticateJWT, ordersGetLatest);
 app.get('/api/orders/gate-log',  authenticateJWT, ordersGetGateLog);
 app.get('/api/orders/history',   authenticateJWT, ordersGetHistory);
+app.get('/api/backtest/trades',  authenticateJWT, async (req, res) => {
+  try {
+    const signal = req.query.signal; // 'BL' or 'SS'
+    const db = req.app.locals.db || (await import('./database.js')).connectToDatabase();
+    const filter = signal ? { signal } : {};
+    const trades = await (await db).collection('pnthr_bt_trade_log')
+      .find(filter, { projection: { _id: 0 } })
+      .sort({ entryDate: 1 })
+      .toArray();
+    res.json({ trades });
+  } catch (err) {
+    console.error('[Backtest] trades fetch error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 app.post('/api/admin/run-orders', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const type = req.body.type || 'WEEKLY';

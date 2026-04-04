@@ -373,11 +373,246 @@ function RulesPopup({ type, onClose }) {
   );
 }
 
+// ── Backtest results popup ──────────────────────────────────────────────────
+
+const BL_BACKTEST = {
+  trades: 1660, winners: 1115, losers: 545,
+  winRate: 67.2, avgPnl: 5.60, avgWin: 9.69, avgLoss: -2.77, wlRatio: 3.50,
+  totalReturn: 9293,
+  years: [
+    { year: '2021', trades: 302, winPct: 67.5, avgPnl: 5.13 },
+    { year: '2022', trades: 123, winPct: 69.1, avgPnl: 4.35 },
+    { year: '2023', trades: 322, winPct: 61.8, avgPnl: 4.55 },
+    { year: '2024', trades: 444, winPct: 67.8, avgPnl: 5.23 },
+    { year: '2025', trades: 350, winPct: 70.3, avgPnl: 8.01 },
+    { year: '2026', trades: 58, winPct: 62.1, avgPnl: 5.29 },
+  ],
+  exitReasons: [
+    { reason: 'SIGNAL (BL exit)', count: 1423, winPct: 67.0, avgPnl: 5.58 },
+    { reason: 'STOP HIT', count: 234, winPct: 68.4, avgPnl: 5.78 },
+    { reason: 'STALE HUNT', count: 3, winPct: 0.0, avgPnl: -1.31 },
+  ],
+  topWinners: [
+    { ticker: 'SNDK', entry: '2025-08-01', exit: '2025-11-07', pnl: 330.31 },
+    { ticker: 'CELH', entry: '2024-07-19', exit: '2024-10-28', pnl: 84.88 },
+    { ticker: 'ENPH', entry: '2023-01-06', exit: '2023-06-05', pnl: 83.81 },
+    { ticker: 'SMCI', entry: '2023-10-27', exit: '2024-03-11', pnl: 73.06 },
+    { ticker: 'WAT', entry: '2021-04-09', exit: '2021-08-03', pnl: 34.70 },
+  ],
+  topLosers: [
+    { ticker: 'SMCI', entry: '2024-05-03', exit: '2024-05-09', pnl: -16.29 },
+    { ticker: 'SEDG', entry: '2023-01-06', exit: '2023-02-23', pnl: -14.38 },
+    { ticker: 'MOS', entry: '2022-06-03', exit: '2022-06-17', pnl: -13.88 },
+    { ticker: 'DXYZ', entry: '2025-01-31', exit: '2025-02-24', pnl: -13.82 },
+    { ticker: 'COIN', entry: '2024-03-08', exit: '2024-04-15', pnl: -13.42 },
+  ],
+};
+
+const SS_BACKTEST = {
+  trades: 143, winners: 97, losers: 46,
+  winRate: 67.8, avgPnl: 4.20, avgWin: 7.97, avgLoss: -3.75, wlRatio: 2.13,
+  totalReturn: 601,
+  years: [
+    { year: '2022', trades: 97, winPct: 68.0, avgPnl: 4.50 },
+    { year: '2023', trades: 22, winPct: 72.7, avgPnl: 4.37 },
+    { year: '2025', trades: 19, winPct: 78.9, avgPnl: 5.74 },
+    { year: '2026', trades: 5, winPct: 40.0, avgPnl: -1.80 },
+  ],
+  noTradeYears: ['2021', '2024'],
+  exitReasons: [
+    { reason: 'SIGNAL (SS exit)', count: 120, winPct: 69.2, avgPnl: 4.53 },
+    { reason: 'STOP HIT', count: 23, winPct: 60.9, avgPnl: 2.52 },
+  ],
+  topWinners: [
+    { ticker: 'AMD', entry: '2022-09-09', exit: '2022-10-14', pnl: 33.44 },
+    { ticker: 'FSLR', entry: '2022-04-08', exit: '2022-06-13', pnl: 31.82 },
+    { ticker: 'ENPH', entry: '2022-12-16', exit: '2023-01-06', pnl: 26.15 },
+    { ticker: 'MCHP', entry: '2025-03-28', exit: '2025-04-09', pnl: 20.60 },
+    { ticker: 'NEE', entry: '2023-09-29', exit: '2023-10-23', pnl: 16.70 },
+  ],
+  topLosers: [
+    { ticker: 'FSLR', entry: '2022-07-01', exit: '2022-07-25', pnl: -17.91 },
+    { ticker: 'OXY', entry: '2022-06-17', exit: '2022-07-05', pnl: -15.05 },
+    { ticker: 'ALB', entry: '2022-09-23', exit: '2022-10-04', pnl: -9.68 },
+    { ticker: 'CCI', entry: '2023-10-20', exit: '2023-10-30', pnl: -5.39 },
+    { ticker: 'BA', entry: '2023-10-20', exit: '2023-10-30', pnl: -4.23 },
+  ],
+};
+
+function BacktestPopup({ type, onClose }) {
+  const d = type === 'BL' ? BL_BACKTEST : SS_BACKTEST;
+  const label = type === 'BL' ? 'BUY LONG' : 'SELL SHORT';
+  const color = type === 'BL' ? '#22c55e' : '#ef4444';
+
+  return (
+    <div className={styles.rulesOverlay} onClick={onClose}>
+      <div className={styles.rulesPanel} onClick={e => e.stopPropagation()}>
+        <div className={styles.rulesHeader}>
+          <h2 className={styles.rulesTitle}>{label} Backtest Results</h2>
+          <button className={styles.rulesClose} onClick={onClose}>X</button>
+        </div>
+
+        <div className={styles.rulesBody}>
+          <div className={styles.ruleDesc} style={{ color: '#888', marginBottom: 12 }}>
+            5-year backtest (Apr 2021 – Apr 2026) · Filter-then-rank pipeline · Single lot per trade
+          </div>
+
+          {/* Headline stats */}
+          <div className={styles.btStatsGrid}>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color }}>{d.trades}</div>
+              <div className={styles.btStatLabel}>Trades</div>
+            </div>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color }}>{d.winRate}%</div>
+              <div className={styles.btStatLabel}>Win Rate</div>
+            </div>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color }}>+{d.avgPnl}%</div>
+              <div className={styles.btStatLabel}>Avg P&L</div>
+            </div>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color }}>{d.wlRatio}:1</div>
+              <div className={styles.btStatLabel}>W/L Ratio</div>
+            </div>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color: '#22c55e' }}>+{d.avgWin}%</div>
+              <div className={styles.btStatLabel}>Avg Winner</div>
+            </div>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color: '#ef4444' }}>{d.avgLoss}%</div>
+              <div className={styles.btStatLabel}>Avg Loser</div>
+            </div>
+          </div>
+
+          {/* Year-by-year */}
+          <h3 className={styles.rulesSectionTitle}>Year-by-Year Performance</h3>
+          <table className={styles.btTable}>
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Trades</th>
+                <th>Win %</th>
+                <th>Avg P&L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.years.map(y => (
+                <tr key={y.year}>
+                  <td style={{ fontWeight: 700, color: '#fcf000' }}>{y.year}</td>
+                  <td>{y.trades}</td>
+                  <td style={{ color: y.winPct >= 60 ? '#22c55e' : y.winPct >= 50 ? '#eab308' : '#ef4444' }}>
+                    {y.winPct}%
+                  </td>
+                  <td style={{ color: y.avgPnl >= 0 ? '#22c55e' : '#ef4444' }}>
+                    {y.avgPnl >= 0 ? '+' : ''}{y.avgPnl}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {type === 'SS' && d.noTradeYears && (
+            <div className={styles.ruleDesc} style={{ marginTop: 6, color: '#888', fontSize: 11 }}>
+              No SS trades in {d.noTradeYears.join(', ')} — bull regime, crash gate blocked all shorts (by design).
+            </div>
+          )}
+
+          {/* By exit reason */}
+          <h3 className={styles.rulesSectionTitle}>By Exit Reason</h3>
+          <table className={styles.btTable}>
+            <thead>
+              <tr>
+                <th>Reason</th>
+                <th>Trades</th>
+                <th>Win %</th>
+                <th>Avg P&L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.exitReasons.map(r => (
+                <tr key={r.reason}>
+                  <td>{r.reason}</td>
+                  <td>{r.count}</td>
+                  <td style={{ color: r.winPct >= 60 ? '#22c55e' : r.winPct >= 50 ? '#eab308' : '#ef4444' }}>
+                    {r.winPct}%
+                  </td>
+                  <td style={{ color: r.avgPnl >= 0 ? '#22c55e' : '#ef4444' }}>
+                    {r.avgPnl >= 0 ? '+' : ''}{r.avgPnl}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Top winners */}
+          <h3 className={styles.rulesSectionTitle}>Top 5 Winners</h3>
+          <table className={styles.btTable}>
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>P&L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.topWinners.map((t, i) => (
+                <tr key={i}>
+                  <td style={{ fontWeight: 700 }}>{t.ticker}</td>
+                  <td>{t.entry}</td>
+                  <td>{t.exit}</td>
+                  <td style={{ color: '#22c55e', fontWeight: 700 }}>+{t.pnl.toFixed(2)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Top losers */}
+          <h3 className={styles.rulesSectionTitle}>Top 5 Losers</h3>
+          <table className={styles.btTable}>
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>P&L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.topLosers.map((t, i) => (
+                <tr key={i}>
+                  <td style={{ fontWeight: 700 }}>{t.ticker}</td>
+                  <td>{t.entry}</td>
+                  <td>{t.exit}</td>
+                  <td style={{ color: '#ef4444', fontWeight: 700 }}>{t.pnl.toFixed(2)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Total return */}
+          <div className={styles.ruleCard} style={{ borderLeft: `3px solid ${color}`, marginTop: 16 }}>
+            <div>
+              <div className={styles.ruleName}>Total Cumulative Return</div>
+              <div className={styles.ruleDesc}>
+                +{d.totalReturn.toLocaleString()}% across {d.trades} trades ({d.winners}W / {d.losers}L).
+                {type === 'SS' && ' The strict crash gate ensures shorts only fire during genuine market breakdowns.'}
+                {type === 'BL' && ' Positive every year including 2022 bear market.'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OrdersPage() {
   const { isAdmin } = useAuth();
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('orders');
-  const [rulesPopup, setRulesPopup] = useState(null); // 'BL' | 'SS' | null
+  const [rulesPopup, setRulesPopup] = useState(null);       // 'BL' | 'SS' | null
+  const [backtestPopup, setBacktestPopup] = useState(null); // 'BL' | 'SS' | null
   const [gateData, setGateData] = useState(null);
   const [history, setHistory] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -457,12 +692,15 @@ export default function OrdersPage() {
           <span className={styles.timestamp}>{formatDate(generatedAt)}</span>
           <div className={styles.rulesButtons}>
             <button className={styles.rulesBtn} onClick={() => setRulesPopup('BL')}>BL Order Rules</button>
+            <button className={`${styles.rulesBtn} ${styles.rulesBtnBT}`} onClick={() => setBacktestPopup('BL')}>BL Backtest Results</button>
             <button className={`${styles.rulesBtn} ${styles.rulesBtnSS}`} onClick={() => setRulesPopup('SS')}>SS Order Rules</button>
+            <button className={`${styles.rulesBtn} ${styles.rulesBtnSSBT}`} onClick={() => setBacktestPopup('SS')}>SS Backtest Results</button>
           </div>
         </div>
       </div>
 
       {rulesPopup && <RulesPopup type={rulesPopup} onClose={() => setRulesPopup(null)} />}
+      {backtestPopup && <BacktestPopup type={backtestPopup} onClose={() => setBacktestPopup(null)} />}
 
       {/* Admin controls */}
       {isAdmin && (

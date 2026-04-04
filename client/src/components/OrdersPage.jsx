@@ -442,7 +442,7 @@ const SS_BACKTEST = {
 function BacktestPopup({ type, onClose }) {
   const d = type === 'BL' ? BL_BACKTEST : SS_BACKTEST;
   const label = type === 'BL' ? 'BUY LONG' : 'SELL SHORT';
-  const color = type === 'BL' ? '#22c55e' : '#ef4444';
+  const color = '#22c55e';
 
   return (
     <div className={styles.rulesOverlay} onClick={onClose}>

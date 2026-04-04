@@ -304,7 +304,7 @@ export async function generateIssue(weekOf) {
 
   const prompt = `You are PNTHR, a sophisticated market intelligence system. Write the weekly "PNTHR's Perch" newsletter for the week of ${formatDateLong(weekOf)}.
 
-PNTHR scans roughly 679 stocks across the S&P 500 and S&P 400 using a 21-week EMA trend-following model. BL+1 = brand-new Buy Long entry THIS WEEK. SS+1 = brand-new Sell Short entry THIS WEEK. The BL+1 to SS+1 ratio is the primary market pulse indicator. NEVER confuse new signals (BL+1/SS+1) with existing open positions (BL+N/SS+N where N > 1).
+PNTHR scans roughly 679 stocks across the S&P 500 and S&P 400 using a sector-optimized EMA trend-following model. BL+1 = brand-new Buy Long entry THIS WEEK. SS+1 = brand-new Sell Short entry THIS WEEK. The BL+1 to SS+1 ratio is the primary market pulse indicator. NEVER confuse new signals (BL+1/SS+1) with existing open positions (BL+N/SS+N where N > 1).
 
 ---
 

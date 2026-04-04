@@ -565,7 +565,7 @@ export async function generateAssistantTasks(userId, positions, nav) {
                   `1. ${ticker} entered ${tradDays} trading days ago. Lot 2 gate opened ${tradDays - 5} days ago.`,
                   `2. Lot 2 trigger of ${fmt$(trigger)} (${isLong ? '+3%' : '-3%'} from entry) has NOT been reached — the stock has not confirmed the move.`,
                   `3. This is a momentum warning. A stock that can't move ${isLong ? '+3%' : '-3%'} in ${tradDays - 5} days may be losing conviction.`,
-                  `4. Check the chart: Is price still ${isLong ? 'above' : 'below'} the 21W EMA? Is the EMA slope still ${isLong ? 'up' : 'down'}?`,
+                  `4. Check the chart: Is price still ${isLong ? 'above' : 'below'} the sector EMA? Is the EMA slope still ${isLong ? 'up' : 'down'}?`,
                   `5. If YES (signal intact): hold and continue watching for the trigger. ${remaining} trading days remain before stale hunt deadline.`,
                   `6. If NO (signal weakening or price drifting back): consider exiting voluntarily now rather than waiting for the Day 20 forced exit.`,
                   tradDays >= 14
@@ -927,7 +927,7 @@ const BUILT_IN_ROUTINES = [
   { id: 'mon_stop_sync',      dayOfWeek: 1, label: 'Run Monday Stop Sync — update IBKR stops to match PNTHR' },
   // mon_weekly_plan, mon_sector_review, mon_earnings_scan → computed smart routines (see buildRoutineContext)
   { id: 'mon_heat_check',     dayOfWeek: 1, label: 'Check portfolio heat — are you within 15% cap?' },
-  { id: 'mon_regime',         dayOfWeek: 1, label: 'Check market regime — SPY/QQQ above or below 21W EMA?' },
+  { id: 'mon_regime',         dayOfWeek: 1, label: 'Check market regime — SPY/QQQ above or below sector EMA?' },
 
   // ── Wednesday ──
   { id: 'wed_mid_week',       dayOfWeek: 3, label: 'Mid-week position review — any lot triggers approaching?' },

@@ -74,9 +74,9 @@ function scoreIndexTrend(direction, marketAtEntry, exchange, userConfirmed) {
   const above   = position === 'above';
   const aligned = (direction === 'LONG' && above) || (direction === 'SHORT' && !above);
   if (aligned) {
-    return { score: 8, label: 'WITH TREND',    detail: `Traded ${direction} with ${indexName} ${above ? 'above' : 'below'} 21 EMA` };
+    return { score: 8, label: 'WITH TREND',    detail: `Traded ${direction} with ${indexName} ${above ? 'above' : 'below'} EMA` };
   }
-  return           { score: 0, label: 'AGAINST TREND', detail: `Traded ${direction} against ${indexName} ${above ? 'above' : 'below'} 21 EMA` };
+  return           { score: 0, label: 'AGAINST TREND', detail: `Traded ${direction} against ${indexName} ${above ? 'above' : 'below'} EMA` };
 }
 
 // ── T1-D: Sector Trend Alignment (0-7 pts) ───────────────────────────────────
@@ -96,7 +96,7 @@ function scoreSectorTrend(direction, marketAtEntry, userConfirmed) {
   const above   = position === 'above';
   const aligned = (direction === 'LONG' && above) || (direction === 'SHORT' && !above);
   if (aligned) {
-    return { score: 7, label: 'WITH SECTOR',    detail: `Traded ${direction} with ${etf} ${above ? 'above' : 'below'} 21 EMA` };
+    return { score: 7, label: 'WITH SECTOR',    detail: `Traded ${direction} with ${etf} ${above ? 'above' : 'below'} EMA` };
   }
   return           { score: 0, label: 'AGAINST SECTOR', detail: `Traded ${direction} against ${etf} trend` };
 }

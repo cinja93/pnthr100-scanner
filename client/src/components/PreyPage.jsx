@@ -860,7 +860,7 @@ export default function PreyPage({ onNavigate }) {
                       <li><strong>Risk %</strong> — Risk as a percentage of current price.</li>
                       <li><strong>RSI</strong> — Relative Strength Index. Must be rising and below 75 (BL) or falling and above 25 (SS) — momentum confirmed in the right direction.</li>
                       <li><strong>OBV</strong> — On-Balance Volume slope. Rising (BL) or falling (SS) confirms volume is backing the move.</li>
-                      <li><strong>Δ EMA</strong> — How far price is above (BL) or below (SS) the 21-week EMA (%). Daylight must be confirmed.</li>
+                      <li><strong>Δ EMA</strong> — How far price is above (BL) or below (SS) the sector-optimized EMA (%). Daylight must be confirmed.</li>
                       <li><strong>Next Earnings</strong> — Upcoming earnings date. Amber highlight = within 14 days.</li>
                     </ul>
                   </div>
@@ -903,8 +903,8 @@ export default function PreyPage({ onNavigate }) {
                       <li><strong>Signal</strong> — BL (Buy Long) or SS (Sell Short) entry direction.</li>
                       <li><strong>Wks Since</strong> — Which weekly bar since the signal (Bar 1 = first week).</li>
                       <li><strong>Current Price</strong> — Current share price.</li>
-                      <li><strong>EMA21</strong> — 21-week exponential moving average (trend line).</li>
-                      <li><strong>Δ EMA</strong> — How far price is above or below the 21-EMA (%).</li>
+                      <li><strong>EMA21</strong> — Sector-optimized EMA (trend line).</li>
+                      <li><strong>Δ EMA</strong> — How far price is above or below the sector-optimized EMA (%).</li>
                       <li><strong>RSI</strong> — Relative Strength Index (momentum; 0–100).</li>
                       <li><strong>ADX</strong> — Trend strength (higher = stronger trend).</li>
                       <li><strong>OBV</strong> — On-Balance Volume slope (volume supporting the move).</li>
@@ -954,8 +954,8 @@ export default function PreyPage({ onNavigate }) {
                       <li><strong>Current</strong> — Current weekly close price.</li>
                       <li><strong>% vs Open</strong> — For GAINING: close vs this week's open. Higher = more momentum toward a launch.</li>
                       <li><strong>% past Trigger</strong> — For LAUNCHED: how far past the prior week's high (longs) or low (shorts).</li>
-                      <li><strong>EMA21</strong> — 21-week exponential moving average (trend anchor).</li>
-                      <li><strong>Δ EMA</strong> — Distance between price and the 21-EMA (%).</li>
+                      <li><strong>EMA21</strong> — Sector-optimized EMA (trend anchor).</li>
+                      <li><strong>Δ EMA</strong> — Distance between price and the sector-optimized EMA (%).</li>
                       <li><strong>Sector</strong> — Sector the stock belongs to.</li>
                     </ul>
                   </div>
@@ -1001,7 +1001,7 @@ export default function PreyPage({ onNavigate }) {
                       <li><strong>52-Wk Min BW</strong> — Tightest band width over 52 weeks — the squeeze floor.</li>
                       <li><strong>Expansion %</strong> — For ATTACK: BW growth from the 52-week min. Bigger = more explosive.</li>
                       <li><strong>Wks in Squeeze</strong> — Consecutive weeks near the 52-week min. Longer = more potential energy.</li>
-                      <li><strong>EMA Lean</strong> — Price above or below 21-week EMA — direction hint for STALK stocks.</li>
+                      <li><strong>EMA Lean</strong> — Price above or below sector-optimized EMA — direction hint for STALK stocks.</li>
                       <li><strong>Δ EMA</strong> — EMA slope over the last 4 weeks.</li>
                       <li><strong>Sector</strong> — Sector the stock belongs to.</li>
                     </ul>

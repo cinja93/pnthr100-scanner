@@ -5,10 +5,10 @@ import dotenv from 'dotenv';
 dotenv.config({ path: new URL('.env', import.meta.url).pathname });
 
 import { aggregateWeeklyBars } from './technicalUtils.js';
+import { DEFAULT_EMA_PERIOD } from './sectorEmaConfig.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
-const EMA_PERIOD   = 21;
 const WEEKS_HISTORY = 260;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -42,12 +42,12 @@ function computeEMASeries(closes, period) {
 
 function runFullStateMachine(weeklyBars) {
   const events = [];
-  if (weeklyBars.length < EMA_PERIOD + 2) return events;
+  if (weeklyBars.length < DEFAULT_EMA_PERIOD + 2) return events;
 
   const closes    = weeklyBars.map(b => b.close);
-  const emas      = computeEMASeries(closes, EMA_PERIOD);
+  const emas      = computeEMASeries(closes, DEFAULT_EMA_PERIOD);
   if (emas.length < 2) return events;
-  const emaOffset = EMA_PERIOD - 1;
+  const emaOffset = DEFAULT_EMA_PERIOD - 1;
 
   let position        = null;
   let longDaylight    = 0;
@@ -57,7 +57,7 @@ function runFullStateMachine(weeklyBars) {
   let shortTrendActive = false;
   let shortTrendCapped = false;
 
-  for (let wi = EMA_PERIOD + 1; wi < weeklyBars.length; wi++) {
+  for (let wi = DEFAULT_EMA_PERIOD + 1; wi < weeklyBars.length; wi++) {
     const emaIdx     = wi - emaOffset;
     if (emaIdx < 1) continue;
     const current    = weeklyBars[wi];

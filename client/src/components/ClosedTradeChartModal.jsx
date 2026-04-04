@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
 import { fetchChartData } from '../services/api';
 import { LOT_NAMES, LOT_OFFSETS } from '../utils/sizingUtils';
+import { getSectorEmaPeriod } from '../utils/sectorEmaConfig';
 import pantherHeadIcon from '../assets/panther head.png';
 
 // ── Weekly aggregation (same as ChartModal) ───────────────────────────────────
@@ -453,8 +454,9 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
       });
     });
 
-    // 21 EMA
-    const ema21Full = calculateEMA(allWeeklyData, 21);
+    // Sector-specific EMA
+    const emaPeriod = getSectorEmaPeriod(entry?.sector);
+    const ema21Full = calculateEMA(allWeeklyData, emaPeriod);
     if (ema21Full.length > 0) {
       const ema21 = ema21Full.filter(d => filteredTimes.has(d.time));
       if (ema21.length > 0) {
@@ -470,7 +472,7 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
     }
 
     // Signal detection for BL/SS/BE/SE badges
-    const { events: allDetected } = detectAllSignals(allWeeklyData, 21, false);
+    const { events: allDetected } = detectAllSignals(allWeeklyData, emaPeriod, false);
     const lastEntryIdx = (() => { for (let i = allDetected.length - 1; i >= 0; i--) { if (allDetected[i].signal === 'BL' || allDetected[i].signal === 'SS') return i; } return -1; })();
     const lastEntry  = lastEntryIdx >= 0 ? allDetected[lastEntryIdx] : null;
     const exitEvent  = lastEntry ? allDetected.slice(lastEntryIdx + 1).find(e => e.signal === 'BE' || e.signal === 'SE') : null;

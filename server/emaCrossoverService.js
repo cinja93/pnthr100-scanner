@@ -3,6 +3,7 @@ import { getAllTickers } from './constituents.js';
 import { getWatchlistStocks } from './stockService.js';
 import { getSignals } from './signalService.js';
 import { connectToDatabase } from './database.js';
+import { DEFAULT_EMA_PERIOD } from './sectorEmaConfig.js';
 
 dotenv.config();
 
@@ -58,13 +59,16 @@ function aggregateToWeekly(dailyData) {
   return [...weeksMap.values()]; // ascending by time
 }
 
-// 21-period EMA on ascending weekly close data
-function calculateEMA21(weeklyData) {
-  if (weeklyData.length < 21) return [];
-  const k = 2 / 22;
-  let ema = weeklyData.slice(0, 21).reduce((sum, d) => sum + d.close, 0) / 21;
-  const result = [{ time: weeklyData[20].time, ema }];
-  for (let i = 21; i < weeklyData.length; i++) {
+// EMA on ascending weekly close data, parameterized by period.
+// Phase 1: crossover scan uses DEFAULT_EMA_PERIOD (21) for all sectors.
+// TODO: Phase 2 — use per-sector EMA periods from sectorEmaConfig.js
+// once crossover detection is validated with variable periods.
+function calculateEMA(weeklyData, period = DEFAULT_EMA_PERIOD) {
+  if (weeklyData.length < period) return [];
+  const k = 2 / (period + 1);
+  let ema = weeklyData.slice(0, period).reduce((sum, d) => sum + d.close, 0) / period;
+  const result = [{ time: weeklyData[period - 1].time, ema }];
+  for (let i = period; i < weeklyData.length; i++) {
     ema = weeklyData[i].close * k + ema * (1 - k);
     result.push({ time: weeklyData[i].time, ema });
   }
@@ -94,7 +98,7 @@ async function fetchHistory(ticker) {
 // At least one bar inside the window must be on the CORRECT side (the actual crossover).
 function checkRecentCrossover(signal, daily) {
   const weekly = aggregateToWeekly(daily);
-  const emaData = calculateEMA21(weekly);
+  const emaData = calculateEMA(weekly);
   if (emaData.length < 4) return false;
 
   // Build Monday-based calendar boundaries (all dates as YYYY-MM-DD strings for direct comparison)

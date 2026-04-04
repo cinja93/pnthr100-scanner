@@ -2041,7 +2041,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
                             }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = c.border; }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = isNew ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)'; }}
-                            title={`Analyze: ${aPct}%${sector ? ` · ${sector} ${emaUp === true ? '▲ above' : emaUp === false ? '▼ below' : ''} 21W EMA` : ''}`}
+                            title={`Analyze: ${aPct}%${sector ? ` · ${sector} ${emaUp === true ? '▲ above' : emaUp === false ? '▼ below' : ''} sector EMA` : ''}`}
                             className={isNew ? 'feed-chip-new' : undefined}
                             style={{
                               display: 'inline-flex',

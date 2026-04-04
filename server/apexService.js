@@ -250,6 +250,9 @@ export async function fetchStockData(ticker) {
     if (!daily || daily.length < 40) return null;
     const weekly = aggregateWeeklyBars(daily, { includeVolume: true });
     if (weekly.length < 30) return null;
+    // Kill scoring uses a fixed 21-period EMA for bell-curve separation (D3),
+    // index regime (D1), and sector ETF data (D2). This is intentionally
+    // independent of per-sector signal EMA periods in sectorEmaConfig.js.
     const ema21 = computeEMA21series(weekly);
     const obv   = computeOBV(weekly);
     const rsi   = computeRSI14(weekly);

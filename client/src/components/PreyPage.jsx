@@ -557,8 +557,8 @@ function PreyStockTable({ stocks, longs, shorts, signals = {}, earnings = {}, on
   );
 }
 
-const ALPHA_HEADERS  = ['Perf Rank', 'Rank Change', 'Ticker', 'Signal', 'Wks Since', 'Current Price', 'EMA21', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
-const SPRING_HEADERS = ['Perf Rank', 'Rank Change', 'Ticker', 'Signal', 'Status', '6M High', '% Off High', 'Current', '% vs Open', '% past Trigger', 'EMA21', 'Δ EMA', 'Sector'];
+const ALPHA_HEADERS  = ['Perf Rank', 'Rank Change', 'Ticker', 'Signal', 'Wks Since', 'Current Price', 'EMA', 'Δ EMA', 'RSI', 'ADX', 'OBV', 'ETF', '4-Wk α'];
+const SPRING_HEADERS = ['Perf Rank', 'Rank Change', 'Ticker', 'Signal', 'Status', '6M High', '% Off High', 'Current', '% vs Open', '% past Trigger', 'EMA', 'Δ EMA', 'Sector'];
 const CROUCH_HEADERS = ['Perf Rank', 'Rank Change', 'Ticker', 'Signal', 'State', 'Current', 'Band Width %', '52-Wk Min BW', 'Expansion %', 'Wks in Squeeze', 'EMA Lean', 'Δ EMA', 'Sector'];
 const DINNER_HEADERS = ['Perf Rank', 'Rank Change', 'Ticker', 'Signal', 'Sector', 'Current Price', 'PNTHR Stop', 'Risk Per Share', 'Risk %', 'RSI', 'OBV', 'Δ EMA', 'Next Earnings'];
 

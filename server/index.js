@@ -2999,14 +2999,14 @@ app.get('/api/journal', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
-    const { status, limit = 50 } = req.query;
+    const { status, limit } = req.query;
     const filter = { ownerId: req.user.userId };
     if (status) filter['performance.status'] = status;
-    const entries = await db.collection('pnthr_journal')
+    let cursor = db.collection('pnthr_journal')
       .find(filter)
-      .sort({ createdAt: -1 })
-      .limit(Number(limit))
-      .toArray();
+      .sort({ createdAt: -1 });
+    if (limit) cursor = cursor.limit(Number(limit));
+    const entries = await cursor.toArray();
     res.json(entries);
     // Lazy backfill: compute discipline score for any closed trade that's missing it.
     // Fire-and-forget after response — doesn't affect response time.
@@ -3156,11 +3156,11 @@ app.get('/api/journal/analytics', authenticateJWT, async (req, res) => {
     const entries = await db.collection('pnthr_journal')
       .find({ ownerId: req.user.userId, 'performance.status': 'CLOSED' })
       .sort({ createdAt: -1 })
-      .limit(50)
       .toArray();
 
-    const scores = entries.map(e => e.discipline?.totalScore).filter(s => s != null);
-    const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+    // Avg discipline uses last 20 trades for responsiveness, total stats use all
+    const recentScores = entries.slice(0, 20).map(e => e.discipline?.totalScore).filter(s => s != null);
+    const avgScore = recentScores.length ? Math.round(recentScores.reduce((a, b) => a + b, 0) / recentScores.length) : null;
 
     const overrideEntries = entries.filter(e => (e.discipline?.overrideCount || 0) > 0);
     const disciplinedWinners = entries.filter(e => (e.discipline?.totalScore || 0) >= 75 && (e.performance?.realizedPnlDollar || e.performance?.totalPnlDollar || 0) > 0);

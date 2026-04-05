@@ -1285,7 +1285,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
         <div style={{ background: '#1a1a1a', borderLeft: `3px solid ${gold}`, borderRadius: 4, padding: '12px 16px', marginTop: 16 }}>
           <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Interpretation</div>
           <div style={{ color: '#aaa', fontSize: 12, lineHeight: 1.5 }}>
-            Sharpe {'>'} 2.0 is exceptional — top hedge funds target 1.0-1.5. Max drawdown of -0.24% vs the S&P's -25% in 2022 demonstrates extreme capital protection. Pyramiding concentrates capital into winners while losers stay small (Lot 1 only). 95% positive months with a worst month of just -0.24% is institutional-grade consistency. CAGR assumes $10K full position sizing — actual returns scale with account size and risk allocation.
+            Sharpe {'>'} 2.0 is exceptional — top hedge funds target 1.0-1.5. Max drawdown of -0.24% vs the S&P 500's -25% in 2022 demonstrates extreme capital protection. Pyramiding concentrates capital into winners while losers stay small (Lot 1 only). 95% positive months with a worst month of just -0.24% is institutional-grade consistency. Backtest metrics above use $100K capital with $10K full positions. The $10M Demo Fund above applies real-world constraints: 1% risk per position, 10% max portfolio heat, IBKR Pro commissions, and wash sale compliance.
           </div>
         </div>
       </div>

@@ -1037,22 +1037,51 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                   <span style={{ color: '#FFD700', fontSize: 14, fontWeight: 700 }}>PRE-TRADE ANALYSIS — {stock.ticker}</span>
                   <span style={{ backgroundColor: ar.color, color: '#000', padding: '3px 10px', borderRadius: 5, fontSize: 13, fontWeight: 800 }}>{ar.pct}%</span>
                 </div>
-                <span style={{ color: '#888', fontSize: 11 }}>Projected full score: {ar.projected.low}–{ar.projected.high}/100</span>
+                <span style={{ color: '#888', fontSize: 11 }}>{ar.score}/{ar.max} pts</span>
               </div>
               {/* Two-column layout */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                 <div>
-                  <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 6 }}>
-                    {ar.isETF ? `ETF SELECTION${ar.assetClass ? ` [${ar.assetClass}]` : ''}` : 'STOCK SELECTION'}
-                  </div>
-                  <ScoreLine label="Signal Quality"  comp={ar.components.signalQuality} max={15} />
-                  <ScoreLine label={ar.isETF ? 'ETF Trend'        : 'Kill Context'}   comp={ar.isETF ? ar.components.trendAlignment  : ar.components.killContext}    max={ar.isETF ? 0 : 10} />
-                  {ar.isETF && <ScoreLine label="EMA Slope"        comp={ar.components.emaSlope}                                                                    max={10} />}
-                  <ScoreLine label={ar.isETF ? 'Macro Alignment'  : 'Index Trend'}   comp={ar.isETF ? ar.components.macroAlignment  : ar.components.indexTrend}    max={8}  />
-                  <ScoreLine label={ar.isETF ? 'Momentum Quality' : 'Sector Trend'}  comp={ar.isETF ? ar.components.momentumQuality : ar.components.sectorTrend}   max={7}  />
-                  <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginTop: 10, marginBottom: 6 }}>EXECUTION (PROJECTED)</div>
-                  <ScoreLine label="Position Sizing" comp={ar.components.sizing}        max={8}  />
-                  <ScoreLine label="Risk Cap"        comp={ar.components.riskCap}       max={5}  />
+                  {ar.isETF ? (
+                    <>
+                      <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 6 }}>
+                        {`ETF SELECTION${ar.assetClass ? ` [${ar.assetClass}]` : ''}`}
+                      </div>
+                      <ScoreLine label="Signal Quality"    comp={ar.components.signalQuality}   max={15} />
+                      <ScoreLine label="ETF Trend"         comp={ar.components.trendAlignment}  max={0}  />
+                      <ScoreLine label="EMA Slope"         comp={ar.components.emaSlope}        max={10} />
+                      <ScoreLine label="Macro Alignment"   comp={ar.components.macroAlignment}  max={8}  />
+                      <ScoreLine label="Momentum Quality"  comp={ar.components.momentumQuality} max={7}  />
+                      <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginTop: 10, marginBottom: 6 }}>EXECUTION (PROJECTED)</div>
+                      <ScoreLine label="Position Sizing"   comp={ar.components.sizing}          max={8}  />
+                      <ScoreLine label="Risk Cap"          comp={ar.components.riskCap}         max={5}  />
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 6 }}>
+                        SETUP QUALITY {ar.tiers?.t1 ? `(${ar.tiers.t1.score}/${ar.tiers.t1.max})` : ''}
+                      </div>
+                      <ScoreLine label="Signal Quality"  comp={ar.components.signalQuality} max={15} />
+                      <ScoreLine label="Kill Context"    comp={ar.components.killContext}    max={10} />
+                      <ScoreLine label="Index Trend"     comp={ar.components.indexTrend}     max={8}  />
+                      <ScoreLine label="Sector Trend"    comp={ar.components.sectorTrend}    max={7}  />
+                      <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginTop: 10, marginBottom: 6 }}>
+                        RISK PROFILE {ar.tiers?.t2 ? `(${ar.tiers.t2.score}/${ar.tiers.t2.max})` : ''}
+                      </div>
+                      <ScoreLine label="Freshness"       comp={ar.components.freshness}      max={12} />
+                      <ScoreLine label="Risk / Reward"   comp={ar.components.riskReward}     max={8}  />
+                      <ScoreLine label="Prey Presence"   comp={ar.components.preyPresence}   max={8}  />
+                      <ScoreLine label="Conviction"      comp={ar.components.conviction}     max={7}  />
+                      <div style={{ color: '#D4A017', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginTop: 10, marginBottom: 6 }}>
+                        ENTRY CONDITIONS {ar.tiers?.t3 ? `(${ar.tiers.t3.score}/${ar.tiers.t3.max})` : ''}
+                      </div>
+                      <ScoreLine label="Slope Strength"      comp={ar.components.slopeStrength}      max={5} />
+                      <ScoreLine label="Sector Concentration" comp={ar.components.sectorConcentration} max={5} />
+                      <ScoreLine label="Wash Compliance"     comp={ar.components.washCompliance}     max={5} />
+                      <ScoreLine label="Volatility Context"  comp={ar.components.volatilityContext}  max={5} />
+                      <ScoreLine label="Portfolio Fit"       comp={ar.components.portfolioFit}       max={5} />
+                    </>
+                  )}
                 </div>
                 <div>
                   {ar.warnings.length > 0 ? (

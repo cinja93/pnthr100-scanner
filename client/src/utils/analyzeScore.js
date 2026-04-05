@@ -1,15 +1,18 @@
 /**
- * PNTHR Analyze — Pre-Trade Scoring System
+ * PNTHR Analyze — Pre-Trade Scoring System v2
  *
- * Computes the pre-trade discipline score for a stock using shared context
- * (regime, sector exposure, wash rules, NAV) loaded once per page.
+ * 100-point system — every point evaluable at scan time.
+ *
+ * T1 Setup Quality (40 pts): Signal Quality 15, Kill Context 10, Index Trend 8, Sector Trend 7
+ * T2 Risk Profile  (35 pts): Freshness 12, Risk/Reward 8, Prey Presence 8, Conviction 7
+ * T3 Entry Conditions (25 pts): Slope Strength 5, Sector Concentration 5, Wash Compliance 5,
+ *                                Volatility Context 5, Portfolio Fit 5
  *
  * Returns:
  * {
- *   score: number,       // points earned (0-53)
- *   max: 53,
+ *   score: number,       // points earned (0-100)
+ *   max: 100,
  *   pct: number,         // percentage (0-100)
- *   projected: { low, high },
  *   composite: number,   // Kill score × Analyze% (for sorting)
  *   components: { ... },
  *   warnings: [ ... ],
@@ -423,13 +426,13 @@ export function computeAnalyzeScore(stock, context) {
   const components = {};
   const warnings = [];
   let score = 0;
-  const max = 53;
+  const max = 100;
 
   const direction = inferDirection(stock);
   const sector = normalizeSector(stock.sector || '');
 
   // ═══════════════════════════════════════════════════════
-  // TIER 1: STOCK SELECTION (40 pts)
+  // TIER 1: SETUP QUALITY (40 pts)
   // ═══════════════════════════════════════════════════════
 
   // T1-A: Signal Quality (0-15)
@@ -444,12 +447,18 @@ export function computeAnalyzeScore(stock, context) {
       t1a = { score: 0, label: 'WRONG DIR', detail: 'Signal direction does not match trade direction' };
       warnings.push('Signal direction conflicts with trade direction');
     } else if (signalAge != null && signalAge <= 1) {
-      t1a = { score: 15, label: 'FRESH', detail: `${sigUp}+1 — highest win rate` };
+      t1a = { score: 15, label: 'FRESH', detail: `${sigUp}+${signalAge} — highest win rate` };
     } else if (signalAge === 2) {
-      t1a = { score: 8, label: 'RECENT', detail: `${sigUp}+2 — reduced edge` };
+      t1a = { score: 13, label: 'RECENT', detail: `${sigUp}+2 — strong edge` };
     } else if (signalAge === 3) {
-      t1a = { score: 3, label: 'STALE', detail: `${sigUp}+3 — diminished edge` };
-    } else if (signalAge != null && signalAge > 3) {
+      t1a = { score: 10, label: 'ACTIVE', detail: `${sigUp}+3 — good edge` };
+    } else if (signalAge === 4) {
+      t1a = { score: 6, label: 'AGING', detail: `${sigUp}+4 — reduced edge` };
+      warnings.push(`Signal is ${signalAge} weeks old — edge declining`);
+    } else if (signalAge === 5) {
+      t1a = { score: 3, label: 'STALE', detail: `${sigUp}+5 — diminished edge` };
+      warnings.push(`Signal is ${signalAge} weeks old — minimal edge remains`);
+    } else if (signalAge != null && signalAge > 5) {
       t1a = { score: 0, label: 'EXPIRED', detail: `${sigUp}+${signalAge} — no edge` };
       warnings.push(`Signal is ${signalAge} weeks old — no statistical edge remains`);
     } else {
@@ -478,9 +487,9 @@ export function computeAnalyzeScore(stock, context) {
   } else if (killScore != null) {
     // Have score but no pipeline max — use tier thresholds
     if (killScore >= 130) t1b = { score: 10, label: 'ALPHA', detail: `Score ${Math.round(killScore)}` };
-    else if (killScore >= 100) t1b = { score: 7, label: 'STRIKING', detail: `Score ${Math.round(killScore)}` };
-    else if (killScore >= 80) t1b = { score: 4, label: 'HUNTING', detail: `Score ${Math.round(killScore)}` };
-    else if (killScore >= 50) t1b = { score: 2, label: 'COILING', detail: `Score ${Math.round(killScore)}` };
+    else if (killScore >= 100) t1b = { score: 8, label: 'STRIKING', detail: `Score ${Math.round(killScore)}` };
+    else if (killScore >= 80) t1b = { score: 6, label: 'HUNTING', detail: `Score ${Math.round(killScore)}` };
+    else if (killScore >= 50) t1b = { score: 3, label: 'COILING', detail: `Score ${Math.round(killScore)}` };
     else t1b = { score: 1, label: 'LOW', detail: `Score ${Math.round(killScore)}` };
   } else {
     warnings.push('Stock not in Kill pipeline — no system scoring data');
@@ -546,38 +555,113 @@ export function computeAnalyzeScore(stock, context) {
   components.sectorTrend = t1d;
 
   // ═══════════════════════════════════════════════════════
-  // TIER 2: EXECUTION (projected — 13 pts)
+  // TIER 2: RISK PROFILE (35 pts)
   // ═══════════════════════════════════════════════════════
 
-  // T2-A: Sizing (0-8) — assume will follow SIZE IT
-  const t2a = { score: 8, label: 'SIZE IT', detail: 'Projected: will use SIZE IT recommendation' };
-  score += t2a.score;
-  components.sizing = t2a;
-
-  // T2-B: Risk Cap (0-5)
-  const t2b = { score: 5, label: 'COMPLIANT', detail: 'Projected: within Vitality cap' };
-  score += t2b.score;
-  components.riskCap = t2b;
-
-  // ═══════════════════════════════════════════════════════
-  // BONUS CHECKS (warnings only — not subtracted from score)
-  // ═══════════════════════════════════════════════════════
-
-  // Wash Rule Check
   const ticker = (stock.ticker || '').toUpperCase();
-  let washStatus = { clean: true, daysRemaining: null };
-  if (context.washTickers?.has(ticker)) {
-    const washEntry = (context.washRules || []).find(w => (w.ticker || '').toUpperCase() === ticker);
-    washStatus = { clean: false, daysRemaining: washEntry?.washSale?.daysRemaining || '?' };
-    warnings.push(`WASH RULE: ${ticker} has an active wash window (${washStatus.daysRemaining} days remaining). Re-entering triggers wash sale.`);
-  }
-  components.washRule = washStatus.clean
-    ? { score: 5, label: 'CLEAN', detail: 'No active wash window' }
-    : { score: 0, label: 'WASH', detail: `Wash window: ${washStatus.daysRemaining} days remaining` };
+  const sd = stock.scoreDetail || {};
 
-  // Sector Exposure Check
+  // T2-A: Freshness (0-12) — signal confirmation + age gate
+  const confirmation = stock.confirmation || sd.d3?.confirmation || '';
+  let t2a;
+  if (confirmation === 'CONFIRMED' && signalAge != null && signalAge <= 1) {
+    t2a = { score: 12, label: 'CONFIRMED FRESH', detail: `${sigUp}+${signalAge} confirmed — maximum conviction`, max: 12 };
+  } else if (confirmation === 'CONFIRMED' && signalAge === 2) {
+    t2a = { score: 10, label: 'CONFIRMED', detail: `${sigUp}+2 confirmed — strong conviction`, max: 12 };
+  } else if (confirmation === 'CONFIRMED' || (signalAge != null && signalAge <= 3)) {
+    t2a = { score: 7, label: 'ACTIVE', detail: `${confirmation || 'UNCONFIRMED'} ${sigUp}+${signalAge ?? '?'} — moderate conviction`, max: 12 };
+  } else if (signalAge != null && signalAge <= 5) {
+    t2a = { score: 4, label: 'AGING', detail: `${sigUp}+${signalAge} — declining conviction`, max: 12 };
+  } else if (signalAge != null && signalAge <= 8) {
+    t2a = { score: 2, label: 'STALE', detail: `${sigUp}+${signalAge} — weak conviction`, max: 12 };
+  } else {
+    t2a = { score: 0, label: 'EXPIRED', detail: signalAge ? `${sigUp}+${signalAge} — no conviction` : 'No signal data', max: 12 };
+  }
+  score += t2a.score;
+  components.freshness = t2a;
+
+  // T2-B: Risk/Reward (0-8) — stop distance quality
+  const stopPrice = stock.stopPrice || stock.pnthrStop || null;
+  const currentPrice = stock.currentPrice || stock.price || null;
+  let t2b;
+  if (stopPrice && currentPrice && stopPrice > 0 && currentPrice > 0) {
+    const riskPct = Math.abs(currentPrice - stopPrice) / currentPrice * 100;
+    if (riskPct >= 2 && riskPct <= 5) {
+      t2b = { score: 8, label: 'IDEAL', detail: `${riskPct.toFixed(1)}% risk — tight, high R:R`, max: 8 };
+    } else if (riskPct > 5 && riskPct <= 8) {
+      t2b = { score: 6, label: 'GOOD', detail: `${riskPct.toFixed(1)}% risk — moderate stop distance`, max: 8 };
+    } else if (riskPct > 8 && riskPct <= 12) {
+      t2b = { score: 4, label: 'WIDE', detail: `${riskPct.toFixed(1)}% risk — wide stop reduces R:R`, max: 8 };
+      warnings.push(`Wide stop: ${riskPct.toFixed(1)}% risk per share reduces reward-to-risk ratio`);
+    } else if (riskPct > 12) {
+      t2b = { score: 2, label: 'VERY WIDE', detail: `${riskPct.toFixed(1)}% risk — poor R:R`, max: 8 };
+      warnings.push(`Very wide stop: ${riskPct.toFixed(1)}% risk — consider waiting for tighter entry`);
+    } else {
+      // < 2% — too tight, high chance of getting stopped out
+      t2b = { score: 3, label: 'TIGHT', detail: `${riskPct.toFixed(1)}% risk — may be too tight`, max: 8 };
+      warnings.push(`Stop very close (${riskPct.toFixed(1)}%) — high probability of getting stopped out`);
+    }
+  } else {
+    t2b = { score: 4, label: 'UNKNOWN', detail: 'Stop price unavailable — partial credit', max: 8 };
+  }
+  score += t2b.score;
+  components.riskReward = t2b;
+
+  // T2-C: Prey Presence (0-8) — multi-strategy confirmation (D8)
+  const d8score = sd.d8?.score ?? 0;
+  const preyStrats = stock.preyStrategies || sd.d8?.strategies || [];
+  // D8 max is 6, scale to 8 pts
+  const preyPts = Math.min(Math.round((d8score / 6) * 8), 8);
+  let preyLabel = 'NONE';
+  if (preyPts >= 6) preyLabel = 'STRONG';
+  else if (preyPts >= 3) preyLabel = 'PRESENT';
+  else if (preyPts >= 1) preyLabel = 'WEAK';
+  const t2c = {
+    score: preyPts, label: preyLabel, max: 8,
+    detail: preyStrats.length ? `Prey: ${preyStrats.join(', ')}` : 'No Prey strategies active',
+  };
+  score += t2c.score;
+  components.preyPresence = t2c;
+
+  // T2-D: Conviction (0-7) — where price closed in weekly bar (D3 subA)
+  const convPct = sd.d3?.convictionPct ?? null;
+  let t2d;
+  if (convPct != null) {
+    if (convPct >= 80)      t2d = { score: 7, label: 'DOMINANT', detail: `${Math.round(convPct)}% conviction — price closed at extreme`, max: 7 };
+    else if (convPct >= 65) t2d = { score: 5, label: 'STRONG', detail: `${Math.round(convPct)}% conviction — favorable close`, max: 7 };
+    else if (convPct >= 45) t2d = { score: 3, label: 'NEUTRAL', detail: `${Math.round(convPct)}% conviction — mid-range close`, max: 7 };
+    else if (convPct >= 25) t2d = { score: 1, label: 'WEAK', detail: `${Math.round(convPct)}% conviction — unfavorable close`, max: 7 };
+    else                    t2d = { score: 0, label: 'AGAINST', detail: `${Math.round(convPct)}% conviction — closed against direction`, max: 7 };
+  } else {
+    t2d = { score: 3, label: 'UNKNOWN', detail: 'Conviction data unavailable — partial credit', max: 7 };
+  }
+  score += t2d.score;
+  components.conviction = t2d;
+
+  // ═══════════════════════════════════════════════════════
+  // TIER 3: ENTRY CONDITIONS (25 pts)
+  // ═══════════════════════════════════════════════════════
+
+  // T3-A: Slope Strength (0-5) — EMA slope magnitude (D3 subB)
+  const slopePct = sd.d3?.slopePct ?? null;
+  let t3a;
+  if (slopePct != null) {
+    const mag = Math.abs(slopePct);
+    if (mag >= 1.0)      t3a = { score: 5, label: 'STRONG', detail: `EMA slope ${slopePct > 0 ? '+' : ''}${slopePct.toFixed(3)}% — powerful trend`, max: 5 };
+    else if (mag >= 0.5) t3a = { score: 4, label: 'MODERATE', detail: `EMA slope ${slopePct > 0 ? '+' : ''}${slopePct.toFixed(3)}% — clear trend`, max: 5 };
+    else if (mag >= 0.2) t3a = { score: 3, label: 'MILD', detail: `EMA slope ${slopePct > 0 ? '+' : ''}${slopePct.toFixed(3)}% — gentle trend`, max: 5 };
+    else if (mag >= 0.1) t3a = { score: 2, label: 'FLAT', detail: `EMA slope ${slopePct > 0 ? '+' : ''}${slopePct.toFixed(3)}% — minimal trend`, max: 5 };
+    else                 t3a = { score: 0, label: 'NO TREND', detail: `EMA slope ${slopePct.toFixed(3)}% — no directional conviction`, max: 5 };
+  } else {
+    t3a = { score: 2, label: 'UNKNOWN', detail: 'EMA slope data unavailable — partial credit', max: 5 };
+  }
+  score += t3a.score;
+  components.slopeStrength = t3a;
+
+  // T3-B: Sector Concentration (0-5) — net directional exposure
   const sectorData = context.sectorExposure?.[sector];
   let sectorImpact = { level: 'CLEAR', netAfter: 0 };
+  let t3b;
   if (sectorData) {
     const projectedLongs = (sectorData.longCount || 0) + (direction === 'LONG' ? 1 : 0);
     const projectedShorts = (sectorData.shortCount || 0) + (direction === 'SHORT' ? 1 : 0);
@@ -589,22 +673,93 @@ export function computeAnalyzeScore(stock, context) {
       currentShorts: sectorData.shortCount || 0,
     };
     if (projectedNet > 3) {
+      t3b = { score: 0, label: 'CRITICAL', detail: `${sector} net ${projectedNet} — exceeds limit`, max: 5 };
       warnings.push(`SECTOR: Adding this ${direction} brings ${sector} to net ${projectedNet}. CRITICAL — exceeds limit.`);
     } else if (projectedNet === 3) {
+      t3b = { score: 2, label: 'AT LIMIT', detail: `${sector} net ${projectedNet} — at concentration cap`, max: 5 };
       warnings.push(`SECTOR: Adding this ${direction} brings ${sector} to net ${projectedNet}. At limit.`);
+    } else {
+      t3b = { score: 5, label: 'CLEAR', detail: `${sector} net ${projectedNet} — within limits`, max: 5 };
     }
+  } else {
+    t3b = { score: 5, label: 'CLEAR', detail: 'No existing sector exposure', max: 5 };
   }
-  components.sectorExposure = sectorImpact;
+  score += t3b.score;
+  components.sectorConcentration = t3b;
+  components.sectorExposure = sectorImpact; // keep for backward compat
 
-  // Slippage Warning
+  // T3-C: Wash Compliance (0-5)
+  let washStatus = { clean: true, daysRemaining: null };
+  if (context.washTickers?.has(ticker)) {
+    const washEntry = (context.washRules || []).find(w => (w.ticker || '').toUpperCase() === ticker);
+    washStatus = { clean: false, daysRemaining: washEntry?.washSale?.daysRemaining || '?' };
+    warnings.push(`WASH RULE: ${ticker} has an active wash window (${washStatus.daysRemaining} days remaining). Re-entering triggers wash sale.`);
+  }
+  const t3c = washStatus.clean
+    ? { score: 5, label: 'CLEAN', detail: 'No active wash window', max: 5 }
+    : { score: 0, label: 'WASH', detail: `Wash window: ${washStatus.daysRemaining} days remaining`, max: 5 };
+  score += t3c.score;
+  components.washCompliance = t3c;
+
+  // T3-D: Volatility Context (0-5) — RSI entry timing
+  const rsi = sd.d6?.curRsi ?? stock.weeklyRsi ?? null;
+  let t3d;
+  if (rsi != null) {
+    if (direction === 'SHORT') {
+      if (rsi >= 35 && rsi <= 60)      t3d = { score: 5, label: 'IDEAL', detail: `RSI ${Math.round(rsi)} — ideal SS entry zone`, max: 5 };
+      else if (rsi > 60 && rsi <= 70)  t3d = { score: 3, label: 'GOOD', detail: `RSI ${Math.round(rsi)} — overbought, drop potential`, max: 5 };
+      else if (rsi >= 25 && rsi < 35)  t3d = { score: 2, label: 'EXTENDED', detail: `RSI ${Math.round(rsi)} — already stretched`, max: 5 };
+      else {
+        t3d = { score: 0, label: 'EXTREME', detail: `RSI ${Math.round(rsi)} — ${rsi > 70 ? 'deeply overbought' : 'oversold squeeze risk'}`, max: 5 };
+        warnings.push(`RSI at ${Math.round(rsi)} — ${rsi > 70 ? 'deeply overbought, reversal risk' : 'oversold, squeeze risk for shorts'}`);
+      }
+    } else {
+      if (rsi >= 40 && rsi <= 65)      t3d = { score: 5, label: 'IDEAL', detail: `RSI ${Math.round(rsi)} — ideal BL entry zone`, max: 5 };
+      else if (rsi >= 30 && rsi < 40)  t3d = { score: 3, label: 'GOOD', detail: `RSI ${Math.round(rsi)} — oversold, bounce potential`, max: 5 };
+      else if (rsi > 65 && rsi <= 75)  t3d = { score: 2, label: 'EXTENDED', detail: `RSI ${Math.round(rsi)} — already stretched`, max: 5 };
+      else {
+        t3d = { score: 0, label: 'EXTREME', detail: `RSI ${Math.round(rsi)} — ${rsi > 75 ? 'overbought risk' : 'deeply oversold'}`, max: 5 };
+        warnings.push(`RSI at ${Math.round(rsi)} — ${rsi > 75 ? 'overbought risk for longs' : 'deeply oversold, catching a knife'}`);
+      }
+    }
+  } else {
+    t3d = { score: 2, label: 'UNKNOWN', detail: 'RSI data unavailable — partial credit', max: 5 };
+  }
+  score += t3d.score;
+  components.volatilityContext = t3d;
+
+  // T3-E: Portfolio Fit (0-5) — heat capacity remaining
+  // Without real-time portfolio heat data, estimate based on NAV + position count
+  const navVal = context.nav ?? null;
+  let t3e;
+  if (navVal && sectorData) {
+    const totalPositions = Object.values(context.sectorExposure || {}).reduce(
+      (sum, s) => sum + (s.longCount || 0) + (s.shortCount || 0), 0
+    );
+    if (totalPositions >= 10) {
+      t3e = { score: 2, label: 'TIGHT', detail: `${totalPositions} positions — limited capacity`, max: 5 };
+    } else if (totalPositions >= 7) {
+      t3e = { score: 3, label: 'MODERATE', detail: `${totalPositions} positions — some capacity`, max: 5 };
+    } else {
+      t3e = { score: 5, label: 'AMPLE', detail: `${totalPositions} positions — plenty of capacity`, max: 5 };
+    }
+  } else {
+    t3e = { score: 4, label: 'ESTIMATED', detail: 'Portfolio data limited — near-full credit', max: 5 };
+  }
+  score += t3e.score;
+  components.portfolioFit = t3e;
+
+  // ═══════════════════════════════════════════════════════
+  // SLIPPAGE WARNING (informational — does not affect score)
+  // ═══════════════════════════════════════════════════════
+
   const signalPrice = stock.signalPrice || stock.entryPrice || null;
-  const currentPrice = stock.currentPrice || stock.price || null;
   if (signalPrice && currentPrice) {
     const slippagePct = Math.abs(currentPrice - signalPrice) / signalPrice * 100;
     if (slippagePct > 2) {
-      warnings.push(`SLIPPAGE: Current price is ${slippagePct.toFixed(1)}% from signal price ($${(+signalPrice).toFixed(2)}). Over 2% costs discipline points.`);
+      warnings.push(`SLIPPAGE: Current price is ${slippagePct.toFixed(1)}% from signal price ($${(+signalPrice).toFixed(2)}).`);
     } else if (slippagePct > 1) {
-      warnings.push(`SLIPPAGE: Current price is ${slippagePct.toFixed(1)}% from signal price. Stay within 1% for full points.`);
+      warnings.push(`SLIPPAGE: Current price is ${slippagePct.toFixed(1)}% from signal price. Stay within 1% for best entry.`);
     }
     components.slippageWarning = { pct: slippagePct, signalPrice };
   }
@@ -615,33 +770,30 @@ export function computeAnalyzeScore(stock, context) {
 
   const pct = Math.round((score / max) * 100);
 
-  // Projected full score range
-  const projectedExecution = 35;
-  const projectedExit = 21;
-  const projectedLow = score + Math.round(projectedExecution * 0.7) + Math.round(projectedExit * 0.7);
-  const projectedHigh = score + projectedExecution + 25;
-
   // Composite: Kill score × Analyze%
   const killScoreNum = killScore ?? 0;
   const composite = Math.round(killScoreNum * (pct / 100));
 
-  // Color
-  const color = pct >= 80 ? '#28a745' : pct >= 60 ? '#FFD700' : '#dc3545';
+  // Color thresholds
+  const color = pct >= 75 ? '#28a745' : pct >= 55 ? '#FFD700' : '#dc3545';
 
   return {
     score,
     max,
     pct,
-    projected: {
-      low: Math.min(projectedLow, 100),
-      high: Math.min(projectedHigh, 100),
-    },
     composite,
     killScore: killScoreNum,
     components,
     warnings,
     color,
     direction,
+
+    // ── Tier subtotals for display ────────────────────────────────────────
+    tiers: {
+      t1: { label: 'Setup Quality', score: (t1a.score + t1b.score + (t1c?.score || 0) + (t1d?.score || 0)), max: 40 },
+      t2: { label: 'Risk Profile', score: (t2a.score + t2b.score + t2c.score + t2d.score), max: 35 },
+      t3: { label: 'Entry Conditions', score: (t3a.score + t3b.score + t3c.score + t3d.score + t3e.score), max: 25 },
+    },
 
     // ── Snapshot of everything on screen at analysis time ──────────────────
     rawData: {
@@ -698,11 +850,21 @@ export function computeAnalyzeScore(stock, context) {
         separation: sectorInfo?.separation ?? null,
       },
       stock: {
-        ticker:       stock.ticker,
+        ticker:       stock.ticker || ticker,
         exchange:     stock.exchange || null,
         sector:       stock.sector || null,
-        currentPrice: stock.currentPrice || stock.price || null,
-        stopPrice:    stock.stopPrice || stock.pnthrStop || null,
+        currentPrice: currentPrice || null,
+        stopPrice:    stopPrice || null,
+      },
+      riskProfile: {
+        freshness:    t2a.score,
+        riskReward:   t2b.score,
+        preyPresence: t2c.score,
+        conviction:   t2d.score,
+        preyStrategies: preyStrats,
+        convictionPct:  convPct,
+        slopePct:       slopePct,
+        rsi:            rsi,
       },
       sectorExposure: {
         sector:        sector,

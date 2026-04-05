@@ -195,7 +195,7 @@ function RulesPopup({ type, onClose }) {
               <div>
                 <div className={styles.ruleName}>BL Backtest Results</div>
                 <div className={styles.ruleDesc}>
-                  1,533 BL trades | 67.7% win rate | +5.60% avg P&L | W/L ratio 3.53:1 | CAGR +60.9% | Sharpe 2.62 | Max DD -1.18% | Positive every year including 2022.
+                  1,533 BL positions | 66.7% win rate | +5.27% avg P&L | W/L ratio 3.74:1 | CAGR +36.8% | Sharpe 3.50 | Max DD -0.74% | Pyramiding (Lots 1-5, $10K full position) | Positive every year including 2022.
                 </div>
               </div>
             </div>
@@ -362,7 +362,7 @@ function RulesPopup({ type, onClose }) {
               <div>
                 <div className={styles.ruleName}>SS Backtest Results</div>
                 <div className={styles.ruleDesc}>
-                  143 SS trades | 68.5% win rate | +4.33% avg P&L | W/L ratio 2.21:1 | CAGR +37.9% | Sharpe 1.95 | Max DD -1.06% | No trades in 2021/2024 (bull regime — crash gate blocked all shorts by design).
+                  143 SS positions | 62.2% win rate | +3.59% avg P&L | W/L ratio 2.60:1 | CAGR +15.3% | Sharpe 2.02 | Max DD -0.61% | Pyramiding (Lots 1-5, $10K full position) | No trades in 2021/2024 (bull regime — crash gate blocked all shorts by design).
                 </div>
               </div>
             </div>
@@ -376,102 +376,107 @@ function RulesPopup({ type, onClose }) {
 // ── Backtest results popup ──────────────────────────────────────────────────
 
 const BL_BACKTEST = {
-  trades: 1533, winners: 1038, losers: 495,
-  winRate: 67.7, avgPnl: 5.60, avgWin: 9.57, avgLoss: -2.71, wlRatio: 3.53,
-  totalReturn: 8589,
+  trades: 1533, winners: 1023, losers: 510,
+  winRate: 66.7, avgPnl: 5.27, avgWin: 9.10, avgLoss: -2.43, wlRatio: 3.74,
+  totalReturn: 310187,
+  lotRows: 2243,
+  avgLots: 1.46,
+  lotDist: { 1: '74.4%', 2: '12.9%', 3: '7.0%', 4: '3.6%', 5: '2.2%' },
   years: [
-    { year: '2021', trades: 276, winPct: 69.6, avgPnl: 5.17 },
-    { year: '2022', trades: 118, winPct: 69.5, avgPnl: 4.57 },
-    { year: '2023', trades: 322, winPct: 62.4, avgPnl: 4.42 },
-    { year: '2024', trades: 401, winPct: 68.8, avgPnl: 5.60 },
-    { year: '2025', trades: 353, winPct: 70.8, avgPnl: 7.77 },
-    { year: '2026', trades: 63, winPct: 61.9, avgPnl: 5.02 },
+    { year: '2021', trades: 303, winPct: 68.3, avgPnl: 4.75 },
+    { year: '2022', trades: 113, winPct: 69.9, avgPnl: 3.89 },
+    { year: '2023', trades: 325, winPct: 61.8, avgPnl: 4.05 },
+    { year: '2024', trades: 400, winPct: 67.8, avgPnl: 5.15 },
+    { year: '2025', trades: 334, winPct: 68.6, avgPnl: 7.56 },
+    { year: '2026', trades: 58, winPct: 62.1, avgPnl: 5.03 },
   ],
   exitReasons: [
-    { reason: 'SIGNAL (BL exit)', count: 1301, winPct: 67.9, avgPnl: 5.67 },
-    { reason: 'STOP HIT', count: 228, winPct: 67.1, avgPnl: 5.15 },
-    { reason: 'STALE HUNT', count: 4, winPct: 0.0, avgPnl: -1.08 },
+    { reason: 'STOP HIT', count: 1186, winPct: 75.0, avgPnl: 6.97 },
+    { reason: 'SIGNAL (BL exit)', count: 347, winPct: 38.3, avgPnl: -0.55 },
   ],
   topWinners: [
-    { ticker: 'SNDK', entry: '2025-08-01', exit: '2025-11-07', pnl: 330.31 },
-    { ticker: 'CELH', entry: '2024-07-19', exit: '2024-10-28', pnl: 84.88 },
-    { ticker: 'ENPH', entry: '2023-01-06', exit: '2023-06-05', pnl: 83.81 },
-    { ticker: 'SMCI', entry: '2023-10-27', exit: '2024-03-11', pnl: 73.06 },
-    { ticker: 'WAT', entry: '2021-04-09', exit: '2021-08-03', pnl: 34.70 },
+    { ticker: 'SNDK', entry: '2025-08-29', exit: '2025-09-02', pnl: 330.31 },
+    { ticker: 'HOOD', entry: '2025-05-02', exit: '2025-05-05', pnl: 94.30 },
+    { ticker: 'CIEN', entry: '2025-08-29', exit: '2025-09-02', pnl: 81.35 },
+    { ticker: 'GEV', entry: '2024-08-30', exit: '2024-09-03', pnl: 71.18 },
+    { ticker: 'MUX', entry: '2025-08-22', exit: '2025-08-25', pnl: 68.22 },
   ],
   topLosers: [
-    { ticker: 'SMCI', entry: '2024-05-03', exit: '2024-05-09', pnl: -16.29 },
-    { ticker: 'SEDG', entry: '2023-01-06', exit: '2023-02-23', pnl: -14.38 },
-    { ticker: 'MOS', entry: '2022-06-03', exit: '2022-06-17', pnl: -13.88 },
-    { ticker: 'DXYZ', entry: '2025-01-31', exit: '2025-02-24', pnl: -13.82 },
-    { ticker: 'COIN', entry: '2024-03-08', exit: '2024-04-15', pnl: -13.42 },
+    { ticker: 'SMCI', entry: '2024-05-24', exit: '2024-05-28', pnl: -16.29 },
+    { ticker: 'UBER', entry: '2022-08-12', exit: '2022-08-22', pnl: -12.32 },
+    { ticker: 'ANET', entry: '2025-10-31', exit: '2025-11-03', pnl: -12.05 },
+    { ticker: 'MSTR', entry: '2022-08-12', exit: '2022-08-19', pnl: -10.68 },
+    { ticker: 'SCCO', entry: '2021-05-14', exit: '2021-05-21', pnl: -10.64 },
   ],
 };
 
 const SS_BACKTEST = {
-  trades: 143, winners: 98, losers: 45,
-  winRate: 68.5, avgPnl: 4.33, avgWin: 7.97, avgLoss: -3.61, wlRatio: 2.21,
-  totalReturn: 619,
+  trades: 143, winners: 89, losers: 54,
+  winRate: 62.2, avgPnl: 3.59, avgWin: 7.53, avgLoss: -2.90, wlRatio: 2.60,
+  totalReturn: 22416,
+  lotRows: 272,
+  avgLots: 1.90,
+  lotDist: { 1: '58.0%', 2: '14.0%', 3: '11.9%', 4: '11.9%', 5: '4.2%' },
   years: [
-    { year: '2022', trades: 97, winPct: 70.1, avgPnl: 4.68 },
-    { year: '2023', trades: 22, winPct: 72.7, avgPnl: 4.37 },
-    { year: '2025', trades: 19, winPct: 78.9, avgPnl: 5.74 },
-    { year: '2026', trades: 5, winPct: 40.0, avgPnl: -1.80 },
+    { year: '2022', trades: 97, winPct: 64.9, avgPnl: 3.98 },
+    { year: '2023', trades: 22, winPct: 50.0, avgPnl: 2.26 },
+    { year: '2025', trades: 19, winPct: 78.9, avgPnl: 4.84 },
+    { year: '2026', trades: 5, winPct: 0.0, avgPnl: -2.81 },
   ],
   noTradeYears: ['2021', '2024'],
   exitReasons: [
-    { reason: 'SIGNAL (SS exit)', count: 120, winPct: 70.0, avgPnl: 4.68 },
-    { reason: 'STOP HIT', count: 23, winPct: 60.9, avgPnl: 2.52 },
+    { reason: 'STOP HIT', count: 109, winPct: 68.8, avgPnl: 5.13 },
+    { reason: 'SIGNAL (SS exit)', count: 34, winPct: 41.2, avgPnl: -1.33 },
   ],
   topWinners: [
-    { ticker: 'AMD', entry: '2022-09-09', exit: '2022-10-14', pnl: 33.44 },
-    { ticker: 'FSLR', entry: '2022-04-08', exit: '2022-06-13', pnl: 31.82 },
-    { ticker: 'ENPH', entry: '2022-12-16', exit: '2023-01-06', pnl: 26.15 },
-    { ticker: 'MCHP', entry: '2025-03-28', exit: '2025-04-09', pnl: 20.60 },
-    { ticker: 'NEE', entry: '2023-09-29', exit: '2023-10-23', pnl: 16.70 },
+    { ticker: 'AMD', entry: '2022-09-16', exit: '2022-09-19', pnl: 33.44 },
+    { ticker: 'STX', entry: '2022-09-02', exit: '2022-09-06', pnl: 26.28 },
+    { ticker: 'TROW', entry: '2022-01-21', exit: '2022-01-24', pnl: 22.46 },
+    { ticker: 'ARE', entry: '2022-05-06', exit: '2022-05-09', pnl: 20.70 },
+    { ticker: 'MCHP', entry: '2025-03-28', exit: '2025-03-31', pnl: 20.60 },
   ],
   topLosers: [
-    { ticker: 'FSLR', entry: '2022-07-01', exit: '2022-07-25', pnl: -17.91 },
-    { ticker: 'OXY', entry: '2022-06-17', exit: '2022-07-05', pnl: -15.05 },
-    { ticker: 'ALB', entry: '2022-09-23', exit: '2022-10-04', pnl: -9.68 },
-    { ticker: 'CCI', entry: '2023-10-20', exit: '2023-10-30', pnl: -5.39 },
-    { ticker: 'BA', entry: '2023-10-20', exit: '2023-10-30', pnl: -4.23 },
+    { ticker: 'ASML', entry: '2022-03-11', exit: '2022-03-14', pnl: -12.58 },
+    { ticker: 'ADBE', entry: '2022-11-04', exit: '2022-11-07', pnl: -11.17 },
+    { ticker: 'AMD', entry: '2022-03-11', exit: '2022-03-21', pnl: -10.72 },
+    { ticker: 'FSLR', entry: '2022-07-15', exit: '2022-07-18', pnl: -9.20 },
+    { ticker: 'ASML', entry: '2022-04-15', exit: '2022-04-20', pnl: -6.77 },
   ],
 };
 
 // ── Hedge Fund Metrics (from computeHedgeFundMetrics.js — $100K starting capital, $10K lots) ──
 
 const BL_HEDGE = {
-  cagr: 60.9, sharpe: 2.62, sortino: 40.71,
-  maxDrawdown: 1.18, maxDDPeriod: '2021-01 to 2021-04',
-  calmar: 51.61, profitFactor: 7.4,
-  bestMonth: 25.98, bestMonthLabel: '2021-09',
-  worstMonth: -1.18, worstMonthLabel: '2021-04',
-  positiveMonths: 53, totalMonths: 57,
-  positiveMonthsPct: 93,
-  avgMonthlyReturn: 4.15, monthlyStdDev: 4.95,
+  cagr: 36.8, sharpe: 3.50, sortino: 11.53,
+  maxDrawdown: 0.74, maxDDPeriod: '2023-02 to 2023-03',
+  calmar: 49.73, profitFactor: 7.62,
+  bestMonth: 11.56, bestMonthLabel: '2021-06',
+  worstMonth: -0.74, worstMonthLabel: '2023-03',
+  positiveMonths: 52, totalMonths: 54,
+  positiveMonthsPct: 96.3,
+  avgMonthlyReturn: 2.67, monthlyStdDev: 2.23,
 };
 
 const SS_HEDGE = {
-  cagr: 37.9, sharpe: 1.95, sortino: 18.91,
-  maxDrawdown: 1.06, maxDDPeriod: '2022-10 to 2022-11',
-  calmar: 35.68, profitFactor: 4.81,
-  bestMonth: 14.9, bestMonthLabel: '2022-05',
-  worstMonth: -1.06, worstMonthLabel: '2022-11',
-  positiveMonths: 16, totalMonths: 18,
-  positiveMonthsPct: 88.9,
-  avgMonthlyReturn: 2.79, monthlyStdDev: 4.23,
+  cagr: 15.3, sharpe: 2.02, sortino: 4.06,
+  maxDrawdown: 0.61, maxDDPeriod: '2025-04 to 2026-03',
+  calmar: 25.13, profitFactor: 4.50,
+  bestMonth: 3.94, bestMonthLabel: '2022-09',
+  worstMonth: -0.61, worstMonthLabel: '2026-03',
+  positiveMonths: 13, totalMonths: 17,
+  positiveMonthsPct: 76.5,
+  avgMonthlyReturn: 1.21, monthlyStdDev: 1.35,
 };
 
 const COMBINED_HEDGE = {
-  cagr: 57.9, sharpe: 2.62, sortino: 46.18,
-  maxDrawdown: 1.18, maxDDPeriod: '2021-01 to 2021-04',
-  calmar: 49.06, profitFactor: 7.12,
-  bestMonth: 25.98, bestMonthLabel: '2021-09',
-  worstMonth: -1.18, worstMonthLabel: '2021-04',
-  positiveMonths: 57, totalMonths: 61,
-  positiveMonthsPct: 93.4,
-  avgMonthlyReturn: 3.98, monthlyStdDev: 4.71,
+  cagr: 34.0, sharpe: 3.41, sortino: 15.82,
+  maxDrawdown: 0.24, maxDDPeriod: '2023-09 to 2023-10',
+  calmar: 143.28, profitFactor: 7.24,
+  bestMonth: 11.56, bestMonthLabel: '2021-06',
+  worstMonth: -0.24, worstMonthLabel: '2023-10',
+  positiveMonths: 57, totalMonths: 60,
+  positiveMonthsPct: 95.0,
+  avgMonthlyReturn: 2.49, monthlyStdDev: 2.11,
 };
 
 // ── Institutional Metrics Section (shared by BacktestPopup + PortfolioPopup) ──
@@ -482,7 +487,7 @@ function HedgeFundSection({ h, label }) {
     <>
       <h3 className={styles.rulesSectionTitle}>Institutional Metrics — {label}</h3>
       <div className={styles.ruleDesc} style={{ color: '#888', marginBottom: 10, fontSize: 11 }}>
-        $100K starting capital · $10K per lot · Annualized from monthly returns · Risk-free rate 5%
+        $100K starting capital · $10K full position (Lots 1-5) · Annualized from monthly returns · Risk-free rate 5%
       </div>
       <div className={styles.btStatsGrid}>
         <div className={styles.btStat}>
@@ -541,7 +546,7 @@ function InstitutionalPopup({ onClose }) {
         </div>
         <div className={styles.rulesBody}>
           <div className={styles.ruleDesc} style={{ color: dim, marginBottom: 16 }}>
-            5-year backtest (Apr 2021 – Apr 2026) · $100K starting capital · $10K per lot · Risk-free rate 5%
+            5-year backtest (Apr 2021 – Apr 2026) · $100K starting capital · $10K full position (Lots 1-5) · Risk-free rate 5%
           </div>
 
           {/* Table 1: PNTHR BL vs SS vs Combined */}
@@ -685,7 +690,7 @@ function InstitutionalPopup({ onClose }) {
             <div>
               <div className={styles.ruleName}>Interpretation</div>
               <div className={styles.ruleDesc}>
-                Sharpe {'>'} 2.0 is exceptional — top hedge funds target 1.0-1.5. Max drawdown under 1.2% vs the S&P's -25% in 2022 demonstrates extreme capital protection. The system was profitable during the 2022 bear market while buy-and-hold lost 19%. 93%+ positive months with a worst month of just -1.18% is institutional-grade consistency.
+                Sharpe {'>'} 2.0 is exceptional — top hedge funds target 1.0-1.5. Max drawdown of -0.24% vs the S&P's -25% in 2022 demonstrates extreme capital protection. Pyramiding concentrates capital into winners while losers stay small (Lot 1 only). 95% positive months with a worst month of just -0.24% is institutional-grade consistency. CAGR assumes $10K full position sizing — actual returns scale with account size and risk allocation.
               </div>
             </div>
           </div>
@@ -722,7 +727,7 @@ function BacktestPopup({ type, onClose }) {
 
         <div className={styles.rulesBody}>
           <div className={styles.ruleDesc} style={{ color: '#888', marginBottom: 12 }}>
-            5-year backtest (Apr 2021 – Apr 2026) · Filter-then-rank pipeline · Single lot per trade
+            5-year backtest (Apr 2021 – Apr 2026) · Filter-then-rank pipeline · Pyramiding (Lots 1-5) · $10K full position
           </div>
 
           {/* Headline stats */}
@@ -861,11 +866,11 @@ function BacktestPopup({ type, onClose }) {
           {/* Total return */}
           <div className={styles.ruleCard} style={{ borderLeft: `3px solid ${color}`, marginTop: 16 }}>
             <div>
-              <div className={styles.ruleName}>Total Cumulative Return (sum of all trade %)</div>
+              <div className={styles.ruleName}>Total Dollar P&L ($10K full position per trade)</div>
               <div className={styles.ruleDesc}>
-                +{d.totalReturn.toLocaleString()}% across {d.trades} trades ({d.winners}W / {d.losers}L).
-                {type === 'SS' && ' The strict crash gate ensures shorts only fire during genuine market breakdowns.'}
-                {type === 'BL' && ' Positive every year including 2022 bear market.'}
+                ${d.totalReturn.toLocaleString()} across {d.trades} positions ({d.winners}W / {d.losers}L) · Avg {d.avgLots} lots/trade · CAGR +{type === 'BL' ? BL_HEDGE.cagr : SS_HEDGE.cagr}%
+                {type === 'SS' && ' · The strict crash gate ensures shorts only fire during genuine market breakdowns.'}
+                {type === 'BL' && ' · Positive every year including 2022 bear market.'}
               </div>
             </div>
           </div>
@@ -876,14 +881,14 @@ function BacktestPopup({ type, onClose }) {
           {/* Individual trades toggle */}
           <div style={{ textAlign: 'center', marginTop: 16 }}>
             <button className={styles.rulesBtn} onClick={handleShowTrades} disabled={loadingTrades}>
-              {loadingTrades ? 'Loading...' : showTrades ? 'Hide Individual Trades' : `Show All ${d.trades} Trades`}
+              {loadingTrades ? 'Loading...' : showTrades ? 'Hide Individual Trades' : `Show All ${d.lotRows} Lot Entries`}
             </button>
           </div>
 
           {showTrades && trades && (
             <>
               <h3 className={styles.rulesSectionTitle}>
-                All {label} Trades ({trades.length})
+                All {label} Lot Entries ({trades.length})
               </h3>
               <div className={styles.btTradesWrap}>
                 <table className={styles.btTable}>
@@ -898,6 +903,7 @@ function BacktestPopup({ type, onClose }) {
                       <th>P&L %</th>
                       <th>Exit Reason</th>
                       <th>Sector</th>
+                      <th>Lot</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -914,6 +920,9 @@ function BacktestPopup({ type, onClose }) {
                         </td>
                         <td style={{ fontSize: 11 }}>{t.exitReason}</td>
                         <td style={{ fontSize: 11 }}>{(t.sector || '').slice(0, 18)}</td>
+                        <td style={{ fontSize: 11, color: t.lotNum > 1 ? '#fcf000' : '#888', whiteSpace: 'nowrap' }}>
+                          Lot {t.lotNum}, {Math.round((t.lotPct || 0) * 100)}%
+                        </td>
                       </tr>
                     ))}
                   </tbody>

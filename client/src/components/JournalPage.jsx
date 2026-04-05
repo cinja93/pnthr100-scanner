@@ -673,18 +673,25 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           <div style={{ background: '#111', borderRadius: 10, padding: '12px 18px', flex: '2 1 320px', minWidth: 280 }}>
             <div style={{ color: '#555', fontSize: 9, letterSpacing: 2, fontWeight: 700, marginBottom: 8 }}>ANNUAL RETURNS</div>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'baseline' }}>
-              {annualReturns.map(yr => (
-                <div key={yr.year} style={{ textAlign: 'center', minWidth: 60 }}>
-                  <div style={{ color: yr.pct >= 0 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 900, lineHeight: 1 }}>
-                    {yr.pct >= 0 ? '+' : ''}{yr.pct}%
+              {annualReturns.map(yr => {
+                const pnlAbs = Math.abs(yr.pnl);
+                const pnlLabel = pnlAbs >= 1e6 ? `$${(yr.pnl / 1e6).toFixed(1)}M` : `$${Math.round(yr.pnl / 1e3).toLocaleString()}K`;
+                return (
+                  <div key={yr.year} style={{ textAlign: 'center', minWidth: 70 }}>
+                    <div style={{ color: yr.pct >= 0 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 900, lineHeight: 1 }}>
+                      {yr.pct >= 0 ? '+' : ''}{yr.pct}%
+                    </div>
+                    <div style={{ color: yr.pnl >= 0 ? 'rgba(107,203,119,0.5)' : 'rgba(255,107,107,0.5)', fontSize: 9, marginTop: 1, fontWeight: 600 }}>
+                      {yr.pnl >= 0 ? '+' : '-'}{pnlLabel}
+                    </div>
+                    <div style={{ color: '#444', fontSize: 8, marginTop: 1 }}>
+                      {yr.year}{yr.partial ? '*' : ''} · {yr.count}
+                    </div>
                   </div>
-                  <div style={{ color: '#555', fontSize: 9, marginTop: 2 }}>
-                    {yr.year}{yr.partial ? '*' : ''} · {yr.count}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-            <div style={{ color: '#333', fontSize: 8, marginTop: 4 }}>* partial year · count = trades closed</div>
+            <div style={{ color: '#333', fontSize: 8, marginTop: 4 }}>* partial year · compounded annually</div>
           </div>
         )}
       </div>

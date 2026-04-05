@@ -27,7 +27,7 @@ const FMP_BASE    = 'https://financialmodelingprep.com';
 export async function navGet(req, res) {
   try {
     const profile = await getUserProfile(req.user.userId);
-    res.json({ nav: profile?.accountSize ?? 100000, ibkrLastSync: profile?.ibkrLastSync ?? null });
+    res.json({ nav: profile?.accountSize ?? 100000, ibkrLastSync: profile?.ibkrLastSync ?? null, liveFundNav: profile?.liveFundNav ?? null, liveFundStartDate: profile?.liveFundStartDate ?? null });
   } catch (err) {
     console.error('[PE] navGet error:', err);
     res.status(500).json({ error: err.message });

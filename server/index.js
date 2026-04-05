@@ -748,7 +748,7 @@ app.get('/api/user/profile', async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
     const profile = await getUserProfile(req.user.userId);
-    res.json({ email: req.user.email, role: req.user.role, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long' });
+    res.json({ email: req.user.email, role: req.user.role, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long', liveFundNav: profile?.liveFundNav ?? null, liveFundStartDate: profile?.liveFundStartDate ?? null });
   } catch (error) {
     console.error('Error fetching user profile:', error);
     res.status(500).json({ error: 'Failed to fetch profile' });
@@ -2999,9 +2999,10 @@ app.get('/api/journal', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
-    const { status, limit } = req.query;
+    const { status, limit, fundPeriod } = req.query;
     const filter = { ownerId: req.user.userId };
     if (status) filter['performance.status'] = status;
+    if (fundPeriod) filter.fundPeriod = fundPeriod;
     let cursor = db.collection('pnthr_journal')
       .find(filter)
       .sort({ createdAt: -1 });
@@ -3093,8 +3094,11 @@ app.get('/api/portfolio/ratios', authenticateJWT, async (req, res) => {
     const db = await connectToDatabase();
     if (!db) return res.status(503).json({ error: 'DB unavailable' });
 
+    const { fundPeriod } = req.query;
+    const returnFilter = { ownerId: req.user.userId };
+    if (fundPeriod) returnFilter.fundPeriod = fundPeriod;
     const snapshots = await db.collection('pnthr_portfolio_returns')
-      .find({ ownerId: req.user.userId })
+      .find(returnFilter)
       .sort({ date: -1 })
       .limit(52)
       .toArray();
@@ -3153,8 +3157,11 @@ app.get('/api/journal/analytics', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
+    const { fundPeriod } = req.query;
+    const analyticsFilter = { ownerId: req.user.userId, 'performance.status': 'CLOSED' };
+    if (fundPeriod) analyticsFilter.fundPeriod = fundPeriod;
     const entries = await db.collection('pnthr_journal')
-      .find({ ownerId: req.user.userId, 'performance.status': 'CLOSED' })
+      .find(analyticsFilter)
       .sort({ createdAt: -1 })
       .toArray();
 
@@ -3234,6 +3241,7 @@ app.get('/api/wash-rules', authenticateJWT, async (req, res) => {
         { 'washSale.triggered': true },
       ],
     };
+    if (req.query.fundPeriod) filter.fundPeriod = req.query.fundPeriod;
     if (req.query.ticker) filter.ticker = req.query.ticker.toUpperCase();
     const rules = await db.collection('pnthr_journal').find(filter)
       .project({ ticker: 1, direction: 1, washSale: 1, 'performance.realizedPnlDollar': 1 })
@@ -4019,37 +4027,6 @@ cron.schedule('0 20 * * 5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
-// ── Cron: Daily signal snapshot Mon–Fri at 5:05 PM ET ───────────────────────
-// Runs after market close. Processes all 679 stocks through the signal state machine
-// using today's developing weekly candle (Mon open → today's close). Saves per-stock
-// results to pnthr_daily_signals and aggregate counts to pnthr_daily_pulse_snapshot.
-// The Pulse endpoint reads from these collections for dial counts + ratio bars.
-cron.schedule('5 17 * * 1-5', async () => {
-  try {
-    console.log('[DailySignal] Starting daily signal snapshot...');
-    const { runDailySignalJob } = await import('./dailySignalJob.js');
-    const result = await runDailySignalJob();
-    console.log(`[DailySignal] Complete — ${result.signals} signals, New BL: ${result.newBlTotal}, New SS: ${result.newSsTotal}`);
-  } catch (err) {
-    console.error('[DailySignal] Failed:', err.message);
-  }
-}, { timezone: 'America/New_York' });
-
-// ── Admin: manual daily signal job trigger ───────────────────────────────────
-// POST /api/admin/run-daily-signal-job — runs the daily signal job immediately
-app.post('/api/admin/run-daily-signal-job', authenticateJWT, requireAdmin, async (req, res) => {
-  try {
-    const { runDailySignalJob } = await import('./dailySignalJob.js');
-    // Run in background — respond immediately so request doesn't time out
-    runDailySignalJob()
-      .then(r => console.log(`[DailySignal] Manual run complete: ${r.signals} signals, ${r.elapsed}s`))
-      .catch(e => console.error('[DailySignal] Manual run failed:', e.message));
-    res.json({ ok: true, message: 'Daily signal job started — check server logs for progress (~5-10 min)' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ── Admin: signal history endpoints ────────────────────────────────────────────
 
 // POST /api/admin/signal-history/snapshot — manually save this week's snapshot
@@ -4363,6 +4340,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     const etfCold  = !getCachedEtfResults();
     if (apexCold) warmApexCacheIfCold().catch(() => {});
     if (etfCold)  warmEtfCacheIfCold().catch(() => {});
+    const cacheWarming = apexCold || etfCold;
 
     // DB queries for regime prices, portfolio, and macro snapshot
     const [regimeDoc, positions, userProfile, marketSnapshot] = await Promise.all([
@@ -4372,49 +4350,13 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       db.collection('pnthr_weekly_market_snapshot').findOne({}, { sort: { weekOf: -1 } }),
     ]);
 
-    // ── Daily signal snapshot (primary source for sector breadth + ratio bars) ──
-    // Populated by the daily cron at 5:05 PM ET. Fresh within 25h = valid.
-    // This is completely independent of the Kill/apex pipeline — reflects today's
-    // developing weekly candle (Mon open → today's close) for all 679 stocks.
-    const dailySnap = await db.collection('pnthr_daily_pulse_snapshot')
-      .findOne({}, { sort: { updatedAt: -1 } });
-    const dailySnapAgeHrs = dailySnap
-      ? (Date.now() - new Date(dailySnap.updatedAt).getTime()) / 3_600_000
-      : 999;
-    const useDailySnapshot = dailySnapAgeHrs < 25;
-
-    // When daily snapshot is fresh, sector breadth is independent of the Kill cache —
-    // no warming spinner needed (the Kill top-10 still loads from apex, but breadth is live).
-    const cacheWarming = (apexCold || etfCold) && !useDailySnapshot;
-
-    // ── Kill top-10 still comes from Kill/apex cache (unchanged) ──────────────
+    // Live apex cache (populated when Kill page is visited this session).
+    // Falls back to Friday pipeline DB data when cache is cold.
     const { getCachedApexResults } = await import('./apexService.js');
     const liveApex = getCachedApexResults();
 
-    let killTop10, blCount, ssCount, sectorMap, weekFilter = {};
-    if (useDailySnapshot) {
-      // ── Sector breadth from daily job (decoupled from Kill page) ────────────
-      blCount   = dailySnap.blTotal  || 0;
-      ssCount   = dailySnap.ssTotal  || 0;
-      sectorMap = dailySnap.bySector || {};
-      // Kill top10 still from kill/apex pipeline (or DB fallback)
-      if (liveApex) {
-        killTop10 = liveApex.stocks
-          .filter(s => s.isTop10)
-          .map(s => ({
-            killRank: s.killRank, ticker: s.ticker, signal: s.signal,
-            totalScore: s.apexScore, tier: s.tier, sector: s.sector,
-            currentPrice: s.currentPrice, rankChange: s.rankChange ?? null,
-          }));
-      } else {
-        const latestWeekDoc = await db.collection('pnthr_kill_scores')
-          .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
-        weekFilter = latestWeekDoc?.weekOf ? { weekOf: latestWeekDoc.weekOf } : {};
-        const top10Scores = await db.collection('pnthr_kill_scores')
-          .find({ ...weekFilter, killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray();
-        killTop10 = top10Scores.map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 }));
-      }
-    } else if (liveApex) {
+    let killTop10, blCount, ssCount, sectorMap;
+    if (liveApex) {
       killTop10 = liveApex.stocks
         .filter(s => s.isTop10)
         .map(s => ({
@@ -4439,7 +4381,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       const latestWeekDoc = await db.collection('pnthr_kill_scores')
         .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
       const latestWeekOf = latestWeekDoc?.weekOf ?? null;
-      weekFilter = latestWeekOf ? { weekOf: latestWeekOf } : {};
+      const weekFilter = latestWeekOf ? { weekOf: latestWeekOf } : {};
 
       const [top10Scores, allKillSignals] = await Promise.all([
         db.collection('pnthr_kill_scores').find({ ...weekFilter, killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
@@ -4462,25 +4404,13 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       }
     }
 
-    // New signals: stocks that fired their signal in the most recently COMPLETED weekly candle.
-    // We anchor to lastCompletedWeekMonday (Friday - 4 days) so partial in-progress weekly candles
-    // are excluded — they produce noisy false signals mid-week. Both live and cold paths use
-    // the same anchor, keeping sector bar counts consistent with confirmed Friday-close data.
-    function getLastCompletedWeekMonday() {
-      // Walk back to the most recent Friday (or today if Friday), then subtract 4 days
-      // to get that week's Monday — the weekStart key for confirmed weekly-candle signals.
-      const today = new Date();
-      const dow = today.getDay(); // 0=Sun … 6=Sat
-      const daysToFri = dow === 5 ? 0 : (dow + 2) % 7;
-      const fri = new Date(today);
-      fri.setDate(today.getDate() - daysToFri);
-      fri.setDate(fri.getDate() - 4); // Friday - 4 = Monday of that week
-      return fri.toISOString().split('T')[0];
-    }
+    // New signals this week (signalAge 0–1) — stocks from apex cache, ETFs from etf cache
+    // ETFs are a separate scoring universe and never appear in the apex/kill results.
     function calcSignalAge(signalDate) {
       if (!signalDate) return 99;
       try {
         const sigMs  = new Date(signalDate + 'T12:00:00').getTime();
+        // Current week Monday
         const now = new Date();
         const dow = now.getDay();
         const monday = new Date(now);
@@ -4492,70 +4422,25 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     function mapNewSig(s) {
       return { ticker: s.ticker, sector: s.sector, currentPrice: s.currentPrice,
         totalScore: s.apexScore ?? s.totalScore ?? 0, tier: s.tier, signal: s.signal,
-        signalAge: s.signalAge ?? calcSignalAge(s.signalDate), killRank: s.killRank ?? null };
+        signalAge: s.signalAge, killRank: s.killRank ?? null };
     }
     const sortByScore = (a, b) => ((b.totalScore || 0) - (a.totalScore || 0));
-    const lastCompletedWeekMonday = getLastCompletedWeekMonday(); // e.g. '2026-03-23'
 
-    // ── Stocks: from daily job (preferred), apex cache (live), or Friday DB ──
+    // ── Stocks: from apex cache (live) or Friday DB ──
     let newBLStocks = [], newSSStocks = [];
-    if (useDailySnapshot) {
-      // Daily job ran after today's close — use pnthr_daily_signals (isNew=true) for stocks
-      // whose developing weekly candle crossed the signal threshold today.
-      const newDocs = await db.collection('pnthr_daily_signals')
-        .find({ isNew: true }, { projection: { ticker: 1, sector: 1, signal: 1, signalDate: 1, ema21: 1 } })
-        .toArray();
-      newBLStocks = newDocs
-        .filter(s => s.signal === 'BL')
-        .map(s => ({ ticker: s.ticker, sector: s.sector, currentPrice: null,
-          totalScore: 0, tier: null, signal: s.signal,
-          signalAge: calcSignalAge(s.signalDate), killRank: null }));
-      newSSStocks = newDocs
-        .filter(s => s.signal === 'SS')
-        .map(s => ({ ticker: s.ticker, sector: s.sector, currentPrice: null,
-          totalScore: 0, tier: null, signal: s.signal,
-          signalAge: calcSignalAge(s.signalDate), killRank: null }));
-    } else if (liveApex) {
-      // Use only stocks whose signal fired in the last completed weekly candle.
-      // Excluding in-progress current-week candle avoids noisy mid-week false signals.
-      const fresh = liveApex.stocks.filter(s =>
-        !s.overextended && s.signalDate === lastCompletedWeekMonday
-      );
+    if (liveApex) {
+      const fresh = liveApex.stocks.filter(s => !s.overextended && (s.signalAge ?? 99) <= 1);
       newBLStocks = fresh.filter(s => s.signal === 'BL').map(mapNewSig).sort(sortByScore);
       newSSStocks = fresh.filter(s => s.signal === 'SS').map(mapNewSig).sort(sortByScore);
     } else {
-      // Cold path: use kill_scores for sector/score data, cross-ref signal_history for
-      // actual signalDate (not stored in kill_scores until next pipeline run).
       const dbFresh = await db.collection('pnthr_kill_scores')
-        .find({ ...weekFilter, signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: 1 } })
-        .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, signalDate: 1, killRank: 1 })
+        .find({ signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: 1 } })
+        .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
         .toArray();
-
-      // Back-fill signalDate from signal_history for stocks that predate the signalDate field.
-      const needDate = dbFresh.filter(s => !s.signalDate);
-      if (needDate.length > 0) {
-        const tickers = [...new Set(needDate.map(s => s.ticker))];
-        const shRows = await db.collection('signal_history')
-          .find({ ticker: { $in: tickers }, signal: { $in: ['BL', 'SS'] }, signalDate: { $ne: null } })
-          .sort({ savedAt: -1 })
-          .project({ ticker: 1, signal: 1, signalDate: 1 })
-          .toArray();
-        const shMap = {};
-        for (const row of shRows) {
-          const key = `${row.ticker}|${row.signal}`;
-          if (!shMap[key]) shMap[key] = row.signalDate;
-        }
-        for (const s of needDate) {
-          s.signalDate = shMap[`${s.ticker}|${s.signal}`] ?? null;
-        }
-      }
-
-      // Keep only signals from the last completed weekly candle.
-      const confirmedFresh = dbFresh.filter(s => s.signalDate === lastCompletedWeekMonday);
-      const toNewSig = s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0,
-        signalAge: calcSignalAge(s.signalDate) });
-      newBLStocks = confirmedFresh.filter(s => s.signal === 'BL').map(toNewSig).sort(sortByScore);
-      newSSStocks = confirmedFresh.filter(s => s.signal === 'SS').map(toNewSig).sort(sortByScore);
+      newBLStocks = dbFresh.filter(s => s.signal === 'BL')
+        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
+      newSSStocks = dbFresh.filter(s => s.signal === 'SS')
+        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
     }
 
     // ── ETFs: from the ETF cache (populated when /api/etf-stocks is visited) ──
@@ -4785,8 +4670,8 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       console.warn('[PULSE] treasury yields fetch failed:', e.message);
     }
 
-    // Data freshness metadata — client shows "Scores: Fri Mar 20" vs "Scores: Live" vs "Daily"
-    const dataSource = useDailySnapshot ? 'daily' : liveApex ? 'live_apex' : 'friday_pipeline';
+    // Data freshness metadata — client shows "Scores: Fri Mar 20" vs "Scores: Live"
+    const dataSource = liveApex ? 'live_apex' : 'friday_pipeline';
     const scoresAsOf = liveApex
       ? new Date().toISOString()
       : (regimeDoc?.weekOf ? `${regimeDoc.weekOf}T16:15:00` : null);
@@ -5033,29 +4918,7 @@ app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
     devSS.sort((a, b) => a.pctFromLow - b.pctFromLow); // past low first, then closest
 
     console.log(`[developing-signals] BL candidates: ${blCandidates.length} → ${devBL.length} developing | SS candidates: ${ssCandidates.length} → ${devSS.length} developing`);
-
-    // ── Triggered Today: stocks in pnthr_daily_signals where isNew=true ──────
-    // These already crossed the weekly signal threshold on today's developing candle.
-    let triggeredToday = { bl: [], ss: [] };
-    try {
-      const db2 = await connectToDatabase();
-      const dailySnap = await db2.collection('pnthr_daily_pulse_snapshot')
-        .findOne({}, { sort: { updatedAt: -1 } });
-      const dailySnapAgeHrs = dailySnap
-        ? (Date.now() - new Date(dailySnap.updatedAt).getTime()) / 3_600_000
-        : 999;
-      if (dailySnapAgeHrs < 25) {
-        const triggered = await db2.collection('pnthr_daily_signals')
-          .find({ isNew: true }, { projection: { ticker: 1, sector: 1, signal: 1, signalDate: 1 } })
-          .toArray();
-        triggeredToday.bl = triggered.filter(s => s.signal === 'BL')
-          .map(s => ({ ticker: s.ticker, sector: s.sector, signalDate: s.signalDate }));
-        triggeredToday.ss = triggered.filter(s => s.signal === 'SS')
-          .map(s => ({ ticker: s.ticker, sector: s.sector, signalDate: s.signalDate }));
-      }
-    } catch (e) { console.warn('[developing-signals] triggeredToday lookup failed:', e.message); }
-
-    res.json({ status: 'OK', bl: devBL, ss: devSS, triggeredToday });
+    res.json({ status: 'OK', bl: devBL, ss: devSS });
   } catch (err) {
     console.error('[/api/pulse/developing-signals]', err.message);
     res.status(500).json({ error: err.message });

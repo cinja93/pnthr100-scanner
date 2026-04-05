@@ -4,6 +4,7 @@
 import React, { useState, useEffect, Component } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 import { useAuth } from '../AuthContext';
+import { useDemo } from '../contexts/DemoContext';
 import ScorecardGrid from './ScorecardGrid';
 import ClosedTradeCards from './ClosedTradeCards';
 import pantherHead from '../assets/panther head.png';
@@ -421,7 +422,9 @@ function HoverTooltip({ children, lines }) {
 
 export default function JournalPage({ onNavigate, initialFilter, focusPositionId, focusTicker }) {
   const { isAdmin } = useAuth();
+  const { isDemo } = useDemo();
   const [tab, setTab] = useState('trades');
+  const [fundPeriod, setFundPeriod] = useState('full_backtest'); // 'full_backtest' = 5 years, 'live_fund' = PNTHR 6-16-25
   const [entries, setEntries] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [weeklyReviews, setWeeklyReviews] = useState([]);
@@ -444,14 +447,17 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [dayTrades, setDayTrades] = useState([]);
   const [dayTradesLoading, setDayTradesLoading] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData = async (period) => {
     setLoading(true);
+    const fp = period !== undefined ? period : fundPeriod;
+    // Only pass fundPeriod filter when in demo mode
+    const fpParam = (isDemo && fp) ? `fundPeriod=${fp}` : '';
     try {
       const [entriesRes, analyticsRes, reviewsRes, ratiosRes] = await Promise.all([
-        fetch(`${API_BASE}/api/journal`, { headers: authHeaders() }),
-        fetch(`${API_BASE}/api/journal/analytics`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/journal${fpParam ? `?${fpParam}` : ''}`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/journal/analytics${fpParam ? `?${fpParam}` : ''}`, { headers: authHeaders() }),
         fetch(`${API_BASE}/api/journal/weekly-reviews`, { headers: authHeaders() }),
-        fetch(`${API_BASE}/api/portfolio/ratios`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/portfolio/ratios${fpParam ? `?${fpParam}` : ''}`, { headers: authHeaders() }),
       ]);
       if (entriesRes.ok) setEntries(await entriesRes.json());
       if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
@@ -462,14 +468,16 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  // Fetch on mount and when fundPeriod changes
+  useEffect(() => { fetchData(fundPeriod); }, [fundPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch active wash rules when analytics tab is loaded
   useEffect(() => {
     if (tab !== 'analytics') return;
-    fetch(`${API_BASE}/api/wash-rules`, { headers: authHeaders() })
+    const fpParam = (isDemo && fundPeriod) ? `?fundPeriod=${fundPeriod}` : '';
+    fetch(`${API_BASE}/api/wash-rules${fpParam}`, { headers: authHeaders() })
       .then(r => r.ok ? r.json() : []).then(setWashRules).catch(() => {});
-  }, [tab]);
+  }, [tab, fundPeriod]);
 
   // Fetch day trades when day-trades tab is loaded
   useEffect(() => {
@@ -1052,6 +1060,30 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           <p style={{ color: '#aaaaaa', fontSize: 13, margin: 0 }}>Trade analysis · Discipline tracking · Pattern recognition</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* ── Fund Period Toggle (demo account only) ── */}
+          {isDemo && (
+            <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #333', marginRight: 8 }}>
+              <button
+                onClick={() => setFundPeriod('full_backtest')}
+                style={{
+                  padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
+                  background: fundPeriod === 'full_backtest' ? '#fcf000' : '#1a1a1a',
+                  color: fundPeriod === 'full_backtest' ? '#111' : '#888',
+                  letterSpacing: 0.3,
+                }}
+              >5 YEARS</button>
+              <button
+                onClick={() => setFundPeriod('live_fund')}
+                style={{
+                  padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
+                  borderLeft: '1px solid #333',
+                  background: fundPeriod === 'live_fund' ? '#fcf000' : '#1a1a1a',
+                  color: fundPeriod === 'live_fund' ? '#111' : '#888',
+                  letterSpacing: 0.3,
+                }}
+              >PNTHR 6-16-25</button>
+            </div>
+          )}
           {isAdmin && entries.length > 0 && (
             <HoverTooltip lines={[
               'SYNC POSITIONS',

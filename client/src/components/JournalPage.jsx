@@ -606,23 +606,45 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   });
   const tdStyle = { padding: '7px 8px', fontSize: 12, color: '#ccc', borderBottom: '1px solid #1a1a1a', verticalAlign: 'middle' };
 
-  const DisciplineStrip = () => (
-    <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-      {[
-        { label: 'OVERALL SCORE', value: analytics?.avgDisciplineScore != null ? `${analytics.avgDisciplineScore}/100` : '0/100', color: analytics?.avgDisciplineScore != null ? DISC_COLORS(analytics.avgDisciplineScore) : '#555', sub: 'avg · last 20 trades' },
-        { label: 'CLEAN STREAK', value: analytics?.streak != null ? `${analytics.streak}` : '0', color: '#6bcb77', sub: 'trades no overrides' },
-        { label: 'OVERRIDES / MO', value: analytics?.overridesThisMonth != null ? String(analytics.overridesThisMonth) : '0', color: analytics?.overridesThisMonth > 0 ? '#ff8c00' : '#6bcb77', sub: 'this month' },
-        { label: 'WIN RATE (DISC)', value: analytics?.disciplineWinRate != null ? `${analytics.disciplineWinRate}%` : 'No data', color: '#6bcb77', sub: 'score ≥ 75 (STRONG+)' },
-        { label: 'WIN RATE (OVRD)', value: analytics?.overrideWinRate != null ? `${analytics.overrideWinRate}%` : 'No data', color: '#ff8c00', sub: 'override trades' },
-      ].map(card => (
-        <div key={card.label} style={{ background: '#111', borderRadius: 10, padding: '12px 18px', flex: '1 1 140px', minWidth: 120 }}>
-          <div style={{ color: '#555', fontSize: 9, letterSpacing: 2, fontWeight: 700, marginBottom: 4 }}>{card.label}</div>
-          <div style={{ color: card.color, fontSize: 22, fontWeight: 900 }}>{card.value}</div>
-          {card.sub && <div style={{ color: '#444', fontSize: 9, marginTop: 2 }}>{card.sub}</div>}
-        </div>
-      ))}
-    </div>
-  );
+  const DisciplineStrip = () => {
+    // Compute total return % from cumulative return in ratios
+    const totalReturnPct = ratios?.cumulativeReturn != null
+      ? (ratios.cumulativeReturn * 100).toFixed(1) : null;
+    const sharpe = ratios?.current?.sharpe ?? ratios?.sinceInception?.sharpe;
+    const sortino = ratios?.current?.sortino ?? ratios?.sinceInception?.sortino;
+
+    // Demo mode: institutional metrics strip
+    const demoCards = [
+      { label: 'OVERALL SCORE', value: analytics?.avgDisciplineScore != null ? `${analytics.avgDisciplineScore}/100` : '—', color: analytics?.avgDisciplineScore != null ? DISC_COLORS(analytics.avgDisciplineScore) : '#555', sub: 'avg · last 20 trades' },
+      { label: 'WIN RATE', value: analytics?.disciplineWinRate != null ? `${analytics.disciplineWinRate}%` : '—', color: '#6bcb77', sub: `${entries.filter(e => e.performance?.status === 'CLOSED').length} closed trades` },
+      { label: 'TOTAL RETURN', value: totalReturnPct != null ? `${totalReturnPct > 0 ? '+' : ''}${totalReturnPct}%` : '—', color: totalReturnPct > 0 ? '#6bcb77' : totalReturnPct < 0 ? '#ff6b6b' : '#888', sub: `${ratios?.weeksOfData ?? 0} weeks` },
+      { label: 'SHARPE', value: sharpe != null ? `${sharpe}` : '—', color: sharpe >= 2 ? '#6bcb77' : sharpe >= 1 ? '#FFD700' : '#ff8c00', sub: 'risk-adjusted return' },
+      { label: 'SORTINO', value: sortino != null ? `${sortino}` : '—', color: sortino >= 3 ? '#6bcb77' : sortino >= 1.5 ? '#FFD700' : '#ff8c00', sub: 'downside risk-adjusted' },
+    ];
+
+    // Live trading: discipline-focused strip
+    const liveCards = [
+      { label: 'OVERALL SCORE', value: analytics?.avgDisciplineScore != null ? `${analytics.avgDisciplineScore}/100` : '0/100', color: analytics?.avgDisciplineScore != null ? DISC_COLORS(analytics.avgDisciplineScore) : '#555', sub: 'avg · last 20 trades' },
+      { label: 'CLEAN STREAK', value: analytics?.streak != null ? `${analytics.streak}` : '0', color: '#6bcb77', sub: 'trades no overrides' },
+      { label: 'OVERRIDES / MO', value: analytics?.overridesThisMonth != null ? String(analytics.overridesThisMonth) : '0', color: analytics?.overridesThisMonth > 0 ? '#ff8c00' : '#6bcb77', sub: 'this month' },
+      { label: 'WIN RATE (DISC)', value: analytics?.disciplineWinRate != null ? `${analytics.disciplineWinRate}%` : 'No data', color: '#6bcb77', sub: 'score ≥ 75 (STRONG+)' },
+      { label: 'WIN RATE (OVRD)', value: analytics?.overrideWinRate != null ? `${analytics.overrideWinRate}%` : 'No data', color: '#ff8c00', sub: 'override trades' },
+    ];
+
+    const cards = isDemo ? demoCards : liveCards;
+
+    return (
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        {cards.map(card => (
+          <div key={card.label} style={{ background: '#111', borderRadius: 10, padding: '12px 18px', flex: '1 1 140px', minWidth: 120 }}>
+            <div style={{ color: '#555', fontSize: 9, letterSpacing: 2, fontWeight: 700, marginBottom: 4 }}>{card.label}</div>
+            <div style={{ color: card.color, fontSize: 22, fontWeight: 900 }}>{card.value}</div>
+            {card.sub && <div style={{ color: '#444', fontSize: 9, marginTop: 2 }}>{card.sub}</div>}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const AnalyticsTab = () => (
     <div>

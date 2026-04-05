@@ -426,6 +426,7 @@
   display: flex;
   gap: 8px;
   margin-top: 4px;
+  justify-content: flex-end;
 }
 
 .rulesBtn {
@@ -472,6 +473,18 @@
 
 .rulesBtnSSBT:hover {
   background: #f97316;
+  color: #111;
+}
+
+.rulesBtnInstitutional {
+  background: #fcf000;
+  color: #111;
+  border-color: #fcf000;
+  font-weight: 800;
+}
+
+.rulesBtnInstitutional:hover {
+  background: #e0d700;
   color: #111;
 }
 

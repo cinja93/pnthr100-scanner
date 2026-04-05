@@ -475,6 +475,16 @@
   color: #111;
 }
 
+.rulesBtnPortfolio {
+  color: #a78bfa;
+  border-color: #a78bfa;
+}
+
+.rulesBtnPortfolio:hover {
+  background: #a78bfa;
+  color: #111;
+}
+
 /* ── Rules Popup ────────────────────────────────────────────────────────────── */
 .rulesOverlay {
   position: fixed;

@@ -439,6 +439,128 @@ const SS_BACKTEST = {
   ],
 };
 
+// ── Hedge Fund Metrics (from computeHedgeFundMetrics.js — $100K starting capital, $10K lots) ──
+
+const BL_HEDGE = {
+  cagr: 60.9, sharpe: 2.62, sortino: 40.71,
+  maxDrawdown: 1.18, maxDDPeriod: '2021-01 to 2021-04',
+  calmar: 51.61, profitFactor: 7.4,
+  bestMonth: 25.98, bestMonthLabel: '2021-09',
+  worstMonth: -1.18, worstMonthLabel: '2021-04',
+  positiveMonths: 53, totalMonths: 57,
+  positiveMonthsPct: 93,
+  avgMonthlyReturn: 4.15, monthlyStdDev: 4.95,
+};
+
+const SS_HEDGE = {
+  cagr: 37.9, sharpe: 1.95, sortino: 18.91,
+  maxDrawdown: 1.06, maxDDPeriod: '2022-10 to 2022-11',
+  calmar: 35.68, profitFactor: 4.81,
+  bestMonth: 14.9, bestMonthLabel: '2022-05',
+  worstMonth: -1.06, worstMonthLabel: '2022-11',
+  positiveMonths: 16, totalMonths: 18,
+  positiveMonthsPct: 88.9,
+  avgMonthlyReturn: 2.79, monthlyStdDev: 4.23,
+};
+
+const COMBINED_HEDGE = {
+  cagr: 57.9, sharpe: 2.62, sortino: 46.18,
+  maxDrawdown: 1.18, maxDDPeriod: '2021-01 to 2021-04',
+  calmar: 49.06, profitFactor: 7.12,
+  bestMonth: 25.98, bestMonthLabel: '2021-09',
+  worstMonth: -1.18, worstMonthLabel: '2021-04',
+  positiveMonths: 57, totalMonths: 61,
+  positiveMonthsPct: 93.4,
+  avgMonthlyReturn: 3.98, monthlyStdDev: 4.71,
+};
+
+// ── Institutional Metrics Section (shared by BacktestPopup + PortfolioPopup) ──
+
+function HedgeFundSection({ h, label }) {
+  const gold = '#fcf000';
+  return (
+    <>
+      <h3 className={styles.rulesSectionTitle}>Institutional Metrics — {label}</h3>
+      <div className={styles.ruleDesc} style={{ color: '#888', marginBottom: 10, fontSize: 11 }}>
+        $100K starting capital · $10K per lot · Annualized from monthly returns · Risk-free rate 5%
+      </div>
+      <div className={styles.btStatsGrid}>
+        <div className={styles.btStat}>
+          <div className={styles.btStatValue} style={{ color: gold }}>+{h.cagr}%</div>
+          <div className={styles.btStatLabel}>CAGR</div>
+        </div>
+        <div className={styles.btStat}>
+          <div className={styles.btStatValue} style={{ color: gold }}>{h.sharpe}</div>
+          <div className={styles.btStatLabel}>Sharpe Ratio</div>
+        </div>
+        <div className={styles.btStat}>
+          <div className={styles.btStatValue} style={{ color: gold }}>{h.sortino}</div>
+          <div className={styles.btStatLabel}>Sortino Ratio</div>
+        </div>
+        <div className={styles.btStat}>
+          <div className={styles.btStatValue} style={{ color: '#ef4444' }}>-{h.maxDrawdown}%</div>
+          <div className={styles.btStatLabel}>Max Drawdown</div>
+        </div>
+        <div className={styles.btStat}>
+          <div className={styles.btStatValue} style={{ color: gold }}>{h.calmar}</div>
+          <div className={styles.btStatLabel}>Calmar Ratio</div>
+        </div>
+        <div className={styles.btStat}>
+          <div className={styles.btStatValue} style={{ color: gold }}>{h.profitFactor}</div>
+          <div className={styles.btStatLabel}>Profit Factor</div>
+        </div>
+      </div>
+      <table className={styles.btTable}>
+        <tbody>
+          <tr><td style={{ color: '#888' }}>Max DD Period</td><td>{h.maxDDPeriod}</td></tr>
+          <tr><td style={{ color: '#888' }}>Best Month</td><td style={{ color: '#22c55e' }}>+{h.bestMonth}% ({h.bestMonthLabel})</td></tr>
+          <tr><td style={{ color: '#888' }}>Worst Month</td><td style={{ color: '#ef4444' }}>{h.worstMonth}% ({h.worstMonthLabel})</td></tr>
+          <tr><td style={{ color: '#888' }}>Positive Months</td><td>{h.positiveMonths}/{h.totalMonths} ({h.positiveMonthsPct}%)</td></tr>
+          <tr><td style={{ color: '#888' }}>Avg Monthly Return</td><td style={{ color: '#22c55e' }}>+{h.avgMonthlyReturn}%</td></tr>
+          <tr><td style={{ color: '#888' }}>Monthly Std Dev</td><td>{h.monthlyStdDev}%</td></tr>
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+// ── Portfolio Results popup (Combined BL + SS) ─────────────────────────────
+
+function PortfolioPopup({ onClose }) {
+  return (
+    <div className={styles.rulesOverlay} onClick={onClose}>
+      <div className={styles.rulesPanel} onClick={e => e.stopPropagation()}>
+        <div className={styles.rulesHeader}>
+          <h2 className={styles.rulesTitle}>Portfolio Results — BL + SS Combined</h2>
+          <button className={styles.rulesClose} onClick={onClose}>X</button>
+        </div>
+        <div className={styles.rulesBody}>
+          <div className={styles.ruleDesc} style={{ color: '#888', marginBottom: 12 }}>
+            5-year backtest (Apr 2021 – Apr 2026) · {BL_BACKTEST.trades} BL + {SS_BACKTEST.trades} SS = {BL_BACKTEST.trades + SS_BACKTEST.trades} total trades
+          </div>
+
+          <HedgeFundSection h={COMBINED_HEDGE} label="Combined" />
+
+          <div style={{ borderTop: '1px solid #333', margin: '16px 0' }} />
+          <HedgeFundSection h={BL_HEDGE} label="BL Only" />
+
+          <div style={{ borderTop: '1px solid #333', margin: '16px 0' }} />
+          <HedgeFundSection h={SS_HEDGE} label="SS Only" />
+
+          <div className={styles.ruleCard} style={{ borderLeft: '3px solid #fcf000', marginTop: 16 }}>
+            <div>
+              <div className={styles.ruleName}>Interpretation</div>
+              <div className={styles.ruleDesc}>
+                Sharpe {'>'} 2.0 is exceptional. Sortino {'>'} 3.0 indicates minimal downside risk. Max drawdown under 1.2% with 93%+ positive months demonstrates extreme consistency. The system achieves hedge fund-grade risk-adjusted returns with minimal drawdowns.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BacktestPopup({ type, onClose }) {
   const d = type === 'BL' ? BL_BACKTEST : SS_BACKTEST;
   const label = type === 'BL' ? 'BUY LONG' : 'SELL SHORT';
@@ -614,6 +736,9 @@ function BacktestPopup({ type, onClose }) {
             </div>
           </div>
 
+          {/* Institutional Metrics */}
+          <HedgeFundSection h={type === 'BL' ? BL_HEDGE : SS_HEDGE} label={label} />
+
           {/* Individual trades toggle */}
           <div style={{ textAlign: 'center', marginTop: 16 }}>
             <button className={styles.rulesBtn} onClick={handleShowTrades} disabled={loadingTrades}>
@@ -674,6 +799,7 @@ export default function OrdersPage() {
   const [tab, setTab] = useState('orders');
   const [rulesPopup, setRulesPopup] = useState(null);       // 'BL' | 'SS' | null
   const [backtestPopup, setBacktestPopup] = useState(null); // 'BL' | 'SS' | null
+  const [portfolioPopup, setPortfolioPopup] = useState(false);
   const [gateData, setGateData] = useState(null);
   const [history, setHistory] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -756,12 +882,14 @@ export default function OrdersPage() {
             <button className={`${styles.rulesBtn} ${styles.rulesBtnBT}`} onClick={() => setBacktestPopup('BL')}>BL Backtest Results</button>
             <button className={`${styles.rulesBtn} ${styles.rulesBtnSS}`} onClick={() => setRulesPopup('SS')}>SS Order Rules</button>
             <button className={`${styles.rulesBtn} ${styles.rulesBtnSSBT}`} onClick={() => setBacktestPopup('SS')}>SS Backtest Results</button>
+            <button className={`${styles.rulesBtn} ${styles.rulesBtnPortfolio}`} onClick={() => setPortfolioPopup(true)}>Portfolio Results</button>
           </div>
         </div>
       </div>
 
       {rulesPopup && <RulesPopup type={rulesPopup} onClose={() => setRulesPopup(null)} />}
       {backtestPopup && <BacktestPopup type={backtestPopup} onClose={() => setBacktestPopup(null)} />}
+      {portfolioPopup && <PortfolioPopup onClose={() => setPortfolioPopup(false)} />}
 
       {/* Admin controls */}
       {isAdmin && (

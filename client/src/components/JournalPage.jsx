@@ -1,7 +1,7 @@
 // client/src/components/JournalPage.jsx
 // ── PNTHR Journal — Trade analysis, discipline tracking, pattern recognition ──
 
-import React, { useState, useEffect, Component } from 'react';
+import React, { useState, useEffect, useMemo, Component } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 import { useAuth } from '../AuthContext';
 import { useDemo } from '../contexts/DemoContext';
@@ -606,6 +606,32 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   });
   const tdStyle = { padding: '7px 8px', fontSize: 12, color: '#ccc', borderBottom: '1px solid #1a1a1a', verticalAlign: 'middle' };
 
+  // Compute annual returns from journal entries
+  const annualReturns = useMemo(() => {
+    const closed = entries.filter(e => e.performance?.status === 'CLOSED');
+    if (!closed.length) return [];
+    // Group by exit year
+    const yearPnl = {};
+    for (const e of closed) {
+      const yr = e.closedAt ? new Date(e.closedAt).getFullYear() : null;
+      if (!yr) continue;
+      yearPnl[yr] = (yearPnl[yr] || { pnl: 0, count: 0 });
+      yearPnl[yr].pnl += (e.performance.totalPnlDollar || 0);
+      yearPnl[yr].count++;
+    }
+    // Compute % return assuming compounding NAV
+    const startingNav = fundPeriod === 'live_fund' ? 10_000_000 : 10_000_000;
+    let runningNav = startingNav;
+    const years = Object.keys(yearPnl).sort();
+    return years.map(yr => {
+      const pnl = yearPnl[yr].pnl;
+      const pct = runningNav > 0 ? (pnl / runningNav * 100) : 0;
+      runningNav += pnl;
+      const currentYear = new Date().getFullYear();
+      return { year: yr, pnl, pct: +pct.toFixed(1), count: yearPnl[yr].count, partial: +yr === currentYear };
+    });
+  }, [entries, fundPeriod]);
+
   const DisciplineStrip = () => {
     // Compute total return % from cumulative return in ratios
     const totalReturnPct = ratios?.cumulativeReturn != null
@@ -642,6 +668,25 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
             {card.sub && <div style={{ color: '#444', fontSize: 9, marginTop: 2 }}>{card.sub}</div>}
           </div>
         ))}
+        {/* Annual Returns card — demo only, wider */}
+        {isDemo && annualReturns.length > 0 && (
+          <div style={{ background: '#111', borderRadius: 10, padding: '12px 18px', flex: '2 1 320px', minWidth: 280 }}>
+            <div style={{ color: '#555', fontSize: 9, letterSpacing: 2, fontWeight: 700, marginBottom: 8 }}>ANNUAL RETURNS</div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'baseline' }}>
+              {annualReturns.map(yr => (
+                <div key={yr.year} style={{ textAlign: 'center', minWidth: 60 }}>
+                  <div style={{ color: yr.pct >= 0 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 900, lineHeight: 1 }}>
+                    {yr.pct >= 0 ? '+' : ''}{yr.pct}%
+                  </div>
+                  <div style={{ color: '#555', fontSize: 9, marginTop: 2 }}>
+                    {yr.year}{yr.partial ? '*' : ''} · {yr.count}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ color: '#333', fontSize: 8, marginTop: 4 }}>* partial year · count = trades closed</div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1063,6 +1108,183 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
     );
   };
 
+  // ── Institutional Metrics Tab (demo only) ────────────────────────────────────
+  const InstitutionalTab = () => {
+    const gold = '#fcf000', green = '#22c55e', red = '#ef4444', dim = '#888';
+
+    // Hedge fund metrics — 5-year backtest ($100K capital, $10K lots, pyramiding)
+    const BL_H = { cagr: 36.8, sharpe: 3.50, sortino: 11.53, maxDrawdown: 0.74, maxDDPeriod: '2023-02 to 2023-03', calmar: 49.73, profitFactor: 7.62, bestMonth: 11.56, bestMonthLabel: '2021-06', worstMonth: -0.74, worstMonthLabel: '2023-03', positiveMonths: 52, totalMonths: 54, positiveMonthsPct: 96.3, avgMonthlyReturn: 2.67, monthlyStdDev: 2.23 };
+    const SS_H = { cagr: 15.3, sharpe: 2.02, sortino: 4.06, maxDrawdown: 0.61, maxDDPeriod: '2025-04 to 2026-03', calmar: 25.13, profitFactor: 4.50, bestMonth: 3.94, bestMonthLabel: '2022-09', worstMonth: -0.61, worstMonthLabel: '2026-03', positiveMonths: 13, totalMonths: 17, positiveMonthsPct: 76.5, avgMonthlyReturn: 1.21, monthlyStdDev: 1.35 };
+    const COMB = { cagr: 34.0, sharpe: 3.41, sortino: 15.82, maxDrawdown: 0.24, maxDDPeriod: '2023-09 to 2023-10', calmar: 143.28, profitFactor: 7.24, bestMonth: 11.56, bestMonthLabel: '2021-06', worstMonth: -0.24, worstMonthLabel: '2023-10', positiveMonths: 57, totalMonths: 60, positiveMonthsPct: 95.0, avgMonthlyReturn: 2.49, monthlyStdDev: 2.11 };
+
+    // $10M demo fund metrics
+    const DEMO_5Y = { startNav: '$10,000,000', endNav: '$78,293,449', totalReturn: '+682.9%', trades: '1,674', winRate: '67.4%', commissions: '$293,000', avgDiscipline: '95.4' };
+    const DEMO_LF = { startNav: '$10,000,000', endNav: '$13,841,978', totalReturn: '+38.4%', trades: '292', winRate: '67.5%', commissions: '$16,676', avgDiscipline: '87' };
+    const demoData = fundPeriod === 'live_fund' ? DEMO_LF : DEMO_5Y;
+
+    const tbl = { width: '100%', borderCollapse: 'collapse', marginBottom: 16, fontSize: 12 };
+    const th = { textAlign: 'left', padding: '6px 10px', color: dim, fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.3, borderBottom: '1px solid #333' };
+    const td = { padding: '6px 10px', color: '#ccc', borderBottom: '1px solid #1a1a1a' };
+    const tdr = { ...td, textAlign: 'right' };
+
+    return (
+      <div>
+        {/* ── $10M Demo Fund Summary ── */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ color: gold, fontSize: 13, fontWeight: 700, letterSpacing: 1, marginBottom: 12, borderBottom: '1px solid #333', paddingBottom: 6, textTransform: 'uppercase' }}>
+            $10M Demo Fund — {fundPeriod === 'live_fund' ? 'PNTHR 6-16-25' : '5-Year Backtest'}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
+            {[
+              { label: 'Starting NAV', value: demoData.startNav, color: '#ccc' },
+              { label: 'Final NAV', value: demoData.endNav, color: gold },
+              { label: 'Total Return', value: demoData.totalReturn, color: green },
+              { label: 'Win Rate', value: demoData.winRate, color: green },
+              { label: 'Total Trades', value: demoData.trades, color: '#ccc' },
+              { label: 'Commissions', value: demoData.commissions, color: red },
+              { label: 'Avg Discipline', value: demoData.avgDiscipline, color: gold },
+              { label: 'Risk Model', value: '1% risk · 10% heat', color: '#ccc' },
+            ].map(s => (
+              <div key={s.label} style={{ background: '#1a1a1a', borderRadius: 6, padding: 12, textAlign: 'center' }}>
+                <div style={{ color: s.color, fontSize: 18, fontWeight: 800, fontFamily: 'monospace' }}>{s.value}</div>
+                <div style={{ color: dim, fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Annual Returns Breakdown ── */}
+        {annualReturns.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ color: gold, fontSize: 13, fontWeight: 700, letterSpacing: 1, marginBottom: 12, borderBottom: '1px solid #333', paddingBottom: 6, textTransform: 'uppercase' }}>
+              Annual Returns
+            </div>
+            <table style={tbl}>
+              <thead>
+                <tr>
+                  <th style={th}>Year</th>
+                  <th style={{ ...th, textAlign: 'right' }}>Return</th>
+                  <th style={{ ...th, textAlign: 'right' }}>P&L</th>
+                  <th style={{ ...th, textAlign: 'right' }}>Trades</th>
+                </tr>
+              </thead>
+              <tbody>
+                {annualReturns.map(yr => (
+                  <tr key={yr.year}>
+                    <td style={td}>{yr.year}{yr.partial ? ' *' : ''}</td>
+                    <td style={{ ...tdr, color: yr.pct >= 0 ? green : red, fontWeight: 700 }}>{yr.pct >= 0 ? '+' : ''}{yr.pct}%</td>
+                    <td style={{ ...tdr, color: yr.pnl >= 0 ? green : red }}>{yr.pnl >= 0 ? '+' : ''}${Math.round(yr.pnl).toLocaleString()}</td>
+                    <td style={tdr}>{yr.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ color: '#444', fontSize: 10, fontStyle: 'italic' }}>* partial year · returns computed with compounding NAV</div>
+          </div>
+        )}
+
+        {/* ── PNTHR Performance Breakdown (BL / SS / Combined) ── */}
+        <div style={{ color: gold, fontSize: 13, fontWeight: 700, letterSpacing: 1, marginBottom: 12, borderBottom: '1px solid #333', paddingBottom: 6, textTransform: 'uppercase' }}>
+          PNTHR Performance Breakdown
+        </div>
+        <div style={{ color: dim, marginBottom: 10, fontSize: 11 }}>
+          $100K starting capital · $10K full position (Lots 1-5) · Annualized from monthly returns · Risk-free rate 5%
+        </div>
+
+        {/* Hero metrics grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+          {[
+            { label: 'CAGR', value: `+${COMB.cagr}%`, color: gold },
+            { label: 'Sharpe', value: COMB.sharpe, color: gold },
+            { label: 'Sortino', value: COMB.sortino, color: gold },
+            { label: 'Max Drawdown', value: `-${COMB.maxDrawdown}%`, color: red },
+            { label: 'Calmar', value: COMB.calmar, color: gold },
+            { label: 'Profit Factor', value: COMB.profitFactor, color: gold },
+          ].map(s => (
+            <div key={s.label} style={{ background: '#1a1a1a', borderRadius: 6, padding: 12, textAlign: 'center' }}>
+              <div style={{ color: s.color, fontSize: 22, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace" }}>{s.value}</div>
+              <div style={{ color: dim, fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Full breakdown table */}
+        <table style={tbl}>
+          <thead>
+            <tr>
+              <th style={th}>Metric</th>
+              <th style={{ ...th, textAlign: 'right' }}>BL (Longs)</th>
+              <th style={{ ...th, textAlign: 'right' }}>SS (Shorts)</th>
+              <th style={{ ...th, textAlign: 'right' }}>Combined</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              { m: 'CAGR', bl: `+${BL_H.cagr}%`, ss: `+${SS_H.cagr}%`, c: `+${COMB.cagr}%`, cColor: gold, color: green },
+              { m: 'Sharpe Ratio', bl: BL_H.sharpe, ss: SS_H.sharpe, c: COMB.sharpe, cColor: gold },
+              { m: 'Sortino Ratio', bl: BL_H.sortino, ss: SS_H.sortino, c: COMB.sortino, cColor: gold },
+              { m: 'Max Drawdown', bl: `-${BL_H.maxDrawdown}%`, ss: `-${SS_H.maxDrawdown}%`, c: `-${COMB.maxDrawdown}%`, color: red },
+              { m: 'Calmar Ratio', bl: BL_H.calmar, ss: SS_H.calmar, c: COMB.calmar, cColor: gold },
+              { m: 'Profit Factor', bl: BL_H.profitFactor, ss: SS_H.profitFactor, c: COMB.profitFactor, cColor: gold },
+              { m: 'Win Rate', bl: '66.7%', ss: '62.2%', c: '66.3%' },
+              { m: 'Avg Monthly Return', bl: `+${BL_H.avgMonthlyReturn}%`, ss: `+${SS_H.avgMonthlyReturn}%`, c: `+${COMB.avgMonthlyReturn}%`, color: green },
+              { m: 'Monthly Std Dev', bl: `${BL_H.monthlyStdDev}%`, ss: `${SS_H.monthlyStdDev}%`, c: `${COMB.monthlyStdDev}%` },
+              { m: 'Best Month', bl: `+${BL_H.bestMonth}%`, ss: `+${SS_H.bestMonth}%`, c: `+${COMB.bestMonth}%`, color: green },
+              { m: 'Worst Month', bl: `${BL_H.worstMonth}%`, ss: `${SS_H.worstMonth}%`, c: `${COMB.worstMonth}%`, color: red },
+              { m: 'Positive Months', bl: `${BL_H.positiveMonths}/${BL_H.totalMonths} (${BL_H.positiveMonthsPct}%)`, ss: `${SS_H.positiveMonths}/${SS_H.totalMonths} (${SS_H.positiveMonthsPct}%)`, c: `${COMB.positiveMonths}/${COMB.totalMonths} (${COMB.positiveMonthsPct}%)` },
+              { m: 'Total Trades', bl: '1,533', ss: '143', c: '1,676', fw: true },
+            ].map(r => (
+              <tr key={r.m}>
+                <td style={{ ...td, color: dim }}>{r.m}</td>
+                <td style={{ ...tdr, color: r.color || '#ccc', fontWeight: r.fw ? 700 : 400 }}>{r.bl}</td>
+                <td style={{ ...tdr, color: r.color || '#ccc', fontWeight: r.fw ? 700 : 400 }}>{r.ss}</td>
+                <td style={{ ...tdr, color: r.cColor || r.color || '#ccc', fontWeight: r.cColor || r.fw ? 700 : 400 }}>{r.c}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* ── PNTHR vs S&P 500 ── */}
+        <div style={{ color: gold, fontSize: 13, fontWeight: 700, letterSpacing: 1, marginBottom: 12, marginTop: 24, borderBottom: '1px solid #333', paddingBottom: 6, textTransform: 'uppercase' }}>
+          PNTHR vs S&P 500
+        </div>
+        <table style={tbl}>
+          <thead>
+            <tr>
+              <th style={th}>Metric</th>
+              <th style={{ ...th, textAlign: 'right' }}>PNTHR Combined</th>
+              <th style={{ ...th, textAlign: 'right' }}>S&P 500 (approx)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              { m: 'CAGR', p: `+${COMB.cagr}%`, s: '~10-12%', pc: gold },
+              { m: 'Sharpe Ratio', p: COMB.sharpe, s: '~0.5-0.8', pc: gold },
+              { m: 'Sortino Ratio', p: COMB.sortino, s: '~0.7-1.0', pc: gold },
+              { m: 'Max Drawdown', p: `-${COMB.maxDrawdown}%`, s: '~-25%', pc: green, sc: red },
+              { m: 'Positive Months', p: `${COMB.positiveMonthsPct}%`, s: '~60-65%', pc: gold },
+              { m: 'Worst Month', p: `${COMB.worstMonth}%`, s: '~-9%', pc: green, sc: red },
+            ].map(r => (
+              <tr key={r.m}>
+                <td style={{ ...td, color: dim }}>{r.m}</td>
+                <td style={{ ...tdr, color: r.pc || '#ccc', fontWeight: 700 }}>{r.p}</td>
+                <td style={{ ...tdr, color: r.sc || '#ccc' }}>{r.s}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Interpretation */}
+        <div style={{ background: '#1a1a1a', borderLeft: `3px solid ${gold}`, borderRadius: 4, padding: '12px 16px', marginTop: 16 }}>
+          <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Interpretation</div>
+          <div style={{ color: '#aaa', fontSize: 12, lineHeight: 1.5 }}>
+            Sharpe {'>'} 2.0 is exceptional — top hedge funds target 1.0-1.5. Max drawdown of -0.24% vs the S&P's -25% in 2022 demonstrates extreme capital protection. Pyramiding concentrates capital into winners while losers stay small (Lot 1 only). 95% positive months with a worst month of just -0.24% is institutional-grade consistency. CAGR assumes $10K full position sizing — actual returns scale with account size and risk allocation.
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const tabBtn = (id, label) => (
     <button onClick={() => setTab(id)}
       style={{ background: tab === id ? '#FFD700' : 'transparent', color: tab === id ? '#000' : '#666', border: `1px solid ${tab === id ? '#FFD700' : '#333'}`, borderRadius: 6, padding: '5px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 1 }}>
@@ -1157,7 +1379,10 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           {tabBtn('trades', 'TRADES')}
           {tabBtn('analytics', 'ANALYTICS')}
           {tabBtn('weekly', 'WEEKLY REVIEW')}
-          {tabBtn('dayTrades', 'DAY TRADES')}
+          {isDemo
+            ? tabBtn('institutional', 'INSTITUTIONAL METRICS')
+            : tabBtn('dayTrades', 'DAY TRADES')
+          }
         </div>
       </div>
 
@@ -1342,6 +1567,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           {tab === 'analytics' && <AnalyticsTab />}
           {tab === 'weekly' && <WeeklyReviewTab />}
           {tab === 'dayTrades' && <DayTradesTab />}
+          {tab === 'institutional' && <InstitutionalTab />}
         </>
       )}
       </div>

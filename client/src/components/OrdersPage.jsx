@@ -601,7 +601,7 @@ function InstitutionalPopup({ onClose }) {
                 <td style={{ color: dim }}>Win Rate</td>
                 <td style={{ textAlign: 'right' }}>{BL_BACKTEST.winRate}%</td>
                 <td style={{ textAlign: 'right' }}>{SS_BACKTEST.winRate}%</td>
-                <td style={{ textAlign: 'right' }}>—</td>
+                <td style={{ textAlign: 'right' }}>66.3%</td>
               </tr>
               <tr>
                 <td style={{ color: dim }}>Avg Monthly Return</td>

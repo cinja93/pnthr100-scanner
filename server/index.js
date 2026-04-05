@@ -1976,10 +1976,32 @@ app.get('/api/backtest/trades',  authenticateJWT, async (req, res) => {
     const signal = req.query.signal; // 'BL' or 'SS'
     const db = req.app.locals.db || (await import('./database.js')).connectToDatabase();
     const filter = signal ? { signal } : {};
-    const trades = await (await db).collection('pnthr_bt_trade_log')
+    const positions = await (await db).collection('pnthr_bt_pyramid_trades')
       .find(filter, { projection: { _id: 0 } })
-      .sort({ entryDate: 1 })
+      .sort({ 'original.entryDate': 1 })
       .toArray();
+    // Flatten: each lot becomes its own row
+    const trades = [];
+    for (const pos of positions) {
+      for (const lot of pos.lots) {
+        trades.push({
+          ticker: pos.ticker,
+          signal: pos.signal,
+          entryDate: lot.fillDate,
+          entryPrice: lot.fillPrice,
+          exitDate: pos.pyramidExitDate,
+          exitPrice: pos.pyramidExitPrice,
+          profitPct: lot.pnlPct,
+          exitReason: pos.pyramidExitReason,
+          sector: pos.sector,
+          isWinner: lot.dollarPnl > 0,
+          lotNum: lot.lot,
+          lotPct: lot.pct,
+          lotName: lot.name,
+          lotsInPosition: pos.lotsFilledCount,
+        });
+      }
+    }
     res.json({ trades });
   } catch (err) {
     console.error('[Backtest] trades fetch error:', err.message);

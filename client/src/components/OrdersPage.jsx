@@ -195,7 +195,7 @@ function RulesPopup({ type, onClose }) {
               <div>
                 <div className={styles.ruleName}>BL Backtest Results</div>
                 <div className={styles.ruleDesc}>
-                  1,660 BL trades | 67.2% win rate | +5.60% avg P&L | W/L ratio 3.50:1 | Positive every year including 2022.
+                  1,533 BL trades | 67.7% win rate | +5.60% avg P&L | W/L ratio 3.53:1 | CAGR +60.9% | Sharpe 2.62 | Max DD -1.18% | Positive every year including 2022.
                 </div>
               </div>
             </div>
@@ -362,7 +362,7 @@ function RulesPopup({ type, onClose }) {
               <div>
                 <div className={styles.ruleName}>SS Backtest Results</div>
                 <div className={styles.ruleDesc}>
-                  143 SS trades | 67.8% win rate | +4.20% avg P&L | W/L ratio 2.13:1 | No trades in 2021/2024 (bull regime — crash gate blocked all shorts by design).
+                  143 SS trades | 68.5% win rate | +4.33% avg P&L | W/L ratio 2.21:1 | CAGR +37.9% | Sharpe 1.95 | Max DD -1.06% | No trades in 2021/2024 (bull regime — crash gate blocked all shorts by design).
                 </div>
               </div>
             </div>
@@ -524,34 +524,168 @@ function HedgeFundSection({ h, label }) {
   );
 }
 
-// ── Portfolio Results popup (Combined BL + SS) ─────────────────────────────
+// ── PNTHR Institutional Metrics popup ───────────────────────────────────────
 
-function PortfolioPopup({ onClose }) {
+function InstitutionalPopup({ onClose }) {
+  const gold = '#fcf000';
+  const green = '#22c55e';
+  const red = '#ef4444';
+  const dim = '#888';
+
   return (
     <div className={styles.rulesOverlay} onClick={onClose}>
       <div className={styles.rulesPanel} onClick={e => e.stopPropagation()}>
         <div className={styles.rulesHeader}>
-          <h2 className={styles.rulesTitle}>Portfolio Results — BL + SS Combined</h2>
+          <h2 className={styles.rulesTitle}>PNTHR Institutional Metrics</h2>
           <button className={styles.rulesClose} onClick={onClose}>X</button>
         </div>
         <div className={styles.rulesBody}>
-          <div className={styles.ruleDesc} style={{ color: '#888', marginBottom: 12 }}>
-            5-year backtest (Apr 2021 – Apr 2026) · {BL_BACKTEST.trades} BL + {SS_BACKTEST.trades} SS = {BL_BACKTEST.trades + SS_BACKTEST.trades} total trades
+          <div className={styles.ruleDesc} style={{ color: dim, marginBottom: 16 }}>
+            5-year backtest (Apr 2021 – Apr 2026) · $100K starting capital · $10K per lot · Risk-free rate 5%
           </div>
 
-          <HedgeFundSection h={COMBINED_HEDGE} label="Combined" />
+          {/* Table 1: PNTHR BL vs SS vs Combined */}
+          <h3 className={styles.rulesSectionTitle}>PNTHR Performance Breakdown</h3>
+          <table className={styles.btTable}>
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th style={{ textAlign: 'right' }}>BL (Longs)</th>
+                <th style={{ textAlign: 'right' }}>SS (Shorts)</th>
+                <th style={{ textAlign: 'right' }}>Combined</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style={{ color: dim }}>CAGR</td>
+                <td style={{ textAlign: 'right', color: green, fontWeight: 700 }}>+{BL_HEDGE.cagr}%</td>
+                <td style={{ textAlign: 'right', color: green, fontWeight: 700 }}>+{SS_HEDGE.cagr}%</td>
+                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>+{COMBINED_HEDGE.cagr}%</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Sharpe Ratio</td>
+                <td style={{ textAlign: 'right' }}>{BL_HEDGE.sharpe}</td>
+                <td style={{ textAlign: 'right' }}>{SS_HEDGE.sharpe}</td>
+                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sharpe}</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Sortino Ratio</td>
+                <td style={{ textAlign: 'right' }}>{BL_HEDGE.sortino}</td>
+                <td style={{ textAlign: 'right' }}>{SS_HEDGE.sortino}</td>
+                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sortino}</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Max Drawdown</td>
+                <td style={{ textAlign: 'right', color: red }}>-{BL_HEDGE.maxDrawdown}%</td>
+                <td style={{ textAlign: 'right', color: red }}>-{SS_HEDGE.maxDrawdown}%</td>
+                <td style={{ textAlign: 'right', color: red }}>-{COMBINED_HEDGE.maxDrawdown}%</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Calmar Ratio</td>
+                <td style={{ textAlign: 'right' }}>{BL_HEDGE.calmar}</td>
+                <td style={{ textAlign: 'right' }}>{SS_HEDGE.calmar}</td>
+                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.calmar}</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Profit Factor</td>
+                <td style={{ textAlign: 'right' }}>{BL_HEDGE.profitFactor}</td>
+                <td style={{ textAlign: 'right' }}>{SS_HEDGE.profitFactor}</td>
+                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.profitFactor}</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Win Rate</td>
+                <td style={{ textAlign: 'right' }}>{BL_BACKTEST.winRate}%</td>
+                <td style={{ textAlign: 'right' }}>{SS_BACKTEST.winRate}%</td>
+                <td style={{ textAlign: 'right' }}>—</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Avg Monthly Return</td>
+                <td style={{ textAlign: 'right', color: green }}>+{BL_HEDGE.avgMonthlyReturn}%</td>
+                <td style={{ textAlign: 'right', color: green }}>+{SS_HEDGE.avgMonthlyReturn}%</td>
+                <td style={{ textAlign: 'right', color: green }}>+{COMBINED_HEDGE.avgMonthlyReturn}%</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Monthly Std Dev</td>
+                <td style={{ textAlign: 'right' }}>{BL_HEDGE.monthlyStdDev}%</td>
+                <td style={{ textAlign: 'right' }}>{SS_HEDGE.monthlyStdDev}%</td>
+                <td style={{ textAlign: 'right' }}>{COMBINED_HEDGE.monthlyStdDev}%</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Best Month</td>
+                <td style={{ textAlign: 'right', color: green }}>+{BL_HEDGE.bestMonth}%</td>
+                <td style={{ textAlign: 'right', color: green }}>+{SS_HEDGE.bestMonth}%</td>
+                <td style={{ textAlign: 'right', color: green }}>+{COMBINED_HEDGE.bestMonth}%</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Worst Month</td>
+                <td style={{ textAlign: 'right', color: red }}>{BL_HEDGE.worstMonth}%</td>
+                <td style={{ textAlign: 'right', color: red }}>{SS_HEDGE.worstMonth}%</td>
+                <td style={{ textAlign: 'right', color: red }}>{COMBINED_HEDGE.worstMonth}%</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Positive Months</td>
+                <td style={{ textAlign: 'right' }}>{BL_HEDGE.positiveMonths}/{BL_HEDGE.totalMonths} ({BL_HEDGE.positiveMonthsPct}%)</td>
+                <td style={{ textAlign: 'right' }}>{SS_HEDGE.positiveMonths}/{SS_HEDGE.totalMonths} ({SS_HEDGE.positiveMonthsPct}%)</td>
+                <td style={{ textAlign: 'right' }}>{COMBINED_HEDGE.positiveMonths}/{COMBINED_HEDGE.totalMonths} ({COMBINED_HEDGE.positiveMonthsPct}%)</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Total Trades</td>
+                <td style={{ textAlign: 'right' }}>{BL_BACKTEST.trades.toLocaleString()}</td>
+                <td style={{ textAlign: 'right' }}>{SS_BACKTEST.trades}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{(BL_BACKTEST.trades + SS_BACKTEST.trades).toLocaleString()}</td>
+              </tr>
+            </tbody>
+          </table>
 
-          <div style={{ borderTop: '1px solid #333', margin: '16px 0' }} />
-          <HedgeFundSection h={BL_HEDGE} label="BL Only" />
+          {/* Table 2: PNTHR vs S&P 500 */}
+          <h3 className={styles.rulesSectionTitle} style={{ marginTop: 20 }}>PNTHR vs S&P 500</h3>
+          <table className={styles.btTable}>
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th style={{ textAlign: 'right' }}>PNTHR Combined</th>
+                <th style={{ textAlign: 'right' }}>S&P 500 (approx)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style={{ color: dim }}>CAGR</td>
+                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>+{COMBINED_HEDGE.cagr}%</td>
+                <td style={{ textAlign: 'right' }}>~10-12%</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Sharpe Ratio</td>
+                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sharpe}</td>
+                <td style={{ textAlign: 'right' }}>~0.5-0.8</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Sortino Ratio</td>
+                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sortino}</td>
+                <td style={{ textAlign: 'right' }}>~0.7-1.0</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Max Drawdown</td>
+                <td style={{ textAlign: 'right', color: green }}>-{COMBINED_HEDGE.maxDrawdown}%</td>
+                <td style={{ textAlign: 'right', color: red }}>~-25%</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Positive Months</td>
+                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.positiveMonthsPct}%</td>
+                <td style={{ textAlign: 'right' }}>~60-65%</td>
+              </tr>
+              <tr>
+                <td style={{ color: dim }}>Worst Month</td>
+                <td style={{ textAlign: 'right', color: green }}>{COMBINED_HEDGE.worstMonth}%</td>
+                <td style={{ textAlign: 'right', color: red }}>~-9%</td>
+              </tr>
+            </tbody>
+          </table>
 
-          <div style={{ borderTop: '1px solid #333', margin: '16px 0' }} />
-          <HedgeFundSection h={SS_HEDGE} label="SS Only" />
-
-          <div className={styles.ruleCard} style={{ borderLeft: '3px solid #fcf000', marginTop: 16 }}>
+          <div className={styles.ruleCard} style={{ borderLeft: `3px solid ${gold}`, marginTop: 16 }}>
             <div>
               <div className={styles.ruleName}>Interpretation</div>
               <div className={styles.ruleDesc}>
-                Sharpe {'>'} 2.0 is exceptional. Sortino {'>'} 3.0 indicates minimal downside risk. Max drawdown under 1.2% with 93%+ positive months demonstrates extreme consistency. The system achieves hedge fund-grade risk-adjusted returns with minimal drawdowns.
+                Sharpe {'>'} 2.0 is exceptional — top hedge funds target 1.0-1.5. Max drawdown under 1.2% vs the S&P's -25% in 2022 demonstrates extreme capital protection. The system was profitable during the 2022 bear market while buy-and-hold lost 19%. 93%+ positive months with a worst month of just -1.18% is institutional-grade consistency.
               </div>
             </div>
           </div>
@@ -799,7 +933,7 @@ export default function OrdersPage() {
   const [tab, setTab] = useState('orders');
   const [rulesPopup, setRulesPopup] = useState(null);       // 'BL' | 'SS' | null
   const [backtestPopup, setBacktestPopup] = useState(null); // 'BL' | 'SS' | null
-  const [portfolioPopup, setPortfolioPopup] = useState(false);
+  const [institutionalPopup, setInstitutionalPopup] = useState(false);
   const [gateData, setGateData] = useState(null);
   const [history, setHistory] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -882,14 +1016,14 @@ export default function OrdersPage() {
             <button className={`${styles.rulesBtn} ${styles.rulesBtnBT}`} onClick={() => setBacktestPopup('BL')}>BL Backtest Results</button>
             <button className={`${styles.rulesBtn} ${styles.rulesBtnSS}`} onClick={() => setRulesPopup('SS')}>SS Order Rules</button>
             <button className={`${styles.rulesBtn} ${styles.rulesBtnSSBT}`} onClick={() => setBacktestPopup('SS')}>SS Backtest Results</button>
-            <button className={`${styles.rulesBtn} ${styles.rulesBtnPortfolio}`} onClick={() => setPortfolioPopup(true)}>Portfolio Results</button>
+            <button className={`${styles.rulesBtn} ${styles.rulesBtnInstitutional}`} onClick={() => setInstitutionalPopup(true)}>PNTHR Institutional Metrics</button>
           </div>
         </div>
       </div>
 
       {rulesPopup && <RulesPopup type={rulesPopup} onClose={() => setRulesPopup(null)} />}
       {backtestPopup && <BacktestPopup type={backtestPopup} onClose={() => setBacktestPopup(null)} />}
-      {portfolioPopup && <PortfolioPopup onClose={() => setPortfolioPopup(false)} />}
+      {institutionalPopup && <InstitutionalPopup onClose={() => setInstitutionalPopup(false)} />}
 
       {/* Admin controls */}
       {isAdmin && (

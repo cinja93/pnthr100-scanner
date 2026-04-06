@@ -302,7 +302,7 @@
 }
 
 .adminBtn {
-  padding: 6px 14px;
+  padding: 10px 18px;
   background: #333;
   color: #fcf000;
   border: 1px solid #555;
@@ -310,6 +310,18 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.2;
+}
+
+.adminBtnSub {
+  font-size: 10px;
+  font-weight: 400;
+  color: #aaa;
+  letter-spacing: 0.02em;
 }
 
 .adminBtn:hover {

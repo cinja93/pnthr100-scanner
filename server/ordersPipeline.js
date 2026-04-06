@@ -141,7 +141,13 @@ export async function runOrdersPipeline({ type = 'WEEKLY' } = {}) {
   if (!apexResults?.stocks) throw new Error('No Kill scores available');
 
   const allStocks = apexResults.stocks;
-  const indexData = apexResults.indexData || await fetchIndexData();
+  // Use cached indexData only if it has valid SPY + QQQ slope data.
+  // apexResults.indexData can be { SPY: null, QQQ: null } when FMP failed during
+  // apex scoring — that object is truthy so a simple || fallback never fires.
+  const cachedIndex = apexResults.indexData;
+  const indexData = (cachedIndex?.SPY?.emaSlope != null && cachedIndex?.QQQ?.emaSlope != null)
+    ? cachedIndex
+    : await fetchIndexData();
   const sectorGateData = await fetchSectorGateData();
 
   console.log(`[Orders] Starting with ${allStocks.length} scored stocks`);
@@ -460,11 +466,28 @@ export async function ordersGetLatest(req, res) {
       inPortfolio: inPort.has(o.ticker),
     }));
 
+    // If saved regime is missing index data (FMP failed when orders were generated),
+    // do a live re-fetch so the MACRO bar always shows real values.
+    let regime = orderDoc?.regime || null;
+    if (regime && (regime.spyPrice == null || regime.spyEmaSlope == null || regime.qqqPrice == null || regime.qqqEmaSlope == null)) {
+      try {
+        const liveIndex = await fetchIndexData();
+        if (liveIndex.SPY) {
+          regime = { ...regime, spyPrice: liveIndex.SPY.price, spyEma21: liveIndex.SPY.ema21, spyEmaSlope: liveIndex.SPY.emaSlope, spyAboveEma: liveIndex.SPY.aboveEma, spyEmaRising: liveIndex.SPY.emaRising };
+        }
+        if (liveIndex.QQQ) {
+          regime = { ...regime, qqqPrice: liveIndex.QQQ.price, qqqEma21: liveIndex.QQQ.ema21, qqqEmaSlope: liveIndex.QQQ.emaSlope, qqqAboveEma: liveIndex.QQQ.aboveEma, qqqEmaRising: liveIndex.QQQ.emaRising };
+        }
+      } catch (e) {
+        console.warn('[Orders API] Could not re-fetch index data for MACRO bar:', e.message);
+      }
+    }
+
     res.json({
       weekOf:          orderDoc?.weekOf || weekOf,
       type:            orderDoc?.type || null,
       generatedAt:     orderDoc?.generatedAt || null,
-      regime:          orderDoc?.regime || null,
+      regime,
       mode:            orderDoc?.mode || 'NO DATA',
       macroDirection:  orderDoc?.macroDirection || null,
       ssCrashActive:   orderDoc?.ssCrashActive || false,

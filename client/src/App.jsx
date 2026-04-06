@@ -717,6 +717,31 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   // Visible = not yet dismissed this session
   const visibleDiscrepancies = ibkrDiscrepancies.filter(d => !dismissedKeys.has(`${d.type}:${d.ticker}`));
 
+  // ── Friday Run-Preview Banner ──────────────────────────────────────────────
+  // Shows on ALL pages for admins on Fridays between 10:30am–4:00pm AZ (MST/UTC-7).
+  // Dismissed per-session via sessionStorage so it doesn't reappear until next reload.
+  const [fridayBannerDismissed, setFridayBannerDismissed] = useState(
+    () => sessionStorage.getItem('pnthr_friday_banner_dismissed') === 'true'
+  );
+  const showFridayBanner = isAdmin && !fridayBannerDismissed && (() => {
+    const now = new Date();
+    const azOffset = -7 * 60; // AZ = MST = UTC-7 always (no DST)
+    const utcMin = now.getTime() / 60000 + now.getTimezoneOffset();
+    const azMin = utcMin + azOffset;
+    const azDate = new Date((azMin + 7 * 60) * 60000); // reconstruct to get day
+    const azNow = new Date(now.getTime() + (azOffset - (-now.getTimezoneOffset())) * 60000);
+    const dow = azNow.getDay(); // 0=Sun … 5=Fri
+    const hour = azNow.getHours();
+    const min = azNow.getMinutes();
+    const azMinOfDay = hour * 60 + min;
+    return dow === 5 && azMinOfDay >= 630 && azMinOfDay < 960; // 10:30am–4:00pm AZ
+  })();
+
+  function dismissFridayBanner() {
+    sessionStorage.setItem('pnthr_friday_banner_dismissed', 'true');
+    setFridayBannerDismissed(true);
+  }
+
   const [activePage, setActivePage] = useState(
     () => localStorage.getItem('pnthr_page') || currentUser?.defaultPage || 'long'
   );
@@ -1049,6 +1074,60 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
               );
             })}
           </>
+        )}
+
+        {/* ── Friday Run-Preview Banner — admin only, Fridays 10:30am–4pm AZ ── */}
+        {showFridayBanner && (
+          <div style={{
+            background: 'linear-gradient(90deg, rgba(252,240,0,0.12), rgba(252,240,0,0.04))',
+            borderBottom: '2px solid rgba(252,240,0,0.5)',
+            padding: '10px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 14,
+            fontSize: 13,
+            flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: 16 }}>📋</span>
+            <span style={{ color: '#FCF000', fontWeight: 900, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
+              FRIDAY ORDER SHEET
+            </span>
+            <span style={{ color: '#ccc', fontWeight: 400 }}>
+              It's time to run the weekly PREVIEW on PNTHR Orders (11am AZ).
+            </span>
+            <button
+              onClick={() => navigate('orders')}
+              style={{
+                background: '#FCF000',
+                color: '#000',
+                border: 'none',
+                borderRadius: 4,
+                padding: '5px 16px',
+                fontWeight: 800,
+                fontSize: 12,
+                cursor: 'pointer',
+                letterSpacing: '0.05em',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              RUN PREVIEW NOW →
+            </button>
+            <button
+              onClick={dismissFridayBanner}
+              style={{
+                marginLeft: 'auto',
+                background: 'none',
+                border: '1px solid #555',
+                color: '#888',
+                borderRadius: 4,
+                padding: '4px 12px',
+                fontSize: 11,
+                cursor: 'pointer',
+              }}
+            >
+              DISMISS
+            </button>
+          </div>
         )}
 
         <main className="main">

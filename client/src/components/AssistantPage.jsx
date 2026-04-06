@@ -2722,17 +2722,20 @@ export default function AssistantPage({ onNavigate }) {
     }
   }
 
-  // ── Friday Preview Alert ───────────────────────────────────────────────────
+  // ── Friday Time Checks ────────────────────────────────────────────────────
   // Computes once per render — no timer needed, page auto-refreshes every 60s.
-  const isFridayPreviewTime = (() => {
+  // AZ = MST = UTC-7, no DST ever.
+  const fridayAzMinOfDay = (() => {
     const now = new Date();
-    const azOffset = -7 * 60; // AZ = MST = UTC-7, no DST
+    const azOffset = -7 * 60;
     const localOffset = now.getTimezoneOffset();
     const azNow = new Date(now.getTime() + (azOffset + localOffset) * 60000);
-    const dow = azNow.getDay();
-    const minOfDay = azNow.getHours() * 60 + azNow.getMinutes();
-    return dow === 5 && minOfDay >= 630 && minOfDay < 960; // 10:30am–4:00pm AZ on Friday
+    if (azNow.getDay() !== 5) return null; // not Friday
+    return azNow.getHours() * 60 + azNow.getMinutes();
   })();
+
+  const isFridayPreviewTime  = fridayAzMinOfDay != null && fridayAzMinOfDay >= 630 && fridayAzMinOfDay < 960;  // 10:30am–4:00pm
+  const isFriday2pmReminders = fridayAzMinOfDay != null && fridayAzMinOfDay >= 840 && fridayAzMinOfDay < 1080; // 2:00pm–6:00pm
 
   // ── Partition Tasks ────────────────────────────────────────────────────────
 
@@ -2912,14 +2915,90 @@ export default function AssistantPage({ onNavigate }) {
             </>
           )}
 
-          {/* P2: Action */}
-          {p2Tasks.length > 0 && (
+          {/* Friday 2pm reminders: Save Signal History + Update Perch */}
+          {isFriday2pmReminders && (
             <>
               <div style={s.sectionHeader}>
                 <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[2] }}>
-                  ● {PRIORITY_LABEL[2]} ({p2Count} open)
+                  ● {PRIORITY_LABEL[2]} ({p2Count + 2} open)
                 </span>
               </div>
+              {/* Signal History reminder */}
+              <div style={{
+                background: 'rgba(253,126,20,0.05)',
+                border: '1px solid rgba(253,126,20,0.3)',
+                borderLeft: '3px solid #fd7e14',
+                borderRadius: 6,
+                marginBottom: 8,
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                flexWrap: 'wrap',
+              }}>
+                <span style={{ fontSize: 15 }}>📥</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#fd7e14', letterSpacing: '0.04em' }}>
+                    SAVE SIGNAL HISTORY — This Week
+                  </div>
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
+                    It's Friday 2pm AZ — save this week's signal history before the week closes.
+                  </div>
+                </div>
+              </div>
+              {/* PNTHR Perch reminder */}
+              <div style={{
+                background: 'rgba(253,126,20,0.05)',
+                border: '1px solid rgba(253,126,20,0.3)',
+                borderLeft: '3px solid #fd7e14',
+                borderRadius: 6,
+                marginBottom: 8,
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                flexWrap: 'wrap',
+              }}>
+                <span style={{ fontSize: 15 }}>📰</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#fd7e14', letterSpacing: '0.04em' }}>
+                    UPDATE PNTHR PERCH — Weekly Newsletter
+                  </div>
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
+                    It's Friday 2pm AZ — generate and publish this week's Perch newsletter.
+                  </div>
+                </div>
+                <button
+                  onClick={() => onNavigate?.('news')}
+                  style={{
+                    background: '#fd7e14',
+                    color: '#000',
+                    border: 'none',
+                    borderRadius: 4,
+                    padding: '6px 16px',
+                    fontWeight: 800,
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    letterSpacing: '0.05em',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  GO TO PERCH →
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* P2: Action */}
+          {p2Tasks.length > 0 && (
+            <>
+              {!isFriday2pmReminders && (
+                <div style={s.sectionHeader}>
+                  <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[2] }}>
+                    ● {PRIORITY_LABEL[2]} ({p2Count} open)
+                  </span>
+                </div>
+              )}
               {p2Tasks.map(task => (
                 <TaskCard
                   key={task.id}

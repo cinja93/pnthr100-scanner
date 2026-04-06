@@ -28,20 +28,20 @@ function getToday() {
 export async function checkCaseStudyEntries(db, allScored, signalData, source) {
   if (!db || !allScored || allScored.length === 0) return;
 
-  // Guard: skip if D5 rank data is missing — means scoring engine ran at <100% capacity
-  // (D5 requires at least 2 weeks of PNTHR rankings to compare against)
+  // Guard: skip NEW ENTRIES if D5 rank data is missing — means scoring engine ran at
+  // <100% capacity (D5 requires 2+ weeks of PNTHR rankings to compare against).
+  // Sections 2 (P&L updates) and 3 (track record rebuild) always run regardless.
   const hasRankData = allScored.some(s => {
     const d5 = s.scores?.d5 ?? s.scoreDetail?.d5?.score;
     return d5 != null && d5 !== 0;
   });
   if (!hasRankData) {
-    console.log('[CASE STUDY] Skipping — D5 rank data missing (engine <100% capacity, need 2+ weeks of rankings)');
-    return;
+    console.log('[CASE STUDY] D5 rank data missing — skipping new entries, still updating P&L + track record');
   }
 
   const today = getToday();
 
-  // Top 10 non-overextended stocks
+  // Top 10 non-overextended stocks (used for new entries only)
   const top10 = allScored
     .filter(s => s.killRank != null && s.killRank <= 10 && !s.overextended)
     .sort((a, b) => a.killRank - b.killRank)
@@ -51,8 +51,10 @@ export async function checkCaseStudyEntries(db, allScored, signalData, source) {
   const scoredMap = {};
   for (const s of allScored) scoredMap[s.ticker] = s;
 
-  // ── 1. Check for new top-10 entries ────────────────────────────────────────
-  for (const stock of top10) {
+  // ── 1. Check for new top-10 entries (skipped when D5 rank data missing) ──────
+  if (!hasRankData) {
+    // skip — entries require 2+ weeks of rank data for D5 to be meaningful
+  } else for (const stock of top10) {
     // Skip if already tracking as active
     const existing = await db.collection('pnthr_kill_case_studies')
       .findOne({ ticker: stock.ticker, status: 'ACTIVE' });

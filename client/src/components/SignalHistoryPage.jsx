@@ -707,8 +707,8 @@ function DimensionLabTab() {
 
   const dimStats = useMemo(() => {
     if (!signals.length) return [];
-    const dims = ['d1', 'd2', 'd3', 'd5', 'd6', 'd7', 'd8'];
-    const labels = { d1: 'D1 — Regime Multiplier', d2: 'D2 — Sector Direction', d3: 'D3 — Entry Quality', d5: 'D5 — Rank Rise Delta', d6: 'D6 — Momentum', d7: 'D7 — Rank Velocity', d8: 'D8 — Prey Presence' };
+    const dims = ['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8'];
+    const labels = { d1: 'D1 — Regime Multiplier', d2: 'D2 — Sector Direction', d3: 'D3 — Entry Quality', d4: 'D4 — Signal Freshness', d5: 'D5 — Rank Rise', d6: 'D6 — Momentum', d7: 'D7 — Rank Velocity', d8: 'D8 — Prey Presence' };
     return dims.map(dim => {
       const vals = signals
         .map(s => {

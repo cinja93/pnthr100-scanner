@@ -10,23 +10,29 @@ const NAV_GROUPS = [
   {
     groupLabel: 'This Week',
     items: [
-      { key: 'assistant', label: 'PNTHR Assistant', iconImg: true },
-      { key: 'pulse',    label: 'PNTHR Pulse',  iconImg: true },
-      { key: 'perch',    label: 'PNTHR Perch',    iconImg: true },
-      { key: 'earnings', label: 'PNTHR Calendar',  icon: '📅' },
+      { key: 'perch',    label: 'PNTHR Perch',     iconImg: true },
+      { key: 'earnings', label: 'PNTHR Calendar',   icon: '📅' },
     ],
   },
   {
-    groupLabel: 'The Hunt',
+    groupLabel: 'PNTHR Live',
     items: [
-      { key: 'search',   label: 'PNTHR Search',   iconImg: true },
-      { key: 'prey',     label: 'PNTHR Prey',     iconImg: true },
-      { key: 'apex',     label: 'PNTHR Kill',     iconImg: true },
-      { key: 'orders',   label: 'PNTHR Orders',   iconImg: true },
+      { key: 'pulse',     label: 'PNTHR Pulse',     iconImg: true },
+      { key: 'assistant', label: 'PNTHR Assistant',  iconImg: true },
+      { key: 'orders',    label: 'PNTHR Orders',    iconImg: true },
+      { key: 'command',   label: 'PNTHR Command',   iconImg: true },
     ],
   },
   {
-    groupLabel: 'Jungle',
+    groupLabel: 'PNTHR Hunt',
+    items: [
+      { key: 'search', label: 'PNTHR Search', iconImg: true },
+      { key: 'prey',   label: 'PNTHR Prey',   iconImg: true },
+      { key: 'apex',   label: 'PNTHR Kill',   iconImg: true },
+    ],
+  },
+  {
+    groupLabel: 'PNTHR Jungle',
     items: [
       { key: 'jungle',  label: 'PNTHR 679 Jungle', iconImg: true },
       { key: 'long',    label: 'PNTHR 100 Longs',  icon: '📈' },
@@ -83,23 +89,20 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
   const firstName = getFirstName(currentUser);
 
-  // Personal group — Command for everyone; History pages admin-only
-  const personalItems = [
-    { key: 'command',  label: 'PNTHR Command',  iconImg: true },
+  // PNTHR Data group — Journal + Watchlist for everyone; Kill 10, Kill Test, History admin-only
+  const dataItems = [
     { key: 'journal',  label: 'PNTHR Journal',  iconImg: true },
-    { key: 'watchlist', label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' },
   ];
   if (isAdmin) {
-    personalItems.push({ key: 'history',        label: 'PNTHR Kill 10',  iconImg: true });
-    personalItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test',     iconImg: true });
-    personalItems.push({ key: 'signal-history', label: 'PNTHR History',      iconImg: true });
+    dataItems.push({ key: 'history',        label: 'PNTHR Kill 10',   iconImg: true });
+    dataItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test', iconImg: true });
+    dataItems.push({ key: 'signal-history', label: 'PNTHR History',   iconImg: true });
   }
+  dataItems.push({ key: 'watchlist', label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' });
 
-  const personalGroup = firstName
-    ? { groupLabel: `For ${firstName}`, items: personalItems }
-    : null;
+  const dataGroup = { groupLabel: 'PNTHR Data', items: dataItems };
 
-  const allGroups = personalGroup ? [...NAV_GROUPS, personalGroup] : NAV_GROUPS;
+  const allGroups = [...NAV_GROUPS, dataGroup];
 
   function handleMouseEnter(key) {
     if (key !== 'long' && key !== 'short') return;

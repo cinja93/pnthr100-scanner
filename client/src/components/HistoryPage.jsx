@@ -211,28 +211,31 @@ export default function HistoryPage() {
   const [sortClosed,  setSortClosed]  = useState({ col: 'exitDate', dir: -1 });
   const [tab,         setTab]         = useState('active');
 
-  useEffect(() => {
-    async function load() {
-      try {
-        setLoading(true);
-        const [trRes, acRes, allRes] = await Promise.all([
-          fetch(`${API_BASE}/api/kill-history/track-record`, { headers: authHeaders() }),
-          fetch(`${API_BASE}/api/kill-history/active`,       { headers: authHeaders() }),
-          fetch(`${API_BASE}/api/kill-history`,              { headers: authHeaders() }),
-        ]);
-        if (!trRes.ok || !acRes.ok || !allRes.ok) throw new Error('Failed to load history');
-        const [tr, ac, al] = await Promise.all([trRes.json(), acRes.json(), allRes.json()]);
-        setTrackRecord(tr);
-        setActive(ac.studies || []);
-        setAll(al.studies || []);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function load(isManual = false) {
+    try {
+      if (isManual) setRefreshing(true); else setLoading(true);
+      setError(null);
+      const [trRes, acRes, allRes] = await Promise.all([
+        fetch(`${API_BASE}/api/kill-history/track-record`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/kill-history/active`,       { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/kill-history`,              { headers: authHeaders() }),
+      ]);
+      if (!trRes.ok || !acRes.ok || !allRes.ok) throw new Error('Failed to load history');
+      const [tr, ac, al] = await Promise.all([trRes.json(), acRes.json(), allRes.json()]);
+      setTrackRecord(tr);
+      setActive(ac.studies || []);
+      setAll(al.studies || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    load();
-  }, []);
+  }
+
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closed = useMemo(() => all.filter(s => s.status === 'CLOSED'), [all]);
 
@@ -278,14 +281,34 @@ export default function HistoryPage() {
     <div style={{ padding: '24px 28px', maxWidth: 1100, margin: '0 auto', fontFamily: 'inherit', color: '#ddd', background: '#0a0a0a', minHeight: '100vh' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: YELLOW, margin: 0, letterSpacing: '-0.02em' }}>
-          PNTHR Kill History
-        </h1>
-        <p style={{ fontSize: 13, color: '#666', marginTop: 4 }}>
-          Forward-tested track record of every stock that entered the Kill top 10.
-          {tr.asOf && <span> Last updated: {fmtD(tr.asOf)}</span>}
-        </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: YELLOW, margin: 0, letterSpacing: '-0.02em' }}>
+            PNTHR Kill History
+          </h1>
+          <p style={{ fontSize: 13, color: '#666', marginTop: 4 }}>
+            Forward-tested track record of every stock that entered the Kill top 10.
+            {tr.asOf && <span> Last updated: {fmtD(tr.asOf)}</span>}
+          </p>
+        </div>
+        <button
+          onClick={() => load(true)}
+          disabled={refreshing}
+          style={{
+            background: 'transparent',
+            border: `1px solid ${refreshing ? '#333' : '#555'}`,
+            color: refreshing ? '#444' : '#aaa',
+            borderRadius: 5,
+            padding: '6px 14px',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: refreshing ? 'not-allowed' : 'pointer',
+            whiteSpace: 'nowrap',
+            letterSpacing: '0.04em',
+          }}
+        >
+          {refreshing ? '↻ Refreshing…' : '↺ Refresh'}
+        </button>
       </div>
 
       {/* ── Metric Cards ───────────────────────────────────────────────────── */}
@@ -295,8 +318,10 @@ export default function HistoryPage() {
           color={tr.winRate >= 60 ? GREEN : tr.winRate >= 40 ? '#ffa500' : RED} />
         <MetricCard label="Avg Win"        value={tr.avgWinPct != null ? fmt(tr.avgWinPct) : '—'} color={GREEN} />
         <MetricCard label="Avg Loss"       value={tr.avgLossPct != null ? fmt(tr.avgLossPct) : '—'} color={RED} />
-        <MetricCard label="Profit Factor"  value={tr.profitFactor > 0 ? `${tr.profitFactor}x` : '—'}
-          color={tr.profitFactor >= 2 ? GREEN : tr.profitFactor >= 1 ? '#ffa500' : RED} />
+        <MetricCard label="Profit Factor"
+          value={tr.profitFactor === 999 ? '∞' : tr.profitFactor > 0 ? `${tr.profitFactor}x` : '—'}
+          sub={tr.profitFactor === 999 ? 'No losses yet' : undefined}
+          color={tr.profitFactor >= 2 || tr.profitFactor === 999 ? GREEN : tr.profitFactor >= 1 ? '#ffa500' : RED} />
         <MetricCard label="Active Now"     value={tr.activeTrades ?? 0} color={YELLOW} />
         <MetricCard label="Avg Hold"       value={tr.avgHoldingWeeks > 0 ? `${tr.avgHoldingWeeks}w` : '—'} />
         <MetricCard label="Big Winners"    value={tr.bigWinnerRate > 0 ? `${tr.bigWinnerRate}%` : '—'}

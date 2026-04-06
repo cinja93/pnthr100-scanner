@@ -492,7 +492,8 @@ function HedgeFundSection({ h, label }) {
       <div className={styles.btStatsGrid}>
         <div className={styles.btStat}>
           <div className={styles.btStatValue} style={{ color: gold }}>+{h.cagr}%</div>
-          <div className={styles.btStatLabel}>CAGR</div>
+          <div className={styles.btStatLabel} style={{ color: '#22c55e' }}>CAGR</div>
+          <div className={styles.btStatLabel} style={{ color: '#22c55e', fontSize: 10, marginTop: 2 }}>(Compound Annual Growth Rate)</div>
         </div>
         <div className={styles.btStat}>
           <div className={styles.btStatValue} style={{ color: gold }}>{h.sharpe}</div>
@@ -654,7 +655,7 @@ function InstitutionalPopup({ onClose }) {
             </thead>
             <tbody>
               <tr>
-                <td style={{ color: dim }}>CAGR</td>
+                <td style={{ color: dim }}>CAGR <span style={{ fontSize: 11, fontWeight: 400 }}>(Compound Annual Growth Rate)</span></td>
                 <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>+{COMBINED_HEDGE.cagr}%</td>
                 <td style={{ textAlign: 'right' }}>~10-12%</td>
               </tr>
@@ -690,7 +691,7 @@ function InstitutionalPopup({ onClose }) {
             <div>
               <div className={styles.ruleName}>Interpretation</div>
               <div className={styles.ruleDesc}>
-                Sharpe {'>'} 2.0 is exceptional — top hedge funds target 1.0-1.5. Max drawdown of -0.24% vs the S&P's -25% in 2022 demonstrates extreme capital protection. Pyramiding concentrates capital into winners while losers stay small (Lot 1 only). 95% positive months with a worst month of just -0.24% is institutional-grade consistency. CAGR assumes $10K full position sizing — actual returns scale with account size and risk allocation.
+                PNTHR Funds proprietary signal implementation system's results are world class. Sharpe {'>'} 2.0 is exceptional. Top hedge funds target 1.0-1.5. Max drawdown of -0.24% vs the S&P's -25% in 2022 demonstrates extreme capital protection. Pyramiding concentrates capital into winners while losers stay small (Lot 1 only). 95% positive months with a worst month of just -0.24% is institutional-grade consistency. CAGR assumes $10K full position sizing. Actual returns scale with account size and risk allocation.
               </div>
             </div>
           </div>
@@ -1038,10 +1039,12 @@ export default function OrdersPage() {
       {isAdmin && (
         <div className={styles.adminBar}>
           <button className={styles.adminBtn} disabled={running} onClick={() => handleManualRun('WEEKLY')}>
-            {running ? 'Running...' : 'Run PREVIEW'}
+            <span>{running ? 'Running...' : 'Run PREVIEW'}</span>
+            <span className={styles.adminBtnSub}>(Run Friday 11am AZ)</span>
           </button>
           <button className={styles.adminBtn} disabled={running} onClick={() => handleManualRun('CONFIRMED')}>
-            {running ? 'Running...' : 'Run CONFIRMED'}
+            <span>{running ? 'Running...' : 'Run CONFIRMED'}</span>
+            <span className={styles.adminBtnSub}>(Final Confirmed)</span>
           </button>
         </div>
       )}

@@ -2251,6 +2251,127 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
   );
 }
 
+// ── Weekly Orders Section ─────────────────────────────────────────────────────
+// Shows this week's PNTHR order sheet summary. Appears as soon as orders are
+// generated (Run PREVIEW or Run CONFIRMED) — fetched live on every page refresh.
+
+function WeeklyOrdersSection({ data, onNavigate }) {
+  const [expanded, setExpanded] = useState(true);
+
+  if (!data?.orders?.length && !data?.mode) return null;
+
+  const blOrders = (data.orders || []).filter(o => o.signal === 'BL');
+  const ssOrders = (data.orders || []).filter(o => o.signal === 'SS');
+  const mode     = data.mode || 'NO DATA';
+  const weekOf   = data.weekOf || '';
+  const docType  = data.type || '';
+  const generatedAt = data.generatedAt ? new Date(data.generatedAt).toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  }) + ' ET' : '';
+
+  const modeColor = mode === 'NO TRADES' ? '#888'
+    : mode === 'CRASH MODE' ? '#ef5350'
+    : mode === 'LONGS + SS CRASH' ? '#fd7e14'
+    : '#22c55e';
+
+  const typeColor = docType === 'CONFIRMED' ? '#22c55e' : '#ffc107';
+
+  return (
+    <div style={{
+      margin: '0 0 10px',
+      borderRadius: 6,
+      border: '1px solid #1e3a1e',
+      background: '#0c0c0c',
+      overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', cursor: 'pointer', background: '#101010' }}
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span style={{ fontSize: 11, color: '#444' }}>{expanded ? '▼' : '▶'}</span>
+        <span style={{ fontWeight: 700, fontSize: 12, color: '#FCF000', letterSpacing: '0.04em' }}>
+          THIS WEEK'S ORDERS
+        </span>
+        <span style={{ fontSize: 11, color: '#555' }}>— week of {weekOf}</span>
+        {docType && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: typeColor, background: `${typeColor}18`, border: `1px solid ${typeColor}44`, borderRadius: 3, padding: '1px 7px', marginLeft: 4 }}>
+            {docType}
+          </span>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: modeColor }}>{mode}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: '10px 14px' }}>
+          {/* Counts row */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>{blOrders.length} BL</span>
+            <span style={{ fontSize: 12, color: '#ef5350', fontWeight: 700 }}>{ssOrders.length} SS</span>
+            {generatedAt && (
+              <span style={{ fontSize: 11, color: '#444', marginLeft: 'auto' }}>Generated {generatedAt}</span>
+            )}
+          </div>
+
+          {/* BL orders */}
+          {blOrders.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: '#22c55e', fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4 }}>BUY LONG</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {blOrders.map(o => (
+                  <span key={o.ticker} style={{
+                    fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 4,
+                    background: 'rgba(34,197,94,0.1)', color: '#22c55e',
+                    border: '1px solid rgba(34,197,94,0.3)',
+                  }}>
+                    {o.ticker}
+                    {o.signalPrice && <span style={{ fontWeight: 400, color: '#888', marginLeft: 5 }}>${o.signalPrice.toFixed(2)}</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* SS orders */}
+          {ssOrders.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: '#ef5350', fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4 }}>SELL SHORT</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {ssOrders.map(o => (
+                  <span key={o.ticker} style={{
+                    fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 4,
+                    background: 'rgba(239,83,80,0.1)', color: '#ef5350',
+                    border: '1px solid rgba(239,83,80,0.3)',
+                  }}>
+                    {o.ticker}
+                    {o.signalPrice && <span style={{ fontWeight: 400, color: '#888', marginLeft: 5 }}>${o.signalPrice.toFixed(2)}</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blOrders.length === 0 && ssOrders.length === 0 && (
+            <div style={{ fontSize: 12, color: '#555', fontStyle: 'italic' }}>No orders this week — {mode}</div>
+          )}
+
+          {/* Link to full orders page */}
+          <div style={{ marginTop: 8, borderTop: '1px solid #161616', paddingTop: 8 }}>
+            <button
+              onClick={() => onNavigate?.('orders')}
+              style={{ background: 'none', border: 'none', color: '#FCF000', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0, letterSpacing: '0.05em' }}
+            >
+              VIEW FULL ORDER SHEET →
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function AssistantPage({ onNavigate }) {
@@ -2282,6 +2403,7 @@ export default function AssistantPage({ onNavigate }) {
   const [headlines,          setHeadlines]          = useState([]);
   const [headlinesLoading,   setHeadlinesLoading]   = useState(true);
   const [devSignalsAge,      setDevSignalsAge]      = useState(null);
+  const [ordersData,         setOrdersData]         = useState(null);
 
   // Analyze context for scoring chips — destructure the INNER analyzeContext
   // (useAnalyzeContext returns { analyzeContext, loading }, but computeAnalyzeScore
@@ -2370,6 +2492,12 @@ export default function AssistantPage({ onNavigate }) {
         .then(r => r.ok ? r.json() : { fills: [] })
         .then(d => setRecentFills(d.fills || []))
         .catch(() => setRecentFills([]));
+
+      // Orders — fire independently so it doesn't block task loading
+      fetch(`${API_BASE}/api/orders/latest`, { headers: authHeaders() })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => setOrdersData(d || null))
+        .catch(() => setOrdersData(null));
 
       const results = await Promise.allSettled([
         fetch(`${API_BASE}/api/assistant/tasks`,    { headers: authHeaders() }),
@@ -2594,6 +2722,18 @@ export default function AssistantPage({ onNavigate }) {
     }
   }
 
+  // ── Friday Preview Alert ───────────────────────────────────────────────────
+  // Computes once per render — no timer needed, page auto-refreshes every 60s.
+  const isFridayPreviewTime = (() => {
+    const now = new Date();
+    const azOffset = -7 * 60; // AZ = MST = UTC-7, no DST
+    const localOffset = now.getTimezoneOffset();
+    const azNow = new Date(now.getTime() + (azOffset + localOffset) * 60000);
+    const dow = azNow.getDay();
+    const minOfDay = azNow.getHours() * 60 + azNow.getMinutes();
+    return dow === 5 && minOfDay >= 630 && minOfDay < 960; // 10:30am–4:00pm AZ on Friday
+  })();
+
   // ── Partition Tasks ────────────────────────────────────────────────────────
 
   const p1Tasks = tasks.filter(t => t.priority === 1);
@@ -2689,6 +2829,9 @@ export default function AssistantPage({ onNavigate }) {
         </div>
 
         <div style={{ padding: '8px 10px 4px' }}>
+          {/* Weekly Orders */}
+          {ordersData && <WeeklyOrdersSection data={ordersData} onNavigate={onNavigate} />}
+
           {/* Live Headline Feed */}
           <HeadlineFeed
             headlines={headlines}
@@ -2698,14 +2841,66 @@ export default function AssistantPage({ onNavigate }) {
             analyzeCtx={analyzeCtx}
           />
 
-          {/* P1: Critical */}
-          {p1Tasks.length > 0 && (
+          {/* Friday Run-Preview notification */}
+          {isFridayPreviewTime && (
             <>
               <div style={s.sectionHeader}>
                 <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[1] }}>
-                  ● {PRIORITY_LABEL[1]} ({p1Count} open)
+                  ● {PRIORITY_LABEL[1]} ({p1Count + 1} open)
                 </span>
               </div>
+              <div style={{
+                background: 'rgba(252,240,0,0.05)',
+                border: '1px solid rgba(252,240,0,0.3)',
+                borderLeft: `3px solid #FCF000`,
+                borderRadius: 6,
+                marginBottom: 8,
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                flexWrap: 'wrap',
+              }}>
+                <span style={{ fontSize: 15 }}>📋</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#FCF000', letterSpacing: '0.04em' }}>
+                    RUN WEEKLY PREVIEW — PNTHR Orders
+                  </div>
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
+                    It's Friday — run the PREVIEW order sheet now (11am AZ) so you can set up GTD limit orders before close.
+                  </div>
+                </div>
+                <button
+                  onClick={() => onNavigate?.('orders')}
+                  style={{
+                    background: '#FCF000',
+                    color: '#000',
+                    border: 'none',
+                    borderRadius: 4,
+                    padding: '6px 16px',
+                    fontWeight: 800,
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    letterSpacing: '0.05em',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  GO TO ORDERS →
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* P1: Critical */}
+          {p1Tasks.length > 0 && (
+            <>
+              {!isFridayPreviewTime && (
+                <div style={s.sectionHeader}>
+                  <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[1] }}>
+                    ● {PRIORITY_LABEL[1]} ({p1Count} open)
+                  </span>
+                </div>
+              )}
               {p1Tasks.map(task => (
                 <TaskCard
                   key={task.id}

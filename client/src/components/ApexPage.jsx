@@ -428,7 +428,7 @@ export default function ApexPage() {
             PNTHR KILL
           </h1>
           <p className={styles.subtitle}>
-            Elaborate 8-dimensional predatory scoring across the full PNTHR 679 Jungle. Regime, sector, entry quality, freshness, rank momentum, velocity, and prey presence — which setup has the PNTHR's full attention this week? ...time for the PNTHR to EAT!
+            KILL tells you WHAT to trade. ANALYZE tells you WHEN to trade it. A stock can be Kill #1 RANK for weeks. But there's only a narrow window in the first 1-3 weeks after signal where the Analyze score says NOW. If you miss that window, you wait for the next signal. You don't chase. Minimum gates: Kill rank: Top 20 (HUNTING tier or better, score ≥80), Analyze: ≥75%, Composite: ≥65. That's the floor. That's when the PNTHR Eats!
           </p>
         </div>
         <button

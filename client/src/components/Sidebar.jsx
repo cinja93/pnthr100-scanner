@@ -165,7 +165,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
       <div style={{ padding: '0 10px 10px' }}>
         <button
           className={styles.archBtn}
-          onClick={() => window.open('/PNTHR_System_Architecture_v6.pdf', '_blank')}
+          onClick={() => window.open('/PNTHR_System_Architecture_v7.pdf', '_blank')}
           title="View PNTHR System Architecture Document"
         >
           <span style={{ fontSize: 14 }}>📄</span>

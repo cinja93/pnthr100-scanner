@@ -1375,13 +1375,20 @@ def build_backtest_disclosure(story):
                    'Historical price data was sourced from the Financial Modeling Prep (FMP) '
                    'API. The backtest processes weekly signals consistent with the Fund\'s '
                    'live operation.', NORMAL))
+    story.append(p('Brokerage commissions were incorporated into the backtest based on '
+                   'Interactive Brokers\' published fee schedule. Short-sale borrowing costs '
+                   'were estimated and included; given that the Fund\'s universe is composed '
+                   'primarily of S&P 500, Dow Jones Industrial Average, Nasdaq 100, and '
+                   'select large- and mid-capitalization securities, borrowing costs for '
+                   'the short book are generally minimal.', NORMAL))
 
     story.append(p('<b>Hypothetical Fee Structure Applied</b>', H2))
     story.append(p('Backtested results are presented on a net basis after applying a '
                    'hypothetical fee structure of 2% annual management fee and 20% '
-                   'performance allocation (Wagyu Class rates), calculated annually. '
-                   'Actual fees charged to any particular investor will depend on their '
-                   'class designation and the current fee schedule.', NORMAL))
+                   'performance allocation (Wagyu Class rates), calculated annually, '
+                   'as well as estimated brokerage commissions and short-sale borrowing '
+                   'costs as described above. Actual fees charged to any particular investor '
+                   'will depend on their class designation and the current fee schedule.', NORMAL))
 
     story.append(p('<b>Summary of Hypothetical Backtest Results</b>', H2))
     story.append(p('The following represents a summary of the PNTHR Signal System\'s '
@@ -1427,10 +1434,19 @@ def build_backtest_disclosure(story):
          'System retroactively. Although the Investment Manager has taken care to avoid '
          'look-ahead bias, there is no guarantee that the model as applied to historical '
          'data is fully free of such bias.'),
-        ('No Transaction Costs',
-         'The backtest does not fully model brokerage commissions, bid-ask spreads, '
-         'market impact costs, or short-sale borrowing costs. These costs would reduce '
-         'actual performance relative to backtested results.'),
+        ('Transaction Cost Modeling',
+         'The backtest incorporates estimated brokerage commissions based on Interactive '
+         'Brokers\' published fee schedule (approximately $0.005 per share, subject to a '
+         '$1.00 minimum and 0.5% of trade value cap under the tiered pricing model) and '
+         'estimated short-sale borrowing costs. Because the Fund\'s universe consists '
+         'primarily of S&P 500, Dow Jones Industrial Average, Nasdaq 100, and select '
+         'large- and mid-capitalization constituents, short-sale borrowing costs are '
+         'generally minimal — typically 0.25%–0.50% per annum for easy-to-borrow securities '
+         'of this caliber. Bid-ask spreads for large-capitalization securities are also '
+         'generally narrow and have not been modeled as a separate line item; actual spread '
+         'costs are expected to be immaterial for the liquid universe employed. Market '
+         'impact costs have not been explicitly modeled and may have a modest effect '
+         'on actual performance for larger position sizes.'),
         ('No Slippage Modeling',
          'The backtest assumes execution at closing prices. In practice, particularly for '
          'pyramid lots triggered at specific price levels, actual fill prices may differ '

@@ -376,70 +376,73 @@ function RulesPopup({ type, onClose }) {
 // ── Backtest results popup ──────────────────────────────────────────────────
 
 const BL_BACKTEST = {
-  trades: 1533, winners: 1023, losers: 510,
-  winRate: 66.7, avgPnl: 5.27, avgWin: 9.10, avgLoss: -2.43, wlRatio: 3.74,
-  totalReturn: 310187,
-  lotRows: 2243,
-  avgLots: 1.46,
-  lotDist: { 1: '74.4%', 2: '12.9%', 3: '7.0%', 4: '3.6%', 5: '2.2%' },
+  trades: 2332, winners: 1698, losers: 634,
+  winRate: 72.8, avgPnl: 6.49, avgWin: 9.97, avgLoss: -2.83, wlRatio: 3.52,
+  totalReturn: 1514085,
+  lotRows: 2332,
+  avgLots: 1.0,
+  lotDist: { 1: '100%', 2: '—', 3: '—', 4: '—', 5: '—' },
   years: [
-    { year: '2021', trades: 303, winPct: 68.3, avgPnl: 4.75 },
-    { year: '2022', trades: 113, winPct: 69.9, avgPnl: 3.89 },
-    { year: '2023', trades: 325, winPct: 61.8, avgPnl: 4.05 },
-    { year: '2024', trades: 400, winPct: 67.8, avgPnl: 5.15 },
-    { year: '2025', trades: 334, winPct: 68.6, avgPnl: 7.56 },
-    { year: '2026', trades: 58, winPct: 62.1, avgPnl: 5.03 },
+    { year: '2019', trades: 214, winPct: 87.9, avgPnl: 7.18 },
+    { year: '2020', trades: 338, winPct: 86.7, avgPnl: 9.94 },
+    { year: '2021', trades: 439, winPct: 72.4, avgPnl: 5.85 },
+    { year: '2022', trades: 123, winPct: 69.1, avgPnl: 4.35 },
+    { year: '2023', trades: 366, winPct: 63.1, avgPnl: 4.67 },
+    { year: '2024', trades: 444, winPct: 67.8, avgPnl: 5.23 },
+    { year: '2025', trades: 350, winPct: 70.3, avgPnl: 8.01 },
+    { year: '2026', trades: 58, winPct: 62.1, avgPnl: 5.26 },
   ],
   exitReasons: [
-    { reason: 'STOP HIT', count: 1186, winPct: 75.0, avgPnl: 6.97 },
-    { reason: 'SIGNAL (BL exit)', count: 347, winPct: 38.3, avgPnl: -0.55 },
+    { reason: 'SIGNAL (BL exit)', count: 1996, winPct: 73.2, avgPnl: 6.55 },
+    { reason: 'STOP HIT', count: 332, winPct: 71.4, avgPnl: 6.23 },
+    { reason: 'STALE HUNT', count: 4, winPct: 0.0, avgPnl: -1.08 },
   ],
   topWinners: [
-    { ticker: 'SNDK', entry: '2025-08-29', exit: '2025-09-02', pnl: 330.31 },
-    { ticker: 'HOOD', entry: '2025-05-02', exit: '2025-05-05', pnl: 94.30 },
-    { ticker: 'CIEN', entry: '2025-08-29', exit: '2025-09-02', pnl: 81.35 },
-    { ticker: 'GEV', entry: '2024-08-30', exit: '2024-09-03', pnl: 71.18 },
-    { ticker: 'MUX', entry: '2025-08-22', exit: '2025-08-25', pnl: 68.22 },
+    { ticker: 'SNDK', entry: '2025-08-29', exit: '2025-11-17', pnl: 330.31 },
+    { ticker: 'HOOD', entry: '2025-05-02', exit: '2025-07-28', pnl: 94.30 },
+    { ticker: 'CIEN', entry: '2025-08-29', exit: '2025-11-17', pnl: 81.35 },
+    { ticker: 'GEV',  entry: '2024-08-30', exit: '2024-12-09', pnl: 71.18 },
+    { ticker: 'MUX',  entry: '2025-08-22', exit: '2025-10-27', pnl: 68.22 },
   ],
   topLosers: [
     { ticker: 'SMCI', entry: '2024-05-24', exit: '2024-05-28', pnl: -16.29 },
     { ticker: 'UBER', entry: '2022-08-12', exit: '2022-08-22', pnl: -12.32 },
+    { ticker: 'AA',   entry: '2021-11-12', exit: '2021-11-29', pnl: -12.14 },
     { ticker: 'ANET', entry: '2025-10-31', exit: '2025-11-03', pnl: -12.05 },
-    { ticker: 'MSTR', entry: '2022-08-12', exit: '2022-08-19', pnl: -10.68 },
-    { ticker: 'SCCO', entry: '2021-05-14', exit: '2021-05-21', pnl: -10.64 },
+    { ticker: 'FSLR', entry: '2021-01-29', exit: '2021-02-01', pnl: -10.98 },
   ],
 };
 
 const SS_BACKTEST = {
-  trades: 143, winners: 89, losers: 54,
-  winRate: 62.2, avgPnl: 3.59, avgWin: 7.53, avgLoss: -2.90, wlRatio: 2.60,
-  totalReturn: 22416,
-  lotRows: 272,
-  avgLots: 1.90,
-  lotDist: { 1: '58.0%', 2: '14.0%', 3: '11.9%', 4: '11.9%', 5: '4.2%' },
+  trades: 143, winners: 97, losers: 46,
+  winRate: 67.8, avgPnl: 4.20, avgWin: 7.97, avgLoss: -3.75, wlRatio: 2.13,
+  totalReturn: 60099,
+  lotRows: 143,
+  avgLots: 1.0,
+  lotDist: { 1: '100%', 2: '—', 3: '—', 4: '—', 5: '—' },
   years: [
-    { year: '2022', trades: 97, winPct: 64.9, avgPnl: 3.98 },
-    { year: '2023', trades: 22, winPct: 50.0, avgPnl: 2.26 },
-    { year: '2025', trades: 19, winPct: 78.9, avgPnl: 4.84 },
-    { year: '2026', trades: 5, winPct: 0.0, avgPnl: -2.81 },
+    { year: '2022', trades: 97,  winPct: 68.0, avgPnl: 4.54 },
+    { year: '2023', trades: 22,  winPct: 63.6, avgPnl: 2.75 },
+    { year: '2025', trades: 19,  winPct: 78.9, avgPnl: 5.74 },
+    { year: '2026', trades: 5,   winPct: 40.0, avgPnl: -1.80 },
   ],
-  noTradeYears: ['2021', '2024'],
+  noTradeYears: ['2019', '2020', '2021', '2024'],
   exitReasons: [
-    { reason: 'STOP HIT', count: 109, winPct: 68.8, avgPnl: 5.13 },
-    { reason: 'SIGNAL (SS exit)', count: 34, winPct: 41.2, avgPnl: -1.33 },
+    { reason: 'SIGNAL (SS exit)', count: 120, winPct: 69.2, avgPnl: 4.53 },
+    { reason: 'STOP HIT',         count: 23,  winPct: 60.9, avgPnl: 2.50 },
   ],
   topWinners: [
-    { ticker: 'AMD', entry: '2022-09-16', exit: '2022-09-19', pnl: 33.44 },
-    { ticker: 'STX', entry: '2022-09-02', exit: '2022-09-06', pnl: 26.28 },
-    { ticker: 'TROW', entry: '2022-01-21', exit: '2022-01-24', pnl: 22.46 },
-    { ticker: 'ARE', entry: '2022-05-06', exit: '2022-05-09', pnl: 20.70 },
-    { ticker: 'MCHP', entry: '2025-03-28', exit: '2025-03-31', pnl: 20.60 },
+    { ticker: 'AMD',  entry: '2022-09-16', exit: '2022-10-24', pnl: 33.44 },
+    { ticker: 'STX',  entry: '2022-09-02', exit: '2022-10-24', pnl: 26.28 },
+    { ticker: 'TROW', entry: '2022-01-21', exit: '2022-03-14', pnl: 22.46 },
+    { ticker: 'ARE',  entry: '2022-05-06', exit: '2022-06-27', pnl: 20.70 },
+    { ticker: 'MCHP', entry: '2025-03-28', exit: '2025-04-09', pnl: 20.60 },
   ],
   topLosers: [
+    { ticker: 'FSLR', entry: '2022-07-15', exit: '2022-07-18', pnl: -17.91 },
     { ticker: 'ASML', entry: '2022-03-11', exit: '2022-03-14', pnl: -12.58 },
     { ticker: 'ADBE', entry: '2022-11-04', exit: '2022-11-07', pnl: -11.17 },
-    { ticker: 'AMD', entry: '2022-03-11', exit: '2022-03-21', pnl: -10.72 },
-    { ticker: 'FSLR', entry: '2022-07-15', exit: '2022-07-18', pnl: -9.20 },
+    { ticker: 'AMD',  entry: '2022-03-11', exit: '2022-03-21', pnl: -10.72 },
     { ticker: 'ASML', entry: '2022-04-15', exit: '2022-04-20', pnl: -6.77 },
   ],
 };
@@ -447,36 +450,39 @@ const SS_BACKTEST = {
 // ── Hedge Fund Metrics (from computeHedgeFundMetrics.js — $100K starting capital, $10K lots) ──
 
 const BL_HEDGE = {
-  cagr: 36.8, sharpe: 3.50, sortino: 11.53,
-  maxDrawdown: 0.74, maxDDPeriod: '2023-02 to 2023-03',
-  calmar: 49.73, profitFactor: 7.62,
-  bestMonth: 11.56, bestMonthLabel: '2021-06',
-  worstMonth: -0.74, worstMonthLabel: '2023-03',
-  positiveMonths: 52, totalMonths: 54,
-  positiveMonthsPct: 96.3,
-  avgMonthlyReturn: 2.67, monthlyStdDev: 2.23,
+  // BL Net-of-costs — Jun 2019 → Apr 2026 (79 months, 2332 trades)
+  cagr: 52.1, sharpe: 2.16, sortino: 70.35,
+  maxDrawdown: 0.35, maxDDPeriod: '2023-09 to 2023-10',
+  calmar: 147.89, profitFactor: 8.92,
+  bestMonth: 25.59, bestMonthLabel: '2019-07',
+  worstMonth: -0.35, worstMonthLabel: '2023-10',
+  positiveMonths: 74, totalMonths: 79,
+  positiveMonthsPct: 93.7,
+  avgMonthlyReturn: 3.68, monthlyStdDev: 5.25,
 };
 
 const SS_HEDGE = {
-  cagr: 15.3, sharpe: 2.02, sortino: 4.06,
-  maxDrawdown: 0.61, maxDDPeriod: '2025-04 to 2026-03',
-  calmar: 25.13, profitFactor: 4.50,
-  bestMonth: 3.94, bestMonthLabel: '2022-09',
-  worstMonth: -0.61, worstMonthLabel: '2026-03',
-  positiveMonths: 13, totalMonths: 17,
-  positiveMonthsPct: 76.5,
-  avgMonthlyReturn: 1.21, monthlyStdDev: 1.35,
+  // SS Net-of-costs — Jun 2019 → Apr 2026 (18 active months, 143 trades)
+  cagr: 35.3, sharpe: 1.85, sortino: 16.54,
+  maxDrawdown: 1.14, maxDDPeriod: '2022-10 to 2022-11',
+  calmar: 30.99, profitFactor: 4.19,
+  bestMonth: 14.55, bestMonthLabel: '2022-05',
+  worstMonth: -1.14, worstMonthLabel: '2022-11',
+  positiveMonths: 16, totalMonths: 18,
+  positiveMonthsPct: 88.9,
+  avgMonthlyReturn: 2.63, monthlyStdDev: 4.14,
 };
 
 const COMBINED_HEDGE = {
-  cagr: 34.0, sharpe: 3.41, sortino: 15.82,
-  maxDrawdown: 0.24, maxDDPeriod: '2023-09 to 2023-10',
-  calmar: 143.28, profitFactor: 7.24,
-  bestMonth: 11.56, bestMonthLabel: '2021-06',
-  worstMonth: -0.24, worstMonthLabel: '2023-10',
-  positiveMonths: 57, totalMonths: 60,
-  positiveMonthsPct: 95.0,
-  avgMonthlyReturn: 2.49, monthlyStdDev: 2.11,
+  // Combined Net-of-costs — Jun 2019 → Apr 2026 (82 months, 2475 trades)
+  cagr: 50.6, sharpe: 2.13, sortino: 86.03,
+  maxDrawdown: 0.20, maxDDPeriod: '2022-10 to 2022-11',
+  calmar: 247.24, profitFactor: 8.51,
+  bestMonth: 25.59, bestMonthLabel: '2019-07',
+  worstMonth: -0.20, worstMonthLabel: '2022-11',
+  positiveMonths: 80, totalMonths: 82,
+  positiveMonthsPct: 97.6,
+  avgMonthlyReturn: 3.59, monthlyStdDev: 5.16,
 };
 
 // ── Institutional Metrics Section (shared by BacktestPopup + PortfolioPopup) ──
@@ -547,7 +553,7 @@ function InstitutionalPopup({ onClose }) {
         </div>
         <div className={styles.rulesBody}>
           <div className={styles.ruleDesc} style={{ color: dim, marginBottom: 16 }}>
-            5-year backtest (Apr 2021 – Apr 2026) · $100K starting capital · $10K full position (Lots 1-5) · Risk-free rate 5%
+            7-year backtest (Jun 2019 – Apr 2026) · $100K starting capital · $10K full position (Lots 1-5) · Risk-free rate 5%
           </div>
 
           {/* Table 1: PNTHR BL vs SS vs Combined */}
@@ -728,7 +734,7 @@ function BacktestPopup({ type, onClose }) {
 
         <div className={styles.rulesBody}>
           <div className={styles.ruleDesc} style={{ color: '#888', marginBottom: 12 }}>
-            5-year backtest (Apr 2021 – Apr 2026) · Filter-then-rank pipeline · Pyramiding (Lots 1-5) · $10K full position
+            7-year backtest (Jun 2019 – Apr 2026) · Filter-then-rank pipeline · Pyramiding (Lots 1-5) · $10K full position
           </div>
 
           {/* Headline stats */}

@@ -29,6 +29,7 @@ import KillTestPage from './components/KillTestPage';
 import AssistantPage from './components/AssistantPage';
 import OrdersPage from './components/OrdersPage';
 import LoginPage from './components/LoginPage';
+import DataRoomPage from './components/DataRoomPage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
 import { computeWeeksAgo } from './utils/dateUtils';
@@ -1256,6 +1257,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
             ? <SignalHistoryPage />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
+
+          {/* PNTHR Data Room */}
+          {activePage === 'data-room' && <DataRoomPage />}
         </main>
 
         <footer className="footer">

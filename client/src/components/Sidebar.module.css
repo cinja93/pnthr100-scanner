@@ -197,7 +197,8 @@
 .statsNeg { color: #f87171; }
 
 /* ── System Architecture button ─────────────────────────────────────── */
-.archBtn {
+.archBtn,
+.dataRoomBtn {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -215,10 +216,17 @@
   transition: all 0.15s;
 }
 
-.archBtn:hover {
+.archBtn:hover,
+.dataRoomBtn:hover {
   background: rgba(252, 240, 0, 0.12);
   border-color: rgba(252, 240, 0, 0.5);
   color: #fcf000;
+}
+
+/* Data Room — slightly more prominent */
+.dataRoomBtn {
+  background: rgba(252, 240, 0, 0.10);
+  border-color: rgba(252, 240, 0, 0.35);
 }
 
 /* ── Footer ──────────────────────────────────────────────────────────── */

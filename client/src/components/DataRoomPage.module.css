@@ -1,0 +1,226 @@
+/* DataRoomPage.module.css */
+
+.page {
+  padding: 32px 36px 60px;
+  max-width: 1100px;
+  margin: 0 auto;
+  color: #e5e5e5;
+  font-family: 'Inter', sans-serif;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.headerLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin: 0;
+  color: #fff;
+}
+
+.titleYellow {
+  color: #fcf000;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: #888;
+  margin: 0;
+  max-width: 540px;
+  line-height: 1.5;
+}
+
+.confidentialBadge {
+  padding: 5px 14px;
+  border: 1.5px solid rgba(252, 240, 0, 0.5);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: rgba(252, 240, 0, 0.8);
+  background: rgba(252, 240, 0, 0.06);
+  align-self: flex-start;
+  white-space: nowrap;
+}
+
+/* ── Notice bar ─────────────────────────────────────────────────────────── */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(252, 240, 0, 0.05);
+  border: 1px solid rgba(252, 240, 0, 0.2);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #aaa;
+  line-height: 1.5;
+  margin-bottom: 32px;
+}
+
+.notice span:first-child {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Groups ─────────────────────────────────────────────────────────────── */
+.group {
+  margin-bottom: 36px;
+}
+
+.groupLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: rgba(252, 240, 0, 0.7);
+  margin-bottom: 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(252, 240, 0, 0.15);
+}
+
+/* ── Document grid ──────────────────────────────────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+/* ── Card ───────────────────────────────────────────────────────────────── */
+.card {
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+  padding: 18px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+  position: relative;
+}
+
+.card:hover {
+  border-color: rgba(252, 240, 0, 0.4);
+  background: #161616;
+  transform: translateY(-1px);
+}
+
+.cardDisabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.cardDisabled:hover {
+  border-color: #2a2a2a;
+  background: #111;
+  transform: none;
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.cardIcon {
+  font-size: 22px;
+}
+
+/* ── Badges ─────────────────────────────────────────────────────────────── */
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.badgeGreen {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.badgePending {
+  background: rgba(252, 240, 0, 0.08);
+  color: rgba(252, 240, 0, 0.6);
+  border: 1px solid rgba(252, 240, 0, 0.2);
+}
+
+/* ── Card text ──────────────────────────────────────────────────────────── */
+.cardTitle {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #e5e5e5;
+  line-height: 1.3;
+}
+
+.cardSubtitle {
+  font-size: 11.5px;
+  color: #666;
+  line-height: 1.4;
+  flex: 1;
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #1e1e1e;
+}
+
+.cardDate {
+  font-size: 10.5px;
+  color: #555;
+}
+
+.cardOpen {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(252, 240, 0, 0.75);
+  letter-spacing: 0.2px;
+}
+
+.card:hover .cardOpen {
+  color: #fcf000;
+}
+
+.cardSoon {
+  font-size: 10.5px;
+  color: #444;
+  font-style: italic;
+}
+
+/* ── Footer note ────────────────────────────────────────────────────────── */
+.footerNote {
+  margin-top: 48px;
+  padding: 16px 20px;
+  border-top: 1px solid #1e1e1e;
+  font-size: 10.5px;
+  color: #444;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.footerNote b {
+  color: #666;
+}

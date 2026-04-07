@@ -161,8 +161,8 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         ))}
       </nav>
 
-      {/* System Architecture button */}
-      <div style={{ padding: '0 10px 10px' }}>
+      {/* System Architecture + Data Room buttons */}
+      <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <button
           className={styles.archBtn}
           onClick={() => window.open('/PNTHR_System_Architecture_v7.pdf', '_blank')}
@@ -170,6 +170,14 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         >
           <span style={{ fontSize: 14 }}>📄</span>
           <span>System Architecture</span>
+        </button>
+        <button
+          className={styles.dataRoomBtn}
+          onClick={() => onNavigate('data-room')}
+          title="PNTHR Data Room — Fund Documents"
+        >
+          <span style={{ fontSize: 14 }}>🗄️</span>
+          <span>PNTHR Data Room</span>
         </button>
       </div>
 

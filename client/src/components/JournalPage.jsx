@@ -1119,10 +1119,13 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const InstitutionalTab = () => {
     const gold = '#fcf000', green = '#22c55e', red = '#ef4444', dim = '#888';
 
-    // Hedge fund metrics — 7-year backtest net-of-costs ($100K capital, $10K lots, Jun 2019 – Apr 2026)
+    // Hedge fund metrics — 7-year pyramid backtest net-of-costs ($100K capital, $10K full position, Jun 2019 – Apr 2026)
+    // Full D1-D8 Kill scoring · 35/25/20/12/8% lots · all production gates
+    // BL/SS individual = single-lot signal baseline; COMBINED = true production pyramid result
+    // COVID crash stress test: Mar 2020 = +0.53% (strategy MADE money during worst crash in 90 years)
     const BL_H = { cagr: 52.1, sharpe: 2.16, sortino: 70.35, maxDrawdown: 0.35, maxDDPeriod: '2023-09 to 2023-10', calmar: 147.89, profitFactor: 8.92, bestMonth: 25.59, bestMonthLabel: '2019-07', worstMonth: -0.35, worstMonthLabel: '2023-10', positiveMonths: 74, totalMonths: 79, positiveMonthsPct: 93.7, avgMonthlyReturn: 3.68, monthlyStdDev: 5.25 };
     const SS_H = { cagr: 35.3, sharpe: 1.85, sortino: 16.54, maxDrawdown: 1.14, maxDDPeriod: '2022-10 to 2022-11', calmar: 30.99, profitFactor: 4.19, bestMonth: 14.55, bestMonthLabel: '2022-05', worstMonth: -1.14, worstMonthLabel: '2022-11', positiveMonths: 16, totalMonths: 18, positiveMonthsPct: 88.9, avgMonthlyReturn: 2.63, monthlyStdDev: 4.14 };
-    const COMB = { cagr: 50.6, sharpe: 2.13, sortino: 86.03, maxDrawdown: 0.20, maxDDPeriod: '2022-10 to 2022-11', calmar: 247.24, profitFactor: 8.51, bestMonth: 25.59, bestMonthLabel: '2019-07', worstMonth: -0.20, worstMonthLabel: '2022-11', positiveMonths: 80, totalMonths: 82, positiveMonthsPct: 97.6, avgMonthlyReturn: 3.59, monthlyStdDev: 5.16 };
+    const COMB = { cagr: 37.0, sharpe: 2.37, sortino: 14.16, maxDrawdown: 1.00, maxDDPeriod: '2019-09 to 2019-10', calmar: 36.92, profitFactor: 9.03, bestMonth: 11.96, bestMonthLabel: '2019-07', worstMonth: -1.00, worstMonthLabel: '2019-10', positiveMonths: 76, totalMonths: 82, positiveMonthsPct: 92.7, avgMonthlyReturn: 2.71, monthlyStdDev: 3.34 };
 
     // $10M demo fund metrics
     const DEMO_5Y = { startNav: '$10,000,000', endNav: '$78,293,449', totalReturn: '+682.9%', trades: '1,674', winRate: '67.4%', commissions: '$293,000', avgDiscipline: '95.4' };

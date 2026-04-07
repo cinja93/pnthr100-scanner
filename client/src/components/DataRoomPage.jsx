@@ -1,4 +1,5 @@
 import styles from './DataRoomPage.module.css';
+import pnthrLogo from '../assets/panther head.png';
 
 const DOCUMENTS = [
   {
@@ -43,12 +44,15 @@ export default function DataRoomPage() {
       {/* Header */}
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <h1 className={styles.title}>
-            <span className={styles.titleYellow}>PNTHR</span> Data Room
-          </h1>
-          <p className={styles.subtitle}>
-            Fund documents, legal filings, and investor materials for Carnivore Quant Fund, LP
-          </p>
+          <img src={pnthrLogo} alt="PNTHR" className={styles.headerLogo} />
+          <div className={styles.headerText}>
+            <h1 className={styles.title}>
+              <span className={styles.titleYellow}>PNTHR</span> Data Room
+            </h1>
+            <p className={styles.subtitle}>
+              Fund documents, legal filings, and investor materials for Carnivore Quant Fund, LP
+            </p>
+          </div>
         </div>
         <div className={styles.confidentialBadge}>CONFIDENTIAL</div>
       </div>

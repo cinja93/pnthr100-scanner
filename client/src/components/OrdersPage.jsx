@@ -459,9 +459,11 @@ const SS_BACKTEST = {
 
 const BL_HEDGE = {
   // BL signal baseline — single-lot net-of-costs (Jun 2019 → Apr 2026, 2332 trades)
+  // Win rate = 66.7% on CONFIRMED BL signals (single-lot, no pyramid stop ratchets)
   cagr: 52.1, sharpe: 2.16, sortino: 70.35,
   maxDrawdown: 0.35, maxDDPeriod: '2023-09 to 2023-10',
   calmar: 147.89, profitFactor: 8.92,
+  winRate: 66.7,   // single-lot CONFIRMED signal win rate — matches this column's data source
   bestMonth: 25.59, bestMonthLabel: '2019-07',
   worstMonth: -0.35, worstMonthLabel: '2023-10',
   positiveMonths: 74, totalMonths: 79,
@@ -471,9 +473,11 @@ const BL_HEDGE = {
 
 const SS_HEDGE = {
   // SS signal baseline — single-lot net-of-costs (Jun 2019 → Apr 2026, 143 trades)
+  // Win rate = 62.2% on CONFIRMED SS signals (single-lot, no pyramid stop ratchets)
   cagr: 35.3, sharpe: 1.85, sortino: 16.54,
   maxDrawdown: 1.14, maxDDPeriod: '2022-10 to 2022-11',
   calmar: 30.99, profitFactor: 4.19,
+  winRate: 62.2,   // single-lot CONFIRMED signal win rate — matches this column's data source
   bestMonth: 14.55, bestMonthLabel: '2022-05',
   worstMonth: -1.14, worstMonthLabel: '2022-11',
   positiveMonths: 16, totalMonths: 18,
@@ -616,9 +620,9 @@ function InstitutionalPopup({ onClose }) {
               </tr>
               <tr>
                 <td style={{ color: dim }}>Win Rate</td>
-                <td style={{ textAlign: 'right' }}>{BL_BACKTEST.winRate}%</td>
-                <td style={{ textAlign: 'right' }}>{SS_BACKTEST.winRate}%</td>
-                <td style={{ textAlign: 'right' }}>66.3%</td>
+                <td style={{ textAlign: 'right' }}>{BL_HEDGE.winRate}%</td>
+                <td style={{ textAlign: 'right' }}>{SS_HEDGE.winRate}%</td>
+                <td style={{ textAlign: 'right' }}>49.5%</td>
               </tr>
               <tr>
                 <td style={{ color: dim }}>Avg Monthly Return</td>

@@ -327,11 +327,12 @@ def build_pdf():
     INNER_BOTTOM = 0.85 * inch
 
     # ========= PAGE 2: TABLE OF CONTENTS ====================================
-    story += [Spacer(1, 0.15 * inch)]
+    story += [Spacer(1, 0.30 * inch)]   # breathing room below header band
     story += [Paragraph('TABLE OF CONTENTS',
               S('Normal', fontSize=17, fontName='Helvetica-Bold', textColor=PNTHR_BLACK, alignment=1))]
-    story += [yellow_rule()]
-    story += [Spacer(1, 0.08 * inch)]
+    story += [Spacer(1, 0.06 * inch)]
+    story += [HRFlowable(width='100%', thickness=1.5, color=PNTHR_YELLOW,
+                         spaceAfter=0.14 * inch, spaceBefore=0)]
 
     toc = [
         ('1.',  'The PNTHR Philosophy & Platform',        'Research origins, investment philosophy, platform architecture'),
@@ -904,7 +905,7 @@ def build_pdf():
         pagesize=letter,
         leftMargin=MARGIN,
         rightMargin=MARGIN,
-        topMargin=MARGIN + HEADER_H + 0.1 * inch,   # clear header band
+        topMargin=MARGIN + HEADER_H + 0.25 * inch,  # clear header band with breathing room
         bottomMargin=0.85 * inch,
         title='PNTHR Den Operational System & Performance Results v7.0',
         author='PNTHR Funds — Carnivore Quant Fund',

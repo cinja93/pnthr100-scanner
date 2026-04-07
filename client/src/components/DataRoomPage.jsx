@@ -101,7 +101,7 @@ export default function DataRoomPage() {
 
       {/* Footer note */}
       <div className={styles.footerNote}>
-        <b>PNTHR Funds, LLC</b> · General Partner · 15150 W Park Place, Suite 215, Surprise, AZ 85374
+        <b>PNTHR Funds, LLC</b> · General Partner · Attention: Cindy Eagar · 15150 W Park Place, Suite 215, Goodyear, AZ 85395
         · 602-810-1940 · info@pnthrfunds.com
         <br />
         Carnivore Quant Fund, LP is offered exclusively to Accredited Investors pursuant to

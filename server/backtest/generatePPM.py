@@ -226,9 +226,9 @@ def build_cover(story):
         ['General Partner:', 'PNTHR Funds, LLC'],
         ['Investment Manager:', 'STT Capital Advisors, LLC'],
         ['Structure:', 'Delaware Limited Partnership'],
-        ['Principal Office:', '15150 W Park Place, Suite 215, Surprise, AZ 85374'],
+        ['Principal Office:', '15150 W Park Place, Suite 215, Goodyear, AZ 85395'],
         ['Strategy:', 'Quantitative Long/Short Equity — PNTHR Signal System'],
-        ['Minimum Investment:', '$250,000 (subject to GP discretion)'],
+        ['Minimum Investment:', '$100,000 (subject to GP discretion)'],
         ['Management Fee:', '2% per annum on NAV'],
         ['Performance Allocation:', '20% / 25% / 30% (tiered by class, above hurdle)'],
         ['Hurdle Rate:', 'US 2-Year Treasury Yield (US2Y), reset annually'],
@@ -272,30 +272,37 @@ def build_contacts(story):
     blocks = [
         ('GENERAL PARTNER', [
             ('Entity:', 'PNTHR Funds, LLC'),
-            ('Address:', '15150 W Park Place, Suite 215\nSurprise, AZ 85374'),
+            ('Address:', '15150 W Park Place, Suite 215\nGoodyear, AZ 85395'),
             ('Phone:', '602-810-1940'),   # FIXED #8 — was 480-287-2345
             ('Email:', 'info@pnthrfunds.com'),
             ('Website:', 'www.pnthrfunds.com'),
+            ('Attention:', 'Cindy Eagar'),
         ]),
         ('INVESTMENT MANAGER', [
             ('Entity:', 'STT Capital Advisors, LLC'),
-            ('Address:', '15150 W Park Place, Suite 215\nSurprise, AZ 85374'),
+            ('Address:', '15150 W Park Place, Suite 215\nGoodyear, AZ 85395'),
             ('Phone:', '602-810-1940'),
-            ('Email:', 'info@pnthrfunds.com'),
+            ('Email:', 'Scott@stocktimingtech.com'),
+            ('Attention:', 'Scott McBrien'),
         ]),
-        ('PRINCIPALS', [
-            ('Managing Members:', 'Scott R McBrien\nCindy Eagar'),
-            ('Role:', 'Co-Founders and Managing Members,\nPNTHR Funds, LLC and STT Capital Advisors, LLC'),
+        ('ADMINISTRATOR', [
+            ('Firm:', 'NAV Consulting, Inc.'),
+            ('Address:', '1 Trans Am Plaza Drive, Suite 400\nOakbrook Terrace, Illinois 60181'),
+            ('Phone:', '+1 (630) 954-1919'),
+            ('Facsimile:', '+1 (630) 954-1945'),
+            ('Email:', 'transfer.agency@navconsulting.net'),
         ]),
         ('LEGAL COUNSEL', [
-            ('Role:', 'To be designated'),
+            ('Firm:', 'David S. Hunt, P.C.'),
+            ('Address:', '66 Exchange Place, Suite 201\nSalt Lake City, Utah 84111'),
         ]),
         ('AUDITOR', [
-            ('Role:', 'To be designated'),
+            ('Firm:', 'Spicer Jeffries, LLP'),
+            ('Address:', '4601 DTC Boulevard, Suite 700\nDenver, Colorado 80237'),
         ]),
         ('PRIME BROKER / CUSTODIAN', [
             ('Firm:', 'Interactive Brokers LLC'),
-            ('Note:', 'Fund assets held in segregated account'),
+            ('Address:', 'One Pickwick Plaza\nGreenwich, Connecticut 06830'),
         ]),
     ]
 
@@ -465,7 +472,7 @@ def build_summary(story):
          'STT Capital Advisors, LLC, an Arizona limited liability company '
          '(the "Investment Manager" or "IM").'),
         ('Principal Office',
-         '15150 W Park Place, Suite 215, Surprise, AZ 85374'),  # FIXED #6
+         '15150 W Park Place, Suite 215, Goodyear, AZ 85395'),  # FIXED #6
         ('Investment Objective',
          # FIXED #4 — was "22% annual return"
          'The Fund seeks to generate superior risk-adjusted returns through a proprietary '
@@ -488,7 +495,7 @@ def build_summary(story):
          'Interests are offered exclusively to persons who qualify as "Accredited Investors" '
          'as defined in Rule 501(a) of Regulation D under the Securities Act of 1933.'),
         ('Minimum Subscription',
-         '$250,000, subject to reduction at the General Partner\'s sole discretion.'),
+         '$100,000, subject to reduction at the General Partner\'s sole discretion.'),
         ('Subscription Periods',
          'Monthly, on the first Business Day of each calendar month, upon thirty (30) '
          'days\' prior written notice to the General Partner.'),
@@ -568,7 +575,7 @@ def build_management(story):
                    'of the Fund, including investor relations, compliance, and all matters '
                    'not delegated to the Investment Manager.', NORMAL))
     story.append(p('The General Partner\'s principal office is located at 15150 W Park Place, '
-                   'Suite 215, Surprise, AZ 85374. Telephone: 602-810-1940.', NORMAL))  # FIXED #8
+                   'Suite 215, Goodyear, AZ 85395. Telephone: 602-810-1940.', NORMAL))  # FIXED #8
 
     story.append(p('<b>Investment Manager</b>', H2))
     story.append(p('STT Capital Advisors, LLC serves as the Investment Manager of the Fund '
@@ -927,7 +934,7 @@ def build_classes(story):
     body_w = PAGE_W - 2 * MARGIN
     class_data = [
         ['Feature',         'Wagyu Class',      'Porterhouse Class',  'Filet Class'],
-        ['Minimum Investment', '≥ $1,000,000',  '$500,000 – $999,999', '< $500,000\n(min. $250,000)'],
+        ['Minimum Investment', '≥ $1,000,000',  '$500,000 – $999,999', '< $500,000\n(min. $100,000)'],
         ['Performance Allocation', '20%',       '25%',                '30%'],
         ['3-Year Loyalty Rate', '15%',          '20%',                '25%'],
         ['Management Fee',  '2.0% p.a.',        '2.0% p.a.',          '2.0% p.a.'],
@@ -1143,30 +1150,34 @@ def build_service_providers(story):
     providers = [
         ('Prime Broker / Custodian',
          'Interactive Brokers LLC\n'
-         'One Pickwick Plaza\nGreenwich, CT 06830\n'
+         'One Pickwick Plaza\nGreenwich, Connecticut 06830\n'
          'All Fund assets are held in a segregated account with Interactive Brokers. '
          'IBKR provides execution, clearing, margin, stock loan, and custody services.'),
 
         ('Legal Counsel',
-         'To be designated. The General Partner is in the process of retaining '
-         'independent legal counsel with expertise in securities law and fund formation.'),
+         'David S. Hunt, P.C.\n'
+         '66 Exchange Place, Suite 201\nSalt Lake City, Utah 84111\n'
+         'Fund legal counsel with expertise in securities law, Regulation D offerings, '
+         'and investment fund formation.'),
 
         ('Independent Auditor',
-         'To be designated. The Fund intends to engage a registered public accounting '
-         'firm to conduct annual audits of the Fund\'s financial statements in accordance '
-         'with U.S. GAAP. Audited financial statements will be distributed to all Limited '
-         'Partners within 120 days of each fiscal year end.'),
+         'Spicer Jeffries, LLP\n'
+         '4601 DTC Boulevard, Suite 700\nDenver, Colorado 80237\n'
+         'Registered public accounting firm responsible for annual audits of the Fund\'s '
+         'financial statements in accordance with U.S. GAAP. Audited financial statements '
+         'will be distributed to all Limited Partners within 120 days of each fiscal year end.'),
 
         ('Administrator',
-         'At present, administrative functions including NAV calculation, capital account '
-         'maintenance, and investor reporting are performed internally by the Investment '
-         'Manager using the PNTHR Scanner platform. The General Partner may engage a '
-         'third-party fund administrator as the Fund grows in assets under management.'),
+         'NAV Consulting, Inc.\n'
+         '1 Trans Am Plaza Drive, Suite 400\nOakbrook Terrace, Illinois 60181\n'
+         'Telephone: +1 (630) 954-1919  |  Facsimile: +1 (630) 954-1945\n'
+         'Email: transfer.agency@navconsulting.net\n'
+         'Responsible for NAV calculation, capital account maintenance, transfer agency '
+         'services, and investor reporting.'),
 
         ('Tax Advisers',
-         'To be designated. The Fund will engage qualified tax counsel to prepare annual '
-         'Schedule K-1 forms for all Limited Partners and to advise on Fund-level tax '
-         'compliance.'),
+         'The Fund will engage qualified tax counsel to prepare annual Schedule K-1 forms '
+         'for all Limited Partners and to advise on Fund-level tax compliance.'),
     ]
 
     for title, text in providers:
@@ -1486,7 +1497,7 @@ def build_other_matters(story):
     story.append(p('<b>Notices</b>', H2))
     story.append(p('All notices required under this Memorandum shall be in writing and '
                    'delivered to the General Partner at: PNTHR Funds, LLC, 15150 W Park '
-                   'Place, Suite 215, Surprise, AZ 85374, or by email to '
+                   'Place, Suite 215, Goodyear, AZ 85395, or by email to '
                    'info@pnthrfunds.com.', NORMAL))
 
     story.append(p('<b>No Waiver</b>', H2))

@@ -120,10 +120,14 @@ function computeHedgeFundMetrics(curve, trades) {
   }
 
   // Trade-level
-  const winners = trades.filter(t => t.isWinner);
-  const losers = trades.filter(t => !t.isWinner);
-  const avgWin = winners.length > 0 ? winners.reduce((s, t) => s + t.profitPct, 0) / winners.length : 0;
-  const avgLoss = losers.length > 0 ? losers.reduce((s, t) => s + t.profitPct, 0) / losers.length : 0;
+  // Use netProfitPct if available (net mode), grossProfitPct next, profitPct as legacy fallback
+  const pctField   = trades[0]?.netProfitPct  !== undefined ? 'netProfitPct'
+                   : trades[0]?.grossProfitPct !== undefined ? 'grossProfitPct'
+                   : 'profitPct';
+  const winners = trades.filter(t =>  t[winnerField]);
+  const losers  = trades.filter(t => !t[winnerField]);
+  const avgWin  = winners.length > 0 ? winners.reduce((s, t) => s + (t[pctField] || 0), 0) / winners.length : 0;
+  const avgLoss = losers.length  > 0 ? losers.reduce( (s, t) => s + (t[pctField] || 0), 0) / losers.length  : 0;
   const winRate = winners.length / trades.length * 100;
 
   return {

@@ -54,15 +54,16 @@ export function enrichLots(lots, entryPrice, stopPrice, direction) {
     if (l.filled && l.actualShares > 0) { cumShr += l.actualShares; cumCost += l.costBasis; }
     const avgCost = cumShr > 0 ? +(cumCost / cumShr).toFixed(2) : 0;
     let recStop, rNote;
-    if (i === 0) {
-      // Lot 1: keep initial ATR stop — no ratchet until Lot 2 confirms the trade
-      recStop = stopPrice; rNote = null;
-    } else if (cumShr > 0) {
-      // Lot 2+: ratchet to avg cost of all filled lots (true breakeven)
-      recStop = avgCost;
-      rNote = `Ratchet stop → $${recStop} (avg cost = true breakeven)`;
+    if (i <= 1) { recStop = stopPrice; rNote = null; }
+    else if (i === 2) {
+      const p = lots[0].actualPrice || entryPrice; recStop = +p.toFixed(2);
+      rNote = `Move stop → $${recStop} (Lot 1 fill = breakeven)`;
+    } else if (i === 3) {
+      const p = lots[1].actualPrice || lots[1].triggerPrice; recStop = +p.toFixed(2);
+      rNote = `Ratchet stop → $${recStop} (Lot 2 fill)`;
     } else {
-      recStop = stopPrice; rNote = null;
+      const p = lots[2].actualPrice || lots[2].triggerPrice; recStop = +p.toFixed(2);
+      rNote = `Ratchet stop → $${recStop} (Lot 3 fill)`;
     }
     return { ...l, cumShr, cumCost: +cumCost.toFixed(2), avgCost, recommendedStop: recStop, ratchetNote: rNote };
   });

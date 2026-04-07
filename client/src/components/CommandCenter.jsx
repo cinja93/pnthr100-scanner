@@ -174,11 +174,11 @@ function runRiskAdvisor(positions, nav) {
       const priceReady = p.direction === 'LONG' ? getDisplayPrice(p) >= trigger : getDisplayPrice(p) <= trigger;
       if (priceReady) {
         const sizing = sizePosition({ netLiquidity: nav, entryPrice: p.entryPrice, stopPrice: p.stopPrice, maxGapPct: p.maxGapPct || 0, direction: p.direction });
-        const lot2Shares = Math.round(sizing.totalShares * 0.30);
+        const lot2Shares = Math.round(sizing.totalShares * 0.25);
         recs.push({
           priority: 'ACTION', type: 'LOT2_READY',
           message: `${p.ticker}: Lot 2 (The Stalk) is READY. Price and time gate both confirmed.`,
-          actions: [{ ticker: p.ticker, action: 'BUY', shares: lot2Shares, price: trigger, reason: 'Scale in 30% — Lot 2 trigger met' }],
+          actions: [{ ticker: p.ticker, action: 'BUY', shares: lot2Shares, price: trigger, reason: 'Scale in 25% — Lot 2 trigger met' }],
         });
       }
     }

@@ -3962,7 +3962,7 @@ app.delete('/api/journal/:id/tags/:tag', authenticateJWT, async (req, res) => {
 });
 
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
-app.use('/api/newsletter', newsletterRouter);
+app.use('/api/newsletter', newsletterRouter);app.use('/api/dataroom', dataroomRouter);
 
 // ── Admin: Cache Status ────────────────────────────────────────────────────────
 // Shows whether in-memory caches are warm. Helps diagnose cold-start issues.
@@ -5737,9 +5737,10 @@ app.listen(PORT, () => {
   console.log(`📊 API available at http://localhost:${PORT}/api/stocks`);
   // Pre-compute signal counts in background (takes ~2 min each)
   computeSectorSignalCounts();
-  computeSpeculativeSignalCounts();
+ from './routes/newsletter.js'; computeSpeculativeSignalCounts();
   // Bootstrap MongoDB indexes (non-blocking)
-  ensureCommandCenterIndexes().catch(() => {});
+ from './routes/newsletter.js';
+  import dataroomRouter from './routes/dataroom.js';ensureCommandCenterIndexes().catch(() => {});
   createPendingEntriesIndexes().catch(() => {});
   createKillHistoryIndexes().catch(() => {});
   ensureAssistantIndexes().catch(() => {});

@@ -7,9 +7,9 @@ const DOCUMENTS = [
     items: [
       {
         title: 'Private Placement Memorandum',
-        subtitle: 'Carnivore Quant Fund, LP — PPM v2.0',
+        subtitle: 'Carnivore Quant Fund, LP — PPM v3.0',
         date: 'April 2026',
-        file: '/PNTHR_PPM_v2.pdf',
+        file: '/PNTHR_PPM_v3.pdf',
         icon: '📋',
         badge: 'Updated',
       },

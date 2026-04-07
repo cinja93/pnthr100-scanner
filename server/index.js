@@ -2008,6 +2008,157 @@ app.get('/api/backtest/trades',  authenticateJWT, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// ── Backtest Audit Export ──────────────────────────────────────────────────────
+// Returns the full investor-grade audit log as CSV or JSON.
+// Requires authentication. CSV format suitable for Excel / third-party audit.
+//
+// Query params:
+//   format  = 'csv' (default) | 'json'
+//   signal  = 'BL' | 'SS' | '' (all)
+//   year    = '2022' | '' (all)
+//   winner  = 'true' | 'false' | '' (all) — filters on netIsWinner
+app.get('/api/backtest/audit-export', authenticateJWT, async (req, res) => {
+  try {
+    const db     = req.app.locals.db;
+    const format = (req.query.format || 'csv').toLowerCase();
+    const signal = req.query.signal || '';
+    const year   = req.query.year   || '';
+    const winner = req.query.winner || '';
+
+    // Build MongoDB filter
+    const filter = {};
+    if (signal) filter.signal = signal.toUpperCase();
+    if (year)   filter.entryDate = { $gte: `${year}-01-01`, $lte: `${year}-12-31` };
+    if (winner === 'true')  filter.netIsWinner = true;
+    if (winner === 'false') filter.netIsWinner = false;
+
+    const records = await db.collection('pnthr_bt_audit_log')
+      .find(filter, { projection: { _id: 0, equityCurves: 0 } })
+      .sort({ entryDate: 1, tradeId: 1 })
+      .toArray();
+
+    if (records.length === 0) {
+      return res.status(404).json({
+        error: 'No audit records found. Run exportAuditLog.js first.',
+        hint: 'cd server && node backtest/exportAuditLog.js',
+      });
+    }
+
+    // ── JSON response ──
+    if (format === 'json') {
+      res.setHeader('Content-Type', 'application/json');
+      return res.json({ count: records.length, records });
+    }
+
+    // ── CSV response ──
+    // Column order matches the investor methodology document.
+    const CSV_COLUMNS = [
+      { key: 'tradeId',              label: 'Trade ID' },
+      { key: 'signal',               label: 'Signal' },
+      { key: 'ticker',               label: 'Ticker' },
+      { key: 'sector',               label: 'Sector' },
+      { key: 'exchange',             label: 'Exchange' },
+      { key: 'weekOf',               label: 'Signal Week' },
+      { key: 'entryDate',            label: 'Entry Date' },
+      { key: 'entryPrice',           label: 'Entry Price' },
+      { key: 'exitDate',             label: 'Exit Date' },
+      { key: 'exitPrice',            label: 'Exit Price' },
+      { key: 'tradingDays',          label: 'Trading Days Held' },
+      { key: 'exitReason',           label: 'Exit Reason' },
+      { key: 'shares',               label: 'Shares' },
+      { key: 'positionValue',        label: 'Position Value ($)' },
+      { key: 'killRank',             label: 'Kill Rank' },
+      { key: 'killScore',            label: 'Kill Score' },
+      { key: 'maxFavorablePct',      label: 'MFE (%)' },
+      { key: 'maxAdversePct',        label: 'MAE (%)' },
+      // Gross
+      { key: 'grossDollarPnl',       label: 'Gross P&L ($)' },
+      { key: 'grossProfitPct',       label: 'Gross P&L (%)' },
+      { key: 'isWinner',             label: 'Gross Winner' },
+      // Costs
+      { key: 'commissionIn',         label: 'Commission Entry ($)' },
+      { key: 'commissionOut',        label: 'Commission Exit ($)' },
+      { key: 'commissionTotal',      label: 'Commission Total ($)' },
+      { key: 'slippageIn',           label: 'Slippage Entry ($)' },
+      { key: 'slippageOut',          label: 'Slippage Exit ($)' },
+      { key: 'slippageTotal',        label: 'Slippage Total ($)' },
+      { key: 'borrowRate',           label: 'Borrow Rate (annual)' },
+      { key: 'borrowCost',           label: 'Borrow Cost ($)' },
+      { key: 'borrowDays',           label: 'Borrow Days' },
+      { key: 'totalFrictionDollar',  label: 'Total Friction ($)' },
+      { key: 'totalFrictionPct',     label: 'Total Friction (% of position)' },
+      // Net
+      { key: 'netDollarPnl',         label: 'Net P&L ($)' },
+      { key: 'netProfitPct',         label: 'Net P&L (%)' },
+      { key: 'netIsWinner',          label: 'Net Winner' },
+      { key: 'rMultiple',            label: 'R-Multiple' },
+      // Audit
+      { key: 'costEngineVersion',    label: 'Cost Engine Version' },
+      { key: 'fingerprint',          label: 'Data Fingerprint' },
+    ];
+
+    // Build CSV
+    const escape = (v) => {
+      if (v == null) return '';
+      const s = String(v);
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+
+    const header = CSV_COLUMNS.map(c => escape(c.label)).join(',');
+    const rows   = records.map(r =>
+      CSV_COLUMNS.map(c => escape(r[c.key])).join(',')
+    );
+
+    // First row: metadata / methodology summary
+    const meta = [
+      `# PNTHR Backtest Audit Log — Generated ${new Date().toISOString()}`,
+      `# Config: ${records[0]?.backtestConfig || 'N/A'}`,
+      `# Period: ${records[0]?.entryDate || '?'} to ${records[records.length - 1]?.entryDate || '?'}`,
+      `# Trades: ${records.length} | Cost Engine: v${records[0]?.costEngineVersion || '?'}`,
+      `# Costs: Commission=IBKR Pro Fixed | Slippage=5bps/leg | Borrow=sector-tiered ETB rate`,
+      `# Net P&L = Gross P&L minus Commission + Slippage + Borrow Cost`,
+      `# Fingerprint = djb2 hash of ticker|entryDate|entryPrice|exitDate|exitPrice|grossPnl`,
+      '',
+    ].join('\n');
+
+    const csv = meta + header + '\n' + rows.join('\n');
+
+    const filename = `PNTHR_Audit_Log_${signal || 'ALL'}_${year || 'AllYears'}_${new Date().toISOString().slice(0,10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(csv);
+
+  } catch (err) {
+    console.error('[Audit Export] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Backtest Metrics (Gross + Net) ────────────────────────────────────────────
+// Returns the latest computed hedge fund metrics (both gross and net of costs)
+// from pnthr_bt_hedge_metrics, populated by computeHedgeFundMetrics.js.
+app.get('/api/backtest/metrics', authenticateJWT, async (req, res) => {
+  try {
+    const db  = req.app.locals.db;
+    const doc = await db.collection('pnthr_bt_hedge_metrics').findOne(
+      {},
+      { projection: { _id: 0, equityCurves: 0 } }
+    );
+    if (!doc) {
+      return res.status(404).json({
+        error: 'No metrics found. Run computeHedgeFundMetrics.js first.',
+      });
+    }
+    res.json(doc);
+  } catch (err) {
+    console.error('[Backtest Metrics] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/admin/run-orders', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const type = req.body.type || 'WEEKLY';

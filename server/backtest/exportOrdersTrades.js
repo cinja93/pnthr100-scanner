@@ -17,6 +17,7 @@ dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 import { connectToDatabase } from '../database.js';
 import { aggregateWeeklyBars } from '../technicalUtils.js';
 import { computeWilderATR } from '../stopCalculation.js';
+import { calcTradeCosts, sharesFromLot, COST_METHODOLOGY } from './costEngine.js';
 
 const ALL_SECTOR_ETFS = ['XLK', 'XLE', 'XLV', 'XLF', 'XLY', 'XLC', 'XLI', 'XLB', 'XLRE', 'XLU', 'XLP'];
 const SECTOR_MAP = {
@@ -500,33 +501,101 @@ async function main() {
     );
   }
 
+  // ── Apply friction costs to every trade ──────────────────────────────────
+  // Derives share count from LOT_SIZE_USD / entryPrice, then calculates
+  // commission (IBKR Pro Fixed), slippage (5 bps/leg), and borrow cost
+  // (SS trades only, sector-tiered). See costEngine.js for full methodology.
+  const tradeDocs = closed.map(t => {
+    const shares = sharesFromLot(t.entryPrice);
+    const costs  = calcTradeCosts({
+      signal:      t.signal,
+      sector:      t.sector,
+      entryPrice:  t.entryPrice,
+      exitPrice:   t.exitPrice,
+      shares,
+      tradingDays: t.tradingDays,
+      dollarPnl:   t.dollarPnl,
+      profitPct:   t.profitPct,
+    });
+
+    // R-multiple: net P&L / initial risk per share
+    // Initial risk = |entryPrice - stopPrice| × shares
+    // stopPrice was stored on the position; we approximate as 5% of entry for
+    // legacy trades without stored stops (overridden by actual stop in live data)
+    const rMultiple = null;  // computed in exportAuditLog.js with actual stops
+
+    return {
+      ticker:       t.ticker,
+      signal:       t.signal,
+      sector:       t.sector,
+      exchange:     t.exchange,
+      weekOf:       t.weekOf,
+      entryDate:    t.entryDate,
+      entryPrice:   t.entryPrice,
+      exitDate:     t.exitDate,
+      exitPrice:    t.exitPrice,
+      tradingDays:  t.tradingDays,
+      exitReason:   t.exitReason,
+      maxLots:      t.maxLots,
+      killRank:     t.killRank,
+      filteredRank: t.filteredRank,
+      apexScore:    t.apexScore,
+
+      // MFE / MAE
+      maxFavorable: parseFloat((t.maxFavorable || 0).toFixed(2)),
+      maxAdverse:   parseFloat((t.maxAdverse  || 0).toFixed(2)),
+
+      // Gross performance (before costs)
+      shares,
+      grossDollarPnl: t.dollarPnl,
+      grossProfitPct: t.profitPct,
+      isWinner:       t.isWinner,
+
+      // Friction costs (from costEngine.js)
+      ...costs,
+
+      // Cost engine version for audit trail
+      costEngineVersion: COST_METHODOLOGY.version,
+      costEngineDate:    COST_METHODOLOGY.effectiveDate,
+    };
+  });
+
   // Store to MongoDB for UI access
   await db.collection('pnthr_bt_trade_log').deleteMany({});
-  await db.collection('pnthr_bt_trade_log').insertMany(
-    closed.map(t => ({
-      ticker: t.ticker,
-      signal: t.signal,
-      sector: t.sector,
-      exchange: t.exchange,
-      weekOf: t.weekOf,
-      entryDate: t.entryDate,
-      entryPrice: t.entryPrice,
-      exitDate: t.exitDate,
-      exitPrice: t.exitPrice,
-      profitPct: t.profitPct,
-      dollarPnl: t.dollarPnl,
-      isWinner: t.isWinner,
-      exitReason: t.exitReason,
-      maxLots: t.maxLots,
-      tradingDays: t.tradingDays,
-      killRank: t.killRank,
-      filteredRank: t.filteredRank,
-      apexScore: t.apexScore,
-      maxFavorable: parseFloat((t.maxFavorable || 0).toFixed(2)),
-      maxAdverse: parseFloat((t.maxAdverse || 0).toFixed(2)),
-    }))
-  );
+  await db.collection('pnthr_bt_trade_log').insertMany(tradeDocs);
   console.log(`\n  Saved ${closed.length} trades to pnthr_bt_trade_log collection.`);
+
+  // ── Friction cost summary ─────────────────────────────────────────────────
+  const blDocs = tradeDocs.filter(t => t.signal === 'BL');
+  const ssDocs = tradeDocs.filter(t => t.signal === 'SS');
+
+  const sumFriction = (arr) => arr.reduce((s, t) => s + t.totalFrictionDollar, 0);
+  const sumGross    = (arr) => arr.reduce((s, t) => s + t.grossDollarPnl, 0);
+  const sumNet      = (arr) => arr.reduce((s, t) => s + t.netDollarPnl, 0);
+  const netWinners  = (arr) => arr.filter(t => t.netIsWinner).length;
+
+  console.log('\n  ── Friction Cost Summary ──\n');
+  console.log('  Strategy   Trades  Gross $ P&L     Total Friction   Net $ P&L      CAGR Impact');
+  console.log('  ─────────  ──────  ─────────────   ──────────────   ─────────────  ────────────');
+
+  for (const [label, arr] of [['BL', blDocs], ['SS', ssDocs], ['COMBINED', tradeDocs]]) {
+    if (arr.length === 0) continue;
+    const gPnl   = sumGross(arr);
+    const frict  = sumFriction(arr);
+    const nPnl   = sumNet(arr);
+    const nWr    = (netWinners(arr) / arr.length * 100).toFixed(1);
+    const avgFrictPct = (frict / arr.length / LOT_SIZE_USD * 100).toFixed(3);
+    console.log(
+      `  ${label.padEnd(9)}  ${String(arr.length).padStart(6)}  ` +
+      `$${gPnl.toFixed(0).padStart(11)}   ` +
+      `$${frict.toFixed(0).padStart(11)} (${avgFrictPct}%/trade)   ` +
+      `$${nPnl.toFixed(0).padStart(11)}  ` +
+      `Net WR: ${nWr}%`
+    );
+  }
+
+  console.log(`\n  Cost methodology: costEngine.js v${COST_METHODOLOGY.version} (${COST_METHODOLOGY.effectiveDate})`);
+  console.log('  Commission: IBKR Pro Fixed | Slippage: 5 bps/leg | Borrow: sector-tiered ETB rate');
 
   console.log('\n═══════════════════════════════════════════════════════════════════════════════════════════════════\n');
   process.exit(0);

@@ -242,6 +242,14 @@ function runStateMachine(weeklyBars, isETF = false, emaPeriod = DEFAULT_EMA_PERI
 
 export { runStateMachine };
 
+// ── Signal cache snapshot (for Pulse sector counts) ────────────────────────────
+// Returns the in-memory signal cache as-is. May be partially populated
+// (only tickers requested today). Used by the Pulse endpoint to get real-time
+// signal states without triggering a full 679-stock fetch.
+export function getSignalCacheSnapshot() {
+  return signalCache.signals || {};
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 // Returns a signal map backward-compatible with the old getLatestSignals() shape,

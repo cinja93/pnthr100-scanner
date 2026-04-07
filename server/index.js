@@ -4353,6 +4353,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     // Live apex cache (populated when Kill page is visited this session).
     // Falls back to Friday pipeline DB data when cache is cold.
     const { getCachedApexResults } = await import('./apexService.js');
+    const { getSignalCacheSnapshot } = await import('./signalService.js');
     const liveApex = getCachedApexResults();
 
     let killTop10, blCount, ssCount, sectorMap;
@@ -4366,13 +4367,24 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         }));
       blCount = liveApex.regime?.blCount || 0;
       ssCount = liveApex.regime?.ssCount || 0;
+      // Build sectorMap using real-time signal cache when available.
+      // The signal cache is updated daily; for any ticker already cached today,
+      // use its live signal (BE/SE stocks correctly excluded). Fall back to
+      // the Friday Kill cache signal for tickers not yet cached today.
+      const realtimeSignals = getSignalCacheSnapshot();
       sectorMap = {};
       for (const s of liveApex.stocks) {
-        if (!s.signal || s.overextended) continue;
+        if (s.overextended) continue;
         const sector = s.sector || 'Unknown';
+        // Prefer real-time signal from daily cache; fall back to Kill cache
+        const cached = realtimeSignals[s.ticker];
+        const effectiveSignal = cached
+          ? (cached.signal === 'BUY' ? 'BL' : cached.signal === 'SELL' ? 'SS' : cached.signal)
+          : s.signal;
+        if (!effectiveSignal || !['BL', 'SS'].includes(effectiveSignal)) continue;
         if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
-        if (s.signal === 'BL') sectorMap[sector].bl++;
-        else if (s.signal === 'SS') sectorMap[sector].ss++;
+        if (effectiveSignal === 'BL') sectorMap[sector].bl++;
+        else if (effectiveSignal === 'SS') sectorMap[sector].ss++;
       }
     } else {
       // Cold server — fall back to Friday pipeline data.
@@ -4429,12 +4441,12 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     // ── Stocks: from apex cache (live) or Friday DB ──
     let newBLStocks = [], newSSStocks = [];
     if (liveApex) {
-      const fresh = liveApex.stocks.filter(s => !s.overextended && (s.signalAge ?? 99) <= 1);
+      const fresh = liveApex.stocks.filter(s => !s.overextended && (s.signalAge ?? 99) === 0);
       newBLStocks = fresh.filter(s => s.signal === 'BL').map(mapNewSig).sort(sortByScore);
       newSSStocks = fresh.filter(s => s.signal === 'SS').map(mapNewSig).sort(sortByScore);
     } else {
       const dbFresh = await db.collection('pnthr_kill_scores')
-        .find({ signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: 1 } })
+        .find({ signal: { $in: ['BL', 'SS'] }, signalAge: 0 })
         .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
         .toArray();
       newBLStocks = dbFresh.filter(s => s.signal === 'BL')

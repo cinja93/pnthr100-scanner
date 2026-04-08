@@ -6,6 +6,7 @@ const schema = new mongoose.Schema({
       contentType: { type: String },
       size: { type: Number },
       data: { type: Buffer },
+      section: { type: String, default: 'PNTHR Funds, Carnivore Quant LP Fund Documents' },
       uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       uploadedAt: { type: Date, default: Date.now },
 });

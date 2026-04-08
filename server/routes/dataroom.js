@@ -2,11 +2,13 @@ import express from 'express';
 import multer from 'multer';
 import { ObjectId } from 'mongodb';
 import { connectToDatabase } from '../database.js';
+import archiver from 'archiver';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 const COLLECTION = 'dataroom_documents';
+const DEFAULT_SECTION = 'PNTHR Funds, Carnivore Quant LP Fund Documents';
 
 // GET /api/dataroom — list all documents (exclude raw data from listing)
 router.get('/', async (req, res) => {
@@ -14,9 +16,44 @@ router.get('/', async (req, res) => {
     const db = await connectToDatabase();
     const docs = await db.collection(COLLECTION)
       .find({}, { projection: { data: 0 } })
-      .sort({ uploadedAt: -1 })
+      .sort({ section: 1, uploadedAt: -1 })
       .toArray();
-    res.json(docs);
+    // Backfill section for legacy docs
+    const filled = docs.map(d => ({ ...d, section: d.section || DEFAULT_SECTION }));
+    res.json(filled);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/dataroom/sections — list distinct section names
+router.get('/sections', async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const sections = await db.collection(COLLECTION).distinct('section');
+    // Also check for a dedicated sections collection for pre-created empty sections
+    const custom = await db.collection('dataroom_sections').find({}).toArray();
+    const customNames = custom.map(s => s.name);
+    const all = [...new Set([...sections.filter(Boolean), ...customNames, DEFAULT_SECTION])].sort();
+    res.json(all);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/dataroom/sections — create a new named section (admin only)
+router.post('/sections', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Section name required' });
+    const db = await connectToDatabase();
+    await db.collection('dataroom_sections').updateOne(
+      { name: name.trim() },
+      { $set: { name: name.trim(), createdAt: new Date() } },
+      { upsert: true }
+    );
+    res.json({ success: true, name: name.trim() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -34,19 +71,53 @@ router.post('/upload', upload.single('document'), async (req, res) => {
       contentType: req.file.mimetype,
       size: req.file.size,
       data: req.file.buffer,
+      section: req.body.section || DEFAULT_SECTION,
       uploadedBy: req.user.userId,
       uploadedAt: new Date(),
     };
     const result = await db.collection(COLLECTION).insertOne(doc);
-    res.json({ _id: result.insertedId, label: doc.label, filename: doc.filename, size: doc.size, uploadedAt: doc.uploadedAt });
+    res.json({ _id: result.insertedId, label: doc.label, filename: doc.filename, size: doc.size, section: doc.section, uploadedAt: doc.uploadedAt });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/dataroom/:id/download — download a document
+// GET /api/dataroom/download-all — download all docs (or by section) as zip (admin only)
+router.get('/download-all', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    const db = await connectToDatabase();
+    const filter = req.query.section ? { section: req.query.section } : {};
+    const docs = await db.collection(COLLECTION).find(filter).toArray();
+    if (docs.length === 0) return res.status(404).json({ error: 'No documents found' });
+
+    const zipName = req.query.section
+      ? `PNTHR_DataRoom_${req.query.section.replace(/[^a-zA-Z0-9]/g, '_')}.zip`
+      : 'PNTHR_DataRoom_All_Documents.zip';
+
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', `attachment; filename="${zipName}"`);
+
+    const archive = archiver('zip', { zlib: { level: 5 } });
+    archive.on('error', err => { throw err; });
+    archive.pipe(res);
+
+    for (const doc of docs) {
+      const buf = doc.data.buffer || doc.data;
+      const folder = (doc.section || DEFAULT_SECTION).replace(/[/\\]/g, '_');
+      archive.append(Buffer.from(buf), { name: `${folder}/${doc.filename}` });
+    }
+
+    await archive.finalize();
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/dataroom/:id/download — download a document (admin only)
 router.get('/:id/download', async (req, res) => {
   try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required — documents are view-only for members' });
     const db = await connectToDatabase();
     const doc = await db.collection(COLLECTION).findOne({ _id: new ObjectId(req.params.id) });
     if (!doc) return res.status(404).json({ error: 'Document not found' });

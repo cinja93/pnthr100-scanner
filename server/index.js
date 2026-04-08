@@ -45,6 +45,7 @@ import {
   createPendingEntriesIndexes,
 } from './pendingEntries.js';
 import newsletterRouter from './routes/newsletter.js';
+import dataroomRouter from './routes/dataroom.js';
 import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';

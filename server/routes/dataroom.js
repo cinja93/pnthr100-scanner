@@ -1,9 +1,9 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const multer = require('multer');
+import multer from 'multer';
 const { GridFsStorage } = require('multer-gridfs-storage');
 const mongoose = require('mongoose');
-const DataRoomDocument = require('../models/DataRoomDocument');
+import DataRoomDocument from '../models/DataRoomDocument';
 
 const requireAuth = (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
@@ -105,4 +105,4 @@ router.delete('/documents/:id', requireAdmin, async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

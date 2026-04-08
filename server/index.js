@@ -3964,7 +3964,7 @@ app.delete('/api/journal/:id/tags/:tag', authenticateJWT, async (req, res) => {
 
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
 app.use('/api/newsletter', newsletterRouter);
-app.use('/api/dataroom', dataroomRouter);
+app.use('/api/dataroom', authenticateJWT, dataroomRouter);
 
 // ── Admin: Cache Status ────────────────────────────────────────────────────────
 // Shows whether in-memory caches are warm. Helps diagnose cold-start issues.

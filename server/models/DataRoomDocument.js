@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const DataRoomDocumentSchema = new mongoose.Schema({
     title:         { type: String, required: true },
@@ -20,4 +20,4 @@ const DataRoomDocumentSchema = new mongoose.Schema({
 DataRoomDocumentSchema.index({ isLatest: 1, deletedAt: 1 });
 DataRoomDocumentSchema.index({ documentGroup: 1 });
 
-module.exports = mongoose.model('DataRoomDocument', DataRoomDocumentSchema);
+export default mongoose.model('DataRoomDocument', DataRoomDocumentSchema);

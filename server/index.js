@@ -5738,10 +5738,10 @@ app.listen(PORT, () => {
   console.log(`📊 API available at http://localhost:${PORT}/api/stocks`);
   // Pre-compute signal counts in background (takes ~2 min each)
   computeSectorSignalCounts();
- from './routes/newsletter.js'; computeSpeculativeSignalCounts();
+  computeSpeculativeSignalCounts();
   // Bootstrap MongoDB indexes (non-blocking)
- from './routes/newsletter.js';
-  import dataroomRouter from './routes/dataroom.js';ensureCommandCenterIndexes().catch(() => {});
+
+  ensureCommandCenterIndexes().catch(() => {});
   createPendingEntriesIndexes().catch(() => {});
   createKillHistoryIndexes().catch(() => {});
   ensureAssistantIndexes().catch(() => {});

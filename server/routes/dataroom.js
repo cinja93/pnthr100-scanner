@@ -3,7 +3,7 @@ const router = express.Router();
 import multer from 'multer';
 const { GridFsStorage } = require('multer-gridfs-storage');
 const mongoose = require('mongoose');
-import DataRoomDocument from '../models/DataRoomDocument';
+import DataRoomDocument from '../models/DataRoomDocument.js';
 
 const requireAuth = (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });

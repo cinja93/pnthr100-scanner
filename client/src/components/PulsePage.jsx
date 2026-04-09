@@ -576,9 +576,8 @@ function RecessionGauge({ data }) {
       {hover && (
         <div style={GAUGE_TOOLTIP_STYLE}>
           <div style={{ color: '#fcf000', fontWeight: 700, marginBottom: 4 }}>PNTHR Vicious Cycle Index</div>
-          <div>Based on Mark Zandi's methodology. Measures how fast the labor market is deteriorating.</div>
-          <div style={{ marginTop: 6 }}><b style={{ color: '#fff' }}>Formula:</b> Compares the 3-month average adjusted unemployment rate to its 12-month low. Uses employment, population, and labor force participation data.</div>
-          <div style={{ marginTop: 6 }}><b style={{ color: '#fff' }}>Signal:</b> When the gap reaches <span style={{ color: '#ff6b6b' }}>1.0 percentage point</span>, a recession has historically either started or is imminent.</div>
+          <div>Measures how fast the labor market is deteriorating by comparing the 3-month average adjusted unemployment rate to its 12-month low.</div>
+          <div style={{ marginTop: 6 }}>When the gap reaches <span style={{ color: '#ff6b6b' }}>1.0 percentage point</span>, a recession has historically either started or is imminent.</div>
           {data && <div style={{ marginTop: 6, color: '#888' }}>As of: {data.asOf}</div>}
         </div>
       )}
@@ -627,10 +626,8 @@ function BuffettGauge({ data }) {
       {hover && (
         <div style={GAUGE_TOOLTIP_STYLE}>
           <div style={{ color: '#fcf000', fontWeight: 700, marginBottom: 4 }}>Buffett Indicator</div>
-          <div>Warren Buffett's favorite market valuation metric. He called it "probably the best single measure of where valuations stand."</div>
-          <div style={{ marginTop: 6 }}><b style={{ color: '#fff' }}>Formula:</b> Total US Stock Market Capitalization divided by GDP, expressed as a percentage.</div>
-          <div style={{ marginTop: 6 }}><b style={{ color: '#fff' }}>Zones:</b></div>
-          <div><span style={{ color: '#6bcb77' }}>Below 73%</span> = Undervalued</div>
+          <div>Total US Stock Market Capitalization divided by GDP, expressed as a percentage.</div>
+          <div style={{ marginTop: 6 }}><span style={{ color: '#6bcb77' }}>Below 73%</span> = Undervalued</div>
           <div><span style={{ color: '#fcf000' }}>95–115%</span> = Fair Value</div>
           <div><span style={{ color: '#ff6b6b' }}>115–140%</span> = Overvalued</div>
           <div><span style={{ color: '#dc3545' }}>Above 140%</span> = Very Overvalued</div>

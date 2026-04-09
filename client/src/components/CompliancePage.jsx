@@ -323,12 +323,31 @@ export default function CompliancePage() {
   return (
     <div style={{ padding: 30, background: '#0a0a0a', minHeight: '100vh', color: '#fff' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <h1 style={{ color: PNTHR_YELLOW, margin: 0 }}>PNTHR Compliance</h1>
       </div>
-      <p style={{ color: '#666', fontSize: 13, margin: '0 0 20px 0' }}>
+      <p style={{ color: '#666', fontSize: 13, margin: '0 0 12px 0' }}>
         Compliance document management, calendar, and task tracking.
       </p>
+
+      {/* Firm Details Bar */}
+      <div style={{
+        background: '#111', border: '1px solid #222', borderRadius: 8, padding: '12px 18px',
+        marginBottom: 20, display: 'flex', flexWrap: 'wrap', gap: '6px 28px', alignItems: 'center',
+        fontSize: 12, color: '#999', lineHeight: 1.6,
+      }}>
+        <div><span style={{ color: '#ccc', fontWeight: 600 }}>Investment Manager:</span> STT Capital Advisors, LLC</div>
+        <div><span style={{ color: '#ccc', fontWeight: 600 }}>CRD:</span> <span style={{ color: PNTHR_YELLOW, fontWeight: 600 }}>335628</span></div>
+        <div><span style={{ color: '#ccc', fontWeight: 600 }}>Status:</span> ERA (Exempt Reporting Adviser) — AZ</div>
+        <div><span style={{ color: '#ccc', fontWeight: 600 }}>Fund:</span> PNTHR Funds, Carnivore Quant Fund, LP</div>
+        <div><span style={{ color: '#ccc', fontWeight: 600 }}>SEC CIK:</span> <span style={{ color: PNTHR_YELLOW, fontWeight: 600 }}>2056757</span></div>
+        <div><span style={{ color: '#ccc', fontWeight: 600 }}>Private Fund ID:</span> 805-3257019749</div>
+        <div><span style={{ color: '#ccc', fontWeight: 600 }}>GP:</span> PNTHR FUNDS, LLC</div>
+        <div><span style={{ color: '#ccc', fontWeight: 600 }}>CCO/CIO:</span> Scott McBrien <span style={{ color: '#666' }}>(CRD: 2213610)</span></div>
+        <div><span style={{ color: '#ccc', fontWeight: 600 }}>COO:</span> Cindy Eagar</div>
+        <div><span style={{ color: '#ccc', fontWeight: 600 }}>Form PF:</span> <span style={{ color: '#4ade80' }}>Exempt</span> (ERA, not SEC-registered)</div>
+        <div><span style={{ color: '#ccc', fontWeight: 600 }}>Office:</span> 15150 W Park Place, Suite 215, Goodyear, AZ 85395</div>
+      </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid #333' }}>

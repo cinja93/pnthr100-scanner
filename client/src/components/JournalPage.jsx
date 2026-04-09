@@ -1459,13 +1459,13 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
               </button>
             </HoverTooltip>
           )}
-          {tabBtn('trades', 'TRADES')}
-          {tabBtn('analytics', 'ANALYTICS')}
-          {tabBtn('weekly', 'WEEKLY REVIEW')}
-          {isDemo
+          {!archiveTab && tabBtn('trades', 'TRADES')}
+          {!archiveTab && tabBtn('analytics', 'ANALYTICS')}
+          {!archiveTab && tabBtn('weekly', 'WEEKLY REVIEW')}
+          {!archiveTab && (isDemo
             ? tabBtn('institutional', 'INSTITUTIONAL METRICS')
             : tabBtn('dayTrades', 'DAY TRADES')
-          }
+          )}
         </div>
       </div>
 
@@ -1520,7 +1520,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
         <div style={{ color: '#555', textAlign: 'center', padding: 40 }}>Loading journal...</div>
       ) : (
         <>
-          <DisciplineStrip />
+          {!archiveTab && <DisciplineStrip />}
 
           {tab === 'trades' && (
             <TradeDetailBoundary>

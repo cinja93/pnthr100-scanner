@@ -1639,6 +1639,10 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                   <div>Lot 3: +6% from anchor</div>
                                   <div>Lot 4: +10% from anchor</div>
                                   <div>Lot 5: +14% from anchor</div>
+                                  <div style={{ color: '#fcf000', fontWeight: 700, marginTop: 10, marginBottom: 4 }}>FRICTION COSTS (NET P&L)</div>
+                                  <div>Commissions: IBKR Pro $0.005/shr ($1 min)</div>
+                                  <div>Slippage: 5 bps per leg (10 bps round-trip)</div>
+                                  <div>Short borrow: 1.0–2.0% annualized by sector</div>
                                   <div style={{ color: '#fcf000', fontWeight: 700, marginTop: 10, marginBottom: 4 }}>RULES</div>
                                   <div>5-day time gate on Lot 2</div>
                                   <div>Stop ratchets on each lot fill</div>

@@ -446,7 +446,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [ratios, setRatios] = useState(null);
   const [dayTrades, setDayTrades] = useState([]);
   const [dayTradesLoading, setDayTradesLoading] = useState(false);
-  const [archiveTab, setArchiveTab] = useState(null); // null = normal journal, 'test_system', '2019', '2020', etc.
+  const [archiveTab, setArchiveTab] = useState('test_system'); // 'test_system' = default, '2019', '2020', etc.
   const [backtestYears, setBacktestYears] = useState([]); // [{year, count}]
   const [backtestTrades, setBacktestTrades] = useState([]);
   const [backtestSummary, setBacktestSummary] = useState(null);
@@ -454,6 +454,8 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [testSystemTrades, setTestSystemTrades] = useState([]);
   const [testSystemLoading, setTestSystemLoading] = useState(false);
   const [showBacktestMetrics, setShowBacktestMetrics] = useState(false);
+  const [systemTrades, setSystemTrades] = useState([]); // fromQueue trades for current year tab
+  const [systemTradesLoading, setSystemTradesLoading] = useState(false);
 
   const fetchData = async (period) => {
     setLoading(true);
@@ -531,6 +533,22 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
         setTestSystemTrades(Array.isArray(data) ? data : []);
         setTestSystemLoading(false);
       }).catch(err => { console.error('[JOURNAL] test-system fetch error:', err); setTestSystemLoading(false); });
+  }, [archiveTab]);
+
+  // Fetch real system trades (fromQueue) for current year tab (2026 only for now)
+  useEffect(() => {
+    const currentYear = new Date().getFullYear().toString();
+    if (!archiveTab || archiveTab === 'test_system' || archiveTab !== currentYear) {
+      setSystemTrades([]);
+      return;
+    }
+    setSystemTradesLoading(true);
+    fetch(`${API_BASE}/api/journal/system-trades/${archiveTab}`, { headers: authHeaders() })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(data => {
+        setSystemTrades(Array.isArray(data) ? data : []);
+        setSystemTradesLoading(false);
+      }).catch(err => { console.error('[JOURNAL] system-trades fetch error:', err); setSystemTradesLoading(false); });
   }, [archiveTab]);
 
   const filtered = entries.filter(e => {
@@ -1385,17 +1403,9 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           {/* ── Archive Period Tabs ── */}
           {isAdmin && (
             <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #333', marginRight: 8, flexWrap: 'wrap' }}>
-              <button onClick={() => setArchiveTab(null)}
-                style={{
-                  padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
-                  background: archiveTab === null ? '#fcf000' : '#1a1a1a',
-                  color: archiveTab === null ? '#111' : '#888',
-                  letterSpacing: 0.3,
-                }}>LIVE</button>
               <button onClick={() => { setArchiveTab('test_system'); setTab('trades'); }}
                 style={{
                   padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
-                  borderLeft: '1px solid #333',
                   background: archiveTab === 'test_system' ? '#fcf000' : '#1a1a1a',
                   color: archiveTab === 'test_system' ? '#111' : '#888',
                   letterSpacing: 0.3,
@@ -1460,10 +1470,10 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
               </button>
             </HoverTooltip>
           )}
-          {!archiveTab && tabBtn('trades', 'TRADES')}
-          {!archiveTab && tabBtn('analytics', 'ANALYTICS')}
-          {!archiveTab && tabBtn('weekly', 'WEEKLY REVIEW')}
-          {!archiveTab && (isDemo
+          {archiveTab === 'test_system' && tabBtn('trades', 'TRADES')}
+          {archiveTab === 'test_system' && tabBtn('analytics', 'ANALYTICS')}
+          {archiveTab === 'test_system' && tabBtn('weekly', 'WEEKLY REVIEW')}
+          {archiveTab === 'test_system' && (isDemo
             ? tabBtn('institutional', 'INSTITUTIONAL METRICS')
             : tabBtn('dayTrades', 'DAY TRADES')
           )}
@@ -1521,67 +1531,12 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
         <div style={{ color: '#555', textAlign: 'center', padding: 40 }}>Loading journal...</div>
       ) : (
         <>
-          {!archiveTab && <DisciplineStrip />}
+          {(archiveTab === 'test_system') && <DisciplineStrip />}
 
           {tab === 'trades' && (
             <TradeDetailBoundary>
-              {/* ── Archive: Test System Tab ── */}
-              {archiveTab === 'test_system' ? (
-                <div>
-                  <div style={{ color: '#fcf000', fontSize: 13, fontWeight: 800, letterSpacing: 1, marginBottom: 16, borderBottom: '1px solid #333', paddingBottom: 8 }}>TEST SYSTEM TRADES</div>
-                  {testSystemLoading ? (
-                    <div style={{ color: '#555', textAlign: 'center', padding: 40 }}>Loading test system trades...</div>
-                  ) : testSystemTrades.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: 48 }}>
-                      <div style={{ color: '#555', fontSize: 14, marginBottom: 6 }}>No test system trades found.</div>
-                      <div style={{ color: '#444', fontSize: 12 }}>Test system trades will appear here once the backtest endpoints are populated.</div>
-                    </div>
-                  ) : (
-                    <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr>
-                            {['DATE', 'TICKER', 'DIR', 'ENTRY $', 'EXIT $', 'P&L', 'SOURCE'].map(h => (
-                              <th key={h} style={{ color: '#666', fontSize: 10, fontWeight: 700, letterSpacing: 1, padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #222', whiteSpace: 'nowrap' }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {testSystemTrades.map((t, i) => {
-                            const pnl = t.pnl ?? t.pnlDollar ?? 0;
-                            return (
-                              <tr key={t._id || i} style={{ borderBottom: '1px solid #1a1a1a' }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#151515'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                              >
-                                <td style={tdStyle}>{t.date || t.entryDate || '—'}</td>
-                                <td style={{ ...tdStyle, color: '#fcf000', fontWeight: 800 }}>{t.ticker}</td>
-                                <td style={tdStyle}>
-                                  <span style={{ background: (t.direction || t.dir) === 'LONG' ? 'rgba(40,167,69,0.2)' : 'rgba(220,53,69,0.2)', color: (t.direction || t.dir) === 'LONG' ? '#6bcb77' : '#ff6b6b', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
-                                    {t.direction || t.dir || '—'}
-                                  </span>
-                                </td>
-                                <td style={tdStyle}>{t.entryPrice != null ? `$${Number(t.entryPrice).toFixed(2)}` : '—'}</td>
-                                <td style={tdStyle}>{t.exitPrice != null ? `$${Number(t.exitPrice).toFixed(2)}` : '—'}</td>
-                                <td style={{ ...tdStyle, color: pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
-                                  {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(2)}
-                                </td>
-                                <td style={tdStyle}>
-                                  <span style={{ background: '#1a1a1a', color: '#666', fontSize: 9, padding: '2px 6px', borderRadius: 3 }}>
-                                    {t.source || 'journal'}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
-              /* ── Archive: Yearly Backtest Tab ── */
-              ) : archiveTab != null ? (
+              {/* ── Archive: Yearly Backtest Tab ── */}
+              {archiveTab !== 'test_system' ? (
                 <div>
                   <div style={{ color: '#fcf000', fontSize: 13, fontWeight: 800, letterSpacing: 1, marginBottom: 16, borderBottom: '1px solid #333', paddingBottom: 8 }}>
                     {archiveTab} BACKTEST TRADES
@@ -1712,9 +1667,76 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                       )}
                     </>
                   )}
+
+                  {/* ── 2026 System Trades (below backtest divider) ── */}
+                  {archiveTab === new Date().getFullYear().toString() && (
+                    <>
+                      <div style={{ borderTop: '2px solid #fcf000', margin: '24px 0 16px', position: 'relative' }}>
+                        <span style={{ position: 'absolute', top: -10, left: 16, background: '#0a0a0a', padding: '0 10px', color: '#fcf000', fontSize: 11, fontWeight: 800, letterSpacing: 1 }}>
+                          LIVE SYSTEM TRADES
+                        </span>
+                      </div>
+                      {systemTradesLoading ? (
+                        <div style={{ color: '#555', textAlign: 'center', padding: 24 }}>Loading system trades...</div>
+                      ) : systemTrades.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: 32 }}>
+                          <div style={{ color: '#555', fontSize: 13 }}>No system trades yet.</div>
+                          <div style={{ color: '#444', fontSize: 11, marginTop: 4 }}>Trades confirmed from PNTHR Orders will appear here.</div>
+                        </div>
+                      ) : (
+                        <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>
+                                {['DATE', 'TICKER', 'DIR', 'ENTRY $', 'EXIT $', 'P&L', 'DISC.', 'KILL', 'STATUS'].map(h => (
+                                  <th key={h} style={{ color: '#666', fontSize: 10, fontWeight: 700, letterSpacing: 1, padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #222', whiteSpace: 'nowrap' }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {systemTrades.map((t, i) => {
+                                const pnl = t.performance?.realizedPnlDollar;
+                                const disc = t.discipline?.totalScore;
+                                return (
+                                  <tr key={t._id || i} style={{ borderBottom: '1px solid #1a1a1a' }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#151515'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                  >
+                                    <td style={tdStyle}>{t.createdAt ? new Date(t.createdAt).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }) : '—'}</td>
+                                    <td style={{ ...tdStyle, color: '#fcf000', fontWeight: 800 }}>{t.ticker}</td>
+                                    <td style={tdStyle}>
+                                      <span style={{ background: t.direction === 'LONG' ? 'rgba(40,167,69,0.2)' : 'rgba(220,53,69,0.2)', color: t.direction === 'LONG' ? '#6bcb77' : '#ff6b6b', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                                        {t.direction || '—'}
+                                      </span>
+                                    </td>
+                                    <td style={tdStyle}>{t.entry?.fillPrice != null ? `$${t.entry.fillPrice.toFixed(2)}` : '—'}</td>
+                                    <td style={tdStyle}>{t.performance?.avgExitPrice != null ? `$${t.performance.avgExitPrice.toFixed(2)}` : '—'}</td>
+                                    <td style={{ ...tdStyle, color: pnl == null ? '#555' : pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
+                                      {pnl != null ? `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(0)}` : '—'}
+                                    </td>
+                                    <td style={tdStyle}>
+                                      {disc != null ? <span style={{ color: disc >= 75 ? '#6bcb77' : disc >= 55 ? '#fcf000' : '#ff6b6b', fontWeight: 800 }}>{disc}</span> : <span style={{ color: '#555' }}>—</span>}
+                                    </td>
+                                    <td style={tdStyle}>
+                                      {t.entry?.killRank ? <span style={{ color: '#fcf000', fontWeight: 700 }}>#{t.entry.killRank}</span> : <span style={{ color: '#555' }}>—</span>}
+                                    </td>
+                                    <td style={tdStyle}>
+                                      <span style={{ background: t.performance?.status === 'ACTIVE' ? 'rgba(40,167,69,0.2)' : t.performance?.status === 'CLOSED' ? 'rgba(108,117,125,0.2)' : 'rgba(255,193,7,0.2)', color: t.performance?.status === 'ACTIVE' ? '#6bcb77' : t.performance?.status === 'CLOSED' ? '#888' : '#ffc107', fontSize: 9, padding: '2px 6px', borderRadius: 3, fontWeight: 700 }}>
+                                        {t.performance?.status || 'ACTIVE'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
 
-              /* ── Normal Live Journal ── */
+              /* ── Test System: Full Journal Layout ── */
               ) : (
                 <>
                   <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>

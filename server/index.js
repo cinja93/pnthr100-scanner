@@ -3981,6 +3981,22 @@ app.get('/api/journal/backtest/years', authenticateJWT, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/journal/system-trades/:year — real system trades (fromQueue) for a given year
+app.get('/api/journal/system-trades/:year', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const year = req.params.year;
+    const startDate = new Date(`${year}-01-01T00:00:00Z`);
+    const endDate = new Date(`${Number(year) + 1}-01-01T00:00:00Z`);
+    const trades = await db.collection('pnthr_journal')
+      .find({ fromQueue: true, createdAt: { $gte: startDate, $lt: endDate } })
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.json(trades);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/journal/backtest/:year — trades for a given year with summary stats
 app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
   try {

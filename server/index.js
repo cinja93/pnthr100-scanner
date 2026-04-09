@@ -4118,19 +4118,20 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
     const year = req.params.year;
-    const fields = {
-      tradeId: 1, ticker: 1, signal: 1, direction: 1, sector: 1,
-      entryDate: 1, exitDate: 1, entryPrice: 1, exitPrice: 1, avgCost: 1,
-      totalShares: 1,
-      grossDollarPnl: 1, netDollarPnl: 1, grossProfitPct: 1, netProfitPct: 1,
-      isWinner: 1, netIsWinner: 1, tradingDays: 1, exitReason: 1,
-      killScore: 1, entryTier: 1, maxLots: 1, lots: 1,
-      commissionTotal: 1, slippageTotal: 1, borrowCostTotal: 1, totalFrictionDollar: 1
-    };
     const trades = await db.collection('pnthr_bt_pyramid_trade_log')
-      .find({ entryDate: { $regex: `^${year}-` } }, { projection: fields })
+      .find({ entryDate: { $regex: `^${year}-` } })
       .sort({ entryDate: -1 })
       .toArray();
+
+    // Debug: log ALL field names and lot structure from first trade
+    if (trades.length > 0) {
+      const t = trades[0];
+      console.log(`[BT SCHEMA] ${t.ticker} top-level keys:`, Object.keys(t).sort().join(', '));
+      if (Array.isArray(t.lots) && t.lots.length > 0) {
+        console.log(`[BT SCHEMA] ${t.ticker} lot[0] keys:`, Object.keys(t.lots[0]).sort().join(', '));
+        console.log(`[BT SCHEMA] ${t.ticker} lot[0] data:`, JSON.stringify(t.lots[0]));
+      }
+    }
 
     // ── Compute P&L from raw lot data (authoritative, never rely on pre-computed fields) ──
     for (const t of trades) {

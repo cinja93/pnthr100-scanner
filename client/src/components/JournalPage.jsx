@@ -448,7 +448,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [ratios, setRatios] = useState(null);
   const [dayTrades, setDayTrades] = useState([]);
   const [dayTradesLoading, setDayTradesLoading] = useState(false);
-  const [archiveTab, setArchiveTab] = useState('test_system'); // 'test_system' = default, '2019', '2020', etc.
+  const [archiveTab, setArchiveTab] = useState(new Date().getFullYear().toString()); // default to current year
   const [backtestYears, setBacktestYears] = useState([]); // [{year, count}]
   const [backtestTrades, setBacktestTrades] = useState([]);
   const [backtestSummary, setBacktestSummary] = useState(null);
@@ -1397,8 +1397,8 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
 
   return (
     <div style={{ padding: '0 0 32px', maxWidth: 1200, color: '#fff', background: '#0a0a0a', minHeight: '100vh' }}>
-      {/* ── Header — matches PNTHR Kill style ─────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '24px 24px 16px', background: '#111111', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '24px 24px 16px', background: '#111111', gap: 16 }}>
         <div>
           <h1 style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 22, fontWeight: 700, color: '#fcf000', margin: '0 0 4px 0' }}>
             <img src={pantherHead} alt="PNTHR" style={{ height: 36, width: 'auto' }} />
@@ -1406,147 +1406,105 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           </h1>
           <p style={{ color: '#aaaaaa', fontSize: 13, margin: 0 }}>Trade analysis · Discipline tracking · Pattern recognition</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', flex: 1, justifyContent: 'flex-end' }}>
-          {/* ── Sub-tabs (left side of right group) ── */}
-          {archiveTab === 'test_system' && tabBtn('trades', 'TRADES')}
-          {archiveTab === 'test_system' && tabBtn('analytics', 'ANALYTICS')}
-          {archiveTab === 'test_system' && tabBtn('weekly', 'WEEKLY REVIEW')}
-          {archiveTab === 'test_system' && (isDemo
-            ? tabBtn('institutional', 'INSTITUTIONAL METRICS')
-            : tabBtn('dayTrades', 'DAY TRADES')
-          )}
-          {/* ── Spacer to push tabs + admin buttons far right ── */}
-          <div style={{ flex: 1 }} />
-          {/* ── Fund Period Toggle (demo account only) ── */}
-          {isDemo && (
-            <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #333', marginRight: 8 }}>
-              <button
-                onClick={() => setFundPeriod('full_backtest')}
-                style={{
-                  padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
-                  background: fundPeriod === 'full_backtest' ? '#fcf000' : '#1a1a1a',
-                  color: fundPeriod === 'full_backtest' ? '#111' : '#888',
-                  letterSpacing: 0.3,
-                }}
-              >5 YEARS</button>
-              <button
-                onClick={() => setFundPeriod('live_fund')}
-                style={{
-                  padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
-                  borderLeft: '1px solid #333',
-                  background: fundPeriod === 'live_fund' ? '#fcf000' : '#1a1a1a',
-                  color: fundPeriod === 'live_fund' ? '#111' : '#888',
-                  letterSpacing: 0.3,
-                }}
-              >PNTHR 6-16-25</button>
-            </div>
-          )}
-          {/* ── Archive Period Tabs ── */}
-          {isAdmin && (
-            <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #333', marginRight: 8, flexWrap: 'wrap' }}>
-              <button onClick={() => { setArchiveTab('test_system'); setTab('trades'); }}
-                style={{
-                  padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
-                  background: archiveTab === 'test_system' ? '#fcf000' : '#1a1a1a',
-                  color: archiveTab === 'test_system' ? '#111' : '#888',
-                  letterSpacing: 0.3,
-                }}>TEST SYSTEM</button>
-              {backtestYears.map(({ year, count }) => (
-                <button key={year} onClick={() => { setArchiveTab(year); setTab('trades'); }}
-                  style={{
-                    padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
-                    borderLeft: '1px solid #333',
-                    background: archiveTab === year ? '#fcf000' : '#1a1a1a',
-                    color: archiveTab === year ? '#111' : '#888',
-                    letterSpacing: 0.3,
-                  }}>{year}</button>
-              ))}
-            </div>
-          )}
-          {isAdmin && entries.length > 0 && (
-            <HoverTooltip lines={[
-              'SYNC POSITIONS',
-              'Scans your active portfolio and creates a journal entry for any position that is missing one.',
-              'WHEN TO USE:',
-              '• After adding new positions in Command Center',
-              '• If you notice a trade is missing from the journal',
-              '• After importing older positions',
-              'Safe to run anytime — will not duplicate existing entries.',
-            ]}>
-              <button onClick={runMigration} disabled={migrating}
-                style={{ background: 'transparent', border: '1px solid #444', color: '#666', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: migrating ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-                {migrating ? '...' : '↺ sync positions'}
-              </button>
-            </HoverTooltip>
-          )}
-          {isAdmin && entries.some(e => e.performance?.status === 'CLOSED') && (
-            <HoverTooltip lines={[
-              'RESCORE CLOSED',
-              'Recalculates the discipline score on all closed trades using the latest scoring rules.',
-              'WHEN TO USE:',
-              '• After IBKR auto-closes several positions at once',
-              '• If discipline scores look wrong or missing',
-              '• After the scoring system is updated',
-              'Does not change your trade data — only recomputes scores.',
-            ]}>
+        {isAdmin && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+            {/* ── Fund Period Toggle (demo account only) ── */}
+            {isDemo && (
+              <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #333' }}>
+                <button onClick={() => setFundPeriod('full_backtest')} style={{ padding: '5px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer', border: 'none', background: fundPeriod === 'full_backtest' ? '#fcf000' : '#1a1a1a', color: fundPeriod === 'full_backtest' ? '#111' : '#888' }}>5 YEARS</button>
+                <button onClick={() => setFundPeriod('live_fund')} style={{ padding: '5px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer', border: 'none', borderLeft: '1px solid #333', background: fundPeriod === 'live_fund' ? '#fcf000' : '#1a1a1a', color: fundPeriod === 'live_fund' ? '#111' : '#888' }}>PNTHR 6-16-25</button>
+              </div>
+            )}
+            <button onClick={runMigration} disabled={migrating}
+              style={{ background: 'transparent', border: '1px solid #444', color: '#666', borderRadius: 6, padding: '5px 12px', fontSize: 10, fontWeight: 600, cursor: migrating ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+              {migrating ? '...' : '↺ sync positions'}
+            </button>
+            {entries.some(e => e.performance?.status === 'CLOSED') && (
               <button onClick={runRescoreAll} disabled={rescoring}
-                style={{ background: 'transparent', border: '1px solid rgba(212,160,23,0.4)', color: '#b8860b', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: rescoring ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                style={{ background: 'transparent', border: '1px solid rgba(212,160,23,0.4)', color: '#b8860b', borderRadius: 6, padding: '5px 12px', fontSize: 10, fontWeight: 600, cursor: rescoring ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
                 {rescoring ? '...' : '⚡ rescore closed'}
               </button>
-            </HoverTooltip>
-          )}
-          {isAdmin && (
-            <HoverTooltip lines={[
-              'REPAIR IBKR TRADES',
-              'Fixes journal entries for all IBKR auto-closed positions.',
-              'WHEN TO USE:',
-              '• A trade shows wrong direction or price (e.g. OLLI showing SHORT)',
-              '• A trade is missing from the journal after IBKR auto-close',
-              '• After adding a position directly without using the confirm flow',
-              'Safe to run multiple times — already-correct entries are skipped.',
-            ]}>
-              <button onClick={runIbkrRepair} disabled={ibkrRepairing}
-                style={{ background: 'transparent', border: '1px solid rgba(220,53,69,0.4)', color: '#9b2335', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: ibkrRepairing ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-                {ibkrRepairing ? '...' : '🔧 repair IBKR'}
-              </button>
-            </HoverTooltip>
-          )}
-        </div>
+            )}
+            <button onClick={runIbkrRepair} disabled={ibkrRepairing}
+              style={{ background: 'transparent', border: '1px solid rgba(220,53,69,0.4)', color: '#9b2335', borderRadius: 6, padding: '5px 12px', fontSize: 10, fontWeight: 600, cursor: ibkrRepairing ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+              {ibkrRepairing ? '...' : '🔧 repair IBKR'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ── Growth Chart Buttons (below year tabs) ── */}
-      {isAdmin && backtestYears.length > 0 && (
-        <div style={{ padding: '0 24px 8px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ color: '#555', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, marginRight: 4 }}>GROWTH CHARTS</span>
-          {backtestYears.map(({ year }) => (
-            <button key={year}
-              onClick={() => setGrowthChartYear(growthChartYear === year ? null : year)}
-              style={{
-                padding: '4px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                border: growthChartYear === year ? '1px solid #fcf000' : '1px solid #333',
-                borderRadius: 4,
-                background: growthChartYear === year ? '#fcf000' : '#111',
-                color: growthChartYear === year ? '#111' : '#666',
-                letterSpacing: 0.3,
-              }}>{year}</button>
-          ))}
+      {/* ── Tab Row: TEST DATA | Year+Chart boxes | CUMULATIVE | RETURN CALCULATOR ── */}
+      {isAdmin && (
+        <div style={{ padding: '0 24px 12px', display: 'flex', gap: 8, alignItems: 'stretch', flexWrap: 'wrap' }}>
+          {/* TEST DATA tab (no chart) */}
+          <button
+            onClick={() => { setArchiveTab('test_system'); setTab('trades'); setGrowthChartYear(null); }}
+            style={{
+              padding: '8px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              border: archiveTab === 'test_system' ? '1px solid #fcf000' : '1px solid #333',
+              borderRadius: 6, background: archiveTab === 'test_system' ? '#fcf000' : '#111',
+              color: archiveTab === 'test_system' ? '#111' : '#888', letterSpacing: 0.5,
+            }}>TEST DATA</button>
+
+          {/* Year tabs with Chart sub-button */}
+          {backtestYears.map(({ year }) => {
+            const isActive = archiveTab === year && !growthChartYear;
+            const isChart = growthChartYear === year;
+            return (
+              <div key={year} style={{
+                border: `1px solid ${isActive || isChart ? '#fcf000' : '#333'}`,
+                borderRadius: 6, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+                background: '#111', minWidth: 56,
+              }}>
+                <button
+                  onClick={() => { setArchiveTab(year); setTab('trades'); setGrowthChartYear(null); }}
+                  style={{
+                    padding: '6px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
+                    background: isActive ? '#fcf000' : 'transparent',
+                    color: isActive ? '#111' : '#ccc', letterSpacing: 0.3, textAlign: 'center',
+                  }}>{year}</button>
+                <button
+                  onClick={() => { setArchiveTab(year); setGrowthChartYear(growthChartYear === year ? null : year); }}
+                  style={{
+                    padding: '3px 12px', fontSize: 9, fontWeight: 600, cursor: 'pointer', border: 'none',
+                    borderTop: '1px solid #333',
+                    background: isChart ? '#fcf000' : 'transparent',
+                    color: isChart ? '#111' : '#666', letterSpacing: 0.5, textAlign: 'center',
+                  }}>Chart</button>
+              </div>
+            );
+          })}
+
+          {/* CUMULATIVE */}
           <button
             onClick={() => setGrowthChartYear(growthChartYear === 'all' ? null : 'all')}
             style={{
-              padding: '4px 14px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              padding: '8px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
               border: growthChartYear === 'all' ? '1px solid #fcf000' : '1px solid #555',
-              borderRadius: 4,
-              background: growthChartYear === 'all' ? '#fcf000' : '#111',
-              color: growthChartYear === 'all' ? '#111' : '#fcf000',
-              letterSpacing: 0.5,
+              borderRadius: 6, background: growthChartYear === 'all' ? '#fcf000' : '#111',
+              color: growthChartYear === 'all' ? '#111' : '#fcf000', letterSpacing: 0.5,
+              alignSelf: 'center',
             }}>CUMULATIVE 2019–2026</button>
+
+          {/* RETURN CALCULATOR */}
           <button
             onClick={() => { setShowCalculator(true); if (!monthlyReturns) setGrowthChartYear(prev => prev || 'all'); }}
             style={{
-              padding: '4px 14px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
-              border: '1px solid #4ecdc4', borderRadius: 4, marginLeft: 8,
+              padding: '8px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              border: '1px solid #4ecdc4', borderRadius: 6,
               background: '#111', color: '#4ecdc4', letterSpacing: 0.5,
+              alignSelf: 'center',
             }}>RETURN CALCULATOR</button>
+
+          {/* Sub-tabs for TEST DATA view */}
+          {archiveTab === 'test_system' && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
+              {tabBtn('trades', 'TRADES')}
+              {tabBtn('analytics', 'ANALYTICS')}
+              {tabBtn('weekly', 'WEEKLY REVIEW')}
+              {isDemo ? tabBtn('institutional', 'INSTITUTIONAL METRICS') : tabBtn('dayTrades', 'DAY TRADES')}
+            </div>
+          )}
         </div>
       )}
 
@@ -1752,23 +1710,13 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                     </>
                   )}
 
-                  {/* ── 2026 System Trades (below backtest divider) ── */}
+                  {/* ── 2026 System Trades (ABOVE backtest, with thin yellow divider below) ── */}
                   {archiveTab === new Date().getFullYear().toString() && (
                     <>
-                      <div style={{ borderTop: '2px solid #fcf000', margin: '24px 0 16px', position: 'relative' }}>
-                        <span style={{ position: 'absolute', top: -10, left: 16, background: '#0a0a0a', padding: '0 10px', color: '#fcf000', fontSize: 11, fontWeight: 800, letterSpacing: 1 }}>
-                          LIVE SYSTEM TRADES
-                        </span>
-                      </div>
                       {systemTradesLoading ? (
                         <div style={{ color: '#555', textAlign: 'center', padding: 24 }}>Loading system trades...</div>
-                      ) : systemTrades.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: 32 }}>
-                          <div style={{ color: '#555', fontSize: 13 }}>No system trades yet.</div>
-                          <div style={{ color: '#444', fontSize: 11, marginTop: 4 }}>Trades confirmed from PNTHR Orders will appear here.</div>
-                        </div>
-                      ) : (
-                        <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden' }}>
+                      ) : systemTrades.length > 0 && (
+                        <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden', marginBottom: 0 }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                               <tr>
@@ -1815,6 +1763,10 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                             </tbody>
                           </table>
                         </div>
+                      )}
+                      {/* Thin yellow divider between live and backtest */}
+                      {(systemTrades.length > 0 || backtestTrades.length > 0) && (
+                        <div style={{ borderTop: '1px solid #fcf000', margin: '12px 0' }} />
                       )}
                     </>
                   )}

@@ -164,7 +164,7 @@ export default function DataRoomPage() {
     <div style={{ padding: 30, background: '#0a0a0a', minHeight: '100vh', color: '#fff' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <h1 style={{ color: '#FFD700', margin: 0 }}>PNTHR Data Room</h1>
+        <h1 style={{ color: '#fcf000', margin: 0 }}>PNTHR Data Room</h1>
         <div style={{ display: 'flex', gap: 10 }}>
           {isAdmin && (
             <>
@@ -173,7 +173,7 @@ export default function DataRoomPage() {
                 disabled={downloading || totalDocs === 0}
                 style={{
                   background: downloading === '__all__' ? '#555' : '#222',
-                  color: '#FFD700', border: '1px solid #444', borderRadius: 6,
+                  color: '#fcf000', border: '1px solid #444', borderRadius: 6,
                   padding: '10px 16px', fontWeight: 600, cursor: totalDocs > 0 && !downloading ? 'pointer' : 'not-allowed', fontSize: 13
                 }}
               >
@@ -213,10 +213,10 @@ export default function DataRoomPage() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ color: '#FFD700', fontSize: 14, fontWeight: 700, transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
+                <span style={{ color: '#fcf000', fontSize: 14, fontWeight: 700, transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
                   ▼
                 </span>
-                <span style={{ color: '#FFD700', fontWeight: 700, fontSize: 15 }}>{sec}</span>
+                <span style={{ color: '#fcf000', fontWeight: 700, fontSize: 15 }}>{sec}</span>
                 <span style={{ color: '#666', fontSize: 12, marginLeft: 4 }}>({secDocs.length} {secDocs.length === 1 ? 'document' : 'documents'})</span>
               </div>
               {isAdmin && secDocs.length > 0 && (
@@ -225,7 +225,7 @@ export default function DataRoomPage() {
                   disabled={downloading === sec}
                   style={{
                     background: downloading === sec ? '#555' : '#222',
-                    color: '#FFD700', border: '1px solid #333', borderRadius: 4,
+                    color: '#fcf000', border: '1px solid #333', borderRadius: 4,
                     padding: '5px 12px', fontSize: 12, fontWeight: 600,
                     cursor: downloading ? 'not-allowed' : 'pointer'
                   }}
@@ -254,7 +254,7 @@ export default function DataRoomPage() {
                     <span
                       onClick={() => handleView(doc)}
                       style={{ color: '#ddd', cursor: 'pointer', flex: 1, fontSize: 14 }}
-                      onMouseEnter={e => e.target.style.color = '#FFD700'}
+                      onMouseEnter={e => e.target.style.color = '#fcf000'}
                       onMouseLeave={e => e.target.style.color = '#ddd'}
                     >
                       {doc.label || doc.filename}
@@ -273,7 +273,7 @@ export default function DataRoomPage() {
                       {isAdmin && (
                         <button
                           onClick={() => handleDownload(doc)}
-                          style={{ background: '#1a1a1a', color: '#FFD700', border: '1px solid #333', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 11 }}
+                          style={{ background: '#1a1a1a', color: '#fcf000', border: '1px solid #333', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 11 }}
                         >
                           Download
                         </button>
@@ -300,7 +300,7 @@ export default function DataRoomPage() {
       {showUpload && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 10, padding: 30, width: 460, maxWidth: '90vw' }}>
-            <h2 style={{ color: '#FFD700', marginTop: 0 }}>Upload Document</h2>
+            <h2 style={{ color: '#fcf000', marginTop: 0 }}>Upload Document</h2>
 
             {/* Section selector */}
             <div style={{ marginBottom: 16 }}>
@@ -316,7 +316,7 @@ export default function DataRoomPage() {
                   </select>
                   <button
                     onClick={() => setShowNewSection(true)}
-                    style={{ background: '#222', color: '#FFD700', border: '1px solid #444', borderRadius: 6, padding: '8px 14px', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}
+                    style={{ background: '#222', color: '#fcf000', border: '1px solid #444', borderRadius: 6, padding: '8px 14px', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}
                   >
                     + New Section
                   </button>

@@ -4123,52 +4123,12 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
       .sort({ entryDate: -1 })
       .toArray();
 
-    // Debug: log ALL field names and lot structure from first trade
-    if (trades.length > 0) {
-      const t = trades[0];
-      console.log(`[BT SCHEMA] ${t.ticker} top-level keys:`, Object.keys(t).sort().join(', '));
-      if (Array.isArray(t.lots) && t.lots.length > 0) {
-        console.log(`[BT SCHEMA] ${t.ticker} lot[0] keys:`, Object.keys(t.lots[0]).sort().join(', '));
-        console.log(`[BT SCHEMA] ${t.ticker} lot[0] data:`, JSON.stringify(t.lots[0]));
-      }
-    }
-
-    // ── Compute P&L from raw lot data (authoritative, never rely on pre-computed fields) ──
-    for (const t of trades) {
-      // Skip if no exit price (STILL_OPEN trades use stored values)
-      if (t.exitPrice == null || !Array.isArray(t.lots)) {
-        t.computedGrossPnl = t.grossDollarPnl ?? t.netDollarPnl ?? 0;
-        t.computedNetPnl = t.netDollarPnl ?? t.grossDollarPnl ?? 0;
-        t.computedTotalShares = t.totalShares ?? 0;
-        t.computedFriction = t.totalFrictionDollar ?? 0;
-        continue;
-      }
-
-      // Gross P&L: sum per-lot (direction-aware)
-      let grossPnl = 0;
-      let totalShares = 0;
-      for (const lot of t.lots) {
-        if (!lot.shares || !lot.fillPrice) continue;
-        const lotPnl = t.signal === 'SS'
-          ? (lot.fillPrice - t.exitPrice) * lot.shares
-          : (t.exitPrice - lot.fillPrice) * lot.shares;
-        grossPnl += lotPnl;
-        totalShares += lot.shares;
-      }
-      t.computedGrossPnl = parseFloat(grossPnl.toFixed(2));
-      t.computedTotalShares = totalShares;
-
-      // Friction: use stored values or 0
-      const friction = (t.commissionTotal || 0) + (t.slippageTotal || 0) + (t.borrowCostTotal || 0);
-      t.computedFriction = parseFloat(friction.toFixed(2));
-      t.computedNetPnl = parseFloat((grossPnl - friction).toFixed(2));
-    }
 
     const totalTrades = trades.length;
-    const winners = trades.filter(t => t.computedNetPnl > 0).length;
+    const winners = trades.filter(t => (t.netDollarPnl || 0) > 0).length;
     const losers = totalTrades - winners;
     const winRate = totalTrades ? +(winners / totalTrades * 100).toFixed(1) : 0;
-    const totalPnl = trades.reduce((sum, t) => sum + (t.computedNetPnl || 0), 0);
+    const totalPnl = trades.reduce((sum, t) => sum + (t.netDollarPnl || 0), 0);
     const avgPnl = totalTrades ? +(totalPnl / totalTrades).toFixed(2) : 0;
 
     res.json({

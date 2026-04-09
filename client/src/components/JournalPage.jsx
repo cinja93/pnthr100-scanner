@@ -1667,8 +1667,8 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                             </thead>
                             <tbody>
                               {backtestTrades.map((t, i) => {
-                                const pnl = t.computedGrossPnl ?? t.grossDollarPnl ?? 0;
-                                const netPnl = t.computedNetPnl ?? t.netDollarPnl ?? 0;
+                                const pnl = t.grossDollarPnl ?? 0;
+                                const netPnl = t.netDollarPnl ?? 0;
                                 const dir = t.direction || t.signal || '—';
                                 return (
                                   <tr key={t._id || t.tradeId || i} style={{ borderBottom: '1px solid #1a1a1a' }}

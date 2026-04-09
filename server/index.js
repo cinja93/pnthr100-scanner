@@ -3963,6 +3963,70 @@ app.delete('/api/journal/:id/tags/:tag', authenticateJWT, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Backtest & Test-System Archive ────────────────────────────────────────────
+
+// GET /api/journal/backtest/years — available years with trade counts (must be before /:year)
+app.get('/api/journal/backtest/years', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const pipeline = [
+      { $addFields: { year: { $substr: ['$entryDate', 0, 4] } } },
+      { $group: { _id: '$year', count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+      { $project: { _id: 0, year: '$_id', count: 1 } }
+    ];
+    const years = await db.collection('pnthr_bt_pyramid_trade_log').aggregate(pipeline).toArray();
+    res.json(years);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/journal/backtest/:year — trades for a given year with summary stats
+app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const year = req.params.year;
+    const fields = {
+      tradeId: 1, ticker: 1, signal: 1, direction: 1, sector: 1,
+      entryDate: 1, exitDate: 1, entryPrice: 1, exitPrice: 1, avgCost: 1,
+      dollarPnl: 1, netDollarPnl: 1, profitPct: 1, netProfitPct: 1,
+      isWinner: 1, netIsWinner: 1, tradingDays: 1, exitReason: 1,
+      killScore: 1, entryTier: 1, maxLots: 1, lots: 1,
+      commissionTotal: 1, slippageTotal: 1, borrowCost: 1, totalFrictionDollar: 1
+    };
+    const trades = await db.collection('pnthr_bt_pyramid_trade_log')
+      .find({ entryDate: { $regex: `^${year}-` } }, { projection: fields })
+      .sort({ entryDate: -1 })
+      .toArray();
+
+    const totalTrades = trades.length;
+    const winners = trades.filter(t => t.netIsWinner).length;
+    const losers = totalTrades - winners;
+    const winRate = totalTrades ? +(winners / totalTrades * 100).toFixed(1) : 0;
+    const totalPnl = trades.reduce((sum, t) => sum + (t.netDollarPnl || 0), 0);
+    const avgPnl = totalTrades ? +(totalPnl / totalTrades).toFixed(2) : 0;
+
+    res.json({
+      trades,
+      summary: { totalTrades, winners, losers, winRate, totalPnl: +totalPnl.toFixed(2), avgPnl }
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/journal/test-system — archived test-system entries
+app.get('/api/journal/test-system', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const docs = await db.collection('pnthr_test_system_archive')
+      .find({})
+      .sort({ archivedAt: -1, createdAt: -1 })
+      .toArray();
+    res.json(docs);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
 app.use('/api/newsletter', newsletterRouter);
 app.use('/api/dataroom', authenticateJWT, dataroomRouter);

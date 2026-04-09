@@ -446,6 +446,13 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [ratios, setRatios] = useState(null);
   const [dayTrades, setDayTrades] = useState([]);
   const [dayTradesLoading, setDayTradesLoading] = useState(false);
+  const [archiveTab, setArchiveTab] = useState(null); // null = normal journal, 'test_system', '2019', '2020', etc.
+  const [backtestYears, setBacktestYears] = useState([]); // [{year, count}]
+  const [backtestTrades, setBacktestTrades] = useState([]);
+  const [backtestSummary, setBacktestSummary] = useState(null);
+  const [backtestLoading, setBacktestLoading] = useState(false);
+  const [testSystemTrades, setTestSystemTrades] = useState([]);
+  const [testSystemLoading, setTestSystemLoading] = useState(false);
 
   const fetchData = async (period) => {
     setLoading(true);
@@ -488,6 +495,36 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
       .then(d => { setDayTrades(d); setDayTradesLoading(false); })
       .catch(() => setDayTradesLoading(false));
   }, [tab]);
+
+  // Fetch available backtest years on mount
+  useEffect(() => {
+    fetch(`${API_BASE}/api/journal/backtest/years`, { headers: authHeaders() })
+      .then(r => r.json()).then(data => { if (Array.isArray(data)) setBacktestYears(data); })
+      .catch(() => {});
+  }, []);
+
+  // Fetch backtest trades when a year tab is selected
+  useEffect(() => {
+    if (!archiveTab || archiveTab === 'test_system') return;
+    setBacktestLoading(true);
+    fetch(`${API_BASE}/api/journal/backtest/${archiveTab}`, { headers: authHeaders() })
+      .then(r => r.json()).then(data => {
+        setBacktestTrades(data.trades || []);
+        setBacktestSummary(data.summary || null);
+        setBacktestLoading(false);
+      }).catch(() => setBacktestLoading(false));
+  }, [archiveTab]);
+
+  // Fetch test system trades when that tab is selected
+  useEffect(() => {
+    if (archiveTab !== 'test_system') return;
+    setTestSystemLoading(true);
+    fetch(`${API_BASE}/api/journal/test-system`, { headers: authHeaders() })
+      .then(r => r.json()).then(data => {
+        setTestSystemTrades(Array.isArray(data) ? data : []);
+        setTestSystemLoading(false);
+      }).catch(() => setTestSystemLoading(false));
+  }, [archiveTab]);
 
   const filtered = entries.filter(e => {
     if (filterStatus === 'ALL') return true;
@@ -600,7 +637,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   };
 
   const thStyle = (field) => ({
-    color: sortField === field ? '#FFD700' : '#666',
+    color: sortField === field ? '#fcf000' : '#666',
     fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', padding: '6px 8px',
     textAlign: 'left', borderBottom: '1px solid #222', whiteSpace: 'nowrap',
   });
@@ -1297,7 +1334,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
 
   const tabBtn = (id, label) => (
     <button onClick={() => setTab(id)}
-      style={{ background: tab === id ? '#FFD700' : 'transparent', color: tab === id ? '#000' : '#666', border: `1px solid ${tab === id ? '#FFD700' : '#333'}`, borderRadius: 6, padding: '5px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 1 }}>
+      style={{ background: tab === id ? '#fcf000' : 'transparent', color: tab === id ? '#000' : '#666', border: `1px solid ${tab === id ? '#fcf000' : '#333'}`, borderRadius: 6, padding: '5px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 1 }}>
       {label}
     </button>
   );
@@ -1336,6 +1373,36 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                   letterSpacing: 0.3,
                 }}
               >PNTHR 6-16-25</button>
+            </div>
+          )}
+          {/* ── Archive Period Tabs ── */}
+          {isAdmin && (
+            <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #333', marginRight: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => setArchiveTab(null)}
+                style={{
+                  padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
+                  background: archiveTab === null ? '#fcf000' : '#1a1a1a',
+                  color: archiveTab === null ? '#111' : '#888',
+                  letterSpacing: 0.3,
+                }}>LIVE</button>
+              <button onClick={() => setArchiveTab('test_system')}
+                style={{
+                  padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
+                  borderLeft: '1px solid #333',
+                  background: archiveTab === 'test_system' ? '#fcf000' : '#1a1a1a',
+                  color: archiveTab === 'test_system' ? '#111' : '#888',
+                  letterSpacing: 0.3,
+                }}>TEST SYSTEM</button>
+              {backtestYears.map(({ year, count }) => (
+                <button key={year} onClick={() => setArchiveTab(year)}
+                  style={{
+                    padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
+                    borderLeft: '1px solid #333',
+                    background: archiveTab === year ? '#fcf000' : '#1a1a1a',
+                    color: archiveTab === year ? '#111' : '#888',
+                    letterSpacing: 0.3,
+                  }}>{year}</button>
+              ))}
             </div>
           )}
           {isAdmin && entries.length > 0 && (
@@ -1451,125 +1518,283 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
 
           {tab === 'trades' && (
             <>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-                {['ALL', 'ACTIVE', 'PARTIAL', 'CLOSED', 'OVERRIDES'].map(f => (
-                  <button key={f} onClick={() => setFilterStatus(f)}
-                    style={{ background: filterStatus === f ? '#333' : 'transparent', color: filterStatus === f ? '#FFD700' : '#555', border: `1px solid ${filterStatus === f ? '#555' : '#222'}`, borderRadius: 4, padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer', letterSpacing: 1 }}>
-                    {f}
-                  </button>
-                ))}
-                <span style={{ color: '#333', fontSize: 11, alignSelf: 'center', marginLeft: 8 }}>{sorted.length} trade{sorted.length !== 1 ? 's' : ''}</span>
-              </div>
-
-              {sorted.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 40 }}>
-                  <div style={{ color: '#555', fontSize: 14, marginBottom: 16 }}>
-                    No journal entries yet. Journal entries are auto-created when you confirm a position in Command.
-                  </div>
-                  {isAdmin && (
-                    <div>
-                      <div style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>Have existing positions? Import them now:</div>
-                      <button onClick={runMigration} disabled={migrating}
-                        style={{ background: '#FFD700', color: '#000', border: 'none', borderRadius: 6, padding: '7px 20px', fontSize: 12, fontWeight: 800, cursor: migrating ? 'not-allowed' : 'pointer', letterSpacing: 1 }}>
-                        {migrating ? 'IMPORTING...' : '⚡ IMPORT EXISTING POSITIONS'}
-                      </button>
-                      {migrateResult && (
-                        <div style={{ marginTop: 8, fontSize: 12, color: migrateResult.error ? '#ff6b6b' : '#6bcb77' }}>
-                          {migrateResult.error ? `Error: ${migrateResult.error}` : `✓ ${migrateResult.created} new, ${migrateResult.updated || 0} refreshed from Command`}
-                        </div>
-                      )}
+              {/* ── Archive: Test System Tab ── */}
+              {archiveTab === 'test_system' ? (
+                <div>
+                  <div style={{ color: '#fcf000', fontSize: 13, fontWeight: 800, letterSpacing: 1, marginBottom: 16, borderBottom: '1px solid #333', paddingBottom: 8 }}>TEST SYSTEM TRADES</div>
+                  {testSystemLoading ? (
+                    <div style={{ color: '#555', textAlign: 'center', padding: 40 }}>Loading test system trades...</div>
+                  ) : testSystemTrades.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: 48 }}>
+                      <div style={{ color: '#555', fontSize: 14, marginBottom: 6 }}>No test system trades found.</div>
+                      <div style={{ color: '#444', fontSize: 12 }}>Test system trades will appear here once the backtest endpoints are populated.</div>
+                    </div>
+                  ) : (
+                    <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr>
+                            {['DATE', 'TICKER', 'DIR', 'ENTRY $', 'EXIT $', 'P&L', 'SOURCE'].map(h => (
+                              <th key={h} style={{ color: '#666', fontSize: 10, fontWeight: 700, letterSpacing: 1, padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #222', whiteSpace: 'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {testSystemTrades.map((t, i) => {
+                            const pnl = t.pnl ?? t.pnlDollar ?? 0;
+                            return (
+                              <tr key={t._id || i} style={{ borderBottom: '1px solid #1a1a1a' }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#151515'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <td style={tdStyle}>{t.date || t.entryDate || '—'}</td>
+                                <td style={{ ...tdStyle, color: '#fcf000', fontWeight: 800 }}>{t.ticker}</td>
+                                <td style={tdStyle}>
+                                  <span style={{ background: (t.direction || t.dir) === 'LONG' ? 'rgba(40,167,69,0.2)' : 'rgba(220,53,69,0.2)', color: (t.direction || t.dir) === 'LONG' ? '#6bcb77' : '#ff6b6b', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                                    {t.direction || t.dir || '—'}
+                                  </span>
+                                </td>
+                                <td style={tdStyle}>{t.entryPrice != null ? `$${Number(t.entryPrice).toFixed(2)}` : '—'}</td>
+                                <td style={tdStyle}>{t.exitPrice != null ? `$${Number(t.exitPrice).toFixed(2)}` : '—'}</td>
+                                <td style={{ ...tdStyle, color: pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
+                                  {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(2)}
+                                </td>
+                                <td style={tdStyle}>
+                                  <span style={{ background: '#1a1a1a', color: '#666', fontSize: 9, padding: '2px 6px', borderRadius: 3 }}>
+                                    {t.source || 'journal'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
-              ) : filterStatus === 'CLOSED' ? (
-                <ClosedTradeCards focusPositionId={focusPositionId} focusTicker={focusTicker} />
-              ) : (
-                <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr>
-                        {[['createdAt', 'DATE'], ['ticker', 'TICKER'], ['direction', 'DIR'], ['entry.fillPrice', 'ENTRY $'], ['performance.avgExitPrice', 'EXIT $'], ['performance.realizedPnlDollar', 'P&L'], ['discipline.totalScore', 'DISC.'], ['entry.killRank', 'KILL'], ['washRule', 'WASH'], ['tags', 'TAGS']].map(([f, l]) => (
-                          <th key={f} style={thStyle(f)} onClick={() => handleSort(f)}>
-                            {l} {sortField === f ? (sortDir === -1 ? '▼' : '▲') : ''}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sorted.map(entry => {
-                        const isExpanded = expandedId === entry._id;
-                        const pnl = entry.performance?.realizedPnlDollar;
-                        const disc = entry.discipline?.totalScore;
-                        const wash = entry.washSale?.isLoss ? entry.washSale : entry.washRule;
-                        const washExpiry = wash?.isLoss && wash?.expiryDate ? new Date(wash.expiryDate) : null;
-                        const washDays = washExpiry ? Math.max(0, Math.ceil((washExpiry - new Date()) / 86400000)) : null;
-                        const washTriggered = wash?.triggered;
-                        const washExpired = washExpiry && washExpiry <= new Date() && !washTriggered;
-                        return (
-                          <React.Fragment key={entry._id}>
-                            <tr
-                              onClick={() => setExpandedId(isExpanded ? null : entry._id)}
-                              style={{ cursor: 'pointer', background: isExpanded ? '#0d0d0d' : 'transparent' }}
-                              onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = '#151515'; }}
-                              onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = 'transparent'; }}
-                            >
-                              <td style={tdStyle}>{entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }) : '—'}</td>
-                              <td style={{ ...tdStyle, color: '#FFD700', fontWeight: 800 }}>{entry.ticker}</td>
-                              <td style={tdStyle}>
-                                <span style={{ background: entry.direction === 'LONG' ? 'rgba(40,167,69,0.2)' : 'rgba(220,53,69,0.2)', color: entry.direction === 'LONG' ? '#6bcb77' : '#ff6b6b', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
-                                  {entry.direction}
-                                </span>
-                              </td>
-                              <td style={tdStyle}>{entry.entry?.fillPrice != null ? `$${entry.entry.fillPrice.toFixed(2)}` : '—'}</td>
-                              <td style={tdStyle}>{entry.performance?.avgExitPrice != null ? `$${entry.performance.avgExitPrice.toFixed(2)}` : entry.performance?.status === 'ACTIVE' ? <span style={{ color: '#555' }}>—</span> : <span style={{ color: '#555' }}>partial</span>}</td>
-                              <td style={{ ...tdStyle, color: pnl == null ? '#555' : pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
-                                {pnl != null ? `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(0)}` : '—'}
-                              </td>
-                              <td style={tdStyle}>
-                                {disc != null
-                                  ? <span style={{ color: DISC_COLORS(disc), fontWeight: 800 }}>{disc}{(entry.discipline?.overrideCount || 0) > 0 ? ' ⚠' : ''}</span>
-                                  : <span style={{ color: '#555' }}>—</span>}
-                              </td>
-                              <td style={tdStyle}>
-                                {entry.entry?.killRank
-                                  ? <span style={{ color: '#FFD700', fontWeight: 700 }}>#{entry.entry.killRank}{entry.entry.isKillTop10 ? ' *' : ''}</span>
-                                  : <span style={{ color: '#555' }}>—</span>}
-                              </td>
-                              <td style={tdStyle}>
-                                {washTriggered
-                                  ? <span title={wash.triggeredDate ? `Triggered ${new Date(wash.triggeredDate).toLocaleDateString()}` : 'Wash sale triggered'}
-                                      style={{ background: 'rgba(220,53,69,0.2)', color: '#dc3545', padding: '2px 8px', borderRadius: 4, fontWeight: 600, fontSize: '0.75rem' }}>WASH</span>
-                                  : washDays != null && washDays > 0
-                                    ? <span title={washExpiry ? `Expires ${washExpiry.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'})}` : ''}
-                                        style={{ color: '#FFD700', fontWeight: 600, fontSize: '0.85rem' }}>{washDays}d</span>
-                                    : washExpired
-                                      ? <span title={washExpiry ? `Expired ${washExpiry.toLocaleDateString()}` : ''} style={{ color: '#28a745', fontSize: '0.85rem' }}>✓</span>
-                                      : <span style={{ color: '#333' }}>—</span>}
-                              </td>
-                              <td style={tdStyle}>
-                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                  {(entry.tags || []).slice(0, 2).map(t => (
-                                    <span key={t} style={{ background: '#1a1a1a', color: '#666', fontSize: 9, padding: '1px 5px', borderRadius: 3 }}>{t}</span>
-                                  ))}
-                                  {(entry.tags || []).length > 2 && <span style={{ color: '#444', fontSize: 9 }}>+{entry.tags.length - 2}</span>}
-                                </div>
-                              </td>
-                            </tr>
-                            {isExpanded && (
+
+              /* ── Archive: Yearly Backtest Tab ── */
+              ) : archiveTab != null ? (
+                <div>
+                  <div style={{ color: '#fcf000', fontSize: 13, fontWeight: 800, letterSpacing: 1, marginBottom: 16, borderBottom: '1px solid #333', paddingBottom: 8 }}>
+                    {archiveTab} BACKTEST TRADES
+                  </div>
+                  {backtestLoading ? (
+                    <div style={{ color: '#555', textAlign: 'center', padding: 40 }}>Loading {archiveTab} trades...</div>
+                  ) : (
+                    <>
+                      {/* Summary bar */}
+                      {backtestSummary && (
+                        <div style={{ display: 'flex', gap: 24, marginBottom: 18, padding: '12px 16px', background: '#111', borderRadius: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>TOTAL TRADES</div>
+                            <div style={{ color: '#ccc', fontSize: 18, fontWeight: 700 }}>{backtestSummary.totalTrades ?? backtestTrades.length}</div>
+                          </div>
+                          <div>
+                            <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>WIN RATE</div>
+                            <div style={{ color: (backtestSummary.winRate ?? 0) >= 50 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 700 }}>
+                              {backtestSummary.winRate != null ? `${backtestSummary.winRate}%` : '—'}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>TOTAL P&L</div>
+                            <div style={{ color: (backtestSummary.totalPnl ?? 0) >= 0 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 700 }}>
+                              {backtestSummary.totalPnl != null ? `${backtestSummary.totalPnl >= 0 ? '+' : ''}$${Math.abs(backtestSummary.totalPnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>AVG P&L</div>
+                            <div style={{ color: (backtestSummary.avgPnl ?? 0) >= 0 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 700 }}>
+                              {backtestSummary.avgPnl != null ? `${backtestSummary.avgPnl >= 0 ? '+' : ''}$${Math.abs(backtestSummary.avgPnl).toFixed(2)}` : '—'}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {backtestTrades.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: 48 }}>
+                          <div style={{ color: '#555', fontSize: 14, marginBottom: 6 }}>No backtest trades for {archiveTab}.</div>
+                          <div style={{ color: '#444', fontSize: 12 }}>Backtest data will appear here once the yearly archive endpoints are populated.</div>
+                        </div>
+                      ) : (
+                        <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
                               <tr>
-                                <td colSpan={10} style={{ padding: '0 8px 8px', background: '#0d0d0d' }}>
-                                  <TradeDetailBoundary>
-                                    <TradeDetail entry={entry} noteInputs={noteInputs} setNoteInputs={setNoteInputs} addNote={addNote} deleteNote={deleteNote} addTag={addTag} removeTag={removeTag} />
-                                  </TradeDetailBoundary>
-                                </td>
+                                {['DATE', 'TICKER', 'DIR', 'ENTRY $', 'EXIT $', 'P&L', 'NET P&L', 'DAYS', 'EXIT REASON', 'KILL SCORE', 'LOTS'].map(h => (
+                                  <th key={h} style={{ color: '#666', fontSize: 10, fontWeight: 700, letterSpacing: 1, padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #222', whiteSpace: 'nowrap' }}>{h}</th>
+                                ))}
                               </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                            </thead>
+                            <tbody>
+                              {backtestTrades.map((t, i) => {
+                                const pnl = t.pnl ?? t.pnlDollar ?? 0;
+                                const netPnl = t.netPnl ?? t.netPnlDollar ?? pnl;
+                                return (
+                                  <tr key={t._id || i} style={{ borderBottom: '1px solid #1a1a1a' }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#151515'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                  >
+                                    <td style={tdStyle}>{t.date || t.entryDate || '—'}</td>
+                                    <td style={{ ...tdStyle, color: '#fcf000', fontWeight: 800 }}>{t.ticker}</td>
+                                    <td style={tdStyle}>
+                                      <span style={{ background: (t.direction || t.dir) === 'LONG' ? 'rgba(40,167,69,0.2)' : 'rgba(220,53,69,0.2)', color: (t.direction || t.dir) === 'LONG' ? '#6bcb77' : '#ff6b6b', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                                        {t.direction || t.dir || '—'}
+                                      </span>
+                                    </td>
+                                    <td style={tdStyle}>{t.entryPrice != null ? `$${Number(t.entryPrice).toFixed(2)}` : '—'}</td>
+                                    <td style={tdStyle}>{t.exitPrice != null ? `$${Number(t.exitPrice).toFixed(2)}` : '—'}</td>
+                                    <td style={{ ...tdStyle, color: pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
+                                      {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(2)}
+                                    </td>
+                                    <td style={{ ...tdStyle, color: netPnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
+                                      {netPnl >= 0 ? '+' : ''}${Math.abs(netPnl).toFixed(2)}
+                                    </td>
+                                    <td style={tdStyle}>{t.days ?? t.holdingDays ?? '—'}</td>
+                                    <td style={tdStyle}>
+                                      <span style={{ color: t.exitReason === 'SIGNAL' ? '#6bcb77' : t.exitReason === 'FEAST' ? '#fcf000' : t.exitReason === 'STOP_HIT' ? '#ff8c00' : '#888', fontWeight: 700, fontSize: 10 }}>
+                                        {t.exitReason || '—'}
+                                      </span>
+                                    </td>
+                                    <td style={tdStyle}>
+                                      {t.killScore != null ? <span style={{ color: '#fcf000', fontWeight: 700 }}>{t.killScore}</span> : <span style={{ color: '#555' }}>—</span>}
+                                    </td>
+                                    <td style={tdStyle}>{t.lots ?? t.lotCount ?? '—'}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
+
+              /* ── Normal Live Journal ── */
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                    {['ALL', 'ACTIVE', 'PARTIAL', 'CLOSED', 'OVERRIDES'].map(f => (
+                      <button key={f} onClick={() => setFilterStatus(f)}
+                        style={{ background: filterStatus === f ? '#333' : 'transparent', color: filterStatus === f ? '#fcf000' : '#555', border: `1px solid ${filterStatus === f ? '#555' : '#222'}`, borderRadius: 4, padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer', letterSpacing: 1 }}>
+                        {f}
+                      </button>
+                    ))}
+                    <span style={{ color: '#333', fontSize: 11, alignSelf: 'center', marginLeft: 8 }}>{sorted.length} trade{sorted.length !== 1 ? 's' : ''}</span>
+                  </div>
+
+                  {sorted.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: 40 }}>
+                      <div style={{ color: '#555', fontSize: 14, marginBottom: 16 }}>
+                        No journal entries yet. Journal entries are auto-created when you confirm a position in Command.
+                      </div>
+                      {isAdmin && (
+                        <div>
+                          <div style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>Have existing positions? Import them now:</div>
+                          <button onClick={runMigration} disabled={migrating}
+                            style={{ background: '#fcf000', color: '#000', border: 'none', borderRadius: 6, padding: '7px 20px', fontSize: 12, fontWeight: 800, cursor: migrating ? 'not-allowed' : 'pointer', letterSpacing: 1 }}>
+                            {migrating ? 'IMPORTING...' : 'IMPORT EXISTING POSITIONS'}
+                          </button>
+                          {migrateResult && (
+                            <div style={{ marginTop: 8, fontSize: 12, color: migrateResult.error ? '#ff6b6b' : '#6bcb77' }}>
+                              {migrateResult.error ? `Error: ${migrateResult.error}` : `Done — ${migrateResult.created} new, ${migrateResult.updated || 0} refreshed from Command`}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : filterStatus === 'CLOSED' ? (
+                    <ClosedTradeCards focusPositionId={focusPositionId} focusTicker={focusTicker} />
+                  ) : (
+                    <div style={{ background: '#111', borderRadius: 10, overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr>
+                            {[['createdAt', 'DATE'], ['ticker', 'TICKER'], ['direction', 'DIR'], ['entry.fillPrice', 'ENTRY $'], ['performance.avgExitPrice', 'EXIT $'], ['performance.realizedPnlDollar', 'P&L'], ['discipline.totalScore', 'DISC.'], ['entry.killRank', 'KILL'], ['washRule', 'WASH'], ['tags', 'TAGS']].map(([f, l]) => (
+                              <th key={f} style={thStyle(f)} onClick={() => handleSort(f)}>
+                                {l} {sortField === f ? (sortDir === -1 ? '▼' : '▲') : ''}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sorted.map(entry => {
+                            const isExpanded = expandedId === entry._id;
+                            const pnl = entry.performance?.realizedPnlDollar;
+                            const disc = entry.discipline?.totalScore;
+                            const wash = entry.washSale?.isLoss ? entry.washSale : entry.washRule;
+                            const washExpiry = wash?.isLoss && wash?.expiryDate ? new Date(wash.expiryDate) : null;
+                            const washDays = washExpiry ? Math.max(0, Math.ceil((washExpiry - new Date()) / 86400000)) : null;
+                            const washTriggered = wash?.triggered;
+                            const washExpired = washExpiry && washExpiry <= new Date() && !washTriggered;
+                            return (
+                              <React.Fragment key={entry._id}>
+                                <tr
+                                  onClick={() => setExpandedId(isExpanded ? null : entry._id)}
+                                  style={{ cursor: 'pointer', background: isExpanded ? '#0d0d0d' : 'transparent' }}
+                                  onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = '#151515'; }}
+                                  onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = 'transparent'; }}
+                                >
+                                  <td style={tdStyle}>{entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }) : '—'}</td>
+                                  <td style={{ ...tdStyle, color: '#fcf000', fontWeight: 800 }}>{entry.ticker}</td>
+                                  <td style={tdStyle}>
+                                    <span style={{ background: entry.direction === 'LONG' ? 'rgba(40,167,69,0.2)' : 'rgba(220,53,69,0.2)', color: entry.direction === 'LONG' ? '#6bcb77' : '#ff6b6b', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                                      {entry.direction}
+                                    </span>
+                                  </td>
+                                  <td style={tdStyle}>{entry.entry?.fillPrice != null ? `$${entry.entry.fillPrice.toFixed(2)}` : '—'}</td>
+                                  <td style={tdStyle}>{entry.performance?.avgExitPrice != null ? `$${entry.performance.avgExitPrice.toFixed(2)}` : entry.performance?.status === 'ACTIVE' ? <span style={{ color: '#555' }}>—</span> : <span style={{ color: '#555' }}>partial</span>}</td>
+                                  <td style={{ ...tdStyle, color: pnl == null ? '#555' : pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
+                                    {pnl != null ? `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(0)}` : '—'}
+                                  </td>
+                                  <td style={tdStyle}>
+                                    {disc != null
+                                      ? <span style={{ color: DISC_COLORS(disc), fontWeight: 800 }}>{disc}{(entry.discipline?.overrideCount || 0) > 0 ? ' ⚠' : ''}</span>
+                                      : <span style={{ color: '#555' }}>—</span>}
+                                  </td>
+                                  <td style={tdStyle}>
+                                    {entry.entry?.killRank
+                                      ? <span style={{ color: '#fcf000', fontWeight: 700 }}>#{entry.entry.killRank}{entry.entry.isKillTop10 ? ' *' : ''}</span>
+                                      : <span style={{ color: '#555' }}>—</span>}
+                                  </td>
+                                  <td style={tdStyle}>
+                                    {washTriggered
+                                      ? <span title={wash.triggeredDate ? `Triggered ${new Date(wash.triggeredDate).toLocaleDateString()}` : 'Wash sale triggered'}
+                                          style={{ background: 'rgba(220,53,69,0.2)', color: '#dc3545', padding: '2px 8px', borderRadius: 4, fontWeight: 600, fontSize: '0.75rem' }}>WASH</span>
+                                      : washDays != null && washDays > 0
+                                        ? <span title={washExpiry ? `Expires ${washExpiry.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'})}` : ''}
+                                            style={{ color: '#fcf000', fontWeight: 600, fontSize: '0.85rem' }}>{washDays}d</span>
+                                        : washExpired
+                                          ? <span title={washExpiry ? `Expired ${washExpiry.toLocaleDateString()}` : ''} style={{ color: '#28a745', fontSize: '0.85rem' }}>✓</span>
+                                          : <span style={{ color: '#333' }}>—</span>}
+                                  </td>
+                                  <td style={tdStyle}>
+                                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                      {(entry.tags || []).slice(0, 2).map(t => (
+                                        <span key={t} style={{ background: '#1a1a1a', color: '#666', fontSize: 9, padding: '1px 5px', borderRadius: 3 }}>{t}</span>
+                                      ))}
+                                      {(entry.tags || []).length > 2 && <span style={{ color: '#444', fontSize: 9 }}>+{entry.tags.length - 2}</span>}
+                                    </div>
+                                  </td>
+                                </tr>
+                                {isExpanded && (
+                                  <tr>
+                                    <td colSpan={10} style={{ padding: '0 8px 8px', background: '#0d0d0d' }}>
+                                      <TradeDetailBoundary>
+                                        <TradeDetail entry={entry} noteInputs={noteInputs} setNoteInputs={setNoteInputs} addNote={addNote} deleteNote={deleteNote} addTag={addTag} removeTag={removeTag} />
+                                      </TradeDetailBoundary>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}

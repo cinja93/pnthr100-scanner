@@ -3884,6 +3884,27 @@ app.put('/api/journal/:id/confirm-score', authenticateJWT, async (req, res) => {
   }
 });
 
+// GET /api/journal/test-system — all journal entries (test system trades)
+// MUST be before /:id route or Express will match "test-system" as an :id param
+app.get('/api/journal/test-system', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const col = db.collection('pnthr_journal');
+    // Backfill ownerId on any entries missing it (one-time, fire-and-forget)
+    col.updateMany(
+      { ownerId: { $exists: false } },
+      { $set: { ownerId: req.user.userId } }
+    ).catch(() => {});
+    // Return all entries for this user (including freshly backfilled ones)
+    const docs = await col
+      .find({ $or: [{ ownerId: req.user.userId }, { ownerId: { $exists: false } }] })
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.json(docs);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/journal/:id — single entry
 app.get('/api/journal/:id', authenticateJWT, async (req, res) => {
   try {
@@ -4075,26 +4096,6 @@ app.get('/api/journal/backtest/monthly-returns', authenticateJWT, async (req, re
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/journal/test-system — all journal entries (test system trades)
-// Also backfills ownerId on legacy entries missing it
-app.get('/api/journal/test-system', authenticateJWT, async (req, res) => {
-  try {
-    const { connectToDatabase } = await import('./database.js');
-    const db = await connectToDatabase();
-    const col = db.collection('pnthr_journal');
-    // Backfill ownerId on any entries missing it (one-time, fire-and-forget)
-    col.updateMany(
-      { ownerId: { $exists: false } },
-      { $set: { ownerId: req.user.userId } }
-    ).catch(() => {});
-    // Return all entries for this user (including freshly backfilled ones)
-    const docs = await col
-      .find({ $or: [{ ownerId: req.user.userId }, { ownerId: { $exists: false } }] })
-      .sort({ createdAt: -1 })
-      .toArray();
-    res.json(docs);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
 
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
 app.use('/api/newsletter', newsletterRouter);

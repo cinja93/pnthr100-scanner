@@ -541,31 +541,49 @@ const VCI_ZONES = [
   { from: 1.5, to: 2.5, color: '#dc3545' },
 ];
 
+const GAUGE_TOOLTIP_STYLE = {
+  position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+  background: '#1a1a1a', border: '1px solid #fcf000', borderRadius: 8,
+  padding: '10px 14px', width: 260, zIndex: 999, fontSize: 11, lineHeight: 1.5,
+  color: '#ccc', textAlign: 'left', marginBottom: 6, pointerEvents: 'none',
+};
+
 function RecessionGauge({ data }) {
-  if (!data) {
-    return (
-      <SemiGauge
-        value={0} min={0} max={2.5} zones={VCI_ZONES}
-        label="RECESSION"
-        gaugeW={150} gaugeH={100}
-        displayValue="—"
-        subLabel="PNTHR VCI"
-        subValue="No data"
-        subValueColor="#888"
-      />
-    );
-  }
-  const { vci, triggered } = data;
-  return (
+  const [hover, setHover] = React.useState(false);
+  const gauge = !data ? (
     <SemiGauge
-      value={vci} min={0} max={2.5} zones={VCI_ZONES}
+      value={0} min={0} max={2.5} zones={VCI_ZONES}
       label="RECESSION"
       gaugeW={150} gaugeH={100}
-      displayValue={vci.toFixed(2)}
+      displayValue="—"
       subLabel="PNTHR VCI"
-      subValue={triggered ? '⚠ TRIGGERED' : 'No Signal'}
-      subValueColor={triggered ? '#ff6b6b' : '#6bcb77'}
+      subValue="No data"
+      subValueColor="#888"
     />
+  ) : (
+    <SemiGauge
+      value={data.vci} min={0} max={2.5} zones={VCI_ZONES}
+      label="RECESSION"
+      gaugeW={150} gaugeH={100}
+      displayValue={data.vci.toFixed(2)}
+      subLabel="PNTHR VCI"
+      subValue={data.triggered ? '⚠ TRIGGERED' : 'No Signal'}
+      subValueColor={data.triggered ? '#ff6b6b' : '#6bcb77'}
+    />
+  );
+  return (
+    <div style={{ position: 'relative' }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      {hover && (
+        <div style={GAUGE_TOOLTIP_STYLE}>
+          <div style={{ color: '#fcf000', fontWeight: 700, marginBottom: 4 }}>PNTHR Vicious Cycle Index</div>
+          <div>Based on Mark Zandi's methodology. Measures how fast the labor market is deteriorating.</div>
+          <div style={{ marginTop: 6 }}><b style={{ color: '#fff' }}>Formula:</b> Compares the 3-month average adjusted unemployment rate to its 12-month low. Uses employment, population, and labor force participation data.</div>
+          <div style={{ marginTop: 6 }}><b style={{ color: '#fff' }}>Signal:</b> When the gap reaches <span style={{ color: '#ff6b6b' }}>1.0 percentage point</span>, a recession has historically either started or is imminent.</div>
+          {data && <div style={{ marginTop: 6, color: '#888' }}>As of: {data.asOf}</div>}
+        </div>
+      )}
+      {gauge}
+    </div>
   );
 }
 
@@ -578,35 +596,49 @@ const BUFFETT_ZONES = [
 ];
 
 function BuffettGauge({ data }) {
-  if (!data) {
-    return (
-      <SemiGauge
-        value={0} min={0} max={250} zones={BUFFETT_ZONES}
-        label="BUFFETT"
-        gaugeW={150} gaugeH={100}
-        displayValue="—"
-        subLabel="Mkt Cap / GDP"
-        subValue="No data"
-        subValueColor="#888"
-      />
-    );
-  }
-  const { ratio, zone } = data;
-  const color = ratio >= 140 ? '#dc3545' : ratio >= 115 ? '#ff6b6b' : ratio >= 95 ? '#fcf000' : '#6bcb77';
-  // Shorten long zone labels to fit gauge
-  const shortZone = zone === 'SIGNIFICANTLY OVERVALUED' ? 'VERY OVERVALUED'
-    : zone === 'SIGNIFICANTLY UNDERVALUED' ? 'VERY UNDERVALUED'
-    : zone;
-  return (
+  const [hover, setHover] = React.useState(false);
+  const shortZone = data ? (data.zone === 'SIGNIFICANTLY OVERVALUED' ? 'VERY OVERVALUED'
+    : data.zone === 'SIGNIFICANTLY UNDERVALUED' ? 'VERY UNDERVALUED'
+    : data.zone) : null;
+  const color = data ? (data.ratio >= 140 ? '#dc3545' : data.ratio >= 115 ? '#ff6b6b' : data.ratio >= 95 ? '#fcf000' : '#6bcb77') : '#888';
+  const gauge = !data ? (
     <SemiGauge
-      value={ratio} min={0} max={250} zones={BUFFETT_ZONES}
+      value={0} min={0} max={250} zones={BUFFETT_ZONES}
       label="BUFFETT"
       gaugeW={150} gaugeH={100}
-      displayValue={`${ratio}%`}
+      displayValue="—"
+      subLabel="Mkt Cap / GDP"
+      subValue="No data"
+      subValueColor="#888"
+    />
+  ) : (
+    <SemiGauge
+      value={data.ratio} min={0} max={250} zones={BUFFETT_ZONES}
+      label="BUFFETT"
+      gaugeW={150} gaugeH={100}
+      displayValue={`${data.ratio}%`}
       subLabel="Mkt Cap / GDP"
       subValue={shortZone}
       subValueColor={color}
     />
+  );
+  return (
+    <div style={{ position: 'relative' }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      {hover && (
+        <div style={GAUGE_TOOLTIP_STYLE}>
+          <div style={{ color: '#fcf000', fontWeight: 700, marginBottom: 4 }}>Buffett Indicator</div>
+          <div>Warren Buffett's favorite market valuation metric. He called it "probably the best single measure of where valuations stand."</div>
+          <div style={{ marginTop: 6 }}><b style={{ color: '#fff' }}>Formula:</b> Total US Stock Market Capitalization divided by GDP, expressed as a percentage.</div>
+          <div style={{ marginTop: 6 }}><b style={{ color: '#fff' }}>Zones:</b></div>
+          <div><span style={{ color: '#6bcb77' }}>Below 73%</span> = Undervalued</div>
+          <div><span style={{ color: '#fcf000' }}>95–115%</span> = Fair Value</div>
+          <div><span style={{ color: '#ff6b6b' }}>115–140%</span> = Overvalued</div>
+          <div><span style={{ color: '#dc3545' }}>Above 140%</span> = Very Overvalued</div>
+          {data && <div style={{ marginTop: 6, color: '#888' }}>As of: {data.asOf} (quarterly)</div>}
+        </div>
+      )}
+      {gauge}
+    </div>
   );
 }
 

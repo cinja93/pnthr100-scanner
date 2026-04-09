@@ -1667,8 +1667,8 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                             </thead>
                             <tbody>
                               {backtestTrades.map((t, i) => {
-                                const pnl = t.computedGrossPnl ?? 0;
-                                const netPnl = t.computedNetPnl ?? 0;
+                                const pnl = t.computedGrossPnl ?? t.grossDollarPnl ?? 0;
+                                const netPnl = t.computedNetPnl ?? t.netDollarPnl ?? 0;
                                 const dir = t.direction || t.signal || '—';
                                 return (
                                   <tr key={t._id || t.tradeId || i} style={{ borderBottom: '1px solid #1a1a1a' }}
@@ -1685,10 +1685,10 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                     <td style={tdStyle}>{t.entryPrice != null ? `$${Number(t.entryPrice).toFixed(2)}` : '—'}</td>
                                     <td style={tdStyle}>{t.exitPrice != null ? `$${Number(t.exitPrice).toFixed(2)}` : '—'}</td>
                                     <td style={{ ...tdStyle, color: pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
-                                      {pnl >= 0 ? '+' : ''}{`$${Math.abs(pnl).toFixed(2)}`}
+                                      {pnl >= 0 ? '+' : '-'}${Math.abs(pnl).toFixed(2)}
                                     </td>
                                     <td style={{ ...tdStyle, color: netPnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
-                                      {netPnl >= 0 ? '+' : ''}{`$${Math.abs(netPnl).toFixed(2)}`}
+                                      {netPnl >= 0 ? '+' : '-'}${Math.abs(netPnl).toFixed(2)}
                                     </td>
                                     <td style={tdStyle}>{t.tradingDays ?? t.days ?? t.holdingDays ?? '—'}</td>
                                     <td style={tdStyle}>

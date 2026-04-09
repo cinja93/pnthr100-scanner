@@ -54,7 +54,7 @@ WARN_BORDER   = HexColor('#fcf000')
 HERE   = os.path.dirname(__file__)
 PUBLIC = os.path.join(HERE, '../../client/public')
 LOGO   = os.path.join(PUBLIC, 'pnthr-funds-logo-white-bg.png')
-OUT    = os.path.join(PUBLIC, 'PNTHR_PPM_v2.pdf')
+OUT    = os.path.join(PUBLIC, 'PNTHR_PPM_v4.pdf')
 
 PAGE_W, PAGE_H = letter
 MARGIN = 1.0 * inch
@@ -256,7 +256,7 @@ def build_cover(story):
     story.append(p('Dated: April 2026',
                    s('Normal', fontName='Times-Italic', fontSize=10, alignment=TA_CENTER)))
     story.append(sp(0.15 * inch))
-    story.append(p('Version 2.0',
+    story.append(p('Version 4.0',
                    s('Normal', fontName='Times-Roman', fontSize=9,
                      alignment=TA_CENTER, textColor=PNTHR_LGRAY)))
     story.append(PageBreak())
@@ -813,11 +813,11 @@ def build_pnthr_signal_system(story):
 
     lot_data = [
         ['Lot', 'Size (% of Full Position)', 'Price Trigger (vs. Entry Price)', 'Notes'],
-        ['Lot 1', '15%', 'Entry price (immediate)', 'Always filled at initial signal qualification'],
-        ['Lot 2', '30%', 'Entry + 3%', 'Requires 5+ trading days time gate from Lot 1'],
-        ['Lot 3', '25%', 'Entry + 6%', 'Stop ratchets to breakeven on fill'],
-        ['Lot 4', '20%', 'Entry + 10%', 'Stop ratchets to Lot 2 fill price on fill'],
-        ['Lot 5', '10%', 'Entry + 14%', 'Stop ratchets to Lot 3 fill price on fill'],
+        ['Lot 1', '35%', 'Entry price (immediate)', 'Always filled at initial signal qualification'],
+        ['Lot 2', '25%', 'Entry + 3%', 'Requires 5+ trading days time gate from Lot 1'],
+        ['Lot 3', '20%', 'Entry + 6%', 'Stop ratchets to breakeven on fill'],
+        ['Lot 4', '12%', 'Entry + 10%', 'Stop ratchets to Lot 2 fill price on fill'],
+        ['Lot 5', '8%', 'Entry + 14%', 'Stop ratchets to Lot 3 fill price on fill'],
     ]
     tbl = Table([[p(c, s('Normal', fontName='Times-Bold' if i == 0 else 'Times-Roman', fontSize=9))
                   for c in row]
@@ -1617,7 +1617,7 @@ def main():
               onLaterPages=inner_page)
 
     size_kb = os.path.getsize(OUT) // 1024
-    print(f'\n✓ PNTHR PPM v2 generated: {OUT}')
+    print(f'\n✓ PNTHR PPM v4 generated: {OUT}')
     print(f'  Size: {size_kb} KB')
     print(f'  All 8 corrections applied.')
     print(f'  New sections: PNTHR Signal System, Technology Risk, Backtest Disclosure, Class Upgrade Path.')

@@ -4123,15 +4123,26 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
       .sort({ entryDate: -1 })
       .toArray();
 
-    // Recompute P&L from fundamental trade fields (avgCost, exitPrice, totalShares, signal).
-    // These raw fields are always correct. Stored grossDollarPnl/netDollarPnl may be stale.
+    // Recompute avgCost + P&L from per-lot fill data (the only reliable source).
+    // Stored avgCost is corrupted for closed multi-lot trades (set to exitPrice).
+    // Lot-level fillPrice and shares are always correct.
     for (const t of trades) {
-      if (t.avgCost != null && t.exitPrice != null && t.totalShares > 0) {
-        const gross = t.signal === 'SS'
-          ? (t.avgCost - t.exitPrice) * t.totalShares
-          : (t.exitPrice - t.avgCost) * t.totalShares;
-        t.grossDollarPnl = parseFloat(gross.toFixed(2));
-        t.netDollarPnl = parseFloat((gross - (t.totalFrictionDollar || 0)).toFixed(2));
+      if (Array.isArray(t.lots) && t.lots.length > 0 && t.exitPrice != null) {
+        let totalCost = 0, totalShares = 0, grossPnl = 0;
+        for (const lot of t.lots) {
+          if (!lot.fillPrice || !lot.shares) continue;
+          totalCost += lot.fillPrice * lot.shares;
+          totalShares += lot.shares;
+          grossPnl += t.signal === 'SS'
+            ? (lot.fillPrice - t.exitPrice) * lot.shares
+            : (t.exitPrice - lot.fillPrice) * lot.shares;
+        }
+        if (totalShares > 0) {
+          t.avgCost = parseFloat((totalCost / totalShares).toFixed(4));
+          t.totalShares = totalShares;
+          t.grossDollarPnl = parseFloat(grossPnl.toFixed(2));
+          t.netDollarPnl = parseFloat((grossPnl - (t.totalFrictionDollar || 0)).toFixed(2));
+        }
       }
     }
 

@@ -46,6 +46,7 @@ import {
 } from './pendingEntries.js';
 import newsletterRouter from './routes/newsletter.js';
 import dataroomRouter from './routes/dataroom.js';
+import complianceRouter from './routes/compliance.js';
 import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
@@ -3965,6 +3966,7 @@ app.delete('/api/journal/:id/tags/:tag', authenticateJWT, async (req, res) => {
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
 app.use('/api/newsletter', newsletterRouter);
 app.use('/api/dataroom', authenticateJWT, dataroomRouter);
+app.use('/api/compliance', authenticateJWT, complianceRouter);
 
 // ── Admin: Cache Status ────────────────────────────────────────────────────────
 // Shows whether in-memory caches are warm. Helps diagnose cold-start issues.

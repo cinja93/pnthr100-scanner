@@ -179,6 +179,16 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           <span style={{ fontSize: 14 }}>🗄️</span>
           <span>PNTHR Data Room</span>
         </button>
+        {isAdmin && (
+          <button
+            className={styles.dataRoomBtn}
+            onClick={() => onNavigate('compliance')}
+            title="PNTHR Compliance — Documents, Calendar & Tasks"
+          >
+            <span style={{ fontSize: 14 }}>🛡️</span>
+            <span>Compliance</span>
+          </button>
+        )}
       </div>
 
       {/* Fixed tooltip rendered outside sidebar overflow */}

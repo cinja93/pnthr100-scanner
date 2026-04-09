@@ -30,6 +30,7 @@ import AssistantPage from './components/AssistantPage';
 import OrdersPage from './components/OrdersPage';
 import LoginPage from './components/LoginPage';
 import DataRoomPage from './components/DataRoomPage';
+import CompliancePage from './components/CompliancePage';
 import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
 import { computeWeeksAgo } from './utils/dateUtils';
@@ -1260,6 +1261,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR Data Room */}
           {activePage === 'data-room' && <DataRoomPage />}
+
+          {/* PNTHR Compliance (admin only) */}
+          {activePage === 'compliance' && isAdmin && <CompliancePage />}
         </main>
 
         <footer className="footer">

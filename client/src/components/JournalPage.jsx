@@ -1385,7 +1385,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                   color: archiveTab === null ? '#111' : '#888',
                   letterSpacing: 0.3,
                 }}>LIVE</button>
-              <button onClick={() => setArchiveTab('test_system')}
+              <button onClick={() => { setArchiveTab('test_system'); setTab('trades'); }}
                 style={{
                   padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
                   borderLeft: '1px solid #333',
@@ -1394,7 +1394,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                   letterSpacing: 0.3,
                 }}>TEST SYSTEM</button>
               {backtestYears.map(({ year, count }) => (
-                <button key={year} onClick={() => setArchiveTab(year)}
+                <button key={year} onClick={() => { setArchiveTab(year); setTab('trades'); }}
                   style={{
                     padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
                     borderLeft: '1px solid #333',

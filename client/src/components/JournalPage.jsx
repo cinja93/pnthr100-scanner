@@ -453,6 +453,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [backtestLoading, setBacktestLoading] = useState(false);
   const [testSystemTrades, setTestSystemTrades] = useState([]);
   const [testSystemLoading, setTestSystemLoading] = useState(false);
+  const [showBacktestMetrics, setShowBacktestMetrics] = useState(false);
 
   const fetchData = async (period) => {
     setLoading(true);
@@ -1613,6 +1614,37 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                             <div style={{ color: (backtestSummary.avgPnl ?? 0) >= 0 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 700 }}>
                               {backtestSummary.avgPnl != null ? `${backtestSummary.avgPnl >= 0 ? '+' : ''}$${Math.abs(backtestSummary.avgPnl).toFixed(2)}` : '—'}
                             </div>
+                          </div>
+                          <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                            <button onClick={() => setShowBacktestMetrics(!showBacktestMetrics)}
+                              style={{ background: showBacktestMetrics ? '#fcf000' : '#1a1a1a', color: showBacktestMetrics ? '#111' : '#fcf000', border: '1px solid #fcf000', borderRadius: 6, padding: '8px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
+                              BACKTEST METRICS
+                            </button>
+                            {showBacktestMetrics && (
+                              <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, background: '#111', border: '1px solid #333', borderRadius: 8, padding: '16px 20px', width: 340, zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.6)' }}>
+                                <div style={{ color: '#fcf000', fontSize: 13, fontWeight: 800, letterSpacing: 1, marginBottom: 12, borderBottom: '1px solid #333', paddingBottom: 8 }}>PNTHR PYRAMID SYSTEM</div>
+                                <div style={{ color: '#888', fontSize: 11, lineHeight: 1.8 }}>
+                                  <div style={{ color: '#ccc', fontWeight: 700, marginBottom: 4 }}>Starting Capital: $100,000</div>
+                                  <div><span style={{ color: '#ccc' }}>Max risk per trade:</span> 1% of NAV (0.5% ETFs)</div>
+                                  <div><span style={{ color: '#ccc' }}>Max portfolio heat:</span> 10% at any time</div>
+                                  <div style={{ color: '#fcf000', fontWeight: 700, marginTop: 10, marginBottom: 4 }}>LOT ALLOCATION</div>
+                                  <div>Lot 1 (The Scent): 35%</div>
+                                  <div>Lot 2 (The Stalk): 25%</div>
+                                  <div>Lot 3 (The Strike): 20%</div>
+                                  <div>Lot 4 (The Jugular): 12%</div>
+                                  <div>Lot 5 (The Kill): 8%</div>
+                                  <div style={{ color: '#fcf000', fontWeight: 700, marginTop: 10, marginBottom: 4 }}>LOT TRIGGERS</div>
+                                  <div>Lot 1: Entry (0%)</div>
+                                  <div>Lot 2: +3% from anchor</div>
+                                  <div>Lot 3: +6% from anchor</div>
+                                  <div>Lot 4: +10% from anchor</div>
+                                  <div>Lot 5: +14% from anchor</div>
+                                  <div style={{ color: '#fcf000', fontWeight: 700, marginTop: 10, marginBottom: 4 }}>RULES</div>
+                                  <div>5-day time gate on Lot 2</div>
+                                  <div>Stop ratchets on each lot fill</div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}

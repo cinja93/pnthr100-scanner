@@ -354,7 +354,7 @@ function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subV
       <div style={{ color: '#FFD700', fontSize: 11, fontWeight: 700, letterSpacing: 2, marginTop: 4 }}>{label}</div>
       <div style={{ color: '#fff', fontSize: 20, fontWeight: 800 }}>{displayValue ?? '—'}</div>
       <div style={{ color: '#888', fontSize: 10 }}>{subLabel}</div>
-      {subValue && <div style={{ color: subValueColor || '#fff', fontSize: 13, fontWeight: 600 }}>{subValue}</div>}
+      {subValue && <div style={{ color: subValueColor || '#fff', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>{subValue}</div>}
     </div>
   );
 }
@@ -593,6 +593,10 @@ function BuffettGauge({ data }) {
   }
   const { ratio, zone } = data;
   const color = ratio >= 140 ? '#dc3545' : ratio >= 115 ? '#ff6b6b' : ratio >= 95 ? '#fcf000' : '#6bcb77';
+  // Shorten long zone labels to fit gauge
+  const shortZone = zone === 'SIGNIFICANTLY OVERVALUED' ? 'VERY OVERVALUED'
+    : zone === 'SIGNIFICANTLY UNDERVALUED' ? 'VERY UNDERVALUED'
+    : zone;
   return (
     <SemiGauge
       value={ratio} min={0} max={250} zones={BUFFETT_ZONES}
@@ -600,7 +604,7 @@ function BuffettGauge({ data }) {
       gaugeW={150} gaugeH={100}
       displayValue={`${ratio}%`}
       subLabel="Mkt Cap / GDP"
-      subValue={zone}
+      subValue={shortZone}
       subValueColor={color}
     />
   );

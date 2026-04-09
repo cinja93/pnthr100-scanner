@@ -462,6 +462,8 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [monthlyReturns, setMonthlyReturns] = useState(null);
   const [hurdleRates, setHurdleRates] = useState({});
   const [showCalculator, setShowCalculator] = useState(false);
+  const [showSpy, setShowSpy] = useState(false);
+  const [spyGrowth, setSpyGrowth] = useState(null);
 
   const fetchData = async (period) => {
     setLoading(true);
@@ -569,6 +571,15 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
       })
       .catch(err => console.error('[JOURNAL] monthly-returns fetch error:', err));
   }, [growthChartYear, monthlyReturns]);
+
+  // Fetch SPY benchmark data (lazy — only when toggle is on)
+  useEffect(() => {
+    if (!showSpy || spyGrowth) return;
+    fetch(`${API_BASE}/api/journal/backtest/spy-benchmark`, { headers: authHeaders() })
+      .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
+      .then(data => setSpyGrowth(data.spyGrowth || []))
+      .catch(err => console.error('[JOURNAL] spy-benchmark fetch error:', err));
+  }, [showSpy, spyGrowth]);
 
   // Use testSystemTrades when on test_system tab, otherwise entries (pnthr_journal)
   const baseEntries = archiveTab === 'test_system' ? testSystemTrades : entries;
@@ -1548,6 +1559,9 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
             hurdleRates={hurdleRates}
             yearFilter={growthChartYear}
             showDataBoxes
+            showSpy={showSpy}
+            onToggleSpy={() => setShowSpy(prev => !prev)}
+            spyGrowth={spyGrowth}
           />
         </div>
       )}

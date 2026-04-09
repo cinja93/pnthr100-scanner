@@ -288,7 +288,7 @@ function YearStatsPanel({ stats, hurdleRates, tierKey }) {
 }
 
 // ── Main GrowthChart Component ───────────────────────────────────────────────
-export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 'all', showDataBoxes = true }) {
+export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 'all', showDataBoxes = true, showSpy = false, onToggleSpy, spyGrowth }) {
   const results = useMemo(() => {
     if (!monthlyReturns?.length) return null;
     const out = {};
@@ -300,11 +300,34 @@ export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 
 
   if (!results) return <div style={{ color: '#666', padding: 20, textAlign: 'center' }}>Loading growth data...</div>;
 
+  // Prepare SPY data for current view (rebase for single-year views)
+  const spyByMonth = useMemo(() => {
+    if (!showSpy || !spyGrowth?.length) return null;
+    const map = {};
+    if (yearFilter === 'all') {
+      for (const s of spyGrowth) map[s.month] = s.nav;
+    } else {
+      // Rebase to $100K at start of year
+      const yearData = spyGrowth.filter(s => s.month.startsWith(String(yearFilter)));
+      if (!yearData.length) return null;
+      // Find the NAV right before this year to use as base
+      const allBefore = spyGrowth.filter(s => s.month < `${yearFilter}-01`);
+      const baseNav = allBefore.length ? allBefore[allBefore.length - 1].nav : yearData[0].nav;
+      for (const s of yearData) {
+        map[s.month] = +((s.nav / baseNav) * 100_000).toFixed(2);
+      }
+    }
+    return map;
+  }, [showSpy, spyGrowth, yearFilter]);
+
   // Merge chart data across tiers
   const mergedData = useMemo(() => {
     const allMonths = new Set();
     for (const r of Object.values(results)) {
       for (const d of r.chartData) allMonths.add(d.month);
+    }
+    if (spyByMonth) {
+      for (const m of Object.keys(spyByMonth)) allMonths.add(m);
     }
     return [...allMonths].sort().map(month => {
       const row = { month };
@@ -312,9 +335,10 @@ export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 
         const pt = r.chartData.find(d => d.month === month);
         row[key] = pt?.nav || null;
       }
+      if (spyByMonth) row.spy = spyByMonth[month] || null;
       return row;
     });
-  }, [results]);
+  }, [results, spyByMonth]);
 
   const title = yearFilter === 'all'
     ? 'Cumulative Growth (2019–2026)'
@@ -323,7 +347,17 @@ export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 
   return (
     <div style={{ background: '#0d0d0d', border: '1px solid #222', borderRadius: 10, padding: '16px 20px', marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h3 style={{ color: '#fcf000', fontSize: 15, fontWeight: 700, margin: 0 }}>{title}</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h3 style={{ color: '#fcf000', fontSize: 15, fontWeight: 700, margin: 0 }}>{title}</h3>
+          {onToggleSpy && (
+            <button onClick={onToggleSpy} style={{
+              padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              border: showSpy ? '1px solid #888' : '1px solid #444', borderRadius: 4,
+              background: showSpy ? '#222' : '#111', color: showSpy ? '#fff' : '#666',
+              letterSpacing: 0.3,
+            }}>vs S&P 500</button>
+          )}
+        </div>
         <span style={{ color: '#666', fontSize: 10 }}>Net of 2% mgmt fee + performance allocation + US2Y hurdle + HWM</span>
       </div>
 
@@ -347,7 +381,10 @@ export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 
           <Tooltip content={<ChartTooltip />} />
           <Legend
             wrapperStyle={{ fontSize: 11, color: '#aaa' }}
-            formatter={(value) => TIERS[value]?.label || value}
+            formatter={(value) => {
+              if (value === 'spy') return 'S&P 500 ($100K, net 0.03% ER)';
+              return TIERS[value]?.label || value;
+            }}
           />
           {Object.entries(TIERS).map(([key, tier]) => (
             <Line
@@ -361,6 +398,18 @@ export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 
               connectNulls
             />
           ))}
+          {showSpy && spyByMonth && (
+            <Line
+              type="monotone"
+              dataKey="spy"
+              name="spy"
+              stroke="#888"
+              strokeWidth={1.5}
+              strokeDasharray="6 3"
+              dot={false}
+              connectNulls
+            />
+          )}
         </LineChart>
       </ResponsiveContainer>
 
@@ -372,6 +421,36 @@ export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 
           ))}
         </div>
       )}
+
+      {/* SPY comparison annotation */}
+      {showSpy && spyByMonth && results.filet?.stats?.totalReturnPct != null && (() => {
+        const spyVals = Object.values(spyByMonth);
+        if (!spyVals.length) return null;
+        const spyEnd = spyVals[spyVals.length - 1];
+        const spyReturnPct = +((spyEnd / 100_000 - 1) * 100).toFixed(1);
+        const filetPct = results.filet.stats.totalReturnPct;
+        const alpha = +(filetPct - spyReturnPct).toFixed(1);
+        return (
+          <div style={{
+            background: '#141414', border: '1px solid #333', borderRadius: 8,
+            padding: '10px 16px', marginTop: 12, display: 'flex', gap: 24,
+            alignItems: 'center', flexWrap: 'wrap', fontSize: 12,
+          }}>
+            <div>
+              <span style={{ color: '#888' }}>PNTHR Filet ($100K): </span>
+              <span style={{ color: filetPct >= 0 ? '#4ecdc4' : '#ff6b6b', fontWeight: 700 }}>{formatPct(filetPct)}</span>
+            </div>
+            <div>
+              <span style={{ color: '#888' }}>S&P 500 ($100K): </span>
+              <span style={{ color: spyReturnPct >= 0 ? '#4ecdc4' : '#ff6b6b', fontWeight: 700 }}>{formatPct(spyReturnPct)}</span>
+            </div>
+            <div>
+              <span style={{ color: '#888' }}>Alpha: </span>
+              <span style={{ color: alpha >= 0 ? '#4ecdc4' : '#ff6b6b', fontWeight: 800, fontSize: 14 }}>{formatPct(alpha)}</span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Year-by-year stats for cumulative view */}
       {yearFilter === 'all' && (

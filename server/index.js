@@ -5024,17 +5024,20 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     let recessionIndicator = null;
     try {
       const fredKey = process.env.FRED_API_KEY;
+      console.log(`[PULSE] FRED_API_KEY present: ${!!fredKey}`);
       if (fredKey) {
         const [empRes, popRes, lfprRes] = await Promise.all([
           fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=CE16OV&sort_order=desc&limit=72&api_key=${fredKey}&file_type=json`),
           fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=CNP16OV&sort_order=desc&limit=72&api_key=${fredKey}&file_type=json`),
           fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=CIVPART&sort_order=desc&limit=72&api_key=${fredKey}&file_type=json`),
         ]);
+        console.log(`[PULSE] FRED responses: emp=${empRes.status} pop=${popRes.status} lfpr=${lfprRes.status}`);
         if (empRes.ok && popRes.ok && lfprRes.ok) {
           const emp  = (await empRes.json()).observations?.filter(o => o.value !== '.').map(o => ({ date: o.date, v: +o.value })) || [];
           const pop  = (await popRes.json()).observations?.filter(o => o.value !== '.').map(o => ({ date: o.date, v: +o.value })) || [];
           const lfpr = (await lfprRes.json()).observations?.filter(o => o.value !== '.').map(o => ({ date: o.date, v: +o.value })) || [];
 
+          console.log(`[PULSE] FRED data lengths: emp=${emp.length} pop=${pop.length} lfpr=${lfpr.length}`);
           if (emp.length >= 15 && pop.length >= 15 && lfpr.length >= 60) {
             // 5-year (60-month) moving average of LFPR
             const lfprAvg5y = lfpr.slice(0, 60).reduce((s, o) => s + o.v, 0) / 60;

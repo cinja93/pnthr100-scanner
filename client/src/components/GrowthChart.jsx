@@ -1,10 +1,11 @@
 // client/src/components/GrowthChart.jsx
 // ── Investor Growth Chart — Backtest Returns with PPM Fee Structure ──────────
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ReferenceLine
+  ResponsiveContainer,
 } from 'recharts';
+import pantherHead from '../assets/panther head.png';
 
 // ── PPM Fee Constants ────────────────────────────────────────────────────────
 const MGMT_FEE_ANNUAL = 0.02; // 2% per annum
@@ -16,6 +17,13 @@ const TIERS = {
   porterhouse: { label: 'Porterhouse', startingCapital: 500_000,   perfAlloc: 0.25, loyaltyAlloc: 0.20, color: '#4ecdc4' },
   wagyu:       { label: 'Wagyu',       startingCapital: 1_000_000, perfAlloc: 0.20, loyaltyAlloc: 0.15, color: '#fcf000' },
 };
+
+// Determine tier from arbitrary amount
+function getTierForAmount(amount) {
+  if (amount >= 1_000_000) return { key: 'wagyu', ...TIERS.wagyu, startingCapital: amount };
+  if (amount >= 500_000)   return { key: 'porterhouse', ...TIERS.porterhouse, startingCapital: amount };
+  return { key: 'filet', ...TIERS.filet, startingCapital: amount };
+}
 
 // ── Fee Calculation Engine ───────────────────────────────────────────────────
 function computeGrowth(monthlyReturns, hurdleRates, tier, yearFilter) {
@@ -73,13 +81,6 @@ function computeGrowth(monthlyReturns, hurdleRates, tier, yearFilter) {
       }
     }
 
-    // Gross return for this month (scaled proportionally to account size)
-    // The backtest ran on $100K — scale returns to this tier's starting capital
-    const scaleFactor = nav / (startingCapital === 100_000 ? 100_000 : getScaledBase(months, m.month, startingCapital));
-    const grossPnl = m.net * (startingCapital / 100_000);
-    // Actually: since we're tracking NAV growth, use the return RATE from the backtest
-    // Monthly return rate = backtest net P&L / backtest NAV at that point
-    // Simpler approach: track cumulative backtest NAV and derive return rate
     const returnRate = m.net / getRunningBacktestNav(months, m.month, 100_000);
     const monthGross = nav * returnRate;
 
@@ -145,8 +146,6 @@ function getRunningBacktestNav(months, upToMonth, startNav) {
   return Math.max(nav, 1); // prevent division by zero
 }
 
-function getScaledBase() { return 100_000; }
-
 function getMonthBefore(monthStr) {
   const [y, m] = monthStr.split('-').map(Number);
   const d = new Date(y, m - 2, 1);
@@ -156,11 +155,9 @@ function getMonthBefore(monthStr) {
 // Performance allocation: on profits above HWM, in excess of hurdle
 function calcPerfAllocation(yearGrossProfit, yearStartNav, hwm, hurdleRate, allocRate) {
   if (yearGrossProfit <= 0) return 0;
-  // Only on profits above HWM
   const navBeforeFees = yearStartNav + yearGrossProfit;
   const profitAboveHwm = Math.max(0, navBeforeFees - Math.max(hwm, yearStartNav));
   if (profitAboveHwm <= 0) return 0;
-  // Subtract hurdle (hurdle = hurdleRate% of starting NAV)
   const hurdleAmount = yearStartNav * (hurdleRate / 100);
   const excessProfit = Math.max(0, profitAboveHwm - hurdleAmount);
   return excessProfit * allocRate;
@@ -214,8 +211,23 @@ function ChartTooltip({ active, payload, label }) {
   );
 }
 
+// ── PNTHR logo dot for last data point ──────────────────────────────────────
+function PnthrDot({ cx, cy, index, dataLength }) {
+  if (index !== dataLength - 1) return null;
+  return (
+    <image
+      href={pantherHead}
+      x={cx - 12}
+      y={cy - 12}
+      width={24}
+      height={24}
+      style={{ filter: 'drop-shadow(0 0 4px rgba(252,240,0,0.6))' }}
+    />
+  );
+}
+
 // ── Data Box Component ───────────────────────────────────────────────────────
-function DataBox({ tierKey, tier, stats, yearFilter }) {
+function DataBox({ tier, stats, yearFilter }) {
   if (!stats?.endingNav) return null;
   const ys = yearFilter !== 'all' && stats.yearStats?.[yearFilter];
   return (
@@ -258,8 +270,34 @@ function DataBox({ tierKey, tier, stats, yearFilter }) {
   );
 }
 
+// ── SPY Data Box ────────────────────────────────────────────────────────────
+function SpyDataBox({ spyReturnPct, startingCapital, endingNav }) {
+  return (
+    <div style={{
+      background: '#141414', border: '1px solid #55555533', borderRadius: 8,
+      padding: '10px 14px', minWidth: 200, flex: 1,
+    }}>
+      <div style={{ color: '#888', fontWeight: 700, fontSize: 12, marginBottom: 6 }}>
+        S&P 500 — {formatDollar(startingCapital)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px', fontSize: 11 }}>
+        <span style={{ color: '#888' }}>Ending NAV</span>
+        <span style={{ color: '#fff', fontWeight: 600, textAlign: 'right' }}>{formatDollar(endingNav)}</span>
+        <span style={{ color: '#888' }}>Total Return</span>
+        <span style={{ color: spyReturnPct >= 0 ? '#4ecdc4' : '#ff6b6b', fontWeight: 600, textAlign: 'right' }}>
+          {formatDollar(endingNav - startingCapital)} ({formatPct(spyReturnPct)})
+        </span>
+        <span style={{ color: '#888' }}>Expense Ratio</span>
+        <span style={{ color: '#aaa', textAlign: 'right' }}>0.03% (VOO)</span>
+        <span style={{ color: '#888' }}>Perf Allocation</span>
+        <span style={{ color: '#aaa', textAlign: 'right' }}>None</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Year Stats Panel ─────────────────────────────────────────────────────────
-function YearStatsPanel({ stats, hurdleRates, tierKey }) {
+function YearStatsPanel({ stats }) {
   if (!stats?.yearStats) return null;
   const years = Object.keys(stats.yearStats).sort();
   return (
@@ -287,8 +325,129 @@ function YearStatsPanel({ stats, hurdleRates, tierKey }) {
   );
 }
 
+// ── Comparison Dropdown ─────────────────────────────────────────────────────
+const COMPARE_PRESETS = [
+  { label: '$100,000 (Filet)', value: 100_000 },
+  { label: '$500,000 (Porterhouse)', value: 500_000 },
+  { label: '$1,000,000 (Wagyu)', value: 1_000_000 },
+];
+
+function CompareDropdown({ compareAmount, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const [customInput, setCustomInput] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
+
+  const handlePreset = (val) => {
+    onSelect(compareAmount === val ? null : val);
+    setOpen(false);
+    setShowCustom(false);
+  };
+
+  const handleCustomSubmit = () => {
+    const raw = Number(customInput.replace(/[^0-9]/g, ''));
+    if (raw >= 100_000) {
+      onSelect(raw);
+      setOpen(false);
+      setShowCustom(false);
+    }
+  };
+
+  const activeLabel = compareAmount
+    ? `vs S&P 500 · ${formatDollar(compareAmount)}`
+    : 'Compare vs S&P 500';
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(!open)} style={{
+        padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+        border: compareAmount ? '1px solid #888' : '1px solid #444', borderRadius: 4,
+        background: compareAmount ? '#222' : '#111', color: compareAmount ? '#fff' : '#666',
+        letterSpacing: 0.3, whiteSpace: 'nowrap',
+      }}>
+        {activeLabel} {open ? '▴' : '▾'}
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 100,
+          background: '#1a1a1a', border: '1px solid #444', borderRadius: 6,
+          padding: 4, minWidth: 200, boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+        }}>
+          {compareAmount && (
+            <div
+              onClick={() => { onSelect(null); setOpen(false); setShowCustom(false); }}
+              style={{
+                padding: '6px 10px', fontSize: 11, color: '#ff6b6b', cursor: 'pointer',
+                borderRadius: 4, fontWeight: 700,
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#222'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              Clear comparison
+            </div>
+          )}
+          {COMPARE_PRESETS.map(p => (
+            <div
+              key={p.value}
+              onClick={() => handlePreset(p.value)}
+              style={{
+                padding: '6px 10px', fontSize: 11, cursor: 'pointer', borderRadius: 4,
+                color: compareAmount === p.value ? '#fcf000' : '#ccc', fontWeight: compareAmount === p.value ? 700 : 400,
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#222'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              {p.label}
+            </div>
+          ))}
+          <div
+            onClick={() => setShowCustom(true)}
+            style={{
+              padding: '6px 10px', fontSize: 11, color: '#4ecdc4', cursor: 'pointer',
+              borderRadius: 4, borderTop: '1px solid #333', marginTop: 2,
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#222'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            Custom amount...
+          </div>
+          {showCustom && (
+            <div style={{ display: 'flex', gap: 4, padding: '4px 6px' }}>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="100,000+"
+                value={customInput}
+                onChange={e => setCustomInput(e.target.value.replace(/[^0-9,]/g, ''))}
+                onKeyDown={e => { if (e.key === 'Enter') handleCustomSubmit(); }}
+                style={{
+                  flex: 1, background: '#111', border: '1px solid #444', borderRadius: 4,
+                  padding: '4px 8px', color: '#fff', fontSize: 11,
+                }}
+                autoFocus
+              />
+              <button onClick={handleCustomSubmit} style={{
+                background: '#4ecdc4', color: '#111', border: 'none', borderRadius: 4,
+                padding: '4px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              }}>GO</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main GrowthChart Component ───────────────────────────────────────────────
-export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 'all', showDataBoxes = true, showSpy = false, onToggleSpy, spyGrowth }) {
+export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 'all', showDataBoxes = true, spyGrowth, onRequestSpy }) {
+  const [compareAmount, setCompareAmount] = useState(null);
+
+  // When user selects a comparison amount, request SPY data if needed
+  const handleCompareSelect = (amount) => {
+    setCompareAmount(amount);
+    if (amount && onRequestSpy) onRequestSpy();
+  };
+
+  // All 3 tiers computed always (for non-compare view)
   const results = useMemo(() => {
     if (!monthlyReturns?.length) return null;
     const out = {};
@@ -298,71 +457,98 @@ export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 
     return out;
   }, [monthlyReturns, hurdleRates, yearFilter]);
 
+  // In compare mode: compute for the selected amount (may be custom)
+  const compareTier = useMemo(() => {
+    if (!compareAmount) return null;
+    return getTierForAmount(compareAmount);
+  }, [compareAmount]);
+
+  const compareResult = useMemo(() => {
+    if (!compareTier || !monthlyReturns?.length) return null;
+    return computeGrowth(monthlyReturns, hurdleRates, compareTier, yearFilter);
+  }, [compareTier, monthlyReturns, hurdleRates, yearFilter]);
+
   if (!results) return <div style={{ color: '#666', padding: 20, textAlign: 'center' }}>Loading growth data...</div>;
 
-  // Prepare SPY data for current view (rebase for single-year views)
+  // Compare mode: scale SPY data to match the selected starting amount
   const spyByMonth = useMemo(() => {
-    if (!showSpy || !spyGrowth?.length) return null;
+    if (!compareAmount || !spyGrowth?.length) return null;
+    const scale = compareAmount / 100_000;
     const map = {};
     if (yearFilter === 'all') {
-      for (const s of spyGrowth) map[s.month] = s.nav;
+      for (const s of spyGrowth) map[s.month] = +(s.nav * scale).toFixed(2);
     } else {
-      // Rebase to $100K at start of year
       const yearData = spyGrowth.filter(s => s.month.startsWith(String(yearFilter)));
       if (!yearData.length) return null;
-      // Find the NAV right before this year to use as base
       const allBefore = spyGrowth.filter(s => s.month < `${yearFilter}-01`);
       const baseNav = allBefore.length ? allBefore[allBefore.length - 1].nav : yearData[0].nav;
       for (const s of yearData) {
-        map[s.month] = +((s.nav / baseNav) * 100_000).toFixed(2);
+        map[s.month] = +((s.nav / baseNav) * compareAmount).toFixed(2);
       }
     }
     return map;
-  }, [showSpy, spyGrowth, yearFilter]);
+  }, [compareAmount, spyGrowth, yearFilter]);
 
-  // Merge chart data across tiers
+  // In compare mode: 2 lines (PNTHR + SPY). Otherwise: 3 tier lines.
+  const isCompareMode = compareAmount && compareResult && spyByMonth;
+
   const mergedData = useMemo(() => {
     const allMonths = new Set();
-    for (const r of Object.values(results)) {
-      for (const d of r.chartData) allMonths.add(d.month);
-    }
-    if (spyByMonth) {
+
+    if (isCompareMode) {
+      for (const d of compareResult.chartData) allMonths.add(d.month);
       for (const m of Object.keys(spyByMonth)) allMonths.add(m);
+    } else {
+      for (const r of Object.values(results)) {
+        for (const d of r.chartData) allMonths.add(d.month);
+      }
     }
+
     return [...allMonths].sort().map(month => {
       const row = { month };
-      for (const [key, r] of Object.entries(results)) {
-        const pt = r.chartData.find(d => d.month === month);
-        row[key] = pt?.nav || null;
+      if (isCompareMode) {
+        const pt = compareResult.chartData.find(d => d.month === month);
+        row.pnthr = pt?.nav || null;
+        row.spy = spyByMonth[month] || null;
+        row.trades = pt?.trades || 0;
+      } else {
+        for (const [key, r] of Object.entries(results)) {
+          const pt = r.chartData.find(d => d.month === month);
+          row[key] = pt?.nav || null;
+        }
       }
-      if (spyByMonth) row.spy = spyByMonth[month] || null;
       return row;
     });
-  }, [results, spyByMonth]);
+  }, [results, compareResult, spyByMonth, isCompareMode]);
 
   const title = yearFilter === 'all'
-    ? 'Cumulative Growth (2019–2026)'
+    ? 'Cumulative Growth (2019\u20132026)'
     : `${yearFilter} Growth`;
+
+  // SPY stats for annotation
+  const spyStats = useMemo(() => {
+    if (!spyByMonth || !compareAmount) return null;
+    const vals = Object.values(spyByMonth);
+    if (!vals.length) return null;
+    const endNav = vals[vals.length - 1];
+    const returnPct = +((endNav / compareAmount - 1) * 100).toFixed(1);
+    return { endNav, returnPct };
+  }, [spyByMonth, compareAmount]);
+
+  const dataLength = mergedData.length;
 
   return (
     <div style={{ background: '#0d0d0d', border: '1px solid #222', borderRadius: 10, padding: '16px 20px', marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <h3 style={{ color: '#fcf000', fontSize: 15, fontWeight: 700, margin: 0 }}>{title}</h3>
-          {onToggleSpy && (
-            <button onClick={onToggleSpy} style={{
-              padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
-              border: showSpy ? '1px solid #888' : '1px solid #444', borderRadius: 4,
-              background: showSpy ? '#222' : '#111', color: showSpy ? '#fff' : '#666',
-              letterSpacing: 0.3,
-            }}>vs S&P 500</button>
-          )}
+          <CompareDropdown compareAmount={compareAmount} onSelect={handleCompareSelect} />
         </div>
         <span style={{ color: '#666', fontSize: 10 }}>Net of 2% mgmt fee + performance allocation + US2Y hurdle + HWM</span>
       </div>
 
       <ResponsiveContainer width="100%" height={340}>
-        <LineChart data={mergedData} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+        <LineChart data={mergedData} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
           <CartesianGrid stroke="#222" strokeDasharray="3 3" />
           <XAxis
             dataKey="month"
@@ -382,81 +568,115 @@ export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 
           <Legend
             wrapperStyle={{ fontSize: 11, color: '#aaa' }}
             formatter={(value) => {
-              if (value === 'spy') return 'S&P 500 ($100K, net 0.03% ER)';
+              if (value === 'spy') return `S&P 500 (${formatDollar(compareAmount)}, net 0.03% ER)`;
+              if (value === 'pnthr') return `PNTHR Fund (${formatDollar(compareAmount)})`;
               return TIERS[value]?.label || value;
             }}
           />
-          {Object.entries(TIERS).map(([key, tier]) => (
-            <Line
-              key={key}
-              type="monotone"
-              dataKey={key}
-              name={key}
-              stroke={tier.color}
-              strokeWidth={2}
-              dot={false}
-              connectNulls
-            />
-          ))}
-          {showSpy && spyByMonth && (
-            <Line
-              type="monotone"
-              dataKey="spy"
-              name="spy"
-              stroke="#888"
-              strokeWidth={1.5}
-              strokeDasharray="6 3"
-              dot={false}
-              connectNulls
-            />
+
+          {isCompareMode ? (
+            <>
+              <Line
+                type="monotone"
+                dataKey="pnthr"
+                name="pnthr"
+                stroke={compareTier.color}
+                strokeWidth={2.5}
+                dot={<PnthrDot dataLength={dataLength} />}
+                connectNulls
+              />
+              <Line
+                type="monotone"
+                dataKey="spy"
+                name="spy"
+                stroke="#888"
+                strokeWidth={1.5}
+                strokeDasharray="6 3"
+                dot={false}
+                connectNulls
+              />
+            </>
+          ) : (
+            Object.entries(TIERS).map(([key, tier]) => (
+              <Line
+                key={key}
+                type="monotone"
+                dataKey={key}
+                name={key}
+                stroke={tier.color}
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
+            ))
           )}
         </LineChart>
       </ResponsiveContainer>
 
-      {/* Data boxes */}
-      {showDataBoxes && (
-        <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-          {Object.entries(TIERS).map(([key, tier]) => (
-            <DataBox key={key} tierKey={key} tier={tier} stats={results[key]?.stats} yearFilter={yearFilter} />
-          ))}
-        </div>
-      )}
-
-      {/* SPY comparison annotation */}
-      {showSpy && spyByMonth && results.filet?.stats?.totalReturnPct != null && (() => {
-        const spyVals = Object.values(spyByMonth);
-        if (!spyVals.length) return null;
-        const spyEnd = spyVals[spyVals.length - 1];
-        const spyReturnPct = +((spyEnd / 100_000 - 1) * 100).toFixed(1);
-        const filetPct = results.filet.stats.totalReturnPct;
-        const alpha = +(filetPct - spyReturnPct).toFixed(1);
-        return (
+      {/* Data boxes — compare mode: PNTHR + SPY side by side */}
+      {showDataBoxes && isCompareMode && compareResult?.stats && spyStats && (
+        <>
+          <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+            <DataBox tier={compareTier} stats={compareResult.stats} yearFilter={yearFilter} />
+            <SpyDataBox
+              spyReturnPct={spyStats.returnPct}
+              startingCapital={compareAmount}
+              endingNav={spyStats.endNav}
+            />
+          </div>
+          {/* Alpha annotation */}
           <div style={{
             background: '#141414', border: '1px solid #333', borderRadius: 8,
             padding: '10px 16px', marginTop: 12, display: 'flex', gap: 24,
             alignItems: 'center', flexWrap: 'wrap', fontSize: 12,
           }}>
             <div>
-              <span style={{ color: '#888' }}>PNTHR Filet ($100K): </span>
-              <span style={{ color: filetPct >= 0 ? '#4ecdc4' : '#ff6b6b', fontWeight: 700 }}>{formatPct(filetPct)}</span>
+              <span style={{ color: '#888' }}>PNTHR ({compareTier.label}): </span>
+              <span style={{ color: compareResult.stats.totalReturnPct >= 0 ? '#4ecdc4' : '#ff6b6b', fontWeight: 700 }}>
+                {formatPct(compareResult.stats.totalReturnPct)}
+              </span>
             </div>
             <div>
-              <span style={{ color: '#888' }}>S&P 500 ($100K): </span>
-              <span style={{ color: spyReturnPct >= 0 ? '#4ecdc4' : '#ff6b6b', fontWeight: 700 }}>{formatPct(spyReturnPct)}</span>
+              <span style={{ color: '#888' }}>S&P 500: </span>
+              <span style={{ color: spyStats.returnPct >= 0 ? '#4ecdc4' : '#ff6b6b', fontWeight: 700 }}>
+                {formatPct(spyStats.returnPct)}
+              </span>
             </div>
             <div>
               <span style={{ color: '#888' }}>Alpha: </span>
-              <span style={{ color: alpha >= 0 ? '#4ecdc4' : '#ff6b6b', fontWeight: 800, fontSize: 14 }}>{formatPct(alpha)}</span>
+              <span style={{
+                color: (compareResult.stats.totalReturnPct - spyStats.returnPct) >= 0 ? '#4ecdc4' : '#ff6b6b',
+                fontWeight: 800, fontSize: 14,
+              }}>
+                {formatPct(+(compareResult.stats.totalReturnPct - spyStats.returnPct).toFixed(1))}
+              </span>
             </div>
           </div>
-        );
-      })()}
+        </>
+      )}
 
-      {/* Year-by-year stats for cumulative view */}
-      {yearFilter === 'all' && (
+      {/* Data boxes — normal 3-tier view */}
+      {showDataBoxes && !isCompareMode && (
+        <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+          {Object.entries(TIERS).map(([key, tier]) => (
+            <DataBox key={key} tier={tier} stats={results[key]?.stats} yearFilter={yearFilter} />
+          ))}
+        </div>
+      )}
+
+      {/* Year-by-year stats for cumulative view (non-compare) */}
+      {yearFilter === 'all' && !isCompareMode && (
         <div style={{ marginTop: 16 }}>
           <div style={{ color: '#888', fontSize: 11, fontWeight: 700, marginBottom: 6 }}>YEAR-BY-YEAR BREAKDOWN (Wagyu)</div>
-          <YearStatsPanel stats={results.wagyu?.stats} hurdleRates={hurdleRates} tierKey="wagyu" />
+          <YearStatsPanel stats={results.wagyu?.stats} />
+        </div>
+      )}
+
+      {/* Year-by-year stats for compare mode */}
+      {yearFilter === 'all' && isCompareMode && compareResult?.stats && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ color: '#888', fontSize: 11, fontWeight: 700, marginBottom: 6 }}>YEAR-BY-YEAR BREAKDOWN ({compareTier.label})</div>
+          <YearStatsPanel stats={compareResult.stats} />
         </div>
       )}
     </div>

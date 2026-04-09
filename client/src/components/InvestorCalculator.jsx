@@ -155,11 +155,13 @@ export default function InvestorCalculator({ monthlyReturns, hurdleRates, onClos
           <div>
             <label style={{ color: '#888', fontSize: 10, fontWeight: 700, display: 'block', marginBottom: 4 }}>INVESTMENT AMOUNT</label>
             <input
-              type="number"
-              value={investmentAmount}
-              onChange={e => setInvestmentAmount(Number(e.target.value))}
-              min={100000}
-              step={50000}
+              type="text"
+              inputMode="numeric"
+              value={investmentAmount.toLocaleString('en-US')}
+              onChange={e => {
+                const raw = e.target.value.replace(/[^0-9]/g, '');
+                setInvestmentAmount(Number(raw) || 0);
+              }}
               style={{
                 width: '100%', background: '#1a1a1a', border: '1px solid #333', borderRadius: 6,
                 padding: '8px 10px', color: '#fff', fontSize: 13, fontWeight: 600,

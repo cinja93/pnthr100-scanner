@@ -175,6 +175,7 @@ export default function PulsePage({ onNavigate }) {
         <YieldGauge label="10Y" subLabel="10-Year Yield" data={data.treasuryYields?.y10} />
         <YieldGauge label="30Y" subLabel="30-Year Yield" data={data.treasuryYields?.y30} />
         <RecessionGauge data={data.recessionIndicator} />
+        <BuffettGauge data={data.buffettIndicator} />
       </div>
       {/* Regime + Portfolio Heat compact strip */}
       <RegimeStrip regime={data.regime} signals={data.signals} positions={data.positions} />
@@ -564,6 +565,43 @@ function RecessionGauge({ data }) {
       subLabel="PNTHR VCI"
       subValue={triggered ? '⚠ TRIGGERED' : 'No Signal'}
       subValueColor={triggered ? '#ff6b6b' : '#6bcb77'}
+    />
+  );
+}
+
+const BUFFETT_ZONES = [
+  { from: 0, to: 73, color: '#6bcb77' },
+  { from: 73, to: 95, color: '#4ecdc4' },
+  { from: 95, to: 115, color: '#fcf000' },
+  { from: 115, to: 140, color: '#ff6b6b' },
+  { from: 140, to: 250, color: '#dc3545' },
+];
+
+function BuffettGauge({ data }) {
+  if (!data) {
+    return (
+      <SemiGauge
+        value={0} min={0} max={250} zones={BUFFETT_ZONES}
+        label="BUFFETT"
+        gaugeW={150} gaugeH={100}
+        displayValue="—"
+        subLabel="Mkt Cap / GDP"
+        subValue="No data"
+        subValueColor="#888"
+      />
+    );
+  }
+  const { ratio, zone } = data;
+  const color = ratio >= 140 ? '#dc3545' : ratio >= 115 ? '#ff6b6b' : ratio >= 95 ? '#fcf000' : '#6bcb77';
+  return (
+    <SemiGauge
+      value={ratio} min={0} max={250} zones={BUFFETT_ZONES}
+      label="BUFFETT"
+      gaugeW={150} gaugeH={100}
+      displayValue={`${ratio}%`}
+      subLabel="Mkt Cap / GDP"
+      subValue={zone}
+      subValueColor={color}
     />
   );
 }

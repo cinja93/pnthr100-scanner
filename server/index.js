@@ -5082,6 +5082,43 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       console.warn('[PULSE] recession indicator fetch failed:', e.message);
     }
 
+    // ── Buffett Indicator (Total Market Cap / GDP) ──
+    let buffettIndicator = null;
+    try {
+      const fredKey = process.env.FRED_API_KEY;
+      if (fredKey) {
+        const [mktCapRes, gdpRes] = await Promise.all([
+          fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=NCBEILQ027S&sort_order=desc&limit=4&api_key=${fredKey}&file_type=json`),
+          fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=GDP&sort_order=desc&limit=4&api_key=${fredKey}&file_type=json`),
+        ]);
+        console.log(`[PULSE] Buffett FRED responses: mktCap=${mktCapRes.status} gdp=${gdpRes.status}`);
+        if (mktCapRes.ok && gdpRes.ok) {
+          const mktCap = (await mktCapRes.json()).observations?.filter(o => o.value !== '.').map(o => ({ date: o.date, v: +o.value })) || [];
+          const gdp = (await gdpRes.json()).observations?.filter(o => o.value !== '.').map(o => ({ date: o.date, v: +o.value })) || [];
+          console.log(`[PULSE] Buffett data lengths: mktCap=${mktCap.length} gdp=${gdp.length}`);
+          if (mktCap.length > 0 && gdp.length > 0) {
+            // NCBEILQ027S is in millions, GDP is in billions (SAAR)
+            const ratio = +((mktCap[0].v / (gdp[0].v * 1000)) * 100).toFixed(1);
+            const zone = ratio >= 140 ? 'SIGNIFICANTLY OVERVALUED'
+              : ratio >= 115 ? 'OVERVALUED'
+              : ratio >= 95 ? 'FAIR VALUE'
+              : ratio >= 73 ? 'UNDERVALUED'
+              : 'SIGNIFICANTLY UNDERVALUED';
+            buffettIndicator = {
+              ratio,
+              zone,
+              marketCap: mktCap[0].v,
+              gdp: gdp[0].v,
+              asOf: mktCap[0].date,
+            };
+            console.log(`[PULSE] Buffett Indicator: ${ratio}% (${zone})`);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[PULSE] Buffett indicator fetch failed:', e.message);
+    }
+
     // Data freshness metadata — client shows "Scores: Fri Mar 20" vs "Scores: Live"
     const dataSource = liveApex ? 'live_apex' : 'friday_pipeline';
     const scoresAsOf = liveApex
@@ -5141,6 +5178,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       marketGauges,
       treasuryYields,
       recessionIndicator,
+      buffettIndicator,
     });
   } catch (err) {
     console.error('[/api/pulse]', err.message);

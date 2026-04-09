@@ -4064,6 +4064,54 @@ app.get('/api/journal/backtest/monthly-returns', authenticateJWT, async (req, re
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/journal/backtest/spy-benchmark — S&P 500 growth-of-$100K for comparison
+// MUST be before backtest/:year
+let spyBenchmarkCache = null;
+let spyBenchmarkCacheTime = null;
+const SPY_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+app.get('/api/journal/backtest/spy-benchmark', authenticateJWT, async (req, res) => {
+  try {
+    // Return cached data if fresh
+    if (spyBenchmarkCache && spyBenchmarkCacheTime && (Date.now() - spyBenchmarkCacheTime < SPY_CACHE_DURATION)) {
+      return res.json({ spyGrowth: spyBenchmarkCache });
+    }
+
+    const apiKey = process.env.FMP_API_KEY;
+    const url = `https://financialmodelingprep.com/api/v3/historical-price-full/SPY?from=2018-12-01&apikey=${apiKey}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!data.historical?.length) return res.json({ spyGrowth: [] });
+
+    // Extract last trading day close per month
+    const monthlyCloses = {};
+    for (const day of data.historical) {
+      const month = day.date.slice(0, 7); // "YYYY-MM"
+      if (!monthlyCloses[month] || day.date > monthlyCloses[month].date) {
+        monthlyCloses[month] = { date: day.date, close: day.close };
+      }
+    }
+
+    const sortedMonths = Object.keys(monthlyCloses).sort();
+    const VOO_EXPENSE_MONTHLY = 0.0003 / 12; // 0.03% annual
+
+    // Build growth-of-$100K series
+    const spyGrowth = [];
+    let nav = 100_000;
+    for (let i = 1; i < sortedMonths.length; i++) {
+      const prevClose = monthlyCloses[sortedMonths[i - 1]].close;
+      const curClose = monthlyCloses[sortedMonths[i]].close;
+      const monthlyReturn = (curClose / prevClose) - 1;
+      nav = nav * (1 + monthlyReturn) * (1 - VOO_EXPENSE_MONTHLY);
+      spyGrowth.push({ month: sortedMonths[i], nav: +nav.toFixed(2) });
+    }
+
+    spyBenchmarkCache = spyGrowth;
+    spyBenchmarkCacheTime = Date.now();
+    res.json({ spyGrowth });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/journal/backtest/:year — trades for a given year with summary stats
 app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
   try {

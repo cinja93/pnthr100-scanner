@@ -570,7 +570,9 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
       .catch(err => console.error('[JOURNAL] monthly-returns fetch error:', err));
   }, [growthChartYear, monthlyReturns]);
 
-  const filtered = entries.filter(e => {
+  // Use testSystemTrades when on test_system tab, otherwise entries (pnthr_journal)
+  const baseEntries = archiveTab === 'test_system' ? testSystemTrades : entries;
+  const filtered = baseEntries.filter(e => {
     if (filterStatus === 'ALL') return true;
     if (filterStatus === 'ACTIVE') return e.performance?.status === 'ACTIVE';
     if (filterStatus === 'PARTIAL') return e.performance?.status === 'PARTIAL';
@@ -1607,7 +1609,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
         </div>
       )}
 
-      {loading ? (
+      {(archiveTab === 'test_system' ? testSystemLoading : loading) ? (
         <div style={{ color: '#555', textAlign: 'center', padding: 40 }}>Loading journal...</div>
       ) : (
         <>

@@ -1,7 +1,9 @@
 import express from 'express';
 import multer from 'multer';
+import jwt from 'jsonwebtoken';
 import { ObjectId } from 'mongodb';
 import { connectToDatabase } from '../database.js';
+import { resolveRole } from '../auth.js';
 import archiver from 'archiver';
 
 const router = express.Router();
@@ -9,6 +11,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 
 const COLLECTION = 'dataroom_documents';
 const DEFAULT_SECTION = 'PNTHR Funds, Carnivore Quant LP Fund Documents';
+const SEED_SECTIONS = [DEFAULT_SECTION, 'Supporting PNTHR Documents'];
 
 // GET /api/dataroom — list all documents (exclude raw data from listing)
 router.get('/', async (req, res) => {
@@ -34,7 +37,7 @@ router.get('/sections', async (req, res) => {
     // Also check for a dedicated sections collection for pre-created empty sections
     const custom = await db.collection('dataroom_sections').find({}).toArray();
     const customNames = custom.map(s => s.name);
-    const all = [...new Set([...sections.filter(Boolean), ...customNames, DEFAULT_SECTION])].sort();
+    const all = [...new Set([...sections.filter(Boolean), ...customNames, ...SEED_SECTIONS])].sort();
     res.json(all);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -111,6 +114,31 @@ router.get('/download-all', async (req, res) => {
     await archive.finalize();
   } catch (err) {
     if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/dataroom/:id/view — view a document inline (all authenticated users)
+// Supports ?token= query param for new-tab viewing (Authorization header not available)
+router.get('/:id/view', async (req, res) => {
+  try {
+    // Auth: prefer header, fall back to query param token (for new-tab opens)
+    let user = req.user;
+    if (!user && req.query.token) {
+      try {
+        const payload = jwt.verify(req.query.token, process.env.JWT_SECRET);
+        user = { userId: payload.userId, email: payload.email, role: resolveRole(payload.email) };
+      } catch { /* invalid token */ }
+    }
+    if (!user) return res.status(401).json({ error: 'Authentication required' });
+
+    const db = await connectToDatabase();
+    const doc = await db.collection(COLLECTION).findOne({ _id: new ObjectId(req.params.id) });
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+    res.set('Content-Type', doc.contentType || 'application/octet-stream');
+    res.set('Content-Disposition', `inline; filename="${doc.filename}"`);
+    res.send(doc.data.buffer || doc.data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

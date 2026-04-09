@@ -104,6 +104,11 @@ export default function DataRoomPage() {
     }
   };
 
+  const handleView = (doc) => {
+    // Open document inline in a new browser tab (all users)
+    window.open(`${API_BASE}/api/dataroom/${doc._id}/view?token=${encodeURIComponent(localStorage.getItem('pnthr_token') || '')}`, '_blank');
+  };
+
   const handleDownload = async (doc) => {
     if (!isAdmin) return;
     try {
@@ -245,39 +250,44 @@ export default function DataRoomPage() {
                     <span style={{ color: '#555', marginRight: 12, fontSize: 16 }}>
                       {doc.contentType?.includes('pdf') ? '📄' : doc.contentType?.includes('image') ? '🖼️' : '📎'}
                     </span>
-                    {/* Label — clickable for admin download, plain for members */}
-                    {isAdmin ? (
-                      <span
-                        onClick={() => handleDownload(doc)}
-                        style={{ color: '#ddd', cursor: 'pointer', flex: 1, fontSize: 14 }}
-                        onMouseEnter={e => e.target.style.color = '#FFD700'}
-                        onMouseLeave={e => e.target.style.color = '#ddd'}
-                      >
-                        {doc.label || doc.filename}
-                      </span>
-                    ) : (
-                      <span style={{ color: '#ddd', flex: 1, fontSize: 14 }}>
-                        {doc.label || doc.filename}
-                      </span>
-                    )}
+                    {/* Label — clickable to view for all users */}
+                    <span
+                      onClick={() => handleView(doc)}
+                      style={{ color: '#ddd', cursor: 'pointer', flex: 1, fontSize: 14 }}
+                      onMouseEnter={e => e.target.style.color = '#FFD700'}
+                      onMouseLeave={e => e.target.style.color = '#ddd'}
+                    >
+                      {doc.label || doc.filename}
+                    </span>
                     <span style={{ color: '#555', fontSize: 12, marginRight: 16, whiteSpace: 'nowrap' }}>{formatSize(doc.size)}</span>
                     <span style={{ color: '#555', fontSize: 12, marginRight: 16, whiteSpace: 'nowrap' }}>{new Date(doc.uploadedAt).toLocaleDateString()}</span>
-                    {isAdmin && (
-                      <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {/* View — all users */}
+                      <button
+                        onClick={() => handleView(doc)}
+                        style={{ background: '#1a1a1a', color: '#4a9eff', border: '1px solid #333', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 11 }}
+                      >
+                        View
+                      </button>
+                      {/* Download — admin only */}
+                      {isAdmin && (
                         <button
                           onClick={() => handleDownload(doc)}
                           style={{ background: '#1a1a1a', color: '#FFD700', border: '1px solid #333', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 11 }}
                         >
                           Download
                         </button>
+                      )}
+                      {/* Delete — admin only */}
+                      {isAdmin && (
                         <button
                           onClick={() => setDeleteTarget(doc)}
                           style={{ background: '#1a1a1a', color: '#c00', border: '1px solid #333', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 11 }}
                         >
                           Delete
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

@@ -113,6 +113,9 @@ app.use(cors({
 
 app.use(express.json({ limit: '5mb' }));
 
+// Trust proxy — required for express-rate-limit behind Render's reverse proxy
+app.set('trust proxy', 1);
+
 // MongoDB injection guard — strips $ and . from req.body, query, params
 app.use(mongoSanitize());
 

@@ -4134,18 +4134,25 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
 
     // ── Compute P&L from raw lot data (authoritative, never rely on pre-computed fields) ──
     for (const t of trades) {
+      // Skip if no exit price (STILL_OPEN trades use stored values)
+      if (t.exitPrice == null || !Array.isArray(t.lots)) {
+        t.computedGrossPnl = t.grossDollarPnl ?? t.netDollarPnl ?? 0;
+        t.computedNetPnl = t.netDollarPnl ?? t.grossDollarPnl ?? 0;
+        t.computedTotalShares = t.totalShares ?? 0;
+        t.computedFriction = t.totalFrictionDollar ?? 0;
+        continue;
+      }
+
       // Gross P&L: sum per-lot (direction-aware)
       let grossPnl = 0;
       let totalShares = 0;
-      if (Array.isArray(t.lots)) {
-        for (const lot of t.lots) {
-          if (!lot.shares || !lot.fillPrice) continue;
-          const lotPnl = t.signal === 'SS'
-            ? (lot.fillPrice - t.exitPrice) * lot.shares
-            : (t.exitPrice - lot.fillPrice) * lot.shares;
-          grossPnl += lotPnl;
-          totalShares += lot.shares;
-        }
+      for (const lot of t.lots) {
+        if (!lot.shares || !lot.fillPrice) continue;
+        const lotPnl = t.signal === 'SS'
+          ? (lot.fillPrice - t.exitPrice) * lot.shares
+          : (t.exitPrice - lot.fillPrice) * lot.shares;
+        grossPnl += lotPnl;
+        totalShares += lot.shares;
       }
       t.computedGrossPnl = parseFloat(grossPnl.toFixed(2));
       t.computedTotalShares = totalShares;

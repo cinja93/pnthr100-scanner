@@ -1660,7 +1660,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                               <tr>
-                                {['DATE', 'TICKER', 'DIR', 'ENTRY $', 'EXIT $', 'P&L', 'NET P&L', 'DAYS', 'EXIT REASON', 'KILL SCORE', 'LOTS'].map(h => (
+                                {['DATE', 'TICKER', 'DIR', 'AVG COST', 'EXIT $', 'P&L', 'NET P&L', 'DAYS', 'EXIT REASON', 'KILL SCORE', 'LOTS'].map(h => (
                                   <th key={h} style={{ color: '#666', fontSize: 10, fontWeight: 700, letterSpacing: 1, padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #222', whiteSpace: 'nowrap' }}>{h}</th>
                                 ))}
                               </tr>
@@ -1682,7 +1682,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                         {dir === 'BL' ? 'LONG' : dir === 'SS' ? 'SHORT' : dir}
                                       </span>
                                     </td>
-                                    <td style={tdStyle}>{t.entryPrice != null ? `$${Number(t.entryPrice).toFixed(2)}` : '—'}</td>
+                                    <td style={tdStyle}>{(t.avgCost ?? t.entryPrice) != null ? `$${Number(t.avgCost ?? t.entryPrice).toFixed(2)}` : '—'}</td>
                                     <td style={tdStyle}>{t.exitPrice != null ? `$${Number(t.exitPrice).toFixed(2)}` : '—'}</td>
                                     <td style={{ ...tdStyle, color: pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
                                       {pnl >= 0 ? '+' : '-'}${Math.abs(pnl).toFixed(2)}

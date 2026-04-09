@@ -41,10 +41,11 @@ export function resolveRole(email) {
 // When ?demo=1 is present and user is admin, swaps userId to demo_fund.
 export function authenticateJWT(req, res, next) {
   const authHeader = req.headers['authorization'];
-  if (!authHeader?.startsWith('Bearer ')) {
+  // Support ?token= query param for new-tab document viewing (no Authorization header available)
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.query?.token;
+  if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  const token = authHeader.slice(7);
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     // Always re-resolve role from ADMIN_EMAILS so promotions/demotions take effect

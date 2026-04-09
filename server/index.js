@@ -3989,6 +3989,19 @@ app.delete('/api/journal/:id/tags/:tag', authenticateJWT, async (req, res) => {
 
 // ── Backtest & Test-System Archive ────────────────────────────────────────────
 
+// ── US 2-Year Treasury Yields (first business day of each year) ──────────────
+// Source: US Treasury Daily Yield Curve (constant maturity)
+const US2Y_HURDLE_RATES = {
+  2019: 2.50,  // Jan 2, 2019 (FRED DGS2)
+  2020: 1.58,  // Jan 2, 2020
+  2021: 0.11,  // Jan 4, 2021
+  2022: 0.78,  // Jan 3, 2022
+  2023: 4.40,  // Jan 3, 2023
+  2024: 4.33,  // Jan 2, 2024
+  2025: 4.25,  // Jan 2, 2025
+  2026: 3.47,  // Jan 2, 2026
+};
+
 // GET /api/journal/backtest/years — available years with trade counts (must be before /:year)
 app.get('/api/journal/backtest/years', authenticateJWT, async (req, res) => {
   try {
@@ -4018,6 +4031,36 @@ app.get('/api/journal/system-trades/:year', authenticateJWT, async (req, res) =>
       .sort({ createdAt: -1 })
       .toArray();
     res.json(trades);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/journal/backtest/monthly-returns — monthly P&L for growth charts
+// MUST be before backtest/:year or Express will match "monthly-returns" as a :year param
+app.get('/api/journal/backtest/monthly-returns', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const trades = await db.collection('pnthr_bt_pyramid_trade_log')
+      .find({}, { projection: { exitDate: 1, netDollarPnl: 1, dollarPnl: 1 } })
+      .toArray();
+
+    // Aggregate P&L by exit month
+    const monthlyPnl = {};
+    for (const t of trades) {
+      if (!t.exitDate) continue;
+      const month = t.exitDate.slice(0, 7); // "YYYY-MM"
+      if (!monthlyPnl[month]) monthlyPnl[month] = { gross: 0, net: 0, trades: 0 };
+      monthlyPnl[month].gross += (t.dollarPnl || 0);
+      monthlyPnl[month].net += (t.netDollarPnl || 0);
+      monthlyPnl[month].trades += 1;
+    }
+
+    // Sort chronologically
+    const sorted = Object.entries(monthlyPnl)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, data]) => ({ month, ...data }));
+
+    res.json({ monthlyReturns: sorted, hurdleRates: US2Y_HURDLE_RATES });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -4053,49 +4096,6 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
-// ── US 2-Year Treasury Yields (first business day of each year) ──────────────
-// Source: US Treasury Daily Yield Curve (constant maturity)
-const US2Y_HURDLE_RATES = {
-  2019: 2.50,  // Jan 2, 2019 (FRED DGS2)
-  2020: 1.58,  // Jan 2, 2020
-  2021: 0.11,  // Jan 4, 2021
-  2022: 0.78,  // Jan 3, 2022
-  2023: 4.40,  // Jan 3, 2023
-  2024: 4.33,  // Jan 2, 2024
-  2025: 4.25,  // Jan 2, 2025
-  2026: 3.47,  // Jan 2, 2026
-};
-
-// GET /api/journal/backtest/monthly-returns — monthly P&L for growth charts
-app.get('/api/journal/backtest/monthly-returns', authenticateJWT, async (req, res) => {
-  try {
-    const { connectToDatabase } = await import('./database.js');
-    const db = await connectToDatabase();
-    const trades = await db.collection('pnthr_bt_pyramid_trade_log')
-      .find({}, { projection: { exitDate: 1, netDollarPnl: 1, dollarPnl: 1 } })
-      .toArray();
-
-    // Aggregate P&L by exit month
-    const monthlyPnl = {};
-    for (const t of trades) {
-      if (!t.exitDate) continue;
-      const month = t.exitDate.slice(0, 7); // "YYYY-MM"
-      if (!monthlyPnl[month]) monthlyPnl[month] = { gross: 0, net: 0, trades: 0 };
-      monthlyPnl[month].gross += (t.dollarPnl || 0);
-      monthlyPnl[month].net += (t.netDollarPnl || 0);
-      monthlyPnl[month].trades += 1;
-    }
-
-    // Sort chronologically
-    const sorted = Object.entries(monthlyPnl)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, data]) => ({ month, ...data }));
-
-    res.json({ monthlyReturns: sorted, hurdleRates: US2Y_HURDLE_RATES });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
 app.use('/api/newsletter', newsletterRouter);

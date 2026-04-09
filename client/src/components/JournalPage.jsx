@@ -1537,16 +1537,6 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
               border: '1px solid #4ecdc4', borderRadius: 4, marginLeft: 8,
               background: '#111', color: '#4ecdc4', letterSpacing: 0.5,
             }}>RETURN CALCULATOR</button>
-          <a
-            href="/PNTHR_PPM_v4.pdf"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              padding: '4px 14px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
-              border: '1px solid #555', borderRadius: 4, marginLeft: 4,
-              background: '#111', color: '#888', letterSpacing: 0.5, textDecoration: 'none',
-              display: 'inline-block',
-            }}>PPM v4 ↓</a>
         </div>
       )}
 

@@ -4076,12 +4076,19 @@ app.get('/api/journal/backtest/monthly-returns', authenticateJWT, async (req, re
 });
 
 // GET /api/journal/test-system — all journal entries (test system trades)
+// Also backfills ownerId on legacy entries missing it
 app.get('/api/journal/test-system', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
-    // Include trades with matching ownerId OR no ownerId (pre-scoping legacy trades)
-    const docs = await db.collection('pnthr_journal')
+    const col = db.collection('pnthr_journal');
+    // Backfill ownerId on any entries missing it (one-time, fire-and-forget)
+    col.updateMany(
+      { ownerId: { $exists: false } },
+      { $set: { ownerId: req.user.userId } }
+    ).catch(() => {});
+    // Return all entries for this user (including freshly backfilled ones)
+    const docs = await col
       .find({ $or: [{ ownerId: req.user.userId }, { ownerId: { $exists: false } }] })
       .sort({ createdAt: -1 })
       .toArray();

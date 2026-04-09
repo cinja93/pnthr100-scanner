@@ -1667,10 +1667,8 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                             </thead>
                             <tbody>
                               {backtestTrades.map((t, i) => {
-                                const rawPnl = t.dollarPnl ?? t.pnl ?? t.pnlDollar ?? 0;
-                                const netPnl = t.netDollarPnl ?? t.netPnl ?? t.netPnlDollar ?? rawPnl;
-                                // If gross P&L is 0 but net exists, back-compute gross = net + friction
-                                const pnl = rawPnl || (netPnl + (t.totalFrictionDollar || 0)) || netPnl;
+                                const netPnl = t.netDollarPnl ?? t.netPnl ?? t.netPnlDollar ?? 0;
+                                const pnl = t.dollarPnl || t.pnl || t.pnlDollar || netPnl;
                                 const dir = t.direction || t.signal || '—';
                                 return (
                                   <tr key={t._id || t.tradeId || i} style={{ borderBottom: '1px solid #1a1a1a' }}

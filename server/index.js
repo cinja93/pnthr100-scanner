@@ -4077,8 +4077,9 @@ app.get('/api/journal/test-system', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
+    // Include trades with matching ownerId OR no ownerId (pre-scoping legacy trades)
     const docs = await db.collection('pnthr_journal')
-      .find({ ownerId: req.user.userId })
+      .find({ $or: [{ ownerId: req.user.userId }, { ownerId: { $exists: false } }] })
       .sort({ createdAt: -1 })
       .toArray();
     res.json(docs);

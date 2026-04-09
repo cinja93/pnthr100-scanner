@@ -499,31 +499,37 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   // Fetch available backtest years on mount
   useEffect(() => {
     fetch(`${API_BASE}/api/journal/backtest/years`, { headers: authHeaders() })
-      .then(r => r.json()).then(data => { if (Array.isArray(data)) setBacktestYears(data); })
-      .catch(() => {});
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(data => { if (Array.isArray(data)) setBacktestYears(data); })
+      .catch(err => console.error('[JOURNAL] backtest years fetch error:', err));
   }, []);
 
   // Fetch backtest trades when a year tab is selected
   useEffect(() => {
     if (!archiveTab || archiveTab === 'test_system') return;
     setBacktestLoading(true);
+    setBacktestTrades([]);
+    setBacktestSummary(null);
     fetch(`${API_BASE}/api/journal/backtest/${archiveTab}`, { headers: authHeaders() })
-      .then(r => r.json()).then(data => {
-        setBacktestTrades(data.trades || []);
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(data => {
+        setBacktestTrades(Array.isArray(data.trades) ? data.trades : []);
         setBacktestSummary(data.summary || null);
         setBacktestLoading(false);
-      }).catch(() => setBacktestLoading(false));
+      }).catch(err => { console.error('[JOURNAL] backtest fetch error:', err); setBacktestLoading(false); });
   }, [archiveTab]);
 
   // Fetch test system trades when that tab is selected
   useEffect(() => {
     if (archiveTab !== 'test_system') return;
     setTestSystemLoading(true);
+    setTestSystemTrades([]);
     fetch(`${API_BASE}/api/journal/test-system`, { headers: authHeaders() })
-      .then(r => r.json()).then(data => {
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(data => {
         setTestSystemTrades(Array.isArray(data) ? data : []);
         setTestSystemLoading(false);
-      }).catch(() => setTestSystemLoading(false));
+      }).catch(err => { console.error('[JOURNAL] test-system fetch error:', err); setTestSystemLoading(false); });
   }, [archiveTab]);
 
   const filtered = entries.filter(e => {
@@ -1517,7 +1523,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           <DisciplineStrip />
 
           {tab === 'trades' && (
-            <>
+            <TradeDetailBoundary>
               {/* ── Archive: Test System Tab ── */}
               {archiveTab === 'test_system' ? (
                 <div>
@@ -1628,29 +1634,30 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                             </thead>
                             <tbody>
                               {backtestTrades.map((t, i) => {
-                                const pnl = t.pnl ?? t.pnlDollar ?? 0;
-                                const netPnl = t.netPnl ?? t.netPnlDollar ?? pnl;
+                                const pnl = t.dollarPnl ?? t.pnl ?? t.pnlDollar ?? 0;
+                                const netPnl = t.netDollarPnl ?? t.netPnl ?? t.netPnlDollar ?? pnl;
+                                const dir = t.direction || t.signal || '—';
                                 return (
-                                  <tr key={t._id || i} style={{ borderBottom: '1px solid #1a1a1a' }}
+                                  <tr key={t._id || t.tradeId || i} style={{ borderBottom: '1px solid #1a1a1a' }}
                                     onMouseEnter={e => e.currentTarget.style.background = '#151515'}
                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                   >
-                                    <td style={tdStyle}>{t.date || t.entryDate || '—'}</td>
+                                    <td style={tdStyle}>{t.entryDate || t.date || '—'}</td>
                                     <td style={{ ...tdStyle, color: '#fcf000', fontWeight: 800 }}>{t.ticker}</td>
                                     <td style={tdStyle}>
-                                      <span style={{ background: (t.direction || t.dir) === 'LONG' ? 'rgba(40,167,69,0.2)' : 'rgba(220,53,69,0.2)', color: (t.direction || t.dir) === 'LONG' ? '#6bcb77' : '#ff6b6b', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
-                                        {t.direction || t.dir || '—'}
+                                      <span style={{ background: dir === 'LONG' || dir === 'BL' ? 'rgba(40,167,69,0.2)' : 'rgba(220,53,69,0.2)', color: dir === 'LONG' || dir === 'BL' ? '#6bcb77' : '#ff6b6b', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                                        {dir === 'BL' ? 'LONG' : dir === 'SS' ? 'SHORT' : dir}
                                       </span>
                                     </td>
                                     <td style={tdStyle}>{t.entryPrice != null ? `$${Number(t.entryPrice).toFixed(2)}` : '—'}</td>
                                     <td style={tdStyle}>{t.exitPrice != null ? `$${Number(t.exitPrice).toFixed(2)}` : '—'}</td>
                                     <td style={{ ...tdStyle, color: pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
-                                      {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(2)}
+                                      {pnl >= 0 ? '+' : ''}{`$${Math.abs(pnl).toFixed(2)}`}
                                     </td>
                                     <td style={{ ...tdStyle, color: netPnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
-                                      {netPnl >= 0 ? '+' : ''}${Math.abs(netPnl).toFixed(2)}
+                                      {netPnl >= 0 ? '+' : ''}{`$${Math.abs(netPnl).toFixed(2)}`}
                                     </td>
-                                    <td style={tdStyle}>{t.days ?? t.holdingDays ?? '—'}</td>
+                                    <td style={tdStyle}>{t.tradingDays ?? t.days ?? t.holdingDays ?? '—'}</td>
                                     <td style={tdStyle}>
                                       <span style={{ color: t.exitReason === 'SIGNAL' ? '#6bcb77' : t.exitReason === 'FEAST' ? '#fcf000' : t.exitReason === 'STOP_HIT' ? '#ff8c00' : '#888', fontWeight: 700, fontSize: 10 }}>
                                         {t.exitReason || '—'}
@@ -1659,7 +1666,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                     <td style={tdStyle}>
                                       {t.killScore != null ? <span style={{ color: '#fcf000', fontWeight: 700 }}>{t.killScore}</span> : <span style={{ color: '#555' }}>—</span>}
                                     </td>
-                                    <td style={tdStyle}>{t.lots ?? t.lotCount ?? '—'}</td>
+                                    <td style={tdStyle}>{t.maxLots ?? t.lots ?? t.lotCount ?? '—'}</td>
                                   </tr>
                                 );
                               })}
@@ -1796,7 +1803,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                   )}
                 </>
               )}
-            </>
+            </TradeDetailBoundary>
           )}
 
           {tab === 'analytics' && <AnalyticsTab />}

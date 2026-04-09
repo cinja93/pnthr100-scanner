@@ -7,6 +7,7 @@ const TABS = [
   { key: 'documents', label: 'Documents' },
   { key: 'calendar',  label: 'Calendar' },
   { key: 'tasks',     label: 'Task Tracker' },
+  { key: 'archive2026', label: '2026' },
 ];
 
 // ── Urgency helpers ─────────────────────────────────────────────────────────
@@ -74,6 +75,12 @@ export default function CompliancePage() {
   const [taskForm, setTaskForm] = useState({ title: '', description: '', dueDate: '', recurrence: 'one-time', category: '' });
   const [deleteTaskTarget, setDeleteTaskTarget] = useState(null);
   const [taskFilter, setTaskFilter] = useState('active'); // active, completed, all
+
+  // ── Archive 2026 state ────────────────────────────────────────────────────
+  const [archiveDocs, setArchiveDocs] = useState([]);
+  const [archiveLoading, setArchiveLoading] = useState(true);
+  const [archiveExpanded, setArchiveExpanded] = useState({ Q1: true, Q2: true, Q3: true, Q4: true });
+  const [archiveDownloading, setArchiveDownloading] = useState(false);
 
   // ── Calendar state ────────────────────────────────────────────────────────
   const [calYear, setCalYear] = useState(new Date().getFullYear());
@@ -266,6 +273,47 @@ export default function CompliancePage() {
     if (!selectedDate) return [];
     return tasksByDate[selectedDate] || [];
   }, [selectedDate, tasksByDate]);
+
+  // ── Archive 2026: filter docs by "2026 Archive" category ─────────────────
+  useEffect(() => {
+    setArchiveLoading(true);
+    const filtered = docs.filter(d => d.category && d.category.startsWith('2026 Archive'));
+    setArchiveDocs(filtered);
+    setArchiveLoading(false);
+  }, [docs]);
+
+  const archiveByQuarter = useMemo(() => {
+    const quarters = { Q1: [], Q2: [], Q3: [], Q4: [] };
+    archiveDocs.forEach(doc => {
+      const sub = (doc.subcategory || '').toUpperCase();
+      if (sub.includes('Q1')) quarters.Q1.push(doc);
+      else if (sub.includes('Q2')) quarters.Q2.push(doc);
+      else if (sub.includes('Q3')) quarters.Q3.push(doc);
+      else if (sub.includes('Q4')) quarters.Q4.push(doc);
+      else {
+        // Try to infer quarter from upload date
+        const month = new Date(doc.uploadedAt).getMonth();
+        if (month < 3) quarters.Q1.push(doc);
+        else if (month < 6) quarters.Q2.push(doc);
+        else if (month < 9) quarters.Q3.push(doc);
+        else quarters.Q4.push(doc);
+      }
+    });
+    return quarters;
+  }, [archiveDocs]);
+
+  const archiveCompletedTasks = useMemo(() => {
+    return tasks.filter(t => t.status === 'COMPLETED' && t.category && t.category.startsWith('2026'));
+  }, [tasks]);
+
+  const archiveStats = useMemo(() => ({
+    total: archiveDocs.length,
+    q1: archiveByQuarter.Q1.length,
+    q2: archiveByQuarter.Q2.length,
+    q3: archiveByQuarter.Q3.length,
+    q4: archiveByQuarter.Q4.length,
+    tasksCompleted: archiveCompletedTasks.length,
+  }), [archiveDocs, archiveByQuarter, archiveCompletedTasks]);
 
   const totalDocs = docs.length;
 
@@ -654,6 +702,200 @@ export default function CompliancePage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ═══ 2026 ARCHIVE TAB ═════════════════════════════════════════════════ */}
+      {activeTab === 'archive2026' && (
+        <div>
+          {/* Header */}
+          <div style={{ marginBottom: 24 }}>
+            <h2 style={{ color: PNTHR_YELLOW, margin: '0 0 4px 0', fontSize: 22 }}>2026 Compliance Archive</h2>
+            <p style={{ color: '#666', fontSize: 13, margin: 0 }}>Audit-ready archive of completed compliance items for fiscal year 2026.</p>
+          </div>
+
+          {/* Summary stats bar */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+            {[
+              { label: 'Total Items', value: archiveStats.total, color: PNTHR_YELLOW },
+              { label: 'Q1', value: archiveStats.q1, color: '#4a9eff' },
+              { label: 'Q2', value: archiveStats.q2, color: '#4a9eff' },
+              { label: 'Q3', value: archiveStats.q3, color: '#4a9eff' },
+              { label: 'Q4', value: archiveStats.q4, color: '#4a9eff' },
+              { label: 'Tasks Completed', value: archiveStats.tasksCompleted, color: '#4ade80' },
+            ].map(s => (
+              <div key={s.label} style={{
+                background: '#141414', border: '1px solid #222', borderRadius: 8,
+                padding: '12px 20px', textAlign: 'center', minWidth: 90,
+              }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.label}</div>
+              </div>
+            ))}
+
+            {/* Download All 2026 button */}
+            <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
+              <button
+                onClick={async () => {
+                  setArchiveDownloading(true);
+                  try {
+                    const url = `${API_BASE}/api/compliance/download-all?category=${encodeURIComponent('2026 Archive')}`;
+                    const res = await fetch(url, { headers: authHeaders() });
+                    if (!res.ok) throw new Error('Download failed');
+                    const blob = await res.blob();
+                    const blobUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = blobUrl;
+                    a.download = 'PNTHR_Compliance_2026_Archive.zip';
+                    a.click(); URL.revokeObjectURL(blobUrl);
+                  } catch (err) { alert(err.message); }
+                  finally { setArchiveDownloading(false); }
+                }}
+                disabled={archiveDownloading || archiveDocs.length === 0}
+                style={{
+                  background: archiveDownloading ? '#555' : '#222',
+                  color: PNTHR_YELLOW, border: '1px solid #444', borderRadius: 6,
+                  padding: '10px 20px', fontWeight: 700, fontSize: 13,
+                  cursor: archiveDocs.length > 0 && !archiveDownloading ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {archiveDownloading ? 'Zipping...' : 'Download All 2026'}
+              </button>
+            </div>
+          </div>
+
+          {archiveLoading && <p style={{ color: '#888' }}>Loading archive...</p>}
+
+          {!archiveLoading && archiveDocs.length === 0 && (
+            <div style={{ background: '#141414', border: '1px solid #222', borderRadius: 8, padding: 30, textAlign: 'center' }}>
+              <p style={{ color: '#666', fontSize: 14, margin: 0 }}>No 2026 archive documents yet.</p>
+              <p style={{ color: '#555', fontSize: 12, margin: '8px 0 0 0' }}>Upload documents with category "2026 Archive" and subcategory "Q1", "Q2", "Q3", or "Q4" to populate this archive.</p>
+            </div>
+          )}
+
+          {/* Quarter sections */}
+          {!archiveLoading && ['Q1', 'Q2', 'Q3', 'Q4'].map(q => {
+            const qDocs = archiveByQuarter[q] || [];
+            const isExpanded = archiveExpanded[q];
+            const toggleArchiveQ = () => setArchiveExpanded(prev => ({ ...prev, [q]: !prev[q] }));
+
+            // Group by type within quarter
+            const byType = { 'Monthly Reviews': [], 'Quarterly Reviews': [], 'Annual Reviews': [], 'Other': [] };
+            qDocs.forEach(doc => {
+              const lbl = (doc.label || doc.filename || '').toLowerCase();
+              if (lbl.includes('monthly')) byType['Monthly Reviews'].push(doc);
+              else if (lbl.includes('quarterly')) byType['Quarterly Reviews'].push(doc);
+              else if (lbl.includes('annual')) byType['Annual Reviews'].push(doc);
+              else byType['Other'].push(doc);
+            });
+
+            return (
+              <div key={q} style={{ marginBottom: 16, border: '1px solid #222', borderRadius: 8, overflow: 'hidden' }}>
+                {/* Quarter header */}
+                <div
+                  onClick={toggleArchiveQ}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '14px 18px', background: '#141414', cursor: 'pointer', userSelect: 'none',
+                    borderBottom: isExpanded ? '1px solid #222' : 'none',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{
+                      color: PNTHR_YELLOW, fontSize: 14, fontWeight: 700,
+                      transform: isExpanded ? 'rotate(0)' : 'rotate(-90deg)',
+                      transition: 'transform 0.2s', display: 'inline-block',
+                    }}>
+                      ▼
+                    </span>
+                    <span style={{ color: PNTHR_YELLOW, fontWeight: 700, fontSize: 15 }}>{q} 2026</span>
+                    <span style={{ color: '#666', fontSize: 12, marginLeft: 4 }}>
+                      ({qDocs.length} {qDocs.length === 1 ? 'document' : 'documents'})
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quarter content */}
+                {isExpanded && (
+                  <div style={{ background: '#0d0d0d' }}>
+                    {qDocs.length === 0 && (
+                      <p style={{ color: '#555', padding: '16px 18px', margin: 0, fontSize: 13, fontStyle: 'italic' }}>
+                        No documents archived for {q} 2026.
+                      </p>
+                    )}
+
+                    {['Monthly Reviews', 'Quarterly Reviews', 'Annual Reviews', 'Other'].map(type => {
+                      const typeDocs = byType[type];
+                      if (typeDocs.length === 0) return null;
+                      return (
+                        <div key={type}>
+                          <div style={{
+                            padding: '8px 18px 4px 36px', color: '#888',
+                            fontSize: 12, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase',
+                          }}>
+                            {type}
+                          </div>
+                          {typeDocs.map(doc => (
+                            <div key={doc._id} style={{
+                              display: 'flex', alignItems: 'center', padding: '10px 18px', paddingLeft: 36,
+                              borderBottom: '1px solid #1a1a1a',
+                            }}>
+                              <span style={{ color: '#555', marginRight: 12, fontSize: 16 }}>
+                                {doc.contentType?.includes('pdf') ? '📄' : doc.contentType?.includes('image') ? '🖼️' : doc.contentType?.includes('word') || doc.contentType?.includes('docx') ? '📝' : '📎'}
+                              </span>
+                              <span style={{ color: '#ddd', flex: 1, fontSize: 14 }}>
+                                {doc.label || doc.filename}
+                              </span>
+                              <span style={{ color: '#555', fontSize: 12, marginRight: 16, whiteSpace: 'nowrap' }}>
+                                {new Date(doc.uploadedAt).toLocaleDateString()}
+                              </span>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button onClick={() => handleView(doc)} style={{
+                                  background: '#1a1a1a', color: '#4a9eff', border: '1px solid #333',
+                                  borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 11,
+                                }}>View</button>
+                                <button onClick={() => handleDownload(doc)} style={{
+                                  background: '#1a1a1a', color: PNTHR_YELLOW, border: '1px solid #333',
+                                  borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 11,
+                                }}>Download</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Completed tasks summary */}
+          {archiveCompletedTasks.length > 0 && (
+            <div style={{ marginTop: 24 }}>
+              <h3 style={{ color: PNTHR_YELLOW, fontSize: 16, marginBottom: 12 }}>Completed Compliance Tasks</h3>
+              <div style={{ border: '1px solid #222', borderRadius: 8, overflow: 'hidden' }}>
+                {archiveCompletedTasks.map(task => (
+                  <div key={task._id} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px',
+                    background: '#0d0d0d', borderBottom: '1px solid #1a1a1a',
+                  }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
+                      background: '#4ade8022', color: '#4ade80', whiteSpace: 'nowrap',
+                    }}>
+                      COMPLETED
+                    </span>
+                    <span style={{ color: '#ddd', flex: 1, fontSize: 14 }}>{task.title}</span>
+                    {task.completedAt && (
+                      <span style={{ color: '#666', fontSize: 12, whiteSpace: 'nowrap' }}>
+                        {new Date(task.completedAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

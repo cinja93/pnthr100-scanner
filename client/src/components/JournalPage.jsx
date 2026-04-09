@@ -1666,7 +1666,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                     <td style={tdStyle}>
                                       {t.killScore != null ? <span style={{ color: '#fcf000', fontWeight: 700 }}>{t.killScore}</span> : <span style={{ color: '#555' }}>—</span>}
                                     </td>
-                                    <td style={tdStyle}>{t.maxLots ?? t.lots ?? t.lotCount ?? '—'}</td>
+                                    <td style={tdStyle}>{typeof t.maxLots === 'number' ? t.maxLots : Array.isArray(t.lots) ? t.lots.length : t.lotCount ?? '—'}</td>
                                   </tr>
                                 );
                               })}

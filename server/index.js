@@ -4132,6 +4132,13 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
       .sort({ entryDate: -1 })
       .toArray();
 
+    // Debug: log actual field names from first trade
+    if (trades.length > 0) {
+      const t = trades[0];
+      console.log(`[BT DEBUG] ${t.ticker} fields:`, Object.keys(t).join(', '));
+      console.log(`[BT DEBUG] ${t.ticker} grossDollarPnl=${t.grossDollarPnl} netDollarPnl=${t.netDollarPnl} totalShares=${t.totalShares} entryPrice=${t.entryPrice} exitPrice=${t.exitPrice}`);
+    }
+
     const totalTrades = trades.length;
     const winners = trades.filter(t => t.netIsWinner).length;
     const losers = totalTrades - winners;

@@ -7,6 +7,8 @@ import { useAuth } from '../AuthContext';
 import { useDemo } from '../contexts/DemoContext';
 import ScorecardGrid from './ScorecardGrid';
 import ClosedTradeCards from './ClosedTradeCards';
+import GrowthChart from './GrowthChart';
+import InvestorCalculator from './InvestorCalculator';
 import pantherHead from '../assets/panther head.png';
 
 class TradeDetailBoundary extends Component {
@@ -456,6 +458,10 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [showBacktestMetrics, setShowBacktestMetrics] = useState(false);
   const [systemTrades, setSystemTrades] = useState([]); // fromQueue trades for current year tab
   const [systemTradesLoading, setSystemTradesLoading] = useState(false);
+  const [growthChartYear, setGrowthChartYear] = useState(null); // null=hidden, 'all'=cumulative, '2019'-'2026'=per year
+  const [monthlyReturns, setMonthlyReturns] = useState(null);
+  const [hurdleRates, setHurdleRates] = useState({});
+  const [showCalculator, setShowCalculator] = useState(false);
 
   const fetchData = async (period) => {
     setLoading(true);
@@ -550,6 +556,19 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
         setSystemTradesLoading(false);
       }).catch(err => { console.error('[JOURNAL] system-trades fetch error:', err); setSystemTradesLoading(false); });
   }, [archiveTab]);
+
+  // Fetch monthly returns for growth charts
+  useEffect(() => {
+    if (!growthChartYear) return;
+    if (monthlyReturns) return; // already fetched
+    fetch(`${API_BASE}/api/journal/backtest/monthly-returns`, { headers: authHeaders() })
+      .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
+      .then(data => {
+        setMonthlyReturns(data.monthlyReturns || []);
+        setHurdleRates(data.hurdleRates || {});
+      })
+      .catch(err => console.error('[JOURNAL] monthly-returns fetch error:', err));
+  }, [growthChartYear, monthlyReturns]);
 
   const filtered = entries.filter(e => {
     if (filterStatus === 'ALL') return true;
@@ -1375,7 +1394,17 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           </h1>
           <p style={{ color: '#aaaaaa', fontSize: 13, margin: 0 }}>Trade analysis · Discipline tracking · Pattern recognition</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', flex: 1, justifyContent: 'flex-end' }}>
+          {/* ── Sub-tabs (left side of right group) ── */}
+          {archiveTab === 'test_system' && tabBtn('trades', 'TRADES')}
+          {archiveTab === 'test_system' && tabBtn('analytics', 'ANALYTICS')}
+          {archiveTab === 'test_system' && tabBtn('weekly', 'WEEKLY REVIEW')}
+          {archiveTab === 'test_system' && (isDemo
+            ? tabBtn('institutional', 'INSTITUTIONAL METRICS')
+            : tabBtn('dayTrades', 'DAY TRADES')
+          )}
+          {/* ── Spacer to push tabs + admin buttons far right ── */}
+          <div style={{ flex: 1 }} />
           {/* ── Fund Period Toggle (demo account only) ── */}
           {isDemo && (
             <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #333', marginRight: 8 }}>
@@ -1470,15 +1499,66 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
               </button>
             </HoverTooltip>
           )}
-          {archiveTab === 'test_system' && tabBtn('trades', 'TRADES')}
-          {archiveTab === 'test_system' && tabBtn('analytics', 'ANALYTICS')}
-          {archiveTab === 'test_system' && tabBtn('weekly', 'WEEKLY REVIEW')}
-          {archiveTab === 'test_system' && (isDemo
-            ? tabBtn('institutional', 'INSTITUTIONAL METRICS')
-            : tabBtn('dayTrades', 'DAY TRADES')
-          )}
         </div>
       </div>
+
+      {/* ── Growth Chart Buttons (below year tabs) ── */}
+      {isAdmin && backtestYears.length > 0 && (
+        <div style={{ padding: '0 24px 8px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ color: '#555', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, marginRight: 4 }}>GROWTH CHARTS</span>
+          {backtestYears.map(({ year }) => (
+            <button key={year}
+              onClick={() => setGrowthChartYear(growthChartYear === year ? null : year)}
+              style={{
+                padding: '4px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                border: growthChartYear === year ? '1px solid #fcf000' : '1px solid #333',
+                borderRadius: 4,
+                background: growthChartYear === year ? '#fcf000' : '#111',
+                color: growthChartYear === year ? '#111' : '#666',
+                letterSpacing: 0.3,
+              }}>{year}</button>
+          ))}
+          <button
+            onClick={() => setGrowthChartYear(growthChartYear === 'all' ? null : 'all')}
+            style={{
+              padding: '4px 14px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              border: growthChartYear === 'all' ? '1px solid #fcf000' : '1px solid #555',
+              borderRadius: 4,
+              background: growthChartYear === 'all' ? '#fcf000' : '#111',
+              color: growthChartYear === 'all' ? '#111' : '#fcf000',
+              letterSpacing: 0.5,
+            }}>CUMULATIVE 2019–2026</button>
+          <button
+            onClick={() => { setShowCalculator(true); if (!monthlyReturns) setGrowthChartYear(prev => prev || 'all'); }}
+            style={{
+              padding: '4px 14px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              border: '1px solid #4ecdc4', borderRadius: 4, marginLeft: 8,
+              background: '#111', color: '#4ecdc4', letterSpacing: 0.5,
+            }}>RETURN CALCULATOR</button>
+          <a
+            href="/PNTHR_PPM_v4.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              padding: '4px 14px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              border: '1px solid #555', borderRadius: 4, marginLeft: 4,
+              background: '#111', color: '#888', letterSpacing: 0.5, textDecoration: 'none',
+              display: 'inline-block',
+            }}>PPM v4 ↓</a>
+        </div>
+      )}
+
+      {/* ── Growth Chart ── */}
+      {growthChartYear && monthlyReturns && (
+        <div style={{ padding: '0 24px 16px' }}>
+          <GrowthChart
+            monthlyReturns={monthlyReturns}
+            hurdleRates={hurdleRates}
+            yearFilter={growthChartYear}
+            showDataBoxes
+          />
+        </div>
+      )}
 
       <div style={{ padding: '0 24px' }}>
       {/* Rescore result toast */}
@@ -1871,6 +1951,15 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
         </>
       )}
       </div>
+
+      {/* ── Investor Return Calculator Modal ── */}
+      {showCalculator && monthlyReturns && (
+        <InvestorCalculator
+          monthlyReturns={monthlyReturns}
+          hurdleRates={hurdleRates}
+          onClose={() => setShowCalculator(false)}
+        />
+      )}
     </div>
   );
 }

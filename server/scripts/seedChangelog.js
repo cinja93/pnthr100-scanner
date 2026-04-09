@@ -28,7 +28,7 @@ console.log('Indexes created');
 const entries = [
   { date: "2026-03-16", version: "v3.0.0", category: "SCORING", impact: "HIGH", description: "Kill v3 scoring engine deployed. 8 dimensions, 7883-trade validation.", changedBy: "Scott", details: "" },
   { date: "2026-03-17", version: "v3.1.0", category: "SCORING", impact: "HIGH", description: "Overextension filter added. Bell curve Sub-C. >20% close separation = disqualified.", changedBy: "Scott", details: "" },
-  { date: "2026-03-19", version: "v3.1.0", category: "RISK", impact: "HIGH", description: "Command Center launched. Tier A pyramiding 15-30-25-20-10.", changedBy: "Scott", details: "" },
+  { date: "2026-03-19", version: "v3.1.0", category: "RISK", impact: "HIGH", description: "Command Center launched. Pyramid lot allocation 35-25-20-12-8.", changedBy: "Scott", details: "" },
   { date: "2026-03-20", version: "v3.2.0", category: "RISK", impact: "MEDIUM", description: "Heat cap changed from slot-based to actual dollar risk. Stock 10%, ETF 5%, Total 15%.", changedBy: "Scott", details: "" },
   { date: "2026-03-20", version: "v3.2.0", category: "RISK", impact: "LOW", description: "ETFs exempted from sector concentration limits. 5% risk cap is their guardrail.", changedBy: "Scott", details: "" },
   { date: "2026-03-22", version: "v3.2.0", category: "BUG_FIX", impact: "HIGH", description: "D5/D7 rank change fix. getMostRecentRanking now computes deltas. Migrated 7 weeks historical rankings.", changedBy: "Scott", details: "Kill engine now running at 8/8 dimensions." },

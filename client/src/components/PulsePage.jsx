@@ -174,6 +174,7 @@ export default function PulsePage({ onNavigate }) {
         <YieldGauge label="2Y" subLabel="2-Year Yield" data={data.treasuryYields?.y2} />
         <YieldGauge label="10Y" subLabel="10-Year Yield" data={data.treasuryYields?.y10} />
         <YieldGauge label="30Y" subLabel="30-Year Yield" data={data.treasuryYields?.y30} />
+        <RecessionGauge data={data.recessionIndicator} />
       </div>
       {/* Regime + Portfolio Heat compact strip */}
       <RegimeStrip regime={data.regime} signals={data.signals} positions={data.positions} />
@@ -527,6 +528,42 @@ function YieldGauge({ label, subLabel, data }) {
       subLabel={subLabel}
       subValue={subValue}
       subValueColor={subValueColor}
+    />
+  );
+}
+
+const VCI_ZONES = [
+  { from: 0, to: 0.3, color: '#6bcb77' },
+  { from: 0.3, to: 0.7, color: '#4ecdc4' },
+  { from: 0.7, to: 1.0, color: '#fcf000' },
+  { from: 1.0, to: 1.5, color: '#ff6b6b' },
+  { from: 1.5, to: 2.5, color: '#dc3545' },
+];
+
+function RecessionGauge({ data }) {
+  if (!data) {
+    return (
+      <SemiGauge
+        value={0} min={0} max={2.5} zones={VCI_ZONES}
+        label="RECESSION"
+        gaugeW={150} gaugeH={100}
+        displayValue="—"
+        subLabel="PNTHR VCI"
+        subValue="No data"
+        subValueColor="#888"
+      />
+    );
+  }
+  const { vci, triggered } = data;
+  return (
+    <SemiGauge
+      value={vci} min={0} max={2.5} zones={VCI_ZONES}
+      label="RECESSION"
+      gaugeW={150} gaugeH={100}
+      displayValue={vci.toFixed(2)}
+      subLabel="PNTHR VCI"
+      subValue={triggered ? '⚠ TRIGGERED' : 'No Signal'}
+      subValueColor={triggered ? '#ff6b6b' : '#6bcb77'}
     />
   );
 }

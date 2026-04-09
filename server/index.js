@@ -5019,6 +5019,66 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       console.warn('[PULSE] treasury yields fetch failed:', e.message);
     }
 
+    // ── PNTHR Recession Indicator (Vicious Cycle Index) ──
+    // Based on Mark Zandi's labor-adjusted Sahm Rule
+    let recessionIndicator = null;
+    try {
+      const fredKey = process.env.FRED_API_KEY;
+      if (fredKey) {
+        const [empRes, popRes, lfprRes] = await Promise.all([
+          fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=CE16OV&sort_order=desc&limit=72&api_key=${fredKey}&file_type=json`),
+          fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=CNP16OV&sort_order=desc&limit=72&api_key=${fredKey}&file_type=json`),
+          fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=CIVPART&sort_order=desc&limit=72&api_key=${fredKey}&file_type=json`),
+        ]);
+        if (empRes.ok && popRes.ok && lfprRes.ok) {
+          const emp  = (await empRes.json()).observations?.filter(o => o.value !== '.').map(o => ({ date: o.date, v: +o.value })) || [];
+          const pop  = (await popRes.json()).observations?.filter(o => o.value !== '.').map(o => ({ date: o.date, v: +o.value })) || [];
+          const lfpr = (await lfprRes.json()).observations?.filter(o => o.value !== '.').map(o => ({ date: o.date, v: +o.value })) || [];
+
+          if (emp.length >= 15 && pop.length >= 15 && lfpr.length >= 60) {
+            // 5-year (60-month) moving average of LFPR
+            const lfprAvg5y = lfpr.slice(0, 60).reduce((s, o) => s + o.v, 0) / 60;
+
+            // Compute adjusted unemployment rate for recent months
+            const adjRates = [];
+            for (let i = 0; i < Math.min(15, emp.length, pop.length); i++) {
+              const adjU = (1 - (emp[i].v / (pop[i].v * (lfprAvg5y / 100)))) * 100;
+              adjRates.push({ date: emp[i].date, rate: adjU });
+            }
+
+            // 3-month moving average of adjusted rate (most recent)
+            const avg3m = (adjRates[0].rate + adjRates[1].rate + adjRates[2].rate) / 3;
+
+            // 12-month low of 3-month moving averages
+            let low12m = Infinity;
+            for (let i = 0; i <= Math.min(11, adjRates.length - 3); i++) {
+              const ma3 = (adjRates[i].rate + adjRates[i + 1].rate + adjRates[i + 2].rate) / 3;
+              if (ma3 < low12m) low12m = ma3;
+            }
+
+            const vci = +(avg3m - low12m).toFixed(2);
+            const triggered = vci >= 1.0;
+
+            // Standard Sahm Rule for comparison
+            const stdU = lfpr.length > 0 ? (1 - (emp[0].v / (pop[0].v * (lfpr[0].v / 100)))) * 100 : null;
+
+            recessionIndicator = {
+              vci,
+              triggered,
+              adjUnemployment: +avg3m.toFixed(2),
+              lfprAvg5y: +lfprAvg5y.toFixed(1),
+              currentLfpr: +(lfpr[0]?.v || 0).toFixed(1),
+              threshold: 1.0,
+              asOf: emp[0]?.date || null,
+            };
+            console.log(`[PULSE] VCI: ${vci} (threshold: 1.0, triggered: ${triggered})`);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[PULSE] recession indicator fetch failed:', e.message);
+    }
+
     // Data freshness metadata — client shows "Scores: Fri Mar 20" vs "Scores: Live"
     const dataSource = liveApex ? 'live_apex' : 'friday_pipeline';
     const scoresAsOf = liveApex
@@ -5077,6 +5137,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       marketSnapshot: { ...(marketSnapshot || {}), treasury10y, dxy },
       marketGauges,
       treasuryYields,
+      recessionIndicator,
     });
   } catch (err) {
     console.error('[/api/pulse]', err.message);

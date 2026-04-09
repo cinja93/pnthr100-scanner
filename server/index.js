@@ -4123,6 +4123,15 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
       .sort({ entryDate: -1 })
       .toArray();
 
+    // Recompute top-level P&L from lot-level values (authoritative source).
+    // Top-level grossDollarPnl/netDollarPnl may be stale from older backtest runs.
+    // Lot-level values are always correct (computed per-lot in closePosition/applyExitCosts).
+    for (const t of trades) {
+      if (Array.isArray(t.lots) && t.lots.length > 0) {
+        t.grossDollarPnl = parseFloat(t.lots.reduce((s, l) => s + (l.grossDollarPnl || 0), 0).toFixed(2));
+        t.netDollarPnl = parseFloat(t.lots.reduce((s, l) => s + (l.netDollarPnl || 0), 0).toFixed(2));
+      }
+    }
 
     const totalTrades = trades.length;
     const winners = trades.filter(t => (t.netDollarPnl || 0) > 0).length;

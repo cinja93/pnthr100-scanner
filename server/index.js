@@ -4072,14 +4072,14 @@ app.get('/api/journal/backtest/monthly-returns', authenticateJWT, async (req, re
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/journal/test-system — archived test-system entries
+// GET /api/journal/test-system — all journal entries (test system trades)
 app.get('/api/journal/test-system', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
-    const docs = await db.collection('pnthr_test_system_archive')
-      .find({})
-      .sort({ archivedAt: -1, createdAt: -1 })
+    const docs = await db.collection('pnthr_journal')
+      .find({ ownerId: req.user.userId })
+      .sort({ createdAt: -1 })
       .toArray();
     res.json(docs);
   } catch (e) { res.status(500).json({ error: e.message }); }

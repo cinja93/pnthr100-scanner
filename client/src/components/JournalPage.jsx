@@ -9,6 +9,7 @@ import ScorecardGrid from './ScorecardGrid';
 import ClosedTradeCards from './ClosedTradeCards';
 import GrowthChart from './GrowthChart';
 import InvestorCalculator from './InvestorCalculator';
+import BacktestTradeCard from './BacktestTradeCard';
 import pantherHead from '../assets/panther head.png';
 
 class TradeDetailBoundary extends Component {
@@ -463,6 +464,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [hurdleRates, setHurdleRates] = useState({});
   const [showCalculator, setShowCalculator] = useState(false);
   const [spyGrowth, setSpyGrowth] = useState(null);
+  const [selectedBacktestTrade, setSelectedBacktestTrade] = useState(null);
 
   const fetchData = async (period) => {
     setLoading(true);
@@ -1676,7 +1678,10 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                   >
                                     <td style={tdStyle}>{t.entryDate || t.date || '—'}</td>
-                                    <td style={{ ...tdStyle, color: '#fcf000', fontWeight: 800 }}>{t.ticker}</td>
+                                    <td style={{ ...tdStyle, color: '#fcf000', fontWeight: 800, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(252,240,0,0.3)', textUnderlineOffset: 2 }}
+                                      onClick={() => setSelectedBacktestTrade(t)}
+                                      title="Click to view trade details"
+                                    >{t.ticker}</td>
                                     <td style={tdStyle}>
                                       <span style={{ background: dir === 'LONG' || dir === 'BL' ? 'rgba(40,167,69,0.2)' : 'rgba(220,53,69,0.2)', color: dir === 'LONG' || dir === 'BL' ? '#6bcb77' : '#ff6b6b', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
                                         {dir === 'BL' ? 'LONG' : dir === 'SS' ? 'SHORT' : dir}
@@ -1914,6 +1919,15 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           monthlyReturns={monthlyReturns}
           hurdleRates={hurdleRates}
           onClose={() => setShowCalculator(false)}
+        />
+      )}
+
+      {/* ── Backtest Trade Card Modal ── */}
+      {selectedBacktestTrade && (
+        <BacktestTradeCard
+          trade={selectedBacktestTrade}
+          allTrades={backtestTrades}
+          onClose={() => setSelectedBacktestTrade(null)}
         />
       )}
     </div>

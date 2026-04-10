@@ -4112,6 +4112,37 @@ app.get('/api/journal/backtest/spy-benchmark', authenticateJWT, async (req, res)
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/journal/backtest/debug/:ticker — temporary diagnostic: raw MongoDB data for a ticker
+app.get('/api/journal/backtest/debug/:ticker', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const ticker = req.params.ticker.toUpperCase();
+    const trade = await db.collection('pnthr_bt_pyramid_trade_log')
+      .findOne({ ticker, exitPrice: { $ne: null } }, { sort: { entryDate: -1 } });
+    if (!trade) return res.json({ error: 'not found' });
+    // Return only the fields we need to diagnose
+    res.json({
+      ticker: trade.ticker,
+      signal: trade.signal,
+      entryPrice: trade.entryPrice,
+      exitPrice: trade.exitPrice,
+      avgCost: trade.avgCost,
+      totalCost: trade.totalCost,
+      totalShares: trade.totalShares,
+      lotTriggers: trade.lotTriggers,
+      grossDollarPnl: trade.grossDollarPnl,
+      netDollarPnl: trade.netDollarPnl,
+      totalFrictionDollar: trade.totalFrictionDollar,
+      lots: (trade.lots || []).map(l => ({
+        lot: l.lot, name: l.name, shares: l.shares,
+        fillPrice: l.fillPrice, fillDate: l.fillDate,
+        grossDollarPnl: l.grossDollarPnl, netDollarPnl: l.netDollarPnl,
+      })),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/journal/backtest/:year — trades for a given year with summary stats
 app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
   try {

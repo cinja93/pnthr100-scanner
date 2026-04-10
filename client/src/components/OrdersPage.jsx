@@ -1064,7 +1064,7 @@ export default function OrdersPage() {
           </button>
           <button className={styles.adminBtn} disabled={running} onClick={() => handleManualRun('CONFIRMED')}>
             <span>{running ? 'Running...' : 'Run CONFIRMED'}</span>
-            <span className={styles.adminBtnSub}>(Final Confirmed)</span>
+            <span className={styles.adminBtnSub}>(Run after 1:15pm AZ)</span>
           </button>
         </div>
       )}

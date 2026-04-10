@@ -4,7 +4,7 @@ import pnthrLogo from '../assets/panther head.png';
 import builtWithLove from '../assets/Built with Love.jpg';
 import { useDemo } from '../contexts/DemoContext';
 
-const APP_VERSION = '4.3.0';
+const APP_VERSION = '4.4.0';
 
 const NAV_GROUPS = [
   {

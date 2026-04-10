@@ -4123,19 +4123,28 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
       .sort({ entryDate: -1 })
       .toArray();
 
-    // Recompute avgCost + P&L from per-lot fill data (the only reliable source).
-    // Stored avgCost is corrupted for closed multi-lot trades (set to exitPrice).
-    // Lot-level fillPrice and shares are always correct.
+    // Recompute avgCost + P&L using lotTriggers (the authoritative, uncorrupted source).
+    // Stored avgCost AND lot-level fillPrice are corrupted for closed multi-lot trades
+    // (both overwritten to exitPrice by the old backtest engine). lotTriggers stores the
+    // original planned entry prices per lot and is NEVER modified after position init.
+    // In a backtest, fill prices === trigger prices exactly.
     for (const t of trades) {
       if (Array.isArray(t.lots) && t.lots.length > 0 && t.exitPrice != null) {
+        const triggers = Array.isArray(t.lotTriggers) ? t.lotTriggers : null;
         let totalCost = 0, totalShares = 0, grossPnl = 0;
-        for (const lot of t.lots) {
-          if (!lot.fillPrice || !lot.shares) continue;
-          totalCost += lot.fillPrice * lot.shares;
+        for (let i = 0; i < t.lots.length; i++) {
+          const lot = t.lots[i];
+          if (!lot.shares) continue;
+          // Use lotTriggers as the authoritative fill price source.
+          // lot.lot is 1-based index; array index i as fallback.
+          const lotIdx = lot.lot ? (lot.lot - 1) : i;
+          const fillPrice = (triggers && triggers[lotIdx]) || lot.fillPrice;
+          if (!fillPrice) continue;
+          totalCost += fillPrice * lot.shares;
           totalShares += lot.shares;
           grossPnl += t.signal === 'SS'
-            ? (lot.fillPrice - t.exitPrice) * lot.shares
-            : (t.exitPrice - lot.fillPrice) * lot.shares;
+            ? (fillPrice - t.exitPrice) * lot.shares
+            : (t.exitPrice - fillPrice) * lot.shares;
         }
         if (totalShares > 0) {
           t.avgCost = parseFloat((totalCost / totalShares).toFixed(4));

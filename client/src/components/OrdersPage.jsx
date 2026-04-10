@@ -195,7 +195,7 @@ function RulesPopup({ type, onClose }) {
               <div>
                 <div className={styles.ruleName}>BL Backtest Results</div>
                 <div className={styles.ruleDesc}>
-                  1,533 BL positions | 66.7% win rate | +5.27% avg P&L | W/L ratio 3.74:1 | CAGR +36.8% | Sharpe 3.50 | Max DD -0.74% | Pyramiding (Lots 1-5, $10K full position) | Positive every year including 2022.
+                  1,524 BL positions | 66.7% win rate | +5.27% avg P&L | W/L ratio 3.74:1 | CAGR +36.8% | Sharpe 3.50 | Max DD -0.74% | Pyramiding (Lots 1-5, $10K full position) | Positive every year including 2022.
                 </div>
               </div>
             </div>
@@ -380,26 +380,26 @@ function RulesPopup({ type, onClose }) {
 // converting small single-lot winners (e.g. +1–2%) into losses when price retraces
 // to the now-higher avg cost. W/L ratio improves: fewer small wins, bigger winners.
 const BL_BACKTEST = {
-  trades: 2373, winners: 1178, losers: 1195,
-  winRate: 49.6, avgPnl: 2.56, avgWin: 7.09, avgLoss: -1.90, wlRatio: 3.73,
-  totalReturn: 722787,
-  lotRows: 2373,
-  avgLots: 2.77,
-  lotDist: { 1: '29.2%', 2: '23.7%', 3: '11.8%', 4: '11.5%', 5: '23.8%' },
+  trades: 2363, winners: 1172, losers: 1191,
+  winRate: 49.6, avgPnl: 2.55, avgWin: 7.07, avgLoss: -1.90, wlRatio: 3.72,
+  totalReturn: 747076,
+  lotRows: 2363,
+  avgLots: 2.76,
+  lotDist: { 1: '29.3%', 2: '23.7%', 3: '11.9%', 4: '11.4%', 5: '23.8%' },
   years: [
-    { year: '2019', trades: 181, winPct: 51.4, avgPnl: 3.21 },
-    { year: '2020', trades: 335, winPct: 52.8, avgPnl: 3.89 },
-    { year: '2021', trades: 430, winPct: 51.2, avgPnl: 2.94 },
-    { year: '2022', trades: 247, winPct: 48.2, avgPnl: 2.11 },
-    { year: '2023', trades: 349, winPct: 48.1, avgPnl: 2.27 },
-    { year: '2024', trades: 481, winPct: 48.6, avgPnl: 2.34 },
-    { year: '2025', trades: 355, winPct: 49.0, avgPnl: 2.92 },
-    { year: '2026', trades: 92,  winPct: 47.8, avgPnl: 2.18 },
+    { year: '2019', trades: 238, winPct: 47.9, avgPnl: 1.39 },
+    { year: '2020', trades: 379, winPct: 47.0, avgPnl: 1.88 },
+    { year: '2021', trades: 437, winPct: 48.7, avgPnl: 2.38 },
+    { year: '2022', trades: 149, winPct: 52.3, avgPnl: 1.20 },
+    { year: '2023', trades: 292, winPct: 43.2, avgPnl: 1.74 },
+    { year: '2024', trades: 451, winPct: 55.0, avgPnl: 3.15 },
+    { year: '2025', trades: 331, winPct: 49.8, avgPnl: 4.26 },
+    { year: '2026', trades: 86,  winPct: 58.1, avgPnl: 4.89 },
   ],
   exitReasons: [
-    { reason: 'SIGNAL (BL exit)', count: 1996, winPct: 73.2, avgPnl: 6.55 },
-    { reason: 'STOP HIT', count: 332, winPct: 71.4, avgPnl: 6.23 },
-    { reason: 'STALE HUNT', count: 4, winPct: 0.0, avgPnl: -1.08 },
+    { reason: 'SIGNAL (BL exit)', count: 1639, winPct: 60.9, avgPnl: 3.26 },
+    { reason: 'STOP HIT', count: 716, winPct: 24.3, avgPnl: 0.96 },
+    { reason: 'STALE HUNT', count: 8, winPct: 0.0, avgPnl: -1.04 },
   ],
   topWinners: [
     { ticker: 'SNDK', entry: '2025-08-29', exit: '2025-11-17', pnl: 330.31 },
@@ -458,17 +458,17 @@ const SS_BACKTEST = {
 // COMBINED shows the true production pyramid strategy result.
 
 const BL_HEDGE = {
-  // BL signal baseline — single-lot net-of-costs (Jun 2019 → Apr 2026, 2332 trades)
+  // BL signal baseline — single-lot net-of-costs (Jun 2019 → Apr 2026, 1524 trades)
   // Win rate = 66.7% on CONFIRMED BL signals (single-lot, no pyramid stop ratchets)
-  cagr: 52.1, sharpe: 2.16, sortino: 70.35,
+  cagr: 52.0, sharpe: 2.15, sortino: 68.82,
   maxDrawdown: 0.35, maxDDPeriod: '2023-09 to 2023-10',
-  calmar: 147.89, profitFactor: 8.92,
+  calmar: 146.80, profitFactor: 8.91,
   winRate: 66.7,   // single-lot CONFIRMED signal win rate — matches this column's data source
   bestMonth: 25.59, bestMonthLabel: '2019-07',
   worstMonth: -0.35, worstMonthLabel: '2023-10',
   positiveMonths: 74, totalMonths: 79,
   positiveMonthsPct: 93.7,
-  avgMonthlyReturn: 3.68, monthlyStdDev: 5.25,
+  avgMonthlyReturn: 3.67, monthlyStdDev: 5.25,
 };
 
 const SS_HEDGE = {
@@ -486,17 +486,17 @@ const SS_HEDGE = {
 };
 
 const COMBINED_HEDGE = {
-  // Combined PYRAMID net-of-costs — Jun 2019 → Apr 2026 (82 months, 2520 trades)
+  // Combined PYRAMID net-of-costs — Jun 2019 → Apr 2026 (82 months, 2510 trades)
   // True production strategy: full D1-D8 · 35/25/20/12/8% lots · all gates
-  // $100K → $857K · COVID crash Mar 2020: +0.53% (strategy MADE money)
-  cagr: 37.0, sharpe: 2.37, sortino: 14.16,
+  // $100K → $861K · COVID crash Mar 2020: +0.53% (strategy MADE money)
+  cagr: 37.0, sharpe: 2.39, sortino: 34.0,
   maxDrawdown: 1.00, maxDDPeriod: '2019-09 to 2019-10',
-  calmar: 36.92, profitFactor: 9.03,
-  bestMonth: 11.96, bestMonthLabel: '2019-07',
+  calmar: 37.02, profitFactor: 9.10,
+  bestMonth: 19.28, bestMonthLabel: '2019-12',
   worstMonth: -1.00, worstMonthLabel: '2019-10',
   positiveMonths: 76, totalMonths: 82,
   positiveMonthsPct: 92.7,
-  avgMonthlyReturn: 2.71, monthlyStdDev: 3.34,
+  avgMonthlyReturn: 2.71, monthlyStdDev: 3.33,
 };
 
 // ── Institutional Metrics Section (shared by BacktestPopup + PortfolioPopup) ──

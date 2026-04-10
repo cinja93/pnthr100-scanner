@@ -1218,13 +1218,13 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
     // Full D1-D8 Kill scoring · 35/25/20/12/8% lots · all production gates
     // BL/SS individual = single-lot signal baseline; COMBINED = true production pyramid result
     // COVID crash stress test: Mar 2020 = +0.53% (strategy MADE money during worst crash in 90 years)
-    const BL_H = { cagr: 52.1, sharpe: 2.16, sortino: 70.35, maxDrawdown: 0.35, maxDDPeriod: '2023-09 to 2023-10', calmar: 147.89, profitFactor: 8.92, bestMonth: 25.59, bestMonthLabel: '2019-07', worstMonth: -0.35, worstMonthLabel: '2023-10', positiveMonths: 74, totalMonths: 79, positiveMonthsPct: 93.7, avgMonthlyReturn: 3.68, monthlyStdDev: 5.25 };
+    const BL_H = { cagr: 52.0, sharpe: 2.15, sortino: 68.82, maxDrawdown: 0.35, maxDDPeriod: '2023-09 to 2023-10', calmar: 146.80, profitFactor: 8.91, bestMonth: 25.59, bestMonthLabel: '2019-07', worstMonth: -0.35, worstMonthLabel: '2023-10', positiveMonths: 74, totalMonths: 79, positiveMonthsPct: 93.7, avgMonthlyReturn: 3.67, monthlyStdDev: 5.25 };
     const SS_H = { cagr: 35.3, sharpe: 1.85, sortino: 16.54, maxDrawdown: 1.14, maxDDPeriod: '2022-10 to 2022-11', calmar: 30.99, profitFactor: 4.19, bestMonth: 14.55, bestMonthLabel: '2022-05', worstMonth: -1.14, worstMonthLabel: '2022-11', positiveMonths: 16, totalMonths: 18, positiveMonthsPct: 88.9, avgMonthlyReturn: 2.63, monthlyStdDev: 4.14 };
-    const COMB = { cagr: 37.0, sharpe: 2.37, sortino: 14.16, maxDrawdown: 1.00, maxDDPeriod: '2019-09 to 2019-10', calmar: 36.92, profitFactor: 9.03, bestMonth: 11.96, bestMonthLabel: '2019-07', worstMonth: -1.00, worstMonthLabel: '2019-10', positiveMonths: 76, totalMonths: 82, positiveMonthsPct: 92.7, avgMonthlyReturn: 2.71, monthlyStdDev: 3.34 };
+    const COMB = { cagr: 37.0, sharpe: 2.39, sortino: 34.0, maxDrawdown: 1.00, maxDDPeriod: '2019-09 to 2019-10', calmar: 37.02, profitFactor: 9.10, bestMonth: 19.28, bestMonthLabel: '2019-12', worstMonth: -1.00, worstMonthLabel: '2019-10', positiveMonths: 76, totalMonths: 82, positiveMonthsPct: 92.7, avgMonthlyReturn: 2.71, monthlyStdDev: 3.33 };
 
-    // $10M demo fund metrics
-    const DEMO_5Y = { startNav: '$10,000,000', endNav: '$78,293,449', totalReturn: '+682.9%', trades: '1,674', winRate: '67.4%', commissions: '$293,000', avgDiscipline: '95.4' };
-    const DEMO_LF = { startNav: '$10,000,000', endNav: '$13,841,978', totalReturn: '+38.4%', trades: '292', winRate: '67.5%', commissions: '$16,676', avgDiscipline: '87' };
+    // $10M demo fund metrics (sourced from gate-filtered pnthr_bt_pyramid_trade_log, fixed $10M sizing)
+    const DEMO_5Y = { startNav: '$10,000,000', endNav: '$79,647,765', totalReturn: '+696.5%', trades: '2,507', winRate: '50.7%', commissions: '$395,474', avgDiscipline: '96.2' };
+    const DEMO_LF = { startNav: '$10,000,000', endNav: '$22,192,104', totalReturn: '+121.9%', trades: '310', winRate: '47.7%', commissions: '$39,000', avgDiscipline: '96.2' };
     const demoData = fundPeriod === 'live_fund' ? DEMO_LF : DEMO_5Y;
 
     const tbl = { width: '100%', borderCollapse: 'collapse', marginBottom: 16, fontSize: 12 };
@@ -1331,13 +1331,13 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
               { m: 'Max Drawdown', bl: `-${BL_H.maxDrawdown}%`, ss: `-${SS_H.maxDrawdown}%`, c: `-${COMB.maxDrawdown}%`, color: red },
               { m: 'Calmar Ratio', bl: BL_H.calmar, ss: SS_H.calmar, c: COMB.calmar, cColor: gold },
               { m: 'Profit Factor', bl: BL_H.profitFactor, ss: SS_H.profitFactor, c: COMB.profitFactor, cColor: gold },
-              { m: 'Win Rate', bl: '66.7%', ss: '62.2%', c: '66.3%' },
+              { m: 'Win Rate', bl: '66.7%', ss: '62.2%', c: '66.3%' },  /* BL unchanged at 66.7% after 9-trade sector gate fix */
               { m: 'Avg Monthly Return', bl: `+${BL_H.avgMonthlyReturn}%`, ss: `+${SS_H.avgMonthlyReturn}%`, c: `+${COMB.avgMonthlyReturn}%`, color: green },
               { m: 'Monthly Std Dev', bl: `${BL_H.monthlyStdDev}%`, ss: `${SS_H.monthlyStdDev}%`, c: `${COMB.monthlyStdDev}%` },
               { m: 'Best Month', bl: `+${BL_H.bestMonth}%`, ss: `+${SS_H.bestMonth}%`, c: `+${COMB.bestMonth}%`, color: green },
               { m: 'Worst Month', bl: `${BL_H.worstMonth}%`, ss: `${SS_H.worstMonth}%`, c: `${COMB.worstMonth}%`, color: red },
               { m: 'Positive Months', bl: `${BL_H.positiveMonths}/${BL_H.totalMonths} (${BL_H.positiveMonthsPct}%)`, ss: `${SS_H.positiveMonths}/${SS_H.totalMonths} (${SS_H.positiveMonthsPct}%)`, c: `${COMB.positiveMonths}/${COMB.totalMonths} (${COMB.positiveMonthsPct}%)` },
-              { m: 'Total Trades', bl: '1,533', ss: '143', c: '1,676', fw: true },
+              { m: 'Total Trades', bl: '1,524', ss: '143', c: '1,667', fw: true },
             ].map(r => (
               <tr key={r.m}>
                 <td style={{ ...td, color: dim }}>{r.m}</td>

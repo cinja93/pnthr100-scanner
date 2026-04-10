@@ -76,8 +76,9 @@ function ssCrashGate(stock, indexData, sectorGateData) {
   const exc = (stock.exchange || '').toUpperCase();
   const idxTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
   const idx = indexData[idxTicker] || indexData['SPY'];
-  if (!idx || idx.emaRising) {
-    return { passed: false, reason: `${idxTicker} EMA not falling — SS crash gate blocked` };
+  // Require 2+ consecutive weeks of falling EMA (matches backtest slopeFallingMap)
+  if (!idx || !idx.slopeFalling2Wk) {
+    return { passed: false, reason: `${idxTicker} EMA not falling 2+ weeks — SS crash gate blocked` };
   }
 
   // Sector 5D momentum must be < -3%
@@ -250,11 +251,13 @@ export async function runOrdersPipeline({ type = 'WEEKLY' } = {}) {
   const regime = {
     spyAboveEma:  spy.aboveEma  ?? null,
     spyEmaRising: spy.emaRising ?? null,
+    spySlopeFalling2Wk: spy.slopeFalling2Wk ?? null,
     spyPrice:     spy.price     ?? null,
     spyEma21:     spy.ema21     ?? null,
     spyEmaSlope:  spy.emaSlope  ?? null,
     qqqAboveEma:  qqq.aboveEma  ?? null,
     qqqEmaRising: qqq.emaRising ?? null,
+    qqqSlopeFalling2Wk: qqq.slopeFalling2Wk ?? null,
     qqqPrice:     qqq.price     ?? null,
     qqqEma21:     qqq.ema21     ?? null,
     qqqEmaSlope:  qqq.emaSlope  ?? null,

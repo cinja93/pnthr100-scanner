@@ -265,7 +265,7 @@ export async function fetchStockData(ticker) {
 }
 
 // ── Index Data (D1 regime) ────────────────────────────────────────────────────
-// Returns { QQQ, SPY } each with: price, ema21 value, emaSlope %, aboveEma, emaRising
+// Returns { QQQ, SPY } each with: price, ema21 value, emaSlope %, aboveEma, emaRising, slopeFalling2Wk
 
 export async function fetchIndexData() {
   const result = {};
@@ -279,12 +279,16 @@ export async function fetchIndexData() {
       if (ema21[li] == null || ema21[li - 1] == null) continue;
 
       const emaSlope = (ema21[li] - ema21[li - 1]) / ema21[li - 1] * 100; // % per week
+      // 2-consecutive-week falling EMA check (matches backtest slopeFallingMap)
+      const curFalling  = ema21[li] < ema21[li - 1];
+      const prevFalling = ema21[li - 2] != null ? ema21[li - 1] < ema21[li - 2] : false;
       result[ticker] = {
         price:     weekly[li].close,
         ema21:     ema21[li],
         emaSlope,
         aboveEma:  weekly[li].close > ema21[li],
         emaRising: ema21[li] > ema21[li - 1],
+        slopeFalling2Wk: curFalling && prevFalling, // true = EMA falling 2+ consecutive weeks
       };
     } catch { /* skip */ }
   }
@@ -974,8 +978,8 @@ export async function getApexResults(
   const results = {
     stocks: scored,
     indexData: {
-      SPY: indexData['SPY'] ? { price: indexData['SPY'].price, ema21: indexData['SPY'].ema21, emaSlope: indexData['SPY'].emaSlope, aboveEma: indexData['SPY'].aboveEma, emaRising: indexData['SPY'].emaRising } : null,
-      QQQ: indexData['QQQ'] ? { price: indexData['QQQ'].price, ema21: indexData['QQQ'].ema21, emaSlope: indexData['QQQ'].emaSlope, aboveEma: indexData['QQQ'].aboveEma, emaRising: indexData['QQQ'].emaRising } : null,
+      SPY: indexData['SPY'] ? { price: indexData['SPY'].price, ema21: indexData['SPY'].ema21, emaSlope: indexData['SPY'].emaSlope, aboveEma: indexData['SPY'].aboveEma, emaRising: indexData['SPY'].emaRising, slopeFalling2Wk: indexData['SPY'].slopeFalling2Wk } : null,
+      QQQ: indexData['QQQ'] ? { price: indexData['QQQ'].price, ema21: indexData['QQQ'].ema21, emaSlope: indexData['QQQ'].emaSlope, aboveEma: indexData['QQQ'].aboveEma, emaRising: indexData['QQQ'].emaRising, slopeFalling2Wk: indexData['QQQ'].slopeFalling2Wk } : null,
     },
     contextSummary: {
       spyAboveEma:  indexData['SPY']?.aboveEma  ?? null,

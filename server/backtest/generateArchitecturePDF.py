@@ -244,8 +244,8 @@ def draw_cover(canvas, doc):
     col_w = (PAGE_W - 2 * MARGIN) / 3
 
     stat1 = [('37%', PNTHR_YELLOW, 'CAGR (Pyramid Strategy)'),
-             ('2.37', PNTHR_YELLOW, 'Sharpe Ratio'),
-             ('9.03x', PNTHR_YELLOW, 'Profit Factor')]
+             ('2.39', PNTHR_YELLOW, 'Sharpe Ratio'),
+             ('9.10x', PNTHR_YELLOW, 'Profit Factor')]
 
     for i, (val, col, lbl) in enumerate(stat1):
         x = MARGIN + i * col_w
@@ -271,7 +271,7 @@ def draw_cover(canvas, doc):
     col_w2 = (PAGE_W - 2 * MARGIN) / 4
 
     stat2 = [('-1.00%',  white,        'Max Drawdown (ALL TIME)'),
-             ('2,520',   white,        'Pyramid Trades Validated'),
+             ('2,510',   white,        'Pyramid Trades Validated'),
              ('679',     white,        'Stocks Scanned Weekly'),
              ('+0.53%',  PNTHR_GREEN,  'March 2020 COVID Crash')]
 
@@ -385,7 +385,7 @@ def build_pdf():
         'The PNTHR research program began in 2020, systematically cataloging equity signals across '
         'hundreds of U.S. stocks through bull markets, bear markets, corrections, and recoveries — including '
         'the fastest bear market in history (COVID, March 2020, -34% in 33 days, VIX 82). Over six years, '
-        'the team refined a proprietary signal generation framework, tested it against 2,520 pyramid-deployed '
+        'the team refined a proprietary signal generation framework, tested it against 2,510 pyramid-deployed '
         'positions across all market conditions, and identified the specific measurable conditions that predict '
         'trade success with statistical significance.', BODY)]
 
@@ -394,8 +394,8 @@ def build_pdf():
         '<b>Confirmation over prediction.</b> PNTHR never predicts where a stock will go. The system waits '
         'for the market to confirm that a trade is working before committing meaningful capital. The pyramid '
         'model deploys only 35% on the initial signal — each subsequent lot requires the market to prove the '
-        'setup is working. This discipline — validated across 2,520 pyramid positions — drives a profit factor '
-        'of 9.03x and a combined Sharpe Ratio of 2.37; metrics that exceed the targets of the world\'s top '
+        'setup is working. This discipline — validated across 2,510 pyramid positions — drives a profit factor '
+        'of 9.10x and a combined Sharpe Ratio of 2.39; metrics that exceed the targets of the world\'s top '
         'hedge funds.', BODY)]
 
     story += [Paragraph(
@@ -685,24 +685,24 @@ def build_pdf():
         'sector-tiered borrow rates for short positions. No parameter optimization on test data. '
         'Results span 2019-2026: bull, bear, COVID crash, and recovery cycles.', BODY)]
 
-    story += [Paragraph('BL (Buy Long) Pyramid Backtest — 2,373 Positions', SECTION_SUB)]
+    story += [Paragraph('BL (Buy Long) Pyramid Backtest — 2,363 Positions', SECTION_SUB)]
     story += [bold_table(
         ['Metric', 'Result', 'Notes'],
-        [['Total Pyramid Positions', '2,373', 'Each position may have 1-5 lots filled'],
+        [['Total Pyramid Positions', '2,363', 'Each position may have 1-5 lots filled'],
          ['Win Rate', '49.6%', 'Lower than single-lot due to stop ratchets (see note)'],
-         ['W/L Ratio', '3.73\u00d7', 'Avg win +7.09% vs avg loss -1.90% per position'],
-         ['Avg P&L per Position', '+2.56%', 'After all costs including borrow and slippage'],
-         ['Profit Factor', '9.03\u00d7', 'Total gross profits \u00f7 total gross losses'],
-         ['Avg Lots Filled', '2.77 of 5', '55% pyramid fill — bimodal: early exit OR full 5-lot'],
-         ['Lot Distribution', '1: 29.2%  2: 23.7%  3: 11.8%  4: 11.5%  5: 23.8%', 'Full pyramid reached 23.8% of the time'],
-         ['Total Gross Return', '$722,787', '$100,000 starting capital, 7+ years']],
+         ['W/L Ratio', '3.72\u00d7', 'Avg win +7.07% vs avg loss -1.90% per position'],
+         ['Avg P&L per Position', '+2.55%', 'After all costs including borrow and slippage'],
+         ['Profit Factor', '9.10\u00d7', 'Total gross profits \u00f7 total gross losses'],
+         ['Avg Lots Filled', '2.76 of 5', '55% pyramid fill — bimodal: early exit OR full 5-lot'],
+         ['Lot Distribution', '1: 29.3%  2: 23.7%  3: 11.9%  4: 11.4%  5: 23.8%', 'Full pyramid reached 23.8% of the time'],
+         ['Total Gross Return', '$747,076', '$100,000 starting capital, 7+ years']],
         col_widths=[1.85*inch, 1.5*inch, CONTENT_W-3.35*inch])]
     story += [Paragraph(
         'Note on Win Rate: The drop from the 66.7% single-lot signal win rate to 49.6% pyramid win rate '
         'is a mathematically expected artifact of stop ratchets — not signal quality decay. When Lot 2 '
         'fills, the stop moves to average cost. Positions that would have been +1-2% single-lot winners '
-        'become losses if price retraces before continuing. The W/L ratio of 3.73\u00d7 and profit '
-        'factor of 9.03\u00d7 confirm this is the correct trade-off: fewer wins, but dramatically '
+        'become losses if price retraces before continuing. The W/L ratio of 3.72\u00d7 and profit '
+        'factor of 9.10\u00d7 confirm this is the correct trade-off: fewer wins, but dramatically '
         'larger ones.', NOTE_STYLE)]
 
     story += [Spacer(1, 6)]
@@ -724,16 +724,16 @@ def build_pdf():
     story += [bold_table(
         ['Metric', 'PNTHR Pyramid', 'S&P 500'],
         [['CAGR',                '+37.0%',           '+10.5%'],
-         ['Sharpe Ratio',        '2.37',              '0.50'],
-         ['Sortino Ratio',       '14.16',             '~0.80'],
+         ['Sharpe Ratio',        '2.39',              '0.50'],
+         ['Sortino Ratio',       '34.0',              '~0.80'],
          ['Max Drawdown',        '-1.00%',            '-25%+'],
-         ['Calmar Ratio',        '36.92',             '~0.40'],
-         ['Profit Factor',       '9.03\u00d7',        'N/A'],
-         ['Best Single Month',   '+11.96%',           'Variable'],
+         ['Calmar Ratio',        '37.02',             '~0.40'],
+         ['Profit Factor',       '9.10\u00d7',        'N/A'],
+         ['Best Single Month',   '+19.28%',           'Variable'],
          ['Worst Single Month',  '-1.00%',            '-12.5%+'],
          ['Positive Months',     '76 of 82 (92.7%)',  '~65%'],
          ['Avg Monthly Return',  '+2.71%',            '+0.88%'],
-         ['Monthly Std Dev',     '3.34%',             '4.2%'],
+         ['Monthly Std Dev',     '3.33%',             '4.2%'],
          ['Max DD Period',       'Sep-Oct 2019 (1 month)', 'Feb-Mar 2020']],
         col_widths=[1.9*inch, 1.55*inch, CONTENT_W-3.45*inch])]
 
@@ -787,7 +787,7 @@ def build_pdf():
 
     story += [Paragraph('The Full D1-D8 Research Dataset', SECTION_SUB)]
     story += [Paragraph(
-        '530 tickers. Multiple market cycles. 2,520 pyramid positions (BL + SS). Approximately '
+        '530 tickers. Multiple market cycles. 2,510 pyramid positions (BL + SS). Approximately '
         '3.2 million data points across 8 scoring dimensions. Two-pass scoring algorithm: Pass 1 '
         'computes preliminary rank (D2+D3+D4+D6)\u00d7D1 \u2192 D5 derived from prevFinalRank vs '
         'prelimRank \u2192 D7 from acceleration of D5 \u2192 final score. Eliminates circular '
@@ -802,7 +802,7 @@ def build_pdf():
          ['Overextension',       '>20% separation = consistently negative',    '-99 score and exclusion is data-driven'],
          ['Rank Velocity',       '3+ weeks improvement = leading indicator',   'D7 captures accelerating setups early'],
          ['Multi-Strategy',      'SPRINT/HUNT convergence adds 4-6% WR',      'D8 is non-trivial confirmation'],
-         ['Pyramid vs Single',   'W/L 3.73\u00d7 vs 2.89\u00d7; Sharpe 2.37 vs 2.16', 'Pyramid improves risk-adjusted returns']],
+         ['Pyramid vs Single',   'W/L 3.72\u00d7 vs 2.89\u00d7; Sharpe 2.39 vs 2.15', 'Pyramid improves risk-adjusted returns']],
         col_widths=[1.45*inch, 2.1*inch, CONTENT_W-3.55*inch])]
 
     story += [Spacer(1, 6)]

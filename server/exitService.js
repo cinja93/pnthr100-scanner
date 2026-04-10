@@ -81,6 +81,8 @@ async function recordExit(db, positionId, userId, exitData) {
   const avgExitPrice = totalExitedShares > 0
     ? allExits.reduce((s, e) => s + e.price * e.shares, 0) / totalExitedShares
     : 0;
+  const totalCostBasis = avgCost * totalFilled;
+  const realizedPct = totalCostBasis > 0 ? +(realizedDollar / totalCostBasis * 100).toFixed(2) : 0;
 
   const newStatus = newRemaining === 0 ? 'CLOSED' : 'PARTIAL';
 
@@ -93,6 +95,7 @@ async function recordExit(db, positionId, userId, exitData) {
       status: newStatus,
       avgExitPrice: +avgExitPrice.toFixed(4),
       'realizedPnl.dollar': +realizedDollar.toFixed(2),
+      'realizedPnl.pct': realizedPct,
       updatedAt: new Date(),
     },
   };
@@ -119,13 +122,13 @@ async function recordExit(db, positionId, userId, exitData) {
 
   // Sync to journal (best-effort — don't fail the exit if journal sync fails)
   try {
-    await syncExitToJournal(db, positionId, userId, exitRecord, newRemaining, realizedDollar, avgExitPrice, newStatus, position);
+    await syncExitToJournal(db, positionId, userId, exitRecord, newRemaining, realizedDollar, realizedPct, avgExitPrice, newStatus, position);
   } catch (e) { console.warn('[EXIT] Journal sync failed:', e.message); }
 
   return { exitRecord, remainingShares: newRemaining, status: newStatus };
 }
 
-async function syncExitToJournal(db, positionId, userId, exitRecord, remainingShares, realizedDollar, avgExitPrice, status, position) {
+async function syncExitToJournal(db, positionId, userId, exitRecord, remainingShares, realizedDollar, realizedPct, avgExitPrice, status, position) {
   const update = {
     $push: { exits: exitRecord },
     $set: {
@@ -133,6 +136,7 @@ async function syncExitToJournal(db, positionId, userId, exitRecord, remainingSh
       'performance.remainingShares': remainingShares,
       'performance.avgExitPrice': +avgExitPrice.toFixed(4),
       'performance.realizedPnlDollar': +realizedDollar.toFixed(2),
+      'performance.realizedPnlPct': realizedPct,
       updatedAt: new Date(),
     },
   };

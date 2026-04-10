@@ -912,7 +912,12 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
             const avgExitPx    = entry?.performance?.avgExitPrice || finalExitPrice || 0;
             const totalExitShr = exits.reduce((s, e) => s + (+e.shares || 0), 0) || lot1?.shares || 0;
             const pnlDollar    = entry?.performance?.realizedPnlDollar ?? null;
-            const pnlPct       = entry?.performance?.realizedPnlPct   ?? null;
+            const entryLots    = Array.isArray(entry?.lots) ? entry.lots : [];
+            const pnlPct       = entry?.performance?.realizedPnlPct ?? (() => {
+              if (pnlDollar == null) return null;
+              const costBasis = entryLots.reduce((s, l) => s + (l.price || 0) * (l.shares || 0), 0);
+              return costBasis > 0 ? +(pnlDollar / costBasis * 100).toFixed(2) : null;
+            })();
             const pnlColor     = pnlDollar == null ? '#aaa' : pnlDollar >= 0 ? '#6bcb77' : '#ff6b6b';
             // Entry / exit action labels
             const entryAction  = isLong ? 'BUY LONG'  : 'SELL SHORT';

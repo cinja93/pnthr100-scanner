@@ -576,7 +576,11 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
   const lastExit  = exits[exits.length - 1];
   const lots      = Array.isArray(entry.lots) ? entry.lots : [];
   const pnl       = entry.performance?.realizedPnlDollar ?? entry.totalPnL ?? null;
-  const pnlPct    = entry.performance?.realizedPnlPct ?? null;
+  const pnlPct    = entry.performance?.realizedPnlPct ?? (() => {
+    if (pnl == null) return null;
+    const costBasis = lots.reduce((s, l) => s + (l.price || 0) * (l.shares || 0), 0);
+    return costBasis > 0 ? +(pnl / costBasis * 100).toFixed(2) : null;
+  })();
   const exitReason = lastExit?.reason || null;
   const entryPrice = entry.entry?.fillPrice ?? entry.entryPrice ?? null;
   const exitPrice  = entry.performance?.avgExitPrice ?? lastExit?.price ?? null;

@@ -1662,7 +1662,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                               <tr>
-                                {['DATE', 'TICKER', 'DIR', 'AVG COST', 'EXIT $', 'P&L', 'NET P&L', 'DAYS', 'EXIT REASON', 'KILL SCORE', 'LOTS'].map(h => (
+                                {['DATE', 'TICKER', 'DIR', 'AVG COST', 'EXIT $', 'P&L $', 'P&L %', 'NET P&L', 'DAYS', 'EXIT REASON', 'KILL SCORE', 'LOTS'].map(h => (
                                   <th key={h} style={{ color: '#666', fontSize: 10, fontWeight: 700, letterSpacing: 1, padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #222', whiteSpace: 'nowrap' }}>{h}</th>
                                 ))}
                               </tr>
@@ -1670,6 +1670,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                             <tbody>
                               {backtestTrades.map((t, i) => {
                                 const pnl = t.grossDollarPnl ?? 0;
+                                const pnlPctBt = t.grossProfitPct ?? t.profitPct ?? null;
                                 const netPnl = t.netDollarPnl ?? 0;
                                 const dir = t.direction || t.signal || '—';
                                 return (
@@ -1691,6 +1692,9 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                     <td style={tdStyle}>{t.exitPrice != null ? `$${Number(t.exitPrice).toFixed(2)}` : '—'}</td>
                                     <td style={{ ...tdStyle, color: pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
                                       {pnl >= 0 ? '+' : '-'}${Math.abs(pnl).toFixed(2)}
+                                    </td>
+                                    <td style={{ ...tdStyle, color: pnlPctBt != null ? (pnlPctBt >= 0 ? '#6bcb77' : '#ff6b6b') : '#555', fontWeight: 700 }}>
+                                      {pnlPctBt != null ? `${pnlPctBt >= 0 ? '+' : ''}${Number(pnlPctBt).toFixed(1)}%` : '—'}
                                     </td>
                                     <td style={{ ...tdStyle, color: netPnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
                                       {netPnl >= 0 ? '+' : '-'}${Math.abs(netPnl).toFixed(2)}
@@ -1725,7 +1729,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                               <tr>
-                                {['DATE', 'TICKER', 'DIR', 'ENTRY $', 'EXIT $', 'P&L', 'DISC.', 'KILL', 'STATUS'].map(h => (
+                                {['DATE', 'TICKER', 'DIR', 'ENTRY $', 'EXIT $', 'P&L $', 'P&L %', 'DISC.', 'KILL', 'STATUS'].map(h => (
                                   <th key={h} style={{ color: '#666', fontSize: 10, fontWeight: 700, letterSpacing: 1, padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #222', whiteSpace: 'nowrap' }}>{h}</th>
                                 ))}
                               </tr>
@@ -1733,6 +1737,12 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                             <tbody>
                               {systemTrades.map((t, i) => {
                                 const pnl = t.performance?.realizedPnlDollar;
+                                const sysLots = Array.isArray(t.lots) ? t.lots : [];
+                                const sysPnlPct = t.performance?.realizedPnlPct ?? (() => {
+                                  if (pnl == null) return null;
+                                  const cb = sysLots.reduce((s, l) => s + (l.price || 0) * (l.shares || 0), 0);
+                                  return cb > 0 ? +(pnl / cb * 100).toFixed(2) : null;
+                                })();
                                 const disc = t.discipline?.totalScore;
                                 return (
                                   <tr key={t._id || i} style={{ borderBottom: '1px solid #1a1a1a' }}
@@ -1750,6 +1760,9 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                     <td style={tdStyle}>{t.performance?.avgExitPrice != null ? `$${t.performance.avgExitPrice.toFixed(2)}` : '—'}</td>
                                     <td style={{ ...tdStyle, color: pnl == null ? '#555' : pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
                                       {pnl != null ? `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(0)}` : '—'}
+                                    </td>
+                                    <td style={{ ...tdStyle, color: sysPnlPct == null ? '#555' : sysPnlPct >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
+                                      {sysPnlPct != null ? `${sysPnlPct >= 0 ? '+' : ''}${sysPnlPct.toFixed(1)}%` : '—'}
                                     </td>
                                     <td style={tdStyle}>
                                       {disc != null ? <span style={{ color: disc >= 75 ? '#6bcb77' : disc >= 55 ? '#fcf000' : '#ff6b6b', fontWeight: 800 }}>{disc}</span> : <span style={{ color: '#555' }}>—</span>}
@@ -1817,7 +1830,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                           <tr>
-                            {[['createdAt', 'DATE'], ['ticker', 'TICKER'], ['direction', 'DIR'], ['entry.fillPrice', 'ENTRY $'], ['performance.avgExitPrice', 'EXIT $'], ['performance.realizedPnlDollar', 'P&L'], ['discipline.totalScore', 'DISC.'], ['entry.killRank', 'KILL'], ['washRule', 'WASH'], ['tags', 'TAGS']].map(([f, l]) => (
+                            {[['createdAt', 'DATE'], ['ticker', 'TICKER'], ['direction', 'DIR'], ['entry.fillPrice', 'ENTRY $'], ['performance.avgExitPrice', 'EXIT $'], ['performance.realizedPnlDollar', 'P&L $'], ['performance.realizedPnlPct', 'P&L %'], ['discipline.totalScore', 'DISC.'], ['entry.killRank', 'KILL'], ['washRule', 'WASH'], ['tags', 'TAGS']].map(([f, l]) => (
                               <th key={f} style={thStyle(f)} onClick={() => handleSort(f)}>
                                 {l} {sortField === f ? (sortDir === -1 ? '▼' : '▲') : ''}
                               </th>
@@ -1828,6 +1841,12 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                           {sorted.map(entry => {
                             const isExpanded = expandedId === entry._id;
                             const pnl = entry.performance?.realizedPnlDollar;
+                            const lots = Array.isArray(entry.lots) ? entry.lots : [];
+                            const pnlPct = entry.performance?.realizedPnlPct ?? (() => {
+                              if (pnl == null) return null;
+                              const costBasis = lots.reduce((s, l) => s + (l.price || 0) * (l.shares || 0), 0);
+                              return costBasis > 0 ? +(pnl / costBasis * 100).toFixed(2) : null;
+                            })();
                             const disc = entry.discipline?.totalScore;
                             const wash = entry.washSale?.isLoss ? entry.washSale : entry.washRule;
                             const washExpiry = wash?.isLoss && wash?.expiryDate ? new Date(wash.expiryDate) : null;
@@ -1853,6 +1872,9 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                   <td style={tdStyle}>{entry.performance?.avgExitPrice != null ? `$${entry.performance.avgExitPrice.toFixed(2)}` : entry.performance?.status === 'ACTIVE' ? <span style={{ color: '#555' }}>—</span> : <span style={{ color: '#555' }}>partial</span>}</td>
                                   <td style={{ ...tdStyle, color: pnl == null ? '#555' : pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
                                     {pnl != null ? `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(0)}` : '—'}
+                                  </td>
+                                  <td style={{ ...tdStyle, color: pnlPct == null ? '#555' : pnlPct >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
+                                    {pnlPct != null ? `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%` : '—'}
                                   </td>
                                   <td style={tdStyle}>
                                     {disc != null
@@ -1886,7 +1908,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                 </tr>
                                 {isExpanded && (
                                   <tr>
-                                    <td colSpan={10} style={{ padding: '0 8px 8px', background: '#0d0d0d' }}>
+                                    <td colSpan={11} style={{ padding: '0 8px 8px', background: '#0d0d0d' }}>
                                       <TradeDetailBoundary>
                                         <TradeDetail entry={entry} noteInputs={noteInputs} setNoteInputs={setNoteInputs} addNote={addNote} deleteNote={deleteNote} addTag={addTag} removeTag={removeTag} />
                                       </TradeDetailBoundary>

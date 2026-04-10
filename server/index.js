@@ -3224,6 +3224,7 @@ app.post('/api/journal/migrate', authenticateJWT, requireAdmin, async (req, res)
         'performance.remainingShares':   pos.remainingShares ?? fills.reduce((s, f) => s + (f.shares || 0), 0),
         'performance.avgExitPrice':      pos.avgExitPrice    || existing?.performance?.avgExitPrice || null,
         'performance.realizedPnlDollar': pos.realizedPnl?.dollar ?? existing?.performance?.realizedPnlDollar ?? 0,
+        'performance.realizedPnlPct':    pos.realizedPnl?.pct   ?? existing?.performance?.realizedPnlPct   ?? null,
         updatedAt: new Date(),
       };
 

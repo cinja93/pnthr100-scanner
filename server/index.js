@@ -4123,16 +4123,6 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
       .sort({ entryDate: -1 })
       .toArray();
 
-    // Debug: dump closed multi-lot trade to verify lot fillPrices
-    const debugTrade = trades.find(t => t.ticker === 'VMC' || t.ticker === 'CBRE');
-    if (debugTrade) {
-      console.log(`[BT PNL DEBUG] ${debugTrade.ticker}: avgCost=${debugTrade.avgCost} exitPrice=${debugTrade.exitPrice} totalShares=${debugTrade.totalShares} totalCost=${debugTrade.totalCost} entryPrice=${debugTrade.entryPrice}`);
-      if (Array.isArray(debugTrade.lots)) {
-        debugTrade.lots.forEach((l, i) => console.log(`[BT PNL DEBUG] ${debugTrade.ticker} lot[${i}]: fillPrice=${l.fillPrice} shares=${l.shares} fillDate=${l.fillDate} grossDollarPnl=${l.grossDollarPnl}`));
-      }
-      if (Array.isArray(debugTrade.lotTriggers)) console.log(`[BT PNL DEBUG] ${debugTrade.ticker} lotTriggers:`, debugTrade.lotTriggers);
-    }
-
     // Recompute avgCost + P&L from per-lot fill data (the only reliable source).
     // Stored avgCost is corrupted for closed multi-lot trades (set to exitPrice).
     // Lot-level fillPrice and shares are always correct.

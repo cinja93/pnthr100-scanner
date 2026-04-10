@@ -340,13 +340,15 @@ export default function BacktestTradeCard({ trade, allTrades, onClose }) {
         </div>
       </div>
 
-      {/* ── Chart Modal ── */}
+      {/* ── Chart Modal — z-index must be above the card backdrop (9000) ── */}
       {showChart && (
-        <ClosedTradeChartModal
-          entry={chartEntry}
-          allEntries={allChartEntries}
-          onClose={() => setShowChart(false)}
-        />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9500 }}>
+          <ClosedTradeChartModal
+            entry={chartEntry}
+            allEntries={allChartEntries}
+            onClose={() => setShowChart(false)}
+          />
+        </div>
       )}
     </>
   );

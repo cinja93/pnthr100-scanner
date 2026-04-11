@@ -165,11 +165,11 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
       <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <button
           className={styles.archBtn}
-          onClick={() => window.open('/PNTHR_System_Architecture_v7.pdf', '_blank')}
-          title="View PNTHR System Architecture Document"
+          onClick={() => window.open('/PNTHR_Institutional_Tearsheet_v17.pdf', '_blank')}
+          title="View PNTHR Institutional Tear Sheet"
         >
           <span style={{ fontSize: 14 }}>📄</span>
-          <span>System Architecture</span>
+          <span>Institutional Tear Sheet</span>
         </button>
         <button
           className={styles.dataRoomBtn}

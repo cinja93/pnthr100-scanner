@@ -1596,41 +1596,42 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                     <>
                       {/* Summary bar */}
                       {backtestSummary && (
-                        <div style={{ display: 'flex', gap: 24, marginBottom: 18, padding: '12px 16px', background: '#111', borderRadius: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <div>
-                            <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>TOTAL TRADES</div>
-                            <div style={{ color: '#ccc', fontSize: 18, fontWeight: 700 }}>{backtestSummary.totalTrades ?? backtestTrades.length}</div>
-                          </div>
-                          <div>
-                            <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>WIN RATE</div>
-                            <div style={{ color: (backtestSummary.winRate ?? 0) >= 50 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 700 }}>
-                              {backtestSummary.winRate != null ? `${backtestSummary.winRate}%` : '—'}
+                        <div style={{ marginBottom: 18, padding: '12px 16px', background: '#111', borderRadius: 8 }}>
+                          <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+                            <div>
+                              <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>TOTAL TRADES</div>
+                              <div style={{ color: '#ccc', fontSize: 18, fontWeight: 700 }}>{backtestSummary.totalTrades ?? backtestTrades.length}</div>
+                            </div>
+                            <div>
+                              <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>WIN RATE</div>
+                              <div style={{ color: (backtestSummary.winRate ?? 0) >= 50 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 700 }}>
+                                {backtestSummary.winRate != null ? `${backtestSummary.winRate}%` : '—'}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>TOTAL P&L</div>
+                              <div style={{ color: (backtestSummary.totalPnl ?? 0) >= 0 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 700 }}>
+                                {backtestSummary.totalPnl != null ? `${backtestSummary.totalPnl >= 0 ? '+' : ''}$${Math.abs(backtestSummary.totalPnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>AVG P&L</div>
+                              <div style={{ color: (backtestSummary.avgPnl ?? 0) >= 0 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 700 }}>
+                                {backtestSummary.avgPnl != null ? `${backtestSummary.avgPnl >= 0 ? '+' : ''}$${Math.abs(backtestSummary.avgPnl).toFixed(2)}` : '—'}
+                              </div>
                             </div>
                           </div>
-                          <div>
-                            <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>TOTAL P&L</div>
-                            <div style={{ color: (backtestSummary.totalPnl ?? 0) >= 0 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 700 }}>
-                              {backtestSummary.totalPnl != null ? `${backtestSummary.totalPnl >= 0 ? '+' : ''}$${Math.abs(backtestSummary.totalPnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ color: '#555', fontSize: 9, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>AVG P&L</div>
-                            <div style={{ color: (backtestSummary.avgPnl ?? 0) >= 0 ? '#6bcb77' : '#ff6b6b', fontSize: 18, fontWeight: 700 }}>
-                              {backtestSummary.avgPnl != null ? `${backtestSummary.avgPnl >= 0 ? '+' : ''}$${Math.abs(backtestSummary.avgPnl).toFixed(2)}` : '—'}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto' }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingTop: 10, borderTop: '1px solid #222' }}>
                             <button className={ordersStyles.rulesBtn} onClick={() => setRulesPopup('BL')}>BL Order Rules</button>
                             <button className={`${ordersStyles.rulesBtn} ${ordersStyles.rulesBtnBT}`} onClick={() => setBacktestPopup('BL')}>BL Backtest Results</button>
                             <button className={`${ordersStyles.rulesBtn} ${ordersStyles.rulesBtnSS}`} onClick={() => setRulesPopup('SS')}>SS Order Rules</button>
                             <button className={`${ordersStyles.rulesBtn} ${ordersStyles.rulesBtnSSBT}`} onClick={() => setBacktestPopup('SS')}>SS Backtest Results</button>
                             <button className={`${ordersStyles.rulesBtn} ${ordersStyles.rulesBtnInstitutional}`} onClick={() => setInstitutionalPopup(true)}>PNTHR Institutional Metrics</button>
-                          </div>
-                          <div style={{ position: 'relative' }}>
-                            <button onClick={() => setShowBacktestMetrics(!showBacktestMetrics)}
-                              style={{ background: showBacktestMetrics ? '#fcf000' : '#1a1a1a', color: showBacktestMetrics ? '#111' : '#fcf000', border: '1px solid #fcf000', borderRadius: 6, padding: '8px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
-                              BACKTEST METRICS
-                            </button>
+                            <div style={{ position: 'relative' }}>
+                              <button onClick={() => setShowBacktestMetrics(!showBacktestMetrics)}
+                                style={{ background: showBacktestMetrics ? '#fcf000' : '#1a1a1a', color: showBacktestMetrics ? '#111' : '#fcf000', border: '1px solid #fcf000', borderRadius: 6, padding: '8px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
+                                BACKTEST METRICS
+                              </button>
                             {showBacktestMetrics && (
                               <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, background: '#111', border: '1px solid #333', borderRadius: 8, padding: '16px 20px', width: 340, zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.6)' }}>
                                 <div style={{ color: '#fcf000', fontSize: 13, fontWeight: 800, letterSpacing: 1, marginBottom: 12, borderBottom: '1px solid #333', paddingBottom: 8 }}>PNTHR PYRAMID SYSTEM</div>
@@ -1660,6 +1661,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                 </div>
                               </div>
                             )}
+                            </div>
                           </div>
                         </div>
                       )}

@@ -10,6 +10,8 @@ import ClosedTradeCards from './ClosedTradeCards';
 import GrowthChart from './GrowthChart';
 import InvestorCalculator from './InvestorCalculator';
 import BacktestTradeCard from './BacktestTradeCard';
+import { RulesPopup, BacktestPopup, InstitutionalPopup } from './OrdersPage';
+import ordersStyles from './OrdersPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
 class TradeDetailBoundary extends Component {
@@ -454,6 +456,9 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [backtestTrades, setBacktestTrades] = useState([]);
   const [backtestSummary, setBacktestSummary] = useState(null);
   const [backtestLoading, setBacktestLoading] = useState(false);
+  const [rulesPopup, setRulesPopup] = useState(null);
+  const [backtestPopup, setBacktestPopup] = useState(null);
+  const [institutionalPopup, setInstitutionalPopup] = useState(false);
   const [testSystemTrades, setTestSystemTrades] = useState([]);
   const [testSystemLoading, setTestSystemLoading] = useState(false);
   const [showBacktestMetrics, setShowBacktestMetrics] = useState(false);
@@ -1614,7 +1619,14 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                               {backtestSummary.avgPnl != null ? `${backtestSummary.avgPnl >= 0 ? '+' : ''}$${Math.abs(backtestSummary.avgPnl).toFixed(2)}` : '—'}
                             </div>
                           </div>
-                          <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto' }}>
+                            <button className={ordersStyles.rulesBtn} onClick={() => setRulesPopup('BL')}>BL Order Rules</button>
+                            <button className={`${ordersStyles.rulesBtn} ${ordersStyles.rulesBtnBT}`} onClick={() => setBacktestPopup('BL')}>BL Backtest Results</button>
+                            <button className={`${ordersStyles.rulesBtn} ${ordersStyles.rulesBtnSS}`} onClick={() => setRulesPopup('SS')}>SS Order Rules</button>
+                            <button className={`${ordersStyles.rulesBtn} ${ordersStyles.rulesBtnSSBT}`} onClick={() => setBacktestPopup('SS')}>SS Backtest Results</button>
+                            <button className={`${ordersStyles.rulesBtn} ${ordersStyles.rulesBtnInstitutional}`} onClick={() => setInstitutionalPopup(true)}>PNTHR Institutional Metrics</button>
+                          </div>
+                          <div style={{ position: 'relative' }}>
                             <button onClick={() => setShowBacktestMetrics(!showBacktestMetrics)}
                               style={{ background: showBacktestMetrics ? '#fcf000' : '#1a1a1a', color: showBacktestMetrics ? '#111' : '#fcf000', border: '1px solid #fcf000', borderRadius: 6, padding: '8px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
                               BACKTEST METRICS
@@ -1634,10 +1646,10 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                   <div>Lot 5 (The Kill): 8%</div>
                                   <div style={{ color: '#fcf000', fontWeight: 700, marginTop: 10, marginBottom: 4 }}>LOT TRIGGERS</div>
                                   <div>Lot 1: Entry (0%)</div>
-                                  <div>Lot 2: +3% from anchor</div>
-                                  <div>Lot 3: +6% from anchor</div>
-                                  <div>Lot 4: +10% from anchor</div>
-                                  <div>Lot 5: +14% from anchor</div>
+                                  <div>Lot 2: +3% from entry</div>
+                                  <div>Lot 3: +6% from entry</div>
+                                  <div>Lot 4: +10% from entry</div>
+                                  <div>Lot 5: +14% from entry</div>
                                   <div style={{ color: '#fcf000', fontWeight: 700, marginTop: 10, marginBottom: 4 }}>FRICTION COSTS (NET P&L)</div>
                                   <div>Commissions: IBKR Pro $0.005/shr ($1 min)</div>
                                   <div>Slippage: 5 bps per leg (10 bps round-trip)</div>
@@ -1651,6 +1663,10 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                           </div>
                         </div>
                       )}
+
+                      {rulesPopup && <RulesPopup type={rulesPopup} onClose={() => setRulesPopup(null)} />}
+                      {backtestPopup && <BacktestPopup type={backtestPopup} onClose={() => setBacktestPopup(null)} />}
+                      {institutionalPopup && <InstitutionalPopup onClose={() => setInstitutionalPopup(false)} />}
 
                       {backtestTrades.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: 48 }}>

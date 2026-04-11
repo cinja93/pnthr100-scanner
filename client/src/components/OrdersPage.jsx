@@ -37,7 +37,7 @@ function MacroRow({ label, price, ema21, aboveEma, emaSlope }) {
 
 // ── Rules popup content ─────────────────────────────────────────────────────
 
-function RulesPopup({ type, onClose }) {
+export function RulesPopup({ type, onClose }) {
   return (
     <div className={styles.rulesOverlay} onClick={onClose}>
       <div className={styles.rulesPanel} onClick={e => e.stopPropagation()}>
@@ -552,7 +552,7 @@ function HedgeFundSection({ h, label }) {
 
 // ── PNTHR Institutional Metrics popup ───────────────────────────────────────
 
-function InstitutionalPopup({ onClose }) {
+export function InstitutionalPopup({ onClose }) {
   const gold = '#fcf000';
   const green = '#22c55e';
   const red = '#ef4444';
@@ -721,7 +721,7 @@ function InstitutionalPopup({ onClose }) {
   );
 }
 
-function BacktestPopup({ type, onClose }) {
+export function BacktestPopup({ type, onClose }) {
   const d = type === 'BL' ? BL_BACKTEST : SS_BACKTEST;
   const label = type === 'BL' ? 'BUY LONG' : 'SELL SHORT';
   const color = '#22c55e';

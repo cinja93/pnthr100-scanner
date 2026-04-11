@@ -21,7 +21,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOGO_PATH = path.resolve(__dirname, '../../client/public/pnthr-funds-logo-full.png');
 const PNTHR_HEAD_PATH = path.resolve(__dirname, '../../client/src/assets/panther head.png');
-const OUTPUT_PATH = path.resolve(__dirname, '../../PNTHR_Institutional_Tearsheet_v17.pdf');
+const OUTPUT_PATH = path.resolve(__dirname, '../../PNTHR_Fund_Intelligence_Report_v18.pdf');
 
 // ── Brand Colors ─────────────────────────────────────────────────────────────
 const YELLOW  = [252, 240, 0];
@@ -608,7 +608,7 @@ async function run() {
 
   // "INSTITUTIONAL TEAR SHEET" centered below header with breathing room
   doc.fontSize(26).fillColor(YELLOW).font('Helvetica-Bold')
-     .text('INSTITUTIONAL TEAR SHEET', LM, COVER_HEADER_H + 24, { width: CW, align: 'center', lineBreak: false });
+     .text('FUND INTELLIGENCE REPORT', LM, COVER_HEADER_H + 24, { width: CW, align: 'center', lineBreak: false });
   doc.fontSize(9).fillColor(LTGRAY).font('Helvetica')
      .text('7-Year Backtest Performance Report  |  June 2019 - April 2026', LM, COVER_HEADER_H + 56, { width: CW, align: 'center', lineBreak: false });
 
@@ -624,7 +624,7 @@ async function run() {
     ['Structure', 'Reg D, Rule 506(c), 3(c)(1) Exempt Fund'],
     ['Universe', '679 liquid U.S. equities (PNTHR 679)'],
     ['Signal Engine', 'Proprietary 21-week EMA crossover + 8-dimension scoring'],
-    ['Position Sizing', '1% max risk per trade, 10% max exposure per position'],
+    ['Position Sizing', '1% max risk per trade, 10% max portfolio risk exposure'],
     ['Pyramiding', '5-lot entry system (35/25/20/12/8%)'],
     ['Backtest Capital', '$100,000 starting NAV'],
     ['Benchmark', 'S&P 500 (SPY)'],
@@ -824,10 +824,113 @@ async function run() {
   pageFooter();
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PAGE 2: EXECUTIVE SUMMARY + PERFORMANCE COMPARISON
+  // TABLE OF CONTENTS
   // ═══════════════════════════════════════════════════════════════════════════
   newBlackPage();
   let y = CONTENT_TOP;
+  y = sectionTitle('TABLE OF CONTENTS', y);
+
+  // ACT I — THE RESULTS
+  doc.fontSize(8).fillColor(YELLOW).font('Helvetica-Bold');
+  doc.text('ACT I — THE RESULTS', LM, y, { width: CW, lineBreak: false });
+  y = doc.y + 8;
+
+  const tocActI = [
+    ['Executive Summary', '3'],
+    ['Performance Comparison: PNTHR vs. S&P 500', '3'],
+    ['Crisis Alpha: Performance During Market Drawdowns', '4'],
+    ['Annual Performance: PNTHR vs S&P 500', '4'],
+    ['Strategy Metrics by Direction', '4'],
+    ['Monthly Returns Heatmap', '5'],
+    ['Drawdown Analysis', '5'],
+    ['Risk Architecture', '6'],
+    ['Worst-Case Trade Analysis (MAE)', '6'],
+    ['Rolling 12-Month Returns', '7'],
+    ['Best & Worst Trading Days', '7'],
+  ];
+
+  for (const [entry, pg] of tocActI) {
+    doc.fontSize(7.5).fillColor(WHITE).font('Helvetica')
+       .text(entry, LM + 12, y, { width: CW - 80, lineBreak: false });
+    doc.fontSize(7.5).fillColor(LTGRAY)
+       .text(pg, LM + CW - 40, y, { width: 40, align: 'right', lineBreak: false });
+    y += 12;
+  }
+
+  y += 8;
+
+  // ACT II — THE METHODOLOGY
+  doc.fontSize(8).fillColor(YELLOW).font('Helvetica-Bold');
+  doc.text('ACT II — THE METHODOLOGY', LM, y, { width: CW, lineBreak: false });
+  y = doc.y + 8;
+
+  const tocActII = [
+    ['1. The PNTHR Philosophy & Platform', '8'],
+    ['2. PNTHR Signal Generation', '9'],
+    ['3. The PNTHR Kill Scoring Engine', '10'],
+    ['4. PNTHR Analyze Pre-Trade Scoring', '11'],
+    ['5. PNTHR Position Sizing & Pyramiding', '12'],
+    ['6. Portfolio Command Center & Entry Workflow', '13'],
+    ['7. Scoring Health / Archive / History / IBKR Bridge', '13'],
+    ['8. Institutional Backtest Results', '14'],
+    ['9. Empirical Evidence', '16'],
+  ];
+
+  for (const [entry, pg] of tocActII) {
+    doc.fontSize(7.5).fillColor(WHITE).font('Helvetica')
+       .text(entry, LM + 12, y, { width: CW - 80, lineBreak: false });
+    doc.fontSize(7.5).fillColor(LTGRAY)
+       .text(pg, LM + CW - 40, y, { width: 40, align: 'right', lineBreak: false });
+    y += 12;
+  }
+
+  y += 8;
+
+  // ACT III — THE PROOF
+  doc.fontSize(8).fillColor(YELLOW).font('Helvetica-Bold');
+  doc.text('ACT III — THE PROOF', LM, y, { width: CW, lineBreak: false });
+  y = doc.y + 8;
+
+  const tocActIII = [
+    ['Comprehensive Daily NAV Log', '17'],
+  ];
+
+  for (const [entry, pg] of tocActIII) {
+    doc.fontSize(7.5).fillColor(WHITE).font('Helvetica')
+       .text(entry, LM + 12, y, { width: CW - 80, lineBreak: false });
+    doc.fontSize(7.5).fillColor(LTGRAY)
+       .text(pg, LM + CW - 40, y, { width: 40, align: 'right', lineBreak: false });
+    y += 12;
+  }
+
+  y += 8;
+
+  // ACT IV — THE CLOSE
+  doc.fontSize(8).fillColor(YELLOW).font('Helvetica-Bold');
+  doc.text('ACT IV — THE CLOSE', LM, y, { width: CW, lineBreak: false });
+  y = doc.y + 8;
+
+  const tocActIV = [
+    ['Executive Recap', '~58'],
+    ['Cumulative Growth Chart', '~59'],
+    ['Important Disclosures', '~60'],
+  ];
+
+  for (const [entry, pg] of tocActIV) {
+    doc.fontSize(7.5).fillColor(WHITE).font('Helvetica')
+       .text(entry, LM + 12, y, { width: CW - 80, lineBreak: false });
+    doc.fontSize(7.5).fillColor(LTGRAY)
+       .text(pg, LM + CW - 40, y, { width: 40, align: 'right', lineBreak: false });
+    y += 12;
+  }
+
+  pageFooter();
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PAGE 2: EXECUTIVE SUMMARY + PERFORMANCE COMPARISON
+  // ═══════════════════════════════════════════════════════════════════════════
+  newBlackPage();
+  y = CONTENT_TOP;
   y = sectionTitle('EXECUTIVE SUMMARY', y);
 
   const execParas = [
@@ -900,6 +1003,288 @@ async function run() {
     }
     return yPos + 6;
   }
+
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CRISIS ALPHA + ANNUAL RETURNS + DIRECTION METRICS
+  // ═══════════════════════════════════════════════════════════════════════════
+  newBlackPage();
+  y = CONTENT_TOP;
+  y = sectionTitle('CRISIS ALPHA: PERFORMANCE DURING MARKET DRAWDOWNS', y);
+
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(0);
+  doc.text('The hallmark of a disciplined panther is composure under pressure. While the broader market experienced significant drawdowns, the Carnivore Quant Fund preserved and grew investor capital through every major market event.', LM, y, { width: CW, lineBreak: true });
+  y = doc.y + 8;
+
+  const crisisCols = ['MARKET EVENT', 'PERIOD', 'S&P 500', 'PNTHR FUND', 'PNTHR ALPHA'];
+  const crisisWidths = [130, 150, 80, 80, CW - 440];
+  y = tableHeader(crisisCols, y, crisisWidths, null, WHITE);
+  for (const cp of crisisPerformance) {
+    const alpha = cp.pnthrReturn - cp.spyDrawdown;
+    const colors = [WHITE, LTGRAY, RED, cp.pnthrReturn >= 0 ? GREEN : RED, GREEN];
+    y = tableRow([cp.label, cp.period, fmtPct(cp.spyDrawdown, 1), fmtPct(cp.pnthrReturn, 1), '+' + alpha.toFixed(1) + '%'], y, crisisWidths, colors);
+  }
+
+  y += 14;
+  y = sectionTitle('ANNUAL PERFORMANCE: PNTHR vs S&P 500', y);
+  const annCols = ['YEAR', 'SPY EQUITY', 'S&P 500', 'PNTHR EQUITY', 'PNTHR NET', 'PNTHR ALPHA'];
+  const annWidths = [55, 100, 85, 100, 85, CW - 425];
+  y = tableHeader(annCols, y, annWidths, null, WHITE);
+
+  for (const yr of years) {
+    const a = annualReturns[yr];
+    // Find year-end equity
+    const yrEnd = dailyNav.filter(d => d.date.startsWith(yr)).pop();
+    const colors = [WHITE, LTGRAY, LTGRAY, YELLOW, a.return >= 0 ? GREEN : RED, a.alpha >= 0 ? GREEN : RED];
+    y = tableRow([
+      yr, '$' + fmtComma(Math.round(yrEnd?.spyEquity || 0)),
+      fmtPct(a.spy, 1),
+      '$' + fmtComma(Math.round(yrEnd?.equity || 0)),
+      fmtPct(a.return, 1), fmtPct(a.alpha, 1),
+    ], y, annWidths, colors);
+  }
+
+  y += 6;
+  y = checkPage(y, 40);
+  doc.fontSize(6.5).fillColor(LTGRAY).font('Helvetica').lineGap(0.5);
+  doc.text('"PNTHR NET" returns are fully burdened: all figures above are net of IBKR Pro Fixed commissions ($0.005/share), 5 basis points of slippage per leg, sector-tiered short borrow costs (1.0-2.0% annualized), a 2.0% per annum management fee on NAV, and a tiered performance allocation of 20%, 25%, 30% (by investor class) on net profits above a hurdle rate equal to the US 2-Year Treasury Yield, reset annually, subject to a high-water mark with loss carryforward provision. These are the returns an investor would have realized after every cost and fee.', LM, y, { width: CW, lineBreak: true });
+  doc.lineGap(0);
+  y = doc.y + 10;
+
+  y = sectionTitle('STRATEGY METRICS BY DIRECTION', y);
+  const dirCols = ['METRIC', 'BL (LONGS)', 'SS (SHORTS)', 'COMBINED'];
+  const dirWidths = [140, 110, 110, CW - 360];
+  y = tableHeader(dirCols, y, dirWidths);
+
+  const m = metrics;
+  const dirRows = [
+    ['Net CAGR', fmtPct(m.bl.net.cagr, 1), fmtPct(m.ss.net.cagr, 1), fmtPct(m.combined.net.cagr, 1)],
+    ['Sharpe Ratio', m.bl.net.sharpe.toFixed(2), m.ss.net.sharpe.toFixed(2), m.combined.net.sharpe.toFixed(2)],
+    ['Sortino Ratio', m.bl.net.sortino.toFixed(2), m.ss.net.sortino.toFixed(2), m.combined.net.sortino.toFixed(2)],
+    ['Max Drawdown', fmtPct(-m.bl.net.maxDrawdown, 2), fmtPct(-m.ss.net.maxDrawdown, 2), fmtPct(-m.combined.net.maxDrawdown, 2)],
+    ['Calmar Ratio', m.bl.net.calmar.toFixed(1), m.ss.net.calmar.toFixed(1), m.combined.net.calmar.toFixed(1)],
+    ['Profit Factor', m.bl.net.profitFactor.toFixed(2) + 'x', m.ss.net.profitFactor.toFixed(2) + 'x', m.combined.net.profitFactor.toFixed(2) + 'x'],
+    ['Win Rate', m.bl.net.winRate.toFixed(1) + '%', m.ss.net.winRate.toFixed(1) + '%', m.combined.net.winRate.toFixed(1) + '%'],
+    ['Avg Monthly Return', fmtPct(m.bl.net.meanMonthlyReturn, 2), fmtPct(m.ss.net.meanMonthlyReturn, 2), fmtPct(m.combined.net.meanMonthlyReturn, 2)],
+    ['Monthly Std Dev', m.bl.net.monthlyStdDev.toFixed(2) + '%', m.ss.net.monthlyStdDev.toFixed(2) + '%', m.combined.net.monthlyStdDev.toFixed(2) + '%'],
+    ['Best Month', fmtPct(m.bl.net.bestMonth, 1), fmtPct(m.ss.net.bestMonth, 1), fmtPct(m.combined.net.bestMonth, 1)],
+    ['Worst Month', fmtPct(m.bl.net.worstMonth, 2), fmtPct(m.ss.net.worstMonth, 2), fmtPct(m.combined.net.worstMonth, 2)],
+    ['Positive Months', `${m.bl.net.positiveMonths}/${m.bl.net.months}`, `${m.ss.net.positiveMonths}/${m.ss.net.months}`, `${m.combined.net.positiveMonths}/${m.combined.net.months}`],
+    ['Total Trades', fmtComma(m.bl.net.totalTrades), fmtComma(m.ss.net.totalTrades), fmtComma(m.combined.net.totalTrades)],
+  ];
+  for (const row of dirRows) {
+    y = tableRow(row, y, dirWidths, [LTGRAY, WHITE, WHITE, YELLOW]);
+  }
+  pageFooter();
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PAGE 4: MONTHLY RETURNS HEATMAP
+  // ═══════════════════════════════════════════════════════════════════════════
+  newBlackPage();
+  y = CONTENT_TOP;
+  y = sectionTitle('MONTHLY RETURNS HEATMAP (NET %)', y);
+
+  const monthLabels = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC', 'YEAR'];
+  const heatCellW = (CW - 40) / 14;
+  const heatCellH = 18;
+
+  // Header
+  doc.fontSize(5.5).fillColor(YELLOW).font('Helvetica-Bold');
+  let hx = LM + 40;
+  for (const ml of monthLabels) {
+    doc.text(ml, hx, y, { width: heatCellW, align: 'center', lineBreak: false });
+    hx += heatCellW;
+  }
+  y += 12;
+
+  for (const yr of years) {
+    doc.fontSize(6.5).fillColor(WHITE).font('Helvetica-Bold')
+       .text(yr, LM, y + 4, { width: 35, lineBreak: false });
+    hx = LM + 40;
+    let yrCompound = 1;
+    for (let mo = 1; mo <= 12; mo++) {
+      const mk = yr + '-' + String(mo).padStart(2, '0');
+      const mr = monthlyReturns[mk];
+      if (mr) {
+        yrCompound *= (1 + mr.return / 100);
+        const val = mr.return;
+        let bgColor;
+        if (val >= 10) bgColor = [0, 100, 0];
+        else if (val >= 5) bgColor = [0, 80, 0];
+        else if (val >= 2) bgColor = [0, 60, 10];
+        else if (val >= 0) bgColor = [20, 50, 20];
+        else if (val >= -1) bgColor = [80, 30, 30];
+        else bgColor = [120, 20, 20];
+        doc.rect(hx + 1, y, heatCellW - 2, heatCellH - 2).fill(bgColor);
+        doc.fontSize(5.5).fillColor(val >= 0 ? GREEN : RED).font('Helvetica')
+           .text(val.toFixed(1), hx + 1, y + 5, { width: heatCellW - 2, align: 'center', lineBreak: false });
+      } else {
+        doc.rect(hx + 1, y, heatCellW - 2, heatCellH - 2).fill([20, 20, 20]);
+        doc.fontSize(5.5).fillColor(MDGRAY).text('-', hx + 1, y + 5, { width: heatCellW - 2, align: 'center', lineBreak: false });
+      }
+      hx += heatCellW;
+    }
+    const yrRet = (yrCompound - 1) * 100;
+    doc.rect(hx + 1, y, heatCellW - 2, heatCellH - 2).fill([40, 40, 0]);
+    doc.fontSize(5.5).fillColor(YELLOW).font('Helvetica-Bold')
+       .text(fmtPct(yrRet, 1), hx + 1, y + 5, { width: heatCellW - 2, align: 'center', lineBreak: false });
+    y += heatCellH;
+  }
+
+  y += 6;
+  doc.fontSize(6.5).fillColor(LTGRAY).font('Helvetica');
+  doc.text(`${metrics.combined.net.positiveMonths} of ${metrics.combined.net.months} months profitable (${metrics.combined.net.positiveMonthsPct}%)  |  Only ${metrics.combined.net.months - metrics.combined.net.positiveMonths} negative months in 7 years  |  Worst: ${fmtPct(metrics.combined.net.worstMonth, 2)}  |  Best: ${fmtPct(metrics.combined.net.bestMonth, 1)}`, LM, y, { width: CW, lineBreak: false });
+
+  y += 20;
+  y = sectionTitle('DRAWDOWN ANALYSIS', y);
+
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(0);
+  doc.text('The Fund operates with zero tolerance for capital impairment. The maximum monthly drawdown was just ' + fmtPct(-metrics.combined.net.maxDrawdown, 2) + '. The deepest mark-to-market trough occurred during COVID recovery and was fully recovered within days. At no point did investor capital sustain a permanent loss nor meaningful decline.', LM, y, { width: CW, lineBreak: true });
+  y = doc.y + 8;
+
+  const ddCols = ['START', 'TROUGH', 'RECOVERY', 'DURATION', 'MTM TROUGH', 'PNTHR RETURN'];
+  const ddWidths = [90, 90, 90, 65, 80, CW - 415];
+  y = tableHeader(ddCols, y, ddWidths, null, WHITE);
+
+  for (const dd of drawdownEvents.slice(0, 10)) {
+    y = tableRow([
+      dd.start, dd.troughDate, dd.recoveryDate,
+      dd.durationDays + ' days', fmtPct(-dd.maxDDPct, 2),
+      fmtPct(dd.periodReturn, 2)
+    ], y, ddWidths, [LTGRAY, LTGRAY, LTGRAY, LTGRAY, RED, dd.periodReturn >= 0 ? GREEN : RED]);
+    if (y > BOTTOM - 40) break;
+  }
+
+  y += 6;
+  doc.fontSize(6.5).fillColor(LTGRAY).font('Helvetica-Oblique').lineGap(0);
+  doc.text('All drawdowns shown are intraday mark-to-market troughs. No drawdown resulted in permanent capital loss.', LM, y, { width: CW, lineBreak: true });
+  doc.font('Helvetica');
+  y = doc.y + 4;
+  pageFooter();
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RISK ARCHITECTURE
+  // ═══════════════════════════════════════════════════════════════════════════
+  newBlackPage();
+  y = CONTENT_TOP;
+  y = sectionTitle('RISK ARCHITECTURE', y);
+
+  doc.fontSize(7.5).fillColor(WHITE).font('Helvetica').lineGap(0);
+  doc.text('The Carnivore Quant Fund is engineered for capital preservation first, alpha generation second. Every aspect of the system, from signal selection to position sizing to exit discipline, ensures the portfolio can absorb adverse conditions without meaningful drawdown.', LM, y, { width: CW, lineBreak: true });
+  y = doc.y + 10;
+
+  const riskItems = [
+    ['1% VITALITY CAP', 'Each stock position risks a maximum of 1% of NAV. ETF positions are capped at 0.5%. Share count = floor(risk budget / risk per share). A wider stop produces fewer shares, not more risk.'],
+    ['5-LOT PYRAMID SYSTEM', 'Initial entry deploys only 35% of the full position. Subsequent lots at +3%, +6%, +10%, +14%. Each lot fill triggers a stop ratchet, progressively locking in gains.'],
+    ['10% POSITION CAP', 'No single ticker can exceed 10% of NAV in total exposure, preventing concentration risk even in high-conviction names.'],
+    ['SECTOR CONCENTRATION LIMIT', 'Net directional exposure capped at 3 positions per sector (|longs - shorts|). Prevents correlated drawdowns from sector-specific events.'],
+    ['PORTFOLIO HEAT CAPS', 'Total open risk capped at 10% for stocks, 5% for ETFs, and 15% combined. Recycled positions (stop beyond entry) carry $0 risk.'],
+    ['SYSTEMATIC EXIT DISCIPLINE', 'Exits: EMA crossover reversal, RSI > 85 feast alert, ATR stop hit, 20-day stale hunt liquidation, risk advisor triggers. Manual overrides tracked and scored.'],
+    ['WASH SALE COMPLIANCE', '30-day re-entry lockout on losing trades, automatically enforced by the pipeline.'],
+  ];
+
+  for (const [title, desc] of riskItems) {
+    y = checkPage(y, 30);
+    doc.fontSize(7.5).fillColor(YELLOW).font('Helvetica-Bold').lineGap(0)
+       .text(title, LM, y, { width: CW, lineBreak: false });
+    y = doc.y + 2;
+    doc.fontSize(6.5).fillColor(LTGRAY).font('Helvetica').lineGap(0)
+       .text(desc, LM + 10, y, { width: CW - 10, lineBreak: true });
+    y = doc.y + 7;
+  }
+
+  y += 6;
+  y = checkPage(y, 50);
+  y = sectionTitle('WORST-CASE TRADE ANALYSIS (MAX ADVERSE EXCURSION)', y);
+  doc.fontSize(7).fillColor(LTGRAY).font('Helvetica').lineGap(0);
+  doc.text('The maximum adverse excursion (MAE) measures the worst intra-trade price move against the position before exit. The table below shows the 10 most extreme adverse moves across ' + fmtComma(metrics.combined.net.totalTrades) + ' closed pyramid trades. Despite these individual trade drawdowns, the portfolio never experienced a negative month-end balance decline. At Lot 1 sizing (35% of the full $10K position = $3,500), even the worst MAE (-15.2%) translated to just 0.5% of portfolio NAV.', LM, y, { width: CW, lineBreak: true });
+  y = doc.y + 8;
+
+  // Top 10 MAE table
+  const maeCols = ['TICKER', 'SIGNAL', 'ENTRY', 'EXIT', 'MAE %', 'NET P&L', 'EXIT REASON', 'MONTH RETURN'];
+  const maeWidths = [45, 35, 55, 55, 42, 50, 70, CW - 352];
+  y = checkPage(y, 20);
+  y = tableHeader(maeCols, y, maeWidths);
+
+  for (const t of top10MAE) {
+    y = checkPage(y, 12);
+    // Find what the fund returned in the month this MAE occurred
+    const maeMonth = t.entryDate.slice(0, 7);
+    const mr = monthlyReturns[maeMonth];
+    const monthRetStr = mr ? fmtPct(mr.return, 2) : 'N/A';
+    const monthRetColor = mr && mr.return >= 0 ? GREEN : RED;
+
+    y = tableRow([
+      t.ticker,
+      t.direction === 'LONG' ? 'BL' : 'SS',
+      t.entryDate,
+      t.exitDate,
+      fmtPct(t.maePct, 1),
+      (t.netPnlDollar >= 0 ? '+$' : '-$') + Math.abs(Math.round(t.netPnlDollar)),
+      t.exitReason,
+      monthRetStr,
+    ], y, maeWidths, [WHITE, LTGRAY, LTGRAY, LTGRAY, RED, t.netPnlDollar >= 0 ? GREEN : RED, LTGRAY, monthRetColor]);
+  }
+
+  y += 10;
+  y = checkPage(y, 30);
+  doc.fontSize(7).fillColor(WHITE).font('Helvetica-Bold').lineGap(0);
+  doc.text('KEY TAKEAWAY:', LM, y, { width: CW, lineBreak: false });
+  y = doc.y + 3;
+  doc.fontSize(7).fillColor(LTGRAY).font('Helvetica');
+  doc.text('At no point during the entire 7-year backtest did the account balance or investor equity decline below prior high-water marks for more than a single month. Even during the months when these worst-case MAE trades occurred, the portfolio remained profitable on a net basis. The 1% vitality cap and 35% initial lot sizing ensure that no single adverse trade can materially impair investor capital.', LM, y, { width: CW, lineBreak: true });
+
+  pageFooter();
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ROLLING METRICS + BEST/WORST DAYS
+  // ═══════════════════════════════════════════════════════════════════════════
+  newBlackPage();
+  y = CONTENT_TOP;
+  y = sectionTitle('ROLLING 12-MONTH RETURNS', y);
+
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(0);
+  doc.text(`Across ${rolling12.length} rolling 12-month windows, the minimum return was ${fmtPct(minRolling12.return, 1)} (ending ${minRolling12.month}). No rolling 12-month period was negative. The Fund has generated positive absolute returns over every trailing year of the backtest.`, LM, y, { width: CW, lineBreak: true });
+  y = doc.y + 8;
+
+  const r12Cols = ['ENDING MONTH', 'TRAILING 12M RETURN'];
+  const r12Widths = [120, CW - 120];
+  y = tableHeader(r12Cols, y, r12Widths, null, WHITE);
+
+  const r12Display = rolling12.filter((_, i) => i % 6 === 0 || rolling12[i].month === minRolling12.month);
+  for (const r of r12Display) {
+    const isMin = r.month === minRolling12.month;
+    y = tableRow([r.month, fmtPct(r.return, 1)], y, r12Widths,
+      [LTGRAY, r.return >= 0 ? GREEN : RED]);
+    if (y > H / 2 - 20) break;
+  }
+
+  y += 14;
+  y = sectionTitle('BEST & WORST TRADING DAYS', y);
+  doc.fontSize(7).fillColor(LTGRAY).font('Helvetica-Oblique').text('Data is sorted by Daily Return.', LM, y, { lineBreak: false });
+  y += 12;
+
+  const daysCols = ['DATE', 'DAILY RETURN', 'SPY EQUITY', 'PNTHR EQUITY'];
+  const daysWidths = [100, 110, 100, CW - 310];
+
+  doc.fontSize(7.5).fillColor(YELLOW).font('Helvetica-Bold').text('10 WORST DAYS', LM, y, { lineBreak: false });
+  y += 10;
+  y = tableHeader(daysCols, y, daysWidths, null, WHITE);
+  for (const d of worst10Days) {
+    const spyDay = dailyNav.find(x => x.date === d.date);
+    y = tableRow([d.date, fmtPct(d.return, 3), spyDay ? '$' + fmtComma(Math.round(spyDay.spyEquity)) : '', '$' + fmtComma(Math.round(d.equity))], y, daysWidths, [LTGRAY, RED, LTGRAY, YELLOW]);
+  }
+
+  y += 12;
+  doc.fontSize(7.5).fillColor(YELLOW).font('Helvetica-Bold').text('10 BEST DAYS', LM, y, { lineBreak: false });
+  y += 10;
+  y = tableHeader(daysCols, y, daysWidths, null, WHITE);
+  for (const d of best10Days) {
+    const spyDay = dailyNav.find(x => x.date === d.date);
+    y = tableRow([d.date, fmtPct(d.return, 3), spyDay ? '$' + fmtComma(Math.round(spyDay.spyEquity)) : '', '$' + fmtComma(Math.round(d.equity))], y, daysWidths, [LTGRAY, GREEN, LTGRAY, YELLOW]);
+  }
+
+  pageFooter();
 
   // ── 1. THE PNTHR PHILOSOPHY & PLATFORM ──────────────────────────────────
   newBlackPage();
@@ -1293,7 +1678,7 @@ async function run() {
   doc.moveTo(LM + 100, y).lineTo(RM - 100, y).strokeColor(YELLOW).lineWidth(1).stroke();
   y += 12;
   doc.fontSize(8).fillColor(LTGRAY).font('Helvetica')
-     .text('v17.0  |  April 2026', LM, y, { width: CW, align: 'center', lineBreak: false });
+     .text('v18.0  |  April 2026', LM, y, { width: CW, align: 'center', lineBreak: false });
   y += 16;
   doc.fontSize(7).fillColor(YELLOW).font('Helvetica-Bold')
      .text('DISCIPLINE IS THE EDGE.    DATA IS THE WEAPON.    THE MARKET CONFIRMS THE KILL.', LM, y, { width: CW, align: 'center', lineBreak: false });
@@ -1311,165 +1696,10 @@ async function run() {
   doc.fontSize(7).fillColor(YELLOW).font('Helvetica-Bold')
      .text('RESEARCH TIMELINE', LM + halfW + 18, y + 5, { width: halfW - 16, align: 'center', lineBreak: false });
   doc.fontSize(6).fillColor(LTGRAY).font('Helvetica')
-     .text('2019: Research program initiated. 2020-2022: Signal validation across market cycles including COVID. 2023: 8-dimension Kill Engine v1.0 released. 2024: PNTHR Analyze pre-trade scoring developed. 2025: IBKR bridge; Discipline Scoring v2. 2026: v17.0 - full D1-D8 pyramid backtest with institutional metrics.', LM + halfW + 18, y + 18, { width: halfW - 16, lineBreak: true });
+     .text('2019: Research program initiated. 2020-2022: Signal validation across market cycles including COVID. 2023: 8-dimension Kill Engine v1.0 released. 2024: PNTHR Analyze pre-trade scoring developed. 2025: IBKR bridge; Discipline Scoring v2. 2026: v18.0 - full D1-D8 pyramid backtest with institutional metrics.', LM + halfW + 18, y + 18, { width: halfW - 16, lineBreak: true });
 
   pageFooter();
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CRISIS ALPHA + ANNUAL RETURNS + DIRECTION METRICS
-  // ═══════════════════════════════════════════════════════════════════════════
-  newBlackPage();
-  y = CONTENT_TOP;
-  y = sectionTitle('CRISIS ALPHA: PERFORMANCE DURING MARKET DRAWDOWNS', y);
-
-  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(0);
-  doc.text('The hallmark of a disciplined panther is composure under pressure. While the broader market experienced significant drawdowns, the Carnivore Quant Fund preserved and grew investor capital through every major market event.', LM, y, { width: CW, lineBreak: true });
-  y = doc.y + 8;
-
-  const crisisCols = ['MARKET EVENT', 'PERIOD', 'S&P 500', 'PNTHR FUND'];
-  const crisisWidths = [130, 150, 80, CW - 360];
-  y = tableHeader(crisisCols, y, crisisWidths);
-  for (const cp of crisisPerformance) {
-    const colors = [WHITE, LTGRAY, RED, cp.pnthrReturn >= 0 ? GREEN : RED];
-    y = tableRow([cp.label, cp.period, fmtPct(cp.spyDrawdown, 1), fmtPct(cp.pnthrReturn, 1)], y, crisisWidths, colors);
-  }
-
-  y += 14;
-  y = sectionTitle('ANNUAL PERFORMANCE: PNTHR vs S&P 500', y);
-  const annCols = ['YEAR', 'SPY EQUITY', 'S&P 500', 'PNTHR EQUITY', 'PNTHR NET', 'ALPHA'];
-  const annWidths = [55, 100, 85, 100, 85, CW - 425];
-  y = tableHeader(annCols, y, annWidths, null, WHITE);
-
-  for (const yr of years) {
-    const a = annualReturns[yr];
-    // Find year-end equity
-    const yrEnd = dailyNav.filter(d => d.date.startsWith(yr)).pop();
-    const colors = [WHITE, LTGRAY, LTGRAY, YELLOW, YELLOW, a.alpha >= 0 ? GREEN : RED];
-    y = tableRow([
-      yr, '$' + fmtComma(Math.round(yrEnd?.spyEquity || 0)),
-      fmtPct(a.spy, 1),
-      '$' + fmtComma(Math.round(yrEnd?.equity || 0)),
-      fmtPct(a.return, 1), fmtPct(a.alpha, 1),
-    ], y, annWidths, colors);
-  }
-
-  y += 6;
-  y = checkPage(y, 40);
-  doc.fontSize(6.5).fillColor(LTGRAY).font('Helvetica').lineGap(0.5);
-  doc.text('"PNTHR NET" returns are fully burdened: all figures above are net of IBKR Pro Fixed commissions ($0.005/share), 5 basis points of slippage per leg, sector-tiered short borrow costs (1.0-2.0% annualized), a 2.0% per annum management fee on NAV, and a tiered performance allocation of 20%/25%/30% (by investor class) on net profits above a hurdle rate equal to the US 2-Year Treasury Yield, reset annually, subject to a high-water mark with loss carryforward provision. These are the returns an investor would have realized after every cost and fee.', LM, y, { width: CW, lineBreak: true });
-  doc.lineGap(0);
-  y = doc.y + 10;
-
-  y = sectionTitle('STRATEGY METRICS BY DIRECTION', y);
-  const dirCols = ['METRIC', 'BL (LONGS)', 'SS (SHORTS)', 'COMBINED'];
-  const dirWidths = [140, 110, 110, CW - 360];
-  y = tableHeader(dirCols, y, dirWidths);
-
-  const m = metrics;
-  const dirRows = [
-    ['Net CAGR', fmtPct(m.bl.net.cagr, 1), fmtPct(m.ss.net.cagr, 1), fmtPct(m.combined.net.cagr, 1)],
-    ['Sharpe Ratio', m.bl.net.sharpe.toFixed(2), m.ss.net.sharpe.toFixed(2), m.combined.net.sharpe.toFixed(2)],
-    ['Sortino Ratio', m.bl.net.sortino.toFixed(2), m.ss.net.sortino.toFixed(2), m.combined.net.sortino.toFixed(2)],
-    ['Max Drawdown', fmtPct(-m.bl.net.maxDrawdown, 2), fmtPct(-m.ss.net.maxDrawdown, 2), fmtPct(-m.combined.net.maxDrawdown, 2)],
-    ['Calmar Ratio', m.bl.net.calmar.toFixed(1), m.ss.net.calmar.toFixed(1), m.combined.net.calmar.toFixed(1)],
-    ['Profit Factor', m.bl.net.profitFactor.toFixed(2) + 'x', m.ss.net.profitFactor.toFixed(2) + 'x', m.combined.net.profitFactor.toFixed(2) + 'x'],
-    ['Win Rate', m.bl.net.winRate.toFixed(1) + '%', m.ss.net.winRate.toFixed(1) + '%', m.combined.net.winRate.toFixed(1) + '%'],
-    ['Avg Monthly Return', fmtPct(m.bl.net.meanMonthlyReturn, 2), fmtPct(m.ss.net.meanMonthlyReturn, 2), fmtPct(m.combined.net.meanMonthlyReturn, 2)],
-    ['Monthly Std Dev', m.bl.net.monthlyStdDev.toFixed(2) + '%', m.ss.net.monthlyStdDev.toFixed(2) + '%', m.combined.net.monthlyStdDev.toFixed(2) + '%'],
-    ['Best Month', fmtPct(m.bl.net.bestMonth, 1), fmtPct(m.ss.net.bestMonth, 1), fmtPct(m.combined.net.bestMonth, 1)],
-    ['Worst Month', fmtPct(m.bl.net.worstMonth, 2), fmtPct(m.ss.net.worstMonth, 2), fmtPct(m.combined.net.worstMonth, 2)],
-    ['Positive Months', `${m.bl.net.positiveMonths}/${m.bl.net.months}`, `${m.ss.net.positiveMonths}/${m.ss.net.months}`, `${m.combined.net.positiveMonths}/${m.combined.net.months}`],
-    ['Total Trades', fmtComma(m.bl.net.totalTrades), fmtComma(m.ss.net.totalTrades), fmtComma(m.combined.net.totalTrades)],
-  ];
-  for (const row of dirRows) {
-    y = tableRow(row, y, dirWidths, [LTGRAY, WHITE, WHITE, YELLOW]);
-  }
-  pageFooter();
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PAGE 4: MONTHLY RETURNS HEATMAP
-  // ═══════════════════════════════════════════════════════════════════════════
-  newBlackPage();
-  y = CONTENT_TOP;
-  y = sectionTitle('MONTHLY RETURNS HEATMAP (NET %)', y);
-
-  const monthLabels = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC', 'YEAR'];
-  const heatCellW = (CW - 40) / 14;
-  const heatCellH = 18;
-
-  // Header
-  doc.fontSize(5.5).fillColor(YELLOW).font('Helvetica-Bold');
-  let hx = LM + 40;
-  for (const ml of monthLabels) {
-    doc.text(ml, hx, y, { width: heatCellW, align: 'center', lineBreak: false });
-    hx += heatCellW;
-  }
-  y += 12;
-
-  for (const yr of years) {
-    doc.fontSize(6.5).fillColor(WHITE).font('Helvetica-Bold')
-       .text(yr, LM, y + 4, { width: 35, lineBreak: false });
-    hx = LM + 40;
-    let yrCompound = 1;
-    for (let mo = 1; mo <= 12; mo++) {
-      const mk = yr + '-' + String(mo).padStart(2, '0');
-      const mr = monthlyReturns[mk];
-      if (mr) {
-        yrCompound *= (1 + mr.return / 100);
-        const val = mr.return;
-        let bgColor;
-        if (val >= 10) bgColor = [0, 100, 0];
-        else if (val >= 5) bgColor = [0, 80, 0];
-        else if (val >= 2) bgColor = [0, 60, 10];
-        else if (val >= 0) bgColor = [20, 50, 20];
-        else if (val >= -1) bgColor = [80, 30, 30];
-        else bgColor = [120, 20, 20];
-        doc.rect(hx + 1, y, heatCellW - 2, heatCellH - 2).fill(bgColor);
-        doc.fontSize(5.5).fillColor(val >= 0 ? GREEN : RED).font('Helvetica')
-           .text(val.toFixed(1), hx + 1, y + 5, { width: heatCellW - 2, align: 'center', lineBreak: false });
-      } else {
-        doc.rect(hx + 1, y, heatCellW - 2, heatCellH - 2).fill([20, 20, 20]);
-        doc.fontSize(5.5).fillColor(MDGRAY).text('-', hx + 1, y + 5, { width: heatCellW - 2, align: 'center', lineBreak: false });
-      }
-      hx += heatCellW;
-    }
-    const yrRet = (yrCompound - 1) * 100;
-    doc.rect(hx + 1, y, heatCellW - 2, heatCellH - 2).fill([40, 40, 0]);
-    doc.fontSize(5.5).fillColor(YELLOW).font('Helvetica-Bold')
-       .text(fmtPct(yrRet, 1), hx + 1, y + 5, { width: heatCellW - 2, align: 'center', lineBreak: false });
-    y += heatCellH;
-  }
-
-  y += 6;
-  doc.fontSize(6.5).fillColor(LTGRAY).font('Helvetica');
-  doc.text(`${metrics.combined.net.positiveMonths} of ${metrics.combined.net.months} months profitable (${metrics.combined.net.positiveMonthsPct}%)  |  Only ${metrics.combined.net.months - metrics.combined.net.positiveMonths} negative months in 7 years  |  Worst: ${fmtPct(metrics.combined.net.worstMonth, 2)}  |  Best: ${fmtPct(metrics.combined.net.bestMonth, 1)}`, LM, y, { width: CW, lineBreak: false });
-
-  y += 20;
-  y = sectionTitle('DRAWDOWN ANALYSIS', y);
-
-  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(0);
-  doc.text('The Fund operates with zero tolerance for capital impairment. The maximum monthly drawdown was just ' + fmtPct(-metrics.combined.net.maxDrawdown, 2) + '. The deepest mark-to-market trough occurred during COVID recovery and was fully recovered within days. At no point did investor capital sustain a meaningful decline.', LM, y, { width: CW, lineBreak: true });
-  y = doc.y + 8;
-
-  const ddCols = ['START', 'TROUGH', 'RECOVERY', 'DURATION', 'MTM TROUGH', 'PNTHR RETURN'];
-  const ddWidths = [90, 90, 90, 65, 80, CW - 415];
-  y = tableHeader(ddCols, y, ddWidths, null, WHITE);
-
-  for (const dd of drawdownEvents.slice(0, 10)) {
-    y = tableRow([
-      dd.start, dd.troughDate, dd.recoveryDate,
-      dd.durationDays + ' days', fmtPct(-dd.maxDDPct, 2),
-      fmtPct(dd.periodReturn, 2)
-    ], y, ddWidths, [LTGRAY, LTGRAY, LTGRAY, LTGRAY, RED, dd.periodReturn >= 0 ? GREEN : RED]);
-    if (y > BOTTOM - 40) break;
-  }
-
-  y += 6;
-  doc.fontSize(6.5).fillColor(LTGRAY).font('Helvetica-Oblique').lineGap(0);
-  doc.text('All drawdowns shown are intraday mark-to-market troughs. No drawdown resulted in permanent capital loss.', LM, y, { width: CW, lineBreak: true });
-  doc.font('Helvetica');
-  y = doc.y + 4;
-  pageFooter();
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PAGES 5+: COMPREHENSIVE DAILY NAV LOG — EVERY MONTH
@@ -1673,41 +1903,7 @@ async function run() {
     doc.moveTo(LM, y).lineTo(LM + CW, y).strokeColor(MDGRAY).lineWidth(0.5).stroke();
     y += 8;
 
-    // ── Insert year-end growth chart ──
-    if (isLastMonthOfYear) {
-      const yearGrowth = computeGrowthForYear(parseInt(yr));
-      if (yearGrowth && yearGrowth.chartData.length > 1) {
-        // Build SPY data for the same year
-        const yearSpyData = Object.entries(spyGrowthByMonth)
-          .filter(([m]) => m.startsWith(yr))
-          .sort(([a], [b]) => a.localeCompare(b));
-        // Scale SPY to $100K starting point
-        const spyStartNav = yearSpyData.length > 0
-          ? (() => {
-              const prevMonths = Object.entries(spyGrowthByMonth)
-                .filter(([m]) => m < yr + '-01').sort(([a], [b]) => a.localeCompare(b));
-              return prevMonths.length ? prevMonths[prevMonths.length - 1][1] : yearSpyData[0][1];
-            })()
-          : 100000;
-        const spyChartData = yearSpyData.map(([month, nav]) => ({
-          month, nav: +(nav / spyStartNav * 100000).toFixed(2)
-        }));
-
-        // Need a new page for the chart
-        pageFooter();
-        newBlackPage();
-        y = CONTENT_TOP;
-
-        y = drawGrowthChart(
-          yr + ' Growth',
-          yearGrowth.chartData,
-          spyChartData,
-          yearGrowth,
-          y + 20
-        );
-        y += 10;
-      }
-    }
+    // Individual year-end charts removed — cumulative chart only (below)
   }
 
   // ── Cumulative Growth Chart (all years) ──
@@ -1733,125 +1929,46 @@ async function run() {
 
   pageFooter();
 
+
+
   // ═══════════════════════════════════════════════════════════════════════════
-  // RISK ARCHITECTURE
+  // EXECUTIVE RECAP
   // ═══════════════════════════════════════════════════════════════════════════
   newBlackPage();
   y = CONTENT_TOP;
-  y = sectionTitle('RISK ARCHITECTURE', y);
+  y = sectionTitle('EXECUTIVE RECAP', y);
 
-  doc.fontSize(7.5).fillColor(WHITE).font('Helvetica').lineGap(0);
-  doc.text('The Carnivore Quant Fund is engineered for capital preservation first, alpha generation second. Every aspect of the system, from signal selection to position sizing to exit discipline, ensures the portfolio can absorb adverse conditions without meaningful drawdown.', LM, y, { width: CW, lineBreak: true });
-  y = doc.y + 10;
+  doc.fontSize(8).fillColor(LTGRAY).font('Helvetica').lineGap(0);
+  doc.text('After reviewing 7 years of daily performance data, here is the bottom line:', LM, y, { width: CW, lineBreak: true });
+  y = doc.y + 14;
 
-  const riskItems = [
-    ['1% VITALITY CAP', 'Each stock position risks a maximum of 1% of NAV. ETF positions are capped at 0.5%. Share count = floor(risk budget / risk per share). A wider stop produces fewer shares, not more risk.'],
-    ['5-LOT PYRAMID SYSTEM', 'Initial entry deploys only 35% of the full position. Subsequent lots at +3%, +6%, +10%, +14%. Each lot fill triggers a stop ratchet, progressively locking in gains.'],
-    ['10% POSITION CAP', 'No single ticker can exceed 10% of NAV in total exposure, preventing concentration risk even in high-conviction names.'],
-    ['SECTOR CONCENTRATION LIMIT', 'Net directional exposure capped at 3 positions per sector (|longs - shorts|). Prevents correlated drawdowns from sector-specific events.'],
-    ['PORTFOLIO HEAT CAPS', 'Total open risk capped at 10% for stocks, 5% for ETFs, and 15% combined. Recycled positions (stop beyond entry) carry $0 risk.'],
-    ['SYSTEMATIC EXIT DISCIPLINE', 'Exits: EMA crossover reversal, RSI > 85 feast alert, ATR stop hit, 20-day stale hunt liquidation, risk advisor triggers. Manual overrides tracked and scored.'],
-    ['WASH SALE COMPLIANCE', '30-day re-entry lockout on losing trades, automatically enforced by the pipeline.'],
+  const recapData = [
+    ['Net CAGR', fmtPct(metrics.combined.net.cagr, 1), GREEN],
+    ['Sharpe Ratio', metrics.combined.net.sharpe.toFixed(2), GREEN],
+    ['Sortino Ratio', metrics.combined.net.sortino.toFixed(2), GREEN],
+    ['Profit Factor', metrics.combined.net.profitFactor.toFixed(1) + 'x', GREEN],
+    ['Win Rate', metrics.combined.net.winRate.toFixed(1) + '%', GREEN],
+    ['Max Monthly Drawdown', fmtPct(-metrics.combined.net.maxDrawdown, 2), YELLOW],
+    ['Positive Months', metrics.combined.net.positiveMonths + ' of ' + metrics.combined.net.months + ' (' + metrics.combined.net.positiveMonthsPct + '%)', GREEN],
+    ['Total Return ($100K start)', fmtDollar(lastDay.equity), YELLOW],
+    ['Alpha vs S&P 500', fmtDollar(lastDay.equity - lastDay.spyEquity), GREEN],
   ];
 
-  for (const [title, desc] of riskItems) {
-    y = checkPage(y, 30);
-    doc.fontSize(7.5).fillColor(YELLOW).font('Helvetica-Bold').lineGap(0)
-       .text(title, LM, y, { width: CW, lineBreak: false });
-    y = doc.y + 2;
-    doc.fontSize(6.5).fillColor(LTGRAY).font('Helvetica').lineGap(0)
-       .text(desc, LM + 10, y, { width: CW - 10, lineBreak: true });
-    y = doc.y + 7;
-  }
-
-  y += 6;
-  y = checkPage(y, 50);
-  y = sectionTitle('WORST-CASE TRADE ANALYSIS (MAX ADVERSE EXCURSION)', y);
-  doc.fontSize(7).fillColor(LTGRAY).font('Helvetica').lineGap(0);
-  doc.text('The maximum adverse excursion (MAE) measures the worst intra-trade price move against the position before exit. The table below shows the 10 most extreme adverse moves across ' + fmtComma(metrics.combined.net.totalTrades) + ' closed pyramid trades. Despite these individual trade drawdowns, the portfolio never experienced a negative month-end balance decline. At Lot 1 sizing (35% of the full $10K position = $3,500), even the worst MAE (-15.2%) translated to just 0.5% of portfolio NAV.', LM, y, { width: CW, lineBreak: true });
-  y = doc.y + 8;
-
-  // Top 10 MAE table
-  const maeCols = ['TICKER', 'SIGNAL', 'ENTRY', 'EXIT', 'MAE %', 'NET P&L', 'EXIT REASON', 'MONTH RETURN'];
-  const maeWidths = [45, 35, 55, 55, 42, 50, 70, CW - 352];
-  y = checkPage(y, 20);
-  y = tableHeader(maeCols, y, maeWidths);
-
-  for (const t of top10MAE) {
-    y = checkPage(y, 12);
-    // Find what the fund returned in the month this MAE occurred
-    const maeMonth = t.entryDate.slice(0, 7);
-    const mr = monthlyReturns[maeMonth];
-    const monthRetStr = mr ? fmtPct(mr.return, 2) : 'N/A';
-    const monthRetColor = mr && mr.return >= 0 ? GREEN : RED;
-
-    y = tableRow([
-      t.ticker,
-      t.direction === 'LONG' ? 'BL' : 'SS',
-      t.entryDate,
-      t.exitDate,
-      fmtPct(t.maePct, 1),
-      (t.netPnlDollar >= 0 ? '+$' : '-$') + Math.abs(Math.round(t.netPnlDollar)),
-      t.exitReason,
-      monthRetStr,
-    ], y, maeWidths, [WHITE, LTGRAY, LTGRAY, LTGRAY, RED, t.netPnlDollar >= 0 ? GREEN : RED, LTGRAY, monthRetColor]);
-  }
-
-  y += 10;
-  y = checkPage(y, 30);
-  doc.fontSize(7).fillColor(WHITE).font('Helvetica-Bold').lineGap(0);
-  doc.text('KEY TAKEAWAY:', LM, y, { width: CW, lineBreak: false });
-  y = doc.y + 3;
-  doc.fontSize(7).fillColor(LTGRAY).font('Helvetica');
-  doc.text('At no point during the entire 7-year backtest did the account balance or investor equity decline below prior high-water marks for more than a single month. Even during the months when these worst-case MAE trades occurred, the portfolio remained profitable on a net basis. The 1% vitality cap and 35% initial lot sizing ensure that no single adverse trade can materially impair investor capital.', LM, y, { width: CW, lineBreak: true });
-
-  pageFooter();
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ROLLING METRICS + BEST/WORST DAYS
-  // ═══════════════════════════════════════════════════════════════════════════
-  newBlackPage();
-  y = CONTENT_TOP;
-  y = sectionTitle('ROLLING 12-MONTH RETURNS', y);
-
-  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(0);
-  doc.text(`Across ${rolling12.length} rolling 12-month windows, the minimum return was ${fmtPct(minRolling12.return, 1)} (ending ${minRolling12.month}). No rolling 12-month period was negative. The Fund has generated positive absolute returns over every trailing year of the backtest.`, LM, y, { width: CW, lineBreak: true });
-  y = doc.y + 8;
-
-  const r12Cols = ['ENDING MONTH', 'TRAILING 12M RETURN'];
-  const r12Widths = [120, CW - 120];
-  y = tableHeader(r12Cols, y, r12Widths, null, WHITE);
-
-  const r12Display = rolling12.filter((_, i) => i % 6 === 0 || rolling12[i].month === minRolling12.month);
-  for (const r of r12Display) {
-    const isMin = r.month === minRolling12.month;
-    y = tableRow([r.month, fmtPct(r.return, 1)], y, r12Widths,
-      [LTGRAY, r.return >= 0 ? GREEN : RED]);
-    if (y > H / 2 - 20) break;
+  for (const [label, val, color] of recapData) {
+    doc.fontSize(8.5).fillColor(LTGRAY).font('Helvetica')
+       .text(label, LM + 40, y, { width: 220, lineBreak: false });
+    doc.fontSize(10).fillColor(color).font('Helvetica-Bold')
+       .text(val, LM + 280, y, { width: 140, align: 'right', lineBreak: false });
+    y += 16;
   }
 
   y += 14;
-  y = sectionTitle('BEST & WORST TRADING DAYS', y);
+  doc.moveTo(LM + 40, y).lineTo(LM + 420, y).strokeColor(MDGRAY).lineWidth(0.5).stroke();
+  y += 14;
 
-  const daysCols = ['DATE', 'DAILY RETURN', 'SPY EQUITY', 'PNTHR EQUITY'];
-  const daysWidths = [100, 110, 100, CW - 310];
-
-  doc.fontSize(7.5).fillColor(YELLOW).font('Helvetica-Bold').text('10 WORST DAYS', LM, y, { lineBreak: false });
-  y += 10;
-  y = tableHeader(daysCols, y, daysWidths, null, WHITE);
-  for (const d of worst10Days) {
-    const spyDay = dailyNav.find(x => x.date === d.date);
-    y = tableRow([d.date, fmtPct(d.return, 3), spyDay ? '$' + fmtComma(Math.round(spyDay.spyEquity)) : '', '$' + fmtComma(Math.round(d.equity))], y, daysWidths, [LTGRAY, RED, LTGRAY, YELLOW]);
-  }
-
-  y += 12;
-  doc.fontSize(7.5).fillColor(YELLOW).font('Helvetica-Bold').text('10 BEST DAYS', LM, y, { lineBreak: false });
-  y += 10;
-  y = tableHeader(daysCols, y, daysWidths, null, WHITE);
-  for (const d of best10Days) {
-    const spyDay = dailyNav.find(x => x.date === d.date);
-    y = tableRow([d.date, fmtPct(d.return, 3), spyDay ? '$' + fmtComma(Math.round(spyDay.spyEquity)) : '', '$' + fmtComma(Math.round(d.equity))], y, daysWidths, [LTGRAY, GREEN, LTGRAY, YELLOW]);
-  }
+  doc.fontSize(8).fillColor(LTGRAY).font('Helvetica-Oblique')
+     .text('The Carnivore Quant Fund transformed $100,000 into ' + fmtDollar(lastDay.equity) + ' while the S&P 500 produced ' + fmtDollar(lastDay.spyEquity) + ' over the same period. Every dollar figure above is net of all transaction costs, management fees, and performance allocation.', LM + 40, y, { width: CW - 80, lineBreak: true });
+  y = doc.y + 20;
 
   pageFooter();
 

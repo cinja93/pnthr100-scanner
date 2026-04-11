@@ -1630,7 +1630,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                             <div style={{ position: 'relative' }}>
                               <button onClick={() => setShowBacktestMetrics(!showBacktestMetrics)}
                                 style={{ background: showBacktestMetrics ? '#fcf000' : '#1a1a1a', color: showBacktestMetrics ? '#111' : '#fcf000', border: '1px solid #fcf000', borderRadius: 6, padding: '8px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
-                                BACKTEST METRICS
+                                PYRAMID METRICS
                               </button>
                             {showBacktestMetrics && (
                               <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, background: '#111', border: '1px solid #333', borderRadius: 8, padding: '16px 20px', width: 340, zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.6)' }}>

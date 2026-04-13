@@ -1220,15 +1220,35 @@ async function computeSectorSignalCounts() {
     const signals = await getSignals(allTickers, { sectorMap });
 
     const counts = {};
+    // Build a price lookup from quotes (best-effort for new signal display)
+    let quotePriceMap = {};
+    try {
+      const newTickers = allTickers.filter(t => {
+        const s = signals[t];
+        return (s?.isNew || s?.isNewSignal) && (s?.signal === 'BL' || s?.signal === 'BUY' || s?.signal === 'SS' || s?.signal === 'SELL');
+      });
+      if (newTickers.length > 0 && newTickers.length <= 100) {
+        const qRes = await fetch(`https://financialmodelingprep.com/api/v3/quote/${newTickers.join(',')}?apikey=${FMP_API_KEY}`);
+        if (qRes.ok) { const qData = await qRes.json(); if (Array.isArray(qData)) for (const q of qData) quotePriceMap[q.symbol] = q.price; }
+      }
+    } catch { /* best-effort */ }
+
     for (const [sectorKey, tickers] of Object.entries(tickersBySector)) {
-      counts[sectorKey] = { BL: 0, BE: 0, SS: 0, SE: 0, newBL: 0, newSS: 0, total: tickers.length };
+      const gicsName = SECTOR_KEY_TO_GICS[sectorKey] || sectorKey;
+      counts[sectorKey] = { BL: 0, BE: 0, SS: 0, SE: 0, newBL: 0, newSS: 0, newBLTickers: [], newSSTickers: [], total: tickers.length };
       for (const ticker of tickers) {
         const sigData = signals[ticker];
         const sig = sigData?.signal;
         const isNew = sigData?.isNew ?? sigData?.isNewSignal ?? false;
-        if (sig === 'BL' || sig === 'BUY')       { counts[sectorKey].BL++; if (isNew) counts[sectorKey].newBL++; }
+        if (sig === 'BL' || sig === 'BUY') {
+          counts[sectorKey].BL++;
+          if (isNew) { counts[sectorKey].newBL++; counts[sectorKey].newBLTickers.push({ ticker, sector: gicsName, currentPrice: quotePriceMap[ticker] || null }); }
+        }
         else if (sig === 'BE')                      counts[sectorKey].BE++;
-        else if (sig === 'SS' || sig === 'SELL')  { counts[sectorKey].SS++; if (isNew) counts[sectorKey].newSS++; }
+        else if (sig === 'SS' || sig === 'SELL') {
+          counts[sectorKey].SS++;
+          if (isNew) { counts[sectorKey].newSS++; counts[sectorKey].newSSTickers.push({ ticker, sector: gicsName, currentPrice: quotePriceMap[ticker] || null }); }
+        }
         else if (sig === 'SE')                      counts[sectorKey].SE++;
       }
     }
@@ -4825,11 +4845,12 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         if (!displayName) continue;
         sectorMap[displayName] = { bl: data.BL || 0, ss: data.SS || 0 };
         sectorTotalStocks[displayName] = data.total || 0;
-        for (let i = 0; i < (data.newBL || 0); i++) {
-          newBLStocks.push({ ticker: `${displayName}-new-${i}`, sector: displayName, signal: 'BL', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
+        // Use actual ticker names from newBLTickers/newSSTickers arrays
+        for (const t of (data.newBLTickers || [])) {
+          newBLStocks.push({ ticker: t.ticker, sector: t.sector || displayName, signal: 'BL', currentPrice: t.currentPrice || null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
         }
-        for (let i = 0; i < (data.newSS || 0); i++) {
-          newSSStocks.push({ ticker: `${displayName}-new-${i}`, sector: displayName, signal: 'SS', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
+        for (const t of (data.newSSTickers || [])) {
+          newSSStocks.push({ ticker: t.ticker, sector: t.sector || displayName, signal: 'SS', currentPrice: t.currentPrice || null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
         }
       }
     } else if (regimeDoc?.sectorSignalSummary) {

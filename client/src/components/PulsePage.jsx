@@ -808,7 +808,7 @@ function KillTop10({ killTop10, onTickerClick, killDataLive, analyzeContext }) {
 }
 
 // ── PNTHR Sector Mini-Gauge ────────────────────────────────────────────────────
-function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, highlight, onClick }) {
+function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, totalStocks = 0, highlight, onClick }) {
   const [hovered, setHovered] = useState(false);
   const total = bl + ss;
   const ssRatio = total > 0 ? ss / total : 0.5;
@@ -880,7 +880,9 @@ function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, highlight, onClic
         <circle cx={cx} cy={cy} r={13} fill="#0a0a0a" stroke="#FFD700" strokeWidth={1.5} />
         <image href="/favicon.png" x={cx - 11} y={cy - 11} width={22} height={22} />
       </svg>
-      <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, textAlign: 'center', lineHeight: 1.2, marginTop: -2, padding: '0 4px' }}>{label}</div>
+      <div style={{ color: '#FFD700', fontSize: 12, fontWeight: 700, textAlign: 'center', lineHeight: 1.2, marginTop: -2, padding: '0 4px' }}>
+        {label}{totalStocks > 0 && <span style={{ color: '#666', fontWeight: 500, fontSize: 10, marginLeft: 3 }}>{totalStocks}</span>}
+      </div>
       <div style={{ color: dirColor, fontSize: 11, fontWeight: 600, marginTop: 2 }}>{dir}</div>
 
       {/* New signal ratio bar */}
@@ -948,12 +950,18 @@ const SECTOR_KEY_TO_ETF = {
 
 function SectorPulse({ signals, killDataLive, onNavigate, newSignals }) {
   const rawBySector = signals?.bySector || {};
+  const rawTotalStocks = signals?.totalStocksBySector || {};
   const bySector = {};
+  const totalStocksBySector = {};
   for (const [sector, counts] of Object.entries(rawBySector)) {
     const canonical = ALIASES[sector] || sector;
     if (!bySector[canonical]) bySector[canonical] = { bl: 0, ss: 0 };
     bySector[canonical].bl += counts.bl || 0;
     bySector[canonical].ss += counts.ss || 0;
+  }
+  for (const [sector, count] of Object.entries(rawTotalStocks)) {
+    const canonical = ALIASES[sector] || sector;
+    totalStocksBySector[canonical] = (totalStocksBySector[canonical] || 0) + count;
   }
 
   // Build per-sector new signal counts from newSignals.blStocks / ssStocks
@@ -998,6 +1006,9 @@ function SectorPulse({ signals, killDataLive, onNavigate, newSignals }) {
           const nd = key === '__ALL__'
             ? { bl: totalNewBl, ss: totalNewSs }
             : (newBySector[key] || { bl: 0, ss: 0 });
+          const ts = key === '__ALL__'
+            ? Object.values(totalStocksBySector).reduce((a, b) => a + b, 0)
+            : (totalStocksBySector[key] || 0);
           return (
             <PNTHRMiniGauge
               key={key}
@@ -1006,6 +1017,7 @@ function SectorPulse({ signals, killDataLive, onNavigate, newSignals }) {
               ss={d.ss}
               newBl={nd.bl}
               newSs={nd.ss}
+              totalStocks={ts}
               highlight={key === '__ALL__'}
               onClick={() => handleSectorClick(key)}
             />

@@ -598,7 +598,8 @@ app.get('/api/stocks/search', async (req, res) => {
       }
     } catch { /* ranking lookup is best-effort */ }
 
-    const signals = await getSignals([ticker]);
+    const searchSectorMap = sector && sector !== 'N/A' ? { [ticker]: sector } : {};
+    const signals = await getSignals([ticker], { sectorMap: searchSectorMap });
 
     res.json({ stock, signals });
   } catch (err) {
@@ -1213,7 +1214,10 @@ async function computeSectorSignalCounts() {
     }
 
     const allTickers = constituents.map(c => c.symbol);
-    const signals = await getSignals(allTickers);
+    // Build sectorMap so getSignals uses sector-optimized EMA periods
+    const sectorMap = {};
+    for (const c of constituents) sectorMap[c.symbol] = c.sector;
+    const signals = await getSignals(allTickers, { sectorMap });
 
     const counts = {};
     for (const [sectorKey, tickers] of Object.entries(tickersBySector)) {
@@ -1426,8 +1430,9 @@ app.get('/api/sector-stocks/:sectorKey', async (req, res) => {
       .sort((a, b) => b.ytdReturn - a.ytdReturn)
       .map((s, i) => ({ ...s, rank: i + 1 }));
 
-    // 6. Get EMA signals + stop prices for these tickers
-    const signals = await getSignals(stocks.map(s => s.ticker));
+    // 6. Get EMA signals + stop prices for these tickers (sector-optimized EMA)
+    const sectorMap = Object.fromEntries(stocks.map(s => [s.ticker, gicsSector]));
+    const signals = await getSignals(stocks.map(s => s.ticker), { sectorMap });
 
     res.json({ stocks, signals });
   } catch (error) {
@@ -1544,7 +1549,24 @@ async function computeSpeculativeSignalCounts() {
     console.log('📡 Computing speculative signal counts (S&P 400 stocks)...');
     const [specLongs, specShorts] = await Promise.all([getSp400Longs(), getSp400Shorts()]);
     const allTickers = [...specLongs, ...specShorts];
-    const signals = await getSignals(allTickers);
+    // Speculative tickers need sector info for EMA optimization — fetch profiles
+    let specSectorMap = {};
+    try {
+      const FMP_API_KEY = process.env.FMP_API_KEY;
+      const profRes = await fetch(`https://financialmodelingprep.com/api/v3/profile/${allTickers.slice(0, 100).join(',')}?apikey=${FMP_API_KEY}`);
+      if (profRes.ok) {
+        const profData = await profRes.json();
+        if (Array.isArray(profData)) for (const p of profData) if (p.symbol && p.sector) specSectorMap[p.symbol] = normalizeSector(p.sector);
+      }
+      if (allTickers.length > 100) {
+        const profRes2 = await fetch(`https://financialmodelingprep.com/api/v3/profile/${allTickers.slice(100).join(',')}?apikey=${FMP_API_KEY}`);
+        if (profRes2.ok) {
+          const profData2 = await profRes2.json();
+          if (Array.isArray(profData2)) for (const p of profData2) if (p.symbol && p.sector) specSectorMap[p.symbol] = normalizeSector(p.sector);
+        }
+      }
+    } catch { /* non-fatal — will use default EMA */ }
+    const signals = await getSignals(allTickers, { sectorMap: specSectorMap });
 
     const counts = {
       longs:  { BL: 0, BE: 0, SS: 0, SE: 0, total: specLongs.length },
@@ -1654,7 +1676,7 @@ app.get('/api/speculative-stocks/:side', async (req, res) => {
       .sort((a, b) => side === 'longs' ? b.ytdReturn - a.ytdReturn : a.ytdReturn - b.ytdReturn)
       .map((s, i) => ({ ...s, rank: i + 1 }));
 
-    const signals = await getSignals(tickers);
+    const signals = await getSignals(tickers, { sectorMap });
 
     res.json({ stocks, signals });
   } catch (error) {
@@ -1675,7 +1697,8 @@ app.get('/api/jungle-stocks', async (req, res) => {
     }
     const [specLongs, specShorts] = await Promise.all([getSp400Longs(), getSp400Shorts()]);
     const stocks  = await getJungleStocks(specLongs, specShorts);
-    const signals = await getSignals(stocks.map(s => s.ticker));
+    const jungleSectorMap = Object.fromEntries(stocks.map(s => [s.ticker, s.sector]).filter(([, s]) => s));
+    const signals = await getSignals(stocks.map(s => s.ticker), { sectorMap: jungleSectorMap });
     jungleCacheData = { stocks, signals };
     jungleCacheTime = now;
     res.json(jungleCacheData);
@@ -4658,7 +4681,8 @@ async function warmApexCacheIfCold() {
         }
       }
     } catch { /* rankings are enrichment only */ }
-    const jungleSignals = await getSignals(tickers);
+    const warmSectorMap = Object.fromEntries(stocks.map(s => [s.ticker, s.sector]).filter(([, s]) => s));
+    const jungleSignals = await getSignals(tickers, { sectorMap: warmSectorMap });
     let preyResults = null, huntTickers = new Set();
     try { preyResults = await getPreyResults(tickers, stockMeta, jungleSignals); } catch (e) { console.warn('[PULSE] prey failed:', e.message); }
     try { const h = await getEmaCrossoverStocks(); huntTickers = new Set((h?.stocks || []).map(s => s.ticker || s)); } catch {}

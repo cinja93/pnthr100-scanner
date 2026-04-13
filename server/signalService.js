@@ -265,8 +265,18 @@ export function getSignalCacheSnapshot() {
 //   isETF:     use 0.3% daylight zone (vs 1% for stocks)
 //   sectorMap: { TICKER: 'SectorName', ... } — for sector-specific EMA periods.
 //              Tickers not in sectorMap use DEFAULT_EMA_PERIOD (21).
+// Persistent ticker→sector map: accumulates from all calls that provide sectorMap.
+// Ensures that even when getSignals() is called WITHOUT sectorMap (e.g. /api/signals),
+// cached signals use the correct sector-optimized EMA period.
+const _globalSectorMap = {};
+
 export async function getSignals(tickers, { isETF = false, sectorMap = {} } = {}) {
   if (!tickers || tickers.length === 0) return {};
+
+  // Merge caller's sectorMap into the persistent global map
+  for (const [t, s] of Object.entries(sectorMap)) {
+    if (s) _globalSectorMap[t] = s;
+  }
 
   const today = getToday();
 
@@ -282,12 +292,12 @@ export async function getSignals(tickers, { isETF = false, sectorMap = {} } = {}
   const activeCache = isETF ? etfSignalCache : signalCache;
 
   // Check for tickers that need recomputing: either missing from cache,
-  // or cached with a different EMA period than the sector now requires
+  // or cached with a different EMA period than the sector now requires.
+  // Uses both caller's sectorMap AND the persistent global map.
   const missing = tickers.filter(t => {
     const cached = activeCache.signals[t];
     if (!cached) return true;
-    // If sector info is provided, check that the cached period matches
-    const sector = sectorMap[t];
+    const sector = sectorMap[t] || _globalSectorMap[t];
     if (sector) {
       const requiredPeriod = getSectorEmaPeriod(sector);
       if (cached.emaPeriod && cached.emaPeriod !== requiredPeriod) return true;
@@ -314,7 +324,7 @@ export async function getSignals(tickers, { isETF = false, sectorMap = {} } = {}
         try {
           const daily  = await fetchDailyBars(ticker, fromDate);
           const weekly = aggregateWeeklyBars(daily);
-          const sector = sectorMap[ticker];
+          const sector = sectorMap[ticker] || _globalSectorMap[ticker];
           const emaPeriod = sector ? getSectorEmaPeriod(sector) : DEFAULT_EMA_PERIOD;
           activeCache.signals[ticker] = runStateMachine(weekly, isETF, emaPeriod);
         } catch (err) {

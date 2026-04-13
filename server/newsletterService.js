@@ -181,7 +181,8 @@ async function fetchPreyData() {
       currentPrice: s.currentPrice,
     };
   }
-  const jungleSignals = await getSignals(tickers);
+  const nlSectorMap = Object.fromEntries(tickers.map(t => [t, stockMeta[t]?.sector]).filter(([, s]) => s));
+  const jungleSignals = await getSignals(tickers, { sectorMap: nlSectorMap });
   const preyResults = await getPreyResults(tickers, stockMeta, jungleSignals);
   return { ...preyResults, signals: jungleSignals, stockMeta };
 }

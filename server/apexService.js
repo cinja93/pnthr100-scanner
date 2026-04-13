@@ -1066,7 +1066,8 @@ export async function triggerApexWarmup() {
         universe: s.universe, rankList: s.rankList ?? null, rank: null,
       };
     }
-    const jungleSignals = await getSignals(tickers);
+    const warmSectorMap = Object.fromEntries(stocks.map(s => [s.ticker, s.sector]).filter(([, s]) => s));
+    const jungleSignals = await getSignals(tickers, { sectorMap: warmSectorMap });
     await getApexResults(tickers, stockMeta, jungleSignals, null, new Set());
     console.log('[apexService] triggerApexWarmup: Kill cache warmed successfully');
   } catch (err) {

@@ -365,7 +365,13 @@ export async function runFridayKillPipeline() {
 
     // ── 2. Fetch signals ───────────────────────────────────────────────────
     console.log('2. Fetching jungle signals...');
-    const jungleSignals = await getSignals(tickers);
+    // Build sectorMap so signals use sector-optimized EMA periods
+    const pipelineSectorMap = {};
+    for (const t of tickers) {
+      const sector = stockMeta[t]?.sector;
+      if (sector) pipelineSectorMap[t] = sector;
+    }
+    const jungleSignals = await getSignals(tickers, { sectorMap: pipelineSectorMap });
     const openSignalCount = Object.values(jungleSignals).filter(s => s?.signal === 'BL' || s?.signal === 'SS').length;
     console.log(`   ${openSignalCount} open signals (BL + SS)`);
 

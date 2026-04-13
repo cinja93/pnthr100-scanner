@@ -165,7 +165,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
       <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <button
           className={styles.archBtn}
-          onClick={() => window.open('/PNTHR_Fund_Intelligence_Report_v18.pdf', '_blank')}
+          onClick={() => window.open('/PNTHR_Fund_Intelligence_Report_v19.pdf', '_blank')}
           title="View PNTHR Fund Intelligence Report"
         >
           <span style={{ fontSize: 14 }}>📄</span>

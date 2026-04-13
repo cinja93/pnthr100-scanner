@@ -21,7 +21,8 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOGO_PATH = path.resolve(__dirname, '../../client/public/pnthr-funds-logo-full.png');
 const PNTHR_HEAD_PATH = path.resolve(__dirname, '../../client/src/assets/panther head.png');
-const OUTPUT_PATH = path.resolve(__dirname, '../../PNTHR_Fund_Intelligence_Report_v18.pdf');
+const FOUNDERS_PATH = path.resolve(__dirname, '../../client/public/pnthr-founders.png');
+const OUTPUT_PATH = path.resolve(__dirname, '../../PNTHR_Fund_Intelligence_Report_v19.pdf');
 
 // ── Brand Colors ─────────────────────────────────────────────────────────────
 const YELLOW  = [252, 240, 0];
@@ -595,12 +596,24 @@ async function run() {
   // ═══════════════════════════════════════════════════════════════════════════
   newBlackPage(true);  // cover page — no branded header bar
 
-  // White header bar across full width with centered logo
-  const COVER_HEADER_H = 140;
+  // White header bar across full width — logo first (full size), founders layered on right
+  const COVER_HEADER_H = 145;
   doc.fillColor('#FFFFFF').rect(0, 0, W, COVER_HEADER_H).fill();
+  // Logo at original prominent size, centered left
   if (fs.existsSync(LOGO_PATH)) {
     const logoW = 260;
-    doc.image(LOGO_PATH, (W - logoW) / 2, 12, { width: logoW });
+    doc.image(LOGO_PATH, (W - logoW) / 2, 14, { width: logoW });
+  }
+  // Founders image layered on right — slightly smaller so logo stays dominant
+  if (fs.existsSync(FOUNDERS_PATH)) {
+    const foundersH = 105;
+    const foundersW = foundersH * 1.5;   // 3:2 landscape aspect ratio
+    const foundersX = W - foundersW - 25;
+    doc.image(FOUNDERS_PATH, foundersX, 10, { height: foundersH });
+    // Names under each person — quiet, small
+    doc.fontSize(5.5).fillColor('#555555').font('Helvetica');
+    doc.text('Cindy Eagar', foundersX + 18, foundersH + 14, { width: 60, align: 'center', lineBreak: false });
+    doc.text('Scott McBrien', foundersX + foundersW - 72, foundersH + 14, { width: 60, align: 'center', lineBreak: false });
   }
 
   // Yellow line separator below header

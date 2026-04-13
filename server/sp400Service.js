@@ -7,8 +7,8 @@ const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 
 // ── Selection criteria ────────────────────────────────────────────────────────
-// Longs:  close > 50-week EMA (uptrend), price >= $20, top 80 by 52-week return
-// Shorts: close < 50-week EMA (downtrend), price >= $70 (avoids penny-land), bottom 80 by 52-week return
+// Longs:  close > 21-week EMA (uptrend), price >= $20, top 80 by 52-week return
+// Shorts: close < 21-week EMA (downtrend), price >= $70 (avoids penny-land), bottom 80 by 52-week return
 // Lists refresh weekly, keyed by last Friday's date.
 // Calculation is slow (~40 FMP calls); results are persisted in MongoDB so Vercel
 // cold starts serve instantly. Hardcoded SPEC_LONGS/SPEC_SHORTS are used as a
@@ -18,7 +18,7 @@ const LONG_COUNT      = 80;
 const SHORT_COUNT     = 80;
 const MIN_LONG_PRICE  = 20;
 const MIN_SHORT_PRICE = 70;
-const WEEKS_HISTORY   = 56; // 55 weeks to seed EMA + 1 extra bar
+const WEEKS_HISTORY   = 56; // 21-week EMA needs ~26 weeks, but 52-week return needs 53 weeks of data
 
 const MONGO_COLLECTION = 'sp400_cache';
 
@@ -91,7 +91,7 @@ function extractWeeklyCloses(dailyOldestFirst) {
   return [...byWeek.values()];
 }
 
-function calcEma(closes, period = 50) {
+function calcEma(closes, period = 21) {
   if (closes.length < period + 1) return null;
   const k = 2 / (period + 1);
   let ema = closes.slice(0, period).reduce((s, c) => s + c, 0) / period;
@@ -104,7 +104,7 @@ async function refreshSp400Cache() {
   if (refreshInProgress) return;
   refreshInProgress = true;
   const weekKey = getWeekKey();
-  console.log(`📊 S&P 400: starting 50-week EMA calculation for week of ${weekKey}...`);
+  console.log(`📊 S&P 400: starting 21-week EMA calculation for week of ${weekKey}...`);
 
   try {
     // Step 1: Get S&P 400 constituent list
@@ -152,7 +152,7 @@ async function refreshSp400Cache() {
       if (i + 200 < tickers.length) await new Promise(r => setTimeout(r, 400));
     }
 
-    // Step 3: Weekly price history for 50-week EMA + 52-week return
+    // Step 3: Weekly price history for 21-week EMA + 52-week return
     // Uses multi-ticker /historical-price-full (batches of 10)
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - WEEKS_HISTORY * 7);
@@ -169,12 +169,14 @@ async function refreshSp400Cache() {
           if (!item?.historical?.length) continue;
           const oldestFirst  = [...item.historical].reverse();
           const weeklyCloses = extractWeeklyCloses(oldestFirst);
-          if (weeklyCloses.length < 53) continue;
-          const ema50w      = calcEma(weeklyCloses, 50);
+          if (weeklyCloses.length < 22) continue;
+          const ema21w      = calcEma(weeklyCloses, 21);
           const latestClose = weeklyCloses[weeklyCloses.length - 1];
-          const close52wAgo = weeklyCloses[weeklyCloses.length - 53];
-          const return52w   = close52wAgo > 0 ? ((latestClose - close52wAgo) / close52wAgo) * 100 : 0;
-          if (ema50w != null) histMap[item.symbol] = { ema50w, return52w };
+          // 52-week return if enough data, otherwise use available range
+          const lookback    = Math.min(52, weeklyCloses.length - 1);
+          const closeAgo    = weeklyCloses[weeklyCloses.length - 1 - lookback];
+          const return52w   = closeAgo > 0 ? ((latestClose - closeAgo) / closeAgo) * 100 : 0;
+          if (ema21w != null) histMap[item.symbol] = { ema21w, return52w };
         }
       } catch (err) { console.error(`S&P 400 history batch ${Math.floor(i / 10) + 1} error:`, err.message); }
       if (i + 10 < tickers.length) await new Promise(r => setTimeout(r, 300));
@@ -187,9 +189,9 @@ async function refreshSp400Cache() {
       const q    = quoteMap[ticker];
       const hist = histMap[ticker];
       if (!q || !hist || !q.price) continue;
-      const { ema50w, return52w } = hist;
-      if (q.price > ema50w  && q.price >= MIN_LONG_PRICE)  longCandidates.push({ ticker, return52w });
-      if (q.price < ema50w  && q.price >= MIN_SHORT_PRICE) shortCandidates.push({ ticker, return52w });
+      const { ema21w, return52w } = hist;
+      if (q.price > ema21w  && q.price >= MIN_LONG_PRICE)  longCandidates.push({ ticker, return52w });
+      if (q.price < ema21w  && q.price >= MIN_SHORT_PRICE) shortCandidates.push({ ticker, return52w });
     }
     longCandidates.sort((a, b)  => b.return52w - a.return52w);
     shortCandidates.sort((a, b) => a.return52w - b.return52w);

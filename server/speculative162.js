@@ -1,26 +1,26 @@
 // S&P 400 Mid-Cap stocks exclusive to the speculative universe
 // (not in S&P 500, Nasdaq 100, or Dow 30)
-// 81 Long Leaders: above 50-week EMA, price > $20, sorted by weighted alpha desc
-// 81 Short Leaders: below 50-week EMA, price > $70, sorted by weighted alpha asc
+// 80 Long Leaders: above 21-week EMA, price >= $20, sorted by 52-week return desc
+// 71 Short Leaders: below 21-week EMA, price >= $70, sorted by 52-week return asc
+// Last refreshed: 2026-04-13
 
 export const SPEC_LONGS = [
-  "LITE","COHR","ROIV","ATI","VAL","AEIS","TTMI","FTI","SATS","MTZ",
-  "MKSI","COKE","CRS","AA","NXT","SLAB","FN","WWD","FIVE","ARWR",
-  "STRL","DAR","XPO","RGLD","MTSI","IPGP","CW","RBC","PBF","UTHR",
-  "LSCC","FCFS","RRX","JAZZ","CASY","THC","OVV","AMKR","AHR","NYT",
-  "ENS","KTOS","CGNX","NXST","DTM","ONTO","ENSG","BWA","DY","HXL",
-  "FLS","TKR","LFUS","WFRD","TTC","LNTH","TEX","WLK","ENTG","CLH",
-  "OSK","NVST","MP","USFD","CYTK","PEN","BWXT","MTDR","APG",
-  "NVT","CHRD","KEX","OHI","CNX","ULS","WBS","WCC","KNX","WTS","NJR",
+  "TTMI","ARWR","AEIS","MKSI","VICR","AMKR","FN","ATI","CAR","SITM",
+  "FIVE","STRL","AA","MTZ","VAL","NXT","FTI","ROIV","DOCN","ELAN",
+  "PBF","MTSI","NVT","LSCC","CRS","DY","LFUS","FLEX","RMBS","IPGP",
+  "SLAB","ENS","WWD","CW","CGNX","ONTO","BWXT","WFRD","XPO","RRX",
+  "ALGM","BWA","FLS","UTHR","WCC","ST","DAR","DINO","ENTG","APG",
+  "JAZZ","SNX","CRUS","EVR","IDCC","RBC","TEX","TNL","AMG","MUR",
+  "OSK","SOLS","LIVN","BC","NVST","TKR","PR","MLI","ITT","SPXC",
+  "JHG","FCFS","OVV","GXO","CYTK","GTLS","ORA","AHR","HXL","NYT",
 ];
 
 export const SPEC_SHORTS = [
-  "DUOL","CVLT","RH","OLED","QLYS","SFM","PCTY","CAR","HLNE","PLNT",
-  "BAH","MORN","MANH","WING","OC","CHDN","ELF","APPF","HLI","LAD",
-  "GWRE","THO","RGEN","EEFT","CHE","ACM","AYI","KNSL","EXP","AVAV",
-  "CHH","SAIC","HQY","WAL","TRU","LPX","PNFP","OKTA","ANF","MMS",
-  "CROX","MTN","VC","RPM","UFPI","NEU","ESAB","WH","BIO","SIGI",
-  "OLLI","LOPE","PAG","BLD","DKS","INGR","WSO","ALV","EXPO","PFGC",
-  "EVR","FCN","SF","AN","NBIX","LANC","PRI","ATR","SEIC","AFG",
-  "UNM","SSB","CSL","TXRH","POST","EHC","SGI","MEDP","UMBF","AAON","JLL",
+  "DUOL","SFM","PCTY","CVLT","MORN","GWRE","QLYS","APPF","CHE","HLNE",
+  "BAH","KNSL","MANH","PLNT","MZTI","RH","BJ","SAIC","OLLI","WING",
+  "OC","OLED","CHDN","POST","INGR","ACM","LPX","SIGI","ESAB","UFPI",
+  "EXP","HQY","MTN","RGEN","LAD","LOPE","HLI","CSL","TXRH","AFG",
+  "PAG","SEIC","NEU","MIDD","THO","WAL","PFGC","BIO","SSD","MSA",
+  "BCO","AYI","AVAV","NXST","NBIX","CACI","ALV","SGI","VC","SF",
+  "BLD","TWLO","WMS","DCI","TOL","SYNA","TLN","THC","MEDP","ILMN","KTOS",
 ];

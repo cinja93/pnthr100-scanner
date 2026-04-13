@@ -4801,22 +4801,31 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     const sortByScore = (a, b) => ((b.totalScore || 0) - (a.totalScore || 0));
 
     // ── Stocks: from apex cache (live) or Friday DB ──
-    // "New" = signalAge 0 (BL+1/SS+1 = fired this week).
-    // On weekends (Sat/Sun), getCurrentWeekMonday() jumps to NEXT Monday, aging
-    // Friday signals to 1. To keep them visible through the weekend, treat
-    // signalAge <= 1 on Sat/Sun as "new" since the week hasn't truly turned yet.
-    const dayOfWeek = new Date().getDay(); // 0=Sun, 6=Sat
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const maxNewAge = isWeekend ? 1 : 0;
-
+    // "New" = signalAge 0 (BL+1 / SS+1 = signal fired this week).
     let newBLStocks = [], newSSStocks = [];
     if (liveApex) {
-      const fresh = liveApex.stocks.filter(s => !s.overextended && (s.signalAge ?? 99) <= maxNewAge);
+      // Cross-reference real-time signal cache to exclude stocks that exited (BE/SE)
+      // since the Friday pipeline — same check the gauge uses for consistency.
+      const rtSignals = getSignalCacheSnapshot();
+      const fresh = liveApex.stocks.filter(s => {
+        if (s.overextended || (s.signalAge ?? 99) !== 0) return false;
+        const rt = rtSignals[s.ticker];
+        if (rt) {
+          const rtSig = rt.signal === 'BUY' ? 'BL' : rt.signal === 'SELL' ? 'SS' : rt.signal;
+          if (!rtSig || !['BL', 'SS'].includes(rtSig)) return false;
+        }
+        return true;
+      });
       newBLStocks = fresh.filter(s => s.signal === 'BL').map(mapNewSig).sort(sortByScore);
       newSSStocks = fresh.filter(s => s.signal === 'SS').map(mapNewSig).sort(sortByScore);
     } else {
+      // MUST scope to latest weekOf — pnthr_kill_scores stores all historical weeks,
+      // each with their own signalAge 0 entries. Without weekOf filter, all weeks leak in.
+      const latestWeekOf = (await db.collection('pnthr_kill_scores')
+        .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } }))?.weekOf ?? null;
+      const weekScope = latestWeekOf ? { weekOf: latestWeekOf } : {};
       const dbFresh = await db.collection('pnthr_kill_scores')
-        .find({ signal: { $in: ['BL', 'SS'] }, signalAge: { $lte: maxNewAge } })
+        .find({ ...weekScope, signal: { $in: ['BL', 'SS'] }, signalAge: 0 })
         .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
         .toArray();
       newBLStocks = dbFresh.filter(s => s.signal === 'BL')

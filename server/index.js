@@ -4777,17 +4777,32 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     let newBLStocks = [], newSSStocks = [];
 
     if (sectorSignalCountsCache) {
+      // Primary: live cache from computeSectorSignalCounts() — same as Sectors page
       for (const [camelKey, data] of Object.entries(sectorSignalCountsCache)) {
         const displayName = SECTOR_KEY_TO_GICS[camelKey];
         if (!displayName) continue;
         sectorMap[displayName] = { bl: data.BL || 0, ss: data.SS || 0 };
         sectorTotalStocks[displayName] = data.total || 0;
-        // New signals (isNewSignal from signal service) — placeholder entries for bar counts
         for (let i = 0; i < (data.newBL || 0); i++) {
           newBLStocks.push({ ticker: `${displayName}-new-${i}`, sector: displayName, signal: 'BL', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
         }
         for (let i = 0; i < (data.newSS || 0); i++) {
           newSSStocks.push({ ticker: `${displayName}-new-${i}`, sector: displayName, signal: 'SS', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
+        }
+      }
+    } else if (regimeDoc?.sectorSignalSummary) {
+      // Fallback: sectorSignalSummary stored in regime doc by Friday pipeline / warmup
+      // (signal service data, not Kill scores). Used while background job is still running.
+      const stored = regimeDoc.sectorSignalSummary;
+      const storedCounts = regimeDoc.sectorStockCounts || {};
+      for (const [sector, data] of Object.entries(stored)) {
+        sectorMap[sector] = { bl: data.bl || 0, ss: data.ss || 0 };
+        sectorTotalStocks[sector] = storedCounts[sector] || 0;
+        for (let i = 0; i < (data.newBL || 0); i++) {
+          newBLStocks.push({ ticker: `${sector}-new-${i}`, sector, signal: 'BL', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
+        }
+        for (let i = 0; i < (data.newSS || 0); i++) {
+          newSSStocks.push({ ticker: `${sector}-new-${i}`, sector, signal: 'SS', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
         }
       }
     }

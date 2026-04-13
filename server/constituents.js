@@ -5,6 +5,11 @@ dotenv.config();
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 
+// Target universe size (before S&P 400 leaders are added by getJungleStocks)
+// getJungleStocks adds 80 S&P 400 longs + 80 S&P 400 shorts = 160
+// So the base (sp517) should target 679 - 160 = 519 tickers
+const BASE_TARGET = 519;
+
 // Fetch constituent list from FMP
 async function fetchConstituents(endpoint) {
   try {
@@ -24,7 +29,7 @@ async function fetchConstituents(endpoint) {
 }
 
 // Weekly cache for constituent lists — keyed by last Friday's date so it auto-refreshes each week
-const constituentCache = { weekKey: null, allTickers: null, dow30: null, sp500: null, nasdaq100: null };
+const constituentCache = { weekKey: null, allTickers: null, dow30: null, sp500: null, nasdaq100: null, sp400Fill: null };
 
 function getWeekKey() {
   const today = new Date();
@@ -39,53 +44,81 @@ function isCacheValid() {
   return constituentCache.weekKey === getWeekKey();
 }
 
-// Supplemental stocks - extracted from user's manual PNTHR 100 list
-// These fill gaps in FMP's constituent lists (stocks that should be in S&P 500/NASDAQ/DOW but are missing)
-const SUPPLEMENTAL_STOCKS = [
+// Legacy hardcoded fallback — ONLY used if FMP API fails for all constituent endpoints
+// This ensures the system never runs with zero stocks
+const FALLBACK_SUPPLEMENTS = [
   "AA", "ADI", "ADM", "AKAM", "ALB", "ALGN", "AMAT", "AMCR", "AOS", "ARM", "ASML",
-  "BAC", "BALL", "BDX", "BF.B", "BG", "BKR", "BPTRX", "BTU", "CAG", "CARR", "CAT",
+  "BAC", "BALL", "BDX", "BG", "BKR", "CAG", "CARR", "CAT",
   "CF", "CHD", "CHTR", "CIEN", "CL", "CLX", "CMI", "COP", "COST", "CTRA", "CVX",
-  "DAN", "DD", "DE", "DG", "DGX", "DHI", "DLR", "DOV", "DOW", "DRI", "DVA", "DVN",
-  "DXYZ", "ECL", "ED", "EOG", "EQIX", "ETN", "EVRG", "FAST", "FCX", "FDX", "GEV",
+  "DD", "DE", "DG", "DGX", "DHI", "DLR", "DOV", "DOW", "DRI", "DVA", "DVN",
+  "ECL", "ED", "EOG", "EQIX", "ETN", "EVRG", "FAST", "FCX", "FDX", "GEV",
   "GILD", "GLW", "GNRC", "GOOGL", "GPC", "HAL", "HAS", "HCA", "HII", "HON", "HSY",
   "HUBB", "HWM", "IBKR", "IEX", "IFF", "INTC", "IP", "IRM", "ITW", "JBHT", "JCI",
-  "JNJ", "KEYS", "KLAC", "KMI", "KR", "KTOS", "LEN", "LHX", "LII", "LMT", "LOW", "LRCX",
+  "JNJ", "KEYS", "KLAC", "KMI", "KR", "LEN", "LHX", "LII", "LMT", "LOW", "LRCX",
   "LUV", "LW", "LYB", "MAR", "MAS", "MCHP", "MDLZ", "MO", "MOS", "MPC", "MPWR",
-  "MRK", "MRNA", "MSI", "MU", "MUX", "NDSN", "NEE", "NEM", "NEOG", "NOC", "NOV",
+  "MRK", "MRNA", "MSI", "MU", "NDSN", "NEE", "NEM", "NOC", "NOV",
   "O", "ODFL", "OKE", "ON", "PCAR", "PEP", "PH", "PHM", "PKG", "PM", "POOL", "PPG",
-  "PSX", "PWR", "Q", "RCL", "SATS", "SCCO", "SLB", "SNDK", "STX", "SW", "SWK",
-  "SYY", "T", "TAP", "TDY", "TER", "TGT", "TNK", "TPL", "TRGP", "TT", "TXN", "UEC",
+  "PSX", "PWR", "RCL", "SCCO", "SLB", "STX", "SWK",
+  "SYY", "T", "TAP", "TDY", "TER", "TGT", "TPL", "TRGP", "TT", "TXN", "UEC",
   "UPS", "VLO", "VMC", "VTRS", "VZ", "WAB", "WDC", "WMB", "WMT", "WSM", "XOM"
 ];
 
 // Tickers to exclude from the universe (e.g. going private, data quality issues)
 const EXCLUDED_TICKERS = new Set(["EA"]);
 
-// Populate the weekly cache — fetches all three lists in one shot so they share a single cache refresh
+// Populate the weekly cache — dynamically builds the universe from index constituents
+// If the S&P 500 + NASDAQ 100 + Dow 30 don't reach BASE_TARGET, fills the gap from S&P 400
 async function refreshConstituentCache() {
   const weekKey = getWeekKey();
   console.log(`📋 Refreshing constituent cache for week of ${weekKey}...`);
 
-  const [sp500, nasdaq100, dow30, userSupplemental] = await Promise.all([
+  const [sp500, nasdaq100, dow30, sp400, userSupplemental] = await Promise.all([
     fetchConstituents('/sp500_constituent'),
     fetchConstituents('/nasdaq_constituent'),
     fetchConstituents('/dowjones_constituent'),
+    fetchConstituents('/sp400_constituent'),
     getSupplementalStocks(),
   ]);
 
-  console.log(`Fetched: ${sp500.length} S&P 500, ${nasdaq100.length} Nasdaq 100, ${dow30.length} Dow 30`);
+  console.log(`Fetched: ${sp500.length} S&P 500, ${nasdaq100.length} Nasdaq 100, ${dow30.length} Dow 30, ${sp400.length} S&P 400`);
 
-  const allTickers = [...new Set([...sp500, ...nasdaq100, ...dow30, ...SUPPLEMENTAL_STOCKS, ...userSupplemental])].filter(t => !EXCLUDED_TICKERS.has(t));
+  // Step 1: Merge the 3 major indices (deduplicated)
+  const indexTickers = [...new Set([...sp500, ...nasdaq100, ...dow30, ...userSupplemental])]
+    .filter(t => !EXCLUDED_TICKERS.has(t));
+
+  console.log(`📋 Index union: ${indexTickers.length} unique tickers from S&P 500 + NASDAQ 100 + Dow 30`);
+
+  // Step 2: If we're short of BASE_TARGET, fill from S&P 400 mid-caps
+  let sp400Fill = [];
+  const deficit = BASE_TARGET - indexTickers.length;
+  if (deficit > 0 && sp400.length > 0) {
+    const indexSet = new Set(indexTickers);
+    // S&P 400 stocks not already in the index union
+    const sp400Candidates = sp400.filter(t => !indexSet.has(t) && !EXCLUDED_TICKERS.has(t));
+    sp400Fill = sp400Candidates.slice(0, deficit);
+    console.log(`📋 Filling ${sp400Fill.length} S&P 400 mid-cap stocks to reach ${BASE_TARGET} base target (deficit was ${deficit})`);
+  } else if (deficit > 0 && sp400.length === 0) {
+    // FMP S&P 400 API failed — use legacy fallback to fill gaps
+    const indexSet = new Set(indexTickers);
+    sp400Fill = FALLBACK_SUPPLEMENTS.filter(t => !indexSet.has(t) && !EXCLUDED_TICKERS.has(t)).slice(0, deficit);
+    console.log(`📋 S&P 400 API unavailable — using ${sp400Fill.length} fallback supplements to fill deficit of ${deficit}`);
+  } else {
+    console.log(`📋 No deficit — ${indexTickers.length} index tickers already meet/exceed ${BASE_TARGET} target`);
+  }
+
+  const allTickers = [...indexTickers, ...sp400Fill];
+
   constituentCache.weekKey    = weekKey;
   constituentCache.allTickers = allTickers;
   constituentCache.dow30      = dow30;
   constituentCache.sp500      = sp500;
   constituentCache.nasdaq100  = nasdaq100;
+  constituentCache.sp400Fill  = sp400Fill;
 
-  console.log(`📋 Constituent cache set (${allTickers.length} unique tickers, valid until next Friday)`);
+  console.log(`📋 Constituent cache set (${allTickers.length} unique tickers, ${sp400Fill.length} from S&P 400 fill, valid until next Friday)`);
 }
 
-// Get all unique tickers from S&P 500, NASDAQ 100, and Dow 30
+// Get all unique tickers from S&P 500, NASDAQ 100, Dow 30, and dynamic S&P 400 fill
 export async function getAllTickers() {
   if (!isCacheValid()) await refreshConstituentCache();
   return constituentCache.allTickers;

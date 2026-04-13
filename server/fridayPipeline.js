@@ -645,6 +645,49 @@ export async function runFridayKillPipeline() {
       console.error('[Kill Pipeline] Changelog auto-log failed (non-fatal):', err.message);
     }
 
+    // ── 8b. Pre-compute gap risk for all scored tickers ─────────────────
+    try {
+      const FMP_KEY = process.env.FMP_API_KEY;
+      const gapCol = db.collection('pnthr_gap_risk');
+      const scoredTickers = scored.map(s => s.ticker);
+      // Only compute for tickers missing or stale (>7 days)
+      const staleThreshold = new Date(Date.now() - 7 * 86400000);
+      const existing = await gapCol.find({ ticker: { $in: scoredTickers }, calculatedAt: { $gte: staleThreshold } }).project({ ticker: 1 }).toArray();
+      const freshSet = new Set(existing.map(e => e.ticker));
+      const stale = scoredTickers.filter(t => !freshSet.has(t));
+      console.log(`[Gap Risk] ${stale.length} tickers need gap risk update (${freshSet.size} already fresh)`);
+
+      let computed = 0;
+      for (let i = 0; i < stale.length; i += 5) {
+        const batch = stale.slice(i, i + 5);
+        await Promise.all(batch.map(async (ticker) => {
+          try {
+            const res = await fetch(`https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${ticker}&apikey=${FMP_KEY}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            const candles = data?.historical || [];
+            if (candles.length < 2) return;
+            let maxGap = 0;
+            for (let j = 0; j < Math.min(candles.length - 1, 260); j++) {
+              const gap = Math.abs((candles[j].open - candles[j + 1].close) / candles[j + 1].close) * 100;
+              if (gap > maxGap) maxGap = gap;
+            }
+            if (maxGap > 0) {
+              await gapCol.updateOne(
+                { ticker },
+                { $set: { ticker, maxGapPct: +maxGap.toFixed(2), calculatedAt: new Date(), dataPoints: Math.min(candles.length, 260) } },
+                { upsert: true }
+              );
+              computed++;
+            }
+          } catch { /* skip individual ticker failures */ }
+        }));
+      }
+      console.log(`[Gap Risk] ✅ Computed ${computed} gap risk values`);
+    } catch (err) {
+      console.error('[Kill Pipeline] Gap risk pre-computation failed (non-fatal):', err.message);
+    }
+
     // ── 9. Summary ────────────────────────────────────────────────────────
     const alphaKills = scored.filter(s => s.tier === 'ALPHA PNTHR KILL');
     const striking   = scored.filter(s => s.tier === 'STRIKING');

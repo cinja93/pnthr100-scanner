@@ -574,8 +574,13 @@ export function computeAnalyzeScore(stock, context) {
     t2a = { score: 4, label: 'AGING', detail: `${sigUp}+${signalAge} — declining conviction`, max: 12 };
   } else if (signalAge != null && signalAge <= 8) {
     t2a = { score: 2, label: 'STALE', detail: `${sigUp}+${signalAge} — weak conviction`, max: 12 };
+  } else if (signalAge != null) {
+    t2a = { score: 0, label: 'EXPIRED', detail: `${sigUp}+${signalAge} — no conviction`, max: 12 };
+  } else if (sigUp === 'BL' || sigUp === 'SS') {
+    // Have signal but no age — chart data may not have loaded yet
+    t2a = { score: 4, label: 'SIGNAL', detail: `${sigUp} — age computing`, max: 12 };
   } else {
-    t2a = { score: 0, label: 'EXPIRED', detail: signalAge ? `${sigUp}+${signalAge} — no conviction` : 'No signal data', max: 12 };
+    t2a = { score: 0, label: 'EXPIRED', detail: 'No signal data', max: 12 };
   }
   score += t2a.score;
   components.freshness = t2a;

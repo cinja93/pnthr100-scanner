@@ -312,6 +312,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   const [pnthrStop, setPnthrStop] = useState(null);
   const [currentWeekStop, setCurrentWeekStop] = useState(null);
   const [currentSignal, setCurrentSignal] = useState(null);
+  const [chartSignalAge, setChartSignalAge] = useState(null); // weeks since last BL/SS from chart
   const [signalMarkers, setSignalMarkers] = useState([]);
   const [pantherMarkerPos, setPantherMarkerPos] = useState(null);
   const [entryDatesLoaded, setEntryDatesLoaded] = useState(false);
@@ -349,6 +350,19 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       // Chart-detected signal is authoritative. Falls back to page data if chart not loaded yet.
       signal: activeSignal || stock.signal || stock.pnthrSignal || null,
     };
+
+    // PNTHR Stop from chart detection — this is the stop shown on every chart.
+    // Must be in enrichedStock so Analyze can score Risk/Reward.
+    if (pnthrStop != null) {
+      base.pnthrStop = +pnthrStop;
+      if (!base.stopPrice) base.stopPrice = +pnthrStop;
+    }
+
+    // Signal age from chart detection — weeks since last BL/SS event.
+    // Ensures Freshness scoring works even when server signalAge is missing.
+    if (chartSignalAge != null && base.signalAge == null && base.weeksSince == null) {
+      base.signalAge = chartSignalAge;
+    }
 
     const emaPeriod = getSectorEmaPeriod(stock?.sector);
     if (allWeeklyData.length >= emaPeriod + 1) {
@@ -400,10 +414,10 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
     }
 
     return base;
-  }, [stock, currentSignal, allWeeklyData, fetchedKillData]);
+  }, [stock, currentSignal, allWeeklyData, fetchedKillData, pnthrStop, chartSignalAge]);
 
   // Reset SIZE IT + ANALYZE panels when navigating to a new stock
-  useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; setFetchedKillData(null); }, [currentIndex]);
+  useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; setFetchedKillData(null); setChartSignalAge(null); }, [currentIndex]);
 
   // ── Fetch Kill score from cache when stock doesn't have it (e.g. opened from Search) ──
   useEffect(() => {
@@ -548,6 +562,20 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
 
     // Compute signals and live stops from full history
     const { events: allDetected, pnthrStop: ps, currentWeekStop: cws, currentSignal: cs } = detectAllSignals(allWeeklyData, emaPeriod, isEtfTicker(stock?.ticker));
+
+    // Compute signal age (weeks since last BL/SS event) from chart data
+    if (cs === 'BL' || cs === 'SS') {
+      const lastSigEvent = [...allDetected].reverse().find(e => e.signal === 'BL' || e.signal === 'SS');
+      if (lastSigEvent?.time) {
+        const sigDate = new Date(typeof lastSigEvent.time === 'number' ? lastSigEvent.time * 1000 : lastSigEvent.time);
+        const now = new Date();
+        const diffWeeks = Math.floor((now - sigDate) / (7 * 24 * 60 * 60 * 1000));
+        setChartSignalAge(diffWeeks);
+      }
+    } else {
+      setChartSignalAge(null);
+    }
+
     // Prefer server-computed stop (from Kill pipeline / signalService) — single source of truth.
     // Fall back to client-computed only when server value is unavailable (e.g. Prey page, cold cache).
     const serverStop = stock?.pnthrStop ?? stock?.stopPrice ?? null;

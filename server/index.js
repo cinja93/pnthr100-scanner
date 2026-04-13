@@ -4805,36 +4805,32 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
 
     // ── Stocks: from apex cache (live) or Friday DB ──
     // "New" = signalAge 0 (BL+1 / SS+1 = signal fired this week).
-    let newBLStocks = [], newSSStocks = [];
+    // Always query DB for new signals (signalAge 0 = BL+1/SS+1) — this is the
+    // authoritative source from the Friday pipeline. The live apex cache may have
+    // stale signalAge values if warmed mid-week with incomplete candle data.
+    const latestWeekOf = (await db.collection('pnthr_kill_scores')
+      .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } }))?.weekOf ?? null;
+    const weekScope = latestWeekOf ? { weekOf: latestWeekOf } : {};
+    const dbFresh = await db.collection('pnthr_kill_scores')
+      .find({ ...weekScope, signal: { $in: ['BL', 'SS'] }, signalAge: 0 })
+      .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
+      .toArray();
+    let newBLStocks = dbFresh.filter(s => s.signal === 'BL')
+      .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
+    let newSSStocks = dbFresh.filter(s => s.signal === 'SS')
+      .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
+
+    // If live apex is available, cross-reference to exclude stocks that have since exited (BE/SE)
     if (liveApex) {
-      // Cross-reference real-time signal cache to exclude stocks that exited (BE/SE)
-      // since the Friday pipeline — same check the gauge uses for consistency.
       const rtSignals = getSignalCacheSnapshot();
-      const fresh = liveApex.stocks.filter(s => {
-        if (s.overextended || (s.signalAge ?? 99) !== 0) return false;
-        const rt = rtSignals[s.ticker];
-        if (rt) {
-          const rtSig = rt.signal === 'BUY' ? 'BL' : rt.signal === 'SELL' ? 'SS' : rt.signal;
-          if (!rtSig || !['BL', 'SS'].includes(rtSig)) return false;
-        }
-        return true;
-      });
-      newBLStocks = fresh.filter(s => s.signal === 'BL').map(mapNewSig).sort(sortByScore);
-      newSSStocks = fresh.filter(s => s.signal === 'SS').map(mapNewSig).sort(sortByScore);
-    } else {
-      // MUST scope to latest weekOf — pnthr_kill_scores stores all historical weeks,
-      // each with their own signalAge 0 entries. Without weekOf filter, all weeks leak in.
-      const latestWeekOf = (await db.collection('pnthr_kill_scores')
-        .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } }))?.weekOf ?? null;
-      const weekScope = latestWeekOf ? { weekOf: latestWeekOf } : {};
-      const dbFresh = await db.collection('pnthr_kill_scores')
-        .find({ ...weekScope, signal: { $in: ['BL', 'SS'] }, signalAge: 0 })
-        .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
-        .toArray();
-      newBLStocks = dbFresh.filter(s => s.signal === 'BL')
-        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
-      newSSStocks = dbFresh.filter(s => s.signal === 'SS')
-        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
+      const stillActive = (ticker) => {
+        const rt = rtSignals[ticker];
+        if (!rt) return true; // not in real-time cache = assume still active
+        const rtSig = rt.signal === 'BUY' ? 'BL' : rt.signal === 'SELL' ? 'SS' : rt.signal;
+        return rtSig && ['BL', 'SS'].includes(rtSig);
+      };
+      newBLStocks = newBLStocks.filter(s => stillActive(s.ticker));
+      newSSStocks = newSSStocks.filter(s => stillActive(s.ticker));
     }
 
     // ── ETFs: from the ETF cache (populated when /api/etf-stocks is visited) ──

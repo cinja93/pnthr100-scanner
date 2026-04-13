@@ -4741,11 +4741,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
 
     // Live apex cache (populated when Kill page is visited this session).
     const { getCachedApexResults } = await import('./apexService.js');
-    const { getSignalCacheSnapshot } = await import('./signalService.js');
     const liveApex = getCachedApexResults();
-
-    // Per-sector total stock counts from the full 679 universe (stored in regime doc by Friday pipeline)
-    const sectorTotalStocks = regimeDoc?.sectorStockCounts || {};
 
     // ── Kill Top-10 panel (separate from Sector Pulse) ──
     let killTop10, blCount, ssCount;
@@ -4772,70 +4768,26 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       ssCount = regimeDoc?.ssCount ?? 0;
     }
 
-    // ── Sector Pulse: gauge + bar from signal service (ALL 679 stocks, NOT Kill scores) ──
-    // Uses the daily-updated signal cache when warm; falls back to sectorSignalSummary
-    // stored in the regime doc by the Friday pipeline / warmApexCacheIfCold.
-    const tickerSectorMap = regimeDoc?.tickerSectorMap || {};
-    const realtimeSignals = getSignalCacheSnapshot();
-    const cachedTickerCount = Object.keys(realtimeSignals).length;
-    const totalTickerCount = Object.keys(tickerSectorMap).length;
-    // Signal cache is "warm" if it covers most of the 679 universe
-    const signalCacheWarm = cachedTickerCount >= totalTickerCount * 0.5 && totalTickerCount > 0;
-
-    let sectorMap;
+    // ── Sector Pulse: gauge + bar from the SAME data as the Sectors page ──
+    // Reads from sectorSignalCountsCache (computed at startup by computeSectorSignalCounts).
+    // This uses S&P 500 constituents grouped by GICS sector + getSignals() — identical
+    // to what /api/sector-signal-counts returns, so numbers always match the Sectors page.
+    const sectorMap = {};
+    const sectorTotalStocks = {};
     let newBLStocks = [], newSSStocks = [];
 
-    if (signalCacheWarm) {
-      // Live signal cache has good coverage — build gauge + bar from real-time data
-      sectorMap = {};
-      for (const [ticker, sector] of Object.entries(tickerSectorMap)) {
-        if (sector === 'Unknown') continue;
-        const sig = realtimeSignals[ticker];
-        if (!sig) continue;
-        const mapped = sig.signal === 'BUY' ? 'BL' : sig.signal === 'SELL' ? 'SS' : sig.signal;
-        if (!mapped || !['BL', 'SS'].includes(mapped)) continue;
-        if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
-        if (mapped === 'BL') sectorMap[sector].bl++;
-        else sectorMap[sector].ss++;
-        // New signal = isNew flag from signal service (fired on the current/last bar)
-        if (sig.isNew) {
-          const entry = { ticker, sector, signal: mapped, currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null };
-          if (mapped === 'BL') newBLStocks.push(entry);
-          else newSSStocks.push(entry);
-        }
-      }
-    } else if (regimeDoc?.sectorSignalSummary && Object.keys(regimeDoc.sectorSignalSummary).length > 0) {
-      // Signal cache cold — use stored sectorSignalSummary from regime doc
-      const stored = regimeDoc.sectorSignalSummary;
-      sectorMap = {};
-      for (const [sector, data] of Object.entries(stored)) {
-        sectorMap[sector] = { bl: data.bl || 0, ss: data.ss || 0 };
-        // Build placeholder new signal entries from stored counts
+    if (sectorSignalCountsCache) {
+      for (const [camelKey, data] of Object.entries(sectorSignalCountsCache)) {
+        const displayName = SECTOR_KEY_TO_GICS[camelKey];
+        if (!displayName) continue;
+        sectorMap[displayName] = { bl: data.BL || 0, ss: data.SS || 0 };
+        sectorTotalStocks[displayName] = data.total || 0;
+        // New signals (isNewSignal from signal service) — placeholder entries for bar counts
         for (let i = 0; i < (data.newBL || 0); i++) {
-          newBLStocks.push({ ticker: `${sector}-new-${i}`, sector, signal: 'BL', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
+          newBLStocks.push({ ticker: `${displayName}-new-${i}`, sector: displayName, signal: 'BL', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
         }
         for (let i = 0; i < (data.newSS || 0); i++) {
-          newSSStocks.push({ ticker: `${sector}-new-${i}`, sector, signal: 'SS', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
-        }
-      }
-    } else {
-      // No sectorSignalSummary yet (pre-migration) — fall back to Kill scores for gauge only
-      const latestWeekDoc = await db.collection('pnthr_kill_scores')
-        .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
-      const weekFilter = latestWeekDoc?.weekOf ? { weekOf: latestWeekDoc.weekOf } : {};
-      const allKillSignals = await db.collection('pnthr_kill_scores')
-        .find({ ...weekFilter, signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1, signalAge: 1 } })
-        .limit(700).toArray();
-      sectorMap = {};
-      for (const s of allKillSignals) {
-        const sector = s.sector || 'Unknown';
-        if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
-        if (s.signal === 'BL') sectorMap[sector].bl++;
-        else if (s.signal === 'SS') sectorMap[sector].ss++;
-        if (s.signalAge === 0) {
-          const entry = { ticker: s.ticker, sector, signal: s.signal, currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null };
-          if (s.signal === 'BL') newBLStocks.push(entry);
-          else newSSStocks.push(entry);
+          newSSStocks.push({ ticker: `${displayName}-new-${i}`, sector: displayName, signal: 'SS', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
         }
       }
     }

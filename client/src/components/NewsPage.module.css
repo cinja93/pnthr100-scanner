@@ -365,6 +365,22 @@
   margin-bottom: 4px;
 }
 
+.mastheadAvatar {
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  object-position: top center;
+  border-radius: 50%;
+  margin-bottom: 8px;
+}
+
+.mastheadAuthor {
+  font-size: 11px;
+  color: #999;
+  font-style: italic;
+  margin-top: 3px;
+}
+
 .mastheadTitle {
   font-size: 28px;
   font-weight: 900;

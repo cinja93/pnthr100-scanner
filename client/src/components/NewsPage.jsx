@@ -3,6 +3,7 @@ import { useAuth } from '../AuthContext';
 import { marked } from 'marked';
 import styles from './NewsPage.module.css';
 import pnthrLogo from '../assets/panther head.png';
+const scottAvatar = '/scott-pnthr-transparent.png';
 import ChartModal from './ChartModal';
 import {
   fetchNewsletterList,
@@ -349,12 +350,13 @@ export default function NewsPage() {
                 />
               ) : (
                 <>
-                  {/* Article masthead — logo + title + date */}
+                  {/* Article masthead — author avatar + title + date */}
                   <div className={styles.articleMasthead}>
-                    <img src={pnthrLogo} alt="PNTHR" className={styles.mastheadLogo} />
+                    <img src={scottAvatar} alt="Scott McBrien" className={styles.mastheadAvatar} />
                     <div className={styles.mastheadTitle}>PNTHR'S PERCH</div>
                     <div className={styles.mastheadSub}>Weekly Market Intelligence</div>
                     <div className={styles.mastheadDate}>Week of {formatWeekOf(issue.weekOf)}</div>
+                    <div className={styles.mastheadAuthor}>by Scott McBrien</div>
                   </div>
                   <div className={styles.mastheadDivider} />
 

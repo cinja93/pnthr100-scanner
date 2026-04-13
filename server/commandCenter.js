@@ -136,7 +136,8 @@ function tradingDaysSince(createdAt) {
 async function calcGapRisk(ticker) {
   try {
     const data = await fmpGet('/stable/historical-price-eod/full', { symbol: ticker });
-    const candles = data?.historical || [];
+    // Stable endpoint returns flat array; legacy returns { historical: [...] }
+    const candles = Array.isArray(data) ? data : (data?.historical || []);
     if (candles.length < 2) return 0;
     let maxGap = 0;
     for (let i = 0; i < Math.min(candles.length - 1, 260); i++) {

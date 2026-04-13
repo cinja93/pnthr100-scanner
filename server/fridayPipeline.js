@@ -665,7 +665,8 @@ export async function runFridayKillPipeline() {
             const res = await fetch(`https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${ticker}&apikey=${FMP_KEY}`);
             if (!res.ok) return;
             const data = await res.json();
-            const candles = data?.historical || [];
+            // Stable endpoint returns flat array; legacy returns { historical: [...] }
+            const candles = Array.isArray(data) ? data : (data?.historical || []);
             if (candles.length < 2) return;
             let maxGap = 0;
             for (let j = 0; j < Math.min(candles.length - 1, 260); j++) {

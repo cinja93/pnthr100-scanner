@@ -44,7 +44,7 @@ router.post('/generate', authenticateJWT, requireAdmin, async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Database unavailable' });
 
     console.log('[Newsletter] Generating Perch v3 issue...');
-    const { narrative, metadata, blacklistViolations } = await generatePerch(db);
+    const { narrative, wasTruncated, metadata, blacklistViolations } = await generatePerch(db);
     const weekOf = req.body.weekOf || metadata.weekOf || getMostRecentFriday();
 
     // Save to newsletter_issues (same collection -- frontend unchanged)
@@ -57,15 +57,20 @@ router.post('/generate', authenticateJWT, requireAdmin, async (req, res) => {
       generatedAt: new Date(),
       generatorVersion: 'perch-v3',
       metadata,
+      ...(wasTruncated && { wasTruncated: true }),
       ...(blacklistViolations.length > 0 && { blacklistViolations }),
     };
 
     if (existing) {
       await col.updateOne({ weekOf }, { $set: doc });
-      return res.json({ ...existing, ...doc, _id: existing._id });
+      const result = { ...existing, ...doc, _id: existing._id };
+      if (wasTruncated) result.warning = '⚠ Newsletter was truncated — generation hit token limit. Content may be incomplete.';
+      return res.json(result);
     }
     const result = await col.insertOne(doc);
-    res.json({ ...doc, _id: result.insertedId });
+    const response = { ...doc, _id: result.insertedId };
+    if (wasTruncated) response.warning = '⚠ Newsletter was truncated — generation hit token limit. Content may be incomplete.';
+    res.json(response);
   } catch (err) {
     console.error('Newsletter generate error:', err);
     res.status(500).json({ error: 'Failed to generate newsletter: ' + err.message });

@@ -12,7 +12,7 @@ import Anthropic from '@anthropic-ai/sdk';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-6';
-const MAX_TOKENS = 4000;
+const MAX_TOKENS = 8000;  // increased from 4000 — newsletters were getting cut off
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -476,6 +476,11 @@ export async function generatePerch(db) {
     messages: [{ role: 'user', content: userPrompt }],
   });
 
+  // ── Truncation check ──────────────────────────────────────────────────────
+  if (response.stop_reason === 'max_tokens') {
+    console.error('[Perch v3] ⚠ GENERATION TRUNCATED — hit max_tokens limit! Newsletter is incomplete.');
+  }
+
   let narrative = response.content
     .filter(b => b.type === 'text')
     .map(b => b.text)
@@ -517,15 +522,20 @@ export async function generatePerch(db) {
     });
   }
 
-  // 6. Return
+  // 6. Truncation flag
+  const wasTruncated = response.stop_reason === 'max_tokens';
+
+  // 7. Return
   return {
     narrative,
+    wasTruncated,
     blacklistViolations: violations,
     metadata: {
       weekOf:         regime.weekOf,
       regimeLabel:    regime.regimeLabel,
       generatedAt:    new Date().toISOString(),
       model:          MODEL,
+      stopReason:     response.stop_reason,
       dataInputs: {
         newLongs:      regime.newBlCount,
         newShorts:     regime.newSsCount,

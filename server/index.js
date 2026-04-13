@@ -2345,10 +2345,17 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
         .map(ip => ip.symbol.toUpperCase())
     );
 
-    // Load PNTHR active positions
+    // Load PNTHR active positions + recently closed tickers (suppress stale IBKR alerts)
     const pnthrPositions = await db.collection('pnthr_portfolio')
       .find({ ownerId: userId, status: 'ACTIVE' })
       .toArray();
+    const recentlyClosedTickers = new Set(
+      (await db.collection('pnthr_portfolio')
+        .find({ ownerId: userId, status: 'CLOSED', closedAt: { $gte: new Date(Date.now() - 7 * 86400000) } },
+               { projection: { ticker: 1 } })
+        .toArray()
+      ).map(p => p.ticker?.toUpperCase()).filter(Boolean)
+    );
 
     // Build lookup maps (active IBKR positions only — 0-share entries excluded)
     const ibkrByTicker = {};
@@ -2516,6 +2523,8 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
     const syncIsStale = staleMins != null && staleMins > 5;
     for (const ticker of Object.keys(ibkrByTicker)) {
       if (!pnthrByTicker[ticker]) {
+        // Suppress alert if the ticker was recently closed in PNTHR (within 7 days)
+        if (recentlyClosedTickers.has(ticker)) continue;
         const rawIbkrShares = +(ibkrByTicker[ticker].shares) || 0;
         const ibkrShares    = Math.abs(rawIbkrShares);
         const soldToday     = todaySoldShares[ticker]   || 0;

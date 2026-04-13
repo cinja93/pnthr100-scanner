@@ -113,7 +113,7 @@ function scoreETFEmaSlope(stock, direction) {
     // emaRising boolean fallback
     const rising = stock.emaRising ?? null;
     if (rising === null) {
-      return { score: 5, max: 10, label: 'UNKNOWN', detail: 'EMA slope data unavailable — partial credit', warnings: [] };
+      return { score: 0, max: 10, label: 'ERROR', detail: 'EMA slope data unavailable — data pipeline failure', warnings: [] };
     }
     const slopeDir = rising ? 'LONG' : 'SHORT';
     const aligned  = slopeDir === direction;
@@ -159,7 +159,7 @@ function scoreETFTrendAlignment(stock) {
   const price = stock.currentPrice || stock.price || stock.close;
   const ema   = stock.ema21;
   if (!price || !ema) {
-    return { score: 0, max: 0, label: 'UNKNOWN', detail: 'EMA data missing', warnings: [] };
+    return { score: 0, max: 0, label: 'ERROR', detail: 'EMA data missing — data pipeline failure', warnings: [] };
   }
   const direction = price > ema ? 'LONG' : 'SHORT';
   return {
@@ -581,7 +581,7 @@ export function computeAnalyzeScore(stock, context) {
   components.freshness = t2a;
 
   // T2-B: Risk/Reward (0-8) — stop distance quality
-  const stopPrice = stock.stopPrice || stock.pnthrStop || null;
+  const stopPrice = stock.stopPrice || stock.pnthrStop || sd.d3?.stopPrice || null;
   const currentPrice = stock.currentPrice || stock.price || null;
   let t2b;
   if (stopPrice && currentPrice && stopPrice > 0 && currentPrice > 0) {
@@ -602,7 +602,7 @@ export function computeAnalyzeScore(stock, context) {
       warnings.push(`Stop very close (${riskPct.toFixed(1)}%) — high probability of getting stopped out`);
     }
   } else {
-    t2b = { score: 4, label: 'UNKNOWN', detail: 'Stop price unavailable — partial credit', max: 8 };
+    t2b = { score: 0, label: 'ERROR', detail: 'Stop price unavailable — data pipeline failure', max: 8 };
   }
   score += t2b.score;
   components.riskReward = t2b;
@@ -624,7 +624,17 @@ export function computeAnalyzeScore(stock, context) {
   components.preyPresence = t2c;
 
   // T2-D: Conviction (0-7) — where price closed in weekly bar (D3 subA)
-  const convPct = sd.d3?.convictionPct ?? null;
+  // Primary: Kill pipeline D3 convictionPct. Fallback: compute from chart weekly bar.
+  let convPct = sd.d3?.convictionPct ?? null;
+  if (convPct == null && stock.weekHigh && stock.weekLow && stock.weekHigh > stock.weekLow) {
+    const closePrice = stock.close || stock.currentPrice || stock.price;
+    if (closePrice != null) {
+      const range = stock.weekHigh - stock.weekLow;
+      const rawConv = ((closePrice - stock.weekLow) / range) * 100;
+      // For SS, conviction is inverted — closing near lows is strong
+      convPct = direction === 'SHORT' ? (100 - rawConv) : rawConv;
+    }
+  }
   let t2d;
   if (convPct != null) {
     if (convPct >= 80)      t2d = { score: 7, label: 'DOMINANT', detail: `${Math.round(convPct)}% conviction — price closed at extreme`, max: 7 };
@@ -633,7 +643,7 @@ export function computeAnalyzeScore(stock, context) {
     else if (convPct >= 25) t2d = { score: 1, label: 'WEAK', detail: `${Math.round(convPct)}% conviction — unfavorable close`, max: 7 };
     else                    t2d = { score: 0, label: 'AGAINST', detail: `${Math.round(convPct)}% conviction — closed against direction`, max: 7 };
   } else {
-    t2d = { score: 3, label: 'UNKNOWN', detail: 'Conviction data unavailable — partial credit', max: 7 };
+    t2d = { score: 0, label: 'ERROR', detail: 'Conviction data unavailable — no weekly bar data', max: 7 };
   }
   score += t2d.score;
   components.conviction = t2d;
@@ -643,7 +653,8 @@ export function computeAnalyzeScore(stock, context) {
   // ═══════════════════════════════════════════════════════
 
   // T3-A: Slope Strength (0-5) — EMA slope magnitude (D3 subB)
-  const slopePct = sd.d3?.slopePct ?? null;
+  // Primary: Kill pipeline D3 slopePct. Fallback: chart-computed emaSlope.
+  const slopePct = sd.d3?.slopePct ?? stock.emaSlope ?? null;
   let t3a;
   if (slopePct != null) {
     const mag = Math.abs(slopePct);
@@ -653,7 +664,7 @@ export function computeAnalyzeScore(stock, context) {
     else if (mag >= 0.1) t3a = { score: 2, label: 'FLAT', detail: `EMA slope ${slopePct > 0 ? '+' : ''}${slopePct.toFixed(3)}% — minimal trend`, max: 5 };
     else                 t3a = { score: 0, label: 'NO TREND', detail: `EMA slope ${slopePct.toFixed(3)}% — no directional conviction`, max: 5 };
   } else {
-    t3a = { score: 2, label: 'UNKNOWN', detail: 'EMA slope data unavailable — partial credit', max: 5 };
+    t3a = { score: 0, label: 'ERROR', detail: 'EMA slope data unavailable — data pipeline failure', max: 5 };
   }
   score += t3a.score;
   components.slopeStrength = t3a;
@@ -702,7 +713,8 @@ export function computeAnalyzeScore(stock, context) {
   components.washCompliance = t3c;
 
   // T3-D: Volatility Context (0-5) — RSI entry timing
-  const rsi = sd.d6?.curRsi ?? stock.weeklyRsi ?? null;
+  // Primary: Kill D6 RSI. Fallback: top-level weeklyRsi, then chart-computed rsi14.
+  const rsi = sd.d6?.curRsi ?? stock.weeklyRsi ?? stock.rsi14 ?? null;
   let t3d;
   if (rsi != null) {
     if (direction === 'SHORT') {
@@ -723,7 +735,7 @@ export function computeAnalyzeScore(stock, context) {
       }
     }
   } else {
-    t3d = { score: 2, label: 'UNKNOWN', detail: 'RSI data unavailable — partial credit', max: 5 };
+    t3d = { score: 0, label: 'ERROR', detail: 'RSI data unavailable — data pipeline failure', max: 5 };
   }
   score += t3d.score;
   components.volatilityContext = t3d;

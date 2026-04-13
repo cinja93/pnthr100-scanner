@@ -391,12 +391,12 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       base.killRank         = fetchedKillData.killRank         ?? fetchedKillData.rank       ?? null;
       base.rankChange       = fetchedKillData.rankChange       ?? null;
       base.tier             = fetchedKillData.tier             ?? null;
-      base.d1               = fetchedKillData.d1               ?? null;
-      base.d2               = fetchedKillData.d2               ?? null;
-      base.d3               = fetchedKillData.d3               ?? null;
-      base.d6               = fetchedKillData.d6               ?? null;
-      base.d7               = fetchedKillData.d7               ?? null;
-      base.d8               = fetchedKillData.d8               ?? null;
+      // scoreDetail contains { d1, d2, d3, d6, d7, d8 } — analyzeScore reads stock.scoreDetail.d3 etc.
+      base.scoreDetail      = fetchedKillData.scoreDetail      ?? null;
+      // Top-level fields also used by analyzeScore fallbacks
+      base.weeklyRsi        = base.weeklyRsi   ?? fetchedKillData.weeklyRsi   ?? null;
+      base.stopPrice        = base.stopPrice   ?? fetchedKillData.stopPrice   ?? null;
+      base.confirmation     = base.confirmation ?? fetchedKillData.confirmation ?? null;
     }
 
     return base;

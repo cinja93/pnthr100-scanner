@@ -436,6 +436,14 @@ export async function runFridayKillPipeline() {
       console.log(`   Saved ${killDocs.length} scored stocks`);
     }
 
+    // Compute per-sector stock counts from the full 679 universe
+    const sectorStockCounts = {};
+    for (const t of tickers) {
+      const sector = stockMeta[t]?.sector || 'Unknown';
+      sectorStockCounts[sector] = (sectorStockCounts[sector] || 0) + 1;
+    }
+    console.log(`   Sector stock counts: ${Object.entries(sectorStockCounts).map(([k,v]) => `${k}:${v}`).join(', ')}`);
+
     // Upsert regime snapshot
     await db.collection('pnthr_kill_regime').updateOne(
       { weekOf },
@@ -454,6 +462,7 @@ export async function runFridayKillPipeline() {
           ssCount:       regime?.ssCount    ?? 0,
           newBlCount:    regime?.newBlCount ?? 0,
           newSsCount:    regime?.newSsCount ?? 0,
+          sectorStockCounts,
           createdAt:     new Date(),
         },
       },

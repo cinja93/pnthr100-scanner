@@ -4718,8 +4718,10 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     const { getSignalCacheSnapshot } = await import('./signalService.js');
     const liveApex = getCachedApexResults();
 
+    // Per-sector total stock counts from the full 679 universe (stored in regime doc by Friday pipeline)
+    const sectorTotalStocks = regimeDoc?.sectorStockCounts || {};
+
     let killTop10, blCount, ssCount, sectorMap;
-    const sectorTotalStocks = {}; // total stocks per sector (all stocks, not just BL/SS)
     if (liveApex) {
       killTop10 = liveApex.stocks
         .filter(s => s.isTop10)
@@ -4739,8 +4741,6 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       for (const s of liveApex.stocks) {
         if (s.overextended) continue;
         const sector = s.sector || 'Unknown';
-        // Count total stocks per sector (regardless of signal)
-        sectorTotalStocks[sector] = (sectorTotalStocks[sector] || 0) + 1;
         // Prefer real-time signal from daily cache; fall back to Kill cache
         const cached = realtimeSignals[s.ticker];
         const effectiveSignal = cached
@@ -4760,18 +4760,16 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       const latestWeekOf = latestWeekDoc?.weekOf ?? null;
       const weekFilter = latestWeekOf ? { weekOf: latestWeekOf } : {};
 
-      const [top10Scores, allKillScores] = await Promise.all([
+      const [top10Scores, allKillSignals] = await Promise.all([
         db.collection('pnthr_kill_scores').find({ ...weekFilter, killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
         db.collection('pnthr_kill_scores')
-          .find(weekFilter, { projection: { ticker: 1, signal: 1, sector: 1 } })
-          .toArray(),
+          .find({ ...weekFilter, signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1 } })
+          .sort({ weekOf: -1 }).limit(700).toArray(),
       ]);
       killTop10 = top10Scores.map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 }));
       blCount = 0; ssCount = 0; sectorMap = {};
-      for (const s of allKillScores) {
+      for (const s of allKillSignals) {
         const sector = s.sector || 'Unknown';
-        // Count total stocks per sector (regardless of signal)
-        sectorTotalStocks[sector] = (sectorTotalStocks[sector] || 0) + 1;
         if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
         if (s.signal === 'BL') { sectorMap[sector].bl++; blCount++; }
         else if (s.signal === 'SS') { sectorMap[sector].ss++; ssCount++; }

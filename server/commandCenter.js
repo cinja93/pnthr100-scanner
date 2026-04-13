@@ -420,7 +420,8 @@ export async function positionsClose(req, res) {
     const { id, exitPrice, exitReason } = req.body;
     if (!id || !exitPrice) return res.status(400).json({ error: 'id and exitPrice required' });
 
-    const position = await db.collection('pnthr_portfolio').findOne({ id, ownerId: req.user.userId });
+    const userId = req.user.userId;
+    const position = await db.collection('pnthr_portfolio').findOne({ id, ownerId: userId });
     if (!position) return res.status(404).json({ error: 'Position not found' });
     if (position.status === 'CLOSED') return res.status(400).json({ error: 'Position already closed' });
 
@@ -433,7 +434,7 @@ export async function positionsClose(req, res) {
     const profitDollar = isLong ? (exitPrice - avgCost) * filledShr : (avgCost - exitPrice) * filledShr;
     const holdingDays = Math.floor((Date.now() - new Date(position.createdAt).getTime()) / 86400000);
 
-    await db.collection('pnthr_portfolio').updateOne({ id, ownerId: req.user.userId }, {
+    await db.collection('pnthr_portfolio').updateOne({ id, ownerId: userId }, {
       $set: {
         status: 'CLOSED', closedAt: new Date(), updatedAt: new Date(),
         outcome: {
@@ -445,6 +446,76 @@ export async function positionsClose(req, res) {
         },
       },
     });
+
+    // ── Sync to journal (best-effort — don't fail the close if journal sync fails) ──
+    try {
+      const { createJournalEntry } = await import('./journalService.js');
+      const { calculateDisciplineScore } = await import('./disciplineScoring.js');
+
+      // Re-read position after close update so journal gets final state
+      const closedPos = await db.collection('pnthr_portfolio').findOne({ id, ownerId: userId });
+
+      // Create journal entry if one doesn't exist yet (non-queue/test trades may not have one)
+      await createJournalEntry(db, closedPos, userId);
+
+      // Build exit record matching exitService format
+      const exitRecord = {
+        id: 'E1',
+        shares: filledShr,
+        price: +exitPrice,
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        reason: exitReason || 'MANUAL',
+        note: '',
+        isOverride: (exitReason || 'MANUAL') === 'MANUAL',
+        isFinalExit: true,
+        pnl: { dollar: +profitDollar.toFixed(2), pct: +profitPct.toFixed(2) },
+        remainingShares: 0,
+        createdAt: new Date(),
+      };
+
+      // Sync exit to journal
+      await db.collection('pnthr_journal').updateOne(
+        { positionId: id.toString(), ownerId: userId },
+        {
+          $push: { exits: exitRecord },
+          $set: {
+            'performance.status': 'CLOSED',
+            'performance.remainingShares': 0,
+            'performance.avgExitPrice': +exitPrice,
+            'performance.realizedPnlDollar': +profitDollar.toFixed(2),
+            'performance.realizedPnlPct': +profitPct.toFixed(2),
+            closedAt: new Date(),
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      // Discipline score
+      const journal = await db.collection('pnthr_journal').findOne(
+        { positionId: id.toString(), ownerId: userId },
+        { projection: { _id: 1 } }
+      );
+      if (journal) {
+        await calculateDisciplineScore(db, journal._id.toString());
+      }
+
+      // Wash sale tracking for losses
+      if (profitDollar < 0) {
+        const exitDate = new Date();
+        exitDate.setUTCHours(0, 0, 0, 0);
+        const expiryDate = new Date(exitDate);
+        expiryDate.setUTCDate(expiryDate.getUTCDate() + 30);
+        await db.collection('pnthr_journal').updateOne(
+          { positionId: id.toString(), ownerId: userId },
+          { $set: { 'washSale.isLoss': true, 'washSale.lossAmount': +profitDollar.toFixed(2), 'washSale.exitDate': exitDate, 'washSale.expiryDate': expiryDate, 'washSale.triggered': false } }
+        );
+      }
+
+      console.log(`[CC] ✅ Journal synced for ${position.ticker} close (${exitReason || 'MANUAL'})`);
+    } catch (journalErr) {
+      console.warn(`[CC] Journal sync failed for ${position.ticker}:`, journalErr.message);
+    }
 
     res.json({ success: true, outcome: { profitPct: +profitPct.toFixed(2), profitDollar: +profitDollar.toFixed(2), holdingDays } });
   } catch (err) {

@@ -22,7 +22,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOGO_PATH = path.resolve(__dirname, '../../client/public/pnthr-funds-logo-full.png');
 const PNTHR_HEAD_PATH = path.resolve(__dirname, '../../client/src/assets/panther head.png');
 const FOUNDERS_PATH = path.resolve(__dirname, '../../client/public/pnthr-founders.png');
-const OUTPUT_PATH = path.resolve(__dirname, '../../PNTHR_Fund_Intelligence_Report_v19.pdf');
+const OUTPUT_PATH = path.resolve(__dirname, '../../PNTHR_Fund_Intelligence_Report_v20.pdf');
 
 // ── Brand Colors ─────────────────────────────────────────────────────────────
 const YELLOW  = [252, 240, 0];
@@ -1982,6 +1982,79 @@ async function run() {
   doc.fontSize(8).fillColor(LTGRAY).font('Helvetica-Oblique')
      .text('The Carnivore Quant Fund transformed $100,000 into ' + fmtDollar(lastDay.equity) + ' while the S&P 500 produced ' + fmtDollar(lastDay.spyEquity) + ' over the same period. Every dollar figure above is net of all transaction costs, management fees, and performance allocation.', LM + 40, y, { width: CW - 80, lineBreak: true });
   y = doc.y + 20;
+
+  pageFooter();
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SUMMARY
+  // ═══════════════════════════════════════════════════════════════════════════
+  newBlackPage();
+  y = CONTENT_TOP;
+  y = sectionTitle('SUMMARY', y);
+  y += 6;
+
+  // Helper for this section
+  function summarySubhead(text, yPos) {
+    yPos = checkPage(yPos, 30);
+    doc.fontSize(11).fillColor(YELLOW).font('Helvetica-Bold')
+       .text(text, LM, yPos, { width: CW, lineBreak: true });
+    return doc.y + 6;
+  }
+  function summaryPara(text, yPos) {
+    yPos = checkPage(yPos, 20);
+    doc.fontSize(9).fillColor(WHITE).font('Helvetica').lineGap(2)
+       .text(text, LM, yPos, { width: CW, lineBreak: true });
+    doc.lineGap(0);
+    return doc.y + 8;
+  }
+  function summaryBullet(text, yPos) {
+    yPos = checkPage(yPos, 14);
+    doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold')
+       .text('•', LM, yPos, { width: 12, lineBreak: false });
+    doc.fontSize(9).fillColor(WHITE).font('Helvetica')
+       .text(text, LM + 14, yPos, { width: CW - 14, lineBreak: true });
+    return doc.y + 4;
+  }
+
+  y = summarySubhead('A System Built to Win in Every Market', y);
+  y = summaryPara('The PNTHR Funds, Carnivore Quant Fund (PNTHR) Strategy was designed from first principles to do what most systematic strategies cannot: generate consistent, compounding returns across the full range of market conditions, bull, bear, crash, and recovery, without relying on leverage, complex derivatives, or opaque machine learning.', y);
+  y = summaryPara('The results speak for themselves.', y);
+  y = summaryPara('Over an 82-month live-equivalent backtest period, the strategy delivered +761% total return at a 37.0% CAGR, converting a $100,000 portfolio to $861,400, against the S&P 500\'s $228,000 over the same period. That is $633,400 in pure alpha. The Sharpe ratio of 2.39 and Sortino ratio of 34.0 are not statistical artifacts; they reflect a strategy that earns its returns through disciplined, rules-based execution rather than tail risk exposure.', y);
+
+  y += 4;
+  y = summarySubhead('Risk Is Not a Byproduct. It Is the Product.', y);
+  y = summaryPara('What distinguishes PNTHR Funds, Carnivore Quant Fund (PNTHR) from passive and most active strategies is not the upside. It is the downside discipline.', y);
+  y = summaryPara('The maximum monthly drawdown across the entire 82-month period was -1.00%. Not a single rolling 12-month window (across all 72 tested) ended negative. The worst was +9.7%. Every drawdown fully recovered. No permanent capital loss, ever.', y);
+  y = summaryPara('When markets collapsed, the PNTHR did not simply "hold on." It thrived:', y);
+  y = summaryBullet('COVID-19 Crash (2020): -3.8% vs. S&P -34.1%', y);
+  y = summaryBullet('2022 Bear Market: +11.7% vs. S&P -25.4%', y);
+  y = summaryBullet('2025 Liberation Day Shock: +1.8% vs. S&P -19.0%', y);
+  y += 4;
+  y = summaryPara('This is not luck. It is architecture. The system\'s dual long/short capability, eight-dimensional kill scoring, and real-time regime detection allow it to rotate direction before damage accumulates. The strategy earns in downtrends; it does not simply survive them.', y);
+
+  y += 4;
+  y = summarySubhead('Empirical Credibility at Scale', y);
+  y = summaryPara('With 2,520 closed trades across seven years, the PNTHR strategy has a statistical foundation that virtually no discretionary fund can match. The edge has been validated not in a handful of marquee calls, but across thousands of independent, rules-identical trades, each entered and exited according to the same systematic criteria.', y);
+  y = summaryPara('A 9.1x profit factor (meaning for every dollar lost, $9.10 was made), achieved at a 49.7% win rate, is a signature characteristic of high-quality systematic momentum strategies. The strategy does not depend on being right most of the time. It depends on cutting losers fast and letting winners compound. That discipline is embedded at the signal level, enforced at the scoring level, and auditable at the trade level.', y);
+
+  y += 4;
+  y = summarySubhead('Built for Institutions. Ready to Scale.', y);
+  y = summaryPara('The PNTHR Command Center, Kill Scoring Engine, and real-time Analyze workflow are not prototype tools; they are production infrastructure. The IBKR bridge provides live NAV synchronization. The Friday pipeline scores the full 679-stock universe automatically. Every trade decision is supported by an eight-dimension score, a pre-trade Analyze rating, and a discipline scoring system that audits each exit in real time.', y);
+  y = summaryPara('The fund is positioned to accept institutional capital with the operational rigor, audit trail, and compliance infrastructure that sophisticated allocators require.', y);
+
+  y += 4;
+  y = summarySubhead('The Opportunity', y);
+  y = summaryPara('Investors today face a choice: accept 7-10% annual returns from passive indexing and absorb 30-40% drawdowns when markets break, or allocate to a strategy that has demonstrated the ability to compound capital at 37% annually while protecting it when it matters most.', y);
+  y = summaryPara('The PNTHR Funds Strategy is that alternative. Every return number in this report is auditable, every trade is logged, and every methodology decision is documented. We invite you to pressure-test it.', y);
+
+  y += 6;
+  y = checkPage(y, 30);
+  doc.fontSize(10).fillColor(YELLOW).font('Helvetica-BoldOblique')
+     .text('The PNTHR does not chase. It positions, waits, and strikes with precision.', LM, y, { width: CW, align: 'center', lineBreak: true });
+  y = doc.y + 14;
+
+  doc.fontSize(7).fillColor(LTGRAY).font('Helvetica-Oblique')
+     .text('This summary reflects backtest results on the PNTHR 679 universe. Past performance is not a guarantee of future results. See full methodology and disclosures within this report.', LM, y, { width: CW, align: 'center', lineBreak: true });
 
   pageFooter();
 

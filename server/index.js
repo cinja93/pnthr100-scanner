@@ -1187,8 +1187,12 @@ async function getSP500Constituents(FMP_API_KEY) {
   return normalized;
 }
 
-// Sector signal counts — pre-computed in background at startup, cached weekly
+// Sector signal counts — pre-computed in background at startup, cached weekly.
+// sectorSignalCountsReady resolves when the first computation completes,
+// so the Pulse endpoint can await it instead of returning empty data.
 let sectorSignalCountsCache = null;
+let _sectorCountsResolve = null;
+let sectorSignalCountsReady = new Promise(r => { _sectorCountsResolve = r; });
 
 async function computeSectorSignalCounts() {
   try {
@@ -1217,7 +1221,7 @@ async function computeSectorSignalCounts() {
       for (const ticker of tickers) {
         const sigData = signals[ticker];
         const sig = sigData?.signal;
-        const isNew = sigData?.isNewSignal ?? false;
+        const isNew = sigData?.isNew ?? sigData?.isNewSignal ?? false;
         if (sig === 'BL' || sig === 'BUY')       { counts[sectorKey].BL++; if (isNew) counts[sectorKey].newBL++; }
         else if (sig === 'BE')                      counts[sectorKey].BE++;
         else if (sig === 'SS' || sig === 'SELL')  { counts[sectorKey].SS++; if (isNew) counts[sectorKey].newSS++; }
@@ -1226,9 +1230,11 @@ async function computeSectorSignalCounts() {
     }
 
     sectorSignalCountsCache = counts;
+    if (_sectorCountsResolve) { _sectorCountsResolve(); _sectorCountsResolve = null; }
     console.log('✅ Sector signal counts ready');
   } catch (err) {
     console.error('Error computing sector signal counts:', err);
+    if (_sectorCountsResolve) { _sectorCountsResolve(); _sectorCountsResolve = null; }
   }
 }
 
@@ -4772,6 +4778,9 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     // Reads from sectorSignalCountsCache (computed at startup by computeSectorSignalCounts).
     // This uses S&P 500 constituents grouped by GICS sector + getSignals() — identical
     // to what /api/sector-signal-counts returns, so numbers always match the Sectors page.
+    // Wait for the background computation to finish (only blocks on first request after restart)
+    if (!sectorSignalCountsCache) await sectorSignalCountsReady;
+
     const sectorMap = {};
     const sectorTotalStocks = {};
     let newBLStocks = [], newSSStocks = [];

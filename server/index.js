@@ -4654,16 +4654,43 @@ async function warmApexCacheIfCold() {
     try {
       const _iSPY = _apexRes?.indexData?.SPY;
       const _iQQQ = _apexRes?.indexData?.QQQ;
-      if (_iSPY || _iQQQ) {
-        const _db = await connectToDatabase();
-        if (_db) {
-          const _latest = await _db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } });
-          if (_latest?._id) {
-            const _upd = {};
-            if (_iSPY) _upd.spy = { close: _iSPY.price, ema21: _iSPY.ema21 };
-            if (_iQQQ) _upd.qqq = { close: _iQQQ.price, ema21: _iQQQ.ema21 };
-            await _db.collection('pnthr_kill_regime').updateOne({ _id: _latest._id }, { $set: _upd });
+      const _db = await connectToDatabase();
+      if (_db) {
+        const _latest = await _db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } });
+        if (_latest?._id) {
+          const _upd = {};
+          if (_iSPY) _upd.spy = { close: _iSPY.price, ema21: _iSPY.ema21 };
+          if (_iQQQ) _upd.qqq = { close: _iQQQ.price, ema21: _iQQQ.ema21 };
+          // Persist ticker→sector map + counts if not already present
+          if (!_latest.tickerSectorMap || !_latest.sectorStockCounts) {
+            const _tsm = {};
+            const _ssc = {};
+            for (const s of stocks) {
+              const sector = s.sector || 'Unknown';
+              _tsm[s.ticker] = sector;
+              _ssc[sector] = (_ssc[sector] || 0) + 1;
+            }
+            _upd.tickerSectorMap = _tsm;
+            _upd.sectorStockCounts = _ssc;
+            console.log(`[PULSE] Persisted tickerSectorMap (${Object.keys(_tsm).length} tickers) to regime doc`);
           }
+          // Always update sectorSignalSummary with fresh signal data
+          const _sss = {};
+          const _tsm2 = _upd.tickerSectorMap || _latest.tickerSectorMap || {};
+          for (const t of tickers) {
+            const sector = _tsm2[t] || stockMeta[t]?.sector || 'Unknown';
+            if (sector === 'Unknown') continue;
+            const sig = jungleSignals[t];
+            if (!sig) continue;
+            const mapped = sig.signal === 'BUY' ? 'BL' : sig.signal === 'SELL' ? 'SS' : sig.signal;
+            if (!mapped || !['BL', 'SS'].includes(mapped)) continue;
+            if (!_sss[sector]) _sss[sector] = { bl: 0, ss: 0, newBL: 0, newSS: 0 };
+            if (mapped === 'BL') { _sss[sector].bl++; if (sig.isNew) _sss[sector].newBL++; }
+            else { _sss[sector].ss++; if (sig.isNew) _sss[sector].newSS++; }
+          }
+          _upd.sectorSignalSummary = _sss;
+          console.log(`[PULSE] Persisted sectorSignalSummary to regime doc`);
+          await _db.collection('pnthr_kill_regime').updateOne({ _id: _latest._id }, { $set: _upd });
         }
       }
     } catch { /* non-fatal */ }
@@ -4713,7 +4740,6 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     ]);
 
     // Live apex cache (populated when Kill page is visited this session).
-    // Falls back to Friday pipeline DB data when cache is cold.
     const { getCachedApexResults } = await import('./apexService.js');
     const { getSignalCacheSnapshot } = await import('./signalService.js');
     const liveApex = getCachedApexResults();
@@ -4721,7 +4747,8 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     // Per-sector total stock counts from the full 679 universe (stored in regime doc by Friday pipeline)
     const sectorTotalStocks = regimeDoc?.sectorStockCounts || {};
 
-    let killTop10, blCount, ssCount, sectorMap;
+    // ── Kill Top-10 panel (separate from Sector Pulse) ──
+    let killTop10, blCount, ssCount;
     if (liveApex) {
       killTop10 = liveApex.stocks
         .filter(s => s.isTop10)
@@ -4732,62 +4759,92 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         }));
       blCount = liveApex.regime?.blCount || 0;
       ssCount = liveApex.regime?.ssCount || 0;
-      // Build sectorMap using real-time signal cache when available.
-      // The signal cache is updated daily; for any ticker already cached today,
-      // use its live signal (BE/SE stocks correctly excluded). Fall back to
-      // the Friday Kill cache signal for tickers not yet cached today.
-      const realtimeSignals = getSignalCacheSnapshot();
-      sectorMap = {};
-      for (const s of liveApex.stocks) {
-        if (s.overextended) continue;
-        const sector = s.sector || 'Unknown';
-        // Prefer real-time signal from daily cache; fall back to Kill cache
-        const cached = realtimeSignals[s.ticker];
-        const effectiveSignal = cached
-          ? (cached.signal === 'BUY' ? 'BL' : cached.signal === 'SELL' ? 'SS' : cached.signal)
-          : s.signal;
-        if (!effectiveSignal || !['BL', 'SS'].includes(effectiveSignal)) continue;
-        if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
-        if (effectiveSignal === 'BL') sectorMap[sector].bl++;
-        else if (effectiveSignal === 'SS') sectorMap[sector].ss++;
-      }
     } else {
-      // Cold server — fall back to Friday pipeline data.
-      // pnthr_kill_scores retains all historical weeks — MUST filter by the most
-      // recent weekOf, otherwise top-10 rows from multiple weeks are returned.
+      // Cold server — fall back to Friday pipeline data for Kill top-10
       const latestWeekDoc = await db.collection('pnthr_kill_scores')
         .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
       const latestWeekOf = latestWeekDoc?.weekOf ?? null;
       const weekFilter = latestWeekOf ? { weekOf: latestWeekOf } : {};
+      killTop10 = (await db.collection('pnthr_kill_scores')
+        .find({ ...weekFilter, killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray())
+        .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 }));
+      blCount = regimeDoc?.blCount ?? 0;
+      ssCount = regimeDoc?.ssCount ?? 0;
+    }
 
-      const [top10Scores, allKillSignals] = await Promise.all([
-        db.collection('pnthr_kill_scores').find({ ...weekFilter, killRank: { $lte: 10, $ne: null } }).sort({ killRank: 1 }).toArray(),
-        db.collection('pnthr_kill_scores')
-          .find({ ...weekFilter, signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1 } })
-          .sort({ weekOf: -1 }).limit(700).toArray(),
-      ]);
-      killTop10 = top10Scores.map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 }));
-      blCount = 0; ssCount = 0; sectorMap = {};
+    // ── Sector Pulse: gauge + bar from signal service (ALL 679 stocks, NOT Kill scores) ──
+    // Uses the daily-updated signal cache when warm; falls back to sectorSignalSummary
+    // stored in the regime doc by the Friday pipeline / warmApexCacheIfCold.
+    const tickerSectorMap = regimeDoc?.tickerSectorMap || {};
+    const realtimeSignals = getSignalCacheSnapshot();
+    const cachedTickerCount = Object.keys(realtimeSignals).length;
+    const totalTickerCount = Object.keys(tickerSectorMap).length;
+    // Signal cache is "warm" if it covers most of the 679 universe
+    const signalCacheWarm = cachedTickerCount >= totalTickerCount * 0.5 && totalTickerCount > 0;
+
+    let sectorMap;
+    let newBLStocks = [], newSSStocks = [];
+
+    if (signalCacheWarm) {
+      // Live signal cache has good coverage — build gauge + bar from real-time data
+      sectorMap = {};
+      for (const [ticker, sector] of Object.entries(tickerSectorMap)) {
+        if (sector === 'Unknown') continue;
+        const sig = realtimeSignals[ticker];
+        if (!sig) continue;
+        const mapped = sig.signal === 'BUY' ? 'BL' : sig.signal === 'SELL' ? 'SS' : sig.signal;
+        if (!mapped || !['BL', 'SS'].includes(mapped)) continue;
+        if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
+        if (mapped === 'BL') sectorMap[sector].bl++;
+        else sectorMap[sector].ss++;
+        // New signal = isNew flag from signal service (fired on the current/last bar)
+        if (sig.isNew) {
+          const entry = { ticker, sector, signal: mapped, currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null };
+          if (mapped === 'BL') newBLStocks.push(entry);
+          else newSSStocks.push(entry);
+        }
+      }
+    } else if (regimeDoc?.sectorSignalSummary && Object.keys(regimeDoc.sectorSignalSummary).length > 0) {
+      // Signal cache cold — use stored sectorSignalSummary from regime doc
+      const stored = regimeDoc.sectorSignalSummary;
+      sectorMap = {};
+      for (const [sector, data] of Object.entries(stored)) {
+        sectorMap[sector] = { bl: data.bl || 0, ss: data.ss || 0 };
+        // Build placeholder new signal entries from stored counts
+        for (let i = 0; i < (data.newBL || 0); i++) {
+          newBLStocks.push({ ticker: `${sector}-new-${i}`, sector, signal: 'BL', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
+        }
+        for (let i = 0; i < (data.newSS || 0); i++) {
+          newSSStocks.push({ ticker: `${sector}-new-${i}`, sector, signal: 'SS', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
+        }
+      }
+    } else {
+      // No sectorSignalSummary yet (pre-migration) — fall back to Kill scores for gauge only
+      const latestWeekDoc = await db.collection('pnthr_kill_scores')
+        .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
+      const weekFilter = latestWeekDoc?.weekOf ? { weekOf: latestWeekDoc.weekOf } : {};
+      const allKillSignals = await db.collection('pnthr_kill_scores')
+        .find({ ...weekFilter, signal: { $in: ['BL', 'SS'] } }, { projection: { ticker: 1, signal: 1, sector: 1, signalAge: 1 } })
+        .limit(700).toArray();
+      sectorMap = {};
       for (const s of allKillSignals) {
         const sector = s.sector || 'Unknown';
         if (!sectorMap[sector]) sectorMap[sector] = { bl: 0, ss: 0 };
-        if (s.signal === 'BL') { sectorMap[sector].bl++; blCount++; }
-        else if (s.signal === 'SS') { sectorMap[sector].ss++; ssCount++; }
-      }
-      // regimeDoc has authoritative counts from the signal state machine
-      if (blCount === 0 && ssCount === 0) {
-        blCount = regimeDoc?.blCount ?? 0;
-        ssCount = regimeDoc?.ssCount ?? 0;
+        if (s.signal === 'BL') sectorMap[sector].bl++;
+        else if (s.signal === 'SS') sectorMap[sector].ss++;
+        if (s.signalAge === 0) {
+          const entry = { ticker: s.ticker, sector, signal: s.signal, currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null };
+          if (s.signal === 'BL') newBLStocks.push(entry);
+          else newSSStocks.push(entry);
+        }
       }
     }
 
-    // New signals this week (signalAge 0–1) — stocks from apex cache, ETFs from etf cache
-    // ETFs are a separate scoring universe and never appear in the apex/kill results.
+    // ── ETFs: from the ETF cache (populated when /api/etf-stocks is visited) ──
     function calcSignalAge(signalDate) {
       if (!signalDate) return 99;
       try {
         const sigMs  = new Date(signalDate + 'T12:00:00').getTime();
-        // Current week Monday
         const now = new Date();
         const dow = now.getDay();
         const monday = new Date(now);
@@ -4796,44 +4853,6 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         return Math.max(0, Math.round((monday.getTime() - sigMs) / (7 * 24 * 60 * 60 * 1000)));
       } catch { return 99; }
     }
-    function mapNewSig(s) {
-      return { ticker: s.ticker, sector: s.sector, currentPrice: s.currentPrice,
-        totalScore: s.apexScore ?? s.totalScore ?? 0, tier: s.tier, signal: s.signal,
-        signalAge: s.signalAge, killRank: s.killRank ?? null };
-    }
-    const sortByScore = (a, b) => ((b.totalScore || 0) - (a.totalScore || 0));
-
-    // ── Stocks: from apex cache (live) or Friday DB ──
-    // "New" = signalAge 0 (BL+1 / SS+1 = signal fired this week).
-    // Always query DB for new signals (signalAge 0 = BL+1/SS+1) — this is the
-    // authoritative source from the Friday pipeline. The live apex cache may have
-    // stale signalAge values if warmed mid-week with incomplete candle data.
-    const latestWeekOf = (await db.collection('pnthr_kill_scores')
-      .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } }))?.weekOf ?? null;
-    const weekScope = latestWeekOf ? { weekOf: latestWeekOf } : {};
-    const dbFresh = await db.collection('pnthr_kill_scores')
-      .find({ ...weekScope, signal: { $in: ['BL', 'SS'] }, signalAge: 0 })
-      .project({ ticker: 1, sector: 1, currentPrice: 1, totalScore: 1, apexScore: 1, tier: 1, signal: 1, signalAge: 1, killRank: 1 })
-      .toArray();
-    let newBLStocks = dbFresh.filter(s => s.signal === 'BL')
-      .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
-    let newSSStocks = dbFresh.filter(s => s.signal === 'SS')
-      .map(s => ({ ...s, totalScore: s.totalScore ?? s.apexScore ?? 0 })).sort(sortByScore);
-
-    // If live apex is available, cross-reference to exclude stocks that have since exited (BE/SE)
-    if (liveApex) {
-      const rtSignals = getSignalCacheSnapshot();
-      const stillActive = (ticker) => {
-        const rt = rtSignals[ticker];
-        if (!rt) return true; // not in real-time cache = assume still active
-        const rtSig = rt.signal === 'BUY' ? 'BL' : rt.signal === 'SELL' ? 'SS' : rt.signal;
-        return rtSig && ['BL', 'SS'].includes(rtSig);
-      };
-      newBLStocks = newBLStocks.filter(s => stillActive(s.ticker));
-      newSSStocks = newSSStocks.filter(s => stillActive(s.ticker));
-    }
-
-    // ── ETFs: from the ETF cache (populated when /api/etf-stocks is visited) ──
     let newBLEtfs = [], newSSEtfs = [];
     const cachedEtf = getCachedEtfResults();
     if (cachedEtf) {

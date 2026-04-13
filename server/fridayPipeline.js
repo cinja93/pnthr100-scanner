@@ -436,13 +436,36 @@ export async function runFridayKillPipeline() {
       console.log(`   Saved ${killDocs.length} scored stocks`);
     }
 
-    // Compute per-sector stock counts from the full 679 universe
+    // Compute per-sector stock counts + ticker→sector map from the full 679 universe
     const sectorStockCounts = {};
+    const tickerSectorMap = {};
     for (const t of tickers) {
       const sector = stockMeta[t]?.sector || 'Unknown';
       sectorStockCounts[sector] = (sectorStockCounts[sector] || 0) + 1;
+      tickerSectorMap[t] = sector;
     }
     console.log(`   Sector stock counts: ${Object.entries(sectorStockCounts).map(([k,v]) => `${k}:${v}`).join(', ')}`);
+
+    // Per-sector signal summary from the full 679 universe (signal service, NOT Kill scores).
+    // Used by Sector Pulse gauges + bars. Signals use 'BUY'/'SELL' format from signalService.
+    const sectorSignalSummary = {};
+    for (const t of tickers) {
+      const sector = tickerSectorMap[t];
+      if (!sector || sector === 'Unknown') continue;
+      const sig = jungleSignals[t];
+      if (!sig) continue;
+      const mapped = sig.signal === 'BUY' ? 'BL' : sig.signal === 'SELL' ? 'SS' : sig.signal;
+      if (!mapped || !['BL', 'SS'].includes(mapped)) continue;
+      if (!sectorSignalSummary[sector]) sectorSignalSummary[sector] = { bl: 0, ss: 0, newBL: 0, newSS: 0 };
+      if (mapped === 'BL') {
+        sectorSignalSummary[sector].bl++;
+        if (sig.isNew) sectorSignalSummary[sector].newBL++;
+      } else {
+        sectorSignalSummary[sector].ss++;
+        if (sig.isNew) sectorSignalSummary[sector].newSS++;
+      }
+    }
+    console.log(`   Sector signal summary: ${Object.entries(sectorSignalSummary).map(([k,v]) => `${k}:${v.bl}BL/${v.ss}SS(+${v.newBL}/+${v.newSS})`).join(', ')}`);
 
     // Upsert regime snapshot
     await db.collection('pnthr_kill_regime').updateOne(
@@ -463,6 +486,8 @@ export async function runFridayKillPipeline() {
           newBlCount:    regime?.newBlCount ?? 0,
           newSsCount:    regime?.newSsCount ?? 0,
           sectorStockCounts,
+          tickerSectorMap,
+          sectorSignalSummary,
           createdAt:     new Date(),
         },
       },

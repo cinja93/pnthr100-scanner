@@ -133,6 +133,92 @@ async function getSectorBreakdown(db, weekOf) {
   }));
 }
 
+// Sector classification for rotation analysis
+const DEFENSIVE_SECTORS = ['Utilities', 'Consumer Staples', 'Healthcare', 'Real Estate'];
+const CYCLICAL_SECTORS  = ['Technology', 'Consumer Discretionary', 'Industrials', 'Financials', 'Energy', 'Basic Materials', 'Communication'];
+
+async function getSectorRotationData(db, weekOf) {
+  // Get previous week's sector breakdown for comparison
+  const prevFriday = new Date(weekOf + 'T12:00:00Z');
+  prevFriday.setUTCDate(prevFriday.getUTCDate() - 7);
+  const prevWeekOf = prevFriday.toISOString().split('T')[0];
+
+  const prevRows = await db.collection('pnthr_kill_scores').aggregate([
+    { $match: { weekOf: prevWeekOf } },
+    { $group: {
+      _id: '$sector',
+      totalBL: { $sum: { $cond: [{ $eq: ['$signal', 'BL'] }, 1, 0] } },
+      totalSS: { $sum: { $cond: [{ $eq: ['$signal', 'SS'] }, 1, 0] } },
+    }},
+  ]).toArray();
+
+  const prevMap = {};
+  for (const r of prevRows) prevMap[r._id] = { totalBL: r.totalBL, totalSS: r.totalSS };
+
+  return { prevWeekOf, prevMap };
+}
+
+function buildSectorRotationAnalysis(sectors, prevMap) {
+  // Compute rotation metrics
+  const rotationLines = [];
+  let defensiveBL = 0, defensiveSS = 0, cyclicalBL = 0, cyclicalSS = 0;
+
+  for (const s of sectors) {
+    if (s.totalBL + s.totalSS === 0) continue;
+    const total = s.totalBL + s.totalSS;
+    const blPct = Math.round((s.totalBL / total) * 100);
+    const prev = prevMap[s.sector];
+    const prevTotal = prev ? prev.totalBL + prev.totalSS : 0;
+    const prevBlPct = prevTotal > 0 ? Math.round((prev.totalBL / prevTotal) * 100) : null;
+
+    // Week-over-week shift
+    let shift = '';
+    if (prev) {
+      const blDelta = s.totalBL - prev.totalBL;
+      const ssDelta = s.totalSS - prev.totalSS;
+      if (blDelta > 0 && ssDelta <= 0) shift = 'improving';
+      else if (ssDelta > 0 && blDelta <= 0) shift = 'deteriorating';
+      else if (blDelta > 0 && ssDelta > 0) shift = 'expanding (both sides)';
+      else if (blDelta === 0 && ssDelta === 0) shift = 'unchanged';
+      else shift = 'mixed';
+    }
+
+    rotationLines.push(
+      `${s.sector}: ${blPct}% long-leaning (${s.totalBL} long / ${s.totalSS} short)` +
+      (prevBlPct !== null ? ` | was ${prevBlPct}% last week` : '') +
+      (shift ? ` | trend: ${shift}` : '')
+    );
+
+    // Accumulate defensive vs cyclical
+    if (DEFENSIVE_SECTORS.includes(s.sector)) {
+      defensiveBL += s.totalBL;
+      defensiveSS += s.totalSS;
+    } else if (CYCLICAL_SECTORS.includes(s.sector)) {
+      cyclicalBL += s.totalBL;
+      cyclicalSS += s.totalSS;
+    }
+  }
+
+  const defTotal = defensiveBL + defensiveSS;
+  const cycTotal = cyclicalBL + cyclicalSS;
+  const defPct = defTotal > 0 ? Math.round((defensiveBL / defTotal) * 100) : 0;
+  const cycPct = cycTotal > 0 ? Math.round((cyclicalBL / cycTotal) * 100) : 0;
+
+  let rotationType;
+  if (defPct >= 70 && cycPct < 55) rotationType = 'RISK-OFF: Heavy defensive rotation. Capital is hiding in safe havens.';
+  else if (cycPct >= 70 && defPct < 55) rotationType = 'RISK-ON: Aggressive cyclical rotation. Capital is chasing growth.';
+  else if (defPct >= 60 && cycPct >= 60) rotationType = 'BROAD BULL: Both defensive and cyclical sectors leaning long. Broad market strength.';
+  else if (defPct < 45 && cycPct < 45) rotationType = 'BROAD BEAR: Both defensive and cyclical sectors leaning short. Broad market weakness.';
+  else rotationType = 'SELECTIVE: Mixed rotation. Capital is discriminating between sectors. No clear risk-on/risk-off trend.';
+
+  return {
+    rotationLines: rotationLines.join('\n'),
+    defensiveSummary: `Defensive sectors (Utilities, Staples, Healthcare, Real Estate): ${defPct}% long-leaning (${defensiveBL} long / ${defensiveSS} short)`,
+    cyclicalSummary: `Cyclical sectors (Tech, Discretionary, Industrials, Financials, Energy, Materials, Communication): ${cycPct}% long-leaning (${cyclicalBL} long / ${cyclicalSS} short)`,
+    rotationType,
+  };
+}
+
 async function getTop10Longs(db, weekOf) {
   return db.collection('pnthr_kill_scores')
     .find({ weekOf, signal: 'BL' })
@@ -340,7 +426,7 @@ By reading this newsletter, you acknowledge that you are solely responsible for 
 
 (c) 2026 PNTHR Funds. All rights reserved.`;
 
-function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, disclaimer }) {
+function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, sectorRotation, disclaimer }) {
   // Format sector table for readability
   const sectorLines = sectors
     .filter(s => s.totalBL + s.totalSS > 0)
@@ -405,6 +491,15 @@ ${regime.prevWeek ? `Previous week: ${regime.prevWeek.blCount} long / ${regime.p
 SECTOR BREAKDOWN (long vs short opportunities, new opportunities this week):
 ${sectorLines || 'No sector data available.'}
 
+SECTOR ROTATION ANALYSIS (week-over-week changes, defensive vs cyclical flow):
+${sectorRotation ? `${sectorRotation.rotationType}
+
+${sectorRotation.defensiveSummary}
+${sectorRotation.cyclicalSummary}
+
+Per-sector detail with week-over-week trend:
+${sectorRotation.rotationLines}` : 'No rotation data available.'}
+
 TOP LONG SETUPS (highest-conviction opportunities on the long side):
 ${fmtLong || 'No long setups this week.'}
 
@@ -423,13 +518,14 @@ Write the newsletter using the section structure below. IMPORTANT: Do NOT includ
 Use ## for each section heading exactly as shown:
 
 1. ## THE OPENING (2-3 paragraphs, set the tone, take a position on what the week means)
-2. ## WHERE THE MONEY IS MOVING (3-4 paragraphs, sector rotation story)
-3. ## TRADE OF THE WEEK (1-2 paragraphs + callout -- ONLY if data provided above)
-4. ## STOCKS TO WATCH: LONG SIDE (top 3-5 long setups, brief thesis per stock)
-5. ## STOCKS TO WATCH: SHORT SIDE (top 3-5 short setups, include a sentence explaining short selling for unfamiliar readers)
-6. ## FROM THE ARCHIVES (ONLY if data provided above -- 2 sentences max)
-7. ## THE WEEK AHEAD (1-2 forward-looking paragraphs, close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott)
-8. Legal Disclaimer (use this EXACTLY as written below):
+2. ## SECTOR ROTATION (2-3 paragraphs analyzing how capital is flowing between sectors. Use the rotation data to tell the story: which sectors are getting stronger/weaker, is money rotating into defensive names or cyclical names, what does that say about institutional sentiment and risk appetite? Connect the rotation to macro context like tariffs, trade policy, interest rates, earnings, or geopolitical uncertainty. Be specific about which sectors are improving/deteriorating vs last week. This section should feel like institutional-grade market intelligence.)
+3. ## WHERE THE MONEY IS MOVING (3-4 paragraphs, deeper dive into specific sector opportunities and stock-level themes)
+4. ## TRADE OF THE WEEK (1-2 paragraphs + callout -- ONLY if data provided above)
+5. ## STOCKS TO WATCH: LONG SIDE (top 3-5 long setups, brief thesis per stock)
+6. ## STOCKS TO WATCH: SHORT SIDE (top 3-5 short setups, include a sentence explaining short selling for unfamiliar readers)
+7. ## FROM THE ARCHIVES (ONLY if data provided above -- 2 sentences max)
+8. ## THE WEEK AHEAD (1-2 forward-looking paragraphs, close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott)
+9. Legal Disclaimer (use this EXACTLY as written below):
 
 ${disclaimer}
 
@@ -446,15 +542,20 @@ export async function generatePerch(db) {
   const regime = await getRegimeData(db);
   console.log(`[Perch v3] Regime: ${regime.regimeLabel}, weekOf: ${regime.weekOf}`);
 
-  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek] = await Promise.all([
+  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, rotationData] = await Promise.all([
     getSectorBreakdown(db, regime.weekOf),
     getTop10Longs(db, regime.weekOf),
     getTop10Shorts(db, regime.weekOf),
     getNewSignalsSummary(db, regime.weekOf),
     getTradeOfWeek(db, regime.weekOf),
+    getSectorRotationData(db, regime.weekOf),
   ]);
 
   const trackRecord = await getFromArchives(db, tradeOfWeek?.ticker ?? null);
+
+  // Build sector rotation analysis
+  const sectorRotation = buildSectorRotationAnalysis(sectors, rotationData.prevMap);
+  console.log(`[Perch v3] Sector rotation: ${sectorRotation.rotationType}`);
 
   console.log(`[Perch v3] Data assembled — longs: ${top10Longs.length}, shorts: ${top10Shorts.length}, TOTW: ${tradeOfWeek?.ticker ?? 'none'}, archive: ${trackRecord?.ticker ?? 'none'}`);
 
@@ -463,6 +564,7 @@ export async function generatePerch(db) {
     weekOf: regime.weekOf,
     regime, sectors, top10Longs, top10Shorts,
     newSignals, tradeOfWeek, trackRecord,
+    sectorRotation,
     disclaimer: DISCLAIMER,
   });
 
@@ -537,14 +639,15 @@ export async function generatePerch(db) {
       model:          MODEL,
       stopReason:     response.stop_reason,
       dataInputs: {
-        newLongs:      regime.newBlCount,
-        newShorts:     regime.newSsCount,
-        totalLongs:    regime.blCount,
-        totalShorts:   regime.ssCount,
-        topLong:       top10Longs[0]?.ticker  ?? null,
-        topShort:      top10Shorts[0]?.ticker ?? null,
-        tradeOfWeek:   tradeOfWeek?.ticker    ?? null,
-        archiveTrade:  trackRecord?.ticker    ?? null,
+        newLongs:       regime.newBlCount,
+        newShorts:      regime.newSsCount,
+        totalLongs:     regime.blCount,
+        totalShorts:    regime.ssCount,
+        topLong:        top10Longs[0]?.ticker  ?? null,
+        topShort:       top10Shorts[0]?.ticker ?? null,
+        tradeOfWeek:    tradeOfWeek?.ticker    ?? null,
+        archiveTrade:   trackRecord?.ticker    ?? null,
+        rotationType:   sectorRotation?.rotationType ?? null,
       },
     },
   };

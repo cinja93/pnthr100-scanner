@@ -358,20 +358,24 @@ export default function DataRoomPage() {
               <label style={{ display: 'block', color: '#aaa', marginBottom: 6, fontSize: 13 }}>File</label>
               <input
                 type="file"
-                onChange={e => setFile(e.target.files[0] || null)}
+                onChange={e => { e.stopPropagation(); setFile(e.target.files[0] || null); }}
+                onClick={e => e.stopPropagation()}
                 style={{ color: '#ccc' }}
               />
+              {file && <div style={{ color: '#888', fontSize: 12, marginTop: 4 }}>{file.name} ({(file.size / 1024).toFixed(0)} KB)</div>}
             </div>
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
               <button
+                type="button"
                 onClick={() => { setShowUpload(false); setFile(null); setLabel(''); setSelectedSection(DEFAULT_SECTION); setShowNewSection(false); setNewSectionName(''); }}
                 style={{ background: '#333', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 18px', cursor: 'pointer' }}
               >
                 Cancel
               </button>
               <button
-                onClick={handleUpload}
+                type="button"
+                onClick={e => { e.preventDefault(); e.stopPropagation(); if (!uploading && file) handleUpload(); }}
                 disabled={!file || uploading || (showNewSection && !newSectionName.trim())}
                 style={{
                   background: file && !uploading ? '#D4A017' : '#555',

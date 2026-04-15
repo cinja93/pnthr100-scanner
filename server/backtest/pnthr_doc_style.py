@@ -232,14 +232,17 @@ def draw_cover_header(c, title, subtitle, portrait=False):
     c.rect(MARGIN_LEFT, band_bottom, page_w - MARGIN_LEFT - MARGIN_RIGHT,
            band_height, stroke=0, fill=1)
 
-    # Title: yellow, pinned size, uppercase, centered
+    # Title: yellow, pinned size, uppercase, centered (supports \n for wrapping)
     c.setFillColor(PNTHR_YELLOW)
     c.setFont(FONT_BOLD, COVER_TITLE_SIZE)
     title_upper = title.upper()
-    title_w = stringWidth(title_upper, FONT_BOLD, COVER_TITLE_SIZE)
-    title_x = (page_w - title_w) / 2.0
+    title_lines = title_upper.split('\n')
+    line_gap = COVER_TITLE_SIZE + 4
     title_y = band_bottom + band_height - 0.4 * inch
-    c.drawString(title_x, title_y, title_upper)
+    for i, line in enumerate(title_lines):
+        lw = stringWidth(line, FONT_BOLD, COVER_TITLE_SIZE)
+        lx = (page_w - lw) / 2.0
+        c.drawString(lx, title_y - i * line_gap, line)
 
     # Subtitle: white, centered below title
     c.setFillColor(white)

@@ -739,3 +739,92 @@ export async function deleteJournalTag(journalId, tag) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+// ── Investor Portal ──────────────────────────────────────────────────────────
+
+export async function investorLogin(email, password) {
+  const res = await fetch(`${API_BASE}/auth/investor/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Invalid credentials');
+  }
+  return res.json();
+}
+
+// Admin: list all investors
+export async function fetchInvestors() {
+  const res = await apiFetch(`${API_BASE}/api/investors`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Admin: create investor account
+export async function createInvestor(data) {
+  const res = await apiFetch(`${API_BASE}/api/investors`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// Admin: update investor
+export async function updateInvestorApi(id, updates) {
+  const res = await apiFetch(`${API_BASE}/api/investors/${id}`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Admin: delete investor
+export async function deleteInvestorApi(id) {
+  const res = await apiFetch(`${API_BASE}/api/investors/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Admin: investor analytics
+export async function fetchInvestorAnalytics() {
+  const res = await apiFetch(`${API_BASE}/api/investors/analytics`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Admin: investor activity log
+export async function fetchInvestorActivityLog(id) {
+  const res = await apiFetch(`${API_BASE}/api/investors/${id}/activity`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Investor self-service: get own profile
+export async function fetchInvestorProfile() {
+  const res = await apiFetch(`${API_BASE}/api/investor/profile`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Investor self-service: log an event
+export async function trackInvestorEvent(type, metadata = {}) {
+  const res = await apiFetch(`${API_BASE}/api/investor/events`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ type, ...metadata }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

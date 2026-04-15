@@ -3,7 +3,9 @@ import { AuthContext } from './AuthContext';
 import { QueueProvider, useQueue } from './contexts/QueueContext';
 import { AnalyzeProvider } from './contexts/AnalyzeContext';
 import { DemoProvider } from './contexts/DemoContext';
+import { PortalProvider, usePortal } from './contexts/PortalContext';
 import QueueReviewPanel from './components/QueueReviewPanel';
+import InvestorLoginPage from './components/InvestorLoginPage';
 import StockTable from './components/StockTable';
 import ChartModal from './components/ChartModal';
 import FilterBar from './components/FilterBar';
@@ -31,7 +33,8 @@ import OrdersPage from './components/OrdersPage';
 import LoginPage from './components/LoginPage';
 import DataRoomPage from './components/DataRoomPage';
 import CompliancePage from './components/CompliancePage';
-import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
+import InvestorManagementPage from './components/InvestorManagementPage';
+import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchInvestorProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
 import { computeWeeksAgo } from './utils/dateUtils';
 import './App.css';
@@ -89,6 +92,15 @@ const defaultFilters = {
 
 
 function App() {
+  return (
+    <PortalProvider>
+      <AppAuth />
+    </PortalProvider>
+  );
+}
+
+function AppAuth() {
+  const { portalMode, isInvestorPortal, isDenPortal } = usePortal();
   const [authToken, setAuthTokenState] = useState(() => localStorage.getItem('pnthr_token'));
   const [currentUser, setCurrentUser] = useState(null); // { email, role, accountSize, defaultPage }
   const [authLoading, setAuthLoading] = useState(true);
@@ -106,7 +118,13 @@ function App() {
     const token = localStorage.getItem('pnthr_token');
     if (!token) { setAuthLoading(false); return; }
     setAuthToken(token);
-    fetchUserProfile()
+
+    // Investor tokens use a different profile endpoint
+    const profileFetch = isInvestorPortal
+      ? fetchInvestorProfile().then(p => ({ ...p, role: 'investor' }))
+      : fetchUserProfile();
+
+    profileFetch
       .then(profile => {
         setCurrentUser(profile);
         setAuthTokenState(token);
@@ -124,7 +142,7 @@ function App() {
     localStorage.setItem('pnthr_token', token);
     setAuthToken(token);
     setAuthTokenState(token);
-    setCurrentUser({ email, role, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long' });
+    setCurrentUser({ email, role, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long', name: profile?.name ?? null, company: profile?.company ?? null });
   }
 
   function handleLogout() {
@@ -141,11 +159,17 @@ function App() {
   }, []); // setCurrentUser is stable from useState — no deps needed
 
   if (authLoading) return null; // brief flash while validating token
-  if (!authToken) return <LoginPage onLogin={handleLogin} />;
+
+  // Show appropriate login page based on portal mode
+  if (!authToken) {
+    if (isInvestorPortal) return <InvestorLoginPage onLogin={handleLogin} />;
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   const isAdmin = currentUser?.role === 'admin';
+  const isInvestor = currentUser?.role === 'investor';
   return (
-    <AuthContext.Provider value={{ currentUser, isAdmin, updateCurrentUser }}>
+    <AuthContext.Provider value={{ currentUser, isAdmin, isInvestor, portalMode, updateCurrentUser }}>
       <DemoProvider>
         <AnalyzeProvider>
           <QueueProvider>
@@ -1264,6 +1288,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR Compliance (admin only) */}
           {activePage === 'compliance' && isAdmin && <CompliancePage />}
+
+          {/* PNTHR Investor Management (admin only) */}
+          {activePage === 'investor-mgmt' && isAdmin && <InvestorManagementPage />}
         </main>
 
         <footer className="footer">

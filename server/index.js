@@ -47,6 +47,8 @@ import {
 import newsletterRouter from './routes/newsletter.js';
 import dataroomRouter from './routes/dataroom.js';
 import complianceRouter from './routes/compliance.js';
+import { investorAuthRouter, investorAdminRouter, investorSelfRouter } from './routes/investor.js';
+import { ensureInvestorIndexes } from './investorService.js';
 import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
@@ -100,6 +102,10 @@ app.use(helmet({ contentSecurityPolicy: false })); // CSP disabled: Vercel handl
 // CORS — support comma-separated origins in ALLOWED_ORIGIN env var
 const rawOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
 const allowedOrigins = rawOrigin.split(',').map(o => o.trim()).filter(Boolean);
+// Always allow investor portal subdomains
+['https://den.pnthrfunds.com', 'https://investor.pnthrfunds.com'].forEach(o => {
+  if (!allowedOrigins.includes(o)) allowedOrigins.push(o);
+});
 app.use(cors({
   origin: (origin, cb) => {
     // Allow requests with no origin (Render health checks, curl, etc.)
@@ -4233,6 +4239,11 @@ app.use('/api/newsletter', newsletterRouter);
 app.use('/api/dataroom', authenticateJWT, dataroomRouter);
 app.use('/api/compliance', authenticateJWT, complianceRouter);
 
+// Investor portal routes
+app.use('/auth/investor', investorAuthRouter);                          // unauthenticated login
+app.use('/api/investors', authenticateJWT, requireAdmin, investorAdminRouter); // admin management
+app.use('/api/investor', authenticateJWT, investorSelfRouter);          // investor self-service
+
 // ── Admin: Cache Status ────────────────────────────────────────────────────────
 // Shows whether in-memory caches are warm. Helps diagnose cold-start issues.
 app.get('/api/cache-status', authenticateJWT, requireAdmin, async (req, res) => {
@@ -6123,6 +6134,7 @@ app.listen(PORT, () => {
   createPendingEntriesIndexes().catch(() => {});
   createKillHistoryIndexes().catch(() => {});
   ensureAssistantIndexes().catch(() => {});
+  ensureInvestorIndexes().catch(() => {});
 });
 
 // Scheduled Friday auto-save: checks every 30 minutes.

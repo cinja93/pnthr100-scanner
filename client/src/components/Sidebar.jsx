@@ -3,6 +3,7 @@ import styles from './Sidebar.module.css';
 import pnthrLogo from '../assets/panther head.png';
 import builtWithLove from '../assets/Built with Love.jpg';
 import { useDemo } from '../contexts/DemoContext';
+import { usePortal } from '../contexts/PortalContext';
 
 const APP_VERSION = '4.4.0';
 
@@ -83,11 +84,13 @@ function BatchStatsTooltip({ stats, top }) {
 
 export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, onLogout, longStats, shortStats }) {
   const { isDemo, toggleDemo } = useDemo();
+  const { allowedPages, isDenPortal, isInvestorPortal } = usePortal();
   const [tooltipKey, setTooltipKey] = useState(null);
   const [tooltipTop, setTooltipTop] = useState(0);
   const btnRefs = useRef({});
 
   const firstName = getFirstName(currentUser);
+  const isPortalMode = isDenPortal || isInvestorPortal;
 
   // PNTHR Data group — Journal + Watchlist for everyone; Kill 10, Kill Test, History admin-only
   const dataItems = [
@@ -102,7 +105,17 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
   const dataGroup = { groupLabel: 'PNTHR Data', items: dataItems };
 
-  const allGroups = [...NAV_GROUPS, dataGroup];
+  let allGroups = [...NAV_GROUPS, dataGroup];
+
+  // Portal mode: filter nav to only allowed pages
+  if (allowedPages) {
+    allGroups = allGroups
+      .map(group => ({
+        ...group,
+        items: group.items.filter(item => allowedPages.includes(item.key)),
+      }))
+      .filter(group => group.items.length > 0);
+  }
 
   function handleMouseEnter(key) {
     if (key !== 'long' && key !== 'short') return;
@@ -118,16 +131,20 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
   return (
     <aside className={styles.sidebar} style={isDemo ? { borderTop: '2px solid #fcf000' } : undefined}>
-      {/* Logo + PNTHR's Den */}
+      {/* Logo + branding */}
       <div className={styles.logoArea}>
         <img src={pnthrLogo} alt="PNTHR" className={styles.logo} />
         <div className={styles.appName}>
-          <span className={styles.appNameYellow}>PNTHR's</span>{' '}
-          <span className={styles.appNameWhite}>Den</span>
+          <span className={styles.appNameYellow}>PNTHR</span>{' '}
+          <span className={styles.appNameWhite}>
+            {isDenPortal ? 'Den' : isInvestorPortal ? 'Investor' : "s Den"}
+          </span>
         </div>
-        <div style={{ fontSize: 8, color: '#444', letterSpacing: '0.08em', textAlign: 'center', marginTop: 2, fontFamily: 'monospace' }}>
-          {isDemo ? `Dv${APP_VERSION}` : `v${APP_VERSION}`}
-        </div>
+        {!isPortalMode && (
+          <div style={{ fontSize: 8, color: '#444', letterSpacing: '0.08em', textAlign: 'center', marginTop: 2, fontFamily: 'monospace' }}>
+            {isDemo ? `Dv${APP_VERSION}` : `v${APP_VERSION}`}
+          </div>
+        )}
       </div>
 
       {/* Navigation groups */}
@@ -162,34 +179,59 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
       </nav>
 
       {/* System Architecture + Data Room buttons */}
-      <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <button
-          className={styles.archBtn}
-          onClick={() => window.open('/PNTHR_Fund_Intelligence_Report_v20.pdf', '_blank')}
-          title="View PNTHR Fund Intelligence Report"
-        >
-          <span style={{ fontSize: 14 }}>📄</span>
-          <span>Fund Intelligence Report</span>
-        </button>
-        <button
-          className={styles.dataRoomBtn}
-          onClick={() => onNavigate('data-room')}
-          title="PNTHR Data Room — Fund Documents"
-        >
-          <span style={{ fontSize: 14 }}>🗄️</span>
-          <span>PNTHR Data Room</span>
-        </button>
-        {isAdmin && (
+      {!isPortalMode && (
+        <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <button
+            className={styles.archBtn}
+            onClick={() => window.open('/PNTHR_Fund_Intelligence_Report_v20.pdf', '_blank')}
+            title="View PNTHR Fund Intelligence Report"
+          >
+            <span style={{ fontSize: 14 }}>📄</span>
+            <span>Fund Intelligence Report</span>
+          </button>
           <button
             className={styles.dataRoomBtn}
-            onClick={() => onNavigate('compliance')}
-            title="PNTHR Compliance — Documents, Calendar & Tasks"
+            onClick={() => onNavigate('data-room')}
+            title="PNTHR Data Room — Fund Documents"
           >
-            <span style={{ fontSize: 14 }}>🛡️</span>
-            <span>Compliance</span>
+            <span style={{ fontSize: 14 }}>🗄️</span>
+            <span>PNTHR Data Room</span>
           </button>
-        )}
-      </div>
+          {isAdmin && (
+            <button
+              className={styles.dataRoomBtn}
+              onClick={() => onNavigate('compliance')}
+              title="PNTHR Compliance — Documents, Calendar & Tasks"
+            >
+              <span style={{ fontSize: 14 }}>🛡️</span>
+              <span>Compliance</span>
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              className={styles.dataRoomBtn}
+              onClick={() => onNavigate('investor-mgmt')}
+              title="PNTHR Investor Portal — Manage Accounts & Analytics"
+            >
+              <span style={{ fontSize: 14 }}>👥</span>
+              <span>Investor Portal</span>
+            </button>
+          )}
+        </div>
+      )}
+      {/* Investor portal: show Data Room button */}
+      {isInvestorPortal && (
+        <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <button
+            className={styles.dataRoomBtn}
+            onClick={() => onNavigate('data-room')}
+            title="PNTHR Data Room — Fund Documents"
+          >
+            <span style={{ fontSize: 14 }}>🗄️</span>
+            <span>PNTHR Data Room</span>
+          </button>
+        </div>
+      )}
 
       {/* Fixed tooltip rendered outside sidebar overflow */}
       {tooltipKey && (
@@ -206,7 +248,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
             <button className={styles.logoutBtn} onClick={onLogout} title="Sign out">Sign out</button>
           </div>
         )}
-        {isAdmin && (
+        {isAdmin && !isPortalMode && (
           <div
             onClick={toggleDemo}
             title={isDemo ? 'Demo mode active' : ''}

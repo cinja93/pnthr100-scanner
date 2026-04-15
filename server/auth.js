@@ -48,6 +48,13 @@ export function authenticateJWT(req, res, next) {
   }
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+
+    // Investor tokens carry source: 'den_investors' — keep role as 'investor', skip ADMIN_EMAILS
+    if (payload.source === 'den_investors') {
+      req.user = { userId: payload.userId, email: payload.email, role: 'investor', isInvestor: true };
+      return next();
+    }
+
     // Always re-resolve role from ADMIN_EMAILS so promotions/demotions take effect
     // on the next request without requiring re-login
     const role = resolveRole(payload.email);

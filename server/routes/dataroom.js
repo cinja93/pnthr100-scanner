@@ -142,8 +142,9 @@ router.get('/:id/view', async (req, res) => {
     const doc = await db.collection(COLLECTION).findOne({ _id: new ObjectId(req.params.id) });
     if (!doc) return res.status(404).json({ error: 'Document not found' });
 
-    // Log view for investors (non-blocking)
-    if (isInvestor) {
+    // Log view for investors and track in event log (non-blocking)
+    const investorDetected = isInvestor || user?.role === 'investor' || user?.isInvestor;
+    if (investorDetected) {
       (async () => {
         try {
           const inv = await db.collection('den_investors').findOne({ _id: new ObjectId(user.userId) }, { projection: { name: 1 } });
@@ -156,7 +157,8 @@ router.get('/:id/view', async (req, res) => {
             section: doc.section || DEFAULT_SECTION,
             viewedAt: new Date(),
           });
-        } catch { /* non-blocking */ }
+          console.log(`[DataRoom] Logged view: ${user.email} → ${doc.label || doc.filename}`);
+        } catch (err) { console.error('[DataRoom] View log error:', err.message); }
       })();
     }
 

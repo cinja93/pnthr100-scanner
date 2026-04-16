@@ -45,6 +45,10 @@ export default function DataRoomPage() {
     if (!grouped[sec]) grouped[sec] = [];
     grouped[sec].push(doc);
   });
+  // Sort docs within each section by sortOrder (then uploadedAt as fallback)
+  Object.values(grouped).forEach(arr => {
+    arr.sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999));
+  });
   // Also include empty sections from the sections list
   sections.forEach(sec => {
     if (!grouped[sec]) grouped[sec] = [];

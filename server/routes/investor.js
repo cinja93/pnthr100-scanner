@@ -19,6 +19,10 @@ import {
   logEvent,
   getInvestorActivity,
   getAnalyticsSummary,
+  addNote,
+  getNotes,
+  updateNote,
+  deleteNote,
 } from '../investorService.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -127,6 +131,50 @@ investorAdminRouter.get('/:id/activity', async (req, res) => {
   try {
     const activity = await getInvestorActivity(req.params.id);
     res.json(activity);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/investors/:id/notes — get all notes for an investor
+investorAdminRouter.get('/:id/notes', async (req, res) => {
+  try {
+    const notes = await getNotes(req.params.id);
+    res.json(notes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/investors/:id/notes — add a note
+investorAdminRouter.post('/:id/notes', async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text?.trim()) return res.status(400).json({ error: 'Note text required' });
+    const note = await addNote(req.params.id, text.trim(), req.user.email);
+    res.json(note);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/investors/notes/:noteId — edit a note
+investorAdminRouter.patch('/notes/:noteId', async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text?.trim()) return res.status(400).json({ error: 'Note text required' });
+    await updateNote(req.params.noteId, text.trim());
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/investors/notes/:noteId — delete a note
+investorAdminRouter.delete('/notes/:noteId', async (req, res) => {
+  try {
+    await deleteNote(req.params.noteId);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

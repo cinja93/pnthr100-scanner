@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchInvestors, createInvestor, updateInvestorApi, deleteInvestorApi, fetchInvestorAnalytics, fetchInvestorActivityLog } from '../services/api';
+import { fetchInvestors, createInvestor, updateInvestorApi, deleteInvestorApi, fetchInvestorAnalytics, fetchInvestorActivityLog, fetchInvestorNotes, addInvestorNote, editInvestorNote, deleteInvestorNote } from '../services/api';
 
 const TIER_COLORS = { Ready: '#28a745', Hot: '#dc3545', Warm: '#f9a825', Cold: '#666' };
 
@@ -124,61 +124,15 @@ export default function InvestorManagementPage() {
             </div>
           )}
           {investors.map(inv => (
-            <div key={inv._id} style={{
-              background: '#141414', border: '1px solid #222', borderRadius: 8,
-              padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16,
-            }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{inv.name}</span>
-                  <button
-                    onClick={() => setResetTarget({ id: inv._id, name: inv.name, currentEmail: inv.email, type: 'email' })}
-                    style={{ background: 'none', border: '1px solid #333', color: '#888', borderRadius: 4, padding: '2px 8px', fontSize: 9, cursor: 'pointer', letterSpacing: '0.04em' }}
-                  >
-                    RESET EMAIL
-                  </button>
-                  <button
-                    onClick={() => setResetTarget({ id: inv._id, name: inv.name, type: 'password' })}
-                    style={{ background: 'none', border: '1px solid #333', color: '#888', borderRadius: 4, padding: '2px 8px', fontSize: 9, cursor: 'pointer', letterSpacing: '0.04em' }}
-                  >
-                    RESET PASSWORD
-                  </button>
-                </div>
-                <div style={{ fontSize: 11, color: '#888' }}>{inv.email} {inv.company ? `- ${inv.company}` : ''}</div>
-              </div>
-              <div style={{ fontSize: 11, color: '#666', minWidth: 100, textAlign: 'center' }}>
-                Created {formatDate(inv.createdAt)}
-              </div>
-              <div style={{ fontSize: 11, color: '#666', minWidth: 100, textAlign: 'center' }}>
-                Last login: {formatDate(inv.lastLoginAt)}
-              </div>
-              <span style={{
-                fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 4,
-                background: inv.status === 'active' ? 'rgba(40,167,69,0.15)' : 'rgba(220,53,69,0.15)',
-                color: inv.status === 'active' ? '#28a745' : '#dc3545',
-                letterSpacing: '0.05em',
-              }}>
-                {inv.status?.toUpperCase()}
-              </span>
-              <button
-                onClick={() => loadActivity(inv._id)}
-                style={{ background: 'none', border: '1px solid #333', color: '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer' }}
-              >
-                ACTIVITY
-              </button>
-              <button
-                onClick={() => handleToggleStatus(inv._id, inv.status)}
-                style={{ background: 'none', border: '1px solid #333', color: '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer' }}
-              >
-                {inv.status === 'active' ? 'DISABLE' : 'ENABLE'}
-              </button>
-              <button
-                onClick={() => handleDelete(inv._id, inv.name)}
-                style={{ background: 'none', border: '1px solid #dc3545', color: '#dc3545', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer' }}
-              >
-                DELETE
-              </button>
-            </div>
+            <InvestorCard
+              key={inv._id}
+              inv={inv}
+              onResetEmail={() => setResetTarget({ id: inv._id, name: inv.name, currentEmail: inv.email, type: 'email' })}
+              onResetPassword={() => setResetTarget({ id: inv._id, name: inv.name, type: 'password' })}
+              onActivity={() => loadActivity(inv._id)}
+              onToggleStatus={() => handleToggleStatus(inv._id, inv.status)}
+              onDelete={() => handleDelete(inv._id, inv.name)}
+            />
           ))}
         </div>
       )}
@@ -304,6 +258,213 @@ export default function InvestorManagementPage() {
 
       {/* ── Create Investor Modal ── */}
       {showCreate && <CreateInvestorModal onClose={() => setShowCreate(false)} onCreated={loadData} />}
+    </div>
+  );
+}
+
+function InvestorCard({ inv, onResetEmail, onResetPassword, onActivity, onToggleStatus, onDelete }) {
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [notes, setNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [newNote, setNewNote] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function loadNotes() {
+    setNotesLoading(true);
+    try {
+      const data = await fetchInvestorNotes(inv._id);
+      setNotes(data);
+    } catch { setNotes([]); }
+    finally { setNotesLoading(false); }
+  }
+
+  function handleToggleNotes() {
+    if (!notesOpen) loadNotes();
+    setNotesOpen(v => !v);
+  }
+
+  async function handleAddNote() {
+    if (!newNote.trim()) return;
+    setSaving(true);
+    try {
+      const note = await addInvestorNote(inv._id, newNote.trim());
+      setNotes(prev => [note, ...prev]);
+      setNewNote('');
+    } catch (err) { alert('Failed to add note: ' + err.message); }
+    finally { setSaving(false); }
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleAddNote();
+    }
+  }
+
+  async function handleSaveEdit(noteId) {
+    if (!editText.trim()) return;
+    try {
+      await editInvestorNote(noteId, editText.trim());
+      setNotes(prev => prev.map(n => n._id === noteId ? { ...n, text: editText.trim(), updatedAt: new Date().toISOString() } : n));
+      setEditingId(null);
+      setEditText('');
+    } catch (err) { alert('Failed to edit note: ' + err.message); }
+  }
+
+  async function handleDeleteNote(noteId) {
+    if (!confirm('Delete this note?')) return;
+    try {
+      await deleteInvestorNote(noteId);
+      setNotes(prev => prev.filter(n => n._id !== noteId));
+    } catch (err) { alert('Failed to delete note: ' + err.message); }
+  }
+
+  return (
+    <div style={{ background: '#141414', border: '1px solid #222', borderRadius: 8, overflow: 'hidden' }}>
+      {/* ── Header row ── */}
+      <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{inv.name}</span>
+            <button onClick={onResetEmail}
+              style={{ background: 'none', border: '1px solid #333', color: '#888', borderRadius: 4, padding: '2px 8px', fontSize: 9, cursor: 'pointer', letterSpacing: '0.04em' }}>
+              RESET EMAIL
+            </button>
+            <button onClick={onResetPassword}
+              style={{ background: 'none', border: '1px solid #333', color: '#888', borderRadius: 4, padding: '2px 8px', fontSize: 9, cursor: 'pointer', letterSpacing: '0.04em' }}>
+              RESET PASSWORD
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: '#888' }}>{inv.email} {inv.company ? `- ${inv.company}` : ''}</div>
+        </div>
+        <div style={{ fontSize: 11, color: '#666', minWidth: 100, textAlign: 'center' }}>
+          Created {formatDate(inv.createdAt)}
+        </div>
+        <div style={{ fontSize: 11, color: '#666', minWidth: 100, textAlign: 'center' }}>
+          Last login: {formatDate(inv.lastLoginAt)}
+        </div>
+        <span style={{
+          fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 4,
+          background: inv.status === 'active' ? 'rgba(40,167,69,0.15)' : 'rgba(220,53,69,0.15)',
+          color: inv.status === 'active' ? '#28a745' : '#dc3545',
+          letterSpacing: '0.05em',
+        }}>
+          {inv.status?.toUpperCase()}
+        </span>
+        <button onClick={handleToggleNotes}
+          style={{ background: notesOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: notesOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: notesOpen ? 700 : 400 }}>
+          NOTES {notes.length > 0 ? `(${notes.length})` : ''}
+        </button>
+        <button onClick={onActivity}
+          style={{ background: 'none', border: '1px solid #333', color: '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer' }}>
+          ACTIVITY
+        </button>
+        <button onClick={onToggleStatus}
+          style={{ background: 'none', border: '1px solid #333', color: '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer' }}>
+          {inv.status === 'active' ? 'DISABLE' : 'ENABLE'}
+        </button>
+        <button onClick={onDelete}
+          style={{ background: 'none', border: '1px solid #dc3545', color: '#dc3545', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer' }}>
+          DELETE
+        </button>
+      </div>
+
+      {/* ── Notes section ── */}
+      {notesOpen && (
+        <div style={{ borderTop: '1px solid #222', padding: '12px 18px', background: '#0f0f0f' }}>
+          {/* Add note input */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: notes.length > 0 ? 12 : 0 }}>
+            <textarea
+              value={newNote}
+              onChange={e => setNewNote(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type a note and press Enter..."
+              rows={2}
+              style={{
+                flex: 1, padding: '8px 12px', background: '#1a1a1a', border: '1px solid #333',
+                borderRadius: 6, fontSize: 12, color: '#fff', outline: 'none', resize: 'vertical',
+                fontFamily: 'inherit', lineHeight: 1.5,
+              }}
+            />
+            <button
+              onClick={handleAddNote}
+              disabled={saving || !newNote.trim()}
+              style={{
+                padding: '8px 14px', background: '#FCF000', color: '#000', fontWeight: 700,
+                fontSize: 11, border: 'none', borderRadius: 6, cursor: 'pointer',
+                opacity: saving || !newNote.trim() ? 0.4 : 1, alignSelf: 'flex-end',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              + ADD NOTE
+            </button>
+          </div>
+
+          {notesLoading && <div style={{ color: '#666', fontSize: 11 }}>Loading notes...</div>}
+
+          {/* Notes list */}
+          {notes.map(note => (
+            <div key={note._id} style={{
+              padding: '8px 0', borderBottom: '1px solid #1a1a1a',
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+            }}>
+              <div style={{ minWidth: 120, flexShrink: 0 }}>
+                <div style={{ fontSize: 10, color: '#555' }}>{formatDateTime(note.createdAt)}</div>
+                {note.updatedAt && note.updatedAt !== note.createdAt && (
+                  <div style={{ fontSize: 9, color: '#444', fontStyle: 'italic' }}>edited {formatDateTime(note.updatedAt)}</div>
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                {editingId === note._id ? (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <textarea
+                      value={editText}
+                      onChange={e => setEditText(e.target.value)}
+                      rows={2}
+                      autoFocus
+                      style={{
+                        flex: 1, padding: '6px 10px', background: '#1a1a1a', border: '1px solid #444',
+                        borderRadius: 4, fontSize: 12, color: '#fff', outline: 'none', resize: 'vertical',
+                        fontFamily: 'inherit', lineHeight: 1.5,
+                      }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <button onClick={() => handleSaveEdit(note._id)}
+                        style={{ background: '#FCF000', color: '#000', border: 'none', borderRadius: 4, padding: '4px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                        SAVE
+                      </button>
+                      <button onClick={() => { setEditingId(null); setEditText(''); }}
+                        style={{ background: 'none', border: '1px solid #333', color: '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer' }}>
+                        CANCEL
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{note.text}</div>
+                )}
+              </div>
+              {editingId !== note._id && (
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <button onClick={() => { setEditingId(note._id); setEditText(note.text); }}
+                    style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 10, padding: '2px 6px' }}>
+                    EDIT
+                  </button>
+                  <button onClick={() => handleDeleteNote(note._id)}
+                    style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 10, padding: '2px 6px' }}>
+                    DELETE
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {!notesLoading && notes.length === 0 && (
+            <div style={{ color: '#555', fontSize: 11, padding: '4px 0' }}>No notes yet.</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

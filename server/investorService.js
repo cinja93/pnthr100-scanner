@@ -192,3 +192,41 @@ export async function getAnalyticsSummary() {
 
   return { investors: enriched, topDocs, topPages };
 }
+
+// ── Investor Notes (admin CRM) ─────────────────────────────────────────────
+
+const NOTES = 'den_investor_notes';
+
+export async function addNote(investorId, text, authorEmail) {
+  const db = await connectToDatabase();
+  const note = {
+    investorId: new ObjectId(investorId),
+    text,
+    authorEmail,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const result = await db.collection(NOTES).insertOne(note);
+  return { ...note, _id: result.insertedId };
+}
+
+export async function getNotes(investorId) {
+  const db = await connectToDatabase();
+  return db.collection(NOTES)
+    .find({ investorId: new ObjectId(investorId) })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
+export async function updateNote(noteId, text) {
+  const db = await connectToDatabase();
+  await db.collection(NOTES).updateOne(
+    { _id: new ObjectId(noteId) },
+    { $set: { text, updatedAt: new Date() } }
+  );
+}
+
+export async function deleteNote(noteId) {
+  const db = await connectToDatabase();
+  await db.collection(NOTES).deleteOne({ _id: new ObjectId(noteId) });
+}

@@ -804,6 +804,42 @@ export async function fetchInvestorAnalytics() {
   return res.json();
 }
 
+// Admin: investor notes
+export async function fetchInvestorNotes(id) {
+  const res = await apiFetch(`${API_BASE}/api/investors/${id}/notes`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function addInvestorNote(id, text) {
+  const res = await apiFetch(`${API_BASE}/api/investors/${id}/notes`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function editInvestorNote(noteId, text) {
+  const res = await apiFetch(`${API_BASE}/api/investors/notes/${noteId}`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function deleteInvestorNote(noteId) {
+  const res = await apiFetch(`${API_BASE}/api/investors/notes/${noteId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 // Admin: investor activity log
 export async function fetchInvestorActivityLog(id) {
   const res = await apiFetch(`${API_BASE}/api/investors/${id}/activity`, { headers: authHeaders() });

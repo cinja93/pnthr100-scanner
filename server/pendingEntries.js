@@ -26,6 +26,13 @@ const FMP_BASE    = 'https://financialmodelingprep.com';
 
 export async function navGet(req, res) {
   try {
+    // Investors: read investmentAmount from den_investors collection
+    if (req.user.source === 'den_investors') {
+      const { ObjectId } = await import('mongodb');
+      const db = await connectToDatabase();
+      const inv = await db.collection('den_investors').findOne({ _id: new ObjectId(req.user.userId) });
+      return res.json({ nav: inv?.investmentAmount ?? 100000 });
+    }
     const profile = await getUserProfile(req.user.userId);
     res.json({ nav: profile?.accountSize ?? 100000, ibkrLastSync: profile?.ibkrLastSync ?? null, liveFundNav: profile?.liveFundNav ?? null, liveFundStartDate: profile?.liveFundStartDate ?? null });
   } catch (err) {

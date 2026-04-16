@@ -51,7 +51,7 @@ export function authenticateJWT(req, res, next) {
 
     // Investor tokens carry source: 'den_investors' — keep role as 'investor', skip ADMIN_EMAILS
     if (payload.source === 'den_investors') {
-      req.user = { userId: payload.userId, email: payload.email, role: 'investor', isInvestor: true };
+      req.user = { userId: payload.userId, email: payload.email, role: 'investor', isInvestor: true, source: 'den_investors' };
       return next();
     }
 

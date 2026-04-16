@@ -22,18 +22,12 @@ export default function InvestorWelcomeModal({ loginCount, maxLogins, onClose })
           fontSize: 13, color: '#aaa', lineHeight: 1.7, margin: '16px 0 0',
           textAlign: 'left',
         }}>
-          You've been granted exclusive access to a preview of the <strong style={{ color: '#fff' }}>PNTHR's Den</strong> — the
-          proprietary platform powering Carnivore Quant LP's investment process.
-        </p>
-
-        <p style={{
-          fontSize: 13, color: '#aaa', lineHeight: 1.7, margin: '14px 0 0',
-          textAlign: 'left',
-        }}>
-          What you're seeing is a curated selection of the tools and analytics our team uses daily
-          to identify, score, and size opportunities across the market. The full internal platform
-          includes additional dimensions of analysis, risk management systems, and execution
-          infrastructure not available in this preview.
+          You've been granted exclusive access to a preview of the <strong style={{ color: '#fff' }}>PNTHR's Den</strong>.
+          This is a version of the proprietary platform powering PNTHR Fund's, Carnivore Quant Fund LP's
+          investment process. What you're seeing is a curated selection of the tools and analytics our team
+          uses daily to identify, score, and size opportunities across the market. The full internal platform
+          includes a significant number of additional dimensions of analysis, risk management systems, and
+          execution infrastructure not available in this preview.
         </p>
 
         {/* Session counter */}

@@ -154,7 +154,7 @@ export default function PulsePage({ onNavigate }) {
       />
 
       {/* ROW 1: Equity markets + VIX */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'nowrap', alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <SpyGauge regime={data.regime} onClick={() => { setChartList([{ ticker: 'SPY' }]); setChartIndex(0); }} />
         <QqqGauge regime={data.regime} onClick={() => { setChartList([{ ticker: 'QQQ' }]); setChartIndex(0); }} />
         <MarketGauge label="NYSE" subLabel="Composite" data={data.marketGauges?.nyse} onClick={() => { setChartList([{ ticker: '^NYA' }]); setChartIndex(0); }} />
@@ -164,14 +164,14 @@ export default function PulsePage({ onNavigate }) {
         <VixThermometer vix={vix} onClick={() => { setChartList([{ ticker: '^VIX' }]); setChartIndex(0); }} />
       </div>
       {/* ROW 2: Commodities & Currency */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'nowrap', alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} onClick={() => { setChartList([{ ticker: 'GLD' }]); setChartIndex(0); }} />
         <MarketGauge label={data.marketGauges?.crude?.symbol === 'USO' ? 'USO' : 'WTI'} subLabel="Crude Oil" data={data.marketGauges?.crude} onClick={() => { setChartList([{ ticker: data.marketGauges?.crude?.symbol || 'USO' }]); setChartIndex(0); }} />
         <MarketGauge label="USD" subLabel="Dollar Index" data={data.marketGauges?.usd} isIndex={true} onClick={() => { setChartList([{ ticker: 'UUP' }]); setChartIndex(0); }} />
         <MarketGauge label="BTC" subLabel="Bitcoin" data={data.marketGauges?.btc} isBtc={true} onClick={() => { setChartList([{ ticker: 'BTCUSD' }]); setChartIndex(0); }} />
       </div>
       {/* ROW 3: Interest rates */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'nowrap', alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <YieldGauge label="FED" subLabel="Fed Rate (1mo)" data={data.treasuryYields?.fed} />
         <YieldGauge label="2Y" subLabel="2-Year Yield" data={data.treasuryYields?.y2} />
         <YieldGauge label="10Y" subLabel="10-Year Yield" data={data.treasuryYields?.y10} />

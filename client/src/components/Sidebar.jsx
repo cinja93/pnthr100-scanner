@@ -87,6 +87,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   const { allowedPages, isDenPortal, isInvestorPortal } = usePortal();
   const [tooltipKey, setTooltipKey] = useState(null);
   const [tooltipTop, setTooltipTop] = useState(0);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const btnRefs = useRef({});
 
   const firstName = getFirstName(currentUser);
@@ -129,8 +130,25 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
   const activeTooltipStats = tooltipKey === 'long' ? longStats : tooltipKey === 'short' ? shortStats : null;
 
+  // Close sidebar when navigating on tablet/mobile
+  function handleNav(page) {
+    setMobileOpen(false);
+    onNavigate(page);
+  }
+
   return (
-    <aside className={styles.sidebar} style={isDemo ? { borderTop: '2px solid #fcf000' } : undefined}>
+    <>
+      {/* Hamburger toggle — only visible on tablet/mobile via CSS */}
+      <button
+        className={styles.hamburger}
+        onClick={() => setMobileOpen(v => !v)}
+        aria-label="Toggle menu"
+      >
+        {mobileOpen ? '✕' : '☰'}
+      </button>
+      {/* Overlay — click to close on tablet */}
+      {mobileOpen && <div className={styles.mobileOverlay} onClick={() => setMobileOpen(false)} />}
+    <aside className={`${styles.sidebar} ${mobileOpen ? styles.sidebarOpen : ''}`} style={isDemo ? { borderTop: '2px solid #fcf000' } : undefined}>
       {/* Logo + branding */}
       <div className={styles.logoArea}>
         <img src={pnthrLogo} alt="PNTHR" className={styles.logo} />
@@ -158,7 +176,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                   key={item.key}
                   ref={el => { if (el) btnRefs.current[item.key] = el; }}
                   className={`${styles.navItem} ${activePage === item.key ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
-                  onClick={() => !item.soon && onNavigate(item.key)}
+                  onClick={() => !item.soon && handleNav(item.key)}
                   disabled={item.soon}
                   title={item.soon ? 'Coming soon' : item.label}
                   onMouseEnter={() => handleMouseEnter(item.key)}
@@ -191,7 +209,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           </button>
           <button
             className={styles.dataRoomBtn}
-            onClick={() => onNavigate('data-room')}
+            onClick={() => handleNav('data-room')}
             title="PNTHR Data Room — Fund Documents"
           >
             <span style={{ fontSize: 14 }}>🗄️</span>
@@ -200,7 +218,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           {isAdmin && (
             <button
               className={styles.dataRoomBtn}
-              onClick={() => onNavigate('compliance')}
+              onClick={() => handleNav('compliance')}
               title="PNTHR Compliance — Documents, Calendar & Tasks"
             >
               <span style={{ fontSize: 14 }}>🛡️</span>
@@ -210,7 +228,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           {isAdmin && (
             <button
               className={styles.dataRoomBtn}
-              onClick={() => onNavigate('investor-mgmt')}
+              onClick={() => handleNav('investor-mgmt')}
               title="PNTHR Investor Portal — Manage Accounts & Analytics"
             >
               <span style={{ fontSize: 14 }}>👥</span>
@@ -224,7 +242,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <button
             className={styles.dataRoomBtn}
-            onClick={() => onNavigate('data-room')}
+            onClick={() => handleNav('data-room')}
             title="PNTHR Data Room — Fund Documents"
           >
             <span style={{ fontSize: 14 }}>🗄️</span>
@@ -273,5 +291,6 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         <p className={styles.loveText}>Built with love by Cindy and Blazer</p>
       </div>
     </aside>
+    </>
   );
 }

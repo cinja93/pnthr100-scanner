@@ -299,3 +299,60 @@
   font-style: italic;
   line-height: 1.4;
 }
+
+/* ── Hamburger toggle — hidden on desktop ─────────────────────────── */
+.hamburger {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 201;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #111;
+  border: 1px solid #333;
+  color: #fcf000;
+  font-size: 20px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobileOverlay {
+  display: none;
+}
+
+/* ── Tablet / iPad responsive (≤1024px) ───────────────────────────── */
+@media (max-width: 1024px) {
+  .hamburger {
+    display: flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: -240px;
+    top: 0;
+    width: 220px;
+    min-width: 220px;
+    height: 100vh;
+    z-index: 200;
+    transition: left 0.25s ease;
+  }
+
+  .sidebarOpen {
+    left: 0;
+  }
+
+  .mobileOverlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 199;
+  }
+
+  .statsTooltip {
+    display: none;
+  }
+}

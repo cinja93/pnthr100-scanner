@@ -211,7 +211,19 @@ h1, h2, h3, h4, h5, h6,
 }
 
 
-/* Responsive design */
+/* Responsive design — tablet (iPad) */
+@media (max-width: 1024px) {
+  .app {
+    /* Sidebar is fixed/overlay on tablet, so content takes full width */
+    flex-direction: column;
+  }
+
+  .content-wrapper {
+    width: 100%;
+    padding-top: 56px; /* space for hamburger button */
+  }
+}
+
 @media (max-width: 768px) {
   .title {
     font-size: 24px;

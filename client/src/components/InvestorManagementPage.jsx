@@ -289,6 +289,7 @@ function CreateInvestorModal({ onClose, onCreated }) {
   const [email, setEmail] = useState('');
   const [company, setCompany] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -338,8 +339,15 @@ function CreateInvestorModal({ onClose, onCreated }) {
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: '#888' }}>
             PNTHR PORTAL PASSWORD
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} placeholder="Password you assign them"
-              style={{ padding: '9px 12px', background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, fontSize: 13, color: '#fff', outline: 'none' }} />
+            <div style={{ position: 'relative' }}>
+              <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} required minLength={8} placeholder="Password you assign them"
+                style={{ padding: '9px 12px', paddingRight: 40, background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, fontSize: 13, color: '#fff', outline: 'none', width: '100%', boxSizing: 'border-box' }} />
+              <button type="button" onClick={() => setShowPassword(v => !v)}
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 16, padding: '2px 4px' }}
+                title={showPassword ? 'Hide password' : 'Show password'}>
+                {showPassword ? '🙈' : '👁'}
+              </button>
+            </div>
           </label>
           {error && <p style={{ fontSize: 12, color: '#dc3545', margin: 0, padding: '6px 10px', background: 'rgba(220,53,69,0.1)', borderRadius: 4 }}>{error}</p>}
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>

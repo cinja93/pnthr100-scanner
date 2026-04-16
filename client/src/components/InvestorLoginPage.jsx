@@ -6,6 +6,7 @@ const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '')
 export default function InvestorLoginPage({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -84,24 +85,34 @@ export default function InvestorLoginPage({ onLogin }) {
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: '0.05em' }}>
             PASSWORD
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-              placeholder="Enter your password"
-              minLength={8}
-              style={{
-                padding: '11px 14px',
-                background: '#0a0a0a',
-                border: '1px solid #333',
-                borderRadius: 6,
-                fontSize: 14,
-                color: '#fff',
-                outline: 'none',
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                minLength={8}
+                style={{
+                  padding: '11px 14px',
+                  paddingRight: 44,
+                  background: '#0a0a0a',
+                  border: '1px solid #333',
+                  borderRadius: 6,
+                  fontSize: 14,
+                  color: '#fff',
+                  outline: 'none',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <button type="button" onClick={() => setShowPassword(v => !v)}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 16, padding: '2px 4px' }}
+                title={showPassword ? 'Hide password' : 'Show password'}>
+                {showPassword ? '🙈' : '👁'}
+              </button>
+            </div>
           </label>
 
           {error && (

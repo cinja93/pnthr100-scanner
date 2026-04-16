@@ -933,8 +933,8 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
             </div>
           </div>
           <div className={styles.headerActions}>
-            {/* ── Wash Rule Warning Badge ── */}
-            {washWarning && (() => {
+            {/* ── Wash Rule Warning Badge (hidden for investors) ── */}
+            {!isInvestor && washWarning && (() => {
               const ws = washWarning.washSale;
               if (ws?.triggered) {
                 return (
@@ -1107,7 +1107,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                       </div>
                       <ScoreLine label="Slope Strength"      comp={ar.components.slopeStrength}      max={5} />
                       <ScoreLine label="Sector Concentration" comp={ar.components.sectorConcentration} max={5} />
-                      <ScoreLine label="Wash Compliance"     comp={ar.components.washCompliance}     max={5} />
+                      {!isInvestor && <ScoreLine label="Wash Compliance"     comp={ar.components.washCompliance}     max={5} />}
                       <ScoreLine label="Volatility Context"  comp={ar.components.volatilityContext}  max={5} />
                       <ScoreLine label="Portfolio Fit"       comp={ar.components.portfolioFit}       max={5} />
                     </>

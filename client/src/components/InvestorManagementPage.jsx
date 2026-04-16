@@ -322,23 +322,23 @@ function CreateInvestorModal({ onClose, onCreated }) {
         </h3>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: '#888' }}>
-            NAME
-            <input type="text" value={name} onChange={e => setName(e.target.value)} required autoFocus
+            INVESTOR NAME
+            <input type="text" value={name} onChange={e => setName(e.target.value)} required autoFocus placeholder="Investor's full name"
               style={{ padding: '9px 12px', background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, fontSize: 13, color: '#fff', outline: 'none' }} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: '#888' }}>
             INVESTOR EMAIL
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="Investor's login email"
               style={{ padding: '9px 12px', background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, fontSize: 13, color: '#fff', outline: 'none' }} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: '#888' }}>
-            COMPANY
-            <input type="text" value={company} onChange={e => setCompany(e.target.value)}
+            INVESTOR COMPANY
+            <input type="text" value={company} onChange={e => setCompany(e.target.value)} placeholder="Investor's firm (optional)"
               style={{ padding: '9px 12px', background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, fontSize: 13, color: '#fff', outline: 'none' }} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: '#888' }}>
-            PASSWORD
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={8}
+            PNTHR PORTAL PASSWORD
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} placeholder="Password you assign them"
               style={{ padding: '9px 12px', background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, fontSize: 13, color: '#fff', outline: 'none' }} />
           </label>
           {error && <p style={{ fontSize: 12, color: '#dc3545', margin: 0, padding: '6px 10px', background: 'rgba(220,53,69,0.1)', borderRadius: 4 }}>{error}</p>}

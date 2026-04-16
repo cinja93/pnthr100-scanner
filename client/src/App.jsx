@@ -6,6 +6,7 @@ import { DemoProvider } from './contexts/DemoContext';
 import { PortalProvider, usePortal } from './contexts/PortalContext';
 import QueueReviewPanel from './components/QueueReviewPanel';
 import InvestorLoginPage from './components/InvestorLoginPage';
+import InvestmentAmountModal from './components/InvestmentAmountModal';
 import StockTable from './components/StockTable';
 import ChartModal from './components/ChartModal';
 import FilterBar from './components/FilterBar';
@@ -142,7 +143,11 @@ function AppAuth() {
     localStorage.setItem('pnthr_token', token);
     setAuthToken(token);
     setAuthTokenState(token);
-    setCurrentUser({ email, role, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long', name: profile?.name ?? null, company: profile?.company ?? null });
+    // For investors, use investmentAmount as accountSize
+    const acctSize = role === 'investor'
+      ? (profile?.investmentAmount ?? null)
+      : (profile?.accountSize ?? null);
+    setCurrentUser({ email, role, accountSize: acctSize, defaultPage: profile?.defaultPage ?? 'long', name: profile?.name ?? null, company: profile?.company ?? null, investmentAmount: profile?.investmentAmount ?? null });
   }
 
   function handleLogout() {
@@ -168,11 +173,23 @@ function AppAuth() {
 
   const isAdmin = currentUser?.role === 'admin';
   const isInvestor = currentUser?.role === 'investor';
+  const needsAmountSelection = isInvestor && !currentUser?.investmentAmount;
+
+  function handleAmountSaved(amount) {
+    setCurrentUser(prev => ({ ...prev, investmentAmount: amount, accountSize: amount }));
+  }
+
   return (
     <AuthContext.Provider value={{ currentUser, isAdmin, isInvestor, portalMode, updateCurrentUser }}>
       <DemoProvider>
         <AnalyzeProvider>
           <QueueProvider>
+            {needsAmountSelection && (
+              <InvestmentAmountModal
+                currentAmount={currentUser?.investmentAmount}
+                onSaved={handleAmountSaved}
+              />
+            )}
             <AppInner currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />
           </QueueProvider>
         </AnalyzeProvider>
@@ -547,6 +564,7 @@ function EmaAlertBanner({ alert: a, onDismiss }) {
 function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const { isAuthenticated, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
   const isAdmin = currentUser?.role === 'admin';
+  const isInvestor = currentUser?.role === 'investor';
   const [lotAlerts,         setLotAlerts]         = useState([]);
   const [positions,         setPositions]         = useState([]); // full positions for EMA alerts
   const [commandRefreshKey, setCommandRefreshKey] = useState(0);  // increments to trigger Command refetch
@@ -1309,8 +1327,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         />
       )}
 
-      {/* Floating queue counter — visible on all pages */}
-      {isAuthenticated && queueSize > 0 && !showQueuePanel && (
+      {/* Floating queue counter — visible on all pages (hidden for investors) */}
+      {isAuthenticated && !isInvestor && queueSize > 0 && !showQueuePanel && (
         <div
           onClick={() => setShowQueuePanel(true)}
           style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 200,
@@ -1322,8 +1340,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         </div>
       )}
 
-      {/* Send success toast */}
-      {sendSuccess && (
+      {/* Send success toast (hidden for investors) */}
+      {!isInvestor && sendSuccess && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 200,
           background: '#28a745', color: '#fff', fontWeight: 700, fontSize: 12,
           padding: '10px 18px', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}>
@@ -1331,8 +1349,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         </div>
       )}
 
-      {/* Queue review panel */}
-      {showQueuePanel && isAuthenticated && (
+      {/* Queue review panel (hidden for investors) */}
+      {showQueuePanel && isAuthenticated && !isInvestor && (
         <QueueReviewPanel onClose={() => setShowQueuePanel(false)} />
       )}
     </div>

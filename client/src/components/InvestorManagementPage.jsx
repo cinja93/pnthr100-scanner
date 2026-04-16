@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchInvestors, createInvestor, updateInvestorApi, deleteInvestorApi, fetchInvestorAnalytics, fetchInvestorActivityLog, fetchInvestorNotes, addInvestorNote, editInvestorNote, deleteInvestorNote } from '../services/api';
+import { fetchInvestors, createInvestor, updateInvestorApi, deleteInvestorApi, fetchInvestorAnalytics, fetchInvestorActivityLog, fetchInvestorNotes, addInvestorNote, editInvestorNote, deleteInvestorNote, resetInvestorLogins } from '../services/api';
 
 const TIER_COLORS = { Ready: '#28a745', Hot: '#dc3545', Warm: '#f9a825', Cold: '#666' };
 
@@ -129,6 +129,12 @@ export default function InvestorManagementPage() {
               inv={inv}
               onResetEmail={() => setResetTarget({ id: inv._id, name: inv.name, currentEmail: inv.email, type: 'email' })}
               onResetPassword={() => setResetTarget({ id: inv._id, name: inv.name, type: 'password' })}
+              onResetAccess={async () => {
+                try {
+                  await resetInvestorLogins(inv._id);
+                  loadData();
+                } catch (err) { alert('Failed to reset access: ' + err.message); }
+              }}
               onActivity={() => loadActivity(inv._id)}
               onToggleStatus={() => handleToggleStatus(inv._id, inv.status)}
               onDelete={() => handleDelete(inv._id, inv.name)}
@@ -262,7 +268,7 @@ export default function InvestorManagementPage() {
   );
 }
 
-function InvestorCard({ inv, onResetEmail, onResetPassword, onActivity, onToggleStatus, onDelete }) {
+function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onActivity, onToggleStatus, onDelete }) {
   const [notesOpen, setNotesOpen] = useState(false);
   const [notes, setNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
@@ -344,6 +350,20 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onActivity, onToggle
         </div>
         <div style={{ fontSize: 11, color: '#666', minWidth: 100, textAlign: 'center' }}>
           Last login: {formatDate(inv.lastLoginAt)}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 120, justifyContent: 'center' }}>
+          <span style={{
+            fontSize: 10, fontWeight: 700,
+            color: (inv.loginCount || 0) >= (inv.maxLogins || 5) ? '#dc3545' : '#888',
+          }}>
+            {inv.loginCount || 0}/{inv.maxLogins || 5} logins
+          </span>
+          {(inv.loginCount || 0) >= (inv.maxLogins || 5) && (
+            <button onClick={onResetAccess}
+              style={{ background: 'rgba(252,240,0,0.1)', border: '1px solid #FCF000', color: '#FCF000', borderRadius: 4, padding: '2px 8px', fontSize: 9, cursor: 'pointer', fontWeight: 700, letterSpacing: '0.04em' }}>
+              RESET ACCESS
+            </button>
+          )}
         </div>
         <span style={{
           fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 4,

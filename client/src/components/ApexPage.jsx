@@ -246,7 +246,7 @@ const UI_DEFS = {
 };
 
 export default function ApexPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isInvestor } = useAuth();
   const { queue, toggleQueue, queuedTickers } = useQueue();
   const { analyzeContext } = useAnalyzeContext() || {};
   const [data, setData]             = useState(null);
@@ -458,6 +458,16 @@ export default function ApexPage() {
 
       {!loading && !error && data && (
         <>
+          {/* ── Investor disclaimer banner ───────────────────────────────────── */}
+          {isInvestor && (
+            <div style={{
+              background: '#111', border: '1px solid #222', borderRadius: 6,
+              padding: '8px 14px', marginBottom: 10, fontSize: 10, color: '#666', lineHeight: 1.6,
+            }}>
+              <strong style={{ color: '#888' }}>DISCLAIMER:</strong> Scores and rankings shown are proprietary analytical tools used by PNTHR Funds. They do not constitute investment advice, a recommendation, or an offer to invest. Position sizes reflect your selected simulation amount and are hypothetical. Past performance is not indicative of future results.
+            </div>
+          )}
+
           {/* ── Context Banner: SPY + QQQ ────────────────────────────────────── */}
           <div className={styles.contextBanner}>
             <span className={styles.contextLabel}>SPY:</span>
@@ -611,7 +621,7 @@ export default function ApexPage() {
                     <SortTh col="wks"       label={<>Wks<br/>Since</>}   title="Sort by Weeks Since Signal" />
                     <SortTh col="analyzeScore" label={<>Ana&shy;lyze</>}  title="Sort by Analyze pre-trade score" />
                     <SortTh col="composite"    label={<>Com&shy;posite</>} title="Sort by Composite (Kill × Analyze%)" />
-                    <th className={`${styles.thStatic} ${styles.thDetail}`} style={{ textAlign: 'center' }}>Score<br/>Detail</th>
+                    {!isInvestor && <th className={`${styles.thStatic} ${styles.thDetail}`} style={{ textAlign: 'center' }}>Score<br/>Detail</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -689,7 +699,7 @@ export default function ApexPage() {
                               </span>
                             )}
                             <span className={styles.tickerText}>{stock.ticker}</span>
-                            {queuedTickers.has(stock.ticker) && (
+                            {!isInvestor && queuedTickers.has(stock.ticker) && (
                               <span style={{ fontSize: 9, fontWeight: 800, background: '#FFD700', color: '#000',
                                 padding: '1px 5px', borderRadius: 3, letterSpacing: '0.04em' }}>QUEUED</span>
                             )}
@@ -753,18 +763,20 @@ export default function ApexPage() {
                           {stock.composite != null ? stock.composite : '—'}
                         </td>
 
-                        {/* Score Detail hover */}
-                        <td
-                          className={styles.detailCell}
-                          onMouseEnter={(e) => {
-                            if (!stock.scores) return;
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            setPopup({ ticker: stock.ticker, apexScore: stock.apexScore, scores: stock.scores, preMultiplier: stock.preMultiplier, x: rect.left, y: rect.bottom + 4 });
-                          }}
-                          onMouseLeave={() => setPopup(null)}
-                        >
-                          <span className={styles.detailIcon}>📊</span>
-                        </td>
+                        {/* Score Detail hover — hidden for investors */}
+                        {!isInvestor && (
+                          <td
+                            className={styles.detailCell}
+                            onMouseEnter={(e) => {
+                              if (!stock.scores) return;
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setPopup({ ticker: stock.ticker, apexScore: stock.apexScore, scores: stock.scores, preMultiplier: stock.preMultiplier, x: rect.left, y: rect.bottom + 4 });
+                            }}
+                            onMouseLeave={() => setPopup(null)}
+                          >
+                            <span className={styles.detailIcon}>📊</span>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -775,8 +787,8 @@ export default function ApexPage() {
         </>
       )}
 
-      {/* ── Score Breakdown Popup (fixed, avoids overflow clipping) ─────────── */}
-      {popup && (
+      {/* ── Score Breakdown Popup (fixed, avoids overflow clipping) — hidden for investors ── */}
+      {popup && !isInvestor && (
         <div
           className={styles.breakdownPopupFixed}
           style={{ left: Math.max(8, popup.x - 240), top: popup.y }}

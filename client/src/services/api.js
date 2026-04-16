@@ -854,6 +854,27 @@ export async function fetchInvestorProfile() {
   return res.json();
 }
 
+// Admin: reset investor login count
+export async function resetInvestorLogins(id) {
+  const res = await apiFetch(`${API_BASE}/api/investors/${id}/reset-logins`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Investor self-service: set investment amount
+export async function setInvestmentAmount(amount) {
+  const res = await apiFetch(`${API_BASE}/api/investor/investment-amount`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ amount }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 // Investor self-service: log an event
 export async function trackInvestorEvent(type, metadata = {}) {
   const res = await apiFetch(`${API_BASE}/api/investor/events`, {

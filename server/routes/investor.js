@@ -23,6 +23,7 @@ import {
   getNotes,
   updateNote,
   deleteNote,
+  resetLoginCount,
 } from '../investorService.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -50,7 +51,8 @@ investorAuthRouter.post('/login', async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     const investor = await authenticateInvestor(email, password);
-    if (!investor) return res.status(401).json({ error: 'Invalid credentials or account disabled' });
+    if (!investor) return res.status(401).json({ error: 'Invalid credentials' });
+    if (investor.locked) return res.status(403).json({ error: investor.reason });
 
     const token = generateInvestorToken(investor._id, investor.email);
 
@@ -65,6 +67,9 @@ investorAuthRouter.post('/login', async (req, res) => {
         name: investor.name,
         company: investor.company,
         email: investor.email,
+        investmentAmount: investor.investmentAmount || null,
+        loginCount: (investor.loginCount || 0) + 1, // already incremented
+        maxLogins: investor.maxLogins || 5,
       },
     });
   } catch (err) {
@@ -131,6 +136,16 @@ investorAdminRouter.get('/:id/activity', async (req, res) => {
   try {
     const activity = await getInvestorActivity(req.params.id);
     res.json(activity);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/investors/:id/reset-logins — reset login count to 0
+investorAdminRouter.post('/:id/reset-logins', async (req, res) => {
+  try {
+    await resetLoginCount(req.params.id);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -207,7 +222,37 @@ investorSelfRouter.get('/profile', async (req, res) => {
       email: investor.email,
       company: investor.company,
       role: 'investor',
+      investmentAmount: investor.investmentAmount || null,
+      loginCount: investor.loginCount || 0,
+      maxLogins: investor.maxLogins || 5,
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/investor/investment-amount — set/update investment amount + auto-note to admin
+investorSelfRouter.post('/investment-amount', async (req, res) => {
+  try {
+    if (req.user.role !== 'investor') return res.status(403).json({ error: 'Investor access only' });
+    const { amount } = req.body;
+    if (!amount || typeof amount !== 'number') return res.status(400).json({ error: 'Valid amount required' });
+
+    // Get current amount for change note
+    const investor = await findInvestorById(req.user.userId);
+    const prevAmount = investor?.investmentAmount;
+
+    // Update investor profile
+    await updateInvestor(req.user.userId, { investmentAmount: amount });
+
+    // Auto-note to admin
+    const fmt = (v) => '$' + v.toLocaleString();
+    const noteText = prevAmount
+      ? `Investor changed investment amount from ${fmt(prevAmount)} to ${fmt(amount)}`
+      : `Investor selected ${fmt(amount)} investment amount`;
+    await addNote(req.user.userId, noteText, 'system');
+
+    res.json({ success: true, investmentAmount: amount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

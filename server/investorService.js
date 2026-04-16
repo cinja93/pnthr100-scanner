@@ -38,6 +38,9 @@ export async function createInvestor({ name, email, company, password, dataroomS
     createdAt: new Date(),
     lastLoginAt: null,
     disabledAt: null,
+    loginCount: 0,
+    maxLogins: 5,
+    investmentAmount: null,
     dataroomSections: dataroomSections || [],
   };
   const result = await db.collection(INVESTORS).insertOne(doc);
@@ -73,6 +76,7 @@ export async function updateInvestor(id, updates) {
   if (updates.email !== undefined) allowed.email = updates.email;
   if (updates.company !== undefined) allowed.company = updates.company;
   if (updates.dataroomSections !== undefined) allowed.dataroomSections = updates.dataroomSections;
+  if (updates.investmentAmount !== undefined) allowed.investmentAmount = updates.investmentAmount;
   if (updates.password) allowed.hashedPassword = await hashPassword(updates.password);
 
   await db.collection(INVESTORS).updateOne(
@@ -92,7 +96,15 @@ export async function recordLogin(investorId) {
   const db = await connectToDatabase();
   await db.collection(INVESTORS).updateOne(
     { _id: new ObjectId(investorId) },
-    { $set: { lastLoginAt: new Date() } }
+    { $set: { lastLoginAt: new Date() }, $inc: { loginCount: 1 } }
+  );
+}
+
+export async function resetLoginCount(investorId) {
+  const db = await connectToDatabase();
+  await db.collection(INVESTORS).updateOne(
+    { _id: new ObjectId(investorId) },
+    { $set: { loginCount: 0 } }
   );
 }
 
@@ -101,9 +113,14 @@ export async function recordLogin(investorId) {
 export async function authenticateInvestor(email, password) {
   const investor = await findInvestorByEmail(email);
   if (!investor) return null;
-  if (investor.status !== 'active') return null;
+  if (investor.status !== 'active') return { locked: true, reason: 'Account is disabled. Contact your fund administrator.' };
   const valid = await verifyPassword(password, investor.hashedPassword);
   if (!valid) return null;
+  // Check login limit
+  const maxLogins = investor.maxLogins || 5;
+  if ((investor.loginCount || 0) >= maxLogins) {
+    return { locked: true, reason: 'Your access has expired. Please contact your fund administrator to continue.' };
+  }
   await recordLogin(investor._id);
   return investor;
 }

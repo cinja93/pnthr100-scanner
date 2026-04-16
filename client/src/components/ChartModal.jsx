@@ -3,6 +3,7 @@ import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
 import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchKillPipeline, fetchNav, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, calcHeat, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils.js';
 import { useQueue } from '../contexts/QueueContext';
+import { useAuth } from '../AuthContext';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeAnalyzeScore, computeETFAnalyzeScore } from '../utils/analyzeScore';
 import { isClassifiedETF } from '../utils/etfClassification';
@@ -300,6 +301,7 @@ function formatWeekDate(timeStr) {
 }
 
 export default function ChartModal({ stocks, initialIndex, earnings = {}, onClose, onWatchlistChange }) {
+  const { isInvestor } = useAuth() || {};
   const { isAuthenticated, queuedTickers, toggleQueue, nav: contextNav } = useQueue() || {};
   const { analyzeContext } = useAnalyzeContext() || {};
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -1000,7 +1002,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                 >
                   {sizeLoading ? '⟳' : 'SIZE IT'}
                 </button>
-                {sizePanel && (
+                {sizePanel && !isInvestor && (
                   <button
                     onClick={handleQueueToggle}
                     style={{ background: queuedTickers?.has(stock.ticker) ? '#28a745' : 'rgba(40,167,69,0.15)',

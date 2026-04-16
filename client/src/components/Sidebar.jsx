@@ -196,8 +196,8 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         ))}
       </nav>
 
-      {/* System Architecture + Data Room buttons */}
-      {!isPortalMode && (
+      {/* System Architecture + Data Room buttons (hidden for investor portal only) */}
+      {!isInvestorPortal && (
         <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <button
             className={styles.archBtn}

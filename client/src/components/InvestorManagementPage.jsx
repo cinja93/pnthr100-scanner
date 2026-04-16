@@ -76,7 +76,7 @@ export default function InvestorManagementPage() {
   }
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 1100 }}>
+    <div style={{ padding: '24px 32px', maxWidth: 1100, minHeight: '100vh', background: '#0a0a0a' }}>
       <h1 style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: '0 0 4px', letterSpacing: '0.04em' }}>
         <span style={{ color: '#FCF000' }}>PNTHR</span> Investor Portal Management
       </h1>

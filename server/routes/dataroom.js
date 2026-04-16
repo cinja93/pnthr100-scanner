@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
     const db = await connectToDatabase();
     const docs = await db.collection(COLLECTION)
       .find({}, { projection: { data: 0 } })
-      .sort({ section: 1, uploadedAt: -1 })
+      .sort({ section: 1, sortOrder: 1, uploadedAt: -1 })
       .toArray();
     // Backfill section for legacy docs
     const filled = docs.map(d => ({ ...d, section: d.section || DEFAULT_SECTION }));
@@ -68,13 +68,18 @@ router.post('/upload', upload.single('document'), async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
     if (!req.file) return res.status(400).json({ error: 'No file provided' });
     const db = await connectToDatabase();
+    const section = req.body.section || DEFAULT_SECTION;
+    // Set sortOrder to append after existing docs in this section
+    const maxDoc = await db.collection(COLLECTION).find({ section }).sort({ sortOrder: -1 }).limit(1).toArray();
+    const nextOrder = (maxDoc[0]?.sortOrder ?? -1) + 1;
     const doc = {
       label: req.body.label || req.file.originalname,
       filename: req.file.originalname,
       contentType: req.file.mimetype,
       size: req.file.size,
       data: req.file.buffer,
-      section: req.body.section || DEFAULT_SECTION,
+      section,
+      sortOrder: nextOrder,
       uploadedBy: req.user.userId,
       uploadedAt: new Date(),
     };
@@ -152,6 +157,23 @@ router.get('/:id/download', async (req, res) => {
     res.set('Content-Type', doc.contentType || 'application/octet-stream');
     res.set('Content-Disposition', `attachment; filename="${doc.filename}"`);
     res.send(doc.data.buffer || doc.data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/dataroom/reorder — reorder documents within a section (admin only)
+router.patch('/reorder', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    const { order } = req.body; // [{ id, sortOrder }]
+    if (!Array.isArray(order)) return res.status(400).json({ error: 'order array required' });
+    const db = await connectToDatabase();
+    const ops = order.map(({ id, sortOrder }) => ({
+      updateOne: { filter: { _id: new ObjectId(id) }, update: { $set: { sortOrder } } }
+    }));
+    if (ops.length > 0) await db.collection(COLLECTION).bulkWrite(ops);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

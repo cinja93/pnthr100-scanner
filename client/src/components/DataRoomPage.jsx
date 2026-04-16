@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
 import { authHeaders, API_BASE } from '../services/api';
 
@@ -158,6 +158,52 @@ export default function DataRoomPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  // ── Drag-and-drop reorder state (admin only) ──
+  const dragRef = useRef({ section: null, fromIdx: null });
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+  const [dragOverSec, setDragOverSec] = useState(null);
+
+  function handleDragStart(sec, idx) {
+    dragRef.current = { section: sec, fromIdx: idx };
+  }
+
+  function handleDragOver(e, sec, idx) {
+    e.preventDefault();
+    setDragOverIdx(idx);
+    setDragOverSec(sec);
+  }
+
+  function handleDragEnd() {
+    setDragOverIdx(null);
+    setDragOverSec(null);
+  }
+
+  async function handleDrop(sec, toIdx) {
+    const { section: fromSec, fromIdx } = dragRef.current;
+    setDragOverIdx(null);
+    setDragOverSec(null);
+    if (fromSec !== sec || fromIdx === null || fromIdx === toIdx) return;
+    const secDocs = [...(grouped[sec] || [])];
+    const [moved] = secDocs.splice(fromIdx, 1);
+    secDocs.splice(toIdx, 0, moved);
+    // Optimistic update
+    const updated = docs.map(d => {
+      if ((d.section || DEFAULT_SECTION) !== sec) return d;
+      const idx = secDocs.findIndex(sd => sd._id === d._id);
+      return idx >= 0 ? { ...d, sortOrder: idx } : d;
+    });
+    setDocs(updated);
+    // Persist
+    const order = secDocs.map((d, i) => ({ id: d._id, sortOrder: i }));
+    try {
+      await fetch(`${API_BASE}/api/dataroom/reorder`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order }),
+      });
+    } catch { /* silent — optimistic update already applied */ }
+  }
+
   const totalDocs = docs.length;
 
   return (
@@ -241,11 +287,27 @@ export default function DataRoomPage() {
                 {secDocs.length === 0 && (
                   <p style={{ color: '#555', padding: '16px 18px', margin: 0, fontSize: 13, fontStyle: 'italic' }}>No documents in this section yet.</p>
                 )}
-                {secDocs.map(doc => (
-                  <div key={doc._id} style={{
-                    display: 'flex', alignItems: 'center', padding: '11px 18px',
-                    borderBottom: '1px solid #1a1a1a',
-                  }}>
+                {secDocs.map((doc, idx) => (
+                  <div
+                    key={doc._id}
+                    draggable={isAdmin}
+                    onDragStart={() => isAdmin && handleDragStart(sec, idx)}
+                    onDragOver={e => isAdmin && handleDragOver(e, sec, idx)}
+                    onDrop={() => isAdmin && handleDrop(sec, idx)}
+                    onDragEnd={handleDragEnd}
+                    style={{
+                      display: 'flex', alignItems: 'center', padding: '11px 18px',
+                      borderBottom: '1px solid #1a1a1a',
+                      borderTop: (dragOverSec === sec && dragOverIdx === idx) ? '2px solid #fcf000' : '2px solid transparent',
+                      transition: 'border-top 0.1s',
+                    }}
+                  >
+                    {/* Drag handle — admin only */}
+                    {isAdmin && (
+                      <span style={{ color: '#444', marginRight: 10, cursor: 'grab', fontSize: 14, userSelect: 'none' }} title="Drag to reorder">
+                        ⠿
+                      </span>
+                    )}
                     {/* Document icon */}
                     <span style={{ color: '#555', marginRight: 12, fontSize: 16 }}>
                       {doc.contentType?.includes('pdf') ? '📄' : doc.contentType?.includes('image') ? '🖼️' : '📎'}

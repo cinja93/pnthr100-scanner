@@ -351,17 +351,22 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
         <div style={{ fontSize: 11, color: '#666', minWidth: 100, textAlign: 'center' }}>
           Last login: {formatDate(inv.lastLoginAt)}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 120, justifyContent: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 140, justifyContent: 'center' }}>
           <span style={{
             fontSize: 10, fontWeight: 700,
-            color: (inv.loginCount || 0) >= (inv.maxLogins || 5) ? '#dc3545' : '#888',
+            color: (inv.loginCount || 0) >= (inv.maxLogins || 5) ? '#dc3545' : (inv.loginCount || 0) >= ((inv.maxLogins || 5) - 1) ? '#f9a825' : '#888',
           }}>
-            {inv.loginCount || 0}/{inv.maxLogins || 5} logins
+            {inv.loginCount || 0}/{inv.maxLogins || 5} sessions
           </span>
-          {(inv.loginCount || 0) >= (inv.maxLogins || 5) && (
+          {(inv.loginCount || 0) > 0 && (
             <button onClick={onResetAccess}
-              style={{ background: 'rgba(252,240,0,0.1)', border: '1px solid #FCF000', color: '#FCF000', borderRadius: 4, padding: '2px 8px', fontSize: 9, cursor: 'pointer', fontWeight: 700, letterSpacing: '0.04em' }}>
-              RESET ACCESS
+              style={{
+                background: (inv.loginCount || 0) >= (inv.maxLogins || 5) ? 'rgba(252,240,0,0.15)' : 'none',
+                border: '1px solid ' + ((inv.loginCount || 0) >= (inv.maxLogins || 5) ? '#FCF000' : '#333'),
+                color: (inv.loginCount || 0) >= (inv.maxLogins || 5) ? '#FCF000' : '#888',
+                borderRadius: 4, padding: '2px 8px', fontSize: 9, cursor: 'pointer', fontWeight: 700, letterSpacing: '0.04em',
+              }}>
+              {(inv.loginCount || 0) >= (inv.maxLogins || 5) ? 'RENEW ACCESS' : 'RESET'}
             </button>
           )}
         </div>

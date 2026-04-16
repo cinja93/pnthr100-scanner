@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchPulse, fetchLiveVix, fetchSignalStocks, fetchDevelopingSignals, fetchSectorExposure } from '../services/api';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
+import { useAuth } from '../AuthContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
 import ChartModal from './ChartModal';
 
@@ -57,6 +58,7 @@ function formatLoadedAt(date) {
 
 export default function PulsePage({ onNavigate }) {
   const { analyzeContext } = useAnalyzeContext() || {};
+  const { isInvestor } = useAuth() || {};
   const [data, setData] = useState(null);
   const [vix, setVix] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -108,7 +110,7 @@ export default function PulsePage({ onNavigate }) {
   }
 
   useEffect(() => {
-    Promise.all([fetchPulse(), fetchLiveVix(), fetchSectorExposure().catch(() => null)])
+    Promise.all([fetchPulse(), fetchLiveVix(), isInvestor ? Promise.resolve(null) : fetchSectorExposure().catch(() => null)])
       .then(([pulse, vixData, secExp]) => {
         setData(pulse);
         setVix(vixData);
@@ -144,7 +146,7 @@ export default function PulsePage({ onNavigate }) {
       <StatusLight
         status={data.statusLight}
         message={data.statusMessage}
-        positions={data.positions}
+        positions={isInvestor ? null : data.positions}
         pulseData={data}
         lastRefresh={lastRefresh}
         isRefreshing={isRefreshing}
@@ -178,7 +180,7 @@ export default function PulsePage({ onNavigate }) {
         <BuffettGauge data={data.buffettIndicator} />
       </div>
       {/* Regime + Portfolio Heat compact strip */}
-      <RegimeStrip regime={data.regime} signals={data.signals} positions={data.positions} />
+      <RegimeStrip regime={data.regime} signals={data.signals} positions={isInvestor ? null : data.positions} />
 
       {/* TIER 2: Signal intelligence — Kill Top 10, Sector Pulse, Signal Breadth, Macro */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -200,8 +202,8 @@ export default function PulsePage({ onNavigate }) {
       )}
       <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
 
-      {/* TIER 3: Portfolio — Heat gauge + positions + alerts/lots in one band */}
-      <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} />
+      {/* TIER 3: Portfolio — Heat gauge + positions + alerts/lots in one band (hidden for investors) */}
+      {!isInvestor && <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} />}
 
       {signalModal && (
         <SignalStockModal

@@ -14,8 +14,8 @@ const PortalContext = createContext({ portalMode: 'app' });
 
 // Pages allowed per portal mode
 export const PORTAL_PAGES = {
-  den:      ['apex', 'perch', 'sectors', 'etf', 'earnings', 'jungle'],
-  investor: ['apex', 'perch', 'sectors', 'etf', 'earnings', 'jungle', 'data-room'],
+  den:      ['apex', 'perch', 'sectors', 'etf', 'earnings', 'jungle', 'pulse'],
+  investor: ['apex', 'perch', 'sectors', 'etf', 'earnings', 'jungle', 'pulse', 'data-room'],
 };
 
 function detectPortal() {

@@ -70,6 +70,7 @@ export async function updateInvestor(id, updates) {
     if (updates.status === 'disabled') allowed.disabledAt = new Date();
   }
   if (updates.name !== undefined) allowed.name = updates.name;
+  if (updates.email !== undefined) allowed.email = updates.email;
   if (updates.company !== undefined) allowed.company = updates.company;
   if (updates.dataroomSections !== undefined) allowed.dataroomSections = updates.dataroomSections;
   if (updates.password) allowed.hashedPassword = await hashPassword(updates.password);

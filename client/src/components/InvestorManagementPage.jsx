@@ -22,6 +22,7 @@ export default function InvestorManagementPage() {
   const [activityId, setActivityId] = useState(null);
   const [activityLog, setActivityLog] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [resetTarget, setResetTarget] = useState(null); // { id, name, type: 'email' | 'password' }
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -128,7 +129,21 @@ export default function InvestorManagementPage() {
               padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16,
             }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{inv.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{inv.name}</span>
+                  <button
+                    onClick={() => setResetTarget({ id: inv._id, name: inv.name, currentEmail: inv.email, type: 'email' })}
+                    style={{ background: 'none', border: '1px solid #333', color: '#888', borderRadius: 4, padding: '2px 8px', fontSize: 9, cursor: 'pointer', letterSpacing: '0.04em' }}
+                  >
+                    RESET EMAIL
+                  </button>
+                  <button
+                    onClick={() => setResetTarget({ id: inv._id, name: inv.name, type: 'password' })}
+                    style={{ background: 'none', border: '1px solid #333', color: '#888', borderRadius: 4, padding: '2px 8px', fontSize: 9, cursor: 'pointer', letterSpacing: '0.04em' }}
+                  >
+                    RESET PASSWORD
+                  </button>
+                </div>
                 <div style={{ fontSize: 11, color: '#888' }}>{inv.email} {inv.company ? `- ${inv.company}` : ''}</div>
               </div>
               <div style={{ fontSize: 11, color: '#666', minWidth: 100, textAlign: 'center' }}>
@@ -278,6 +293,15 @@ export default function InvestorManagementPage() {
         </div>
       )}
 
+      {/* ── Reset Email / Password Modal ── */}
+      {resetTarget && (
+        <ResetModal
+          target={resetTarget}
+          onClose={() => setResetTarget(null)}
+          onSaved={() => { setResetTarget(null); loadData(); }}
+        />
+      )}
+
       {/* ── Create Investor Modal ── */}
       {showCreate && <CreateInvestorModal onClose={() => setShowCreate(false)} onCreated={loadData} />}
     </div>
@@ -357,6 +381,85 @@ function CreateInvestorModal({ onClose, onCreated }) {
               opacity: saving ? 0.6 : 1,
             }}>
               {saving ? 'Creating...' : 'Create Investor'}
+            </button>
+            <button type="button" onClick={onClose} style={{
+              padding: '10px 16px', background: 'none', border: '1px solid #333', color: '#888',
+              fontSize: 13, borderRadius: 6, cursor: 'pointer',
+            }}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ResetModal({ target, onClose, onSaved }) {
+  const [value, setValue] = useState(target.type === 'email' ? (target.currentEmail || '') : '');
+  const [showPw, setShowPw] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const isEmail = target.type === 'email';
+  const title = isEmail ? 'Reset Investor Email' : 'Reset Investor Password';
+  const label = isEmail ? 'NEW EMAIL ADDRESS' : 'NEW PASSWORD';
+  const placeholder = isEmail ? 'investor@company.com' : 'Enter new password (min 8 characters)';
+
+  async function handleSave(e) {
+    e.preventDefault();
+    if (!value.trim()) return;
+    if (!isEmail && value.length < 8) { setError('Password must be at least 8 characters'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const updates = isEmail ? { email: value.trim() } : { password: value };
+      await updateInvestorApi(target.id, updates);
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }} onClick={onClose}>
+      <div style={{
+        background: '#1a1a1a', border: '1px solid #333', borderRadius: 12,
+        padding: 28, width: '100%', maxWidth: 420,
+      }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: '0 0 4px' }}>{title}</h3>
+        <p style={{ fontSize: 12, color: '#666', margin: '0 0 20px' }}>For: {target.name}</p>
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: '#888' }}>
+            {label}
+            {isEmail ? (
+              <input type="email" value={value} onChange={e => setValue(e.target.value)} required autoFocus placeholder={placeholder}
+                style={{ padding: '9px 12px', background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, fontSize: 13, color: '#fff', outline: 'none' }} />
+            ) : (
+              <div style={{ position: 'relative' }}>
+                <input type={showPw ? 'text' : 'password'} value={value} onChange={e => setValue(e.target.value)} required autoFocus minLength={8} placeholder={placeholder}
+                  style={{ padding: '9px 12px', paddingRight: 40, background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, fontSize: 13, color: '#fff', outline: 'none', width: '100%', boxSizing: 'border-box' }} />
+                <button type="button" onClick={() => setShowPw(v => !v)}
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 16, padding: '2px 4px' }}
+                  title={showPw ? 'Hide password' : 'Show password'}>
+                  {showPw ? '🙈' : '👁'}
+                </button>
+              </div>
+            )}
+          </label>
+          {error && <p style={{ fontSize: 12, color: '#dc3545', margin: 0, padding: '6px 10px', background: 'rgba(220,53,69,0.1)', borderRadius: 4 }}>{error}</p>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button type="submit" disabled={saving} style={{
+              flex: 1, padding: '10px', background: '#FCF000', color: '#000', fontWeight: 700,
+              fontSize: 13, border: 'none', borderRadius: 6, cursor: saving ? 'default' : 'pointer',
+              opacity: saving ? 0.6 : 1,
+            }}>
+              {saving ? 'Saving...' : isEmail ? 'Update Email' : 'Update Password'}
             </button>
             <button type="button" onClick={onClose} style={{
               padding: '10px 16px', background: 'none', border: '1px solid #333', color: '#888',

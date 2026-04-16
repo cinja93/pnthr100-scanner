@@ -327,7 +327,7 @@ function CreateInvestorModal({ onClose, onCreated }) {
               style={{ padding: '9px 12px', background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, fontSize: 13, color: '#fff', outline: 'none' }} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: '#888' }}>
-            EMAIL
+            INVESTOR EMAIL
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
               style={{ padding: '9px 12px', background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, fontSize: 13, color: '#fff', outline: 'none' }} />
           </label>

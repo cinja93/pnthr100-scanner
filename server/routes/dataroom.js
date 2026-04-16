@@ -128,10 +128,12 @@ router.get('/:id/view', async (req, res) => {
   try {
     // Auth: prefer header, fall back to query param token (for new-tab opens)
     let user = req.user;
+    let isInvestor = user?.source === 'den_investors';
     if (!user && req.query.token) {
       try {
         const payload = jwt.verify(req.query.token, process.env.JWT_SECRET);
-        user = { userId: payload.userId, email: payload.email, role: resolveRole(payload.email) };
+        isInvestor = payload.source === 'den_investors';
+        user = { userId: payload.userId, email: payload.email, role: isInvestor ? 'investor' : resolveRole(payload.email), source: payload.source };
       } catch { /* invalid token */ }
     }
     if (!user) return res.status(401).json({ error: 'Authentication required' });
@@ -139,6 +141,25 @@ router.get('/:id/view', async (req, res) => {
     const db = await connectToDatabase();
     const doc = await db.collection(COLLECTION).findOne({ _id: new ObjectId(req.params.id) });
     if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+    // Log view for investors (non-blocking)
+    if (isInvestor) {
+      (async () => {
+        try {
+          const inv = await db.collection('den_investors').findOne({ _id: new ObjectId(user.userId) }, { projection: { name: 1 } });
+          await db.collection('dataroom_view_log').insertOne({
+            investorId: user.userId,
+            investorEmail: user.email,
+            investorName: inv?.name || null,
+            documentId: new ObjectId(req.params.id),
+            documentName: doc.label || doc.filename,
+            section: doc.section || DEFAULT_SECTION,
+            viewedAt: new Date(),
+          });
+        } catch { /* non-blocking */ }
+      })();
+    }
+
     res.set('Content-Type', doc.contentType || 'application/octet-stream');
     res.set('Content-Disposition', `inline; filename="${doc.filename}"`);
     res.send(doc.data.buffer || doc.data);
@@ -174,6 +195,22 @@ router.patch('/reorder', async (req, res) => {
     }));
     if (ops.length > 0) await db.collection(COLLECTION).bulkWrite(ops);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/dataroom/view-log — investor document view log (admin only)
+router.get('/view-log', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    const db = await connectToDatabase();
+    const logs = await db.collection('dataroom_view_log')
+      .find({})
+      .sort({ viewedAt: -1 })
+      .limit(200)
+      .toArray();
+    res.json(logs);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

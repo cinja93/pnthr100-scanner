@@ -19,6 +19,9 @@ export default function DataRoomPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [collapsedSections, setCollapsedSections] = useState({});
   const [downloading, setDownloading] = useState(null); // track which zip is downloading
+  const [showViewLog, setShowViewLog] = useState(false);
+  const [viewLog, setViewLog] = useState([]);
+  const [viewLogLoading, setViewLogLoading] = useState(false);
 
   const loadDocs = useCallback(() => {
     setLoading(true);
@@ -219,6 +222,26 @@ export default function DataRoomPage() {
           {isAdmin && (
             <>
               <button
+                onClick={() => {
+                  setShowViewLog(v => !v);
+                  if (!showViewLog && viewLog.length === 0) {
+                    setViewLogLoading(true);
+                    fetch(`${API_BASE}/api/dataroom/view-log`, { headers: authHeaders() })
+                      .then(r => r.json())
+                      .then(d => setViewLog(Array.isArray(d) ? d : []))
+                      .catch(() => setViewLog([]))
+                      .finally(() => setViewLogLoading(false));
+                  }
+                }}
+                style={{
+                  background: showViewLog ? '#1a1a1a' : '#222',
+                  color: showViewLog ? '#fcf000' : '#888', border: '1px solid #444', borderRadius: 6,
+                  padding: '10px 16px', fontWeight: 600, cursor: 'pointer', fontSize: 13
+                }}
+              >
+                {showViewLog ? 'Hide View Log' : 'Investor View Log'}
+              </button>
+              <button
                 onClick={() => handleDownloadZip(null)}
                 disabled={downloading || totalDocs === 0}
                 style={{
@@ -242,6 +265,46 @@ export default function DataRoomPage() {
       <p style={{ color: '#666', fontSize: 13, margin: '0 0 24px 0' }}>
         {isAdmin ? 'Manage fund documents by section. Upload, download, or delete.' : 'View fund documents. Contact an administrator to request copies or signatures.'}
       </p>
+
+      {/* ── Investor View Log Panel ── */}
+      {showViewLog && isAdmin && (
+        <div style={{ marginBottom: 20, border: '1px solid #222', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ padding: '12px 18px', background: '#141414', borderBottom: '1px solid #222' }}>
+            <span style={{ color: '#fcf000', fontWeight: 700, fontSize: 13, letterSpacing: '0.05em' }}>INVESTOR DOCUMENT VIEW LOG</span>
+            <span style={{ color: '#555', fontSize: 11, marginLeft: 8 }}>({viewLog.length} entries)</span>
+          </div>
+          {viewLogLoading && <div style={{ padding: '16px 18px', color: '#666', fontSize: 12 }}>Loading...</div>}
+          {!viewLogLoading && viewLog.length === 0 && (
+            <div style={{ padding: '16px 18px', color: '#555', fontSize: 12, fontStyle: 'italic' }}>No document views recorded yet.</div>
+          )}
+          {!viewLogLoading && viewLog.length > 0 && (
+            <div style={{ background: '#0d0d0d', maxHeight: 340, overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #222' }}>
+                    {['Investor', 'Email', 'Document', 'Section', 'Viewed At'].map(h => (
+                      <th key={h} style={{ padding: '8px 12px', color: '#555', fontWeight: 600, textAlign: 'left', fontSize: 10, letterSpacing: '0.05em', position: 'sticky', top: 0, background: '#0d0d0d' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {viewLog.map((log, i) => (
+                    <tr key={log._id || i} style={{ borderBottom: '1px solid #1a1a1a' }}>
+                      <td style={{ padding: '7px 12px', color: '#fff', fontWeight: 600 }}>{log.investorName || '-'}</td>
+                      <td style={{ padding: '7px 12px', color: '#888' }}>{log.investorEmail || '-'}</td>
+                      <td style={{ padding: '7px 12px', color: '#ccc' }}>{log.documentName || '-'}</td>
+                      <td style={{ padding: '7px 12px', color: '#666', fontSize: 11 }}>{log.section || '-'}</td>
+                      <td style={{ padding: '7px 12px', color: '#666', fontSize: 11, whiteSpace: 'nowrap' }}>
+                        {log.viewedAt ? new Date(log.viewedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {loading && <p style={{ color: '#888' }}>Loading...</p>}
 

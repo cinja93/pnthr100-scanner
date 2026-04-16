@@ -14,7 +14,7 @@ const PortalContext = createContext({ portalMode: 'app' });
 
 // Pages allowed per portal mode
 export const PORTAL_PAGES = {
-  den:      ['apex', 'perch', 'sectors', 'etf', 'earnings', 'jungle', 'pulse'],
+  den:      null, // Admin demo mode — full access, no page filtering
   investor: ['apex', 'perch', 'sectors', 'etf', 'earnings', 'jungle', 'pulse', 'data-room'],
 };
 

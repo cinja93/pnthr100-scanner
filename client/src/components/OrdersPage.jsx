@@ -1330,18 +1330,18 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
     <table className={styles.ordersTable}>
       <thead>
         <tr>
-          <th>#</th>
           <th>Ticker</th>
           <th>Action</th>
-          <th>Kill Score</th>
-          <th>Tier</th>
+          <th>Shares</th>
           <th>Entry (Limit)</th>
           <th>Stop</th>
-          <th>Shares</th>
-          <th>Sector</th>
-          <th>D2</th>
-          <th>RSI</th>
           <th>GTD Expiry</th>
+          <th>Sector</th>
+          <th>RSI</th>
+          <th>#</th>
+          <th>Kill Score</th>
+          <th>Tier</th>
+          <th>D2</th>
           <th>Status</th>
         </tr>
       </thead>
@@ -1363,7 +1363,6 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
           const cost   = shares * entry;
           return (
             <tr key={o.ticker}>
-              <td>{o.filteredRank}</td>
               <td>
                 <strong
                   onClick={() => onTickerClick?.(o.ticker)}
@@ -1379,6 +1378,20 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
                   {o.signal === 'BL' ? 'BUY' : 'SHORT'}
                 </span>
               </td>
+              <td style={{ fontFamily: 'monospace', color: shares > 0 ? '#fcf000' : '#666' }}>
+                {shares > 0 ? shares.toLocaleString() : '—'}
+                {shares > 0 && (
+                  <div style={{ fontSize: 10, color: '#888' }}>
+                    ${Math.round(cost).toLocaleString()}
+                  </div>
+                )}
+              </td>
+              <td className={styles.entryPrice}>${o.signalPrice?.toFixed(2) || o.currentPrice?.toFixed(2) || '—'}</td>
+              <td className={styles.stopPrice}>${o.stopPrice?.toFixed(2) || '—'}</td>
+              <td className={styles.gtdDate}>{gtdExp}</td>
+              <td style={{ fontSize: 12 }}>{o.sector}</td>
+              <td style={{ fontSize: 12 }}>{o.weeklyRsi?.toFixed(0) || '—'}</td>
+              <td>{o.filteredRank}</td>
               <td className={styles.killScore}>{o.killScore}</td>
               <td>
                 <span className={styles.tierCell} style={{
@@ -1388,20 +1401,7 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
                   {o.tier}
                 </span>
               </td>
-              <td className={styles.entryPrice}>${o.signalPrice?.toFixed(2) || o.currentPrice?.toFixed(2) || '—'}</td>
-              <td className={styles.stopPrice}>${o.stopPrice?.toFixed(2) || '—'}</td>
-              <td style={{ fontFamily: 'monospace', color: shares > 0 ? '#fcf000' : '#666' }}>
-                {shares > 0 ? shares.toLocaleString() : '—'}
-                {shares > 0 && (
-                  <div style={{ fontSize: 10, color: '#888' }}>
-                    ${Math.round(cost).toLocaleString()}
-                  </div>
-                )}
-              </td>
-              <td style={{ fontSize: 12 }}>{o.sector}</td>
               <td style={{ color: (o.d2Score ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>{o.d2Score?.toFixed(0) ?? '—'}</td>
-              <td style={{ fontSize: 12 }}>{o.weeklyRsi?.toFixed(0) || '—'}</td>
-              <td className={styles.gtdDate}>{gtdExp}</td>
               <td>
                 {o.inPortfolio
                   ? <span style={{ color: '#2563eb', fontWeight: 600, fontSize: 11 }}>IN PORTFOLIO</span>

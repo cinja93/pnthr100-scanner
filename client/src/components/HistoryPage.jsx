@@ -209,7 +209,7 @@ export default function HistoryPage() {
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
   const [sortClosed,  setSortClosed]  = useState({ col: 'exitDate', dir: -1 });
-  const [tab,         setTab]         = useState('active');
+  const [sortActive,  setSortActive]  = useState({ col: 'entryRank', dir: 1 });
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -239,34 +239,47 @@ export default function HistoryPage() {
 
   const closed = useMemo(() => all.filter(s => s.status === 'CLOSED'), [all]);
 
-  const sortedClosed = useMemo(() => {
-    return [...closed].sort((a, b) => {
-      const va = a[sortClosed.col] ?? '';
-      const vb = b[sortClosed.col] ?? '';
-      if (typeof va === 'number') return sortClosed.dir * (vb - va);
-      return sortClosed.dir * String(va).localeCompare(String(vb));
+  // Generic sort helper for both tables
+  function sortRows(rows, sortState, extraCols) {
+    return [...rows].sort((a, b) => {
+      let va = extraCols?.[sortState.col]?.(a) ?? a[sortState.col] ?? '';
+      let vb = extraCols?.[sortState.col]?.(b) ?? b[sortState.col] ?? '';
+      if (typeof va === 'number' && typeof vb === 'number') return sortState.dir * (va - vb);
+      return sortState.dir * String(va).localeCompare(String(vb));
     });
-  }, [closed, sortClosed]);
-
-  function toggleSort(col) {
-    setSortClosed(prev => prev.col === col
-      ? { col, dir: prev.dir * -1 }
-      : { col, dir: -1 }
-    );
   }
 
-  function SortTh({ col, children }) {
-    const active = sortClosed.col === col;
-    return (
-      <th onClick={() => toggleSort(col)} style={{
-        padding: '9px 10px', color: active ? YELLOW : '#888',
-        fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none',
-        textAlign: col === 'ticker' || col === 'direction' ? 'left' : 'center',
-      }}>
-        {children} {active ? (sortClosed.dir === -1 ? '▼' : '▲') : ''}
-      </th>
-    );
+  const sortedClosed = useMemo(() => sortRows(closed, sortClosed), [closed, sortClosed]);
+
+  // Active trades: derive current P&L and rank from snapshots for sorting
+  const activeWithDerived = useMemo(() => active.map(s => {
+    const lastSnap = s.weeklySnapshots?.slice(-1)[0];
+    return { ...s, _pnlPct: lastSnap?.pnlPct ?? 0, _currentRank: lastSnap?.killRank ?? s.entryRank };
+  }), [active]);
+
+  const sortedActive = useMemo(() => sortRows(activeWithDerived, sortActive, {
+    pnlPct: r => r._pnlPct,
+    currentRank: r => r._currentRank,
+  }), [activeWithDerived, sortActive]);
+
+  // Sortable header factory — works with any sort state setter
+  function makeSortTh(sortState, setSortState) {
+    return function SortTh({ col, children, align }) {
+      const isActive = sortState.col === col;
+      return (
+        <th onClick={() => setSortState(prev => prev.col === col ? { col, dir: prev.dir * -1 } : { col, dir: -1 })} style={{
+          padding: '9px 10px', color: isActive ? YELLOW : '#888',
+          fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none',
+          textAlign: align || 'center',
+        }}>
+          {children} {isActive ? (sortState.dir === -1 ? '▼' : '▲') : ''}
+        </th>
+      );
+    };
   }
+
+  const ClosedSortTh = makeSortTh(sortClosed, setSortClosed);
+  const ActiveSortTh = makeSortTh(sortActive, setSortActive);
 
   if (loading) return (
     <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Loading Kill History...</div>
@@ -341,198 +354,185 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {/* ── Tabs ───────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: `1px solid ${BORDER}` }}>
-        {[
-          { key: 'active', label: `Active (${active.length})` },
-          { key: 'closed', label: `Closed (${closed.length})` },
-          { key: 'breakdown', label: 'Breakdown' },
-        ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} style={{
-            background: 'none', border: 'none', padding: '8px 16px',
-            fontSize: 13, fontWeight: 700, cursor: 'pointer',
-            color: tab === t.key ? YELLOW : '#666',
-            borderBottom: tab === t.key ? `2px solid ${YELLOW}` : '2px solid transparent',
-            transition: 'color 0.15s',
-          }}>{t.label}</button>
-        ))}
+      {/* ── Closed Trades ─────────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 32 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ccc', margin: '0 0 12px', letterSpacing: '0.02em' }}>
+          Closed Trades <span style={{ color: '#555', fontWeight: 400, fontSize: 13 }}>({closed.length})</span>
+        </h2>
+        {closed.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#555' }}>
+            No closed trades yet.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                  <ClosedSortTh col="ticker" align="left">Ticker</ClosedSortTh>
+                  <ClosedSortTh col="direction" align="left">Dir</ClosedSortTh>
+                  <ClosedSortTh col="entryDate">Entry Date</ClosedSortTh>
+                  <ClosedSortTh col="entryPrice">Entry $</ClosedSortTh>
+                  <ClosedSortTh col="entryRank">Entry Kill Rank</ClosedSortTh>
+                  <ClosedSortTh col="exitDate">Exit Date</ClosedSortTh>
+                  <ClosedSortTh col="exitPrice">Exit $</ClosedSortTh>
+                  <ClosedSortTh col="pnlPct">P&L %</ClosedSortTh>
+                  <ClosedSortTh col="pnlDollar">P&L $</ClosedSortTh>
+                  <ClosedSortTh col="holdingWeeks">Weeks</ClosedSortTh>
+                  <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Reason</th>
+                  <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Tier</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedClosed.map(s => {
+                  const isPos = (s.pnlPct ?? 0) > 0;
+                  return (
+                    <tr key={s.id} style={{
+                      borderBottom: `1px solid ${BORDER}`,
+                      background: isPos ? 'rgba(40,167,69,0.05)' : 'rgba(220,53,69,0.05)',
+                    }}>
+                      <td style={{ padding: '7px 10px', fontWeight: 800, color: YELLOW }}>{s.ticker}</td>
+                      <td style={{ padding: '7px 10px', color: s.direction === 'SHORT' ? RED : GREEN, fontWeight: 700 }}>
+                        {s.direction === 'SHORT' ? 'SS' : 'BL'}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.entryDate)}</td>
+                      <td style={{ textAlign: 'center', padding: '7px 10px' }}>${s.entryPrice?.toFixed(2)}</td>
+                      <td style={{ textAlign: 'center', padding: '7px 10px', color: YELLOW, fontWeight: 700 }}>#{s.entryRank}</td>
+                      <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.exitDate)}</td>
+                      <td style={{ textAlign: 'center', padding: '7px 10px' }}>${s.exitPrice?.toFixed(2)}</td>
+                      <td style={{ textAlign: 'center', padding: '7px 10px', fontWeight: 700,
+                        color: isPos ? GREEN : RED }}>
+                        {fmt(s.pnlPct)}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '7px 10px', fontWeight: 700,
+                        color: isPos ? GREEN : RED }}>
+                        {fmtP(s.pnlDollar)}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa' }}>{s.holdingWeeks}</td>
+                      <td style={{ padding: '7px 10px' }}>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3,
+                          background: s.exitReason === 'OVEREXTENDED'
+                            ? 'rgba(255,165,0,0.15)' : isPos ? 'rgba(40,167,69,0.15)' : 'rgba(220,53,69,0.15)',
+                          color: s.exitReason === 'OVEREXTENDED' ? '#ffa500' : isPos ? GREEN : RED,
+                        }}>
+                          {s.exitReason}
+                        </span>
+                      </td>
+                      <td style={{ padding: '7px 10px' }}><TierBadge tier={s.entryTier} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* ── Active Trades Table ─────────────────────────────────────────────── */}
-      {tab === 'active' && (
-        <>
-          {active.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#555' }}>
-              No active case studies. They appear when a stock enters the Kill top 10.
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
-                    <th style={{ textAlign: 'left',   padding: '9px 10px', color: '#888', fontWeight: 600 }}>Ticker</th>
-                    <th style={{ textAlign: 'left',   padding: '9px 10px', color: '#888', fontWeight: 600 }}>Dir</th>
-                    <th style={{ textAlign: 'center', padding: '9px 10px', color: '#888', fontWeight: 600 }}>Entry Date</th>
-                    <th style={{ textAlign: 'center', padding: '9px 10px', color: '#888', fontWeight: 600 }}>Entry $</th>
-                    <th style={{ textAlign: 'center', padding: '9px 10px', color: '#888', fontWeight: 600 }}>P&L %</th>
-                    <th style={{ textAlign: 'center', padding: '9px 10px', color: '#888', fontWeight: 600 }}>Weeks</th>
-                    <th style={{ textAlign: 'center', padding: '9px 10px', color: '#888', fontWeight: 600 }}>Max Gain</th>
-                    <th style={{ textAlign: 'center', padding: '9px 10px', color: '#888', fontWeight: 600 }}>Kill Rank</th>
-                    <th style={{ textAlign: 'left',   padding: '9px 10px', color: '#888', fontWeight: 600 }}>Tier</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {active.map(s => {
-                    const lastSnap = s.weeklySnapshots?.slice(-1)[0];
-                    const pnlPct   = lastSnap?.pnlPct ?? null;
-                    const rankNow  = lastSnap?.killRank;
-                    const isPos    = pnlPct != null && pnlPct >= 0;
-                    return (
-                      <tr key={s.id} style={{
-                        borderBottom: `1px solid ${BORDER}`,
-                        background: pnlPct != null
-                          ? (isPos ? 'rgba(40,167,69,0.05)' : 'rgba(220,53,69,0.05)')
-                          : 'transparent',
-                      }}>
-                        <td style={{ padding: '8px 10px', fontWeight: 800, color: YELLOW }}>{s.ticker}</td>
-                        <td style={{ padding: '8px 10px', color: s.direction === 'SHORT' ? RED : GREEN, fontWeight: 700 }}>
-                          {s.direction === 'SHORT' ? 'SHORT' : 'LONG'}
-                        </td>
-                        <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa' }}>{fmtD(s.entryDate)}</td>
-                        <td style={{ textAlign: 'center', padding: '8px 10px' }}>${s.entryPrice?.toFixed(2)}</td>
-                        <td style={{ textAlign: 'center', padding: '8px 10px', fontWeight: 700,
-                          color: pnlPct == null ? '#555' : isPos ? GREEN : RED }}>
-                          {fmt(pnlPct)}
-                        </td>
-                        <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa' }}>{s.holdingWeeks}</td>
-                        <td style={{ textAlign: 'center', padding: '8px 10px', color: GREEN }}>
-                          {s.maxFavorable > 0 ? fmt(s.maxFavorable) : '—'}
-                        </td>
-                        <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa' }}>
-                          {rankNow != null ? `#${rankNow}` : `#${s.entryRank}`}
-                        </td>
-                        <td style={{ padding: '8px 10px' }}><TierBadge tier={s.entryTier} /></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
+      {/* ── Open Trades ───────────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 32 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ccc', margin: '0 0 4px', letterSpacing: '0.02em' }}>
+          Open Trades <span style={{ color: '#555', fontWeight: 400, fontSize: 13 }}>({active.length})</span>
+        </h2>
+        {active.length > 0 && (() => {
+          const lastSnap = active[0]?.weeklySnapshots?.slice(-1)[0];
+          const snapDate = lastSnap?.date;
+          return snapDate ? (
+            <p style={{ fontSize: 11, color: '#555', margin: '0 0 12px' }}>
+              P&L as of {fmtD(snapDate)}
+            </p>
+          ) : null;
+        })()}
+        {active.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#555' }}>
+            No active case studies. They appear when a stock enters the Kill top 10.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                  <ActiveSortTh col="ticker" align="left">Ticker</ActiveSortTh>
+                  <ActiveSortTh col="direction" align="left">Dir</ActiveSortTh>
+                  <ActiveSortTh col="entryDate">Entry Date</ActiveSortTh>
+                  <ActiveSortTh col="entryPrice">Entry $</ActiveSortTh>
+                  <ActiveSortTh col="entryRank">Entry Kill Rank</ActiveSortTh>
+                  <ActiveSortTh col="currentRank">Current Kill Rank</ActiveSortTh>
+                  <ActiveSortTh col="pnlPct">P&L %</ActiveSortTh>
+                  <ActiveSortTh col="holdingWeeks">Weeks</ActiveSortTh>
+                  <ActiveSortTh col="maxFavorable">Max Gain</ActiveSortTh>
+                  <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Tier</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedActive.map(s => {
+                  const pnlPct   = s._pnlPct;
+                  const rankNow  = s._currentRank;
+                  const isPos    = pnlPct >= 0;
+                  return (
+                    <tr key={s.id} style={{
+                      borderBottom: `1px solid ${BORDER}`,
+                      background: pnlPct !== 0
+                        ? (isPos ? 'rgba(40,167,69,0.05)' : 'rgba(220,53,69,0.05)')
+                        : 'transparent',
+                    }}>
+                      <td style={{ padding: '8px 10px', fontWeight: 800, color: YELLOW }}>{s.ticker}</td>
+                      <td style={{ padding: '8px 10px', color: s.direction === 'SHORT' ? RED : GREEN, fontWeight: 700 }}>
+                        {s.direction === 'SHORT' ? 'SS' : 'BL'}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.entryDate)}</td>
+                      <td style={{ textAlign: 'center', padding: '8px 10px' }}>${s.entryPrice?.toFixed(2)}</td>
+                      <td style={{ textAlign: 'center', padding: '8px 10px', color: YELLOW, fontWeight: 700 }}>#{s.entryRank}</td>
+                      <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa' }}>#{rankNow}</td>
+                      <td style={{ textAlign: 'center', padding: '8px 10px', fontWeight: 700,
+                        color: pnlPct === 0 ? '#555' : isPos ? GREEN : RED }}>
+                        {fmt(pnlPct)}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa' }}>{s.holdingWeeks}</td>
+                      <td style={{ textAlign: 'center', padding: '8px 10px', color: GREEN }}>
+                        {s.maxFavorable > 0 ? fmt(s.maxFavorable) : '—'}
+                      </td>
+                      <td style={{ padding: '8px 10px' }}><TierBadge tier={s.entryTier} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
-      {/* ── Closed Trades Table ─────────────────────────────────────────────── */}
-      {tab === 'closed' && (
-        <>
-          {closed.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#555' }}>
-              No closed trades yet.
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
-                    <SortTh col="ticker">Ticker</SortTh>
-                    <SortTh col="direction">Dir</SortTh>
-                    <SortTh col="entryDate">Entry</SortTh>
-                    <SortTh col="exitDate">Exit</SortTh>
-                    <SortTh col="pnlPct">P&L %</SortTh>
-                    <SortTh col="pnlDollar">P&L $</SortTh>
-                    <SortTh col="holdingWeeks">Weeks</SortTh>
-                    <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Reason</th>
-                    <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Tier</th>
-                    <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600, textAlign: 'center' }}>Source</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedClosed.map(s => {
-                    const isPos = (s.pnlPct ?? 0) > 0;
-                    return (
-                      <tr key={s.id} style={{
-                        borderBottom: `1px solid ${BORDER}`,
-                        background: isPos ? 'rgba(40,167,69,0.05)' : 'rgba(220,53,69,0.05)',
-                      }}>
-                        <td style={{ padding: '7px 10px', fontWeight: 800, color: YELLOW }}>{s.ticker}</td>
-                        <td style={{ padding: '7px 10px', color: s.direction === 'SHORT' ? RED : GREEN, fontWeight: 700 }}>
-                          {s.direction === 'SHORT' ? 'SS' : 'BL'}
-                        </td>
-                        <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.entryDate)}</td>
-                        <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.exitDate)}</td>
-                        <td style={{ textAlign: 'center', padding: '7px 10px', fontWeight: 700,
-                          color: isPos ? GREEN : RED }}>
-                          {fmt(s.pnlPct)}
-                        </td>
-                        <td style={{ textAlign: 'center', padding: '7px 10px', fontWeight: 700,
-                          color: isPos ? GREEN : RED }}>
-                          {fmtP(s.pnlDollar)}
-                        </td>
-                        <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa' }}>{s.holdingWeeks}</td>
-                        <td style={{ padding: '7px 10px' }}>
-                          <span style={{
-                            fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3,
-                            background: s.exitReason === 'OVEREXTENDED'
-                              ? 'rgba(255,165,0,0.15)' : isPos ? 'rgba(40,167,69,0.15)' : 'rgba(220,53,69,0.15)',
-                            color: s.exitReason === 'OVEREXTENDED' ? '#ffa500' : isPos ? GREEN : RED,
-                          }}>
-                            {s.exitReason}
-                          </span>
-                        </td>
-                        <td style={{ padding: '7px 10px' }}><TierBadge tier={s.entryTier} /></td>
-                        <td style={{ textAlign: 'center', padding: '7px 10px' }}>
-                          <span style={{ fontSize: 10, color: '#555' }}>
-                            {s.entrySource === 'FRIDAY_PIPELINE' ? 'FRI' : 'MID'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
+      {/* ── Breakdown ─────────────────────────────────────────────────────── */}
+      {closed.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ccc', margin: '0 0 12px', letterSpacing: '0.02em' }}>
+            Breakdown
+          </h2>
+          <BreakdownTable title="By Tier"      data={tr.byTier}      defaultOpen={true} />
+          <BreakdownTable title="By Direction"  data={tr.byDirection} />
+          <BreakdownTable title="By Sector"     data={tr.bySector} />
+          <BreakdownTable title="By Entry Source (Friday vs Mid-Week)" data={tr.bySource} />
 
-      {/* ── Breakdown Tab ──────────────────────────────────────────────────── */}
-      {tab === 'breakdown' && (
-        <div>
-          {closed.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#555' }}>
-              No closed trades yet — breakdown will appear after first exits.
-            </div>
-          ) : (
-            <>
-              <BreakdownTable title="By Tier"      data={tr.byTier}      defaultOpen={true} />
-              <BreakdownTable title="By Direction"  data={tr.byDirection} />
-              <BreakdownTable title="By Sector"     data={tr.bySector} />
-              <BreakdownTable title="By Entry Source (Friday vs Mid-Week)" data={tr.bySource} />
-
-              {/* Monthly returns */}
-              {tr.monthlyReturns?.length > 0 && (
-                <div style={{
-                  background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
-                  padding: '14px 16px', marginTop: 12,
-                }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#aaa', marginBottom: 10 }}>Monthly Returns</div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {tr.monthlyReturns.map(m => (
-                      <div key={m.month} style={{
-                        background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`,
-                        borderRadius: 6, padding: '8px 12px', minWidth: 90, textAlign: 'center',
-                      }}>
-                        <div style={{ fontSize: 10, color: '#555', marginBottom: 3 }}>{m.month}</div>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: m.avgPnl >= 0 ? GREEN : RED }}>
-                          {fmt(m.avgPnl)}
-                        </div>
-                        <div style={{ fontSize: 10, color: '#555' }}>{m.trades} trade{m.trades !== 1 ? 's' : ''}</div>
-                      </div>
-                    ))}
+          {tr.monthlyReturns?.length > 0 && (
+            <div style={{
+              background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
+              padding: '14px 16px', marginTop: 12,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#aaa', marginBottom: 10 }}>Monthly Returns</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {tr.monthlyReturns.map(m => (
+                  <div key={m.month} style={{
+                    background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`,
+                    borderRadius: 6, padding: '8px 12px', minWidth: 90, textAlign: 'center',
+                  }}>
+                    <div style={{ fontSize: 10, color: '#555', marginBottom: 3 }}>{m.month}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: m.avgPnl >= 0 ? GREEN : RED }}>
+                      {fmt(m.avgPnl)}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#555' }}>{m.trades} trade{m.trades !== 1 ? 's' : ''}</div>
                   </div>
-                </div>
-              )}
-            </>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}

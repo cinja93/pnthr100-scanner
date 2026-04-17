@@ -421,15 +421,16 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   // Reset SIZE IT + ANALYZE panels when navigating to a new stock
   useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; setFetchedKillData(null); setChartSignalAge(null); }, [currentIndex]);
 
-  // Auto-resync SIZE IT direction to the chart's currentSignal — the badge and
-  // the sizing panel must NEVER disagree. If chart detects BL, direction becomes
-  // LONG; SS → SHORT. Runs whenever currentSignal changes or the panel opens.
+  // Auto-resync SIZE IT direction to chart's currentSignal UNLESS the user
+  // has explicitly toggled (userOverride flag). Discretion mode is respected;
+  // default mode snaps to the chart signal. Override is cleared automatically
+  // on ticker change via the panel reset effect above.
   useEffect(() => {
-    if (!sizePanel) return;
+    if (!sizePanel || sizePanel.userOverride) return;
     const enforced = currentSignal === 'BL' ? 'LONG' : currentSignal === 'SS' ? 'SHORT' : null;
     if (!enforced || sizePanel.direction === enforced) return;
     setSizePanel(p => p ? { ...p, direction: enforced } : p);
-  }, [currentSignal, sizePanel?.direction]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentSignal, sizePanel?.direction, sizePanel?.userOverride]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch Kill score from cache when stock doesn't have it (e.g. opened from Search) ──
   useEffect(() => {
@@ -1175,7 +1176,11 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
         {isAuthenticated && sizePanel && (() => {
           const vitality      = sizePanel.vitality ?? +(sizePanel.nav * (sizePanel.isETF ? 0.005 : 0.01)).toFixed(0);
           const riskOverVit   = sizePanel.risk$ > vitality;
-          const dirColor      = sizePanel.direction === 'SHORT' ? '#ff6b6b' : '#28a745';
+          const chartSigDir   = currentSignal === 'BL' ? 'LONG' : currentSignal === 'SS' ? 'SHORT' : null;
+          const discretionOn  = chartSigDir != null && sizePanel.direction !== chartSigDir;
+          const dirColor      = discretionOn ? '#f59e0b'
+                               : sizePanel.direction === 'SHORT' ? '#ff6b6b'
+                               : '#28a745';
           const dirLabel      = sizePanel.direction === 'SHORT' ? 'SHORT' : 'LONG';
           const tier          = sizePanel.isETF ? 'ETF' : 'STOCK';
           const tierColor     = sizePanel.isETF ? '#6ea8fe' : '#FFD700';
@@ -1200,65 +1205,78 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
               flexDirection: 'column',
               gap: 10,
             }}>
+              {/* Discretion banner — only renders when user has flipped direction away from chart signal */}
+              {discretionOn && (
+                <div style={{
+                  background: 'rgba(245,158,11,0.12)',
+                  border: '1px solid rgba(245,158,11,0.5)',
+                  borderRadius: 4,
+                  padding: '6px 10px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: '#f59e0b',
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.03em',
+                }}>
+                  ⚠ DISCRETION — chart signal is {currentSignal} ({chartSigDir}); sizing as {dirLabel}.
+                  Stop recalculated via {dirLabel === 'LONG' ? 'blInitStop' : 'ssInitStop'} formula.
+                </div>
+              )}
               {/* Row 1: ticker · direction toggle | lot 1 shares · total target */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 18, fontWeight: 900, color: '#FFD700', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
                     {stock.ticker}
                   </span>
-                  {(() => {
-                    const signalLocked = currentSignal === 'BL' || currentSignal === 'SS';
-                    return (
-                      <button
-                        disabled={signalLocked}
-                        onClick={signalLocked ? undefined : () => setSizePanel(p => {
-                          const newDir = p.direction === 'LONG' ? 'SHORT' : 'LONG';
+                  <button
+                    onClick={() => setSizePanel(p => {
+                      const newDir = p.direction === 'LONG' ? 'SHORT' : 'LONG';
 
-                          let newStop;
-                          if (allWeeklyData.length >= 4) {
-                            const atrArr      = computeWilderATR(allWeeklyData);
-                            const lastIdx     = allWeeklyData.length - 1;
-                            const prev1       = allWeeklyData[lastIdx - 1];
-                            const prev2       = allWeeklyData[lastIdx - 2];
-                            const current     = allWeeklyData[lastIdx];
-                            const atr         = atrArr[lastIdx] ?? atrArr[lastIdx - 1] ?? null;
-                            const twoWeekLow  = Math.min(prev1.low,  prev2.low);
-                            const twoWeekHigh = Math.max(prev1.high, prev2.high);
-                            newStop = newDir === 'LONG'
-                              ? blInitStop(twoWeekLow,  current.close, atr)
-                              : ssInitStop(twoWeekHigh, current.close, atr);
-                          } else if (p.chartPnthrStop) {
-                            newStop = p.chartPnthrStop;
-                          } else {
-                            newStop = newDir === 'SHORT' ? +(p.entry * 1.02).toFixed(2) : +(p.entry * 0.98).toFixed(2);
-                          }
+                      let newStop;
+                      if (allWeeklyData.length >= 4) {
+                        const atrArr      = computeWilderATR(allWeeklyData);
+                        const lastIdx     = allWeeklyData.length - 1;
+                        const prev1       = allWeeklyData[lastIdx - 1];
+                        const prev2       = allWeeklyData[lastIdx - 2];
+                        const current     = allWeeklyData[lastIdx];
+                        const atr         = atrArr[lastIdx] ?? atrArr[lastIdx - 1] ?? null;
+                        const twoWeekLow  = Math.min(prev1.low,  prev2.low);
+                        const twoWeekHigh = Math.max(prev1.high, prev2.high);
+                        newStop = newDir === 'LONG'
+                          ? blInitStop(twoWeekLow,  current.close, atr)
+                          : ssInitStop(twoWeekHigh, current.close, atr);
+                      } else if (p.chartPnthrStop) {
+                        newStop = p.chartPnthrStop;
+                      } else {
+                        newStop = newDir === 'SHORT' ? +(p.entry * 1.02).toFixed(2) : +(p.entry * 0.98).toFixed(2);
+                      }
 
-                          const sizing = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir, isETF: p.isETF });
-                          const lot1   = Math.max(1, Math.round(sizing.totalShares * 0.35));
-                          return {
-                            ...p,
-                            direction:    newDir,
-                            adjustedStop: newStop,
-                            stop:         newStop,
-                            totalShares:  sizing.totalShares,
-                            lot1Shares:   lot1,
-                            vitality:     sizing.vitality,
-                            risk$:        +(lot1 * Math.abs(p.entry - newStop)).toFixed(0),
-                          };
-                        })}
-                        title={signalLocked
-                          ? `Direction locked to chart ${currentSignal} signal`
-                          : 'Click to flip LONG ↔ SHORT'}
-                        style={{ background: sizePanel.direction === 'SHORT' ? 'rgba(220,53,69,0.15)' : 'rgba(40,167,69,0.15)',
-                          border: `1.5px solid ${dirColor}`, color: dirColor,
-                          borderRadius: 5, padding: '3px 10px', fontSize: 12, fontWeight: 800,
-                          cursor: signalLocked ? 'not-allowed' : 'pointer',
-                          opacity: signalLocked ? 0.85 : 1,
-                          fontFamily: 'monospace', letterSpacing: '0.05em' }}>
-                        {dirLabel} {signalLocked ? '🔒' : '⇄'}
-                      </button>
-                    );
-                  })()}
+                      const sizing = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir, isETF: p.isETF });
+                      const lot1   = Math.max(1, Math.round(sizing.totalShares * 0.35));
+                      return {
+                        ...p,
+                        direction:    newDir,
+                        adjustedStop: newStop,
+                        stop:         newStop,
+                        totalShares:  sizing.totalShares,
+                        lot1Shares:   lot1,
+                        vitality:     sizing.vitality,
+                        risk$:        +(lot1 * Math.abs(p.entry - newStop)).toFixed(0),
+                        userOverride: true,   // user exercised discretion — don't auto-resync on this ticker
+                      };
+                    })}
+                    title={discretionOn
+                      ? `DISCRETION — chart signal is ${currentSignal}; sizing as ${dirLabel}. Click to flip back.`
+                      : 'Click to flip LONG ↔ SHORT (enters discretion mode)'}
+                    style={{ background: discretionOn ? 'rgba(245,158,11,0.18)'
+                            : sizePanel.direction === 'SHORT' ? 'rgba(220,53,69,0.15)'
+                            : 'rgba(40,167,69,0.15)',
+                      border: `1.5px solid ${dirColor}`, color: dirColor,
+                      borderRadius: 5, padding: '3px 10px', fontSize: 12, fontWeight: 800,
+                      cursor: 'pointer',
+                      fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+                    {dirLabel} {discretionOn ? '⚠' : '⇄'}
+                  </button>
                   <span style={{ fontSize: 11, color: tierColor, fontWeight: 700, border: `1px solid ${tierColor}`, borderRadius: 3, padding: '2px 7px', opacity: 0.85 }}>
                     {tier}
                   </span>
@@ -1419,18 +1437,20 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                   : parseFloat((lastBar.high + 0.01).toFixed(2));
               })();
 
+              const overrideStyle = { fontSize: 10, marginLeft: 4, fontWeight: 900,
+                color: '#f59e0b', letterSpacing: '0.04em' };
               return (
                 <>
                   {displayPnthrStop != null && (
                     <span className={styles.stopBadge}>
                       PNTHR Stop: ${displayPnthrStop.toFixed(2)}
-                      {overridden && <span style={{ fontSize: 9, opacity: 0.65, marginLeft: 4 }}>({sizePanelDir})</span>}
+                      {overridden && <span style={overrideStyle}>⚠ {sizePanelDir}</span>}
                     </span>
                   )}
                   {displayCurrStop != null && (
                     <span className={styles.stopBadgeCurr}>
                       Curr Stop: ${displayCurrStop.toFixed(2)}
-                      {overridden && <span style={{ fontSize: 9, opacity: 0.65, marginLeft: 4 }}>({sizePanelDir})</span>}
+                      {overridden && <span style={overrideStyle}>⚠ {sizePanelDir}</span>}
                     </span>
                   )}
                 </>

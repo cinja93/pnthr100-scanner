@@ -916,7 +916,6 @@ export default function ApexPage() {
           stocks={chartStocks}
           initialIndex={chartIndex}
           signals={Object.fromEntries(chartStocks.map(s => [s.ticker, { signal: s.signal, signalDate: s.signalDate, isNewSignal: s.isNewSignal, stopPrice: s.stopPrice }]))}
-          earnings={{}}
           onClose={() => setChartIndex(null)}
         />
       )}

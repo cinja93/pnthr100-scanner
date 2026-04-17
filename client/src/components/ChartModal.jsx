@@ -300,7 +300,14 @@ function formatWeekDate(timeStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function ChartModal({ stocks, initialIndex, earnings = {}, onClose, onWatchlistChange }) {
+// Stable module-level default for the earnings prop. Using `earnings = {}` in the
+// parameter destructure creates a NEW empty object every render, which changes the
+// reference identity and thrashes the chart-building useEffect's dep array —
+// destroying and rebuilding the chart on every parent re-render (white flash +
+// signals briefly disappearing).
+const EMPTY_EARNINGS = Object.freeze({});
+
+export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARNINGS, onClose, onWatchlistChange }) {
   const { isInvestor } = useAuth() || {};
   const { isAuthenticated, queuedTickers, toggleQueue, nav: contextNav } = useQueue() || {};
   const { analyzeContext } = useAnalyzeContext() || {};

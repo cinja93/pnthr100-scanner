@@ -3195,8 +3195,6 @@ export default function AssistantPage({ onNavigate }) {
         <ChartModal
           stocks={chartStocks}
           initialIndex={chartIndex}
-          signals={{}}
-          earnings={{}}
           onClose={() => setChartStocks(null)}
         />
       )}

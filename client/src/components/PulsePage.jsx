@@ -216,7 +216,6 @@ export default function PulsePage({ onNavigate }) {
         <ChartModal
           stocks={chartList}
           initialIndex={chartIndex}
-          earnings={{}}
           onClose={() => { setChartList([]); setChartIndex(0); }}
         />
       )}

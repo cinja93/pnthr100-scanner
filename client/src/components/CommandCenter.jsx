@@ -2792,7 +2792,6 @@ export default function CommandCenter({ onNavigate, refreshSignal }) {
         <ChartModal
           stocks={chartModal.stocks}
           initialIndex={chartModal.index}
-          earnings={{}}
           onClose={() => setChartModal(null)}
         />
       )}

@@ -4,6 +4,9 @@
   padding: 24px;
   max-width: 1400px;
   margin: 0 auto;
+  background: #09090b;
+  color: #e8e6e3;
+  min-height: 100vh;
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────────── */

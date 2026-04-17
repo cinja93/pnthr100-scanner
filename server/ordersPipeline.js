@@ -463,10 +463,17 @@ export async function ordersGetLatest(req, res) {
       .find({ status: 'ACTIVE', ownerId: req.user.userId }).project({ ticker: 1 }).toArray();
     const inPort = new Set(portfolio.map(p => p.ticker));
 
-    // Enrich orders with portfolio status
-    const orders = (orderDoc?.orders || []).map(o => ({
+    // Enrich orders with portfolio status + cached gap risk (for client-side SIZE IT)
+    const rawOrders = orderDoc?.orders || [];
+    const tickers   = rawOrders.map(o => o.ticker);
+    const gapDocs   = tickers.length
+      ? await db.collection('pnthr_gap_risk').find({ ticker: { $in: tickers } }).toArray()
+      : [];
+    const gapMap = new Map(gapDocs.map(g => [g.ticker, g.maxGapPct || 0]));
+    const orders = rawOrders.map(o => ({
       ...o,
       inPortfolio: inPort.has(o.ticker),
+      maxGapPct:   gapMap.get(o.ticker) ?? 0,
     }));
 
     // If saved regime is missing index data (FMP failed when orders were generated),

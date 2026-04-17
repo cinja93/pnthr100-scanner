@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchLatestOrders, fetchOrdersHistory, fetchOrdersGateLog, runOrdersManual, fetchBacktestTrades } from '../services/api';
+import { fetchLatestOrders, fetchOrdersHistory, fetchOrdersGateLog, runOrdersManual, fetchBacktestTrades, fetchNav } from '../services/api';
+import { sizePosition, isEtfTicker } from '../utils/sizingUtils.js';
+import ChartModal from './ChartModal';
 import styles from './OrdersPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -969,6 +971,12 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [running, setRunning] = useState(false);
+  const [nav, setNav] = useState(100000);
+  const [chartIndex, setChartIndex] = useState(null);
+
+  useEffect(() => {
+    fetchNav().then(r => { if (r?.nav) setNav(r.nav); }).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -1167,7 +1175,8 @@ export default function OrdersPage() {
               {blOrders.length > 0 && (
                 <div className={styles.gateSection}>
                   <h3 className={styles.gateSectionTitle}>BUY LONG ({blOrders.length})</h3>
-                  <OrderTable orders={blOrders} gtdExp={gtdExp} />
+                  <OrderTable orders={blOrders} gtdExp={gtdExp} nav={nav}
+                    onTickerClick={(t) => setChartIndex(orders.findIndex(o => o.ticker === t))} />
                 </div>
               )}
 
@@ -1175,7 +1184,8 @@ export default function OrdersPage() {
               {ssOrders.length > 0 && (
                 <div className={styles.gateSection}>
                   <h3 className={styles.gateSectionTitle}>SELL SHORT ({ssOrders.length})</h3>
-                  <OrderTable orders={ssOrders} gtdExp={gtdExp} />
+                  <OrderTable orders={ssOrders} gtdExp={gtdExp} nav={nav}
+                    onTickerClick={(t) => setChartIndex(orders.findIndex(o => o.ticker === t))} />
                 </div>
               )}
             </>
@@ -1300,13 +1310,22 @@ export default function OrdersPage() {
           )}
         </div>
       )}
+
+      {/* Chart modal — opens on ticker click */}
+      {chartIndex != null && chartIndex >= 0 && (
+        <ChartModal
+          stocks={orders}
+          initialIndex={chartIndex}
+          onClose={() => setChartIndex(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ── Order table sub-component ──────────────────────────────────────────────────
 
-function OrderTable({ orders, gtdExp }) {
+function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
   return (
     <table className={styles.ordersTable}>
       <thead>
@@ -1318,6 +1337,7 @@ function OrderTable({ orders, gtdExp }) {
           <th>Tier</th>
           <th>Entry (Limit)</th>
           <th>Stop</th>
+          <th>Shares</th>
           <th>Sector</th>
           <th>D2</th>
           <th>RSI</th>
@@ -1326,41 +1346,71 @@ function OrderTable({ orders, gtdExp }) {
         </tr>
       </thead>
       <tbody>
-        {orders.map((o, i) => (
-          <tr key={o.ticker}>
-            <td>{o.filteredRank}</td>
-            <td>
-              <strong>{o.ticker}</strong>
-              <div style={{ fontSize: 11, color: '#666' }}>{o.companyName}</div>
-            </td>
-            <td>
-              <span className={o.signal === 'BL' ? styles.dirBL : styles.dirSS}>
-                {o.signal === 'BL' ? 'BUY' : 'SHORT'}
-              </span>
-            </td>
-            <td className={styles.killScore}>{o.killScore}</td>
-            <td>
-              <span className={styles.tierCell} style={{
-                background: tierColor(o.tier),
-                color: tierTextColor(o.tier),
-              }}>
-                {o.tier}
-              </span>
-            </td>
-            <td className={styles.entryPrice}>${o.signalPrice?.toFixed(2) || o.currentPrice?.toFixed(2) || '—'}</td>
-            <td className={styles.stopPrice}>${o.stopPrice?.toFixed(2) || '—'}</td>
-            <td style={{ fontSize: 12 }}>{o.sector}</td>
-            <td style={{ color: (o.d2Score ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>{o.d2Score?.toFixed(0) ?? '—'}</td>
-            <td style={{ fontSize: 12 }}>{o.weeklyRsi?.toFixed(0) || '—'}</td>
-            <td className={styles.gtdDate}>{gtdExp}</td>
-            <td>
-              {o.inPortfolio
-                ? <span style={{ color: '#2563eb', fontWeight: 600, fontSize: 11 }}>IN PORTFOLIO</span>
-                : <span style={{ color: '#22c55e', fontWeight: 600, fontSize: 11 }}>NEW</span>
-              }
-            </td>
-          </tr>
-        ))}
+        {orders.map((o, i) => {
+          const entry = o.signalPrice || o.currentPrice || 0;
+          const stop  = o.stopPrice || 0;
+          const sized = (entry > 0 && stop > 0 && nav > 0)
+            ? sizePosition({
+                netLiquidity: nav,
+                entryPrice:   entry,
+                stopPrice:    stop,
+                maxGapPct:    o.maxGapPct || 0,
+                direction:    o.direction || (o.signal === 'BL' ? 'LONG' : 'SHORT'),
+                isETF:        isEtfTicker(o.ticker),
+              })
+            : null;
+          const shares = sized?.totalShares || 0;
+          const cost   = shares * entry;
+          return (
+            <tr key={o.ticker}>
+              <td>{o.filteredRank}</td>
+              <td>
+                <strong
+                  onClick={() => onTickerClick?.(o.ticker)}
+                  style={{ cursor: onTickerClick ? 'pointer' : 'default', color: '#fcf000', textDecoration: 'underline dotted' }}
+                  title="Click to view chart"
+                >
+                  {o.ticker}
+                </strong>
+                <div style={{ fontSize: 11, color: '#888' }}>{o.companyName}</div>
+              </td>
+              <td>
+                <span className={o.signal === 'BL' ? styles.dirBL : styles.dirSS}>
+                  {o.signal === 'BL' ? 'BUY' : 'SHORT'}
+                </span>
+              </td>
+              <td className={styles.killScore}>{o.killScore}</td>
+              <td>
+                <span className={styles.tierCell} style={{
+                  background: tierColor(o.tier),
+                  color: tierTextColor(o.tier),
+                }}>
+                  {o.tier}
+                </span>
+              </td>
+              <td className={styles.entryPrice}>${o.signalPrice?.toFixed(2) || o.currentPrice?.toFixed(2) || '—'}</td>
+              <td className={styles.stopPrice}>${o.stopPrice?.toFixed(2) || '—'}</td>
+              <td style={{ fontFamily: 'monospace', color: shares > 0 ? '#fcf000' : '#666' }}>
+                {shares > 0 ? shares.toLocaleString() : '—'}
+                {shares > 0 && (
+                  <div style={{ fontSize: 10, color: '#888' }}>
+                    ${Math.round(cost).toLocaleString()}
+                  </div>
+                )}
+              </td>
+              <td style={{ fontSize: 12 }}>{o.sector}</td>
+              <td style={{ color: (o.d2Score ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>{o.d2Score?.toFixed(0) ?? '—'}</td>
+              <td style={{ fontSize: 12 }}>{o.weeklyRsi?.toFixed(0) || '—'}</td>
+              <td className={styles.gtdDate}>{gtdExp}</td>
+              <td>
+                {o.inPortfolio
+                  ? <span style={{ color: '#2563eb', fontWeight: 600, fontSize: 11 }}>IN PORTFOLIO</span>
+                  : <span style={{ color: '#22c55e', fontWeight: 600, fontSize: 11 }}>NEW</span>
+                }
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

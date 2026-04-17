@@ -1630,6 +1630,13 @@ function PendingCard({ entry, nav, onConfirm, onDismiss }) {
           {entry.killTier && <TierBadge t={entry.killTier} />}
           {entry.sector && <span style={{ fontSize: 11, color: '#555' }}>{entry.sector}</span>}
           {entry.killScore != null && <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>Score: {entry.killScore}</span>}
+          {entry.isManualOverride && (
+            <span title="Manual override — queued from the OVERRIDE dialog on the chart; does not match the Friday system recommendation"
+              style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: '#2563eb',
+                borderRadius: 3, padding: '2px 7px', letterSpacing: '0.08em' }}>
+              OVERRIDE
+            </span>
+          )}
           {isExpired && <Badge color="#fff" bg="rgba(220,53,69,0.4)" small>EXPIRED</Badge>}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>

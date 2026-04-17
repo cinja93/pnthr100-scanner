@@ -326,6 +326,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   // ── SIZE IT / QUEUE IT state ─────────────────────────────────────────────────
   const [sizePanel, setSizePanel] = useState(null);
   const [sizeLoading, setSizeLoading] = useState(false);
+  const [overrideModal, setOverrideModal] = useState(false); // true when OVERRIDE dialog is open
   // ── ANALYZE panel state ──────────────────────────────────────────────────────
   const [analyzeOpen, setAnalyzeOpen] = useState(false);
   const analyzeResultRef = useRef(null);
@@ -418,19 +419,18 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
     return base;
   }, [stock, currentSignal, allWeeklyData, fetchedKillData, pnthrStop, chartSignalAge]);
 
-  // Reset SIZE IT + ANALYZE panels when navigating to a new stock
-  useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; setFetchedKillData(null); setChartSignalAge(null); }, [currentIndex]);
+  // Reset SIZE IT + ANALYZE + OVERRIDE panels when navigating to a new stock
+  useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; setFetchedKillData(null); setChartSignalAge(null); setOverrideModal(false); }, [currentIndex]);
 
-  // Auto-resync SIZE IT direction to chart's currentSignal UNLESS the user
-  // has explicitly toggled (userOverride flag). Discretion mode is respected;
-  // default mode snaps to the chart signal. Override is cleared automatically
-  // on ticker change via the panel reset effect above.
+  // Lock SIZE IT direction to chart's currentSignal — single source of truth.
+  // The user cannot desync direction from the system signal; to go against the
+  // system they must use the blue OVERRIDE button (opens dedicated dialog).
   useEffect(() => {
-    if (!sizePanel || sizePanel.userOverride) return;
+    if (!sizePanel) return;
     const enforced = currentSignal === 'BL' ? 'LONG' : currentSignal === 'SS' ? 'SHORT' : null;
     if (!enforced || sizePanel.direction === enforced) return;
     setSizePanel(p => p ? { ...p, direction: enforced } : p);
-  }, [currentSignal, sizePanel?.direction, sizePanel?.userOverride]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentSignal, sizePanel?.direction]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch Kill score from cache when stock doesn't have it (e.g. opened from Search) ──
   useEffect(() => {
@@ -1176,11 +1176,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
         {isAuthenticated && sizePanel && (() => {
           const vitality      = sizePanel.vitality ?? +(sizePanel.nav * (sizePanel.isETF ? 0.005 : 0.01)).toFixed(0);
           const riskOverVit   = sizePanel.risk$ > vitality;
-          const chartSigDir   = currentSignal === 'BL' ? 'LONG' : currentSignal === 'SS' ? 'SHORT' : null;
-          const discretionOn  = chartSigDir != null && sizePanel.direction !== chartSigDir;
-          const dirColor      = discretionOn ? '#f59e0b'
-                               : sizePanel.direction === 'SHORT' ? '#ff6b6b'
-                               : '#28a745';
+          const dirColor      = sizePanel.direction === 'SHORT' ? '#ff6b6b' : '#28a745';
           const dirLabel      = sizePanel.direction === 'SHORT' ? 'SHORT' : 'LONG';
           const tier          = sizePanel.isETF ? 'ETF' : 'STOCK';
           const tierColor     = sizePanel.isETF ? '#6ea8fe' : '#FFD700';
@@ -1205,77 +1201,30 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
               flexDirection: 'column',
               gap: 10,
             }}>
-              {/* Discretion banner — only renders when user has flipped direction away from chart signal */}
-              {discretionOn && (
-                <div style={{
-                  background: 'rgba(245,158,11,0.12)',
-                  border: '1px solid rgba(245,158,11,0.5)',
-                  borderRadius: 4,
-                  padding: '6px 10px',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: '#f59e0b',
-                  fontFamily: 'monospace',
-                  letterSpacing: '0.03em',
-                }}>
-                  ⚠ DISCRETION — chart signal is {currentSignal} ({chartSigDir}); sizing as {dirLabel}.
-                  Stop recalculated via {dirLabel === 'LONG' ? 'blInitStop' : 'ssInitStop'} formula.
-                </div>
-              )}
-              {/* Row 1: ticker · direction toggle | lot 1 shares · total target */}
+              {/* Row 1: ticker · direction (locked) · OVERRIDE button | lot 1 shares · total target */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 18, fontWeight: 900, color: '#FFD700', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
                     {stock.ticker}
                   </span>
-                  <button
-                    onClick={() => setSizePanel(p => {
-                      const newDir = p.direction === 'LONG' ? 'SHORT' : 'LONG';
-
-                      let newStop;
-                      if (allWeeklyData.length >= 4) {
-                        const atrArr      = computeWilderATR(allWeeklyData);
-                        const lastIdx     = allWeeklyData.length - 1;
-                        const prev1       = allWeeklyData[lastIdx - 1];
-                        const prev2       = allWeeklyData[lastIdx - 2];
-                        const current     = allWeeklyData[lastIdx];
-                        const atr         = atrArr[lastIdx] ?? atrArr[lastIdx - 1] ?? null;
-                        const twoWeekLow  = Math.min(prev1.low,  prev2.low);
-                        const twoWeekHigh = Math.max(prev1.high, prev2.high);
-                        newStop = newDir === 'LONG'
-                          ? blInitStop(twoWeekLow,  current.close, atr)
-                          : ssInitStop(twoWeekHigh, current.close, atr);
-                      } else if (p.chartPnthrStop) {
-                        newStop = p.chartPnthrStop;
-                      } else {
-                        newStop = newDir === 'SHORT' ? +(p.entry * 1.02).toFixed(2) : +(p.entry * 0.98).toFixed(2);
-                      }
-
-                      const sizing = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir, isETF: p.isETF });
-                      const lot1   = Math.max(1, Math.round(sizing.totalShares * 0.35));
-                      return {
-                        ...p,
-                        direction:    newDir,
-                        adjustedStop: newStop,
-                        stop:         newStop,
-                        totalShares:  sizing.totalShares,
-                        lot1Shares:   lot1,
-                        vitality:     sizing.vitality,
-                        risk$:        +(lot1 * Math.abs(p.entry - newStop)).toFixed(0),
-                        userOverride: true,   // user exercised discretion — don't auto-resync on this ticker
-                      };
-                    })}
-                    title={discretionOn
-                      ? `DISCRETION — chart signal is ${currentSignal}; sizing as ${dirLabel}. Click to flip back.`
-                      : 'Click to flip LONG ↔ SHORT (enters discretion mode)'}
-                    style={{ background: discretionOn ? 'rgba(245,158,11,0.18)'
-                            : sizePanel.direction === 'SHORT' ? 'rgba(220,53,69,0.15)'
-                            : 'rgba(40,167,69,0.15)',
+                  {/* Direction badge — locked to chart signal. Use OVERRIDE button to go against the system. */}
+                  <span
+                    title={`Direction locked to chart ${currentSignal || 'signal'}. Use OVERRIDE to reverse.`}
+                    style={{ background: sizePanel.direction === 'SHORT' ? 'rgba(220,53,69,0.15)' : 'rgba(40,167,69,0.15)',
                       border: `1.5px solid ${dirColor}`, color: dirColor,
                       borderRadius: 5, padding: '3px 10px', fontSize: 12, fontWeight: 800,
-                      cursor: 'pointer',
-                      fontFamily: 'monospace', letterSpacing: '0.05em' }}>
-                    {dirLabel} {discretionOn ? '⚠' : '⇄'}
+                      fontFamily: 'monospace', letterSpacing: '0.05em', userSelect: 'none' }}>
+                    {dirLabel} 🔒
+                  </span>
+                  {/* OVERRIDE button — opens reverse-stop dialog for manual discretion */}
+                  <button
+                    onClick={() => setOverrideModal(true)}
+                    title="View reverse stop + sizing, and queue a manual override"
+                    style={{ background: '#2563eb', color: '#fff',
+                      border: 'none', borderRadius: 5, padding: '4px 12px',
+                      fontSize: 11, fontWeight: 800, cursor: 'pointer',
+                      fontFamily: 'monospace', letterSpacing: '0.06em' }}>
+                    OVERRIDE
                   </button>
                   <span style={{ fontSize: 11, color: tierColor, fontWeight: 700, border: `1px solid ${tierColor}`, borderRadius: 3, padding: '2px 7px', opacity: 0.85 }}>
                     {tier}
@@ -1437,20 +1386,18 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                   : parseFloat((lastBar.high + 0.01).toFixed(2));
               })();
 
-              const overrideStyle = { fontSize: 10, marginLeft: 4, fontWeight: 900,
-                color: '#f59e0b', letterSpacing: '0.04em' };
               return (
                 <>
                   {displayPnthrStop != null && (
                     <span className={styles.stopBadge}>
                       PNTHR Stop: ${displayPnthrStop.toFixed(2)}
-                      {overridden && <span style={overrideStyle}>⚠ {sizePanelDir}</span>}
+                      {overridden && <span style={{ fontSize: 9, opacity: 0.65, marginLeft: 4 }}>({sizePanelDir})</span>}
                     </span>
                   )}
                   {displayCurrStop != null && (
                     <span className={styles.stopBadgeCurr}>
                       Curr Stop: ${displayCurrStop.toFixed(2)}
-                      {overridden && <span style={overrideStyle}>⚠ {sizePanelDir}</span>}
+                      {overridden && <span style={{ fontSize: 9, opacity: 0.65, marginLeft: 4 }}>({sizePanelDir})</span>}
                     </span>
                   )}
                 </>
@@ -1584,6 +1531,181 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
         </div>
 
       </div>
+
+      {/* ── OVERRIDE modal — manual reverse-stop + optional queue ────────────── */}
+      {overrideModal && sizePanel && (
+        <OverrideDialog
+          stock={stock}
+          sizePanel={sizePanel}
+          currentSignal={currentSignal}
+          allWeeklyData={allWeeklyData}
+          analyzeResult={analyzeResultRef.current}
+          onQueue={(payload) => { if (toggleQueue) toggleQueue(payload); setOverrideModal(false); }}
+          onClose={() => setOverrideModal(false)}
+        />
+      )}
     </div>
   );
 }
+
+// ── OVERRIDE Dialog ───────────────────────────────────────────────────────────
+// Shows reverse-side math (entry, stop, shares, stock risk%) for manual
+// discretion. When the chart signal is BL or SS, only the opposite side is
+// shown. When there's no signal, BOTH sides render so the user can pick.
+// Queuing from here writes a pending entry with isManualOverride = true.
+function OverrideDialog({ stock, sizePanel, currentSignal, allWeeklyData, analyzeResult, onQueue, onClose }) {
+  // Derive 2-week high/low + ATR from chart data — same source as the state machine.
+  const computed = useMemo(() => {
+    if (!allWeeklyData || allWeeklyData.length < 4) return null;
+    const atrArr      = computeWilderATR(allWeeklyData);
+    const lastIdx     = allWeeklyData.length - 1;
+    const prev1       = allWeeklyData[lastIdx - 1];
+    const prev2       = allWeeklyData[lastIdx - 2];
+    const current     = allWeeklyData[lastIdx];
+    const atr         = atrArr[lastIdx] ?? atrArr[lastIdx - 1] ?? null;
+    const twoWeekLow  = Math.min(prev1.low,  prev2.low);
+    const twoWeekHigh = Math.max(prev1.high, prev2.high);
+    return {
+      longStop:   blInitStop(twoWeekLow,  current.close, atr),
+      shortStop:  ssInitStop(twoWeekHigh, current.close, atr),
+      twoWeekLow, twoWeekHigh, close: current.close, atr,
+    };
+  }, [allWeeklyData]);
+
+  if (!computed) {
+    return (
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
+        zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ background: '#111', color: '#ccc', padding: 24, borderRadius: 10, maxWidth: 400, textAlign: 'center' }}>
+          Not enough chart data to compute override stops.
+          <div style={{ marginTop: 12 }}><button onClick={onClose} style={btnClose}>Close</button></div>
+        </div>
+      </div>
+    );
+  }
+
+  // Helper — compute sizing for a given direction
+  function sized(direction) {
+    const stop = direction === 'LONG' ? computed.longStop : computed.shortStop;
+    const res  = sizePosition({
+      netLiquidity: sizePanel.nav,
+      entryPrice:   sizePanel.entry,
+      stopPrice:    stop,
+      maxGapPct:    sizePanel.gapPct,
+      direction,
+      isETF:        sizePanel.isETF,
+    });
+    const lot1     = Math.max(1, Math.round(res.totalShares * STRIKE_PCT[0]));
+    const riskDlr  = lot1 * Math.abs(sizePanel.entry - stop);
+    const stockRiskPct = sizePanel.nav > 0 ? +(riskDlr / sizePanel.nav * 100).toFixed(2) : 0;
+    return { direction, stop, totalShares: res.totalShares, lot1, riskDlr, stockRiskPct, gapMult: res.gapMult, vitality: res.vitality };
+  }
+
+  const chartSignalDir = currentSignal === 'BL' ? 'LONG' : currentSignal === 'SS' ? 'SHORT' : null;
+  const hasSignal      = chartSignalDir != null;
+  // When signal exists, show only the OPPOSITE side. When no signal, show BOTH.
+  const sides = hasSignal
+    ? [sized(chartSignalDir === 'LONG' ? 'SHORT' : 'LONG')]
+    : [sized('LONG'), sized('SHORT')];
+
+  function buildQueuePayload(side) {
+    return {
+      id:                Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      ticker:            stock.ticker,
+      signal:            stock.signal,
+      direction:         side.direction,
+      currentPrice:      sizePanel.entry,
+      suggestedStop:     side.stop,
+      adjustedStop:      side.stop,
+      gapPct:            sizePanel.gapPct,
+      gapMultiplier:     side.gapMult,
+      totalTargetShares: side.totalShares,
+      lot1Shares:        side.lot1,
+      riskPerPosition:   +side.riskDlr.toFixed(0),
+      killScore:         stock.totalScore ?? stock.apexScore ?? stock.killScore ?? null,
+      killTier:          stock.tier ?? null,
+      isETF:             sizePanel.isETF || false,
+      sector:            sizePanel.isETF ? 'ETF' : (stock.sector || '—'),
+      companyName:       stock.companyName || '',
+      exchange:          stock.exchange || '',
+      signalAge:         stock.signalAge ?? stock.weeksSince ?? null,
+      killRank:          stock.killRank ?? stock.rank ?? null,
+      analyzeScore:      analyzeResult ? { ...analyzeResult, computedAt: new Date().toISOString() } : null,
+      queuedAt:          Date.now(),
+      isManualOverride:  true,
+    };
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)',
+      zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#0c0c0c', color: '#e8e6e3',
+        width: '92vw', maxWidth: hasSignal ? 460 : 720, borderRadius: 12,
+        border: '2px solid #2563eb', overflow: 'hidden', fontFamily: '-apple-system, sans-serif' }}>
+        <div style={{ padding: '14px 20px', background: '#2563eb', color: '#fff',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em' }}>
+            OVERRIDE — {stock.ticker}
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>✕</button>
+        </div>
+
+        <div style={{ padding: '14px 20px', fontSize: 12, color: '#999',
+          borderBottom: '1px solid rgba(255,255,255,0.08)', background: '#0a0a0a' }}>
+          System Signal:{' '}
+          <span style={{ color: currentSignal === 'BL' ? '#22c55e' : currentSignal === 'SS' ? '#ef4444' : '#f59e0b', fontWeight: 700 }}>
+            {currentSignal || 'NO SIGNAL (pause)'}
+          </span>
+          {hasSignal && <> · Current PNTHR Stop <span style={{ color: '#fcf000', fontFamily: 'monospace' }}>${(sizePanel.stop ?? sizePanel.adjustedStop ?? 0).toFixed(2)}</span></>}
+        </div>
+
+        <div style={{ padding: '18px 20px', display: 'grid',
+          gridTemplateColumns: sides.length === 2 ? '1fr 1fr' : '1fr', gap: 16 }}>
+          {sides.map(side => (
+            <div key={side.direction} style={{
+              border: `1px solid ${side.direction === 'LONG' ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}`,
+              borderRadius: 8, padding: 14, background: 'rgba(255,255,255,0.02)',
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em',
+                color: side.direction === 'LONG' ? '#22c55e' : '#ef4444', marginBottom: 10 }}>
+                {hasSignal ? `REVERSE TO ${side.direction}` : `IF ${side.direction}`}
+              </div>
+              <OverrideRow label="Entry"       value={`$${sizePanel.entry.toFixed(2)}`} />
+              <OverrideRow label="PNTHR Stop"  value={`$${side.stop.toFixed(2)}`} highlight />
+              <OverrideRow label="Lot 1 Shares" value={side.lot1.toLocaleString()} />
+              <OverrideRow label="Total Shares" value={side.totalShares.toLocaleString()} />
+              <OverrideRow label="Risk $"      value={`$${Math.round(side.riskDlr).toLocaleString()}`} />
+              <OverrideRow label="Stock Risk"  value={`${side.stockRiskPct}%`} />
+              <button
+                onClick={() => onQueue(buildQueuePayload(side))}
+                style={{ marginTop: 12, width: '100%',
+                  background: side.direction === 'LONG' ? '#22c55e' : '#ef4444',
+                  color: '#fff', border: 'none', borderRadius: 6,
+                  padding: '9px 14px', fontWeight: 800, fontSize: 12, cursor: 'pointer',
+                  letterSpacing: '0.06em' }}>
+                QUEUE {side.direction} OVERRIDE
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: '10px 20px 14px', fontSize: 10, color: '#666', lineHeight: 1.5 }}>
+          ⓘ Queueing here flags the entry with <code style={{ color: '#888' }}>isManualOverride</code>,
+          visible as a blue OVERRIDE badge on the pending card in Command Center.
+          PNTHR Orders always shows the system recommendation; discretion lives on the pending entry.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OverrideRow({ label, value, highlight = false }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12, fontFamily: 'monospace' }}>
+      <span style={{ color: '#888' }}>{label}</span>
+      <span style={{ color: highlight ? '#fcf000' : '#e8e6e3', fontWeight: highlight ? 800 : 600 }}>{value}</span>
+    </div>
+  );
+}
+
+const btnClose = { background: '#2563eb', color: '#fff', border: 'none', borderRadius: 5, padding: '6px 14px', fontWeight: 700, cursor: 'pointer' };

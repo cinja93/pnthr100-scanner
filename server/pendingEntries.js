@@ -96,7 +96,7 @@ export async function pendingEntriesPost(req, res) {
       'ticker', 'direction', 'signal', 'signalAge', 'entryPrice', 'suggestedStop',
       'adjustedStop', 'gapPct', 'shares', 'sector', 'exchange', 'isETF',
       'killScore', 'killRank', 'killTier', 'analyzeScore', 'queuedAt',
-      'entryContext', 'lotPrices', 'lotShares',
+      'entryContext', 'lotPrices', 'lotShares', 'isManualOverride',
     ];
 
     const now = new Date();

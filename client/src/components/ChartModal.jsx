@@ -421,6 +421,16 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
   // Reset SIZE IT + ANALYZE panels when navigating to a new stock
   useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; setFetchedKillData(null); setChartSignalAge(null); }, [currentIndex]);
 
+  // Auto-resync SIZE IT direction to the chart's currentSignal — the badge and
+  // the sizing panel must NEVER disagree. If chart detects BL, direction becomes
+  // LONG; SS → SHORT. Runs whenever currentSignal changes or the panel opens.
+  useEffect(() => {
+    if (!sizePanel) return;
+    const enforced = currentSignal === 'BL' ? 'LONG' : currentSignal === 'SS' ? 'SHORT' : null;
+    if (!enforced || sizePanel.direction === enforced) return;
+    setSizePanel(p => p ? { ...p, direction: enforced } : p);
+  }, [currentSignal, sizePanel?.direction]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Fetch Kill score from cache when stock doesn't have it (e.g. opened from Search) ──
   useEffect(() => {
     const s = stocks[currentIndex];
@@ -779,56 +789,43 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
       // ETF tier detection: hardcoded list OR FMP profile flag
       const isETF = isEtfTicker(stock.ticker, tickerData.isEtf);
 
-      // Stop: prefer the chart's own pnthrStop (computed from fresh chart data via
-      // detectAllSignals) as it matches what's drawn on the chart. Fall back to
-      // stock.stopPrice from the server, then EMA ±2% if neither is available.
-
-      // Direction detection — 4-method waterfall, first match wins:
-      // M1: server's suggestedDirection (Kill signal > EMA comparison, already computed)
-      // M2: EMA value from ticker API (price vs 21-week EMA)
-      // M3: stock.ema from chart data
-      // M4: stop price relationship (stop above entry = short)
-      // Signal field on stock object overrides if explicitly SS/BL.
-      let direction = 'LONG'; // ultimate fallback
+      // ── Direction: SINGLE SOURCE OF TRUTH ─────────────────────────────────
+      // The chart's currentSignal (from detectAllSignals) IS what's drawn on the
+      // chart and shown as the green BL / red SS badge. SIZE IT must use the
+      // same state — otherwise the direction can silently desync from the signal
+      // the user is actually looking at.
+      //
+      // Priority: chart currentSignal → raw stock.signal → server suggestion → EMA fallback.
+      let direction = 'LONG';
       let dirSource = 'FALLBACK';
 
-      // M1: server suggestedDirection (most reliable — uses Kill signal + EMA)
-      if (tickerData.suggestedDirection) {
-        direction = tickerData.suggestedDirection;
-        dirSource = 'SERVER_SUGGESTED';
-      }
-      // M2: EMA from ticker API
-      else if (tickerData.ema21 && tickerData.ema21 > 0 && entryPrice) {
-        direction = entryPrice < tickerData.ema21 ? 'SHORT' : 'LONG';
-        dirSource = 'TICKER_EMA21';
-      }
-      // M3: EMA from stock object (chart page data)
-      else if (stock.ema && stock.ema > 0 && entryPrice) {
-        direction = entryPrice < stock.ema ? 'SHORT' : 'LONG';
-        dirSource = 'STOCK_EMA';
-      }
-      // M4: stop price relationship
-      else if (stock.stopPrice && entryPrice && stock.stopPrice > entryPrice * 1.02) {
-        direction = 'SHORT';
-        dirSource = 'STOP_RELATIONSHIP';
+      // P1: chart's state-machine currentSignal (authoritative — matches badge)
+      if (currentSignal === 'BL') { direction = 'LONG';  dirSource = 'CHART_SIGNAL_BL'; }
+      else if (currentSignal === 'SS') { direction = 'SHORT'; dirSource = 'CHART_SIGNAL_SS'; }
+      // P2: raw prop signal (e.g. order row passes signal='BL')
+      else {
+        const sigRaw = stock.signal || stock.signalType || stock.pnthrSignal || stock.type || '';
+        const sigUp  = sigRaw.toUpperCase();
+        if (sigUp === 'BL') { direction = 'LONG';  dirSource = 'PROP_SIGNAL_BL'; }
+        else if (sigUp === 'SS') { direction = 'SHORT'; dirSource = 'PROP_SIGNAL_SS'; }
+        // P3: server suggestion (Kill cache or EMA-derived)
+        else if (tickerData.suggestedDirection) {
+          direction = tickerData.suggestedDirection;
+          dirSource = 'SERVER_SUGGESTED';
+        }
+        // P4: EMA fallback
+        else if (tickerData.ema21 && tickerData.ema21 > 0 && entryPrice) {
+          direction = entryPrice < tickerData.ema21 ? 'SHORT' : 'LONG';
+          dirSource = 'TICKER_EMA21';
+        } else if (stock.ema && stock.ema > 0 && entryPrice) {
+          direction = entryPrice < stock.ema ? 'SHORT' : 'LONG';
+          dirSource = 'STOCK_EMA';
+        }
       }
 
-      // Explicit signal override (takes precedence over all EMA-based methods)
-      const sigRaw = stock.signal || stock.signalType || stock.pnthrSignal || stock.type || '';
-      const sigUp  = sigRaw.toUpperCase();
-      if (sigUp === 'SS') { direction = 'SHORT'; dirSource = 'SIGNAL_SS'; }
-      else if (sigUp === 'BL') { direction = 'LONG'; dirSource = 'SIGNAL_BL'; }
-
-      console.log('[SIZE IT] Direction detection:', {
-        ticker:           stock.ticker || stock.symbol,
-        signal:           stock.signal,
-        suggestedDirection: tickerData.suggestedDirection,
-        entryPrice,
-        ema21:            tickerData.ema21,
-        stockEma:         stock.ema,
-        stopPrice:        stock.stopPrice,
-        method:           dirSource,
-        direction,
+      console.log('[SIZE IT] Direction:', {
+        ticker: stock.ticker, currentSignal, propSignal: stock.signal,
+        suggestedDirection: tickerData.suggestedDirection, method: dirSource, direction,
       });
       // Stop default: PNTHR Stop from chart (ATR-based) > server stopPrice > EMA ±2%
       const chartStop   = pnthrStop ? +pnthrStop : null;
@@ -1209,54 +1206,59 @@ export default function ChartModal({ stocks, initialIndex, earnings = {}, onClos
                   <span style={{ fontSize: 18, fontWeight: 900, color: '#FFD700', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
                     {stock.ticker}
                   </span>
-                  <button
-                    onClick={() => setSizePanel(p => {
-                      const newDir = p.direction === 'LONG' ? 'SHORT' : 'LONG';
+                  {(() => {
+                    const signalLocked = currentSignal === 'BL' || currentSignal === 'SS';
+                    return (
+                      <button
+                        disabled={signalLocked}
+                        onClick={signalLocked ? undefined : () => setSizePanel(p => {
+                          const newDir = p.direction === 'LONG' ? 'SHORT' : 'LONG';
 
-                      // Recompute PNTHR stop for the new direction using loaded weekly data
-                      let newStop;
-                      if (allWeeklyData.length >= 4) {
-                        const atrArr      = computeWilderATR(allWeeklyData);
-                        const lastIdx     = allWeeklyData.length - 1;
-                        const prev1       = allWeeklyData[lastIdx - 1];
-                        const prev2       = allWeeklyData[lastIdx - 2];
-                        const current     = allWeeklyData[lastIdx];
-                        const atr         = atrArr[lastIdx] ?? atrArr[lastIdx - 1] ?? null;
-                        const twoWeekLow  = Math.min(prev1.low,  prev2.low);
-                        const twoWeekHigh = Math.max(prev1.high, prev2.high);
-                        if (newDir === 'LONG') {
-                          newStop = blInitStop(twoWeekLow, current.close, atr);
-                        } else {
-                          newStop = ssInitStop(twoWeekHigh, current.close, atr);
-                        }
-                      } else if (p.chartPnthrStop) {
-                        newStop = p.chartPnthrStop;
-                      } else {
-                        newStop = newDir === 'SHORT'
-                          ? +(p.entry * 1.02).toFixed(2)
-                          : +(p.entry * 0.98).toFixed(2);
-                      }
+                          let newStop;
+                          if (allWeeklyData.length >= 4) {
+                            const atrArr      = computeWilderATR(allWeeklyData);
+                            const lastIdx     = allWeeklyData.length - 1;
+                            const prev1       = allWeeklyData[lastIdx - 1];
+                            const prev2       = allWeeklyData[lastIdx - 2];
+                            const current     = allWeeklyData[lastIdx];
+                            const atr         = atrArr[lastIdx] ?? atrArr[lastIdx - 1] ?? null;
+                            const twoWeekLow  = Math.min(prev1.low,  prev2.low);
+                            const twoWeekHigh = Math.max(prev1.high, prev2.high);
+                            newStop = newDir === 'LONG'
+                              ? blInitStop(twoWeekLow,  current.close, atr)
+                              : ssInitStop(twoWeekHigh, current.close, atr);
+                          } else if (p.chartPnthrStop) {
+                            newStop = p.chartPnthrStop;
+                          } else {
+                            newStop = newDir === 'SHORT' ? +(p.entry * 1.02).toFixed(2) : +(p.entry * 0.98).toFixed(2);
+                          }
 
-                      const sizing = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir, isETF: p.isETF });
-                      const lot1   = Math.max(1, Math.round(sizing.totalShares * 0.35));
-                      return {
-                        ...p,
-                        direction:    newDir,
-                        adjustedStop: newStop,
-                        stop:         newStop,
-                        totalShares:  sizing.totalShares,
-                        lot1Shares:   lot1,
-                        vitality:     sizing.vitality,
-                        risk$:        +(lot1 * Math.abs(p.entry - newStop)).toFixed(0),
-                      };
-                    })}
-                    title="Click to flip LONG ↔ SHORT"
-                    style={{ background: sizePanel.direction === 'SHORT' ? 'rgba(220,53,69,0.15)' : 'rgba(40,167,69,0.15)',
-                      border: `1.5px solid ${dirColor}`, color: dirColor,
-                      borderRadius: 5, padding: '3px 10px', fontSize: 12, fontWeight: 800,
-                      cursor: 'pointer', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
-                    {dirLabel} ⇄
-                  </button>
+                          const sizing = sizePosition({ netLiquidity: p.nav, entryPrice: p.entry, stopPrice: newStop, maxGapPct: p.gapPct, direction: newDir, isETF: p.isETF });
+                          const lot1   = Math.max(1, Math.round(sizing.totalShares * 0.35));
+                          return {
+                            ...p,
+                            direction:    newDir,
+                            adjustedStop: newStop,
+                            stop:         newStop,
+                            totalShares:  sizing.totalShares,
+                            lot1Shares:   lot1,
+                            vitality:     sizing.vitality,
+                            risk$:        +(lot1 * Math.abs(p.entry - newStop)).toFixed(0),
+                          };
+                        })}
+                        title={signalLocked
+                          ? `Direction locked to chart ${currentSignal} signal`
+                          : 'Click to flip LONG ↔ SHORT'}
+                        style={{ background: sizePanel.direction === 'SHORT' ? 'rgba(220,53,69,0.15)' : 'rgba(40,167,69,0.15)',
+                          border: `1.5px solid ${dirColor}`, color: dirColor,
+                          borderRadius: 5, padding: '3px 10px', fontSize: 12, fontWeight: 800,
+                          cursor: signalLocked ? 'not-allowed' : 'pointer',
+                          opacity: signalLocked ? 0.85 : 1,
+                          fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+                        {dirLabel} {signalLocked ? '🔒' : '⇄'}
+                      </button>
+                    );
+                  })()}
                   <span style={{ fontSize: 11, color: tierColor, fontWeight: 700, border: `1px solid ${tierColor}`, borderRadius: 3, padding: '2px 7px', opacity: 0.85 }}>
                     {tier}
                   </span>

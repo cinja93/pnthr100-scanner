@@ -408,6 +408,55 @@ export default function HistoryPage() {
     };
   }, [pyramidClosed, pyramidActive, pyramidTrades]);
 
+  // Pyramid breakdown tables (by tier, direction, sector) + monthly returns
+  const pyramidBreakdown = useMemo(() => {
+    const cl = pyramidClosed;
+    if (cl.length === 0) return null;
+
+    function buildGroup(keyFn) {
+      const groups = {};
+      for (const t of cl) {
+        const k = keyFn(t) || 'Unknown';
+        if (!groups[k]) groups[k] = { count: 0, wins: 0, totalPnl: 0 };
+        groups[k].count++;
+        if (t.pnlDollar > 0) groups[k].wins++;
+        groups[k].totalPnl += t.pnlPct;
+      }
+      for (const k of Object.keys(groups)) {
+        groups[k].winRate = +(groups[k].wins / groups[k].count * 100).toFixed(1);
+        groups[k].avgPnl  = +(groups[k].totalPnl / groups[k].count).toFixed(1);
+        delete groups[k].totalPnl;
+      }
+      return groups;
+    }
+
+    // Monthly returns by exit month
+    const byMonth = {};
+    for (const t of cl) {
+      const month = t.exitDate?.substring(0, 7);
+      if (!month) continue;
+      if (!byMonth[month]) byMonth[month] = { trades: 0, totalPnl: 0, totalDollar: 0 };
+      byMonth[month].trades++;
+      byMonth[month].totalPnl += t.pnlPct;
+      byMonth[month].totalDollar += t.pnlDollar;
+    }
+    const monthlyReturns = Object.entries(byMonth)
+      .map(([month, d]) => ({
+        month,
+        trades: d.trades,
+        avgPnl: +(d.totalPnl / d.trades).toFixed(1),
+        totalDollar: +d.totalDollar.toFixed(0),
+      }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    return {
+      byTier:      buildGroup(t => t.entryTier),
+      byDirection: buildGroup(t => t.direction),
+      bySector:    buildGroup(t => t.sector),
+      monthlyReturns,
+    };
+  }, [pyramidClosed]);
+
   // Generic sort helper for both tables
   function sortRows(rows, sortState, extraCols) {
     return [...rows].sort((a, b) => {
@@ -758,38 +807,55 @@ export default function HistoryPage() {
       </div>
 
       {/* ── Breakdown ─────────────────────────────────────────────────────── */}
-      {closed.length > 0 && (
+      {(pyramidClosed.length > 0 || closed.length > 0) && (
         <div style={{ marginBottom: 32 }}>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ccc', margin: '0 0 12px', letterSpacing: '0.02em' }}>
             Breakdown
           </h2>
-          <BreakdownTable title="By Tier"      data={tr.byTier}      defaultOpen={true} />
-          <BreakdownTable title="By Direction"  data={tr.byDirection} />
-          <BreakdownTable title="By Sector"     data={tr.bySector} />
-          <BreakdownTable title="By Entry Source (Friday vs Mid-Week)" data={tr.bySource} />
+          {(() => {
+            const bd = pyramidBreakdown || {};
+            const usePyramid = !!pyramidBreakdown;
+            const byTier      = usePyramid ? bd.byTier      : tr.byTier;
+            const byDirection  = usePyramid ? bd.byDirection  : tr.byDirection;
+            const bySector     = usePyramid ? bd.bySector     : tr.bySector;
+            const monthly      = usePyramid ? bd.monthlyReturns : tr.monthlyReturns;
+            return (<>
+              <BreakdownTable title="By Tier"      data={byTier}      defaultOpen={true} />
+              <BreakdownTable title="By Direction"  data={byDirection} />
+              <BreakdownTable title="By Sector"     data={bySector} />
+              {!usePyramid && <BreakdownTable title="By Entry Source (Friday vs Mid-Week)" data={tr.bySource} />}
 
-          {tr.monthlyReturns?.length > 0 && (
-            <div style={{
-              background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
-              padding: '14px 16px', marginTop: 12,
-            }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#aaa', marginBottom: 10 }}>Monthly Returns</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {tr.monthlyReturns.map(m => (
-                  <div key={m.month} style={{
-                    background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`,
-                    borderRadius: 6, padding: '8px 12px', minWidth: 90, textAlign: 'center',
-                  }}>
-                    <div style={{ fontSize: 10, color: '#555', marginBottom: 3 }}>{m.month}</div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: m.avgPnl >= 0 ? GREEN : RED }}>
-                      {fmt(m.avgPnl)}
-                    </div>
-                    <div style={{ fontSize: 10, color: '#555' }}>{m.trades} trade{m.trades !== 1 ? 's' : ''}</div>
+              {monthly?.length > 0 && (
+                <div style={{
+                  background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
+                  padding: '14px 16px', marginTop: 12,
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#aaa', marginBottom: 10 }}>
+                    Monthly Returns {usePyramid && <span style={{ color: '#555', fontWeight: 400 }}>({fmtNav(nav)} pyramid)</span>}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {monthly.map(m => (
+                      <div key={m.month} style={{
+                        background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`,
+                        borderRadius: 6, padding: '8px 12px', minWidth: 90, textAlign: 'center',
+                      }}>
+                        <div style={{ fontSize: 10, color: '#555', marginBottom: 3 }}>{m.month}</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: m.avgPnl >= 0 ? GREEN : RED }}>
+                          {fmt(m.avgPnl)}
+                        </div>
+                        <div style={{ fontSize: 10, color: '#555' }}>{m.trades} trade{m.trades !== 1 ? 's' : ''}</div>
+                        {usePyramid && m.totalDollar != null && (
+                          <div style={{ fontSize: 10, color: m.totalDollar >= 0 ? GREEN : RED, marginTop: 2 }}>
+                            {fmtP(m.totalDollar)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>);
+          })()}
         </div>
       )}
 

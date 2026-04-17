@@ -260,6 +260,9 @@ export default function HistoryPage() {
   const [error,       setError]       = useState(null);
   const [sortClosed,  setSortClosed]  = useState({ col: 'exitDate', dir: -1 });
   const [sortActive,  setSortActive]  = useState({ col: 'entryRank', dir: 1 });
+  const [dataSource,  setDataSource]  = useState('kill10'); // 'kill10' | 'orders'
+  const [ordersData,  setOrdersData]  = useState(null);
+  const [ordersLoading, setOrdersLoading] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -291,6 +294,26 @@ export default function HistoryPage() {
   }
 
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch Orders 2026 backtest data on demand
+  async function loadOrders() {
+    if (ordersData) return; // Already loaded
+    try {
+      setOrdersLoading(true);
+      const res = await fetch(`${API_BASE}/api/journal/backtest/2026`, { headers: authHeaders() });
+      if (!res.ok) throw new Error('Failed to load Orders data');
+      const data = await res.json();
+      setOrdersData(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (dataSource === 'orders') loadOrders();
+  }, [dataSource]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closed = useMemo(() => all.filter(s => s.status === 'CLOSED'), [all]);
 
@@ -457,6 +480,91 @@ export default function HistoryPage() {
     };
   }, [pyramidClosed]);
 
+  // ── Orders 2026 mapped trades (backtest data, fixed $10K sizing) ─────────
+  const ordersTrades = useMemo(() => {
+    if (!ordersData?.trades) return [];
+    return ordersData.trades.map(t => {
+      const lotsCount = t.lots?.length || 1;
+      return {
+        id: `orders-${t.ticker}-${t.entryDate}`,
+        ticker: t.ticker,
+        direction: t.signal === 'SS' ? 'SHORT' : 'LONG',
+        sector: t.sector || '—',
+        entryDate: t.entryDate,
+        entryPrice: t.avgCost || t.entryPrice,
+        exitDate: t.exitDate,
+        exitPrice: t.exitPrice,
+        entryRank: t.killRank || null,
+        entryTier: t.apexScore >= 130 ? 'ALPHA PNTHR KILL' : t.apexScore >= 100 ? 'STRIKING' : t.apexScore >= 80 ? 'HUNTING' : t.apexScore >= 65 ? 'POUNCING' : t.apexScore >= 50 ? 'COILING' : 'STALKING',
+        entryScore: t.apexScore,
+        exitReason: t.exitReason || '—',
+        lotsFilledCount: lotsCount,
+        pnlPct: t.netProfitPct ?? t.grossProfitPct ?? 0,
+        pnlDollar: t.netDollarPnl ?? t.grossDollarPnl ?? 0,
+        holdingDays: t.tradingDays ?? 0,
+        status: t.closed === false ? 'ACTIVE' : 'CLOSED',
+      };
+    });
+  }, [ordersData]);
+
+  const ordersClosed = useMemo(() => ordersTrades.filter(t => t.status === 'CLOSED'), [ordersTrades]);
+  const ordersActive = useMemo(() => ordersTrades.filter(t => t.status === 'ACTIVE'), [ordersTrades]);
+
+  const ordersStats = useMemo(() => {
+    const cl = ordersClosed;
+    if (cl.length === 0) return null;
+    const winners = cl.filter(t => t.pnlDollar > 0);
+    const losers  = cl.filter(t => t.pnlDollar <= 0);
+    const grossWin  = winners.reduce((s, t) => s + t.pnlDollar, 0);
+    const grossLoss = Math.abs(losers.reduce((s, t) => s + t.pnlDollar, 0));
+    const totalPnl  = cl.reduce((s, t) => s + t.pnlDollar, 0);
+    return {
+      totalTrades: ordersTrades.length,
+      closedTrades: cl.length,
+      activeTrades: ordersActive.length,
+      winRate: +(winners.length / cl.length * 100).toFixed(1),
+      totalPnl: +totalPnl.toFixed(0),
+      avgWinDollar: winners.length > 0 ? +(grossWin / winners.length).toFixed(0) : 0,
+      avgLossDollar: losers.length > 0 ? +(-grossLoss / losers.length).toFixed(0) : 0,
+      profitFactor: grossLoss > 0 ? +(grossWin / grossLoss).toFixed(2) : (grossWin > 0 ? 999 : 0),
+      avgLotsPerTrade: cl.length > 0 ? +(cl.reduce((s, t) => s + t.lotsFilledCount, 0) / cl.length).toFixed(1) : 0,
+    };
+  }, [ordersClosed, ordersActive, ordersTrades]);
+
+  const ordersBreakdown = useMemo(() => {
+    const cl = ordersClosed;
+    if (cl.length === 0) return null;
+    function buildGroup(keyFn) {
+      const groups = {};
+      for (const t of cl) {
+        const k = keyFn(t) || 'Unknown';
+        if (!groups[k]) groups[k] = { count: 0, wins: 0, totalPnl: 0 };
+        groups[k].count++;
+        if (t.pnlDollar > 0) groups[k].wins++;
+        groups[k].totalPnl += t.pnlPct;
+      }
+      for (const k of Object.keys(groups)) {
+        groups[k].winRate = +(groups[k].wins / groups[k].count * 100).toFixed(1);
+        groups[k].avgPnl  = +(groups[k].totalPnl / groups[k].count).toFixed(1);
+        delete groups[k].totalPnl;
+      }
+      return groups;
+    }
+    const byMonth = {};
+    for (const t of cl) {
+      const month = t.exitDate?.substring(0, 7);
+      if (!month) continue;
+      if (!byMonth[month]) byMonth[month] = { trades: 0, totalPnl: 0, totalDollar: 0 };
+      byMonth[month].trades++;
+      byMonth[month].totalPnl += t.pnlPct;
+      byMonth[month].totalDollar += t.pnlDollar;
+    }
+    const monthlyReturns = Object.entries(byMonth)
+      .map(([month, d]) => ({ month, trades: d.trades, avgPnl: +(d.totalPnl / d.trades).toFixed(1), totalDollar: +d.totalDollar.toFixed(0) }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+    return { byTier: buildGroup(t => t.entryTier), byDirection: buildGroup(t => t.direction), bySector: buildGroup(t => t.sector), monthlyReturns };
+  }, [ordersClosed]);
+
   // Generic sort helper for both tables
   function sortRows(rows, sortState, extraCols) {
     return [...rows].sort((a, b) => {
@@ -515,108 +623,142 @@ export default function HistoryPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: YELLOW, margin: 0, letterSpacing: '-0.02em' }}>
-            PNTHR Kill History
+            {dataSource === 'orders' ? 'PNTHR Orders — 2026' : 'PNTHR Kill History'}
           </h1>
           <p style={{ fontSize: 13, color: '#666', marginTop: 4 }}>
-            Forward-tested track record — full 5-lot PNTHR Command pyramid strategy.
-            {tr.asOf && <span> Last updated: {fmtD(tr.asOf)}</span>}
+            {dataSource === 'orders'
+              ? 'Fund Intelligence Report — 2026 pyramid backtest (5-lot pyramid, net of costs).'
+              : <>Forward-tested track record — full 5-lot PNTHR Command pyramid strategy.
+                  {tr.asOf && <span> Last updated: {fmtD(tr.asOf)}</span>}</>
+            }
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <select
-            value={nav}
-            onChange={e => setNav(Number(e.target.value))}
+            value={dataSource}
+            onChange={e => setDataSource(e.target.value)}
             style={{
-              background: '#111', border: '1px solid #444', color: YELLOW,
+              background: '#111', border: `1px solid ${dataSource === 'orders' ? '#0096ff' : '#444'}`,
+              color: dataSource === 'orders' ? '#0096ff' : YELLOW,
               borderRadius: 5, padding: '6px 10px', fontSize: 12, fontWeight: 700,
               cursor: 'pointer', outline: 'none',
             }}
           >
-            {NAV_OPTIONS.map(n => (
-              <option key={n} value={n}>{fmtNav(n)} NAV</option>
-            ))}
+            <option value="kill10">PNTHR Kill 10</option>
+            <option value="orders">PNTHR Orders</option>
           </select>
+          {dataSource === 'kill10' && (
+            <select
+              value={nav}
+              onChange={e => setNav(Number(e.target.value))}
+              style={{
+                background: '#111', border: '1px solid #444', color: YELLOW,
+                borderRadius: 5, padding: '6px 10px', fontSize: 12, fontWeight: 700,
+                cursor: 'pointer', outline: 'none',
+              }}
+            >
+              {NAV_OPTIONS.map(n => (
+                <option key={n} value={n}>{fmtNav(n)} NAV</option>
+              ))}
+            </select>
+          )}
           <button
-            onClick={() => load(true)}
-            disabled={refreshing}
+            onClick={() => { if (dataSource === 'orders') { setOrdersData(null); loadOrders(); } else load(true); }}
+            disabled={refreshing || ordersLoading}
             style={{
               background: 'transparent',
-              border: `1px solid ${refreshing ? '#333' : '#555'}`,
-              color: refreshing ? '#444' : '#aaa',
+              border: `1px solid ${(refreshing || ordersLoading) ? '#333' : '#555'}`,
+              color: (refreshing || ordersLoading) ? '#444' : '#aaa',
               borderRadius: 5,
               padding: '6px 14px',
               fontSize: 12,
               fontWeight: 600,
-              cursor: refreshing ? 'not-allowed' : 'pointer',
+              cursor: (refreshing || ordersLoading) ? 'not-allowed' : 'pointer',
               whiteSpace: 'nowrap',
               letterSpacing: '0.04em',
             }}
           >
-            {refreshing ? '↻ Refreshing…' : '↺ Refresh'}
+            {(refreshing || ordersLoading) ? '↻ Refreshing…' : '↺ Refresh'}
           </button>
         </div>
       </div>
 
       {/* ── Metric Cards ───────────────────────────────────────────────────── */}
+      {dataSource === 'orders' && ordersLoading ? (
+        <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Loading Orders data...</div>
+      ) : (
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
-        {pyramidStats ? (<>
-          <MetricCard label="Total Trades"   value={pyramidStats.totalTrades} sub={`${pyramidStats.activeTrades} active`} />
-          <MetricCard label="Win Rate"       value={`${pyramidStats.winRate}%`}
-            color={pyramidStats.winRate >= 60 ? GREEN : pyramidStats.winRate >= 40 ? '#ffa500' : RED} />
-          <MetricCard label="Total P&L"      value={fmtP(pyramidStats.totalPnl)}
-            sub={`at ${fmtNav(nav)} NAV`}
-            color={pyramidStats.totalPnl >= 0 ? GREEN : RED} />
-          <MetricCard label="Avg Win"        value={fmtP(pyramidStats.avgWinDollar)} color={GREEN} />
-          <MetricCard label="Avg Loss"       value={fmtP(pyramidStats.avgLossDollar)} color={RED} />
-          <MetricCard label="Profit Factor"
-            value={pyramidStats.profitFactor === 999 ? '∞' : pyramidStats.profitFactor > 0 ? `${pyramidStats.profitFactor}x` : '—'}
-            sub={pyramidStats.profitFactor === 999 ? 'No losses yet' : undefined}
-            color={pyramidStats.profitFactor >= 2 || pyramidStats.profitFactor === 999 ? GREEN : pyramidStats.profitFactor >= 1 ? '#ffa500' : RED} />
-          <MetricCard label="Avg Lots/Trade" value={pyramidStats.avgLotsPerTrade} sub="of 5 max" color={YELLOW} />
-          <MetricCard label="Active Now"     value={pyramidStats.activeTrades} color={YELLOW} />
-        </>) : (<>
-          <MetricCard label="Total Trades"   value={tr.totalTrades ?? 0} sub={`${tr.activeTrades ?? 0} active`} />
-          <MetricCard label="Win Rate"       value={tr.closedTrades > 0 ? `${tr.winRate}%` : '—'}
-            color={tr.winRate >= 60 ? GREEN : tr.winRate >= 40 ? '#ffa500' : RED} />
-          <MetricCard label="Avg Win"        value={tr.avgWinPct != null ? fmt(tr.avgWinPct) : '—'} color={GREEN} />
-          <MetricCard label="Avg Loss"       value={tr.avgLossPct != null ? fmt(tr.avgLossPct) : '—'} color={RED} />
-          <MetricCard label="Profit Factor"
-            value={tr.profitFactor === 999 ? '∞' : tr.profitFactor > 0 ? `${tr.profitFactor}x` : '—'}
-            sub={tr.profitFactor === 999 ? 'No losses yet' : undefined}
-            color={tr.profitFactor >= 2 || tr.profitFactor === 999 ? GREEN : tr.profitFactor >= 1 ? '#ffa500' : RED} />
-          <MetricCard label="Active Now"     value={tr.activeTrades ?? 0} color={YELLOW} />
-          <MetricCard label="Avg Hold"       value={tr.avgHoldingWeeks > 0 ? `${tr.avgHoldingWeeks}w` : '—'} />
-        </>)}
+        {(() => {
+          const stats = dataSource === 'orders' ? ordersStats : pyramidStats;
+          if (stats) return (<>
+            <MetricCard label="Total Trades"   value={stats.totalTrades} sub={stats.activeTrades > 0 ? `${stats.activeTrades} active` : 'all closed'} />
+            <MetricCard label="Win Rate"       value={`${stats.winRate}%`}
+              color={stats.winRate >= 60 ? GREEN : stats.winRate >= 40 ? '#ffa500' : RED} />
+            <MetricCard label="Total P&L"      value={fmtP(stats.totalPnl)}
+              sub={dataSource === 'orders' ? '$10K/position pyramid' : `at ${fmtNav(nav)} NAV`}
+              color={stats.totalPnl >= 0 ? GREEN : RED} />
+            <MetricCard label="Avg Win"        value={fmtP(stats.avgWinDollar)} color={GREEN} />
+            <MetricCard label="Avg Loss"       value={fmtP(stats.avgLossDollar)} color={RED} />
+            <MetricCard label="Profit Factor"
+              value={stats.profitFactor === 999 ? '∞' : stats.profitFactor > 0 ? `${stats.profitFactor}x` : '—'}
+              sub={stats.profitFactor === 999 ? 'No losses yet' : undefined}
+              color={stats.profitFactor >= 2 || stats.profitFactor === 999 ? GREEN : stats.profitFactor >= 1 ? '#ffa500' : RED} />
+            <MetricCard label="Avg Lots/Trade" value={stats.avgLotsPerTrade} sub="of 5 max" color={YELLOW} />
+            {stats.activeTrades > 0 && <MetricCard label="Active Now" value={stats.activeTrades} color={YELLOW} />}
+          </>);
+          // Fallback for Kill 10 when no pyramid sim data
+          return (<>
+            <MetricCard label="Total Trades"   value={tr.totalTrades ?? 0} sub={`${tr.activeTrades ?? 0} active`} />
+            <MetricCard label="Win Rate"       value={tr.closedTrades > 0 ? `${tr.winRate}%` : '—'}
+              color={tr.winRate >= 60 ? GREEN : tr.winRate >= 40 ? '#ffa500' : RED} />
+            <MetricCard label="Avg Win"        value={tr.avgWinPct != null ? fmt(tr.avgWinPct) : '—'} color={GREEN} />
+            <MetricCard label="Avg Loss"       value={tr.avgLossPct != null ? fmt(tr.avgLossPct) : '—'} color={RED} />
+            <MetricCard label="Profit Factor"
+              value={tr.profitFactor === 999 ? '∞' : tr.profitFactor > 0 ? `${tr.profitFactor}x` : '—'}
+              sub={tr.profitFactor === 999 ? 'No losses yet' : undefined}
+              color={tr.profitFactor >= 2 || tr.profitFactor === 999 ? GREEN : tr.profitFactor >= 1 ? '#ffa500' : RED} />
+            <MetricCard label="Active Now"     value={tr.activeTrades ?? 0} color={YELLOW} />
+            <MetricCard label="Avg Hold"       value={tr.avgHoldingWeeks > 0 ? `${tr.avgHoldingWeeks}w` : '—'} />
+          </>);
+        })()}
       </div>
+      )}
 
       {/* ── Equity Curve ───────────────────────────────────────────────────── */}
-      {(pyramidClosed.length > 0 || closed.length > 0) && (
-        <div style={{
-          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
-          padding: '16px 18px', marginBottom: 24,
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#aaa', marginBottom: 12 }}>
-            Equity Curve — Cumulative P&L{' '}
-            <span style={{ color: '#555', fontWeight: 400 }}>
-              ({pyramidClosed.length > 0 ? `5-lot pyramid at ${fmtNav(nav)}` : 'standardized $10K / trade'})
-            </span>
+      {(() => {
+        const curveData = dataSource === 'orders' ? ordersClosed
+          : pyramidClosed.length > 0 ? pyramidClosed : closed;
+        const curveSub = dataSource === 'orders' ? '2026 Orders — $10K/position pyramid'
+          : pyramidClosed.length > 0 ? `5-lot pyramid at ${fmtNav(nav)}` : 'standardized $10K / trade';
+        if (curveData.length === 0) return null;
+        return (
+          <div style={{
+            background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
+            padding: '16px 18px', marginBottom: 24,
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#aaa', marginBottom: 12 }}>
+              Equity Curve — Cumulative P&L{' '}
+              <span style={{ color: '#555', fontWeight: 400 }}>({curveSub})</span>
+            </div>
+            <EquityCurve closed={curveData} />
           </div>
-          <EquityCurve closed={pyramidClosed.length > 0 ? pyramidClosed : closed} />
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Closed Trades ─────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ccc', margin: '0 0 12px', letterSpacing: '0.02em' }}>
           Closed Trades <span style={{ color: '#555', fontWeight: 400, fontSize: 13 }}>
-            ({pyramidClosed.length > 0 ? pyramidClosed.length : closed.length})
+            ({dataSource === 'orders' ? ordersClosed.length : pyramidClosed.length > 0 ? pyramidClosed.length : closed.length})
           </span>
         </h2>
         {(() => {
-          const rows = pyramidClosed.length > 0
-            ? sortRows(pyramidClosed, sortClosed, { lotsFilledCount: r => r.lotsFilledCount })
-            : sortedClosed;
-          const usePyramid = pyramidClosed.length > 0;
+          const rows = dataSource === 'orders'
+            ? sortRows(ordersClosed, sortClosed, { lotsFilledCount: r => r.lotsFilledCount })
+            : pyramidClosed.length > 0
+              ? sortRows(pyramidClosed, sortClosed, { lotsFilledCount: r => r.lotsFilledCount })
+              : sortedClosed;
+          const usePyramid = dataSource === 'orders' || pyramidClosed.length > 0;
 
           if (rows.length === 0) return (
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#555' }}>No closed trades yet.</div>
@@ -704,9 +846,10 @@ export default function HistoryPage() {
       {/* ── Open Trades ───────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 32 }}>
         {(() => {
-          const usePyramid = pyramidActive.length > 0;
-          const openRows = usePyramid ? pyramidActive : activeWithDerived;
-          const openCount = usePyramid ? pyramidActive.length : active.length;
+          const usePyramid = dataSource === 'orders' || pyramidActive.length > 0;
+          const openRows = dataSource === 'orders' ? ordersActive
+            : pyramidActive.length > 0 ? pyramidActive : activeWithDerived;
+          const openCount = openRows.length;
 
           // Date subtitle
           const asOfDate = usePyramid
@@ -807,18 +950,18 @@ export default function HistoryPage() {
       </div>
 
       {/* ── Breakdown ─────────────────────────────────────────────────────── */}
-      {(pyramidClosed.length > 0 || closed.length > 0) && (
+      {(dataSource === 'orders' ? ordersClosed.length > 0 : pyramidClosed.length > 0 || closed.length > 0) && (
         <div style={{ marginBottom: 32 }}>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ccc', margin: '0 0 12px', letterSpacing: '0.02em' }}>
             Breakdown
           </h2>
           {(() => {
-            const bd = pyramidBreakdown || {};
-            const usePyramid = !!pyramidBreakdown;
-            const byTier      = usePyramid ? bd.byTier      : tr.byTier;
-            const byDirection  = usePyramid ? bd.byDirection  : tr.byDirection;
-            const bySector     = usePyramid ? bd.bySector     : tr.bySector;
-            const monthly      = usePyramid ? bd.monthlyReturns : tr.monthlyReturns;
+            const bd = dataSource === 'orders' ? ordersBreakdown : (pyramidBreakdown || {});
+            const usePyramid = dataSource === 'orders' || !!pyramidBreakdown;
+            const byTier      = usePyramid ? bd?.byTier      : tr.byTier;
+            const byDirection  = usePyramid ? bd?.byDirection  : tr.byDirection;
+            const bySector     = usePyramid ? bd?.bySector     : tr.bySector;
+            const monthly      = usePyramid ? bd?.monthlyReturns : tr.monthlyReturns;
             return (<>
               <BreakdownTable title="By Tier"      data={byTier}      defaultOpen={true} />
               <BreakdownTable title="By Direction"  data={byDirection} />

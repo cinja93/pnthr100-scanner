@@ -2,19 +2,34 @@
 // ── PNTHR Kill History — Track Record System ──────────────────────────────────
 //
 // Displays the forward-tested track record of every stock that entered the
-// Kill top 10. Pulls from three endpoints:
+// Kill top 10. Pulls from four endpoints:
 //   GET /api/kill-history/track-record  — aggregate stats
 //   GET /api/kill-history/active        — live open trades
 //   GET /api/kill-history              — all trades (for closed table + equity curve)
+//   GET /api/kill-history/simulation   — pyramid simulation results (NAV-independent)
 
 import { useState, useEffect, useMemo } from 'react';
 import { authHeaders, API_BASE } from '../services/api';
+
+// ── Constants (match sizingUtils.js) ─────────────────────────────────────────
+
+const STRIKE_PCT  = [0.35, 0.25, 0.20, 0.12, 0.08];
+const NAV_OPTIONS = [100_000, 250_000, 500_000, 1_000_000, 2_500_000, 5_000_000];
+
+function sizeForNav(nav, entryPrice, stopPrice) {
+  const tickerCap = nav * 0.10;
+  const vitality  = nav * 0.01;
+  const rps       = Math.abs(entryPrice - stopPrice);
+  if (rps <= 0) return 0;
+  return Math.floor(Math.min(Math.floor(vitality / rps), Math.floor(tickerCap / entryPrice)));
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const fmt  = (n, dec = 1) => n == null ? '—' : `${n >= 0 ? '+' : ''}${Number(n).toFixed(dec)}%`;
 const fmtP = (n) => n == null ? '—' : `${n >= 0 ? '+' : '-'}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const fmtD = (s) => s ? new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—';
+const fmtNav = (n) => n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${(n / 1_000).toFixed(0)}K`;
 
 // ── Colours ───────────────────────────────────────────────────────────────────
 
@@ -46,15 +61,15 @@ function TierBadge({ tier }) {
   );
 }
 
-// ── Equity Curve (SVG) ─────────────────────────────────────────────────────────
+// ── Equity Curve (SVG) — weekly dates on X axis ──────────────────────────────
 
 function EquityCurve({ closed }) {
-  const WIDTH = 700, HEIGHT = 180, PAD = { t: 16, r: 16, b: 32, l: 56 };
+  const WIDTH = 700, HEIGHT = 200, PAD = { t: 16, r: 16, b: 48, l: 64 };
 
   const points = useMemo(() => {
     const sorted = [...closed].sort((a, b) => (a.exitDate || '').localeCompare(b.exitDate || ''));
     let cum = 0;
-    const pts = [{ date: '', cum: 0, label: '' }];
+    const pts = [];
     for (const t of sorted) {
       cum += (t.pnlDollar || 0);
       pts.push({ date: t.exitDate, cum: +cum.toFixed(0), label: t.ticker });
@@ -62,7 +77,7 @@ function EquityCurve({ closed }) {
     return pts;
   }, [closed]);
 
-  if (points.length < 2) {
+  if (points.length < 1) {
     return (
       <div style={{ textAlign: 'center', padding: '40px 0', color: '#555', fontSize: 13 }}>
         No closed trades yet — equity curve will appear after the first exit
@@ -70,7 +85,11 @@ function EquityCurve({ closed }) {
     );
   }
 
-  const vals = points.map(p => p.cum);
+  // Add origin point at earliest date
+  const firstDate = points[0]?.date || '';
+  const allPts = [{ date: firstDate, cum: 0, label: '' }, ...points];
+
+  const vals = allPts.map(p => p.cum);
   const minV = Math.min(0, ...vals);
   const maxV = Math.max(0, ...vals);
   const range = maxV - minV || 1;
@@ -78,13 +97,13 @@ function EquityCurve({ closed }) {
   const iW = WIDTH - PAD.l - PAD.r;
   const iH = HEIGHT - PAD.t - PAD.b;
 
-  const toX = (i) => PAD.l + (i / (points.length - 1)) * iW;
+  const toX = (i) => PAD.l + (i / (allPts.length - 1)) * iW;
   const toY = (v) => PAD.t + iH - ((v - minV) / range) * iH;
 
-  const polyline = points.map((p, i) => `${toX(i)},${toY(p.cum)}`).join(' ');
+  const polyline = allPts.map((p, i) => `${toX(i)},${toY(p.cum)}`).join(' ');
   const zeroY    = toY(0);
-  const lastPt   = points[points.length - 1];
-  const lastX    = toX(points.length - 1);
+  const lastPt   = allPts[allPts.length - 1];
+  const lastX    = toX(allPts.length - 1);
   const lastY    = toY(lastPt.cum);
   const isPos    = lastPt.cum >= 0;
 
@@ -94,8 +113,29 @@ function EquityCurve({ closed }) {
   for (let i = 0; i <= 4; i++) {
     const val = minV + step * i;
     const y   = toY(val);
-    const lbl = val >= 0 ? `+$${Math.round(val / 1000)}k` : `-$${Math.round(Math.abs(val) / 1000)}k`;
+    let lbl;
+    const absVal = Math.abs(val);
+    if (absVal >= 1_000_000) lbl = `${val >= 0 ? '+' : '-'}$${(absVal / 1_000_000).toFixed(1)}M`;
+    else if (absVal >= 1000) lbl = `${val >= 0 ? '+' : '-'}$${Math.round(absVal / 1000)}k`;
+    else lbl = `${val >= 0 ? '+' : '-'}$${Math.round(absVal)}`;
     yTicks.push({ y, lbl });
+  }
+
+  // X axis — weekly date labels (show ~6–10 labels evenly spaced)
+  const xLabels = [];
+  const totalPts = allPts.length;
+  const maxLabels = Math.min(10, totalPts);
+  const labelStep = Math.max(1, Math.floor(totalPts / maxLabels));
+  for (let i = 0; i < totalPts; i += labelStep) {
+    const pt = allPts[i];
+    if (pt.date) {
+      xLabels.push({ x: toX(i), label: fmtD(pt.date) });
+    }
+  }
+  // Always include last point
+  if (totalPts > 1) {
+    const last = allPts[totalPts - 1];
+    if (last.date) xLabels.push({ x: toX(totalPts - 1), label: fmtD(last.date) });
   }
 
   return (
@@ -107,6 +147,14 @@ function EquityCurve({ closed }) {
             stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
           <text x={PAD.l - 6} y={t.y + 4} textAnchor="end" fill="#555" fontSize={10}>{t.lbl}</text>
         </g>
+      ))}
+
+      {/* X axis date labels */}
+      {xLabels.map((xl, i) => (
+        <text key={i} x={xl.x} y={HEIGHT - PAD.b + 18} textAnchor="middle" fill="#555" fontSize={9}
+          transform={`rotate(-30, ${xl.x}, ${HEIGHT - PAD.b + 18})`}>
+          {xl.label}
+        </text>
       ))}
 
       {/* Zero line */}
@@ -206,6 +254,8 @@ export default function HistoryPage() {
   const [trackRecord, setTrackRecord] = useState(null);
   const [active,      setActive]      = useState([]);
   const [all,         setAll]         = useState([]);
+  const [simData,     setSimData]     = useState(null);
+  const [nav,         setNav]         = useState(1_000_000);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
   const [sortClosed,  setSortClosed]  = useState({ col: 'exitDate', dir: -1 });
@@ -217,16 +267,21 @@ export default function HistoryPage() {
     try {
       if (isManual) setRefreshing(true); else setLoading(true);
       setError(null);
-      const [trRes, acRes, allRes] = await Promise.all([
+      const [trRes, acRes, allRes, simRes] = await Promise.all([
         fetch(`${API_BASE}/api/kill-history/track-record`, { headers: authHeaders() }),
         fetch(`${API_BASE}/api/kill-history/active`,       { headers: authHeaders() }),
         fetch(`${API_BASE}/api/kill-history`,              { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/kill-history/simulation`,   { headers: authHeaders() }),
       ]);
       if (!trRes.ok || !acRes.ok || !allRes.ok) throw new Error('Failed to load history');
       const [tr, ac, al] = await Promise.all([trRes.json(), acRes.json(), allRes.json()]);
       setTrackRecord(tr);
       setActive(ac.studies || []);
       setAll(al.studies || []);
+      if (simRes.ok) {
+        const sim = await simRes.json();
+        setSimData(sim);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -238,6 +293,120 @@ export default function HistoryPage() {
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closed = useMemo(() => all.filter(s => s.status === 'CLOSED'), [all]);
+
+  // ── Pyramid P&L computation (NAV-scaled from simulation) ──────────────────
+  // Sim results are NAV-independent (lot fills, exit prices).
+  // We scale shares/dollars here based on selected NAV.
+  const pyramidTrades = useMemo(() => {
+    if (!simData?.trades) return [];
+    return simData.trades.map(t => {
+      const totalShares = sizeForNav(nav, t.entryPrice, t.initStop);
+      const isLong = t.direction === 'LONG';
+
+      // Compute per-lot shares and cost
+      let totalCost = 0, totalShr = 0;
+      const lotDetails = (t.lots || []).map(l => {
+        const shr = Math.max(1, Math.round(totalShares * l.pctOfTotal));
+        const cost = shr * l.fillPrice;
+        totalCost += cost;
+        totalShr += shr;
+        return { ...l, shares: shr, cost };
+      });
+
+      // FEAST: 50% of filled shares exit at feast price, rest at final exit
+      let pnlDollar = 0;
+      let exitPrice = null;
+      let exitDate  = null;
+      let exitReason = null;
+
+      if (t.status === 'CLOSED' && t.finalExit) {
+        exitPrice  = t.finalExit.price;
+        exitDate   = t.finalExit.date;
+        exitReason = t.finalExit.reason;
+
+        if (t.feastExit) {
+          // Split: 50% at FEAST, 50% at final
+          const feastShr = Math.floor(totalShr * 0.5);
+          const restShr  = totalShr - feastShr;
+          const avgCost  = totalShr > 0 ? totalCost / totalShr : t.entryPrice;
+
+          const feastPnl = isLong
+            ? (t.feastExit.price - avgCost) * feastShr
+            : (avgCost - t.feastExit.price) * feastShr;
+          const restPnl = isLong
+            ? (t.finalExit.price - avgCost) * restShr
+            : (avgCost - t.finalExit.price) * restShr;
+          pnlDollar = feastPnl + restPnl;
+          exitReason = `FEAST+${t.finalExit.reason}`;
+        } else {
+          const avgCost = totalShr > 0 ? totalCost / totalShr : t.entryPrice;
+          pnlDollar = isLong
+            ? (t.finalExit.price - avgCost) * totalShr
+            : (avgCost - t.finalExit.price) * totalShr;
+        }
+      } else {
+        // Active — use latest price for unrealized P&L
+        const avgCost = totalShr > 0 ? totalCost / totalShr : t.entryPrice;
+        const curPrice = t.latestPrice;
+        if (t.feastExit) {
+          const feastShr = Math.floor(totalShr * 0.5);
+          const restShr  = totalShr - feastShr;
+          const feastPnl = isLong
+            ? (t.feastExit.price - avgCost) * feastShr
+            : (avgCost - t.feastExit.price) * feastShr;
+          const restPnl = isLong
+            ? (curPrice - avgCost) * restShr
+            : (avgCost - curPrice) * restShr;
+          pnlDollar = feastPnl + restPnl;
+        } else {
+          pnlDollar = isLong
+            ? (curPrice - avgCost) * totalShr
+            : (avgCost - curPrice) * totalShr;
+        }
+        exitDate = t.latestDate;
+      }
+
+      const pnlPct = totalCost > 0 ? (pnlDollar / totalCost) * 100 : 0;
+
+      return {
+        ...t,
+        lotDetails,
+        totalShares: totalShr,
+        totalCost: +totalCost.toFixed(2),
+        pnlDollar: +pnlDollar.toFixed(2),
+        pnlPct: +pnlPct.toFixed(2),
+        exitPrice,
+        exitDate,
+        exitReason,
+        lotsFilledCount: lotDetails.length,
+      };
+    });
+  }, [simData, nav]);
+
+  const pyramidClosed = useMemo(() => pyramidTrades.filter(t => t.status === 'CLOSED'), [pyramidTrades]);
+  const pyramidActive = useMemo(() => pyramidTrades.filter(t => t.status === 'ACTIVE'), [pyramidTrades]);
+
+  // Pyramid aggregate stats
+  const pyramidStats = useMemo(() => {
+    const cl = pyramidClosed;
+    if (cl.length === 0) return null;
+    const winners = cl.filter(t => t.pnlDollar > 0);
+    const losers  = cl.filter(t => t.pnlDollar <= 0);
+    const grossWin  = winners.reduce((s, t) => s + t.pnlDollar, 0);
+    const grossLoss = Math.abs(losers.reduce((s, t) => s + t.pnlDollar, 0));
+    const totalPnl  = cl.reduce((s, t) => s + t.pnlDollar, 0);
+    return {
+      totalTrades: pyramidTrades.length,
+      closedTrades: cl.length,
+      activeTrades: pyramidActive.length,
+      winRate: +(winners.length / cl.length * 100).toFixed(1),
+      totalPnl: +totalPnl.toFixed(0),
+      avgWinDollar: winners.length > 0 ? +(grossWin / winners.length).toFixed(0) : 0,
+      avgLossDollar: losers.length > 0 ? +(-grossLoss / losers.length).toFixed(0) : 0,
+      profitFactor: grossLoss > 0 ? +(grossWin / grossLoss).toFixed(2) : (grossWin > 0 ? 999 : 0),
+      avgLotsPerTrade: cl.length > 0 ? +(cl.reduce((s, t) => s + t.lotsFilledCount, 0) / cl.length).toFixed(1) : 0,
+    };
+  }, [pyramidClosed, pyramidActive, pyramidTrades]);
 
   // Generic sort helper for both tables
   function sortRows(rows, sortState, extraCols) {
@@ -300,205 +469,292 @@ export default function HistoryPage() {
             PNTHR Kill History
           </h1>
           <p style={{ fontSize: 13, color: '#666', marginTop: 4 }}>
-            Forward-tested track record of every stock that entered the Kill top 10.
+            Forward-tested track record — full 5-lot PNTHR Command pyramid strategy.
             {tr.asOf && <span> Last updated: {fmtD(tr.asOf)}</span>}
           </p>
         </div>
-        <button
-          onClick={() => load(true)}
-          disabled={refreshing}
-          style={{
-            background: 'transparent',
-            border: `1px solid ${refreshing ? '#333' : '#555'}`,
-            color: refreshing ? '#444' : '#aaa',
-            borderRadius: 5,
-            padding: '6px 14px',
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: refreshing ? 'not-allowed' : 'pointer',
-            whiteSpace: 'nowrap',
-            letterSpacing: '0.04em',
-          }}
-        >
-          {refreshing ? '↻ Refreshing…' : '↺ Refresh'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select
+            value={nav}
+            onChange={e => setNav(Number(e.target.value))}
+            style={{
+              background: '#111', border: '1px solid #444', color: YELLOW,
+              borderRadius: 5, padding: '6px 10px', fontSize: 12, fontWeight: 700,
+              cursor: 'pointer', outline: 'none',
+            }}
+          >
+            {NAV_OPTIONS.map(n => (
+              <option key={n} value={n}>{fmtNav(n)} NAV</option>
+            ))}
+          </select>
+          <button
+            onClick={() => load(true)}
+            disabled={refreshing}
+            style={{
+              background: 'transparent',
+              border: `1px solid ${refreshing ? '#333' : '#555'}`,
+              color: refreshing ? '#444' : '#aaa',
+              borderRadius: 5,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: refreshing ? 'not-allowed' : 'pointer',
+              whiteSpace: 'nowrap',
+              letterSpacing: '0.04em',
+            }}
+          >
+            {refreshing ? '↻ Refreshing…' : '↺ Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* ── Metric Cards ───────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
-        <MetricCard label="Total Trades"   value={tr.totalTrades ?? 0} sub={`${tr.activeTrades ?? 0} active`} />
-        <MetricCard label="Win Rate"       value={tr.closedTrades > 0 ? `${tr.winRate}%` : '—'}
-          color={tr.winRate >= 60 ? GREEN : tr.winRate >= 40 ? '#ffa500' : RED} />
-        <MetricCard label="Avg Win"        value={tr.avgWinPct != null ? fmt(tr.avgWinPct) : '—'} color={GREEN} />
-        <MetricCard label="Avg Loss"       value={tr.avgLossPct != null ? fmt(tr.avgLossPct) : '—'} color={RED} />
-        <MetricCard label="Profit Factor"
-          value={tr.profitFactor === 999 ? '∞' : tr.profitFactor > 0 ? `${tr.profitFactor}x` : '—'}
-          sub={tr.profitFactor === 999 ? 'No losses yet' : undefined}
-          color={tr.profitFactor >= 2 || tr.profitFactor === 999 ? GREEN : tr.profitFactor >= 1 ? '#ffa500' : RED} />
-        <MetricCard label="Active Now"     value={tr.activeTrades ?? 0} color={YELLOW} />
-        <MetricCard label="Avg Hold"       value={tr.avgHoldingWeeks > 0 ? `${tr.avgHoldingWeeks}w` : '—'} />
-        <MetricCard label="Big Winners"    value={tr.bigWinnerRate > 0 ? `${tr.bigWinnerRate}%` : '—'}
-          sub="trades ≥ +20%" color={GREEN} />
+        {pyramidStats ? (<>
+          <MetricCard label="Total Trades"   value={pyramidStats.totalTrades} sub={`${pyramidStats.activeTrades} active`} />
+          <MetricCard label="Win Rate"       value={`${pyramidStats.winRate}%`}
+            color={pyramidStats.winRate >= 60 ? GREEN : pyramidStats.winRate >= 40 ? '#ffa500' : RED} />
+          <MetricCard label="Total P&L"      value={fmtP(pyramidStats.totalPnl)}
+            sub={`at ${fmtNav(nav)} NAV`}
+            color={pyramidStats.totalPnl >= 0 ? GREEN : RED} />
+          <MetricCard label="Avg Win"        value={fmtP(pyramidStats.avgWinDollar)} color={GREEN} />
+          <MetricCard label="Avg Loss"       value={fmtP(pyramidStats.avgLossDollar)} color={RED} />
+          <MetricCard label="Profit Factor"
+            value={pyramidStats.profitFactor === 999 ? '∞' : pyramidStats.profitFactor > 0 ? `${pyramidStats.profitFactor}x` : '—'}
+            sub={pyramidStats.profitFactor === 999 ? 'No losses yet' : undefined}
+            color={pyramidStats.profitFactor >= 2 || pyramidStats.profitFactor === 999 ? GREEN : pyramidStats.profitFactor >= 1 ? '#ffa500' : RED} />
+          <MetricCard label="Avg Lots/Trade" value={pyramidStats.avgLotsPerTrade} sub="of 5 max" color={YELLOW} />
+          <MetricCard label="Active Now"     value={pyramidStats.activeTrades} color={YELLOW} />
+        </>) : (<>
+          <MetricCard label="Total Trades"   value={tr.totalTrades ?? 0} sub={`${tr.activeTrades ?? 0} active`} />
+          <MetricCard label="Win Rate"       value={tr.closedTrades > 0 ? `${tr.winRate}%` : '—'}
+            color={tr.winRate >= 60 ? GREEN : tr.winRate >= 40 ? '#ffa500' : RED} />
+          <MetricCard label="Avg Win"        value={tr.avgWinPct != null ? fmt(tr.avgWinPct) : '—'} color={GREEN} />
+          <MetricCard label="Avg Loss"       value={tr.avgLossPct != null ? fmt(tr.avgLossPct) : '—'} color={RED} />
+          <MetricCard label="Profit Factor"
+            value={tr.profitFactor === 999 ? '∞' : tr.profitFactor > 0 ? `${tr.profitFactor}x` : '—'}
+            sub={tr.profitFactor === 999 ? 'No losses yet' : undefined}
+            color={tr.profitFactor >= 2 || tr.profitFactor === 999 ? GREEN : tr.profitFactor >= 1 ? '#ffa500' : RED} />
+          <MetricCard label="Active Now"     value={tr.activeTrades ?? 0} color={YELLOW} />
+          <MetricCard label="Avg Hold"       value={tr.avgHoldingWeeks > 0 ? `${tr.avgHoldingWeeks}w` : '—'} />
+        </>)}
       </div>
 
       {/* ── Equity Curve ───────────────────────────────────────────────────── */}
-      {closed.length > 0 && (
+      {(pyramidClosed.length > 0 || closed.length > 0) && (
         <div style={{
           background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
           padding: '16px 18px', marginBottom: 24,
         }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#aaa', marginBottom: 12 }}>
-            Equity Curve — Cumulative P&L <span style={{ color: '#555', fontWeight: 400 }}>(standardized $10K / trade)</span>
+            Equity Curve — Cumulative P&L{' '}
+            <span style={{ color: '#555', fontWeight: 400 }}>
+              ({pyramidClosed.length > 0 ? `5-lot pyramid at ${fmtNav(nav)}` : 'standardized $10K / trade'})
+            </span>
           </div>
-          <EquityCurve closed={closed} />
+          <EquityCurve closed={pyramidClosed.length > 0 ? pyramidClosed : closed} />
         </div>
       )}
 
       {/* ── Closed Trades ─────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ccc', margin: '0 0 12px', letterSpacing: '0.02em' }}>
-          Closed Trades <span style={{ color: '#555', fontWeight: 400, fontSize: 13 }}>({closed.length})</span>
+          Closed Trades <span style={{ color: '#555', fontWeight: 400, fontSize: 13 }}>
+            ({pyramidClosed.length > 0 ? pyramidClosed.length : closed.length})
+          </span>
         </h2>
-        {closed.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#555' }}>
-            No closed trades yet.
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
-                  <ClosedSortTh col="ticker" align="left">Ticker</ClosedSortTh>
-                  <ClosedSortTh col="direction" align="left">Dir</ClosedSortTh>
-                  <ClosedSortTh col="entryDate">Entry Date</ClosedSortTh>
-                  <ClosedSortTh col="entryPrice">Entry $</ClosedSortTh>
-                  <ClosedSortTh col="entryRank">Entry Kill Rank</ClosedSortTh>
-                  <ClosedSortTh col="exitDate">Exit Date</ClosedSortTh>
-                  <ClosedSortTh col="exitPrice">Exit $</ClosedSortTh>
-                  <ClosedSortTh col="pnlPct">P&L %</ClosedSortTh>
-                  <ClosedSortTh col="pnlDollar">P&L $</ClosedSortTh>
-                  <ClosedSortTh col="holdingWeeks">Weeks</ClosedSortTh>
-                  <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Reason</th>
-                  <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Tier</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedClosed.map(s => {
-                  const isPos = (s.pnlPct ?? 0) > 0;
-                  return (
-                    <tr key={s.id} style={{
-                      borderBottom: `1px solid ${BORDER}`,
-                      background: isPos ? 'rgba(40,167,69,0.05)' : 'rgba(220,53,69,0.05)',
-                    }}>
-                      <td style={{ padding: '7px 10px', fontWeight: 800, color: YELLOW }}>{s.ticker}</td>
-                      <td style={{ padding: '7px 10px', color: s.direction === 'SHORT' ? RED : GREEN, fontWeight: 700 }}>
-                        {s.direction === 'SHORT' ? 'SS' : 'BL'}
-                      </td>
-                      <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.entryDate)}</td>
-                      <td style={{ textAlign: 'center', padding: '7px 10px' }}>${s.entryPrice?.toFixed(2)}</td>
-                      <td style={{ textAlign: 'center', padding: '7px 10px', color: YELLOW, fontWeight: 700 }}>#{s.entryRank}</td>
-                      <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.exitDate)}</td>
-                      <td style={{ textAlign: 'center', padding: '7px 10px' }}>${s.exitPrice?.toFixed(2)}</td>
-                      <td style={{ textAlign: 'center', padding: '7px 10px', fontWeight: 700,
-                        color: isPos ? GREEN : RED }}>
-                        {fmt(s.pnlPct)}
-                      </td>
-                      <td style={{ textAlign: 'center', padding: '7px 10px', fontWeight: 700,
-                        color: isPos ? GREEN : RED }}>
-                        {fmtP(s.pnlDollar)}
-                      </td>
-                      <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa' }}>{s.holdingWeeks}</td>
-                      <td style={{ padding: '7px 10px' }}>
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3,
-                          background: s.exitReason === 'OVEREXTENDED'
-                            ? 'rgba(255,165,0,0.15)' : isPos ? 'rgba(40,167,69,0.15)' : 'rgba(220,53,69,0.15)',
-                          color: s.exitReason === 'OVEREXTENDED' ? '#ffa500' : isPos ? GREEN : RED,
-                        }}>
-                          {s.exitReason}
-                        </span>
-                      </td>
-                      <td style={{ padding: '7px 10px' }}><TierBadge tier={s.entryTier} /></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {(() => {
+          const rows = pyramidClosed.length > 0
+            ? sortRows(pyramidClosed, sortClosed, { lotsFilledCount: r => r.lotsFilledCount })
+            : sortedClosed;
+          const usePyramid = pyramidClosed.length > 0;
+
+          if (rows.length === 0) return (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#555' }}>No closed trades yet.</div>
+          );
+
+          return (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                    <ClosedSortTh col="ticker" align="left">Ticker</ClosedSortTh>
+                    <ClosedSortTh col="direction" align="left">Dir</ClosedSortTh>
+                    <ClosedSortTh col="entryDate">Entry</ClosedSortTh>
+                    <ClosedSortTh col="entryPrice">Entry $</ClosedSortTh>
+                    <ClosedSortTh col="entryRank">Entry Rank</ClosedSortTh>
+                    {usePyramid && <ClosedSortTh col="lotsFilledCount">Lots</ClosedSortTh>}
+                    <ClosedSortTh col="exitDate">Exit</ClosedSortTh>
+                    <ClosedSortTh col="exitPrice">Exit $</ClosedSortTh>
+                    <ClosedSortTh col="pnlPct">P&L %</ClosedSortTh>
+                    <ClosedSortTh col="pnlDollar">P&L $</ClosedSortTh>
+                    <ClosedSortTh col="holdingDays">{usePyramid ? 'Days' : 'Weeks'}</ClosedSortTh>
+                    <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Reason</th>
+                    <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Tier</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(s => {
+                    const isPos = (s.pnlPct ?? 0) > 0;
+                    const reason = s.exitReason || s.finalExit?.reason || '—';
+                    return (
+                      <tr key={s.id || `${s.ticker}-${s.entryDate}`} style={{
+                        borderBottom: `1px solid ${BORDER}`,
+                        background: isPos ? 'rgba(40,167,69,0.05)' : 'rgba(220,53,69,0.05)',
+                      }}>
+                        <td style={{ padding: '7px 10px', fontWeight: 800, color: YELLOW }}>{s.ticker}</td>
+                        <td style={{ padding: '7px 10px', color: s.direction === 'SHORT' ? RED : GREEN, fontWeight: 700 }}>
+                          {s.direction === 'SHORT' ? 'SS' : 'BL'}
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.entryDate)}</td>
+                        <td style={{ textAlign: 'center', padding: '7px 10px' }}>${s.entryPrice?.toFixed(2)}</td>
+                        <td style={{ textAlign: 'center', padding: '7px 10px', color: YELLOW, fontWeight: 700 }}>#{s.entryRank}</td>
+                        {usePyramid && (
+                          <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa' }}>
+                            {s.lotsFilledCount}/5
+                          </td>
+                        )}
+                        <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.exitDate)}</td>
+                        <td style={{ textAlign: 'center', padding: '7px 10px' }}>
+                          ${(s.exitPrice ?? s.finalExit?.price)?.toFixed(2) ?? '—'}
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '7px 10px', fontWeight: 700,
+                          color: isPos ? GREEN : RED }}>
+                          {fmt(s.pnlPct)}
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '7px 10px', fontWeight: 700,
+                          color: isPos ? GREEN : RED }}>
+                          {fmtP(s.pnlDollar)}
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa' }}>
+                          {usePyramid ? s.holdingDays : s.holdingWeeks}
+                        </td>
+                        <td style={{ padding: '7px 10px' }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3,
+                            background: reason.includes('OVEREXTENDED')
+                              ? 'rgba(255,165,0,0.15)' : reason.includes('FEAST')
+                              ? 'rgba(252,240,0,0.12)' : isPos ? 'rgba(40,167,69,0.15)' : 'rgba(220,53,69,0.15)',
+                            color: reason.includes('OVEREXTENDED') ? '#ffa500'
+                              : reason.includes('FEAST') ? YELLOW : isPos ? GREEN : RED,
+                          }}>
+                            {reason}
+                          </span>
+                        </td>
+                        <td style={{ padding: '7px 10px' }}><TierBadge tier={s.entryTier} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Open Trades ───────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ccc', margin: '0 0 4px', letterSpacing: '0.02em' }}>
-          Open Trades <span style={{ color: '#555', fontWeight: 400, fontSize: 13 }}>({active.length})</span>
-        </h2>
-        {active.length > 0 && (() => {
-          const lastSnap = active[0]?.weeklySnapshots?.slice(-1)[0];
-          const snapDate = lastSnap?.date;
-          return snapDate ? (
-            <p style={{ fontSize: 11, color: '#555', margin: '0 0 12px' }}>
-              P&L as of {fmtD(snapDate)}
-            </p>
-          ) : null;
-        })()}
-        {active.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#555' }}>
-            No active case studies. They appear when a stock enters the Kill top 10.
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
-                  <ActiveSortTh col="ticker" align="left">Ticker</ActiveSortTh>
-                  <ActiveSortTh col="direction" align="left">Dir</ActiveSortTh>
-                  <ActiveSortTh col="entryDate">Entry Date</ActiveSortTh>
-                  <ActiveSortTh col="entryPrice">Entry $</ActiveSortTh>
-                  <ActiveSortTh col="entryRank">Entry Kill Rank</ActiveSortTh>
-                  <ActiveSortTh col="currentRank">Current Kill Rank</ActiveSortTh>
-                  <ActiveSortTh col="pnlPct">P&L %</ActiveSortTh>
-                  <ActiveSortTh col="holdingWeeks">Weeks</ActiveSortTh>
-                  <ActiveSortTh col="maxFavorable">Max Gain</ActiveSortTh>
-                  <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Tier</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedActive.map(s => {
-                  const pnlPct   = s._pnlPct;
-                  const rankNow  = s._currentRank;
-                  const isPos    = pnlPct >= 0;
-                  return (
-                    <tr key={s.id} style={{
-                      borderBottom: `1px solid ${BORDER}`,
-                      background: pnlPct !== 0
-                        ? (isPos ? 'rgba(40,167,69,0.05)' : 'rgba(220,53,69,0.05)')
-                        : 'transparent',
-                    }}>
-                      <td style={{ padding: '8px 10px', fontWeight: 800, color: YELLOW }}>{s.ticker}</td>
-                      <td style={{ padding: '8px 10px', color: s.direction === 'SHORT' ? RED : GREEN, fontWeight: 700 }}>
-                        {s.direction === 'SHORT' ? 'SS' : 'BL'}
-                      </td>
-                      <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.entryDate)}</td>
-                      <td style={{ textAlign: 'center', padding: '8px 10px' }}>${s.entryPrice?.toFixed(2)}</td>
-                      <td style={{ textAlign: 'center', padding: '8px 10px', color: YELLOW, fontWeight: 700 }}>#{s.entryRank}</td>
-                      <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa' }}>#{rankNow}</td>
-                      <td style={{ textAlign: 'center', padding: '8px 10px', fontWeight: 700,
-                        color: pnlPct === 0 ? '#555' : isPos ? GREEN : RED }}>
-                        {fmt(pnlPct)}
-                      </td>
-                      <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa' }}>{s.holdingWeeks}</td>
-                      <td style={{ textAlign: 'center', padding: '8px 10px', color: GREEN }}>
-                        {s.maxFavorable > 0 ? fmt(s.maxFavorable) : '—'}
-                      </td>
-                      <td style={{ padding: '8px 10px' }}><TierBadge tier={s.entryTier} /></td>
+        {(() => {
+          const usePyramid = pyramidActive.length > 0;
+          const openRows = usePyramid ? pyramidActive : activeWithDerived;
+          const openCount = usePyramid ? pyramidActive.length : active.length;
+
+          // Date subtitle
+          const asOfDate = usePyramid
+            ? pyramidActive[0]?.latestDate
+            : active[0]?.weeklySnapshots?.slice(-1)[0]?.date;
+
+          return (<>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ccc', margin: '0 0 4px', letterSpacing: '0.02em' }}>
+              Open Trades <span style={{ color: '#555', fontWeight: 400, fontSize: 13 }}>({openCount})</span>
+            </h2>
+            {asOfDate && (
+              <p style={{ fontSize: 11, color: '#555', margin: '0 0 12px' }}>
+                P&L as of {fmtD(asOfDate)}
+              </p>
+            )}
+            {openCount === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#555' }}>
+                No active case studies. They appear when a stock enters the Kill top 10.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                      <ActiveSortTh col="ticker" align="left">Ticker</ActiveSortTh>
+                      <ActiveSortTh col="direction" align="left">Dir</ActiveSortTh>
+                      <ActiveSortTh col="entryDate">Entry</ActiveSortTh>
+                      <ActiveSortTh col="entryPrice">Entry $</ActiveSortTh>
+                      <ActiveSortTh col="entryRank">Entry Rank</ActiveSortTh>
+                      {usePyramid && <ActiveSortTh col="lotsFilledCount">Lots</ActiveSortTh>}
+                      {!usePyramid && <ActiveSortTh col="currentRank">Current Rank</ActiveSortTh>}
+                      <ActiveSortTh col="pnlPct">P&L %</ActiveSortTh>
+                      {usePyramid && <ActiveSortTh col="pnlDollar">P&L $</ActiveSortTh>}
+                      <ActiveSortTh col={usePyramid ? 'holdingDays' : 'holdingWeeks'}>{usePyramid ? 'Days' : 'Weeks'}</ActiveSortTh>
+                      {!usePyramid && <ActiveSortTh col="maxFavorable">Max Gain</ActiveSortTh>}
+                      <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Tier</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  </thead>
+                  <tbody>
+                    {sortRows(openRows, sortActive, {
+                      pnlPct: r => usePyramid ? r.pnlPct : r._pnlPct,
+                      pnlDollar: r => r.pnlDollar ?? 0,
+                      currentRank: r => r._currentRank ?? 999,
+                      lotsFilledCount: r => r.lotsFilledCount ?? 0,
+                    }).map(s => {
+                      const pnlPct = usePyramid ? s.pnlPct : s._pnlPct;
+                      const isPos  = (pnlPct ?? 0) >= 0;
+                      return (
+                        <tr key={s.id || `${s.ticker}-${s.entryDate}`} style={{
+                          borderBottom: `1px solid ${BORDER}`,
+                          background: pnlPct !== 0
+                            ? (isPos ? 'rgba(40,167,69,0.05)' : 'rgba(220,53,69,0.05)')
+                            : 'transparent',
+                        }}>
+                          <td style={{ padding: '8px 10px', fontWeight: 800, color: YELLOW }}>{s.ticker}</td>
+                          <td style={{ padding: '8px 10px', color: s.direction === 'SHORT' ? RED : GREEN, fontWeight: 700 }}>
+                            {s.direction === 'SHORT' ? 'SS' : 'BL'}
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.entryDate)}</td>
+                          <td style={{ textAlign: 'center', padding: '8px 10px' }}>${s.entryPrice?.toFixed(2)}</td>
+                          <td style={{ textAlign: 'center', padding: '8px 10px', color: YELLOW, fontWeight: 700 }}>#{s.entryRank}</td>
+                          {usePyramid && (
+                            <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa' }}>
+                              {s.lotsFilledCount}/5
+                            </td>
+                          )}
+                          {!usePyramid && (
+                            <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa' }}>#{s._currentRank}</td>
+                          )}
+                          <td style={{ textAlign: 'center', padding: '8px 10px', fontWeight: 700,
+                            color: pnlPct === 0 ? '#555' : isPos ? GREEN : RED }}>
+                            {fmt(pnlPct)}
+                          </td>
+                          {usePyramid && (
+                            <td style={{ textAlign: 'center', padding: '8px 10px', fontWeight: 700,
+                              color: (s.pnlDollar ?? 0) >= 0 ? GREEN : RED }}>
+                              {fmtP(s.pnlDollar)}
+                            </td>
+                          )}
+                          <td style={{ textAlign: 'center', padding: '8px 10px', color: '#aaa' }}>
+                            {usePyramid ? s.holdingDays : s.holdingWeeks}
+                          </td>
+                          {!usePyramid && (
+                            <td style={{ textAlign: 'center', padding: '8px 10px', color: GREEN }}>
+                              {s.maxFavorable > 0 ? fmt(s.maxFavorable) : '—'}
+                            </td>
+                          )}
+                          <td style={{ padding: '8px 10px' }}><TierBadge tier={s.entryTier} /></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>);
+        })()}
       </div>
 
       {/* ── Breakdown ─────────────────────────────────────────────────────── */}

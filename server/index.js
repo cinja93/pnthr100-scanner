@@ -35,6 +35,7 @@ import {
   killHistoryGetActive,
   killHistoryGetTrackRecord,
 } from './killHistory.js';
+import { killSimulationHandler } from './killSimulation.js';
 import {
   navGet,
   navPost,
@@ -1862,6 +1863,7 @@ app.get('/api/apex/ticker/:ticker', authenticateJWT, (req, res) => {
 app.get('/api/kill-history',              authenticateJWT, killHistoryGetAll);
 app.get('/api/kill-history/active',       authenticateJWT, killHistoryGetActive);
 app.get('/api/kill-history/track-record', authenticateJWT, killHistoryGetTrackRecord);
+app.get('/api/kill-history/simulation',  authenticateJWT, killSimulationHandler);
 
 // ── PNTHR Kill Test — Appearance Tracking ──────────────────────────────────────
 app.get('/api/kill-appearances', authenticateJWT, requireAdmin, async (req, res) => {

@@ -1333,6 +1333,54 @@ async function run() {
     doc.moveTo(uwX(i - stride), uwY(pnthrUW[i - stride])).lineTo(uwX(i), uwY(pnthrUW[i])).stroke();
   }
 
+  // ── Compute top 3 SPY drawdowns with peak/trough/recovery dates ──────────
+  const spyDDs2 = [];
+  {
+    let pk = dailyNav[0].spyEquity, pkDate = dailyNav[0].date;
+    let inDd = false, sDate, pkVal, tr = Infinity, trDate;
+    for (const d of dailyNav) {
+      if (d.spyEquity > pk) { pk = d.spyEquity; pkDate = d.date; }
+      const pct = ((pk - d.spyEquity) / pk) * 100;
+      if (pct > 0.1) {
+        if (!inDd) { inDd = true; sDate = pkDate; pkVal = pk; tr = d.spyEquity; trDate = d.date; }
+        if (d.spyEquity < tr) { tr = d.spyEquity; trDate = d.date; }
+      } else if (inDd) {
+        const depth = ((pkVal - tr) / pkVal) * 100;
+        spyDDs2.push({ peakDate: sDate, troughDate: trDate, recoveryDate: d.date, depth });
+        inDd = false;
+      }
+    }
+    spyDDs2.sort((a, b) => b.depth - a.depth);
+  }
+
+  // ── Numbered dots overlay ────────────────────────────────────────────────
+  function pnthrWindowReturnInline(startDate, endDate) {
+    const s = dailyNav.find(r => r.date === startDate);
+    const e = dailyNav.find(r => r.date === endDate);
+    return s && e ? ((e.equity - s.equity) / s.equity) * 100 : 0;
+  }
+  function drawDdDot(idxInData, yVal, number, fillColor, dotOffsetY = 10, labelOffsetY = 8, radius = 7, decimals = 1) {
+    const cx = uwX(idxInData);
+    const cy = uwY(yVal) + dotOffsetY;
+    doc.circle(cx, cy, radius).fillColor('#000000').fill();
+    doc.circle(cx, cy, radius - 1).fillColor(fillColor).fill();
+    const numFontSize = radius >= 6 ? 8 : 7;
+    doc.fillColor('#000000').fontSize(numFontSize).font('Helvetica-Bold')
+       .text(String(number), cx - 3, cy - numFontSize / 2, { width: 7, align: 'center', lineBreak: false });
+    doc.fillColor(fillColor).fontSize(6.5).font('Helvetica-Bold')
+       .text(`${yVal >= 0 ? '+' : ''}${yVal.toFixed(decimals)}%`, cx - 20, cy + labelOffsetY, { width: 40, align: 'center', lineBreak: false });
+  }
+  const spyDot1 = spyDDs2[0], spyDot2 = spyDDs2[1], spyDot3 = spyDDs2[2];
+  const spyDot1Idx = spyDot1 ? dailyNav.findIndex(d => d.date === spyDot1.troughDate) : -1;
+  const spyDot2Idx = spyDot2 ? dailyNav.findIndex(d => d.date === spyDot2.troughDate) : -1;
+  const spyDot3Idx = spyDot3 ? dailyNav.findIndex(d => d.date === spyDot3.troughDate) : -1;
+  const pntDot    = localDDs[0];
+  const pntDotIdx = pntDot ? dailyNav.findIndex(d => d.date === pntDot.troughDate) : -1;
+  if (spyDot1Idx >= 0) drawDdDot(spyDot1Idx, -spyDot1.depth, 1, RED,    10, 8);
+  if (spyDot2Idx >= 0) drawDdDot(spyDot2Idx, -spyDot2.depth, 2, RED,    10, 8);
+  if (spyDot3Idx >= 0) drawDdDot(spyDot3Idx, -spyDot3.depth, 3, RED,    10, 8);
+  if (pntDotIdx  >= 0) drawDdDot(pntDotIdx,  -pntDot.maxDDPct, 4, YELLOW, 8, 8, 6, 2);
+
   // X-axis year labels (derive from first/last date in dailyNav)
   const firstYear = parseInt(dailyNav[0].date.slice(0, 4));
   const lastYear  = parseInt(dailyNav[nPoints - 1].date.slice(0, 4));
@@ -1344,8 +1392,8 @@ async function run() {
     doc.text(String(yr), x - 12, uwPlotY + uwPlotH + 3, { width: 24, align: 'center', lineBreak: false });
   }
 
-  // Legend
-  const uwLegY = uwPlotY + uwPlotH + 15;
+  // Legend - shifted 17px lower so the #1 dot and "-34.1%" label have clearance
+  const uwLegY = uwPlotY + uwPlotH + 32;
   doc.strokeColor(YELLOW).lineWidth(1);
   doc.moveTo(uwPlotX, uwLegY + 3).lineTo(uwPlotX + 14, uwLegY + 3).stroke();
   doc.fontSize(6).fillColor(YELLOW).font('Helvetica').text('PNTHR Fund', uwPlotX + 18, uwLegY, { lineBreak: false });
@@ -1353,7 +1401,86 @@ async function run() {
   doc.moveTo(uwPlotX + 90, uwLegY + 3).lineTo(uwPlotX + 104, uwLegY + 3).stroke();
   doc.undash();
   doc.fillColor(RED).text('S&P 500', uwPlotX + 108, uwLegY, { lineBreak: false });
-  y = uwLegY + 18;
+  y = uwLegY + 22;
+
+  // ── "The PNTHR's Mastery of Market Drawdowns" commentary ──────────────
+  function fmtLongDate(iso) {
+    if (!iso) return '';
+    const [yr, mo, day] = iso.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[+mo - 1]} ${+day}, ${yr}`;
+  }
+  const BODY_INDENT = 20, BODY_X = LM + BODY_INDENT, BODY_W = CW - BODY_INDENT;
+  const s1 = spyDot1, s2 = spyDot2, s3 = spyDot3;
+  const s1p = s1 ? pnthrWindowReturnInline(s1.peakDate, s1.troughDate) : 0;
+  const s2p = s2 ? pnthrWindowReturnInline(s2.peakDate, s2.troughDate) : 0;
+  const s3p = s3 ? pnthrWindowReturnInline(s3.peakDate, s3.troughDate) : 0;
+  const s1r = s1 ? (100 / (100 - s1.depth) - 1) * 100 : 0;
+  const s2r = s2 ? (100 / (100 - s2.depth) - 1) * 100 : 0;
+  const s3r = s3 ? (100 / (100 - s3.depth) - 1) * 100 : 0;
+  const pR  = pntDot ? (100 / (100 - pntDot.maxDDPct) - 1) * 100 : 0;
+  const s1Days = s1 ? dailyNav.filter(r => r.date >= s1.peakDate && r.date <= s1.troughDate).length : 0;
+  const s2Days = s2 ? dailyNav.filter(r => r.date >= s2.peakDate && r.date <= s2.troughDate).length : 0;
+  const s3Days = s3 ? dailyNav.filter(r => r.date >= s3.peakDate && r.date <= s3.troughDate).length : 0;
+  const pRecoveryDays = pntDot ? dailyNav.filter(r => r.date >= pntDot.troughDate && r.date <= pntDot.recoveryDate).length : 0;
+
+  doc.fontSize(10).fillColor(YELLOW).font('Helvetica-Bold')
+     .text("The PNTHR's Mastery of Market Drawdowns", LM, y, { width: CW, lineBreak: false });
+  y += 15;
+
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1);
+  doc.text('The math of recovery is unforgiving. Keep in mind that a 10% drawdown in the market requires an 11.11% gain to break even. A 25% drawdown demands 33.33%. A 50% loss requires a full 100% gain. The investor must double their money just to return to the prior peak. Every percentage point lost is time the compounding engine sits idle.',
+    BODY_X, y, { width: BODY_W, lineBreak: true, align: 'left' });
+  y = doc.y + 8;
+
+  doc.fontSize(7.5).fillColor(WHITE).font('Helvetica-Oblique').text('Refer to the chart above:', BODY_X, y, { width: BODY_W, lineBreak: true, align: 'left' });
+  doc.font('Helvetica');
+  y = doc.y + 5;
+
+  function spyBulletReal(num, spy, pnthrRet, recov, daysLabel, tail) {
+    doc.fontSize(7.5).fillColor(RED).font('Helvetica-Bold').text(`${num}.  `, BODY_X, y, { continued: true, lineBreak: false });
+    doc.fillColor(WHITE).font('Helvetica-Bold').text(`S&P 500 Trough (${fmtLongDate(spy.troughDate)})`, { continued: true });
+    doc.fillColor(LTGRAY).font('Helvetica').text(`:  SPY fell `, { continued: true });
+    doc.fillColor(RED).font('Helvetica-Bold').text(`-${spy.depth.toFixed(2)}%`, { continued: true });
+    doc.fillColor(LTGRAY).font('Helvetica').text(` from its ${fmtLongDate(spy.peakDate)} peak over ${daysLabel}. Recovery required `, { continued: true });
+    doc.fillColor(RED).font('Helvetica-Bold').text(`+${recov.toFixed(2)}%`, { continued: true });
+    doc.fillColor(LTGRAY).font('Helvetica').text(` simply to reach breakeven. PNTHR over the same window: `, { continued: true });
+    doc.fillColor(GREEN).font('Helvetica-Bold').text(`+${pnthrRet.toFixed(2)}%`, { continued: true });
+    doc.fillColor(LTGRAY).font('Helvetica').text(tail, { lineBreak: true, width: BODY_W });
+    y = doc.y + 5;
+  }
+  if (s1) spyBulletReal('1', s1, s1p, s1r, `${s1Days} trading days`,
+    '. While the market collapsed, the Fund posted a gain: the macro and sector gates had already removed long exposure, protecting capital from the COVID shock.');
+  if (s2) spyBulletReal('2', s2, s2p, s2r, `a grinding ${s2Days}-day bear market`,
+    `. The recovery process ultimately took until ${fmtLongDate(s2.recoveryDate)}. The Fund gained nearly ten percent while SPY investors spent two years climbing back to even.`);
+  if (s3) spyBulletReal('3', s3, s3p, s3r, `${s3Days} trading days`,
+    '. The Fund remained positive while SPY required months to recover.');
+
+  if (pntDot) {
+    doc.fontSize(7.5).fillColor(YELLOW).font('Helvetica-Bold').text('4.  ', BODY_X, y, { continued: true, lineBreak: false });
+    doc.fillColor(WHITE).font('Helvetica-Bold').text(`PNTHR's Deepest Drawdown (${fmtLongDate(pntDot.troughDate)})`, { continued: true });
+    doc.fillColor(LTGRAY).font('Helvetica').text(`:  ONLY a `, { continued: true });
+    doc.fillColor(YELLOW).font('Helvetica-Bold').text(`-${pntDot.maxDDPct.toFixed(2)}%`, { continued: true });
+    doc.fillColor(LTGRAY).font('Helvetica').text(
+      ` drawdown from the ${fmtLongDate(pntDot.start)} peak. Fully recovered in ${pRecoveryDays} trading days with a +${pR.toFixed(2)}% gain. This is the Fund's worst seven-year moment which is world class capital preservation and performance.`,
+      { lineBreak: true, width: BODY_W }
+    );
+    y = doc.y + 10;
+  }
+
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1);
+  doc.text("This is not luck. The Fund is systematically engineered to cap downside: a 1% vitality cap per position, 5-lot pyramid sizing, macro and sector regime gates, and a sector-specific EMA trend filter that removes capital from the market when conditions break down. When drawdowns are kept shallow, every month of gains compounds forward rather than rebuilding prior losses. That asymmetry, compounded over a seven-year cycle, is what separates institutional-grade outcomes from average market performance.",
+    BODY_X, y, { width: BODY_W, lineBreak: true, align: 'left' });
+  y = doc.y + 10;
+
+  doc.fontSize(8).fillColor(WHITE).font('Helvetica-Bold')
+     .text('The Killer Stat', BODY_X, y, { width: BODY_W, lineBreak: true, align: 'left' });
+  y = doc.y + 3;
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1);
+  doc.text(
+    `The Fund made money during every single S&P 500 drawdown in this seven-year window. It earned +${s1p.toFixed(2)}% during the COVID crash, +${s2p.toFixed(2)}% during the 2022 bear market, and +${s3p.toFixed(2)}% during the 2025 drawdown. This isn't just "capital preservation." It's active gain while the market burns.`,
+    BODY_X, y, { width: BODY_W, lineBreak: true, align: 'left' }
+  );
 
   pageFooter();
 

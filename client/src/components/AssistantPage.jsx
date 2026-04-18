@@ -16,7 +16,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { API_BASE, authHeaders, fetchIbkrDiscrepancies, fetchIbkrTradesToday } from '../services/api';
+import {
+  API_BASE, authHeaders, fetchIbkrDiscrepancies, fetchIbkrTradesToday,
+  fetchAccessRequests, approveAccessAsMember, approveAccessAsInvestor, denyAccessRequest,
+} from '../services/api';
+import { useAuth } from '../AuthContext';
 import ChartModal from './ChartModal';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
@@ -81,6 +85,35 @@ function nowEtString() {
 
 function dayLabel(dow) {
   return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dow] || '';
+}
+
+// Human-readable relative time for access request timestamps.
+function formatTimeAgo(iso) {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  const mins = Math.round((Date.now() - then) / 60000);
+  if (mins < 1)   return 'just now';
+  if (mins < 60)  return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24)   return `${hrs} hr ago`;
+  const days = Math.round(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+// Style helper for the access-request action buttons.
+function accessBtn(bg, color, disabled = false, outline = false) {
+  return {
+    background:   outline ? 'transparent' : bg,
+    color,
+    border:       outline ? `1px solid ${bg}` : 'none',
+    borderRadius: 5,
+    padding:      '6px 12px',
+    fontSize:     11,
+    fontWeight:   700,
+    letterSpacing: '0.04em',
+    cursor:       disabled ? 'not-allowed' : 'pointer',
+    opacity:      disabled ? 0.5 : 1,
+  };
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -2404,6 +2437,35 @@ export default function AssistantPage({ onNavigate }) {
   const [headlinesLoading,   setHeadlinesLoading]   = useState(true);
   const [devSignalsAge,      setDevSignalsAge]      = useState(null);
   const [ordersData,         setOrdersData]         = useState(null);
+  const [accessRequests,     setAccessRequests]     = useState([]);
+  const [accessActioning,    setAccessActioning]    = useState(null); // { id, action } while in flight
+  const { isAdmin } = useAuth() || {};
+
+  const reloadAccessRequests = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const { requests } = await fetchAccessRequests();
+      setAccessRequests(requests || []);
+    } catch { /* non-fatal */ }
+  }, [isAdmin]);
+
+  useEffect(() => { reloadAccessRequests(); }, [reloadAccessRequests]);
+
+  const handleAccessAction = useCallback(async (id, action) => {
+    if (accessActioning) return;
+    setAccessActioning({ id, action });
+    try {
+      if (action === 'approve-member')   await approveAccessAsMember(id);
+      if (action === 'approve-investor') await approveAccessAsInvestor(id);
+      if (action === 'deny')             await denyAccessRequest(id);
+      await reloadAccessRequests();
+    } catch (err) {
+      alert(`Failed to ${action.replace('-', ' ')}: ${err.message}`);
+    }
+    setAccessActioning(null);
+  }, [accessActioning, reloadAccessRequests]);
+
+  const pendingAccessCount = accessRequests.filter(r => r.status === 'pending').length;
 
   // Analyze context for scoring chips — destructure the INNER analyzeContext
   // (useAnalyzeContext returns { analyzeContext, loading }, but computeAnalyzeScore
@@ -2799,6 +2861,75 @@ export default function AssistantPage({ onNavigate }) {
       </div>
 
       {error && <div style={s.error}>{error}</div>}
+
+      {/* ── Access Requests (admin-only) ──────────────────────────────────── */}
+      {isAdmin && pendingAccessCount > 0 && (
+        <div style={{
+          border: '2px solid #2563eb', borderRadius: 8, marginBottom: 16,
+          background: 'rgba(37,99,235,0.05)',
+        }}>
+          <div style={{
+            padding: '8px 14px', borderBottom: '1px solid rgba(37,99,235,0.2)',
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#60a5fa', letterSpacing: '0.04em' }}>
+              ACCESS REQUESTS
+            </span>
+            <span style={{
+              background: '#2563eb', color: '#fff', fontSize: 11, fontWeight: 800,
+              padding: '2px 7px', borderRadius: 10, letterSpacing: '0.05em',
+            }}>
+              {pendingAccessCount} PENDING
+            </span>
+          </div>
+          <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {accessRequests.filter(r => r.status === 'pending').map(r => {
+              const actioning   = accessActioning?.id === r._id;
+              const whichAction = actioning ? accessActioning.action : null;
+              const ago         = formatTimeAgo(r.createdAt);
+              return (
+                <div key={r._id} style={{
+                  background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 6, padding: '10px 14px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+                }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#e8e6e3' }}>
+                      {r.name}
+                      <span style={{ color: '#888', fontWeight: 400, marginLeft: 8, fontSize: 12 }}>
+                        &lt;{r.email}&gt;
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
+                      Requested {ago}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button
+                      disabled={actioning}
+                      onClick={() => handleAccessAction(r._id, 'approve-member')}
+                      style={accessBtn('#22c55e', '#fff', actioning)}>
+                      {whichAction === 'approve-member' ? '…' : 'Approve as Member'}
+                    </button>
+                    <button
+                      disabled={actioning}
+                      onClick={() => handleAccessAction(r._id, 'approve-investor')}
+                      style={accessBtn('#2563eb', '#fff', actioning)}>
+                      {whichAction === 'approve-investor' ? '…' : 'Approve as Investor'}
+                    </button>
+                    <button
+                      disabled={actioning}
+                      onClick={() => handleAccessAction(r._id, 'deny')}
+                      style={accessBtn('#3a1010', '#fca5a5', actioning, true)}>
+                      {whichAction === 'deny' ? '…' : 'Deny'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════════════
            SECTION 1 — LIVE OPPORTUNITIES

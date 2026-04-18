@@ -517,6 +517,30 @@ export async function deletePosition(id) {
   return res.json();
 }
 
+// ── Access Requests (admin) ────────────────────────────────────────────────
+
+export async function fetchAccessRequests() {
+  const res = await apiFetch(`${API_BASE}/api/access-requests`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function actionAccessRequest(id, action) {
+  const res = await apiFetch(`${API_BASE}/api/access-requests/${id}/${action}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export const approveAccessAsMember   = (id) => actionAccessRequest(id, 'approve-member');
+export const approveAccessAsInvestor = (id) => actionAccessRequest(id, 'approve-investor');
+export const denyAccessRequest       = (id) => actionAccessRequest(id, 'deny');
+
 // ── Signal History Enhancement ─────────────────────────────────────────────────
 
 export async function fetchMarketSnapshots(from, to) {

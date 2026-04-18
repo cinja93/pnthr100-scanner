@@ -50,6 +50,10 @@ import dataroomRouter from './routes/dataroom.js';
 import complianceRouter from './routes/compliance.js';
 import { investorAuthRouter, investorAdminRouter, investorSelfRouter } from './routes/investor.js';
 import { ensureInvestorIndexes } from './investorService.js';
+import {
+  ensureAccessRequestIndexes, createAccessRequest, emailAlreadyInUse,
+  listAccessRequests, approveAsMember, approveAsInvestor, denyAccessRequest,
+} from './accessRequests.js';
 import cron from 'node-cron';
 import { generateIssue, getMostRecentFriday } from './newsletterService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
@@ -180,24 +184,30 @@ app.post('/auth/register', authLimiter, authenticateJWT, requireAdmin, async (re
   }
 });
 
-// Public self-registration — creates account as pending, emails admin for approval
+// Public self-registration — creates a pending access request that Scott
+// reviews in PNTHR Assistant. No classification is assumed here; Scott picks
+// Member vs Investor at approval time. Returns a generic success response
+// whether or not the email already exists (no enumeration leak).
 app.post('/auth/request-access', authLimiter, async (req, res) => {
+  const GENERIC_OK = {
+    success: true, pending: true,
+    message: 'Your account request has been submitted. You will be notified when approved.',
+  };
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required' });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email address' });
     if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+    // Silently swallow duplicates — do not confirm whether the email exists.
+    if (await emailAlreadyInUse(email)) return res.json(GENERIC_OK);
+
     const hashedPassword = await hashPassword(password);
-    const user = await createUser(email, hashedPassword, { name, status: 'pending' });
-    const token = generateApprovalToken(user._id.toString());
-    const apiUrl = process.env.API_URL || `https://pnthr100-scanner-api.onrender.com`;
-    const approveUrl = `${apiUrl}/auth/approve/${user._id}?action=approve&token=${token}`;
-    const denyUrl    = `${apiUrl}/auth/approve/${user._id}?action=deny&token=${token}`;
-    await sendApprovalRequestEmail({ applicantName: name, applicantEmail: email, approveUrl, denyUrl });
-    res.json({ success: true, pending: true, message: 'Your account request has been submitted. You will receive an email when approved.' });
+    await createAccessRequest({ name, email, hashedPassword });
+    res.json(GENERIC_OK);
   } catch (error) {
-    if (error.message.includes('already exists')) return res.status(409).json({ error: error.message });
     console.error('Request access error:', error);
+    // Even on DB error, don't leak — log and return generic failure
     res.status(500).json({ error: 'Failed to submit account request' });
   }
 });
@@ -3176,6 +3186,57 @@ app.post('/api/pending-entries',                authenticateJWT, pendingEntriesP
 app.post('/api/pending-entries/:id/confirm',    authenticateJWT, pendingEntryConfirm);
 app.post('/api/pending-entries/:id/dismiss',    authenticateJWT, pendingEntryDismiss);
 
+// ── Access Requests (admin-only) ─────────────────────────────────────────────
+// Public signups land in pnthr_access_requests. Admin reviews in PNTHR
+// Assistant and promotes to either `users` (member) or `den_investors`
+// (investor), or denies. Auto-expires after 14 days.
+
+app.get('/api/access-requests', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const requests = await listAccessRequests();
+    res.json({ requests });
+  } catch (err) {
+    console.error('[AccessRequests] list error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/access-requests/:id/approve-member', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await approveAsMember(req.params.id, req.user.email);
+    if (result.error) return res.status(result.code || 400).json({ error: result.error });
+    sendWelcomeEmail({ to: result.email, name: result.name || result.email }).catch(() => {});
+    res.json(result);
+  } catch (err) {
+    console.error('[AccessRequests] approve-member error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/access-requests/:id/approve-investor', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await approveAsInvestor(req.params.id, req.user.email);
+    if (result.error) return res.status(result.code || 400).json({ error: result.error });
+    sendWelcomeEmail({ to: result.email, name: result.name || result.email }).catch(() => {});
+    res.json(result);
+  } catch (err) {
+    console.error('[AccessRequests] approve-investor error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/access-requests/:id/deny', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await denyAccessRequest(req.params.id, req.user.email);
+    if (result.error) return res.status(result.code || 400).json({ error: result.error });
+    sendDenialEmail({ to: result.email, name: result.name || result.email }).catch(() => {});
+    res.json(result);
+  } catch (err) {
+    console.error('[AccessRequests] deny error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Exit Service ──────────────────────────────────────────────────────────────
 
 // POST /api/positions/:id/exit — record an exit (partial or full)
@@ -6137,6 +6198,7 @@ app.listen(PORT, () => {
   createKillHistoryIndexes().catch(() => {});
   ensureAssistantIndexes().catch(() => {});
   ensureInvestorIndexes().catch(() => {});
+  ensureAccessRequestIndexes().catch(() => {});
 });
 
 // Scheduled Friday auto-save: checks every 30 minutes.

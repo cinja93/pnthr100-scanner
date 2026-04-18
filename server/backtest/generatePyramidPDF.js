@@ -1058,9 +1058,18 @@ async function run() {
      .text('All NET performance figures in this document reflect the complete fee and cost schedule below, which mirrors the PNTHR Private Placement Memorandum (PPM v5.2). Every item is drawn directly from the PPM; nothing in this section is illustrative. Investors should read this section in conjunction with the full PPM, which controls in any case of conflict.', LM, y, { width: CW, lineBreak: true });
   y = doc.y + 12;
 
+  // Helper so yellow subsection headings always leave vertical clearance
+  // before the body below them (doc.y does not advance after `lineBreak:false`
+  // without a width, which was causing overlaps).
+  function feeHeading(text, yy) {
+    yy = checkPage(yy, 20);
+    doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold')
+       .text(text, LM, yy, { width: CW, lineBreak: false });
+    return yy + 14;
+  }
+
   // ── 1. Management Fee ────────────────────────────────────────────────────
-  doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('1. Management Fee', LM, y, { lineBreak: false });
-  y = doc.y + 4;
+  y = feeHeading('1. Management Fee', y);
   doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
     'Rate:    2.0% per annum on Net Asset Value.\n' +
     'Accrual: Monthly, at a rate of 2.0% / 12 = 0.1667% per month.\n' +
@@ -1070,8 +1079,7 @@ async function run() {
   y = doc.y + 10;
 
   // ── 2. Performance Allocation Tiers ──────────────────────────────────────
-  doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('2. Performance Allocation (Tiered by Investor Class)', LM, y, { lineBreak: false });
-  y = doc.y + 4;
+  y = feeHeading('2. Performance Allocation (Tiered by Investor Class)', y);
 
   const feeCols   = ['INVESTOR CLASS', 'THRESHOLD', 'YEARS 1-3', 'YR 4+ (LOYALTY)'];
   const feeWidths = [130, 130, 110, CW - 370];
@@ -1093,8 +1101,7 @@ async function run() {
   y = doc.y + 10;
 
   // ── 3. Hurdle Rate ───────────────────────────────────────────────────────
-  doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('3. Hurdle Rate (US 2-Year Treasury Yield)', LM, y, { lineBreak: false });
-  y = doc.y + 4;
+  y = feeHeading('3. Hurdle Rate (US 2-Year Treasury Yield)', y);
   doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
     'The performance allocation hurdle is the US 2-Year Treasury constant-maturity yield as published by the U.S. Department of the Treasury at the close of business on the first trading day of each calendar year, divided by four for quarterly application. The hurdle is non-cumulative: each quarter is evaluated independently.',
     LM + 12, y, { width: CW - 12, lineBreak: true });
@@ -1117,8 +1124,7 @@ async function run() {
   y += 8;
 
   // ── 4. Trading Costs (commissions, slippage, borrow) ─────────────────────
-  doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('4. Trading Costs (Fund-Level Operating Expenses)', LM, y, { lineBreak: false });
-  y = doc.y + 4;
+  y = feeHeading('4. Trading Costs (Fund-Level Operating Expenses)', y);
   doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
     'Brokerage Commissions: Interactive Brokers Pro Fixed pricing: $0.005 per share, minimum $1.00 per order, maximum 1% of trade value. Modeled in both GROSS and NET figures (transaction-level cost).\n' +
     'Slippage:              5 basis points per leg as a market-impact proxy. Modeled in both GROSS and NET figures.\n' +
@@ -1134,8 +1140,7 @@ async function run() {
   const correctYr13   = STARTING_CAPITAL >= 1_000_000 ? '20%' : STARTING_CAPITAL >= 500_000 ? '25%' : '30%';
   const correctYr4    = STARTING_CAPITAL >= 1_000_000 ? '15%' : STARTING_CAPITAL >= 500_000 ? '20%' : '25%';
 
-  doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('5. Fee Schedule Applied in this Document - IMPORTANT DISCLOSURE', LM, y, { lineBreak: false });
-  y = doc.y + 4;
+  y = feeHeading('5. Fee Schedule Applied in this Document - IMPORTANT DISCLOSURE', y);
   doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
     `This document reports the ${NAV_DISPLAY} NAV variant. The PPM investor class applicable at this starting capital is ${navTierLabel}, with a ${correctYr13} performance allocation in years 1-3 and ${correctYr4} after the 36-month loyalty discount.\n\n` +
     `IMPORTANT: For consistency of comparison across the three NAV-scaled variants of this report, all three variants ($100K, $500K, $1M) apply the Filet Class fee schedule (30% years 1-3, 25% after loyalty) in the backtest. A Porterhouse or Wagyu investor would experience a MATERIALLY LOWER fee burden and correspondingly HIGHER NET returns than those reported here. The Filet schedule is used throughout this document as a conservative floor; actual realized NET returns for a ${navTierLabel} investor would be higher.\n\n` +
@@ -1145,8 +1150,7 @@ async function run() {
 
   // ── 6. Total Fee Drag Over 7 Years ───────────────────────────────────────
   if (gm && nm) {
-    doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('6. Total Fee Drag Over the 82-Month Backtest', LM, y, { lineBreak: false });
-    y = doc.y + 4;
+    y = feeHeading('6. Total Fee Drag Over the 82-Month Backtest', y);
     const drag$  = gm.finalEquity - nm.finalEquity;
     const dragPct = gm.totalReturn - nm.totalReturn;
     const dragCagr = gm.cagr - nm.cagr;

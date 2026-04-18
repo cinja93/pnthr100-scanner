@@ -1073,8 +1073,7 @@ async function run() {
   doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
     'Rate:    2.0% per annum on Net Asset Value.\n' +
     'Accrual: Monthly, at a rate of 2.0% / 12 = 0.1667% per month.\n' +
-    'Payment: Quarterly, in advance (per PPM). The backtest applies the fee monthly for simulation purposes; the economic impact is substantively equivalent.\n' +
-    'Prorated for partial-month subscriptions, withdrawals, and redemptions.',
+    'Payment: Quarterly, in advance (per PPM). The backtest applies the fee monthly for simulation purposes; the economic impact is substantively equivalent. Fees are prorated for partial-month subscriptions, withdrawals, and redemptions.',
     LM + 12, y, { width: CW - 12, lineBreak: true });
   y = doc.y + 10;
 
@@ -1085,20 +1084,32 @@ async function run() {
   const feeWidths = [130, 130, 110, CW - 370];
   y = tableHeader(feeCols, y, feeWidths, null, WHITE);
   const feeRows = [
-    ['Filet Class',       '< $500,000',       '30%', '25%'],
-    ['Porterhouse Class', '$500,000 - $999,999', '25%', '20%'],
-    ['Wagyu Class',       '≥ $1,000,000',     '20%', '15%'],
+    ['Filet Class',       '< $500,000',           '30%', '25%'],
+    ['Porterhouse Class', '$500,000 - $999,999',  '25%', '20%'],
+    ['Wagyu Class',       '>= $1,000,000',        '20%', '15%'], // ASCII ">=" renders reliably in Helvetica
   ];
   for (const r of feeRows) y = tableRow(r, y, feeWidths, [WHITE, LTGRAY, YELLOW, GREEN]);
-  y += 6;
+  y += 10;
 
-  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
-    'Loyalty Discount:  A 5 percentage-point reduction in the performance allocation rate applies after 36 consecutive months of investment. The reduced rate is applied prospectively from the first performance period following the 36-month anniversary.\n' +
-    'Upgrade Mechanism: Investors may upgrade to a higher class by meeting the threshold; the new rate applies to subsequent performance periods. Downgrades at GP discretion.\n' +
-    'High Water Mark:   Performance allocation is charged only on net profits above the account\'s running HWM. Losses in any period create a Loss Carryforward that must be fully recovered before any future allocation is charged.\n' +
-    'Calculation Frequency (per PPM): Quarterly, non-cumulative. Each quarter is evaluated independently.',
-    LM + 12, y, { width: CW - 12, lineBreak: true });
-  y = doc.y + 10;
+  // Render each provision as its own labeled paragraph so the labels line up
+  // and each item has visible breathing room from the next.
+  function feeBullet(label, body, yy) {
+    yy = checkPage(yy, 20);
+    doc.fontSize(7.5).fillColor(WHITE).font('Helvetica-Bold')
+       .text(label, LM + 12, yy, { continued: true, lineBreak: false });
+    doc.fillColor(LTGRAY).font('Helvetica').lineGap(1)
+       .text('  ' + body, { width: CW - 12, lineBreak: true });
+    return doc.y + 5;
+  }
+  y = feeBullet('Loyalty Discount:',
+    'A 5 percentage-point reduction in the performance allocation rate applies after 36 consecutive months of investment. The reduced rate is applied prospectively from the first performance period following the 36-month anniversary.', y);
+  y = feeBullet('Upgrade Mechanism:',
+    'Investors may upgrade to a higher class by meeting the threshold; the new rate applies to subsequent performance periods. Downgrades are at GP discretion.', y);
+  y = feeBullet('High Water Mark:',
+    "Performance allocation is charged only on net profits above the account's running HWM. Losses in any period create a Loss Carryforward that must be fully recovered before any future allocation is charged.", y);
+  y = feeBullet('Calculation Frequency (per PPM):',
+    'Quarterly, non-cumulative. Each quarter is evaluated independently.', y);
+  y += 6;
 
   // ── 3. Hurdle Rate ───────────────────────────────────────────────────────
   y = feeHeading('3. Hurdle Rate (US 2-Year Treasury Yield)', y);
@@ -1125,13 +1136,15 @@ async function run() {
 
   // ── 4. Trading Costs (commissions, slippage, borrow) ─────────────────────
   y = feeHeading('4. Trading Costs (Fund-Level Operating Expenses)', y);
-  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
-    'Brokerage Commissions: Interactive Brokers Pro Fixed pricing: $0.005 per share, minimum $1.00 per order, maximum 1% of trade value. Modeled in both GROSS and NET figures (transaction-level cost).\n' +
-    'Slippage:              5 basis points per leg as a market-impact proxy. Modeled in both GROSS and NET figures.\n' +
-    'Short Borrow Costs:    Sector-tiered annualized rates of 1.0% - 2.0% on the notional value of short positions, accrued daily while short. Modeled in both GROSS and NET figures.\n' +
-    'Ongoing Operating Expenses (per PPM - legal, audit, administrative, regulatory): borne by the Fund as ordinary expenses but NOT separately modeled in this backtest. Estimated at 0.1-0.3% of NAV per annum for a fund of this size; investors should adjust expected NET returns accordingly.',
-    LM + 12, y, { width: CW - 12, lineBreak: true });
-  y = doc.y + 10;
+  y = feeBullet('Brokerage Commissions:',
+    'Interactive Brokers Pro Fixed pricing: $0.005 per share, minimum $1.00 per order, maximum 1% of trade value. Modeled in both GROSS and NET figures (transaction-level cost).', y);
+  y = feeBullet('Slippage:',
+    '5 basis points per leg as a market-impact proxy. Modeled in both GROSS and NET figures.', y);
+  y = feeBullet('Short Borrow Costs:',
+    'Sector-tiered annualized rates of 1.0% - 2.0% on the notional value of short positions, accrued daily while short. Modeled in both GROSS and NET figures.', y);
+  y = feeBullet('Ongoing Operating Expenses (per PPM):',
+    'Legal, audit, administrative, and regulatory expenses are borne by the Fund as ordinary expenses but are NOT separately modeled in this backtest. Estimated at 0.1-0.3% of NAV per annum for a fund of this size; investors should adjust expected NET returns accordingly.', y);
+  y += 6;
 
   // ── 5. Fee Schedule Applied In THIS Document ─────────────────────────────
   const navTierLabel  = STARTING_CAPITAL >= 1_000_000 ? 'Wagyu (≥ $1M)'
@@ -1151,18 +1164,14 @@ async function run() {
   // ── 6. Total Fee Drag Over 7 Years ───────────────────────────────────────
   if (gm && nm) {
     y = feeHeading('6. Total Fee Drag Over the 82-Month Backtest', y);
-    const drag$  = gm.finalEquity - nm.finalEquity;
+    const drag$   = gm.finalEquity - nm.finalEquity;
     const dragPct = gm.totalReturn - nm.totalReturn;
     const dragCagr = gm.cagr - nm.cagr;
-    doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
-      `Starting NAV:      ${NAV_DISPLAY}\n` +
-      `Ending Equity:     ${fmtDollar(gm.finalEquity)} GROSS - ${fmtDollar(nm.finalEquity)} NET = -${fmtDollar(drag$)} total fee drag\n` +
-      `Return Drag:       -${dragPct.toFixed(1)} percentage points on Total Return\n` +
-      `CAGR Drag:         -${dragCagr.toFixed(2)} percentage points on annualized return\n` +
-      `Cumulative Fees:   Approximately ${(drag$ / gm.finalEquity * 100).toFixed(1)}% of gross ending equity.\n` +
-      `This drag reflects the full Filet fee schedule plus all trading costs over 82 months.`,
-      LM + 12, y, { width: CW - 12, lineBreak: true });
-    y = doc.y + 6;
+    y = feeBullet('Starting NAV:',    NAV_DISPLAY, y);
+    y = feeBullet('Ending Equity:',   `${fmtDollar(gm.finalEquity)} GROSS vs. ${fmtDollar(nm.finalEquity)} NET, a ${fmtDollar(drag$)} total fee drag.`, y);
+    y = feeBullet('Return Drag:',     `-${dragPct.toFixed(1)} percentage points on Total Return.`, y);
+    y = feeBullet('CAGR Drag:',       `-${dragCagr.toFixed(2)} percentage points on the annualized return.`, y);
+    y = feeBullet('Cumulative Fees:', `Approximately ${(drag$ / gm.finalEquity * 100).toFixed(1)}% of gross ending equity. This drag reflects the full Filet fee schedule plus all trading costs over 82 months.`, y);
   }
 
   pageFooter();

@@ -622,8 +622,10 @@ async function run() {
   // Yellow line separator below header
   doc.moveTo(0, COVER_HEADER_H).lineTo(W, COVER_HEADER_H).strokeColor(YELLOW).lineWidth(2).stroke();
 
-  // "INSTITUTIONAL TEAR SHEET" centered below header with breathing room
-  doc.fontSize(26).fillColor(YELLOW).font('Helvetica-Bold')
+  // Cover title — 22pt fits on one line inside CW=512 (the previous 26pt
+  // wrapped onto the subtitle). Y positions unchanged from the original
+  // single-line layout so the chart fits within the page bottom margin.
+  doc.fontSize(22).fillColor(YELLOW).font('Helvetica-Bold')
      .text('PYRAMID FUND INTELLIGENCE REPORT', LM, COVER_HEADER_H + 24, { width: CW, align: 'center', lineBreak: false });
   doc.fontSize(9).fillColor(LTGRAY).font('Helvetica')
      .text('7-Year Backtest Performance Report  |  June 2019 - April 2026', LM, COVER_HEADER_H + 56, { width: CW, align: 'center', lineBreak: false });

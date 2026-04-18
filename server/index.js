@@ -95,6 +95,7 @@ import {
   upsertUserProfile,
   approveUser,
   denyUser,
+  resetMemberPassword,
 } from './database.js';
 
 const app = express();
@@ -3233,6 +3234,24 @@ app.post('/api/access-requests/:id/deny', authenticateJWT, requireAdmin, async (
     res.json(result);
   } catch (err) {
     console.error('[AccessRequests] deny error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin-only: reset a member account's password. Investors are managed via a
+// separate route (not yet built) — this endpoint only touches the `users`
+// collection, not `den_investors`.
+app.post('/api/admin/reset-member-password', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+    if (!email || !newPassword) return res.status(400).json({ error: 'email and newPassword are required' });
+    if (newPassword.length < 8)  return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    const hashedPassword = await hashPassword(newPassword);
+    const result = await resetMemberPassword(email, hashedPassword);
+    if (result.error) return res.status(result.code || 400).json({ error: result.error });
+    res.json({ ok: true, email: email.toLowerCase().trim() });
+  } catch (err) {
+    console.error('[Admin] reset-member-password error:', err);
     res.status(500).json({ error: err.message });
   }
 });

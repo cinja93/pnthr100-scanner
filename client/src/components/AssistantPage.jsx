@@ -19,6 +19,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   API_BASE, authHeaders, fetchIbkrDiscrepancies, fetchIbkrTradesToday,
   fetchAccessRequests, approveAccessAsMember, approveAccessAsInvestor, denyAccessRequest,
+  resetMemberPassword,
 } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ChartModal from './ChartModal';
@@ -2467,6 +2468,28 @@ export default function AssistantPage({ onNavigate }) {
 
   const pendingAccessCount = accessRequests.filter(r => r.status === 'pending').length;
 
+  // ── Password reset form state (admin-only) ─────────────────────────────
+  const [pwResetOpen,      setPwResetOpen]      = useState(false);
+  const [pwResetEmail,     setPwResetEmail]     = useState('');
+  const [pwResetPassword,  setPwResetPassword]  = useState('');
+  const [pwResetBusy,      setPwResetBusy]      = useState(false);
+  const [pwResetResult,    setPwResetResult]    = useState(null); // { ok, msg }
+
+  const handlePwReset = useCallback(async (e) => {
+    e?.preventDefault?.();
+    if (pwResetBusy) return;
+    setPwResetBusy(true);
+    setPwResetResult(null);
+    try {
+      await resetMemberPassword(pwResetEmail.trim(), pwResetPassword);
+      setPwResetResult({ ok: true, msg: `Password updated for ${pwResetEmail.trim()}` });
+      setPwResetPassword('');
+    } catch (err) {
+      setPwResetResult({ ok: false, msg: err.message });
+    }
+    setPwResetBusy(false);
+  }, [pwResetEmail, pwResetPassword, pwResetBusy]);
+
   // Analyze context for scoring chips — destructure the INNER analyzeContext
   // (useAnalyzeContext returns { analyzeContext, loading }, but computeAnalyzeScore
   // expects the inner object with regime, sectorEma, etc.)
@@ -2861,6 +2884,60 @@ export default function AssistantPage({ onNavigate }) {
       </div>
 
       {error && <div style={s.error}>{error}</div>}
+
+      {/* ── Member password reset (admin-only, collapsible) ───────────────── */}
+      {isAdmin && (
+        <div style={{
+          border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8,
+          marginBottom: pendingAccessCount > 0 ? 12 : 16, background: '#0b0b0b',
+        }}>
+          <button
+            onClick={() => setPwResetOpen(o => !o)}
+            style={{
+              width: '100%', background: 'none', border: 'none', color: '#aaa',
+              padding: '8px 14px', fontSize: 12, textAlign: 'left', cursor: 'pointer',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+            <span style={{ letterSpacing: '0.04em' }}>🔑 RESET MEMBER PASSWORD</span>
+            <span style={{ fontSize: 10, color: '#666' }}>{pwResetOpen ? '▲' : '▼'}</span>
+          </button>
+          {pwResetOpen && (
+            <form onSubmit={handlePwReset} style={{
+              padding: '10px 14px 14px', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end',
+            }}>
+              <div>
+                <label style={{ fontSize: 10, color: '#666', display: 'block', marginBottom: 3 }}>Member email</label>
+                <input
+                  type="email" value={pwResetEmail} onChange={e => setPwResetEmail(e.target.value)}
+                  placeholder="brennan@example.com" required
+                  style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', color: '#e8e6e3',
+                    borderRadius: 4, padding: '6px 10px', fontSize: 12, fontFamily: 'monospace', width: 240 }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 10, color: '#666', display: 'block', marginBottom: 3 }}>New password (≥ 8 chars)</label>
+                <input
+                  type="text" value={pwResetPassword} onChange={e => setPwResetPassword(e.target.value)}
+                  minLength={8} required
+                  style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', color: '#e8e6e3',
+                    borderRadius: 4, padding: '6px 10px', fontSize: 12, fontFamily: 'monospace', width: 220 }} />
+              </div>
+              <button
+                type="submit" disabled={pwResetBusy || !pwResetEmail || pwResetPassword.length < 8}
+                style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4,
+                  padding: '7px 14px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+                  cursor: pwResetBusy ? 'not-allowed' : 'pointer', opacity: pwResetBusy ? 0.6 : 1 }}>
+                {pwResetBusy ? 'RESETTING…' : 'RESET PASSWORD'}
+              </button>
+              {pwResetResult && (
+                <div style={{ fontSize: 11, fontWeight: 600, marginLeft: 8,
+                  color: pwResetResult.ok ? '#22c55e' : '#ef4444' }}>
+                  {pwResetResult.ok ? '✓' : '✗'} {pwResetResult.msg}
+                </div>
+              )}
+            </form>
+          )}
+        </div>
+      )}
 
       {/* ── Access Requests (admin-only) ──────────────────────────────────── */}
       {isAdmin && pendingAccessCount > 0 && (

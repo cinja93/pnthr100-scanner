@@ -541,6 +541,19 @@ export const approveAccessAsMember   = (id) => actionAccessRequest(id, 'approve-
 export const approveAccessAsInvestor = (id) => actionAccessRequest(id, 'approve-investor');
 export const denyAccessRequest       = (id) => actionAccessRequest(id, 'deny');
 
+export async function resetMemberPassword(email, newPassword) {
+  const res = await apiFetch(`${API_BASE}/api/admin/reset-member-password`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, newPassword }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 // ── Signal History Enhancement ─────────────────────────────────────────────────
 
 export async function fetchMarketSnapshots(from, to) {

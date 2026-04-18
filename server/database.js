@@ -414,6 +414,20 @@ export async function denyUser(userId) {
   );
 }
 
+// Admin-triggered password reset for a member account (does NOT affect investors).
+// Returns { ok: true } on success or { error, code } on failure.
+export async function resetMemberPassword(email, hashedPassword) {
+  const database = await connectToDatabase();
+  if (!database) return { error: 'DB unavailable', code: 503 };
+  const lower = email.toLowerCase().trim();
+  const result = await database.collection('users').updateOne(
+    { email: lower },
+    { $set: { hashedPassword, passwordResetAt: new Date() } }
+  );
+  if (result.matchedCount === 0) return { error: 'No member account found with that email', code: 404 };
+  return { ok: true };
+}
+
 export async function findUserByEmail(email) {
   const database = await connectToDatabase();
   if (!database) return null;

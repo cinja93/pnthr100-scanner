@@ -401,7 +401,7 @@ async function run() {
   function drawGrowthChart(title, pnthrData, spyData, growthStats, chartY) {
     const chartX = LM;
     const chartW = CW;
-    const chartH = 220; // was 160 — taller plot area
+    const chartH = 160;
     const plotX = chartX + 40;
     const plotW = chartW - 50;
     const plotY = chartY;
@@ -716,7 +716,7 @@ async function run() {
   }
 
   // ── Mini cumulative chart + PNTHR head + quote ──
-  fy += 55; // was 30 — extra breathing room between comparison table and chart
+  fy += 30;
   {
     // Build cumulative chart data for mini version
     const miniCumGrowth = computeGrowthForYear('all');
@@ -750,7 +750,7 @@ async function run() {
       // Mini chart to the right
       const miniChartX = LM + 120;
       const miniChartW = CW - 120;
-      const miniChartH = 150; // was 100 — taller graph for readability
+      const miniChartH = 100;
       const miniPlotX = miniChartX + 35;
       const miniPlotW = miniChartW - 45;
       const miniPlotY = fy + 8;
@@ -1939,7 +1939,7 @@ async function run() {
       cumGrowth.chartData,
       allSpyData,
       cumGrowth,
-      y + 40 // was +20 — pushes chart further down for proper spacing below the title
+      y + 20
     );
     y += 10;
   }

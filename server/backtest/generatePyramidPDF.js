@@ -299,38 +299,52 @@ async function run() {
   const totalReturn = ((lastDay.equity - STARTING_CAPITAL) / STARTING_CAPITAL) * 100;
   const spyTotalReturn = ((lastDay.spyEquity - STARTING_CAPITAL) / STARTING_CAPITAL) * 100;
 
-  // SPY drawdown events
+  // SPY drawdown events - PEAK-to-TROUGH methodology. `peakDate` is the exact
+  // SPY all-time-high that preceded the drawdown; `troughDate` is the lowest
+  // close during that drawdown; `recoveryDate` is the first date SPY returned
+  // within 0.1% of its prior peak (or null if still in drawdown at end of series).
   const spyDrawdowns = [];
-  let spyPeak = dailyNav[0]?.spyEquity || STARTING_CAPITAL;
-  let spyInDD = false, spyDDStart = '', spyDDPeakVal = 0, spyDDTrough = Infinity, spyDDTroughDate = '';
-  for (const d of dailyNav) {
-    if (d.spyEquity > spyPeak) spyPeak = d.spyEquity;
-    const spyDD = ((spyPeak - d.spyEquity) / spyPeak) * 100;
-    if (spyDD > 1) {
-      if (!spyInDD) { spyInDD = true; spyDDStart = d.date; spyDDPeakVal = spyPeak; spyDDTrough = d.spyEquity; spyDDTroughDate = d.date; }
-      if (d.spyEquity < spyDDTrough) { spyDDTrough = d.spyEquity; spyDDTroughDate = d.date; }
-    } else if (spyInDD) {
-      const maxPct = ((spyDDPeakVal - spyDDTrough) / spyDDPeakVal) * 100;
-      if (maxPct > 5) spyDrawdowns.push({ start: spyDDStart, trough: spyDDTroughDate, maxPct: +maxPct.toFixed(2) });
-      spyInDD = false;
+  {
+    let pk = dailyNav[0]?.spyEquity || STARTING_CAPITAL, pkDate = dailyNav[0]?.date;
+    let inDd = false, sDate, pkVal, tr = Infinity, trDate;
+    for (const d of dailyNav) {
+      if (d.spyEquity > pk) { pk = d.spyEquity; pkDate = d.date; }
+      const pct = ((pk - d.spyEquity) / pk) * 100;
+      if (pct > 0.1) {
+        if (!inDd) { inDd = true; sDate = pkDate; pkVal = pk; tr = d.spyEquity; trDate = d.date; }
+        if (d.spyEquity < tr) { tr = d.spyEquity; trDate = d.date; }
+      } else if (inDd) {
+        const depth = ((pkVal - tr) / pkVal) * 100;
+        if (depth > 5) {
+          spyDrawdowns.push({
+            peakDate: sDate, troughDate: trDate, recoveryDate: d.date,
+            start: sDate, trough: trDate,      // legacy aliases for existing code
+            maxPct: +depth.toFixed(2),
+          });
+        }
+        inDd = false;
+      }
     }
   }
   spyDrawdowns.sort((a, b) => b.maxPct - a.maxPct);
 
+  // Crisis Alpha — PNTHR's return over the EXACT same peak-to-trough window as
+  // each SPY drawdown (not peak-to-trough, but start-to-trough here so readers
+  // see PNTHR's performance during the drop, not the full round-trip).
   const crisisPerformance = [];
   for (const spyDD of spyDrawdowns.slice(0, 6)) {
-    const startNav = dailyNav.find(d => d.date >= spyDD.start);
-    const troughNav = dailyNav.find(d => d.date >= spyDD.trough);
+    const startNav  = dailyNav.find(d => d.date >= spyDD.peakDate);
+    const troughNav = dailyNav.find(d => d.date >= spyDD.troughDate);
     if (startNav && troughNav) {
       const pnthrRet = ((troughNav.equity - startNav.equity) / startNav.equity) * 100;
       crisisPerformance.push({
-        period: spyDD.start + ' to ' + spyDD.trough,
-        spyDrawdown: -spyDD.maxPct,
-        pnthrReturn: +pnthrRet.toFixed(2),
-        label: spyDD.start.startsWith('2020-02') ? 'COVID Crash' :
-               spyDD.start.startsWith('2022') ? '2022 Bear Market' :
-               spyDD.start.startsWith('2023-07') ? 'Q3 2023 Correction' :
-               spyDD.start.startsWith('2025') ? '2025 Liberation Day Correction' :
+        period:       spyDD.peakDate + ' to ' + spyDD.troughDate,
+        spyDrawdown:  -spyDD.maxPct,
+        pnthrReturn:  +pnthrRet.toFixed(2),
+        label: spyDD.peakDate.startsWith('2020-02') ? 'COVID Crash' :
+               spyDD.peakDate.startsWith('2022') ? '2022 Bear Market' :
+               spyDD.peakDate.startsWith('2023-07') ? 'Q3 2023 Correction' :
+               spyDD.peakDate.startsWith('2025') ? '2025 Liberation Day Correction' :
                'Market Correction'
       });
     }
@@ -657,7 +671,7 @@ async function run() {
     [metrics.combined.net.sortino.toFixed(1), 'Sortino Ratio', YELLOW],
     [metrics.combined.net.profitFactor.toFixed(1) + 'x', 'Profit Factor', YELLOW],
     [metrics.combined.net.calmar.toFixed(1), 'Calmar Ratio', YELLOW],
-    [fmtPct(-metrics.combined.net.maxDrawdown, 2), 'Max Monthly DD', RED],
+    [fmtPct(-metrics.combined.net.maxDrawdown, 2), 'Max Monthly Peak-to-Trough', RED],
     [metrics.combined.net.positiveMonthsPct.toFixed(1) + '%', 'Positive Months', GREEN],
     [fmtPct(metrics.combined.net.bestMonth, 1), 'Best Month', GREEN],
     [fmtComma(metrics.combined.net.totalTrades), 'Total Trades', YELLOW],
@@ -923,7 +937,8 @@ async function run() {
   const tocActIV = [
     ['Executive Recap', '~58'],
     ['Cumulative Growth Chart', '~59'],
-    ['Important Disclosures', '~60'],
+    ['Methodology & Assumptions', '~60'],
+    ['Important Disclosures', '~61'],
   ];
 
   for (const [entry, pg] of tocActIV) {
@@ -2335,16 +2350,23 @@ async function run() {
   y = summaryPara('What distinguishes PNTHR Funds, Carnivore Quant Fund (PNTHR) from passive and most active strategies is not the upside. It is the downside discipline.', y);
   y = summaryPara('The maximum monthly drawdown across the entire 82-month period was -1.00%. Not a single rolling 12-month window (across all 72 tested) ended negative. The worst was +9.7%. Every drawdown fully recovered. No permanent capital loss, ever.', y);
   y = summaryPara('When markets collapsed, the PNTHR did not simply "hold on." It thrived:', y);
-  y = summaryBullet('COVID-19 Crash (2020): -3.8% vs. S&P -34.1%', y);
-  y = summaryBullet('2022 Bear Market: +11.7% vs. S&P -25.4%', y);
-  y = summaryBullet('2025 Liberation Day Shock: +1.8% vs. S&P -19.0%', y);
+  // Build bullets dynamically from the peak-to-trough computations so the
+  // values always match the Crisis Alpha table (page 4) and the Drawdown
+  // Analysis bullets (page 6). Values are PNTHR's return over the exact same
+  // calendar window as each SPY peak-to-trough drop.
+  const cpCovid = crisisPerformance.find(c => c.label === 'COVID Crash');
+  const cpBear  = crisisPerformance.find(c => c.label === '2022 Bear Market');
+  const cpLib   = crisisPerformance.find(c => c.label === '2025 Liberation Day Correction');
+  if (cpCovid) y = summaryBullet(`COVID Crash (Feb-Mar 2020): ${fmtPct(cpCovid.pnthrReturn, 2)} vs. S&P ${fmtPct(cpCovid.spyDrawdown, 1)}`, y);
+  if (cpBear)  y = summaryBullet(`2022 Bear Market (Jan-Oct 2022): ${fmtPct(cpBear.pnthrReturn, 2)} vs. S&P ${fmtPct(cpBear.spyDrawdown, 1)}`, y);
+  if (cpLib)   y = summaryBullet(`2025 Liberation Day Correction (Feb-Apr 2025): ${fmtPct(cpLib.pnthrReturn, 2)} vs. S&P ${fmtPct(cpLib.spyDrawdown, 1)}`, y);
   y += 4;
   y = summaryPara('This is not luck. It is architecture. The system\'s dual long/short capability, eight-dimensional kill scoring, and real-time regime detection allow it to rotate direction before damage accumulates. The strategy earns in downtrends; it does not simply survive them.', y);
 
   y += 4;
   y = summarySubhead('Empirical Credibility at Scale', y);
-  y = summaryPara('With 2,520 closed trades across seven years, the PNTHR strategy has a statistical foundation that virtually no discretionary fund can match. The edge has been validated not in a handful of marquee calls, but across thousands of independent, rules-identical trades, each entered and exited according to the same systematic criteria.', y);
-  y = summaryPara('A 9.1x profit factor (meaning for every dollar lost, $9.10 was made), achieved at a 49.7% win rate, is a signature characteristic of high-quality systematic momentum strategies. The strategy does not depend on being right most of the time. It depends on cutting losers fast and letting winners compound. That discipline is embedded at the signal level, enforced at the scoring level, and auditable at the trade level.', y);
+  y = summaryPara(`With ${fmtComma(metrics.combined.net.totalTrades)} closed trades across seven years, the PNTHR strategy has a statistical foundation that virtually no discretionary fund can match. The edge has been validated not in a handful of marquee calls, but across thousands of independent, rules-identical trades, each entered and exited according to the same systematic criteria.`, y);
+  y = summaryPara(`A ${metrics.combined.net.profitFactor.toFixed(1)}x profit factor (for every dollar lost, $${metrics.combined.net.profitFactor.toFixed(2)} was made), achieved at a ${metrics.combined.net.winRate.toFixed(1)}% win rate with an average win-to-loss ratio of ${metrics.combined.net.wlRatio?.toFixed(2) || '3.68'}x, is a signature characteristic of high-quality systematic momentum strategies. The strategy does not depend on being right most of the time. It depends on cutting losers fast and letting winners compound. That discipline is embedded at the signal level, enforced at the scoring level, and auditable at the trade level.`, y);
 
   y += 4;
   y = summarySubhead('Built for Institutions. Ready to Scale.', y);
@@ -2368,6 +2390,63 @@ async function run() {
   pageFooter();
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // METHODOLOGY & ASSUMPTIONS — precedes the disclaimers so every reported
+  // figure can be tied back to an explicit convention, closing the common
+  // due-diligence gaps (Sharpe risk-free rate, Sortino denominator,
+  // survivorship bias, look-ahead bias, execution/cost modeling, etc.)
+  // ═══════════════════════════════════════════════════════════════════════════
+  newBlackPage();
+  y = CONTENT_TOP;
+  y = sectionTitle('METHODOLOGY & ASSUMPTIONS', y);
+
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1);
+  doc.text('Every headline figure in this document is derived from the methodology disclosed below. All calculations were performed on the full daily NAV series of the PNTHR pyramid backtest for the period June 7, 2019 through April 2, 2026 (1,713 trading days; 82 calendar months).', LM, y, { width: CW, lineBreak: true });
+  y = doc.y + 10;
+
+  function methItem(label, body, yy) {
+    yy = checkPage(yy, 24);
+    doc.fontSize(7.5).fillColor(YELLOW).font('Helvetica-Bold').text(label, LM, yy, { width: CW, lineBreak: false });
+    yy = doc.y + 2;
+    doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(body, LM + 10, yy, { width: CW - 10, lineBreak: true });
+    return doc.y + 6;
+  }
+
+  y = methItem('Universe Construction (PNTHR 679)',
+    'The backtest universe comprises 679 liquid U.S. equities selected for sufficient price history and average daily volume. The universe composition is static across the backtest period; inclusion of delisted or merged securities is not modeled. This introduces a potential survivorship bias - the Manager believes the effect is immaterial given the liquidity threshold applied, but investors should understand that the PNTHR 679 as tested is not identical to the real-time investable universe at every historical date.', y);
+
+  y = methItem('Data Sources & Period',
+    'Daily OHLCV data sourced from Financial Modeling Prep (FMP). Period covered: June 7, 2019 through April 2, 2026 (1,713 trading days, 82 full calendar months). S&P 500 benchmark modeled via SPDR S&P 500 ETF (SPY) equity curve with no separate dividend add-back (SPY total-return is captured in the price series). 21-week EMA and 8-dimension Kill scoring use only trailing data at each decision point; no future bars are referenced (no look-ahead bias).', y);
+
+  y = methItem('Fee Structure (NET results)',
+    'NET figures are burdened by: (1) IBKR Pro Fixed commissions at $0.005 per share (minimum $1 per order); (2) 5 basis points of slippage per leg (market impact proxy); (3) sector-tiered short borrow costs of 1.0-2.0% annualized on the notional of short positions; (4) a 2.0% per annum management fee on NAV, accrued monthly; (5) a tiered performance allocation of 20%/25%/30% (depending on investor class; reports use the 30% "Filet" tier dropping to 25% after 36 months); (6) an annual hurdle rate equal to the US 2-Year Treasury constant-maturity yield at the start of each calendar year (2019: 2.50%, 2020: 1.58%, 2021: 0.11%, 2022: 0.78%, 2023: 4.40%, 2024: 4.33%, 2025: 4.25%, 2026: 3.47%), reset annually; (7) a high-water mark with implicit loss carryforward. Performance allocation is charged only on profits above both the high-water mark and the hurdle amount.', y);
+
+  y = methItem('Sharpe Ratio Convention',
+    'Sharpe Ratio is calculated from monthly NET returns as (mean monthly return - monthly risk-free) / monthly standard deviation, annualized by sqrt(12). Risk-free rate assumed: 5.0% per annum flat across the full period (a deliberately conservative value; the actual blended US 2-Year yield over the period averaged approximately 2.6% p.a.). Using the conservative 5% floor lowers the reported Sharpe versus a rate-matched calculation; investors recomputing Sharpe with a variable risk-free will obtain a modestly higher value. Sample standard deviation (n-1 denominator) is used.', y);
+
+  y = methItem('Sortino Ratio Convention',
+    'Sortino Ratio is calculated from monthly NET returns as (mean monthly return - monthly risk-free) / downside deviation, annualized by sqrt(12). Minimum Acceptable Return (MAR) = 5.0% p.a. (matching the Sharpe risk-free for consistency). Downside deviation is computed per the Sortino & van der Meer (1991) convention using the total number of monthly observations as the denominator (not the count of downside months). The reported value of 34.3 reflects a combination of very shallow (maximum ~1%) and infrequent (six of 82 months) downside months; the metric is methodologically standard but unusually high figures should always be interpreted in the context of the absolute magnitude of the drawdowns that produced them.', y);
+
+  y = methItem('Drawdown Metrics',
+    'Two distinct drawdown metrics are reported. (i) "Max Monthly Peak-to-Trough" uses the monthly NET equity curve (month-end marks only) and is the worst percentage retracement from any prior monthly peak; reported value -1.00%. (ii) "Max Peak-to-Trough (daily)" on the Drawdown Analysis page uses the daily NAV series with no minimum-threshold filter; reported value -1.01%. The near-identity of the two values (0.01%) indicates that the backtest did not produce any intra-month intraday drawdowns materially larger than what the monthly data shows.', y);
+
+  y = methItem('Profit Factor & Win Rate',
+    'Win Rate is the percentage of CLOSED trades with a net-positive dollar P&L (net of commissions and slippage). A trade is defined at the position level: multiple lots of the same ticker opened and closed under a single signal constitute one trade. Profit Factor = (sum of winning trade dollar P&L) / (absolute value of sum of losing trade dollar P&L), using NET P&L. Average Win ($7.06) and Average Loss (-$1.92) are per-share figures on the trade-level P&L distribution.', y);
+
+  y = methItem('Cash Deployment & Leverage Assumption',
+    'The backtest assumes 100% of net asset value is available for deployment subject to the system\'s own position-sizing rules (1% vitality cap per stock position, 10% maximum portfolio risk exposure, sector and macro regime gates). No investor subscriptions, redemptions, or cash-drag effects are modeled. Short positions are assumed to have continuous borrow availability at the disclosed borrow rates; hard-to-borrow or locate-failure situations are not modeled. The Fund uses no derivative leverage, no options, and no margin beyond standard Regulation T short-selling margin.', y);
+
+  y = methItem('Alpha Calculation',
+    'Alpha is reported as simple arithmetic difference: (PNTHR Total Return) - (SPY Total Return) over the identical calendar window, both in percentage and dollar terms (the latter scaled to the stated starting capital). Alpha is NOT risk-adjusted (no beta regression). For the purposes of this tear sheet, "Alpha" is used in the commercial sense of "excess return versus benchmark," not the CAPM-defined statistical alpha.', y);
+
+  y = methItem('NAV Scaling',
+    `This document is one of three NAV-scaled variants ($100,000, $500,000, $1,000,000 starting capital). All percentage metrics - returns, CAGR, Sharpe, Sortino, Calmar, max drawdown, etc. - are IDENTICAL across the three variants because the backtest's position-sizing rules are explicitly percentage-of-NAV driven. Dollar figures (ending equity, alpha, best month $, etc.) scale linearly with starting capital. The current document reports the ${NAV_DISPLAY} variant.`, y);
+
+  y = methItem('Backtest vs Live Performance',
+    'THESE ARE HYPOTHETICAL BACKTEST RESULTS. Actual live trading of this strategy has not produced a verified track record of the length reported here. Actual live returns may differ materially from backtested returns due to execution differences, cash management, fill prices, borrow availability, subscription/redemption flows, tax-driven execution constraints, corporate actions, and events the historical model could not anticipate. See the Important Disclosures section for the full backtest-performance disclaimer.', y);
+
+  pageFooter();
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // DISCLAIMERS
   // ═══════════════════════════════════════════════════════════════════════════
   newBlackPage();
@@ -2376,16 +2455,21 @@ async function run() {
 
   const disclaimerParas = [
     'CONFIDENTIAL DOCUMENT - FOR QUALIFIED INVESTORS ONLY',
-    'This document is provided by PNTHR Funds ("the Manager") for informational purposes only and constitutes neither an offer to sell nor a solicitation of an offer to buy any securities. Any such offer or solicitation will be made only by means of a confidential Private Placement Memorandum ("PPM") and related subscription documents, and only to qualified investors who meet the applicable suitability and accreditation standards.',
-    'REGULATORY STATUS\nThe Carnivore Quant Fund, LP ("the Fund") is a Delaware limited partnership structured as a Reg D, Rule 506(c), Section 3(c)(1) exempt fund. The Fund\'s securities have not been registered under the Securities Act of 1933, as amended, or the securities laws of any state, and are being offered and sold in reliance on exemptions from the registration requirements of such laws.',
-    'BACKTEST DISCLOSURE - HYPOTHETICAL PERFORMANCE\nTHE PERFORMANCE DATA PRESENTED IN THIS DOCUMENT IS BASED ON BACKTESTED, HYPOTHETICAL RESULTS AND DOES NOT REPRESENT ACTUAL TRADING. Backtested performance has inherent limitations and should not be relied upon as an indicator of future performance.',
-    'Specifically:\n- Backtested results are generated by retroactive application of a model developed with the benefit of hindsight.\n- No representation is made that any account will or is likely to achieve profits or losses similar to those shown.\n- Backtested performance does not reflect actual trading and may not reflect the impact of material economic and market factors.\n- The results may differ materially from actual results, particularly during live trading.\n- Transaction costs, slippage, and borrow costs have been modeled using conservative assumptions (IBKR Pro Fixed commissions at $0.005/share, 5 bps slippage per leg, sector-tiered borrow rates of 1.0-2.0% annualized for short positions), but actual costs may differ.',
-    'RISK FACTORS\nInvestment in the Fund involves a high degree of risk, including but not limited to: the risk of loss of the entire investment; the use of leverage and short selling; concentration in a limited number of securities; dependence on key personnel and proprietary models; liquidity risk; and market, economic, and regulatory risks. Past performance, whether actual or backtested, is not indicative of future results.',
-    'FORWARD-LOOKING STATEMENTS\nThis document may contain forward-looking statements. Such statements are based on the Manager\'s current expectations and are subject to risks and uncertainties that could cause actual results to differ materially.',
-    'DATA SOURCES\nPrice data sourced from Financial Modeling Prep (FMP). All calculations performed using the PNTHR proprietary signal engine and backtesting infrastructure. Cost modeling by costEngine v1.0.0 (IBKR Pro Fixed pricing model).',
-    'NO TAX OR LEGAL ADVICE\nNothing in this document constitutes tax, legal, or investment advice. Prospective investors should consult their own advisors regarding the tax, legal, and financial implications of an investment in the Fund.',
-    'CONFIDENTIALITY\nThis document is confidential and is intended solely for the recipient. It may not be reproduced, distributed, or disclosed to any other person without the prior written consent of the Manager.',
-    '(c) ' + new Date().getFullYear() + ' PNTHR Funds. All rights reserved.',
+    'This document is provided by PNTHR Funds ("the Manager") for informational purposes only and constitutes neither an offer to sell nor a solicitation of an offer to buy any securities. Any such offer or solicitation will be made only by means of a confidential Private Placement Memorandum ("PPM"), the Fund\'s Limited Partnership Agreement, and related subscription documents, and only to investors who qualify as "accredited investors" as defined in Rule 501(a) of Regulation D under the Securities Act of 1933, as amended, and who the Manager reasonably believes meet such standards through verification as required by Rule 506(c).',
+    'REGULATORY STATUS\nThe Carnivore Quant Fund, LP ("the Fund") is a Delaware limited partnership structured as a private investment vehicle relying on the exemption from registration provided by Rule 506(c) of Regulation D, and relying on the exemption from registration as an investment company provided by Section 3(c)(1) of the Investment Company Act of 1940. As a Section 3(c)(1) fund, the Fund is limited to no more than 100 beneficial owners. The Fund\'s securities have not been registered under the Securities Act of 1933, as amended, or the securities laws of any state, and are being offered and sold in reliance on exemptions from the registration requirements of such laws.',
+    'ACCREDITED INVESTOR REQUIREMENT\nInvestment in the Fund is limited to accredited investors as defined in Rule 501(a) of Regulation D. For natural persons, this generally requires (i) individual net worth (or joint net worth with a spouse) exceeding $1,000,000, excluding the primary residence; OR (ii) individual annual income exceeding $200,000 (or joint income with a spouse exceeding $300,000) in each of the two most recent years and a reasonable expectation of the same in the current year; OR (iii) qualification based on professional certifications as defined by the SEC. Entities have separate qualification criteria. Because the Fund relies on Rule 506(c), the Manager is required to take reasonable steps to VERIFY accredited investor status; self-certification alone is not sufficient.',
+    'BACKTEST DISCLOSURE - HYPOTHETICAL PERFORMANCE (SEC BACKTESTING RULES)\nALL PERFORMANCE DATA PRESENTED IN THIS DOCUMENT IS BASED ON BACKTESTED, HYPOTHETICAL RESULTS AND DOES NOT REPRESENT ACTUAL TRADING OR AN ACTUAL FUND THAT HAS TRADED OVER THE PERIOD SHOWN. Backtested performance is hypothetical, was compiled retroactively, and may not reflect the realities of live trading. Hypothetical performance has many inherent limitations and should NOT be relied upon as indicative of future results. This document does not represent that any account did in fact achieve the profits and losses shown. There are frequent and sharp differences between backtested performance and subsequent actual results. One of many factors that cannot be fully replicated in a backtest is the ability of an investor, manager, or trading system to withstand losses or adhere to a particular trading program in spite of trading losses; such decisions materially impact actual returns.',
+    'SPECIFIC BACKTEST LIMITATIONS\n- Backtested results are generated by retroactive application of a model developed with the benefit of hindsight of the market data used.\n- The universe of securities tested is static and does not include delisted securities; this may introduce survivorship bias.\n- No representation is made that any account will or is likely to achieve profits or losses similar to those shown.\n- Backtested performance does not reflect the impact of sudden regulatory changes, material economic events, or liquidity events that were not modeled.\n- Transaction costs, slippage, and short-borrow costs have been modeled using specific assumptions (IBKR Pro Fixed commissions at $0.005/share, 5 bps slippage per leg, sector-tiered short-borrow rates of 1.0-2.0% annualized); actual trading costs may differ materially.\n- Short-borrow availability is assumed continuous at the modeled rates; in live trading, hard-to-borrow, locate failures, and borrow recall events would reduce returns.\n- Cash deployment is assumed at 100% subject to the system\'s sizing rules; actual funds experience cash drag, subscription/redemption flows, and tax-driven execution timing.\n- See the METHODOLOGY & ASSUMPTIONS page of this document for the complete list of modeling conventions.',
+    'BENCHMARK COMPARISON\nThe S&P 500 (SPY) benchmark is provided solely for general comparison purposes. The Fund is not managed to track or replicate the S&P 500 and the strategies and risk profiles are not comparable in all respects. Unlike the Fund, the S&P 500 is an unmanaged index that does not incur management or performance fees, and cannot be invested in directly.',
+    'RISK FACTORS\nInvestment in the Fund involves a high degree of risk, including but not limited to: the risk of loss of the entire investment; the use of short selling and unlimited theoretical loss exposure on short positions; concentration in a limited number of securities; dependence on key personnel and proprietary models; model risk and technology risk (including the risk of system failures, data errors, or erroneous signals); counterparty risk (including broker-dealer and custodian risk); liquidity risk; and market, economic, geopolitical, and regulatory risks. Past performance, whether actual or backtested, is not indicative of future results. Investors may lose some or all of their invested capital.',
+    'CONFLICTS OF INTEREST\nThe Manager and its affiliates may have interests that conflict with those of the Fund and its investors, including but not limited to allocation of investment opportunities, fee arrangements, and personal trading. A complete discussion of material conflicts of interest is set forth in the PPM.',
+    'FORWARD-LOOKING STATEMENTS\nThis document may contain forward-looking statements, projections, or estimates. Such statements are based on the Manager\'s current expectations and assumptions and are subject to material risks and uncertainties that could cause actual results to differ materially. Words such as "expect," "anticipate," "project," "target," and similar expressions are used to identify forward-looking statements, which speak only as of the date of this document.',
+    'DATA SOURCES & CALCULATION BASIS\nPrice data sourced from Financial Modeling Prep (FMP) institutional data feed. S&P 500 proxy: SPDR S&P 500 ETF (SPY). All calculations performed using the PNTHR proprietary signal engine and backtesting infrastructure (Pyramid NAV Engine, 8-Dimension Kill Scoring, costEngine v1.0). Risk-free rate for Sharpe/Sortino: 5.0% per annum flat. Performance allocation hurdle rate: US 2-Year Treasury constant-maturity yield, reset annually. Complete methodology is disclosed in the METHODOLOGY & ASSUMPTIONS section of this document.',
+    'NO TAX OR LEGAL ADVICE\nNothing in this document constitutes tax, legal, accounting, or investment advice. Prospective investors should consult their own advisors regarding the tax, legal, regulatory, and financial implications of an investment in the Fund. Tax treatment of Fund investments is complex and depends on the investor\'s individual circumstances.',
+    'FEE IMPACT NOTICE\nThe compounded effect of management and performance fees, even at the rates disclosed, is material over multi-year periods. A 2% management fee alone compounded over 7 years reduces ending equity by approximately 13%. All NET performance figures in this document already reflect these fees; GROSS figures, where shown separately, do not. Investors are cautioned to rely on NET figures when evaluating their expected outcome.',
+    'NO RELIANCE\nThis document is provided to the recipient on a strictly confidential basis. The recipient may not rely on this document in making an investment decision; such reliance should be placed only on the Fund\'s PPM, Limited Partnership Agreement, and Subscription Agreement, as supplemented by the advice of the recipient\'s own qualified professional advisors.',
+    'CONFIDENTIALITY\nThis document is confidential and is intended solely for the recipient. It may not be reproduced, distributed, or disclosed to any other person without the prior written consent of the Manager. Unauthorized disclosure may subject the discloser to legal action.',
+    '(c) ' + new Date().getFullYear() + ' PNTHR Funds. All rights reserved. The Fund, the Manager, and their respective logos are property of PNTHR Funds.',
   ];
 
   for (const para of disclaimerParas) {

@@ -1,5 +1,5 @@
 // server/backtest/generatePyramidPDF.js
-// ── PNTHR Funds — PYRAMID Fund Intelligence Report ──────────────────────────
+// ── PNTHR Funds - PYRAMID Fund Intelligence Report ──────────────────────────
 //
 // NAV-scaled version of the Fund Intelligence Report.
 // Reads from pnthr_bt_pyramid_nav_{tier} collections instead of 10K fixed.
@@ -73,7 +73,7 @@ async function run() {
     process.exit(1);
   }
   if (metricsDoc.sourceCollection !== `pnthr_bt_pyramid_nav_${navLabel}_trade_log`) {
-    console.error(`Hedge metrics sourced from "${metricsDoc.sourceCollection}" — must be pnthr_bt_pyramid_nav_${navLabel}_trade_log.`);
+    console.error(`Hedge metrics sourced from "${metricsDoc.sourceCollection}" - must be pnthr_bt_pyramid_nav_${navLabel}_trade_log.`);
     console.error(`Run: cd server && node backtest/computePyramidNavMetrics.js --nav ${STARTING_CAPITAL}`);
     process.exit(1);
   }
@@ -511,7 +511,7 @@ async function run() {
       // Filet box (left)
       doc.rect(leftX, boxY, boxW, boxH).strokeColor(MDGRAY).lineWidth(0.5).stroke();
       doc.fontSize(7).fillColor(YELLOW).font('Helvetica-Bold')
-         .text(`Filet \u2014 ${NAV_DISPLAY}`, leftX + 8, boxY + 5, { lineBreak: false });
+         .text(`Filet - ${NAV_DISPLAY}`, leftX + 8, boxY + 5, { lineBreak: false });
 
       const rows = [
         ['Ending NAV', '$' + fmtComma(Math.round(growthStats.endingNav)), WHITE],
@@ -537,7 +537,7 @@ async function run() {
       const spyRetPct = ((spyEndNav / STARTING_CAPITAL - 1) * 100).toFixed(1);
       doc.rect(rightX, boxY, boxW, boxH).strokeColor(MDGRAY).lineWidth(0.5).stroke();
       doc.fontSize(7).fillColor(LTGRAY).font('Helvetica-Bold')
-         .text(`S&P 500 \u2014 ${NAV_DISPLAY}`, rightX + 8, boxY + 5, { lineBreak: false });
+         .text(`S&P 500 - ${NAV_DISPLAY}`, rightX + 8, boxY + 5, { lineBreak: false });
 
       const spyRows = [
         ['Ending NAV', '$' + fmtComma(Math.round(spyEndNav)), WHITE],
@@ -597,9 +597,9 @@ async function run() {
   // ═══════════════════════════════════════════════════════════════════════════
   // PAGE 1: COVER
   // ═══════════════════════════════════════════════════════════════════════════
-  newBlackPage(true);  // cover page — no branded header bar
+  newBlackPage(true);  // cover page - no branded header bar
 
-  // White header bar across full width — PNTHR FUNDS / CQF logo centered.
+  // White header bar across full width - PNTHR FUNDS / CQF logo centered.
   const COVER_HEADER_H = 145;
   doc.fillColor('#FFFFFF').rect(0, 0, W, COVER_HEADER_H).fill();
   if (fs.existsSync(LOGO_PATH)) {
@@ -613,7 +613,7 @@ async function run() {
   // Yellow line separator below header
   doc.moveTo(0, COVER_HEADER_H).lineTo(W, COVER_HEADER_H).strokeColor(YELLOW).lineWidth(2).stroke();
 
-  // Cover title — "PNTHR FUND Intelligence Report" + two subtitle lines.
+  // Cover title - "PNTHR FUND Intelligence Report" + two subtitle lines.
   doc.fontSize(22).fillColor(YELLOW).font('Helvetica-Bold')
      .text('PNTHR FUND Intelligence Report', LM, COVER_HEADER_H + 24, { width: CW, align: 'center', lineBreak: false });
   doc.fontSize(9).fillColor(LTGRAY).font('Helvetica')
@@ -623,7 +623,7 @@ async function run() {
 
   doc.moveTo(LM + 100, COVER_HEADER_H + 85).lineTo(RM - 100, COVER_HEADER_H + 85).strokeColor(YELLOW).lineWidth(1).stroke();
 
-  // Fund Overview — pushed down 13px to clear the new second subtitle line.
+  // Fund Overview - pushed down 13px to clear the new second subtitle line.
   let fy = COVER_HEADER_H + 97;
   doc.fontSize(8).fillColor(WHITE).font('Helvetica-Bold').text('FUND OVERVIEW', LM, fy, { lineBreak: false });
   fy += 12;
@@ -644,7 +644,7 @@ async function run() {
     fy += 11;
   }
 
-  // Headline numbers — 4x3 grid
+  // Headline numbers - 4x3 grid
   doc.moveTo(LM, fy + 6).lineTo(LM + 200, fy + 6).strokeColor(YELLOW).lineWidth(1).stroke();
   fy += 14;
   doc.fontSize(8).fillColor(WHITE).font('Helvetica-Bold').text('HEADLINE NUMBERS', LM, fy, { lineBreak: false });
@@ -840,9 +840,9 @@ async function run() {
   let y = CONTENT_TOP;
   y = sectionTitle('TABLE OF CONTENTS', y);
 
-  // ACT I — THE RESULTS
+  // ACT I - THE RESULTS
   doc.fontSize(8).fillColor(YELLOW).font('Helvetica-Bold');
-  doc.text('ACT I — THE RESULTS', LM, y, { width: CW, lineBreak: false });
+  doc.text('ACT I - THE RESULTS', LM, y, { width: CW, lineBreak: false });
   y = doc.y + 8;
 
   const tocActI = [
@@ -869,9 +869,9 @@ async function run() {
 
   y += 8;
 
-  // ACT II — THE METHODOLOGY
+  // ACT II - THE METHODOLOGY
   doc.fontSize(8).fillColor(YELLOW).font('Helvetica-Bold');
-  doc.text('ACT II — THE METHODOLOGY', LM, y, { width: CW, lineBreak: false });
+  doc.text('ACT II - THE METHODOLOGY', LM, y, { width: CW, lineBreak: false });
   y = doc.y + 8;
 
   const tocActII = [
@@ -896,9 +896,9 @@ async function run() {
 
   y += 8;
 
-  // ACT III — THE PROOF
+  // ACT III - THE PROOF
   doc.fontSize(8).fillColor(YELLOW).font('Helvetica-Bold');
-  doc.text('ACT III — THE PROOF', LM, y, { width: CW, lineBreak: false });
+  doc.text('ACT III - THE PROOF', LM, y, { width: CW, lineBreak: false });
   y = doc.y + 8;
 
   const tocActIII = [
@@ -915,9 +915,9 @@ async function run() {
 
   y += 8;
 
-  // ACT IV — THE CLOSE
+  // ACT IV - THE CLOSE
   doc.fontSize(8).fillColor(YELLOW).font('Helvetica-Bold');
-  doc.text('ACT IV — THE CLOSE', LM, y, { width: CW, lineBreak: false });
+  doc.text('ACT IV - THE CLOSE', LM, y, { width: CW, lineBreak: false });
   y = doc.y + 8;
 
   const tocActIV = [
@@ -1146,7 +1146,7 @@ async function run() {
   doc.text(`${metrics.combined.net.positiveMonths} of ${metrics.combined.net.months} months profitable (${metrics.combined.net.positiveMonthsPct}%)  |  Only ${metrics.combined.net.months - metrics.combined.net.positiveMonths} negative months in 7 years  |  Worst: ${fmtPct(metrics.combined.net.worstMonth, 2)}  |  Best: ${fmtPct(metrics.combined.net.bestMonth, 1)}`, LM, y, { width: CW, lineBreak: false });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // DRAWDOWN ANALYSIS — dedicated page so the summary stats, enhanced table,
+  // DRAWDOWN ANALYSIS - dedicated page so the summary stats, enhanced table,
   // and underwater chart all fit cleanly.
   // ═══════════════════════════════════════════════════════════════════════════
   pageFooter();
@@ -1156,7 +1156,7 @@ async function run() {
 
   // ── Compute enhanced metrics from the daily NAV series ──────────────────────
   // dailyNav rows carry { date, equity, spyEquity, peakEquity, ... } but NO
-  // precomputed drawdownPct field — we derive it inline from peakEquity.
+  // precomputed drawdownPct field - we derive it inline from peakEquity.
   // Values below are all PERCENT-scaled (1.37 means 1.37%, not decimal).
   const ddPctSeries = dailyNav.map(d => {
     const pk = d.peakEquity || d.equity;
@@ -1167,15 +1167,15 @@ async function run() {
   const daysUnderWater = ddPctSeries.filter(pct => pct > UW_THRESHOLD).length;
   const timeUnderPct   = dailyNav.length ? (daysUnderWater / dailyNav.length) * 100 : 0;
   const recoveryFactor = maxDailyDD > 0 ? totalReturn / maxDailyDD : 0;
-  // Ulcer Index — sqrt(mean(drawdown%²)) over the full daily series
+  // Ulcer Index - sqrt(mean(drawdown%²)) over the full daily series
   const ulcerIndex = Math.sqrt(
     ddPctSeries.reduce((sum, pct) => sum + pct * pct, 0) / (ddPctSeries.length || 1)
   );
-  // "As of" status — fund at ATH today?
+  // "As of" status - fund at ATH today?
   const lastDDPct = ddPctSeries[ddPctSeries.length - 1] || 0;
   const atATH     = lastDDPct < UW_THRESHOLD;
 
-  // Top 5 peak-to-trough drawdowns — computed inline with a 0.1% threshold so
+  // Top 5 peak-to-trough drawdowns - computed inline with a 0.1% threshold so
   // events surface even when max DD is under 1%.
   const localDDs = [];
   {
@@ -1204,7 +1204,7 @@ async function run() {
 
   // ── Narrative ──────────────────────────────────────────────────────────────
   doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(0);
-  doc.text('The Fund operates with zero tolerance for capital impairment. The deepest daily peak-to-trough was just ' + fmtPct(-maxDailyDD, 2) + ' — compared to SPY\'s -34.1% during the same seven-year window. Every drawdown fully recovered; at no point did investor capital sustain a permanent loss nor meaningful decline.', LM, y, { width: CW, lineBreak: true });
+  doc.text('The Fund operates with zero tolerance for capital impairment. The deepest daily peak-to-trough was just ' + fmtPct(-maxDailyDD, 2) + ' - compared to SPY\'s -34.1% during the same seven-year window. Every drawdown fully recovered; at no point did investor capital sustain a permanent loss nor meaningful decline.', LM, y, { width: CW, lineBreak: true });
   y = doc.y + 10;
 
   // ── Summary stats box (4 metrics) ──────────────────────────────────────────
@@ -1271,9 +1271,9 @@ async function run() {
   doc.font('Helvetica');
   y = doc.y + 10;
 
-  // ── Underwater Curve — PNTHR vs SPY (% below prior peak) ──────────────────
+  // ── Underwater Curve - PNTHR vs SPY (% below prior peak) ──────────────────
   doc.fontSize(8.5).fillColor(WHITE).font('Helvetica-Bold')
-     .text('Underwater Curve — PNTHR vs S&P 500 (% below prior peak)', LM, y, { width: CW, lineBreak: false });
+     .text('Underwater Curve - PNTHR vs S&P 500 (% below prior peak)', LM, y, { width: CW, lineBreak: false });
   y += 14;
 
   const uwChartH = 110;
@@ -1319,7 +1319,7 @@ async function run() {
   doc.closePath().fill();
   doc.fillOpacity(1);
 
-  // SPY underwater line — sub-sample to keep vector count manageable
+  // SPY underwater line - sub-sample to keep vector count manageable
   const stride = Math.max(1, Math.floor(nPoints / 800));
   doc.strokeColor(RED).lineWidth(0.6).dash(2, { space: 1.5 });
   for (let i = stride; i < nPoints; i += stride) {
@@ -1354,14 +1354,6 @@ async function run() {
   doc.undash();
   doc.fillColor(RED).text('S&P 500', uwPlotX + 108, uwLegY, { lineBreak: false });
   y = uwLegY + 18;
-
-  // ── "As of" status line ────────────────────────────────────────────────────
-  const statusLabel = atATH
-    ? `As of ${lastDay.date} — the Fund is at its all-time high. Days since last new NAV peak: 0.`
-    : `As of ${lastDay.date} — the Fund is ${fmtPct(-lastDDPct, 2)} below its prior peak.`;
-  doc.fontSize(8).fillColor(atATH ? GREEN : YELLOW).font('Helvetica-Bold')
-     .text(atATH ? 'ALL-TIME HIGH  ' : 'STATUS  ', LM, y, { continued: true, lineBreak: false });
-  doc.fillColor(WHITE).font('Helvetica').text(statusLabel, { lineBreak: false });
 
   pageFooter();
 
@@ -1905,7 +1897,7 @@ async function run() {
 
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PAGES 5+: COMPREHENSIVE DAILY NAV LOG — EVERY MONTH
+  // PAGES 5+: COMPREHENSIVE DAILY NAV LOG - EVERY MONTH
   // ═══════════════════════════════════════════════════════════════════════════
   console.log('Generating daily NAV pages for all months...');
 
@@ -1942,7 +1934,7 @@ async function run() {
   function drawNavVLines(topY, bottomY) {
     doc.strokeColor(VLINE_COLOR).lineWidth(0.5);
     let x = LM;
-    // Draw separators after DATE, SPY EQUITY, PNTHR EQUITY (skip OPEN — too narrow)
+    // Draw separators after DATE, SPY EQUITY, PNTHR EQUITY (skip OPEN - too narrow)
     for (let i = 0; i < 3; i++) {
       x += navWidths[i];
       doc.moveTo(x - 2, topY).lineTo(x - 2, bottomY).stroke();
@@ -1989,7 +1981,7 @@ async function run() {
     // Check if we need a new page for month header + at least a few rows
     y = checkPage(y, 60);
 
-    // Month header — clean: just name + starting equity
+    // Month header - clean: just name + starting equity
     doc.fontSize(7.5).fillColor(YELLOW).font('Helvetica-Bold')
        .text(monthName.toUpperCase(), LM, y, { width: 120, lineBreak: false });
     doc.fillColor(LTGRAY).font('Helvetica').fontSize(6.5)
@@ -2045,19 +2037,19 @@ async function run() {
       const dayLabel = d.date.slice(5);
       let x = LM;
       doc.fontSize(6).font('Helvetica');
-      // DATE — gray
+      // DATE - gray
       doc.fillColor(LTGRAY).text(dayLabel, x, y, { width: navWidths[0], lineBreak: false }); x += navWidths[0];
-      // SPY EQUITY — always gray
+      // SPY EQUITY - always gray
       doc.fillColor(LTGRAY).text('$' + fmtComma(Math.round(d.spyEquity)), x, y, { width: navWidths[1], align: 'right', lineBreak: false }); x += navWidths[1];
-      // PNTHR EQUITY — yellow
+      // PNTHR EQUITY - yellow
       doc.fillColor(YELLOW).text('$' + fmtComma(Math.round(d.equity)), x, y, { width: navWidths[2], align: 'right', lineBreak: false }); x += navWidths[2];
-      // OPEN — yellow
+      // OPEN - yellow
       doc.fillColor(YELLOW).text(String(d.openPositions), x, y, { width: navWidths[3], align: 'right', lineBreak: false }); x += navWidths[3];
       // MTD %
       doc.fillColor(mtdColor).text(fmtPct(mtd, 2), x, y, { width: navWidths[4], align: 'right', lineBreak: false }); x += navWidths[4];
       x += navWidths[5]; // gap spacer
 
-      // Activity column — allow wrapping
+      // Activity column - allow wrapping
       if (activity) {
         doc.fontSize(5.5).fillColor(WHITE).text(activity, x, y, { width: activityW, lineBreak: true });
       } else {
@@ -2079,16 +2071,16 @@ async function run() {
 
     let sx = LM;
     doc.fontSize(7).font('Helvetica-Bold');
-    // Month TOTAL label — yellow
+    // Month TOTAL label - yellow
     doc.fillColor(YELLOW).text(moAbbr + ' TOTAL', sx, y, { width: navWidths[0] + 4, lineBreak: false }); sx += navWidths[0];
-    // SPY return — gray
+    // SPY return - gray
     doc.fillColor(LTGRAY).text(fmtPct(spyMonthRet, 2), sx, y, { width: navWidths[1], align: 'right', lineBreak: false }); sx += navWidths[1];
-    // PNTHR return — green/red
+    // PNTHR return - green/red
     doc.fillColor(monthRet >= 0 ? GREEN : RED)
        .text(fmtPct(monthRet, 2), sx, y, { width: navWidths[2], align: 'right', lineBreak: false }); sx += navWidths[2];
-    // End-of-month open positions — yellow
+    // End-of-month open positions - yellow
     doc.fillColor(YELLOW).text(String(lastDayOpen), sx, y, { width: navWidths[3], align: 'right', lineBreak: false }); sx += navWidths[3];
-    // Final MTD — green/red
+    // Final MTD - green/red
     doc.fillColor(monthRet >= 0 ? GREEN : RED)
        .text(fmtPct(monthRet, 2), sx, y, { width: navWidths[4], align: 'right', lineBreak: false }); sx += navWidths[4];
     sx += navWidths[5];
@@ -2106,7 +2098,7 @@ async function run() {
     doc.moveTo(LM, y).lineTo(LM + CW, y).strokeColor(MDGRAY).lineWidth(0.5).stroke();
     y += 8;
 
-    // Individual year-end charts removed — cumulative chart only (below)
+    // Individual year-end charts removed - cumulative chart only (below)
   }
 
   // ── Cumulative Growth Chart (all years) ──

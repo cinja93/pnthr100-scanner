@@ -17,7 +17,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const LOGO_PATH = path.resolve(__dirname, '../../client/public/pnthr-funds-logo-full.png');
+const LOGO_PATH = path.resolve(__dirname, '../../client/public/pnthr-funds-cover-logo.png');
 const PNTHR_HEAD_PATH = path.resolve(__dirname, '../../client/src/assets/panther head.png');
 const FOUNDERS_PATH = path.resolve(__dirname, '../../client/public/pnthr-founders.png');
 
@@ -599,41 +599,32 @@ async function run() {
   // ═══════════════════════════════════════════════════════════════════════════
   newBlackPage(true);  // cover page — no branded header bar
 
-  // White header bar across full width — logo first (full size), founders layered on right
+  // White header bar across full width — PNTHR FUNDS / CQF logo centered.
   const COVER_HEADER_H = 145;
   doc.fillColor('#FFFFFF').rect(0, 0, W, COVER_HEADER_H).fill();
-  // Logo at original prominent size, centered left
   if (fs.existsSync(LOGO_PATH)) {
-    const logoW = 260;
-    doc.image(LOGO_PATH, (W - logoW) / 2, 14, { width: logoW });
-  }
-  // Founders image layered on right — slightly smaller so logo stays dominant
-  if (fs.existsSync(FOUNDERS_PATH)) {
-    const foundersH = 105;
-    const foundersW = foundersH * 1.5;   // 3:2 landscape aspect ratio
-    const foundersX = W - foundersW - 25;
-    doc.image(FOUNDERS_PATH, foundersX, 10, { height: foundersH });
-    // Names under each person — quiet, small
-    doc.fontSize(5.5).fillColor('#555555').font('Helvetica');
-    doc.text('Cindy Eagar', foundersX + 18, foundersH + 14, { width: 60, align: 'center', lineBreak: false });
-    doc.text('Scott McBrien', foundersX + foundersW - 72, foundersH + 14, { width: 60, align: 'center', lineBreak: false });
+    const logoW = 280;                             // 2.46:1 aspect → ~114 tall
+    const logoH = logoW / 2.46;
+    const logoX = (W - logoW) / 2;                 // horizontally centered
+    const logoY = (COVER_HEADER_H - logoH) / 2;    // vertically centered
+    doc.image(LOGO_PATH, logoX, logoY, { width: logoW });
   }
 
   // Yellow line separator below header
   doc.moveTo(0, COVER_HEADER_H).lineTo(W, COVER_HEADER_H).strokeColor(YELLOW).lineWidth(2).stroke();
 
-  // Cover title — 22pt fits on one line inside CW=512 (the previous 26pt
-  // wrapped onto the subtitle). Y positions unchanged from the original
-  // single-line layout so the chart fits within the page bottom margin.
+  // Cover title — "PNTHR FUND Intelligence Report" + two subtitle lines.
   doc.fontSize(22).fillColor(YELLOW).font('Helvetica-Bold')
-     .text('PYRAMID FUND INTELLIGENCE REPORT', LM, COVER_HEADER_H + 24, { width: CW, align: 'center', lineBreak: false });
+     .text('PNTHR FUND Intelligence Report', LM, COVER_HEADER_H + 24, { width: CW, align: 'center', lineBreak: false });
   doc.fontSize(9).fillColor(LTGRAY).font('Helvetica')
      .text('7-Year Backtest Performance Report  |  June 2019 - April 2026', LM, COVER_HEADER_H + 56, { width: CW, align: 'center', lineBreak: false });
+  doc.fontSize(9).fillColor(LTGRAY).font('Helvetica')
+     .text('Pyramiding 5 Lot Strategy', LM, COVER_HEADER_H + 69, { width: CW, align: 'center', lineBreak: false });
 
-  doc.moveTo(LM + 100, COVER_HEADER_H + 72).lineTo(RM - 100, COVER_HEADER_H + 72).strokeColor(YELLOW).lineWidth(1).stroke();
+  doc.moveTo(LM + 100, COVER_HEADER_H + 85).lineTo(RM - 100, COVER_HEADER_H + 85).strokeColor(YELLOW).lineWidth(1).stroke();
 
-  // Fund Overview
-  let fy = COVER_HEADER_H + 84;
+  // Fund Overview — pushed down 13px to clear the new second subtitle line.
+  let fy = COVER_HEADER_H + 97;
   doc.fontSize(8).fillColor(WHITE).font('Helvetica-Bold').text('FUND OVERVIEW', LM, fy, { lineBreak: false });
   fy += 12;
   doc.fontSize(7).fillColor(LTGRAY).font('Helvetica');

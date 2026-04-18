@@ -662,10 +662,12 @@ async function run() {
   doc.moveTo(LM, fy + 6).lineTo(LM + 200, fy + 6).strokeColor(YELLOW).lineWidth(1).stroke();
   fy += 14;
   doc.fontSize(8).fillColor(WHITE).font('Helvetica-Bold').text('HEADLINE NUMBERS', LM, fy, { lineBreak: false });
+  doc.fontSize(6).fillColor(LTGRAY).font('Helvetica-Oblique')
+     .text('(all figures NET of fees - see page 3 for full Gross vs Net breakdown)', LM + 120, fy + 2, { lineBreak: false });
   fy += 14;
 
   const headlines = [
-    [fmtPct(totalReturn, 0), 'Total Return', GREEN],
+    [fmtPct(totalReturn, 0), 'Net Total Return', GREEN],
     [fmtPct(metrics.combined.net.cagr, 1), 'Net CAGR', GREEN],
     [metrics.combined.net.sharpe.toFixed(2), 'Sharpe Ratio', YELLOW],
     [metrics.combined.net.sortino.toFixed(1), 'Sortino Ratio', YELLOW],
@@ -703,10 +705,10 @@ async function run() {
   const yearsSpan = metrics.combined.net.months / 12;
   const spyCagr = +((Math.pow(lastDay.spyEquity / STARTING_CAPITAL, 1 / yearsSpan) - 1) * 100).toFixed(1);
   const coverComp = [
-    ['', 'PNTHR', 'S&P 500', 'ALPHA'],
+    ['', 'PNTHR (NET)', 'S&P 500', 'ALPHA'],
     ['Total Return', fmtPct(totalReturn, 0), fmtPct(spyTotalReturn, 0), fmtPct(totalReturn - spyTotalReturn, 0)],
     ['CAGR', fmtPct(metrics.combined.net.cagr, 1), fmtPct(spyCagr, 1), fmtPct(metrics.combined.net.cagr - spyCagr, 1)],
-    ['Max Drawdown', fmtPct(-metrics.combined.net.maxDrawdown, 2), fmtPct(-spyDrawdowns[0]?.maxPct || -34, 1), ''],
+    ['Max Monthly Peak-to-Trough', fmtPct(-metrics.combined.net.maxDrawdown, 2), fmtPct(-spyDrawdowns[0]?.maxPct || -34, 1), ''],
     ['Ending Equity', fmtDollar(lastDay.equity), fmtDollar(lastDay.spyEquity), fmtDollar(lastDay.equity - lastDay.spyEquity)],
   ];
   const ccWidths = [140, 100, 100, CW - 340];
@@ -862,15 +864,17 @@ async function run() {
   const tocActI = [
     ['Executive Summary', '3'],
     ['Performance Comparison: PNTHR vs. S&P 500', '3'],
-    ['Crisis Alpha: Performance During Market Drawdowns', '4'],
-    ['Annual Performance: PNTHR vs S&P 500', '4'],
-    ['Strategy Metrics by Direction', '4'],
-    ['Monthly Returns Heatmap', '5'],
-    ['Drawdown Analysis', '5'],
-    ['Risk Architecture', '6'],
-    ['Worst-Case Trade Analysis (MAE)', '6'],
-    ['Rolling 12-Month Returns', '7'],
-    ['Best & Worst Trading Days', '7'],
+    ['Gross vs Net: Impact of the Fee Schedule', '3'],
+    ['Fees & Expenses Schedule (PPM Reconciliation)', '4'],
+    ['Crisis Alpha: Performance During Market Drawdowns', '5'],
+    ['Annual Performance: PNTHR vs S&P 500', '5'],
+    ['Strategy Metrics by Direction', '5'],
+    ['Monthly Returns Heatmap', '6'],
+    ['Drawdown Analysis', '7'],
+    ['Risk Architecture', '8'],
+    ['Worst-Case Trade Analysis (MAE)', '8'],
+    ['Rolling 12-Month Returns', '9'],
+    ['Best & Worst Trading Days', '9'],
   ];
 
   for (const [entry, pg] of tocActI) {
@@ -994,6 +998,169 @@ async function run() {
     const colors = [LTGRAY, isDD ? RED : GREEN, LTGRAY, GREEN];
     y = tableRow(row, y, compWidths, colors);
   }
+  y += 10;
+
+  // ── GROSS vs NET comparison — full transparency on fee impact ───────────
+  const gm = metrics.combined.gross;
+  const nm = metrics.combined.net;
+  if (gm && nm) {
+    y = sectionTitle('GROSS vs NET: IMPACT OF THE FEE SCHEDULE', y);
+
+    doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1)
+       .text('All headline figures in this document are reported on a NET basis unless explicitly labeled "Gross." The table below shows both side-by-side so the cumulative impact of the full fee schedule (2% management fee + tiered performance allocation above the US 2-Year Treasury hurdle, subject to a high-water mark) is fully transparent.', LM, y, { width: CW, lineBreak: true });
+    y = doc.y + 10;
+
+    const gnCols = ['METRIC', 'GROSS', 'NET', 'FEE DRAG'];
+    const gnWidths = [170, 110, 110, CW - 390];
+    y = tableHeader(gnCols, y, gnWidths);
+
+    function delta(g, n, decimals = 1, isPct = false) {
+      const d = g - n;
+      return (d >= 0 ? '-' : '+') + Math.abs(d).toFixed(decimals) + (isPct ? ' pts' : '');
+    }
+    const gnRows = [
+      ['Total Return',         fmtPct(gm.totalReturn, 1),      fmtPct(nm.totalReturn, 1),      delta(gm.totalReturn, nm.totalReturn, 1, true)],
+      ['CAGR',                 fmtPct(gm.cagr, 2),             fmtPct(nm.cagr, 2),             delta(gm.cagr, nm.cagr, 2, true)],
+      ['Sharpe Ratio',         gm.sharpe.toFixed(2),           nm.sharpe.toFixed(2),           delta(gm.sharpe, nm.sharpe, 2)],
+      ['Sortino Ratio',        (typeof gm.sortino === 'number' ? gm.sortino : parseFloat(gm.sortino)).toFixed(2),
+                                (typeof nm.sortino === 'number' ? nm.sortino : parseFloat(nm.sortino)).toFixed(2),
+                                delta(parseFloat(gm.sortino), parseFloat(nm.sortino), 2)],
+      ['Calmar Ratio',         (typeof gm.calmar === 'number' ? gm.calmar : parseFloat(gm.calmar)).toFixed(2),
+                                (typeof nm.calmar === 'number' ? nm.calmar : parseFloat(nm.calmar)).toFixed(2),
+                                delta(parseFloat(gm.calmar), parseFloat(nm.calmar), 2)],
+      ['Max Monthly Peak-to-Trough', fmtPct(-gm.maxDrawdown, 2), fmtPct(-nm.maxDrawdown, 2),  delta(nm.maxDrawdown, gm.maxDrawdown, 2, true)],
+      ['Best Month',           fmtPct(gm.bestMonth, 2),        fmtPct(nm.bestMonth, 2),        delta(gm.bestMonth, nm.bestMonth, 2, true)],
+      ['Worst Month',          fmtPct(gm.worstMonth, 2),       fmtPct(nm.worstMonth, 2),       delta(nm.worstMonth, gm.worstMonth, 2, true)],
+      [`Ending Equity (${NAV_DISPLAY})`, fmtDollar(gm.finalEquity), fmtDollar(nm.finalEquity), '-' + fmtDollar(gm.finalEquity - nm.finalEquity).replace('$', '$')],
+    ];
+    for (const row of gnRows) {
+      y = tableRow(row, y, gnWidths, [LTGRAY, GREEN, GREEN, RED]);
+    }
+
+    y += 6;
+    doc.fontSize(6).fillColor(LTGRAY).font('Helvetica-Oblique').lineGap(1)
+       .text(`Gross figures are before the 2.0% per annum management fee and before performance allocation. Net figures are after BOTH fees, applied per the HWM/hurdle schedule described in the Methodology & Assumptions section. Trade-level commissions (IBKR Pro Fixed at $0.005/share) and 5 bps per-leg slippage are reflected in BOTH gross and net (they are transaction-level, not fund-level, costs). Sector-tiered short-borrow costs of 1.0-2.0% annualized are likewise reflected in both. In other words, "Gross" here means "before management and performance fees," not "before any trading costs."`, LM, y, { width: CW, lineBreak: true });
+    doc.font('Helvetica');
+  }
+
+  pageFooter();
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FEES & EXPENSES SCHEDULE — complete PPM fee disclosure on its own page
+  // so an LP, auditor, or legal counsel can reconcile every cost between
+  // this tear sheet and the PNTHR Private Placement Memorandum (v5.2).
+  // ═══════════════════════════════════════════════════════════════════════════
+  newBlackPage();
+  y = CONTENT_TOP;
+  y = sectionTitle('FEES & EXPENSES SCHEDULE', y);
+
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1)
+     .text('All NET performance figures in this document reflect the complete fee and cost schedule below, which mirrors the PNTHR Private Placement Memorandum (PPM v5.2). Every item is drawn directly from the PPM; nothing in this section is illustrative. Investors should read this section in conjunction with the full PPM, which controls in any case of conflict.', LM, y, { width: CW, lineBreak: true });
+  y = doc.y + 12;
+
+  // ── 1. Management Fee ────────────────────────────────────────────────────
+  doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('1. Management Fee', LM, y, { lineBreak: false });
+  y = doc.y + 4;
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
+    'Rate:    2.0% per annum on Net Asset Value.\n' +
+    'Accrual: Monthly, at a rate of 2.0% / 12 = 0.1667% per month.\n' +
+    'Payment: Quarterly, in advance (per PPM). The backtest applies the fee monthly for simulation purposes; the economic impact is substantively equivalent.\n' +
+    'Prorated for partial-month subscriptions, withdrawals, and redemptions.',
+    LM + 12, y, { width: CW - 12, lineBreak: true });
+  y = doc.y + 10;
+
+  // ── 2. Performance Allocation Tiers ──────────────────────────────────────
+  doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('2. Performance Allocation (Tiered by Investor Class)', LM, y, { lineBreak: false });
+  y = doc.y + 4;
+
+  const feeCols   = ['INVESTOR CLASS', 'THRESHOLD', 'YEARS 1-3', 'YR 4+ (LOYALTY)'];
+  const feeWidths = [130, 130, 110, CW - 370];
+  y = tableHeader(feeCols, y, feeWidths, null, WHITE);
+  const feeRows = [
+    ['Filet Class',       '< $500,000',       '30%', '25%'],
+    ['Porterhouse Class', '$500,000 - $999,999', '25%', '20%'],
+    ['Wagyu Class',       '≥ $1,000,000',     '20%', '15%'],
+  ];
+  for (const r of feeRows) y = tableRow(r, y, feeWidths, [WHITE, LTGRAY, YELLOW, GREEN]);
+  y += 6;
+
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
+    'Loyalty Discount:  A 5 percentage-point reduction in the performance allocation rate applies after 36 consecutive months of investment. The reduced rate is applied prospectively from the first performance period following the 36-month anniversary.\n' +
+    'Upgrade Mechanism: Investors may upgrade to a higher class by meeting the threshold; the new rate applies to subsequent performance periods. Downgrades at GP discretion.\n' +
+    'High Water Mark:   Performance allocation is charged only on net profits above the account\'s running HWM. Losses in any period create a Loss Carryforward that must be fully recovered before any future allocation is charged.\n' +
+    'Calculation Frequency (per PPM): Quarterly, non-cumulative. Each quarter is evaluated independently.',
+    LM + 12, y, { width: CW - 12, lineBreak: true });
+  y = doc.y + 10;
+
+  // ── 3. Hurdle Rate ───────────────────────────────────────────────────────
+  doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('3. Hurdle Rate (US 2-Year Treasury Yield)', LM, y, { lineBreak: false });
+  y = doc.y + 4;
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
+    'The performance allocation hurdle is the US 2-Year Treasury constant-maturity yield as published by the U.S. Department of the Treasury at the close of business on the first trading day of each calendar year, divided by four for quarterly application. The hurdle is non-cumulative: each quarter is evaluated independently.',
+    LM + 12, y, { width: CW - 12, lineBreak: true });
+  y = doc.y + 6;
+
+  const hurdleCols   = ['YEAR', 'US2Y YIELD (1st TRADING DAY)', 'QUARTERLY HURDLE (÷4)', 'ANNUAL HURDLE ON $1M NAV'];
+  const hurdleWidths = [60, 170, 150, CW - 380];
+  y = tableHeader(hurdleCols, y, hurdleWidths, null, WHITE);
+  const hurdleData = [
+    ['2019', '2.50%', '0.625%', '$25,000'],
+    ['2020', '1.58%', '0.395%', '$15,800'],
+    ['2021', '0.11%', '0.0275%', '$1,100'],
+    ['2022', '0.78%', '0.195%', '$7,800'],
+    ['2023', '4.40%', '1.10%',  '$44,000'],
+    ['2024', '4.33%', '1.0825%', '$43,300'],
+    ['2025', '4.25%', '1.0625%', '$42,500'],
+    ['2026', '3.47%', '0.8675%', '$34,700'],
+  ];
+  for (const r of hurdleData) y = tableRow(r, y, hurdleWidths, [WHITE, LTGRAY, LTGRAY, GREEN]);
+  y += 8;
+
+  // ── 4. Trading Costs (commissions, slippage, borrow) ─────────────────────
+  doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('4. Trading Costs (Fund-Level Operating Expenses)', LM, y, { lineBreak: false });
+  y = doc.y + 4;
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
+    'Brokerage Commissions: Interactive Brokers Pro Fixed pricing: $0.005 per share, minimum $1.00 per order, maximum 1% of trade value. Modeled in both GROSS and NET figures (transaction-level cost).\n' +
+    'Slippage:              5 basis points per leg as a market-impact proxy. Modeled in both GROSS and NET figures.\n' +
+    'Short Borrow Costs:    Sector-tiered annualized rates of 1.0% - 2.0% on the notional value of short positions, accrued daily while short. Modeled in both GROSS and NET figures.\n' +
+    'Ongoing Operating Expenses (per PPM - legal, audit, administrative, regulatory): borne by the Fund as ordinary expenses but NOT separately modeled in this backtest. Estimated at 0.1-0.3% of NAV per annum for a fund of this size; investors should adjust expected NET returns accordingly.',
+    LM + 12, y, { width: CW - 12, lineBreak: true });
+  y = doc.y + 10;
+
+  // ── 5. Fee Schedule Applied In THIS Document ─────────────────────────────
+  const navTierLabel  = STARTING_CAPITAL >= 1_000_000 ? 'Wagyu (≥ $1M)'
+                      : STARTING_CAPITAL >= 500_000   ? 'Porterhouse ($500K-$999K)'
+                      : 'Filet (< $500K)';
+  const correctYr13   = STARTING_CAPITAL >= 1_000_000 ? '20%' : STARTING_CAPITAL >= 500_000 ? '25%' : '30%';
+  const correctYr4    = STARTING_CAPITAL >= 1_000_000 ? '15%' : STARTING_CAPITAL >= 500_000 ? '20%' : '25%';
+
+  doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('5. Fee Schedule Applied in this Document - IMPORTANT DISCLOSURE', LM, y, { lineBreak: false });
+  y = doc.y + 4;
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
+    `This document reports the ${NAV_DISPLAY} NAV variant. The PPM investor class applicable at this starting capital is ${navTierLabel}, with a ${correctYr13} performance allocation in years 1-3 and ${correctYr4} after the 36-month loyalty discount.\n\n` +
+    `IMPORTANT: For consistency of comparison across the three NAV-scaled variants of this report, all three variants ($100K, $500K, $1M) apply the Filet Class fee schedule (30% years 1-3, 25% after loyalty) in the backtest. A Porterhouse or Wagyu investor would experience a MATERIALLY LOWER fee burden and correspondingly HIGHER NET returns than those reported here. The Filet schedule is used throughout this document as a conservative floor; actual realized NET returns for a ${navTierLabel} investor would be higher.\n\n` +
+    `In addition, the backtest applies the performance allocation and hurdle on an ANNUAL basis for simulation efficiency, whereas the PPM specifies QUARTERLY non-cumulative application. Over long holding periods with few down quarters (as the backtest shows), the annual and quarterly conventions converge to similar results; quarterly application typically produces modestly higher allocation payments in strong years and lower in mixed years. Investors reviewing actual Fund performance will see the PPM's quarterly convention applied exactly.`,
+    LM + 12, y, { width: CW - 12, lineBreak: true });
+  y = doc.y + 10;
+
+  // ── 6. Total Fee Drag Over 7 Years ───────────────────────────────────────
+  if (gm && nm) {
+    doc.fontSize(9).fillColor(YELLOW).font('Helvetica-Bold').text('6. Total Fee Drag Over the 82-Month Backtest', LM, y, { lineBreak: false });
+    y = doc.y + 4;
+    const drag$  = gm.finalEquity - nm.finalEquity;
+    const dragPct = gm.totalReturn - nm.totalReturn;
+    const dragCagr = gm.cagr - nm.cagr;
+    doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(1).text(
+      `Starting NAV:      ${NAV_DISPLAY}\n` +
+      `Ending Equity:     ${fmtDollar(gm.finalEquity)} GROSS - ${fmtDollar(nm.finalEquity)} NET = -${fmtDollar(drag$)} total fee drag\n` +
+      `Return Drag:       -${dragPct.toFixed(1)} percentage points on Total Return\n` +
+      `CAGR Drag:         -${dragCagr.toFixed(2)} percentage points on annualized return\n` +
+      `Cumulative Fees:   Approximately ${(drag$ / gm.finalEquity * 100).toFixed(1)}% of gross ending equity.\n` +
+      `This drag reflects the full Filet fee schedule plus all trading costs over 82 months.`,
+      LM + 12, y, { width: CW - 12, lineBreak: true });
+    y = doc.y + 6;
+  }
+
   pageFooter();
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2438,8 +2605,8 @@ async function run() {
   y = methItem('Alpha Calculation',
     'Alpha is reported as simple arithmetic difference: (PNTHR Total Return) - (SPY Total Return) over the identical calendar window, both in percentage and dollar terms (the latter scaled to the stated starting capital). Alpha is NOT risk-adjusted (no beta regression). For the purposes of this tear sheet, "Alpha" is used in the commercial sense of "excess return versus benchmark," not the CAPM-defined statistical alpha.', y);
 
-  y = methItem('NAV Scaling',
-    `This document is one of three NAV-scaled variants ($100,000, $500,000, $1,000,000 starting capital). All percentage metrics - returns, CAGR, Sharpe, Sortino, Calmar, max drawdown, etc. - are IDENTICAL across the three variants because the backtest's position-sizing rules are explicitly percentage-of-NAV driven. Dollar figures (ending equity, alpha, best month $, etc.) scale linearly with starting capital. The current document reports the ${NAV_DISPLAY} variant.`, y);
+  y = methItem('NAV Scaling Across the Three Variants',
+    `This document is one of three NAV-scaled variants ($100,000, $500,000, $1,000,000 starting capital). Percentage metrics are SUBSTANTIALLY SIMILAR but NOT bit-for-bit identical across the three variants. Small variations - typically within approximately 0.5 percentage points on total return and CAGR, 0.02 on Sharpe, a few points on Sortino, and 0.04-0.15 percentage points on max drawdown - arise from share-level rounding effects in the backtest. At $100,000 NAV, a 1% vitality budget for a $180 stock produces roughly 5 whole shares; at $1,000,000 it produces roughly 55. The rounding friction aggregates slightly differently across the three tiers over 2,500+ trades, producing the minor observed variation. Dollar figures (ending equity, alpha, best month $, total trades, etc.) scale approximately but not exactly linearly with starting capital for the same reason. The current document reports the ${NAV_DISPLAY} variant; corresponding $100,000 and $500,000 (or $1,000,000) variants of this report are available under separate cover.`, y);
 
   y = methItem('Backtest vs Live Performance',
     'THESE ARE HYPOTHETICAL BACKTEST RESULTS. Actual live trading of this strategy has not produced a verified track record of the length reported here. Actual live returns may differ materially from backtested returns due to execution differences, cash management, fill prices, borrow availability, subscription/redemption flows, tax-driven execution constraints, corporate actions, and events the historical model could not anticipate. See the Important Disclosures section for the full backtest-performance disclaimer.', y);

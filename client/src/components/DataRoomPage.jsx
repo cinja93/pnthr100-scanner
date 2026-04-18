@@ -1,11 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
+import { usePortal } from '../contexts/PortalContext';
 import { authHeaders, API_BASE } from '../services/api';
 
-const DEFAULT_SECTION = 'PNTHR Funds, Carnivore Quant LP Fund Documents';
+const DEFAULT_SECTION          = 'PNTHR Funds, Carnivore Quant LP Fund Documents';
+const VIP_HIDDEN_DOC_LABELS    = new Set(['PNTHR Strategy Change Notice']);
 
 export default function DataRoomPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin: rawIsAdmin } = useAuth();
+  const { isVipPortal, isInvestorPortal } = usePortal();
+  // In VIP / investor portals, suppress admin UI (upload / download / delete /
+  // reorder / view log) so admins previewing under those subdomains see
+  // exactly what family / investors see.
+  const isAdmin = rawIsAdmin && !isVipPortal && !isInvestorPortal;
   const [docs, setDocs] = useState([]);
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,9 +48,11 @@ export default function DataRoomPage() {
 
   useEffect(() => { loadDocs(); loadSections(); }, [loadDocs, loadSections]);
 
-  // Group docs by section
+  // Group docs by section. VIP portal hides specific docs (e.g. the
+  // Strategy Change Notice) so family doesn't see internal-strategy changes.
   const grouped = {};
   docs.forEach(doc => {
+    if (isVipPortal && VIP_HIDDEN_DOC_LABELS.has(doc.label?.trim())) return;
     const sec = doc.section || DEFAULT_SECTION;
     if (!grouped[sec]) grouped[sec] = [];
     grouped[sec].push(doc);

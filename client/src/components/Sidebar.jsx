@@ -84,20 +84,38 @@ function BatchStatsTooltip({ stats, top }) {
 
 export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, onLogout, longStats, shortStats }) {
   const { isDemo, toggleDemo } = useDemo();
-  const { allowedPages, isDenPortal, isInvestorPortal } = usePortal();
+  const { allowedPages, isDenPortal, isInvestorPortal, isVipPortal } = usePortal();
   const [tooltipKey, setTooltipKey] = useState(null);
   const [tooltipTop, setTooltipTop] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const btnRefs = useRef({});
 
   const firstName = getFirstName(currentUser);
-  const isPortalMode = isDenPortal || isInvestorPortal;
+  const isPortalMode = isDenPortal || isInvestorPortal || isVipPortal;
+  // Admin UI suppression — when admin visits vip/investor subdomain, we hide
+  // admin-only controls so they see exactly what the family/investor sees.
+  const effectiveAdmin = isAdmin && !isVipPortal && !isInvestorPortal;
+
+  // Build nav groups. VIP portal gets an injected "Portfolio" item under
+  // PNTHR Live so Brennan + family can see their own portfolio status.
+  const liveGroupWithPortfolio = isVipPortal
+    ? {
+        groupLabel: 'PNTHR Live',
+        items: [
+          { key: 'pulse',     label: 'PNTHR Pulse',     iconImg: true },
+          { key: 'portfolio', label: 'PNTHR Portfolio', iconImg: true },
+          { key: 'assistant', label: 'PNTHR Assistant', iconImg: true },
+          { key: 'orders',    label: 'PNTHR Orders',    iconImg: true },
+          { key: 'command',   label: 'PNTHR Command',   iconImg: true },
+        ],
+      }
+    : null;
 
   // PNTHR Data group — Journal + Watchlist for everyone; Kill 10, Kill Test, History admin-only
   const dataItems = [
     { key: 'journal',  label: 'PNTHR Journal',  iconImg: true },
   ];
-  if (isAdmin) {
+  if (effectiveAdmin) {
     dataItems.push({ key: 'history',        label: 'PNTHR Kill 10',   iconImg: true });
     dataItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test', iconImg: true });
     dataItems.push({ key: 'signal-history', label: 'PNTHR History',   iconImg: true });
@@ -106,7 +124,12 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
   const dataGroup = { groupLabel: 'PNTHR Data', items: dataItems };
 
-  let allGroups = [...NAV_GROUPS, dataGroup];
+  // Swap in the VIP-specific PNTHR Live group when in VIP mode.
+  const baseGroups = liveGroupWithPortfolio
+    ? NAV_GROUPS.map(g => g.groupLabel === 'PNTHR Live' ? liveGroupWithPortfolio : g)
+    : NAV_GROUPS;
+
+  let allGroups = [...baseGroups, dataGroup];
 
   // Portal mode: filter nav to only allowed pages
   if (allowedPages) {
@@ -215,7 +238,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
             <span style={{ fontSize: 14 }}>🗄️</span>
             <span>PNTHR Data Room</span>
           </button>
-          {isAdmin && (
+          {effectiveAdmin && (
             <button
               className={styles.dataRoomBtn}
               onClick={() => handleNav('compliance')}
@@ -225,7 +248,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
               <span>Compliance</span>
             </button>
           )}
-          {isAdmin && (
+          {effectiveAdmin && (
             <button
               className={styles.dataRoomBtn}
               onClick={() => handleNav('investor-mgmt')}
@@ -266,7 +289,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
             <button className={styles.logoutBtn} onClick={onLogout} title="Sign out">Sign out</button>
           </div>
         )}
-        {isAdmin && !isPortalMode && (
+        {effectiveAdmin && !isPortalMode && (
           <div
             onClick={toggleDemo}
             title={isDemo ? 'Demo mode active' : ''}

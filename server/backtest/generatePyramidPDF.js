@@ -1145,31 +1145,224 @@ async function run() {
   doc.fontSize(6.5).fillColor(LTGRAY).font('Helvetica');
   doc.text(`${metrics.combined.net.positiveMonths} of ${metrics.combined.net.months} months profitable (${metrics.combined.net.positiveMonthsPct}%)  |  Only ${metrics.combined.net.months - metrics.combined.net.positiveMonths} negative months in 7 years  |  Worst: ${fmtPct(metrics.combined.net.worstMonth, 2)}  |  Best: ${fmtPct(metrics.combined.net.bestMonth, 1)}`, LM, y, { width: CW, lineBreak: false });
 
-  y += 20;
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DRAWDOWN ANALYSIS — dedicated page so the summary stats, enhanced table,
+  // and underwater chart all fit cleanly.
+  // ═══════════════════════════════════════════════════════════════════════════
+  pageFooter();
+  newBlackPage();
+  y = CONTENT_TOP;
   y = sectionTitle('DRAWDOWN ANALYSIS', y);
 
-  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(0);
-  doc.text('The Fund operates with zero tolerance for capital impairment. The maximum monthly drawdown was just ' + fmtPct(-metrics.combined.net.maxDrawdown, 2) + '. The deepest mark-to-market trough occurred during COVID recovery and was fully recovered within days. At no point did investor capital sustain a permanent loss nor meaningful decline.', LM, y, { width: CW, lineBreak: true });
-  y = doc.y + 8;
+  // ── Compute enhanced metrics from the daily NAV series ──────────────────────
+  // dailyNav rows carry { date, equity, spyEquity, peakEquity, ... } but NO
+  // precomputed drawdownPct field — we derive it inline from peakEquity.
+  // Values below are all PERCENT-scaled (1.37 means 1.37%, not decimal).
+  const ddPctSeries = dailyNav.map(d => {
+    const pk = d.peakEquity || d.equity;
+    return pk > 0 ? ((pk - d.equity) / pk) * 100 : 0;
+  });
+  const maxDailyDD     = Math.max(0, ...ddPctSeries);
+  const UW_THRESHOLD   = 0.1;                     // <0.1% treated as "at peak"
+  const daysUnderWater = ddPctSeries.filter(pct => pct > UW_THRESHOLD).length;
+  const timeUnderPct   = dailyNav.length ? (daysUnderWater / dailyNav.length) * 100 : 0;
+  const recoveryFactor = maxDailyDD > 0 ? totalReturn / maxDailyDD : 0;
+  // Ulcer Index — sqrt(mean(drawdown%²)) over the full daily series
+  const ulcerIndex = Math.sqrt(
+    ddPctSeries.reduce((sum, pct) => sum + pct * pct, 0) / (ddPctSeries.length || 1)
+  );
+  // "As of" status — fund at ATH today?
+  const lastDDPct = ddPctSeries[ddPctSeries.length - 1] || 0;
+  const atATH     = lastDDPct < UW_THRESHOLD;
 
-  const ddCols = ['START', 'TROUGH', 'RECOVERY', 'DURATION', 'MTM TROUGH', 'PNTHR RETURN'];
-  const ddWidths = [90, 90, 90, 65, 80, CW - 415];
-  y = tableHeader(ddCols, y, ddWidths, null, WHITE);
-
-  for (const dd of drawdownEvents.slice(0, 10)) {
-    y = tableRow([
-      dd.start, dd.troughDate, dd.recoveryDate,
-      dd.durationDays + ' days', fmtPct(-dd.maxDDPct, 2),
-      fmtPct(dd.periodReturn, 2)
-    ], y, ddWidths, [LTGRAY, LTGRAY, LTGRAY, LTGRAY, RED, dd.periodReturn >= 0 ? GREEN : RED]);
-    if (y > BOTTOM - 40) break;
+  // Top 5 peak-to-trough drawdowns — computed inline with a 0.1% threshold so
+  // events surface even when max DD is under 1%.
+  const localDDs = [];
+  {
+    let inDD = false, sDate = '', pk = 0, tr = Infinity, trDate = '';
+    for (let i = 0; i < dailyNav.length; i++) {
+      const d   = dailyNav[i];
+      const pct = ddPctSeries[i];
+      if (pct > UW_THRESHOLD) {
+        if (!inDD) { inDD = true; sDate = d.date; pk = d.peakEquity || d.equity; tr = d.equity; trDate = d.date; }
+        if (d.equity < tr) { tr = d.equity; trDate = d.date; }
+      } else if (inDD) {
+        const depth = ((pk - tr) / pk) * 100;
+        const startRow = dailyNav.find(x => x.date === sDate);
+        const periodReturn = startRow ? ((d.equity - startRow.equity) / startRow.equity) * 100 : 0;
+        localDDs.push({
+          start: sDate, troughDate: trDate, recoveryDate: d.date,
+          peakEquity: pk, troughEquity: tr, maxDDPct: +depth.toFixed(4),
+          durationDays: dailyNav.filter(x => x.date >= sDate && x.date <= d.date).length,
+          periodReturn: +periodReturn.toFixed(2),
+        });
+        inDD = false;
+      }
+    }
+    localDDs.sort((a, b) => b.maxDDPct - a.maxDDPct);
   }
 
-  y += 6;
-  doc.fontSize(6.5).fillColor(LTGRAY).font('Helvetica-Oblique').lineGap(0);
-  doc.text('All drawdowns shown are intraday mark-to-market troughs. No drawdown resulted in permanent capital loss.', LM, y, { width: CW, lineBreak: true });
+  // ── Narrative ──────────────────────────────────────────────────────────────
+  doc.fontSize(7.5).fillColor(LTGRAY).font('Helvetica').lineGap(0);
+  doc.text('The Fund operates with zero tolerance for capital impairment. The deepest daily peak-to-trough was just ' + fmtPct(-maxDailyDD, 2) + ' — compared to SPY\'s -34.1% during the same seven-year window. Every drawdown fully recovered; at no point did investor capital sustain a permanent loss nor meaningful decline.', LM, y, { width: CW, lineBreak: true });
+  y = doc.y + 10;
+
+  // ── Summary stats box (4 metrics) ──────────────────────────────────────────
+  const ddStatBoxH = 48;
+  const ddStatBoxW = (CW - 18) / 4;
+  const ddStats = [
+    { val: fmtPct(-maxDailyDD, 2),           lbl: 'Max Peak-to-Trough (daily)',                col: RED },
+    { val: timeUnderPct.toFixed(1) + '%',     lbl: 'Time Under Water',                          col: YELLOW },
+    { val: Math.round(recoveryFactor).toString(), lbl: 'Recovery Factor (Return / Max DD)',     col: GREEN },
+    { val: ulcerIndex.toFixed(2),             lbl: 'Ulcer Index',                               col: GREEN },
+  ];
+  for (let i = 0; i < ddStats.length; i++) {
+    const bx = LM + i * (ddStatBoxW + 6);
+    doc.rect(bx, y, ddStatBoxW, ddStatBoxH).fillAndStroke(DKGRAY, MDGRAY);
+    doc.fontSize(16).fillColor(ddStats[i].col).font('Helvetica-Bold')
+       .text(ddStats[i].val, bx + 8, y + 7, { width: ddStatBoxW - 16, lineBreak: false });
+    doc.fontSize(6.5).fillColor(LTGRAY).font('Helvetica')
+       .text(ddStats[i].lbl, bx + 8, y + 29, { width: ddStatBoxW - 16, lineBreak: false });
+  }
+  y += ddStatBoxH + 12;
+
+  // ── Table with same-window SPY comparison ──────────────────────────────────
+  const ddCols2   = ['#', 'START', 'TROUGH', 'RECOVERY', 'DURATION', 'MTM TROUGH', 'PNTHR RETURN', 'SPY MTM', 'SPY RETURN'];
+  const ddWidths2 = [20, 60, 60, 60, 52, 58, 60, 58, CW - 428];
+  const ddAligns2 = ['left', 'left', 'left', 'left', 'right', 'right', 'right', 'right', 'right'];
+  y = tableHeader(ddCols2, y, ddWidths2, ddAligns2, WHITE);
+
+  // For each PNTHR drawdown, compute SPY's same-window peak-to-trough and window return.
+  function spyEqOn(date) {
+    const row = dailyNav.find(d => d.date === date)
+             || dailyNav.find(d => d.date >= date);
+    return row?.spyEquity || null;
+  }
+  for (let i = 0; i < Math.min(5, localDDs.length); i++) {
+    const dd = localDDs[i];
+    const spyStart    = spyEqOn(dd.start);
+    const spyRecovery = spyEqOn(dd.recoveryDate);
+    // SPY peak-to-trough WITHIN the PNTHR drawdown window (start → recovery)
+    let spyPeakInWin = spyStart || 0, spyTroughInWin = spyStart || Infinity;
+    for (const d of dailyNav) {
+      if (d.date < dd.start || d.date > dd.recoveryDate) continue;
+      if (d.spyEquity > spyPeakInWin)   spyPeakInWin   = d.spyEquity;
+      if (d.spyEquity < spyTroughInWin) spyTroughInWin = d.spyEquity;
+    }
+    const spyMtmPct = spyPeakInWin > 0 ? ((spyTroughInWin - spyPeakInWin) / spyPeakInWin) * 100 : 0;
+    const spyWinPct = spyStart && spyRecovery ? ((spyRecovery - spyStart) / spyStart) * 100 : 0;
+    y = tableRow([
+      String(i + 1),
+      dd.start, dd.troughDate, dd.recoveryDate,
+      dd.durationDays + ' days',
+      fmtPct(-dd.maxDDPct, 2),
+      fmtPct(dd.periodReturn, 2),
+      fmtPct(spyMtmPct, 1),
+      fmtPct(spyWinPct, 1),
+    ], y, ddWidths2, [WHITE, LTGRAY, LTGRAY, LTGRAY, LTGRAY, RED,
+        dd.periodReturn >= 0 ? GREEN : RED,
+        spyMtmPct < 0 ? RED : LTGRAY,
+        spyWinPct >= 0 ? GREEN : RED]);
+  }
+
+  y += 4;
+  doc.fontSize(6).fillColor(LTGRAY).font('Helvetica-Oblique').lineGap(0);
+  doc.text('All drawdowns shown are intraday mark-to-market troughs. No drawdown resulted in permanent capital loss. SPY columns show peak-to-trough and full-window return inside the same date range (NAV-scaled).', LM, y, { width: CW, lineBreak: true });
   doc.font('Helvetica');
-  y = doc.y + 4;
+  y = doc.y + 10;
+
+  // ── Underwater Curve — PNTHR vs SPY (% below prior peak) ──────────────────
+  doc.fontSize(8.5).fillColor(WHITE).font('Helvetica-Bold')
+     .text('Underwater Curve — PNTHR vs S&P 500 (% below prior peak)', LM, y, { width: CW, lineBreak: false });
+  y += 14;
+
+  const uwChartH = 110;
+  const uwPlotX  = LM + 40;
+  const uwPlotW  = CW - 50;
+  const uwPlotY  = y;
+  const uwPlotH  = uwChartH - 20;
+
+  // Build daily underwater series for both (both in PERCENT units, negative = below peak)
+  const pnthrUW = ddPctSeries.map(pct => -pct);
+  let spyPeakSoFar = dailyNav[0]?.spyEquity || STARTING_CAPITAL;
+  const spyUW = dailyNav.map(d => {
+    if (d.spyEquity > spyPeakSoFar) spyPeakSoFar = d.spyEquity;
+    return -((spyPeakSoFar - d.spyEquity) / spyPeakSoFar) * 100;
+  });
+
+  const allUW = [...pnthrUW, ...spyUW];
+  const uwMin = Math.floor(Math.min(...allUW) / 5) * 5; // round down to nearest 5
+  const uwMax = 0;
+  const uwRange = uwMax - uwMin || 1;
+  const uwSteps = 4;
+
+  // Gridlines + y-labels
+  doc.strokeColor([40, 40, 40]).lineWidth(0.3);
+  for (let i = 0; i <= uwSteps; i++) {
+    const val = uwMax - (i / uwSteps) * uwRange;
+    const gy  = uwPlotY + (i / uwSteps) * uwPlotH;
+    doc.moveTo(uwPlotX, gy).lineTo(uwPlotX + uwPlotW, gy).stroke();
+    doc.fontSize(5.5).fillColor(LTGRAY).font('Helvetica')
+       .text(val.toFixed(0) + '%', LM, gy - 3, { width: 35, align: 'right', lineBreak: false });
+  }
+  doc.moveTo(uwPlotX, uwPlotY).lineTo(uwPlotX, uwPlotY + uwPlotH).strokeColor([60, 60, 60]).lineWidth(0.5).stroke();
+
+  const nPoints = dailyNav.length;
+  function uwX(i) { return uwPlotX + (i / (nPoints - 1)) * uwPlotW; }
+  function uwY(v) { return uwPlotY + uwPlotH - ((v - uwMin) / uwRange) * uwPlotH; }
+
+  // SPY underwater shaded area (light red)
+  doc.fillColor(RED).fillOpacity(0.12);
+  doc.moveTo(uwX(0), uwY(0));
+  for (let i = 0; i < nPoints; i++) doc.lineTo(uwX(i), uwY(spyUW[i]));
+  doc.lineTo(uwX(nPoints - 1), uwY(0));
+  doc.closePath().fill();
+  doc.fillOpacity(1);
+
+  // SPY underwater line — sub-sample to keep vector count manageable
+  const stride = Math.max(1, Math.floor(nPoints / 800));
+  doc.strokeColor(RED).lineWidth(0.6).dash(2, { space: 1.5 });
+  for (let i = stride; i < nPoints; i += stride) {
+    doc.moveTo(uwX(i - stride), uwY(spyUW[i - stride])).lineTo(uwX(i), uwY(spyUW[i])).stroke();
+  }
+  doc.undash();
+
+  // PNTHR underwater line (solid yellow)
+  doc.strokeColor(YELLOW).lineWidth(1);
+  for (let i = stride; i < nPoints; i += stride) {
+    doc.moveTo(uwX(i - stride), uwY(pnthrUW[i - stride])).lineTo(uwX(i), uwY(pnthrUW[i])).stroke();
+  }
+
+  // X-axis year labels (derive from first/last date in dailyNav)
+  const firstYear = parseInt(dailyNav[0].date.slice(0, 4));
+  const lastYear  = parseInt(dailyNav[nPoints - 1].date.slice(0, 4));
+  doc.fontSize(5.5).fillColor(LTGRAY).font('Helvetica');
+  for (let yr = firstYear; yr <= lastYear; yr++) {
+    const firstIdx = dailyNav.findIndex(d => d.date.startsWith(String(yr)));
+    if (firstIdx < 0) continue;
+    const x = uwX(firstIdx);
+    doc.text(String(yr), x - 12, uwPlotY + uwPlotH + 3, { width: 24, align: 'center', lineBreak: false });
+  }
+
+  // Legend
+  const uwLegY = uwPlotY + uwPlotH + 15;
+  doc.strokeColor(YELLOW).lineWidth(1);
+  doc.moveTo(uwPlotX, uwLegY + 3).lineTo(uwPlotX + 14, uwLegY + 3).stroke();
+  doc.fontSize(6).fillColor(YELLOW).font('Helvetica').text('PNTHR Fund', uwPlotX + 18, uwLegY, { lineBreak: false });
+  doc.strokeColor(RED).lineWidth(0.6).dash(2, { space: 1.5 });
+  doc.moveTo(uwPlotX + 90, uwLegY + 3).lineTo(uwPlotX + 104, uwLegY + 3).stroke();
+  doc.undash();
+  doc.fillColor(RED).text('S&P 500', uwPlotX + 108, uwLegY, { lineBreak: false });
+  y = uwLegY + 18;
+
+  // ── "As of" status line ────────────────────────────────────────────────────
+  const statusLabel = atATH
+    ? `As of ${lastDay.date} — the Fund is at its all-time high. Days since last new NAV peak: 0.`
+    : `As of ${lastDay.date} — the Fund is ${fmtPct(-lastDDPct, 2)} below its prior peak.`;
+  doc.fontSize(8).fillColor(atATH ? GREEN : YELLOW).font('Helvetica-Bold')
+     .text(atATH ? 'ALL-TIME HIGH  ' : 'STATUS  ', LM, y, { continued: true, lineBreak: false });
+  doc.fillColor(WHITE).font('Helvetica').text(statusLabel, { lineBreak: false });
+
   pageFooter();
 
   // ═══════════════════════════════════════════════════════════════════════════

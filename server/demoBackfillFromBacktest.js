@@ -2,15 +2,17 @@
 // server/demoBackfillFromBacktest.js
 // ── PNTHR Demo Fund — Rebuild from Gate-Filtered Backtest Pyramid Trades ─────
 //
-// Sources demo fund positions/journal from pnthr_bt_pyramid_trade_log (pnthr_den DB),
-// which already has all production gates applied (macro, sector, D2, SS crash).
-// This ensures the demo mirrors the live Orders pipeline exactly.
+// Sources demo fund positions/journal from pnthr_bt_pyramid_nav_1m_trade_log
+// (pnthr_den DB), the v21 canonical Wagyu ($1M) trade log produced by
+// exportPyramidNav.js. This is the same collection the Den-published Wagyu
+// metrics are derived from (post-gate-fix, post-SS-crash-gate, MTM + PPM-fee
+// via rebuild_mtm_daily_nav.js).
 //
 // Run with:  node server/demoBackfillFromBacktest.js
 //
 // Logic:
 //   1. Clear all existing demo_fund data
-//   2. Load all closed pyramid trades from pnthr_den.pnthr_bt_pyramid_trade_log
+//   2. Load all closed pyramid trades from pnthr_den.pnthr_bt_pyramid_nav_1m_trade_log
 //   3. Sort by entryDate, then by exitDate for NAV tracking
 //   4. Size each position using $10M seed NAV (1% risk rule)
 //   5. Track NAV incrementally as trades close
@@ -123,7 +125,7 @@ async function main() {
   });
 
   // ── 3. Load closed pyramid trades (exclude STILL_OPEN) ────────────────────
-  const allTrades = await denDb.collection('pnthr_bt_pyramid_trade_log')
+  const allTrades = await denDb.collection('pnthr_bt_pyramid_nav_1m_trade_log')
     .find({ closed: true, exitReason: { $ne: 'STILL_OPEN' } })
     .sort({ weekOf: 1, killRank: 1 })
     .toArray();
@@ -131,9 +133,12 @@ async function main() {
   console.log(`Loaded ${allTrades.length} closed pyramid trades (${allTrades[0]?.weekOf} → ${allTrades[allTrades.length - 1]?.weekOf})\n`);
 
   // ── 4. Process trades with FIXED sizing ─────────────────────────────────────
-  // The backtest used fixed $100K sizing (no compounding). We use fixed $10M
-  // sizing to match. NAV = seed + cumulative P&L (reinvestment model matches
-  // the backtest equity curve that produces the 37% CAGR).
+  // Source collection is the v21 canonical Wagyu ($1M) tier trade log. The
+  // backtest uses NAV-static sizing (no compounding) per-tier; we use fixed
+  // $10M sizing following the same static-NAV model. NAV = seed + cumulative
+  // realized P&L. (No open-position MTM needed here: only closed trades are
+  // loaded. Full fee-engine congruence with Den Wagyu Net numbers applied in
+  // a separate post-processing pass via rebuild_mtm_daily_nav.js.)
 
   let nav = DEMO_SEED_NAV;
   let totalOpened = 0, totalClosed = 0;
@@ -366,7 +371,7 @@ async function main() {
   console.log('\n═══════════════════════════════════════════════');
   console.log('DEMO FUND REBUILD COMPLETE');
   console.log('═══════════════════════════════════════════════');
-  console.log(`Source:           pnthr_den.pnthr_bt_pyramid_trade_log (gate-filtered)`);
+  console.log(`Source:           pnthr_den.pnthr_bt_pyramid_nav_1m_trade_log (v21 canonical Wagyu)`);
   console.log(`Total trades:     ${totalClosed}`);
   console.log(`  full_backtest:  ${fullBtCount}`);
   console.log(`  live_fund:      ${lfCount}`);

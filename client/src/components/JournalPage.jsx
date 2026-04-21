@@ -1237,9 +1237,11 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
     const SS_H = { cagr: 35.3, sharpe: 1.85, sortino: 16.54, maxDrawdown: 1.14, maxDDPeriod: '2022-10 to 2022-11', calmar: 30.99, profitFactor: 4.19, bestMonth: 14.55, bestMonthLabel: '2022-05', worstMonth: -1.14, worstMonthLabel: '2022-11', positiveMonths: 16, totalMonths: 18, positiveMonthsPct: 88.9, avgMonthlyReturn: 2.63, monthlyStdDev: 4.14 };
     const COMB = { cagr: 37.0, sharpe: 2.39, sortino: 34.0, maxDrawdown: 1.00, maxDDPeriod: '2019-09 to 2019-10', calmar: 37.02, profitFactor: 9.10, bestMonth: 19.28, bestMonthLabel: '2019-12', worstMonth: -1.00, worstMonthLabel: '2019-10', positiveMonths: 76, totalMonths: 82, positiveMonthsPct: 92.7, avgMonthlyReturn: 2.71, monthlyStdDev: 3.33 };
 
-    // $10M demo fund metrics (sourced from gate-filtered pnthr_bt_pyramid_trade_log, fixed $10M sizing)
-    const DEMO_5Y = { startNav: '$10,000,000', endNav: '$79,647,765', totalReturn: '+696.5%', trades: '2,507', winRate: '50.7%', commissions: '$395,474', avgDiscipline: '96.2' };
-    const DEMO_LF = { startNav: '$10,000,000', endNav: '$22,192,104', totalReturn: '+121.9%', trades: '310', winRate: '47.7%', commissions: '$39,000', avgDiscipline: '96.2' };
+    // $10M demo fund metrics (sourced from v21 canonical pnthr_bt_pyramid_nav_1m_trade_log — Wagyu tier)
+    // Values from demoBackfillFromBacktest.js run on 2026-04-21.
+    // NOTE: fixed-NAV Gross P&L (pre-fees). Apply PPM fee engine for full Net congruence with Wagyu 29.48% CAGR.
+    const DEMO_5Y = { startNav: '$10,000,000', endNav: '$87,285,669', totalReturn: '+772.9%', trades: '2,614', winRate: '52.1%', commissions: '$417,936', avgDiscipline: '96.1' };
+    const DEMO_LF = { startNav: '$10,000,000', endNav: '$22,656,455', totalReturn: '+126.6%', trades: '312', winRate: '48.4%', commissions: '$40,858', avgDiscipline: '96.1' };
     const demoData = fundPeriod === 'live_fund' ? DEMO_LF : DEMO_5Y;
 
     const tbl = { width: '100%', borderCollapse: 'collapse', marginBottom: 16, fontSize: 12 };

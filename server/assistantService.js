@@ -194,22 +194,30 @@ function daysUntilEarnings(dateStr) {
 
 /**
  * Load IBKR positions from MongoDB for the given tickers.
- * Returns a map: { TICKER: { ibkrShares, ibkrStop, ibkrAvgCost } }
+ * Returns a map: { TICKER: { ibkrShares, ibkrStop, ibkrAvgCost, ibkrAction, ibkrOrderType } }
+ * Action + orderType lets downstream distinguish pyramid triggers from protective stops.
  */
 async function loadIbkrPositions(tickers) {
   if (!tickers.length) return {};
   try {
     const db = await connectToDatabase();
-    const docs = await db.collection('pnthr_ibkr_positions')
-      .find({ ticker: { $in: tickers.map(t => t.toUpperCase()) } })
-      .toArray();
+    // Single doc per user — find any doc that has at least one position in our ticker list.
+    const ibkrDocs = await db.collection('pnthr_ibkr_positions').find({}).toArray();
+    const upperSet = new Set(tickers.map(t => t.toUpperCase()));
     const map = {};
-    for (const d of docs) {
-      map[d.ticker.toUpperCase()] = {
-        ibkrShares:   d.shares ?? d.ibkrShares ?? null,
-        ibkrStop:     d.stopPrice ?? d.ibkrStop ?? null,
-        ibkrAvgCost:  d.avgCost ?? d.ibkrAvgCost ?? null,
-      };
+    for (const d of ibkrDocs) {
+      for (const pos of (d.positions || [])) {
+        const sym = pos.symbol?.toUpperCase();
+        if (!sym || !upperSet.has(sym)) continue;
+        const stopOrder = (d.stopOrders || []).find(s => s.symbol?.toUpperCase() === sym);
+        map[sym] = {
+          ibkrShares:    pos.shares ?? null,
+          ibkrStop:      stopOrder?.stopPrice ?? null,
+          ibkrAvgCost:   pos.avgCost ?? null,
+          ibkrAction:    stopOrder?.action ?? null,     // 'BUY' | 'SELL' | null
+          ibkrOrderType: stopOrder?.orderType ?? null,  // 'STP' | 'STP LMT' | null
+        };
+      }
     }
     return map;
   } catch (err) {
@@ -464,8 +472,38 @@ export async function generateAssistantTasks(userId, positions, nav) {
       });
     }
 
-    // ── P1: IBKR_STOP_MISMATCH ────────────────────────────────────────────────
-    if (ibkr.ibkrStop != null && stopPrice != null) {
+    // ── P1: IBKR_STOP_MISMATCH / PYRAMID_READY ────────────────────────────────
+    // Distinguish PROTECTIVE stops from PYRAMID triggers before flagging a mismatch.
+    //   Pyramid trigger pattern (strategy-as-designed, NOT a discrepancy):
+    //     BUY STP LMT on a LONG position  — pre-placed breakout add for Lot N
+    //     SELL STP LMT on a SHORT position — pre-placed breakdown add for Lot N
+    //   Any other STP/STP LMT in the opposite direction = protective stop.
+    const dirUpper  = (direction || '').toUpperCase();
+    const isPyramid = ibkr.ibkrOrderType === 'STP LMT' && (
+      (dirUpper === 'LONG'  && ibkr.ibkrAction === 'BUY') ||
+      (dirUpper === 'SHORT' && ibkr.ibkrAction === 'SELL')
+    );
+
+    if (isPyramid && ibkr.ibkrStop != null) {
+      // Inform (priority 2, informational) — the pyramid breakout trigger is ready.
+      tasks.push({
+        id:              `pyramid_ready_${ticker}`,
+        priority:        2,
+        type:            'PYRAMID_READY',
+        ticker,
+        badge:           'PYRAMID',
+        headline:        `${ticker} ${dirUpper}: IBKR pyramid trigger armed at ${fmt$(ibkr.ibkrStop)} (${ibkr.ibkrAction} ${ibkr.ibkrOrderType}).`,
+        instructions:    [
+          `This is a pre-placed pyramid add-on order, not a stop-loss.`,
+          `Trigger fires if ${ticker} price ${dirUpper === 'LONG' ? 'breaks above' : 'breaks below'} ${fmt$(ibkr.ibkrStop)}.`,
+          `If filled, update Command with the new lot fill.`,
+        ],
+        confirmQuestion: null,
+        data:            { ibkrStop: ibkr.ibkrStop, action: ibkr.ibkrAction, orderType: ibkr.ibkrOrderType, direction: dirUpper },
+        dayOfWeek:       null,
+        autoClears:      true,
+      });
+    } else if (ibkr.ibkrStop != null && stopPrice != null) {
       const stopDiff = Math.abs(ibkr.ibkrStop - stopPrice);
       if (stopDiff > 0.10) {
         tasks.push({
@@ -875,17 +913,33 @@ export async function getStopSyncRows(positions, userId) {
   // Load PNTHR signal-cache stops (ibkrDoc already loaded above)
   const signalStops = await loadSignalStops(tickers);
 
-  // Build ticker → IBKR stop price map from stored stop orders
+  // Build ticker → IBKR stop order map from stored stop orders.
+  // Store the FULL order object so downstream can distinguish:
+  //   - Protective stops: SELL STP/STP LMT on LONG, BUY STP/STP LMT on SHORT
+  //   - Pyramid triggers: BUY STP LMT on LONG, SELL STP LMT on SHORT
+  // Pyramid triggers are pre-placed breakout orders for lot adds — NOT stop-loss
+  // mismatches. Treating them as mismatches produces false alerts.
   const ibkrStopMap = {};
   for (const order of (ibkrDoc?.stopOrders || [])) {
-    if (order.symbol) ibkrStopMap[order.symbol.toUpperCase()] = order.stopPrice;
+    if (order.symbol) ibkrStopMap[order.symbol.toUpperCase()] = order;
   }
 
   return syncedPosns.map(p => {
-    const ticker     = p.ticker.toUpperCase();
-    const pnthrStop  = p.stopPrice ?? null;
-    const signalStop = signalStops[ticker] ?? null;
-    const ibkrStop   = ibkrStopMap[ticker] ?? null;
+    const ticker      = p.ticker.toUpperCase();
+    const pnthrStop   = p.stopPrice ?? null;
+    const signalStop  = signalStops[ticker] ?? null;
+    const ibkrOrder   = ibkrStopMap[ticker] ?? null;
+    const ibkrStop    = ibkrOrder?.stopPrice ?? null;
+    const ibkrAction  = ibkrOrder?.action   ?? null;   // 'BUY' | 'SELL'
+    const ibkrOrderType = ibkrOrder?.orderType ?? null; // 'STP' | 'STP LMT'
+
+    // Classify the IBKR order: protective vs pyramid trigger
+    // Pyramid: BUY STP LMT on LONG (breakout add), SELL STP LMT on SHORT (breakdown add)
+    const dirUpper  = (p.direction || '').toUpperCase();
+    const isPyramid = ibkrOrder && ibkrOrderType === 'STP LMT' && (
+      (dirUpper === 'LONG'  && ibkrAction === 'BUY') ||
+      (dirUpper === 'SHORT' && ibkrAction === 'SELL')
+    );
 
     // Check 1: does PNTHR's stored stop match the latest signal computation?
     const signalDiff        = pnthrStop != null && signalStop != null
@@ -894,10 +948,11 @@ export async function getStopSyncRows(positions, userId) {
     const signalNeedsUpdate = signalDiff != null && signalDiff >= 0.01;
 
     // Check 2: does the live IBKR stop order match the PNTHR stored stop?
+    // Pyramid triggers are NOT protective stops, so they shouldn't count as mismatches.
     const ibkrDiff     = pnthrStop != null && ibkrStop != null
       ? +Math.abs(pnthrStop - ibkrStop).toFixed(2)
       : null;
-    const ibkrMismatch = ibkrDiff != null && ibkrDiff >= 0.01;
+    const ibkrMismatch = !isPyramid && ibkrDiff != null && ibkrDiff >= 0.01;
 
     const needsUpdate = signalNeedsUpdate || ibkrMismatch;
 
@@ -907,6 +962,9 @@ export async function getStopSyncRows(positions, userId) {
       currentStop:        pnthrStop,   // PNTHR-stored stop
       newStop:            signalStop,  // latest signal-cache stop
       ibkrStop,                        // live IBKR stop order price (null if none synced)
+      ibkrAction,                      // 'BUY' or 'SELL' — null if no order
+      ibkrOrderType,                   // 'STP' or 'STP LMT' — null if no order
+      isPyramid,                       // true if IBKR order is a pyramid breakout trigger
       diff:               signalDiff,
       ibkrDiff,
       needsUpdate,

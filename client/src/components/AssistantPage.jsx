@@ -1747,6 +1747,7 @@ const HL = {
   MEDIUM:     { bg: '#1a1500', text: '#fff9c4', ticker: '#ffd54f', badge: '#3e2723', badgeText: '#ffe082', border: '#f9a825' },
   DEVELOPING: { bg: '#0a1520', text: '#b3d9ff', ticker: '#64b5f6', badge: '#0d2137', badgeText: '#90caf9', border: '#1976d2' },
   WATCHING:   { bg: '#12161a', text: '#90a4ae', ticker: '#b0bec5', badge: '#1c2530', badgeText: '#78909c', border: '#455a64' },
+  PYRAMID:    { bg: '#001c1f', text: '#80deea', ticker: '#4dd0e1', badge: '#004d55', badgeText: '#b2ebf2', border: '#00acc1' },
   LOW:        { bg: '#0d0d0d', text: '#616161', ticker: '#757575', badge: '#1a1a1a', badgeText: '#616161', border: '#333'    },
 };
 

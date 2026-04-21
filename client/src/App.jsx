@@ -213,10 +213,12 @@ function AppAuth() {
 // States: default → confirming → fixing → fixed (auto-dismiss)
 
 // CRITICAL → dark red bg, white text | HIGH → PNTHR yellow bg, black text | MEDIUM → amber bg, black text
+// INFO → teal bg (pyramid add-on triggers — strategy-as-designed, informational)
 const DISC_BAND = {
   CRITICAL: { bg: '#7f0000', text: '#fff', muted: 'rgba(255,255,255,0.75)', tickerBg: 'rgba(0,0,0,0.30)', tickerText: '#fff', typeLbl: 'rgba(255,255,255,0.50)', icon: '🚨', onDark: true },
   HIGH:     { bg: '#fcf000', text: '#000', muted: 'rgba(0,0,0,0.60)',       tickerBg: 'rgba(0,0,0,0.12)', tickerText: '#000', typeLbl: 'rgba(0,0,0,0.45)',         icon: '⚠️', onDark: false },
   MEDIUM:   { bg: '#f9a825', text: '#000', muted: 'rgba(0,0,0,0.60)',       tickerBg: 'rgba(0,0,0,0.12)', tickerText: '#000', typeLbl: 'rgba(0,0,0,0.45)',         icon: 'ℹ️', onDark: false },
+  INFO:     { bg: '#006064', text: '#fff', muted: 'rgba(255,255,255,0.75)', tickerBg: 'rgba(0,0,0,0.30)', tickerText: '#fff', typeLbl: 'rgba(255,255,255,0.50)', icon: '🔺', onDark: true },
 };
 
 function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
@@ -450,6 +452,14 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
         </span>
       );
     }
+    if (d.type === 'PYRAMID_TRIGGER') {
+      const breakWord = dirLabel === 'LONG' ? 'above' : 'below';
+      return (
+        <span style={{ color: muted, fontSize: 11 }}>
+          {dirLabel} · Pre-placed pyramid trigger: IBKR {d.ibkrAction} {d.ibkrOrderType} @ <b style={{ color: text }}>${(+d.ibkrStop).toFixed(2)}</b> — fires if price breaks {breakWord} trigger (not a stop-loss).
+        </span>
+      );
+    }
     return null;
   }
 
@@ -498,7 +508,7 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
 
       {/* Type label */}
       <span style={{ fontSize: 10, color: typeLbl, flexShrink: 0, letterSpacing: '0.04em' }}>
-        {d.type.replace(/_/g, ' ')}
+        {d.type === 'PYRAMID_TRIGGER' ? 'PYRAMID' : d.type.replace(/_/g, ' ')}
       </span>
 
       {/* Interactive content */}

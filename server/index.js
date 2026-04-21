@@ -2567,23 +2567,50 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
           ibkrStop: ibkrStopByTicker[ticker]?.stopPrice ? +ibkrStopByTicker[ticker].stopPrice : null,
         });
       } else {
-        // E. Stop mismatch — IBKR has a stop order that differs from Command stop
+        // E. Stop mismatch / pyramid trigger
+        // Distinguish protective stops from pre-placed pyramid breakout orders.
+        //   Pyramid (strategy add-on, NOT a mismatch):
+        //     - LONG  position + BUY  STP LMT  → breakout add at price ABOVE current
+        //     - SHORT position + SELL STP LMT  → breakdown add at price BELOW current
+        //   Anything else that's an STP/STP LMT is a protective stop — flag mismatches.
         const ibkrStop = ibkrStopByTicker[ticker];
         if (ibkrStop?.stopPrice) {
-          const pStop = +p.stopPrice;
-          const iStop = +ibkrStop.stopPrice;
-          const stopDiffPct = Math.abs(pStop - iStop) / pStop;
-          if (stopDiffPct >= 0.005) {
+          const orderAction = (ibkrStop.action    || '').toUpperCase();
+          const orderType   = (ibkrStop.orderType || '').toUpperCase();
+          const dirUpper    = (direction          || '').toUpperCase();
+          const isPyramid   = orderType === 'STP LMT' && (
+            (dirUpper === 'LONG'  && orderAction === 'BUY') ||
+            (dirUpper === 'SHORT' && orderAction === 'SELL')
+          );
+
+          if (isPyramid) {
+            // Informational — a pre-placed pyramid trigger, not a mismatch.
             discrepancies.push({
-              type: 'STOP_MISMATCH',
-              severity: 'HIGH',
+              type: 'PYRAMID_TRIGGER',
+              severity: 'INFO',
               ticker,
               positionId,
               direction,
-              pnthrStop: +pStop.toFixed(2),
-              ibkrStop:  +iStop.toFixed(2),
-              diff:      +(pStop - iStop).toFixed(2),
+              ibkrStop:    +(+ibkrStop.stopPrice).toFixed(2),
+              ibkrAction:  orderAction,
+              ibkrOrderType: orderType,
             });
+          } else {
+            const pStop = +p.stopPrice;
+            const iStop = +ibkrStop.stopPrice;
+            const stopDiffPct = Math.abs(pStop - iStop) / pStop;
+            if (stopDiffPct >= 0.005) {
+              discrepancies.push({
+                type: 'STOP_MISMATCH',
+                severity: 'HIGH',
+                ticker,
+                positionId,
+                direction,
+                pnthrStop: +pStop.toFixed(2),
+                ibkrStop:  +iStop.toFixed(2),
+                diff:      +(pStop - iStop).toFixed(2),
+              });
+            }
           }
         }
       }
@@ -2636,7 +2663,7 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
     }
 
     // Sort: CRITICAL first, then HIGH, then MEDIUM
-    const SEVERITY_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
+    const SEVERITY_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, INFO: 3 };
     discrepancies.sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
 
     res.json({ discrepancies, ibkrConnected: true, syncedAt, isStale: syncIsStale, staleMins });

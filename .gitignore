@@ -6,3 +6,7 @@ client/.env
 .env
 .DS_Store
 dist
+
+# Python bytecode cache (reportlab generators)
+__pycache__/
+*.pyc

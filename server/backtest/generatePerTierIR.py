@@ -276,6 +276,10 @@ def section_cover(t):
     """Canonical Phase 2 cover page: logo upper-left, title block, meta lines,
     confidential block near the bottom. Drawn chrome (black bg, yellow accent
     bar, ghost panther, footer band) comes from pnthr_design.make_page_handlers."""
+    # Cover carries only the logo + title block + meta lines. The
+    # CONFIDENTIAL INSTITUTIONAL TEAR SHEET notice is moved to the top
+    # of page 2 (see section_highlights) so it leads into the content
+    # instead of floating at the bottom of the cover.
     return build_cover_header(
         title_line_1='PNTHR FUNDS,',
         title_line_2='Carnivore Quant Fund, LP',
@@ -283,22 +287,41 @@ def section_cover(t):
         date_line=f'Backtest Period:  {t["gross"]["startDate"]} through {t["gross"]["endDate"]}',
         revision_line='Document Revision:  Pyramid IR v1 - April 2026',
         issuer_line='Issuer:  PNTHR Funds, LLC (General Partner)',
-        confidential_title='CONFIDENTIAL INSTITUTIONAL TEAR SHEET',
-        confidential_body=(
-            'FOR QUALIFIED INVESTORS ONLY. HYPOTHETICAL BACKTEST RESULTS. '
-            'NOT AN OFFER TO SELL OR A SOLICITATION OF AN OFFER TO BUY '
-            'ANY SECURITY. PAST PERFORMANCE IS NOT INDICATIVE OF FUTURE '
-            'RESULTS. SEE IMPORTANT DISCLOSURES ON FINAL PAGE.'
-        ),
-        pre_confidential_spacer_inches=2.3,
+        confidential_title=None,
+        confidential_body=None,
     )
 
 
 def section_highlights(t):
-    """Page 2: headline summary — title, fund overview, headline tiles,
-    PNTHR vs SPY at-a-glance, and cumulative growth chart. Replaces the
-    dark-tile hero block that was formerly on the cover."""
+    """Page 2: CONFIDENTIAL banner, headline summary — title, fund overview,
+    headline tiles, PNTHR vs SPY at-a-glance, and cumulative growth chart.
+    Replaces the dark-tile hero block that was formerly on the cover."""
     s = []
+    # CONFIDENTIAL banner — lifted off the cover so it sits at the top of
+    # the first content page instead of floating at the bottom of page 1.
+    banner_rows = [
+        [Paragraph('<b>CONFIDENTIAL INSTITUTIONAL TEAR SHEET</b>',
+                   S('banner_t', fontSize=11, leading=14, textColor=HexColor('#ffffff'),
+                     fontName='Helvetica-Bold', alignment=TA_CENTER))],
+        [Paragraph(
+            'FOR QUALIFIED INVESTORS ONLY. HYPOTHETICAL BACKTEST RESULTS. '
+            'NOT AN OFFER TO SELL OR A SOLICITATION OF AN OFFER TO BUY ANY SECURITY. '
+            'PAST PERFORMANCE IS NOT INDICATIVE OF FUTURE RESULTS. '
+            'SEE IMPORTANT DISCLOSURES ON FINAL PAGE.',
+            S('banner_b', fontSize=8.5, leading=11, textColor=HexColor('#cccccc'),
+              alignment=TA_CENTER))],
+    ]
+    banner = Table(banner_rows, colWidths=[CONTENT_W], style=TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), HexColor('#0a0a0a')),
+        ('TOPPADDING', (0,0), (-1,0), 8),
+        ('BOTTOMPADDING', (0,0), (-1,0), 2),
+        ('TOPPADDING', (0,1), (-1,1), 2),
+        ('BOTTOMPADDING', (0,1), (-1,1), 8),
+        ('LEFTPADDING', (0,0), (-1,-1), 14),
+        ('RIGHTPADDING', (0,0), (-1,-1), 14),
+    ]))
+    s.append(banner)
+    s.append(Spacer(1, 0.15 * inch))
     s += section(f'{t["classLabel"].upper()} PYRAMID INTELLIGENCE REPORT  ({fmt_usd(t["seedNav"], compact=True)} NAV VARIANT)')
     s.append(body(
         f'Seven-year backtest of the Carnivore Quant Fund pyramiding long/short equity strategy '
@@ -344,18 +367,21 @@ def section_highlights(t):
     s.append(Spacer(1, 4))
     net = t['net']
     trades = t['trades']
+    # Color rule: GREEN for positive returns/results, RED for negative,
+    # WHITE for neutral data (counts, ratios without a signed direction).
+    TILE_WHITE = HexColor('#ffffff')
     tiles = [
         [('+' + f'{net["totalReturn"]:.0f}%', 'Net Total Return', PNTHR_GREEN),
          ('+' + f'{net["cagr"]:.1f}%', 'Net Compound Annual Growth Rate (CAGR)', PNTHR_GREEN),
-         (f'{net["sharpe"]:.2f}', 'Sharpe Ratio', PNTHR_YELLOW),
-         (f'{net["sortino"]:.2f}', 'Sortino Ratio', PNTHR_YELLOW)],
+         (f'{net["sharpe"]:.2f}', 'Sharpe Ratio', TILE_WHITE),
+         (f'{net["sortino"]:.2f}', 'Sortino Ratio', TILE_WHITE)],
         [(f'{trades["combined"]["profitFactor"]:.1f}x', 'Profit Factor', PNTHR_GREEN),
-         (f'{net["calmar"]:.1f}', 'Calmar Ratio', PNTHR_YELLOW),
+         (f'{net["calmar"]:.1f}', 'Calmar Ratio', TILE_WHITE),
          (f'{net["maxDD"]:.2f}%', 'Max Peak-to-Trough (MTM)', PNTHR_RED),
          (f'{net["positivePct"]:.1f}%', 'Positive Months', PNTHR_GREEN)],
         [(f'+{net["bestMonth"]["ret"]:.1f}%', 'Best Month', PNTHR_GREEN),
-         (f'{trades["closed"]:,}', 'Total Closed Trades', PNTHR_YELLOW),
-         (fmt_usd(net['endNav'], compact=True), f'Ending Equity ({fmt_usd(t["seedNav"], compact=False)} start)', PNTHR_YELLOW),
+         (f'{trades["closed"]:,}', 'Total Closed Trades', TILE_WHITE),
+         (fmt_usd(net['endNav'], compact=True), f'Ending Equity ({fmt_usd(t["seedNav"], compact=False)} start)', PNTHR_GREEN),
          ('+' + fmt_usd(net['endNav'] - t['spy']['endingEquity'], compact=True), 'PNTHR Alpha vs S&P 500', PNTHR_GREEN)],
     ]
     tile_w = (CONTENT_W - 18) / 4
@@ -385,33 +411,60 @@ def section_highlights(t):
     s.append(Paragraph('<b>PNTHR vs S&amp;P 500 AT A GLANCE</b>',
                        S('h3', fontSize=10, leading=13, textColor=HexColor('#0a0a0a'), fontName='Helvetica-Bold')))
     s.append(Spacer(1, 3))
-    glance_rows = [
-        ['', '<font color="#fcf000">PNTHR (NET)</font>', '<font color="#888888">S&amp;P 500</font>', '<font color="#22c55e">ALPHA</font>'],
-        ['Total Return', f'+{net["totalReturn"]:.1f}%', f'+{t["spy"]["totalReturn"]:.1f}%', f'+{net["totalReturn"] - t["spy"]["totalReturn"]:.1f}%'],
-        ['CAGR',        f'+{net["cagr"]:.1f}%',        f'+{t["spy"]["cagr"]:.1f}%',        f'+{net["cagr"] - t["spy"]["cagr"]:.1f}%'],
-        ['Max Monthly Peak-to-Trough', f'{net["maxDD"]:.2f}%', f'{t["spy"]["maxDD"]:.1f}%',  '-'],
-        ['Ending Equity', fmt_usd(net['endNav'], compact=True), fmt_usd(t['spy']['endingEquity'], compact=True), fmt_usd(net['endNav'] - t['spy']['endingEquity'], compact=True)],
+    # Color rule per user spec:
+    #   - Column labels (row 0): PNTHR = yellow, S&P 500 = white, ALPHA = green
+    #   - PNTHR data column = yellow
+    #   - S&P 500 data column = white
+    #   - ALPHA data column = green if positive, red if negative, white if "-"
+    #   - Row labels (col 0) = light gray
+    def _pct_val(net_v, spy_v):
+        return f'+{net_v - spy_v:.1f}%' if (net_v - spy_v) >= 0 else f'{net_v - spy_v:.1f}%'
+    glance_raw = [
+        # (row_label, pnthr_str, spy_str, alpha_str)
+        (None,             'PNTHR (NET)',                                   'S&P 500',                                       'ALPHA'),
+        ('Total Return',   f'+{net["totalReturn"]:.1f}%',                   f'+{t["spy"]["totalReturn"]:.1f}%',              _pct_val(net["totalReturn"], t["spy"]["totalReturn"])),
+        ('CAGR',           f'+{net["cagr"]:.1f}%',                          f'+{t["spy"]["cagr"]:.1f}%',                     _pct_val(net["cagr"], t["spy"]["cagr"])),
+        ('Max Monthly Peak-to-Trough', f'{net["maxDD"]:.2f}%',              f'{t["spy"]["maxDD"]:.1f}%',                     '-'),
+        ('Ending Equity',  fmt_usd(net['endNav'], compact=True),            fmt_usd(t['spy']['endingEquity'], compact=True), fmt_usd(net['endNav'] - t['spy']['endingEquity'], compact=True)),
     ]
-    # Render with HTML-ish colored cells
+    YEL = '#fcf000'
+    WHT = '#ffffff'
+    GRN = '#22c55e'
+    RED = '#ef4444'
+    LGR = '#cccccc'  # row label light gray
+    def _alpha_color(val):
+        if val == '-' or val is None: return WHT
+        v = val.strip()
+        if v.startswith('-'): return RED
+        return GRN
     rendered_rows = []
-    for row in glance_rows:
-        rendered = []
-        for i, cell in enumerate(row):
-            if '<font' in cell:
-                rendered.append(Paragraph(cell, S('gr', fontSize=8.5, textColor=HexColor('#dddddd'))))
-            else:
-                if i == 0:
-                    rendered.append(Paragraph(f'<font color="#888888">{cell}</font>', S('g0', fontSize=8.5)))
-                else:
-                    color = '#22c55e' if (cell.startswith('+') or cell.startswith('$')) else '#ef4444' if cell.startswith('-') else '#dddddd'
-                    rendered.append(Paragraph(f'<font color="{color}">{cell}</font>', S('gc', fontSize=8.5, alignment=TA_RIGHT)))
-        rendered_rows.append(rendered)
-    g_tbl = Table(rendered_rows, colWidths=[1.8*inch, (CONTENT_W - 1.8*inch)/3]*1 + [((CONTENT_W - 1.8*inch)/3)]*2, style=TableStyle([
+    for ri, (lbl, p, sp, al) in enumerate(glance_raw):
+        if ri == 0:
+            # Header row — bold, colored per column rule
+            rendered_rows.append([
+                Paragraph('', S('g_head_blank', fontSize=9)),
+                Paragraph(f'<b><font color="{YEL}">{p}</font></b>',  S('g_head_p',  fontSize=9, alignment=TA_RIGHT)),
+                Paragraph(f'<b><font color="{WHT}">{sp}</font></b>', S('g_head_sp', fontSize=9, alignment=TA_RIGHT)),
+                Paragraph(f'<b><font color="{GRN}">{al}</font></b>', S('g_head_al', fontSize=9, alignment=TA_RIGHT)),
+            ])
+        else:
+            rendered_rows.append([
+                Paragraph(f'<font color="{LGR}">{lbl}</font>',       S('g_lbl',  fontSize=9)),
+                Paragraph(f'<font color="{YEL}">{p}</font>',         S('g_pn',   fontSize=9, alignment=TA_RIGHT)),
+                Paragraph(f'<font color="{WHT}">{sp}</font>',        S('g_spy',  fontSize=9, alignment=TA_RIGHT)),
+                Paragraph(f'<font color="{_alpha_color(al)}">{al}</font>', S('g_al', fontSize=9, alignment=TA_RIGHT)),
+            ])
+    col_data_w = (CONTENT_W - 2.2*inch) / 3
+    g_tbl = Table(rendered_rows, colWidths=[2.2*inch, col_data_w, col_data_w, col_data_w], style=TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), HexColor('#0a0a0a')),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (0,0), (0,-1), 'LEFT'),
         ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('LEFTPADDING', (0,0), (-1,-1), 10),
+        ('RIGHTPADDING', (0,0), (-1,-1), 10),
+        ('LINEBELOW', (0,0), (-1,0), 0.4, HexColor('#333333')),
     ]))
     s.append(g_tbl)
 

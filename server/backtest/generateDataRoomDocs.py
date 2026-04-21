@@ -299,10 +299,10 @@ def gen_risk_management():
 
     s += section('5-Lot Pyramid System')
     s.append(body(
-        'Initial entry deploys only <b>35% of the full position</b>. Subsequent lots at +3%, +6%, '
-        '+10%, +14% are earned through sequential confirmation, each lot requiring the prior lot '
-        'to be filled, a time gate to be cleared, and a price trigger to be reached. Maximum capital '
-        'is only deployed when the market has confirmed the trade multiple times.'
+        'Initial entry deploys only <b>35% of the full position</b>. Subsequent lots are earned '
+        'through sequential confirmation, each lot requiring the prior lot to be filled, a time '
+        'gate to be cleared, and a price trigger to be reached. Maximum capital is only deployed '
+        'when the market has confirmed the trade multiple times.'
     ))
     s.append(bold_table(
         ['Lot', 'Name', 'Alloc', 'Trigger', 'Gate', 'Purpose'],
@@ -489,7 +489,7 @@ def gen_risk_management():
     ))
 
     build_doc('PNTHR_Risk_Management_Framework.pdf',
-              'Risk Management Framework', 'v1.2 - April 2026', s)
+              'Risk Management Framework', 'v1.3 - April 2026', s)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1326,7 +1326,7 @@ def gen_ddq():
         ('Net Max Drawdown (daily NAV)', 'Filet: -9.99%; Porterhouse: -9.36%; Wagyu: -8.82%'),
         ('Benchmark (S&amp;P 500)', 'CAGR: +12.8%; Max Drawdown: -34.1%. Strategy alpha: Filet +13.0 pts; Porterhouse +14.9 pts; Wagyu +16.7 pts (annualized, net).'),
         ('Data Integrity', 'Backtest internally validated: direction-index gate via historical SP500/NDX100 membership reconstruction (FMP events); SP400 membership via MDY ETF holdings proxy; sector ETF gate at sector-specific trend-filter periods (specific periods proprietary); quarterly non-cumulative fee engine per PPM sec. 4.1-4.3; mark-to-market daily-basis Max Drawdown computation. Not independently audited by a third-party accounting firm; Fund intends to engage Spicer Jeffries LLP as independent auditor upon Limited Partner admission.'),
-        ('Full Detail', 'Refer to PNTHR Fund Intelligence Report v22 for complete per-class metrics, annual performance breakdowns, crisis alpha analysis, methodology, and anticipated due diligence questions.'),
+        ('Full Detail', 'Refer to PNTHR Fund Intelligence Report v23 for complete per-class metrics, annual performance breakdowns, crisis alpha analysis, methodology, and anticipated due diligence questions.'),
     ]
     s.append(bold_table(
         ['Question', 'Answer'],
@@ -1360,7 +1360,7 @@ def gen_ddq():
     ))
 
     build_doc('PNTHR_Due_Diligence_Questionnaire.pdf',
-              'Due Diligence Questionnaire', 'v1.2 - April 2026', s)
+              'Due Diligence Questionnaire', 'v1.3 - April 2026', s)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1993,7 +1993,7 @@ def gen_fund_intelligence_v21():
     # ── Section 1: Executive Summary ─────────────────────────────────────────
     s += section('Executive Summary')
     s.append(body(
-        'This Fund Intelligence Report v21 consolidates performance data for all three investor '
+        'This Fund Intelligence Report v23 consolidates performance data for all three investor '
         'classes of PNTHR FUNDS, Carnivore Quant Fund, LP into a single authoritative document. '
         'All figures are derived from a full historical backtest of the proprietary PNTHR Signal '
         'System across the PNTHR 679 U.S. equity universe from June 2019 through April 2026 '
@@ -2183,8 +2183,9 @@ def gen_fund_intelligence_v21():
         '1.0% (equities) or 0.5% (ETFs), tickerCap = NAV x 10%, risk-per-share = absolute '
         'difference between entry price and initial stop. The 5-lot pyramid allocates '
         '35% / 25% / 20% / 12% / 8% of total shares across Lot 1 "The Scent" through Lot 5 '
-        '"The Kill" with offset triggers +3% / +6% / +10% / +14% (BL) or the mirror for SS, '
-        'and a 5-trading-day time gate between Lot 1 and Lot 2.'
+        '"The Kill", with sequential price-based confirmation thresholds for each subsequent '
+        'lot (specific thresholds proprietary) and a 5-trading-day time gate between Lot 1 '
+        'and Lot 2.'
     ))
 
     s += subsection('Fee Engine (PPM sec. 4.1-4.3)')
@@ -2456,8 +2457,8 @@ def gen_fund_intelligence_v21():
         'tickers is not available in the current data source.'
     ))
 
-    build_doc('PNTHR_Fund_Intelligence_Report_v22.pdf',
-              'Fund Intelligence Report', 'v22 - April 2026 - HYPOTHETICAL BACKTEST (CONSOLIDATED 3-CLASS)', s)
+    build_doc('PNTHR_Fund_Intelligence_Report_v23.pdf',
+              'Fund Intelligence Report', 'v23 - April 2026 - HYPOTHETICAL BACKTEST (CONSOLIDATED 3-CLASS)', s)
 
 
 if __name__ == '__main__':

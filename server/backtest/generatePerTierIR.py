@@ -297,28 +297,29 @@ def section_highlights(t):
     headline tiles, PNTHR vs SPY at-a-glance, and cumulative growth chart.
     Replaces the dark-tile hero block that was formerly on the cover."""
     s = []
-    # CONFIDENTIAL banner — lifted off the cover so it sits at the top of
-    # the first content page instead of floating at the bottom of page 1.
+    # CONFIDENTIAL banner — white-page styling with yellow top/bottom accent
+    # rules and bold black text. No dark fills.
     banner_rows = [
         [Paragraph('<b>CONFIDENTIAL INSTITUTIONAL TEAR SHEET</b>',
-                   S('banner_t', fontSize=11, leading=14, textColor=HexColor('#ffffff'),
+                   S('banner_t', fontSize=11, leading=14, textColor=HexColor('#0a0a0a'),
                      fontName='Helvetica-Bold', alignment=TA_CENTER))],
         [Paragraph(
             'FOR QUALIFIED INVESTORS ONLY. HYPOTHETICAL BACKTEST RESULTS. '
             'NOT AN OFFER TO SELL OR A SOLICITATION OF AN OFFER TO BUY ANY SECURITY. '
             'PAST PERFORMANCE IS NOT INDICATIVE OF FUTURE RESULTS. '
             'SEE IMPORTANT DISCLOSURES ON FINAL PAGE.',
-            S('banner_b', fontSize=8.5, leading=11, textColor=HexColor('#cccccc'),
+            S('banner_b', fontSize=8.5, leading=11, textColor=HexColor('#333333'),
               alignment=TA_CENTER))],
     ]
     banner = Table(banner_rows, colWidths=[CONTENT_W], style=TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), HexColor('#0a0a0a')),
         ('TOPPADDING', (0,0), (-1,0), 8),
         ('BOTTOMPADDING', (0,0), (-1,0), 2),
         ('TOPPADDING', (0,1), (-1,1), 2),
         ('BOTTOMPADDING', (0,1), (-1,1), 8),
         ('LEFTPADDING', (0,0), (-1,-1), 14),
         ('RIGHTPADDING', (0,0), (-1,-1), 14),
+        ('LINEABOVE', (0,0), (-1,0), 1.5, PNTHR_YELLOW),
+        ('LINEBELOW', (0,-1), (-1,-1), 1.5, PNTHR_YELLOW),
     ]))
     s.append(banner)
     s.append(Spacer(1, 0.15 * inch))
@@ -342,19 +343,21 @@ def section_highlights(t):
         ['Backtest Capital',f'{fmt_usd(t["seedNav"], compact=False)} starting NAV (Pyramid sizing)'],
         ['Benchmark',       'S&P 500 (SPY)'],
     ]
-    # Fund Overview: dark panel (continuity with the dashboard card aesthetic),
-    # yellow labels + white values so it stays legible against the white page.
+    # Fund Overview: clean white table, bold black labels, black values,
+    # light-gray zebra stripes, thin yellow top rule for the brand accent.
     ov_tbl = Table(overview_rows, colWidths=[1.5*inch, CONTENT_W - 1.5*inch], style=TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), HexColor('#0a0a0a')),
         ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
-        ('TEXTCOLOR', (0,0), (0,-1), PNTHR_YELLOW),
-        ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('TEXTCOLOR', (1,0), (1,-1), HexColor('#ffffff')),
+        ('TEXTCOLOR', (0,0), (0,-1), HexColor('#0a0a0a')),
+        ('FONTSIZE', (0,0), (-1,-1), 9.5),
+        ('TEXTCOLOR', (1,0), (1,-1), HexColor('#222222')),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
         ('LEFTPADDING', (0,0), (-1,-1), 10),
         ('RIGHTPADDING', (0,0), (-1,-1), 10),
+        ('ROWBACKGROUNDS', (0,0), (-1,-1), [HexColor('#ffffff'), HexColor('#f7f7f7')]),
+        ('LINEABOVE', (0,0), (-1,0), 1.5, PNTHR_YELLOW),
+        ('LINEBELOW', (0,-1), (-1,-1), 0.5, HexColor('#dddddd')),
     ]))
     s.append(Paragraph('<b>FUND OVERVIEW</b>', S('h', fontSize=10, leading=13, textColor=HexColor('#0a0a0a'), fontName='Helvetica-Bold')))
     s.append(Spacer(1, 4))
@@ -367,41 +370,46 @@ def section_highlights(t):
     s.append(Spacer(1, 4))
     net = t['net']
     trades = t['trades']
-    # Color rule: GREEN for positive returns/results, RED for negative,
-    # WHITE for neutral data (counts, ratios without a signed direction).
-    TILE_WHITE = HexColor('#ffffff')
+    # Color rule on WHITE background:
+    #   GREEN for positive returns/results
+    #   RED for negative
+    #   BLACK for neutral data (counts, dimensionless ratios)
+    GREEN = '#16a34a'   # darker, readable on white
+    RED   = '#dc2626'
+    BLK   = '#0a0a0a'
     tiles = [
-        [('+' + f'{net["totalReturn"]:.0f}%', 'Net Total Return', PNTHR_GREEN),
-         ('+' + f'{net["cagr"]:.1f}%', 'Net Compound Annual Growth Rate (CAGR)', PNTHR_GREEN),
-         (f'{net["sharpe"]:.2f}', 'Sharpe Ratio', TILE_WHITE),
-         (f'{net["sortino"]:.2f}', 'Sortino Ratio', TILE_WHITE)],
-        [(f'{trades["combined"]["profitFactor"]:.1f}x', 'Profit Factor', PNTHR_GREEN),
-         (f'{net["calmar"]:.1f}', 'Calmar Ratio', TILE_WHITE),
-         (f'{net["maxDD"]:.2f}%', 'Max Peak-to-Trough (MTM)', PNTHR_RED),
-         (f'{net["positivePct"]:.1f}%', 'Positive Months', PNTHR_GREEN)],
-        [(f'+{net["bestMonth"]["ret"]:.1f}%', 'Best Month', PNTHR_GREEN),
-         (f'{trades["closed"]:,}', 'Total Closed Trades', TILE_WHITE),
-         (fmt_usd(net['endNav'], compact=True), f'Ending Equity ({fmt_usd(t["seedNav"], compact=False)} start)', PNTHR_GREEN),
-         ('+' + fmt_usd(net['endNav'] - t['spy']['endingEquity'], compact=True), 'PNTHR Alpha vs S&P 500', PNTHR_GREEN)],
+        [('+' + f'{net["totalReturn"]:.0f}%', 'Net Total Return', GREEN),
+         ('+' + f'{net["cagr"]:.1f}%', 'Net Compound Annual Growth Rate (CAGR)', GREEN),
+         (f'{net["sharpe"]:.2f}', 'Sharpe Ratio', BLK),
+         (f'{net["sortino"]:.2f}', 'Sortino Ratio', BLK)],
+        [(f'{trades["combined"]["profitFactor"]:.1f}x', 'Profit Factor', GREEN),
+         (f'{net["calmar"]:.1f}', 'Calmar Ratio', BLK),
+         (f'{net["maxDD"]:.2f}%', 'Max Peak-to-Trough (MTM)', RED),
+         (f'{net["positivePct"]:.1f}%', 'Positive Months', GREEN)],
+        [(f'+{net["bestMonth"]["ret"]:.1f}%', 'Best Month', GREEN),
+         (f'{trades["closed"]:,}', 'Total Closed Trades', BLK),
+         (fmt_usd(net['endNav'], compact=True), f'Ending Equity ({fmt_usd(t["seedNav"], compact=False)} start)', GREEN),
+         ('+' + fmt_usd(net['endNav'] - t['spy']['endingEquity'], compact=True), 'PNTHR Alpha vs S&P 500', GREEN)],
     ]
     tile_w = (CONTENT_W - 18) / 4
     for row in tiles:
         cells = []
-        for val, label, color in row:
+        for val, label, color_hex in row:
             p = [
-                Paragraph(f'<font color="{color.hexval()[:-2]}"><b>{val}</b></font>',
-                          S('tv', fontSize=17, leading=20, alignment=TA_LEFT, textColor=color, fontName='Helvetica-Bold')),
-                Paragraph(f'<font color="#666666">{label}</font>',
-                          S('tl', fontSize=7, leading=9, alignment=TA_LEFT, textColor=HexColor('#888888'))),
+                Paragraph(f'<font color="{color_hex}"><b>{val}</b></font>',
+                          S('tv', fontSize=17, leading=20, alignment=TA_LEFT)),
+                Paragraph(f'<font color="#555555">{label}</font>',
+                          S('tl', fontSize=7, leading=9, alignment=TA_LEFT)),
             ]
             cells.append(p)
         tbl = Table([cells], colWidths=[tile_w]*4, style=TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), HexColor('#0a0a0a')),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('LEFTPADDING',  (0,0), (-1,-1), 8),
             ('RIGHTPADDING', (0,0), (-1,-1), 8),
             ('TOPPADDING',   (0,0), (-1,-1), 7),
             ('BOTTOMPADDING',(0,0), (-1,-1), 7),
+            ('BOX',  (0,0), (-1,-1), 0.5, HexColor('#dddddd')),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, HexColor('#eeeeee')),
         ]))
         s.append(tbl)
         s.append(Spacer(1, 4))
@@ -427,44 +435,51 @@ def section_highlights(t):
         ('Max Monthly Peak-to-Trough', f'{net["maxDD"]:.2f}%',              f'{t["spy"]["maxDD"]:.1f}%',                     '-'),
         ('Ending Equity',  fmt_usd(net['endNav'], compact=True),            fmt_usd(t['spy']['endingEquity'], compact=True), fmt_usd(net['endNav'] - t['spy']['endingEquity'], compact=True)),
     ]
-    YEL = '#fcf000'
-    WHT = '#ffffff'
-    GRN = '#22c55e'
-    RED = '#ef4444'
-    LGR = '#cccccc'  # row label light gray
+    # Color rule on WHITE background:
+    #   PNTHR column     — black text on a LIGHT-YELLOW cell highlight (brand)
+    #   S&P 500 column   — plain black text
+    #   ALPHA column     — green if positive, red if negative, dark gray if "-"
+    BLK = '#0a0a0a'
+    GRN = '#16a34a'
+    RED = '#dc2626'
     def _alpha_color(val):
-        if val == '-' or val is None: return WHT
-        v = val.strip()
-        if v.startswith('-'): return RED
+        if val == '-' or val is None: return '#555555'
+        if val.strip().startswith('-'): return RED
         return GRN
     rendered_rows = []
     for ri, (lbl, p, sp, al) in enumerate(glance_raw):
         if ri == 0:
-            # Header row — bold, colored per column rule
             rendered_rows.append([
                 Paragraph('', S('g_head_blank', fontSize=9)),
-                Paragraph(f'<b><font color="{YEL}">{p}</font></b>',  S('g_head_p',  fontSize=9, alignment=TA_RIGHT)),
-                Paragraph(f'<b><font color="{WHT}">{sp}</font></b>', S('g_head_sp', fontSize=9, alignment=TA_RIGHT)),
-                Paragraph(f'<b><font color="{GRN}">{al}</font></b>', S('g_head_al', fontSize=9, alignment=TA_RIGHT)),
+                Paragraph(f'<b><font color="{BLK}">{p}</font></b>',  S('g_head_p',  fontSize=9.5, alignment=TA_RIGHT)),
+                Paragraph(f'<b><font color="{BLK}">{sp}</font></b>', S('g_head_sp', fontSize=9.5, alignment=TA_RIGHT)),
+                Paragraph(f'<b><font color="{BLK}">{al}</font></b>', S('g_head_al', fontSize=9.5, alignment=TA_RIGHT)),
             ])
         else:
             rendered_rows.append([
-                Paragraph(f'<font color="{LGR}">{lbl}</font>',       S('g_lbl',  fontSize=9)),
-                Paragraph(f'<font color="{YEL}">{p}</font>',         S('g_pn',   fontSize=9, alignment=TA_RIGHT)),
-                Paragraph(f'<font color="{WHT}">{sp}</font>',        S('g_spy',  fontSize=9, alignment=TA_RIGHT)),
-                Paragraph(f'<font color="{_alpha_color(al)}">{al}</font>', S('g_al', fontSize=9, alignment=TA_RIGHT)),
+                Paragraph(f'<b><font color="{BLK}">{lbl}</font></b>', S('g_lbl',  fontSize=9.5)),
+                Paragraph(f'<font color="{BLK}">{p}</font>',         S('g_pn',   fontSize=9.5, alignment=TA_RIGHT)),
+                Paragraph(f'<font color="{BLK}">{sp}</font>',        S('g_spy',  fontSize=9.5, alignment=TA_RIGHT)),
+                Paragraph(f'<font color="{_alpha_color(al)}">{al}</font>', S('g_al', fontSize=9.5, alignment=TA_RIGHT)),
             ])
     col_data_w = (CONTENT_W - 2.2*inch) / 3
     g_tbl = Table(rendered_rows, colWidths=[2.2*inch, col_data_w, col_data_w, col_data_w], style=TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), HexColor('#0a0a0a')),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('ALIGN', (0,0), (0,-1), 'LEFT'),
         ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
-        ('TOPPADDING', (0,0), (-1,-1), 5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
         ('LEFTPADDING', (0,0), (-1,-1), 10),
         ('RIGHTPADDING', (0,0), (-1,-1), 10),
-        ('LINEBELOW', (0,0), (-1,0), 0.4, HexColor('#333333')),
+        # Yellow tinted cell highlight on the PNTHR column (col index 1)
+        ('BACKGROUND', (1,0), (1,-1), HexColor('#fffde0')),
+        # Thin yellow top rule + light-gray bottom rule for structure
+        ('LINEABOVE', (0,0), (-1,0), 1.5, PNTHR_YELLOW),
+        ('LINEBELOW', (0,0), (-1,0), 0.6, HexColor('#cccccc')),
+        ('LINEBELOW', (0,-1), (-1,-1), 0.5, HexColor('#dddddd')),
+        ('ROWBACKGROUNDS', (0,1), (0,-1), [HexColor('#ffffff'), HexColor('#f7f7f7')]),
+        ('ROWBACKGROUNDS', (2,1), (2,-1), [HexColor('#ffffff'), HexColor('#f7f7f7')]),
+        ('ROWBACKGROUNDS', (3,1), (3,-1), [HexColor('#ffffff'), HexColor('#f7f7f7')]),
     ]))
     s.append(g_tbl)
 

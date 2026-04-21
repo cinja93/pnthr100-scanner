@@ -96,9 +96,17 @@ function computeServerAnalyzeScore(stock, regime) {
   else if (ks >= 50)  s += 2;
   else                s += 1;
 
-  // T1-C: Index Trend (0-8) — NASDAQ stocks route to QQQ, others to SPY
-  const isNasdaq     = (stock.exchange || '').toUpperCase() === 'NASDAQ';
-  const primaryAbove = isNasdaq ? (regime?.qqqAboveEma ?? null) : (regime?.spyAboveEma ?? null);
+  // T1-C: Index Trend (0-8) — membership-based routing per v22 policy.
+  // SP500 -> SPY; NDX100-only -> QQQ; SP400 -> MDY (regime tracks SPY/QQQ only;
+  // MDY-routed stocks fall back to SPY since live regime data doesn't track MDY).
+  const idxTicker = stock.isSp500
+    ? 'SPY'
+    : stock.isNasdaq100
+      ? 'QQQ'
+      : stock.isSp400
+        ? 'SPY'   // MDY-routed — fallback (regime tracks SPY/QQQ only; see handoff)
+        : 'SPY';  // non-index fallback
+  const primaryAbove = idxTicker === 'QQQ' ? (regime?.qqqAboveEma ?? null) : (regime?.spyAboveEma ?? null);
   if (primaryAbove !== null) {
     const aligned = (direction === 'LONG' && primaryAbove) || (direction === 'SHORT' && !primaryAbove);
     s += aligned ? 8 : 0;

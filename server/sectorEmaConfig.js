@@ -13,9 +13,11 @@
 //   Slow-cycle (24-26): Healthcare, Industrials, Financial Services, Energy,
 //                        Communication Services, Real Estate
 //
-// IMPORTANT: SPY/QQQ regime gates stay at EMA 21 (market-wide indices).
-//            Sector ETF gates stay at EMA 21 (Phase 1 — gate EMA optimization
-//            is a separate future test).
+// IMPORTANT: SPY/QQQ/MDY direction-index regime gates stay at EMA 21 (per v22
+//            Den disclosure: "21-week EMA for INDEX gate only").
+//            Sector ETF gates use per-sector optimized EMA from this table
+//            (v22 adoption 2026-04-21 — aligns with Den disclosure
+//            "sector-specific optimized EMA").
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const SECTOR_EMA_PERIODS = {

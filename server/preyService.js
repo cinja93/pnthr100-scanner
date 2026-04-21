@@ -42,9 +42,20 @@ const SECTOR_MAP = {
   'Consumer Staples':       'XLP',
 };
 
+// Reverse: ETF -> canonical sector name (for per-sector optimized EMA lookup).
+const ETF_TO_SECTOR = {
+  'XLK':  'Technology',             'XLE':  'Energy',
+  'XLV':  'Healthcare',              'XLF':  'Financial Services',
+  'XLY':  'Consumer Discretionary',  'XLC':  'Communication Services',
+  'XLI':  'Industrials',             'XLB':  'Basic Materials',
+  'XLRE': 'Real Estate',             'XLU':  'Utilities',
+  'XLP':  'Consumer Staples',
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // getLastFriday(), aggregateWeeklyBars(), computeEMAseries() imported from technicalUtils.js
-// Per-sector EMA periods from sectorEmaConfig.js; sector ETF gates stay at EMA 21
+// Per-sector optimized EMA periods from sectorEmaConfig.js — applied to BOTH stock EMA
+// AND sector ETF gate (aligned with v22 Den disclosure). Reverse lookup via ETF_TO_SECTOR.
 
 async function fetchDailyBars(ticker, from, to) {
   const url = `${FMP_BASE_URL}/historical-price-full/${ticker}?from=${from}&to=${to}&apikey=${FMP_API_KEY}`;
@@ -186,21 +197,24 @@ async function fetchStockData(ticker, emaPeriod = DEFAULT_EMA_PERIOD) {
 // ── Sector Sentinel ───────────────────────────────────────────────────────────
 
 async function runSectorSentinel() {
-  const status = {}, fourWeekReturns = {};
+  const status = {}, fourWeekReturns = {}, periods = {};
   await Promise.all(SECTOR_ETFS.map(async etf => {
     try {
-      // Sector ETF gates always use EMA 21 (Phase 1 — gate EMA optimization separate)
-      const data = await fetchStockData(etf, DEFAULT_EMA_PERIOD);
+      // Per-sector optimized EMA for sector ETF gate (v22 policy).
+      const sector = ETF_TO_SECTOR[etf];
+      const emaPeriod = getSectorEmaPeriod(sector);
+      const data = await fetchStockData(etf, emaPeriod);
       if (!data) return;
-      const { weekly, ema21 } = data;
+      const { weekly, ema21 } = data;  // ema21 array name retained; actually period emaPeriod
       const n = weekly.length;
       const lastEma = ema21[n - 1];
       if (lastEma == null) return;
-      status[etf] = weekly[n - 1].close > lastEma ? 'above' : 'below';
+      status[etf]  = weekly[n - 1].close > lastEma ? 'above' : 'below';
+      periods[etf] = emaPeriod;
       if (n >= 5) fourWeekReturns[etf] = (weekly[n-1].close - weekly[n-5].close) / weekly[n-5].close;
     } catch { /* skip */ }
   }));
-  return { status, fourWeekReturns };
+  return { status, fourWeekReturns, periods };
 }
 
 // ── Rule Set 1: Elite Alpha Long ──────────────────────────────────────────────

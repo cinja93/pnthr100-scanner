@@ -74,7 +74,8 @@ import {
   getPositionHealthAlerts,
 } from './assistantService.js';
 import { recordExit, calcAvgCost, calcTotalFilled } from './exitService.js';
-import { computeEMA21fromDailyBars } from './technicalUtils.js';
+import { computeEMA21fromDailyBars, computeEMAFromDailyBars } from './technicalUtils.js';
+import { getSectorEmaPeriod } from './sectorEmaConfig.js';
 import { createJournalEntry, calculateDisciplineScore } from './journalService.js';
 import {
   getSupplementalStocks,
@@ -1336,7 +1337,7 @@ app.get('/api/sector-exposure', authenticateJWT, async (req, res) => {
   }
 });
 
-// GET /api/sector-ema — sector ETF vs 21-week EMA for all 11 sectors
+// GET /api/sector-ema — sector ETF vs per-sector optimized EMA (v22 policy)
 app.get('/api/sector-ema', authenticateJWT, async (req, res) => {
   try {
     const SECTOR_ETFS = {
@@ -1354,27 +1355,30 @@ app.get('/api/sector-ema', authenticateJWT, async (req, res) => {
     };
 
     // FMP stable EMA endpoint returns "Invalid timeframe" for weekly.
-    // Compute 21-week EMA from daily candles instead — guaranteed to work for any ETF.
+    // Compute EMA from daily candles at per-sector optimized period (v22 policy).
     const FMP_KEY  = process.env.FMP_API_KEY;
     const FMP_HOST = 'https://financialmodelingprep.com';
-    const etfTickers = Object.values(SECTOR_ETFS);
+    const etfEntries = Object.entries(SECTOR_ETFS);
 
-    // Helper: compute 21-week EMA from 250 daily candles (shared utility)
-    async function computeEtfEma(etf) {
+    // Helper: compute per-sector optimized EMA from 250 daily candles.
+    async function computeEtfEma(etf, sector) {
       try {
         const url = `${FMP_HOST}/api/v3/historical-price-full/${etf}?timeseries=250&apikey=${FMP_KEY}`;
         const data = await fetch(url, { signal: AbortSignal.timeout(8000) })
           .then(r => r.ok ? r.json() : null).catch(() => null);
-        const result = computeEMA21fromDailyBars(data?.historical ?? null);
-        return result ? result.current : null;
+        const period = getSectorEmaPeriod(sector);
+        const result = computeEMAFromDailyBars(data?.historical ?? null, period);
+        return result ? { current: result.current, period } : null;
       } catch { return null; }
     }
+
+    const etfTickers = etfEntries.map(([, etf]) => etf);
 
     // Batch quote fetch (one call for all 11 ETFs) + candle-based EMA in parallel
     const [quotesRaw, emaEntries] = await Promise.all([
       fetch(`${FMP_HOST}/api/v3/quote/${etfTickers.join(',')}?apikey=${FMP_KEY}`)
         .then(r => r.ok ? r.json() : []).catch(() => []),
-      Promise.all(etfTickers.map(async etf => [etf, await computeEtfEma(etf)])),
+      Promise.all(etfEntries.map(async ([sector, etf]) => [etf, await computeEtfEma(etf, sector)])),
     ]);
 
     const priceMap = {};
@@ -1382,20 +1386,24 @@ app.get('/api/sector-ema', authenticateJWT, async (req, res) => {
     const emaMap = Object.fromEntries(emaEntries);
 
     const result = {};
-    for (const [sector, etf] of Object.entries(SECTOR_ETFS)) {
-      const price = priceMap[etf] ?? null;
-      const ema21 = emaMap[etf]  ?? null;
+    for (const [sector, etf] of etfEntries) {
+      const price  = priceMap[etf] ?? null;
+      const entry  = emaMap[etf]   ?? null;
+      const ema    = entry?.current ?? null;
+      const period = entry?.period  ?? null;
       result[sector] = {
         etf,
         price,
-        ema21,
-        aboveEma:   price != null && ema21 != null ? price > ema21 : null,
+        ema,
+        ema21:      ema,                  // legacy field retained for client backward-compat
+        emaPeriod:  period,               // NEW: per-sector period for UI label
+        aboveEma:   price != null && ema != null ? price > ema : null,
         signal:     null,
-        separation: price && ema21 ? +((price - ema21) / ema21 * 100).toFixed(2) : null,
+        separation: price && ema ? +((price - ema) / ema * 100).toFixed(2) : null,
       };
     }
     console.log('[SECTOR-EMA]', Object.entries(result).map(([s, d]) =>
-      `${d.etf}:price=${d.price?.toFixed(0)} ema=${d.ema21} above=${d.aboveEma}`).join(' | '));
+      `${d.etf}[${d.emaPeriod}w]:price=${d.price?.toFixed(0)} ema=${d.ema} above=${d.aboveEma}`).join(' | '));
 
     res.json(result);
   } catch (err) {
@@ -5915,7 +5923,7 @@ async function fetchDevelopingSignalsCached() {
       }
     } catch { /* non-fatal */ }
 
-    // Sector EMA trend (above/below 21W EMA for each sector)
+    // Sector EMA trend (above/below per-sector optimized EMA — v22 policy)
     let sectorTrend = {};
     try {
       const SECTOR_ETFS = {
@@ -5924,15 +5932,17 @@ async function fetchDevelopingSignalsCached() {
         'Energy': 'XLE', 'Utilities': 'XLU', 'Basic Materials': 'XLB',
         'Communication Services': 'XLC', 'Real Estate': 'XLRE',
       };
-      const etfTickers = Object.values(SECTOR_ETFS);
+      const etfEntries = Object.entries(SECTOR_ETFS);
+      const etfTickers = etfEntries.map(([, etf]) => etf);
       const [quotesRaw, emaEntries] = await Promise.all([
         fetch(`https://financialmodelingprep.com/api/v3/quote/${etfTickers.join(',')}?apikey=${FMP_API_KEY}`)
           .then(r => r.ok ? r.json() : []).catch(() => []),
-        Promise.all(etfTickers.map(async etf => {
+        Promise.all(etfEntries.map(async ([sector, etf]) => {
           try {
             const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${etf}?timeseries=250&apikey=${FMP_API_KEY}`;
             const data = await fetch(url, { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : null).catch(() => null);
-            const result = computeEMA21fromDailyBars(data?.historical ?? null);
+            const period = getSectorEmaPeriod(sector);
+            const result = computeEMAFromDailyBars(data?.historical ?? null, period);
             return [etf, result ? result.current : null];
           } catch { return [etf, null]; }
         })),

@@ -1133,8 +1133,8 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
                   )}
                   {ar.components.sectorExposure?.level !== 'CLEAR' && (
                     <div style={{ marginTop: 10, padding: '8px 12px',
-                      backgroundColor: ar.components.sectorExposure.level === 'CRITICAL' ? 'rgba(220,53,69,0.08)' : 'rgba(255,215,0,0.08)',
-                      border: `1px solid ${ar.components.sectorExposure.level === 'CRITICAL' ? 'rgba(220,53,69,0.25)' : 'rgba(255,215,0,0.25)'}`,
+                      backgroundColor: ar.components.sectorExposure.level === 'HEIGHTENED' ? 'rgba(220,53,69,0.08)' : 'rgba(255,215,0,0.08)',
+                      border: `1px solid ${ar.components.sectorExposure.level === 'HEIGHTENED' ? 'rgba(220,53,69,0.25)' : 'rgba(255,215,0,0.25)'}`,
                       borderRadius: 6, fontSize: 11, color: '#ccc' }}>
                       {stock.sector} goes to net {ar.components.sectorExposure.netAfter} ({ar.components.sectorExposure.currentLongs}L/{ar.components.sectorExposure.currentShorts}S → +1)
                     </div>

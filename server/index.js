@@ -1106,7 +1106,7 @@ app.get('/api/portfolio/ticker/:ticker', async (req, res) => {
 });
 
 // POST /api/portfolio/optimize
-// Runs risk-adjusted portfolio optimisation (Sortino-first, sector caps, vol targeting).
+// Runs risk-adjusted portfolio optimisation (Sortino-first, vol targeting; no sector cap).
 // Body: { accountSize: number, tickers: string[] }
 app.post('/api/portfolio/optimize', async (req, res) => {
   try {
@@ -1324,10 +1324,10 @@ app.get('/api/sector-exposure', authenticateJWT, async (req, res) => {
       exposure,
       recommendations,
       summary: {
-        totalSectors: Object.keys(exposure).length,
-        criticalCount: recommendations.filter(r => r.level === 'CRITICAL').length,
-        atLimitCount:  recommendations.filter(r => r.level === 'AT_LIMIT').length,
-        clearCount:    Object.values(exposure).filter(e => e.level === 'CLEAR').length,
+        totalSectors:    Object.keys(exposure).length,
+        heightenedCount: recommendations.filter(r => r.level === 'HEIGHTENED').length,
+        elevatedCount:   recommendations.filter(r => r.level === 'ELEVATED').length,
+        clearCount:      Object.values(exposure).filter(e => e.level === 'CLEAR').length,
       },
     });
   } catch (err) {
@@ -6052,7 +6052,7 @@ app.get('/api/assistant/headlines', async (req, res) => {
     }
     for (const [sector, net] of Object.entries(sectorCounts)) {
       if (Math.abs(net) > 3) {
-        add(nowISO, '⚠️', 'SECTOR', null, `SECTOR RISK ${sector} — ${Math.abs(net)} net directional (cap: 3)`, 'SECTOR_RISK');
+        add(nowISO, '⚠️', 'SECTOR', null, `SECTOR CONCENTRATION ${sector} — ${Math.abs(net)} net directional (advisory; manager discretion)`, 'SECTOR_CONCENTRATION');
       }
     }
 

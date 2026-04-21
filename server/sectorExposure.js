@@ -1,17 +1,17 @@
 /**
- * PNTHR Risk Advisor v2 — Net Directional Exposure Model
+ * PNTHR Risk Advisor v2 — Net Directional Sector Concentration (Advisory)
  *
- * Replaces the blunt "max 3 per sector" count rule with a net directional
- * exposure model that recognizes long/short positions partially offset each other.
+ * Net Exposure = |longs - shorts| per sector.
  *
- * Net Exposure = |longs - shorts|
+ * Fund policy: NO hard sector concentration cap — manager discretion governs.
+ * This module surfaces ADVISORY information only. It does not enforce.
  *
- * Levels:
- *   0–2  → CLEAR    (no warning)
- *   3    → AT_LIMIT (yellow)
- *   4+   → CRITICAL (red)
+ * Levels (informational):
+ *   0–2  → CLEAR       (routine)
+ *   3    → ELEVATED    (worth reviewing)
+ *   4+   → HEIGHTENED  (noticeable concentration — manager awareness)
  *
- * ETFs are exempt — they ARE the diversification.
+ * ETFs are exempt — they are the diversification layer.
  */
 
 import { normalizeSector } from './sectorUtils.js';
@@ -56,15 +56,15 @@ export function calculateSectorExposure(positions) {
     sectors[sector].totalCount++;
   }
 
-  // Calculate net exposure and level for each sector
+  // Calculate net exposure and level for each sector (advisory labels).
   for (const data of Object.values(sectors)) {
     data.netExposure  = Math.abs(data.longCount - data.shortCount);
     data.netDirection = data.longCount >= data.shortCount ? 'LONG' : 'SHORT';
 
     if (data.netExposure >= 4) {
-      data.level = 'CRITICAL';
+      data.level = 'HEIGHTENED';
     } else if (data.netExposure === 3) {
-      data.level = 'AT_LIMIT';
+      data.level = 'ELEVATED';
     } else {
       data.level = 'CLEAR';
     }
@@ -74,11 +74,12 @@ export function calculateSectorExposure(positions) {
 }
 
 /**
- * Generate Risk Advisor recommendations for sector concentration.
+ * Generate Risk Advisor informational recommendations for sector concentration.
+ * All options are ADVISORY — no enforcement. Manager discretion governs.
  *
  * @param {Object} sectorExposure - output from calculateSectorExposure()
  * @param {Object} killMap        - Kill scores keyed by ticker (from pnthr_kill_scores)
- * @returns {Array} recommendations sorted by priority (CRITICAL first)
+ * @returns {Array} recommendations sorted by priority (HEIGHTENED first)
  */
 export function generateSectorRecommendations(sectorExposure, killMap = {}) {
   const recommendations = [];
@@ -97,11 +98,10 @@ export function generateSectorRecommendations(sectorExposure, killMap = {}) {
       options:      [],
     };
 
-    const excess         = data.netExposure - 2; // positions needed to reach net 2
     const oppositeSignal = data.netDirection === 'LONG' ? 'SS' : 'BL';
     const oppositeLabel  = data.netDirection === 'LONG' ? 'short' : 'long';
 
-    // Option A: Close weakest positions in the net-heavy direction
+    // Heavy-side ticker list — shown as context for manager review.
     const heavyTickers = data.netDirection === 'LONG' ? data.longs : data.shorts;
     const rankedHeavy  = heavyTickers
       .map(t => ({
@@ -109,17 +109,19 @@ export function generateSectorRecommendations(sectorExposure, killMap = {}) {
         killScore: killMap[t]?.totalScore ?? 0,
         killRank:  killMap[t]?.killRank   ?? 999,
       }))
-      .sort((a, b) => a.killScore - b.killScore); // weakest first
+      .sort((a, b) => a.killScore - b.killScore); // weakest first (informational)
 
+    // ADVISORY: concentration summary + optional weakest-by-Kill for manager reference
     rec.options.push({
-      type:    'CLOSE',
-      action:  `Close ${excess} ${data.netDirection.toLowerCase()} position${excess > 1 ? 's' : ''} to reduce net exposure to 2`,
-      detail:  `Weakest by Kill score: ${rankedHeavy.slice(0, excess).map(r => `${r.ticker} (score: ${Math.round(r.killScore)})`).join(', ')}`,
-      tickers: rankedHeavy.slice(0, excess).map(r => r.ticker),
+      type:    'ADVISORY',
+      action:  `${sector} net ${data.netDirection.toLowerCase()} exposure at ${data.netExposure}. Manager discretion on new additions.`,
+      detail:  rankedHeavy.length > 0
+        ? `Weakest in direction by Kill score: ${rankedHeavy.slice(0, Math.min(3, rankedHeavy.length)).map(r => `${r.ticker} (score: ${Math.round(r.killScore)})`).join(', ')}`
+        : 'No positions on the heavy side.',
+      tickers: rankedHeavy.slice(0, Math.min(3, rankedHeavy.length)).map(r => r.ticker),
     });
 
-    // Option B: Add opposite-direction positions to balance
-    // Show enough candidates to fully balance (at least 3 for options, up to netExposure)
+    // ADVISORY: opposite-direction candidates for awareness (no prescription)
     const candidateCount = Math.max(3, data.netExposure);
     const sectorCandidates = Object.values(killMap)
       .filter(s =>
@@ -131,38 +133,30 @@ export function generateSectorRecommendations(sectorExposure, killMap = {}) {
       .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
       .slice(0, candidateCount);
 
-    rec.options.push({
-      type:    'BALANCE',
-      action:  `Add ${excess} ${oppositeLabel} position${excess > 1 ? 's' : ''} in ${sector} to balance exposure`,
-      detail:  `Top ${oppositeSignal} candidates:`,
-      tickers: sectorCandidates.map(c => c.ticker),
-      candidateDetails: sectorCandidates.map(c => ({
-        ticker:    c.ticker,
-        signal:    c.signal,
-        killScore: Math.round(c.totalScore || 0),
-        rank:      c.killRank,
-        tier:      c.tier,
-        signalAge: c.signalAge ?? null,
-      })),
-    });
-
-    // Option C: AT_LIMIT — hold guidance
-    if (data.level === 'AT_LIMIT') {
+    if (sectorCandidates.length > 0) {
       rec.options.push({
-        type:    'HOLD',
-        action:  `At limit. No new ${data.netDirection.toLowerCase()} positions in ${sector} unless balanced with a ${oppositeLabel}`,
-        detail:  `Current: ${data.longCount}L / ${data.shortCount}S = net ${data.netExposure} ${data.netDirection.toLowerCase()}`,
-        tickers: [],
+        type:    'OPPOSITE_CANDIDATES',
+        action:  `Available ${oppositeLabel} candidates in ${sector} (manager awareness only)`,
+        detail:  `Top ${oppositeSignal} candidates:`,
+        tickers: sectorCandidates.map(c => c.ticker),
+        candidateDetails: sectorCandidates.map(c => ({
+          ticker:    c.ticker,
+          signal:    c.signal,
+          killScore: Math.round(c.totalScore || 0),
+          rank:      c.killRank,
+          tier:      c.tier,
+          signalAge: c.signalAge ?? null,
+        })),
       });
     }
 
     recommendations.push(rec);
   }
 
-  // CRITICAL first, then AT_LIMIT; within each level sort by highest net exposure
+  // HEIGHTENED first, then ELEVATED; within each level sort by highest net exposure
   recommendations.sort((a, b) => {
-    if (a.level === 'CRITICAL' && b.level !== 'CRITICAL') return -1;
-    if (b.level === 'CRITICAL' && a.level !== 'CRITICAL') return  1;
+    if (a.level === 'HEIGHTENED' && b.level !== 'HEIGHTENED') return -1;
+    if (b.level === 'HEIGHTENED' && a.level !== 'HEIGHTENED') return  1;
     return b.netExposure - a.netExposure;
   });
 

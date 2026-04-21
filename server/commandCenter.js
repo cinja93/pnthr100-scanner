@@ -369,13 +369,13 @@ export async function positionsSave(req, res) {
         const projNet     = Math.abs(projLongs - projShorts);
         if (projNet > 3) {
           warning = {
-            type:    'SECTOR_CONCENTRATION',
-            message: `Adding this ${newDir} in ${sectorName} would bring net exposure to ${projNet} (limit: 3). Consider balancing with a ${newDir === 'LONG' ? 'short' : 'long'} in ${sectorName}.`,
+            type:    'SECTOR_HEIGHTENED',
+            message: `Adding this ${newDir} in ${sectorName} would bring net directional exposure to ${projNet}. Advisory only — Fund policy allows manager discretion on sector concentration.`,
           };
         } else if (projNet === 3) {
           warning = {
-            type:    'SECTOR_AT_LIMIT',
-            message: `${sectorName} will be at net exposure limit (${projLongs}L / ${projShorts}S = net 3). No further ${newDir.toLowerCase()}s without adding a ${newDir === 'LONG' ? 'short' : 'long'}.`,
+            type:    'SECTOR_ELEVATED',
+            message: `${sectorName} would be at net exposure ${projNet} (${projLongs}L / ${projShorts}S). Advisory only — Fund policy allows manager discretion; balancing with a ${newDir === 'LONG' ? 'short' : 'long'} is optional.`,
           };
         }
       }

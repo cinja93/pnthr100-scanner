@@ -683,19 +683,22 @@ export function computeAnalyzeScore(stock, context) {
     const projectedShorts = (sectorData.shortCount || 0) + (direction === 'SHORT' ? 1 : 0);
     const projectedNet = Math.abs(projectedLongs - projectedShorts);
     sectorImpact = {
-      level: projectedNet > 3 ? 'CRITICAL' : projectedNet === 3 ? 'AT_LIMIT' : 'CLEAR',
+      level: projectedNet > 3 ? 'HEIGHTENED' : projectedNet === 3 ? 'ELEVATED' : 'CLEAR',
       netAfter: projectedNet,
       currentLongs: sectorData.longCount || 0,
       currentShorts: sectorData.shortCount || 0,
     };
+    // Fund policy allows manager discretion on sector concentration — no hard cap.
+    // This score component is advisory: always awards full points; label + detail
+    // surface the concentration signal for manager awareness.
     if (projectedNet > 3) {
-      t3b = { score: 0, label: 'CRITICAL', detail: `${sector} net ${projectedNet} — exceeds limit`, max: 5 };
-      warnings.push(`SECTOR: Adding this ${direction} brings ${sector} to net ${projectedNet}. CRITICAL — exceeds limit.`);
+      t3b = { score: 5, label: 'HEIGHTENED', detail: `${sector} net ${projectedNet} — advisory (manager discretion)`, max: 5 };
+      warnings.push(`SECTOR: Adding this ${direction} brings ${sector} to net ${projectedNet}. Advisory — manager discretion.`);
     } else if (projectedNet === 3) {
-      t3b = { score: 2, label: 'AT LIMIT', detail: `${sector} net ${projectedNet} — at concentration cap`, max: 5 };
-      warnings.push(`SECTOR: Adding this ${direction} brings ${sector} to net ${projectedNet}. At limit.`);
+      t3b = { score: 5, label: 'ELEVATED', detail: `${sector} net ${projectedNet} — advisory`, max: 5 };
+      warnings.push(`SECTOR: Adding this ${direction} brings ${sector} to net ${projectedNet}. Advisory.`);
     } else {
-      t3b = { score: 5, label: 'CLEAR', detail: `${sector} net ${projectedNet} — within limits`, max: 5 };
+      t3b = { score: 5, label: 'CLEAR', detail: `${sector} net ${projectedNet}`, max: 5 };
     }
   } else {
     t3b = { score: 5, label: 'CLEAR', detail: 'No existing sector exposure', max: 5 };

@@ -113,8 +113,9 @@ function runRiskAdvisor(positions, nav) {
     });
   }
 
-  // Rule 2: Sector Net Directional Exposure — ETFs exempt
-  // Net Exposure = |longs - shorts|; limit is 3; CRITICAL if ≥4, AT_LIMIT if =3
+  // Rule 2: Sector Net Directional Exposure (ADVISORY ONLY) — ETFs exempt
+  // Net Exposure = |longs - shorts|; no hard cap (Fund manager-discretion policy);
+  // informational labels: HEIGHTENED if ≥4, ELEVATED if =3, CLEAR otherwise
   const bySector = {};
   for (const p of livePos) {
     if (p.isETF || isEtfTicker(p.ticker)) continue;
@@ -2354,7 +2355,7 @@ export default function CommandCenter({ onNavigate, refreshSignal }) {
     setTab('positions');
     try {
       const result = await apiPost('/api/positions', pos);
-      if (result.warning?.type === 'SECTOR_CONCENTRATION' || result.warning?.type === 'SECTOR_AT_LIMIT') {
+      if (result.warning?.type === 'SECTOR_HEIGHTENED' || result.warning?.type === 'SECTOR_ELEVATED') {
         setSectorWarning(result.warning.message);
         setTimeout(() => setSectorWarning(null), 10000);
       }

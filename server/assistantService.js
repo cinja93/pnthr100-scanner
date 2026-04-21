@@ -774,7 +774,7 @@ export async function generateAssistantTasks(userId, positions, nav) {
     }
   }
 
-  // P3: SECTOR_LIMIT — any sector at net 3 positions
+  // P3: SECTOR_CONCENTRATION — advisory for any sector at net 3+ positions
   if (activePosns.length > 0) {
     const sectorNet = {};
     for (const p of activePosns) {
@@ -788,17 +788,17 @@ export async function generateAssistantTasks(userId, positions, nav) {
       const net = Math.abs(counts.longs - counts.shorts);
       if (net >= 3) {
         tasks.push({
-          id:              `sector_limit_${sec.replace(/\s+/g, '_')}`,
+          id:              `sector_concentration_${sec.replace(/\s+/g, '_')}`,
           priority:        3,
-          type:            'SECTOR_LIMIT',
+          type:            'SECTOR_CONCENTRATION',
           ticker:          null,
-          badge:           'SECTOR LIMIT',
-          headline:        `${sec}: Net directional exposure at ${net} (cap = 3). Review concentration.`,
+          badge:           'SECTOR CONCENTRATION',
+          headline:        `${sec}: Net directional exposure at ${net}. Manager review.`,
           instructions:    [
             `${sec} sector has ${counts.longs} long${counts.longs !== 1 ? 's' : ''} and ${counts.shorts} short${counts.shorts !== 1 ? 's' : ''}.`,
-            `Net directional exposure = ${net} (PNTHR cap is 3).`,
-            'Consider whether a new position in this sector would violate the concentration rule.',
-            'No immediate action required — this is a watch flag for new entries.',
+            `Net directional exposure = ${net}.`,
+            'Fund policy allows manager discretion on sector concentration — no hard cap.',
+            'Advisory flag for awareness on new entries.',
           ],
           confirmQuestion: `Have you reviewed ${sec} sector concentration?`,
           data:            {
@@ -1421,7 +1421,7 @@ export function getRoutineTasks(dayOfWeek, context = {}) {
     const {
       killLabel        = 'Kill signals: Review Kill page for new BL/SS signals',
       killChipSections = [],
-      sectorLabel      = 'Sector concentration — review for any sector at 3+ net',
+      sectorLabel      = 'Sector concentration — advisory for any sector at 3+ net (manager discretion)',
       sectorChipSections = [],
       earningsLabel    = 'Earnings check — scan calendar for held positions this week',
       earningsDetail   = null,

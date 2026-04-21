@@ -1651,12 +1651,12 @@ function AlertStrip({ alerts, lotsReady, onNavigate }) {
 }
 
 function SectorCard({ sector, data }) {
-  const isCrit  = data.level === 'CRITICAL';
-  const isLimit = data.level === 'AT_LIMIT';
-  const dot     = isCrit ? '#dc3545' : isLimit ? '#FFD700' : '#28a745';
-  const netClr  = isCrit ? '#dc3545' : isLimit ? '#FFD700' : '#28a745';
-  const bg      = isCrit ? 'rgba(220,53,69,0.06)' : isLimit ? 'rgba(255,215,0,0.04)' : '#1a1a1a';
-  const border  = isCrit ? 'rgba(220,53,69,0.25)' : isLimit ? 'rgba(255,215,0,0.15)' : '#2a2a2a';
+  const isHeightened = data.level === 'HEIGHTENED';
+  const isElevated   = data.level === 'ELEVATED';
+  const dot     = isHeightened ? '#dc3545' : isElevated ? '#FFD700' : '#28a745';
+  const netClr  = isHeightened ? '#dc3545' : isElevated ? '#FFD700' : '#28a745';
+  const bg      = isHeightened ? 'rgba(220,53,69,0.06)' : isElevated ? 'rgba(255,215,0,0.04)' : '#1a1a1a';
+  const border  = isHeightened ? 'rgba(220,53,69,0.25)' : isElevated ? 'rgba(255,215,0,0.15)' : '#2a2a2a';
   const name    = getSectorDisplayName(sector);
 
   return (
@@ -1675,7 +1675,7 @@ function SectorCard({ sector, data }) {
 function SectorExposureGrid({ sectorExposure }) {
   const sorted = Object.entries(sectorExposure)
     .sort(([, a], [, b]) => {
-      const order = { CRITICAL: 0, AT_LIMIT: 1, CLEAR: 2 };
+      const order = { HEIGHTENED: 0, ELEVATED: 1, CLEAR: 2 };
       const d = (order[a.level] ?? 2) - (order[b.level] ?? 2);
       return d !== 0 ? d : b.netExposure - a.netExposure;
     });
@@ -1708,7 +1708,7 @@ function PortfolioStatus({ positions, lotsReady, onNavigate, sectorExposure }) {
   if (totalPct > 13) alerts.push({ level: 'HIGH',     text: `Total heat ${totalPct.toFixed(1)}% approaching 15% cap` });
   if (sectorExposure?.recommendations) {
     for (const r of sectorExposure.recommendations) {
-      alerts.push({ level: r.level === 'CRITICAL' ? 'CRITICAL' : 'HIGH', text: r.sector });
+      alerts.push({ level: r.level === 'HEIGHTENED' ? 'CRITICAL' : 'HIGH', text: r.sector });
     }
   }
 

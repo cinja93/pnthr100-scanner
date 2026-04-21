@@ -277,7 +277,7 @@ export default function PortfolioPage({ currentUser, onProfileUpdate }) {
           title={
             accountSize <= 0 ? 'Enter an account size first' :
             checkedStocks.length < 2 ? 'Select at least 2 stocks' :
-            'Optimize: sector caps, volatility targeting, Sortino maximization'
+            'Optimize: Sortino maximization with volatility targeting (no sector cap)'
           }
         >
           {optimizing ? '⏳ Optimizing...' : '📊 Optimize Portfolio'}

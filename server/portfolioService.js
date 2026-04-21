@@ -85,7 +85,7 @@ async function fetchVix() {
 }
 
 // ── Risk-Adjusted Portfolio Optimization ─────────────────────────────────────
-// Framework: stop-defined risk, sector caps, VIX-based vol targeting, Sortino-first.
+// Framework: stop-defined risk, VIX-based vol targeting, Sortino-first.
 // No return forecasts are used. All rules are mechanical.
 
 // Pad / trim a raw return array to exactly WEEKS periods (oldest first, zero-padded).
@@ -150,7 +150,7 @@ function computeAvgCorrelation(returnSeries) {
 //   Variables : x[i] ∈ [0, 1]  — allocation fraction for each position
 //   Objective : Maximize Σ sortino[i] * x[i]
 //               LP naturally sets x[i] = 0 for negative-Sortino stocks.
-//   Constraints: for each sector s: Σ{i in s} x[i] ≤ maxPerSector
+//   No sector constraint — Fund policy is manager-discretion on sector concentration.
 //
 // Post-solve (local JS):
 //   VIX-based vol targeting  — volScale  = min(1, VIX_TARGET / currentVIX)
@@ -163,7 +163,6 @@ function computeAvgCorrelation(returnSeries) {
 export async function optimizeWithRason(positions, accountSize, riskPct = 1) {
   const WEEKS = 12;
   const VIX_TARGET = 20;
-  const SECTOR_CAP = 0.25;
   const CORR_THRESHOLD = 0.50;
 
   const n = positions.length;
@@ -190,7 +189,6 @@ export async function optimizeWithRason(positions, accountSize, riskPct = 1) {
   );
 
   const stockSortino = adjReturns.map(computeSortino);
-  const maxPerSector = Math.max(2, Math.ceil(n * SECTOR_CAP));
 
   // ── Build RASON LP model ───────────────────────────────────────────────────
   // One scalar variable per position: x0, x1, ... xN (RASON scalar variable format)
@@ -206,23 +204,11 @@ export async function optimizeWithRason(positions, accountSize, riskPct = 1) {
     .map((name, i) => `${stockSortino[i].toFixed(8)}*${name}`)
     .join(' + ');
 
-  // Sector constraints: Σ xi for stocks in sector s ≤ maxPerSector
-  const sectors = [...new Set(positions.map(p => p.sector || 'Unknown'))];
-  const constraints = {};
-  sectors.forEach((sector) => {
-    const members = positions
-      .map((p, i) => (p.sector || 'Unknown') === sector ? xNames[i] : null)
-      .filter(Boolean);
-    if (members.length > 0) {
-      const key = `sec_${sector.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      constraints[key] = { upper: maxPerSector, formula: members.join(' + ') };
-    }
-  });
-
+  // No sector constraints — manager-discretion policy on sector concentration.
   const rasonModel = {
     engineSettings: { engine: 'Simplex LP' },
     variables,
-    constraints,
+    constraints: {},
     objective: {
       obj: { type: 'maximize', formula: objFormula, finalValue: [] },
     },
@@ -251,21 +237,9 @@ export async function optimizeWithRason(positions, accountSize, riskPct = 1) {
 
     console.log(`📐 RASON solved. Included: ${fractions.filter(f => f > 0.01).length}/${n}`);
   } catch (err) {
-    // ── Fallback: greedy rule-based selection ──────────────────────────────
+    // ── Fallback: greedy rule-based selection (no sector cap) ─────────────
     console.warn(`⚠️  RASON unavailable (${err.message}), using rule-based fallback.`);
     const included = new Set([...Array(n).keys()].filter(i => stockSortino[i] >= 0));
-    const sectorGroups = {};
-    positions.forEach((p, i) => {
-      if (!included.has(i)) return;
-      const s = p.sector || 'Unknown';
-      (sectorGroups[s] = sectorGroups[s] || []).push({ i, sortino: stockSortino[i] });
-    });
-    for (const group of Object.values(sectorGroups)) {
-      if (group.length > maxPerSector) {
-        group.sort((a, b) => b.sortino - a.sortino);
-        group.slice(maxPerSector).forEach(g => included.delete(g.i));
-      }
-    }
     fractions = positions.map((_, i) => included.has(i) ? 1 : 0);
   }
 

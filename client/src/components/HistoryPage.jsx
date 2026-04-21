@@ -300,7 +300,8 @@ export default function HistoryPage() {
     if (ordersData) return; // Already loaded
     try {
       setOrdersLoading(true);
-      const res = await fetch(`${API_BASE}/api/journal/backtest/2026`, { headers: authHeaders() });
+      // Explicit tier=wagyu — HistoryPage mirrors Wagyu-tier numbers (flagship NAV reporting basis).
+      const res = await fetch(`${API_BASE}/api/journal/backtest/2026?tier=wagyu`, { headers: authHeaders() });
       if (!res.ok) throw new Error('Failed to load Orders data');
       const data = await res.json();
       setOrdersData(data);

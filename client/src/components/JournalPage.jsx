@@ -452,6 +452,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [dayTrades, setDayTrades] = useState([]);
   const [dayTradesLoading, setDayTradesLoading] = useState(false);
   const [archiveTab, setArchiveTab] = useState(new Date().getFullYear().toString()); // default to current year
+  const [backtestTier, setBacktestTier] = useState('wagyu'); // v21 per-tier: filet|porterhouse|wagyu
   const [backtestYears, setBacktestYears] = useState([]); // [{year, count}]
   const [backtestTrades, setBacktestTrades] = useState([]);
   const [backtestSummary, setBacktestSummary] = useState(null);
@@ -513,28 +514,35 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
       .catch(() => setDayTradesLoading(false));
   }, [tab]);
 
-  // Fetch available backtest years on mount
+  // Clear tier-dependent caches when tier changes so stale numbers don't flash
   useEffect(() => {
-    fetch(`${API_BASE}/api/journal/backtest/years`, { headers: authHeaders() })
+    setMonthlyReturns(null);
+    setBacktestTrades([]);
+    setBacktestSummary(null);
+  }, [backtestTier]);
+
+  // Fetch available backtest years when tier changes
+  useEffect(() => {
+    fetch(`${API_BASE}/api/journal/backtest/years?tier=${backtestTier}`, { headers: authHeaders() })
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then(data => { if (Array.isArray(data)) setBacktestYears(data); })
       .catch(err => console.error('[JOURNAL] backtest years fetch error:', err));
-  }, []);
+  }, [backtestTier]);
 
-  // Fetch backtest trades when a year tab is selected
+  // Fetch backtest trades when a year tab or tier is selected
   useEffect(() => {
     if (!archiveTab || archiveTab === 'test_system') return;
     setBacktestLoading(true);
     setBacktestTrades([]);
     setBacktestSummary(null);
-    fetch(`${API_BASE}/api/journal/backtest/${archiveTab}`, { headers: authHeaders() })
+    fetch(`${API_BASE}/api/journal/backtest/${archiveTab}?tier=${backtestTier}`, { headers: authHeaders() })
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then(data => {
         setBacktestTrades(Array.isArray(data.trades) ? data.trades : []);
         setBacktestSummary(data.summary || null);
         setBacktestLoading(false);
       }).catch(err => { console.error('[JOURNAL] backtest fetch error:', err); setBacktestLoading(false); });
-  }, [archiveTab]);
+  }, [archiveTab, backtestTier]);
 
   // Fetch test system trades when that tab is selected
   useEffect(() => {
@@ -565,18 +573,20 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
       }).catch(err => { console.error('[JOURNAL] system-trades fetch error:', err); setSystemTradesLoading(false); });
   }, [archiveTab]);
 
-  // Fetch monthly returns for growth charts
+  // Fetch monthly returns for growth charts — tier-change effect clears monthlyReturns
+  // so a tier switch retriggers the fetch; the null-guard below prevents re-fetch on
+  // growthChartYear-only changes (data is tier-scoped, not year-scoped).
   useEffect(() => {
     if (!growthChartYear) return;
-    if (monthlyReturns) return; // already fetched
-    fetch(`${API_BASE}/api/journal/backtest/monthly-returns`, { headers: authHeaders() })
+    if (monthlyReturns) return;
+    fetch(`${API_BASE}/api/journal/backtest/monthly-returns?tier=${backtestTier}`, { headers: authHeaders() })
       .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
       .then(data => {
         setMonthlyReturns(data.monthlyReturns || []);
         setHurdleRates(data.hurdleRates || {});
       })
       .catch(err => console.error('[JOURNAL] monthly-returns fetch error:', err));
-  }, [growthChartYear, monthlyReturns]);
+  }, [growthChartYear, backtestTier, monthlyReturns]);
 
   // Fetch SPY benchmark data (lazy — only when requested by GrowthChart)
   const fetchSpyData = () => {
@@ -1440,9 +1450,29 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
         )}
       </div>
 
-      {/* ── Tab Row: TEST DATA | Year+Chart boxes | CUMULATIVE | RETURN CALCULATOR ── */}
+      {/* ── Tab Row: TIER selector | TEST DATA | Year+Chart boxes | CUMULATIVE | RETURN CALCULATOR ── */}
       {isAdmin && (
         <div style={{ padding: '0 24px 12px', display: 'flex', gap: 8, alignItems: 'stretch', flexWrap: 'wrap' }}>
+          {/* v21 per-tier NAV selector — Filet $100K / Porterhouse $500K / Wagyu $1M */}
+          <div
+            title="Select NAV tier. Filet $100K-$499K (30%/25%), Porterhouse $500K-$999K (25%/20%), Wagyu $1M+ (20%/15%). All 3 tiers are back-tested independently; share count and fee schedule differ per PPM sec. 4.1-4.3."
+            style={{ display: 'flex', alignItems: 'stretch', border: '1px solid #333', borderRadius: 6, overflow: 'hidden', background: '#0a0a0a' }}
+          >
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#666', padding: '0 10px', alignSelf: 'center', letterSpacing: 0.7 }}>TIER</div>
+            {['filet', 'porterhouse', 'wagyu'].map((t, i) => (
+              <button
+                key={t}
+                onClick={() => setBacktestTier(t)}
+                style={{
+                  padding: '8px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                  border: 'none', borderLeft: i === 0 ? '1px solid #333' : '1px solid #222',
+                  background: backtestTier === t ? '#fcf000' : 'transparent',
+                  color: backtestTier === t ? '#111' : '#888', letterSpacing: 0.5,
+                }}
+              >{t.toUpperCase()}</button>
+            ))}
+          </div>
+
           {/* TEST DATA tab (no chart) */}
           <button
             onClick={() => { setArchiveTab('test_system'); setTab('trades'); setGrowthChartYear(null); }}

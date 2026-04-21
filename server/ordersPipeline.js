@@ -24,6 +24,7 @@ import { getSp400Longs, getSp400Shorts }  from './sp400Service.js';
 import { getPreyResults }                 from './preyService.js';
 import { getLastFriday }                  from './technicalUtils.js';
 import { DEMO_OWNER_ID }                  from './demoEngine.js';
+import { getDirectionIndexFromFlags }     from './gateLogic.js';
 
 const BL_TOP_N = 10;
 const SS_TOP_N = 5;
@@ -31,10 +32,17 @@ const SS_SECTOR_5D_THRESHOLD = -3; // sector 5D momentum must be < -3% for SS
 
 // ── Gate functions ──────────────────────────────────────────────────────────
 
+// Direction index per v21 gate policy (2026-04-20):
+//   SP500 -> SPY, NDX100-only -> QQQ, SP400 -> MDY, fallback -> SPY.
+// indexData may be missing MDY if FMP fetch fails; we fall back to SPY in that case
+// to avoid nulling the gate.
 function macroGate(stock, indexData) {
-  const exc = (stock.exchange || '').toUpperCase();
-  const idxTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
-  const idx = indexData[idxTicker] || indexData['SPY'];
+  const idxTicker = getDirectionIndexFromFlags({
+    isSp500:     !!stock.isSp500,
+    isNasdaq100: !!stock.isNasdaq100,
+    isSp400:     !!stock.isSp400,
+  });
+  const idx = indexData[idxTicker] || indexData.SPY;
   if (!idx) return { passed: false, reason: `No ${idxTicker} data` };
 
   if (stock.signal === 'BL' && !idx.aboveEma) {
@@ -72,10 +80,13 @@ function d2Gate(stock) {
 function ssCrashGate(stock, indexData, sectorGateData) {
   if (stock.signal !== 'SS') return { passed: true, reason: 'BL — crash gate N/A' };
 
-  // Macro slope must be falling 2+ weeks
-  const exc = (stock.exchange || '').toUpperCase();
-  const idxTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
-  const idx = indexData[idxTicker] || indexData['SPY'];
+  // Direction index per v21 gate policy; MDY may fall back to SPY if data missing.
+  const idxTicker = getDirectionIndexFromFlags({
+    isSp500:     !!stock.isSp500,
+    isNasdaq100: !!stock.isNasdaq100,
+    isSp400:     !!stock.isSp400,
+  });
+  const idx = indexData[idxTicker] || indexData.SPY;
   // Require 2+ consecutive weeks of falling EMA (matches backtest slopeFallingMap)
   if (!idx || !idx.slopeFalling2Wk) {
     return { passed: false, reason: `${idxTicker} EMA not falling 2+ weeks — SS crash gate blocked` };

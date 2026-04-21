@@ -4149,18 +4149,33 @@ const US2Y_HURDLE_RATES = {
   2026: 3.47,  // Jan 2, 2026
 };
 
+// ── v21 per-tier backtest trade-log collections ──────────────────────────────
+// Tier selector: ?tier=filet|porterhouse|wagyu (default wagyu).
+// Anything else falls back to Wagyu — pre-gate-fix `pnthr_bt_pyramid_trade_log`
+// is quarantined and must not be queried from live routes.
+const TIER_COLLECTIONS = {
+  filet:       'pnthr_bt_pyramid_nav_100k_trade_log',
+  porterhouse: 'pnthr_bt_pyramid_nav_500k_trade_log',
+  wagyu:       'pnthr_bt_pyramid_nav_1m_trade_log',
+};
+function resolveTierCollection(rawTier) {
+  const t = String(rawTier || 'wagyu').toLowerCase();
+  return TIER_COLLECTIONS[t] || TIER_COLLECTIONS.wagyu;
+}
+
 // GET /api/journal/backtest/years — available years with trade counts (must be before /:year)
 app.get('/api/journal/backtest/years', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
+    const collection = resolveTierCollection(req.query.tier);
     const pipeline = [
       { $addFields: { year: { $substr: ['$entryDate', 0, 4] } } },
       { $group: { _id: '$year', count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
       { $project: { _id: 0, year: '$_id', count: 1 } }
     ];
-    const years = await db.collection('pnthr_bt_pyramid_trade_log').aggregate(pipeline).toArray();
+    const years = await db.collection(collection).aggregate(pipeline).toArray();
     res.json(years);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4187,7 +4202,8 @@ app.get('/api/journal/backtest/monthly-returns', authenticateJWT, async (req, re
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
-    const trades = await db.collection('pnthr_bt_pyramid_trade_log')
+    const collection = resolveTierCollection(req.query.tier);
+    const trades = await db.collection(collection)
       .find({}, { projection: { exitDate: 1, netDollarPnl: 1, dollarPnl: 1 } })
       .toArray();
 
@@ -4264,8 +4280,9 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
+    const collection = resolveTierCollection(req.query.tier);
     const year = req.params.year;
-    const trades = await db.collection('pnthr_bt_pyramid_trade_log')
+    const trades = await db.collection(collection)
       .find({ entryDate: { $regex: `^${year}-` } })
       .sort({ entryDate: -1 })
       .toArray();

@@ -488,7 +488,7 @@ const SS_HEDGE = {
 };
 
 const COMBINED_HEDGE = {
-  // Combined PYRAMID net-of-costs — Jun 2019 → Apr 2026 (82 months, 2510 trades)
+  // Combined PYRAMID net-of-costs — Jun 2019 through Apr 2026 (82 months, ~2,614 closed trades)
   // True production strategy: full D1-D8 · 35/25/20/12/8% lots · all gates
   // $100K → $861K · COVID crash Mar 2020: +0.53% (strategy MADE money)
   cagr: 37.0, sharpe: 2.39, sortino: 34.0,

@@ -29,6 +29,7 @@ dotenv.config();
 
 import { getMostRecentRanking, getRankingBeforeDate, connectToDatabase } from './database.js';
 import { getLastFriday, aggregateWeeklyBars, computeEMA21series } from './technicalUtils.js';
+import { getDirectionIndexFromFlags } from './gateLogic.js';
 
 const FMP_API_KEY  = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
@@ -265,11 +266,12 @@ export async function fetchStockData(ticker) {
 }
 
 // ── Index Data (D1 regime) ────────────────────────────────────────────────────
-// Returns { QQQ, SPY } each with: price, ema21 value, emaSlope %, aboveEma, emaRising, slopeFalling2Wk
+// Returns { QQQ, SPY, MDY } each with: price, ema21 value, emaSlope %, aboveEma, emaRising, slopeFalling2Wk
+// MDY is the direction index for S&P MidCap 400 members per v21 gate policy.
 
 export async function fetchIndexData() {
   const result = {};
-  for (const ticker of ['QQQ', 'SPY']) {
+  for (const ticker of ['QQQ', 'SPY', 'MDY']) {
     try {
       const data = await fetchStockData(ticker);
       if (!data) continue;
@@ -378,16 +380,20 @@ function collectPreyTickers(preyResults, huntTickers, stockMeta) {
 }
 
 // ── D1: Market Regime Multiplier (0.70× to 1.30×) ────────────────────────────
-// Exchange routing: Nasdaq → QQQ, NYSE/ARCA → SPY
-// regimeScore (-5 to +5) → BL multiplier = 1.0 + score×0.06; SS inverted
+// Direction index per v21 gate policy (2026-04-20):
+//   SP500 member    -> SPY
+//   NDX100-only     -> QQQ
+//   SP400 member    -> MDY
+//   fallback        -> SPY
+// regimeScore (-5 to +5) -> BL multiplier = 1.0 + score*0.06; SS inverted
 
-function calcD1(signal, exchange, indexData, signalCounts) {
+function calcD1(signal, stockFlags, indexData, signalCounts) {
   const { blCount = 0, ssCount = 0, newBlCount = 0, newSsCount = 0 } = signalCounts;
 
-  // Route to index by exchange
-  const exc = (exchange || '').toUpperCase();
-  const indexTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
-  const idx = indexData[indexTicker];
+  // Direction index per historical-membership-based policy
+  const indexTicker = getDirectionIndexFromFlags(stockFlags || {});
+  // MDY data may be missing on some weeks; fall back to SPY rather than nulling D1
+  const idx = indexData[indexTicker] || indexData.SPY;
 
   // Index EMA position + slope scoring
   let indexScore = 0;
@@ -846,7 +852,12 @@ export async function getApexResults(
     const data        = await fetchStockData(ticker);
 
     // ── Score all 8 dimensions ────────────────────────────────────────────────
-    const d1 = calcD1(signal, meta.exchange, indexData, signalCounts);
+    const d1 = calcD1(
+      signal,
+      { isSp500: !!meta.isSp500, isNasdaq100: !!meta.isNasdaq100, isSp400: !!meta.isSp400 },
+      indexData,
+      signalCounts,
+    );
     const d2 = scoreD2(signal, meta.sector, isNewSignal, sectorData);
     const d3 = scoreD3(signal, data);
 
@@ -871,6 +882,7 @@ export async function getApexResults(
         isSp500:      meta.isSp500      || false,
         isDow30:      meta.isDow30      || false,
         isNasdaq100:  meta.isNasdaq100  || false,
+        isSp400:      meta.isSp400      || false,
         universe:     meta.universe     || null,
         preyStrategies: [],
         apexScore:    -99,
@@ -915,6 +927,7 @@ export async function getApexResults(
       isSp500:      meta.isSp500      || false,
       isDow30:      meta.isDow30      || false,
       isNasdaq100:  meta.isNasdaq100  || false,
+      isSp400:      meta.isSp400      || false,
       universe:     meta.universe     || null,
       preyStrategies: d8.strategies,
       apexScore:    total,
@@ -1059,10 +1072,13 @@ export async function triggerApexWarmup() {
     const tickers = stocks.map(s => s.ticker);
     const stockMeta = {};
     for (const s of stocks) {
+      // isSp400 derived from universe since stockService returns 'sp400Long'/'sp400Short'/'sp517'
+      // (FMP's historical SP400 endpoint is unavailable; live MDY ETF holdings are the proxy).
+      const inSp400 = s.universe === 'sp400Long' || s.universe === 'sp400Short';
       stockMeta[s.ticker] = {
         companyName: s.companyName, sector: s.sector, exchange: s.exchange,
         currentPrice: s.currentPrice, ytdReturn: s.ytdReturn,
-        isSp500: s.isSp500, isDow30: s.isDow30, isNasdaq100: s.isNasdaq100,
+        isSp500: s.isSp500, isDow30: s.isDow30, isNasdaq100: s.isNasdaq100, isSp400: inSp400,
         universe: s.universe, rankList: s.rankList ?? null, rank: null,
       };
     }

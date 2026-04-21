@@ -1229,19 +1229,23 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const InstitutionalTab = () => {
     const gold = '#fcf000', green = '#22c55e', red = '#ef4444', dim = '#888';
 
-    // Hedge fund metrics — 7-year pyramid backtest net-of-costs ($100K capital, $10K full position, Jun 2019 – Apr 2026)
-    // Full D1-D8 Kill scoring · 35/25/20/12/8% lots · all production gates
-    // BL/SS individual = single-lot signal baseline; COMBINED = true production pyramid result
-    // COVID crash stress test: Mar 2020 = +0.53% (strategy MADE money during worst crash in 90 years)
-    const BL_H = { cagr: 52.0, sharpe: 2.15, sortino: 68.82, maxDrawdown: 0.35, maxDDPeriod: '2023-09 to 2023-10', calmar: 146.80, profitFactor: 8.91, bestMonth: 25.59, bestMonthLabel: '2019-07', worstMonth: -0.35, worstMonthLabel: '2023-10', positiveMonths: 74, totalMonths: 79, positiveMonthsPct: 93.7, avgMonthlyReturn: 3.67, monthlyStdDev: 5.25 };
-    const SS_H = { cagr: 35.3, sharpe: 1.85, sortino: 16.54, maxDrawdown: 1.14, maxDDPeriod: '2022-10 to 2022-11', calmar: 30.99, profitFactor: 4.19, bestMonth: 14.55, bestMonthLabel: '2022-05', worstMonth: -1.14, worstMonthLabel: '2022-11', positiveMonths: 16, totalMonths: 18, positiveMonthsPct: 88.9, avgMonthlyReturn: 2.63, monthlyStdDev: 4.14 };
-    const COMB = { cagr: 37.0, sharpe: 2.39, sortino: 34.0, maxDrawdown: 1.00, maxDDPeriod: '2019-09 to 2019-10', calmar: 37.02, profitFactor: 9.10, bestMonth: 19.28, bestMonthLabel: '2019-12', worstMonth: -1.00, worstMonthLabel: '2019-10', positiveMonths: 76, totalMonths: 82, positiveMonthsPct: 92.7, avgMonthlyReturn: 2.71, monthlyStdDev: 3.33 };
+    // Hedge fund metrics — v21 canonical Wagyu ($1M tier) backtest, Jun 2019 -> Apr 2026 (6.85 years)
+    // COMB uses Gross MTM daily NAV curve (pre-fund-fee, post-transaction-cost); matches published
+    // Wagyu Gross (Sharpe 2.59 / Sortino 4.72 / MaxDD -8.51%). BL_H / SS_H are realized-Gross
+    // per-direction breakouts from pnthr_bt_pyramid_nav_1m_trade_log (fees are portfolio-level
+    // per PPM Sec. 4.1-4.3 and do not cleanly decompose by direction).
+    // Computed 2026-04-21 via scripts_den/compute_per_direction_metrics.js
+    const BL_H = { cagr: 37.97, sharpe: 3.19, sortino: 85.06, maxDrawdown: 0.91, maxDDPeriod: '2019-09 to 2019-10', calmar: 41.74, profitFactor: 10.33, bestMonth: 12.56, bestMonthLabel: '2021-01', worstMonth: -0.85, worstMonthLabel: '2019-10', positiveMonths: 69, totalMonths: 83, positiveMonthsPct: 83.1, avgMonthlyReturn: 2.47, monthlyStdDev: 2.82 };
+    const SS_H = { cagr: 4.98,  sharpe: 0.49, sortino: 24.66, maxDrawdown: 0.65, maxDDPeriod: '2022-04 to 2022-05', calmar: 7.64,  profitFactor: 7.43,  bestMonth: 8.72,  bestMonthLabel: '2022-05', worstMonth: -0.24, worstMonthLabel: '2026-03', positiveMonths: 14, totalMonths: 83, positiveMonthsPct: 16.9, avgMonthlyReturn: 0.40, monthlyStdDev: 1.48 };
+    const COMB = { cagr: 38.60, sharpe: 2.56, sortino: 4.72,  maxDrawdown: 8.51, maxDDPeriod: '2020-09 to 2020-09', calmar: 4.54,  profitFactor: 10.14, bestMonth: 17.36, bestMonthLabel: '2019-11', worstMonth: -4.64, worstMonthLabel: '2020-09', positiveMonths: 69, totalMonths: 83, positiveMonthsPct: 83.1, avgMonthlyReturn: 2.60, monthlyStdDev: 3.14 };
 
-    // $10M demo fund metrics (sourced from v21 canonical pnthr_bt_pyramid_nav_1m_trade_log — Wagyu tier)
-    // Values from demoBackfillFromBacktest.js run on 2026-04-21.
-    // NOTE: fixed-NAV Gross P&L (pre-fees). Apply PPM fee engine for full Net congruence with Wagyu 29.48% CAGR.
-    const DEMO_5Y = { startNav: '$10,000,000', endNav: '$87,285,669', totalReturn: '+772.9%', trades: '2,614', winRate: '52.1%', commissions: '$417,936', avgDiscipline: '96.1' };
-    const DEMO_LF = { startNav: '$10,000,000', endNav: '$22,656,455', totalReturn: '+126.6%', trades: '312', winRate: '48.4%', commissions: '$40,858', avgDiscipline: '96.1' };
+    // $10M demo fund metrics — aggregate NAV is Net-of-fees (Wagyu Class: 2% mgmt + 20% perf alloc,
+    // reducing to 15% after 36 months, quarterly non-cumulative per PPM Sec. 4.1-4.3).
+    // Source: pnthr_bt_pyramid_nav_1m_daily_nav_mtm_v21_net_recomputed (1,713 daily docs, scaled 10x)
+    // via scripts_den/rebuild_demo_nav_net.js run on 2026-04-21. CAGR matches published Wagyu Net 29.48%.
+    // Per-trade journal entries remain Gross (fees are portfolio-level, not trade-level).
+    const DEMO_5Y = { startNav: '$10,000,000', endNav: '$57,841,892', totalReturn: '+478.4%', trades: '2,614', winRate: '52.1%', commissions: '$417,936', avgDiscipline: '96.1' };
+    const DEMO_LF = { startNav: '$10,000,000', endNav: '$11,465,420', totalReturn: '+14.7%',  trades: '312',   winRate: '48.4%', commissions: '$40,858', avgDiscipline: '96.1' };
     const demoData = fundPeriod === 'live_fund' ? DEMO_LF : DEMO_5Y;
 
     const tbl = { width: '100%', borderCollapse: 'collapse', marginBottom: 16, fontSize: 12 };

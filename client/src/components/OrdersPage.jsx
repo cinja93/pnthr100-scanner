@@ -453,52 +453,50 @@ const SS_BACKTEST = {
   ],
 };
 
-// ── Hedge Fund Metrics — Pyramid Net-of-Costs ($100K capital, $10K full position, Lots 1-5) ──
-// Source: exportPyramidOrders.js + computeHedgeFundMetrics.js
-// Full D1-D8 Kill scoring · 35/25/20/12/8% lot sizing · Jun 2019 → Apr 2026
-// BL/SS individual metrics from single-lot model (signal quality baseline);
-// COMBINED shows the true production pyramid strategy result.
+// ── Hedge Fund Metrics — v21 canonical Wagyu ($1M tier) Gross, Jun 2019 -> Apr 2026 (6.85 years) ──
+// COMBINED uses Gross MTM daily NAV curve (pre-fund-fee, post-transaction-cost); matches published
+// Wagyu Gross (Sharpe 2.59 / Sortino 4.72 / MaxDD -8.51%). BL_HEDGE / SS_HEDGE are realized-Gross
+// per-direction breakouts from pnthr_bt_pyramid_nav_1m_trade_log (fees are portfolio-level per
+// PPM Sec. 4.1-4.3 and do not cleanly decompose by direction).
+// Source: scripts_den/compute_per_direction_metrics.js run on 2026-04-21.
 
 const BL_HEDGE = {
-  // BL signal baseline — single-lot net-of-costs (Jun 2019 → Apr 2026, 1524 trades)
-  // Win rate = 66.7% on CONFIRMED BL signals (single-lot, no pyramid stop ratchets)
-  cagr: 52.0, sharpe: 2.15, sortino: 68.82,
-  maxDrawdown: 0.35, maxDDPeriod: '2023-09 to 2023-10',
-  calmar: 146.80, profitFactor: 8.91,
-  winRate: 66.7,   // single-lot CONFIRMED signal win rate — matches this column's data source
-  bestMonth: 25.59, bestMonthLabel: '2019-07',
-  worstMonth: -0.35, worstMonthLabel: '2023-10',
-  positiveMonths: 74, totalMonths: 79,
-  positiveMonthsPct: 93.7,
-  avgMonthlyReturn: 3.67, monthlyStdDev: 5.25,
+  // BL-only realized Gross from v21 Wagyu trade log (2,457 trades)
+  cagr: 37.97, sharpe: 3.19, sortino: 85.06,
+  maxDrawdown: 0.91, maxDDPeriod: '2019-09 to 2019-10',
+  calmar: 41.74, profitFactor: 10.33,
+  winRate: 51.2,   // BL wins 1257 / (1257 + 1200) trade-level
+  bestMonth: 12.56, bestMonthLabel: '2021-01',
+  worstMonth: -0.85, worstMonthLabel: '2019-10',
+  positiveMonths: 69, totalMonths: 83,
+  positiveMonthsPct: 83.1,
+  avgMonthlyReturn: 2.47, monthlyStdDev: 2.82,
 };
 
 const SS_HEDGE = {
-  // SS signal baseline — single-lot net-of-costs (Jun 2019 → Apr 2026, 143 trades)
-  // Win rate = 62.2% on CONFIRMED SS signals (single-lot, no pyramid stop ratchets)
-  cagr: 35.3, sharpe: 1.85, sortino: 16.54,
-  maxDrawdown: 1.14, maxDDPeriod: '2022-10 to 2022-11',
-  calmar: 30.99, profitFactor: 4.19,
-  winRate: 62.2,   // single-lot CONFIRMED signal win rate — matches this column's data source
-  bestMonth: 14.55, bestMonthLabel: '2022-05',
-  worstMonth: -1.14, worstMonthLabel: '2022-11',
-  positiveMonths: 16, totalMonths: 18,
-  positiveMonthsPct: 88.9,
-  avgMonthlyReturn: 2.63, monthlyStdDev: 4.14,
+  // SS-only realized Gross from v21 Wagyu trade log (157 trades; SS Crash Gate restrictive)
+  cagr: 4.98, sharpe: 0.49, sortino: 24.66,
+  maxDrawdown: 0.65, maxDDPeriod: '2022-04 to 2022-05',
+  calmar: 7.64, profitFactor: 7.43,
+  winRate: 48.4,   // SS wins 76 / (76 + 81) trade-level
+  bestMonth: 8.72, bestMonthLabel: '2022-05',
+  worstMonth: -0.24, worstMonthLabel: '2026-03',
+  positiveMonths: 14, totalMonths: 83,
+  positiveMonthsPct: 16.9,
+  avgMonthlyReturn: 0.40, monthlyStdDev: 1.48,
 };
 
 const COMBINED_HEDGE = {
-  // Combined PYRAMID net-of-costs — Jun 2019 through Apr 2026 (82 months, ~2,614 closed trades)
-  // True production strategy: full D1-D8 · 35/25/20/12/8% lots · all gates
-  // $100K → $861K · COVID crash Mar 2020: +0.53% (strategy MADE money)
-  cagr: 37.0, sharpe: 2.39, sortino: 34.0,
-  maxDrawdown: 1.00, maxDDPeriod: '2019-09 to 2019-10',
-  calmar: 37.02, profitFactor: 9.10,
-  bestMonth: 19.28, bestMonthLabel: '2019-12',
-  worstMonth: -1.00, worstMonthLabel: '2019-10',
-  positiveMonths: 76, totalMonths: 82,
-  positiveMonthsPct: 92.7,
-  avgMonthlyReturn: 2.71, monthlyStdDev: 3.33,
+  // Combined Wagyu Gross MTM daily NAV — Jun 2019 -> Apr 2026 (83 months, 2,614 closed trades)
+  // $1M -> $9.37M on Gross MTM basis at Wagyu tier
+  cagr: 38.60, sharpe: 2.56, sortino: 4.72,
+  maxDrawdown: 8.51, maxDDPeriod: '2020-09 to 2020-09',
+  calmar: 4.54, profitFactor: 10.14,
+  bestMonth: 17.36, bestMonthLabel: '2019-11',
+  worstMonth: -4.64, worstMonthLabel: '2020-09',
+  positiveMonths: 69, totalMonths: 83,
+  positiveMonthsPct: 83.1,
+  avgMonthlyReturn: 2.60, monthlyStdDev: 3.14,
 };
 
 // ── Institutional Metrics Section (shared by BacktestPopup + PortfolioPopup) ──

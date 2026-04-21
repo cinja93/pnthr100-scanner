@@ -338,17 +338,17 @@ def section_highlights(t):
               alignment=TA_CENTER))],
     ]
     banner = Table(banner_rows, colWidths=[CONTENT_W], style=TableStyle([
-        ('TOPPADDING', (0,0), (-1,0), 8),
-        ('BOTTOMPADDING', (0,0), (-1,0), 2),
-        ('TOPPADDING', (0,1), (-1,1), 2),
-        ('BOTTOMPADDING', (0,1), (-1,1), 8),
+        ('TOPPADDING', (0,0), (-1,0), 5),
+        ('BOTTOMPADDING', (0,0), (-1,0), 1),
+        ('TOPPADDING', (0,1), (-1,1), 1),
+        ('BOTTOMPADDING', (0,1), (-1,1), 5),
         ('LEFTPADDING', (0,0), (-1,-1), 14),
         ('RIGHTPADDING', (0,0), (-1,-1), 14),
         ('LINEABOVE', (0,0), (-1,0), 1.5, PNTHR_YELLOW),
         ('LINEBELOW', (0,-1), (-1,-1), 1.5, PNTHR_YELLOW),
     ]))
     s.append(banner)
-    s.append(Spacer(1, 0.18 * inch))
+    s.append(Spacer(1, 0.10 * inch))
 
     # Top section heading — yellow on black (overrides section() which is
     # black-bold-on-white for the rest of the document)
@@ -385,19 +385,19 @@ def section_highlights(t):
         ('BACKGROUND', (0,0), (-1,-1), HexColor('#111111')),
         ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
         ('TEXTCOLOR', (0,0), (0,-1), PNTHR_YELLOW),
-        ('FONTSIZE', (0,0), (-1,-1), 9.5),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
         ('TEXTCOLOR', (1,0), (1,-1), HexColor('#ffffff')),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('TOPPADDING', (0,0), (-1,-1), 5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
         ('LEFTPADDING', (0,0), (-1,-1), 12),
         ('RIGHTPADDING', (0,0), (-1,-1), 12),
         ('LINEBELOW', (0,0), (-1,-2), 0.3, HexColor('#1f1f1f')),
     ]))
     s.append(Paragraph('<b>FUND OVERVIEW</b>', S('h', fontSize=10, leading=13, textColor=PNTHR_YELLOW, fontName='Helvetica-Bold')))
-    s.append(Spacer(1, 4))
+    s.append(Spacer(1, 3))
     s.append(ov_tbl)
-    s.append(Spacer(1, 0.15 * inch))
+    s.append(Spacer(1, 0.10 * inch))
 
     # Headline numbers — 12 tiles in 3 rows of 4
     s.append(Paragraph('<b><font color="#fcf000">HEADLINE NUMBERS</font></b>   <font color="#aaaaaa" size="8">(all figures NET of fees - see page 3 for full Gross vs Net breakdown)</font>',
@@ -442,11 +442,11 @@ def section_highlights(t):
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('LEFTPADDING',  (0,0), (-1,-1), 10),
             ('RIGHTPADDING', (0,0), (-1,-1), 10),
-            ('TOPPADDING',   (0,0), (-1,-1), 8),
-            ('BOTTOMPADDING',(0,0), (-1,-1), 8),
+            ('TOPPADDING',   (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING',(0,0), (-1,-1), 5),
         ]))
         s.append(tbl)
-        s.append(Spacer(1, 4))
+        s.append(Spacer(1, 3))
 
     # PNTHR vs S&P 500 at a Glance (small summary)
     s.append(Spacer(1, 0.12 * inch))
@@ -513,13 +513,9 @@ def section_highlights(t):
     ]))
     s.append(g_tbl)
 
-    # Cumulative growth chart
-    s.append(Spacer(1, 0.1 * inch))
-    chart_path = os.path.join(TMP_DIR, f'growth_{t["tier"]}.png')
-    generate_cumulative_growth_chart(t, chart_path)
-    if os.path.exists(chart_path):
-        img = RLImage(chart_path, width=CONTENT_W, height=2.1*inch)
-        s.append(img)
+    # (Growth chart lives on its own page in ACT IV —
+    # section_cumulative_growth_chart_page — not duplicated here so the
+    # dashboard fits on exactly one black page.)
     s.append(PageBreak())
     return s
 

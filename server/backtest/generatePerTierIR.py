@@ -49,6 +49,13 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 import matplotlib.dates as mdates
 
+# Canonical Phase 2 design template (shared with PPM v6.9, LPA v3.4, IMA v3.5,
+# Sub Agmt v2.6, AIV v2.3, GP OpAgmt v2.5, InvQuest v2.4, LOI v4.2, FIR v24)
+sys.path.insert(0, os.path.expanduser('~/Downloads/PNTHR_legal_docs_v6/generators'))
+from pnthr_design import (
+    make_doc_template, make_page_handlers, build_cover_header,
+)
+
 # ── Brand Colors (match generateDataRoomDocs.py) ─────────────────────────────
 PNTHR_YELLOW   = HexColor('#fcf000')
 PNTHR_BLACK    = HexColor('#0a0a0a')
@@ -115,19 +122,21 @@ def yellow_rule():
     return HRFlowable(width='100%', thickness=1.2, color=PNTHR_YELLOW, spaceBefore=2, spaceAfter=6)
 
 def section(text):
-    return [Spacer(1, 6), Paragraph(f'<b>{text}</b>', S('sect', fontSize=13, leading=15, textColor=PNTHR_YELLOW, letterSpacing=0.5)), yellow_rule()]
+    # Canonical: black bold heading with yellow underline rule (matches the
+    # yellow-accent visual language used throughout Phase 2 docs).
+    return [Spacer(1, 6), Paragraph(f'<b>{text}</b>', S('sect', fontSize=13, leading=16, textColor=HexColor('#0a0a0a'), fontName='Helvetica-Bold')), yellow_rule()]
 
 def subsection(text):
-    return [Spacer(1, 4), Paragraph(f'<b>{text}</b>', S('sub', fontSize=10, leading=13, textColor=PNTHR_YELLOW)), Spacer(1, 3)]
+    return [Spacer(1, 4), Paragraph(f'<b>{text}</b>', S('sub', fontSize=10.5, leading=13, textColor=HexColor('#0a0a0a'), fontName='Helvetica-Bold')), Spacer(1, 3)]
 
 def body(text):
-    return Paragraph(text, S('body', fontSize=9, leading=12, textColor=HexColor('#222222')))
+    return Paragraph(text, S('body', fontSize=9.5, leading=12.5, textColor=HexColor('#111111'), alignment=TA_JUSTIFY))
 
 def bullet(text):
-    return Paragraph(f'• {text}', S('bul', fontSize=9, leading=12, textColor=HexColor('#222222'), leftIndent=10))
+    return Paragraph(f'• {text}', S('bul', fontSize=9.5, leading=12.5, textColor=HexColor('#111111'), leftIndent=14))
 
 def note(text):
-    return Paragraph(text, S('note', fontSize=8, leading=10, textColor=PNTHR_LGRAY, fontName='Helvetica-Oblique'))
+    return Paragraph(text, S('note', fontSize=8, leading=10, textColor=HexColor('#666666'), fontName='Helvetica-Oblique'))
 
 def bold_table(headers, rows, col_widths=None, highlight_row=None, zebra=True, first_col_bold=False):
     data = [headers] + rows
@@ -155,79 +164,15 @@ def bold_table(headers, rows, col_widths=None, highlight_row=None, zebra=True, f
         ts.append(('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'))
     return Table(data, colWidths=col_widths, style=TableStyle(ts))
 
-# ── Canvas handlers (cover = dark with logo + ghost; content = yellow rule + footer) ──
-def make_cover_callback(state):
-    def cover(canvas, doc):
-        canvas.saveState()
-        canvas.setFillColor(PNTHR_BLACK)
-        canvas.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
-        canvas.setFillColor(PNTHR_YELLOW)
-        canvas.rect(0, PAGE_H - 4, PAGE_W, 4, fill=1, stroke=0)
-        if os.path.exists(LOGO_BLACK_BG):
-            try:
-                canvas.drawImage(LOGO_BLACK_BG, PAGE_W/2 - 1.6*inch, PAGE_H - 1.9*inch,
-                                 width=3.2*inch, preserveAspectRatio=True, mask='auto')
-            except Exception: pass
-        # Confidential footer
-        canvas.setFillColor(HexColor('#aaaaaa'))
-        canvas.setFont('Helvetica-Oblique', 7)
-        canvas.drawCentredString(PAGE_W/2, 0.48*inch,
-            'CONFIDENTIAL — For Qualified Investors Only — Not an Offer to Sell Securities')
-        canvas.setFillColor(HexColor('#666666'))
-        canvas.drawCentredString(PAGE_W/2, 0.32*inch,
-            'Past performance is not indicative of future results. See full disclaimers on final page.')
-        canvas.setFillColor(HexColor('#888888'))
-        canvas.setFont('Helvetica', 7.5)
-        canvas.drawCentredString(PAGE_W/2, 0.18*inch,
-            'PNTHR FUNDS  -  CARNIVORE QUANT FUND  -  CONFIDENTIAL  -  April 2026  -  pnthrfunds.com')
-        canvas.restoreState()
-    return cover
-
-def make_content_callback(state):
-    def content(canvas, doc):
-        canvas.saveState()
-        # Yellow rule at top
-        canvas.setFillColor(PNTHR_YELLOW)
-        canvas.rect(0, PAGE_H - 3, PAGE_W, 3, fill=1, stroke=0)
-        # Header text
-        canvas.setFillColor(PNTHR_YELLOW)
-        canvas.setFont('Helvetica-Bold', 8)
-        canvas.drawString(MARGIN, PAGE_H - 0.35*inch, 'PNTHR FUNDS')
-        canvas.setFillColor(HexColor('#888888'))
-        canvas.setFont('Helvetica', 7.5)
-        canvas.drawString(MARGIN + 0.95*inch, PAGE_H - 0.35*inch, '|  Carnivore Quant Fund  |  Institutional Tear Sheet')
-        canvas.drawRightString(PAGE_W - MARGIN, PAGE_H - 0.35*inch, f'Page {canvas.getPageNumber()}')
-        canvas.setStrokeColor(HexColor('#cccccc'))
-        canvas.setLineWidth(0.4)
-        canvas.line(MARGIN, PAGE_H - 0.42*inch, PAGE_W - MARGIN, PAGE_H - 0.42*inch)
-        # Footer
-        canvas.setStrokeColor(HexColor('#cccccc'))
-        canvas.line(MARGIN, 0.55*inch, PAGE_W - MARGIN, 0.55*inch)
-        canvas.setFillColor(HexColor('#888888'))
-        canvas.setFont('Helvetica', 7.5)
-        canvas.drawCentredString(PAGE_W/2, 0.38*inch,
-            'PNTHR FUNDS  -  CARNIVORE QUANT FUND  -  CONFIDENTIAL  -  April 2026  -  pnthrfunds.com')
-        canvas.restoreState()
-    return content
-
-class DocState:
-    def __init__(self, title, version):
-        self.title = title
-        self.version = version
-
-def build_doc(filename, title, version, story):
+# ── Canvas handlers (canonical Phase 2 template from pnthr_design.py) ─────────
+def build_doc(filename, title, short_title, story):
     out_path = os.path.join(OUT_DIR, filename)
-    state = DocState(title, version)
-    doc = SimpleDocTemplate(
-        out_path,
-        pagesize=letter,
-        leftMargin=MARGIN, rightMargin=MARGIN,
-        topMargin=0.75*inch, bottomMargin=0.75*inch,
-        title=title, author='PNTHR Funds, LLC',
+    doc = make_doc_template(out_path, title_meta=title, subject=short_title)
+    on_cover, on_page = make_page_handlers(
+        doc_short_title=short_title,
+        doc_date_display='April 2026',
     )
-    cover = make_cover_callback(state)
-    content = make_content_callback(state)
-    doc.build(story, onFirstPage=cover, onLaterPages=content)
+    doc.build(story, onFirstPage=on_cover, onLaterPages=on_page)
     return out_path
 
 # ── Chart helpers ───────────────────────────────────────────────────────────
@@ -328,19 +273,41 @@ def fmt_usd(v, compact=True):
 # ── SECTION BUILDERS ────────────────────────────────────────────────────────
 
 def section_cover(t):
+    """Canonical Phase 2 cover page: logo upper-left, title block, meta lines,
+    confidential block near the bottom. Drawn chrome (black bg, yellow accent
+    bar, ghost panther, footer band) comes from pnthr_design.make_page_handlers."""
+    return build_cover_header(
+        title_line_1='PNTHR FUNDS,',
+        title_line_2='Carnivore Quant Fund, LP',
+        subtitle=f'{t["classLabel"]} Pyramid Intelligence Report',
+        date_line=f'Backtest Period:  {t["gross"]["startDate"]} through {t["gross"]["endDate"]}',
+        revision_line='Document Revision:  Pyramid IR v1 - April 2026',
+        issuer_line='Issuer:  PNTHR Funds, LLC (General Partner)',
+        confidential_title='CONFIDENTIAL INSTITUTIONAL TEAR SHEET',
+        confidential_body=(
+            'FOR QUALIFIED INVESTORS ONLY. HYPOTHETICAL BACKTEST RESULTS. '
+            'NOT AN OFFER TO SELL OR A SOLICITATION OF AN OFFER TO BUY '
+            'ANY SECURITY. PAST PERFORMANCE IS NOT INDICATIVE OF FUTURE '
+            'RESULTS. SEE IMPORTANT DISCLOSURES ON FINAL PAGE.'
+        ),
+        pre_confidential_spacer_inches=2.3,
+    )
+
+
+def section_highlights(t):
+    """Page 2: headline summary — title, fund overview, headline tiles,
+    PNTHR vs SPY at-a-glance, and cumulative growth chart. Replaces the
+    dark-tile hero block that was formerly on the cover."""
     s = []
-    # Logo + title handled by callback
-    # Spacer to push content down below logo
-    s.append(Spacer(1, 2.1 * inch))
-    # Big title (rendered as Paragraph over dark background)
-    s.append(Paragraph(f'<font color="#ffffff"><b>PNTHR FUND Intelligence Report {fmt_usd(t["seedNav"], compact=True)}</b></font>',
-                       S('cov-title', fontSize=24, leading=28, alignment=TA_CENTER, textColor=white)))
-    s.append(Spacer(1, 0.08 * inch))
-    s.append(Paragraph(f'<font color="#888888">7-Year Backtest Performance Report  |  {t["gross"]["startDate"][:4]} - {t["gross"]["endDate"][:4]}</font>',
-                       S('cov-sub', fontSize=10, leading=13, alignment=TA_CENTER, textColor=HexColor('#888888'))))
-    s.append(Paragraph(f'<font color="#888888">Pyramiding 5 Lot Strategy</font>',
-                       S('cov-sub2', fontSize=10, leading=13, alignment=TA_CENTER, textColor=HexColor('#888888'))))
-    s.append(Spacer(1, 0.18 * inch))
+    s += section(f'{t["classLabel"].upper()} PYRAMID INTELLIGENCE REPORT  ({fmt_usd(t["seedNav"], compact=True)} NAV VARIANT)')
+    s.append(body(
+        f'Seven-year backtest of the Carnivore Quant Fund pyramiding long/short equity strategy '
+        f'applied to a {fmt_usd(t["seedNav"], compact=False)} starting NAV under the PPM-defined '
+        f'{t["classLabel"]} fee schedule ({t["feeSchedule"]["yearsOneToThree"]}% performance allocation '
+        f'years 1-3, {t["feeSchedule"]["yearsFourPlus"]}% thereafter). Period: '
+        f'{t["gross"]["startDate"]} through {t["gross"]["endDate"]} '
+        f'({t["gross"]["years"]:.2f} years, {t["net"]["totalMonths"]} months, 1,713 trading days).'
+    ))
     # Fund overview
     overview_rows = [
         ['Strategy',        'Systematic Long/Short U.S. Equity'],
@@ -459,45 +426,45 @@ def section_toc(t):
     s += section('TABLE OF CONTENTS')
     toc_entries = [
         ('ACT I - THE RESULTS', None),
-        ('Executive Summary', 3),
-        ('Performance Comparison: PNTHR vs. S&P 500', 3),
-        ('Gross vs Net: Impact of the Fee Schedule', 3),
-        ('Fees & Expenses Schedule (PPM Reconciliation)', 4),
-        ('Crisis Alpha: Performance During Market Drawdowns', 6),
-        ('Annual Performance: PNTHR vs S&P 500', 6),
-        ('Strategy Metrics by Direction', 6),
-        ('Monthly Returns Heatmap', 7),
-        ('Drawdown Analysis', 8),
-        ('Risk Architecture', 9),
-        ('Worst-Case Trade Analysis (MAE)', 9),
-        ('Rolling 12-Month Returns', 10),
-        ('Best & Worst Trading Days', 10),
+        ('Executive Summary', 4),
+        ('Performance Comparison: PNTHR vs. S&P 500', 4),
+        ('Gross vs Net: Impact of the Fee Schedule', 5),
+        ('Fees & Expenses Schedule (PPM Reconciliation)', 7),
+        ('Crisis Alpha: Performance During Market Drawdowns', 9),
+        ('Annual Performance: PNTHR vs S&P 500', 10),
+        ('Strategy Metrics by Direction', 10),
+        ('Monthly Returns Heatmap', 11),
+        ('Drawdown Analysis', 12),
+        ('Risk Architecture', 13),
+        ('Worst-Case Trade Analysis (MAE)', 14),
+        ('Rolling 12-Month Returns', 15),
+        ('Best & Worst Trading Days', 15),
         ('ACT II - THE METHODOLOGY', None),
-        ('1. The PNTHR Philosophy & Platform', 11),
-        ('2. PNTHR Signal Generation', 11),
-        ('3. The PNTHR Kill Scoring Engine', 12),
-        ('4. PNTHR Analyze Pre-Trade Scoring', 13),
-        ('5. PNTHR Position Sizing & Pyramiding', 14),
-        ('6. Portfolio Command Center & Entry Workflow', 14),
-        ('7. Scoring Health / Archive / History / IBKR Bridge', 15),
-        ('8. Institutional Backtest Results', 15),
-        ('9. Empirical Evidence', 16),
+        ('1. The PNTHR Philosophy & Platform', 18),
+        ('2. PNTHR Signal Generation', 18),
+        ('3. The PNTHR Kill Scoring Engine', 19),
+        ('4. PNTHR Analyze Pre-Trade Scoring', 20),
+        ('5. PNTHR Position Sizing & Pyramiding', 21),
+        ('6. Portfolio Command Center & Entry Workflow', 21),
+        ('7. Scoring Health / Archive / History / IBKR Bridge', 22),
+        ('8. Institutional Backtest Results', 22),
+        ('9. Empirical Evidence', 23),
         ('ACT III - THE PROOF', None),
-        ('Comprehensive Daily NAV Log', 17),
+        ('Comprehensive Daily NAV Log', 24),
         ('ACT IV - THE CLOSE', None),
-        ('Cumulative Growth Chart', 57),
-        ('Executive Recap', 58),
-        ('Methodology & Assumptions', 61),
-        ('Important Disclosures', 63),
+        ('Cumulative Growth Chart', 107),
+        ('Executive Recap', 108),
+        ('Methodology & Assumptions', 110),
+        ('Important Disclosures', 111),
     ]
     rows = []
     for label, pg in toc_entries:
         if pg is None:
-            rows.append([Paragraph(f'<font color="#fcf000"><b>{label}</b></font>',
-                         S('toc-act', fontSize=10)), ''])
+            rows.append([Paragraph(f'<font color="#0a0a0a"><b>{label}</b></font>',
+                         S('toc-act', fontSize=10.5)), ''])
         else:
-            rows.append([Paragraph(f'<font color="#333333">{label}</font>', S('toc', fontSize=9)),
-                         Paragraph(f'<font color="#666666">{pg}</font>', S('toc-pg', fontSize=9, alignment=TA_RIGHT))])
+            rows.append([Paragraph(f'<font color="#222222">{label}</font>', S('toc', fontSize=9.5)),
+                         Paragraph(f'<font color="#666666">{pg}</font>', S('toc-pg', fontSize=9.5, alignment=TA_RIGHT))])
     tbl = Table(rows, colWidths=[CONTENT_W - 0.5*inch, 0.5*inch], style=TableStyle([
         ('TOPPADDING', (0,0), (-1,-1), 2),
         ('BOTTOMPADDING', (0,0), (-1,-1), 2),
@@ -1470,7 +1437,8 @@ def build_per_tier_ir(tier_key):
 
     # Build story (list of flowables)
     story = []
-    story += section_cover(t)
+    story += section_cover(t)            # Canonical Phase 2 cover
+    story += section_highlights(t)       # Page 2: headline tiles + growth chart
     story += section_toc(t)
     story += section_executive_summary(t)
     story += section_fees(t)
@@ -1487,8 +1455,9 @@ def build_per_tier_ir(tier_key):
     story += section_disclosures(t)
 
     filename = f'PNTHR_Pyramid_IR_{t["label"]}_{tier_key}_v1.pdf'
-    path = build_doc(filename, f'PNTHR Funds - Carnivore Quant Fund, LP - {t["label"]} Pyramid Intelligence Report',
-                     f'v1 - April 2026 - {t["classLabel"]}', story)
+    short_title = f'{t["classLabel"]} Pyramid Intelligence Report'
+    title_meta = f'PNTHR Funds - Carnivore Quant Fund, LP - {t["classLabel"]} Pyramid Intelligence Report v1'
+    path = build_doc(filename, title_meta, short_title, story)
     return path
 
 

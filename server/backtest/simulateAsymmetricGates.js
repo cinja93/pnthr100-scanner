@@ -18,6 +18,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 
 import { connectToDatabase } from '../database.js';
+import { loadMembership, getDirectionIndexForTicker } from './backtestMembershipSets.js';
 import { aggregateWeeklyBars, computeEMA21series } from '../technicalUtils.js';
 import { computeWilderATR, blInitStop, ssInitStop } from '../stopCalculation.js';
 
@@ -198,6 +199,9 @@ async function main() {
   const db = await connectToDatabase();
   if (!db) { console.error('Cannot connect to MongoDB'); process.exit(1); }
 
+  // Membership-based direction-index (v22 policy).
+  await loadMembership(db);
+
   const signalCol = db.collection('pnthr_bt_analyze_signals');
   const scoreCol  = db.collection('pnthr_bt_scores');
   const regimeCol = db.collection('pnthr_bt_regime');
@@ -308,9 +312,8 @@ async function main() {
     const d2 = d2Map[key] ?? null;
     const regime = regimeMap[sig.weekOf];
 
-    // Macro alignment
-    const exc = (sig.exchange || '').toUpperCase();
-    const idxTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
+    // Macro alignment (direction-index routing: membership-based per v22 policy)
+    const idxTicker = getDirectionIndexForTicker(sig.ticker, sig.weekOf);
     const idxKey = idxTicker.toLowerCase();
     const idxState = regime?.[idxKey];
     const macroAligned = idxState

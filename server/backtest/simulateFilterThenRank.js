@@ -25,6 +25,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 
 import { connectToDatabase } from '../database.js';
+import { loadMembership, getDirectionIndexForTicker } from './backtestMembershipSets.js';
 import { aggregateWeeklyBars } from '../technicalUtils.js';
 import { computeWilderATR } from '../stopCalculation.js';
 
@@ -85,6 +86,9 @@ function closePyramidPosition(pos, exitDate, exitPrice, exitReason) {
 async function main() {
   const db = await connectToDatabase();
   if (!db) { console.error('Cannot connect to MongoDB'); process.exit(1); }
+
+  // Membership-based direction-index (v22 policy).
+  await loadMembership(db);
 
   const scoreCol  = db.collection('pnthr_bt_scores');
   const signalCol = db.collection('pnthr_bt_analyze_signals');
@@ -583,11 +587,10 @@ function runSimulation(config, allWeeks, scoresByWeek, signalMap, regimeMap, slo
     let pool = weekScores.filter(s => !s.overextended && s.signal && s.entryPrice > 0);
 
     if (config.mode === 'filter_then_rank') {
-      // Step 2: MACRO gate
+      // Step 2: MACRO gate (direction-index routing: membership-based per v22 policy)
       if (config.macroGate && regime) {
         pool = pool.filter(s => {
-          const exc = (s.exchange || '').toUpperCase();
-          const idxTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
+          const idxTicker = getDirectionIndexForTicker(s.ticker, friday);
           const idxKey = idxTicker.toLowerCase();
           const idx = regime[idxKey];
           if (!idx) return false;
@@ -612,12 +615,11 @@ function runSimulation(config, allWeeks, scoresByWeek, signalMap, regimeMap, slo
         pool = pool.filter(s => (s.scores?.d2 ?? 0) >= 0);
       }
 
-      // Step 5: SS strict criteria
+      // Step 5: SS strict criteria (direction-index routing: membership-based per v22 policy)
       if (config.ssStrict) {
         pool = pool.filter(s => {
           if (s.signal !== 'SS') return true; // BL passes through
-          const exc = (s.exchange || '').toUpperCase();
-          const idxTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
+          const idxTicker = getDirectionIndexForTicker(s.ticker, friday);
           const slopeOk = slopeFallingMap[friday]?.[idxTicker] ?? false;
           if (!slopeOk) return false;
           const etf = SECTOR_MAP[s.sector];
@@ -662,11 +664,10 @@ function runSimulation(config, allWeeks, scoresByWeek, signalMap, regimeMap, slo
       // Take top 10
       pool = pool.slice(0, 10);
 
-      // Then filter
+      // Then filter (direction-index routing: membership-based per v22 policy)
       if (config.macroGate && regime) {
         pool = pool.filter(s => {
-          const exc = (s.exchange || '').toUpperCase();
-          const idxTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
+          const idxTicker = getDirectionIndexForTicker(s.ticker, friday);
           const idxKey = idxTicker.toLowerCase();
           const idx = regime[idxKey];
           if (!idx) return false;

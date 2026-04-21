@@ -40,6 +40,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 
 import { connectToDatabase } from '../database.js';
+import { loadMembership, getDirectionIndexForTicker } from './backtestMembershipSets.js';
 import { aggregateWeeklyBars } from '../technicalUtils.js';
 import { computeWilderATR, blInitStop, ssInitStop } from '../stopCalculation.js';
 
@@ -115,9 +116,9 @@ function computeRSI(closes, period = 14) {
 }
 
 // ── D1: Regime multiplier ─────────────────────────────────────────────────────
-function calcD1(signal, exchange, regimeByWeek, friday) {
-  const exc = (exchange || '').toUpperCase();
-  const indexTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
+// Direction-index routing: membership-based per v22 policy.
+function calcD1(signal, ticker, regimeByWeek, friday) {
+  const indexTicker = getDirectionIndexForTicker(ticker, friday);
   const regime = regimeByWeek[friday];
   if (!regime) return 1.0;
   const idx = regime[indexTicker.toLowerCase()];
@@ -377,6 +378,9 @@ async function main() {
   const db = await connectToDatabase();
   if (!db) { console.error('Cannot connect to MongoDB'); process.exit(1); }
 
+  // Membership-based direction-index (v22 policy).
+  await loadMembership(db);
+
   const candleCol  = db.collection('pnthr_bt_candles');
   const scoreCol   = db.collection('pnthr_bt_scores');
   const signalCol  = db.collection('pnthr_bt_analyze_signals');
@@ -609,7 +613,7 @@ async function main() {
           continue;
         }
 
-        const d1 = calcD1(signal, meta.exchange, regimeByWeek, friday);
+        const d1 = calcD1(signal, ticker, regimeByWeek, friday);
         const d2 = calcD2(signal, meta.sector, sectorData);
         const d4 = calcD4(signalAge, d3.confirmation);
         const d6 = calcD6(signal, rsi);

@@ -16,6 +16,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import { connectToDatabase } from '../database.js';
+import { loadMembership, getDirectionIndexForTicker } from './backtestMembershipSets.js';
 import { computeWilderATR, blInitStop, ssInitStop } from '../stopCalculation.js';
 import { getSectorEmaPeriod, SECTOR_EMA_PERIODS, DEFAULT_EMA_PERIOD } from '../sectorEmaConfig.js';
 
@@ -315,10 +316,10 @@ function computeSignalAge(signalDate, targetMonday) {
 
 // ── D1: Market Regime ────────────────────────────────────────────────────────
 
-function calcD1(signal, exchange, indexData, signalCounts) {
+// Direction-index routing: membership-based per v22 policy.
+function calcD1(signal, ticker, friday, indexData, signalCounts) {
   const { blCount = 0, ssCount = 0, newBlCount = 0, newSsCount = 0 } = signalCounts;
-  const exc = (exchange || '').toUpperCase();
-  const indexTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
+  const indexTicker = getDirectionIndexForTicker(ticker, friday);
   const idx = indexData[indexTicker];
 
   let indexScore = 0;
@@ -501,6 +502,9 @@ async function main() {
 
   const db = await connectToDatabase();
   if (!db) throw new Error('DB unavailable');
+
+  // Membership-based direction-index (v22 policy).
+  await loadMembership(db);
 
   // ── 1. Load ALL candle data ─────────────────────────────────────────────
   console.log('[1/6] Loading candle data from caches...');
@@ -690,7 +694,7 @@ async function main() {
       const curRankChange = rankInfo.rankChange ?? null;
       const prevWeekRankChange = prevRankChanges[ticker] ?? null;
 
-      const d1 = calcD1(sig.signal, meta.exchange, indexData, signalCounts);
+      const d1 = calcD1(sig.signal, ticker, friday, indexData, signalCounts);
       const d2 = scoreD2(sig.signal, meta.sector, sig.isNewSignal, sectorData);
       const d3 = scoreD3(sig.signal, weekly, ema21);
 

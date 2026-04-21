@@ -49,6 +49,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 
 import { connectToDatabase } from '../database.js';
+import { loadMembership, getDirectionIndexForTicker } from './backtestMembershipSets.js';
 import { aggregateWeeklyBars } from '../technicalUtils.js';
 import { computeWilderATR } from '../stopCalculation.js';
 import { calcCommission, calcSlippage, getBorrowRate, calcBorrowCost, COST_METHODOLOGY } from './costEngine.js';
@@ -117,6 +118,9 @@ function checkStructuralExit(weekBar, twoWeekHigh, twoWeekLow, signal) {
 async function main() {
   const db = await connectToDatabase();
   if (!db) { console.error('Cannot connect to MongoDB'); process.exit(1); }
+
+  // Membership-based direction-index (v22 policy).
+  await loadMembership(db);
 
   const scoreCol   = db.collection('pnthr_bt_scores');
   const signalCol  = db.collection('pnthr_bt_analyze_signals');
@@ -390,11 +394,10 @@ async function main() {
 
     let pool = weekScores.filter(s => !s.overextended && s.signal && s.entryPrice > 0);
 
-    // MACRO gate
+    // MACRO gate (direction-index routing: membership-based per v22 policy)
     if (regime) {
       pool = pool.filter(s => {
-        const exc = (s.exchange || '').toUpperCase();
-        const idxTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
+        const idxTicker = getDirectionIndexForTicker(s.ticker, friday);
         const idxKey = idxTicker.toLowerCase();
         const idx = regime[idxKey];
         if (!idx) return false;
@@ -416,8 +419,7 @@ async function main() {
     // SS CRASH gate: requires 2+ consecutive falling EMA weeks + sector -3% 5D
     pool = pool.filter(s => {
       if (s.signal !== 'SS') return true;
-      const exc = (s.exchange || '').toUpperCase();
-      const idxTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
+      const idxTicker = getDirectionIndexForTicker(s.ticker, friday);
       const slopeOk = slopeFallingMap[friday]?.[idxTicker] ?? false;
       if (!slopeOk) return false;
       const etf = SECTOR_MAP[s.sector];

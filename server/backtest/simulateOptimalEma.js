@@ -19,6 +19,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 
 import { connectToDatabase } from '../database.js';
+import { loadMembership, getDirectionIndexForTicker } from './backtestMembershipSets.js';
 import { aggregateWeeklyBars } from '../technicalUtils.js';
 import { computeWilderATR, blInitStop, ssInitStop } from '../stopCalculation.js';
 
@@ -309,11 +310,10 @@ function runFullSimulation({
 
     pool = pool.filter(s => !s.overextended && s.signal && s.entryPrice > 0);
 
-    // MACRO gate
+    // MACRO gate (direction-index routing: membership-based per v22 policy)
     if (regime) {
       pool = pool.filter(s => {
-        const exc = (s.exchange || '').toUpperCase();
-        const idxTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
+        const idxTicker = getDirectionIndexForTicker(s.ticker, friday);
         const idxKey = idxTicker.toLowerCase();
         const idx = regime[idxKey];
         if (!idx) return false;
@@ -334,11 +334,10 @@ function runFullSimulation({
     // D2 gate
     pool = pool.filter(s => (s.scores?.d2 ?? 0) >= 0);
 
-    // SS crash gate
+    // SS crash gate (direction-index routing: membership-based per v22 policy)
     pool = pool.filter(s => {
       if (s.signal !== 'SS') return true;
-      const exc = (s.exchange || '').toUpperCase();
-      const idxTicker = (exc === 'NASDAQ' || exc.includes('NASDAQ')) ? 'QQQ' : 'SPY';
+      const idxTicker = getDirectionIndexForTicker(s.ticker, friday);
       const slopeOk = slopeFallingMap[friday]?.[idxTicker] ?? false;
       if (!slopeOk) return false;
       const etf = SECTOR_MAP[s.sector];
@@ -445,6 +444,9 @@ async function main() {
   const db = await connectToDatabase();
   if (!db) { console.error('Cannot connect to MongoDB'); process.exit(1); }
   console.log('Connected to MongoDB\n');
+
+  // Membership-based direction-index (v22 policy).
+  await loadMembership(db);
 
   const scoreCol  = db.collection('pnthr_bt_scores');
   const signalCol = db.collection('pnthr_bt_analyze_signals');

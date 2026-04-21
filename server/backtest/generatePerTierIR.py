@@ -319,23 +319,28 @@ def section_highlights(t):
         ['Backtest Capital',f'{fmt_usd(t["seedNav"], compact=False)} starting NAV (Pyramid sizing)'],
         ['Benchmark',       'S&P 500 (SPY)'],
     ]
+    # Fund Overview: dark panel (continuity with the dashboard card aesthetic),
+    # yellow labels + white values so it stays legible against the white page.
     ov_tbl = Table(overview_rows, colWidths=[1.5*inch, CONTENT_W - 1.5*inch], style=TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), HexColor('#0a0a0a')),
         ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
         ('TEXTCOLOR', (0,0), (0,-1), PNTHR_YELLOW),
         ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('TEXTCOLOR', (1,0), (1,-1), HexColor('#dddddd')),
+        ('TEXTCOLOR', (1,0), (1,-1), HexColor('#ffffff')),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('TOPPADDING', (0,0), (-1,-1), 2),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('LEFTPADDING', (0,0), (-1,-1), 10),
+        ('RIGHTPADDING', (0,0), (-1,-1), 10),
     ]))
-    s.append(Paragraph('<font color="#fcf000"><b>FUND OVERVIEW</b></font>', S('h', fontSize=9, textColor=PNTHR_YELLOW)))
+    s.append(Paragraph('<b>FUND OVERVIEW</b>', S('h', fontSize=10, leading=13, textColor=HexColor('#0a0a0a'), fontName='Helvetica-Bold')))
     s.append(Spacer(1, 4))
     s.append(ov_tbl)
     s.append(Spacer(1, 0.15 * inch))
 
     # Headline numbers — 12 tiles in 3 rows of 4
-    s.append(Paragraph('<font color="#fcf000"><b>HEADLINE NUMBERS</b></font><font color="#888888">   (all figures NET of fees - see page 3 for full Gross vs Net breakdown)</font>',
-                       S('h2', fontSize=9, textColor=PNTHR_YELLOW)))
+    s.append(Paragraph('<b>HEADLINE NUMBERS</b>   <font color="#666666" size="8">(all figures NET of fees - see page 3 for full Gross vs Net breakdown)</font>',
+                       S('h2', fontSize=10, leading=13, textColor=HexColor('#0a0a0a'), fontName='Helvetica-Bold')))
     s.append(Spacer(1, 4))
     net = t['net']
     trades = t['trades']
@@ -377,8 +382,8 @@ def section_highlights(t):
 
     # PNTHR vs S&P 500 at a Glance (small summary)
     s.append(Spacer(1, 0.1 * inch))
-    s.append(Paragraph('<font color="#fcf000"><b>PNTHR vs S&amp;P 500 AT A GLANCE</b></font>',
-                       S('h3', fontSize=9, textColor=PNTHR_YELLOW)))
+    s.append(Paragraph('<b>PNTHR vs S&amp;P 500 AT A GLANCE</b>',
+                       S('h3', fontSize=10, leading=13, textColor=HexColor('#0a0a0a'), fontName='Helvetica-Bold')))
     s.append(Spacer(1, 3))
     glance_rows = [
         ['', '<font color="#fcf000">PNTHR (NET)</font>', '<font color="#888888">S&amp;P 500</font>', '<font color="#22c55e">ALPHA</font>'],

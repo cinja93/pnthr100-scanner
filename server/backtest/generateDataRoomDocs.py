@@ -1326,7 +1326,7 @@ def gen_ddq():
         ('Net Max Drawdown (daily NAV)', 'Filet: -9.99%; Porterhouse: -9.36%; Wagyu: -8.82%'),
         ('Benchmark (S&amp;P 500)', 'CAGR: +12.8%; Max Drawdown: -34.1%. Strategy alpha: Filet +13.0 pts; Porterhouse +14.9 pts; Wagyu +16.7 pts (annualized, net).'),
         ('Data Integrity', 'Backtest internally validated: direction-index gate via historical SP500/NDX100 membership reconstruction (FMP events); SP400 membership via MDY ETF holdings proxy; sector ETF gate at sector-specific trend-filter periods (specific periods proprietary); quarterly non-cumulative fee engine per PPM sec. 4.1-4.3; mark-to-market daily-basis Max Drawdown computation. Not independently audited by a third-party accounting firm; Fund intends to engage Spicer Jeffries LLP as independent auditor upon Limited Partner admission.'),
-        ('Full Detail', 'Refer to PNTHR Fund Intelligence Report v23 for complete per-class metrics, annual performance breakdowns, crisis alpha analysis, methodology, and anticipated due diligence questions.'),
+        ('Full Detail', 'Refer to PNTHR Fund Intelligence Report v24 for complete per-class metrics, annual performance breakdowns, crisis alpha analysis, methodology, and anticipated due diligence questions.'),
     ]
     s.append(bold_table(
         ['Question', 'Answer'],
@@ -1360,7 +1360,7 @@ def gen_ddq():
     ))
 
     build_doc('PNTHR_Due_Diligence_Questionnaire.pdf',
-              'Due Diligence Questionnaire', 'v1.3 - April 2026', s)
+              'Due Diligence Questionnaire', 'v1.4 - April 2026', s)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1993,7 +1993,7 @@ def gen_fund_intelligence_v21():
     # ── Section 1: Executive Summary ─────────────────────────────────────────
     s += section('Executive Summary')
     s.append(body(
-        'This Fund Intelligence Report v23 consolidates performance data for all three investor '
+        'This Fund Intelligence Report v24 consolidates performance data for all three investor '
         'classes of PNTHR FUNDS, Carnivore Quant Fund, LP into a single authoritative document. '
         'All figures are derived from a full historical backtest of the proprietary PNTHR Signal '
         'System across the PNTHR 679 U.S. equity universe from June 2019 through April 2026 '
@@ -2223,13 +2223,21 @@ def gen_fund_intelligence_v21():
     s.append(body(
         'These figures are entirely <b>hypothetical backtest results</b>. The Fund has not '
         'yet traded non-affiliated Limited Partner capital. From June 16, 2025 through '
-        'April 16, 2026 (the Pre-Launch Live Testing Period), the General Partner and principals '
-        'used their own capital to live-test a <i>Short-Term Complementary Strategy</i>, '
-        'distinct from the Strategy described herein. The Short-Term Complementary Strategy '
-        'produced cumulative losses of 44.92% borne exclusively by the General Partner; no '
-        'non-affiliated Limited Partner was exposed. The Strategy presented in this report is '
-        'operational as of April 17, 2026. All backtest performance is simulated against '
-        'historical data.'
+        'April 16, 2026 (the Pre-Launch Live Testing Period), the General Partner and '
+        'principals used their own capital to live-test the <i>Short-Term Complementary '
+        'Strategy</i>. The Short-Term Complementary Strategy is a <b>completely separate '
+        'trading strategy</b> from the Strategy described in this Report. It differs from '
+        'the Strategy in all material respects, including signal logic, entry and exit '
+        'rules, position sizing methodology, risk management framework, and portfolio '
+        'construction. <b>The Strategy itself was not traded during the Pre-Launch Live '
+        'Testing Period, and the 44.92% cumulative loss incurred by the Short-Term '
+        'Complementary Strategy has no bearing on, and is not indicative of, the '
+        'performance of the Strategy.</b> The Short-Term Complementary Strategy produced '
+        'cumulative losses of 44.92% borne exclusively by the General Partner; no '
+        'non-affiliated Limited Partner was exposed. The Short-Term Complementary Strategy '
+        'has been permanently eliminated from the Fund\'s investment program. The Strategy '
+        'presented in this Report is operational as of April 17, 2026. All backtest '
+        'performance is simulated against historical data.'
     ))
 
     s += subsection('2. What realistic live performance should an investor expect?')
@@ -2457,8 +2465,8 @@ def gen_fund_intelligence_v21():
         'tickers is not available in the current data source.'
     ))
 
-    build_doc('PNTHR_Fund_Intelligence_Report_v23.pdf',
-              'Fund Intelligence Report', 'v23 - April 2026 - HYPOTHETICAL BACKTEST (CONSOLIDATED 3-CLASS)', s)
+    build_doc('PNTHR_Fund_Intelligence_Report_v24.pdf',
+              'Fund Intelligence Report', 'v24 - April 2026 - HYPOTHETICAL BACKTEST (CONSOLIDATED 3-CLASS)', s)
 
 
 if __name__ == '__main__':

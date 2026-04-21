@@ -153,7 +153,33 @@ class PNTHRBridge(EWrapper, EClient):
         self.account_ready.set()
 
     def position(self, account, contract, pos, avgCost):
-        pass  # Handled in updatePortfolio
+        """Fallback position handler — populates positions_dict from reqPositions().
+
+        updatePortfolio (from reqAccountUpdates) is primary and provides richer data
+        (marketPrice, marketValue, unrealizedPNL). But TWS has a known quirk where
+        reqAccountUpdates streams account values (NAV) without streaming portfolio
+        callbacks. When that happens, this fallback ensures positions still sync
+        via the reliable reqPositions() path. If updatePortfolio fires later, it
+        overwrites with richer data. Market-price-dependent fields default to 0
+        until updatePortfolio catches up.
+        """
+        symbol = contract.symbol
+        if pos != 0:
+            # Only populate if not already set by updatePortfolio (avoid clobbering richer data)
+            if symbol not in self.positions_dict:
+                self.positions_dict[symbol] = {
+                    'symbol':        symbol,
+                    'secType':       contract.secType,
+                    'currency':      contract.currency,
+                    'shares':        float(pos),
+                    'marketPrice':   0.0,   # filled by updatePortfolio when it fires
+                    'marketValue':   0.0,   # filled by updatePortfolio when it fires
+                    'avgCost':       float(avgCost),
+                    'unrealizedPNL': 0.0,   # filled by updatePortfolio when it fires
+                    'realizedPNL':   0.0,   # filled by updatePortfolio when it fires
+                }
+        else:
+            self.positions_dict.pop(symbol, None)
 
     def positionEnd(self):
         self.positions_ready.set()

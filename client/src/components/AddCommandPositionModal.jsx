@@ -43,6 +43,7 @@ export default function AddCommandPositionModal({ open, initial, onClose, onSave
   const [sector,     setSector]     = useState('');
   const [saving,     setSaving]     = useState(false);
   const [error,      setError]      = useState(null);
+  const [warning,    setWarning]    = useState(null); // non-blocking; shows 'ADD ANYWAY' on next click
   const tickerRef = useRef(null);
 
   // Reset when opening, pre-fill from `initial` if provided
@@ -56,6 +57,7 @@ export default function AddCommandPositionModal({ open, initial, onClose, onSave
     setFillDate(todayISO());
     setSector('');
     setError(null);
+    setWarning(null);
     setSaving(false);
     // Focus ticker if empty, otherwise shares
     setTimeout(() => tickerRef.current?.focus(), 50);
@@ -63,25 +65,44 @@ export default function AddCommandPositionModal({ open, initial, onClose, onSave
 
   if (!open) return null;
 
+  // Returns { blocking: true, message } for hard errors, { blocking: false, message }
+  // for soft warnings the user can bypass (e.g. stop already ratcheted past entry),
+  // or null if the form is clean.
   const validate = () => {
-    if (!ticker.trim()) return 'Ticker required';
-    if (!['LONG', 'SHORT'].includes(direction)) return 'Direction required';
+    if (!ticker.trim()) return { blocking: true, message: 'Ticker required' };
+    if (!['LONG', 'SHORT'].includes(direction)) return { blocking: true, message: 'Direction required' };
     const nShares = Number(shares);
-    if (!Number.isFinite(nShares) || nShares <= 0 || !Number.isInteger(nShares)) return 'Shares must be a positive integer';
+    if (!Number.isFinite(nShares) || nShares <= 0 || !Number.isInteger(nShares)) return { blocking: true, message: 'Shares must be a positive integer' };
     const nEntry = Number(entryPrice);
-    if (!Number.isFinite(nEntry) || nEntry <= 0) return 'Entry price must be positive';
+    if (!Number.isFinite(nEntry) || nEntry <= 0) return { blocking: true, message: 'Entry price must be positive' };
     const nStop = Number(stopPrice);
-    if (!Number.isFinite(nStop) || nStop <= 0) return 'Stop price must be positive';
-    if (direction === 'LONG'  && nStop >= nEntry) return 'Long stop must be below entry price';
-    if (direction === 'SHORT' && nStop <= nEntry) return 'Short stop must be above entry price';
+    if (!Number.isFinite(nStop) || nStop <= 0) return { blocking: true, message: 'Stop price must be positive' };
+    // Soft warnings — stop on "wrong" side usually means stop has already been
+    // ratcheted past entry on a position that's been open for a while. Flag it
+    // but let the user proceed on a second click.
+    if (direction === 'LONG'  && nStop >= nEntry) return { blocking: false, message: 'Long stop is at or above entry — this usually means the stop has already been ratcheted past entry. Click ADD ANYWAY to proceed.' };
+    if (direction === 'SHORT' && nStop <= nEntry) return { blocking: false, message: 'Short stop is at or below entry — this usually means the stop has already been ratcheted past entry. Click ADD ANYWAY to proceed.' };
     return null;
   };
 
+  // When the user edits any field, clear the warning so they re-confirm if still valid.
+  const clearWarning = () => { if (warning) setWarning(null); };
+
   const save = async () => {
-    const err = validate();
-    if (err) { setError(err); return; }
+    const v = validate();
+    if (v?.blocking) { setError(v.message); setWarning(null); return; }
+    if (v && !v.blocking) {
+      // Non-blocking warning — show it and require a second click before saving
+      if (warning !== v.message) {
+        setWarning(v.message);
+        setError(null);
+        return;
+      }
+      // warning was already shown; user clicked again → proceed
+    }
     setSaving(true);
     setError(null);
+    setWarning(null);
     try {
       const nShares = Number(shares);
       const nEntry  = Number(entryPrice);
@@ -190,7 +211,7 @@ export default function AddCommandPositionModal({ open, initial, onClose, onSave
                 key={d}
                 type="button"
                 disabled={saving}
-                onClick={() => setDirection(d)}
+                onClick={() => { setDirection(d); clearWarning(); }}
                 style={{
                   flex: 1, padding: '6px 10px',
                   background: direction === d
@@ -226,7 +247,7 @@ export default function AddCommandPositionModal({ open, initial, onClose, onSave
               type="number" min="0" step="0.01"
               value={entryPrice}
               disabled={saving}
-              onChange={(e) => setEntryPrice(e.target.value)}
+              onChange={(e) => { setEntryPrice(e.target.value); clearWarning(); }}
               placeholder="251.56"
               style={inputStyle}
             />
@@ -239,7 +260,7 @@ export default function AddCommandPositionModal({ open, initial, onClose, onSave
               type="number" min="0" step="0.01"
               value={stopPrice}
               disabled={saving}
-              onChange={(e) => setStopPrice(e.target.value)}
+              onChange={(e) => { setStopPrice(e.target.value); clearWarning(); }}
               placeholder="230.63"
               style={inputStyle}
             />
@@ -279,6 +300,16 @@ export default function AddCommandPositionModal({ open, initial, onClose, onSave
           }}>{error}</div>
         )}
 
+        {warning && !error && (
+          <div style={{
+            padding: '8px 10px', marginBottom: 10,
+            background: 'rgba(255,193,7,0.1)',
+            border: '1px solid rgba(255,193,7,0.5)',
+            borderRadius: 4, color: '#ffc107',
+            fontSize: 12, fontWeight: 600,
+          }}>⚠ {warning}</div>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
           <button
             type="button"
@@ -298,13 +329,15 @@ export default function AddCommandPositionModal({ open, initial, onClose, onSave
             disabled={saving}
             style={{
               padding: '7px 22px',
-              background: saving ? 'rgba(252,240,0,0.5)' : '#FCF000',
-              border: '1px solid #FCF000',
+              background: saving ? 'rgba(252,240,0,0.5)'
+                        : warning ? '#ffc107'
+                        : '#FCF000',
+              border: `1px solid ${warning ? '#ffc107' : '#FCF000'}`,
               color: '#000', borderRadius: 4,
               fontSize: 12, fontWeight: 800, letterSpacing: '0.05em',
               cursor: saving ? 'wait' : 'pointer',
             }}
-          >{saving ? 'SAVING…' : 'ADD TO COMMAND'}</button>
+          >{saving ? 'SAVING…' : warning ? 'ADD ANYWAY' : 'ADD TO COMMAND'}</button>
         </div>
       </div>
     </div>

@@ -78,8 +78,32 @@ function Cell({ check, children, onClick, align = 'left', subtle = false, bottom
   );
 }
 
-// Empty placeholder cell (used on rows that have no value in this column)
-function EmptyCell({ bottomBorder = false }) {
+// Empty placeholder cell. When `needsFill` is true, renders a dashed box
+// so the user instantly sees "this is where data should go."
+function EmptyCell({ bottomBorder = false, needsFill = false, align = 'center' }) {
+  if (needsFill) {
+    return (
+      <td
+        style={{
+          padding: '4px 8px',
+          borderBottom: bottomBorder ? '1px solid rgba(255,255,255,0.12)' : 'none',
+          textAlign: align,
+        }}
+      >
+        <span style={{
+          display: 'inline-block',
+          padding: '1px 8px',
+          border: '1px dashed rgba(220,53,69,0.75)',
+          borderRadius: 3,
+          color: '#dc3545',
+          fontSize: 9,
+          fontWeight: 800,
+          letterSpacing: '0.08em',
+          background: 'rgba(220,53,69,0.04)',
+        }}>ADD</span>
+      </td>
+    );
+  }
   return (
     <td
       style={{
@@ -87,10 +111,24 @@ function EmptyCell({ bottomBorder = false }) {
         borderBottom: bottomBorder ? '1px solid rgba(255,255,255,0.12)' : 'none',
         color: 'rgba(255,255,255,0.2)',
         fontSize: 12,
-        textAlign: 'center',
+        textAlign: align,
       }}
     >·</td>
   );
+}
+
+// Which columns should have data for a given sub-row kind.
+// Used to decide whether an empty cell should be highlighted ("needs fill in")
+// or left as an inert ·.
+const REQUIRED_FIELDS = {
+  IBKR_POS:  new Set(['dir', 'shares']),
+  IBKR_STOP: new Set(['shares', 'stopSide', 'stopPrice']),
+  CMD_POS:   new Set(['dir', 'shares']),
+  CMD_STOP:  new Set(['shares', 'stopSide', 'stopPrice']),
+};
+function needsFillIn(kind, col, rowStatus) {
+  if (rowStatus !== 'red' && rowStatus !== 'yellow') return false;
+  return REQUIRED_FIELDS[kind]?.has(col) || false;
 }
 
 // ── Action modal (IBKR instructions for cells that need manual fixing) ───────
@@ -353,8 +391,8 @@ export default function AssistantLiveTable({ onNavigate }) {
           <colgroup>
             <col style={{ width: 18 }} />                    {/* status dot */}
             <col style={{ width: 150 }} />                   {/* ticker + last + IBKR avg + CMD avg */}
+            <col style={{ width: 95 }} />                    {/* direction */}
             <col style={{ width: 100 }} />                   {/* source label */}
-            <col style={{ width: 60 }} />                    {/* dir */}
             <col style={{ width: 75 }} />                    {/* shares */}
             <col style={{ width: 70 }} />                    {/* stop side */}
             <col style={{ width: 95 }} />                    {/* stop price */}
@@ -365,8 +403,8 @@ export default function AssistantLiveTable({ onNavigate }) {
             <tr>
               <th style={s.th}></th>
               <th style={s.th}>TICKER · LAST · AVG</th>
+              <th style={s.th}>DIRECTION</th>
               <th style={s.th}>SRC</th>
-              <th style={s.th}>DIR</th>
               <th style={{ ...s.th, ...s.thR }}>SHARES</th>
               <th style={s.th}>STOP SIDE</th>
               <th style={{ ...s.th, ...s.thR }}>STOP PRICE</th>
@@ -443,21 +481,21 @@ export default function AssistantLiveTable({ onNavigate }) {
                       </td>
                     )}
 
+                    {/* DIRECTION — POS rows only. Moved before SRC per user request. */}
+                    {sr.direction != null
+                      ? <Cell check={sr.dirCheck} bottomBorder={isLast}>{sr.direction}</Cell>
+                      : <EmptyCell bottomBorder={isLast} needsFill={needsFillIn(sr.kind, 'dir', rs)} />}
+
                     <td style={{ ...s.sourceLabel(sr.kind), borderBottom: isLast ? '1px solid rgba(255,255,255,0.12)' : 'none' }}>
                       {sr.source}
                     </td>
-
-                    {/* DIR — POS rows only */}
-                    {sr.direction != null
-                      ? <Cell check={sr.dirCheck} bottomBorder={isLast}>{sr.direction}</Cell>
-                      : <EmptyCell bottomBorder={isLast} />}
 
                     {/* SHARES — always shown (position shares or stop shares) */}
                     {sr.shares != null
                       ? <Cell check={sr.sharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>{fmtShares(sr.shares)}</Cell>
                       : sr.noStop
                         ? <Cell check={sr.sharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>0</Cell>
-                        : <EmptyCell bottomBorder={isLast} />}
+                        : <EmptyCell bottomBorder={isLast} align="right" needsFill={needsFillIn(sr.kind, 'shares', rs)} />}
 
                     {/* STOP SIDE — STOP rows only */}
                     {sr.kind === 'IBKR_POS' || sr.kind === 'CMD_POS'
@@ -466,7 +504,7 @@ export default function AssistantLiveTable({ onNavigate }) {
                         ? <Cell check={sr.stopSideCheck} bottomBorder={isLast}>
                             {sr.stopSide ?? (sr.noStop ? '—' : '')}
                           </Cell>
-                        : <EmptyCell bottomBorder={isLast} />
+                        : <EmptyCell bottomBorder={isLast} needsFill={needsFillIn(sr.kind, 'stopSide', rs)} />
                     }
 
                     {/* STOP PRICE — STOP rows only */}
@@ -476,7 +514,7 @@ export default function AssistantLiveTable({ onNavigate }) {
                         ? <Cell check={sr.stopPriceCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>
                             {sr.noStop ? '— NAKED' : fmtMoney(sr.stopPrice)}
                           </Cell>
-                        : <EmptyCell bottomBorder={isLast} />
+                        : <EmptyCell bottomBorder={isLast} align="right" needsFill={needsFillIn(sr.kind, 'stopPrice', rs)} />
                     }
 
                     {/* NEXT RATCHET — CMD_STOP row only */}

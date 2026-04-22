@@ -805,16 +805,18 @@ export default function AssistantLiveTable({ onNavigate }) {
                               } />
                               <span style={{ opacity: 0.5, fontSize: 9, marginRight: 2 }}>L{t.lot}</span>
                               <span>{fmtMoney(t.triggerPrice)}</span>
-                              {t.targetShares > 0 && (
-                                <span
-                                  title={`Plan calls for ${t.targetShares} sh at Lot ${t.lot}`}
-                                  style={{
-                                    marginLeft: 5, fontSize: 9,
-                                    color: 'rgba(255,255,255,0.45)',
-                                    fontWeight: 500,
-                                  }}
-                                >{t.targetShares} sh</span>
-                              )}
+                              <span
+                                title={t.targetShares > 0
+                                  ? `Plan calls for ${t.targetShares} sh at Lot ${t.lot}`
+                                  : `0 sh — position already at vitality/ticker-cap ceiling; no more shares to distribute to lots 2-5`}
+                                style={{
+                                  marginLeft: 5, fontSize: 9,
+                                  color: t.targetShares > 0
+                                    ? 'rgba(255,255,255,0.45)'
+                                    : 'rgba(255,255,255,0.28)',
+                                  fontWeight: 500,
+                                }}
+                              >{t.targetShares} sh</span>
                             </div>
                           ))}
                         </td>

@@ -1,14 +1,17 @@
 // client/src/components/AssistantLiveTable.jsx
 // ── PNTHR Assistant LIVE — source-of-truth reconciliation table ──────────────
 //
-// One row per ticker (union of IBKR positions + IBKR working stops + Command
-// Center portfolio). Each cell compares IBKR vs Command and shows a colored
-// dot: green = aligned, yellow = attention soon, red = fix now, gray = N/A.
+// THREE sub-rows per ticker (stacked vertically):
+//   1. IBKR POS — what IBKR says you own (direction, shares, avg)
+//   2. IBKR STP — the working stop order(s) in IBKR (one row per stop)
+//   3. CMD      — what Command Center expects
 //
-// Clicking a non-green cell either deep-links into Command Center (if the fix
-// is in-app) or shows an IBKR instruction (if the fix is manual in TWS).
+// Cells have their own colored alignment dot. Same dot color appears in both
+// participating rows of a column comparison (e.g. shares dot on IBKR POS and
+// CMD rows reflects the same check).
 //
-// Data source: GET /api/assistant/live-reconcile (every 60s).
+// Click any non-green cell to fix (deep-link to Command or show IBKR instructions).
+// Data source: GET /api/assistant/live-reconcile (60s auto-refresh).
 
 import { useState, useEffect, useCallback } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
@@ -34,41 +37,59 @@ const fmtTime   = (iso) => {
   } catch { return '—'; }
 };
 
-// ── Dot primitive ────────────────────────────────────────────────────────────
-function Dot({ status, title }) {
+// ── Status dot ───────────────────────────────────────────────────────────────
+function Dot({ status, title, size = 8 }) {
   const c = DOT_COLOR[status] || DOT_COLOR.gray;
   return (
     <span
       title={title}
       style={{
         display: 'inline-block',
-        width: 8, height: 8, borderRadius: '50%',
+        width: size, height: size, borderRadius: '50%',
         background: c, marginRight: 6, verticalAlign: 'middle',
+        flexShrink: 0,
       }}
     />
   );
 }
 
-// ── Cell with built-in color dot + click behavior ────────────────────────────
-function Cell({ check, children, onClick }) {
-  const status    = check?.status || 'gray';
-  const clickable = onClick && status !== 'green' && status !== 'gray';
+// ── Single cell — has optional dot (via check) + value, optionally clickable ─
+function Cell({ check, children, onClick, align = 'left', subtle = false, bottomBorder = false }) {
+  const status    = check?.status || null;
+  const clickable = onClick && status && status !== 'green' && status !== 'gray';
   return (
     <td
       onClick={clickable ? onClick : undefined}
       style={{
-        padding: '8px 10px',
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        padding: '4px 8px',
+        borderBottom: bottomBorder ? '1px solid rgba(255,255,255,0.12)' : 'none',
         cursor: clickable ? 'pointer' : 'default',
-        color: '#e6e6e6',
-        fontSize: 13,
+        color: subtle ? 'rgba(255,255,255,0.35)' : '#e6e6e6',
+        fontSize: 12,
         whiteSpace: 'nowrap',
+        textAlign: align,
+        fontVariantNumeric: 'tabular-nums',
       }}
       title={check?.reason || ''}
     >
-      <Dot status={status} title={check?.reason} />
+      {status && <Dot status={status} title={check?.reason} />}
       {children}
     </td>
+  );
+}
+
+// Empty placeholder cell (used on rows that have no value in this column)
+function EmptyCell({ bottomBorder = false }) {
+  return (
+    <td
+      style={{
+        padding: '4px 8px',
+        borderBottom: bottomBorder ? '1px solid rgba(255,255,255,0.12)' : 'none',
+        color: 'rgba(255,255,255,0.2)',
+        fontSize: 12,
+        textAlign: 'center',
+      }}
+    >·</td>
   );
 }
 
@@ -137,6 +158,90 @@ function ActionModal({ row, onClose }) {
   );
 }
 
+// ── Build the 3+ sub-rows for one ticker ─────────────────────────────────────
+// Returns an array: [IBKR_POS, IBKR_STP_1, ..., IBKR_STP_N, CMD]
+// Each sub-row has the source label + values for every column (or null where N/A)
+function buildSubRows(row) {
+  const out = [];
+  const c   = row.checks || {};
+
+  // 1. IBKR POS
+  out.push({
+    kind:         'IBKR_POS',
+    source:       'IBKR POS',
+    direction:    row.ibkr.direction,
+    shares:       row.ibkr.shares,
+    avgCost:      row.ibkr.avgCost,
+    stopSide:     null,
+    stopPrice:    null,
+    stopShares:   null,
+    ratchetValue: null,
+    // checks shown on this row:
+    dirCheck:     c.direction,
+    sharesCheck:  c.shares,
+    avgCheck:     c.avg,
+  });
+
+  // 2. IBKR STP — one row per stop (or a single placeholder if no stops)
+  const stops = row.ibkr.stops || [];
+  if (stops.length === 0) {
+    // Show a stop placeholder so user sees clearly that IBKR has no stop
+    out.push({
+      kind:         'IBKR_STP',
+      source:       'IBKR STP',
+      direction:    null, shares: null, avgCost: null,
+      stopSide:     null,
+      stopPrice:    null,
+      stopShares:   null,
+      ratchetValue: null,
+      stopSideCheck:   c.stopSide,
+      stopPriceCheck:  c.stopPrice,
+      stopSharesCheck: c.stopShares,
+      noStop: true,
+    });
+  } else {
+    stops.forEach((st, idx) => {
+      out.push({
+        kind:         'IBKR_STP',
+        source:       stops.length > 1 ? `IBKR STP ${idx + 1}` : 'IBKR STP',
+        direction:    null, shares: null, avgCost: null,
+        stopSide:     st.side,
+        stopPrice:    st.price,
+        stopShares:   st.shares,
+        ratchetValue: null,
+        // show the column-level checks only on the FIRST stop row (compound checks span all stops)
+        stopSideCheck:   idx === 0 ? c.stopSide : null,
+        stopPriceCheck:  idx === 0 ? c.stopPrice : null,
+        stopSharesCheck: idx === 0 ? c.stopShares : null,
+      });
+    });
+  }
+
+  // 3. CMD
+  out.push({
+    kind:         'CMD',
+    source:       'CMD',
+    direction:    row.command.direction,
+    shares:       row.command.shares,
+    avgCost:      row.command.avgCost,
+    stopSide:     row.command.direction === 'LONG'  ? 'SELL' :
+                  row.command.direction === 'SHORT' ? 'BUY'  : null,
+    stopPrice:    row.command.stopPrice,
+    stopShares:   row.command.shares, // planned stop covers the full position
+    ratchetValue: row.nextRatchet,
+    ratchetLabel: row.ratchetLabel,
+    dirCheck:        c.direction,
+    sharesCheck:     c.shares,
+    avgCheck:        c.avg,
+    stopSideCheck:   c.stopSide,
+    stopPriceCheck:  c.stopPrice,
+    stopSharesCheck: c.stopShares,
+    ratchetCheck:    c.ratchet,
+  });
+
+  return out;
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 export default function AssistantLiveTable({ onNavigate }) {
   const [data,      setData]      = useState(null);
@@ -200,17 +305,32 @@ export default function AssistantLiveTable({ onNavigate }) {
       background: `${color}22`, border: `1px solid ${color}55`,
       color, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
     }),
-    tableWrap: { padding: '8px 6px 6px', overflowX: 'auto' },
-    table:     { width: '100%', borderCollapse: 'collapse', minWidth: 1100 },
+    tableWrap: { padding: '6px 6px 6px', overflowX: 'auto' },
+    table:     { width: '100%', borderCollapse: 'collapse', minWidth: 900 },
     th: {
-      padding: '6px 10px', textAlign: 'left', fontSize: 10, fontWeight: 800,
+      padding: '6px 8px', textAlign: 'left', fontSize: 9, fontWeight: 800,
       letterSpacing: '0.08em', color: 'rgba(255,255,255,0.6)',
       borderBottom: '1px solid rgba(255,255,255,0.15)', whiteSpace: 'nowrap',
     },
-    ticker: { fontWeight: 800, letterSpacing: '0.04em' },
-    rowRed:    { background: 'rgba(220,53,69,0.04)' },
-    rowYellow: { background: 'rgba(255,193,7,0.03)' },
+    thR: { textAlign: 'right' },
+    ticker: { fontWeight: 800, letterSpacing: '0.04em', fontSize: 13, color: '#fff' },
+    sourceLabel: (kind) => ({
+      padding: '4px 8px',
+      fontSize: 9,
+      fontWeight: 700,
+      letterSpacing: '0.08em',
+      color: kind === 'CMD'       ? '#FCF000'
+           : kind === 'IBKR_POS'  ? 'rgba(255,255,255,0.55)'
+           :                        'rgba(255,255,255,0.4)',
+      whiteSpace: 'nowrap',
+    }),
   };
+
+  // Row-level tint based on worst status — applied to all sub-rows of a ticker
+  const rowTint = (rs) =>
+    rs === 'red'    ? 'rgba(220,53,69,0.04)'
+  : rs === 'yellow' ? 'rgba(255,193,7,0.03)'
+  :                   'transparent';
 
   const body = () => {
     if (loading && !data) return <div style={{ padding: 20, opacity: 0.6 }}>Loading reconciliation…</div>;
@@ -220,97 +340,183 @@ export default function AssistantLiveTable({ onNavigate }) {
     return (
       <div style={s.tableWrap}>
         <table style={s.table}>
+          <colgroup>
+            <col style={{ width: 18 }} />                    {/* status dot */}
+            <col style={{ width: 90 }} />                    {/* ticker */}
+            <col style={{ width: 80 }} />                    {/* source label */}
+            <col style={{ width: 60 }} />                    {/* dir */}
+            <col style={{ width: 70 }} />                    {/* shares */}
+            <col style={{ width: 95 }} />                    {/* avg */}
+            <col style={{ width: 85 }} />                    {/* last */}
+            <col style={{ width: 70 }} />                    {/* stop side */}
+            <col style={{ width: 95 }} />                    {/* stop price */}
+            <col style={{ width: 70 }} />                    {/* stop shr */}
+            <col style={{ width: 130 }} />                   {/* next ratchet */}
+            <col style={{ width: 70 }} />                    {/* action */}
+          </colgroup>
           <thead>
             <tr>
               <th style={s.th}></th>
               <th style={s.th}>TICKER</th>
+              <th style={s.th}>SRC</th>
               <th style={s.th}>DIR</th>
-              <th style={s.th}>SHARES (IBKR / CMD)</th>
-              <th style={s.th}>AVG (IBKR / CMD)</th>
-              <th style={s.th}>LAST</th>
+              <th style={{ ...s.th, ...s.thR }}>SHARES</th>
+              <th style={{ ...s.th, ...s.thR }}>AVG</th>
+              <th style={{ ...s.th, ...s.thR }}>LAST</th>
               <th style={s.th}>STOP SIDE</th>
-              <th style={s.th}>STOP PRICE (IBKR / CMD)</th>
-              <th style={s.th}>STOP SHR (IBKR / CMD)</th>
-              <th style={s.th}>NEXT RATCHET</th>
+              <th style={{ ...s.th, ...s.thR }}>STOP PRICE</th>
+              <th style={{ ...s.th, ...s.thR }}>STOP SHR</th>
+              <th style={{ ...s.th, ...s.thR }}>NEXT RATCHET</th>
               <th style={s.th}>ACTION</th>
             </tr>
           </thead>
           <tbody>
             {data.rows.map(row => {
-              const rs = row.rowStatus;
-              const rowBg = rs === 'red' ? s.rowRed : rs === 'yellow' ? s.rowYellow : undefined;
-              const c     = row.checks || {};
+              const rs   = row.rowStatus;
+              const tint = rowTint(rs);
+              const sub  = buildSubRows(row);
+              const spanAll = sub.length;
               const ibStops = row.ibkr?.stops || [];
-              const stopPriceStr = ibStops.length
-                ? ibStops.map(o => fmtMoney(o.price)).join(', ')
-                : '—';
-              const stopShrStr = ibStops.length
-                ? ibStops.map(o => fmtShares(o.shares)).join(', ')
-                : '—';
-              const stopSideStr = ibStops.length
-                ? [...new Set(ibStops.map(o => o.side))].join('+')
-                : '—';
-              return (
-                <tr key={row.ticker} style={rowBg}>
-                  <td style={{ padding: '8px 4px 8px 10px', width: 18 }}>
-                    <Dot status={rs} title={`Row status: ${rs}`} />
-                  </td>
-                  <td style={{ padding: '8px 10px', ...s.ticker, color: '#fff' }}>
-                    {row.ticker}
-                    {row.multiStop && (
-                      <span style={{
-                        marginLeft: 6, padding: '1px 5px', borderRadius: 3,
-                        background: 'rgba(255,193,7,0.15)', color: '#ffc107',
-                        fontSize: 9, fontWeight: 800,
-                      }}>
-                        {ibStops.length} STOPS
-                      </span>
-                    )}
-                  </td>
-                  <Cell check={c.direction}>
-                    {row.command.direction || row.ibkr.direction || '—'}
-                  </Cell>
-                  <Cell check={c.shares} onClick={() => handleCellClick(row)}>
-                    {fmtShares(row.ibkr.shares)} / {fmtShares(row.command.shares)}
-                  </Cell>
-                  <Cell check={c.avg} onClick={() => handleCellClick(row)}>
-                    {fmtMoney(row.ibkr.avgCost)} / {fmtMoney(row.command.avgCost)}
-                  </Cell>
-                  <td style={{ padding: '8px 10px', fontSize: 13, color: '#e6e6e6', whiteSpace: 'nowrap' }}>
-                    {fmtMoney(row.lastPrice)}
-                  </td>
-                  <Cell check={c.stopSide}>{stopSideStr}</Cell>
-                  <Cell check={c.stopPrice} onClick={() => handleCellClick(row)}>
-                    {stopPriceStr} / {fmtMoney(row.command.stopPrice)}
-                  </Cell>
-                  <Cell check={c.stopShares} onClick={() => handleCellClick(row)}>
-                    {stopShrStr} / {fmtShares(row.command.shares)}
-                  </Cell>
-                  <Cell check={c.ratchet} onClick={() => handleCellClick(row)}>
-                    {row.nextRatchet ? fmtMoney(row.nextRatchet) : '—'}
-                    {row.ratchetLabel && (
-                      <span style={{ opacity: 0.6, fontSize: 11, marginLeft: 4 }}>({row.ratchetLabel})</span>
-                    )}
-                  </Cell>
-                  <td style={{ padding: '8px 10px' }}>
-                    {row.actions.length > 0 && (
-                      <button
-                        onClick={() => handleCellClick(row)}
+
+              return sub.map((sr, idx) => {
+                const isLast = idx === sub.length - 1;
+                return (
+                  <tr key={`${row.ticker}-${idx}`} style={{ background: tint }}>
+                    {idx === 0 && (
+                      <td
+                        rowSpan={spanAll}
                         style={{
-                          padding: '3px 8px',
-                          background: rs === 'red' ? '#dc3545' : '#ffc107',
-                          color: rs === 'red' ? '#fff' : '#000',
-                          border: 'none', borderRadius: 4,
-                          fontSize: 10, fontWeight: 800, letterSpacing: '0.05em',
-                          cursor: 'pointer',
+                          padding: '4px 4px 4px 10px',
+                          borderBottom: '1px solid rgba(255,255,255,0.12)',
+                          verticalAlign: 'middle',
+                          textAlign: 'center',
                         }}
                       >
-                        FIX
-                      </button>
+                        <Dot status={rs} size={10} title={`Row status: ${rs}`} />
+                      </td>
                     )}
-                  </td>
-                </tr>
-              );
+                    {idx === 0 && (
+                      <td
+                        rowSpan={spanAll}
+                        style={{
+                          padding: '4px 8px',
+                          borderBottom: '1px solid rgba(255,255,255,0.12)',
+                          verticalAlign: 'middle',
+                          ...s.ticker,
+                        }}
+                      >
+                        {row.ticker}
+                        {row.multiStop && (
+                          <div style={{
+                            marginTop: 2, padding: '1px 5px', borderRadius: 3,
+                            background: 'rgba(255,193,7,0.15)', color: '#ffc107',
+                            fontSize: 9, fontWeight: 800, display: 'inline-block',
+                          }}>{ibStops.length} STOPS</div>
+                        )}
+                      </td>
+                    )}
+
+                    <td style={{ ...s.sourceLabel(sr.kind), borderBottom: isLast ? '1px solid rgba(255,255,255,0.12)' : 'none' }}>
+                      {sr.source}
+                    </td>
+
+                    {/* DIR */}
+                    {sr.direction != null
+                      ? <Cell check={sr.dirCheck} bottomBorder={isLast}>{sr.direction}</Cell>
+                      : <EmptyCell bottomBorder={isLast} />}
+
+                    {/* SHARES */}
+                    {sr.shares != null
+                      ? <Cell check={sr.sharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>{fmtShares(sr.shares)}</Cell>
+                      : <EmptyCell bottomBorder={isLast} />}
+
+                    {/* AVG */}
+                    {sr.avgCost != null
+                      ? <Cell check={sr.avgCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>{fmtMoney(sr.avgCost)}</Cell>
+                      : <EmptyCell bottomBorder={isLast} />}
+
+                    {/* LAST — single cell spanning all sub-rows, shown only on first */}
+                    {idx === 0 && (
+                      <td
+                        rowSpan={spanAll}
+                        style={{
+                          padding: '4px 8px', textAlign: 'right',
+                          borderBottom: '1px solid rgba(255,255,255,0.12)',
+                          verticalAlign: 'middle',
+                          color: '#e6e6e6', fontSize: 12,
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >{fmtMoney(row.lastPrice)}</td>
+                    )}
+
+                    {/* STOP SIDE */}
+                    {sr.kind === 'IBKR_POS'
+                      ? <EmptyCell bottomBorder={isLast} />
+                      : (sr.stopSide != null || sr.noStop)
+                        ? <Cell check={sr.stopSideCheck} bottomBorder={isLast}>{sr.stopSide ?? (sr.noStop ? '—' : '')}</Cell>
+                        : <EmptyCell bottomBorder={isLast} />
+                    }
+
+                    {/* STOP PRICE */}
+                    {sr.kind === 'IBKR_POS'
+                      ? <EmptyCell bottomBorder={isLast} />
+                      : (sr.stopPrice != null || sr.noStop)
+                        ? <Cell check={sr.stopPriceCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>
+                            {sr.noStop ? '— NAKED' : fmtMoney(sr.stopPrice)}
+                          </Cell>
+                        : <EmptyCell bottomBorder={isLast} />
+                    }
+
+                    {/* STOP SHR */}
+                    {sr.kind === 'IBKR_POS'
+                      ? <EmptyCell bottomBorder={isLast} />
+                      : (sr.stopShares != null || sr.noStop)
+                        ? <Cell check={sr.stopSharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>
+                            {sr.noStop ? '0' : fmtShares(sr.stopShares)}
+                          </Cell>
+                        : <EmptyCell bottomBorder={isLast} />
+                    }
+
+                    {/* NEXT RATCHET — only populated on CMD row */}
+                    {sr.kind === 'CMD' && sr.ratchetValue != null
+                      ? <Cell check={sr.ratchetCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>
+                          {fmtMoney(sr.ratchetValue)}
+                          {sr.ratchetLabel && (
+                            <span style={{ opacity: 0.55, fontSize: 10, marginLeft: 4 }}>({sr.ratchetLabel})</span>
+                          )}
+                        </Cell>
+                      : <EmptyCell bottomBorder={isLast} />
+                    }
+
+                    {/* ACTION — rowspan, on first sub-row only */}
+                    {idx === 0 && (
+                      <td
+                        rowSpan={spanAll}
+                        style={{
+                          padding: '4px 8px',
+                          borderBottom: '1px solid rgba(255,255,255,0.12)',
+                          verticalAlign: 'middle',
+                          textAlign: 'center',
+                        }}
+                      >
+                        {row.actions.length > 0 && (
+                          <button
+                            onClick={() => handleCellClick(row)}
+                            style={{
+                              padding: '3px 8px',
+                              background: rs === 'red' ? '#dc3545' : '#ffc107',
+                              color: rs === 'red' ? '#fff' : '#000',
+                              border: 'none', borderRadius: 4,
+                              fontSize: 10, fontWeight: 800, letterSpacing: '0.05em',
+                              cursor: 'pointer',
+                            }}
+                          >FIX</button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              });
             })}
           </tbody>
         </table>

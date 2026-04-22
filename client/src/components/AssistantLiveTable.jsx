@@ -458,8 +458,22 @@ function buildSubRows(row) {
     avgCheck:    c.avg,
   });
 
-  // 2. IBKR STOP — one row per stop (or placeholder if none)
+  // 2. IBKR STOP — one row per IBKR stop order (or a placeholder if none).
+  // Each stop is classified:
+  //   - PROTECTIVE = opposite-side STP for the position direction
+  //     (SELL STP on LONG, BUY STP on SHORT). The compound stop-side / price /
+  //     shares check dots attach to this row.
+  //   - RATCHET    = same-side STP placed at a lot-entry trigger price.
+  //     No protective-stop check dots — its correctness is reflected by the
+  //     per-lot dots in the NEXT RATCHET column instead.
   const stops = row.ibkr.stops || [];
+  const protectiveSide = row.command.direction === 'LONG'  ? 'SELL'
+                       : row.command.direction === 'SHORT' ? 'BUY'
+                       : row.ibkr.direction    === 'LONG'  ? 'SELL'
+                       : row.ibkr.direction    === 'SHORT' ? 'BUY'
+                       : null;
+  const isProtective = (st) => protectiveSide ? st.side === protectiveSide : true;
+
   if (stops.length === 0) {
     out.push({
       kind:   'IBKR_STOP',
@@ -471,17 +485,20 @@ function buildSubRows(row) {
       noStop: true,
     });
   } else {
+    const firstProtectiveIdx = stops.findIndex(isProtective);
     stops.forEach((st, idx) => {
+      const prot = isProtective(st);
       out.push({
-        kind:   'IBKR_STOP',
-        source: stops.length > 1 ? `IBKR STOP ${idx + 1}` : 'IBKR STOP',
-        shares:    st.shares,
-        stopSide:  st.side,
-        stopPrice: st.price,
-        // compound column-level checks only on first stop row
-        sharesCheck:    idx === 0 ? c.stopShares : null,
-        stopSideCheck:  idx === 0 ? c.stopSide   : null,
-        stopPriceCheck: idx === 0 ? c.stopPrice  : null,
+        kind:       'IBKR_STOP',
+        subKind:    prot ? 'PROTECTIVE' : 'RATCHET',
+        source:     prot ? 'IBKR STOP'  : 'IBKR RATCHET',
+        shares:     st.shares,
+        stopSide:   st.side,
+        stopPrice:  st.price,
+        // Protective-stop check dots attach to the first protective row only.
+        sharesCheck:    idx === firstProtectiveIdx ? c.stopShares : null,
+        stopSideCheck:  idx === firstProtectiveIdx ? c.stopSide   : null,
+        stopPriceCheck: idx === firstProtectiveIdx ? c.stopPrice  : null,
       });
     });
   }
@@ -788,6 +805,16 @@ export default function AssistantLiveTable({ onNavigate }) {
                               } />
                               <span style={{ opacity: 0.5, fontSize: 9, marginRight: 2 }}>L{t.lot}</span>
                               <span>{fmtMoney(t.triggerPrice)}</span>
+                              {t.targetShares > 0 && (
+                                <span
+                                  title={`Plan calls for ${t.targetShares} sh at Lot ${t.lot}`}
+                                  style={{
+                                    marginLeft: 5, fontSize: 9,
+                                    color: 'rgba(255,255,255,0.45)',
+                                    fontWeight: 500,
+                                  }}
+                                >{t.targetShares} sh</span>
+                              )}
                             </div>
                           ))}
                         </td>

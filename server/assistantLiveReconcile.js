@@ -40,6 +40,21 @@ function summarizeFills(fills = {}) {
 // Mirrors client/src/utils/sizingUtils.js → buildLots so server and client
 // agree on the exact trigger prices.
 const LOT_OFFSETS = [0, 0.03, 0.06, 0.10, 0.14];
+const STRIKE_PCT  = [0.35, 0.25, 0.20, 0.12, 0.08];
+
+// Derive each lot's intended share count from the first filled lot and its
+// STRIKE_PCT weighting. If lot 1 filled with 19 shares, total ≈ 19/0.35 = 54,
+// and lot N target = 54 × STRIKE_PCT[N-1].
+function computeLotTargetShares(position) {
+  const fills = position.fills || {};
+  const firstFilled = [1, 2, 3, 4, 5].find(n => fills[n]?.filled);
+  if (!firstFilled) return [0, 0, 0, 0, 0];
+  const anchorShares = +fills[firstFilled].shares || 0;
+  const anchorPct    = STRIKE_PCT[firstFilled - 1];
+  if (anchorShares <= 0 || !anchorPct) return [0, 0, 0, 0, 0];
+  const implied = anchorShares / anchorPct;
+  return STRIKE_PCT.map(pct => Math.max(1, Math.round(implied * pct)));
+}
 
 function computeLotTriggers(position) {
   const dir = position.direction;
@@ -50,6 +65,7 @@ function computeLotTriggers(position) {
     ? +fills[1].price
     : +position.entryPrice || null;
   if (!anchor) return [];
+  const targetShares = computeLotTargetShares(position);
   return [2, 3, 4, 5].map(n => {
     const i = n - 1;
     const triggerPrice = isLong
@@ -58,10 +74,26 @@ function computeLotTriggers(position) {
     return {
       lot: n,
       triggerPrice,
+      targetShares: targetShares[i] || 0,
       filled: fills[n]?.filled || false,
       expectedSide: isLong ? 'BUY' : 'SELL', // lot-entry orders are the same side as the position
     };
   });
+}
+
+// A protective stop is opposite-side from the position direction. BUY STPs
+// on a LONG are lot-entry orders (staged at ratchet prices), NOT protective —
+// they should never be counted toward stop coverage or trigger 'multi-stop'
+// warnings.
+function protectiveSideFor(direction) {
+  if (direction === 'LONG')  return 'SELL';
+  if (direction === 'SHORT') return 'BUY';
+  return null;
+}
+function filterProtectiveStops(ibkrStops, direction) {
+  const side = protectiveSideFor(direction);
+  if (!side) return ibkrStops; // unknown direction — be conservative, include all
+  return ibkrStops.filter(s => s.action === side);
 }
 
 // For each unfilled lot trigger, check if there's a matching pending order in
@@ -204,19 +236,27 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice) {
   const rawLotTriggers     = cmd ? computeLotTriggers(cmd) : [];
   const enrichedLotTriggers = enrichLotTriggersWithIbkrStatus(rawLotTriggers, ibkrTickerStops);
 
+  // For the protective-stop checks (side / price / shares / multi-stop flag),
+  // look only at PROTECTIVE stops. A BUY STP on a long is a lot-entry order
+  // staged at a ratchet price, not a protective stop — it shouldn't inflate
+  // coverage math or trigger a 'multi-stop' warning. It gets its green/red
+  // treatment in the ratchet column instead.
+  const protectiveStops = filterProtectiveStops(ibkrTickerStops, cmdDir || ibkrDir);
+
   // Classify each column
   const checks = {
     direction:     classifyDirection(ibkrDir, cmdDir),
     shares:        classifyShares(ibkrShares, cmdSharesOrNull),
     avg:           classifyAvg(ibkrAvg, cmdAvg),
-    stopSide:      classifyStopSide(expectedStopSide, ibkrTickerStops),
-    stopPrice:     classifyStopPrice(ibkrTickerStops, cmd?.stopPrice ?? null),
-    stopShares:    classifyStopShares(ibkrTickerStops, cmdSharesOrNull),
+    stopSide:      classifyStopSide(expectedStopSide, protectiveStops),
+    stopPrice:     classifyStopPrice(protectiveStops, cmd?.stopPrice ?? null),
+    stopShares:    classifyStopShares(protectiveStops, cmdSharesOrNull),
     ratchet:       cmd ? classifyLotTriggers(enrichedLotTriggers) : { status: 'gray' },
   };
 
-  // Extra flag: multiple stops on same ticker (user asked to flag for review)
-  const multiStop = ibkrTickerStops.length > 1;
+  // Multi-stop flag counts only protective stops — multiple BUY STPs on a
+  // long are expected (lot triggers), not a multi-stop mistake.
+  const multiStop = protectiveStops.length > 1;
 
   // Row status = worst of all checks
   const rowStatus = worst(...Object.values(checks).map(c => c.status));
@@ -226,10 +266,11 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice) {
   // For any unstaged lot trigger, give the user the exact TWS instruction
   for (const t of enrichedLotTriggers) {
     if (t.filled || t.staged) continue;
+    const shareHint = t.targetShares > 0 ? `${t.targetShares} sh ` : '';
     actions.push({
       type: 'ibkr',
       label: `Stage Lot ${t.lot} trigger in IBKR`,
-      instruction: `Open TWS. Add ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} GTC (Lot ${t.lot} entry).`,
+      instruction: `Open TWS. Add ${t.expectedSide} STP ${shareHint}@ $${t.triggerPrice.toFixed(2)} GTC (Lot ${t.lot} entry).`,
     });
   }
   if (checks.stopPrice.status === 'red' && checks.stopPrice.reason?.includes('NAKED')) {

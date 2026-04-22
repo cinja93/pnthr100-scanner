@@ -22,7 +22,7 @@ import { syncExitToJournal } from './exitService.js';
 //   Fill price within 1% of stored stop → STOP_HIT
 //   Otherwise → MANUAL (discretionary exit placed directly in TWS)
 //
-async function processExecutions(db, userId, executions, pnthrPositions, syncedAt) {
+async function processExecutions(db, userId, executions, pnthrPositions, syncedAt, ibkrPositions = []) {
   if (!executions?.length) return [];
 
   // Ensure index exists (no-op if already created; runs at most once per cold start cycle)
@@ -49,6 +49,16 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
     positionByTickerDir[key] = p;
   }
 
+  // Live IBKR shares per ticker (signed) from the current payload. Closed
+  // positions are absent from this map (bridge drops tickers with pos=0).
+  // Used as the final authority on "is the position actually gone?" — guards
+  // against stale partial executions triggering a belated auto-close after a
+  // user edits CMD shares down to match IBKR.
+  const ibkrSharesByTicker = {};
+  for (const p of ibkrPositions || []) {
+    if (p?.symbol) ibkrSharesByTicker[p.symbol.toUpperCase()] = Math.abs(+p.shares || 0);
+  }
+
   const autoClosed = [];
 
   for (const exec of executions) {
@@ -68,6 +78,16 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
 
     // Only auto-close when execution covers ≥ 90% of tracked shares (full exits)
     if (pnthrShares === 0 || exec.shares < pnthrShares * 0.90) continue;
+
+    // Final authority: if IBKR still shows this ticker with meaningful shares,
+    // the execution was a REDUCTION not an EXIT, even when the share-ratio
+    // math suggests a 'full exit'. This blocks stale partial-exit executions
+    // from auto-closing a position after the user aligns CMD shares downward.
+    const liveIbkrShares = ibkrSharesByTicker[symbol] || 0;
+    if (liveIbkrShares > 0) {
+      console.log(`[IBKR] Skipping auto-close of ${symbol}: IBKR still holds ${liveIbkrShares} shares (exec was a reduction, not a full exit)`);
+      continue;
+    }
 
     // Determine exit reason: fill within 1% of stored stop → STOP_HIT
     const stop       = pnthr.stopPrice;
@@ -304,9 +324,12 @@ export async function ibkrSync(req, res) {
       await db.collection('pnthr_portfolio').bulkWrite(updateOps);
     }
 
-    // 4. Phase 2: Process executions — auto-close positions from TWS fills
+    // 4. Phase 2: Process executions — auto-close positions from TWS fills.
+    // We pass the live IBKR positions so processExecutions can refuse to
+    // close a position that IBKR still holds (guards against stale partial
+    // exits triggering auto-close after the user aligns CMD shares).
     const autoClosedPositions = await processExecutions(
-      db, userId, executions, pnthrPositions, syncedAt
+      db, userId, executions, pnthrPositions, syncedAt, positions
     );
 
     // 6. Identify IBKR positions not yet tracked in PNTHR (informational)

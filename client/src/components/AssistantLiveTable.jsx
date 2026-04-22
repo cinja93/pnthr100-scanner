@@ -458,14 +458,19 @@ function buildSubRows(row) {
     avgCheck:    c.avg,
   });
 
-  // 2. IBKR STOP — one row per IBKR stop order (or a placeholder if none).
-  // Each stop is classified:
-  //   - PROTECTIVE = opposite-side STP for the position direction
-  //     (SELL STP on LONG, BUY STP on SHORT). The compound stop-side / price /
-  //     shares check dots attach to this row.
-  //   - RATCHET    = same-side STP placed at a lot-entry trigger price.
-  //     No protective-stop check dots — its correctness is reflected by the
-  //     per-lot dots in the NEXT RATCHET column instead.
+  // Split IBKR stops into PROTECTIVE vs RATCHET:
+  //   PROTECTIVE = opposite-side STP for the position direction
+  //                (SELL STP on LONG, BUY STP on SHORT). Participates in the
+  //                stop-side / price / shares reconciliation checks.
+  //   RATCHET    = same-side STP placed at a lot-entry trigger price. Does
+  //                not affect the protective-stop checks — its correctness
+  //                shows up in the NEXT RATCHET column dots instead.
+  //
+  // Sub-row order is:
+  //   IBKR POS → IBKR STOP(s) → CMD POS → CMD STOP → [gap] → IBKR RATCHET(s)
+  // so the flow stays grouped (position/stop/command) and ratchet orders don't
+  // break the visual continuity of the 'how many protective shares do I have'
+  // chain.
   const stops = row.ibkr.stops || [];
   const protectiveSide = row.command.direction === 'LONG'  ? 'SELL'
                        : row.command.direction === 'SHORT' ? 'BUY'
@@ -473,10 +478,14 @@ function buildSubRows(row) {
                        : row.ibkr.direction    === 'SHORT' ? 'BUY'
                        : null;
   const isProtective = (st) => protectiveSide ? st.side === protectiveSide : true;
+  const protectiveIbkrStops = stops.filter(isProtective);
+  const ratchetIbkrStops    = stops.filter(s => !isProtective(s));
 
-  if (stops.length === 0) {
+  // 2. IBKR STOP — protective stops (or a single placeholder if there are none)
+  if (protectiveIbkrStops.length === 0) {
     out.push({
       kind:   'IBKR_STOP',
+      subKind: 'PROTECTIVE',
       source: 'IBKR STOP',
       shares: null, stopSide: null, stopPrice: null,
       sharesCheck:    c.stopShares,
@@ -485,20 +494,17 @@ function buildSubRows(row) {
       noStop: true,
     });
   } else {
-    const firstProtectiveIdx = stops.findIndex(isProtective);
-    stops.forEach((st, idx) => {
-      const prot = isProtective(st);
+    protectiveIbkrStops.forEach((st, idx) => {
       out.push({
         kind:       'IBKR_STOP',
-        subKind:    prot ? 'PROTECTIVE' : 'RATCHET',
-        source:     prot ? 'IBKR STOP'  : 'IBKR RATCHET',
+        subKind:    'PROTECTIVE',
+        source:     'IBKR STOP',
         shares:     st.shares,
         stopSide:   st.side,
         stopPrice:  st.price,
-        // Protective-stop check dots attach to the first protective row only.
-        sharesCheck:    idx === firstProtectiveIdx ? c.stopShares : null,
-        stopSideCheck:  idx === firstProtectiveIdx ? c.stopSide   : null,
-        stopPriceCheck: idx === firstProtectiveIdx ? c.stopPrice  : null,
+        sharesCheck:    idx === 0 ? c.stopShares : null,
+        stopSideCheck:  idx === 0 ? c.stopSide   : null,
+        stopPriceCheck: idx === 0 ? c.stopPrice  : null,
       });
     });
   }
@@ -529,6 +535,23 @@ function buildSubRows(row) {
     stopPriceCheck: c.stopPrice,
     ratchetCheck:   c.ratchet,
   });
+
+  // 5. Visual gap + IBKR RATCHET rows — same-side lot-entry stops, rendered
+  // after the CMD block so they don't break the protective-stop reconciliation
+  // flow. A dedicated GAP entry becomes a thin separator row in the UI.
+  if (ratchetIbkrStops.length > 0) {
+    out.push({ kind: 'GAP' });
+    ratchetIbkrStops.forEach(st => {
+      out.push({
+        kind:      'IBKR_STOP',
+        subKind:   'RATCHET',
+        source:    'IBKR RATCHET',
+        shares:    st.shares,
+        stopSide:  st.side,
+        stopPrice: st.price,
+      });
+    });
+  }
 
   return out;
 }
@@ -672,6 +695,25 @@ export default function AssistantLiveTable({ onNavigate }) {
 
               return sub.map((sr, idx) => {
                 const isLast = idx === sub.length - 1;
+
+                // Visual separator between the CMD block and the IBKR RATCHET
+                // rows. The ticker/last/status/action columns are covered by
+                // the rowSpan from idx=0, so we only render empty middle cells.
+                if (sr.kind === 'GAP') {
+                  const dash = '1px dashed rgba(255,255,255,0.18)';
+                  const gapCell = { padding: 0, height: 8, borderTop: dash };
+                  return (
+                    <tr key={`${row.ticker}-${idx}`} style={{ background: tint }}>
+                      <td style={gapCell} /> {/* direction */}
+                      <td style={gapCell} /> {/* source */}
+                      <td style={gapCell} /> {/* shares */}
+                      <td style={gapCell} /> {/* stop side */}
+                      <td style={gapCell} /> {/* stop price */}
+                      <td style={gapCell} /> {/* next ratchet */}
+                    </tr>
+                  );
+                }
+
                 return (
                   <tr key={`${row.ticker}-${idx}`} style={{ background: tint }}>
                     {idx === 0 && (

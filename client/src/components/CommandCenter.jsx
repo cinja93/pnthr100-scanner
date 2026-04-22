@@ -11,6 +11,7 @@ import { useAuth } from '../AuthContext';
 import { useDemo } from '../contexts/DemoContext';
 import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat, isEtfTicker } from '../utils/sizingUtils.js';
 import ChartModal from './ChartModal';
+import AddCommandPositionModal from './AddCommandPositionModal';
 import pantherHead from '../assets/panther head.png';
 
 // (buildLots, enrichLots, sizePosition, calcHeat imported from ../utils/sizingUtils.js)
@@ -2017,6 +2018,7 @@ export default function CommandCenter({ onNavigate, refreshSignal }) {
   const [washWarning,           setWashWarning]           = useState(null); // { ticker, lossAmount, exitDate, expiryDate, daysRemaining, pendingId, fillData }
   const [riskAdvisorExitModal,  setRiskAdvisorExitModal]  = useState(null); // { position, shares, price, date, reason, note }
   const [ibkrLastSync,          setIbkrLastSync]          = useState(null); // global ibkrLastSync from user_profiles
+  const [addPositionModal,      setAddPositionModal]      = useState(null); // null or { ticker?, direction?, ... } pre-fill
 
   const heat        = useMemo(() => calcHeat(positions, nav),        [positions, nav]);
   const advisorRecs = useMemo(() => runRiskAdvisor(positions, nav), [positions, nav]);
@@ -2443,6 +2445,23 @@ export default function CommandCenter({ onNavigate, refreshSignal }) {
           {saving && <span style={{ fontSize: 10, color: '#555' }}>saving…</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {/* Quick-add position button — opens modal to create a Command position
+              directly without going through the chart → queue flow. */}
+          <button
+            onClick={() => setAddPositionModal({})}
+            title="Add a position to Command directly"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 30, height: 30, borderRadius: 6,
+              background: 'rgba(252,240,0,0.12)',
+              border: '1px solid rgba(252,240,0,0.5)',
+              color: '#FCF000', fontSize: 20, fontWeight: 800,
+              cursor: 'pointer', padding: 0, lineHeight: 1,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(252,240,0,0.25)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(252,240,0,0.12)'; }}
+          >+</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 7, height: 7, borderRadius: 4,
               background: heat.totalRiskPct > 15 ? '#dc3545' : heat.totalRiskPct > 10 ? '#ffc107' : '#28a745' }} />
@@ -2796,6 +2815,20 @@ export default function CommandCenter({ onNavigate, refreshSignal }) {
           onClose={() => setChartModal(null)}
         />
       )}
+
+      {/* Quick-add position modal — triggered by the + button in the header */}
+      <AddCommandPositionModal
+        open={addPositionModal != null}
+        initial={addPositionModal}
+        onClose={() => setAddPositionModal(null)}
+        onSaved={() => {
+          // Re-fetch positions so the new row appears immediately
+          apiGet('/api/positions')
+            .then(data => { if (data.positions) setPositions(data.positions); })
+            .catch(() => {});
+        }}
+      />
+
 
       {/* Wash sale warning modal — requires user acknowledgement before confirming entry */}
       {washWarning && (() => {

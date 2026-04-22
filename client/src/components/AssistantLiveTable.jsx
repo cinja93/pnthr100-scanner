@@ -556,6 +556,7 @@ function buildSubRows(row) {
           source:    'IBKR RATCHET',
           shares:    st.shares,
           stopSide:  st.side,
+          stopType:  st.type,       // raw IB order type (e.g. 'STP', 'STP LMT')
           stopPrice: st.price,
           showRatchetPlan: idx === 0, // L2-L5 list renders on the first ratchet row
         });
@@ -681,9 +682,9 @@ export default function AssistantLiveTable({ onNavigate }) {
       <col style={{ width: 95 }} />                    {/* direction */}
       <col style={{ width: 100 }} />                   {/* source label */}
       <col style={{ width: 75 }} />                    {/* shares */}
-      <col style={{ width: 70 }} />                    {/* stop side */}
+      <col style={{ width: 115 }} />                   {/* stop side (wider so 'BUY STOP LIMIT' fits on ratchet rows) */}
       <col style={{ width: 95 }} />                    {/* stop price */}
-      <col style={{ width: 130 }} />                   {/* next ratchet */}
+      <col style={{ width: 115 }} />                   {/* next ratchet (narrowed to free room for STOP SIDE) */}
       <col style={{ width: 70 }} />                    {/* action */}
     </colgroup>
   );
@@ -829,12 +830,27 @@ export default function AssistantLiveTable({ onNavigate }) {
                         ? <Cell check={sr.sharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>0</Cell>
                         : <EmptyCell bottomBorder={isLast} align="right" needsFill={needsFillIn(sr.kind, 'shares', rs)} />}
 
-                    {/* STOP SIDE — STOP rows only */}
+                    {/* STOP SIDE — STOP rows only. On RATCHET rows we also
+                        render the IB order type ('STOP LIMIT' / 'STOP') so the
+                        user knows exactly what order to stage in TWS. */}
                     {sr.kind === 'IBKR_POS' || sr.kind === 'CMD_POS'
                       ? <EmptyCell bottomBorder={isLast} />
                       : (sr.stopSide != null || sr.noStop)
                         ? <Cell check={sr.stopSideCheck} bottomBorder={isLast}>
                             {sr.stopSide ?? (sr.noStop ? '—' : '')}
+                            {sr.subKind === 'RATCHET' && sr.stopType && (
+                              <span style={{
+                                marginLeft: 5,
+                                fontSize: 10,
+                                fontWeight: 600,
+                                color: 'rgba(255,255,255,0.55)',
+                                letterSpacing: '0.03em',
+                              }}>
+                                {sr.stopType === 'STP LMT' ? 'STOP LIMIT'
+                                 : sr.stopType === 'STP'   ? 'STOP'
+                                 :                           sr.stopType}
+                              </span>
+                            )}
                           </Cell>
                         : <EmptyCell bottomBorder={isLast} needsFill={needsFillIn(sr.kind, 'stopSide', rs)} />
                     }

@@ -643,12 +643,18 @@ export default function AssistantLiveTable({ onNavigate }) {
                           : <EmptyCell bottomBorder={isLast} align="right" needsFill={needsFillIn(sr.kind, 'stopPrice', rs)} />
                     }
 
-                    {/* NEXT RATCHET — CMD_STOP row only. Shows lot 2-5 trigger
-                        prices stacked; each gets a green dot if IBKR already
-                        has a matching pending order, red if not. Filled lots
-                        show a muted strikethrough so it's obvious they're done. */}
-                    {sr.kind === 'CMD_STOP' && row.lotTriggers?.length > 0
-                      ? <td
+                    {/* NEXT RATCHET — CMD_STOP row only. Shows only the REMAINING
+                        (unfilled) lot-trigger prices; once a lot has filled we
+                        no longer need to stage an order for it. Each remaining
+                        trigger gets a green dot if IBKR has a matching pending
+                        order, red if not. */}
+                    {(() => {
+                      const remaining = (row.lotTriggers || []).filter(t => !t.filled);
+                      if (sr.kind !== 'CMD_STOP' || remaining.length === 0) {
+                        return <EmptyCell bottomBorder={isLast} />;
+                      }
+                      return (
+                        <td
                           onClick={() => handleCellClick(row)}
                           style={{
                             padding: '4px 8px',
@@ -658,30 +664,23 @@ export default function AssistantLiveTable({ onNavigate }) {
                             fontVariantNumeric: 'tabular-nums', textAlign: 'right',
                           }}
                         >
-                          {row.lotTriggers.map(t => {
-                            const dotStatus = t.filled ? 'gray'
-                                            : t.staged ? 'green'
-                                            :            'red';
-                            return (
-                              <div key={t.lot} style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                                gap: 2, lineHeight: '14px',
-                                opacity: t.filled ? 0.4 : 1,
-                                textDecoration: t.filled ? 'line-through' : 'none',
-                              }}>
-                                <Dot status={dotStatus} title={
-                                  t.filled ? `Lot ${t.lot}: filled`
-                                          : t.staged ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR`
-                                          : `Lot ${t.lot}: NO pending ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)}`
-                                } />
-                                <span style={{ opacity: 0.5, fontSize: 9, marginRight: 2 }}>L{t.lot}</span>
-                                <span>{fmtMoney(t.triggerPrice)}</span>
-                              </div>
-                            );
-                          })}
+                          {remaining.map(t => (
+                            <div key={t.lot} style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                              gap: 2, lineHeight: '14px',
+                            }}>
+                              <Dot status={t.staged ? 'green' : 'red'} title={
+                                t.staged
+                                  ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR`
+                                  : `Lot ${t.lot}: NO pending ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)}`
+                              } />
+                              <span style={{ opacity: 0.5, fontSize: 9, marginRight: 2 }}>L{t.lot}</span>
+                              <span>{fmtMoney(t.triggerPrice)}</span>
+                            </div>
+                          ))}
                         </td>
-                      : <EmptyCell bottomBorder={isLast} />
-                    }
+                      );
+                    })()}
 
                     {/* ACTION — rowspan, on first sub-row only */}
                     {idx === 0 && (

@@ -76,7 +76,7 @@ class PNTHRBridge(EWrapper, EClient):
         #   • Re-opening the same ticker overwrites cleanly — no duplicates on reconnect
         #   • get_payload() converts to list for the server JSON payload
         self.positions_dict  = {}
-        self.open_orders     = {}   # orderId → {symbol, stopPrice, action, orderType, shares}
+        self.open_orders     = {}   # permId → {orderId, symbol, stopPrice, action, orderType, shares}
         self.executions      = []   # Phase 2: fills captured via reqExecutions
         self.account_ready   = threading.Event()
         self.positions_ready = threading.Event()
@@ -199,8 +199,15 @@ class PNTHRBridge(EWrapper, EClient):
             shares = float(order.totalQuantity)
         except (TypeError, ValueError):
             shares = 0.0
-        self.open_orders[orderId] = {
+        # Key by permId (permanent unique ID assigned by TWS). Orders placed
+        # manually in TWS — not by this API client — come back with orderId=0,
+        # so keying by orderId would collapse them all into a single entry.
+        # permId is guaranteed unique across the account lifetime.
+        perm_id = getattr(order, 'permId', 0) or 0
+        key = perm_id if perm_id else f"_synth_{len(self.open_orders)}_{contract.symbol}_{orderId}"
+        self.open_orders[key] = {
             'orderId':   orderId,
+            'permId':    perm_id,
             'symbol':    contract.symbol.upper(),
             'stopPrice': round(stop_price, 4),
             'action':    order.action,

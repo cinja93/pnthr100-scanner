@@ -13,7 +13,7 @@
 // Click any non-green cell to fix (deep-link to Command or show IBKR instructions).
 // Data source: GET /api/assistant/live-reconcile (60s auto-refresh).
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 
 const REFRESH_MS = 60_000;
@@ -74,6 +74,124 @@ function Cell({ check, children, onClick, align = 'left', subtle = false, bottom
     >
       {status && <Dot status={status} title={check?.reason} />}
       {children}
+    </td>
+  );
+}
+
+// Inline-editable stop price cell for CMD_STOP rows. Click → input → Enter saves
+// to PATCH /api/positions/:id/stop-price and triggers a table refresh.
+function EditableStopPriceCell({ value, check, positionId, onSaved, bottomBorder = false }) {
+  const [editing, setEditing] = useState(false);
+  const [input,   setInput]   = useState(value == null ? '' : String(value));
+  const [saving,  setSaving]  = useState(false);
+  const [flash,   setFlash]   = useState(null); // 'success' | 'error' | null
+  const inputRef = useRef(null);
+
+  // Keep internal input in sync when the prop changes (e.g. after a refetch)
+  useEffect(() => { if (!editing) setInput(value == null ? '' : String(value)); }, [value, editing]);
+
+  // Auto-focus the input when entering edit mode
+  useEffect(() => {
+    if (editing && inputRef.current) { inputRef.current.focus(); inputRef.current.select(); }
+  }, [editing]);
+
+  const commit = async () => {
+    const n = Number(input);
+    if (!Number.isFinite(n) || n <= 0) {
+      setFlash('error');
+      setTimeout(() => setFlash(null), 1500);
+      setEditing(false);
+      setInput(String(value ?? ''));
+      return;
+    }
+    if (Math.abs(n - (+value || 0)) < 0.005) {
+      // No change — exit cleanly
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/positions/${positionId}/stop-price`, {
+        method:  'PATCH',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ stopPrice: n }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setFlash('success');
+      setEditing(false);
+      await onSaved?.();
+      setTimeout(() => setFlash(null), 900);
+    } catch (e) {
+      setFlash('error');
+      setTimeout(() => setFlash(null), 2000);
+      setEditing(false);
+      setInput(String(value ?? ''));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setInput(String(value ?? ''));
+  };
+
+  const status = check?.status || null;
+  const flashBg = flash === 'success' ? 'rgba(40,167,69,0.18)'
+                : flash === 'error'   ? 'rgba(220,53,69,0.18)'
+                : undefined;
+
+  return (
+    <td
+      onClick={(e) => { if (!editing && !saving && positionId) { e.stopPropagation(); setEditing(true); } }}
+      style={{
+        padding: '4px 8px',
+        borderBottom: bottomBorder ? '1px solid rgba(255,255,255,0.12)' : 'none',
+        cursor: editing ? 'text' : positionId ? 'pointer' : 'default',
+        color: '#e6e6e6',
+        fontSize: 12,
+        whiteSpace: 'nowrap',
+        textAlign: 'right',
+        fontVariantNumeric: 'tabular-nums',
+        background: flashBg,
+        transition: 'background 0.3s',
+      }}
+      title={editing ? 'Enter to save · Esc to cancel' : 'Click to edit stop price'}
+    >
+      {status && <Dot status={status} title={check?.reason} />}
+      {editing ? (
+        <input
+          ref={inputRef}
+          type="number"
+          step="0.01"
+          min="0"
+          value={input}
+          disabled={saving}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+          }}
+          onBlur={commit}
+          style={{
+            width: 70, padding: '1px 4px',
+            background: 'rgba(252,240,0,0.1)',
+            border: '1px solid #FCF000',
+            borderRadius: 3, color: '#FCF000',
+            fontSize: 12, fontWeight: 600,
+            fontVariantNumeric: 'tabular-nums',
+            textAlign: 'right',
+            outline: 'none',
+          }}
+        />
+      ) : (
+        <span style={{
+          borderBottom: positionId ? '1px dotted rgba(252,240,0,0.35)' : 'none',
+          paddingBottom: 1,
+        }}>
+          {saving ? '…' : (value == null ? '—' : fmtMoney(value))}
+        </span>
+      )}
     </td>
   );
 }
@@ -507,14 +625,22 @@ export default function AssistantLiveTable({ onNavigate }) {
                         : <EmptyCell bottomBorder={isLast} needsFill={needsFillIn(sr.kind, 'stopSide', rs)} />
                     }
 
-                    {/* STOP PRICE — STOP rows only */}
+                    {/* STOP PRICE — STOP rows only. CMD_STOP is inline-editable. */}
                     {sr.kind === 'IBKR_POS' || sr.kind === 'CMD_POS'
                       ? <EmptyCell bottomBorder={isLast} />
-                      : (sr.stopPrice != null || sr.noStop)
-                        ? <Cell check={sr.stopPriceCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>
-                            {sr.noStop ? '— NAKED' : fmtMoney(sr.stopPrice)}
-                          </Cell>
-                        : <EmptyCell bottomBorder={isLast} align="right" needsFill={needsFillIn(sr.kind, 'stopPrice', rs)} />
+                      : sr.kind === 'CMD_STOP' && row.command.positionId
+                        ? <EditableStopPriceCell
+                            value={sr.stopPrice}
+                            check={sr.stopPriceCheck}
+                            positionId={row.command.positionId}
+                            onSaved={fetchData}
+                            bottomBorder={isLast}
+                          />
+                        : (sr.stopPrice != null || sr.noStop)
+                          ? <Cell check={sr.stopPriceCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>
+                              {sr.noStop ? '— NAKED' : fmtMoney(sr.stopPrice)}
+                            </Cell>
+                          : <EmptyCell bottomBorder={isLast} align="right" needsFill={needsFillIn(sr.kind, 'stopPrice', rs)} />
                     }
 
                     {/* NEXT RATCHET — CMD_STOP row only */}

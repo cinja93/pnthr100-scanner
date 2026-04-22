@@ -29,15 +29,39 @@ function formatDateLong(isoDate) {
   });
 }
 
+// ── Jargon → plain-English translation ───────────────────────────────────────
+// Converts internal PNTHR signal notation (BL+1, SS+2, BE, SE, etc.) into
+// phrasing a generalist investor understands. Runs on data summaries BEFORE
+// they're embedded in the generation prompt; the prompt also instructs Claude
+// to write in plain English as defense in depth.
+function translateSignal(sig) {
+  if (!sig) return '';
+  const s = String(sig).toUpperCase().trim();
+  if (s === 'BL') return 'long';
+  if (s === 'SS') return 'short';
+  if (s === 'BE') return 'long exit';
+  if (s === 'SE') return 'short cover';
+  const m = s.match(/^(BL|SS)\+(\d+)$/);
+  if (m) {
+    const dir = m[1] === 'BL' ? 'long' : 'short';
+    const n = +m[2];
+    if (n === 1) return `new ${dir} signal this week`;
+    if (n === 2) return `${dir} signal from last week`;
+    return `${dir} signal from ${n} weeks ago`;
+  }
+  return s.toLowerCase();
+}
+
 function summarizeRows(rows, limit = 10) {
   if (!rows || rows.length === 0) return 'None this week.';
   return rows.slice(0, limit).map(r => {
     const ticker = r.ticker || '';
-    const signal = r.signal || r.signalBadge || '';
-    const isNew  = r.isNewSignal ? ' *NEW*' : '';
-    const price  = r.currentPrice ? ` $${Number(r.currentPrice).toFixed(2)}` : '';
+    const rawSignal = r.signal || r.signalBadge || '';
+    const signalText = translateSignal(rawSignal);
+    const isNew = r.isNewSignal ? ' NEW' : '';
+    const price = r.currentPrice ? ` $${Number(r.currentPrice).toFixed(2)}` : '';
     const sector = r.sector ? ` [${r.sector}]` : '';
-    return `${ticker}${signal ? ' (' + signal + isNew + ')' : ''}${price}${sector}`;
+    return `${ticker}${signalText ? ' (' + signalText + isNew + ')' : ''}${price}${sector}`;
   }).join(', ');
 }
 
@@ -46,7 +70,7 @@ function summarizeAllRows(rows) {
   if (!rows || rows.length === 0) return 'None.';
   return rows.map(r => {
     const ticker = r.ticker || '';
-    const isNew  = r.isNewSignal ? ' *NEW*' : '';
+    const isNew  = r.isNewSignal ? ' NEW' : '';
     const price  = r.currentPrice ? ` $${Number(r.currentPrice).toFixed(2)}` : '';
     const sector = r.sector ? ` [${r.sector}]` : '';
     return `${ticker}${isNew}${price}${sector}`;
@@ -74,13 +98,13 @@ function computeFullSectorCounts(signals, stockMeta) {
     .sort((a, b) => (b[1].newBL + b[1].newSS) - (a[1].newBL + a[1].newSS))
     .map(([sector, c]) => {
       const parts = [];
-      if (c.newBL) parts.push(`NEW BL+1: ${c.newBL}`);
-      if (c.BL)    parts.push(`Existing BL: ${c.BL}`);
-      if (c.BE)    parts.push(`BE exits (longs sold off): ${c.BE}`);
-      if (c.newSS) parts.push(`NEW SS+1: ${c.newSS}`);
-      if (c.SS)    parts.push(`Existing SS: ${c.SS}`);
-      if (c.SE)    parts.push(`SE covers (shorts covered): ${c.SE}`);
-      const lean = c.newSS > c.newBL ? 'BEARISH' : c.newBL > c.newSS ? 'BULLISH' : 'NEUTRAL';
+      if (c.newBL) parts.push(`${c.newBL} new long signals this week`);
+      if (c.BL)    parts.push(`${c.BL} longs from prior weeks still active`);
+      if (c.BE)    parts.push(`${c.BE} long exits`);
+      if (c.newSS) parts.push(`${c.newSS} new short signals this week`);
+      if (c.SS)    parts.push(`${c.SS} shorts from prior weeks still active`);
+      if (c.SE)    parts.push(`${c.SE} short covers`);
+      const lean = c.newSS > c.newBL ? 'bearish' : c.newBL > c.newSS ? 'bullish' : 'neutral';
       return `${sector} [${lean} lean this week]: ${parts.join(', ')} | ${c.total} stocks tracked`;
     }).join('\n');
 }
@@ -256,20 +280,20 @@ export async function generateIssue(weekOf) {
   // Fetch prior issues for lookback context
   const priorIssues = await getPriorPublishedIssues(4);
 
-  // PNTHR Feast by definition only shows BL+1 and SS+1 (first week of signal, still in the zone).
-  // Every stock in Feast IS a new signal this week — no further filtering needed.
+  // Internal note: these lists only contain stocks whose very first signal is
+  // THIS WEEK — i.e. brand-new entries. Older continuing signals are excluded.
   const dinnerLongs  = prey.dinner?.longs  || [];
   const dinnerShorts = prey.dinner?.shorts || [];
 
   const dinnerSummary = [
-    `SIGNAL NOTATION: BL+1 = brand-new Buy Long entry THIS WEEK. SS+1 = brand-new Sell Short entry THIS WEEK. The PNTHR Feast section only contains BL+1 and SS+1 stocks, meaning every stock listed below triggered a new entry signal this week.`,
+    `Every stock listed below triggered a NEW entry signal THIS WEEK (these are first-week entries, not continuations of older signals).`,
     ``,
-    `New BL+1 signals this week (new long entries): ${dinnerLongs.length}`,
-    `New SS+1 signals this week (new short entries): ${dinnerShorts.length}`,
-    `Ratio of new shorts to new longs: ${dinnerLongs.length === 0 ? 'N/A (no new longs)' : (dinnerShorts.length / dinnerLongs.length).toFixed(1) + ':1'}`,
+    `New long signals this week (first-week entries): ${dinnerLongs.length}`,
+    `New short signals this week (first-week entries): ${dinnerShorts.length}`,
+    `Ratio of new short signals to new long signals: ${dinnerLongs.length === 0 ? 'N/A (no new longs)' : (dinnerShorts.length / dinnerLongs.length).toFixed(1) + ':1'}`,
     ``,
-    `New longs (BL+1): ${summarizeAllRows(dinnerLongs) || 'None'}`,
-    `New shorts (SS+1): ${summarizeAllRows(dinnerShorts) || 'None'}`,
+    `New long tickers: ${summarizeAllRows(dinnerLongs) || 'None'}`,
+    `New short tickers: ${summarizeAllRows(dinnerShorts) || 'None'}`,
   ].join('\n');
 
   const alphaSummary  = 'LONG: ' + summarizeRows(prey.alphas?.longs, 10) + ' | SHORT: ' + summarizeRows(prey.alphas?.shorts, 10);
@@ -305,23 +329,23 @@ export async function generateIssue(weekOf) {
 
   const prompt = `You are PNTHR, a sophisticated market intelligence system. Write the weekly "PNTHR's Perch" newsletter for the week of ${formatDateLong(weekOf)}.
 
-PNTHR scans roughly 679 stocks across the S&P 500 and S&P 400 using a sector-optimized EMA trend-following model. BL+1 = brand-new Buy Long entry THIS WEEK. SS+1 = brand-new Sell Short entry THIS WEEK. The BL+1 to SS+1 ratio is the primary market pulse indicator. NEVER confuse new signals (BL+1/SS+1) with existing open positions (BL+N/SS+N where N > 1).
+PNTHR scans roughly 679 stocks across the S&P 500 and S&P 400 using a sector-optimized trend-following model. The key weekly metric is the ratio of new long signals (first-week entries) to new short signals — a rising ratio of new shorts to new longs signals broader market weakness. New first-week signals are fundamentally different from continuing signals that triggered in prior weeks, and the newsletter must keep that distinction clear in plain language.
 
 ---
 
 THIS WEEK'S DATA:
 
-INDEX STATUS (SPY vs QQQ — differentiate these, money can flow into one and out of the other):
+INDEX STATUS (S&P 500 vs Nasdaq 100 — differentiate these, capital can flow into one while leaving the other):
 ${marketCtx.spyStatus}
 ${marketCtx.qqqStatus}
 
 SECTOR ETF 5-DAY PERFORMANCE (use to identify which sectors are leading and lagging):
 ${marketCtx.sectorReturns || 'Sector ETF data unavailable this week.'}
 
-NEW SIGNALS THIS WEEK (BL+1 = new longs, SS+1 = new shorts — these are the acceleration signals):
+NEW SIGNALS THIS WEEK (first-week long and short entries — these are the acceleration signals):
 ${dinnerSummary}
 
-FULL SECTOR SIGNAL BREAKDOWN across all 679 PNTHR stocks (new entries + full open book + exits):
+FULL SECTOR SIGNAL BREAKDOWN across all 679 PNTHR stocks (new entries, continuing signals, and exits by sector):
 ${sectorSummary}
 
 PNTHR SPRINT — stocks rising in PNTHR rank or new to the scan this week:
@@ -330,10 +354,10 @@ ${sprintSummary}
 TRADE OF THE WEEK candidates (profitable closed trades this week):
 ${totwSummary}
 
-SPRING SETUPS (stocks coiling near breakout trigger):
+SPRING SETUPS (stocks tightening up near a trigger point):
 ${springSummary}
 
-BOLLINGER BAND COMPRESSIONS (pre-explosion coils):
+COMPRESSION SETUPS (price ranges tightening before a likely larger move):
 ${sneakSummary}
 
 PRIOR WEEKS CONTEXT (for lookback section):
@@ -345,7 +369,7 @@ Write the newsletter in EXACTLY this structure and format. Follow the section na
 
 # PNTHR's Perch — Week of ${formatDateLong(weekOf)}
 
-[INTRO HOOK — 1 punchy paragraph, no heading. Open with the BL+1 to SS+1 ratio using the EXACT numbers from the data. State what it means for the market right now. If SPY and QQQ are diverging, call it out. Take a clear stance. Make The PNTHR sound like it sees something others don't.]
+[INTRO HOOK — 1 punchy paragraph, no heading. Open with the ratio of new long signals to new short signals this week, using the EXACT numbers from the data. State what it means for the market right now in plain language. If the S&P 500 and Nasdaq 100 are diverging, call it out. Take a clear stance. Make PNTHR sound like it sees something others don't.]
 
 ## PNTHR Trade of the Week - [TICKER]
 
@@ -359,15 +383,15 @@ Write the newsletter in EXACTLY this structure and format. Follow the section na
 
 ## Market Overview
 
-[SPY vs QQQ EMA status, the BL+1/SS+1 ratio and what it signals. Differentiate S&P 500 from Nasdaq 100 — they can diverge. State clearly: is this an accelerating breakdown, an acceleration upward, or a neutral tape? 2-3 paragraphs.]
+[S&P 500 and Nasdaq 100 trend status, the ratio of new long signals to new short signals this week, and what the combination signals. Differentiate S&P 500 from Nasdaq 100 — they can diverge. State clearly: is this an accelerating weakness, an acceleration upward, or a neutral tape? 2-3 paragraphs.]
 
 ## Sector Intelligence
 
-[This is the most important section. Use the sector signal breakdown AND the sector ETF 5D returns together. Lead with the sectors generating the most NEW SS+1 signals — those are actively breaking down. Call out any sector with NEW BL+1 signals against a bearish tape as a contrarian tell. Identify the rotation story: where is capital leaving and where is it hiding? Connect the dots. Make the reader see something they would not have found on their own. 3-5 paragraphs.]
+[This is the most important section. Use the sector signal breakdown AND the sector ETF 5-day returns together. Lead with the sectors generating the most new short signals — those are actively weakening. Call out any sector with new long signals against a weak broader tape as a contrarian tell. Identify the rotation story: where is capital leaving and where is it hiding? Connect the dots. Make the reader see something they would not have found on their own. 3-5 paragraphs.]
 
-## New BL+1 Breakdown
+## New Signals This Week
 
-[For each new long entry this week: ticker, sector, current price, and 2-3 sentences of interpretation. Why is THIS stock breaking out when the broader tape is [direction]? What does it say about its sector? Is it a defensive rotation, a contrarian bet, or a true outlier? Cover every BL+1 stock from the data above.]
+[For each new long entry this week: ticker, sector, current price, and 2-3 sentences of interpretation. Why is THIS stock strengthening when the broader tape is [direction]? What does it say about its sector? Is it a defensive rotation, a contrarian bet, or a true outlier? Cover every new long ticker from the data above.]
 
 ## PNTHR Sprint
 
@@ -384,17 +408,26 @@ ABSOLUTE RULES — violations break the rendering engine or mislead readers:
 2. The ## PNTHR Trade of the Week heading MUST contain the ticker symbol after a hyphen (e.g. "## PNTHR Trade of the Week - DAR"). The rendering engine extracts it from there.
 3. The blockquote MUST start with > **[TICKER] - [Company Name]** as the very first line. Do not put > **TRADE OF THE WEEK** or any other text before the ticker line.
 4. Use only markdown. No HTML, no emojis, no special characters outside standard markdown.
-5. Differentiate NEW signals (BL+1/SS+1) from existing trends (BL+N/SS+N where N>1) at all times. These are fundamentally different market signals.
-6. Write for an intelligent investor audience. Analyze and conclude — do not just list data. Every section must leave the reader with a point of view and an action.`;
+5. Always distinguish NEW first-week signals from CONTINUING signals that triggered in prior weeks. These are fundamentally different market signals and the reader must never be left unsure which is which.
+6. Analyze and conclude — do not just list data. Every section must leave the reader with a point of view and an action.
+7. PLAIN ENGLISH ONLY. The audience may not know trading jargon. The following terms are FORBIDDEN in the output: BL, SS, BE, SE, BL+1, SS+1, BL+N, SS+N, RSI, OBV, ADX, EMA, 21W EMA, FEAST, ALPHA, SPRING, SNEAK, HUNT, SPRINT (as acronyms in body copy), breakout, breakdown, coiling, oversold, overbought. Say instead: "new long signal this week," "new short signal this week," "long exit," "short cover," "the trend," "tightening up," "pushing higher," "breaking down," "stretched." Define any branded term on first use (e.g. "PNTHR Sprint — our list of stocks climbing the rankings") and prefer plain descriptions after that.`;
 
   console.log('[Newsletter] Calling Claude API...');
+  // max_tokens: 8000 — the previous 3000 cap was causing the narrative to get
+  // cut off mid-section on weeks with ≥15 new long signals. The same fix
+  // was applied months ago to the old perchService.js but was never ported
+  // here. 8000 leaves comfortable headroom for 6 sections + per-stock detail.
   const message = await client.messages.create({
     model: 'claude-opus-4-6',
-    max_tokens: 3000,
+    max_tokens: 8000,
     messages: [{ role: 'user', content: prompt }],
   });
 
   const narrative = message.content[0]?.type === 'text' ? message.content[0].text : '';
+  const wasTruncated = message.stop_reason === 'max_tokens';
+  if (wasTruncated) {
+    console.warn(`[Newsletter] ⚠ Narrative hit the max_tokens ceiling (${message.usage?.output_tokens} output tokens). Narrative is likely cut off mid-section — consider bumping max_tokens and regenerating.`);
+  }
 
   // Save to MongoDB
   const db = await connectToDatabase();
@@ -407,6 +440,7 @@ ABSOLUTE RULES — violations break the rendering engine or mislead readers:
     weekOf,
     status: 'draft',
     narrative,
+    wasTruncated, // true if Claude hit max_tokens — a red flag for the editor
     featuredTrade: bestDollar ?? null,
     profitableExits: exits.slice(0, 20),
     dataSnapshot: {

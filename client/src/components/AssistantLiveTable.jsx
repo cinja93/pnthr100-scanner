@@ -643,14 +643,43 @@ export default function AssistantLiveTable({ onNavigate }) {
                           : <EmptyCell bottomBorder={isLast} align="right" needsFill={needsFillIn(sr.kind, 'stopPrice', rs)} />
                     }
 
-                    {/* NEXT RATCHET — CMD_STOP row only */}
-                    {sr.kind === 'CMD_STOP' && sr.ratchetValue != null
-                      ? <Cell check={sr.ratchetCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>
-                          {fmtMoney(sr.ratchetValue)}
-                          {sr.ratchetLabel && (
-                            <span style={{ opacity: 0.55, fontSize: 10, marginLeft: 4 }}>({sr.ratchetLabel})</span>
-                          )}
-                        </Cell>
+                    {/* NEXT RATCHET — CMD_STOP row only. Shows lot 2-5 trigger
+                        prices stacked; each gets a green dot if IBKR already
+                        has a matching pending order, red if not. Filled lots
+                        show a muted strikethrough so it's obvious they're done. */}
+                    {sr.kind === 'CMD_STOP' && row.lotTriggers?.length > 0
+                      ? <td
+                          onClick={() => handleCellClick(row)}
+                          style={{
+                            padding: '4px 8px',
+                            borderBottom: isLast ? '1px solid rgba(255,255,255,0.12)' : 'none',
+                            cursor: row.actions?.some(a => a.type === 'ibkr') ? 'pointer' : 'default',
+                            fontSize: 11, whiteSpace: 'nowrap',
+                            fontVariantNumeric: 'tabular-nums', textAlign: 'right',
+                          }}
+                        >
+                          {row.lotTriggers.map(t => {
+                            const dotStatus = t.filled ? 'gray'
+                                            : t.staged ? 'green'
+                                            :            'red';
+                            return (
+                              <div key={t.lot} style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                                gap: 2, lineHeight: '14px',
+                                opacity: t.filled ? 0.4 : 1,
+                                textDecoration: t.filled ? 'line-through' : 'none',
+                              }}>
+                                <Dot status={dotStatus} title={
+                                  t.filled ? `Lot ${t.lot}: filled`
+                                          : t.staged ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR`
+                                          : `Lot ${t.lot}: NO pending ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)}`
+                                } />
+                                <span style={{ opacity: 0.5, fontSize: 9, marginRight: 2 }}>L{t.lot}</span>
+                                <span>{fmtMoney(t.triggerPrice)}</span>
+                              </div>
+                            );
+                          })}
+                        </td>
                       : <EmptyCell bottomBorder={isLast} />
                     }
 

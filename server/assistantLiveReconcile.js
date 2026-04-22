@@ -36,16 +36,46 @@ function summarizeFills(fills = {}) {
   return { filledCount: filledLots.length, totShr, avgCost, filledLots };
 }
 
-// ── Next ratchet target per lot system (Lot 3→breakeven, Lot 4→Lot 2 fill, Lot 5→Lot 3 fill)
-// Returns the price where the stop SHOULD sit given current fill state.
-function computeRatchetTarget(position) {
-  const { fills = {} } = position;
-  const { filledCount, avgCost } = summarizeFills(fills);
-  if (filledCount < 3) return null; // no ratchet yet — stop stays at originalStop until lot 3 fills
-  if (filledCount === 3) return { value: avgCost, label: 'breakeven (avg cost)' };
-  if (filledCount === 4 && fills[2]?.price) return { value: +fills[2].price, label: 'lot 2 fill' };
-  if (filledCount === 5 && fills[3]?.price) return { value: +fills[3].price, label: 'lot 3 fill' };
-  return null;
+// Lot-trigger prices for lots 2-5 (BUY STP for long, SELL STP for short).
+// Mirrors client/src/utils/sizingUtils.js → buildLots so server and client
+// agree on the exact trigger prices.
+const LOT_OFFSETS = [0, 0.03, 0.06, 0.10, 0.14];
+
+function computeLotTriggers(position) {
+  const dir = position.direction;
+  const isLong = dir === 'LONG';
+  if (!dir || !['LONG', 'SHORT'].includes(dir)) return [];
+  const fills = position.fills || {};
+  const anchor = fills[1]?.filled && fills[1]?.price
+    ? +fills[1].price
+    : +position.entryPrice || null;
+  if (!anchor) return [];
+  return [2, 3, 4, 5].map(n => {
+    const i = n - 1;
+    const triggerPrice = isLong
+      ? +(anchor * (1 + LOT_OFFSETS[i])).toFixed(2)
+      : +(anchor * (1 - LOT_OFFSETS[i])).toFixed(2);
+    return {
+      lot: n,
+      triggerPrice,
+      filled: fills[n]?.filled || false,
+      expectedSide: isLong ? 'BUY' : 'SELL', // lot-entry orders are the same side as the position
+    };
+  });
+}
+
+// For each unfilled lot trigger, check if there's a matching pending order in
+// IBKR (same side + same price within tolerance). Returns an array enriched
+// with `staged: bool` so the client can render green/red dots.
+function enrichLotTriggersWithIbkrStatus(triggers, ibkrStops) {
+  return triggers.map(t => {
+    if (t.filled) return { ...t, staged: null }; // already happened — no dot
+    const match = ibkrStops.find(s =>
+      s.action === t.expectedSide &&
+      Math.abs(+s.stopPrice - t.triggerPrice) < 0.05
+    );
+    return { ...t, staged: !!match };
+  });
 }
 
 // ── FMP live price fetch (mirrors headlines endpoint pattern) ────────────────
@@ -131,20 +161,18 @@ function classifyStopShares(ibkrStops, cmdShr) {
   return { status: 'red', reason: `Over-stopped: ${covered} sh stopping ${cmdShr} sh position` };
 }
 
-function classifyRatchet(cmdPos, ibkrStops, lastPrice) {
-  if (!cmdPos) return { status: 'gray' };
-  const target = computeRatchetTarget(cmdPos);
-  if (!target) return { status: 'gray', reason: 'no ratchet due yet' };
-  // Has IBKR stop been staged at the ratchet target?
-  const staged = ibkrStops.some(s => Math.abs(+s.stopPrice - target.value) < TOL.RATCHET_STAGED);
-  if (staged) return { status: 'green', nextRatchet: target.value, label: target.label, reason: 'ratchet staged in IBKR' };
-  if (lastPrice == null) return { status: 'yellow', nextRatchet: target.value, label: target.label, reason: 'ratchet not staged' };
-  // Distance from current stop to target as a proxy for urgency
-  const curStop = cmdPos.stopPrice;
-  const diffPct = curStop ? Math.abs(target.value - curStop) / curStop : 1;
-  if (diffPct >= 0.01) return { status: 'yellow', nextRatchet: target.value, label: target.label, reason: 'ratchet due — place new stop in IBKR' };
-  if (diffPct >= 0.005) return { status: 'yellow', nextRatchet: target.value, label: target.label, reason: 'ratchet due' };
-  return { status: 'red', nextRatchet: target.value, label: target.label, reason: 'ratchet overdue' };
+// Classify the overall ratchet-column status based on lot-trigger staging.
+// Green  = every UNFILLED lot trigger has a matching pending order in IBKR
+// Yellow = at least one unfilled trigger staged, but not all
+// Red    = no unfilled trigger staged (and at least one exists)
+// Gray   = no applicable triggers (e.g. all 5 lots filled)
+function classifyLotTriggers(enrichedTriggers) {
+  const pending = enrichedTriggers.filter(t => !t.filled);
+  if (pending.length === 0) return { status: 'gray', reason: 'all lots filled' };
+  const stagedCount = pending.filter(t => t.staged).length;
+  if (stagedCount === pending.length) return { status: 'green', reason: 'all upcoming lot triggers staged in IBKR' };
+  if (stagedCount === 0)              return { status: 'red',   reason: `${pending.length} lot trigger(s) not staged in IBKR` };
+  return { status: 'yellow', reason: `${stagedCount}/${pending.length} lot triggers staged in IBKR` };
 }
 
 // ── Row builder ──────────────────────────────────────────────────────────────
@@ -167,6 +195,12 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice) {
   // Stop side expected
   const expectedStopSide = cmdDir === 'LONG' ? 'SELL' : cmdDir === 'SHORT' ? 'BUY' : null;
 
+  // Lot triggers (BUY STP for long / SELL STP for short) for unfilled lots 2-5.
+  // Each enriched with staged:true/false based on whether a matching pending order
+  // exists in IBKR. The client stacks these in the NEXT RATCHET column with dots.
+  const rawLotTriggers     = cmd ? computeLotTriggers(cmd) : [];
+  const enrichedLotTriggers = enrichLotTriggersWithIbkrStatus(rawLotTriggers, ibkrTickerStops);
+
   // Classify each column
   const checks = {
     direction:     classifyDirection(ibkrDir, cmdDir),
@@ -175,7 +209,7 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice) {
     stopSide:      classifyStopSide(expectedStopSide, ibkrTickerStops),
     stopPrice:     classifyStopPrice(ibkrTickerStops, cmd?.stopPrice ?? null),
     stopShares:    classifyStopShares(ibkrTickerStops, cmdSharesOrNull),
-    ratchet:       classifyRatchet(cmd, ibkrTickerStops, lastPrice),
+    ratchet:       cmd ? classifyLotTriggers(enrichedLotTriggers) : { status: 'gray' },
   };
 
   // Extra flag: multiple stops on same ticker (user asked to flag for review)
@@ -186,11 +220,13 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice) {
 
   // Action list: what the user can click to fix
   const actions = [];
-  if (cmdHas && checks.ratchet.status === 'yellow' && checks.ratchet.nextRatchet != null) {
+  // For any unstaged lot trigger, give the user the exact TWS instruction
+  for (const t of enrichedLotTriggers) {
+    if (t.filled || t.staged) continue;
     actions.push({
       type: 'ibkr',
-      label: 'Stage ratchet in IBKR',
-      instruction: `Open TWS. Add ${expectedStopSide} STP ${cmdSharesOrNull || '?'} sh @ $${checks.ratchet.nextRatchet.toFixed(2)} GTC.`,
+      label: `Stage Lot ${t.lot} trigger in IBKR`,
+      instruction: `Open TWS. Add ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} GTC (Lot ${t.lot} entry).`,
     });
   }
   if (checks.stopPrice.status === 'red' && checks.stopPrice.reason?.includes('NAKED')) {
@@ -251,8 +287,7 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice) {
       stopPrice:   cmd?.stopPrice ?? null,
     },
     lastPrice,
-    nextRatchet:  checks.ratchet.nextRatchet ?? null,
-    ratchetLabel: checks.ratchet.label ?? null,
+    lotTriggers:  enrichedLotTriggers, // [{lot, triggerPrice, filled, expectedSide, staged}, ...]
     multiStop,
     checks,
     actions,

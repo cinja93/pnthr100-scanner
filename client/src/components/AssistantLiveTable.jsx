@@ -158,85 +158,88 @@ function ActionModal({ row, onClose }) {
   );
 }
 
-// ── Build the 3+ sub-rows for one ticker ─────────────────────────────────────
-// Returns an array: [IBKR_POS, IBKR_STP_1, ..., IBKR_STP_N, CMD]
-// Each sub-row has the source label + values for every column (or null where N/A)
+// ── Build the 4-row (+ extra IBKR stops) sub-row stack for one ticker ────────
+// Stack order:
+//   IBKR POS     → direction, shares (pos), avg
+//   IBKR STOP(s) → shares (stop), stop side, stop price  (multi-stop → extra rows)
+//   CMD POS      → direction, shares (pos), avg
+//   CMD STOP     → shares (stop), stop side, stop price, next ratchet
+//
+// The SHARES column is filled on every row so the user can scan one column
+// and confirm all four values match.
 function buildSubRows(row) {
   const out = [];
   const c   = row.checks || {};
+  const cmdPlannedShares = row.command.shares; // planned stop should cover the full position
+  const expectedStopSide = row.command.direction === 'LONG'  ? 'SELL'
+                         : row.command.direction === 'SHORT' ? 'BUY'
+                         : null;
 
   // 1. IBKR POS
   out.push({
-    kind:         'IBKR_POS',
-    source:       'IBKR POS',
-    direction:    row.ibkr.direction,
-    shares:       row.ibkr.shares,
-    avgCost:      row.ibkr.avgCost,
-    stopSide:     null,
-    stopPrice:    null,
-    stopShares:   null,
-    ratchetValue: null,
-    // checks shown on this row:
-    dirCheck:     c.direction,
-    sharesCheck:  c.shares,
-    avgCheck:     c.avg,
+    kind:        'IBKR_POS',
+    source:      'IBKR POS',
+    direction:   row.ibkr.direction,
+    shares:      row.ibkr.shares,
+    avgCost:     row.ibkr.avgCost,
+    dirCheck:    c.direction,
+    sharesCheck: c.shares,
+    avgCheck:    c.avg,
   });
 
-  // 2. IBKR STP — one row per stop (or a single placeholder if no stops)
+  // 2. IBKR STOP — one row per stop (or placeholder if none)
   const stops = row.ibkr.stops || [];
   if (stops.length === 0) {
-    // Show a stop placeholder so user sees clearly that IBKR has no stop
     out.push({
-      kind:         'IBKR_STP',
-      source:       'IBKR STP',
-      direction:    null, shares: null, avgCost: null,
-      stopSide:     null,
-      stopPrice:    null,
-      stopShares:   null,
-      ratchetValue: null,
-      stopSideCheck:   c.stopSide,
-      stopPriceCheck:  c.stopPrice,
-      stopSharesCheck: c.stopShares,
+      kind:   'IBKR_STOP',
+      source: 'IBKR STOP',
+      shares: null, stopSide: null, stopPrice: null,
+      sharesCheck:    c.stopShares,
+      stopSideCheck:  c.stopSide,
+      stopPriceCheck: c.stopPrice,
       noStop: true,
     });
   } else {
     stops.forEach((st, idx) => {
       out.push({
-        kind:         'IBKR_STP',
-        source:       stops.length > 1 ? `IBKR STP ${idx + 1}` : 'IBKR STP',
-        direction:    null, shares: null, avgCost: null,
-        stopSide:     st.side,
-        stopPrice:    st.price,
-        stopShares:   st.shares,
-        ratchetValue: null,
-        // show the column-level checks only on the FIRST stop row (compound checks span all stops)
-        stopSideCheck:   idx === 0 ? c.stopSide : null,
-        stopPriceCheck:  idx === 0 ? c.stopPrice : null,
-        stopSharesCheck: idx === 0 ? c.stopShares : null,
+        kind:   'IBKR_STOP',
+        source: stops.length > 1 ? `IBKR STOP ${idx + 1}` : 'IBKR STOP',
+        shares:    st.shares,
+        stopSide:  st.side,
+        stopPrice: st.price,
+        // compound column-level checks only on first stop row
+        sharesCheck:    idx === 0 ? c.stopShares : null,
+        stopSideCheck:  idx === 0 ? c.stopSide   : null,
+        stopPriceCheck: idx === 0 ? c.stopPrice  : null,
       });
     });
   }
 
-  // 3. CMD
+  // 3. CMD POS
   out.push({
-    kind:         'CMD',
-    source:       'CMD',
-    direction:    row.command.direction,
-    shares:       row.command.shares,
-    avgCost:      row.command.avgCost,
-    stopSide:     row.command.direction === 'LONG'  ? 'SELL' :
-                  row.command.direction === 'SHORT' ? 'BUY'  : null,
-    stopPrice:    row.command.stopPrice,
-    stopShares:   row.command.shares, // planned stop covers the full position
+    kind:        'CMD_POS',
+    source:      'CMD POS',
+    direction:   row.command.direction,
+    shares:      row.command.shares,
+    avgCost:     row.command.avgCost,
+    dirCheck:    c.direction,
+    sharesCheck: c.shares,
+    avgCheck:    c.avg,
+  });
+
+  // 4. CMD STOP
+  out.push({
+    kind:        'CMD_STOP',
+    source:      'CMD STOP',
+    shares:      cmdPlannedShares, // planned stop covers the full position
+    stopSide:    expectedStopSide,
+    stopPrice:   row.command.stopPrice,
     ratchetValue: row.nextRatchet,
     ratchetLabel: row.ratchetLabel,
-    dirCheck:        c.direction,
-    sharesCheck:     c.shares,
-    avgCheck:        c.avg,
-    stopSideCheck:   c.stopSide,
-    stopPriceCheck:  c.stopPrice,
-    stopSharesCheck: c.stopShares,
-    ratchetCheck:    c.ratchet,
+    sharesCheck:    c.stopShares,
+    stopSideCheck:  c.stopSide,
+    stopPriceCheck: c.stopPrice,
+    ratchetCheck:   c.ratchet,
   });
 
   return out;
@@ -313,7 +316,7 @@ export default function AssistantLiveTable({ onNavigate }) {
       color, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
     }),
     tableWrap: { padding: '6px 6px 6px', overflowX: 'auto' },
-    table:     { width: '100%', borderCollapse: 'collapse', minWidth: 900 },
+    table:     { width: '100%', borderCollapse: 'collapse', minWidth: 820 },
     th: {
       padding: '6px 8px', textAlign: 'left', fontSize: 9, fontWeight: 800,
       letterSpacing: '0.08em', color: 'rgba(255,255,255,0.6)',
@@ -326,9 +329,9 @@ export default function AssistantLiveTable({ onNavigate }) {
       fontSize: 9,
       fontWeight: 700,
       letterSpacing: '0.08em',
-      color: kind === 'CMD'       ? '#FCF000'
-           : kind === 'IBKR_POS'  ? 'rgba(255,255,255,0.55)'
-           :                        'rgba(255,255,255,0.4)',
+      color: kind === 'CMD_POS' || kind === 'CMD_STOP' ? '#FCF000'
+           : kind === 'IBKR_POS'                       ? 'rgba(255,255,255,0.6)'
+           :                                             'rgba(255,255,255,0.45)',
       whiteSpace: 'nowrap',
     }),
   };
@@ -349,30 +352,26 @@ export default function AssistantLiveTable({ onNavigate }) {
         <table style={s.table}>
           <colgroup>
             <col style={{ width: 18 }} />                    {/* status dot */}
-            <col style={{ width: 90 }} />                    {/* ticker */}
-            <col style={{ width: 80 }} />                    {/* source label */}
+            <col style={{ width: 105 }} />                   {/* ticker + last */}
+            <col style={{ width: 100 }} />                   {/* source label */}
             <col style={{ width: 60 }} />                    {/* dir */}
-            <col style={{ width: 70 }} />                    {/* shares */}
+            <col style={{ width: 75 }} />                    {/* shares */}
             <col style={{ width: 95 }} />                    {/* avg */}
-            <col style={{ width: 85 }} />                    {/* last */}
             <col style={{ width: 70 }} />                    {/* stop side */}
             <col style={{ width: 95 }} />                    {/* stop price */}
-            <col style={{ width: 70 }} />                    {/* stop shr */}
             <col style={{ width: 130 }} />                   {/* next ratchet */}
             <col style={{ width: 70 }} />                    {/* action */}
           </colgroup>
           <thead>
             <tr>
               <th style={s.th}></th>
-              <th style={s.th}>TICKER</th>
+              <th style={s.th}>TICKER / LAST</th>
               <th style={s.th}>SRC</th>
               <th style={s.th}>DIR</th>
               <th style={{ ...s.th, ...s.thR }}>SHARES</th>
               <th style={{ ...s.th, ...s.thR }}>AVG</th>
-              <th style={{ ...s.th, ...s.thR }}>LAST</th>
               <th style={s.th}>STOP SIDE</th>
               <th style={{ ...s.th, ...s.thR }}>STOP PRICE</th>
-              <th style={{ ...s.th, ...s.thR }}>STOP SHR</th>
               <th style={{ ...s.th, ...s.thR }}>NEXT RATCHET</th>
               <th style={s.th}>ACTION</th>
             </tr>
@@ -409,13 +408,16 @@ export default function AssistantLiveTable({ onNavigate }) {
                           padding: '4px 8px',
                           borderBottom: '1px solid rgba(255,255,255,0.12)',
                           verticalAlign: 'middle',
-                          ...s.ticker,
                         }}
                       >
-                        {row.ticker}
+                        <div style={s.ticker}>{row.ticker}</div>
+                        <div style={{
+                          fontSize: 11, color: 'rgba(255,255,255,0.55)',
+                          fontVariantNumeric: 'tabular-nums', marginTop: 2,
+                        }}>{fmtMoney(row.lastPrice)}</div>
                         {row.multiStop && (
                           <div style={{
-                            marginTop: 2, padding: '1px 5px', borderRadius: 3,
+                            marginTop: 3, padding: '1px 5px', borderRadius: 3,
                             background: 'rgba(255,193,7,0.15)', color: '#ffc107',
                             fontSize: 9, fontWeight: 800, display: 'inline-block',
                           }}>{ibStops.length} STOPS</div>
@@ -427,45 +429,35 @@ export default function AssistantLiveTable({ onNavigate }) {
                       {sr.source}
                     </td>
 
-                    {/* DIR */}
+                    {/* DIR — POS rows only */}
                     {sr.direction != null
                       ? <Cell check={sr.dirCheck} bottomBorder={isLast}>{sr.direction}</Cell>
                       : <EmptyCell bottomBorder={isLast} />}
 
-                    {/* SHARES */}
+                    {/* SHARES — always shown (position shares or stop shares) */}
                     {sr.shares != null
                       ? <Cell check={sr.sharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>{fmtShares(sr.shares)}</Cell>
-                      : <EmptyCell bottomBorder={isLast} />}
+                      : sr.noStop
+                        ? <Cell check={sr.sharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>0</Cell>
+                        : <EmptyCell bottomBorder={isLast} />}
 
-                    {/* AVG */}
+                    {/* AVG — POS rows only */}
                     {sr.avgCost != null
                       ? <Cell check={sr.avgCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>{fmtMoney(sr.avgCost)}</Cell>
                       : <EmptyCell bottomBorder={isLast} />}
 
-                    {/* LAST — single cell spanning all sub-rows, shown only on first */}
-                    {idx === 0 && (
-                      <td
-                        rowSpan={spanAll}
-                        style={{
-                          padding: '4px 8px', textAlign: 'right',
-                          borderBottom: '1px solid rgba(255,255,255,0.12)',
-                          verticalAlign: 'middle',
-                          color: '#e6e6e6', fontSize: 12,
-                          fontVariantNumeric: 'tabular-nums',
-                        }}
-                      >{fmtMoney(row.lastPrice)}</td>
-                    )}
-
-                    {/* STOP SIDE */}
-                    {sr.kind === 'IBKR_POS'
+                    {/* STOP SIDE — STOP rows only */}
+                    {sr.kind === 'IBKR_POS' || sr.kind === 'CMD_POS'
                       ? <EmptyCell bottomBorder={isLast} />
                       : (sr.stopSide != null || sr.noStop)
-                        ? <Cell check={sr.stopSideCheck} bottomBorder={isLast}>{sr.stopSide ?? (sr.noStop ? '—' : '')}</Cell>
+                        ? <Cell check={sr.stopSideCheck} bottomBorder={isLast}>
+                            {sr.stopSide ?? (sr.noStop ? '—' : '')}
+                          </Cell>
                         : <EmptyCell bottomBorder={isLast} />
                     }
 
-                    {/* STOP PRICE */}
-                    {sr.kind === 'IBKR_POS'
+                    {/* STOP PRICE — STOP rows only */}
+                    {sr.kind === 'IBKR_POS' || sr.kind === 'CMD_POS'
                       ? <EmptyCell bottomBorder={isLast} />
                       : (sr.stopPrice != null || sr.noStop)
                         ? <Cell check={sr.stopPriceCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>
@@ -474,18 +466,8 @@ export default function AssistantLiveTable({ onNavigate }) {
                         : <EmptyCell bottomBorder={isLast} />
                     }
 
-                    {/* STOP SHR */}
-                    {sr.kind === 'IBKR_POS'
-                      ? <EmptyCell bottomBorder={isLast} />
-                      : (sr.stopShares != null || sr.noStop)
-                        ? <Cell check={sr.stopSharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>
-                            {sr.noStop ? '0' : fmtShares(sr.stopShares)}
-                          </Cell>
-                        : <EmptyCell bottomBorder={isLast} />
-                    }
-
-                    {/* NEXT RATCHET — only populated on CMD row */}
-                    {sr.kind === 'CMD' && sr.ratchetValue != null
+                    {/* NEXT RATCHET — CMD_STOP row only */}
+                    {sr.kind === 'CMD_STOP' && sr.ratchetValue != null
                       ? <Cell check={sr.ratchetCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>
                           {fmtMoney(sr.ratchetValue)}
                           {sr.ratchetLabel && (

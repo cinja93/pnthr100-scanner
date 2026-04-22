@@ -606,3 +606,112 @@
   background: rgba(252, 240, 0, 0.1);
   border-bottom-color: #fcf000;
 }
+
+/* ── Inline sector-rotation chart (week-over-week long-lean %) ─────────── */
+.articleBody :global(.pnthr-chart-panel) {
+  margin: 28px 0;
+  padding: 16px 18px 14px;
+  background: rgba(252, 240, 0, 0.03);
+  border: 1px solid rgba(252, 240, 0, 0.22);
+  border-radius: 6px;
+}
+.articleBody :global(.pnthr-chart-title) {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #fcf000;
+  margin-bottom: 6px;
+}
+.articleBody :global(.pnthr-chart-legend) {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 12px;
+}
+.articleBody :global(.pnthr-chart-legend-item) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.articleBody :global(.pnthr-chart-legend-dot) {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.articleBody :global(.pnthr-chart-legend-thisweek) { background: #fcf000; }
+.articleBody :global(.pnthr-chart-legend-lastweek) { background: rgba(255, 255, 255, 0.3); }
+
+.articleBody :global(.pnthr-chart-bars) {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.articleBody :global(.pnthr-chart-row) {
+  display: grid;
+  grid-template-columns: 180px 1fr 110px;
+  gap: 10px;
+  align-items: center;
+}
+.articleBody :global(.pnthr-chart-label) {
+  font-size: 12px;
+  color: #ccc;
+  white-space: nowrap;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.articleBody :global(.pnthr-chart-track) {
+  position: relative;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.articleBody :global(.pnthr-chart-bar) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  transition: width 0.4s ease-out;
+}
+.articleBody :global(.pnthr-chart-bar-lastweek) {
+  background: rgba(255, 255, 255, 0.28);
+  z-index: 1;
+}
+.articleBody :global(.pnthr-chart-bar-thisweek) {
+  background: #fcf000;
+  z-index: 2;
+  box-shadow: -1px 0 0 rgba(0, 0, 0, 0.4) inset;
+}
+.articleBody :global(.pnthr-chart-vals) {
+  display: flex;
+  gap: 6px;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  font-variant-numeric: tabular-nums;
+  align-items: baseline;
+}
+.articleBody :global(.pnthr-chart-val-thisweek) {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fcf000;
+  min-width: 42px;
+}
+.articleBody :global(.pnthr-chart-val-delta) {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.articleBody :global(.pnthr-chart-delta-up)   { color: #28a745; }
+.articleBody :global(.pnthr-chart-delta-down) { color: #dc3545; }
+.articleBody :global(.pnthr-chart-delta-flat) { color: #888; }
+
+@media (max-width: 640px) {
+  .articleBody :global(.pnthr-chart-row) {
+    grid-template-columns: 120px 1fr 80px;
+  }
+  .articleBody :global(.pnthr-chart-label) { font-size: 11px; }
+  .articleBody :global(.pnthr-chart-val-thisweek) { font-size: 12px; min-width: 34px; }
+}

@@ -161,6 +161,50 @@ export default function NewsPage() {
 
   const rawHtml = issue?.narrative ? marked.parse(issue.narrative) : '';
 
+  // Build the sector-rotation chart HTML (week-over-week long-lean %).
+  // Data comes from issue.charts.sectorRotation (computed server-side at
+  // generation time). Yellow bar = this week, gray bar = last week. If
+  // there's no prior-issue data the gray bar renders with width 0 and the
+  // delta label is suppressed.
+  const sectorRotationChartHtml = useMemo(() => {
+    const rows = issue?.charts?.sectorRotation || [];
+    if (!rows.length) return '';
+    const items = rows.map(r => {
+      const lastWeekWidth = r.lastWeek == null ? 0 : r.lastWeek;
+      const deltaLabel = r.delta == null ? ''
+        : r.delta > 0 ? `▲${r.delta}`
+        : r.delta < 0 ? `▼${Math.abs(r.delta)}`
+        :               '—';
+      const deltaClass = r.delta == null ? ''
+        : r.delta > 0 ? 'pnthr-chart-delta-up'
+        : r.delta < 0 ? 'pnthr-chart-delta-down'
+        :               'pnthr-chart-delta-flat';
+      return `
+        <div class="pnthr-chart-row">
+          <div class="pnthr-chart-label">${r.sector}</div>
+          <div class="pnthr-chart-track">
+            <div class="pnthr-chart-bar pnthr-chart-bar-lastweek" style="width:${lastWeekWidth}%"></div>
+            <div class="pnthr-chart-bar pnthr-chart-bar-thisweek" style="width:${r.thisWeek}%"></div>
+          </div>
+          <div class="pnthr-chart-vals">
+            <span class="pnthr-chart-val-thisweek">${r.thisWeek}%</span>
+            ${deltaLabel ? `<span class="pnthr-chart-val-delta ${deltaClass}">${deltaLabel}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="pnthr-chart-panel">
+        <div class="pnthr-chart-title">SECTOR LONG-LEAN % — THIS WEEK VS LAST WEEK</div>
+        <div class="pnthr-chart-legend">
+          <span class="pnthr-chart-legend-item"><span class="pnthr-chart-legend-dot pnthr-chart-legend-thisweek"></span>This week</span>
+          <span class="pnthr-chart-legend-item"><span class="pnthr-chart-legend-dot pnthr-chart-legend-lastweek"></span>Last week</span>
+        </div>
+        <div class="pnthr-chart-bars">${items}</div>
+      </div>
+    `;
+  }, [issue?.charts?.sectorRotation]);
+
   // Known tickers set — built once jungle stocks load
   const knownTickers = useMemo(() => new Set(jungleStocks.map(s => s.ticker)), [jungleStocks]);
 
@@ -199,6 +243,21 @@ export default function NewsPage() {
       html = replaced !== html ? replaced : html + card;
     }
 
+    // Inject the sector-rotation chart at the END of the 'Sector Intelligence'
+    // section (right before the next h2 heading, so it reads as a 'here's
+    // what we just described, visualized' summary). Done before ticker
+    // linkification so the chart HTML isn't picked up by the regex.
+    if (sectorRotationChartHtml) {
+      const sectorRegex = /(<h2[^>]*>[^<]*Sector Intelligence[^<]*<\/h2>)([\s\S]*?)(?=<h2|$)/i;
+      if (sectorRegex.test(html)) {
+        html = html.replace(sectorRegex, (_m, heading, body) => `${heading}${body}${sectorRotationChartHtml}`);
+      } else {
+        // Fallback: if the expected heading isn't in the narrative, append
+        // the chart at the end so the user still sees it.
+        html = html + sectorRotationChartHtml;
+      }
+    }
+
     // Linkify tickers only once jungle stocks are loaded
     if (knownTickers.size > 0) {
       html = html.replace(/(?<=>|^)([^<]+)(?=<|$)/g, textBlock =>
@@ -211,7 +270,7 @@ export default function NewsPage() {
     }
 
     return html;
-  }, [rawHtml, knownTickers, issue?.narrative]);
+  }, [rawHtml, knownTickers, issue?.narrative, sectorRotationChartHtml]);
 
   async function handleArticleClick(e) {
     const ticker = e.target.dataset?.ticker || e.target.dataset?.totwChart;

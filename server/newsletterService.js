@@ -178,6 +178,31 @@ async function fetchMarketContext() {
   }
 }
 
+// Sector long-lean percentage (active longs as % of active long+short signals)
+// per sector. Used to drive the week-over-week sector rotation chart on the
+// rendered newsletter — compared against the prior issue's dataSnapshot.
+// Sectors with fewer than 3 active signals are skipped as noisy.
+function computeSectorLongLeanPct(signals, stockMeta) {
+  const bySector = {};
+  for (const [ticker, sig] of Object.entries(signals)) {
+    const sector = stockMeta[ticker]?.sector;
+    if (!sector || sector === 'Unknown') continue;
+    const s = sig.signal;
+    // Count active positions only; exits and covers don't affect current lean.
+    if (s !== 'BL' && s !== 'SS') continue;
+    if (!bySector[sector]) bySector[sector] = { longs: 0, shorts: 0 };
+    if (s === 'BL') bySector[sector].longs++;
+    else            bySector[sector].shorts++;
+  }
+  const out = {};
+  for (const [sector, c] of Object.entries(bySector)) {
+    const total = c.longs + c.shorts;
+    if (total < 3) continue;
+    out[sector] = Math.round((c.longs / total) * 100);
+  }
+  return out;
+}
+
 // Compute Sprint movers — stocks that rose in PNTHR rank or are new entries
 function computeSprintMovers(stocks) {
   const risers = stocks
@@ -253,8 +278,10 @@ function findBestExits(signals, stockMeta, weekOf) {
 async function getPriorPublishedIssues(limit = 4) {
   const db = await connectToDatabase();
   if (!db) return [];
+  // dataSnapshot included so we can pull last week's sector long-lean
+  // percentages for the week-over-week sector rotation chart.
   return db.collection(COLLECTION)
-    .find({ status: 'published' }, { projection: { narrative: 1, weekOf: 1 } })
+    .find({ status: 'published' }, { projection: { narrative: 1, weekOf: 1, dataSnapshot: 1 } })
     .sort({ weekOf: -1 })
     .limit(limit)
     .toArray();
@@ -302,6 +329,30 @@ export async function generateIssue(weekOf) {
 
   // Full sector breakdown across all 679 PNTHR stocks — drives intermarket analysis
   const sectorSummary = computeFullSectorCounts(prey.signals || {}, prey.stockMeta || {});
+
+  // Sector long-lean % this week, used to drive the week-over-week rotation
+  // chart on the rendered newsletter. We compare against the prior issue's
+  // stored snapshot; on the very first generation (or when a sector had no
+  // signals last week) the "lastWeek" bar will be null and the chart will
+  // show only this week's bar.
+  const thisWeekLongLean = computeSectorLongLeanPct(prey.signals || {}, prey.stockMeta || {});
+  const lastWeekLongLean = priorIssues[0]?.dataSnapshot?.sectorLongLeanPct || {};
+  const sectorRotationChart = Object.keys(thisWeekLongLean)
+    .map(sector => {
+      const thisWeek = thisWeekLongLean[sector];
+      const lastWeek = Object.prototype.hasOwnProperty.call(lastWeekLongLean, sector)
+        ? lastWeekLongLean[sector]
+        : null;
+      const delta = lastWeek == null ? null : thisWeek - lastWeek;
+      return { sector, thisWeek, lastWeek, delta };
+    })
+    // Biggest movers first (by absolute delta); ties broken by higher thisWeek.
+    .sort((a, b) => {
+      const aAbs = Math.abs(a.delta ?? 0);
+      const bAbs = Math.abs(b.delta ?? 0);
+      if (aAbs !== bAbs) return bAbs - aAbs;
+      return b.thisWeek - a.thisWeek;
+    });
 
   // Trade of the Week summary for prompt
   function tradeStr(t) {
@@ -443,6 +494,12 @@ ABSOLUTE RULES — violations break the rendering engine or mislead readers:
     wasTruncated, // true if Claude hit max_tokens — a red flag for the editor
     featuredTrade: bestDollar ?? null,
     profitableExits: exits.slice(0, 20),
+    // Precomputed chart data the client renders inline with the narrative.
+    // Kept server-side (rather than generated from signal data on the fly on
+    // the client) so the numbers never drift from what the prompt saw.
+    charts: {
+      sectorRotation: sectorRotationChart,
+    },
     dataSnapshot: {
       dinnerLongs:  (prey.dinner?.longs  || []).slice(0, 10).map(r => r.ticker),
       dinnerShorts: (prey.dinner?.shorts || []).slice(0, 10).map(r => r.ticker),
@@ -450,6 +507,9 @@ ABSOLUTE RULES — violations break the rendering engine or mislead readers:
       alphaShorts:  (prey.alphas?.shorts || []).slice(0, 10).map(r => r.ticker),
       springLongs:  (prey.springs?.longs || []).slice(0, 10).map(r => r.ticker),
       springShorts: (prey.springs?.shorts|| []).slice(0, 10).map(r => r.ticker),
+      // Stored so NEXT week's generation can compare week-over-week for the
+      // sector rotation chart (this week's values become next week's "last week").
+      sectorLongLeanPct: thisWeekLongLean,
     },
     generatedAt: new Date(),
   };

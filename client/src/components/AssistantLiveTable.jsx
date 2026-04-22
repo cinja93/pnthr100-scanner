@@ -536,21 +536,39 @@ function buildSubRows(row) {
     ratchetCheck:   c.ratchet,
   });
 
-  // 5. Visual gap + IBKR RATCHET rows — same-side lot-entry stops, rendered
-  // after the CMD block so they don't break the protective-stop reconciliation
-  // flow. A dedicated GAP entry becomes a thin separator row in the UI.
-  if (ratchetIbkrStops.length > 0) {
+  // 5. Visual gap + ratchet zone. Always rendered so the L2-L5 plan list has
+  // a consistent home below the divider (even when no ratchet orders are
+  // staged yet in IBKR).
+  //   - IBKR_RATCHET rows: one per same-side lot-entry stop currently in IBKR
+  //   - If no ratchet orders are staged, a single RATCHET_PLAN row stands in
+  //     so the L2-L5 plan list still has a row to render on.
+  //   - The FIRST row below the divider gets showRatchetPlan: true, meaning
+  //     the L2-L5 list renders in its NEXT RATCHET cell.
+  const hasRemainingLotPlan = (row.lotTriggers || []).some(t => !t.filled);
+  const needsRatchetZone = ratchetIbkrStops.length > 0 || hasRemainingLotPlan;
+  if (needsRatchetZone) {
     out.push({ kind: 'GAP' });
-    ratchetIbkrStops.forEach(st => {
-      out.push({
-        kind:      'IBKR_STOP',
-        subKind:   'RATCHET',
-        source:    'IBKR RATCHET',
-        shares:    st.shares,
-        stopSide:  st.side,
-        stopPrice: st.price,
+    if (ratchetIbkrStops.length > 0) {
+      ratchetIbkrStops.forEach((st, idx) => {
+        out.push({
+          kind:      'IBKR_STOP',
+          subKind:   'RATCHET',
+          source:    'IBKR RATCHET',
+          shares:    st.shares,
+          stopSide:  st.side,
+          stopPrice: st.price,
+          showRatchetPlan: idx === 0, // L2-L5 list renders on the first ratchet row
+        });
       });
-    });
+    } else {
+      // No staged ratchet stops — dedicated plan row so the list stays below
+      // the divider rather than jumping back up onto CMD STOP.
+      out.push({
+        kind:    'RATCHET_PLAN',
+        source:  'RATCHET PLAN',
+        showRatchetPlan: true,
+      });
+    }
   }
 
   return out;
@@ -653,6 +671,33 @@ export default function AssistantLiveTable({ onNavigate }) {
   : rs === 'yellow' ? 'rgba(255,193,7,0.03)'
   :                   'transparent';
 
+  // Shared colgroup for the header table and every per-ticker table so column
+  // widths stay in lock-step. Rendered via a helper so each mini-table gets
+  // its own React nodes.
+  const renderColgroup = () => (
+    <colgroup>
+      <col style={{ width: 18 }} />                    {/* status dot */}
+      <col style={{ width: 150 }} />                   {/* ticker + last + IBKR avg + CMD avg */}
+      <col style={{ width: 95 }} />                    {/* direction */}
+      <col style={{ width: 100 }} />                   {/* source label */}
+      <col style={{ width: 75 }} />                    {/* shares */}
+      <col style={{ width: 70 }} />                    {/* stop side */}
+      <col style={{ width: 95 }} />                    {/* stop price */}
+      <col style={{ width: 130 }} />                   {/* next ratchet */}
+      <col style={{ width: 70 }} />                    {/* action */}
+    </colgroup>
+  );
+
+  // Yellow outline around each ticker group, so the IBKR RATCHET row below
+  // the divider can't be mistaken for the next ticker's first row.
+  const tickerBoxStyle = {
+    border:       '3px solid rgba(252,240,0,0.45)',
+    borderRadius: 5,
+    marginBottom: 7,
+    overflow:     'hidden',
+    background:   'rgba(0,0,0,0.3)',
+  };
+
   const body = () => {
     if (loading && !data) return <div style={{ padding: 20, opacity: 0.6 }}>Loading reconciliation…</div>;
     if (error) return <div style={{ padding: 20, color: '#dc3545' }}>Error: {error}</div>;
@@ -660,18 +705,9 @@ export default function AssistantLiveTable({ onNavigate }) {
 
     return (
       <div style={s.tableWrap}>
-        <table style={s.table}>
-          <colgroup>
-            <col style={{ width: 18 }} />                    {/* status dot */}
-            <col style={{ width: 150 }} />                   {/* ticker + last + IBKR avg + CMD avg */}
-            <col style={{ width: 95 }} />                    {/* direction */}
-            <col style={{ width: 100 }} />                   {/* source label */}
-            <col style={{ width: 75 }} />                    {/* shares */}
-            <col style={{ width: 70 }} />                    {/* stop side */}
-            <col style={{ width: 95 }} />                    {/* stop price */}
-            <col style={{ width: 130 }} />                   {/* next ratchet */}
-            <col style={{ width: 70 }} />                    {/* action */}
-          </colgroup>
+        {/* Column headers — single table, no body rows */}
+        <table style={{ ...s.table, tableLayout: 'fixed', marginBottom: 4 }}>
+          {renderColgroup()}
           <thead>
             <tr>
               <th style={s.th}></th>
@@ -685,15 +721,22 @@ export default function AssistantLiveTable({ onNavigate }) {
               <th style={s.th}>ACTION</th>
             </tr>
           </thead>
-          <tbody>
-            {data.rows.map(row => {
-              const rs   = row.rowStatus;
-              const tint = rowTint(rs);
-              const sub  = buildSubRows(row);
-              const spanAll = sub.length;
-              const ibStops = row.ibkr?.stops || [];
+        </table>
 
-              return sub.map((sr, idx) => {
+        {/* One yellow-bordered mini-table per ticker */}
+        {data.rows.map(row => {
+          const rs      = row.rowStatus;
+          const tint    = rowTint(rs);
+          const sub     = buildSubRows(row);
+          const spanAll = sub.length;
+          const ibStops = row.ibkr?.stops || [];
+
+          return (
+            <div key={row.ticker} style={tickerBoxStyle}>
+              <table style={{ ...s.table, tableLayout: 'fixed' }}>
+                {renderColgroup()}
+                <tbody>
+                  {sub.map((sr, idx) => {
                 const isLast = idx === sub.length - 1;
 
                 // Visual separator between the CMD block and the IBKR RATCHET
@@ -814,14 +857,13 @@ export default function AssistantLiveTable({ onNavigate }) {
                           : <EmptyCell bottomBorder={isLast} align="right" needsFill={needsFillIn(sr.kind, 'stopPrice', rs)} />
                     }
 
-                    {/* NEXT RATCHET — CMD_STOP row only. Shows only the REMAINING
-                        (unfilled) lot-trigger prices; once a lot has filled we
-                        no longer need to stage an order for it. Each remaining
-                        trigger gets a green dot if IBKR has a matching pending
-                        order, red if not. */}
+                    {/* NEXT RATCHET — renders on whichever row is flagged
+                        showRatchetPlan (first IBKR_RATCHET stop or, when none
+                        are staged, a dedicated RATCHET_PLAN row). Below the
+                        divider so the protective flow reads cleanly. */}
                     {(() => {
                       const remaining = (row.lotTriggers || []).filter(t => !t.filled);
-                      if (sr.kind !== 'CMD_STOP' || remaining.length === 0) {
+                      if (!sr.showRatchetPlan || remaining.length === 0) {
                         return <EmptyCell bottomBorder={isLast} />;
                       }
                       return (
@@ -903,10 +945,12 @@ export default function AssistantLiveTable({ onNavigate }) {
                     )}
                   </tr>
                 );
-              });
-            })}
-          </tbody>
-        </table>
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
       </div>
     );
   };

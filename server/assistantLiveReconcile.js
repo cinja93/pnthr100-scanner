@@ -4,7 +4,7 @@
 // Compares IBKR (positions + working stops) against Command Center (portfolio + planned stops)
 // and returns one row per ticker (union of all three sources) with color-coded checks.
 
-import { connectToDatabase } from './database.js';
+import { connectToDatabase, getUserProfile } from './database.js';
 
 // ── Tolerance thresholds ──────────────────────────────────────────────────────
 // Centralized so tuning doesn't require chasing through the file.
@@ -42,21 +42,66 @@ function summarizeFills(fills = {}) {
 const LOT_OFFSETS = [0, 0.03, 0.06, 0.10, 0.14];
 const STRIKE_PCT  = [0.35, 0.25, 0.20, 0.12, 0.08];
 
-// Derive each lot's intended share count from the first filled lot and its
-// STRIKE_PCT weighting. If lot 1 filled with 19 shares, total ≈ 19/0.35 = 54,
-// and lot N target = 54 × STRIKE_PCT[N-1].
-function computeLotTargetShares(position) {
+// Mirrors the lot-sizing math in client/src/components/CommandCenter.jsx
+// (approx lines 700-735). If these two diverge, Command will show one number
+// and the LIVE table will show another for the same position — which is what
+// happened with AVGO (user saw 2 in Command, 3 here).
+//
+// Steps:
+//   1. sizePosition() → base totalShares from vitality + ticker-cap caps
+//   2. Compare lot 1's ACTUAL fill to STRIKE_PCT[0] × totalShares. If it
+//      differs, scale effectiveTotal off actual fill but re-apply caps, then
+//      redistribute the remaining shares to lots 2-5 using weights 30/25/20/10
+//      (sum 85). These are NOT the same as STRIKE_PCT[1..4] — they are the
+//      historical rebalance weights that Command uses after a lot-1 over/
+//      under-fill.
+//   3. Final display value per lot = adjShares[i] if the adjustment kicked in,
+//      otherwise Math.round(effectiveTotal × STRIKE_PCT[i]).
+function computeLotTargetShares(position, netLiquidity) {
   const fills = position.fills || {};
-  const firstFilled = [1, 2, 3, 4, 5].find(n => fills[n]?.filled);
-  if (!firstFilled) return [0, 0, 0, 0, 0];
-  const anchorShares = +fills[firstFilled].shares || 0;
-  const anchorPct    = STRIKE_PCT[firstFilled - 1];
-  if (anchorShares <= 0 || !anchorPct) return [0, 0, 0, 0, 0];
-  const implied = anchorShares / anchorPct;
-  return STRIKE_PCT.map(pct => Math.max(1, Math.round(implied * pct)));
+  const entry = +position.entryPrice || 0;
+  const sizingStop = +(position.originalStop || position.stopPrice) || 0;
+  const isETF = !!position.isETF;
+  if (!entry || !sizingStop || !netLiquidity) return [0, 0, 0, 0, 0];
+
+  const tickerCap  = netLiquidity * 0.10;
+  const vitality   = netLiquidity * (isETF ? 0.005 : 0.01);
+  const maxGapPct  = +position.maxGapPct || 0;
+  const structRisk = Math.abs((entry - sizingStop) / entry);
+  const gapMult    = maxGapPct > structRisk * 100 ? Math.max(0.3, structRisk * 100 / maxGapPct) : 1.0;
+  const rps        = Math.abs(entry - sizingStop);
+  const total      = Math.floor(
+    Math.min(rps > 0 ? Math.floor(vitality / rps) : 0, Math.floor(tickerCap / entry)) * gapMult
+  );
+
+  const lot1            = fills[1];
+  const lot1Actual      = lot1?.filled && lot1?.shares ? +lot1.shares : null;
+  const lot1FillPrice   = lot1?.price ? +lot1.price : entry;
+  const lot1RPS         = Math.abs(lot1FillPrice - sizingStop);
+  const lot1Recommended = Math.max(1, Math.round(total * STRIKE_PCT[0]));
+
+  let effectiveTotal = total;
+  let adjShares = null;
+  if (lot1Actual !== null && lot1Actual !== lot1Recommended) {
+    const impliedTotal   = Math.round(lot1Actual / STRIKE_PCT[0]);
+    const maxByTickerCap = lot1FillPrice > 0 ? Math.floor(netLiquidity * 0.10 / lot1FillPrice) : impliedTotal;
+    const maxByVitality  = lot1RPS > 0 ? Math.floor(netLiquidity * (isETF ? 0.005 : 0.01) / lot1RPS) : impliedTotal;
+    const cappedTotal    = Math.min(impliedTotal, maxByTickerCap, maxByVitality);
+    effectiveTotal       = Math.max(lot1Actual, cappedTotal);
+
+    const remaining = Math.max(0, effectiveTotal - lot1Actual);
+    const l2 = Math.round(remaining * 30 / 85);
+    const l3 = Math.round(remaining * 25 / 85);
+    const l4 = Math.round(remaining * 20 / 85);
+    const l5 = Math.max(0, remaining - l2 - l3 - l4);
+    adjShares = [lot1Actual, l2, l3, l4, l5];
+  }
+
+  const targets = STRIKE_PCT.map(pct => Math.max(1, Math.round(effectiveTotal * pct)));
+  return targets.map((tgt, i) => adjShares && adjShares[i] !== tgt ? adjShares[i] : tgt);
 }
 
-function computeLotTriggers(position) {
+function computeLotTriggers(position, netLiquidity) {
   const dir = position.direction;
   const isLong = dir === 'LONG';
   if (!dir || !['LONG', 'SHORT'].includes(dir)) return [];
@@ -65,7 +110,7 @@ function computeLotTriggers(position) {
     ? +fills[1].price
     : +position.entryPrice || null;
   if (!anchor) return [];
-  const targetShares = computeLotTargetShares(position);
+  const targetShares = computeLotTargetShares(position, netLiquidity);
   return [2, 3, 4, 5].map(n => {
     const i = n - 1;
     const triggerPrice = isLong
@@ -211,7 +256,7 @@ function classifyLotTriggers(enrichedTriggers) {
 }
 
 // ── Row builder ──────────────────────────────────────────────────────────────
-function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice) {
+function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity) {
   const cmdHas  = !!cmd;
   const ibkrHas = !!ibkrPos;
 
@@ -233,7 +278,7 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice) {
   // Lot triggers (BUY STP for long / SELL STP for short) for unfilled lots 2-5.
   // Each enriched with staged:true/false based on whether a matching pending order
   // exists in IBKR. The client stacks these in the NEXT RATCHET column with dots.
-  const rawLotTriggers     = cmd ? computeLotTriggers(cmd) : [];
+  const rawLotTriggers     = cmd ? computeLotTriggers(cmd, netLiquidity) : [];
   const enrichedLotTriggers = enrichLotTriggersWithIbkrStatus(rawLotTriggers, ibkrTickerStops);
 
   // For the protective-stop checks (side / price / shares / multi-stop flag),
@@ -356,6 +401,16 @@ export async function assistantLiveReconcile(req, res) {
       .find({ ownerId: userId, status: 'ACTIVE' })
       .toArray();
 
+    // NAV is needed so the lot-sizing math matches Command Center exactly.
+    // Command uses sizePosition(NAV, ...) to derive totalShares then splits
+    // across lots — the LIVE table must compute the same values or the user
+    // sees mismatches (AVGO: Command showed 2 sh at lot 2, LIVE table showed 3).
+    let netLiquidity = 0;
+    try {
+      const profile = await getUserProfile(userId);
+      netLiquidity = +profile?.accountSize || 100000; // match default in database.js
+    } catch { netLiquidity = 100000; }
+
     // IBKR snapshot (single doc per user)
     const ibkrDoc = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
     const ibkrPositions = ibkrDoc?.positions  || [];
@@ -379,7 +434,7 @@ export async function assistantLiveReconcile(req, res) {
       const ibkrPos = ibkrPositions.find(p => p.symbol?.toUpperCase() === ticker) || null;
       const stops   = ibkrStops.filter(s => s.symbol?.toUpperCase() === ticker);
       const last    = prices[ticker] ?? ibkrPos?.marketPrice ?? cmd?.currentPrice ?? null;
-      return buildRow(ticker, cmd, ibkrPos, stops, last);
+      return buildRow(ticker, cmd, ibkrPos, stops, last, netLiquidity);
     });
 
     // Sort: red first, then yellow, then green; within each by ticker

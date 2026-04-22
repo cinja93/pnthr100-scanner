@@ -78,6 +78,186 @@ function Cell({ check, children, onClick, align = 'left', subtle = false, bottom
   );
 }
 
+// ── Generic inline integer-shares editor ─────────────────────────────────────
+// Shared by CMD POS and CMD STOP share cells. Click → number input →
+// Enter saves via PATCH /api/positions/:id/shares; the server adjusts lot 1's
+// shares so the total sums to the typed value (lots 2-5 preserved).
+function EditableSharesCell({ value, check, positionId, onSaved, bottomBorder = false }) {
+  const [editing, setEditing] = useState(false);
+  const [input,   setInput]   = useState(value == null ? '' : String(value));
+  const [saving,  setSaving]  = useState(false);
+  const [flash,   setFlash]   = useState(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => { if (!editing) setInput(value == null ? '' : String(value)); }, [value, editing]);
+  useEffect(() => {
+    if (editing && inputRef.current) { inputRef.current.focus(); inputRef.current.select(); }
+  }, [editing]);
+
+  const commit = async () => {
+    const n = Number(input);
+    if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
+      setFlash('error'); setTimeout(() => setFlash(null), 1500);
+      setEditing(false); setInput(String(value ?? ''));
+      return;
+    }
+    if (n === (+value || 0)) { setEditing(false); return; }
+    setSaving(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/positions/${positionId}/shares`, {
+        method:  'PATCH',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ totalShares: n }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d?.error || `HTTP ${r.status}`);
+      }
+      setFlash('success');
+      setEditing(false);
+      await onSaved?.();
+      setTimeout(() => setFlash(null), 900);
+    } catch (e) {
+      setFlash('error');
+      setTimeout(() => setFlash(null), 2000);
+      setEditing(false);
+      setInput(String(value ?? ''));
+    } finally { setSaving(false); }
+  };
+
+  const cancel = () => { setEditing(false); setInput(String(value ?? '')); };
+  const flashBg = flash === 'success' ? 'rgba(40,167,69,0.18)'
+                : flash === 'error'   ? 'rgba(220,53,69,0.18)'
+                : undefined;
+  const status = check?.status || null;
+
+  return (
+    <td
+      onClick={(e) => { if (!editing && !saving && positionId) { e.stopPropagation(); setEditing(true); } }}
+      style={{
+        padding: '4px 8px',
+        borderBottom: bottomBorder ? '1px solid rgba(255,255,255,0.12)' : 'none',
+        cursor: editing ? 'text' : positionId ? 'pointer' : 'default',
+        color: '#e6e6e6', fontSize: 12,
+        whiteSpace: 'nowrap', textAlign: 'right',
+        fontVariantNumeric: 'tabular-nums',
+        background: flashBg, transition: 'background 0.3s',
+      }}
+      title={editing ? 'Enter to save · Esc to cancel' : 'Click to edit total shares'}
+    >
+      {status && <Dot status={status} title={check?.reason} />}
+      {editing ? (
+        <input
+          ref={inputRef}
+          type="number" step="1" min="1"
+          value={input}
+          disabled={saving}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+          }}
+          onBlur={commit}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: 60, padding: '1px 4px',
+            background: 'rgba(252,240,0,0.1)',
+            border: '1px solid #FCF000', borderRadius: 3,
+            color: '#FCF000', fontSize: 12, fontWeight: 600,
+            fontVariantNumeric: 'tabular-nums', textAlign: 'right',
+            outline: 'none',
+          }}
+        />
+      ) : (
+        <span style={{
+          borderBottom: positionId ? '1px dotted rgba(252,240,0,0.35)' : 'none',
+          paddingBottom: 1,
+        }}>{saving ? '…' : (value == null ? '—' : value)}</span>
+      )}
+    </td>
+  );
+}
+
+// ── Inline direction toggle (LONG ↔ SHORT) ───────────────────────────────────
+// Click to reveal LONG/SHORT buttons; click one to save via PATCH
+// /api/positions/:id/direction. Flipping direction also flips the expected
+// protective-stop side (SELL ↔ BUY) automatically via the next refetch.
+function EditableDirectionCell({ value, check, positionId, onSaved, bottomBorder = false }) {
+  const [editing, setEditing] = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [flash,   setFlash]   = useState(null);
+
+  const pick = async (newDir) => {
+    if (newDir === value) { setEditing(false); return; }
+    setSaving(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/positions/${positionId}/direction`, {
+        method:  'PATCH',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ direction: newDir }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setFlash('success'); setEditing(false);
+      await onSaved?.();
+      setTimeout(() => setFlash(null), 900);
+    } catch (e) {
+      setFlash('error');
+      setTimeout(() => setFlash(null), 2000);
+      setEditing(false);
+    } finally { setSaving(false); }
+  };
+
+  const status = check?.status || null;
+  const flashBg = flash === 'success' ? 'rgba(40,167,69,0.18)'
+                : flash === 'error'   ? 'rgba(220,53,69,0.18)'
+                : undefined;
+
+  return (
+    <td
+      onClick={(e) => { if (!editing && !saving && positionId) { e.stopPropagation(); setEditing(true); } }}
+      style={{
+        padding: '4px 8px',
+        borderBottom: bottomBorder ? '1px solid rgba(255,255,255,0.12)' : 'none',
+        cursor: editing ? 'default' : positionId ? 'pointer' : 'default',
+        color: '#e6e6e6', fontSize: 12, whiteSpace: 'nowrap',
+        background: flashBg, transition: 'background 0.3s',
+      }}
+      title={editing ? 'Click LONG or SHORT to set' : 'Click to change direction'}
+    >
+      {status && <Dot status={status} title={check?.reason} />}
+      {editing ? (
+        <span style={{ display: 'inline-flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+          {['LONG', 'SHORT'].map(d => (
+            <button
+              key={d}
+              type="button"
+              disabled={saving}
+              onClick={() => pick(d)}
+              style={{
+                padding: '1px 6px',
+                background: d === value
+                  ? (d === 'LONG' ? 'rgba(40,167,69,0.25)' : 'rgba(220,53,69,0.25)')
+                  : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${d === value
+                  ? (d === 'LONG' ? '#28a745' : '#dc3545')
+                  : 'rgba(255,255,255,0.2)'}`,
+                color: d === 'LONG' ? '#28a745' : '#dc3545',
+                borderRadius: 3, fontSize: 10, fontWeight: 800,
+                letterSpacing: '0.05em', cursor: 'pointer',
+              }}
+            >{d}</button>
+          ))}
+        </span>
+      ) : (
+        <span style={{
+          borderBottom: positionId ? '1px dotted rgba(252,240,0,0.35)' : 'none',
+          paddingBottom: 1,
+        }}>{saving ? '…' : value}</span>
+      )}
+    </td>
+  );
+}
+
 // Inline-editable stop price cell for CMD_STOP rows. Click → input → Enter saves
 // to PATCH /api/positions/:id/stop-price and triggers a table refresh.
 function EditableStopPriceCell({ value, check, positionId, onSaved, bottomBorder = false }) {
@@ -814,18 +994,37 @@ export default function AssistantLiveTable({ onNavigate }) {
                       </td>
                     )}
 
-                    {/* DIRECTION — POS rows only. Moved before SRC per user request. */}
+                    {/* DIRECTION — POS rows only. Editable on CMD_POS. */}
                     {sr.direction != null
-                      ? <Cell check={sr.dirCheck} bottomBorder={isLast}>{sr.direction}</Cell>
+                      ? (sr.kind === 'CMD_POS' && row.command.positionId
+                          ? <EditableDirectionCell
+                              value={sr.direction}
+                              check={sr.dirCheck}
+                              positionId={row.command.positionId}
+                              onSaved={fetchData}
+                              bottomBorder={isLast}
+                            />
+                          : <Cell check={sr.dirCheck} bottomBorder={isLast}>{sr.direction}</Cell>)
                       : <EmptyCell bottomBorder={isLast} needsFill={needsFillIn(sr.kind, 'dir', rs)} />}
 
                     <td style={{ ...s.sourceLabel(sr.kind), borderBottom: isLast ? '1px solid rgba(255,255,255,0.12)' : 'none' }}>
                       {sr.source}
                     </td>
 
-                    {/* SHARES — always shown (position shares or stop shares) */}
+                    {/* SHARES — always shown (position shares or stop shares).
+                        Inline-editable on CMD_POS and CMD_STOP rows — both map
+                        to the same underlying position total (protective stop
+                        always covers the full position). */}
                     {sr.shares != null
-                      ? <Cell check={sr.sharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>{fmtShares(sr.shares)}</Cell>
+                      ? ((sr.kind === 'CMD_POS' || sr.kind === 'CMD_STOP') && row.command.positionId
+                          ? <EditableSharesCell
+                              value={sr.shares}
+                              check={sr.sharesCheck}
+                              positionId={row.command.positionId}
+                              onSaved={fetchData}
+                              bottomBorder={isLast}
+                            />
+                          : <Cell check={sr.sharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>{fmtShares(sr.shares)}</Cell>)
                       : sr.noStop
                         ? <Cell check={sr.sharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>0</Cell>
                         : <EmptyCell bottomBorder={isLast} align="right" needsFill={needsFillIn(sr.kind, 'shares', rs)} />}

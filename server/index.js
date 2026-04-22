@@ -2401,6 +2401,48 @@ app.patch('/api/positions/:id/stop-price', authenticateJWT, async (req, res) => 
   }
 });
 
+// Inline-edit the total (filled) share count from PNTHR Assistant LIVE.
+// Strategy: adjust lot 1's shares so that the sum of all filled lots equals
+// the requested total. Lots 2-5 fill counts are preserved. Rejects if the
+// target is lower than what lots 2-5 alone already have.
+app.patch('/api/positions/:id/shares', authenticateJWT, async (req, res) => {
+  try {
+    const { totalShares } = req.body;
+    const target = Number(totalShares);
+    if (!Number.isFinite(target) || target <= 0 || !Number.isInteger(target) || target > 1_000_000) {
+      return res.status(400).json({ error: 'totalShares must be a positive integer' });
+    }
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const pos = await db.collection('pnthr_portfolio').findOne({ id: req.params.id, ownerId: req.user.userId });
+    if (!pos) return res.status(404).json({ error: 'Position not found' });
+
+    const fills = pos.fills || {};
+    const lot1  = fills[1];
+    if (!lot1?.filled) return res.status(400).json({ error: 'Lot 1 is not filled; cannot adjust total shares' });
+
+    let otherShares = 0;
+    for (const n of [2, 3, 4, 5]) {
+      const f = fills[n];
+      if (f?.filled) otherShares += +f.shares || 0;
+    }
+    const lot1New = target - otherShares;
+    if (lot1New <= 0) {
+      return res.status(400).json({
+        error: `Target ${target} shares is too low — lots 2-5 alone already hold ${otherShares} shares. Edit individual lots in Command.`,
+      });
+    }
+
+    await db.collection('pnthr_portfolio').updateOne(
+      { id: req.params.id, ownerId: req.user.userId },
+      { $set: { 'fills.1.shares': lot1New, updatedAt: new Date() } }
+    );
+    res.json({ success: true, totalShares: target, lot1Shares: lot1New });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Inline-edit the CMD average cost from PNTHR Assistant LIVE.
 // Strategy: adjust LOT 1's fill price so the weighted average of all filled
 // lots equals the requested value. Lots 2-5 fill prices are preserved. This

@@ -17,6 +17,22 @@ import { API_BASE, authHeaders } from '../services/api';
 
 const todayISO = () => new Date().toISOString().split('T')[0];
 
+// Canonical GICS sectors used throughout PNTHR (see server/sectorUtils.js).
+// Keep in sync with KNOWN_SECTORS there.
+const SECTORS = [
+  'Technology',
+  'Healthcare',
+  'Financial Services',
+  'Consumer Discretionary',
+  'Consumer Staples',
+  'Communication Services',
+  'Industrials',
+  'Basic Materials',
+  'Real Estate',
+  'Utilities',
+  'Energy',
+];
+
 export default function AddCommandPositionModal({ open, initial, onClose, onSaved }) {
   const [ticker,     setTicker]     = useState('');
   const [direction,  setDirection]  = useState('LONG');
@@ -240,14 +256,17 @@ export default function AddCommandPositionModal({ open, initial, onClose, onSave
         </div>
 
         {field('SECTOR (OPTIONAL)',
-          <input
-            type="text"
+          <select
             value={sector}
             disabled={saving}
             onChange={(e) => setSector(e.target.value)}
-            placeholder="Technology"
-            style={inputStyle}
-          />, 'Leave blank if unknown — can be edited later'
+            style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }}
+          >
+            <option value="">— select sector —</option>
+            {SECTORS.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>, 'Leave blank if unknown — can be edited later'
         )}
 
         {error && (

@@ -2401,42 +2401,63 @@ app.patch('/api/positions/:id/stop-price', authenticateJWT, async (req, res) => 
   }
 });
 
-// Inline-edit the CMD average cost from PNTHR Assistant LIVE. Only supported
-// when exactly ONE lot is filled — in that case the avg cost == lot 1's fill
-// price so the update is unambiguous. Multi-lot positions return 400 with
-// guidance to edit individual fills in Command Center.
+// Inline-edit the CMD average cost from PNTHR Assistant LIVE.
+// Strategy: adjust LOT 1's fill price so the weighted average of all filled
+// lots equals the requested value. Lots 2-5 fill prices are preserved. This
+// lets the user align Command's avg with IBKR's avg without editing every
+// individual lot manually.
+//   targetAvg * totalShares = lot1Shares * lot1NewPrice + sum(otherShares * otherPrices)
+//   lot1NewPrice = (targetAvg * totalShares - sum(otherShares * otherPrices)) / lot1Shares
+// Rejects if the math requires a negative lot 1 price (e.g. other lots alone
+// already exceed the target avg × total shares).
 app.patch('/api/positions/:id/avg-cost', authenticateJWT, async (req, res) => {
   try {
     const { avgCost } = req.body;
-    const n = Number(avgCost);
-    if (!Number.isFinite(n) || n <= 0 || n > 1_000_000) {
+    const target = Number(avgCost);
+    if (!Number.isFinite(target) || target <= 0 || target > 1_000_000) {
       return res.status(400).json({ error: 'avgCost must be a positive number' });
     }
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
     const pos = await db.collection('pnthr_portfolio').findOne({ id: req.params.id, ownerId: req.user.userId });
     if (!pos) return res.status(404).json({ error: 'Position not found' });
-    const filledLots = Object.entries(pos.fills || {})
-      .filter(([, f]) => f?.filled)
-      .map(([n]) => Number(n));
-    if (filledLots.length === 0) return res.status(400).json({ error: 'Position has no filled lots' });
-    if (filledLots.length > 1) {
+
+    const fills = pos.fills || {};
+    const lot1  = fills[1];
+    if (!lot1?.filled) return res.status(400).json({ error: 'Lot 1 is not filled; cannot solve for new avg' });
+
+    const lot1Shares = +lot1.shares || 0;
+    if (lot1Shares <= 0) return res.status(400).json({ error: 'Lot 1 shares invalid' });
+
+    // Sum shares and cost from lots 2-5 that are filled
+    let otherShares = 0, otherCost = 0;
+    for (const n of [2, 3, 4, 5]) {
+      const f = fills[n];
+      if (!f?.filled) continue;
+      otherShares += +f.shares || 0;
+      otherCost   += (+f.shares || 0) * (+f.price || 0);
+    }
+    const totalShares = lot1Shares + otherShares;
+    const lot1NewPrice = (target * totalShares - otherCost) / lot1Shares;
+
+    if (!Number.isFinite(lot1NewPrice) || lot1NewPrice <= 0) {
       return res.status(400).json({
-        error: `Cannot edit average — position has ${filledLots.length} filled lots. Edit individual fills in Command Center.`,
+        error: `Target avg $${target.toFixed(2)} is too low — lots 2-5 alone would require a negative lot 1 price. Edit lots individually in Command.`,
       });
     }
-    const onlyLot = filledLots[0];
+
+    const rounded = +lot1NewPrice.toFixed(4);
     await db.collection('pnthr_portfolio').updateOne(
       { id: req.params.id, ownerId: req.user.userId },
       {
         $set: {
-          [`fills.${onlyLot}.price`]: +n.toFixed(4),
-          entryPrice:                 +n.toFixed(4),
-          updatedAt:                  new Date(),
+          'fills.1.price': rounded,
+          entryPrice:      rounded,
+          updatedAt:       new Date(),
         },
       }
     );
-    res.json({ success: true, avgCost: +n.toFixed(4), lotUpdated: onlyLot });
+    res.json({ success: true, avgCost: target, lot1Price: rounded });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

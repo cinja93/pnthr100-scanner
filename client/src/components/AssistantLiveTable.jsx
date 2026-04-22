@@ -212,7 +212,9 @@ function EditableAvgCostLine({ value, check, positionId, filledLotCount, onSaved
     if (editing && inputRef.current) { inputRef.current.focus(); inputRef.current.select(); }
   }, [editing]);
 
-  const editable = positionId && filledLotCount === 1;
+  // Edits work for any filled-lot count: the server solves for lot 1's price
+  // so the weighted avg of all filled lots equals the requested value.
+  const editable = !!positionId;
 
   const commit = async () => {
     const n = Number(input);
@@ -253,11 +255,11 @@ function EditableAvgCostLine({ value, check, positionId, filledLotCount, onSaved
                    : flash === 'error'   ? 'rgba(220,53,69,0.3)'
                    : 'transparent';
 
-  const tooltip = editable
-    ? 'Click to edit CMD avg cost'
+  const tooltip = !editable
+    ? ''
     : filledLotCount > 1
-      ? 'Multi-lot position — edit individual fills in Command Center'
-      : '';
+      ? `Click to edit — lot 1 price will be adjusted so the ${filledLotCount}-lot weighted average equals your entered value`
+      : 'Click to edit CMD avg cost';
 
   return (
     <div

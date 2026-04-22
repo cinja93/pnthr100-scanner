@@ -244,15 +244,17 @@ function buildSubRows(row) {
 
 // ── Main component ──────────────────────────────────────────────────────────
 export default function AssistantLiveTable({ onNavigate }) {
-  const [data,      setData]      = useState(null);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState(null);
-  const [modalRow,  setModalRow]  = useState(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [data,       setData]       = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error,      setError]      = useState(null);
+  const [modalRow,   setModalRow]   = useState(null);
+  const [collapsed,  setCollapsed]  = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
       setError(null);
+      setRefreshing(true);
       const r = await fetch(`${API_BASE}/api/assistant/live-reconcile`, { headers: authHeaders() });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
@@ -261,6 +263,7 @@ export default function AssistantLiveTable({ onNavigate }) {
       setError(e.message || 'Failed to load');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -291,7 +294,11 @@ export default function AssistantLiveTable({ onNavigate }) {
       padding: '7px 14px 5px',
       borderBottom: '1px solid rgba(252, 240, 0, 0.12)',
       display: 'flex', alignItems: 'center', gap: 12,
-      cursor: 'pointer', userSelect: 'none',
+      userSelect: 'none',
+    },
+    collapseBtn: {
+      background: 'transparent', border: 'none', padding: '2px 4px',
+      color: '#FCF000', fontSize: 11, cursor: 'pointer',
     },
     title: {
       color: '#FCF000', fontWeight: 900, fontSize: 10, letterSpacing: '0.14em',
@@ -528,8 +535,13 @@ export default function AssistantLiveTable({ onNavigate }) {
 
   return (
     <div style={s.container}>
-      <div style={s.headerBar} onClick={() => setCollapsed(v => !v)}>
-        <span style={{ fontSize: 11, color: '#FCF000' }}>{collapsed ? '▶' : '▼'}</span>
+      <div style={s.headerBar}>
+        <button
+          type="button"
+          onClick={() => setCollapsed(v => !v)}
+          style={s.collapseBtn}
+          title={collapsed ? 'Expand' : 'Collapse'}
+        >{collapsed ? '▶' : '▼'}</button>
         <span style={s.title}>PNTHR ASSISTANT LIVE — SOURCE OF TRUTH</span>
         {summary.red > 0    && <span style={s.pill(DOT_COLOR.red)}>    ● {summary.red} TO FIX</span>}
         {summary.yellow > 0 && <span style={s.pill(DOT_COLOR.yellow)}> ● {summary.yellow} WATCHING</span>}
@@ -541,19 +553,26 @@ export default function AssistantLiveTable({ onNavigate }) {
         )}
         <span style={s.spacer} />
         <span style={s.meta}>
-          last sync: {fmtTime(data?.lastSyncedAt)}
+          {refreshing ? 'refreshing…' : `last sync: ${fmtTime(data?.lastSyncedAt)}`}
         </span>
         <button
-          onClick={(e) => { e.stopPropagation(); fetchData(); }}
+          type="button"
+          onClick={fetchData}
+          disabled={refreshing}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(252,240,0,0.22)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(252,240,0,0.1)';  }}
           style={{
-            padding: '3px 10px',
+            padding: '4px 12px',
             background: 'rgba(252,240,0,0.1)',
             color: '#FCF000',
-            border: '1px solid rgba(252,240,0,0.3)',
+            border: '1px solid rgba(252,240,0,0.4)',
             borderRadius: 4, fontSize: 10, fontWeight: 800,
-            cursor: 'pointer', letterSpacing: '0.05em',
+            cursor: refreshing ? 'wait' : 'pointer',
+            letterSpacing: '0.05em',
+            opacity: refreshing ? 0.6 : 1,
+            transition: 'background 0.15s',
           }}
-        >↺ REFRESH</button>
+        >{refreshing ? '… REFRESHING' : '↺ REFRESH'}</button>
       </div>
       {!collapsed && body()}
       <ActionModal row={modalRow} onClose={() => setModalRow(null)} />

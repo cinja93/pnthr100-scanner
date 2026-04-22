@@ -196,6 +196,119 @@ function EditableStopPriceCell({ value, check, positionId, onSaved, bottomBorder
   );
 }
 
+// Inline-editable CMD average cost, rendered in the ticker cell below IBKR avg.
+// Only editable when exactly one lot is filled (avg == lot 1 fill price). For
+// multi-lot positions, renders plain with a tooltip pointing the user at
+// Command Center (where individual fills can be edited).
+function EditableAvgCostLine({ value, check, positionId, filledLotCount, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [input,   setInput]   = useState(value == null ? '' : String(value));
+  const [saving,  setSaving]  = useState(false);
+  const [flash,   setFlash]   = useState(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => { if (!editing) setInput(value == null ? '' : String(value)); }, [value, editing]);
+  useEffect(() => {
+    if (editing && inputRef.current) { inputRef.current.focus(); inputRef.current.select(); }
+  }, [editing]);
+
+  const editable = positionId && filledLotCount === 1;
+
+  const commit = async () => {
+    const n = Number(input);
+    if (!Number.isFinite(n) || n <= 0) {
+      setFlash('error'); setTimeout(() => setFlash(null), 1500);
+      setEditing(false); setInput(String(value ?? ''));
+      return;
+    }
+    if (Math.abs(n - (+value || 0)) < 0.005) { setEditing(false); return; }
+    setSaving(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/positions/${positionId}/avg-cost`, {
+        method:  'PATCH',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ avgCost: n }),
+      });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${r.status}`);
+      }
+      setFlash('success');
+      setEditing(false);
+      await onSaved?.();
+      setTimeout(() => setFlash(null), 900);
+    } catch (e) {
+      setFlash('error');
+      setTimeout(() => setFlash(null), 2000);
+      setEditing(false);
+      setInput(String(value ?? ''));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancel = () => { setEditing(false); setInput(String(value ?? '')); };
+
+  const flashColor = flash === 'success' ? 'rgba(40,167,69,0.3)'
+                   : flash === 'error'   ? 'rgba(220,53,69,0.3)'
+                   : 'transparent';
+
+  const tooltip = editable
+    ? 'Click to edit CMD avg cost'
+    : filledLotCount > 1
+      ? 'Multi-lot position — edit individual fills in Command Center'
+      : '';
+
+  return (
+    <div
+      onClick={() => { if (editable && !saving && !editing) setEditing(true); }}
+      title={tooltip}
+      style={{
+        marginTop: 1, fontSize: 11,
+        display: 'flex', alignItems: 'center', gap: 0,
+        fontVariantNumeric: 'tabular-nums',
+        color: 'rgba(255,255,255,0.75)',
+        cursor: editable && !editing ? 'pointer' : 'default',
+        background: flashColor,
+        transition: 'background 0.3s',
+        borderRadius: 2,
+      }}
+    >
+      <Dot status={check?.status || 'gray'} title={check?.reason} />
+      <span style={{ opacity: 0.5, marginRight: 4, color: '#FCF000' }}>CMD</span>
+      {editing ? (
+        <input
+          ref={inputRef}
+          type="number" step="0.0001" min="0"
+          value={input}
+          disabled={saving}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+          }}
+          onBlur={commit}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: 72, padding: '1px 4px',
+            background: 'rgba(252,240,0,0.1)',
+            border: '1px solid #FCF000',
+            borderRadius: 3, color: '#FCF000',
+            fontSize: 11, fontWeight: 600,
+            fontVariantNumeric: 'tabular-nums',
+            outline: 'none',
+          }}
+        />
+      ) : (
+        <span style={{
+          borderBottom: editable ? '1px dotted rgba(252,240,0,0.35)' : 'none',
+          paddingBottom: 1,
+        }}>{saving ? '…' : (value == null ? '—' : `$${(+value).toFixed(2)}`)}</span>
+      )}
+    </div>
+  );
+}
+
 // Empty placeholder cell. When `needsFill` is true, renders a dashed box
 // so the user instantly sees "this is where data should go."
 function EmptyCell({ bottomBorder = false, needsFill = false, align = 'center' }) {
@@ -579,16 +692,13 @@ export default function AssistantLiveTable({ onNavigate }) {
                           <span style={{ opacity: 0.5, marginRight: 4 }}>IBKR</span>
                           {fmtMoney(row.ibkr.avgCost)}
                         </div>
-                        <div style={{
-                          marginTop: 1, fontSize: 11,
-                          display: 'flex', alignItems: 'center', gap: 0,
-                          fontVariantNumeric: 'tabular-nums',
-                          color: 'rgba(255,255,255,0.75)',
-                        }}>
-                          <Dot status={row.checks?.avg?.status || 'gray'} title={row.checks?.avg?.reason} />
-                          <span style={{ opacity: 0.5, marginRight: 4, color: '#FCF000' }}>CMD</span>
-                          {fmtMoney(row.command.avgCost)}
-                        </div>
+                        <EditableAvgCostLine
+                          value={row.command.avgCost}
+                          check={row.checks?.avg}
+                          positionId={row.command.positionId}
+                          filledLotCount={row.command.filledLotCount}
+                          onSaved={fetchData}
+                        />
                         {row.multiStop && (
                           <div style={{
                             marginTop: 4, padding: '1px 5px', borderRadius: 3,

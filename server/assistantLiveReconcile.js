@@ -279,12 +279,16 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice) {
       })),
     },
     command: {
-      hasPosition: cmdHas,
-      positionId:  cmd?.id || null,
-      direction:   cmdDir,
-      shares:      cmdSharesOrNull,
-      avgCost:     cmdAvg,
-      stopPrice:   cmd?.stopPrice ?? null,
+      hasPosition:    cmdHas,
+      positionId:     cmd?.id || null,
+      direction:      cmdDir,
+      shares:         cmdSharesOrNull,
+      avgCost:        cmdAvg,
+      stopPrice:      cmd?.stopPrice ?? null,
+      // How many lots are filled — the client uses this to decide whether the
+      // CMD avg cost is inline-editable (only editable for single-lot positions
+      // where avg == lot 1 fill price unambiguously).
+      filledLotCount: cmd ? summarizeFills(cmd.fills).filledCount : 0,
     },
     lastPrice,
     lotTriggers:  enrichedLotTriggers, // [{lot, triggerPrice, filled, expectedSide, staged}, ...]

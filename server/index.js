@@ -2400,6 +2400,47 @@ app.patch('/api/positions/:id/stop-price', authenticateJWT, async (req, res) => 
     res.status(500).json({ error: err.message });
   }
 });
+
+// Inline-edit the CMD average cost from PNTHR Assistant LIVE. Only supported
+// when exactly ONE lot is filled — in that case the avg cost == lot 1's fill
+// price so the update is unambiguous. Multi-lot positions return 400 with
+// guidance to edit individual fills in Command Center.
+app.patch('/api/positions/:id/avg-cost', authenticateJWT, async (req, res) => {
+  try {
+    const { avgCost } = req.body;
+    const n = Number(avgCost);
+    if (!Number.isFinite(n) || n <= 0 || n > 1_000_000) {
+      return res.status(400).json({ error: 'avgCost must be a positive number' });
+    }
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const pos = await db.collection('pnthr_portfolio').findOne({ id: req.params.id, ownerId: req.user.userId });
+    if (!pos) return res.status(404).json({ error: 'Position not found' });
+    const filledLots = Object.entries(pos.fills || {})
+      .filter(([, f]) => f?.filled)
+      .map(([n]) => Number(n));
+    if (filledLots.length === 0) return res.status(400).json({ error: 'Position has no filled lots' });
+    if (filledLots.length > 1) {
+      return res.status(400).json({
+        error: `Cannot edit average — position has ${filledLots.length} filled lots. Edit individual fills in Command Center.`,
+      });
+    }
+    const onlyLot = filledLots[0];
+    await db.collection('pnthr_portfolio').updateOne(
+      { id: req.params.id, ownerId: req.user.userId },
+      {
+        $set: {
+          [`fills.${onlyLot}.price`]: +n.toFixed(4),
+          entryPrice:                 +n.toFixed(4),
+          updatedAt:                  new Date(),
+        },
+      }
+    );
+    res.json({ success: true, avgCost: +n.toFixed(4), lotUpdated: onlyLot });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.post('/api/ibkr/sync',          authenticateJWT, requireAdmin, ibkrSync);
 
 // ── IBKR Discrepancy Check ─────────────────────────────────────────────────

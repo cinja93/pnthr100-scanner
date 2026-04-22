@@ -1359,17 +1359,47 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
             : null;
           const shares = sized?.totalShares || 0;
           const cost   = shares * entry;
+          // Earnings-this-week rows get the same yellow treatment as PreyPage.
+          // Wash-sale-blocked tickers get a small red WASH badge next to the ticker.
+          const rowBg = o.hasEarningsThisWeek ? '#fef3c7' : undefined;
+          const rowColor = o.hasEarningsThisWeek ? '#1a1a1a' : undefined;
           return (
-            <tr key={o.ticker}>
+            <tr key={o.ticker} style={rowBg ? { background: rowBg, color: rowColor } : undefined}>
               <td>
-                <strong
-                  onClick={() => onTickerClick?.(o.ticker)}
-                  style={{ cursor: onTickerClick ? 'pointer' : 'default', color: '#fcf000', textDecoration: 'underline dotted' }}
-                  title="Click to view chart"
-                >
-                  {o.ticker}
-                </strong>
-                <div style={{ fontSize: 11, color: '#888' }}>{o.companyName}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <strong
+                    onClick={() => onTickerClick?.(o.ticker)}
+                    style={{
+                      cursor: onTickerClick ? 'pointer' : 'default',
+                      color: o.hasEarningsThisWeek ? '#1a1a1a' : '#fcf000',
+                      textDecoration: 'underline dotted',
+                    }}
+                    title="Click to view chart"
+                  >
+                    {o.ticker}
+                  </strong>
+                  {o.washBlocked && (
+                    <span
+                      title={`Wash sale window open until ${o.washExpiryDate ? new Date(o.washExpiryDate).toLocaleDateString() : 'unknown'} — trading this will disallow the loss`}
+                      style={{
+                        background: '#dc3545', color: '#fff',
+                        fontSize: 9, fontWeight: 800, letterSpacing: '0.08em',
+                        padding: '1px 6px', borderRadius: 3,
+                      }}
+                    >WASH</span>
+                  )}
+                  {o.hasEarningsThisWeek && (
+                    <span
+                      title={`Earnings on ${o.nextEarningsDate || 'this week'}`}
+                      style={{
+                        background: '#b45309', color: '#fff',
+                        fontSize: 9, fontWeight: 800, letterSpacing: '0.08em',
+                        padding: '1px 6px', borderRadius: 3,
+                      }}
+                    >EARNINGS</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: o.hasEarningsThisWeek ? '#555' : '#888' }}>{o.companyName}</div>
               </td>
               <td>
                 <span className={o.signal === 'BL' ? styles.dirBL : styles.dirSS}>

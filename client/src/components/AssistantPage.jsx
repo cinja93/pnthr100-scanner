@@ -2291,6 +2291,41 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
 // Shows this week's PNTHR order sheet summary. Appears as soon as orders are
 // generated (Run PREVIEW or Run CONFIRMED) — fetched live on every page refresh.
 
+// Single ticker pill in the weekly orders section. Base color is the signal
+// accent (green for BL, red for SS). Two overlays can apply:
+//   - hasEarningsThisWeek → full pill flips to an earnings-yellow background
+//     (same treatment PreyPage uses for ticker rows). Overrides signal color.
+//   - washBlocked         → small red 'WASH' badge appended after the ticker
+function OrderPill({ o, accent }) {
+  const earningsBg    = o.hasEarningsThisWeek;
+  const background    = earningsBg ? '#fef3c7' : `${accent}1a`; // 0x1a ~ 10% alpha
+  const border        = earningsBg ? '1px solid #f59e0b' : `1px solid ${accent}4d`;
+  const textColor     = earningsBg ? '#78350f' : accent;
+  const priceColor    = earningsBg ? '#78350f99' : '#888';
+  return (
+    <span style={{
+      fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 4,
+      background, color: textColor, border,
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+    }}>
+      {o.ticker}
+      {o.washBlocked && (
+        <span
+          title={`Wash sale window open until ${o.washExpiryDate ? new Date(o.washExpiryDate).toLocaleDateString() : 'unknown'}`}
+          style={{
+            background: '#dc3545', color: '#fff',
+            fontSize: 8, fontWeight: 800, letterSpacing: '0.08em',
+            padding: '0 4px', borderRadius: 2,
+          }}
+        >WASH</span>
+      )}
+      {o.signalPrice && (
+        <span style={{ fontWeight: 400, color: priceColor }}>${o.signalPrice.toFixed(2)}</span>
+      )}
+    </span>
+  );
+}
+
 function WeeklyOrdersSection({ data, onNavigate }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -2357,14 +2392,7 @@ function WeeklyOrdersSection({ data, onNavigate }) {
               <div style={{ fontSize: 10, color: '#22c55e', fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4 }}>BUY LONG</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {blOrders.map(o => (
-                  <span key={o.ticker} style={{
-                    fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 4,
-                    background: 'rgba(34,197,94,0.1)', color: '#22c55e',
-                    border: '1px solid rgba(34,197,94,0.3)',
-                  }}>
-                    {o.ticker}
-                    {o.signalPrice && <span style={{ fontWeight: 400, color: '#888', marginLeft: 5 }}>${o.signalPrice.toFixed(2)}</span>}
-                  </span>
+                  <OrderPill key={o.ticker} o={o} accent="#22c55e" />
                 ))}
               </div>
             </div>
@@ -2376,14 +2404,7 @@ function WeeklyOrdersSection({ data, onNavigate }) {
               <div style={{ fontSize: 10, color: '#ef5350', fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4 }}>SELL SHORT</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {ssOrders.map(o => (
-                  <span key={o.ticker} style={{
-                    fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 4,
-                    background: 'rgba(239,83,80,0.1)', color: '#ef5350',
-                    border: '1px solid rgba(239,83,80,0.3)',
-                  }}>
-                    {o.ticker}
-                    {o.signalPrice && <span style={{ fontWeight: 400, color: '#888', marginLeft: 5 }}>${o.signalPrice.toFixed(2)}</span>}
-                  </span>
+                  <OrderPill key={o.ticker} o={o} accent="#ef5350" />
                 ))}
               </div>
             </div>

@@ -138,7 +138,7 @@ let earningsCache = null;
 let earningsCacheTime = 0;
 const EARNINGS_CACHE_MS = 24 * 60 * 60 * 1000;
 
-async function fetchEarningsMap(tickers) {
+export async function fetchEarningsMap(tickers) {
   const now = Date.now();
   if (earningsCache && (now - earningsCacheTime) < EARNINGS_CACHE_MS) {
     return earningsCache;

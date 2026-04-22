@@ -25,6 +25,7 @@ import { getPreyResults }                 from './preyService.js';
 import { getLastFriday }                  from './technicalUtils.js';
 import { DEMO_OWNER_ID }                  from './demoEngine.js';
 import { getDirectionIndexFromFlags }     from './gateLogic.js';
+import { fetchEarningsMap }                from './assistantService.js';
 
 const BL_TOP_N = 10;
 const SS_TOP_N = 5;
@@ -481,11 +482,45 @@ export async function ordersGetLatest(req, res) {
       ? await db.collection('pnthr_gap_risk').find({ ticker: { $in: tickers } }).toArray()
       : [];
     const gapMap = new Map(gapDocs.map(g => [g.ticker, g.maxGapPct || 0]));
-    const orders = rawOrders.map(o => ({
-      ...o,
-      inPortfolio: inPort.has(o.ticker),
-      maxGapPct:   gapMap.get(o.ticker) ?? 0,
-    }));
+
+    // Earnings-this-week lookup — fetchEarningsMap hits FMP's 7-day earnings
+    // calendar (24h cache). Orders for tickers reporting in the next 7 days
+    // get flagged so the client can render a yellow background.
+    let earningsMap = {};
+    if (tickers.length) {
+      try { earningsMap = await fetchEarningsMap(tickers); }
+      catch (e) { console.warn('[Orders API] earnings fetch failed:', e.message); }
+    }
+
+    // Wash-sale lookup — per-user. A ticker is wash-blocked if the user has a
+    // closed position with a losing exit whose 30-day window is still open and
+    // hasn't been triggered.
+    const nowDate = new Date();
+    const washDocs = tickers.length
+      ? await db.collection('pnthr_portfolio').find({
+          ownerId: req.user.userId,
+          ticker:  { $in: tickers },
+          status:  'CLOSED',
+          'washSale.isLoss':     true,
+          'washSale.triggered':  false,
+          'washSale.expiryDate': { $gt: nowDate },
+        }).project({ ticker: 1, 'washSale.expiryDate': 1 }).toArray()
+      : [];
+    const washMap = new Map(washDocs.map(w => [w.ticker, w.washSale?.expiryDate || null]));
+
+    const orders = rawOrders.map(o => {
+      const earningsDate = earningsMap[o.ticker?.toUpperCase()] || null;
+      const washExpiry   = washMap.get(o.ticker) || null;
+      return {
+        ...o,
+        inPortfolio:         inPort.has(o.ticker),
+        maxGapPct:           gapMap.get(o.ticker) ?? 0,
+        nextEarningsDate:    earningsDate,
+        hasEarningsThisWeek: !!earningsDate, // fetchEarningsMap only returns next-7-day dates
+        washBlocked:         !!washExpiry,
+        washExpiryDate:      washExpiry,
+      };
+    });
 
     // If saved regime is missing index data (FMP failed when orders were generated),
     // do a live re-fetch so the MACRO bar always shows real values.

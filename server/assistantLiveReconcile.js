@@ -240,16 +240,21 @@ function classifyStopShares(ibkrStops, cmdShr) {
 
 // Classify the overall ratchet-column status based on the NEXT unfilled lot
 // trigger only. Per-lot dots inside the cell still reflect each individual
-// trigger's staging state (green/red), but only the next one drives the
-// row-level roll-up. Rationale: the user only needs to stage orders when
-// triggers get close to price; later ratchets are informational.
+// trigger's staging state, but only the next unfilled one drives the row-
+// level roll-up.
 //
-// Green = next unfilled lot trigger has a matching pending order in IBKR
-// Red   = next unfilled lot trigger has NO matching pending order
+// Green = next unfilled lot is staged in IBKR
+//       OR next unfilled lot has 0 target shares (position front-loaded at
+//       vitality/ticker cap — there's nothing more to stage, which means
+//       no action required → green)
+// Red   = next unfilled lot has shares to stage but NO matching pending order
 // Gray  = all lots filled (no upcoming trigger)
 function classifyLotTriggers(enrichedTriggers) {
   const next = enrichedTriggers.find(t => !t.filled);
   if (!next) return { status: 'gray', reason: 'all lots filled' };
+  if (!next.targetShares || next.targetShares <= 0) {
+    return { status: 'green', reason: 'position already at size cap — no more shares to add' };
+  }
   return next.staged
     ? { status: 'green', reason: `Next lot (L${next.lot}) staged in IBKR` }
     : { status: 'red',   reason: `Next lot (L${next.lot}) NOT staged in IBKR` };
@@ -308,14 +313,16 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
 
   // Action list: what the user can click to fix
   const actions = [];
-  // For any unstaged lot trigger, give the user the exact TWS instruction
+  // For any unstaged lot trigger with shares remaining, give the user the
+  // exact TWS instruction. Lots with 0 target shares are skipped — the
+  // position is already at its size cap and there's nothing more to stage.
   for (const t of enrichedLotTriggers) {
     if (t.filled || t.staged) continue;
-    const shareHint = t.targetShares > 0 ? `${t.targetShares} sh ` : '';
+    if (!t.targetShares || t.targetShares <= 0) continue;
     actions.push({
       type: 'ibkr',
       label: `Stage Lot ${t.lot} trigger in IBKR`,
-      instruction: `Open TWS. Add ${t.expectedSide} STP ${shareHint}@ $${t.triggerPrice.toFixed(2)} GTC (Lot ${t.lot} entry).`,
+      instruction: `Open TWS. Add ${t.expectedSide} STP ${t.targetShares} sh @ $${t.triggerPrice.toFixed(2)} GTC (Lot ${t.lot} entry).`,
     });
   }
   if (checks.stopPrice.status === 'red' && checks.stopPrice.reason?.includes('NAKED')) {

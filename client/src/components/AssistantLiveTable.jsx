@@ -793,32 +793,42 @@ export default function AssistantLiveTable({ onNavigate }) {
                             fontVariantNumeric: 'tabular-nums', textAlign: 'right',
                           }}
                         >
-                          {remaining.map(t => (
-                            <div key={t.lot} style={{
-                              display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                              gap: 2, lineHeight: '14px',
-                            }}>
-                              <Dot status={t.staged ? 'green' : 'red'} title={
-                                t.staged
-                                  ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR`
-                                  : `Lot ${t.lot}: NO pending ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)}`
-                              } />
-                              <span style={{ opacity: 0.5, fontSize: 9, marginRight: 2 }}>L{t.lot}</span>
-                              <span>{fmtMoney(t.triggerPrice)}</span>
-                              <span
-                                title={t.targetShares > 0
-                                  ? `Plan calls for ${t.targetShares} sh at Lot ${t.lot}`
-                                  : `0 sh — position already at vitality/ticker-cap ceiling; no more shares to distribute to lots 2-5`}
-                                style={{
-                                  marginLeft: 5, fontSize: 9,
-                                  color: t.targetShares > 0
-                                    ? 'rgba(255,255,255,0.45)'
-                                    : 'rgba(255,255,255,0.28)',
-                                  fontWeight: 500,
-                                }}
-                              >{t.targetShares} sh</span>
-                            </div>
-                          ))}
+                          {remaining.map(t => {
+                            // If target shares is 0 the plan has nothing to
+                            // add for this lot (position already at vitality /
+                            // ticker-cap ceiling). No action needed → green.
+                            const noAction = !t.targetShares || t.targetShares <= 0;
+                            const dotStatus = noAction ? 'green'
+                                            : t.staged ? 'green'
+                                            :            'red';
+                            const dotTitle = noAction
+                              ? `Lot ${t.lot}: no shares to add (position already at size cap)`
+                              : t.staged
+                                ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR`
+                                : `Lot ${t.lot}: NO pending ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)}`;
+                            return (
+                              <div key={t.lot} style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                                gap: 2, lineHeight: '14px',
+                              }}>
+                                <Dot status={dotStatus} title={dotTitle} />
+                                <span style={{ opacity: 0.5, fontSize: 9, marginRight: 2 }}>L{t.lot}</span>
+                                <span>{fmtMoney(t.triggerPrice)}</span>
+                                <span
+                                  title={noAction
+                                    ? '0 sh — position already at vitality/ticker-cap ceiling; no more shares to distribute'
+                                    : `Plan calls for ${t.targetShares} sh at Lot ${t.lot}`}
+                                  style={{
+                                    marginLeft: 5, fontSize: 9,
+                                    color: noAction
+                                      ? 'rgba(255,255,255,0.28)'
+                                      : 'rgba(255,255,255,0.45)',
+                                    fontWeight: 500,
+                                  }}
+                                >{t.targetShares} sh</span>
+                              </div>
+                            );
+                          })}
                         </td>
                       );
                     })()}

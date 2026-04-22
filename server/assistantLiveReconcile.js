@@ -115,9 +115,15 @@ function classifyStopPrice(ibkrStops, cmdStop) {
 function classifyStopShares(ibkrStops, cmdShr) {
   if (!ibkrStops.length && cmdShr == null) return { status: 'gray' };
   if (!ibkrStops.length) return { status: 'red', reason: 'NAKED — position unprotected' };
+  // If any stop is missing a shares value, the bridge is the old version and
+  // the coverage math would be wrong. Surface as a yellow "restart bridge"
+  // signal rather than a misleading red under-stopped flag.
+  const anyUnknown = ibkrStops.some(o => o.shares == null);
+  if (anyUnknown) {
+    return { status: 'yellow', reason: 'Bridge has not reported stop share count (restart pnthr-ibkr-bridge)' };
+  }
   const covered = ibkrStops.reduce((s, o) => s + (+o.shares || 0), 0);
   if (cmdShr == null) {
-    // Orphan stop: no Command position. Show IBKR share count for info; red handled elsewhere.
     return { status: 'red', reason: `${covered} sh stop with no Command position` };
   }
   if (covered === cmdShr) return { status: 'green' };
@@ -232,7 +238,8 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice) {
         side:      s.action,
         type:      s.orderType,
         price:     +s.stopPrice,
-        shares:    +(s.shares || 0),
+        // shares: null means bridge predates the totalQuantity patch (treat as unknown, not 0)
+        shares:    s.shares == null ? null : +s.shares,
       })),
     },
     command: {

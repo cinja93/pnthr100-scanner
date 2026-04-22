@@ -161,18 +161,21 @@ function classifyStopShares(ibkrStops, cmdShr) {
   return { status: 'red', reason: `Over-stopped: ${covered} sh stopping ${cmdShr} sh position` };
 }
 
-// Classify the overall ratchet-column status based on lot-trigger staging.
-// Green  = every UNFILLED lot trigger has a matching pending order in IBKR
-// Yellow = at least one unfilled trigger staged, but not all
-// Red    = no unfilled trigger staged (and at least one exists)
-// Gray   = no applicable triggers (e.g. all 5 lots filled)
+// Classify the overall ratchet-column status based on the NEXT unfilled lot
+// trigger only. Per-lot dots inside the cell still reflect each individual
+// trigger's staging state (green/red), but only the next one drives the
+// row-level roll-up. Rationale: the user only needs to stage orders when
+// triggers get close to price; later ratchets are informational.
+//
+// Green = next unfilled lot trigger has a matching pending order in IBKR
+// Red   = next unfilled lot trigger has NO matching pending order
+// Gray  = all lots filled (no upcoming trigger)
 function classifyLotTriggers(enrichedTriggers) {
-  const pending = enrichedTriggers.filter(t => !t.filled);
-  if (pending.length === 0) return { status: 'gray', reason: 'all lots filled' };
-  const stagedCount = pending.filter(t => t.staged).length;
-  if (stagedCount === pending.length) return { status: 'green', reason: 'all upcoming lot triggers staged in IBKR' };
-  if (stagedCount === 0)              return { status: 'red',   reason: `${pending.length} lot trigger(s) not staged in IBKR` };
-  return { status: 'yellow', reason: `${stagedCount}/${pending.length} lot triggers staged in IBKR` };
+  const next = enrichedTriggers.find(t => !t.filled);
+  if (!next) return { status: 'gray', reason: 'all lots filled' };
+  return next.staged
+    ? { status: 'green', reason: `Next lot (L${next.lot}) staged in IBKR` }
+    : { status: 'red',   reason: `Next lot (L${next.lot}) NOT staged in IBKR` };
 }
 
 // ── Row builder ──────────────────────────────────────────────────────────────

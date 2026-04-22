@@ -352,11 +352,10 @@ export default function AssistantLiveTable({ onNavigate }) {
         <table style={s.table}>
           <colgroup>
             <col style={{ width: 18 }} />                    {/* status dot */}
-            <col style={{ width: 105 }} />                   {/* ticker + last */}
+            <col style={{ width: 150 }} />                   {/* ticker + last + IBKR avg + CMD avg */}
             <col style={{ width: 100 }} />                   {/* source label */}
             <col style={{ width: 60 }} />                    {/* dir */}
             <col style={{ width: 75 }} />                    {/* shares */}
-            <col style={{ width: 95 }} />                    {/* avg */}
             <col style={{ width: 70 }} />                    {/* stop side */}
             <col style={{ width: 95 }} />                    {/* stop price */}
             <col style={{ width: 130 }} />                   {/* next ratchet */}
@@ -365,11 +364,10 @@ export default function AssistantLiveTable({ onNavigate }) {
           <thead>
             <tr>
               <th style={s.th}></th>
-              <th style={s.th}>TICKER / LAST</th>
+              <th style={s.th}>TICKER · LAST · AVG</th>
               <th style={s.th}>SRC</th>
               <th style={s.th}>DIR</th>
               <th style={{ ...s.th, ...s.thR }}>SHARES</th>
-              <th style={{ ...s.th, ...s.thR }}>AVG</th>
               <th style={s.th}>STOP SIDE</th>
               <th style={{ ...s.th, ...s.thR }}>STOP PRICE</th>
               <th style={{ ...s.th, ...s.thR }}>NEXT RATCHET</th>
@@ -405,19 +403,39 @@ export default function AssistantLiveTable({ onNavigate }) {
                       <td
                         rowSpan={spanAll}
                         style={{
-                          padding: '4px 8px',
+                          padding: '6px 8px',
                           borderBottom: '1px solid rgba(255,255,255,0.12)',
-                          verticalAlign: 'middle',
+                          verticalAlign: 'top',
                         }}
                       >
                         <div style={s.ticker}>{row.ticker}</div>
                         <div style={{
                           fontSize: 11, color: 'rgba(255,255,255,0.55)',
-                          fontVariantNumeric: 'tabular-nums', marginTop: 2,
+                          fontVariantNumeric: 'tabular-nums', marginTop: 1,
                         }}>{fmtMoney(row.lastPrice)}</div>
+                        <div style={{
+                          marginTop: 4, fontSize: 11,
+                          display: 'flex', alignItems: 'center', gap: 0,
+                          fontVariantNumeric: 'tabular-nums',
+                          color: 'rgba(255,255,255,0.75)',
+                        }}>
+                          <Dot status={row.checks?.avg?.status || 'gray'} title={row.checks?.avg?.reason} />
+                          <span style={{ opacity: 0.5, marginRight: 4 }}>IBKR</span>
+                          {fmtMoney(row.ibkr.avgCost)}
+                        </div>
+                        <div style={{
+                          marginTop: 1, fontSize: 11,
+                          display: 'flex', alignItems: 'center', gap: 0,
+                          fontVariantNumeric: 'tabular-nums',
+                          color: 'rgba(255,255,255,0.75)',
+                        }}>
+                          <Dot status={row.checks?.avg?.status || 'gray'} title={row.checks?.avg?.reason} />
+                          <span style={{ opacity: 0.5, marginRight: 4, color: '#FCF000' }}>CMD</span>
+                          {fmtMoney(row.command.avgCost)}
+                        </div>
                         {row.multiStop && (
                           <div style={{
-                            marginTop: 3, padding: '1px 5px', borderRadius: 3,
+                            marginTop: 4, padding: '1px 5px', borderRadius: 3,
                             background: 'rgba(255,193,7,0.15)', color: '#ffc107',
                             fontSize: 9, fontWeight: 800, display: 'inline-block',
                           }}>{ibStops.length} STOPS</div>
@@ -440,11 +458,6 @@ export default function AssistantLiveTable({ onNavigate }) {
                       : sr.noStop
                         ? <Cell check={sr.sharesCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>0</Cell>
                         : <EmptyCell bottomBorder={isLast} />}
-
-                    {/* AVG — POS rows only */}
-                    {sr.avgCost != null
-                      ? <Cell check={sr.avgCheck} align="right" onClick={() => handleCellClick(row)} bottomBorder={isLast}>{fmtMoney(sr.avgCost)}</Cell>
-                      : <EmptyCell bottomBorder={isLast} />}
 
                     {/* STOP SIDE — STOP rows only */}
                     {sr.kind === 'IBKR_POS' || sr.kind === 'CMD_POS'

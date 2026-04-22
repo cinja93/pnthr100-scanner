@@ -23,6 +23,7 @@ import {
 } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ChartModal from './ChartModal';
+import AssistantLiveTable from './AssistantLiveTable';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
 
@@ -3008,6 +3009,13 @@ export default function AssistantPage({ onNavigate }) {
           </div>
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+           PNTHR ASSISTANT LIVE — source-of-truth reconciliation table
+           Shows every ticker from IBKR positions + IBKR stops + Command Center
+           with colored alignment indicators. Click a non-green cell to fix.
+         ══════════════════════════════════════════════════════════════════════ */}
+      <AssistantLiveTable onNavigate={onNavigate} />
 
       {/* ══════════════════════════════════════════════════════════════════════
            SECTION 1 — LIVE OPPORTUNITIES

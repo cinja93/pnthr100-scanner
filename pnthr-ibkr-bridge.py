@@ -76,7 +76,7 @@ class PNTHRBridge(EWrapper, EClient):
         #   • Re-opening the same ticker overwrites cleanly — no duplicates on reconnect
         #   • get_payload() converts to list for the server JSON payload
         self.positions_dict  = {}
-        self.open_orders     = {}   # symbol → {orderId, stopPrice, action, orderType}
+        self.open_orders     = {}   # orderId → {symbol, stopPrice, action, orderType, shares}
         self.executions      = []   # Phase 2: fills captured via reqExecutions
         self.account_ready   = threading.Event()
         self.positions_ready = threading.Event()
@@ -187,7 +187,6 @@ class PNTHRBridge(EWrapper, EClient):
     # ── Open order callbacks ───────────────────────────────────────────────────
     def openOrder(self, orderId, contract, order, orderState):
         """Capture live stop orders placed in TWS. Called once per order."""
-        # Only capture STP and STP LMT order types with a valid stop price
         if order.orderType not in ('STP', 'STP LMT'):
             return
         try:
@@ -196,17 +195,18 @@ class PNTHRBridge(EWrapper, EClient):
             return
         if stop_price <= 0:
             return
-        symbol = contract.symbol.upper()
-        # If multiple stop orders exist for the same symbol, keep highest orderId
-        # (most recently placed order is usually the active one)
-        existing = self.open_orders.get(symbol)
-        if not existing or orderId > existing['orderId']:
-            self.open_orders[symbol] = {
-                'orderId':   orderId,
-                'stopPrice': round(stop_price, 4),
-                'action':    order.action,      # 'SELL' (long stop) or 'BUY' (short stop)
-                'orderType': order.orderType,
-            }
+        try:
+            shares = float(order.totalQuantity)
+        except (TypeError, ValueError):
+            shares = 0.0
+        self.open_orders[orderId] = {
+            'orderId':   orderId,
+            'symbol':    contract.symbol.upper(),
+            'stopPrice': round(stop_price, 4),
+            'action':    order.action,
+            'orderType': order.orderType,
+            'shares':    shares,
+        }
 
     def openOrderEnd(self):
         """All open orders have been delivered for this request."""
@@ -260,10 +260,7 @@ class PNTHRBridge(EWrapper, EClient):
                 'availableFunds':    _float('AvailableFunds'),
             },
             'positions': list(self.positions_dict.values()),
-            'stopOrders': [
-                {'symbol': sym, **data}
-                for sym, data in self.open_orders.items()
-            ],
+            'stopOrders': list(self.open_orders.values()),
             'executions': self.executions,
         }
 

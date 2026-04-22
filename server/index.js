@@ -62,6 +62,7 @@ import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
 import { calculateSectorExposure, generateSectorRecommendations } from './sectorExposure.js';
 import { sendApprovalRequestEmail, sendWelcomeEmail, sendDenialEmail } from './emailService.js';
 import { ibkrSync, getOvernightFills } from './ibkrSync.js';
+import { assistantLiveReconcile } from './assistantLiveReconcile.js';
 import { DEMO_OWNER_ID, startDemoPriceRefresh, stopDemoPriceRefresh } from './demoEngine.js';
 import {
   generateAssistantTasks,
@@ -5991,6 +5992,8 @@ async function fetchDevelopingSignalsCached() {
     return devSignalsCache.data; // serve stale if refresh fails
   }
 }
+
+app.get('/api/assistant/live-reconcile', assistantLiveReconcile);
 
 app.get('/api/assistant/headlines', async (req, res) => {
   try {

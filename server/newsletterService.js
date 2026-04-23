@@ -372,14 +372,17 @@ export async function generateIssue(weekOf) {
     const dir = t.signal === 'BE' ? 'Long exit (trade closed profitably)' : 'Short cover (trade closed profitably)';
     return `${t.ticker} (${t.companyName}, ${t.sector}) — ${dir} | Profit: +$${t.profitDollar.toFixed(2)} / +${t.profitPct.toFixed(2)}%`;
   }
-  const totw_dollar = tradeStr(bestDollar);
-  const totw_pct    = tradeStr(bestPct && bestPct.ticker !== bestDollar?.ticker ? bestPct : null);
+  // Trade of the Week defaults to the top performer by % return. Dollar
+  // figures are still shown as secondary context so the blockquote has the
+  // $ amount, but the narrative should feature the pct-best exit.
+  const totw_pct    = tradeStr(bestPct);
+  const totw_dollar = tradeStr(bestDollar && bestDollar.ticker !== bestPct?.ticker ? bestDollar : null);
   const totwSummary = exits.length === 0
     ? 'No profitable exits closed this week.'
     : [
         `Total profitable exits this week: ${exits.length}`,
-        totw_dollar ? `Best by dollar profit: ${totw_dollar}` : null,
-        totw_pct    ? `Best by % return: ${totw_pct}` : null,
+        totw_pct    ? `Trade of the Week (use this one — top performer by % return): ${totw_pct}` : null,
+        totw_dollar ? `For context, top performer by dollar profit (do NOT feature as Trade of the Week): ${totw_dollar}` : null,
       ].filter(Boolean).join('\n');
 
   const lookbackContext = priorIssues.length === 0
@@ -504,7 +507,9 @@ ABSOLUTE RULES — violations break the rendering engine or mislead readers:
     status: 'draft',
     narrative,
     wasTruncated, // true if Claude hit max_tokens — a red flag for the editor
-    featuredTrade: bestDollar ?? null,
+    // Feature the top % return as the doc-level Trade of the Week (matches
+    // what the narrative + rendered TOTW card should highlight).
+    featuredTrade: bestPct ?? null,
     profitableExits: exits.slice(0, 20),
     // Precomputed chart data the client renders inline with the narrative.
     // Kept server-side (rather than generated from signal data on the fly on

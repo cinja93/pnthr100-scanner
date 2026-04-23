@@ -243,17 +243,20 @@ export default function NewsPage() {
       html = replaced !== html ? replaced : html + card;
     }
 
-    // Inject the sector-rotation chart at the END of the 'Sector Intelligence'
-    // section (right before the next h2 heading, so it reads as a 'here's
-    // what we just described, visualized' summary). Done before ticker
-    // linkification so the chart HTML isn't picked up by the regex.
+    // Inject the sector-rotation chart at the END of the rotation section
+    // (right before the next h2 heading, so it reads as a 'here's what we
+    // just described, visualized' summary). perchService.js uses
+    // '## SECTOR ROTATION' as the section heading; the older
+    // newsletterService.js path uses '## Sector Intelligence'. Match either.
+    // Done before ticker linkification so the chart HTML isn't touched by
+    // the ticker-link regex.
     if (sectorRotationChartHtml) {
-      const sectorRegex = /(<h2[^>]*>[^<]*Sector Intelligence[^<]*<\/h2>)([\s\S]*?)(?=<h2|$)/i;
+      const sectorRegex = /(<h2[^>]*>[^<]*(?:Sector Rotation|Sector Intelligence)[^<]*<\/h2>)([\s\S]*?)(?=<h2|$)/i;
       if (sectorRegex.test(html)) {
         html = html.replace(sectorRegex, (_m, heading, body) => `${heading}${body}${sectorRotationChartHtml}`);
       } else {
-        // Fallback: if the expected heading isn't in the narrative, append
-        // the chart at the end so the user still sees it.
+        // Fallback: if no matching section heading exists, append the chart
+        // at the end so the user still sees it.
         html = html + sectorRotationChartHtml;
       }
     }

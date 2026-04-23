@@ -44,7 +44,7 @@ router.post('/generate', authenticateJWT, requireAdmin, async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Database unavailable' });
 
     console.log('[Newsletter] Generating Perch v3 issue...');
-    const { narrative, wasTruncated, metadata, blacklistViolations } = await generatePerch(db);
+    const { narrative, wasTruncated, metadata, blacklistViolations, charts } = await generatePerch(db);
     const weekOf = req.body.weekOf || metadata.weekOf || getMostRecentFriday();
 
     // Save to newsletter_issues (same collection -- frontend unchanged)
@@ -57,6 +57,9 @@ router.post('/generate', authenticateJWT, requireAdmin, async (req, res) => {
       generatedAt: new Date(),
       generatorVersion: 'perch-v3',
       metadata,
+      // Precomputed chart data used by NewsPage.jsx to render inline panels
+      // (e.g. the week-over-week sector rotation bars) alongside the narrative.
+      ...(charts && { charts }),
       ...(wasTruncated && { wasTruncated: true }),
       ...(blacklistViolations.length > 0 && { blacklistViolations }),
     };

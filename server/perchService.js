@@ -47,6 +47,7 @@ const BLACKLIST = [
   /\bKill Score\b/i, /\bKill Rank\b/i, /\bKill score\b/i,
   /\b(D1|D2|D3|D4|D5|D6|D7|D8)\b/,
   /\b21-?week EMA\b/i, /\bEMA\b/,
+  /\bexponential moving average\b/i, /\bmoving average\b/i,
   /\bALPHA PNTHR KILL\b/i, /\bSTRIKING\b/, /\bPOUNCING\b/,
   /\bHUNTING\b/, /\bCOILING\b/, /\bSTALKING\b/, /\bTRACKING\b/,
   /\bPROWLING\b/, /\bSTIRRING\b/, /\bDORMANT\b/, /\bOVEREXTENDED\b/,
@@ -370,7 +371,9 @@ CRITICAL RULES -- NEVER VIOLATE:
 
 1. BLACKLISTED TERMS (never use any of these):
    BL, SS, BL+1, SS+1, BE, SE, Kill Score, Kill Rank, D1, D2, D3, D4, D5, D6, D7, D8,
-   EMA (say "moving average" generically if needed), ALPHA PNTHR KILL, STRIKING, POUNCING,
+   EMA, 21W EMA, 21-week EMA, exponential moving average, moving average
+   (always say "the trend" instead),
+   ALPHA PNTHR KILL, STRIKING, POUNCING,
    HUNTING, COILING, STALKING, TRACKING, PROWLING, STIRRING, DORMANT, OVEREXTENDED,
    FEAST, HUNT, SPRINT, signal age, regime multiplier, discipline score, analyze score,
    composite score, confirmation status, overextension filter, heat rules, Friday pipeline,
@@ -406,7 +409,8 @@ TRANSLATION GUIDE:
 - Model rank = "ranks highest in our model" / "top-ranked setup"
 - Conviction filter = "fully confirmed setup" / "all conditions met"
 - 679 universe = "nearly 700 large-cap US stocks"
-- Signal counts by sector = "our model sees the most new opportunities in [sector]"`;
+- Signal counts by sector = "our model sees the most new opportunities in [sector]"
+- Trend reference (21-week EMA, optimized EMA, any EMA variant) = always "the trend" (e.g. "above trend," "back above trend," "trending higher")`;
 
 const DISCLAIMER = `---
 
@@ -451,6 +455,7 @@ function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, new
   const totwSection = tradeOfWeek
     ? `TRADE OF THE WEEK (most profitable model exit this week):
 Ticker: ${tradeOfWeek.ticker}
+Company: ${tradeOfWeek.companyName || tradeOfWeek.ticker}
 Sector: ${tradeOfWeek.sector}
 Direction: ${tradeOfWeek.direction}
 Exit Date: ${tradeOfWeek.exitDate}
@@ -520,7 +525,9 @@ Use ## for each section heading exactly as shown:
 1. ## THE OPENING (2-3 paragraphs, set the tone, take a position on what the week means)
 2. ## SECTOR ROTATION (2-3 paragraphs analyzing how capital is flowing between sectors. Use the rotation data to tell the story: which sectors are getting stronger/weaker, is money rotating into defensive names or cyclical names, what does that say about institutional sentiment and risk appetite? Connect the rotation to macro context like tariffs, trade policy, interest rates, earnings, or geopolitical uncertainty. Be specific about which sectors are improving/deteriorating vs last week. This section should feel like institutional-grade market intelligence.)
 3. ## WHERE THE MONEY IS MOVING (3-4 paragraphs, deeper dive into specific sector opportunities and stock-level themes)
-4. ## TRADE OF THE WEEK (1-2 paragraphs + callout -- ONLY if data provided above)
+4. ## TRADE OF THE WEEK - [TICKER]   <-- REQUIRED section whenever TRADE OF THE WEEK data was provided above. Replace [TICKER] with the exact ticker symbol from the data (heading MUST be "## TRADE OF THE WEEK - AAPL" style; the frontend extracts the ticker from this heading to render a chart button, so the format is not optional). Immediately after the heading, put this blockquote on its own line so the frontend has a backup ticker source:
+   > **[TICKER] - [Company Name]** | [Sector]
+   Then write 1-2 paragraphs about what the trade captured and what the reader should take away. Skip this section entirely ONLY if the TRADE OF THE WEEK data above literally says "No confirmed exits this week. OMIT".
 5. ## STOCKS TO WATCH: LONG SIDE (top 3-5 long setups, brief thesis per stock)
 6. ## STOCKS TO WATCH: SHORT SIDE (top 3-5 short setups, include a sentence explaining short selling for unfamiliar readers)
 7. ## FROM THE ARCHIVES (ONLY if data provided above -- 2 sentences max)
@@ -556,6 +563,29 @@ export async function generatePerch(db) {
   // Build sector rotation analysis
   const sectorRotation = buildSectorRotationAnalysis(sectors, rotationData.prevMap);
   console.log(`[Perch v3] Sector rotation: ${sectorRotation.rotationType}`);
+
+  // Chart data for the inline week-over-week sector rotation chart on the
+  // rendered newsletter. Reuses the same totals the prompt already saw, so
+  // the narrative and the chart can't drift apart. Sectors with <3 active
+  // signals are filtered out as noisy. Sorted by absolute delta desc so the
+  // biggest movers surface first.
+  const sectorRotationChart = sectors
+    .filter(s => s.totalBL + s.totalSS >= 3)
+    .map(s => {
+      const thisTotal = s.totalBL + s.totalSS;
+      const thisWeek  = Math.round((s.totalBL / thisTotal) * 100);
+      const prev      = rotationData.prevMap[s.sector];
+      const prevTotal = prev ? prev.totalBL + prev.totalSS : 0;
+      const lastWeek  = prevTotal >= 3 ? Math.round((prev.totalBL / prevTotal) * 100) : null;
+      const delta     = lastWeek == null ? null : thisWeek - lastWeek;
+      return { sector: s.sector, thisWeek, lastWeek, delta };
+    })
+    .sort((a, b) => {
+      const aAbs = Math.abs(a.delta ?? 0);
+      const bAbs = Math.abs(b.delta ?? 0);
+      if (aAbs !== bAbs) return bAbs - aAbs;
+      return b.thisWeek - a.thisWeek;
+    });
 
   console.log(`[Perch v3] Data assembled — longs: ${top10Longs.length}, shorts: ${top10Shorts.length}, TOTW: ${tradeOfWeek?.ticker ?? 'none'}, archive: ${trackRecord?.ticker ?? 'none'}`);
 
@@ -632,6 +662,12 @@ export async function generatePerch(db) {
     narrative,
     wasTruncated,
     blacklistViolations: violations,
+    charts: {
+      // Week-over-week sector long-lean %. The client renders this below the
+      // SECTOR ROTATION section with yellow (this week) vs gray (last week)
+      // bars.
+      sectorRotation: sectorRotationChart,
+    },
     metadata: {
       weekOf:         regime.weekOf,
       regimeLabel:    regime.regimeLabel,

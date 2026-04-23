@@ -938,8 +938,22 @@ export default function AssistantLiveTable({ onNavigate }) {
                   );
                 }
 
+                // When the NEXT RATCHET cell has a multi-line L2–L5 list
+                // (IBKR RATCHET / RATCHET PLAN rows), anchor the whole tr to
+                // the top so the single-line price/side/shares cells line up
+                // with the FIRST L-line — otherwise the default middle
+                // alignment floats them into the middle of the list.
+                const isRatchetZoneRow = sr.kind === 'RATCHET_PLAN'
+                  || (sr.kind === 'IBKR_STOP' && sr.subKind === 'RATCHET');
+
                 return (
-                  <tr key={`${row.ticker}-${idx}`} style={{ background: tint }}>
+                  <tr
+                    key={`${row.ticker}-${idx}`}
+                    style={{
+                      background: tint,
+                      ...(isRatchetZoneRow ? { verticalAlign: 'top' } : {}),
+                    }}
+                  >
                     {idx === 0 && (
                       <td
                         rowSpan={spanAll}

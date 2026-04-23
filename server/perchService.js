@@ -11,6 +11,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { fetchPreyData, findBestExits } from './newsletterService.js';
 import { archiveThisWeeksExits } from './tradeArchiveWriter.js';
+import { getAllTickers } from './constituents.js';
+import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
+import { connectToDatabase } from './database.js';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-6';
@@ -354,6 +357,45 @@ async function getFromArchives(db, totwTicker) {
   };
 }
 
+// ── Upcoming-week earnings (PNTHR Calendar) ───────────────────────────────────
+// Pulls the FMP earning calendar for the Mon–Fri that immediately follows the
+// newsletter's Friday weekOf, then narrows it to the PNTHR 679 universe so
+// The Week Ahead only surfaces companies the reader already tracks.
+async function getUpcomingEarnings(weekOf) {
+  const FMP_API_KEY = process.env.FMP_API_KEY;
+  if (!FMP_API_KEY) return [];
+
+  const fri = new Date(weekOf + 'T12:00:00Z');
+  const mon = new Date(fri); mon.setUTCDate(fri.getUTCDate() + 3);
+  const nfr = new Date(fri); nfr.setUTCDate(fri.getUTCDate() + 7);
+  const from = mon.toISOString().split('T')[0];
+  const to   = nfr.toISOString().split('T')[0];
+
+  try {
+    const [calendar, sp517, sp400L, sp400S] = await Promise.all([
+      fetch(`https://financialmodelingprep.com/api/v3/earning_calendar?from=${from}&to=${to}&apikey=${FMP_API_KEY}`)
+        .then(r => r.json()).catch(() => []),
+      getAllTickers(),
+      getSp400Longs(),
+      getSp400Shorts(),
+    ]);
+    if (!Array.isArray(calendar)) return [];
+    const universe = new Set([...sp517, ...sp400L, ...sp400S]);
+    return calendar
+      .filter(e => e.symbol && !e.symbol.includes('.') && universe.has(e.symbol))
+      .map(e => ({
+        date:   e.date,
+        ticker: e.symbol,
+        name:   e.name || e.symbol,
+        time:   e.time || null, // 'bmo' | 'amc' | null
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.ticker.localeCompare(b.ticker));
+  } catch (err) {
+    console.warn('[Perch v3] Upcoming earnings fetch failed:', err.message);
+    return [];
+  }
+}
+
 // ── Prompt Templates ──────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are Scott, the founder of PNTHR Funds, writing your weekly market newsletter called "PNTHR's Perch." You are an opinionated market strategist who runs a proprietary quantitative model that scans nearly 700 large-cap US stocks every week. You use data-driven insights to identify where money is flowing, which sectors are leading or lagging, and which individual stocks have the highest-conviction setups on both the long and short side.
@@ -414,11 +456,10 @@ TRANSLATION GUIDE:
 - Signal counts by sector = "our model sees the most new opportunities in [sector]"
 - Trend reference (21-week EMA, optimized EMA, any EMA variant) = always "the trend" (e.g. "above trend," "back above trend," "trending higher")`;
 
-const DISCLAIMER = `---
-
-IMPORTANT DISCLOSURES
-
-PNTHR's Perch is published weekly by PNTHR Funds for informational and educational purposes only. Nothing contained in this newsletter constitutes investment advice, an investment recommendation, or a solicitation to buy, sell, short, or hold any security or financial instrument. The content reflects the opinions of the author as of the date of publication and is based on proprietary quantitative models and data analysis that may not be suitable for all investors.
+// The leading `---` and `## IMPORTANT DISCLOSURES` heading are emitted by the
+// prompt's section-9 instruction. This template is the disclosure BODY only;
+// paste it verbatim under the heading.
+const DISCLAIMER = `PNTHR's Perch is published weekly by PNTHR Funds for informational and educational purposes only. Nothing contained in this newsletter constitutes investment advice, an investment recommendation, or a solicitation to buy, sell, short, or hold any security or financial instrument. The content reflects the opinions of the author as of the date of publication and is based on proprietary quantitative models and data analysis that may not be suitable for all investors.
 
 SHORT SELLING RISK: This newsletter discusses both long and short trading opportunities. Short selling involves substantial risk, including the potential for unlimited losses. Short selling is not appropriate for all investors and requires a margin account. You should fully understand the risks of short selling before considering any short positions.
 
@@ -432,7 +473,7 @@ By reading this newsletter, you acknowledge that you are solely responsible for 
 
 (c) 2026 PNTHR Funds. All rights reserved.`;
 
-function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, sectorRotation, disclaimer }) {
+function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, sectorRotation, upcomingEarnings, disclaimer }) {
   // Format sector table for readability
   const sectorLines = sectors
     .filter(s => s.totalBL + s.totalSS > 0)
@@ -478,6 +519,31 @@ Holding Period: ${trackRecord.holdingWeeks} weeks
 ${trackRecord.isLoss ? 'NOTE: This is a LOSING trade. Frame as: "Not every call works out. Discipline means taking losses quickly and moving on."' : ''}`
     : 'FROM THE ARCHIVES: OMIT this section entirely.';
 
+  // Upcoming-week earnings from the PNTHR Calendar (filtered to the 679
+  // universe). Formatted by weekday so 'The Week Ahead' can cite specific
+  // names without guessing.
+  const earningsSection = (() => {
+    if (!upcomingEarnings || upcomingEarnings.length === 0) {
+      return 'PNTHR CALENDAR EARNINGS (upcoming Mon–Fri): No PNTHR-universe companies are scheduled to report this coming week.';
+    }
+    const byDate = new Map();
+    for (const e of upcomingEarnings) {
+      if (!byDate.has(e.date)) byDate.set(e.date, []);
+      byDate.get(e.date).push(e);
+    }
+    const lines = [];
+    for (const [date, items] of [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const label = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+      const names = items.slice(0, 12).map(e => {
+        const when = e.time === 'bmo' ? ' (before open)' : e.time === 'amc' ? ' (after close)' : '';
+        return `${e.ticker} (${e.name})${when}`;
+      }).join(', ');
+      const extra = items.length > 12 ? ` — plus ${items.length - 12} more` : '';
+      lines.push(`${label}: ${names}${extra}`);
+    }
+    return `PNTHR CALENDAR EARNINGS (upcoming Mon–Fri, companies in our 679 universe only):\n${lines.join('\n')}`;
+  })();
+
   const regimeDesc = regime.regimeLabel === 'BULL'
     ? `BULL market: Both SPY (${regime.spy.position} trend, ${regime.spy.slope}) and QQQ (${regime.qqq.position} trend, ${regime.qqq.slope}) are in uptrends.`
     : regime.regimeLabel === 'BEAR'
@@ -520,23 +586,29 @@ ${totwSection}
 
 ${archiveSection}
 
-Write the newsletter using the section structure below. IMPORTANT: Do NOT include a top-level title (no "# PNTHR's Perch") and do NOT include a date line (no "Week of...") — the frontend header already shows those. Start the output directly with the first ## section heading.
+${earningsSection}
 
-Use ## for each section heading exactly as shown:
+Write the newsletter using the LOCKED section structure below. The section names, their order, and their markdown are a contract with the frontend rendering engine — do not rename, reorder, merge, split, or skip sections (other than explicit OMIT rules). Do NOT include a top-level title (no "# PNTHR's Perch") and do NOT include a date line (no "Week of...") — the frontend header already shows those. Start the output directly with the first ## section heading.
+
+Use ## for each section heading exactly as shown. The nine sections below are the ONLY sections allowed, and they must appear in exactly this order:
 
 1. ## THE OPENING (2-3 paragraphs, set the tone, take a position on what the week means)
-2. ## TRADE OF THE WEEK - [TICKER]   <-- REQUIRED section whenever TRADE OF THE WEEK data was provided above. Replace [TICKER] with the exact ticker symbol from the data (heading MUST be "## TRADE OF THE WEEK - AAPL" style; the frontend extracts the ticker from this heading to render a chart button, so the format is not optional). Write 1-2 paragraphs about what the trade captured and what the reader should take away, then END the section with a 3-line blockquote callout formatted EXACTLY like this (one leading ">" per line, no blank lines between, no extra text):
+2. ## PNTHR TRADE OF THE WEEK - [TICKER]   <-- REQUIRED section whenever TRADE OF THE WEEK data was provided above. Replace [TICKER] with the exact ticker symbol from the data (heading MUST be "## PNTHR TRADE OF THE WEEK - AAPL" style; the frontend extracts the ticker from this heading to render a chart button, so the format is not optional). Write 1-2 paragraphs about what the trade captured and what the reader should take away, then END the section with a 3-line blockquote callout formatted EXACTLY like this (one leading ">" per line, no blank lines between, no extra text):
    > **[TICKER] - [Company Name]** | [Sector]
    > [Long exit (trade closed profitably) / Short cover (trade closed profitably)]
    > **Profit: +$[X.XX] (+[X.XX]%)**
-   Use "Long exit" for a long direction (BE exit), "Short cover" for a short direction (SE exit). Use the exact profit dollar and % numbers from the data above, rounded to two decimals. Skip this section entirely ONLY if the TRADE OF THE WEEK data above literally says "No confirmed exits this week. OMIT".
-3. ## SECTOR ROTATION (2-3 paragraphs analyzing how capital is flowing between sectors. Use the rotation data to tell the story: which sectors are getting stronger/weaker, is money rotating into defensive names or cyclical names, what does that say about institutional sentiment and risk appetite? Connect the rotation to macro context like tariffs, trade policy, interest rates, earnings, or geopolitical uncertainty. Be specific about which sectors are improving/deteriorating vs last week. This section should feel like institutional-grade market intelligence.)
+   Use "Long exit" when the trade direction from the data is long, "Short cover" when the direction is short. Use the exact profit dollar and % numbers from the data above, rounded to two decimals. Skip this section entirely ONLY if the TRADE OF THE WEEK data above literally says "No confirmed exits this week. OMIT".
+3. ## SECTOR ROTATION (2-3 paragraphs analyzing how capital is flowing between sectors. Use the rotation data to tell the story: which sectors are getting stronger/weaker, is money rotating into defensive names or cyclical names, what does that say about institutional sentiment and risk appetite? Connect the rotation to macro context like tariffs, trade policy, interest rates, earnings, or geopolitical uncertainty. Be specific about which sectors are improving/deteriorating vs last week. This section should feel like institutional-grade market intelligence. NOTE: The frontend automatically renders a week-over-week sector-rotation bar chart at the end of this section — do NOT describe it as "above" or "below" or embed any chart yourself.)
 4. ## WHERE THE MONEY IS MOVING (3-4 paragraphs, deeper dive into specific sector opportunities and stock-level themes)
 5. ## STOCKS TO WATCH: LONG SIDE (top 3-5 long setups, brief thesis per stock)
 6. ## STOCKS TO WATCH: SHORT SIDE (top 3-5 short setups, include a sentence explaining short selling for unfamiliar readers)
 7. ## FROM THE ARCHIVES (ONLY if data provided above -- 2 sentences max)
-8. ## THE WEEK AHEAD (1-2 forward-looking paragraphs, close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott)
-9. Legal Disclaimer (use this EXACTLY as written below):
+8. ## THE WEEK AHEAD (1-2 forward-looking paragraphs. If PNTHR Calendar earnings data was provided above, explicitly call out the most notable companies reporting in the upcoming Mon–Fri window and what to watch for — only reference names from the PNTHR Calendar earnings list, NEVER from external sources or memory. If the data above says no companies are scheduled, say so plainly and pivot to what the reader should watch instead. Close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott.)
+9. ## IMPORTANT DISCLOSURES (REQUIRED final section. Emit this EXACT block verbatim — a horizontal rule, then the heading, then the body below. No paraphrasing, no summarizing, no omissions. This section is legally required on every issue.):
+
+---
+
+## IMPORTANT DISCLOSURES
 
 ${disclaimer}
 
@@ -609,6 +681,12 @@ export async function generatePerch(db) {
 
   const trackRecord = await getFromArchives(db, tradeOfWeek?.ticker ?? null);
 
+  // PNTHR Calendar earnings for the upcoming Mon–Fri, filtered to the 679
+  // universe. Surfaced to the prompt so 'The Week Ahead' can call out the
+  // specific names reporting next week without inventing them.
+  const upcomingEarnings = await getUpcomingEarnings(regime.weekOf);
+  console.log(`[Perch v3] Upcoming-week earnings in PNTHR universe: ${upcomingEarnings.length}`);
+
   // Build sector rotation analysis
   const sectorRotation = buildSectorRotationAnalysis(sectors, rotationData.prevMap);
   console.log(`[Perch v3] Sector rotation: ${sectorRotation.rotationType}`);
@@ -638,7 +716,7 @@ export async function generatePerch(db) {
     weekOf: regime.weekOf,
     regime, sectors, top10Longs, top10Shorts,
     newSignals, tradeOfWeek, trackRecord,
-    sectorRotation,
+    sectorRotation, upcomingEarnings,
     disclaimer: DISCLAIMER,
   });
 
@@ -739,7 +817,43 @@ export async function generatePerch(db) {
         tradeOfWeek:    tradeOfWeek?.ticker    ?? null,
         archiveTrade:   trackRecord?.ticker    ?? null,
         rotationType:   sectorRotation?.rotationType ?? null,
+        upcomingEarningsCount: upcomingEarnings.length,
       },
     },
   };
+}
+
+// ── Generate + persist (single source of truth for cron AND admin route) ──────
+// Both the Friday 5PM cron and the POST /api/newsletter/generate endpoint call
+// this wrapper so there's exactly one generator. It runs generatePerch, upserts
+// the doc into newsletter_issues, and returns the saved record.
+export async function generateAndSavePerch(weekOfOverride) {
+  const db = await connectToDatabase();
+  if (!db) throw new Error('Database not available');
+
+  const result = await generatePerch(db);
+  const { narrative, wasTruncated, metadata, blacklistViolations, charts, featuredTrade } = result;
+  const weekOf = weekOfOverride || metadata.weekOf;
+
+  const col = db.collection('newsletter_issues');
+  const existing = await col.findOne({ weekOf });
+  const doc = {
+    weekOf,
+    status: 'draft',
+    narrative,
+    generatedAt: new Date(),
+    generatorVersion: 'perch-v3',
+    metadata,
+    ...(charts && { charts }),
+    ...(featuredTrade && { featuredTrade }),
+    ...(wasTruncated && { wasTruncated: true }),
+    ...(blacklistViolations.length > 0 && { blacklistViolations }),
+  };
+
+  if (existing) {
+    await col.updateOne({ weekOf }, { $set: doc });
+    return { ...existing, ...doc, _id: existing._id };
+  }
+  const insert = await col.insertOne(doc);
+  return { ...doc, _id: insert.insertedId };
 }

@@ -55,7 +55,8 @@ import {
   listAccessRequests, approveAsMember, approveAsInvestor, denyAccessRequest,
 } from './accessRequests.js';
 import cron from 'node-cron';
-import { generateIssue, getMostRecentFriday } from './newsletterService.js';
+import { getMostRecentFriday } from './newsletterService.js';
+import { generateAndSavePerch } from './perchService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
 import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateToken, resolveRole, generateApprovalToken, verifyApprovalToken } from './auth.js';
 import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
@@ -4694,11 +4695,14 @@ cron.schedule('30 16 * * 1-5', async () => {
 }, { timezone: 'America/New_York' });
 
 // ── Cron: auto-generate newsletter every Friday at 5pm ET ───────────────────
+// Uses perchService (single source of truth — same generator the admin UI's
+// Generate button hits). The older newsletterService.generateIssue path is
+// retired; it now forwards here so anything still importing it keeps working.
 cron.schedule('0 17 * * 5', async () => {
   try {
     const weekOf = getMostRecentFriday();
     console.log(`[Cron] Generating PNTHR's Perch for week of ${weekOf}...`);
-    await generateIssue(weekOf);
+    await generateAndSavePerch(weekOf);
     console.log(`[Cron] PNTHR's Perch generated successfully.`);
   } catch (err) {
     console.error('[Cron] Newsletter generation failed:', err.message);

@@ -8,7 +8,7 @@ import {
   publishIssue,
   getMostRecentFriday,
 } from '../newsletterService.js';
-import { generatePerch } from '../perchService.js';
+import { generateAndSavePerch } from '../perchService.js';
 import { connectToDatabase } from '../database.js';
 
 const router = Router();
@@ -37,46 +37,17 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/newsletter/generate -- ADMIN ONLY
-// Uses perchService v3: MongoDB Kill scores, regime, signal_history, trade archive
+// Thin wrapper around perchService.generateAndSavePerch — the same generator
+// the Friday 5PM cron calls. Single source of truth for both paths.
 router.post('/generate', authenticateJWT, requireAdmin, async (req, res) => {
   try {
-    const db = await connectToDatabase();
-    if (!db) return res.status(503).json({ error: 'Database unavailable' });
-
     console.log('[Newsletter] Generating Perch v3 issue...');
-    const { narrative, wasTruncated, metadata, blacklistViolations, charts, featuredTrade } = await generatePerch(db);
-    const weekOf = req.body.weekOf || metadata.weekOf || getMostRecentFriday();
-
-    // Save to newsletter_issues (same collection -- frontend unchanged)
-    const col = db.collection('newsletter_issues');
-    const existing = await col.findOne({ weekOf });
-    const doc = {
-      weekOf,
-      status: 'draft',
-      narrative,
-      generatedAt: new Date(),
-      generatorVersion: 'perch-v3',
-      metadata,
-      // Precomputed chart data used by NewsPage.jsx to render inline panels
-      // (e.g. the week-over-week sector rotation bars) alongside the narrative.
-      ...(charts && { charts }),
-      // Structured TOTW record so the frontend can rebuild the direction +
-      // profit lines if Claude renders only the ticker row of the callout.
-      ...(featuredTrade && { featuredTrade }),
-      ...(wasTruncated && { wasTruncated: true }),
-      ...(blacklistViolations.length > 0 && { blacklistViolations }),
-    };
-
-    if (existing) {
-      await col.updateOne({ weekOf }, { $set: doc });
-      const result = { ...existing, ...doc, _id: existing._id };
-      if (wasTruncated) result.warning = '⚠ Newsletter was truncated — generation hit token limit. Content may be incomplete.';
-      return res.json(result);
+    const weekOf = req.body.weekOf || getMostRecentFriday();
+    const saved  = await generateAndSavePerch(weekOf);
+    if (saved.wasTruncated) {
+      saved.warning = '⚠ Newsletter was truncated — generation hit token limit. Content may be incomplete.';
     }
-    const result = await col.insertOne(doc);
-    const response = { ...doc, _id: result.insertedId };
-    if (wasTruncated) response.warning = '⚠ Newsletter was truncated — generation hit token limit. Content may be incomplete.';
-    res.json(response);
+    res.json(saved);
   } catch (err) {
     console.error('Newsletter generate error:', err);
     res.status(500).json({ error: 'Failed to generate newsletter: ' + err.message });

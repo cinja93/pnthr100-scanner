@@ -217,7 +217,7 @@ function computeSprintMovers(stocks) {
   }).join(', ');
 }
 
-async function fetchPreyData() {
+export async function fetchPreyData() {
   const [specLongs, specShorts] = await Promise.all([getSp400Longs(), getSp400Shorts()]);
   const stocks = await getJungleStocks(specLongs, specShorts);
   const tickers = stocks.map(s => s.ticker);
@@ -238,7 +238,9 @@ async function fetchPreyData() {
 
 // Find profitable exits this week. weekOf is YYYY-MM-DD (Friday).
 // weekStart of that week is the Monday 4 days prior.
-function findBestExits(signals, stockMeta, weekOf) {
+// Exported so perchService.js can fall back to live signals when the
+// pnthr679_trade_archive collection is empty for the current week.
+export function findBestExits(signals, stockMeta, weekOf) {
   // Determine Monday of the newsletter week
   const fri = new Date(weekOf + 'T12:00:00');
   const mon = new Date(fri);

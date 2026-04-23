@@ -9,6 +9,7 @@
 //   pnthr_perch_track_record_log — Rotation log (avoid repeat archives)
 
 import Anthropic from '@anthropic-ai/sdk';
+import { fetchPreyData, findBestExits } from './newsletterService.js';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-6';
@@ -549,7 +550,7 @@ export async function generatePerch(db) {
   const regime = await getRegimeData(db);
   console.log(`[Perch v3] Regime: ${regime.regimeLabel}, weekOf: ${regime.weekOf}`);
 
-  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, rotationData] = await Promise.all([
+  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, rotationData] = await Promise.all([
     getSectorBreakdown(db, regime.weekOf),
     getTop10Longs(db, regime.weekOf),
     getTop10Shorts(db, regime.weekOf),
@@ -557,6 +558,36 @@ export async function generatePerch(db) {
     getTradeOfWeek(db, regime.weekOf),
     getSectorRotationData(db, regime.weekOf),
   ]);
+
+  // Fallback: pnthr679_trade_archive hasn't been reliably populated for the
+  // current week (last entries were from 2026-03-09 as of 2026-04-22). If the
+  // archive query returned nothing, recompute from live signals — same code
+  // path newsletterService.js uses for its Trade of the Week.
+  let tradeOfWeek = tradeOfWeekFromArchive;
+  if (!tradeOfWeek) {
+    try {
+      console.log('[Perch v3] Archive had no TOTW candidate for this week. Falling back to live signals...');
+      const prey = await fetchPreyData();
+      const { bestPct } = findBestExits(prey.signals || {}, prey.stockMeta || {}, regime.weekOf);
+      if (bestPct) {
+        tradeOfWeek = {
+          ticker:       bestPct.ticker,
+          companyName:  bestPct.companyName || bestPct.ticker,
+          sector:       bestPct.sector || 'Unknown',
+          direction:    bestPct.direction === 'long' ? 'LONG' : 'SHORT',
+          entryDate:    null,
+          exitDate:     regime.weekOf,
+          profitPct:    bestPct.profitPct,
+          profitDollar: bestPct.profitDollar,
+          holdingWeeks: null,
+          bigWinner:    bestPct.profitPct >= 20,
+        };
+        console.log(`[Perch v3] Live-signal TOTW: ${tradeOfWeek.ticker} +${tradeOfWeek.profitPct}%`);
+      }
+    } catch (err) {
+      console.warn('[Perch v3] Live-signal TOTW fallback failed:', err.message);
+    }
+  }
 
   const trackRecord = await getFromArchives(db, tradeOfWeek?.ticker ?? null);
 

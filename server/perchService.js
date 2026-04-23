@@ -567,8 +567,8 @@ export async function generatePerch(db) {
   // Chart data for the inline week-over-week sector rotation chart on the
   // rendered newsletter. Reuses the same totals the prompt already saw, so
   // the narrative and the chart can't drift apart. Sectors with <3 active
-  // signals are filtered out as noisy. Sorted by absolute delta desc so the
-  // biggest movers surface first.
+  // signals are filtered out as noisy. Sorted by thisWeek desc (longest bar
+  // first) so the strongest sectors read from the top.
   const sectorRotationChart = sectors
     .filter(s => s.totalBL + s.totalSS >= 3)
     .map(s => {
@@ -580,12 +580,7 @@ export async function generatePerch(db) {
       const delta     = lastWeek == null ? null : thisWeek - lastWeek;
       return { sector: s.sector, thisWeek, lastWeek, delta };
     })
-    .sort((a, b) => {
-      const aAbs = Math.abs(a.delta ?? 0);
-      const bAbs = Math.abs(b.delta ?? 0);
-      if (aAbs !== bAbs) return bAbs - aAbs;
-      return b.thisWeek - a.thisWeek;
-    });
+    .sort((a, b) => b.thisWeek - a.thisWeek);
 
   console.log(`[Perch v3] Data assembled — longs: ${top10Longs.length}, shorts: ${top10Shorts.length}, TOTW: ${tradeOfWeek?.ticker ?? 'none'}, archive: ${trackRecord?.ticker ?? 'none'}`);
 

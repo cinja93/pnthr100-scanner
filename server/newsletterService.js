@@ -346,13 +346,8 @@ export async function generateIssue(weekOf) {
       const delta = lastWeek == null ? null : thisWeek - lastWeek;
       return { sector, thisWeek, lastWeek, delta };
     })
-    // Biggest movers first (by absolute delta); ties broken by higher thisWeek.
-    .sort((a, b) => {
-      const aAbs = Math.abs(a.delta ?? 0);
-      const bAbs = Math.abs(b.delta ?? 0);
-      if (aAbs !== bAbs) return bAbs - aAbs;
-      return b.thisWeek - a.thisWeek;
-    });
+    // Strongest sectors first (longest bar at the top).
+    .sort((a, b) => b.thisWeek - a.thisWeek);
 
   // Trade of the Week summary for prompt
   function tradeStr(t) {

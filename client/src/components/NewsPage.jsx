@@ -235,9 +235,12 @@ export default function NewsPage() {
           `</div>` +
           `<button class="pnthr-totw-btn" data-totw-chart="${totwTicker}">▶ VIEW CHART</button>` +
         `</div>`;
-      // Replace the TOTW h2 with the hero card + hidden h2
+      // Replace the TOTW h2 with the hero card + hidden h2.
+      // [^<]*? keeps the match inside ONE h2 — earlier [\s\S]*? greedily spanned
+      // from the first h2 on the page through the real TOTW h2, placing the
+      // card at the very top and leaving the real TOTW heading visible.
       const replaced = html.replace(
-        /(<h2[^>]*>)([\s\S]*?Trade of the Week[\s\S]*?)(<\/h2>)/i,
+        /(<h2[^>]*>)([^<]*?Trade of the Week[^<]*?)(<\/h2>)/i,
         `${card}<h2 class="pnthr-totw-heading">$2$3`
       );
       html = replaced !== html ? replaced : html + card;

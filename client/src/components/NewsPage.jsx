@@ -244,6 +244,44 @@ export default function NewsPage() {
         `${card}<h2 class="pnthr-totw-heading">$2$3`
       );
       html = replaced !== html ? replaced : html + card;
+
+      // Enrich the TOTW callout blockquote with direction + profit lines if
+      // Claude only rendered the first line. featuredTrade is the structured
+      // record the backend built from the live signal; we rebuild the two
+      // missing lines from it so the callout matches the visual contract.
+      const ft = issue?.featuredTrade;
+      if (ft && ft.profitDollar != null && ft.profitPct != null) {
+        const direction = ft.direction === 'short' ? 'Short cover' : 'Long exit';
+        const dollars   = Math.abs(Number(ft.profitDollar)).toFixed(2);
+        const pct       = Math.abs(Number(ft.profitPct)).toFixed(2);
+        html = html.replace(
+          /(<blockquote>\s*<p>[\s\S]*?<\/p>\s*<\/blockquote>)/i,
+          (match) => {
+            if (/Profit:|trade closed profitably/i.test(match)) return match;
+            const inject = `<br>${direction} (trade closed profitably)<br><strong>Profit: +$${dollars} (+${pct}%)</strong>`;
+            return match.replace(/<\/p>/, `${inject}</p>`);
+          }
+        );
+      }
+
+      // Reorder: move the whole TOTW block (hero card + hidden heading +
+      // blockquote + paragraphs) to sit between THE OPENING section and the
+      // next section, so the reader hits the trade story before the sector
+      // rotation deep-dive. The block is bounded by <hr>/next non-TOTW <h2>.
+      const totwBlockRe = /<div class="pnthr-totw-hero">[\s\S]*?(?=<hr\b|<h2(?![^>]*pnthr-totw-heading))/;
+      const totwMatch   = html.match(totwBlockRe);
+      if (totwMatch) {
+        const totwBlock = totwMatch[0];
+        const without = html
+          .replace(totwBlockRe, '')
+          // Collapse the now-adjacent <hr><hr> left behind when TOTW was cut
+          .replace(/(<hr\b[^>]*>)\s*<hr\b[^>]*>/g, '$1');
+        const inserted = without.replace(
+          /(<h2(?![^>]*pnthr-totw-heading)[^>]*>[\s\S]*?)(<hr\b[^>]*>|<h2(?![^>]*pnthr-totw-heading))/,
+          `$1${totwBlock}$2`
+        );
+        if (inserted !== without) html = inserted;
+      }
     }
 
     // Inject the sector-rotation chart at the END of the rotation section
@@ -276,7 +314,7 @@ export default function NewsPage() {
     }
 
     return html;
-  }, [rawHtml, knownTickers, issue?.narrative, sectorRotationChartHtml]);
+  }, [rawHtml, knownTickers, issue?.narrative, issue?.featuredTrade, sectorRotationChartHtml]);
 
   async function handleArticleClick(e) {
     const ticker = e.target.dataset?.ticker || e.target.dataset?.totwChart;

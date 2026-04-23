@@ -525,11 +525,13 @@ Write the newsletter using the section structure below. IMPORTANT: Do NOT includ
 Use ## for each section heading exactly as shown:
 
 1. ## THE OPENING (2-3 paragraphs, set the tone, take a position on what the week means)
-2. ## SECTOR ROTATION (2-3 paragraphs analyzing how capital is flowing between sectors. Use the rotation data to tell the story: which sectors are getting stronger/weaker, is money rotating into defensive names or cyclical names, what does that say about institutional sentiment and risk appetite? Connect the rotation to macro context like tariffs, trade policy, interest rates, earnings, or geopolitical uncertainty. Be specific about which sectors are improving/deteriorating vs last week. This section should feel like institutional-grade market intelligence.)
-3. ## WHERE THE MONEY IS MOVING (3-4 paragraphs, deeper dive into specific sector opportunities and stock-level themes)
-4. ## TRADE OF THE WEEK - [TICKER]   <-- REQUIRED section whenever TRADE OF THE WEEK data was provided above. Replace [TICKER] with the exact ticker symbol from the data (heading MUST be "## TRADE OF THE WEEK - AAPL" style; the frontend extracts the ticker from this heading to render a chart button, so the format is not optional). Immediately after the heading, put this blockquote on its own line so the frontend has a backup ticker source:
+2. ## TRADE OF THE WEEK - [TICKER]   <-- REQUIRED section whenever TRADE OF THE WEEK data was provided above. Replace [TICKER] with the exact ticker symbol from the data (heading MUST be "## TRADE OF THE WEEK - AAPL" style; the frontend extracts the ticker from this heading to render a chart button, so the format is not optional). Write 1-2 paragraphs about what the trade captured and what the reader should take away, then END the section with a 3-line blockquote callout formatted EXACTLY like this (one leading ">" per line, no blank lines between, no extra text):
    > **[TICKER] - [Company Name]** | [Sector]
-   Then write 1-2 paragraphs about what the trade captured and what the reader should take away. Skip this section entirely ONLY if the TRADE OF THE WEEK data above literally says "No confirmed exits this week. OMIT".
+   > [Long exit (trade closed profitably) / Short cover (trade closed profitably)]
+   > **Profit: +$[X.XX] (+[X.XX]%)**
+   Use "Long exit" for a long direction (BE exit), "Short cover" for a short direction (SE exit). Use the exact profit dollar and % numbers from the data above, rounded to two decimals. Skip this section entirely ONLY if the TRADE OF THE WEEK data above literally says "No confirmed exits this week. OMIT".
+3. ## SECTOR ROTATION (2-3 paragraphs analyzing how capital is flowing between sectors. Use the rotation data to tell the story: which sectors are getting stronger/weaker, is money rotating into defensive names or cyclical names, what does that say about institutional sentiment and risk appetite? Connect the rotation to macro context like tariffs, trade policy, interest rates, earnings, or geopolitical uncertainty. Be specific about which sectors are improving/deteriorating vs last week. This section should feel like institutional-grade market intelligence.)
+4. ## WHERE THE MONEY IS MOVING (3-4 paragraphs, deeper dive into specific sector opportunities and stock-level themes)
 5. ## STOCKS TO WATCH: LONG SIDE (top 3-5 long setups, brief thesis per stock)
 6. ## STOCKS TO WATCH: SHORT SIDE (top 3-5 short setups, include a sentence explaining short selling for unfamiliar readers)
 7. ## FROM THE ARCHIVES (ONLY if data provided above -- 2 sentences max)
@@ -710,6 +712,17 @@ export async function generatePerch(db) {
       // bars.
       sectorRotation: sectorRotationChart,
     },
+    // Structured TOTW record the frontend uses to rebuild the callout's
+    // direction + profit lines when Claude renders only the ticker row.
+    featuredTrade: tradeOfWeek ? {
+      ticker:       tradeOfWeek.ticker,
+      signal:       tradeOfWeek.signal ?? (tradeOfWeek.direction === 'short' ? 'SE' : 'BE'),
+      direction:    tradeOfWeek.direction,
+      profitDollar: tradeOfWeek.profitDollar ?? null,
+      profitPct:    tradeOfWeek.profitPct    ?? null,
+      companyName:  tradeOfWeek.companyName  ?? null,
+      sector:       tradeOfWeek.sector       ?? null,
+    } : null,
     metadata: {
       weekOf:         regime.weekOf,
       regimeLabel:    regime.regimeLabel,

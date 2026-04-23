@@ -44,7 +44,7 @@ router.post('/generate', authenticateJWT, requireAdmin, async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Database unavailable' });
 
     console.log('[Newsletter] Generating Perch v3 issue...');
-    const { narrative, wasTruncated, metadata, blacklistViolations, charts } = await generatePerch(db);
+    const { narrative, wasTruncated, metadata, blacklistViolations, charts, featuredTrade } = await generatePerch(db);
     const weekOf = req.body.weekOf || metadata.weekOf || getMostRecentFriday();
 
     // Save to newsletter_issues (same collection -- frontend unchanged)
@@ -60,6 +60,9 @@ router.post('/generate', authenticateJWT, requireAdmin, async (req, res) => {
       // Precomputed chart data used by NewsPage.jsx to render inline panels
       // (e.g. the week-over-week sector rotation bars) alongside the narrative.
       ...(charts && { charts }),
+      // Structured TOTW record so the frontend can rebuild the direction +
+      // profit lines if Claude renders only the ticker row of the callout.
+      ...(featuredTrade && { featuredTrade }),
       ...(wasTruncated && { wasTruncated: true }),
       ...(blacklistViolations.length > 0 && { blacklistViolations }),
     };

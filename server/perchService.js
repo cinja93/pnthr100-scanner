@@ -10,6 +10,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { fetchPreyData, findBestExits } from './newsletterService.js';
+import { archiveThisWeeksExits } from './tradeArchiveWriter.js';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-6';
@@ -559,15 +560,30 @@ export async function generatePerch(db) {
     getSectorRotationData(db, regime.weekOf),
   ]);
 
-  // Fallback: pnthr679_trade_archive hasn't been reliably populated for the
-  // current week (last entries were from 2026-03-09 as of 2026-04-22). If the
-  // archive query returned nothing, recompute from live signals — same code
-  // path newsletterService.js uses for its Trade of the Week.
+  // Fallback: pnthr679_trade_archive is only refreshed by a manual CSV import
+  // (scripts/importTradeArchive.js) — it had no ongoing writer and data went
+  // stale at 2026-03-09. If the archive query returned no candidate for this
+  // week, recompute from live signals AND upsert the week's exits into the
+  // archive so both TOTW and 'From the Archives' have fresh data going
+  // forward.
   let tradeOfWeek = tradeOfWeekFromArchive;
   if (!tradeOfWeek) {
     try {
       console.log('[Perch v3] Archive had no TOTW candidate for this week. Falling back to live signals...');
       const prey = await fetchPreyData();
+
+      // Self-heal the archive: upsert this week's BE/SE exits.
+      try {
+        const { upserted, modified, total } = await archiveThisWeeksExits({
+          weekOf:    regime.weekOf,
+          signals:   prey.signals   || {},
+          stockMeta: prey.stockMeta || {},
+        });
+        console.log(`[Perch v3] Archived ${total} weekly exits (${upserted} new, ${modified} updated) into pnthr679_trade_archive`);
+      } catch (archErr) {
+        console.warn('[Perch v3] Archive write failed (non-fatal):', archErr.message);
+      }
+
       const { bestPct } = findBestExits(prey.signals || {}, prey.stockMeta || {}, regime.weekOf);
       if (bestPct) {
         tradeOfWeek = {

@@ -6,6 +6,7 @@ import { getJungleStocks } from './stockService.js';
 import { getSignals } from './signalService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getPreyResults } from './preyService.js';
+import { archiveThisWeeksExits } from './tradeArchiveWriter.js';
 
 const COLLECTION = 'newsletter_issues';
 
@@ -301,6 +302,20 @@ export async function generateIssue(weekOf) {
 
   // Find this week's most profitable exits
   const { exits, bestDollar, bestPct } = findBestExits(prey.signals || {}, prey.stockMeta || {}, weekOf);
+
+  // Keep pnthr679_trade_archive in sync with live signals. The archive had no
+  // ongoing writer before this (CSV-only import) so it went stale. Every
+  // newsletter generation — cron or manual — now refreshes it.
+  try {
+    const { upserted, modified, total } = await archiveThisWeeksExits({
+      weekOf,
+      signals:   prey.signals   || {},
+      stockMeta: prey.stockMeta || {},
+    });
+    console.log(`[Newsletter] Archived ${total} weekly exits (${upserted} new, ${modified} updated) into pnthr679_trade_archive`);
+  } catch (archErr) {
+    console.warn('[Newsletter] Archive write failed (non-fatal):', archErr.message);
+  }
 
   // Sprint movers from full stock list
   const allStocks = Object.entries(prey.stockMeta || {}).map(([ticker, meta]) => ({ ticker, ...meta }));

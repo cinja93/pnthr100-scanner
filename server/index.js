@@ -6214,18 +6214,26 @@ app.get('/api/assistant/headlines', async (req, res) => {
       }
     }
 
-    // ── 2. Sector concentration ──────────────────────────────────────────────
-    const sectorCounts = {};
+    // ── 2. Sector breakdown ──────────────────────────────────────────────────
+    // Replaces the old SECTOR CONCENTRATION headline lines with a full
+    // portfolio breakdown for the pie chart in PNTHR Assistant.
+    const sectorMap = {};
     for (const p of positions) {
       if (!p.sector || p.isEtf) continue;
-      const dir = p.direction === 'SHORT' ? -1 : 1;
-      sectorCounts[p.sector] = (sectorCounts[p.sector] || 0) + dir;
+      if (!sectorMap[p.sector]) sectorMap[p.sector] = { sector: p.sector, longTickers: [], shortTickers: [] };
+      if (p.direction === 'SHORT') sectorMap[p.sector].shortTickers.push(p.ticker);
+      else                         sectorMap[p.sector].longTickers.push(p.ticker);
     }
-    for (const [sector, net] of Object.entries(sectorCounts)) {
-      if (Math.abs(net) > 3) {
-        add(nowISO, '⚠️', 'SECTOR', null, `SECTOR CONCENTRATION ${sector} — ${Math.abs(net)} net directional (advisory; manager discretion)`, 'SECTOR_CONCENTRATION');
-      }
-    }
+    const sectorBreakdown = Object.values(sectorMap)
+      .map(s => ({
+        sector:       s.sector,
+        longTickers:  [...new Set(s.longTickers)].sort(),
+        shortTickers: [...new Set(s.shortTickers)].sort(),
+      }))
+      .sort((a, b) =>
+        (b.longTickers.length + b.shortTickers.length) -
+        (a.longTickers.length + a.shortTickers.length)
+      );
 
     // ── 3. IBKR discrepancies ────────────────────────────────────────────────
     try {
@@ -6380,6 +6388,7 @@ app.get('/api/assistant/headlines', async (req, res) => {
 
     res.json({
       headlines,
+      sectorBreakdown,
       count: headlines.length,
       devSignalsAge: devSignalsCache.timestamp ? Math.round((Date.now() - devSignalsCache.timestamp) / 60000) : null,
       generatedAt: nowISO,

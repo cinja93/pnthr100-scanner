@@ -1614,6 +1614,195 @@ function CompletedSection({ completed }) {
   );
 }
 
+// ── Portfolio Sector Breakdown (pie chart) ────────────────────────────────────
+// Replaces the old SECTOR CONCENTRATION warning lines in the headline feed with
+// a single pie view of the whole portfolio. Slices sized by count of positions
+// per sector; ticker chips (long = green, short = red) sit in a legend to the
+// right and click through to the chart modal via onTickerClick.
+
+const SECTOR_COLORS = {
+  'Technology':             '#5E81F4',
+  'Financial Services':     '#10B981',
+  'Healthcare':             '#EC4899',
+  'Consumer Discretionary': '#F59E0B',
+  'Communication Services': '#8B5CF6',
+  'Industrials':            '#EF4444',
+  'Consumer Staples':       '#84CC16',
+  'Energy':                 '#F97316',
+  'Utilities':              '#06B6D4',
+  'Real Estate':            '#A855F7',
+  'Basic Materials':        '#14B8A6',
+  'Materials':              '#14B8A6',
+};
+const sectorColor = (name) => SECTOR_COLORS[name] || '#64748B';
+
+function PortfolioSectorPie({ breakdown, onTickerClick }) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  const { arcs, total } = useMemo(() => {
+    const withCounts = (breakdown || [])
+      .map(s => ({ ...s, count: (s.longTickers?.length || 0) + (s.shortTickers?.length || 0) }))
+      .filter(s => s.count > 0);
+    const tot = withCounts.reduce((sum, s) => sum + s.count, 0);
+    if (tot === 0) return { arcs: [], total: 0 };
+
+    const R = 120, CX = 130, CY = 130;
+    let angle = -Math.PI / 2; // start at 12 o'clock
+    const built = withCounts.map(s => {
+      const frac  = s.count / tot;
+      const sweep = frac * Math.PI * 2;
+      const a0 = angle, a1 = angle + sweep;
+      angle = a1;
+
+      const x0 = CX + R * Math.cos(a0);
+      const y0 = CY + R * Math.sin(a0);
+      const x1 = CX + R * Math.cos(a1);
+      const y1 = CY + R * Math.sin(a1);
+      const large = sweep > Math.PI ? 1 : 0;
+      // Single-sector portfolio draws as a full circle, not a degenerate wedge.
+      const path = frac >= 0.999
+        ? `M ${CX - R} ${CY} A ${R} ${R} 0 1 1 ${CX + R} ${CY} A ${R} ${R} 0 1 1 ${CX - R} ${CY} Z`
+        : `M ${CX} ${CY} L ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1} Z`;
+
+      const midA   = (a0 + a1) / 2;
+      const labelR = R * 0.6;
+      return {
+        ...s,
+        path,
+        fraction: frac,
+        pct:      +(frac * 100).toFixed(0),
+        color:    sectorColor(s.sector),
+        labelX:   CX + labelR * Math.cos(midA),
+        labelY:   CY + labelR * Math.sin(midA),
+      };
+    });
+    return { arcs: built, total: tot };
+  }, [breakdown]);
+
+  if (total === 0) return null;
+
+  return (
+    <div style={{
+      background: '#080808',
+      border: '1px solid #1a1a1a',
+      borderRadius: 6,
+      marginBottom: 16,
+      overflow: 'hidden',
+    }}>
+      <div
+        onClick={() => setCollapsed(c => !c)}
+        style={{
+          background: '#0e0e0e',
+          borderBottom: collapsed ? 'none' : '1px solid #1a1a1a',
+          padding: '8px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          cursor: 'pointer',
+          userSelect: 'none',
+        }}
+      >
+        <span style={{ fontSize: 11, color: '#444' }}>{collapsed ? '▶' : '▼'}</span>
+        <span style={{
+          color: '#FCF000', fontWeight: 900, fontSize: 10, letterSpacing: '0.14em',
+          fontFamily: "'Inter', 'Segoe UI', sans-serif",
+        }}>
+          PORTFOLIO SECTOR BREAKDOWN
+        </span>
+        <span style={{ fontSize: 11, color: '#666', marginLeft: 4 }}>
+          {total} position{total !== 1 ? 's' : ''} · {arcs.length} sector{arcs.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {!collapsed && (
+        <div style={{ display: 'flex', gap: 24, padding: 16, flexWrap: 'wrap' }}>
+          <svg width="260" height="260" viewBox="0 0 260 260" style={{ flexShrink: 0 }}>
+            {arcs.map(a => (
+              <path
+                key={a.sector}
+                d={a.path}
+                fill={a.color}
+                stroke="#080808"
+                strokeWidth={2}
+              />
+            ))}
+            {/* In-slice count + percentage; only rendered for slices that are
+                big enough (>=8%) to hold the label without crowding. */}
+            {arcs.map(a => a.fraction >= 0.08 && (
+              <g key={a.sector + '-lbl'} style={{ pointerEvents: 'none' }}>
+                <text
+                  x={a.labelX} y={a.labelY - 3}
+                  textAnchor="middle"
+                  style={{
+                    fill: '#fff', fontSize: 13, fontWeight: 800,
+                    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+                  }}
+                >{a.count}</text>
+                <text
+                  x={a.labelX} y={a.labelY + 11}
+                  textAnchor="middle"
+                  style={{
+                    fill: 'rgba(255,255,255,0.9)', fontSize: 10, fontWeight: 700,
+                    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+                  }}
+                >{a.pct}%</text>
+              </g>
+            ))}
+          </svg>
+
+          <div style={{
+            flex: 1, minWidth: 260,
+            display: 'flex', flexDirection: 'column', gap: 10,
+            maxHeight: 260, overflowY: 'auto',
+          }}>
+            {arcs.map(a => (
+              <div key={a.sector} style={{
+                borderLeft: `3px solid ${a.color}`,
+                paddingLeft: 10,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#e0e0e0' }}>{a.sector}</span>
+                  <span style={{ fontSize: 10, color: '#666' }}>
+                    {a.count} position{a.count !== 1 ? 's' : ''} · {a.pct}%
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {(a.longTickers || []).map(t => (
+                    <span
+                      key={t + '_L'}
+                      onClick={() => onTickerClick?.(t)}
+                      title={`${t} · LONG — click for chart`}
+                      style={{
+                        fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+                        background: 'rgba(40,167,69,0.13)', color: '#28a745',
+                        border: '1px solid rgba(40,167,69,0.3)',
+                        cursor: 'pointer', userSelect: 'none',
+                      }}
+                    >{t}</span>
+                  ))}
+                  {(a.shortTickers || []).map(t => (
+                    <span
+                      key={t + '_S'}
+                      onClick={() => onTickerClick?.(t)}
+                      title={`${t} · SHORT — click for chart`}
+                      style={{
+                        fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+                        background: 'rgba(239,83,80,0.13)', color: '#ef5350',
+                        border: '1px solid rgba(239,83,80,0.3)',
+                        cursor: 'pointer', userSelect: 'none',
+                      }}
+                    >{t}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Headline Feed ────────────────────────────────────────────────────────────
 // Bloomberg-style scrolling alert feed. Polls /api/assistant/headlines every 60s.
 // Developing signals cached 15 min server-side.
@@ -2342,6 +2531,7 @@ export default function AssistantPage({ onNavigate }) {
   const [headlines,          setHeadlines]          = useState([]);
   const [headlinesLoading,   setHeadlinesLoading]   = useState(true);
   const [devSignalsAge,      setDevSignalsAge]      = useState(null);
+  const [sectorBreakdown,    setSectorBreakdown]    = useState([]);
   const [ordersData,         setOrdersData]         = useState(null);
   const [accessRequests,     setAccessRequests]     = useState([]);
   const [accessActioning,    setAccessActioning]    = useState(null); // { id, action } while in flight
@@ -2575,6 +2765,7 @@ export default function AssistantPage({ onNavigate }) {
         if (mounted) {
           setHeadlines(data.headlines || []);
           setDevSignalsAge(data.devSignalsAge ?? null);
+          setSectorBreakdown(data.sectorBreakdown || []);
           setHeadlinesLoading(false);
         }
       } catch { if (mounted) setHeadlinesLoading(false); }
@@ -2952,6 +3143,12 @@ export default function AssistantPage({ onNavigate }) {
         <div style={{ padding: '8px 10px 4px' }}>
           {/* Weekly Orders */}
           {ordersData && <WeeklyOrdersSection data={ordersData} onNavigate={onNavigate} />}
+
+          {/* Portfolio Sector Breakdown pie chart */}
+          <PortfolioSectorPie
+            breakdown={sectorBreakdown}
+            onTickerClick={(ticker) => handleChipClick({ ticker })}
+          />
 
           {/* Live Headline Feed */}
           <HeadlineFeed

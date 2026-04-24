@@ -43,6 +43,37 @@ const PRIORITY_LABEL = {
   4: 'ROUTINE',
 };
 
+// Per-type badge colors so the eye can pick out earnings vs pyramid vs stop
+// alerts at a glance. Left card border still uses PRIORITY_COLOR so urgency
+// shows on the spine; the badge pill carries the *type*. Fall through to the
+// priority color for any type not listed here.
+const TYPE_COLOR = {
+  // Earnings — pale yellow per user convention
+  EARNINGS_THIS_WEEK:    '#FCD34D',
+  EARNINGS_TOMORROW:     '#FCD34D',
+  // Pyramid-entry family — cyan/teal
+  PYRAMID_READY:         '#06B6D4',
+  LOT_READY:             '#22D3EE',
+  LOT_GATE_CLEAR:        '#67E8F9',
+  LOT_GATE_NO_TRIGGER:   '#475569',
+  // Stop / protective family — orange→red scale by severity
+  STOP_CLOSE:            '#FB923C',
+  STOP_CROSSED:          '#EF4444',
+  RATCHET_DUE:           '#60A5FA',
+  // Critical exits
+  FEAST_ALERT:           '#F472B6',
+  LIQUIDATE:             '#DC2626',
+  STALE:                 '#9CA3AF',
+  EXIT_UNRECORDED:       '#64748B',
+  // IBKR reconciliation — purple
+  IBKR_STOP_MISMATCH:    '#A78BFA',
+  IBKR_SHARE_MISMATCH:   '#A78BFA',
+  // Risk / portfolio — amber
+  HEAT_WARNING:          '#F97316',
+  WASH_EXPIRING:         '#F59E0B',
+  SECTOR_CONCENTRATION:  '#EAB308',
+};
+
 const REFRESH_INTERVAL = 60; // seconds between auto-refreshes
 
 // ── CountdownTimer — isolated 1s re-renders ──────────────────────────────────
@@ -222,18 +253,21 @@ const s = {
     cursor: 'pointer',
     userSelect: 'none',
   },
-  badge: (priority) => ({
-    fontSize: 9,
-    fontWeight: 800,
-    letterSpacing: '0.1em',
-    color: PRIORITY_COLOR[priority],
-    background: `${PRIORITY_COLOR[priority]}18`,
-    border: `1px solid ${PRIORITY_COLOR[priority]}44`,
-    borderRadius: 3,
-    padding: '2px 7px',
-    whiteSpace: 'nowrap',
-    flexShrink: 0,
-  }),
+  badge: (type, priority) => {
+    const color = TYPE_COLOR[type] || PRIORITY_COLOR[priority];
+    return {
+      fontSize: 9,
+      fontWeight: 800,
+      letterSpacing: '0.1em',
+      color,
+      background: `${color}18`,
+      border: `1px solid ${color}44`,
+      borderRadius: 3,
+      padding: '2px 7px',
+      whiteSpace: 'nowrap',
+      flexShrink: 0,
+    };
+  },
   ticker: {
     fontSize: 13,
     fontWeight: 700,
@@ -696,7 +730,7 @@ function TaskCard({ task, isCompleted, onMarkDone }) {
     return (
       <div style={{ ...s.card(task.priority, expanded), opacity: 0.55 }}>
         <div style={s.cardHeader} onClick={() => setExpanded(e => !e)}>
-          <span style={s.badge(task.priority)}>{task.badge}</span>
+          <span style={s.badge(task.type, task.priority)}>{task.badge}</span>
           {task.ticker && <span style={s.ticker}>{task.ticker}</span>}
           <span style={s.headline}>{task.headline}</span>
           <span style={s.expandBtn(expanded)}>▼</span>
@@ -746,7 +780,7 @@ function TaskCard({ task, isCompleted, onMarkDone }) {
     <>
       <div style={s.card(task.priority, expanded)}>
         <div style={s.cardHeader} onClick={() => setExpanded(e => !e)}>
-          <span style={s.badge(task.priority)}>{task.badge}</span>
+          <span style={s.badge(task.type, task.priority)}>{task.badge}</span>
           {task.ticker && <span style={s.ticker}>{task.ticker}</span>}
           <span style={s.headline}>{task.headline}</span>
           <span style={s.expandBtn(expanded)}>▼</span>

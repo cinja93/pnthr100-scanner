@@ -27,19 +27,12 @@ import { DEMO_OWNER_ID }                  from './demoEngine.js';
 import { getDirectionIndexFromFlags }     from './gateLogic.js';
 import { fetchEarningsMap }                from './assistantService.js';
 
+// NEW_ASYM_SS selection parameters, as run by the canonical Wagyu backtest
+// (server/backtest/exportPyramidNav.js:391-435). These numbers produced the
+// 38.78% gross CAGR and should not be touched without a new backtest pass.
 const BL_TOP_N = 10;
+const SS_TOP_N = 5;
 const SS_SECTOR_5D_THRESHOLD = -3; // sector 5D momentum must be < -3% for SS
-
-// Regime-level short gate: when BOTH SPY and QQQ are above their 21W EMA we
-// are in a bullish regime and take ZERO shorts, regardless of per-stock
-// MACRO/SECTOR outcomes. This supersedes the old SS_TOP_N = 5 hardcoded
-// "always take the top five shorts" rule, which was an arbitrary count with
-// no regime awareness.
-function shortsAllowed(indexData) {
-  const spyBullish = indexData?.SPY?.aboveEma === true;
-  const qqqBullish = indexData?.QQQ?.aboveEma === true;
-  return !(spyBullish && qqqBullish);
-}
 
 // ── Gate functions ──────────────────────────────────────────────────────────
 
@@ -175,17 +168,11 @@ export async function runOrdersPipeline({ type = 'WEEKLY' } = {}) {
 
   console.log(`[Orders] Starting with ${allStocks.length} scored stocks`);
 
-  // Step 2: Filter to stocks with active signals. If both SPY and QQQ are
-  // above their 21W EMA we're in a bullish regime — drop all SS candidates
-  // here so they don't occupy pipeline time or show up in the gate log as
-  // false near-misses.
-  const ssAllowed = shortsAllowed(indexData);
+  // Step 2: Filter to stocks with active signals
   const withSignals = allStocks.filter(s =>
-    (s.signal === 'BL' || (ssAllowed && s.signal === 'SS'))
-    && !s.overextended
-    && s.apexScore > 0
+    (s.signal === 'BL' || s.signal === 'SS') && !s.overextended && s.apexScore > 0
   );
-  console.log(`[Orders] ${withSignals.length} stocks with active BL/SS signals (shorts ${ssAllowed ? 'allowed' : 'BLOCKED by regime'})`);
+  console.log(`[Orders] ${withSignals.length} stocks with active BL/SS signals`);
 
   // Step 3: Apply gates
   const gateLog = [];
@@ -242,12 +229,9 @@ export async function runOrdersPipeline({ type = 'WEEKLY' } = {}) {
   blPool.forEach((s, i) => { s.filteredRank = i + 1; });
   ssPool.forEach((s, i) => { s.filteredRank = i + 1; });
 
-  // Step 5: Selection. BL is capped at the top 10 by Kill score. SS is no
-  // longer capped — the MACRO / D2 / SS_CRASH gates (plus the regime-level
-  // ssAllowed guard above) are strict enough that any survivors are legit
-  // short candidates rather than arbitrary top-N filler.
+  // Step 5: Take top N — matches backtest NEW_ASYM_SS selection exactly.
   const blOrders = blPool.slice(0, BL_TOP_N);
-  const ssOrders = ssAllowed ? ssPool : [];
+  const ssOrders = ssPool.slice(0, SS_TOP_N);
   const allOrders = [...blOrders, ...ssOrders];
 
   console.log(`[Orders] Selected ${blOrders.length} BL + ${ssOrders.length} SS = ${allOrders.length} orders`);

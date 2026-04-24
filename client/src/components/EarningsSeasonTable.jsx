@@ -15,6 +15,57 @@ const thR = { textAlign: 'right', padding: '8px 12px', fontWeight: 700 };
 const tdL = { textAlign: 'left',  padding: '8px 12px', fontSize: 12 };
 const tdR = { textAlign: 'right', padding: '8px 12px', fontSize: 12 };
 
+// ── Column-header tooltips ───────────────────────────────────────────────────
+// Hover any column header to see what it means and how to read it. Native
+// `title` attributes render reliably on desktop hover and mobile long-press
+// with no extra component deps. A dotted underline + help cursor on each
+// header signals that the text is hoverable.
+const COLUMN_TOOLTIPS = {
+  'SECTOR':
+    'GICS sector. All 11 sectors are listed; a sector stays dimmed until at ' +
+    'least one of its S&P 500 members has reported earnings this quarter.',
+  'REPORTED':
+    'Reporters so far / total S&P 500 members in this sector. ' +
+    'High ratio = enough data to trust the row. Low ratio (e.g. 2/68) = ' +
+    'tiny sample, treat the beat/miss split as noisy.',
+  'AVG MISS %':
+    'Average earnings-surprise magnitude for companies in this sector that ' +
+    'MISSED estimates (beyond the ±2% in-line band). Negative number. ' +
+    'Tells you HOW BADLY the misses missed — a −1% miss is cosmetic; ' +
+    'a −15% miss is a wake-up call. Pair with the MISS count: 1 report ' +
+    'missing by −20% moves this number much more than 5 reports each ' +
+    'missing by −3%.',
+  'MISS':
+    'Companies that came in MORE THAN 2% below consensus EPS. The ± 2% ' +
+    'band follows FactSet\'s "in-line" convention. Number is the count, ' +
+    'percentage in parentheses is share of this sector\'s reporters. ' +
+    'Historical S&P norm is roughly 20–25% of reports missing.',
+  'MET':
+    'Companies that landed WITHIN ±2% of consensus EPS — effectively ' +
+    'in-line. Gray because this is the neutral bucket. Historical share is ' +
+    '~0–10% of reports (most land outside the band one way or the other).',
+  'BEAT':
+    'Companies that BEAT consensus EPS by more than 2% (above the in-line ' +
+    'band). Number is the count, percentage is share of this sector\'s ' +
+    'reporters. Historical S&P norm is ~70–80% beating — if the sector ' +
+    'is running much HIGHER than that, the bar may have been lowered going ' +
+    'into the quarter; much LOWER is genuine weakness.',
+  'AVG BEAT %':
+    'Average earnings-surprise magnitude for companies that BEAT. Positive ' +
+    'number. Tells you HOW BIG the beats are — a +2% beat is a whisker; ' +
+    'a +20% beat is a blowout. A high BEAT count with a low AVG BEAT % ' +
+    'means the bar was easy; a high AVG BEAT % means genuine outperformance.',
+};
+
+function ThTip({ children, style }) {
+  const key = String(children).toUpperCase().trim();
+  const tip = COLUMN_TOOLTIPS[key];
+  const mergedStyle = tip
+    ? { ...style, cursor: 'help', textDecoration: 'underline dotted rgba(255,255,255,0.25)', textUnderlineOffset: 3 }
+    : style;
+  return <th title={tip || undefined} style={mergedStyle}>{children}</th>;
+}
+
 export default function EarningsSeasonTable() {
   const [snap, setSnap]             = useState(null);
   const [loading, setLoading]       = useState(true);
@@ -107,13 +158,13 @@ export default function EarningsSeasonTable() {
           }}>
             <thead>
               <tr style={{ background: '#0e0e0e', color: '#777', fontSize: 10, letterSpacing: '0.06em' }}>
-                <th style={thL}>SECTOR</th>
-                <th style={thR}>REPORTED</th>
-                <th style={thR}>AVG MISS %</th>
-                <th style={thR}>MISS</th>
-                <th style={thR}>MET</th>
-                <th style={thR}>BEAT</th>
-                <th style={thR}>AVG BEAT %</th>
+                <ThTip style={thL}>SECTOR</ThTip>
+                <ThTip style={thR}>REPORTED</ThTip>
+                <ThTip style={thR}>AVG MISS %</ThTip>
+                <ThTip style={thR}>MISS</ThTip>
+                <ThTip style={thR}>MET</ThTip>
+                <ThTip style={thR}>BEAT</ThTip>
+                <ThTip style={thR}>AVG BEAT %</ThTip>
               </tr>
             </thead>
             <tbody>

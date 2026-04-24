@@ -19,7 +19,7 @@
 
 import { ObjectId } from 'mongodb';
 import { connectToDatabase } from './database.js';
-import { generateImpersonationToken } from './auth.js';
+import { generateImpersonationToken, getAdminEmails } from './auth.js';
 
 const LOG_COLLECTION = 'pnthr_impersonation_log';
 const USERS_COLLECTION = 'users';
@@ -78,8 +78,17 @@ export async function impersonationListTargets(req, res) {
       .toArray();
 
     // Shape into a flat list for the dropdown. Vanilla is always first.
+    // Admin emails come from the ADMIN_EMAILS env var, NOT the users
+    // collection. The DB role field for admins is usually 'member' and gets
+    // promoted dynamically via resolveRole() — so the role filter alone
+    // would let admins (including the caller) appear here. Hard-exclude by
+    // email so an admin can never start an impersonation session against
+    // themselves or another admin.
+    const adminEmailSet = new Set(getAdminEmails());
     const realTargets = users
-      .filter(u => u.email && u.email !== VANILLA_TARGET.email)
+      .filter(u => u.email
+        && u.email !== VANILLA_TARGET.email
+        && !adminEmailSet.has(u.email.toLowerCase().trim()))
       .map(u => ({
         id:          u._id.toString(),
         // Prefer the stored `name`; fall back to the email local-part if it's

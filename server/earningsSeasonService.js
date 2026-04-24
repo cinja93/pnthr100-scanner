@@ -11,12 +11,15 @@
 // quarter) and on-demand-refreshed when the cache is older than 12 hours.
 // No cron — the page lazy-refreshes on load.
 
-import { connectToDatabase } from './database.js';
-import { getSp500Tickers }   from './constituents.js';
+import { connectToDatabase }          from './database.js';
+import { getSp500Tickers }             from './constituents.js';
+import { normalizeSector }             from './sectorUtils.js';
 
-const FMP_API_KEY       = process.env.FMP_API_KEY;
-const CACHE_COLLECTION  = 'pnthr_earnings_season_cache';
-const CACHE_STALE_AFTER = 12 * 60 * 60 * 1000; // 12 hours
+const FMP_API_KEY          = process.env.FMP_API_KEY;
+const CACHE_COLLECTION     = 'pnthr_earnings_season_cache';
+const SECTOR_COLLECTION    = 'pnthr_ticker_sector_cache';   // dedicated ticker→sector store
+const CACHE_STALE_AFTER    = 12 * 60 * 60 * 1000;  // 12h — earnings snapshot
+const SECTOR_STALE_AFTER   = 30 * 24 * 60 * 60 * 1000; // 30d — sector assignments rarely change
 
 // ±2% surprise band for "met expectations" (FactSet-style in-line definition).
 // |actualEps − estEps| / |estEps|  ≤ MET_BAND  → MET
@@ -74,27 +77,86 @@ async function fetchSeasonReports(from, to) {
   return Array.isArray(data) ? data : [];
 }
 
-// ── Sector lookup — pnthr_kill_scores is the durable PNTHR 679 sector map ────
-// The Friday pipeline persists sector per ticker to pnthr_kill_scores every
-// week. That's the canonical source of truth for the 679 universe and covers
-// every S&P 500 ticker. We read the latest weekOf so this works even on a
-// cold server where the in-memory apex cache hasn't warmed up yet.
-async function buildSectorMap(db) {
-  const map = new Map();
-  if (!db) return map;
-  try {
-    const latest = await db.collection('pnthr_kill_scores')
-      .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
-    if (!latest?.weekOf) return map;
-    const docs = await db.collection('pnthr_kill_scores')
-      .find({ weekOf: latest.weekOf }, { projection: { ticker: 1, sector: 1 } })
-      .toArray();
-    for (const d of docs) {
-      if (d.ticker && d.sector) map.set(d.ticker.toUpperCase(), d.sector);
+// ── Sector lookup — dedicated FMP profile cache ──────────────────────────────
+// Self-contained ticker → sector map for S&P 500. Reads the fresh cached
+// entries from pnthr_ticker_sector_cache, fetches FMP /profile/{tickers} for
+// anything missing or stale (30d TTL), and writes the results back.
+//
+// No dependency on Kill scoring, signal pipelines, or any other service —
+// this belongs to earnings-season logic.
+async function fetchProfileSectors(tickers) {
+  if (!tickers.length || !FMP_API_KEY) return {};
+  const out = {};
+  const CHUNK = 100;
+  for (let i = 0; i < tickers.length; i += CHUNK) {
+    const chunk = tickers.slice(i, i + CHUNK);
+    try {
+      const url = `https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        for (const p of data) {
+          if (p.symbol) out[p.symbol.toUpperCase()] = normalizeSector(p.sector);
+        }
+      }
+    } catch (err) {
+      console.warn('[earningsSeason] profile fetch failed:', err.message);
     }
-  } catch (err) {
-    console.warn('[earningsSeason] sector map build failed:', err.message);
   }
+  return out;
+}
+
+async function buildSectorMap(db, sp500Set) {
+  const map = new Map();
+  const tickerList = [...sp500Set];
+  const nowMs = Date.now();
+
+  // Step 1 — pull fresh cached sectors (< 30d old) from the dedicated store.
+  if (db) {
+    try {
+      const cached = await db.collection(SECTOR_COLLECTION)
+        .find({ ticker: { $in: tickerList } })
+        .toArray();
+      for (const d of cached) {
+        const ageMs = d.cachedAt ? nowMs - new Date(d.cachedAt).getTime() : Infinity;
+        if (d.ticker && d.sector && ageMs < SECTOR_STALE_AFTER) {
+          map.set(d.ticker.toUpperCase(), d.sector);
+        }
+      }
+    } catch (err) {
+      console.warn('[earningsSeason] sector cache read failed:', err.message);
+    }
+  }
+
+  // Step 2 — find S&P 500 tickers we don't have fresh data for.
+  const missing = tickerList.filter(t => !map.has(t));
+  if (missing.length === 0) return map;
+
+  // Step 3 — fetch FMP profiles for missing tickers, normalize, and cache.
+  const fetched = await fetchProfileSectors(missing);
+  const upserts = [];
+  for (const t of Object.keys(fetched)) {
+    const sec = fetched[t];
+    if (sec && sec !== 'Unknown') {
+      map.set(t, sec);
+      upserts.push({
+        updateOne: {
+          filter: { ticker: t },
+          update: { $set: { ticker: t, sector: sec, cachedAt: new Date() } },
+          upsert: true,
+        },
+      });
+    }
+  }
+  if (db && upserts.length > 0) {
+    try {
+      await db.collection(SECTOR_COLLECTION).bulkWrite(upserts);
+    } catch (err) {
+      console.warn('[earningsSeason] sector cache write failed:', err.message);
+    }
+  }
+
   return map;
 }
 
@@ -228,7 +290,7 @@ export async function getEarningsSeasonSnapshot({ forceRefresh = false } = {}) {
   // Build fresh
   const sp500Arr = await getSp500Tickers();
   const sp500Set = new Set((sp500Arr || []).map(t => t.toUpperCase()));
-  const sectorMap = await buildSectorMap(db);
+  const sectorMap = await buildSectorMap(db, sp500Set);
   const reports = await fetchSeasonReports(season.from, season.to);
   const agg = aggregateBySector(reports, sectorMap, sp500Set);
 

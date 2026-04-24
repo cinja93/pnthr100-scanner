@@ -5070,7 +5070,10 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     // DB queries for regime prices, portfolio, and macro snapshot
     const [regimeDoc, positions, userProfile, marketSnapshot] = await Promise.all([
       db.collection('pnthr_kill_regime').findOne({}, { sort: { weekOf: -1 } }),
-      db.collection('pnthr_portfolio').find({ ownerId: userId, status: { $ne: 'closed' } }).toArray(),
+      // status is stored uppercase ('CLOSED'); a previous $ne: 'closed' (lowercase)
+      // matched nothing and let every closed position through, inflating Active
+      // count + heat. Match Command Center's $nin: ['CLOSED'] exactly.
+      db.collection('pnthr_portfolio').find({ ownerId: userId, status: { $nin: ['CLOSED'] } }).toArray(),
       db.collection('user_profiles').findOne({ userId }),
       db.collection('pnthr_weekly_market_snapshot').findOne({}, { sort: { weekOf: -1 } }),
     ]);

@@ -1473,13 +1473,13 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
           <th>Ticker</th>
           <th>Action</th>
           <th>Lot 1 Shares</th>
+          <th>Stock Heat Shares</th>
           <th>Entry (Limit)</th>
           <th>Stop</th>
           <th>GTD Expiry</th>
           <th>Sector</th>
           <th>RSI</th>
           <th>#</th>
-          <th>Kill Score</th>
           <th>Tier</th>
           <th>Status</th>
         </tr>
@@ -1490,14 +1490,22 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
           // Lot 1 figures are pre-clamped against the 10% stock-cap by
           // OrdersPage; fall back to ideal if a row came in without the
           // enrichment (defensive — shouldn't happen in normal flow).
-          const ideal  = o.idealLot1  ?? 0;
-          const shares = o.cappedLot1 ?? ideal;
+          const ideal   = o.idealLot1  ?? 0;
+          const shares  = o.cappedLot1 ?? ideal;
           const clamped = !!o.clampedByStockCap;
-          const cost    = shares * entry;
-          // Earnings-this-week rows get the same yellow treatment as PreyPage.
-          // Wash-sale-blocked tickers get a small red WASH badge next to the ticker.
-          const rowBg = o.hasEarningsThisWeek ? '#fef3c7' : undefined;
-          const rowColor = o.hasEarningsThisWeek ? '#1a1a1a' : undefined;
+          const trimmed = Math.max(0, ideal - shares);
+          const idealCost = ideal  * entry;
+          const heatCost  = shares * entry;
+          // Earnings-this-week rows get the same yellow treatment as PreyPage,
+          // plus a row-wide dark-text override so every numeric/colored cell
+          // stays readable against the yellow background. `darkOverride` is
+          // mixed into each cell's explicit inline color; individual colored
+          // badges (tier pills, wash/earnings tags) keep their own styling.
+          const earnMode     = !!o.hasEarningsThisWeek;
+          const rowBg        = earnMode ? '#fef3c7' : undefined;
+          const rowColor     = earnMode ? '#1a1a1a' : undefined;
+          const darkOverride = earnMode ? '#1a1a1a' : null;
+          const pickColor = (normal) => earnMode ? '#1a1a1a' : normal;
           return (
             <tr key={o.ticker} style={rowBg ? { background: rowBg, color: rowColor } : undefined}>
               <td>
@@ -1541,50 +1549,74 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
                   {o.signal === 'BL' ? 'BUY' : 'SHORT'}
                 </span>
               </td>
+              {/* LOT 1 SHARES — raw sizer output (35% of full pyramid). Always
+                  shown so the trader sees the unclamped target regardless of
+                  whether heat-cap trimming kicked in this row. */}
               <td style={{ fontFamily: 'monospace' }}>
-                {/* Lot 1 share count. If the 10%-stock-cap clamp reduced the
-                    number, show the ideal struck-through in red alongside the
-                    capped value in green so the trader sees both. */}
                 {ideal > 0 ? (
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                    {clamped && (
-                      <span
-                        title="Ideal Lot 1 size before clamping to 10% stock-heat cap"
-                        style={{ color: '#dc3545', textDecoration: 'line-through', fontSize: 12 }}
-                      >
-                        {ideal.toLocaleString()}
-                      </span>
-                    )}
+                  <>
+                    <span style={{ color: pickColor('#fcf000'), fontWeight: 700 }}>
+                      {ideal.toLocaleString()}
+                    </span>
+                    <div style={{ fontSize: 10, color: pickColor('#888') }}>
+                      ${Math.round(idealCost).toLocaleString()}
+                    </div>
+                  </>
+                ) : (
+                  <span style={{ color: pickColor('#666') }}>—</span>
+                )}
+              </td>
+              {/* STOCK HEAT SHARES — what actually fits after the cumulative
+                  10%-of-NAV clamp walks the rows by Kill score. Equal to the
+                  Lot 1 ideal when budget allows; lower (green) when clamped;
+                  zero (red) when the budget is exhausted. */}
+              <td style={{ fontFamily: 'monospace' }}>
+                {ideal > 0 ? (
+                  <>
                     <span
                       title={clamped
-                        ? `Capped to ${shares} shr (${ideal - shares} trimmed) so the new fills stay within the 10% stock-heat budget.`
-                        : `Full Lot 1 fits within remaining 10% stock-heat budget.`}
+                        ? (shares === 0
+                            ? 'Stock-heat budget exhausted — 0 shares can be added without violating the 10% cap.'
+                            : `Trimmed from ${ideal} → ${shares} (−${trimmed}) to stay within the remaining 10% stock-heat budget.`)
+                        : 'Full Lot 1 fits within the 10% stock-heat budget.'}
                       style={{
-                        color: clamped
-                          ? (shares === 0 ? '#dc3545' : '#22c55e')
-                          : '#fcf000',
-                        fontWeight: clamped ? 700 : 400,
+                        color: earnMode
+                          ? '#1a1a1a'
+                          : (clamped
+                              ? (shares === 0 ? '#dc3545' : '#22c55e')
+                              : '#22c55e'),
+                        fontWeight: 700,
                       }}
                     >
                       {shares.toLocaleString()}
                     </span>
-                  </div>
+                    {clamped && shares > 0 && (
+                      <span style={{ fontSize: 10, color: pickColor('#dc3545'), marginLeft: 5 }}>
+                        −{trimmed}
+                      </span>
+                    )}
+                    {shares > 0 && (
+                      <div style={{ fontSize: 10, color: pickColor('#888') }}>
+                        ${Math.round(heatCost).toLocaleString()}
+                      </div>
+                    )}
+                  </>
                 ) : (
-                  <span style={{ color: '#666' }}>—</span>
-                )}
-                {shares > 0 && (
-                  <div style={{ fontSize: 10, color: '#888' }}>
-                    ${Math.round(cost).toLocaleString()}
-                  </div>
+                  <span style={{ color: pickColor('#666') }}>—</span>
                 )}
               </td>
-              <td className={styles.entryPrice}>${o.signalPrice?.toFixed(2) || o.currentPrice?.toFixed(2) || '—'}</td>
-              <td className={styles.stopPrice}>${o.stopPrice?.toFixed(2) || '—'}</td>
-              <td className={styles.gtdDate}>{gtdExp}</td>
-              <td style={{ fontSize: 12 }}>{o.sector}</td>
-              <td style={{ fontSize: 12 }}>{o.weeklyRsi?.toFixed(0) || '—'}</td>
-              <td>{o.filteredRank}</td>
-              <td className={styles.killScore}>{o.killScore}</td>
+              <td className={styles.entryPrice} style={darkOverride ? { color: darkOverride } : undefined}>
+                ${o.signalPrice?.toFixed(2) || o.currentPrice?.toFixed(2) || '—'}
+              </td>
+              <td className={styles.stopPrice} style={darkOverride ? { color: darkOverride } : undefined}>
+                ${o.stopPrice?.toFixed(2) || '—'}
+              </td>
+              <td className={styles.gtdDate} style={darkOverride ? { color: darkOverride } : undefined}>
+                {gtdExp}
+              </td>
+              <td style={{ fontSize: 12, color: pickColor(undefined) }}>{o.sector}</td>
+              <td style={{ fontSize: 12, color: pickColor(undefined) }}>{o.weeklyRsi?.toFixed(0) || '—'}</td>
+              <td style={darkOverride ? { color: darkOverride } : undefined}>{o.filteredRank}</td>
               <td>
                 <span className={styles.tierCell} style={{
                   background: tierColor(o.tier),
@@ -1595,8 +1627,8 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
               </td>
               <td>
                 {o.inPortfolio
-                  ? <span style={{ color: '#2563eb', fontWeight: 600, fontSize: 11 }}>IN PORTFOLIO</span>
-                  : <span style={{ color: '#22c55e', fontWeight: 600, fontSize: 11 }}>NEW</span>
+                  ? <span style={{ color: earnMode ? '#1e3a8a' : '#2563eb', fontWeight: 600, fontSize: 11 }}>IN PORTFOLIO</span>
+                  : <span style={{ color: earnMode ? '#14532d' : '#22c55e', fontWeight: 600, fontSize: 11 }}>NEW</span>
                 }
               </td>
             </tr>

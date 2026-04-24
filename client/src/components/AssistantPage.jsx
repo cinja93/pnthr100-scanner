@@ -1630,7 +1630,7 @@ const SECTOR_COLORS = {
   'Consumer Staples':       '#84CC16',
   'Energy':                 '#F97316',
   'Utilities':              '#06B6D4',
-  'Real Estate':            '#A855F7',
+  'Real Estate':            '#FCD34D',
   'Basic Materials':        '#14B8A6',
   'Materials':              '#14B8A6',
 };
@@ -1753,7 +1753,7 @@ function PortfolioSectorPie({ breakdown, onTickerClick }) {
           <div style={{
             flex: 1, minWidth: 260,
             display: 'flex', flexDirection: 'column', gap: 10,
-            maxHeight: 260, overflowY: 'auto',
+            maxHeight: 420, overflowY: 'auto',
           }}>
             {arcs.map(a => (
               <div key={a.sector} style={{

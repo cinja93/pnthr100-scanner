@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchLatestOrders, fetchOrdersHistory, fetchOrdersGateLog, runOrdersManual, fetchBacktestTrades, fetchNav } from '../services/api';
-import { sizePosition, isEtfTicker } from '../utils/sizingUtils.js';
+import { fetchLatestOrders, fetchOrdersHistory, fetchOrdersGateLog, runOrdersManual, fetchBacktestTrades, fetchNav, API_BASE, authHeaders } from '../services/api';
+import { sizePosition, isEtfTicker, calcHeat, STRIKE_PCT } from '../utils/sizingUtils.js';
 import ChartModal from './ChartModal';
 import styles from './OrdersPage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -971,9 +971,22 @@ export default function OrdersPage() {
   const [running, setRunning] = useState(false);
   const [nav, setNav] = useState(100000);
   const [chartIndex, setChartIndex] = useState(null);
+  const [openPositions, setOpenPositions] = useState([]); // currently-open portfolio — drives stock-cap clamp
 
   useEffect(() => {
     fetchNav().then(r => { if (r?.nav) setNav(r.nav); }).catch(() => {});
+    // Open positions feed the stock-heat cap calculation. Ignore failure —
+    // worst case the cap reads as "full budget" and nothing gets clamped.
+    // /api/positions returns this user's currently-open Command Center
+    // positions (status !== CLOSED), which is exactly what calcHeat expects.
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/positions`, { headers: authHeaders() });
+        if (!res.ok) return;
+        const list = await res.json();
+        if (Array.isArray(list)) setOpenPositions(list);
+      } catch { /* non-fatal */ }
+    })();
   }, []);
 
   const load = useCallback(async () => {
@@ -1019,9 +1032,80 @@ export default function OrdersPage() {
 
   const { regime, mode, orders, stats, sectorSummary, dailyUpdates, type: docType, generatedAt } = data;
 
-  const blOrders = orders.filter(o => o.signal === 'BL');
-  const ssOrders = orders.filter(o => o.signal === 'SS');
   const gtdExp = nextFriday();
+
+  // ── Stock-heat cap clamp ──────────────────────────────────────────────────
+  // The backtest/Orders sizer computes IDEAL per-position shares in isolation.
+  // In live trading the 10%-of-NAV stock-risk cap is a portfolio-wide ceiling,
+  // so if current filled positions are already using, say, $6,758 of an
+  // $8,500 budget, only $1,742 is available for new fills.
+  //
+  // We walk the orders in Kill-score order (strongest first) and clamp each
+  // row's Lot 1 size to whatever risk budget remains. Later rows shrink or
+  // go to zero as the budget is exhausted. ETFs are skipped (don't count
+  // against the stock cap, don't consume it either).
+  const { clampedOrders, capBudget, capUsed, capLeftAfter } = useMemo(() => {
+    const heat    = calcHeat(openPositions || [], nav);
+    const budget  = nav * 0.10;                 // 10% stock-risk cap in $
+    const used    = heat.stockRisk || 0;        // currently-filled stock risk $
+    let capLeft   = Math.max(0, budget - used); // $ remaining before cap
+
+    // Sort a COPY of orders by Kill score DESC so clamping follows rank,
+    // but the returned list preserves original per-ticker identity.
+    const rankMap = new Map();
+    const byScore = [...(orders || [])].sort((a, b) => (b.killScore ?? 0) - (a.killScore ?? 0));
+
+    for (const o of byScore) {
+      const entry = o.signalPrice || o.currentPrice || 0;
+      const stop  = o.stopPrice || 0;
+      const rps   = Math.abs(entry - stop);
+      const sized = (entry > 0 && stop > 0 && nav > 0)
+        ? sizePosition({
+            netLiquidity: nav,
+            entryPrice:   entry,
+            stopPrice:    stop,
+            maxGapPct:    o.maxGapPct || 0,
+            direction:    o.direction || (o.signal === 'BL' ? 'LONG' : 'SHORT'),
+            isETF:        isEtfTicker(o.ticker),
+          })
+        : null;
+      const totalShares = sized?.totalShares || 0;
+      // Lot 1 = 35% of full pyramid size. Floor (not round) so the integer
+      // share count never implies more risk than the dollars would pay for.
+      const idealLot1 = totalShares > 0 ? Math.max(1, Math.floor(totalShares * STRIKE_PCT[0])) : 0;
+
+      let cappedLot1  = idealLot1;
+      let clamped     = false;
+
+      if (!isEtfTicker(o.ticker) && rps > 0 && idealLot1 > 0) {
+        const idealRisk  = idealLot1 * rps;
+        if (idealRisk > capLeft) {
+          cappedLot1 = Math.max(0, Math.floor(capLeft / rps));
+          clamped    = true;
+        }
+        capLeft = Math.max(0, capLeft - cappedLot1 * rps);
+      }
+
+      rankMap.set(o.ticker, {
+        idealLot1,
+        cappedLot1,
+        clampedByStockCap: clamped,
+        lot1Risk$: cappedLot1 * rps,
+      });
+    }
+
+    const enriched = (orders || []).map(o => ({ ...o, ...(rankMap.get(o.ticker) || {}) }));
+    return {
+      clampedOrders: enriched,
+      capBudget:     budget,
+      capUsed:       used,
+      capLeftAfter:  capLeft, // after hypothetically filling every Order lot 1
+    };
+  }, [orders, openPositions, nav]);
+
+  const blOrders = clampedOrders.filter(o => o.signal === 'BL');
+  const ssOrders = clampedOrders.filter(o => o.signal === 'SS');
+  const capLeftBefore = Math.max(0, capBudget - capUsed);
 
   return (
     <div className={styles.page}>
@@ -1169,6 +1253,16 @@ export default function OrdersPage() {
             </div>
           ) : (
             <>
+              {/* Stock-heat capacity banner — what's left in the 10% cap after
+                  existing open positions, and what would remain if every Lot 1
+                  on this sheet were filled at the clamped sizes. */}
+              <CapacityBanner
+                budget={capBudget}
+                used={capUsed}
+                leftBefore={capLeftBefore}
+                leftAfter={capLeftAfter}
+              />
+
               {/* BL Orders */}
               {blOrders.length > 0 && (
                 <div className={styles.gateSection}>
@@ -1323,6 +1417,49 @@ export default function OrdersPage() {
 
 // ── Order table sub-component ──────────────────────────────────────────────────
 
+// Stock-heat capacity banner — shows the 10% stock-risk budget, how much of
+// it the currently-open portfolio is consuming, how much is left, and what
+// would remain if every clamped Lot 1 on this sheet filled at the sizes the
+// table is recommending.
+function CapacityBanner({ budget, used, leftBefore, leftAfter }) {
+  if (!budget || budget <= 0) return null;
+  const pctUsed   = Math.min(100, (used / budget) * 100);
+  const pctLeft   = Math.max(0, 100 - pctUsed);
+  const willUse   = Math.max(0, leftBefore - leftAfter);
+  const afterPct  = Math.max(0, ((leftAfter) / budget) * 100);
+  const color     = pctUsed >= 95 ? '#dc3545'
+                  : pctUsed >= 80 ? '#ffc107'
+                  :                 '#22c55e';
+  const fmt = (n) => `$${Math.round(n).toLocaleString()}`;
+  return (
+    <div style={{
+      display:     'flex',
+      flexWrap:    'wrap',
+      alignItems:  'center',
+      gap:         14,
+      padding:     '8px 14px',
+      marginBottom: 10,
+      background:  '#0e0e0e',
+      border:      '1px solid #222',
+      borderLeft:  `3px solid ${color}`,
+      borderRadius: 6,
+      fontSize:    12,
+      color:       '#ccc',
+      fontVariantNumeric: 'tabular-nums',
+    }}>
+      <span style={{ color: '#888', letterSpacing: '0.05em', fontWeight: 700 }}>
+        STOCK HEAT CAP (10%)
+      </span>
+      <span>budget <b style={{ color: '#fcf000' }}>{fmt(budget)}</b></span>
+      <span>in use <b style={{ color }}>{fmt(used)}</b> ({pctUsed.toFixed(1)}%)</span>
+      <span>left <b style={{ color: leftBefore > 0 ? '#22c55e' : '#dc3545' }}>{fmt(leftBefore)}</b> ({pctLeft.toFixed(1)}%)</span>
+      <span style={{ opacity: 0.75 }}>
+        if all Lot 1 fills → <b>{fmt(willUse)}</b> added, <b>{fmt(leftAfter)}</b> remaining ({afterPct.toFixed(1)}%)
+      </span>
+    </div>
+  );
+}
+
 function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
   return (
     <table className={styles.ordersTable}>
@@ -1330,7 +1467,7 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
         <tr>
           <th>Ticker</th>
           <th>Action</th>
-          <th>Shares</th>
+          <th>Lot 1 Shares</th>
           <th>Entry (Limit)</th>
           <th>Stop</th>
           <th>GTD Expiry</th>
@@ -1339,26 +1476,19 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
           <th>#</th>
           <th>Kill Score</th>
           <th>Tier</th>
-          <th>D2</th>
           <th>Status</th>
         </tr>
       </thead>
       <tbody>
         {orders.map((o, i) => {
           const entry = o.signalPrice || o.currentPrice || 0;
-          const stop  = o.stopPrice || 0;
-          const sized = (entry > 0 && stop > 0 && nav > 0)
-            ? sizePosition({
-                netLiquidity: nav,
-                entryPrice:   entry,
-                stopPrice:    stop,
-                maxGapPct:    o.maxGapPct || 0,
-                direction:    o.direction || (o.signal === 'BL' ? 'LONG' : 'SHORT'),
-                isETF:        isEtfTicker(o.ticker),
-              })
-            : null;
-          const shares = sized?.totalShares || 0;
-          const cost   = shares * entry;
+          // Lot 1 figures are pre-clamped against the 10% stock-cap by
+          // OrdersPage; fall back to ideal if a row came in without the
+          // enrichment (defensive — shouldn't happen in normal flow).
+          const ideal  = o.idealLot1  ?? 0;
+          const shares = o.cappedLot1 ?? ideal;
+          const clamped = !!o.clampedByStockCap;
+          const cost    = shares * entry;
           // Earnings-this-week rows get the same yellow treatment as PreyPage.
           // Wash-sale-blocked tickers get a small red WASH badge next to the ticker.
           const rowBg = o.hasEarningsThisWeek ? '#fef3c7' : undefined;
@@ -1406,8 +1536,37 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
                   {o.signal === 'BL' ? 'BUY' : 'SHORT'}
                 </span>
               </td>
-              <td style={{ fontFamily: 'monospace', color: shares > 0 ? '#fcf000' : '#666' }}>
-                {shares > 0 ? shares.toLocaleString() : '—'}
+              <td style={{ fontFamily: 'monospace' }}>
+                {/* Lot 1 share count. If the 10%-stock-cap clamp reduced the
+                    number, show the ideal struck-through in red alongside the
+                    capped value in green so the trader sees both. */}
+                {ideal > 0 ? (
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                    {clamped && (
+                      <span
+                        title="Ideal Lot 1 size before clamping to 10% stock-heat cap"
+                        style={{ color: '#dc3545', textDecoration: 'line-through', fontSize: 12 }}
+                      >
+                        {ideal.toLocaleString()}
+                      </span>
+                    )}
+                    <span
+                      title={clamped
+                        ? `Capped to ${shares} shr (${ideal - shares} trimmed) so the new fills stay within the 10% stock-heat budget.`
+                        : `Full Lot 1 fits within remaining 10% stock-heat budget.`}
+                      style={{
+                        color: clamped
+                          ? (shares === 0 ? '#dc3545' : '#22c55e')
+                          : '#fcf000',
+                        fontWeight: clamped ? 700 : 400,
+                      }}
+                    >
+                      {shares.toLocaleString()}
+                    </span>
+                  </div>
+                ) : (
+                  <span style={{ color: '#666' }}>—</span>
+                )}
                 {shares > 0 && (
                   <div style={{ fontSize: 10, color: '#888' }}>
                     ${Math.round(cost).toLocaleString()}
@@ -1429,7 +1588,6 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
                   {o.tier}
                 </span>
               </td>
-              <td style={{ color: (o.d2Score ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>{o.d2Score?.toFixed(0) ?? '—'}</td>
               <td>
                 {o.inPortfolio
                   ? <span style={{ color: '#2563eb', fontWeight: 600, fontSize: 11 }}>IN PORTFOLIO</span>

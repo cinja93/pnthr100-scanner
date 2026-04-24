@@ -871,7 +871,9 @@ export default function AssistantLiveTable({ onNavigate }) {
 
   // Yellow outline around each ticker group, so the IBKR RATCHET row below
   // the divider can't be mistaken for the next ticker's first row.
+  // `position: relative` anchors the live-price badge in the top-right.
   const tickerBoxStyle = {
+    position:     'relative',
     border:       '3px solid rgba(252,240,0,0.45)',
     borderRadius: 5,
     marginBottom: 7,
@@ -914,6 +916,40 @@ export default function AssistantLiveTable({ onNavigate }) {
 
           return (
             <div key={row.ticker} style={tickerBoxStyle}>
+              {/* Live-price badge — top-right corner. Refreshes with the
+                  reconcile poll (every 60s). Hidden when price is unknown. */}
+              {row.lastPrice != null && (
+                <div
+                  title={`Live price — refreshes every ${REFRESH_MS / 1000}s`}
+                  style={{
+                    position:    'absolute',
+                    top:         6,
+                    right:       6,
+                    zIndex:      2,
+                    display:     'flex',
+                    alignItems:  'center',
+                    gap:         5,
+                    padding:     '2px 8px',
+                    background:  'rgba(252,240,0,0.10)',
+                    border:      '1px solid rgba(252,240,0,0.40)',
+                    borderRadius: 4,
+                    fontSize:    11,
+                    fontWeight:  800,
+                    color:       '#FCF000',
+                    letterSpacing: '0.02em',
+                    fontVariantNumeric: 'tabular-nums',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <span style={{
+                    display: 'inline-block',
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: '#28a745',
+                    boxShadow: '0 0 4px rgba(40,167,69,0.9)',
+                  }} />
+                  {fmtMoney(row.lastPrice)}
+                </div>
+              )}
               <table style={{ ...s.table, tableLayout: 'fixed' }}>
                 {renderColgroup()}
                 <tbody>

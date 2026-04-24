@@ -13,7 +13,6 @@
 
 import { connectToDatabase } from './database.js';
 import { getSp500Tickers }   from './constituents.js';
-import { getCachedApexResults } from './apexService.js';
 
 const FMP_API_KEY       = process.env.FMP_API_KEY;
 const CACHE_COLLECTION  = 'pnthr_earnings_season_cache';
@@ -75,18 +74,26 @@ async function fetchSeasonReports(from, to) {
   return Array.isArray(data) ? data : [];
 }
 
-// ── Sector lookup — apex cache first, then FMP profile fallback (cached) ─────
-// We only need sector names for S&P 500 tickers. apexService carries sector for
-// everything in the PNTHR 679 universe (which overlaps heavily with SPX), so
-// for missing tickers we leave 'Unknown' — the gauge still aggregates them
-// into the total row but not a sector bucket. Good enough for v1.
-function buildSectorMap() {
+// ── Sector lookup — pnthr_kill_scores is the durable PNTHR 679 sector map ────
+// The Friday pipeline persists sector per ticker to pnthr_kill_scores every
+// week. That's the canonical source of truth for the 679 universe and covers
+// every S&P 500 ticker. We read the latest weekOf so this works even on a
+// cold server where the in-memory apex cache hasn't warmed up yet.
+async function buildSectorMap(db) {
   const map = new Map();
-  const apex = getCachedApexResults();
-  if (apex?.stocks) {
-    for (const s of apex.stocks) {
-      if (s.ticker && s.sector) map.set(s.ticker.toUpperCase(), s.sector);
+  if (!db) return map;
+  try {
+    const latest = await db.collection('pnthr_kill_scores')
+      .findOne({}, { sort: { weekOf: -1 }, projection: { weekOf: 1 } });
+    if (!latest?.weekOf) return map;
+    const docs = await db.collection('pnthr_kill_scores')
+      .find({ weekOf: latest.weekOf }, { projection: { ticker: 1, sector: 1 } })
+      .toArray();
+    for (const d of docs) {
+      if (d.ticker && d.sector) map.set(d.ticker.toUpperCase(), d.sector);
     }
+  } catch (err) {
+    console.warn('[earningsSeason] sector map build failed:', err.message);
   }
   return map;
 }
@@ -221,7 +228,7 @@ export async function getEarningsSeasonSnapshot({ forceRefresh = false } = {}) {
   // Build fresh
   const sp500Arr = await getSp500Tickers();
   const sp500Set = new Set((sp500Arr || []).map(t => t.toUpperCase()));
-  const sectorMap = buildSectorMap();
+  const sectorMap = await buildSectorMap(db);
   const reports = await fetchSeasonReports(season.from, season.to);
   const agg = aggregateBySector(reports, sectorMap, sp500Set);
 

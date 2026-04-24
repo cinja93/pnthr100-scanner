@@ -250,6 +250,32 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
               <span>Investor Portal</span>
             </button>
           )}
+          {/* Admin-only: preview what investors / VIPs see when they log in.
+              Opens the same React app with the portal mode forced via the
+              ?portal= query param (see PortalContext.detectPortal). The admin
+              stays logged in as themselves; only the nav / page restrictions
+              switch, so admin sees exactly the subset of pages each role has
+              access to. New tab so the admin's own Den session isn't lost. */}
+          {effectiveAdmin && (
+            <button
+              className={styles.dataRoomBtn}
+              onClick={() => window.open(`${window.location.origin}/?portal=investor`, '_blank', 'noopener')}
+              title="Open the Investor view in a new tab — see exactly what investors see when they log in"
+            >
+              <span style={{ fontSize: 14 }}>👀</span>
+              <span>View as Investor</span>
+            </button>
+          )}
+          {effectiveAdmin && (
+            <button
+              className={styles.dataRoomBtn}
+              onClick={() => window.open(`${window.location.origin}/?portal=vip`, '_blank', 'noopener')}
+              title="Open the VIP view in a new tab — see exactly what VIP members see when they log in"
+            >
+              <span style={{ fontSize: 14 }}>👀</span>
+              <span>View as VIP</span>
+            </button>
+          )}
         </div>
       )}
       {/* Investor portal: show Data Room button */}

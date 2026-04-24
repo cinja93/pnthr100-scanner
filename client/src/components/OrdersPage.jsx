@@ -1026,14 +1026,6 @@ export default function OrdersPage() {
     }
   }
 
-  if (loading) return <div className={styles.loading}>Loading orders...</div>;
-  if (error) return <div className={styles.error}>Error: {error}</div>;
-  if (!data) return <div className={styles.empty}><p className={styles.emptyTitle}>No order data</p></div>;
-
-  const { regime, mode, orders, stats, sectorSummary, dailyUpdates, type: docType, generatedAt } = data;
-
-  const gtdExp = nextFriday();
-
   // ── Stock-heat cap clamp ──────────────────────────────────────────────────
   // The backtest/Orders sizer computes IDEAL per-position shares in isolation.
   // In live trading the 10%-of-NAV stock-risk cap is a portfolio-wide ceiling,
@@ -1044,16 +1036,21 @@ export default function OrdersPage() {
   // row's Lot 1 size to whatever risk budget remains. Later rows shrink or
   // go to zero as the budget is exhausted. ETFs are skipped (don't count
   // against the stock cap, don't consume it either).
+  //
+  // NOTE: this hook MUST live above the early `loading/error/!data` returns
+  // so React sees a stable hook count across renders. data may still be null
+  // on the first pass, so we null-guard the inputs.
   const { clampedOrders, capBudget, capUsed, capLeftAfter } = useMemo(() => {
-    const heat    = calcHeat(openPositions || [], nav);
-    const budget  = nav * 0.10;                 // 10% stock-risk cap in $
-    const used    = heat.stockRisk || 0;        // currently-filled stock risk $
-    let capLeft   = Math.max(0, budget - used); // $ remaining before cap
+    const rawOrders = data?.orders || [];
+    const heat      = calcHeat(openPositions || [], nav);
+    const budget    = nav * 0.10;                 // 10% stock-risk cap in $
+    const used      = heat.stockRisk || 0;        // currently-filled stock risk $
+    let capLeft     = Math.max(0, budget - used); // $ remaining before cap
 
     // Sort a COPY of orders by Kill score DESC so clamping follows rank,
     // but the returned list preserves original per-ticker identity.
     const rankMap = new Map();
-    const byScore = [...(orders || [])].sort((a, b) => (b.killScore ?? 0) - (a.killScore ?? 0));
+    const byScore = [...rawOrders].sort((a, b) => (b.killScore ?? 0) - (a.killScore ?? 0));
 
     for (const o of byScore) {
       const entry = o.signalPrice || o.currentPrice || 0;
@@ -1074,11 +1071,11 @@ export default function OrdersPage() {
       // share count never implies more risk than the dollars would pay for.
       const idealLot1 = totalShares > 0 ? Math.max(1, Math.floor(totalShares * STRIKE_PCT[0])) : 0;
 
-      let cappedLot1  = idealLot1;
-      let clamped     = false;
+      let cappedLot1 = idealLot1;
+      let clamped    = false;
 
       if (!isEtfTicker(o.ticker) && rps > 0 && idealLot1 > 0) {
-        const idealRisk  = idealLot1 * rps;
+        const idealRisk = idealLot1 * rps;
         if (idealRisk > capLeft) {
           cappedLot1 = Math.max(0, Math.floor(capLeft / rps));
           clamped    = true;
@@ -1094,14 +1091,22 @@ export default function OrdersPage() {
       });
     }
 
-    const enriched = (orders || []).map(o => ({ ...o, ...(rankMap.get(o.ticker) || {}) }));
+    const enriched = rawOrders.map(o => ({ ...o, ...(rankMap.get(o.ticker) || {}) }));
     return {
       clampedOrders: enriched,
       capBudget:     budget,
       capUsed:       used,
       capLeftAfter:  capLeft, // after hypothetically filling every Order lot 1
     };
-  }, [orders, openPositions, nav]);
+  }, [data, openPositions, nav]);
+
+  if (loading) return <div className={styles.loading}>Loading orders...</div>;
+  if (error) return <div className={styles.error}>Error: {error}</div>;
+  if (!data) return <div className={styles.empty}><p className={styles.emptyTitle}>No order data</p></div>;
+
+  const { regime, mode, orders, stats, sectorSummary, dailyUpdates, type: docType, generatedAt } = data;
+
+  const gtdExp = nextFriday();
 
   const blOrders = clampedOrders.filter(o => o.signal === 'BL');
   const ssOrders = clampedOrders.filter(o => o.signal === 'SS');

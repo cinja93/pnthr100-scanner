@@ -1465,23 +1465,106 @@ function CapacityBanner({ budget, used, leftBefore, leftAfter }) {
   );
 }
 
+// ── Column-header tooltips ───────────────────────────────────────────────────
+// Hover any table header to see what the column means and how to act on it.
+// Native `title` tooltips render reliably everywhere (desktop hover, mobile
+// long-press) with no new component deps. Dotted underline cue tells the user
+// the header is hoverable.
+const COLUMN_TOOLTIPS = {
+  'Ticker':
+    'Stock ticker symbol. Click the ticker to open its chart in ChartModal.',
+  'Action':
+    'Trade direction. BUY = go LONG (close > 21W EMA, expect price up). ' +
+    'SHORT = sell short (close < 21W EMA, expect price down). ' +
+    'Determined per stock by the Kill pipeline — you do not choose direction.',
+  'Lot 1 Shares':
+    'Recommended Lot 1 entry size (35% of the full 5-lot pyramid target). ' +
+    'Computed from your NAV, entry price, and stop using 1% vitality / 10% ' +
+    'ticker cap. This is what the position would be IF portfolio heat were ' +
+    'not a concern. The $ figure below is Lot 1\'s dollar cost at Entry.',
+  'Stock Heat Shares':
+    'Portfolio-aware size. Starts from Lot 1 Shares, then subtracts this ' +
+    'row\'s risk from your remaining 10%-of-NAV stock-heat budget (the sheet ' +
+    'walks rows top-down, so strongest names get their full size first). ' +
+    'Green = full Lot 1 fits. Green with red "−N" = trimmed so adding this ' +
+    'row stays within the 10% cap. Red 0 = budget exhausted, trim existing ' +
+    'positions in Command Center before taking this one.',
+  'Entry (Limit)':
+    'Suggested limit-order entry price — the breakout (BL) or breakdown (SS) ' +
+    'level detected by the signal engine. Place a GTD BUY STOP LIMIT ' +
+    '(for LONG) or SELL STOP LIMIT (for SHORT) at this exact price in TWS. ' +
+    'Orders that do not trigger by GTD Expiry auto-cancel.',
+  'Stop':
+    'Protective stop price. Set a SELL STOP (LONG) or BUY STOP (SHORT) at ' +
+    'this level immediately after your entry fills. Per-share loss if stopped ' +
+    'out = |Entry − Stop|. Source: Wilder ATR(3) trailing ratchet — will be ' +
+    'moved up on lot fills (Lot 2 → breakeven, Lot 4 → Lot 2 fill, etc.).',
+  'GTD Expiry':
+    'Good-Til-Date — how long the limit order stays live in IBKR. If the ' +
+    'entry price does not trigger by this date, the order auto-cancels so you ' +
+    'do not fill stale signals. Always set to next Friday (aligns with the ' +
+    'weekly signal refresh).',
+  'Sector':
+    'GICS sector assignment. Drives the SECTOR gate in the pipeline: a BL ' +
+    'candidate only passes if its sector ETF is above its 21W EMA; SS only ' +
+    'passes if the sector ETF is below. Also used for sector-concentration ' +
+    'awareness when stacking new positions.',
+  'RSI':
+    'Weekly RSI(14) at the signal bar. Context only — does NOT affect ' +
+    'selection. For LONG: low RSI means oversold entering strength (early ' +
+    'in the move); high RSI means extended (late in the move, FEAST risk ' +
+    'above 85). For SHORT: inverse. Weekly RSI > 85 triggers FEAST alerts on ' +
+    'open positions.',
+  '#':
+    'Filtered rank — this row\'s position in the current week\'s gate-filtered ' +
+    'pool, ranked by Kill score. Rank 1 = strongest BL (or SS) that passed ' +
+    'MACRO + SECTOR + D2 + SS_CRASH gates. Different from the raw Kill page ' +
+    'rank, which is the strongest in the universe regardless of gates.',
+  'Tier':
+    'Kill-score tier label. ≥130 = ALPHA PNTHR KILL, ≥100 = STRIKING, ' +
+    '≥80 = HUNTING, ≥65 = POUNCING, ≥50 = COILING, and below. Orders surfaces ' +
+    'mostly upper tiers since the 4 gates filter weaker stocks out. A tier ' +
+    'downgrade between weeks is a signal to tighten stops.',
+  'Status':
+    'IN PORTFOLIO = you already own this ticker in Command Center. Do NOT ' +
+    'double up — manage lots 2–5 via Command\'s lot system. ' +
+    'NEW = not in your current portfolio; this is a fresh Lot 1 entry if you ' +
+    'take it.',
+};
+
+function ThTip({ children }) {
+  const tip = COLUMN_TOOLTIPS[children];
+  return (
+    <th
+      title={tip || undefined}
+      style={tip ? {
+        cursor: 'help',
+        textDecoration: 'underline dotted rgba(255,255,255,0.2)',
+        textUnderlineOffset: 3,
+      } : undefined}
+    >
+      {children}
+    </th>
+  );
+}
+
 function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
   return (
     <table className={styles.ordersTable}>
       <thead>
         <tr>
-          <th>Ticker</th>
-          <th>Action</th>
-          <th>Lot 1 Shares</th>
-          <th>Stock Heat Shares</th>
-          <th>Entry (Limit)</th>
-          <th>Stop</th>
-          <th>GTD Expiry</th>
-          <th>Sector</th>
-          <th>RSI</th>
-          <th>#</th>
-          <th>Tier</th>
-          <th>Status</th>
+          <ThTip>Ticker</ThTip>
+          <ThTip>Action</ThTip>
+          <ThTip>Lot 1 Shares</ThTip>
+          <ThTip>Stock Heat Shares</ThTip>
+          <ThTip>Entry (Limit)</ThTip>
+          <ThTip>Stop</ThTip>
+          <ThTip>GTD Expiry</ThTip>
+          <ThTip>Sector</ThTip>
+          <ThTip>RSI</ThTip>
+          <ThTip>#</ThTip>
+          <ThTip>Tier</ThTip>
+          <ThTip>Status</ThTip>
         </tr>
       </thead>
       <tbody>

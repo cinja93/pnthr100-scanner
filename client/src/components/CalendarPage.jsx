@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
+import EarningsSeasonTable from './EarningsSeasonTable';
 import { fetchJungleStocks, fetchEarnings, fetchWashRules } from '../services/api';
 import styles from './CalendarPage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -190,6 +191,11 @@ export default function CalendarPage() {
           {loading ? 'Loading…' : '↻ Refresh'}
         </button>
       </div>
+
+      {/* S&P 500 earnings-season beat/met/miss rollup. Pinned above the
+          daily calendar so the market-wide read is visible before the
+          jungle reporters + wash-sale expirations. */}
+      <EarningsSeasonTable />
 
       {loading && (
         <div className={styles.loadingState}>

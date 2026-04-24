@@ -141,7 +141,7 @@ Run through every page in the Den and confirm it loads without console errors:
 - [ ] PNTHR 100 Longs / PNTHR 100 Shorts
 - [ ] PNTHR ETFs
 - [ ] PNTHR Sectors (11 sectors, signal counts > 0)
-- [ ] Earnings Week
+- [ ] PNTHR Calendar
 - [ ] Watchlist
 - [ ] PNTHR Command (positions, lots, NAV, IBKR indicator)
 - [ ] PNTHR Journal (entries load, discipline scores visible)

@@ -7,8 +7,9 @@
 //
 // Rendered at the top of CalendarPage.
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { fetchEarningsSeason } from '../services/api';
+import ThTip from './HeaderTooltip';
 
 const thL = { textAlign: 'left',  padding: '8px 12px', fontWeight: 700 };
 const thR = { textAlign: 'right', padding: '8px 12px', fontWeight: 700 };
@@ -16,10 +17,9 @@ const tdL = { textAlign: 'left',  padding: '8px 12px', fontSize: 12 };
 const tdR = { textAlign: 'right', padding: '8px 12px', fontSize: 12 };
 
 // ── Column-header tooltips ───────────────────────────────────────────────────
-// Hover any column header to see what it means and how to read it. Native
-// `title` attributes render reliably on desktop hover and mobile long-press
-// with no extra component deps. A dotted underline + help cursor on each
-// header signals that the text is hoverable.
+// Hover any column header to see what it means and how to read it. The shared
+// <ThTip> (HeaderTooltip.jsx) renders a styled popover instantly on hover —
+// native HTML `title` tooltips were unreliable (Chrome delay + extensions).
 const COLUMN_TOOLTIPS = {
   'SECTOR':
     'GICS sector. All 11 sectors are listed; a sector stays dimmed until at ' +
@@ -36,7 +36,7 @@ const COLUMN_TOOLTIPS = {
     'missing by −20% moves this number much more than 5 reports each ' +
     'missing by −3%.',
   'MISS':
-    'Companies that came in MORE THAN 2% below consensus EPS. The ± 2% ' +
+    'Companies that came in MORE THAN 2% below consensus EPS. The ±2% ' +
     'band follows FactSet\'s "in-line" convention. Number is the count, ' +
     'percentage in parentheses is share of this sector\'s reporters. ' +
     'Historical S&P norm is roughly 20–25% of reports missing.',
@@ -57,74 +57,12 @@ const COLUMN_TOOLTIPS = {
     'means the bar was easy; a high AVG BEAT % means genuine outperformance.',
 };
 
-// Custom tooltip — native `title` attributes aren't reliable (Chrome's 1.5s
-// delay, some ad-blockers/extensions suppress them entirely). This renders
-// a styled popover in viewport coords (position: fixed) so it can't be
-// clipped by the table's overflow-x container.
-function ThTip({ children, style }) {
+// Local wrapper: resolves tooltip content from COLUMN_TOOLTIPS by header text
+// and forwards to the shared popover <ThTip>.
+function TipHeader({ children, style }) {
   const key = String(children).toUpperCase().trim();
   const tip = COLUMN_TOOLTIPS[key];
-  const ref  = useRef(null);
-  const [rect, setRect] = useState(null);
-
-  const show = () => { if (tip && ref.current) setRect(ref.current.getBoundingClientRect()); };
-  const hide = () => setRect(null);
-
-  const mergedStyle = tip
-    ? { ...style, cursor: 'help', textDecoration: 'underline dotted rgba(255,255,255,0.28)', textUnderlineOffset: 3, position: 'relative' }
-    : style;
-
-  return (
-    <th
-      ref={ref}
-      style={mergedStyle}
-      onMouseEnter={show}
-      onMouseLeave={hide}
-      onFocus={show}
-      onBlur={hide}
-      // Keep native title as an accessibility fallback (screen readers, mobile
-      // long-press) but don't depend on it for the visible UX.
-      title={tip || undefined}
-    >
-      {children}
-      {rect && tip && (
-        <div
-          // Render in viewport coords so the overflow-x: auto wrapper can't
-          // clip us. Clamp into the viewport on both sides.
-          style={{
-            position:   'fixed',
-            top:        rect.bottom + 8,
-            left:       Math.max(8, Math.min(rect.left, window.innerWidth - 360 - 8)),
-            width:      360,
-            maxWidth:   'calc(100vw - 16px)',
-            zIndex:     9999,
-            padding:    '12px 14px',
-            background: '#1a1a1a',
-            border:     '1px solid rgba(252,240,0,0.3)',
-            borderRadius: 6,
-            color:      '#e0e0e0',
-            fontSize:   12,
-            fontWeight: 400,
-            lineHeight: 1.55,
-            letterSpacing: 'normal',
-            textTransform: 'none',
-            textAlign:  'left',
-            whiteSpace: 'normal',
-            boxShadow:  '0 8px 28px rgba(0,0,0,0.7)',
-            pointerEvents: 'none',
-          }}
-        >
-          <div style={{
-            color: '#FCF000', fontWeight: 800, fontSize: 10, letterSpacing: '0.12em',
-            marginBottom: 6, textTransform: 'uppercase',
-          }}>
-            {key}
-          </div>
-          {tip}
-        </div>
-      )}
-    </th>
-  );
+  return <ThTip label={key} tooltip={tip} style={style}>{children}</ThTip>;
 }
 
 export default function EarningsSeasonTable() {
@@ -219,13 +157,13 @@ export default function EarningsSeasonTable() {
           }}>
             <thead>
               <tr style={{ background: '#0e0e0e', color: '#777', fontSize: 10, letterSpacing: '0.06em' }}>
-                <ThTip style={thL}>SECTOR</ThTip>
-                <ThTip style={thR}>REPORTED</ThTip>
-                <ThTip style={thR}>AVG MISS %</ThTip>
-                <ThTip style={thR}>MISS</ThTip>
-                <ThTip style={thR}>MET</ThTip>
-                <ThTip style={thR}>BEAT</ThTip>
-                <ThTip style={thR}>AVG BEAT %</ThTip>
+                <TipHeader style={thL}>SECTOR</TipHeader>
+                <TipHeader style={thR}>REPORTED</TipHeader>
+                <TipHeader style={thR}>AVG MISS %</TipHeader>
+                <TipHeader style={thR}>MISS</TipHeader>
+                <TipHeader style={thR}>MET</TipHeader>
+                <TipHeader style={thR}>BEAT</TipHeader>
+                <TipHeader style={thR}>AVG BEAT %</TipHeader>
               </tr>
             </thead>
             <tbody>

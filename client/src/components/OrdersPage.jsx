@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { fetchLatestOrders, fetchOrdersHistory, fetchOrdersGateLog, runOrdersManual, fetchBacktestTrades, fetchNav, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, isEtfTicker, calcHeat, STRIKE_PCT } from '../utils/sizingUtils.js';
+import ThTipShared from './HeaderTooltip';
 import ChartModal from './ChartModal';
 import styles from './OrdersPage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -1466,10 +1467,10 @@ function CapacityBanner({ budget, used, leftBefore, leftAfter }) {
 }
 
 // ── Column-header tooltips ───────────────────────────────────────────────────
-// Hover any table header to see what the column means and how to act on it.
-// Native `title` tooltips render reliably everywhere (desktop hover, mobile
-// long-press) with no new component deps. Dotted underline cue tells the user
-// the header is hoverable.
+// Hover any table header for a styled popover explaining what the column
+// means and how to use it. The popover component (HeaderTooltip.jsx) renders
+// instantly on hover — native HTML `title` tooltips were unreliable (Chrome
+// delay + extensions suppressing them).
 const COLUMN_TOOLTIPS = {
   'Ticker':
     'Stock ticker symbol. Click the ticker to open its chart in ChartModal.',
@@ -1532,20 +1533,12 @@ const COLUMN_TOOLTIPS = {
     'take it.',
 };
 
+// Local wrapper resolves the tooltip content from COLUMN_TOOLTIPS by header
+// text and forwards to the shared <ThTipShared> popover.
 function ThTip({ children }) {
-  const tip = COLUMN_TOOLTIPS[children];
-  return (
-    <th
-      title={tip || undefined}
-      style={tip ? {
-        cursor: 'help',
-        textDecoration: 'underline dotted rgba(255,255,255,0.2)',
-        textUnderlineOffset: 3,
-      } : undefined}
-    >
-      {children}
-    </th>
-  );
+  const key = String(children);
+  const tip = COLUMN_TOOLTIPS[key];
+  return <ThTipShared label={key} tooltip={tip}>{children}</ThTipShared>;
 }
 
 function OrderTable({ orders, gtdExp, nav, onTickerClick }) {

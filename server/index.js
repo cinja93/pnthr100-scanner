@@ -3434,6 +3434,36 @@ app.post('/api/admin/reset-member-password', authenticateJWT, requireAdmin, asyn
   }
 });
 
+// Admin-only: create a member (VIP) account directly, status: 'active', so
+// the user can log in immediately at vip.pnthrfunds.com without going
+// through the self-signup → admin approval ping-pong. Used for onboarding
+// known members (Brennan + family) where the admin already has their email
+// and is setting an initial password to share over a secure channel.
+//
+// For investor onboarding, the existing POST /api/investors flow is the
+// right tool — those accounts live in `den_investors` with their own schema
+// (investmentAmount, accreditation status, etc.) and are not interchangeable
+// with member accounts.
+app.post('/api/admin/create-member', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { email, password, name } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
+    if (password.length < 8)  return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    const hashedPassword = await hashPassword(password);
+    // createUser sets role: 'member' and rejects duplicate emails. Default
+    // status: 'active' — admin-created accounts skip the approval queue.
+    const user = await createUser(email, hashedPassword, { name: name || '', status: 'active' });
+    res.json({ ok: true, id: user._id?.toString?.(), email: user.email, name: user.name });
+  } catch (err) {
+    // createUser throws "An account with that email already exists" — surface
+    // that as a 409 so the form can show a clear message.
+    const msg = err?.message || 'Failed to create member';
+    const status = /already exists/i.test(msg) ? 409 : 500;
+    if (status === 500) console.error('[Admin] create-member error:', err);
+    res.status(status).json({ error: msg });
+  }
+});
+
 // ── Exit Service ──────────────────────────────────────────────────────────────
 
 // POST /api/positions/:id/exit — record an exit (partial or full)

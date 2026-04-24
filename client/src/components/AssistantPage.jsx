@@ -20,6 +20,8 @@ import {
   API_BASE, authHeaders, fetchIbkrDiscrepancies, fetchIbkrTradesToday,
   fetchAccessRequests, approveAccessAsMember, approveAccessAsInvestor, denyAccessRequest,
   resetMemberPassword,
+  createMemberAdmin,
+  createInvestor,
 } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ChartModal from './ChartModal';
@@ -2619,6 +2621,45 @@ export default function AssistantPage({ onNavigate }) {
     setPwResetBusy(false);
   }, [pwResetEmail, pwResetPassword, pwResetBusy]);
 
+  // ── Create-account form state (admin-only) ─────────────────────────────
+  // Two account types share the same form: VIP (member, lives in `users`)
+  // and INVESTOR (lives in `den_investors` with extra fields). The radio
+  // toggle picks which backend endpoint to call.
+  const [caOpen,     setCaOpen]     = useState(false);
+  const [caType,     setCaType]     = useState('vip'); // 'vip' | 'investor'
+  const [caEmail,    setCaEmail]    = useState('');
+  const [caPassword, setCaPassword] = useState('');
+  const [caName,     setCaName]     = useState('');
+  const [caBusy,     setCaBusy]     = useState(false);
+  const [caResult,   setCaResult]   = useState(null);
+
+  const handleCreateAccount = useCallback(async (e) => {
+    e?.preventDefault?.();
+    if (caBusy) return;
+    setCaBusy(true);
+    setCaResult(null);
+    try {
+      const email = caEmail.trim();
+      const password = caPassword;
+      const name = caName.trim();
+      if (caType === 'vip') {
+        const res = await createMemberAdmin({ email, password, name });
+        setCaResult({ ok: true, msg: `VIP account created for ${res.email}. Send them this URL: https://vip.pnthrfunds.com/` });
+      } else {
+        // Investor flow uses the existing /api/investors endpoint. The
+        // schema there carries name + email + initial password. Other
+        // investor-specific fields (investmentAmount, accreditation, etc.)
+        // are filled in by the investor on their first login.
+        const res = await createInvestor({ email, password, name });
+        setCaResult({ ok: true, msg: `Investor account created for ${res?.email || email}. Send them this URL: https://investor.pnthrfunds.com/` });
+      }
+      setCaPassword('');
+    } catch (err) {
+      setCaResult({ ok: false, msg: err.message });
+    }
+    setCaBusy(false);
+  }, [caType, caEmail, caPassword, caName, caBusy]);
+
   // Analyze context for scoring chips — destructure the INNER analyzeContext
   // (useAnalyzeContext returns { analyzeContext, loading }, but computeAnalyzeScore
   // expects the inner object with regime, sectorEma, etc.)
@@ -3060,6 +3101,84 @@ export default function AssistantPage({ onNavigate }) {
                 <div style={{ fontSize: 11, fontWeight: 600, marginLeft: 8,
                   color: pwResetResult.ok ? '#22c55e' : '#ef4444' }}>
                   {pwResetResult.ok ? '✓' : '✗'} {pwResetResult.msg}
+                </div>
+              )}
+            </form>
+          )}
+        </div>
+      )}
+
+      {/* ── Create account (admin-only, VIP or Investor) ──────────────────── */}
+      {isAdmin && (
+        <div style={{
+          border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8,
+          marginBottom: pendingAccessCount > 0 ? 12 : 16, background: '#0b0b0b',
+        }}>
+          <button
+            onClick={() => setCaOpen(o => !o)}
+            style={{
+              width: '100%', background: 'none', border: 'none', color: '#aaa',
+              padding: '8px 14px', fontSize: 12, textAlign: 'left', cursor: 'pointer',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+            <span style={{ letterSpacing: '0.04em' }}>🆕 CREATE ACCOUNT</span>
+            <span style={{ fontSize: 10, color: '#666' }}>{caOpen ? '▲' : '▼'}</span>
+          </button>
+          {caOpen && (
+            <form onSubmit={handleCreateAccount} style={{ padding: '4px 14px 14px' }}>
+              {/* Account-type toggle. Pick before filling the form so the
+                  user sees which subdomain the link will be for. */}
+              <div style={{ display: 'flex', gap: 14, marginBottom: 10, fontSize: 12, color: '#bbb' }}>
+                <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="radio" name="caType" value="vip"
+                    checked={caType === 'vip'}
+                    onChange={() => setCaType('vip')} />
+                  <span>VIP / Member <span style={{ color: '#666', fontSize: 10 }}>(vip.pnthrfunds.com)</span></span>
+                </label>
+                <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="radio" name="caType" value="investor"
+                    checked={caType === 'investor'}
+                    onChange={() => setCaType('investor')} />
+                  <span>Investor <span style={{ color: '#666', fontSize: 10 }}>(investor.pnthrfunds.com)</span></span>
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div>
+                  <label style={{ fontSize: 10, color: '#666', display: 'block', marginBottom: 3 }}>Full name</label>
+                  <input
+                    type="text" value={caName} onChange={e => setCaName(e.target.value)}
+                    placeholder="Brennan McBrien"
+                    style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', color: '#e8e6e3',
+                      borderRadius: 4, padding: '6px 10px', fontSize: 12, width: 200 }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 10, color: '#666', display: 'block', marginBottom: 3 }}>Email</label>
+                  <input
+                    type="email" value={caEmail} onChange={e => setCaEmail(e.target.value)}
+                    placeholder="brennan@example.com" required
+                    style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', color: '#e8e6e3',
+                      borderRadius: 4, padding: '6px 10px', fontSize: 12, fontFamily: 'monospace', width: 240 }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 10, color: '#666', display: 'block', marginBottom: 3 }}>Initial password (≥ 8 chars)</label>
+                  <input
+                    type="text" value={caPassword} onChange={e => setCaPassword(e.target.value)}
+                    minLength={8} required
+                    style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', color: '#e8e6e3',
+                      borderRadius: 4, padding: '6px 10px', fontSize: 12, fontFamily: 'monospace', width: 220 }} />
+                </div>
+                <button
+                  type="submit" disabled={caBusy || !caEmail || caPassword.length < 8}
+                  style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 4,
+                    padding: '7px 14px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+                    cursor: caBusy ? 'not-allowed' : 'pointer', opacity: caBusy ? 0.6 : 1 }}>
+                  {caBusy ? 'CREATING…' : `CREATE ${caType === 'vip' ? 'VIP' : 'INVESTOR'}`}
+                </button>
+              </div>
+              {caResult && (
+                <div style={{ fontSize: 11, fontWeight: 600, marginTop: 10,
+                  color: caResult.ok ? '#22c55e' : '#ef4444' }}>
+                  {caResult.ok ? '✓' : '✗'} {caResult.msg}
                 </div>
               )}
             </form>

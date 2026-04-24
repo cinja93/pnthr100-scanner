@@ -193,6 +193,22 @@ export async function removeWatchlistTicker(ticker) {
   return response.json();
 }
 
+// Admin: create a member (VIP) account directly with status 'active'.
+// Caller is responsible for relaying the password to the new user via a
+// secure channel.
+export async function createMemberAdmin({ email, password, name }) {
+  const res = await apiFetch(`${API_BASE}/api/admin/create-member`, {
+    method:  'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body:    JSON.stringify({ email, password, name }),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 // ── Admin impersonation ──
 // Returns the list of users the admin can preview as, plus the synthetic
 // "Vanilla" (empty-user) target. See server/impersonationService.js.

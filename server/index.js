@@ -629,6 +629,19 @@ app.get('/api/stocks/search', async (req, res) => {
   }
 });
 
+// Earnings-season beat/miss/met snapshot for the current fiscal reporting
+// quarter, aggregated by S&P 500 sector. Cached 12h; pass ?refresh=1 to bust.
+app.get('/api/earnings-season', authenticateJWT, async (req, res) => {
+  try {
+    const { getEarningsSeasonSnapshot } = await import('./earningsSeasonService.js');
+    const snap = await getEarningsSeasonSnapshot({ forceRefresh: req.query.refresh === '1' });
+    res.json(snap);
+  } catch (err) {
+    console.error('[/api/earnings-season]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Earnings calendar for the current/upcoming week
 app.get('/api/earnings/week', async (req, res) => {
   try {

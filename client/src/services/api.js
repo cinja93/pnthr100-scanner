@@ -193,6 +193,16 @@ export async function removeWatchlistTicker(ticker) {
   return response.json();
 }
 
+// ── Earnings season snapshot ──
+// Beat/Met/Miss rollup of the current reporting quarter across S&P 500
+// sectors. See server/earningsSeasonService.js for the schema.
+export async function fetchEarningsSeason({ refresh = false } = {}) {
+  const qs = refresh ? '?refresh=1' : '';
+  const res = await apiFetch(`${API_BASE}/api/earnings-season${qs}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+  return res.json();
+}
+
 // ── Portfolio ──
 
 export async function fetchPortfolio() {

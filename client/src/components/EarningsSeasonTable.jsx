@@ -7,7 +7,7 @@
 //
 // Rendered at the top of CalendarPage.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchEarningsSeason } from '../services/api';
 
 const thL = { textAlign: 'left',  padding: '8px 12px', fontWeight: 700 };
@@ -57,13 +57,74 @@ const COLUMN_TOOLTIPS = {
     'means the bar was easy; a high AVG BEAT % means genuine outperformance.',
 };
 
+// Custom tooltip — native `title` attributes aren't reliable (Chrome's 1.5s
+// delay, some ad-blockers/extensions suppress them entirely). This renders
+// a styled popover in viewport coords (position: fixed) so it can't be
+// clipped by the table's overflow-x container.
 function ThTip({ children, style }) {
   const key = String(children).toUpperCase().trim();
   const tip = COLUMN_TOOLTIPS[key];
+  const ref  = useRef(null);
+  const [rect, setRect] = useState(null);
+
+  const show = () => { if (tip && ref.current) setRect(ref.current.getBoundingClientRect()); };
+  const hide = () => setRect(null);
+
   const mergedStyle = tip
-    ? { ...style, cursor: 'help', textDecoration: 'underline dotted rgba(255,255,255,0.25)', textUnderlineOffset: 3 }
+    ? { ...style, cursor: 'help', textDecoration: 'underline dotted rgba(255,255,255,0.28)', textUnderlineOffset: 3, position: 'relative' }
     : style;
-  return <th title={tip || undefined} style={mergedStyle}>{children}</th>;
+
+  return (
+    <th
+      ref={ref}
+      style={mergedStyle}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+      // Keep native title as an accessibility fallback (screen readers, mobile
+      // long-press) but don't depend on it for the visible UX.
+      title={tip || undefined}
+    >
+      {children}
+      {rect && tip && (
+        <div
+          // Render in viewport coords so the overflow-x: auto wrapper can't
+          // clip us. Clamp into the viewport on both sides.
+          style={{
+            position:   'fixed',
+            top:        rect.bottom + 8,
+            left:       Math.max(8, Math.min(rect.left, window.innerWidth - 360 - 8)),
+            width:      360,
+            maxWidth:   'calc(100vw - 16px)',
+            zIndex:     9999,
+            padding:    '12px 14px',
+            background: '#1a1a1a',
+            border:     '1px solid rgba(252,240,0,0.3)',
+            borderRadius: 6,
+            color:      '#e0e0e0',
+            fontSize:   12,
+            fontWeight: 400,
+            lineHeight: 1.55,
+            letterSpacing: 'normal',
+            textTransform: 'none',
+            textAlign:  'left',
+            whiteSpace: 'normal',
+            boxShadow:  '0 8px 28px rgba(0,0,0,0.7)',
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{
+            color: '#FCF000', fontWeight: 800, fontSize: 10, letterSpacing: '0.12em',
+            marginBottom: 6, textTransform: 'uppercase',
+          }}>
+            {key}
+          </div>
+          {tip}
+        </div>
+      )}
+    </th>
+  );
 }
 
 export default function EarningsSeasonTable() {

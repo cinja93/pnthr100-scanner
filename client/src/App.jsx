@@ -117,7 +117,6 @@ function App() {
 
 function AppAuth() {
   const { portalMode, isInvestorPortal, isDenPortal } = usePortal();
-  const { isImpersonating } = useImpersonation();
   // Impersonation token (sessionStorage, per-tab) wins over the admin's own
   // token (localStorage) whenever this tab is in a preview session. That
   // keeps the admin's main tab working as admin in parallel.
@@ -604,6 +603,9 @@ function EmaAlertBanner({ alert: a, onDismiss }) {
 }
 
 function AppInner({ currentUser, setCurrentUser, onLogout }) {
+  // Used only to shift page content below the fixed impersonation banner.
+  // `isImpersonating` must be read here — it's not in scope from AppAuth.
+  const { isImpersonating } = useImpersonation();
   const { isAuthenticated, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
   const isAdmin = currentUser?.role === 'admin';
   const isInvestor = currentUser?.role === 'investor';

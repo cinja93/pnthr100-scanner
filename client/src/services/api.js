@@ -193,6 +193,42 @@ export async function removeWatchlistTicker(ticker) {
   return response.json();
 }
 
+// ── Admin impersonation ──
+// Returns the list of users the admin can preview as, plus the synthetic
+// "Vanilla" (empty-user) target. See server/impersonationService.js.
+export async function fetchImpersonationTargets() {
+  const res = await apiFetch(`${API_BASE}/api/admin/impersonate/targets`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Starts a read-only impersonation session. Returns a short-lived JWT scoped
+// to the target user. Caller is responsible for opening the new tab with the
+// token in sessionStorage (NOT localStorage — keeps admin's own session
+// untouched).
+export async function startImpersonation(targetUserId) {
+  const res = await apiFetch(`${API_BASE}/api/admin/impersonate`, {
+    method:  'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body:    JSON.stringify({ targetUserId }),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// Logs the stop of the current impersonation session. Uses the impersonation
+// token itself (not the admin's token). Audit record gets a stoppedAt.
+export async function stopImpersonation() {
+  const res = await apiFetch(`${API_BASE}/api/admin/impersonate/stop`, {
+    method:  'POST',
+    headers: authHeaders(),
+  });
+  return res.ok;
+}
+
 // ── Earnings season snapshot ──
 // Beat/Met/Miss rollup of the current reporting quarter across S&P 500
 // sectors. See server/earningsSeasonService.js for the schema.

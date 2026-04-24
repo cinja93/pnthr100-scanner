@@ -23,6 +23,38 @@ export function generateToken(userId, email, role = 'member') {
   return jwt.sign({ userId: userId.toString(), email, role }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 }
 
+// ── Impersonation token ──────────────────────────────────────────────────────
+// Admin-only, short-lived (30 min), read-only. JWT carries the TARGET user's
+// identity so every downstream data query filters to their ownerId. The
+// impersonatedBy/impersonatorEmail claims let the server log the admin and
+// let the client render a "VIEWING AS ..." banner.
+//
+// readOnly: true is enforced by authenticateJWT below — any non-GET request
+// carrying this claim is rejected with 403, even if the client UI bypasses
+// its disabled-state checks.
+export function generateImpersonationToken({
+  targetUserId,
+  targetEmail,
+  targetRole,
+  targetDisplayName,
+  impersonatorUserId,
+  impersonatorEmail,
+}) {
+  return jwt.sign(
+    {
+      userId:            targetUserId.toString(),
+      email:             targetEmail,
+      role:              targetRole,
+      impersonatedBy:    impersonatorUserId.toString(),
+      impersonatorEmail,
+      targetDisplayName,
+      readOnly:          true,
+    },
+    JWT_SECRET,
+    { expiresIn: '30m' },
+  );
+}
+
 // Returns the set of admin emails from the ADMIN_EMAILS env var (comma-separated)
 export function getAdminEmails() {
   return (process.env.ADMIN_EMAILS || '')
@@ -48,6 +80,33 @@ export function authenticateJWT(req, res, next) {
   }
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+
+    // ── Impersonation path ─────────────────────────────────────────────────
+    // Admin-scoped token pretending to be another user. Token's role is
+    // fixed at issuance (target's actual role); we do NOT re-resolve against
+    // ADMIN_EMAILS because that would leak admin privileges into the
+    // impersonated session. readOnly is enforced here before any handler runs.
+    if (payload.impersonatedBy) {
+      // The stop endpoint writes the session's stop-time to the audit log, so
+      // it's the only non-GET allowed from within an impersonation session.
+      const isStopEndpoint = req.path === '/api/admin/impersonate/stop';
+      if (payload.readOnly && req.method !== 'GET' && !isStopEndpoint) {
+        return res.status(403).json({
+          error: 'Impersonation session is read-only. This action cannot be performed.',
+          code:  'IMPERSONATION_READ_ONLY',
+        });
+      }
+      req.user = {
+        userId:            payload.userId,
+        email:             payload.email,
+        role:              payload.role,
+        impersonatedBy:    payload.impersonatedBy,
+        impersonatorEmail: payload.impersonatorEmail,
+        targetDisplayName: payload.targetDisplayName,
+        readOnly:          !!payload.readOnly,
+      };
+      return next();
+    }
 
     // Investor tokens carry source: 'den_investors' — keep role as 'investor', skip ADMIN_EMAILS
     if (payload.source === 'den_investors') {

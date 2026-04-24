@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import styles from './Sidebar.module.css';
 import pnthrLogo from '../assets/panther head.png';
 import builtWithLove from '../assets/Built with Love.jpg';
 import { useDemo } from '../contexts/DemoContext';
 import { usePortal } from '../contexts/PortalContext';
+import { fetchImpersonationTargets, startImpersonation } from '../services/api';
 
 const APP_VERSION = '4.4.0';
 
@@ -79,6 +80,134 @@ function BatchStatsTooltip({ stats, top }) {
         </span>
       </div>
     </div>
+  );
+}
+
+// ── VIP impersonation dropdown ──────────────────────────────────────────────
+// Admin-only button: "View as VIP" expands to a list of users the admin can
+// preview as (Vanilla + real VIPs from the DB). Clicking a target calls the
+// impersonation endpoint, stores the 30-minute read-only token in the new
+// tab's sessionStorage (via the URL hand-off), and opens that tab.
+function VipImpersonateMenu() {
+  const [open, setOpen]         = useState(false);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState(null);
+  const [targets, setTargets]   = useState(null); // { vanilla, targets: [...] }
+  const [launching, setLaunching] = useState(null); // target id while awaiting impersonate call
+
+  // Load the target list the first time the menu opens so the dropdown
+  // reflects the current VIP roster without an up-front fetch.
+  useEffect(() => {
+    if (!open || targets || loading) return;
+    setLoading(true);
+    setError(null);
+    fetchImpersonationTargets()
+      .then(setTargets)
+      .catch(e => setError(e.message || 'Failed to load'))
+      .finally(() => setLoading(false));
+  }, [open, targets, loading]);
+
+  const handleLaunch = async (target) => {
+    setLaunching(target.id);
+    try {
+      const { token } = await startImpersonation(target.id);
+      // Hand off the token via URL so the new tab's sessionStorage (per-tab
+      // isolated) picks it up — the admin's OWN tab keeps its localStorage
+      // admin token completely untouched. consumeImpersonationFromUrl strips
+      // the param from the URL bar once captured.
+      const url = `${window.location.origin}/?impersonate=${encodeURIComponent(token)}`;
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setOpen(false);
+    } catch (e) {
+      setError(e.message || 'Failed to start impersonation');
+    } finally {
+      setLaunching(null);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        className={styles.dataRoomBtn}
+        onClick={() => setOpen(o => !o)}
+        title="Preview as a specific VIP member (read-only, 30-min session)"
+      >
+        <span style={{ fontSize: 14 }}>👀</span>
+        <span style={{ flex: 1, textAlign: 'left' }}>View as VIP</span>
+        <span style={{ fontSize: 10, opacity: 0.6 }}>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div style={{
+          marginTop:    4,
+          padding:      6,
+          background:   '#0c0c0c',
+          border:       '1px solid rgba(252,240,0,0.25)',
+          borderRadius: 6,
+          display:      'flex',
+          flexDirection: 'column',
+          gap:          3,
+        }}>
+          {loading && (
+            <div style={{ padding: '6px 10px', fontSize: 11, color: '#888' }}>Loading…</div>
+          )}
+          {error && (
+            <div style={{ padding: '6px 10px', fontSize: 11, color: '#ef5350' }}>{error}</div>
+          )}
+          {targets && (
+            <>
+              {/* Vanilla first — a synthetic empty user for fresh-login UX
+                  testing. No data, no stocks, no personalization. */}
+              <VipImpersonateOption
+                target={targets.vanilla}
+                subtitle="Fresh user — no data"
+                onLaunch={handleLaunch}
+                launching={launching === targets.vanilla.id}
+              />
+              {targets.targets.length === 0 && (
+                <div style={{ padding: '6px 10px', fontSize: 11, color: '#555' }}>No VIPs found</div>
+              )}
+              {targets.targets.map(t => (
+                <VipImpersonateOption
+                  key={t.id}
+                  target={t}
+                  subtitle={t.email}
+                  onLaunch={handleLaunch}
+                  launching={launching === t.id}
+                />
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VipImpersonateOption({ target, subtitle, onLaunch, launching }) {
+  return (
+    <button
+      onClick={() => !launching && onLaunch(target)}
+      disabled={!!launching}
+      style={{
+        padding:      '6px 10px',
+        background:   'transparent',
+        border:       '1px solid transparent',
+        borderRadius: 4,
+        color:        '#e0e0e0',
+        textAlign:    'left',
+        cursor:       launching ? 'wait' : 'pointer',
+        display:      'flex',
+        flexDirection: 'column',
+        gap:          1,
+      }}
+      onMouseEnter={e => !launching && (e.currentTarget.style.background = 'rgba(252,240,0,0.08)')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+    >
+      <span style={{ fontSize: 12, fontWeight: 700, color: launching ? '#888' : '#FCF000' }}>
+        {launching ? '…launching' : `View as ${target.displayName}`}
+      </span>
+      <span style={{ fontSize: 9, color: '#666', letterSpacing: '0.02em' }}>{subtitle}</span>
+    </button>
   );
 }
 
@@ -250,12 +379,9 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
               <span>Investor Portal</span>
             </button>
           )}
-          {/* Admin-only: preview what investors / VIPs see when they log in.
-              Opens the same React app with the portal mode forced via the
-              ?portal= query param (see PortalContext.detectPortal). The admin
-              stays logged in as themselves; only the nav / page restrictions
-              switch, so admin sees exactly the subset of pages each role has
-              access to. New tab so the admin's own Den session isn't lost. */}
+          {/* Admin-only: preview the INVESTOR portal shell. This is a plain
+              portal-mode preview (nav filter only) — admin stays logged in
+              as themselves. Useful for "here's what a prospect would see". */}
           {effectiveAdmin && (
             <button
               className={styles.dataRoomBtn}
@@ -266,15 +392,12 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
               <span>View as Investor</span>
             </button>
           )}
+          {/* Admin-only: full impersonation dropdown for the VIP portal. Opens
+              a new tab with a read-only, 30-minute token scoped to the
+              chosen VIP user — admin sees the VIP's actual data, not their
+              own. See server/impersonationService.js + ImpersonationBanner. */}
           {effectiveAdmin && (
-            <button
-              className={styles.dataRoomBtn}
-              onClick={() => window.open(`${window.location.origin}/?portal=vip`, '_blank', 'noopener')}
-              title="Open the VIP view in a new tab — see exactly what VIP members see when they log in"
-            >
-              <span style={{ fontSize: 14 }}>👀</span>
-              <span>View as VIP</span>
-            </button>
+            <VipImpersonateMenu />
           )}
         </div>
       )}

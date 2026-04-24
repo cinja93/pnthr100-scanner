@@ -4,6 +4,13 @@ import { QueueProvider, useQueue } from './contexts/QueueContext';
 import { AnalyzeProvider } from './contexts/AnalyzeContext';
 import { DemoProvider } from './contexts/DemoContext';
 import { PortalProvider, usePortal } from './contexts/PortalContext';
+import {
+  ImpersonationProvider,
+  useImpersonation,
+  consumeImpersonationFromUrl,
+  getImpersonationToken,
+} from './contexts/ImpersonationContext';
+import ImpersonationBanner, { IMPERSONATION_BANNER_HEIGHT } from './components/ImpersonationBanner';
 import QueueReviewPanel from './components/QueueReviewPanel';
 import InvestorLoginPage from './components/InvestorLoginPage';
 import InvestmentAmountModal from './components/InvestmentAmountModal';
@@ -94,16 +101,27 @@ const defaultFilters = {
 
 
 function App() {
+  // Consume ?impersonate=<jwt> from the URL into sessionStorage BEFORE any
+  // token is read. Safe to call multiple times — it's a no-op after the URL
+  // param is cleared on the first pass.
+  consumeImpersonationFromUrl();
   return (
     <PortalProvider>
-      <AppAuth />
+      <ImpersonationProvider>
+        <ImpersonationBanner />
+        <AppAuth />
+      </ImpersonationProvider>
     </PortalProvider>
   );
 }
 
 function AppAuth() {
   const { portalMode, isInvestorPortal, isDenPortal } = usePortal();
-  const [authToken, setAuthTokenState] = useState(() => localStorage.getItem('pnthr_token'));
+  const { isImpersonating } = useImpersonation();
+  // Impersonation token (sessionStorage, per-tab) wins over the admin's own
+  // token (localStorage) whenever this tab is in a preview session. That
+  // keeps the admin's main tab working as admin in parallel.
+  const [authToken, setAuthTokenState] = useState(() => getImpersonationToken() || localStorage.getItem('pnthr_token'));
   const [currentUser, setCurrentUser] = useState(null); // { email, role, accountSize, defaultPage }
   const [authLoading, setAuthLoading] = useState(true);
   const [showWelcome, setShowWelcome] = useState(false);
@@ -112,13 +130,17 @@ function AppAuth() {
   useEffect(() => {
     // Any API call that gets a 401 will trigger this — clears session and shows login
     setOnUnauthorized(() => {
+      // Clear BOTH admin (localStorage) and impersonation (sessionStorage)
+      // tokens. If an impersonation token expires mid-session the 401
+      // handler runs here — clearing it drops the banner too.
       localStorage.removeItem('pnthr_token');
+      try { window.sessionStorage.removeItem('pnthr_impersonation_token'); } catch { /* ignore */ }
       clearAuthToken();
       setAuthTokenState(null);
       setCurrentUser(null);
     });
 
-    const token = localStorage.getItem('pnthr_token');
+    const token = getImpersonationToken() || localStorage.getItem('pnthr_token');
     if (!token) { setAuthLoading(false); return; }
     setAuthToken(token);
 
@@ -999,7 +1021,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   }
 
   return (
-    <div className="app">
+    <div className="app" style={isImpersonating ? { paddingTop: IMPERSONATION_BANNER_HEIGHT } : undefined}>
       <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
 
       <div className="content-wrapper">

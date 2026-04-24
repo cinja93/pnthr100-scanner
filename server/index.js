@@ -13,6 +13,7 @@ import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
 import { getApexResults, clearApexCache, getCachedTickerKillData, getCachedSignalStocks, triggerApexWarmup } from './apexService.js';
+import { impersonationListTargets, impersonationStart, impersonationStop } from './impersonationService.js';
 import {
   killPipelineHandler,
   positionsGetAll,
@@ -5066,6 +5067,13 @@ async function warmEtfCacheIfCold() {
 }
 
 // ── PNTHR's Pulse — Mission Control Dashboard ─────────────────────────────────
+// ── Admin impersonation (read-only, audit-logged, 30-min TTL) ──────────────
+// Lets an admin view the app exactly as a VIP member sees it — for support,
+// QA, and demos. See server/impersonationService.js for the guard rails.
+app.get ('/api/admin/impersonate/targets', authenticateJWT, impersonationListTargets);
+app.post('/api/admin/impersonate',         authenticateJWT, impersonationStart);
+app.post('/api/admin/impersonate/stop',    authenticateJWT, impersonationStop);
+
 app.get('/api/pulse', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');

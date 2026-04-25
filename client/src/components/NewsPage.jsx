@@ -259,7 +259,10 @@ export default function NewsPage() {
           (match) => {
             if (/Profit:|trade closed profitably/i.test(match)) return match;
             const inject = `<br>${direction} (trade closed profitably)<br><strong>Profit: +$${dollars} (+${pct}%)</strong>`;
-            return match.replace(/<\/p>/, `${inject}</p>`);
+            // Use a function callback so the `$` chars in the dollar amount
+            // aren't interpreted as regex backreferences (e.g. `$21.64` was
+            // becoming `1.64` because `$2` was treated as capture group 2).
+            return match.replace(/<\/p>/, () => `${inject}</p>`);
           }
         );
       }

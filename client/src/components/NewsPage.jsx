@@ -279,9 +279,14 @@ export default function NewsPage() {
           .replace(totwBlockRe, '')
           // Collapse the now-adjacent <hr><hr> left behind when TOTW was cut
           .replace(/(<hr\b[^>]*>)\s*<hr\b[^>]*>/g, '$1');
+        // Function callback so any `$N` inside totwBlock (e.g. the dollar
+        // amount in "+$21.64") isn't interpreted as a regex backreference.
+        // String-form replacement was injecting the second capture group's
+        // <hr> in the middle of the profit number, splitting "+$21.64" into
+        // "+ <hr> 1.64" and breaking the rendered profit line.
         const inserted = without.replace(
           /(<h2(?![^>]*pnthr-totw-heading)[^>]*>[\s\S]*?)(<hr\b[^>]*>|<h2(?![^>]*pnthr-totw-heading))/,
-          `$1${totwBlock}$2`
+          (_m, p1, p2) => `${p1}${totwBlock}${p2}`
         );
         if (inserted !== without) html = inserted;
       }

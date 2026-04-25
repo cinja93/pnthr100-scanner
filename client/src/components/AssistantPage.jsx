@@ -2990,6 +2990,13 @@ export default function AssistantPage({ onNavigate }) {
 
   const isFridayPreviewTime  = fridayAzMinOfDay != null && fridayAzMinOfDay >= 630 && fridayAzMinOfDay < 960;  // 10:30am–4:00pm
   const isFriday2pmReminders = fridayAzMinOfDay != null && fridayAzMinOfDay >= 840 && fridayAzMinOfDay < 1080; // 2:00pm–6:00pm
+  // The Friday-2pm reminder cards (Save Signal History, Update Perch) and
+  // the Friday-preview reminder (Run Weekly Orders Preview) are admin-only
+  // operational chores. They must NEVER render to a VIP, an investor, or
+  // an admin who is impersonating one of them — gate every reference to
+  // the time window through these flags.
+  const showFridayReminders = isAdmin && isFriday2pmReminders;
+  const showFridayPreview   = isAdmin && isFridayPreviewTime;
 
   // ── Partition Tasks ────────────────────────────────────────────────────────
 
@@ -3312,8 +3319,10 @@ export default function AssistantPage({ onNavigate }) {
             analyzeCtx={analyzeCtx}
           />
 
-          {/* Friday Run-Preview notification */}
-          {isFridayPreviewTime && (
+          {/* Friday Run-Preview notification — admin-only operational
+              prompt (running PNTHR Orders is a manager action, not a
+              VIP/investor concern). Gated by showFridayPreview. */}
+          {showFridayPreview && (
             <>
               <div style={s.sectionHeader}>
                 <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[1] }}>
@@ -3365,7 +3374,11 @@ export default function AssistantPage({ onNavigate }) {
           {/* P1: Critical */}
           {p1Tasks.length > 0 && (
             <>
-              {!isFridayPreviewTime && (
+              {/* Suppress the standard CRITICAL header only when the
+                  admin-only Friday preview block is actually rendering
+                  above. For non-admins (or impersonating sessions) we
+                  still want the header to show. */}
+              {!showFridayPreview && (
                 <div style={s.sectionHeader}>
                   <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[1] }}>
                     ● {PRIORITY_LABEL[1]} ({p1Count} open)
@@ -3383,8 +3396,10 @@ export default function AssistantPage({ onNavigate }) {
             </>
           )}
 
-          {/* Friday 2pm reminders: Save Signal History + Update Perch */}
-          {isFriday2pmReminders && (
+          {/* Friday 2pm reminders: Save Signal History + Update Perch.
+              Admin-only — gated by showFridayReminders so VIPs/investors
+              and impersonating-admin sessions never see these chores. */}
+          {showFridayReminders && (
             <>
               <div style={s.sectionHeader}>
                 <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[2] }}>
@@ -3460,7 +3475,11 @@ export default function AssistantPage({ onNavigate }) {
           {/* P2: Action */}
           {p2Tasks.length > 0 && (
             <>
-              {!isFriday2pmReminders && (
+              {/* Suppress this header only when the admin's Friday-reminder
+                  block is actually rendered above — for non-admins (or
+                  outside Friday 2pm) we still want the standard ACTION
+                  header to show. */}
+              {!showFridayReminders && (
                 <div style={s.sectionHeader}>
                   <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[2] }}>
                     ● {PRIORITY_LABEL[2]} ({p2Count} open)

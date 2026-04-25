@@ -139,9 +139,10 @@ async function getSectorBreakdown(db, weekOf) {
   }));
 }
 
-// Sector classification for rotation analysis
+// Sector classification for rotation analysis. Names MUST match the canonical
+// GICS strings stored in pnthr_kill_scores (see sectorUtils.normalizeSector).
 const DEFENSIVE_SECTORS = ['Utilities', 'Consumer Staples', 'Healthcare', 'Real Estate'];
-const CYCLICAL_SECTORS  = ['Technology', 'Consumer Discretionary', 'Industrials', 'Financials', 'Energy', 'Basic Materials', 'Communication'];
+const CYCLICAL_SECTORS  = ['Technology', 'Consumer Discretionary', 'Industrials', 'Financial Services', 'Energy', 'Basic Materials', 'Communication Services'];
 
 async function getSectorRotationData(db, weekOf) {
   // Get previous week's sector breakdown for comparison
@@ -190,7 +191,7 @@ function buildSectorRotationAnalysis(sectors, prevMap) {
     }
 
     rotationLines.push(
-      `${s.sector}: ${blPct}% long-leaning (${s.totalBL} long / ${s.totalSS} short)` +
+      `${s.sector}: ${blPct}% long-leaning (${s.totalBL} active long opportunities / ${s.totalSS} active short opportunities)` +
       (prevBlPct !== null ? ` | was ${prevBlPct}% last week` : '') +
       (shift ? ` | trend: ${shift}` : '')
     );
@@ -219,8 +220,8 @@ function buildSectorRotationAnalysis(sectors, prevMap) {
 
   return {
     rotationLines: rotationLines.join('\n'),
-    defensiveSummary: `Defensive sectors (Utilities, Staples, Healthcare, Real Estate): ${defPct}% long-leaning (${defensiveBL} long / ${defensiveSS} short)`,
-    cyclicalSummary: `Cyclical sectors (Tech, Discretionary, Industrials, Financials, Energy, Materials, Communication): ${cycPct}% long-leaning (${cyclicalBL} long / ${cyclicalSS} short)`,
+    defensiveSummary: `Defensive sectors (Utilities, Staples, Healthcare, Real Estate): ${defPct}% long-leaning (${defensiveBL} active long opportunities / ${defensiveSS} active short opportunities)`,
+    cyclicalSummary: `Cyclical sectors (Tech, Discretionary, Industrials, Financials, Energy, Materials, Communication): ${cycPct}% long-leaning (${cyclicalBL} active long opportunities / ${cyclicalSS} active short opportunities)`,
     rotationType,
   };
 }
@@ -474,25 +475,41 @@ By reading this newsletter, you acknowledge that you are solely responsible for 
 (c) 2026 PNTHR Funds. All rights reserved.`;
 
 function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, sectorRotation, upcomingEarnings, disclaimer }) {
-  // Format sector table for readability
+  // Regime-driven directional filter. In BULL we hide short data so Claude
+  // can't accidentally reference shorts; in BEAR we hide long data; in MIXED
+  // we keep both. See feedback_perch_regime_aware_content.md for the rule.
+  const isBull  = regime.regimeLabel === 'BULL';
+  const isBear  = regime.regimeLabel === 'BEAR';
+
+  // Format sector table for readability. Regime filter strips the irrelevant
+  // side so the LLM can't quote it.
   const sectorLines = sectors
     .filter(s => s.totalBL + s.totalSS > 0)
-    .map(s => `${s.sector}: ${s.totalBL} long / ${s.totalSS} short opportunities open${s.newBL || s.newSS ? ` (${s.newBL} new long, ${s.newSS} new short this week)` : ''} — ${s.lean} lean`)
+    .map(s => {
+      if (isBull) {
+        return `${s.sector}: ${s.totalBL} active long opportunities${s.newBL ? ` (${s.newBL} new this week)` : ''} — ${s.lean} lean`;
+      }
+      if (isBear) {
+        return `${s.sector}: ${s.totalSS} active short opportunities${s.newSS ? ` (${s.newSS} new this week)` : ''} — ${s.lean} lean`;
+      }
+      return `${s.sector}: ${s.totalBL} active long / ${s.totalSS} active short opportunities${s.newBL || s.newSS ? ` (${s.newBL} new long, ${s.newSS} new short this week)` : ''} — ${s.lean} lean`;
+    })
     .join('\n');
 
-  // Format top setups
-  const fmtLong  = top10Longs.slice(0, 5).map(s => `${s.ticker} (${s.sector ?? 'Unknown'}, $${s.currentPrice ?? 'N/A'})`).join(', ');
-  const fmtShort = top10Shorts.slice(0, 5).map(s => `${s.ticker} (${s.sector ?? 'Unknown'}, $${s.currentPrice ?? 'N/A'})`).join(', ');
+  // Format top setups. Regime filter: in BULL we hide shorts, in BEAR we hide longs.
+  const fmtLong  = isBear ? '' : top10Longs.slice(0, 5).map(s => `${s.ticker} (${s.sector ?? 'Unknown'}, $${s.currentPrice ?? 'N/A'})`).join(', ');
+  const fmtShort = isBull ? '' : top10Shorts.slice(0, 5).map(s => `${s.ticker} (${s.sector ?? 'Unknown'}, $${s.currentPrice ?? 'N/A'})`).join(', ');
 
-  // Format new signals by sector
+  // Format new signals by sector. Regime filter strips the off-trend side.
   const newSigLines = Object.entries(newSignals)
     .filter(([, v]) => v.newBL.length + v.newSS.length > 0)
     .map(([sec, v]) => {
       const parts = [];
-      if (v.newBL.length) parts.push(`${v.newBL.length} new long: ${v.newBL.join(', ')}`);
-      if (v.newSS.length) parts.push(`${v.newSS.length} new short: ${v.newSS.join(', ')}`);
+      if (v.newBL.length && !isBear) parts.push(`${v.newBL.length} new long: ${v.newBL.join(', ')}`);
+      if (v.newSS.length && !isBull) parts.push(`${v.newSS.length} new short: ${v.newSS.join(', ')}`);
+      if (parts.length === 0) return null;
       return `${sec}: ${parts.join(' | ')}`;
-    }).join('\n');
+    }).filter(Boolean).join('\n');
 
   // Format trade of week
   const totwSection = tradeOfWeek
@@ -545,23 +562,56 @@ ${trackRecord.isLoss ? 'NOTE: This is a LOSING trade. Frame as: "Not every call 
   })();
 
   const regimeDesc = regime.regimeLabel === 'BULL'
-    ? `BULL market: Both SPY (${regime.spy.position} trend, ${regime.spy.slope}) and QQQ (${regime.qqq.position} trend, ${regime.qqq.slope}) are in uptrends.`
+    ? `BULL market: Both SPY (${regime.spy.position} trend, ${regime.spy.slope}) and QQQ (${regime.qqq.position} trend, ${regime.qqq.slope}) are in uptrends. The dominant trend is UP. Trade with the trend.`
     : regime.regimeLabel === 'BEAR'
-    ? `BEAR market: Both SPY (${regime.spy.position} trend, ${regime.spy.slope}) and QQQ (${regime.qqq.position} trend, ${regime.qqq.slope}) are in downtrends.`
-    : `MIXED market: SPY is ${regime.spy.position} its trend (${regime.spy.slope}), QQQ is ${regime.qqq.position} its trend (${regime.qqq.slope}).`;
+    ? `BEAR market: Both SPY (${regime.spy.position} trend, ${regime.spy.slope}) and QQQ (${regime.qqq.position} trend, ${regime.qqq.slope}) are in downtrends. The dominant trend is DOWN. Trade with the trend.`
+    : `MIXED market: SPY is ${regime.spy.position} its trend (${regime.spy.slope}), QQQ is ${regime.qqq.position} its trend (${regime.qqq.slope}). Selectivity is required — the indexes do not agree.`;
+
+  // Regime-aware section instructions for sections 5 and 6 of the locked
+  // 9-section format. In BULL we don't discuss shorts at all; in BEAR we
+  // don't discuss longs. MIXED keeps both. See feedback memory.
+  const longSideInstruction = isBear
+    ? `## STOCKS TO WATCH: LONG SIDE — Replace the usual long picks with 1 short paragraph (3-5 sentences). The major indexes are in a clear downtrend right now, so we are not adding long positions this week. Explain in plain English why: when the broad market is trending down, individual long ideas tend to fight the tape; buying weakness because a stock looks cheap is the wrong instinct in this environment; the disciplined move is to wait until the major indexes turn back up before stepping in on the long side. Do NOT name any specific tickers. Do NOT use technical terms like "EMA", "moving average", "regime", or any signal codes.`
+    : `## STOCKS TO WATCH: LONG SIDE (top 3-5 long setups, brief plain-English thesis per stock)`;
+
+  const shortSideInstruction = isBull
+    ? `## STOCKS TO WATCH: SHORT SIDE — Replace the usual short picks with 1 short paragraph (3-5 sentences). The major indexes are in a clear uptrend right now, so we are not taking short positions this week. Explain in plain English why: when the broad market is trending up, shorting individual names tends to fight the tape; selling strong markets because they feel extended is the wrong instinct in this environment; the disciplined move is to wait until the major indexes turn back down before stepping in on the short side. Do NOT name any specific tickers. Do NOT define what shorting is. Do NOT use technical terms like "EMA", "moving average", "regime", or any signal codes.`
+    : `## STOCKS TO WATCH: SHORT SIDE (top 3-5 short setups, brief plain-English thesis per stock)`;
+
+  // Regime stats line — strip the off-trend counts so the LLM can't quote them.
+  const regimeStatsLine = isBull
+    ? `Active long opportunities open: ${regime.blCount} (${regime.newBlCount} new this week)`
+    : isBear
+    ? `Active short opportunities open: ${regime.ssCount} (${regime.newSsCount} new this week)`
+    : `Active long opportunities open: ${regime.blCount} (${regime.newBlCount} new this week) | Active short opportunities open: ${regime.ssCount} (${regime.newSsCount} new this week)`;
+
+  const prevWeekLine = regime.prevWeek
+    ? (isBull
+        ? `Previous week: ${regime.prevWeek.blCount} active long (${regime.prevWeek.newBlCount} new)`
+        : isBear
+        ? `Previous week: ${regime.prevWeek.ssCount} active short (${regime.prevWeek.newSsCount} new)`
+        : `Previous week: ${regime.prevWeek.blCount} active long / ${regime.prevWeek.ssCount} active short (${regime.prevWeek.newBlCount} new long, ${regime.prevWeek.newSsCount} new short)`)
+    : '';
 
   return `Write this week's PNTHR's Perch newsletter for the week of ${weekOf}.
 
 Use the data below to draw conclusions. Never expose raw data, signal codes, or scoring mechanics to the reader.
 
+DATA LABEL GUARDRAIL — read carefully before writing:
+- "active long opportunities" / "active short opportunities" = total positions still being tracked right now (a stock that the model flagged weeks ago and is still in the watchlist counts here).
+- "new this week" = opportunities that appeared in the last 7 days. These are the only ones you may describe as "new", "fresh", or "this week".
+- Do NOT call an "active" count "new". Example: "22 active long opportunities" must NEVER be paraphrased as "22 new long opportunities this week".
+- When citing counts, use the exact phrasing from the data so the reader gets the right meaning.
+
 MARKET REGIME:
 ${regimeDesc}
-Total long opportunities open: ${regime.blCount} | Total short opportunities open: ${regime.ssCount}
-New long opportunities this week: ${regime.newBlCount} | New short opportunities this week: ${regime.newSsCount}
+${regimeStatsLine}
 ${regime.vix ? `VIX: ${regime.vix}` : ''}
-${regime.prevWeek ? `Previous week: ${regime.prevWeek.blCount} long / ${regime.prevWeek.ssCount} short open (${regime.prevWeek.newBlCount} new long, ${regime.prevWeek.newSsCount} new short)` : ''}
+${prevWeekLine}
 
-SECTOR BREAKDOWN (long vs short opportunities, new opportunities this week):
+${isBull ? 'REGIME-DRIVEN CONTENT RULE: This is a BULL regime. Do NOT discuss shorts, short setups, short tickers, or "what to short" anywhere in this issue. The short-side data has been intentionally omitted from the inputs above. Section 6 has been replaced with an educational paragraph about not fighting the trend (see section 6 instructions below).' : ''}${isBear ? 'REGIME-DRIVEN CONTENT RULE: This is a BEAR regime. Do NOT discuss longs, long setups, long tickers, or "what to buy" anywhere in this issue. The long-side data has been intentionally omitted from the inputs above. Section 5 has been replaced with an educational paragraph about not fighting the trend (see section 5 instructions below).' : ''}${!isBull && !isBear ? 'REGIME-DRIVEN CONTENT RULE: This is a MIXED regime. Cover both sides but frame the week as one requiring SELECTIVITY — the indexes do not agree, so the reader should be more discriminating than usual.' : ''}
+
+SECTOR BREAKDOWN (active opportunities by sector, plus new this week):
 ${sectorLines || 'No sector data available.'}
 
 SECTOR ROTATION ANALYSIS (week-over-week changes, defensive vs cyclical flow):
@@ -573,11 +623,11 @@ ${sectorRotation.cyclicalSummary}
 Per-sector detail with week-over-week trend:
 ${sectorRotation.rotationLines}` : 'No rotation data available.'}
 
-TOP LONG SETUPS (highest-conviction opportunities on the long side):
-${fmtLong || 'No long setups this week.'}
+${isBear ? 'TOP LONG SETUPS: REGIME-OMITTED. Bear regime — long-side setups intentionally suppressed.' : `TOP LONG SETUPS (highest-conviction opportunities on the long side):
+${fmtLong || 'No long setups this week.'}`}
 
-TOP SHORT SETUPS (highest-conviction opportunities on the short side):
-${fmtShort || 'No short setups this week.'}
+${isBull ? 'TOP SHORT SETUPS: REGIME-OMITTED. Bull regime — short-side setups intentionally suppressed.' : `TOP SHORT SETUPS (highest-conviction opportunities on the short side):
+${fmtShort || 'No short setups this week.'}`}
 
 NEW OPPORTUNITIES THIS WEEK (fresh setups, by sector):
 ${newSigLines || 'No new setups this week.'}
@@ -600,8 +650,8 @@ Use ## for each section heading exactly as shown. The nine sections below are th
    Use "Long exit" when the trade direction from the data is long, "Short cover" when the direction is short. Use the exact profit dollar and % numbers from the data above, rounded to two decimals. Skip this section entirely ONLY if the TRADE OF THE WEEK data above literally says "No confirmed exits this week. OMIT".
 3. ## SECTOR ROTATION (2-3 paragraphs analyzing how capital is flowing between sectors. Use the rotation data to tell the story: which sectors are getting stronger/weaker, is money rotating into defensive names or cyclical names, what does that say about institutional sentiment and risk appetite? Connect the rotation to macro context like tariffs, trade policy, interest rates, earnings, or geopolitical uncertainty. Be specific about which sectors are improving/deteriorating vs last week. This section should feel like institutional-grade market intelligence. NOTE: The frontend automatically renders a week-over-week sector-rotation bar chart at the end of this section — do NOT describe it as "above" or "below" or embed any chart yourself.)
 4. ## WHERE THE MONEY IS MOVING (3-4 paragraphs, deeper dive into specific sector opportunities and stock-level themes)
-5. ## STOCKS TO WATCH: LONG SIDE (top 3-5 long setups, brief thesis per stock)
-6. ## STOCKS TO WATCH: SHORT SIDE (top 3-5 short setups, include a sentence explaining short selling for unfamiliar readers)
+5. ${longSideInstruction}
+6. ${shortSideInstruction}
 7. ## FROM THE ARCHIVES (ONLY if data provided above -- 2 sentences max)
 8. ## THE WEEK AHEAD (1-2 forward-looking paragraphs. If PNTHR Calendar earnings data was provided above, explicitly call out the most notable companies reporting in the upcoming Mon–Fri window and what to watch for — only reference names from the PNTHR Calendar earnings list, NEVER from external sources or memory. If the data above says no companies are scheduled, say so plainly and pivot to what the reader should watch instead. Close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott.)
 9. ## IMPORTANT DISCLOSURES (REQUIRED final section. Emit this EXACT block verbatim — a horizontal rule, then the heading, then the body below. No paraphrasing, no summarizing, no omissions. This section is legally required on every issue.):

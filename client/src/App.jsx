@@ -1108,8 +1108,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           </>
         )}
 
-        {/* ── IBKR Discrepancy Banners — interactive fix flow, persistent per session ── */}
-        {visibleDiscrepancies.length > 0 && (
+        {/* ── IBKR Discrepancy Banners — admin-only (broker reconciliation tooling) ── */}
+        {isAdmin && visibleDiscrepancies.length > 0 && (
           <>
             {/* Header bar when 3+ issues — shows count + dismiss all */}
             {visibleDiscrepancies.length >= 3 && (

@@ -1443,7 +1443,7 @@ function RecentFillsSection({ fills, onNavigate }) {
           ⚡ RECENT FILLS
         </span>
         <span style={{ fontSize: 11, color: '#555' }}>
-          ({visible.length} position{visible.length !== 1 ? 's' : ''} auto-closed by IBKR)
+          ({visible.length} position{visible.length !== 1 ? 's' : ''} auto-closed by broker)
         </span>
       </div>
       {expanded && visible.map(fill => {
@@ -3657,13 +3657,15 @@ export default function AssistantPage({ onNavigate }) {
         </div>
 
         <div style={{ padding: '8px 10px 4px' }}>
-          {/* Today's IBKR Trades */}
-          <TradesTodaySection
-            trades={ibkrTrades}
-            loading={ibkrTradesLoading}
-            ibkrConnected={ibkrConnected}
-            onNavigate={onNavigate}
-          />
+          {/* Today's IBKR Trades — admin-only (broker fill reconciliation) */}
+          {isAdmin && (
+            <TradesTodaySection
+              trades={ibkrTrades}
+              loading={ibkrTradesLoading}
+              ibkrConnected={ibkrConnected}
+              onNavigate={onNavigate}
+            />
+          )}
 
           {/* Recent Fills */}
           <RecentFillsSection fills={recentFills} onNavigate={onNavigate} />

@@ -983,13 +983,16 @@ export async function getStopSyncRows(positions, userId) {
  * Pre-seeded day-of-week checklists.
  * dayOfWeek: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, null=daily
  */
+// `adminOnly: true` items are broker/operational tasks that must be hidden
+// from non-admin (investor/VIP) users — we don't expose the broker name or
+// admin tooling.
 const BUILT_IN_ROUTINES = [
   // ── Daily ──
-  { id: 'daily_ibkr_check',   dayOfWeek: null, label: 'Review IBKR overnight — any exits?' },
+  { id: 'daily_ibkr_check',   dayOfWeek: null, label: 'Review IBKR overnight — any exits?', adminOnly: true },
   { id: 'daily_record_exits', dayOfWeek: null, label: 'Record any exits in Command' },
 
   // ── Monday ──
-  { id: 'mon_stop_sync',      dayOfWeek: 1, label: 'Run Monday Stop Sync — update IBKR stops to match PNTHR' },
+  { id: 'mon_stop_sync',      dayOfWeek: 1, label: 'Run Monday Stop Sync — update IBKR stops to match PNTHR', adminOnly: true },
   // mon_weekly_plan, mon_sector_review, mon_earnings_scan → computed smart routines (see buildRoutineContext)
   { id: 'mon_heat_check',     dayOfWeek: 1, label: 'Check portfolio heat — are you within 15% cap?' },
   { id: 'mon_regime',         dayOfWeek: 1, label: 'Check market regime — SPY/QQQ above or below 21W EMA?' },
@@ -1003,7 +1006,7 @@ const BUILT_IN_ROUTINES = [
   { id: 'fri_kill_refresh',   dayOfWeek: 5, label: 'Friday Kill refresh — new pipeline running at 4:15 PM ET' },
   { id: 'fri_week_review',    dayOfWeek: 5, label: 'End-of-week review: wins, losses, and lessons' },
   { id: 'fri_journal',        dayOfWeek: 5, label: 'Update journal discipline scores for closed trades' },
-  { id: 'fri_ibkr_token',     dayOfWeek: 5, label: 'Check IBKR bridge token expiry — renew if < 2 weeks' },
+  { id: 'fri_ibkr_token',     dayOfWeek: 5, label: 'Check IBKR bridge token expiry — renew if < 2 weeks', adminOnly: true },
 ];
 
 // ── Smart Routine Context ─────────────────────────────────────────────────────
@@ -1469,9 +1472,10 @@ export async function getPositionHealthAlerts(userId) {
  * @param {number}  dayOfWeek  0=Sun..6=Sat
  * @param {object}  context    optional — from buildRoutineContext()
  */
-export function getRoutineTasks(dayOfWeek, context = {}) {
+export function getRoutineTasks(dayOfWeek, context = {}, { isAdmin = false } = {}) {
   const base = BUILT_IN_ROUTINES.filter(r =>
-    r.dayOfWeek === null || r.dayOfWeek === dayOfWeek
+    (r.dayOfWeek === null || r.dayOfWeek === dayOfWeek) &&
+    (isAdmin || !r.adminOnly)
   );
 
   // Inject smart Monday routines after mon_stop_sync

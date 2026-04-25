@@ -5938,7 +5938,8 @@ app.get('/api/assistant/routines', async (req, res) => {
       console.warn('[assistant/routines] context build failed:', ctxErr.message);
     }
 
-    const routines = getRoutineTasks(dow, context);
+    const isAdmin = req.user?.role === 'admin';
+    const routines = getRoutineTasks(dow, context, { isAdmin });
     res.json({ routines, dayOfWeek: dow });
   } catch (err) {
     console.error('[assistant/routines]', err.message);

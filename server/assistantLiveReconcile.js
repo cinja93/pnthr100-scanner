@@ -160,7 +160,8 @@ async function fetchLivePrices(tickers) {
   const out = {};
   if (!tickers.length || !process.env.FMP_API_KEY) return out;
   try {
-    const url = `https://financialmodelingprep.com/stable/quote?symbol=${tickers.join(',')}&apikey=${process.env.FMP_API_KEY}`;
+    // /stable/quote silently returns [] for multi-symbol; /api/v3/quote/{symbols} works
+    const url = `https://financialmodelingprep.com/api/v3/quote/${tickers.join(',')}?apikey=${process.env.FMP_API_KEY}`;
     const r   = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!r.ok) return out;
     const d = await r.json();

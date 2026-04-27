@@ -39,13 +39,16 @@ async function fmpGet(path, params = {}) {
   return res.json();
 }
 
-// Batch quotes for up to 500 tickers per call
+// Batch quotes for up to 500 tickers per call.
+// Uses /api/v3/quote/{symbols} (path-based multi-symbol) — the /stable/quote
+// endpoint silently returns [] when given a comma-separated list, so multi-symbol
+// queries against it had been losing every price (= 0 in caller) for some time.
 async function fetchQuotes(tickers) {
   const results = {};
   for (let i = 0; i < tickers.length; i += 500) {
     const batch = tickers.slice(i, i + 500);
     try {
-      const data = await fmpGet('/stable/quote', { symbol: batch.join(',') });
+      const data = await fmpGet(`/api/v3/quote/${batch.join(',')}`);
       if (Array.isArray(data)) {
         for (const q of data) {
           results[q.symbol] = {

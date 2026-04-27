@@ -5836,7 +5836,8 @@ app.get('/api/assistant/tasks', async (req, res) => {
     if (tickers.length) {
       try {
         const FMP_KEY = process.env.FMP_API_KEY;
-        const qUrl = `https://financialmodelingprep.com/stable/quote?symbol=${tickers.join(',')}&apikey=${FMP_KEY}`;
+        // /stable/quote silently returns [] for multi-symbol; /api/v3/quote/{symbols} works
+        const qUrl = `https://financialmodelingprep.com/api/v3/quote/${tickers.join(',')}?apikey=${FMP_KEY}`;
         const qRes = await fetch(qUrl, { signal: AbortSignal.timeout(8000) });
         if (qRes.ok) {
           const qData = await qRes.json();
@@ -6210,7 +6211,8 @@ app.get('/api/assistant/headlines', async (req, res) => {
     const live = {};
     if (tickers.length) {
       try {
-        const qRes = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${tickers.join(',')}&apikey=${process.env.FMP_API_KEY}`, { signal: AbortSignal.timeout(8000) });
+        // /stable/quote silently returns [] for multi-symbol; /api/v3/quote/{symbols} works
+        const qRes = await fetch(`https://financialmodelingprep.com/api/v3/quote/${tickers.join(',')}?apikey=${process.env.FMP_API_KEY}`, { signal: AbortSignal.timeout(8000) });
         if (qRes.ok) { const d = await qRes.json(); if (Array.isArray(d)) for (const q of d) live[q.symbol] = q.price; }
       } catch { /* non-fatal */ }
     }

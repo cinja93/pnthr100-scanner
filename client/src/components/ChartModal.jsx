@@ -986,8 +986,45 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
             })()}
             {isAuthenticated && (
               <>
-                {/* ── ANALYZE button ── */}
+                {/* ── ANALYZE button ──
+                    Pre-trade analysis blends three data sources (chart-computed,
+                    Kill pipeline, live context). The Kill pipeline only carries
+                    data for stocks with an active BL/SS signal ≤12 weeks old.
+                    Running the score on a stock without a current signal produces
+                    a misleading half-scored result with cascading "data pipeline
+                    failure" labels — the panel can't compute Signal Quality,
+                    Kill Context, Freshness, Risk/Reward, or Prey Presence
+                    because there's nothing to score against.
+                    Gate the button: only enabled when the chart's state machine
+                    detects an active BL or SS signal. Otherwise show a disabled
+                    button explaining honestly why analysis is unavailable. */}
                 {analyzeContext && (() => {
+                  const hasActiveSignal = currentSignal === 'BL' || currentSignal === 'SS';
+                  if (!hasActiveSignal) {
+                    // Chart loaded with no actionable signal (BE/SE state, or never had one in window).
+                    // Hide the button entirely while the chart is still loading (currentSignal === null
+                    // pre-load is indistinguishable from "no signal" — wait until weekly bars exist).
+                    if (allWeeklyData.length === 0) return null;
+                    return (
+                      <button
+                        disabled
+                        title="No active PNTHR signal. Pre-trade analysis requires a current BL or SS setup — this stock is in BE/SE state or has no recent signal cross."
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 5,
+                          padding: '5px 12px',
+                          backgroundColor: 'rgba(0,0,0,0.2)',
+                          border: '1.5px solid #444',
+                          borderRadius: 5, color: '#888', fontSize: 11, fontWeight: 800,
+                          cursor: 'not-allowed', fontFamily: 'monospace', letterSpacing: '0.04em',
+                        }}
+                      >
+                        ANALYZE
+                        <span style={{ backgroundColor: '#444', color: '#888', padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 700 }}>
+                          NO SIGNAL
+                        </span>
+                      </button>
+                    );
+                  }
                   const isETFStock = enrichedStock?.isETF || enrichedStock?.type === 'etf'
                     || isEtfTicker(enrichedStock?.ticker) || isClassifiedETF(enrichedStock?.ticker);
                   const ar = isETFStock

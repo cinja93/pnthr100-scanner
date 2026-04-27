@@ -663,12 +663,16 @@ export async function regimeHandler(req, res) {
       const spyEma21  = spyEma?.current || null;   // null if FMP failed — do NOT default to 0
       const qqqEma21  = qqqEma?.current || null;
 
-      // If FMP EMA fetch failed, fall back to stored Friday boolean (stale but correct direction)
-      // Never use 0 as a fallback — price > 0 always, so EMA=0 would always say "above"
-      const spyPos = spyEma21 ? (spyPrice >= spyEma21 ? 'above' : 'below')
-                              : (latest?.spyAboveEma != null ? (latest.spyAboveEma ? 'above' : 'below') : null);
-      const qqqPos = qqqEma21 ? (qqqPrice >= qqqEma21 ? 'above' : 'below')
-                              : (latest?.qqqAboveEma != null ? (latest.qqqAboveEma ? 'above' : 'below') : null);
+      // Live position requires BOTH a real price AND a real EMA. If either is
+      // missing/zero (FMP quote or EMA call failed), fall back to the stored
+      // Friday boolean — which is stale but at least directionally correct.
+      // If both sources are missing, return null so the client surfaces ERROR
+      // instead of silently lying (per Data Integrity Rules — ERROR not UNKNOWN).
+      const fridayPos = (b) => b == null ? null : (b ? 'above' : 'below');
+      const livePos = (price, ema) => (price && ema) ? (price >= ema ? 'above' : 'below') : null;
+
+      const spyPos = livePos(spyPrice, spyEma21) ?? fridayPos(latest?.spyAboveEma);
+      const qqqPos = livePos(qqqPrice, qqqEma21) ?? fridayPos(latest?.qqqAboveEma);
 
       console.log(`[REGIME] SPY price=${spyPrice} ema21=${spyEma21} pos=${spyPos} | QQQ price=${qqqPrice} ema21=${qqqEma21} pos=${qqqPos}`);
 

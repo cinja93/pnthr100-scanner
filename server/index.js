@@ -2576,9 +2576,35 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
     for (const ip of ibkrPositions) {
       if (ip.symbol) ibkrByTicker[ip.symbol.toUpperCase()] = ip;
     }
-    const ibkrStopByTicker = {};
+    // Group ALL stops per ticker — a ticker can legitimately have multiple
+    // stop orders open simultaneously: one protective stop (SELL on long,
+    // BUY on short) plus 1-4 pyramid ratchet entries (BUY STP on long for
+    // L2/L3/L4/L5 breakouts, SELL STP on short for breakdown adds).
+    // The previous map-by-ticker-with-overwrite collapsed these into a single
+    // entry — last write wins — which made any pyramid trigger appear as a
+    // "STOP MISMATCH" against the protective-stop price stored in Command.
+    const ibkrStopsByTicker = {};
     for (const s of ibkrStops) {
-      if (s.symbol) ibkrStopByTicker[s.symbol.toUpperCase()] = s;
+      if (!s.symbol) continue;
+      const key = s.symbol.toUpperCase();
+      if (!ibkrStopsByTicker[key]) ibkrStopsByTicker[key] = [];
+      ibkrStopsByTicker[key].push(s);
+    }
+    // Helper: a stop is "protective" if its action is opposite the position
+    // direction (LONG → SELL stop = exit; SHORT → BUY stop = cover).
+    // A stop on the SAME side as direction is a pyramid ratchet entry.
+    function classifyTickerStops(ticker, direction) {
+      const stops = ibkrStopsByTicker[ticker] || [];
+      const dirUp = (direction || '').toUpperCase();
+      const protectiveSide = dirUp === 'LONG' ? 'SELL' : dirUp === 'SHORT' ? 'BUY' : null;
+      const pyramidSide    = dirUp === 'LONG' ? 'BUY'  : dirUp === 'SHORT' ? 'SELL' : null;
+      const protective = protectiveSide
+        ? stops.filter(s => (s.action || '').toUpperCase() === protectiveSide)
+        : stops;
+      const pyramids = pyramidSide
+        ? stops.filter(s => (s.action || '').toUpperCase() === pyramidSide)
+        : [];
+      return { protective, pyramids };
     }
     const pnthrByTicker = {};
     for (const pp of pnthrPositions) {
@@ -2700,63 +2726,64 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
         }
       }
 
+      // D + E. Stop reconciliation
+      //   - Protective stops (action opposite to direction) compare against Command stop.
+      //   - Pyramid ratchet entries (action same as direction) emit one INFO entry each;
+      //     a position can have 1-4 of them open at once for L2/L3/L4/L5.
+      //   - Order TYPE (STP vs STP LMT) is irrelevant to classification — only ACTION
+      //     vs direction matters. Earlier code required STP LMT for pyramid recognition,
+      //     which broke when users switched ratchets to plain STP for guaranteed fills.
+      const { protective, pyramids } = classifyTickerStops(ticker, direction);
+
       // D. Stop missing in Command
       if (!p.stopPrice || +p.stopPrice === 0) {
+        const firstProtective = protective[0];
         discrepancies.push({
           type: 'STOP_MISSING',
           severity: 'CRITICAL',
           ticker,
           positionId,
           direction,
-          ibkrStop: ibkrStopByTicker[ticker]?.stopPrice ? +ibkrStopByTicker[ticker].stopPrice : null,
+          ibkrStop: firstProtective?.stopPrice ? +firstProtective.stopPrice : null,
         });
-      } else {
-        // E. Stop mismatch / pyramid trigger
-        // Distinguish protective stops from pre-placed pyramid breakout orders.
-        //   Pyramid (strategy add-on, NOT a mismatch):
-        //     - LONG  position + BUY  STP LMT  → breakout add at price ABOVE current
-        //     - SHORT position + SELL STP LMT  → breakdown add at price BELOW current
-        //   Anything else that's an STP/STP LMT is a protective stop — flag mismatches.
-        const ibkrStop = ibkrStopByTicker[ticker];
-        if (ibkrStop?.stopPrice) {
-          const orderAction = (ibkrStop.action    || '').toUpperCase();
-          const orderType   = (ibkrStop.orderType || '').toUpperCase();
-          const dirUpper    = (direction          || '').toUpperCase();
-          const isPyramid   = orderType === 'STP LMT' && (
-            (dirUpper === 'LONG'  && orderAction === 'BUY') ||
-            (dirUpper === 'SHORT' && orderAction === 'SELL')
-          );
-
-          if (isPyramid) {
-            // Informational — a pre-placed pyramid trigger, not a mismatch.
-            discrepancies.push({
-              type: 'PYRAMID_TRIGGER',
-              severity: 'INFO',
-              ticker,
-              positionId,
-              direction,
-              ibkrStop:    +(+ibkrStop.stopPrice).toFixed(2),
-              ibkrAction:  orderAction,
-              ibkrOrderType: orderType,
-            });
-          } else {
-            const pStop = +p.stopPrice;
-            const iStop = +ibkrStop.stopPrice;
-            const stopDiffPct = Math.abs(pStop - iStop) / pStop;
-            if (stopDiffPct >= 0.005) {
-              discrepancies.push({
-                type: 'STOP_MISMATCH',
-                severity: 'HIGH',
-                ticker,
-                positionId,
-                direction,
-                pnthrStop: +pStop.toFixed(2),
-                ibkrStop:  +iStop.toFixed(2),
-                diff:      +(pStop - iStop).toFixed(2),
-              });
-            }
-          }
+      } else if (protective.length > 0) {
+        // E1. Stop mismatch — compare Command's stop against the protective IBKR stop.
+        //     If multiple protective stops exist (rare, usually a config error), use the
+        //     one closest to Command's stop and flag the multiplicity separately.
+        const pStop = +p.stopPrice;
+        const closest = protective.reduce(
+          (best, s) => Math.abs(+s.stopPrice - pStop) < Math.abs(+best.stopPrice - pStop) ? s : best,
+          protective[0]
+        );
+        const iStop = +closest.stopPrice;
+        const stopDiffPct = Math.abs(pStop - iStop) / pStop;
+        if (stopDiffPct >= 0.005) {
+          discrepancies.push({
+            type: 'STOP_MISMATCH',
+            severity: 'HIGH',
+            ticker,
+            positionId,
+            direction,
+            pnthrStop: +pStop.toFixed(2),
+            ibkrStop:  +iStop.toFixed(2),
+            diff:      +(pStop - iStop).toFixed(2),
+          });
         }
+      }
+
+      // E2. Pyramid ratchet triggers (BUY STP on long, SELL STP on short).
+      //     Emit one INFO entry per ratchet so the UI can list them all.
+      for (const py of pyramids) {
+        discrepancies.push({
+          type: 'PYRAMID_TRIGGER',
+          severity: 'INFO',
+          ticker,
+          positionId,
+          direction,
+          ibkrStop:      +(+py.stopPrice).toFixed(2),
+          ibkrAction:    (py.action    || '').toUpperCase(),
+          ibkrOrderType: (py.orderType || '').toUpperCase(),
+        });
       }
     }
 

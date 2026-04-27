@@ -28,6 +28,7 @@ import { runFridayKillPipeline } from './fridayPipeline.js';
 import { runOrdersPipeline, runOrdersDailyUpdate, ordersGetLatest, ordersGetGateLog, ordersGetHistory } from './ordersPipeline.js';
 import { getKillTestSettings, saveKillTestSettings } from './killTestSettings.js';
 import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
+import { runDailySignalJob } from './dailySignalJob.js';
 import { killTestMonthlyGet, killTestMetricsGet, killTestMonthlyGenerate, generateMonthlySnapshots } from './killTestMonthly.js';
 import {
   checkCaseStudyEntries,
@@ -4737,6 +4738,31 @@ cron.schedule('30 16 * * 1-5', async () => {
     console.error('[KillTest Daily] Failed:', err.message);
   }
 }, { timezone: 'America/New_York' });
+
+// ── Cron: daily signal snapshot Mon–Fri at 5:05pm ET ────────────────────────
+// Recomputes BL/SS state for the full 679-stock universe against today's
+// developing weekly bar and writes pnthr_daily_signals + pnthr_daily_pulse_snapshot.
+// Powers the "Triggered Today" feature and the Pulse dial counts.
+// 5:05pm leaves a 35-minute buffer after market close (4:00pm ET) for FMP data
+// to settle, and runs after the 4:30pm KillTest job + 4:40pm Orders Daily.
+cron.schedule('5 17 * * 1-5', async () => {
+  try {
+    await runDailySignalJob();
+  } catch (err) {
+    console.error('[dailySignalJob] Failed:', err.message);
+  }
+}, { timezone: 'America/New_York' });
+
+// POST /api/admin/run-daily-signal-job — manual trigger (per dailySignalJob.js header).
+// Useful for backfilling immediately after deploy without waiting for the 5:05pm cron.
+app.post('/api/admin/run-daily-signal-job', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    runDailySignalJob().catch(err => console.error('[dailySignalJob] Manual run failed:', err.message));
+    res.json({ ok: true, message: 'Daily signal job started — check server logs for completion.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── Cron: auto-generate newsletter every Friday at 5pm ET ───────────────────
 // Uses perchService (single source of truth — same generator the admin UI's

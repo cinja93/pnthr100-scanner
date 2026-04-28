@@ -452,7 +452,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [dayTrades, setDayTrades] = useState([]);
   const [dayTradesLoading, setDayTradesLoading] = useState(false);
   const [archiveTab, setArchiveTab] = useState(new Date().getFullYear().toString()); // default to current year
-  const [backtestTier, setBacktestTier] = useState('wagyu'); // v21 per-tier: filet|porterhouse|wagyu
+  const [backtestTier, setBacktestTier] = useState('wagyu'); // v5 per-tier: filet|porterhouse|wagyu
   const [backtestYears, setBacktestYears] = useState([]); // [{year, count}]
   const [backtestTrades, setBacktestTrades] = useState([]);
   const [backtestSummary, setBacktestSummary] = useState(null);
@@ -1271,9 +1271,11 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
 
     // $10M demo fund metrics — aggregate NAV is Net-of-fees (Wagyu Class: 2% mgmt + 20% perf alloc,
     // reducing to 15% after 36 months, quarterly non-cumulative per PPM Sec. 4.1-4.3).
-    // Source: pnthr_bt_pyramid_nav_1m_daily_nav_mtm_v21_net_recomputed (1,713 daily docs, scaled 10x)
-    // via scripts_den/rebuild_demo_nav_net.js. endNav $57,841,892 ÷ 10 = $5.78M and matches v5
-    // Wagyu Net ending equity. winRate 51.0% matches v5 page 22 "Win Rate (Combined)" exactly.
+    // Underlying data source: the MongoDB collection that backs the v5 IR PDF
+    // (pnthr_bt_pyramid_nav_1m_daily_nav_mtm_v21_net_recomputed — collection name is the
+    // physical container; the v5 IR was published off this exact 1,713 daily-doc series).
+    // endNav $57,841,892 ÷ 10 = $5.78M matches v5 Wagyu Net ending equity.
+    // winRate 51.0% matches v5 page 22 "Win Rate (Combined)" exactly.
     // Per-trade journal entries remain Gross (fees are portfolio-level, not trade-level).
     const DEMO_5Y = { startNav: '$10,000,000', endNav: '$57,841,892', totalReturn: '+478.4%', trades: '2,614', winRate: '51.0%', commissions: '$417,936', avgDiscipline: '96.1' };
     const DEMO_LF = { startNav: '$10,000,000', endNav: '$11,465,420', totalReturn: '+14.7%',  trades: '312',   winRate: '48.4%', commissions: '$40,858', avgDiscipline: '96.1' };
@@ -1535,7 +1537,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
       {/* ── Tab Row: TIER selector | TEST DATA | Year+Chart boxes | CUMULATIVE | RETURN CALCULATOR ── */}
       {isAdmin && (
         <div style={{ padding: '0 24px 12px', display: 'flex', gap: 8, alignItems: 'stretch', flexWrap: 'wrap' }}>
-          {/* v21 per-tier NAV selector — Filet $100K / Porterhouse $500K / Wagyu $1M */}
+          {/* v5 per-tier NAV selector — Filet $100K / Porterhouse $500K / Wagyu $1M */}
           <div
             title="Select NAV tier. Filet $100K-$499K (30%/25%), Porterhouse $500K-$999K (25%/20%), Wagyu $1M+ (20%/15%). All 3 tiers are back-tested independently; share count and fee schedule differ per PPM sec. 4.1-4.3."
             style={{ display: 'flex', alignItems: 'stretch', border: '1px solid #333', borderRadius: 6, overflow: 'hidden', background: '#0a0a0a' }}

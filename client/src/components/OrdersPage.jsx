@@ -454,50 +454,68 @@ const SS_BACKTEST = {
   ],
 };
 
-// ── Hedge Fund Metrics — v21 canonical Wagyu ($1M tier) Gross, Jun 2019 -> Apr 2026 (6.85 years) ──
-// COMBINED uses Gross MTM daily NAV curve (pre-fund-fee, post-transaction-cost); matches published
-// Wagyu Gross (Sharpe 2.59 / Sortino 4.72 / MaxDD -8.51%). BL_HEDGE / SS_HEDGE are realized-Gross
-// per-direction breakouts from pnthr_bt_pyramid_nav_1m_trade_log (fees are portfolio-level per
-// PPM Sec. 4.1-4.3 and do not cleanly decompose by direction).
-// Source: scripts_den/compute_per_direction_metrics.js run on 2026-04-21.
+// ── Hedge Fund Metrics — v5 canonical Wagyu ($1M tier), Jun 2019 -> Apr 2026 (6.82 years) ──
+// Source of truth: PNTHR_Pyramid_IR_Wagyu_1m_v5.pdf (2026-04-26).
+//
+// We display three distinct number sets — they are NOT redundant:
+//   COMB         = NET MTM (Wagyu Class fees applied) — v5 pages 4, 22, 23 (NET).
+//                  This is the headline / hero number — what an investor experiences.
+//   COMB_GROSS   = GROSS MTM (pre-fund-fee, post-transaction-cost) — v5 pages 4, 5, 22 (GROSS).
+//                  Used only for the "Gross vs Net — Fee Schedule Impact" comparison.
+//   COMB_REAL    = Realized Pre-Fund-Fees (closed-trade P&L only) — v5 page 9 COMBINED.
+//                  Used for the per-direction BL/SS breakdown table (only path where
+//                  per-direction numbers are publishable; fees are portfolio-level per
+//                  PPM Sec. 4.1-4.3 and do not cleanly decompose by direction).
+// BL_HEDGE / SS_HEDGE come from v5 page 9 "Strategy Metrics by Direction (Pre-Fund-Fees)".
 
 const BL_HEDGE = {
-  // BL-only realized Gross from v21 Wagyu trade log (2,457 trades)
-  cagr: 37.97, sharpe: 3.19, sortino: 85.06,
-  maxDrawdown: 0.91, maxDDPeriod: '2019-09 to 2019-10',
-  calmar: 41.74, profitFactor: 10.33,
-  winRate: 51.2,   // BL wins 1257 / (1257 + 1200) trade-level
-  bestMonth: 12.56, bestMonthLabel: '2021-01',
-  worstMonth: -0.85, worstMonthLabel: '2019-10',
-  positiveMonths: 69, totalMonths: 83,
-  positiveMonthsPct: 83.1,
-  avgMonthlyReturn: 2.47, monthlyStdDev: 2.82,
+  // BL realized pre-fund-fees — v5 page 9 BL (LONGS) column
+  cagr: 37.8, sharpe: 3.22, sortino: 84.87,
+  maxDrawdown: 0.91, calmar: 41.5, profitFactor: 10.33,
+  winRate: 51.2, bestMonth: 12.6, totalTrades: 2457,
 };
 
 const SS_HEDGE = {
-  // SS-only realized Gross from v21 Wagyu trade log (157 trades; SS Crash Gate restrictive)
-  cagr: 4.98, sharpe: 0.49, sortino: 24.66,
-  maxDrawdown: 0.65, maxDDPeriod: '2022-04 to 2022-05',
-  calmar: 7.64, profitFactor: 7.43,
-  winRate: 48.4,   // SS wins 76 / (76 + 81) trade-level
-  bestMonth: 8.72, bestMonthLabel: '2022-05',
-  worstMonth: -0.24, worstMonthLabel: '2026-03',
-  positiveMonths: 14, totalMonths: 83,
-  positiveMonthsPct: 16.9,
-  avgMonthlyReturn: 0.40, monthlyStdDev: 1.48,
+  // SS realized pre-fund-fees — v5 page 9 SS (SHORTS) column
+  cagr: 5.0, sharpe: 0.58, sortino: 24.61,
+  maxDrawdown: 0.65, calmar: 7.6, profitFactor: 7.43,
+  winRate: 48.4, bestMonth: 8.7, totalTrades: 157,
+};
+
+const COMBINED_REAL = {
+  // Combined realized pre-fund-fees — v5 page 9 COMBINED column. Used in the BL/SS/COMBINED
+  // per-direction breakdown so the row is internally consistent (all three columns realized).
+  cagr: 38.6, sharpe: 3.31, sortino: 86.48,
+  maxDrawdown: 0.91, calmar: 42.5, profitFactor: 10.14,
+  winRate: 51.0, bestMonth: 12.6, totalTrades: 2614,
+};
+
+const COMBINED_GROSS = {
+  // Wagyu Gross MTM daily NAV — v5 pages 4, 5, 22. Used only in the Gross vs Net fee-drag table.
+  cagr: 38.60, sharpe: 2.59, sortino: 4.72,
+  maxDrawdown: 8.51, calmar: 4.5, profitFactor: 10.14,
+  bestMonth: 17.36, worstMonth: -4.64,
+  endingEquity: '$9.37M', totalReturn: 826.6,
 };
 
 const COMBINED_HEDGE = {
-  // Combined Wagyu Gross MTM daily NAV — Jun 2019 -> Apr 2026 (83 months, 2,614 closed trades)
-  // $1M -> $9.37M on Gross MTM basis at Wagyu tier
-  cagr: 38.60, sharpe: 2.56, sortino: 4.72,
-  maxDrawdown: 8.51, maxDDPeriod: '2020-09 to 2020-09',
-  calmar: 4.54, profitFactor: 10.14,
-  bestMonth: 17.36, bestMonthLabel: '2019-11',
-  worstMonth: -4.64, worstMonthLabel: '2020-09',
-  positiveMonths: 69, totalMonths: 83,
-  positiveMonthsPct: 83.1,
-  avgMonthlyReturn: 2.60, monthlyStdDev: 3.14,
+  // Wagyu NET MTM daily NAV (Wagyu Class fees applied) — v5 pages 4, 22, 23.
+  // This is the headline figure the InstitutionalPopup leads with.
+  cagr: 29.35, sharpe: 1.95, sortino: 3.39,
+  maxDrawdown: 8.82, calmar: 3.33, profitFactor: 10.14,
+  bestMonth: 17.16, worstMonth: -6.99,
+  positiveMonths: 63, totalMonths: 83, positiveMonthsPct: 75.9,
+  avgMonthlyReturn: 2.01, monthlyStdDev: 3.12,
+  bestMonthLabel: '2019-11', worstMonthLabel: '2020-09',
+  maxDDPeriod: '2020-09 to 2020-09',
+  endingEquity: '$5.78M', totalReturn: 478.4,
+};
+
+// SPY benchmark over the same $1M start window — v5 page 4 "PNTHR vs S&P 500".
+const SPY_BENCHMARK = {
+  cagr: 14.59, sharpe: 0.65, sortino: 1.11,
+  maxDrawdown: 33.7, totalReturn: 153.1,
+  endingEquity: '$2.53M',
 };
 
 // ── Institutional Metrics Section (shared by BacktestPopup + PortfolioPopup) ──
@@ -508,13 +526,12 @@ function HedgeFundSection({ h, label }) {
     <>
       <h3 className={styles.rulesSectionTitle}>Institutional Metrics — {label}</h3>
       <div className={styles.ruleDesc} style={{ color: '#888', marginBottom: 10, fontSize: 11 }}>
-        $100K starting capital · $10K full position (Lots 1-5) · Annualized from monthly returns · Risk-free rate 5%
+        v5 canonical · $1M starting capital (Wagyu) · Pre-Fund-Fees realized (per-direction) · Risk-free rate 5%
       </div>
       <div className={styles.btStatsGrid}>
         <div className={styles.btStat}>
           <div className={styles.btStatValue} style={{ color: gold }}>+{h.cagr}%</div>
-          <div className={styles.btStatLabel} style={{ color: '#22c55e' }}>CAGR</div>
-          <div className={styles.btStatLabel} style={{ color: '#22c55e', fontSize: 10, marginTop: 2 }}>(Compound Annual Growth Rate)</div>
+          <div className={styles.btStatLabel} style={{ color: '#22c55e' }}>CAGR (pre-fund-fees)</div>
         </div>
         <div className={styles.btStat}>
           <div className={styles.btStatValue} style={{ color: gold }}>{h.sharpe}</div>
@@ -533,18 +550,15 @@ function HedgeFundSection({ h, label }) {
           <div className={styles.btStatLabel}>Calmar Ratio</div>
         </div>
         <div className={styles.btStat}>
-          <div className={styles.btStatValue} style={{ color: gold }}>{h.profitFactor}</div>
+          <div className={styles.btStatValue} style={{ color: gold }}>{h.profitFactor}x</div>
           <div className={styles.btStatLabel}>Profit Factor</div>
         </div>
       </div>
       <table className={styles.btTable}>
         <tbody>
-          <tr><td style={{ color: '#888' }}>Max DD Period</td><td>{h.maxDDPeriod}</td></tr>
-          <tr><td style={{ color: '#888' }}>Best Month</td><td style={{ color: '#22c55e' }}>+{h.bestMonth}% ({h.bestMonthLabel})</td></tr>
-          <tr><td style={{ color: '#888' }}>Worst Month</td><td style={{ color: '#ef4444' }}>{h.worstMonth}% ({h.worstMonthLabel})</td></tr>
-          <tr><td style={{ color: '#888' }}>Positive Months</td><td>{h.positiveMonths}/{h.totalMonths} ({h.positiveMonthsPct}%)</td></tr>
-          <tr><td style={{ color: '#888' }}>Avg Monthly Return</td><td style={{ color: '#22c55e' }}>+{h.avgMonthlyReturn}%</td></tr>
-          <tr><td style={{ color: '#888' }}>Monthly Std Dev</td><td>{h.monthlyStdDev}%</td></tr>
+          <tr><td style={{ color: '#888' }}>Win Rate</td><td>{h.winRate}%</td></tr>
+          <tr><td style={{ color: '#888' }}>Best Month</td><td style={{ color: '#22c55e' }}>+{h.bestMonth}%</td></tr>
+          <tr><td style={{ color: '#888' }}>Total Trades</td><td>{h.totalTrades.toLocaleString()}</td></tr>
         </tbody>
       </table>
     </>
@@ -558,6 +572,7 @@ export function InstitutionalPopup({ onClose }) {
   const green = '#22c55e';
   const red = '#ef4444';
   const dim = '#888';
+  const headerCellStyle = { textAlign: 'right' };
 
   return (
     <div className={styles.rulesOverlay} onClick={onClose}>
@@ -568,143 +583,113 @@ export function InstitutionalPopup({ onClose }) {
         </div>
         <div className={styles.rulesBody}>
           <div className={styles.ruleDesc} style={{ color: dim, marginBottom: 16 }}>
-            7-year backtest (Jun 2019 – Apr 2026) · $100K starting capital · $10K full position (Lots 1-5) · Risk-free rate 5%
+            v5 canonical · 6.82-year backtest (2019-06-07 → 2026-04-02) · $1M starting capital (Wagyu Class) · Net of 2% mgmt fee + 20% performance allocation (15% after 36-month loyalty) above US2Y/4 quarterly hurdle, applied per PPM Sec. 4.1-4.3 · Risk-free rate 5%
           </div>
 
-          {/* Table 1: PNTHR BL vs SS vs Combined */}
-          <h3 className={styles.rulesSectionTitle}>PNTHR Performance Breakdown</h3>
+          {/* Hero — NET MTM headline */}
+          <h3 className={styles.rulesSectionTitle}>PNTHR Performance — Net of Fees (Wagyu Class)</h3>
+          <div className={styles.btStatsGrid}>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color: gold }}>+{COMBINED_HEDGE.cagr}%</div>
+              <div className={styles.btStatLabel} style={{ color: green }}>Net CAGR</div>
+            </div>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color: gold }}>{COMBINED_HEDGE.sharpe}</div>
+              <div className={styles.btStatLabel}>Net Sharpe</div>
+            </div>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color: gold }}>{COMBINED_HEDGE.sortino}</div>
+              <div className={styles.btStatLabel}>Net Sortino</div>
+            </div>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color: red }}>-{COMBINED_HEDGE.maxDrawdown}%</div>
+              <div className={styles.btStatLabel}>Max DD (Net MTM)</div>
+            </div>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color: gold }}>{COMBINED_HEDGE.calmar}</div>
+              <div className={styles.btStatLabel}>Net Calmar</div>
+            </div>
+            <div className={styles.btStat}>
+              <div className={styles.btStatValue} style={{ color: gold }}>{COMBINED_HEDGE.profitFactor}x</div>
+              <div className={styles.btStatLabel}>Profit Factor</div>
+            </div>
+          </div>
+
+          {/* Table 1: Gross vs Net — Impact of Fee Schedule (mirrors v5 IR pages 4-5) */}
+          <h3 className={styles.rulesSectionTitle} style={{ marginTop: 20 }}>Gross vs Net — Impact of Fee Schedule</h3>
+          <div className={styles.ruleDesc} style={{ color: dim, marginBottom: 10, fontSize: 11 }}>
+            Gross figures are post-transaction-costs but BEFORE the 2% mgmt fee + Wagyu Class performance allocation. Net is the take-home — applied per PPM Sec. 4.1-4.3 (mgmt accrued monthly on NAV; perf allocation charged QUARTERLY non-cumulative on NAV above HWM and the US2Y/4 quarterly hurdle).
+          </div>
           <table className={styles.btTable}>
             <thead>
               <tr>
                 <th>Metric</th>
-                <th style={{ textAlign: 'right' }}>BL (Longs)</th>
-                <th style={{ textAlign: 'right' }}>SS (Shorts)</th>
-                <th style={{ textAlign: 'right' }}>Combined</th>
+                <th style={headerCellStyle}>Gross</th>
+                <th style={headerCellStyle}>Net</th>
+                <th style={headerCellStyle}>Fee Drag</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td style={{ color: dim }}>CAGR</td>
-                <td style={{ textAlign: 'right', color: green, fontWeight: 700 }}>+{BL_HEDGE.cagr}%</td>
-                <td style={{ textAlign: 'right', color: green, fontWeight: 700 }}>+{SS_HEDGE.cagr}%</td>
-                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>+{COMBINED_HEDGE.cagr}%</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Sharpe Ratio</td>
-                <td style={{ textAlign: 'right' }}>{BL_HEDGE.sharpe}</td>
-                <td style={{ textAlign: 'right' }}>{SS_HEDGE.sharpe}</td>
-                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sharpe}</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Sortino Ratio</td>
-                <td style={{ textAlign: 'right' }}>{BL_HEDGE.sortino}</td>
-                <td style={{ textAlign: 'right' }}>{SS_HEDGE.sortino}</td>
-                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sortino}</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Max Drawdown</td>
-                <td style={{ textAlign: 'right', color: red }}>-{BL_HEDGE.maxDrawdown}%</td>
-                <td style={{ textAlign: 'right', color: red }}>-{SS_HEDGE.maxDrawdown}%</td>
-                <td style={{ textAlign: 'right', color: red }}>-{COMBINED_HEDGE.maxDrawdown}%</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Calmar Ratio</td>
-                <td style={{ textAlign: 'right' }}>{BL_HEDGE.calmar}</td>
-                <td style={{ textAlign: 'right' }}>{SS_HEDGE.calmar}</td>
-                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.calmar}</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Profit Factor</td>
-                <td style={{ textAlign: 'right' }}>{BL_HEDGE.profitFactor}</td>
-                <td style={{ textAlign: 'right' }}>{SS_HEDGE.profitFactor}</td>
-                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.profitFactor}</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Win Rate</td>
-                <td style={{ textAlign: 'right' }}>{BL_HEDGE.winRate}%</td>
-                <td style={{ textAlign: 'right' }}>{SS_HEDGE.winRate}%</td>
-                <td style={{ textAlign: 'right' }}>49.5%</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Avg Monthly Return</td>
-                <td style={{ textAlign: 'right', color: green }}>+{BL_HEDGE.avgMonthlyReturn}%</td>
-                <td style={{ textAlign: 'right', color: green }}>+{SS_HEDGE.avgMonthlyReturn}%</td>
-                <td style={{ textAlign: 'right', color: green }}>+{COMBINED_HEDGE.avgMonthlyReturn}%</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Monthly Std Dev</td>
-                <td style={{ textAlign: 'right' }}>{BL_HEDGE.monthlyStdDev}%</td>
-                <td style={{ textAlign: 'right' }}>{SS_HEDGE.monthlyStdDev}%</td>
-                <td style={{ textAlign: 'right' }}>{COMBINED_HEDGE.monthlyStdDev}%</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Best Month</td>
-                <td style={{ textAlign: 'right', color: green }}>+{BL_HEDGE.bestMonth}%</td>
-                <td style={{ textAlign: 'right', color: green }}>+{SS_HEDGE.bestMonth}%</td>
-                <td style={{ textAlign: 'right', color: green }}>+{COMBINED_HEDGE.bestMonth}%</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Worst Month</td>
-                <td style={{ textAlign: 'right', color: red }}>{BL_HEDGE.worstMonth}%</td>
-                <td style={{ textAlign: 'right', color: red }}>{SS_HEDGE.worstMonth}%</td>
-                <td style={{ textAlign: 'right', color: red }}>{COMBINED_HEDGE.worstMonth}%</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Positive Months</td>
-                <td style={{ textAlign: 'right' }}>{BL_HEDGE.positiveMonths}/{BL_HEDGE.totalMonths} ({BL_HEDGE.positiveMonthsPct}%)</td>
-                <td style={{ textAlign: 'right' }}>{SS_HEDGE.positiveMonths}/{SS_HEDGE.totalMonths} ({SS_HEDGE.positiveMonthsPct}%)</td>
-                <td style={{ textAlign: 'right' }}>{COMBINED_HEDGE.positiveMonths}/{COMBINED_HEDGE.totalMonths} ({COMBINED_HEDGE.positiveMonthsPct}%)</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Total Trades</td>
-                <td style={{ textAlign: 'right' }}>{BL_BACKTEST.trades.toLocaleString()}</td>
-                <td style={{ textAlign: 'right' }}>{SS_BACKTEST.trades}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{(BL_BACKTEST.trades + SS_BACKTEST.trades).toLocaleString()}</td>
-              </tr>
+              <tr><td style={{ color: dim }}>Total Return</td><td style={{ textAlign: 'right', fontWeight: 700 }}>+{COMBINED_GROSS.totalReturn}%</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>+{COMBINED_HEDGE.totalReturn}%</td><td style={{ textAlign: 'right', color: red, fontWeight: 700 }}>-348.2 pts</td></tr>
+              <tr><td style={{ color: dim }}>CAGR</td><td style={{ textAlign: 'right' }}>+{COMBINED_GROSS.cagr}%</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>+{COMBINED_HEDGE.cagr}%</td><td style={{ textAlign: 'right', color: red }}>-9.25 pts</td></tr>
+              <tr><td style={{ color: dim }}>Sharpe Ratio</td><td style={{ textAlign: 'right' }}>{COMBINED_GROSS.sharpe}</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sharpe}</td><td style={{ textAlign: 'right', color: red }}>-0.64</td></tr>
+              <tr><td style={{ color: dim }}>Sortino Ratio</td><td style={{ textAlign: 'right' }}>{COMBINED_GROSS.sortino}</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sortino}</td><td style={{ textAlign: 'right', color: red }}>-1.33</td></tr>
+              <tr><td style={{ color: dim }}>Calmar Ratio</td><td style={{ textAlign: 'right' }}>{COMBINED_GROSS.calmar}</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.calmar}</td><td style={{ textAlign: 'right', color: red }}>-1.2</td></tr>
+              <tr><td style={{ color: dim }}>Max Monthly P-to-T</td><td style={{ textAlign: 'right' }}>-{COMBINED_GROSS.maxDrawdown}%</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>-{COMBINED_HEDGE.maxDrawdown}%</td><td style={{ textAlign: 'right', color: red }}>+0.31 pts</td></tr>
+              <tr><td style={{ color: dim }}>Best Month</td><td style={{ textAlign: 'right' }}>+{COMBINED_GROSS.bestMonth}%</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>+{COMBINED_HEDGE.bestMonth}%</td><td style={{ textAlign: 'right', color: dim }}>—</td></tr>
+              <tr><td style={{ color: dim }}>Worst Month</td><td style={{ textAlign: 'right' }}>{COMBINED_GROSS.worstMonth}%</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.worstMonth}%</td><td style={{ textAlign: 'right', color: dim }}>—</td></tr>
+              <tr><td style={{ color: dim }}>Ending Equity ($1M)</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{COMBINED_GROSS.endingEquity}</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.endingEquity}</td><td style={{ textAlign: 'right', color: red, fontWeight: 700 }}>-$3.59M</td></tr>
             </tbody>
           </table>
 
-          {/* Table 2: PNTHR vs S&P 500 */}
-          <h3 className={styles.rulesSectionTitle} style={{ marginTop: 20 }}>PNTHR vs S&P 500</h3>
+          {/* Table 2: BL vs SS vs Combined — Pre-Fund-Fees (v5 IR page 9) */}
+          <h3 className={styles.rulesSectionTitle} style={{ marginTop: 20 }}>Strategy by Direction (Pre-Fund-Fees)</h3>
+          <div className={styles.ruleDesc} style={{ color: dim, marginBottom: 10, fontSize: 11 }}>
+            Realized closed-trade P&L per direction. Fund fees are portfolio-level per PPM Sec. 4.1-4.3 and do not cleanly decompose by direction, so per-direction figures are reported pre-fund-fees only. Mirrors v5 IR page 9.
+          </div>
           <table className={styles.btTable}>
             <thead>
               <tr>
                 <th>Metric</th>
-                <th style={{ textAlign: 'right' }}>PNTHR Combined</th>
-                <th style={{ textAlign: 'right' }}>S&P 500 (approx)</th>
+                <th style={headerCellStyle}>BL (Longs)</th>
+                <th style={headerCellStyle}>SS (Shorts)</th>
+                <th style={headerCellStyle}>Combined</th>
               </tr>
             </thead>
             <tbody>
+              <tr><td style={{ color: dim }}>CAGR (pre-fund-fees)</td><td style={{ textAlign: 'right', color: green, fontWeight: 700 }}>+{BL_HEDGE.cagr}%</td><td style={{ textAlign: 'right', color: green, fontWeight: 700 }}>+{SS_HEDGE.cagr}%</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>+{COMBINED_REAL.cagr}%</td></tr>
+              <tr><td style={{ color: dim }}>Sharpe Ratio</td><td style={{ textAlign: 'right' }}>{BL_HEDGE.sharpe}</td><td style={{ textAlign: 'right' }}>{SS_HEDGE.sharpe}</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_REAL.sharpe}</td></tr>
+              <tr><td style={{ color: dim }}>Sortino Ratio</td><td style={{ textAlign: 'right' }}>{BL_HEDGE.sortino}</td><td style={{ textAlign: 'right' }}>{SS_HEDGE.sortino}</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_REAL.sortino}</td></tr>
+              <tr><td style={{ color: dim }}>Max Drawdown</td><td style={{ textAlign: 'right', color: red }}>-{BL_HEDGE.maxDrawdown}%</td><td style={{ textAlign: 'right', color: red }}>-{SS_HEDGE.maxDrawdown}%</td><td style={{ textAlign: 'right', color: red }}>-{COMBINED_REAL.maxDrawdown}%</td></tr>
+              <tr><td style={{ color: dim }}>Calmar Ratio</td><td style={{ textAlign: 'right' }}>{BL_HEDGE.calmar}</td><td style={{ textAlign: 'right' }}>{SS_HEDGE.calmar}</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_REAL.calmar}</td></tr>
+              <tr><td style={{ color: dim }}>Profit Factor</td><td style={{ textAlign: 'right' }}>{BL_HEDGE.profitFactor}x</td><td style={{ textAlign: 'right' }}>{SS_HEDGE.profitFactor}x</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_REAL.profitFactor}x</td></tr>
+              <tr><td style={{ color: dim }}>Win Rate</td><td style={{ textAlign: 'right' }}>{BL_HEDGE.winRate}%</td><td style={{ textAlign: 'right' }}>{SS_HEDGE.winRate}%</td><td style={{ textAlign: 'right' }}>{COMBINED_REAL.winRate}%</td></tr>
+              <tr><td style={{ color: dim }}>Best Month</td><td style={{ textAlign: 'right', color: green }}>+{BL_HEDGE.bestMonth}%</td><td style={{ textAlign: 'right', color: green }}>+{SS_HEDGE.bestMonth}%</td><td style={{ textAlign: 'right', color: green }}>+{COMBINED_REAL.bestMonth}%</td></tr>
+              <tr><td style={{ color: dim }}>Total Trades</td><td style={{ textAlign: 'right' }}>{BL_HEDGE.totalTrades.toLocaleString()}</td><td style={{ textAlign: 'right' }}>{SS_HEDGE.totalTrades}</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{COMBINED_REAL.totalTrades.toLocaleString()}</td></tr>
+            </tbody>
+          </table>
+
+          {/* Table 3: PNTHR (Net) vs S&P 500 — actual v5 numbers, $1M start */}
+          <h3 className={styles.rulesSectionTitle} style={{ marginTop: 20 }}>PNTHR (Net) vs S&P 500</h3>
+          <div className={styles.ruleDesc} style={{ color: dim, marginBottom: 10, fontSize: 11 }}>
+            Both starting at $1,000,000 on 2019-06-07; SPY benchmark is the SPDR S&P 500 ETF total-return series (dividend-adjusted, 0.03% expense). Mirrors v5 IR page 4.
+          </div>
+          <table className={styles.btTable}>
+            <thead>
               <tr>
-                <td style={{ color: dim }}>CAGR <span style={{ fontSize: 11, fontWeight: 400 }}>(Compound Annual Growth Rate)</span></td>
-                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>+{COMBINED_HEDGE.cagr}%</td>
-                <td style={{ textAlign: 'right' }}>~10-12%</td>
+                <th>Metric</th>
+                <th style={headerCellStyle}>PNTHR (Net)</th>
+                <th style={headerCellStyle}>S&P 500 (SPY)</th>
+                <th style={headerCellStyle}>Alpha</th>
               </tr>
-              <tr>
-                <td style={{ color: dim }}>Sharpe Ratio</td>
-                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sharpe}</td>
-                <td style={{ textAlign: 'right' }}>~0.5-0.8</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Sortino Ratio</td>
-                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sortino}</td>
-                <td style={{ textAlign: 'right' }}>~0.7-1.0</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Max Drawdown</td>
-                <td style={{ textAlign: 'right', color: green }}>-{COMBINED_HEDGE.maxDrawdown}%</td>
-                <td style={{ textAlign: 'right', color: red }}>~-25%</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Positive Months</td>
-                <td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.positiveMonthsPct}%</td>
-                <td style={{ textAlign: 'right' }}>~60-65%</td>
-              </tr>
-              <tr>
-                <td style={{ color: dim }}>Worst Month</td>
-                <td style={{ textAlign: 'right', color: green }}>{COMBINED_HEDGE.worstMonth}%</td>
-                <td style={{ textAlign: 'right', color: red }}>~-9%</td>
-              </tr>
+            </thead>
+            <tbody>
+              <tr><td style={{ color: dim }}>Total Return (6.82y)</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>+{COMBINED_HEDGE.totalReturn}%</td><td style={{ textAlign: 'right' }}>+{SPY_BENCHMARK.totalReturn}%</td><td style={{ textAlign: 'right', color: green }}>+325.3 pts</td></tr>
+              <tr><td style={{ color: dim }}>CAGR</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>+{COMBINED_HEDGE.cagr}%</td><td style={{ textAlign: 'right' }}>+{SPY_BENCHMARK.cagr}%</td><td style={{ textAlign: 'right', color: green }}>+14.76 pts</td></tr>
+              <tr><td style={{ color: dim }}>Sharpe Ratio</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sharpe}</td><td style={{ textAlign: 'right' }}>{SPY_BENCHMARK.sharpe}</td><td style={{ textAlign: 'right', color: green }}>+1.30</td></tr>
+              <tr><td style={{ color: dim }}>Sortino Ratio</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.sortino}</td><td style={{ textAlign: 'right' }}>{SPY_BENCHMARK.sortino}</td><td style={{ textAlign: 'right', color: green }}>+2.28</td></tr>
+              <tr><td style={{ color: dim }}>Max Drawdown</td><td style={{ textAlign: 'right', color: green }}>-{COMBINED_HEDGE.maxDrawdown}%</td><td style={{ textAlign: 'right', color: red }}>-{SPY_BENCHMARK.maxDrawdown}%</td><td style={{ textAlign: 'right', color: green }}>+24.90 pts</td></tr>
+              <tr><td style={{ color: dim }}>Ending Equity</td><td style={{ textAlign: 'right', color: gold, fontWeight: 700 }}>{COMBINED_HEDGE.endingEquity}</td><td style={{ textAlign: 'right' }}>{SPY_BENCHMARK.endingEquity}</td><td style={{ textAlign: 'right', color: green, fontWeight: 700 }}>+$3.25M</td></tr>
             </tbody>
           </table>
 
@@ -712,7 +697,7 @@ export function InstitutionalPopup({ onClose }) {
             <div>
               <div className={styles.ruleName}>Interpretation</div>
               <div className={styles.ruleDesc}>
-                PNTHR Funds proprietary signal implementation system's results are world class. Sharpe {'>'} 2.0 is exceptional. Top hedge funds target 1.0-1.5. Max drawdown of -0.24% vs the S&P's -25% in 2022 demonstrates extreme capital protection. Pyramiding concentrates capital into winners while losers stay small (Lot 1 only). 95% positive months with a worst month of just -0.24% is institutional-grade consistency. CAGR assumes $10K full position sizing. Actual returns scale with account size and risk allocation.
+                Net Sharpe of {COMBINED_HEDGE.sharpe} is institutional-grade — top long/short hedge funds target 1.0–1.5 net of fees. Net max daily peak-to-trough drawdown of -{COMBINED_HEDGE.maxDrawdown}% over the same 6.82-year window in which SPY drew down -{SPY_BENCHMARK.maxDrawdown}% demonstrates the strategy's regime-aware capital protection. {COMBINED_HEDGE.positiveMonths} of {COMBINED_HEDGE.totalMonths} months profitable ({COMBINED_HEDGE.positiveMonthsPct}%) with a worst single month of {COMBINED_HEDGE.worstMonth}% reflects pyramiding's asymmetric risk profile — losses stay small (Lot 1 only) while winners get capital concentration via Lots 2-5. Headline figures are reported on a NET basis (Wagyu Class fee schedule per PPM v6.9); the Gross vs Net table above shows the full fee-schedule impact transparently.
               </div>
             </div>
           </div>

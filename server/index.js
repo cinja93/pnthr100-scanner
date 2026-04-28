@@ -4385,8 +4385,11 @@ const US2Y_HURDLE_RATES = {
   2026: 3.47,  // Jan 2, 2026
 };
 
-// ── v21 per-tier backtest trade-log collections ──────────────────────────────
+// ── v5-canonical per-tier backtest trade-log collections ─────────────────────
 // Tier selector: ?tier=filet|porterhouse|wagyu (default wagyu).
+// Collection names retain the `_nav_{NAV}_trade_log` shape (physical containers;
+// the v5 Per-Tier IR PDFs were published off these exact collections, post-MTM
+// + PPM-compliant fee correction).
 // Anything else falls back to Wagyu — pre-gate-fix `pnthr_bt_pyramid_trade_log`
 // is quarantined and must not be queried from live routes.
 const TIER_COLLECTIONS = {

@@ -1697,8 +1697,8 @@ function PendingCard({ entry, nav, onConfirm, onDismiss }) {
           <span style={{ color: '#444', fontWeight: 400 }}> = auto-detected from Analyze · click to override</span>
         </div>
         {[
-          { key: 'indexTrendAligned',  label: `${indexEtfName} ${isLong ? 'above' : 'below'} 21W EMA at entry?`,    auto: condAuto.index  },
-          { key: 'sectorTrendAligned', label: `${sectorEtfName} ${isLong ? 'above' : 'below'} 21W EMA at entry?`,   auto: condAuto.sector },
+          { key: 'indexTrendAligned',  label: `${indexEtfName} ${isLong ? 'above' : 'below'} 21W Index EMA at entry?`, auto: condAuto.index  },
+          { key: 'sectorTrendAligned', label: `${sectorEtfName} ${isLong ? 'above' : 'below'} OpEMA at entry?`,        auto: condAuto.sector },
           { key: 'sizingCorrect',      label: 'Used SIZE IT for Lot 1?',                     auto: false           },
         ].map(({ key, label, auto }) => (
           <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>

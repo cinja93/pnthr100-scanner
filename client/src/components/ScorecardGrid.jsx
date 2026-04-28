@@ -234,7 +234,7 @@ const TIP = {
   exchange:     'Stock exchange: NYSE or NASDAQ',
   indexTrend:   'Index trend alignment. ✓ = traded with S&P 500 or Nasdaq 100 direction. ✗ = traded against the index trend',
   sector:       'GICS sector classification',
-  sectorTrend:  'Sector trend alignment. ✓ = traded with sector ETF 21-week EMA direction. ✗ = traded against sector trend',
+  sectorTrend:  'Sector trend alignment. ✓ = traded with sector ETF OpEMA direction. ✗ = traded against sector trend',
   entrySignal:  'Entry signal at time of trade. BL+1 = fresh buy long, SS+1 = fresh sell short, NO SIGNAL = no PNTHR signal existed',
   signalCheck:  'Signal quality check. ✓ = entered on fresh signal (BL+1 or SS+1). ✗ = stale signal (BL+2 or later). ⚠ = no signal (PAUSE)',
   exitSignal:   'Exit reason. SIGNAL = system BE/SE exit. STOP_HIT = stopped out. MANUAL = manual override. FEAST = RSI > 85. STALE_HUNT = 20-day expiry',
@@ -275,10 +275,10 @@ const TIP = {
 
 const B_TIP = {
   spy:      'S&P 500 ETF price at time of snapshot',
-  spyVsEma: 'SPY percentage distance from 21-week EMA. Negative = below EMA (bearish)',
+  spyVsEma: 'SPY percentage distance from 21W Index EMA. Negative = below EMA (bearish)',
   spyTrend: 'SPY trend check. ✓ = traded with SPY trend. ✗ = traded against SPY trend',
   qqq:      'Nasdaq 100 ETF price at time of snapshot',
-  qqqVsEma: 'QQQ percentage distance from 21-week EMA',
+  qqqVsEma: 'QQQ percentage distance from 21W Index EMA',
   qqqTrend: 'QQQ trend check. ✓ = traded with QQQ trend. ✗ = traded against QQQ trend',
   vix:      'CBOE Volatility Index level',
   vixZone:  'VIX zone: CALM (≤15), NORMAL (15-20), ELEVATED (20-30), FEAR (30+)',

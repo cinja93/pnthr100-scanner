@@ -59,23 +59,23 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>1</div>
               <div>
                 <div className={styles.ruleName}>Active BL Signal</div>
-                <div className={styles.ruleDesc}>Stock must have a confirmed Buy Long signal on its sector-optimized weekly EMA (18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate; default 21W): weekly close {'>'} EMA, EMA sloping up, weekly high {'>='} prior 2-week high + $0.01, and weekly low sits 1–10% above the EMA (0.3–10% for ETFs), within the first 3 bars of the long-daylight streak.</div>
+                <div className={styles.ruleDesc}>Stock must have a confirmed Buy Long signal on its <strong>OpEMA</strong> (Optimized EMA — sector-specific weekly period: 18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate; default 21W): weekly close {'>'} OpEMA, OpEMA sloping up, weekly high {'>='} prior 2-week high + $0.01, and weekly low sits 1–10% above the OpEMA (0.3–10% for ETFs), within the first 3 bars of the long-daylight streak.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>2</div>
               <div>
-                <div className={styles.ruleName}>MACRO Gate — Direction Index Above 21W EMA</div>
-                <div className={styles.ruleDesc}>Direction index is set by index membership: SP500 → SPY, Nasdaq-100-only → QQQ, S&amp;P MidCap 400 → MDY (fallback SPY if MDY data missing). The stock's direction index must be trading ABOVE its 21-week EMA, otherwise the long is blocked.</div>
+                <div className={styles.ruleName}>MACRO Gate — Direction Index Above 21W Index EMA</div>
+                <div className={styles.ruleDesc}>Direction index is set by index membership: SP500 → SPY, Nasdaq-100-only → QQQ, S&amp;P MidCap 400 → MDY (fallback SPY if MDY data missing). The stock's direction index must be trading ABOVE its <strong>21W Index EMA</strong> (regime gate — fixed 21W, NOT the same as OpEMA), otherwise the long is blocked.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>3</div>
               <div>
-                <div className={styles.ruleName}>SECTOR Gate — Sector ETF Above Sector-Optimized EMA</div>
-                <div className={styles.ruleDesc}>The stock's sector ETF (e.g., XLK for Technology, XLF for Financials) must be trading ABOVE its sector-optimized weekly EMA — same per-sector period used for the stock signal (18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate). Buying longs in a sector that's in a downtrend is blocked.</div>
+                <div className={styles.ruleName}>SECTOR Gate — Sector ETF Above OpEMA</div>
+                <div className={styles.ruleDesc}>The stock's sector ETF (e.g., XLK for Technology, XLF for Financials) must be trading ABOVE its <strong>OpEMA</strong> — same sector-optimized period used for the stock signal (18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate). Buying longs in a sector that's in a downtrend is blocked.</div>
               </div>
             </div>
 
@@ -96,7 +96,7 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>D1</div>
               <div>
                 <div className={styles.ruleName}>Regime Multiplier (0.70–1.30×)</div>
-                <div className={styles.ruleDesc}>Scales entire score by macro regime. Direction index (SPY/QQQ/MDY by membership) EMA position + slope scored ±2; SS:BL open ratio scored ±2 with an additional ±1 from new-signal ratio. regimeScore × 0.06 = adjustment, clamped 0.70–1.30. BL: 1.0 + adj; SS: 1.0 − adj.</div>
+                <div className={styles.ruleDesc}>Scales entire score by macro regime. Direction index (SPY/QQQ/MDY by membership) <strong>21W Index EMA</strong> position + slope scored ±2; SS:BL open ratio scored ±2 with an additional ±1 from new-signal ratio. regimeScore × 0.06 = adjustment, clamped 0.70–1.30. BL: 1.0 + adj; SS: 1.0 − adj.</div>
               </div>
             </div>
 
@@ -211,23 +211,23 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>1</div>
               <div>
                 <div className={styles.ruleName}>Active SS Signal</div>
-                <div className={styles.ruleDesc}>Stock must have a confirmed Sell Short signal on its sector-optimized weekly EMA (18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate; default 21W): weekly close {'<'} EMA, EMA sloping down, weekly low {'<='} prior 2-week low − $0.01, and weekly high sits 1–10% below the EMA (0.3–10% for ETFs), within the first 3 bars of the short-daylight streak.</div>
+                <div className={styles.ruleDesc}>Stock must have a confirmed Sell Short signal on its <strong>OpEMA</strong> (Optimized EMA — sector-specific weekly period: 18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate; default 21W): weekly close {'<'} OpEMA, OpEMA sloping down, weekly low {'<='} prior 2-week low − $0.01, and weekly high sits 1–10% below the OpEMA (0.3–10% for ETFs), within the first 3 bars of the short-daylight streak.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>2</div>
               <div>
-                <div className={styles.ruleName}>MACRO Gate — Direction Index Below 21W EMA</div>
-                <div className={styles.ruleDesc}>Direction index is set by index membership: SP500 → SPY, Nasdaq-100-only → QQQ, S&amp;P MidCap 400 → MDY (fallback SPY if MDY data missing). The stock's direction index must be trading BELOW its 21-week EMA, otherwise the short is blocked.</div>
+                <div className={styles.ruleName}>MACRO Gate — Direction Index Below 21W Index EMA</div>
+                <div className={styles.ruleDesc}>Direction index is set by index membership: SP500 → SPY, Nasdaq-100-only → QQQ, S&amp;P MidCap 400 → MDY (fallback SPY if MDY data missing). The stock's direction index must be trading BELOW its <strong>21W Index EMA</strong> (regime gate — fixed 21W, NOT the same as OpEMA), otherwise the short is blocked.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>3</div>
               <div>
-                <div className={styles.ruleName}>SECTOR Gate — Sector ETF Below Sector-Optimized EMA</div>
-                <div className={styles.ruleDesc}>The stock's sector ETF must be trading BELOW its sector-optimized weekly EMA — same per-sector period used for the stock signal (18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate). Shorting in a sector that's trending up is blocked.</div>
+                <div className={styles.ruleName}>SECTOR Gate — Sector ETF Below OpEMA</div>
+                <div className={styles.ruleDesc}>The stock's sector ETF must be trading BELOW its <strong>OpEMA</strong> — same sector-optimized period used for the stock signal (18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate). Shorting in a sector that's trending up is blocked.</div>
               </div>
             </div>
 
@@ -246,7 +246,7 @@ export function RulesPopup({ type, onClose }) {
                 <div className={styles.ruleDesc}>
                   Shorts require CRASH conditions (both must be true):
                   <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
-                    <li>Direction index (SPY/QQQ/MDY by membership) 21W EMA falling for 2+ consecutive weeks</li>
+                    <li>Direction index (SPY/QQQ/MDY by membership) 21W Index EMA falling for 2+ consecutive weeks</li>
                     <li>Sector 5D momentum {'<'} -3% (sector ETF dropped 3%+ in 5 trading days)</li>
                   </ul>
                   This is the key asymmetric gate — SS only enters during genuine market breakdowns, not mild pullbacks.
@@ -1460,8 +1460,8 @@ const COLUMN_TOOLTIPS = {
   'Ticker':
     'Stock ticker symbol. Click the ticker to open its chart in ChartModal.',
   'Action':
-    'Trade direction. BUY = go LONG (close > 21W EMA, expect price up). ' +
-    'SHORT = sell short (close < 21W EMA, expect price down). ' +
+    'Trade direction. BUY = go LONG (close > OpEMA, expect price up). ' +
+    'SHORT = sell short (close < OpEMA, expect price down). ' +
     'Determined per stock by the Kill pipeline — you do not choose direction.',
   'Lot 1 Shares':
     'Recommended Lot 1 entry size (35% of the full 5-lot pyramid target). ' +
@@ -1492,7 +1492,7 @@ const COLUMN_TOOLTIPS = {
     'weekly signal refresh).',
   'Sector':
     'GICS sector assignment. Drives the SECTOR gate in the pipeline: a BL ' +
-    'candidate only passes if its sector ETF is above its 21W EMA; SS only ' +
+    'candidate only passes if its sector ETF is above its OpEMA; SS only ' +
     'passes if the sector ETF is below. Also used for sector-concentration ' +
     'awareness when stacking new positions.',
   'RSI':

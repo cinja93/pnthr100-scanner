@@ -598,7 +598,7 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
 
   const CHECK_TIPS = {
     IDX:    'Index trend alignment. ✓ = traded with S&P 500 or Nasdaq 100 direction. Scored T1-C (0-8 pts).',
-    SECT:   'Sector trend alignment. ✓ = traded with sector ETF 21-week EMA direction. Scored T1-D (0-7 pts).',
+    SECT:   'Sector trend alignment. ✓ = traded with sector ETF OpEMA direction. Scored T1-D (0-7 pts).',
     SIG:    'Signal quality. ✓ = fresh BL+1/SS+1. ✗ = stale signal. ⚠ = no PNTHR signal. Scored T1-A (0-15 pts).',
     EXIT:   'Exit discipline. ✓ = system rule (signal/stop/feast/stale). ✗ = manual override. Scored T3-A (0-12 pts).',
     '~EARLY': '✓ = ran to system exit. ✗ = manually closed before signal. Part of T3-B scoring.',

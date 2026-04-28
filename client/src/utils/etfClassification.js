@@ -210,7 +210,7 @@ export function isClassifiedETF(ticker) {
 
 // ─── Macro Alignment: ETF → S&P 500 Sector Benchmark ───────────────────────
 // Each ETF is compared against its corresponding S&P 500 sector ETF.
-// Logic: is this ETF's price direction (above/below 21 EMA) in sync with its sector benchmark?
+// Logic: is this ETF's price direction (above/below OpEMA) in sync with its sector benchmark?
 // Pure sector ETFs (XLK, XLE, etc.) compare against themselves — always in sync.
 // Broad market / factor / international ETFs compare against SPY.
 // Bonds, currencies, crypto → null (independent, no sector benchmark).

@@ -51,10 +51,10 @@ function macroGate(stock, indexData) {
   if (!idx) return { passed: false, reason: `No ${idxTicker} data` };
 
   if (stock.signal === 'BL' && !idx.aboveEma) {
-    return { passed: false, reason: `${idxTicker} below 21W EMA — longs blocked` };
+    return { passed: false, reason: `${idxTicker} below 21W Index EMA — longs blocked` };
   }
   if (stock.signal === 'SS' && idx.aboveEma) {
-    return { passed: false, reason: `${idxTicker} above 21W EMA — shorts blocked` };
+    return { passed: false, reason: `${idxTicker} above 21W Index EMA — shorts blocked` };
   }
   return { passed: true, reason: `${idxTicker} ${idx.aboveEma ? 'above' : 'below'} EMA — ${stock.signal} aligned` };
 }
@@ -66,10 +66,10 @@ function sectorGate(stock, sectorGateData) {
   }
   const { aboveEma } = sectorGateData[etf];
   if (stock.signal === 'BL' && !aboveEma) {
-    return { passed: false, reason: `${etf} (${stock.sector}) below 21W EMA — BL blocked` };
+    return { passed: false, reason: `${etf} (${stock.sector}) below OpEMA — BL blocked` };
   }
   if (stock.signal === 'SS' && aboveEma) {
-    return { passed: false, reason: `${etf} (${stock.sector}) above 21W EMA — SS blocked` };
+    return { passed: false, reason: `${etf} (${stock.sector}) above OpEMA — SS blocked` };
   }
   return { passed: true, reason: `${etf} aligned with ${stock.signal}` };
 }

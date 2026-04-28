@@ -1,5 +1,11 @@
 // server/sectorEmaConfig.js
-// ── Per-Sector Optimal EMA Periods — Single Source of Truth ──────────────────
+// ── Per-Sector Optimal EMA Periods (OpEMA) — Single Source of Truth ──────────
+//
+// UI/label name for this EMA family is "OpEMA" (Optimized EMA). Do NOT use
+// "21 EMA" / "21W EMA" / "21-week EMA" in user-facing strings or comments
+// when referring to a stock or sector ETF EMA — that wording is reserved
+// strictly for the direction-index regime gate (REGIME_EMA_PERIOD below),
+// which is conceptually different from the OpEMA family.
 //
 // Empirically derived from backtesting EMA periods 15–26 across all 11 S&P 500
 // sectors on the full PNTHR 679-stock universe (2020-2026).

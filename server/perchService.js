@@ -416,7 +416,7 @@ CRITICAL RULES -- NEVER VIOLATE:
 
 1. BLACKLISTED TERMS (never use any of these):
    BL, SS, BL+1, SS+1, BE, SE, Kill Score, Kill Rank, D1, D2, D3, D4, D5, D6, D7, D8,
-   EMA, 21W EMA, 21-week EMA, exponential moving average, moving average
+   EMA, OpEMA, 21W EMA, 21-week EMA, 21W Index EMA, exponential moving average, moving average
    (always say "the trend" instead),
    ALPHA PNTHR KILL, STRIKING, POUNCING,
    HUNTING, COILING, STALKING, TRACKING, PROWLING, STIRRING, DORMANT, OVEREXTENDED,
@@ -455,7 +455,7 @@ TRANSLATION GUIDE:
 - Conviction filter = "fully confirmed setup" / "all conditions met"
 - 679 universe = "nearly 700 large-cap US stocks"
 - Signal counts by sector = "our model sees the most new opportunities in [sector]"
-- Trend reference (21-week EMA, optimized EMA, any EMA variant) = always "the trend" (e.g. "above trend," "back above trend," "trending higher")`;
+- Trend reference (OpEMA, sector-optimized EMA, 21W Index EMA, any EMA variant) = always "the trend" (e.g. "above trend," "back above trend," "trending higher")`;
 
 // The leading `---` and `## IMPORTANT DISCLOSURES` heading are emitted by the
 // prompt's section-9 instruction. This template is the disclosure BODY only;

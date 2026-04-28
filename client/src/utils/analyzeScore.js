@@ -103,7 +103,7 @@ function scoreETFSignalQuality(stock, direction) {
   return { score: Math.min(pts, 15), max: 15, label, detail: `${signal}${signalAge != null ? '+' + signalAge : ''} signal`, warnings };
 }
 
-// EMA Slope: is the 21-week EMA itself rising or falling, and how steeply?
+// EMA Slope: is the OpEMA itself rising or falling, and how steeply?
 // Scored 0-10 based on slope direction alignment with ETF trend + slope magnitude.
 // emaSlope = % change from previous week's EMA to current (from signalService or ChartModal).
 function scoreETFEmaSlope(stock, direction) {
@@ -152,7 +152,7 @@ function scoreETFEmaSlope(stock, direction) {
 }
 
 // ETF Trend: direction indicator only — no scoring.
-// Price above 21 EMA = LONG trend; price below = SHORT trend.
+// Price above OpEMA = LONG trend; price below = SHORT trend.
 // This direction feeds Signal Quality and Macro Alignment checks.
 // Trade direction conflict is NOT penalized here — Macro Alignment handles alignment.
 function scoreETFTrendAlignment(stock) {
@@ -165,7 +165,7 @@ function scoreETFTrendAlignment(stock) {
   return {
     score: 0, max: 0,
     label: direction,
-    detail: `Price ${price > ema ? 'above' : 'below'} 21 EMA`,
+    detail: `Price ${price > ema ? 'above' : 'below'} OpEMA`,
     warnings: [],
   };
 }
@@ -337,7 +337,7 @@ export function computeETFAnalyzeScore(stock, context) {
   const ticker = (stock.ticker || stock.symbol || '').toUpperCase();
   const assetClass = getETFAssetClass(ticker) || 'THEMATIC';
 
-  // ETF direction is determined by price vs 21 EMA — not by signal.
+  // ETF direction is determined by price vs OpEMA — not by signal.
   // Price above EMA = LONG trend; price below = SHORT trend.
   const price = stock.currentPrice || stock.price || stock.close;
   const ema   = stock.ema21;
@@ -516,10 +516,10 @@ export function computeAnalyzeScore(stock, context) {
     if (primaryAbove != null) {
       const aligned = (direction === 'LONG' && primaryAbove) || (direction === 'SHORT' && !primaryAbove);
       if (aligned) {
-        t1c = { score: 8, label: 'WITH TREND', detail: `${direction} with ${indexName} ${primaryAbove ? 'above' : 'below'} 21 EMA` };
+        t1c = { score: 8, label: 'WITH TREND', detail: `${direction} with ${indexName} ${primaryAbove ? 'above' : 'below'} 21W Index EMA` };
       } else {
-        t1c = { score: 0, label: 'AGAINST', detail: `${direction} against ${indexName} ${primaryAbove ? 'above' : 'below'} 21 EMA` };
-        warnings.push(`Trading ${direction} against ${indexName} — ${indexName} is ${primaryAbove ? 'above' : 'below'} 21 EMA`);
+        t1c = { score: 0, label: 'AGAINST', detail: `${direction} against ${indexName} ${primaryAbove ? 'above' : 'below'} 21W Index EMA` };
+        warnings.push(`Trading ${direction} against ${indexName} — ${indexName} is ${primaryAbove ? 'above' : 'below'} 21W Index EMA`);
       }
     } else {
       console.error(`[ANALYZE] Regime loaded but ${indexName} EMA position is null`);
@@ -541,10 +541,10 @@ export function computeAnalyzeScore(stock, context) {
   if (sectorInfo?.aboveEma != null) {
     const aligned = (direction === 'LONG' && sectorInfo.aboveEma) || (direction === 'SHORT' && !sectorInfo.aboveEma);
     if (aligned) {
-      t1d = { score: 7, label: 'WITH SECTOR', detail: `${direction} with ${sector} (${sectorInfo.etf} ${sectorInfo.aboveEma ? 'above' : 'below'} 21 EMA, ${sectorInfo.separation ?? '?'}%)` };
+      t1d = { score: 7, label: 'WITH SECTOR', detail: `${direction} with ${sector} (${sectorInfo.etf} ${sectorInfo.aboveEma ? 'above' : 'below'} OpEMA, ${sectorInfo.separation ?? '?'}%)` };
     } else {
-      t1d = { score: 0, label: 'AGAINST', detail: `${direction} against ${sector} (${sectorInfo.etf} ${sectorInfo.aboveEma ? 'above' : 'below'} 21 EMA)` };
-      warnings.push(`Trading ${direction} against ${sector} — ${sectorInfo.etf} is ${sectorInfo.aboveEma ? 'above' : 'below'} 21 EMA`);
+      t1d = { score: 0, label: 'AGAINST', detail: `${direction} against ${sector} (${sectorInfo.etf} ${sectorInfo.aboveEma ? 'above' : 'below'} OpEMA)` };
+      warnings.push(`Trading ${direction} against ${sector} — ${sectorInfo.etf} is ${sectorInfo.aboveEma ? 'above' : 'below'} OpEMA`);
     }
   } else {
     console.error(`[ANALYZE] No sector EMA data for "${sector}" — data bug`);

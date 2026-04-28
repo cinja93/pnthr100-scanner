@@ -240,9 +240,9 @@ const TIER_DEFS = {
 };
 
 const UI_DEFS = {
-  regime: 'Market Regime — The regime multiplier adjusts all Kill scores based on the broad market environment. When SPY and QQQ are below their falling 21-week EMAs (bear market), short signals are amplified up to 1.30× and long signals are dampened to 0.70×. When both are above rising EMAs (bull market), the reverse applies. This ensures the system favors trades aligned with the prevailing market direction.',
-  bl:     'Longs (BL) — Buy Long signals. Stocks that have crossed above their sector EMA with an upward-sloping EMA and confirmed entry quality. In a bear regime, these are dampened by the regime multiplier and fewer will score highly.',
-  ss:     'Shorts (SS) — Sell Short signals. Stocks that have crossed below their sector EMA with a downward-sloping EMA and confirmed entry quality. In a bear regime, these are amplified by the regime multiplier and will dominate the top rankings.',
+  regime: 'Market Regime — The regime multiplier adjusts all Kill scores based on the broad market environment. When SPY and QQQ are below their falling 21W Index EMAs (bear market), short signals are amplified up to 1.30× and long signals are dampened to 0.70×. When both are above rising 21W Index EMAs (bull market), the reverse applies. This ensures the system favors trades aligned with the prevailing market direction. (The 21W Index EMA is the regime gate — separate from each stock\'s OpEMA, which is sector-optimized 18-26W.)',
+  bl:     'Longs (BL) — Buy Long signals. Stocks that have crossed above their OpEMA with an upward-sloping OpEMA and confirmed entry quality. In a bear regime, these are dampened by the regime multiplier and fewer will score highly.',
+  ss:     'Shorts (SS) — Sell Short signals. Stocks that have crossed below their OpEMA with a downward-sloping OpEMA and confirmed entry quality. In a bear regime, these are amplified by the regime multiplier and will dominate the top rankings.',
 };
 
 export default function ApexPage() {

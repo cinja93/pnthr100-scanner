@@ -2331,7 +2331,7 @@ app.get('/api/scoring-health', authenticateJWT, requireAdmin, async (req, res) =
     }
 
     const dimensions = [
-      dim('D1','Market Regime',    '0.70× – 1.30×', 'SPY/QQQ vs 21-week EMA + signal ratio',   d1, d1Varies || d1.hasData),
+      dim('D1','Market Regime',    '0.70× – 1.30×', 'SPY/QQQ vs 21W Index EMA + signal ratio',  d1, d1Varies || d1.hasData),
       dim('D2','Sector Alignment', '−15 to +15 pts', 'FMP sector 5D/1M performance',             d2),
       dim('D3','Entry Quality',    '0 – 85 pts',     `Weekly candles (conviction/slope/sep) — ${d3Conf}`, d3),
       dim('D4','Signal Freshness', '−15 to +10 pts', 'Signal age (days since entry)',             d4),

@@ -3895,7 +3895,7 @@ app.get('/api/journal/closed-scorecard', authenticateJWT, async (req, res) => {
             // This happens when a position was added directly (not via pendingEntries confirm flow).
             try {
               await createJournalEntry(db, pos, req.user.userId);
-              await syncExitToJournal(db, pos.id, req.user.userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pos);
+              await syncExitToJournal(db, pos.id, req.user.userId, exitRecord, 0, profitDollar, profitPct, exitPrice, 'CLOSED', pos);
               console.log(`[Journal] ✅ Created missing journal entry for IBKR-closed ${pos.ticker}`);
             } catch (createErr) {
               console.warn(`[Journal] Create failed for ${pos.ticker}:`, createErr.message);
@@ -3909,7 +3909,7 @@ app.get('/api/journal/closed-scorecard', authenticateJWT, async (req, res) => {
 
           // Case C: Journal exists but exit not yet synced — sync now
           try {
-            await syncExitToJournal(db, pos.id, req.user.userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pos);
+            await syncExitToJournal(db, pos.id, req.user.userId, exitRecord, 0, profitDollar, profitPct, exitPrice, 'CLOSED', pos);
             console.log(`[Journal] ✅ Repaired stuck IBKR-closed entry for ${pos.ticker}`);
           } catch (repairErr) {
             console.warn(`[Journal] Repair failed for ${pos.ticker}:`, repairErr.message);
@@ -4000,7 +4000,7 @@ app.post('/api/journal/repair-ibkr', authenticateJWT, requireAdmin, async (req, 
       if (!jEntry) {
         try {
           const created = await createJournalEntry(db, pos, userId);
-          await syncExitToJournal(db, posId, userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pos);
+          await syncExitToJournal(db, posId, userId, exitRecord, 0, profitDollar, profitPct, exitPrice, 'CLOSED', pos);
           log.push(`✅ [${pos.ticker}] Created new journal entry + synced exit (positionId: ${posId})`);
           repaired++;
         } catch (e) {
@@ -4051,7 +4051,7 @@ app.post('/api/journal/repair-ibkr', authenticateJWT, requireAdmin, async (req, 
             }
           );
           // Now sync the correct exit
-          await syncExitToJournal(db, posId, userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pos);
+          await syncExitToJournal(db, posId, userId, exitRecord, 0, profitDollar, profitPct, exitPrice, 'CLOSED', pos);
           log.push(`✅ [${pos.ticker}] Fixed direction mismatch (was ${jEntry.direction} → ${pos.direction}) + resynced exit`);
           repaired++;
         } catch (e) {
@@ -4067,7 +4067,7 @@ app.post('/api/journal/repair-ibkr', authenticateJWT, requireAdmin, async (req, 
         continue;
       }
       try {
-        await syncExitToJournal(db, posId, userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pos);
+        await syncExitToJournal(db, posId, userId, exitRecord, 0, profitDollar, profitPct, exitPrice, 'CLOSED', pos);
         log.push(`✅ [${pos.ticker}] Synced missing exit data`);
         repaired++;
       } catch (e) {

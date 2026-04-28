@@ -150,7 +150,7 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
         marketAtExit:    {},
         createdAt:       syncedAt,
       };
-      await syncExitToJournal(db, pnthr.id, userId, exitRecord, 0, profitDollar, exitPrice, 'CLOSED', pnthr);
+      await syncExitToJournal(db, pnthr.id, userId, exitRecord, 0, profitDollar, +profitPct.toFixed(2), exitPrice, 'CLOSED', pnthr);
     } catch (e) {
       console.warn(`[IBKR] Journal sync failed for ${symbol}:`, e.message);
     }

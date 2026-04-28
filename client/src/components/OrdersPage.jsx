@@ -378,79 +378,80 @@ export function RulesPopup({ type, onClose }) {
 
 // ── Backtest results popup ──────────────────────────────────────────────────
 
-// ── Pyramid strategy (35/25/20/12/8% lots, full D1-D8 scoring, Jun 2019–Apr 2026) ──
-// Win rate lower than single-lot because stop ratchets move to avg cost on lot fills,
-// converting small single-lot winners (e.g. +1–2%) into losses when price retraces
-// to the now-higher avg cost. W/L ratio improves: fewer small wins, bigger winners.
+// ── Per-direction pyramid backtest (Wagyu $1M tier, NET, Jun 2019–Apr 2026) ──
+// Source: pnthr_bt_pyramid_nav_1m_trade_log MongoDB collection — same dataset
+// that produced v5 Wagyu Per-Tier IR PDFs. NET = post-frictions (commissions,
+// slippage, borrow). Trade counts match v5 page 9 exactly: BL 2,457 / SS 157.
+// Regenerate via: node server/scripts_den/computeBacktestPopupData.js
 const BL_BACKTEST = {
-  trades: 2363, winners: 1172, losers: 1191,
-  winRate: 49.6, avgPnl: 2.55, avgWin: 7.07, avgLoss: -1.90, wlRatio: 3.72,
-  totalReturn: 747076,
-  lotRows: 2363,
-  avgLots: 2.76,
-  lotDist: { 1: '29.3%', 2: '23.7%', 3: '11.9%', 4: '11.4%', 5: '23.8%' },
+  trades: 2457, winners: 1257, losers: 1200,
+  winRate: 51.2, avgPnl: 2.78, avgWin: 7.25, avgLoss: -1.90, wlRatio: 3.82,
+  totalReturn: 7884391,
+  lotRows: 6830,
+  avgLots: 2.78,
+  lotDist: { 1: '36.0%', 2: '25.2%', 3: '17.1%', 4: '12.9%', 5: '8.9%' },
   years: [
-    { year: '2019', trades: 238, winPct: 47.9, avgPnl: 1.39 },
-    { year: '2020', trades: 379, winPct: 47.0, avgPnl: 1.88 },
-    { year: '2021', trades: 437, winPct: 48.7, avgPnl: 2.38 },
-    { year: '2022', trades: 149, winPct: 52.3, avgPnl: 1.20 },
-    { year: '2023', trades: 292, winPct: 43.2, avgPnl: 1.74 },
-    { year: '2024', trades: 451, winPct: 55.0, avgPnl: 3.15 },
-    { year: '2025', trades: 331, winPct: 49.8, avgPnl: 4.26 },
-    { year: '2026', trades: 86,  winPct: 58.1, avgPnl: 4.89 },
+    { year: '2019', trades: 266, winPct: 50.8, avgPnl: 1.61 },
+    { year: '2020', trades: 378, winPct: 47.1, avgPnl: 2.57 },
+    { year: '2021', trades: 465, winPct: 49.2, avgPnl: 1.91 },
+    { year: '2022', trades: 126, winPct: 52.4, avgPnl: 1.38 },
+    { year: '2023', trades: 345, winPct: 54.5, avgPnl: 2.81 },
+    { year: '2024', trades: 457, winPct: 53.6, avgPnl: 3.19 },
+    { year: '2025', trades: 358, winPct: 51.4, avgPnl: 4.91 },
+    { year: '2026', trades: 62,  winPct: 51.6, avgPnl: 2.96 },
   ],
   exitReasons: [
-    { reason: 'SIGNAL (BL exit)', count: 1639, winPct: 60.9, avgPnl: 3.26 },
-    { reason: 'STOP HIT', count: 716, winPct: 24.3, avgPnl: 0.96 },
-    { reason: 'STALE HUNT', count: 8, winPct: 0.0, avgPnl: -1.04 },
+    { reason: 'SIGNAL_BE',  count: 1729, winPct: 62.1, avgPnl: 3.47 },
+    { reason: 'STOP_HIT',   count: 721,  winPct: 25.5, avgPnl: 1.17 },
+    { reason: 'STALE_HUNT', count: 7,    winPct: 0.0,  avgPnl: -1.06 },
   ],
   topWinners: [
-    { ticker: 'SNDK', entry: '2025-08-29', exit: '2025-11-17', pnl: 330.31 },
-    { ticker: 'HOOD', entry: '2025-05-02', exit: '2025-07-28', pnl: 94.30 },
-    { ticker: 'CIEN', entry: '2025-08-29', exit: '2025-11-17', pnl: 81.35 },
-    { ticker: 'GEV',  entry: '2024-08-30', exit: '2024-12-09', pnl: 71.18 },
-    { ticker: 'MUX',  entry: '2025-08-22', exit: '2025-10-27', pnl: 68.22 },
+    { ticker: 'SNDK', entry: '2025-08-29', exit: '2025-11-17', pnl: 312.40 },
+    { ticker: 'HOOD', entry: '2025-05-02', exit: '2025-07-28', pnl: 86.19 },
+    { ticker: 'CIEN', entry: '2025-08-29', exit: '2025-11-17', pnl: 73.78 },
+    { ticker: 'GEV',  entry: '2024-08-30', exit: '2024-12-09', pnl: 64.01 },
+    { ticker: 'MUX',  entry: '2025-08-29', exit: '2025-10-27', pnl: 61.10 },
   ],
   topLosers: [
-    { ticker: 'SMCI', entry: '2024-05-24', exit: '2024-05-28', pnl: -16.29 },
-    { ticker: 'UBER', entry: '2022-08-12', exit: '2022-08-22', pnl: -12.32 },
-    { ticker: 'AA',   entry: '2021-11-12', exit: '2021-11-29', pnl: -12.14 },
-    { ticker: 'ANET', entry: '2025-10-31', exit: '2025-11-03', pnl: -12.05 },
-    { ticker: 'FSLR', entry: '2021-01-29', exit: '2021-02-01', pnl: -10.98 },
+    { ticker: 'SMCI', entry: '2024-05-24', exit: '2024-05-28', pnl: -16.40 },
+    { ticker: 'ON',   entry: '2021-03-19', exit: '2021-03-25', pnl: -12.59 },
+    { ticker: 'ON',   entry: '2021-03-05', exit: '2021-03-08', pnl: -12.59 },
+    { ticker: 'UBER', entry: '2022-08-12', exit: '2022-08-22', pnl: -12.44 },
+    { ticker: 'AA',   entry: '2021-11-12', exit: '2021-11-29', pnl: -12.25 },
   ],
 };
 
 const SS_BACKTEST = {
-  trades: 147, winners: 71, losers: 76,
-  winRate: 48.3, avgPnl: 1.94, avgWin: 6.38, avgLoss: -2.20, wlRatio: 2.89,
-  totalReturn: 34614,
-  lotRows: 147,
-  avgLots: 2.77,
-  lotDist: { 1: '29.2%', 2: '23.7%', 3: '11.8%', 4: '11.5%', 5: '23.8%' },
+  trades: 157, winners: 76, losers: 81,
+  winRate: 48.4, avgPnl: 2.13, avgWin: 6.61, avgLoss: -2.07, wlRatio: 3.19,
+  totalReturn: 390839,
+  lotRows: 456,
+  avgLots: 2.90,
+  lotDist: { 1: '34.4%', 2: '26.3%', 3: '17.5%', 4: '13.4%', 5: '8.3%' },
   years: [
-    { year: '2022', trades: 100, winPct: 49.0, avgPnl: 2.21 },
-    { year: '2023', trades: 22,  winPct: 45.5, avgPnl: 1.37 },
-    { year: '2025', trades: 20,  winPct: 50.0, avgPnl: 2.64 },
-    { year: '2026', trades: 5,   winPct: 40.0, avgPnl: -0.91 },
+    { year: '2022', trades: 106, winPct: 50.0, avgPnl: 2.26 },
+    { year: '2023', trades: 25,  winPct: 44.0, avgPnl: 1.43 },
+    { year: '2025', trades: 17,  winPct: 70.6, avgPnl: 3.99 },
+    { year: '2026', trades: 9,   winPct: 0.0,  avgPnl: -0.97 },
   ],
   noTradeYears: ['2019', '2020', '2021', '2024'],
   exitReasons: [
-    { reason: 'SIGNAL (SS exit)', count: 120, winPct: 69.2, avgPnl: 4.53 },
-    { reason: 'STOP HIT',         count: 23,  winPct: 60.9, avgPnl: 2.50 },
+    { reason: 'SIGNAL_BE', count: 101, winPct: 62.4, avgPnl: 3.08 },
+    { reason: 'STOP_HIT',  count: 56,  winPct: 23.2, avgPnl: 0.42 },
   ],
   topWinners: [
-    { ticker: 'AMD',  entry: '2022-09-16', exit: '2022-10-24', pnl: 33.44 },
-    { ticker: 'STX',  entry: '2022-09-02', exit: '2022-10-24', pnl: 26.28 },
-    { ticker: 'TROW', entry: '2022-01-21', exit: '2022-03-14', pnl: 22.46 },
-    { ticker: 'ARE',  entry: '2022-05-06', exit: '2022-06-27', pnl: 20.70 },
-    { ticker: 'MCHP', entry: '2025-03-28', exit: '2025-04-09', pnl: 20.60 },
+    { ticker: 'WDAY', entry: '2022-04-15', exit: '2022-06-27', pnl: 30.08 },
+    { ticker: 'ZS',   entry: '2022-04-15', exit: '2022-05-31', pnl: 23.46 },
+    { ticker: 'STX',  entry: '2022-09-02', exit: '2022-10-24', pnl: 22.75 },
+    { ticker: 'MCHP', entry: '2025-03-28', exit: '2025-04-09', pnl: 17.66 },
+    { ticker: 'ARE',  entry: '2022-05-06', exit: '2022-06-27', pnl: 16.82 },
   ],
   topLosers: [
-    { ticker: 'FSLR', entry: '2022-07-15', exit: '2022-07-18', pnl: -17.91 },
-    { ticker: 'ASML', entry: '2022-03-11', exit: '2022-03-14', pnl: -12.58 },
-    { ticker: 'ADBE', entry: '2022-11-04', exit: '2022-11-07', pnl: -11.17 },
-    { ticker: 'AMD',  entry: '2022-03-11', exit: '2022-03-21', pnl: -10.72 },
-    { ticker: 'ASML', entry: '2022-04-15', exit: '2022-04-20', pnl: -6.77 },
+    { ticker: 'FSLR', entry: '2022-07-15', exit: '2022-07-18', pnl: -18.04 },
+    { ticker: 'ASML', entry: '2022-03-11', exit: '2022-03-14', pnl: -12.70 },
+    { ticker: 'ADBE', entry: '2022-11-04', exit: '2022-11-07', pnl: -11.29 },
+    { ticker: 'AMD',  entry: '2022-03-11', exit: '2022-03-21', pnl: -10.87 },
+    { ticker: 'ASML', entry: '2022-04-15', exit: '2022-04-20', pnl: -6.89 },
   ],
 };
 
@@ -734,7 +735,7 @@ export function BacktestPopup({ type, onClose }) {
 
         <div className={styles.rulesBody}>
           <div className={styles.ruleDesc} style={{ color: '#888', marginBottom: 12 }}>
-            7-year backtest (Jun 2019 – Apr 2026) · Filter-then-rank pipeline · Pyramiding (Lots 1-5) · $10K full position
+            6.82-year backtest (Jun 2019 – Apr 2026) · Wagyu $1M tier · NET (post-frictions) · Pyramiding (Lots 1-5) · v5 canonical (matches PNTHR_Pyramid_IR_Wagyu_v5 page 9)
           </div>
 
           {/* Headline stats */}
@@ -873,11 +874,11 @@ export function BacktestPopup({ type, onClose }) {
           {/* Total return */}
           <div className={styles.ruleCard} style={{ borderLeft: `3px solid ${color}`, marginTop: 16 }}>
             <div>
-              <div className={styles.ruleName}>Total Dollar P&L ($10K full position per trade)</div>
+              <div className={styles.ruleName}>Total Dollar P&L (Wagyu $1M tier, NET)</div>
               <div className={styles.ruleDesc}>
-                ${d.totalReturn.toLocaleString()} across {d.trades} positions ({d.winners}W / {d.losers}L) · Avg {d.avgLots} lots/trade · CAGR +{type === 'BL' ? BL_HEDGE.cagr : SS_HEDGE.cagr}%
+                ${d.totalReturn.toLocaleString()} across {d.trades} positions ({d.winners}W / {d.losers}L) · Avg {d.avgLots} lots/trade · CAGR +{type === 'BL' ? BL_HEDGE.cagr : SS_HEDGE.cagr}% (pre-fund-fees)
                 {type === 'SS' && ' · The strict crash gate ensures shorts only fire during genuine market breakdowns.'}
-                {type === 'BL' && ' · Positive every year including 2022 bear market.'}
+                {type === 'BL' && ' · Positive avg P&L every year including 2022 bear market.'}
               </div>
             </div>
           </div>

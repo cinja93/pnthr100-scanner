@@ -1465,18 +1465,24 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
             style={{ display: 'flex', alignItems: 'stretch', border: '1px solid #333', borderRadius: 6, overflow: 'hidden', background: '#0a0a0a' }}
           >
             <div style={{ fontSize: 9, fontWeight: 700, color: '#666', padding: '0 10px', alignSelf: 'center', letterSpacing: 0.7 }}>TIER</div>
-            {['filet', 'porterhouse', 'wagyu'].map((t, i) => (
-              <button
-                key={t}
-                onClick={() => setBacktestTier(t)}
-                style={{
-                  padding: '8px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                  border: 'none', borderLeft: i === 0 ? '1px solid #333' : '1px solid #222',
-                  background: backtestTier === t ? '#fcf000' : 'transparent',
-                  color: backtestTier === t ? '#111' : '#888', letterSpacing: 0.5,
-                }}
-              >{t.toUpperCase()}</button>
-            ))}
+            {['filet', 'porterhouse', 'wagyu'].map((t, i) => {
+              // Tier doesn't apply to TEST DATA (which reads user's own pnthr_journal,
+              // not a backtest tier collection). Suppress highlight to avoid implying
+              // the displayed trades are tier-scoped.
+              const tierActive = archiveTab !== 'test_system' && backtestTier === t;
+              return (
+                <button
+                  key={t}
+                  onClick={() => setBacktestTier(t)}
+                  style={{
+                    padding: '8px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    border: 'none', borderLeft: i === 0 ? '1px solid #333' : '1px solid #222',
+                    background: tierActive ? '#fcf000' : 'transparent',
+                    color: tierActive ? '#111' : '#888', letterSpacing: 0.5,
+                  }}
+                >{t.toUpperCase()}</button>
+              );
+            })}
           </div>
 
           {/* TEST DATA tab (no chart) */}

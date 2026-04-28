@@ -81,7 +81,11 @@ function computeGrowth(monthlyReturns, hurdleRates, tier, yearFilter) {
       }
     }
 
-    const returnRate = m.net / getRunningBacktestNav(months, m.month, 100_000);
+    // Each tier's trade log (pnthr_bt_pyramid_nav_{100k|500k|1m}_trade_log) records
+    // dollar P&L sized to that tier's starting NAV. So the rate-of-return at month M
+    // must use that same starting NAV as the running-NAV anchor — not a hardcoded
+    // $100K (which only matches Filet).
+    const returnRate = m.net / getRunningBacktestNav(months, m.month, startingCapital);
     const monthGross = nav * returnRate;
 
     totalGrossReturn += monthGross;
@@ -438,7 +442,7 @@ function CompareDropdown({ compareAmount, onSelect }) {
 }
 
 // ── Main GrowthChart Component ───────────────────────────────────────────────
-export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 'all', showDataBoxes = true, spyGrowth, onRequestSpy }) {
+export default function GrowthChart({ monthlyReturnsByTier, hurdleRates, yearFilter = 'all', showDataBoxes = true, spyGrowth, onRequestSpy }) {
   const [compareAmount, setCompareAmount] = useState(null);
 
   // When user selects a comparison amount, request SPY data if needed
@@ -447,26 +451,35 @@ export default function GrowthChart({ monthlyReturns, hurdleRates, yearFilter = 
     if (amount && onRequestSpy) onRequestSpy();
   };
 
-  // All 3 tiers computed always (for non-compare view)
+  // All 3 tiers computed always (for non-compare view) — each tier uses ITS OWN
+  // monthly returns so the chart matches the v5 per-tier IR PDFs exactly. Driving
+  // all three curves from one tier's data was the BUG-1 root cause (rate inflation
+  // for non-Filet tiers).
   const results = useMemo(() => {
-    if (!monthlyReturns?.length) return null;
+    if (!monthlyReturnsByTier) return null;
+    const anyData = Object.values(monthlyReturnsByTier).some(arr => arr?.length);
+    if (!anyData) return null;
     const out = {};
     for (const [key, tier] of Object.entries(TIERS)) {
-      out[key] = computeGrowth(monthlyReturns, hurdleRates, tier, yearFilter);
+      const tierData = monthlyReturnsByTier[key] || [];
+      out[key] = computeGrowth(tierData, hurdleRates, tier, yearFilter);
     }
     return out;
-  }, [monthlyReturns, hurdleRates, yearFilter]);
+  }, [monthlyReturnsByTier, hurdleRates, yearFilter]);
 
-  // In compare mode: compute for the selected amount (may be custom)
+  // In compare mode: compute for the selected amount (may be custom). Use the
+  // monthly returns for the tier that the amount maps to.
   const compareTier = useMemo(() => {
     if (!compareAmount) return null;
     return getTierForAmount(compareAmount);
   }, [compareAmount]);
 
   const compareResult = useMemo(() => {
-    if (!compareTier || !monthlyReturns?.length) return null;
-    return computeGrowth(monthlyReturns, hurdleRates, compareTier, yearFilter);
-  }, [compareTier, monthlyReturns, hurdleRates, yearFilter]);
+    if (!compareTier || !monthlyReturnsByTier) return null;
+    const tierData = monthlyReturnsByTier[compareTier.key] || [];
+    if (!tierData.length) return null;
+    return computeGrowth(tierData, hurdleRates, compareTier, yearFilter);
+  }, [compareTier, monthlyReturnsByTier, hurdleRates, yearFilter]);
 
   if (!results) return <div style={{ color: '#666', padding: 20, textAlign: 'center' }}>Loading growth data...</div>;
 

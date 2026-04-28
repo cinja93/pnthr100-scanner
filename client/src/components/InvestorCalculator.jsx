@@ -5,10 +5,13 @@ import React, { useState, useMemo } from 'react';
 const MGMT_FEE_ANNUAL = 0.02;
 const MGMT_FEE_MONTHLY = MGMT_FEE_ANNUAL / 12;
 
+// `min` doubles as the backtest-NAV anchor for that tier — the underlying trade log
+// (pnthr_bt_pyramid_nav_{100k|500k|1m}_trade_log) is dollar-sized to that NAV, so any
+// rate-of-return derivation must divide by that NAV, not a hardcoded $100K.
 const TIER_DEFS = {
-  wagyu:       { label: 'Wagyu',       min: 1_000_000, perfAlloc: 0.20, loyaltyAlloc: 0.15, color: '#fcf000' },
-  porterhouse: { label: 'Porterhouse', min: 500_000,   perfAlloc: 0.25, loyaltyAlloc: 0.20, color: '#4ecdc4' },
-  filet:       { label: 'Filet',       min: 100_000,   perfAlloc: 0.30, loyaltyAlloc: 0.25, color: '#ff6b6b' },
+  wagyu:       { key: 'wagyu',       label: 'Wagyu',       min: 1_000_000, perfAlloc: 0.20, loyaltyAlloc: 0.15, color: '#fcf000' },
+  porterhouse: { key: 'porterhouse', label: 'Porterhouse', min: 500_000,   perfAlloc: 0.25, loyaltyAlloc: 0.20, color: '#4ecdc4' },
+  filet:       { key: 'filet',       label: 'Filet',       min: 100_000,   perfAlloc: 0.30, loyaltyAlloc: 0.25, color: '#ff6b6b' },
 };
 
 function getTier(amount) {
@@ -25,10 +28,15 @@ function formatPct(n) {
   return (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
 }
 
-export default function InvestorCalculator({ monthlyReturns, hurdleRates, onClose }) {
+export default function InvestorCalculator({ monthlyReturnsByTier, hurdleRates, onClose }) {
   const [investmentAmount, setInvestmentAmount] = useState(100_000);
   const [startMonth, setStartMonth] = useState('');
   const [endMonth, setEndMonth] = useState('');
+
+  // Pick the tier's monthly returns based on the user's investment amount —
+  // each tier has its own backtest collection (sized to that tier's NAV).
+  const tierForAmount = getTier(investmentAmount);
+  const monthlyReturns = monthlyReturnsByTier?.[tierForAmount.key] || null;
 
   // Available months from backtest data
   const availableMonths = useMemo(() => {
@@ -60,8 +68,10 @@ export default function InvestorCalculator({ monthlyReturns, hurdleRates, onClos
     let yearStartNav = nav;
     let yearGrossProfit = 0;
     let yearHurdleRate = 0;
-    // Track running backtest NAV for return rate calculation
-    let backtestNav = 100_000;
+    // Running backtest NAV anchor — must start at the tier's actual backtest NAV
+    // (NOT a hardcoded $100K), since the dollar P&L in monthlyReturns is sized to
+    // tier.min. Using $100K with the Wagyu collection inflates rates 10x.
+    let backtestNav = tier.min;
 
     const monthlyBreakdown = [];
 

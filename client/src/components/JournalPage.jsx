@@ -466,7 +466,11 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const [systemTrades, setSystemTrades] = useState([]); // fromQueue trades for current year tab
   const [systemTradesLoading, setSystemTradesLoading] = useState(false);
   const [growthChartYear, setGrowthChartYear] = useState(null); // null=hidden, 'all'=cumulative, '2019'-'2026'=per year
-  const [monthlyReturns, setMonthlyReturns] = useState(null);
+  // monthlyReturnsByTier: { filet: [...], porterhouse: [...], wagyu: [...] } — fetched
+  // in parallel when CUMULATIVE/year chart is opened. The chart needs ALL THREE
+  // tier curves and each tier's trade log records dollar P&L sized to its own NAV
+  // ($100K/$500K/$1M), so a single-tier fetch cannot drive all three accurately.
+  const [monthlyReturnsByTier, setMonthlyReturnsByTier] = useState(null);
   const [hurdleRates, setHurdleRates] = useState({});
   const [showCalculator, setShowCalculator] = useState(false);
   const [spyGrowth, setSpyGrowth] = useState(null);
@@ -514,9 +518,10 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
       .catch(() => setDayTradesLoading(false));
   }, [tab]);
 
-  // Clear tier-dependent caches when tier changes so stale numbers don't flash
+  // Clear tier-dependent caches when tier changes so stale numbers don't flash.
+  // (monthlyReturnsByTier is NOT cleared — all 3 tiers are pre-fetched together,
+  // so a tier switch just selects a different slice of an already-loaded object.)
   useEffect(() => {
-    setMonthlyReturns(null);
     setBacktestTrades([]);
     setBacktestSummary(null);
   }, [backtestTier]);
@@ -573,20 +578,34 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
       }).catch(err => { console.error('[JOURNAL] system-trades fetch error:', err); setSystemTradesLoading(false); });
   }, [archiveTab]);
 
-  // Fetch monthly returns for growth charts — tier-change effect clears monthlyReturns
-  // so a tier switch retriggers the fetch; the null-guard below prevents re-fetch on
-  // growthChartYear-only changes (data is tier-scoped, not year-scoped).
+  // Fetch monthly returns for ALL THREE tiers in parallel when the chart is opened.
+  // The chart shows a curve for each tier (Filet/Porterhouse/Wagyu) and they cannot
+  // share data — each tier's trade log has dollar P&L sized to its own NAV. Cached
+  // once per session: switching `backtestTier` just selects a slice, no refetch.
   useEffect(() => {
     if (!growthChartYear) return;
-    if (monthlyReturns) return;
-    fetch(`${API_BASE}/api/journal/backtest/monthly-returns?tier=${backtestTier}`, { headers: authHeaders() })
-      .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
-      .then(data => {
-        setMonthlyReturns(data.monthlyReturns || []);
-        setHurdleRates(data.hurdleRates || {});
+    if (monthlyReturnsByTier) return;
+    const tiers = ['filet', 'porterhouse', 'wagyu'];
+    Promise.all(tiers.map(t =>
+      fetch(`${API_BASE}/api/journal/backtest/monthly-returns?tier=${t}`, { headers: authHeaders() })
+        .then(r => { if (!r.ok) throw new Error(`Failed: ${t}`); return r.json(); })
+        .then(data => ({ tier: t, monthlyReturns: data.monthlyReturns || [], hurdleRates: data.hurdleRates || {} }))
+    ))
+      .then(results => {
+        const byTier = {};
+        let hurdles = {};
+        for (const r of results) {
+          byTier[r.tier] = r.monthlyReturns;
+          hurdles = r.hurdleRates;
+        }
+        setMonthlyReturnsByTier(byTier);
+        setHurdleRates(hurdles);
       })
       .catch(err => console.error('[JOURNAL] monthly-returns fetch error:', err));
-  }, [growthChartYear, backtestTier, monthlyReturns]);
+  }, [growthChartYear, monthlyReturnsByTier]);
+
+  // Legacy single-tier alias for consumers that aren't tier-aware (gating, etc.)
+  const monthlyReturns = monthlyReturnsByTier?.[backtestTier] || null;
 
   // Fetch SPY benchmark data (lazy — only when requested by GrowthChart)
   const fetchSpyData = () => {
@@ -1229,22 +1248,24 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   const InstitutionalTab = () => {
     const gold = '#fcf000', green = '#22c55e', red = '#ef4444', dim = '#888';
 
-    // Hedge fund metrics — v21 canonical Wagyu ($1M tier) backtest, Jun 2019 -> Apr 2026 (6.85 years)
-    // COMB uses Gross MTM daily NAV curve (pre-fund-fee, post-transaction-cost); matches published
-    // Wagyu Gross (Sharpe 2.59 / Sortino 4.72 / MaxDD -8.51%). BL_H / SS_H are realized-Gross
-    // per-direction breakouts from pnthr_bt_pyramid_nav_1m_trade_log (fees are portfolio-level
-    // per PPM Sec. 4.1-4.3 and do not cleanly decompose by direction).
-    // Computed 2026-04-21 via scripts_den/compute_per_direction_metrics.js
-    const BL_H = { cagr: 37.97, sharpe: 3.19, sortino: 85.06, maxDrawdown: 0.91, maxDDPeriod: '2019-09 to 2019-10', calmar: 41.74, profitFactor: 10.33, bestMonth: 12.56, bestMonthLabel: '2021-01', worstMonth: -0.85, worstMonthLabel: '2019-10', positiveMonths: 69, totalMonths: 83, positiveMonthsPct: 83.1, avgMonthlyReturn: 2.47, monthlyStdDev: 2.82 };
-    const SS_H = { cagr: 4.98,  sharpe: 0.49, sortino: 24.66, maxDrawdown: 0.65, maxDDPeriod: '2022-04 to 2022-05', calmar: 7.64,  profitFactor: 7.43,  bestMonth: 8.72,  bestMonthLabel: '2022-05', worstMonth: -0.24, worstMonthLabel: '2026-03', positiveMonths: 14, totalMonths: 83, positiveMonthsPct: 16.9, avgMonthlyReturn: 0.40, monthlyStdDev: 1.48 };
-    const COMB = { cagr: 38.60, sharpe: 2.56, sortino: 4.72,  maxDrawdown: 8.51, maxDDPeriod: '2020-09 to 2020-09', calmar: 4.54,  profitFactor: 10.14, bestMonth: 17.36, bestMonthLabel: '2019-11', worstMonth: -4.64, worstMonthLabel: '2020-09', positiveMonths: 69, totalMonths: 83, positiveMonthsPct: 83.1, avgMonthlyReturn: 2.60, monthlyStdDev: 3.14 };
+    // Hedge fund metrics — v5 canonical Wagyu ($1M tier) backtest, Jun 2019 -> Apr 2026 (6.82 years)
+    // Source of truth: PNTHR_Pyramid_IR_Wagyu_1m_v5.pdf (2026-04-26).
+    // COMB uses Gross MTM daily NAV curve (pre-fund-fee, post-transaction-cost). All
+    // CAGR/Sharpe/Sortino/MaxDD/Best/Worst values match v5 page 5 + page 22 exactly.
+    // BL_H / SS_H are realized per-direction breakouts (pre-fund-fees) — match v5 page 9
+    // "Strategy Metrics by Direction" exactly. Fees are portfolio-level per PPM Sec. 4.1-4.3
+    // and do not cleanly decompose by direction.
+    const BL_H = { cagr: 37.8,  sharpe: 3.22, sortino: 84.87, maxDrawdown: 0.91, maxDDPeriod: '2019-09 to 2019-10', calmar: 41.5,  profitFactor: 10.33, bestMonth: 12.6,  bestMonthLabel: '2021-01', worstMonth: -0.85, worstMonthLabel: '2019-10', positiveMonths: 69, totalMonths: 83, positiveMonthsPct: 83.1, avgMonthlyReturn: 2.47, monthlyStdDev: 2.82 };
+    const SS_H = { cagr: 5.0,   sharpe: 0.58, sortino: 24.61, maxDrawdown: 0.65, maxDDPeriod: '2022-04 to 2022-05', calmar: 7.6,   profitFactor: 7.43,  bestMonth: 8.7,   bestMonthLabel: '2022-05', worstMonth: -0.24, worstMonthLabel: '2026-03', positiveMonths: 14, totalMonths: 83, positiveMonthsPct: 16.9, avgMonthlyReturn: 0.40, monthlyStdDev: 1.48 };
+    const COMB = { cagr: 38.60, sharpe: 2.59, sortino: 4.72,  maxDrawdown: 8.51, maxDDPeriod: '2020-09 to 2020-09', calmar: 4.5,   profitFactor: 10.14, bestMonth: 17.36, bestMonthLabel: '2019-11', worstMonth: -4.64, worstMonthLabel: '2020-09', positiveMonths: 69, totalMonths: 83, positiveMonthsPct: 83.1, avgMonthlyReturn: 2.60, monthlyStdDev: 3.14 };
 
     // $10M demo fund metrics — aggregate NAV is Net-of-fees (Wagyu Class: 2% mgmt + 20% perf alloc,
     // reducing to 15% after 36 months, quarterly non-cumulative per PPM Sec. 4.1-4.3).
     // Source: pnthr_bt_pyramid_nav_1m_daily_nav_mtm_v21_net_recomputed (1,713 daily docs, scaled 10x)
-    // via scripts_den/rebuild_demo_nav_net.js run on 2026-04-21. CAGR matches published Wagyu Net 29.48%.
+    // via scripts_den/rebuild_demo_nav_net.js. endNav $57,841,892 ÷ 10 = $5.78M and matches v5
+    // Wagyu Net ending equity. winRate 51.0% matches v5 page 22 "Win Rate (Combined)" exactly.
     // Per-trade journal entries remain Gross (fees are portfolio-level, not trade-level).
-    const DEMO_5Y = { startNav: '$10,000,000', endNav: '$57,841,892', totalReturn: '+478.4%', trades: '2,614', winRate: '52.1%', commissions: '$417,936', avgDiscipline: '96.1' };
+    const DEMO_5Y = { startNav: '$10,000,000', endNav: '$57,841,892', totalReturn: '+478.4%', trades: '2,614', winRate: '51.0%', commissions: '$417,936', avgDiscipline: '96.1' };
     const DEMO_LF = { startNav: '$10,000,000', endNav: '$11,465,420', totalReturn: '+14.7%',  trades: '312',   winRate: '48.4%', commissions: '$40,858', avgDiscipline: '96.1' };
     const demoData = fundPeriod === 'live_fund' ? DEMO_LF : DEMO_5Y;
 
@@ -1314,7 +1335,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           PNTHR Performance Breakdown
         </div>
         <div style={{ color: dim, marginBottom: 10, fontSize: 11 }}>
-          $100K starting capital · $10K full position (Lots 1-5) · Annualized from monthly returns · Risk-free rate 5%
+          $1M starting capital (Wagyu) · 1% risk per equity position, 0.5% per ETF · Annualized from monthly returns · Risk-free rate 5%
         </div>
 
         {/* Hero metrics grid */}
@@ -1558,10 +1579,10 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
       )}
 
       {/* ── Growth Chart ── */}
-      {growthChartYear && monthlyReturns && (
+      {growthChartYear && monthlyReturnsByTier && (
         <div style={{ padding: '0 24px 16px' }}>
           <GrowthChart
-            monthlyReturns={monthlyReturns}
+            monthlyReturnsByTier={monthlyReturnsByTier}
             hurdleRates={hurdleRates}
             yearFilter={growthChartYear}
             showDataBoxes
@@ -2000,9 +2021,9 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
       </div>
 
       {/* ── Investor Return Calculator Modal ── */}
-      {showCalculator && monthlyReturns && (
+      {showCalculator && monthlyReturnsByTier && (
         <InvestorCalculator
-          monthlyReturns={monthlyReturns}
+          monthlyReturnsByTier={monthlyReturnsByTier}
           hurdleRates={hurdleRates}
           onClose={() => setShowCalculator(false)}
         />

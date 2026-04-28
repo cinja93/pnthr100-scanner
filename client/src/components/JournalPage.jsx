@@ -1250,14 +1250,24 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
 
     // Hedge fund metrics — v5 canonical Wagyu ($1M tier) backtest, Jun 2019 -> Apr 2026 (6.82 years)
     // Source of truth: PNTHR_Pyramid_IR_Wagyu_1m_v5.pdf (2026-04-26).
-    // COMB uses Gross MTM daily NAV curve (pre-fund-fee, post-transaction-cost). All
-    // CAGR/Sharpe/Sortino/MaxDD/Best/Worst values match v5 page 5 + page 22 exactly.
-    // BL_H / SS_H are realized per-direction breakouts (pre-fund-fees) — match v5 page 9
-    // "Strategy Metrics by Direction" exactly. Fees are portfolio-level per PPM Sec. 4.1-4.3
-    // and do not cleanly decompose by direction.
-    const BL_H = { cagr: 37.8,  sharpe: 3.22, sortino: 84.87, maxDrawdown: 0.91, maxDDPeriod: '2019-09 to 2019-10', calmar: 41.5,  profitFactor: 10.33, bestMonth: 12.6,  bestMonthLabel: '2021-01', worstMonth: -0.85, worstMonthLabel: '2019-10', positiveMonths: 69, totalMonths: 83, positiveMonthsPct: 83.1, avgMonthlyReturn: 2.47, monthlyStdDev: 2.82 };
-    const SS_H = { cagr: 5.0,   sharpe: 0.58, sortino: 24.61, maxDrawdown: 0.65, maxDDPeriod: '2022-04 to 2022-05', calmar: 7.6,   profitFactor: 7.43,  bestMonth: 8.7,   bestMonthLabel: '2022-05', worstMonth: -0.24, worstMonthLabel: '2026-03', positiveMonths: 14, totalMonths: 83, positiveMonthsPct: 16.9, avgMonthlyReturn: 0.40, monthlyStdDev: 1.48 };
-    const COMB = { cagr: 38.60, sharpe: 2.59, sortino: 4.72,  maxDrawdown: 8.51, maxDDPeriod: '2020-09 to 2020-09', calmar: 4.5,   profitFactor: 10.14, bestMonth: 17.36, bestMonthLabel: '2019-11', worstMonth: -4.64, worstMonthLabel: '2020-09', positiveMonths: 69, totalMonths: 83, positiveMonthsPct: 83.1, avgMonthlyReturn: 2.60, monthlyStdDev: 3.14 };
+    //
+    // We display three distinct number sets — they are NOT redundant:
+    //   COMB         = NET MTM (Wagyu Class fees applied) — v5 pages 4, 22, 23 (NET).
+    //                  This is the headline / hero number — what a real investor experiences.
+    //   COMB_GROSS   = GROSS MTM (pre-fund-fee, post-transaction-cost) — v5 pages 4, 5, 22 (GROSS).
+    //                  Used only for the "Gross vs Net — Fee Schedule Impact" comparison.
+    //   COMB_REAL    = Realized Pre-Fund-Fees (closed-trade P&L only) — v5 page 9 COMBINED.
+    //                  Used for the per-direction BL/SS breakdown table (only path where
+    //                  per-direction numbers are publishable; fees are portfolio-level per
+    //                  PPM Sec. 4.1-4.3 and do not cleanly decompose by direction).
+    // BL_H / SS_H likewise come from v5 page 9 "Strategy Metrics by Direction (Pre-Fund-Fees)".
+    const BL_H       = { cagr: 37.8,  sharpe: 3.22, sortino: 84.87, maxDrawdown: 0.91, calmar: 41.5,  profitFactor: 10.33, winRate: 51.2, bestMonth: 12.6, totalTrades: 2457 };
+    const SS_H       = { cagr: 5.0,   sharpe: 0.58, sortino: 24.61, maxDrawdown: 0.65, calmar: 7.6,   profitFactor: 7.43,  winRate: 48.4, bestMonth: 8.7,  totalTrades: 157  };
+    const COMB_REAL  = { cagr: 38.6,  sharpe: 3.31, sortino: 86.48, maxDrawdown: 0.91, calmar: 42.5,  profitFactor: 10.14, winRate: 51.0, bestMonth: 12.6, totalTrades: 2614 };
+    const COMB_GROSS = { cagr: 38.60, sharpe: 2.59, sortino: 4.72,  maxDrawdown: 8.51, calmar: 4.5,   profitFactor: 10.14, bestMonth: 17.36, worstMonth: -4.64, endingEquity: '$9.37M', totalReturn: 826.6 };
+    const COMB       = { cagr: 29.35, sharpe: 1.95, sortino: 3.39,  maxDrawdown: 8.82, calmar: 3.33,  profitFactor: 10.14, bestMonth: 17.16, worstMonth: -6.99, endingEquity: '$5.78M', totalReturn: 478.4, positiveMonths: 63, totalMonths: 83, positiveMonthsPct: 75.9, avgMonthlyReturn: 2.01, monthlyStdDev: 3.12, bestMonthLabel: '2019-11', worstMonthLabel: '2020-09', maxDDPeriod: '2020-09 to 2020-09' };
+    // SPY benchmark over the same $1M start window — v5 page 4 "PNTHR vs S&P 500".
+    const SPY_BM     = { cagr: 14.59, sharpe: 0.65, sortino: 1.11, maxDrawdown: 33.7, totalReturn: 153.1, endingEquity: '$2.53M' };
 
     // $10M demo fund metrics — aggregate NAV is Net-of-fees (Wagyu Class: 2% mgmt + 20% perf alloc,
     // reducing to 15% after 36 months, quarterly non-cumulative per PPM Sec. 4.1-4.3).
@@ -1330,22 +1340,22 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           </div>
         )}
 
-        {/* ── PNTHR Performance Breakdown (BL / SS / Combined) ── */}
+        {/* ── PNTHR Performance — Net of Fees (Wagyu Class) ── */}
         <div style={{ color: gold, fontSize: 13, fontWeight: 700, letterSpacing: 1, marginBottom: 12, borderBottom: '1px solid #333', paddingBottom: 6, textTransform: 'uppercase' }}>
-          PNTHR Performance Breakdown
+          PNTHR Performance — Net of Fees (Wagyu Class)
         </div>
         <div style={{ color: dim, marginBottom: 10, fontSize: 11 }}>
-          $1M starting capital (Wagyu) · 1% risk per equity position, 0.5% per ETF · Annualized from monthly returns · Risk-free rate 5%
+          $1M starting capital · Net of 2% mgmt fee + 20% performance allocation (15% after 36-month loyalty) above US2Y/4 quarterly hurdle, applied per PPM Sec. 4.1-4.3 · Risk-free rate 5%
         </div>
 
-        {/* Hero metrics grid */}
+        {/* Hero metrics grid — NET MTM (what an investor actually experiences) */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
           {[
-            { label: 'CAGR', value: `+${COMB.cagr}%`, color: gold },
-            { label: 'Sharpe', value: COMB.sharpe, color: gold },
-            { label: 'Sortino', value: COMB.sortino, color: gold },
-            { label: 'Max Drawdown', value: `-${COMB.maxDrawdown}%`, color: red },
-            { label: 'Calmar', value: COMB.calmar, color: gold },
+            { label: 'Net CAGR', value: `+${COMB.cagr}%`, color: gold },
+            { label: 'Net Sharpe', value: COMB.sharpe, color: gold },
+            { label: 'Net Sortino', value: COMB.sortino, color: gold },
+            { label: 'Max Drawdown (Net MTM)', value: `-${COMB.maxDrawdown}%`, color: red },
+            { label: 'Net Calmar', value: COMB.calmar, color: gold },
             { label: 'Profit Factor', value: COMB.profitFactor, color: gold },
           ].map(s => (
             <div key={s.label} style={{ background: '#1a1a1a', borderRadius: 6, padding: 12, textAlign: 'center' }}>
@@ -1355,7 +1365,51 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           ))}
         </div>
 
-        {/* Full breakdown table */}
+        {/* ── Gross vs Net — Impact of Fee Schedule (mirrors v5 IR pages 4-5) ── */}
+        <div style={{ color: gold, fontSize: 13, fontWeight: 700, letterSpacing: 1, marginTop: 8, marginBottom: 12, borderBottom: '1px solid #333', paddingBottom: 6, textTransform: 'uppercase' }}>
+          Gross vs Net — Impact of Fee Schedule
+        </div>
+        <div style={{ color: dim, marginBottom: 10, fontSize: 11 }}>
+          Gross figures are post-transaction-costs but BEFORE the 2% mgmt fee + Wagyu Class performance allocation. Net is the take-home — applied per PPM Sec. 4.1-4.3 (mgmt accrued monthly on NAV; perf allocation charged QUARTERLY non-cumulative on NAV above HWM and the US2Y/4 quarterly hurdle).
+        </div>
+        <table style={tbl}>
+          <thead>
+            <tr>
+              <th style={th}>Metric</th>
+              <th style={{ ...th, textAlign: 'right' }}>Gross</th>
+              <th style={{ ...th, textAlign: 'right' }}>Net</th>
+              <th style={{ ...th, textAlign: 'right' }}>Fee Drag</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              { m: 'Total Return',          g: `+${COMB_GROSS.totalReturn}%`,    n: `+${COMB.totalReturn}%`,    d: '-348.2 pts', fw: true },
+              { m: 'CAGR',                  g: `+${COMB_GROSS.cagr}%`,           n: `+${COMB.cagr}%`,           d: '-9.25 pts' },
+              { m: 'Sharpe Ratio',          g: COMB_GROSS.sharpe,                n: COMB.sharpe,                d: '-0.64' },
+              { m: 'Sortino Ratio',         g: COMB_GROSS.sortino,               n: COMB.sortino,               d: '-1.33' },
+              { m: 'Calmar Ratio',          g: COMB_GROSS.calmar,                n: COMB.calmar,                d: '-1.2' },
+              { m: 'Max Monthly P-to-T',    g: `-${COMB_GROSS.maxDrawdown}%`,    n: `-${COMB.maxDrawdown}%`,    d: '+0.31 pts' },
+              { m: 'Best Month',            g: `+${COMB_GROSS.bestMonth}%`,      n: `+${COMB.bestMonth}%`,      d: '—', dDim: true },
+              { m: 'Worst Month',           g: `${COMB_GROSS.worstMonth}%`,      n: `${COMB.worstMonth}%`,      d: '—', dDim: true },
+              { m: 'Ending Equity ($1M)',   g: COMB_GROSS.endingEquity,          n: COMB.endingEquity,          d: '-$3.59M', fw: true },
+            ].map(r => (
+              <tr key={r.m}>
+                <td style={{ ...td, color: dim }}>{r.m}</td>
+                <td style={{ ...tdr, color: '#ccc', fontWeight: r.fw ? 700 : 400 }}>{r.g}</td>
+                <td style={{ ...tdr, color: gold, fontWeight: 700 }}>{r.n}</td>
+                <td style={{ ...tdr, color: r.dDim ? dim : red, fontWeight: r.fw ? 700 : 400 }}>{r.d}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* ── Strategy by Direction (Pre-Fund-Fees, realized P&L) ── */}
+        <div style={{ color: gold, fontSize: 13, fontWeight: 700, letterSpacing: 1, marginTop: 24, marginBottom: 12, borderBottom: '1px solid #333', paddingBottom: 6, textTransform: 'uppercase' }}>
+          Strategy by Direction (Pre-Fund-Fees)
+        </div>
+        <div style={{ color: dim, marginBottom: 10, fontSize: 11 }}>
+          Realized closed-trade P&L per direction. Fund fees are portfolio-level per PPM Sec. 4.1-4.3 and do not cleanly decompose by direction, so per-direction figures are reported pre-fund-fees only. Mirrors v5 IR page 9.
+        </div>
         <table style={tbl}>
           <thead>
             <tr>
@@ -1367,19 +1421,15 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           </thead>
           <tbody>
             {[
-              { m: 'CAGR', bl: `+${BL_H.cagr}%`, ss: `+${SS_H.cagr}%`, c: `+${COMB.cagr}%`, cColor: gold, color: green },
-              { m: 'Sharpe Ratio', bl: BL_H.sharpe, ss: SS_H.sharpe, c: COMB.sharpe, cColor: gold },
-              { m: 'Sortino Ratio', bl: BL_H.sortino, ss: SS_H.sortino, c: COMB.sortino, cColor: gold },
-              { m: 'Max Drawdown', bl: `-${BL_H.maxDrawdown}%`, ss: `-${SS_H.maxDrawdown}%`, c: `-${COMB.maxDrawdown}%`, color: red },
-              { m: 'Calmar Ratio', bl: BL_H.calmar, ss: SS_H.calmar, c: COMB.calmar, cColor: gold },
-              { m: 'Profit Factor', bl: BL_H.profitFactor, ss: SS_H.profitFactor, c: COMB.profitFactor, cColor: gold },
-              { m: 'Win Rate', bl: '66.7%', ss: '62.2%', c: '66.3%' },  /* BL unchanged at 66.7% after 9-trade sector gate fix */
-              { m: 'Avg Monthly Return', bl: `+${BL_H.avgMonthlyReturn}%`, ss: `+${SS_H.avgMonthlyReturn}%`, c: `+${COMB.avgMonthlyReturn}%`, color: green },
-              { m: 'Monthly Std Dev', bl: `${BL_H.monthlyStdDev}%`, ss: `${SS_H.monthlyStdDev}%`, c: `${COMB.monthlyStdDev}%` },
-              { m: 'Best Month', bl: `+${BL_H.bestMonth}%`, ss: `+${SS_H.bestMonth}%`, c: `+${COMB.bestMonth}%`, color: green },
-              { m: 'Worst Month', bl: `${BL_H.worstMonth}%`, ss: `${SS_H.worstMonth}%`, c: `${COMB.worstMonth}%`, color: red },
-              { m: 'Positive Months', bl: `${BL_H.positiveMonths}/${BL_H.totalMonths} (${BL_H.positiveMonthsPct}%)`, ss: `${SS_H.positiveMonths}/${SS_H.totalMonths} (${SS_H.positiveMonthsPct}%)`, c: `${COMB.positiveMonths}/${COMB.totalMonths} (${COMB.positiveMonthsPct}%)` },
-              { m: 'Total Trades', bl: '1,524', ss: '143', c: '1,667', fw: true },
+              { m: 'CAGR (pre-fund-fees)', bl: `+${BL_H.cagr}%`, ss: `+${SS_H.cagr}%`, c: `+${COMB_REAL.cagr}%`, cColor: gold, color: green },
+              { m: 'Sharpe Ratio', bl: BL_H.sharpe, ss: SS_H.sharpe, c: COMB_REAL.sharpe, cColor: gold },
+              { m: 'Sortino Ratio', bl: BL_H.sortino, ss: SS_H.sortino, c: COMB_REAL.sortino, cColor: gold },
+              { m: 'Max Drawdown', bl: `-${BL_H.maxDrawdown}%`, ss: `-${SS_H.maxDrawdown}%`, c: `-${COMB_REAL.maxDrawdown}%`, color: red },
+              { m: 'Calmar Ratio', bl: BL_H.calmar, ss: SS_H.calmar, c: COMB_REAL.calmar, cColor: gold },
+              { m: 'Profit Factor', bl: `${BL_H.profitFactor}x`, ss: `${SS_H.profitFactor}x`, c: `${COMB_REAL.profitFactor}x`, cColor: gold },
+              { m: 'Win Rate', bl: `${BL_H.winRate}%`, ss: `${SS_H.winRate}%`, c: `${COMB_REAL.winRate}%` },
+              { m: 'Best Month', bl: `+${BL_H.bestMonth}%`, ss: `+${SS_H.bestMonth}%`, c: `+${COMB_REAL.bestMonth}%`, color: green },
+              { m: 'Total Trades', bl: BL_H.totalTrades.toLocaleString(), ss: SS_H.totalTrades.toLocaleString(), c: COMB_REAL.totalTrades.toLocaleString(), fw: true },
             ].map(r => (
               <tr key={r.m}>
                 <td style={{ ...td, color: dim }}>{r.m}</td>
@@ -1391,41 +1441,46 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           </tbody>
         </table>
 
-        {/* ── PNTHR vs S&P 500 ── */}
+        {/* ── PNTHR (Net) vs S&P 500 — actual v5 numbers, $1M start ── */}
         <div style={{ color: gold, fontSize: 13, fontWeight: 700, letterSpacing: 1, marginBottom: 12, marginTop: 24, borderBottom: '1px solid #333', paddingBottom: 6, textTransform: 'uppercase' }}>
-          PNTHR vs S&P 500
+          PNTHR (Net) vs S&P 500
+        </div>
+        <div style={{ color: dim, marginBottom: 10, fontSize: 11 }}>
+          Both starting at $1,000,000 on 2019-06-07; SPY benchmark is the SPDR S&P 500 ETF total-return series (dividend-adjusted, 0.03% expense). Mirrors v5 IR page 4.
         </div>
         <table style={tbl}>
           <thead>
             <tr>
               <th style={th}>Metric</th>
-              <th style={{ ...th, textAlign: 'right' }}>PNTHR Combined</th>
-              <th style={{ ...th, textAlign: 'right' }}>S&P 500 (approx)</th>
+              <th style={{ ...th, textAlign: 'right' }}>PNTHR (Net)</th>
+              <th style={{ ...th, textAlign: 'right' }}>S&P 500 (SPY)</th>
+              <th style={{ ...th, textAlign: 'right' }}>Alpha</th>
             </tr>
           </thead>
           <tbody>
             {[
-              { m: 'CAGR', p: `+${COMB.cagr}%`, s: '~10-12%', pc: gold },
-              { m: 'Sharpe Ratio', p: COMB.sharpe, s: '~0.5-0.8', pc: gold },
-              { m: 'Sortino Ratio', p: COMB.sortino, s: '~0.7-1.0', pc: gold },
-              { m: 'Max Drawdown', p: `-${COMB.maxDrawdown}%`, s: '~-25%', pc: green, sc: red },
-              { m: 'Positive Months', p: `${COMB.positiveMonthsPct}%`, s: '~60-65%', pc: gold },
-              { m: 'Worst Month', p: `${COMB.worstMonth}%`, s: '~-9%', pc: green, sc: red },
+              { m: 'Total Return (6.82y)', p: `+${COMB.totalReturn}%`,    s: `+${SPY_BM.totalReturn}%`,   a: '+325.3 pts',  pc: gold, ac: green },
+              { m: 'CAGR',                  p: `+${COMB.cagr}%`,           s: `+${SPY_BM.cagr}%`,          a: '+14.76 pts', pc: gold, ac: green },
+              { m: 'Sharpe Ratio',          p: COMB.sharpe,                s: SPY_BM.sharpe,               a: '+1.30',      pc: gold, ac: green },
+              { m: 'Sortino Ratio',         p: COMB.sortino,               s: SPY_BM.sortino,              a: '+2.28',      pc: gold, ac: green },
+              { m: 'Max Drawdown',          p: `-${COMB.maxDrawdown}%`,    s: `-${SPY_BM.maxDrawdown}%`,   a: '+24.90 pts', pc: green, sc: red, ac: green },
+              { m: 'Ending Equity',         p: COMB.endingEquity,          s: SPY_BM.endingEquity,         a: '+$3.25M',    pc: gold, ac: green, fw: true },
             ].map(r => (
               <tr key={r.m}>
                 <td style={{ ...td, color: dim }}>{r.m}</td>
                 <td style={{ ...tdr, color: r.pc || '#ccc', fontWeight: 700 }}>{r.p}</td>
                 <td style={{ ...tdr, color: r.sc || '#ccc' }}>{r.s}</td>
+                <td style={{ ...tdr, color: r.ac || '#ccc', fontWeight: r.fw ? 700 : 400 }}>{r.a}</td>
               </tr>
             ))}
           </tbody>
         </table>
 
-        {/* Interpretation */}
+        {/* Interpretation — v5 NET narrative */}
         <div style={{ background: '#1a1a1a', borderLeft: `3px solid ${gold}`, borderRadius: 4, padding: '12px 16px', marginTop: 16 }}>
           <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Interpretation</div>
           <div style={{ color: '#aaa', fontSize: 12, lineHeight: 1.5 }}>
-            Sharpe {'>'} 2.0 is exceptional — top hedge funds target 1.0-1.5. Max drawdown of -0.24% vs the S&P 500's -25% in 2022 demonstrates extreme capital protection. Pyramiding concentrates capital into winners while losers stay small (Lot 1 only). 95% positive months with a worst month of just -0.24% is institutional-grade consistency. Backtest metrics above use $100K capital with $10K full positions. The $10M Demo Fund above applies real-world constraints: 1% risk per position, 10% max portfolio heat, IBKR Pro commissions, and wash sale compliance.
+            Net Sharpe of {COMB.sharpe} is institutional-grade — top long/short hedge funds target 1.0–1.5 net of fees. Net max daily peak-to-trough drawdown of -{COMB.maxDrawdown}% over the same 6.82-year window in which SPY drew down -{SPY_BM.maxDrawdown}% demonstrates the strategy's regime-aware capital protection. {COMB.positiveMonths} of {COMB.totalMonths} months profitable ({COMB.positiveMonthsPct}%) with a worst single month of {COMB.worstMonth}% reflects pyramiding's asymmetric risk profile — losses stay small (Lot 1 only) while winners get capital concentration via Lots 2-5. Headline figures are reported on a NET basis (Wagyu Class fee schedule per PPM v6.9); the Gross vs Net table above shows the full fee-schedule impact transparently. The $10M Demo Fund above scales the same Net-of-fees Wagyu Class result 10× to illustrate institutional capacity.
           </div>
         </div>
       </div>

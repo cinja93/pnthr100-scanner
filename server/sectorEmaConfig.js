@@ -50,5 +50,28 @@ export function getSectorEmaPeriod(sector) {
   return SECTOR_EMA_PERIODS[sector] || DEFAULT_EMA_PERIOD;
 }
 
+// Sector ETF → canonical sector name (for sector ETF gate EMA lookup)
+export const ETF_TO_SECTOR = {
+  XLK:  'Technology',
+  XLV:  'Healthcare',
+  XLF:  'Financial Services',
+  XLI:  'Industrials',
+  XLE:  'Energy',
+  XLC:  'Communication Services',
+  XLRE: 'Real Estate',
+  XLU:  'Utilities',
+  XLB:  'Basic Materials',
+  XLY:  'Consumer Discretionary',
+  XLP:  'Consumer Staples',
+};
+
+/**
+ * Get the optimal EMA period for a sector ETF (XLK, XLV, etc).
+ * Falls back to DEFAULT_EMA_PERIOD (21) for unknown ETFs.
+ */
+export function getEtfEmaPeriod(etf) {
+  return getSectorEmaPeriod(ETF_TO_SECTOR[etf]);
+}
+
 // Client-friendly export: sector → period mapping for bundling into client code
 export const SECTOR_EMA_MAP = { ...SECTOR_EMA_PERIODS };

@@ -22,9 +22,10 @@ import { getJungleStocks }               from './stockService.js';
 import { getSignals }                     from './signalService.js';
 import { getSp400Longs, getSp400Shorts }  from './sp400Service.js';
 import { getPreyResults }                 from './preyService.js';
-import { getLastFriday }                  from './technicalUtils.js';
+import { getLastFriday, computeEMAseries } from './technicalUtils.js';
 import { DEMO_OWNER_ID }                  from './demoEngine.js';
 import { getDirectionIndexFromFlags }     from './gateLogic.js';
+import { getEtfEmaPeriod }                 from './sectorEmaConfig.js';
 import { fetchEarningsMap }                from './assistantService.js';
 
 // NEW_ASYM_SS selection parameters, as run by the canonical Wagyu backtest
@@ -120,16 +121,21 @@ async function fetchSectorGateData() {
     try {
       const data = await fetchStockData(etf);
       if (!data) return;
-      const { weekly, ema21 } = data;
+      const { weekly } = data;
       const n = weekly.length;
       const li = n - 1;
-      if (!ema21[li]) return;
+      // Sector ETF gate uses the sector's optimized EMA period (18-26W per
+      // sectorEmaConfig.js), not a fixed 21W. v22 adoption 2026-04-21.
+      const period = getEtfEmaPeriod(etf);
+      const emaSeries = computeEMAseries(weekly, period);
+      if (emaSeries[li] == null) return;
 
       result[etf] = {
         close:     weekly[li].close,
-        ema21:     ema21[li],
-        aboveEma:  weekly[li].close > ema21[li],
-        emaRising: ema21[li] > (ema21[li - 1] || 0),
+        ema:       emaSeries[li],
+        emaPeriod: period,
+        aboveEma:  weekly[li].close > emaSeries[li],
+        emaRising: emaSeries[li - 1] != null && emaSeries[li] > emaSeries[li - 1],
         return5D:  basicSectorData[etf]?.return5D ?? null,
         return1M:  basicSectorData[etf]?.return1M ?? null,
       };
@@ -295,7 +301,8 @@ export async function runOrdersPipeline({ type = 'WEEKLY' } = {}) {
     sectorSummary[etf] = {
       sector:    sectorName,
       close:     d.close,
-      ema21:     d.ema21,
+      ema:       d.ema,
+      emaPeriod: d.emaPeriod,
       aboveEma:  d.aboveEma,
       return5D:  d.return5D,
       return1M:  d.return1M,

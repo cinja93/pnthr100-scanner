@@ -74,8 +74,8 @@ export function RulesPopup({ type, onClose }) {
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>3</div>
               <div>
-                <div className={styles.ruleName}>SECTOR Gate — Sector ETF Above 21W EMA</div>
-                <div className={styles.ruleDesc}>The stock's sector ETF (e.g., XLK for Technology, XLF for Financials) must be trading ABOVE its 21-week EMA. Buying longs in a sector that's in a downtrend is blocked.</div>
+                <div className={styles.ruleName}>SECTOR Gate — Sector ETF Above Sector-Optimized EMA</div>
+                <div className={styles.ruleDesc}>The stock's sector ETF (e.g., XLK for Technology, XLF for Financials) must be trading ABOVE its sector-optimized weekly EMA — same per-sector period used for the stock signal (18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate). Buying longs in a sector that's in a downtrend is blocked.</div>
               </div>
             </div>
 
@@ -226,8 +226,8 @@ export function RulesPopup({ type, onClose }) {
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>3</div>
               <div>
-                <div className={styles.ruleName}>SECTOR Gate — Sector ETF Below 21W EMA</div>
-                <div className={styles.ruleDesc}>The stock's sector ETF must be trading BELOW its 21-week EMA. Shorting in a sector that's trending up is blocked.</div>
+                <div className={styles.ruleName}>SECTOR Gate — Sector ETF Below Sector-Optimized EMA</div>
+                <div className={styles.ruleDesc}>The stock's sector ETF must be trading BELOW its sector-optimized weekly EMA — same per-sector period used for the stock signal (18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate). Shorting in a sector that's trending up is blocked.</div>
               </div>
             </div>
 

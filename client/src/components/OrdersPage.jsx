@@ -59,15 +59,15 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>1</div>
               <div>
                 <div className={styles.ruleName}>Active BL Signal</div>
-                <div className={styles.ruleDesc}>Stock must have a confirmed Buy Long signal (close {'>'} sector EMA, slope up, high {'>='} 2-week high, 1-10% daylight above EMA)</div>
+                <div className={styles.ruleDesc}>Stock must have a confirmed Buy Long signal: weekly close {'>'} its own 21-week EMA, 21W EMA sloping up, weekly high {'>='} prior 2-week high + $0.01, and weekly low sits 1–10% above the 21W EMA (0.3–10% for ETFs), within the first 3 bars of the long-daylight streak.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>2</div>
               <div>
-                <div className={styles.ruleName}>MACRO Gate — Index Above 21W EMA</div>
-                <div className={styles.ruleDesc}>SPY (NYSE stocks) or QQQ (NASDAQ stocks) must be trading ABOVE its 21-week EMA. If the index is below EMA, all longs in that exchange are blocked.</div>
+                <div className={styles.ruleName}>MACRO Gate — Direction Index Above 21W EMA</div>
+                <div className={styles.ruleDesc}>Direction index is set by index membership: SP500 → SPY, Nasdaq-100-only → QQQ, S&amp;P MidCap 400 → MDY (fallback SPY if MDY data missing). The stock's direction index must be trading ABOVE its 21-week EMA, otherwise the long is blocked.</div>
               </div>
             </div>
 
@@ -96,7 +96,7 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>D1</div>
               <div>
                 <div className={styles.ruleName}>Regime Multiplier (0.70–1.30×)</div>
-                <div className={styles.ruleDesc}>Scales entire score by macro regime. Index EMA position + slope scored ±2, plus SS:BL ratio adjustments. regimeScore × 0.06 = adjustment. BL: 1.0 + adj; SS: 1.0 − adj.</div>
+                <div className={styles.ruleDesc}>Scales entire score by macro regime. Direction index (SPY/QQQ/MDY by membership) EMA position + slope scored ±2; SS:BL open ratio scored ±2 with an additional ±1 from new-signal ratio. regimeScore × 0.06 = adjustment, clamped 0.70–1.30. BL: 1.0 + adj; SS: 1.0 − adj.</div>
               </div>
             </div>
 
@@ -112,7 +112,7 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>D3</div>
               <div>
                 <div className={styles.ruleName}>Entry Quality (0–85 pts) — THE KEY DIMENSION</div>
-                <div className={styles.ruleDesc}>Sub-A: Close conviction (cap 40 pts). Sub-B: EMA slope × 10, signal direction only (cap 30 pts). Sub-C: EMA separation bell curve — sweet spot 2-8% (up to 15 pts), decays 8-20%, 20%+ = OVEREXTENDED (score −99). Confirmation: ≥30=CONFIRMED, ≥15=PARTIAL, {'<'}15=UNCONFIRMED.</div>
+                <div className={styles.ruleDesc}>Sub-A: Close conviction within weekly range × 2.5, cap 40 pts. Sub-B: |EMA slope %| × 10, signal direction only, cap 30 pts. Sub-C: EMA daylight bell curve (uses high/low vs EMA) — 0-2% ramp 0→6 pts, sweet spot 2-8% (6→15 pts), 8-15% decay 15→3 pts, 15-20% decay 3→0 pts. Overextension hard gate (sets entire stock score to −99) triggers when CLOSE-vs-EMA separation {'>'} 20%, even if intraweek high/low daylight scored differently. Confirmation: ≥30=CONFIRMED, ≥15=PARTIAL, {'<'}15=UNCONFIRMED.</div>
               </div>
             </div>
 
@@ -120,7 +120,7 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>D4</div>
               <div>
                 <div className={styles.ruleName}>Signal Freshness (−15 to +10 pts)</div>
-                <div className={styles.ruleDesc}>New signals earn bonus scaled by D3 confirmation. Age 0 CONFIRMED: +10, PARTIAL: +6, UNCONFIRMED: +3. Decays to 0 by week 3–5, then −3/wk through week 9, smooth decay to floor −15.</div>
+                <div className={styles.ruleDesc}>New signals earn bonus scaled by D3 confirmation. Age 0: CONFIRMED +10, PARTIAL +6, UNCONFIRMED +3. Age 1: CONFIRMED +7, PARTIAL +4, UNCONFIRMED +2. Age 2: +4. Age 3-5: 0. Age 6-9: −3 per week beyond week 5 (so −3, −6, −9, −12). Age 10+: smooth decay −1.5/wk from −12, floor −15.</div>
               </div>
             </div>
 
@@ -136,7 +136,7 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>D6</div>
               <div>
                 <div className={styles.ruleName}>Momentum (−10 to +20 pts)</div>
-                <div className={styles.ruleDesc}>Sub-A RSI: ±5 pts (inverted for SS). Sub-B OBV week-over-week: ±5 pts. Sub-C ADX: 0–5 pts when rising above 15. Sub-D Volume: +5 if ratio {'>'} 1.5×. Floor −10, cap +20.</div>
+                <div className={styles.ruleDesc}>Sub-A RSI: ±5 pts (inverted for SS). Sub-B OBV week-over-week: ±5 pts (inverted for SS). Sub-C ADX: 0–5 pts when rising above 15. Sub-D Volume: +5 if weekly volume / 20-week average {'>'} 1.5×. Floor −10, cap +20.</div>
               </div>
             </div>
 
@@ -196,9 +196,9 @@ export function RulesPopup({ type, onClose }) {
 
             <div className={styles.ruleCard} style={{ borderLeft: '3px solid #fcf000' }}>
               <div>
-                <div className={styles.ruleName}>BL Backtest Results</div>
+                <div className={styles.ruleName}>BL Backtest Results (v5 Wagyu — realized pre-fund-fees)</div>
                 <div className={styles.ruleDesc}>
-                  1,524 BL positions | 66.7% win rate | +5.27% avg P&L | W/L ratio 3.74:1 | CAGR +36.8% | Sharpe 3.50 | Max DD -0.74% | Pyramiding (Lots 1-5, $10K full position) | Positive every year including 2022.
+                  2,457 BL trades | 51.2% win rate | CAGR +37.8% | Sharpe 3.22 | Sortino 84.87 | Max DD -0.91% | Calmar 41.5 | Profit Factor 10.33 | Best Month +12.6% | Pyramiding (Lots 1-5). Source: PNTHR_Pyramid_IR_Wagyu_v5 page 9 (LONGS column).
                 </div>
               </div>
             </div>
@@ -211,15 +211,15 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>1</div>
               <div>
                 <div className={styles.ruleName}>Active SS Signal</div>
-                <div className={styles.ruleDesc}>Stock must have a confirmed Sell Short signal (close {'<'} sector EMA, slope down, low {'<='} 2-week low, 1-10% below EMA)</div>
+                <div className={styles.ruleDesc}>Stock must have a confirmed Sell Short signal: weekly close {'<'} its own 21-week EMA, 21W EMA sloping down, weekly low {'<='} prior 2-week low − $0.01, and weekly high sits 1–10% below the 21W EMA (0.3–10% for ETFs), within the first 3 bars of the short-daylight streak.</div>
               </div>
             </div>
 
             <div className={styles.ruleCard}>
               <div className={styles.ruleNum}>2</div>
               <div>
-                <div className={styles.ruleName}>MACRO Gate — Index Below 21W EMA</div>
-                <div className={styles.ruleDesc}>SPY (NYSE stocks) or QQQ (NASDAQ stocks) must be trading BELOW its 21-week EMA. Shorting when the index is in an uptrend is blocked.</div>
+                <div className={styles.ruleName}>MACRO Gate — Direction Index Below 21W EMA</div>
+                <div className={styles.ruleDesc}>Direction index is set by index membership: SP500 → SPY, Nasdaq-100-only → QQQ, S&amp;P MidCap 400 → MDY (fallback SPY if MDY data missing). The stock's direction index must be trading BELOW its 21-week EMA, otherwise the short is blocked.</div>
               </div>
             </div>
 
@@ -246,7 +246,7 @@ export function RulesPopup({ type, onClose }) {
                 <div className={styles.ruleDesc}>
                   Shorts require CRASH conditions (both must be true):
                   <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
-                    <li>Macro EMA slope falling (SPY 21W EMA declining)</li>
+                    <li>Direction index (SPY/QQQ/MDY by membership) 21W EMA falling for 2+ consecutive weeks</li>
                     <li>Sector 5D momentum {'<'} -3% (sector ETF dropped 3%+ in 5 trading days)</li>
                   </ul>
                   This is the key asymmetric gate — SS only enters during genuine market breakdowns, not mild pullbacks.
@@ -263,7 +263,7 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>D1</div>
               <div>
                 <div className={styles.ruleName}>Regime Multiplier (0.70–1.30×)</div>
-                <div className={styles.ruleDesc}>Scales entire score by macro regime. SS: 1.0 − (regimeScore × 0.06) — bearish regime amplifies SS scores via intentional bias. This is where shorts get their edge.</div>
+                <div className={styles.ruleDesc}>Scales entire score by macro regime. Direction index (SPY/QQQ/MDY by membership) EMA position + slope scored ±2; SS:BL open ratio scored ±2 with an additional ±1 from new-signal ratio. regimeScore × 0.06 = adjustment, clamped 0.70–1.30. SS multiplier = 1.0 − adj — a negative regimeScore (bearish market) INCREASES the SS multiplier (intentional bearish bias). This is where shorts get their edge.</div>
               </div>
             </div>
 
@@ -279,7 +279,7 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>D3</div>
               <div>
                 <div className={styles.ruleName}>Entry Quality (0–85 pts) — THE KEY DIMENSION</div>
-                <div className={styles.ruleDesc}>Sub-A: Close conviction (cap 40 pts). Sub-B: EMA slope × 10, signal direction only (cap 30 pts). Sub-C: EMA separation bell curve — sweet spot 2-8% (up to 15 pts), decays 8-20%, 20%+ = OVEREXTENDED (score −99). Confirmation: ≥30=CONFIRMED, ≥15=PARTIAL, {'<'}15=UNCONFIRMED.</div>
+                <div className={styles.ruleDesc}>Sub-A: Close conviction within weekly range × 2.5, cap 40 pts. Sub-B: |EMA slope %| × 10, signal direction only, cap 30 pts. Sub-C: EMA daylight bell curve (uses high/low vs EMA) — 0-2% ramp 0→6 pts, sweet spot 2-8% (6→15 pts), 8-15% decay 15→3 pts, 15-20% decay 3→0 pts. Overextension hard gate (sets entire stock score to −99) triggers when CLOSE-vs-EMA separation {'>'} 20%, even if intraweek high/low daylight scored differently. Confirmation: ≥30=CONFIRMED, ≥15=PARTIAL, {'<'}15=UNCONFIRMED.</div>
               </div>
             </div>
 
@@ -287,7 +287,7 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>D4</div>
               <div>
                 <div className={styles.ruleName}>Signal Freshness (−15 to +10 pts)</div>
-                <div className={styles.ruleDesc}>New signals earn bonus scaled by D3 confirmation. Age 0 CONFIRMED: +10, PARTIAL: +6, UNCONFIRMED: +3. Decays to 0 by week 3–5, then −3/wk through week 9, smooth decay to floor −15.</div>
+                <div className={styles.ruleDesc}>New signals earn bonus scaled by D3 confirmation. Age 0: CONFIRMED +10, PARTIAL +6, UNCONFIRMED +3. Age 1: CONFIRMED +7, PARTIAL +4, UNCONFIRMED +2. Age 2: +4. Age 3-5: 0. Age 6-9: −3 per week beyond week 5 (so −3, −6, −9, −12). Age 10+: smooth decay −1.5/wk from −12, floor −15.</div>
               </div>
             </div>
 
@@ -303,7 +303,7 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>D6</div>
               <div>
                 <div className={styles.ruleName}>Momentum (−10 to +20 pts)</div>
-                <div className={styles.ruleDesc}>Sub-A RSI: ±5 pts (inverted for SS). Sub-B OBV week-over-week: ±5 pts (inverted for SS). Sub-C ADX: 0–5 pts when rising above 15. Sub-D Volume: +5 if ratio {'>'} 1.5×. Floor −10, cap +20.</div>
+                <div className={styles.ruleDesc}>Sub-A RSI: ±5 pts (inverted for SS). Sub-B OBV week-over-week: ±5 pts (inverted for SS). Sub-C ADX: 0–5 pts when rising above 15. Sub-D Volume: +5 if weekly volume / 20-week average {'>'} 1.5×. Floor −10, cap +20.</div>
               </div>
             </div>
 
@@ -363,9 +363,9 @@ export function RulesPopup({ type, onClose }) {
 
             <div className={styles.ruleCard} style={{ borderLeft: '3px solid #fcf000' }}>
               <div>
-                <div className={styles.ruleName}>SS Backtest Results</div>
+                <div className={styles.ruleName}>SS Backtest Results (v5 Wagyu — realized pre-fund-fees)</div>
                 <div className={styles.ruleDesc}>
-                  143 SS positions | 62.2% win rate | +3.59% avg P&L | W/L ratio 2.60:1 | CAGR +15.3% | Sharpe 2.02 | Max DD -0.61% | Pyramiding (Lots 1-5, $10K full position) | No trades in 2021/2024 (bull regime — crash gate blocked all shorts by design).
+                  157 SS trades | 48.4% win rate | CAGR +5.0% | Sharpe 0.58 | Sortino 24.61 | Max DD -0.65% | Calmar 7.6 | Profit Factor 7.43 | Best Month +8.7% | Pyramiding (Lots 1-5). Crash gate blocks all shorts in bull regimes (no trades 2019/2020/2021/2024). Source: PNTHR_Pyramid_IR_Wagyu_v5 page 9 (SHORTS column).
                 </div>
               </div>
             </div>

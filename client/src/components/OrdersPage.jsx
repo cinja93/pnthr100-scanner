@@ -59,7 +59,7 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>1</div>
               <div>
                 <div className={styles.ruleName}>Active BL Signal</div>
-                <div className={styles.ruleDesc}>Stock must have a confirmed Buy Long signal: weekly close {'>'} its own 21-week EMA, 21W EMA sloping up, weekly high {'>='} prior 2-week high + $0.01, and weekly low sits 1–10% above the 21W EMA (0.3–10% for ETFs), within the first 3 bars of the long-daylight streak.</div>
+                <div className={styles.ruleDesc}>Stock must have a confirmed Buy Long signal on its sector-optimized weekly EMA (18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate; default 21W): weekly close {'>'} EMA, EMA sloping up, weekly high {'>='} prior 2-week high + $0.01, and weekly low sits 1–10% above the EMA (0.3–10% for ETFs), within the first 3 bars of the long-daylight streak.</div>
               </div>
             </div>
 
@@ -211,7 +211,7 @@ export function RulesPopup({ type, onClose }) {
               <div className={styles.ruleNum}>1</div>
               <div>
                 <div className={styles.ruleName}>Active SS Signal</div>
-                <div className={styles.ruleDesc}>Stock must have a confirmed Sell Short signal: weekly close {'<'} its own 21-week EMA, 21W EMA sloping down, weekly low {'<='} prior 2-week low − $0.01, and weekly high sits 1–10% below the 21W EMA (0.3–10% for ETFs), within the first 3 bars of the short-daylight streak.</div>
+                <div className={styles.ruleDesc}>Stock must have a confirmed Sell Short signal on its sector-optimized weekly EMA (18W Staples, 19W Disc/Materials, 21W Tech/Comms/Utilities, 24W Healthcare/Industrials, 25W Financials, 26W Energy/Real Estate; default 21W): weekly close {'<'} EMA, EMA sloping down, weekly low {'<='} prior 2-week low − $0.01, and weekly high sits 1–10% below the EMA (0.3–10% for ETFs), within the first 3 bars of the short-daylight streak.</div>
               </div>
             </div>
 

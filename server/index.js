@@ -493,8 +493,8 @@ app.get('/api/stocks/shorts', async (req, res) => {
   }
 });
 
-// EMA Crossover scan: stocks with a BUY signal + weekly close >= 21-week EMA, or
-// SELL signal + weekly close <= 21-week EMA, within the last 2 completed weeks.
+// EMA Crossover scan: stocks with a BUY signal + weekly close >= OpEMA, or
+// SELL signal + weekly close <= OpEMA, within the last 2 completed weeks.
 // Universe: top 100 long + top 100 short. Cached 60 min; pass ?refresh=1 to bust.
 app.get('/api/stocks/ema-crossover', async (req, res) => {
   try {

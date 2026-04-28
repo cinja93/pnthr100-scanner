@@ -119,23 +119,22 @@ async function fetchSectorGateData() {
 
   await Promise.all(ALL_SECTOR_ETFS.map(async (etf) => {
     try {
-      const data = await fetchStockData(etf);
-      if (!data) return;
-      const { weekly } = data;
-      const n = weekly.length;
-      const li = n - 1;
-      // Sector ETF gate uses the sector's optimized EMA period (18-26W per
+      // Sector ETF gate uses OpEMA — sector-optimized period (18-26W per
       // sectorEmaConfig.js), not a fixed 21W. v22 adoption 2026-04-21.
       const period = getEtfEmaPeriod(etf);
-      const emaSeries = computeEMAseries(weekly, period);
-      if (emaSeries[li] == null) return;
+      const data = await fetchStockData(etf, period);
+      if (!data) return;
+      const { weekly, ema } = data;
+      const n = weekly.length;
+      const li = n - 1;
+      if (ema[li] == null) return;
 
       result[etf] = {
         close:     weekly[li].close,
-        ema:       emaSeries[li],
+        ema:       ema[li],
         emaPeriod: period,
-        aboveEma:  weekly[li].close > emaSeries[li],
-        emaRising: emaSeries[li - 1] != null && emaSeries[li] > emaSeries[li - 1],
+        aboveEma:  weekly[li].close > ema[li],
+        emaRising: ema[li - 1] != null && ema[li] > ema[li - 1],
         return5D:  basicSectorData[etf]?.return5D ?? null,
         return1M:  basicSectorData[etf]?.return1M ?? null,
       };

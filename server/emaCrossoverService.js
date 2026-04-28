@@ -3,7 +3,7 @@ import { getAllTickers } from './constituents.js';
 import { getWatchlistStocks } from './stockService.js';
 import { getSignals } from './signalService.js';
 import { connectToDatabase } from './database.js';
-import { DEFAULT_EMA_PERIOD } from './sectorEmaConfig.js';
+import { DEFAULT_EMA_PERIOD, getSectorEmaPeriod } from './sectorEmaConfig.js';
 
 dotenv.config();
 
@@ -59,10 +59,8 @@ function aggregateToWeekly(dailyData) {
   return [...weeksMap.values()]; // ascending by time
 }
 
-// EMA on ascending weekly close data, parameterized by period.
-// Phase 1: crossover scan uses DEFAULT_EMA_PERIOD (21) for all sectors.
-// TODO: Phase 2 — use per-sector EMA periods from sectorEmaConfig.js
-// once crossover detection is validated with variable periods.
+// EMA on ascending weekly close data, parameterized by period (OpEMA).
+// Crossover scan now uses sector-optimized EMA per stock (caller passes period).
 function calculateEMA(weeklyData, period = DEFAULT_EMA_PERIOD) {
   if (weeklyData.length < period) return [];
   const k = 2 / (period + 1);
@@ -96,9 +94,9 @@ async function fetchHistory(ticker) {
 // Window: the 2 most recently completed weekly bars (< this Monday, >= 2 Mondays ago).
 // Reference: the most recent bar BEFORE that window — must be on the OPPOSITE side of the EMA.
 // At least one bar inside the window must be on the CORRECT side (the actual crossover).
-function checkRecentCrossover(signal, daily) {
+function checkRecentCrossover(signal, daily, period) {
   const weekly = aggregateToWeekly(daily);
-  const emaData = calculateEMA(weekly);
+  const emaData = calculateEMA(weekly, period);
   if (emaData.length < 4) return false;
 
   // Build Monday-based calendar boundaries (all dates as YYYY-MM-DD strings for direct comparison)
@@ -159,7 +157,22 @@ async function runEmaCrossoverScan() {
     const rawSignals = await getSignals(allTickers);
     // Only check BL/SS — crossover is only meaningful on entry signals, not exits
     const tickersWithSignals = allTickers.filter(t => rawSignals[t]?.signal === 'BL' || rawSignals[t]?.signal === 'SS');
-    console.log(`📊 ${tickersWithSignals.length} tickers have signals — checking EMA crossover...`);
+    console.log(`📊 ${tickersWithSignals.length} tickers have signals — checking OpEMA crossover...`);
+
+    // Bulk profile fetch → sector map → OpEMA period per ticker. FMP /profile
+    // accepts comma-separated symbols (~100 per call).
+    const sectorMap = {};
+    for (let i = 0; i < tickersWithSignals.length; i += 100) {
+      try {
+        const url = `${FMP_BASE_URL}/profile/${tickersWithSignals.slice(i, i + 100).join(',')}?apikey=${FMP_API_KEY}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const profiles = await res.json();
+          if (Array.isArray(profiles)) for (const p of profiles) sectorMap[p.symbol] = p.sector || null;
+        }
+      } catch (err) { console.error('OpEMA crossover profile error:', err.message); }
+      if (i + 100 < tickersWithSignals.length) await new Promise(r => setTimeout(r, 300));
+    }
 
     // 3. Fetch price history and test the actual crossover condition (5 concurrent, 300ms delay)
     const matchingTickers = [];
@@ -171,13 +184,14 @@ async function runEmaCrossoverScan() {
       await Promise.all(chunk.map(async ticker => {
         try {
           const signal = rawSignals[ticker].signal;
+          const period = getSectorEmaPeriod(sectorMap[ticker]); // OpEMA per stock
           const daily = await fetchHistory(ticker);
-          if (checkRecentCrossover(signal, daily)) {
+          if (checkRecentCrossover(signal, daily, period)) {
             matchingTickers.push(ticker);
             matchingSignalsMap[ticker] = rawSignals[ticker];
           }
         } catch (err) {
-          console.error(`EMA crossover error for ${ticker}:`, err.message);
+          console.error(`OpEMA crossover error for ${ticker}:`, err.message);
         }
       }));
       if (i + CONCURRENCY < tickersWithSignals.length) {

@@ -1,14 +1,16 @@
 import dotenv from 'dotenv';
 import { connectToDatabase } from './database.js';
 import { SPEC_LONGS, SPEC_SHORTS } from './speculative162.js';
+import { getSectorEmaPeriod, DEFAULT_EMA_PERIOD } from './sectorEmaConfig.js';
 dotenv.config();
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 
 // ── Selection criteria ────────────────────────────────────────────────────────
-// Longs:  close > 21-week EMA (uptrend), price >= $20, top 80 by 52-week return
-// Shorts: close < 21-week EMA (downtrend), price >= $70 (avoids penny-land), bottom 80 by 52-week return
+// Longs:  close > OpEMA (uptrend), price >= $20, top 80 by 52-week return
+// Shorts: close < OpEMA (downtrend), price >= $70 (avoids penny-land), bottom 80 by 52-week return
+// OpEMA = sector-optimized weekly EMA per stock (18-26W per sectorEmaConfig.js).
 // Lists refresh weekly, keyed by last Friday's date.
 // Calculation is slow (~40 FMP calls); results are persisted in MongoDB so Vercel
 // cold starts serve instantly. Hardcoded SPEC_LONGS/SPEC_SHORTS are used as a
@@ -18,7 +20,7 @@ const LONG_COUNT      = 80;
 const SHORT_COUNT     = 80;
 const MIN_LONG_PRICE  = 20;
 const MIN_SHORT_PRICE = 70;
-const WEEKS_HISTORY   = 56; // 21-week EMA needs ~26 weeks, but 52-week return needs 53 weeks of data
+const WEEKS_HISTORY   = 56; // OpEMA needs ~26 weeks (slow sectors), 52-week return needs 53 weeks
 
 const MONGO_COLLECTION = 'sp400_cache';
 
@@ -91,7 +93,7 @@ function extractWeeklyCloses(dailyOldestFirst) {
   return [...byWeek.values()];
 }
 
-function calcEma(closes, period = 21) {
+function calcEma(closes, period) {
   if (closes.length < period + 1) return null;
   const k = 2 / (period + 1);
   let ema = closes.slice(0, period).reduce((s, c) => s + c, 0) / period;
@@ -104,7 +106,7 @@ async function refreshSp400Cache() {
   if (refreshInProgress) return;
   refreshInProgress = true;
   const weekKey = getWeekKey();
-  console.log(`📊 S&P 400: starting 21-week EMA calculation for week of ${weekKey}...`);
+  console.log(`📊 S&P 400: starting OpEMA (sector-optimized) calculation for week of ${weekKey}...`);
 
   try {
     // Step 1: Get S&P 400 constituent list
@@ -152,7 +154,18 @@ async function refreshSp400Cache() {
       if (i + 200 < tickers.length) await new Promise(r => setTimeout(r, 400));
     }
 
-    // Step 3: Weekly price history for 21-week EMA + 52-week return
+    // Step 2b: Bulk profile fetch for sector → OpEMA period lookup per ticker.
+    // FMP /profile accepts comma-separated symbols (~100 per call).
+    const sectorMap = {};
+    for (let i = 0; i < tickers.length; i += 100) {
+      try {
+        const profiles = await fetchFMP(`/profile/${tickers.slice(i, i + 100).join(',')}`);
+        if (Array.isArray(profiles)) for (const p of profiles) sectorMap[p.symbol] = p.sector || null;
+      } catch (err) { console.error('S&P 400 profile error:', err.message); }
+      if (i + 100 < tickers.length) await new Promise(r => setTimeout(r, 400));
+    }
+
+    // Step 3: Weekly price history for OpEMA + 52-week return
     // Uses multi-ticker /historical-price-full (batches of 10)
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - WEEKS_HISTORY * 7);
@@ -169,14 +182,17 @@ async function refreshSp400Cache() {
           if (!item?.historical?.length) continue;
           const oldestFirst  = [...item.historical].reverse();
           const weeklyCloses = extractWeeklyCloses(oldestFirst);
-          if (weeklyCloses.length < 22) continue;
-          const ema21w      = calcEma(weeklyCloses, 21);
+          // OpEMA period varies 18-26W by sector; need 27 weeks min for the slowest sectors.
+          if (weeklyCloses.length < 27) continue;
+          const sector      = sectorMap[item.symbol] || null;
+          const emaPeriod   = getSectorEmaPeriod(sector); // falls back to DEFAULT_EMA_PERIOD if sector unknown
+          const opEma       = calcEma(weeklyCloses, emaPeriod);
           const latestClose = weeklyCloses[weeklyCloses.length - 1];
           // 52-week return if enough data, otherwise use available range
           const lookback    = Math.min(52, weeklyCloses.length - 1);
           const closeAgo    = weeklyCloses[weeklyCloses.length - 1 - lookback];
           const return52w   = closeAgo > 0 ? ((latestClose - closeAgo) / closeAgo) * 100 : 0;
-          if (ema21w != null) histMap[item.symbol] = { ema21w, return52w };
+          if (opEma != null) histMap[item.symbol] = { opEma, emaPeriod, return52w };
         }
       } catch (err) { console.error(`S&P 400 history batch ${Math.floor(i / 10) + 1} error:`, err.message); }
       if (i + 10 < tickers.length) await new Promise(r => setTimeout(r, 300));
@@ -189,9 +205,9 @@ async function refreshSp400Cache() {
       const q    = quoteMap[ticker];
       const hist = histMap[ticker];
       if (!q || !hist || !q.price) continue;
-      const { ema21w, return52w } = hist;
-      if (q.price > ema21w  && q.price >= MIN_LONG_PRICE)  longCandidates.push({ ticker, return52w });
-      if (q.price < ema21w  && q.price >= MIN_SHORT_PRICE) shortCandidates.push({ ticker, return52w });
+      const { opEma, return52w } = hist;
+      if (q.price > opEma && q.price >= MIN_LONG_PRICE)  longCandidates.push({ ticker, return52w });
+      if (q.price < opEma && q.price >= MIN_SHORT_PRICE) shortCandidates.push({ ticker, return52w });
     }
     longCandidates.sort((a, b)  => b.return52w - a.return52w);
     shortCandidates.sort((a, b) => a.return52w - b.return52w);

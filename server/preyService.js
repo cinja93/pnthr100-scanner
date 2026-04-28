@@ -12,7 +12,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { getLastFriday, aggregateWeeklyBars, computeEMAseries, computeEMA21series } from './technicalUtils.js';
+import { getLastFriday, aggregateWeeklyBars, computeEMAseries } from './technicalUtils.js';
 import { getSectorEmaPeriod, DEFAULT_EMA_PERIOD } from './sectorEmaConfig.js';
 
 const FMP_API_KEY   = process.env.FMP_API_KEY;
@@ -388,7 +388,7 @@ function runSpringLong(ticker, data) {
   const cur  = weekly[li];
   const prev = weekly[li - 1];
 
-  // Rule 1: price above 21-week EMA
+  // Rule 1: price above OpEMA
   if (cur.close <= lastEma) return null;
 
   // Rule 2: EMA net rising (higher than 4 weeks ago)
@@ -450,7 +450,7 @@ function runSpringShort(ticker, data) {
   const cur  = weekly[li];
   const prev = weekly[li - 1];
 
-  // Rule 1: price below 21-week EMA
+  // Rule 1: price below OpEMA
   if (cur.close >= lastEma) return null;
 
   // Rule 2: EMA net falling (lower than 4 weeks ago)

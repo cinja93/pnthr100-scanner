@@ -644,7 +644,7 @@ export async function tickerHandler(req, res) {
 }
 
 // ── GET /api/regime ───────────────────────────────────────────────────────────
-// Returns market regime: SPY/QQQ vs 21-week EMA + BL/SS ratio.
+// Returns market regime: SPY/QQQ vs 21W Index EMA + BL/SS ratio.
 
 export async function regimeHandler(req, res) {
   try {

@@ -1,7 +1,7 @@
 // S&P 400 Mid-Cap stocks exclusive to the speculative universe
 // (not in S&P 500, Nasdaq 100, or Dow 30)
-// 80 Long Leaders: above 21-week EMA, price >= $20, sorted by 52-week return desc
-// 71 Short Leaders: below 21-week EMA, price >= $70, sorted by 52-week return asc
+// 80 Long Leaders: above OpEMA (sector-optimized), price >= $20, sorted by 52-week return desc
+// 71 Short Leaders: below OpEMA (sector-optimized), price >= $70, sorted by 52-week return asc
 // Last refreshed: 2026-04-13
 
 export const SPEC_LONGS = [

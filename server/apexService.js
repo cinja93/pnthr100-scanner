@@ -28,8 +28,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { getMostRecentRanking, getRankingBeforeDate, connectToDatabase } from './database.js';
-import { getLastFriday, aggregateWeeklyBars, computeEMA21series } from './technicalUtils.js';
+import { getLastFriday, aggregateWeeklyBars, computeEMAseries } from './technicalUtils.js';
 import { getDirectionIndexFromFlags } from './gateLogic.js';
+import { getSectorEmaPeriod, getEtfEmaPeriod, REGIME_EMA_PERIOD } from './sectorEmaConfig.js';
 
 const FMP_API_KEY  = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
@@ -163,7 +164,7 @@ async function fetchDailyBars(ticker, from, to, retries = 3) {
   throw new Error(`FMP failed after ${retries} attempts for ${ticker}`);
 }
 
-// aggregateWeeklyBars and computeEMA21series imported from technicalUtils.js
+// aggregateWeeklyBars and computeEMAseries imported from technicalUtils.js
 // Call aggregateWeeklyBars(daily, { includeVolume: true }) for OBV computation.
 
 // ── Indicator Computations ────────────────────────────────────────────────────
@@ -242,7 +243,11 @@ function computeADX14(weeklyBars) {
 
 // ── Data Fetcher ──────────────────────────────────────────────────────────────
 
-export async function fetchStockData(ticker) {
+// EMA period defaults to 21 for backward compatibility with the index-data
+// fetch path (SPY/QQQ/MDY use REGIME_EMA_PERIOD = 21). For stock signals and
+// sector ETF gates the caller MUST pass the OpEMA period from
+// getSectorEmaPeriod(sector) / getEtfEmaPeriod(etf) — never use the default.
+export async function fetchStockData(ticker, period = REGIME_EMA_PERIOD) {
   try {
     const today = new Date();
     const from  = new Date(today);
@@ -251,14 +256,14 @@ export async function fetchStockData(ticker) {
     if (!daily || daily.length < 40) return null;
     const weekly = aggregateWeeklyBars(daily, { includeVolume: true });
     if (weekly.length < 30) return null;
-    // Kill scoring uses a fixed 21-period EMA for bell-curve separation (D3),
-    // index regime (D1), and sector ETF data (D2). This is intentionally
-    // independent of per-sector signal EMA periods in sectorEmaConfig.js.
-    const ema21 = computeEMA21series(weekly);
-    const obv   = computeOBV(weekly);
-    const rsi   = computeRSI14(weekly);
-    const adx   = computeADX14(weekly);
-    return { weekly, ema21, obv, rsi, adx };
+    // OpEMA family: stock signals + sector ETF gates use sector-optimized period
+    // (18-26W per sectorEmaConfig.js). Direction index (SPY/QQQ/MDY) uses the
+    // fixed REGIME_EMA_PERIOD = 21W. The `ema` field holds whichever was computed.
+    const ema = computeEMAseries(weekly, period);
+    const obv = computeOBV(weekly);
+    const rsi = computeRSI14(weekly);
+    const adx = computeADX14(weekly);
+    return { weekly, ema, emaPeriod: period, obv, rsi, adx };
   } catch (e) {
     console.warn('[apex] fetchStockData failed for', ticker, e.message);
     return null;
@@ -273,23 +278,24 @@ export async function fetchIndexData() {
   const result = {};
   for (const ticker of ['QQQ', 'SPY', 'MDY']) {
     try {
-      const data = await fetchStockData(ticker);
+      // Direction index (SPY/QQQ/MDY) uses fixed REGIME_EMA_PERIOD = 21W.
+      const data = await fetchStockData(ticker, REGIME_EMA_PERIOD);
       if (!data) continue;
-      const { weekly, ema21 } = data;
+      const { weekly, ema } = data;
       const n  = weekly.length;
       const li = n - 1;
-      if (ema21[li] == null || ema21[li - 1] == null) continue;
+      if (ema[li] == null || ema[li - 1] == null) continue;
 
-      const emaSlope = (ema21[li] - ema21[li - 1]) / ema21[li - 1] * 100; // % per week
+      const emaSlope = (ema[li] - ema[li - 1]) / ema[li - 1] * 100; // % per week
       // 2-consecutive-week falling EMA check (matches backtest slopeFallingMap)
-      const curFalling  = ema21[li] < ema21[li - 1];
-      const prevFalling = ema21[li - 2] != null ? ema21[li - 1] < ema21[li - 2] : false;
+      const curFalling  = ema[li] < ema[li - 1];
+      const prevFalling = ema[li - 2] != null ? ema[li - 1] < ema[li - 2] : false;
       result[ticker] = {
         price:     weekly[li].close,
-        ema21:     ema21[li],
+        ema21:     ema[li], // field name kept as ema21 — direction index IS always 21W
         emaSlope,
-        aboveEma:  weekly[li].close > ema21[li],
-        emaRising: ema21[li] > ema21[li - 1],
+        aboveEma:  weekly[li].close > ema[li],
+        emaRising: ema[li] > ema[li - 1],
         slopeFalling2Wk: curFalling && prevFalling, // true = EMA falling 2+ consecutive weeks
       };
     } catch { /* skip */ }
@@ -304,7 +310,9 @@ export async function fetchSectorData() {
   const result = {};
   await Promise.all(ALL_SECTOR_ETFS.map(async etf => {
     try {
-      const data = await fetchStockData(etf);
+      // Sector ETFs use OpEMA period (per-sector optimized) for the gate path,
+      // but D2 here only uses weekly returns (5D/1M) — no EMA — so any period works.
+      const data = await fetchStockData(etf, getEtfEmaPeriod(etf));
       if (!data) return;
       const { weekly } = data;
       const n = weekly.length;
@@ -492,11 +500,11 @@ function scoreD3(signal, data) {
   const zero = { score: 0, subA: 0, subB: 0, subC: 0, confirmation: 'UNCONFIRMED',
                  overextended: false, convictionPct: 0, slopePct: 0, separationPct: 0 };
   if (!signal || !data) return zero;
-  const { weekly, ema21 } = data;
+  const { weekly, ema: emaSeries } = data;
   const n   = weekly.length;
   const li  = n - 1;
-  const ema = ema21[li];
-  const emaPrev = ema21[li - 1];
+  const ema = emaSeries[li];
+  const emaPrev = emaSeries[li - 1];
   const bar = weekly[li];
   if (ema == null || !bar) return zero;
 
@@ -849,7 +857,9 @@ export async function getApexResults(
     const signal      = signalData.signal;
     const isNewSignal = signalData.isNewSignal ?? false;
     const signalAge   = computeSignalAge(signalData.signalDate);
-    const data        = await fetchStockData(ticker);
+    // Stock-level OpEMA: sector-optimized period (18-26W). Used by D3 bell curve
+    // and overextension gate. Falls back to REGIME_EMA_PERIOD only if sector unknown.
+    const data        = await fetchStockData(ticker, getSectorEmaPeriod(meta.sector));
 
     // ── Score all 8 dimensions ────────────────────────────────────────────────
     const d1 = calcD1(

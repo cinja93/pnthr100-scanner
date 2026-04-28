@@ -7,6 +7,7 @@ dotenv.config();
 
 import { connectToDatabase } from './database.js';
 import { getSectorEtf } from './marketSnapshot.js';
+import { getSectorEmaPeriod, REGIME_EMA_PERIOD } from './sectorEmaConfig.js';
 
 const KEY  = process.env.FMP_API_KEY;
 const FMP  = 'https://financialmodelingprep.com/api/v3';
@@ -58,11 +59,12 @@ async function getTechVal(ticker, type, period, date) {
   return rows[0] || null;
 }
 
-// EMA21 for a ticker at a specific date (pulls 60-day window to ensure enough bars)
-async function getEma21AtDate(ticker, date) {
+// EMA at a specific date (pulls 60-day window to ensure enough bars).
+// Direction index (SPY/QQQ/MDY) uses 21W; stocks/sector ETFs use OpEMA period.
+async function getEmaAtDate(ticker, date, period) {
   const from = addDays(date, -60);
   const to   = addDays(date, 1);
-  const data = await fmpGet(`/technical_indicator/1day/${ticker}?type=ema&period=21&from=${from}&to=${to}`).catch(() => []);
+  const data = await fmpGet(`/technical_indicator/1day/${ticker}?type=ema&period=${period}&from=${from}&to=${to}`).catch(() => []);
   const rows = (Array.isArray(data) ? data : [])
     .filter(r => r.date <= date)
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -160,8 +162,8 @@ async function backfillEntry(db, entry) {
     console.log('  → market snapshot...');
     try {
       const [spyEma, qqqEma, spyBars, qqqBars] = await Promise.all([
-        getEma21AtDate('SPY', entryDate),
-        getEma21AtDate('QQQ', entryDate),
+        getEmaAtDate('SPY', entryDate, REGIME_EMA_PERIOD),
+        getEmaAtDate('QQQ', entryDate, REGIME_EMA_PERIOD),
         getDaily('SPY', addDays(entryDate, -3), addDays(entryDate, 1)),
         getDaily('QQQ', addDays(entryDate, -3), addDays(entryDate, 1)),
       ]);
@@ -198,7 +200,7 @@ async function backfillEntry(db, entry) {
       // Sector ETF
       if (sectorEtf) {
         const [sectEma, sectBars] = await Promise.all([
-          getEma21AtDate(sectorEtf, entryDate),
+          getEmaAtDate(sectorEtf, entryDate, getSectorEmaPeriod(sector)),
           getDaily(sectorEtf, addDays(entryDate, -3), addDays(entryDate, 1)),
         ]);
         const sectBar = sectBars.filter(b => b.date <= entryDate).at(-1);

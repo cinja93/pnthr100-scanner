@@ -129,6 +129,31 @@ async function recordExit(db, positionId, userId, exitData) {
 }
 
 async function syncExitToJournal(db, positionId, userId, exitRecord, remainingShares, realizedDollar, realizedPct, avgExitPrice, status, position) {
+  // Guarantee a journal doc exists before applying the exit update.
+  // Pre-fix this used updateOne with no upsert — when the journal doc was
+  // missing (e.g., position created before journal infra existed, or
+  // auto-close fired before any prior sync had created the entry) the
+  // exit data was silently dropped. For an automated trading system that
+  // is unacceptable, so we create-then-update.
+  const existing = await db.collection('pnthr_journal').findOne(
+    { positionId: positionId.toString(), ownerId: userId },
+    { projection: { _id: 1 } }
+  );
+  if (!existing) {
+    if (position) {
+      try {
+        const { createJournalEntry } = await import('./journalService.js');
+        await createJournalEntry(db, position, userId);
+      } catch (e) {
+        console.error(`[EXIT] Auto-create journal failed for ${positionId}: ${e.message} — exit data NOT recorded`);
+        return; // fail loud rather than silently lose data
+      }
+    } else {
+      console.error(`[EXIT] No position object provided and no journal doc exists for ${positionId} — exit data NOT recorded`);
+      return;
+    }
+  }
+
   const update = {
     $push: { exits: exitRecord },
     $set: {

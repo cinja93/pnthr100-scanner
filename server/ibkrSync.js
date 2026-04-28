@@ -1,5 +1,13 @@
 // server/ibkrSync.js
-// POST /api/ibkr/sync — IBKR TWS Bridge receiver (Phase 2: Auto-Close from Fills)
+// POST /api/ibkr/sync — IBKR TWS Bridge receiver
+//
+// Phase 1: Read-only IBKR position/stop sync (mirror IBKR state into PNTHR)
+// Phase 2: Auto-close from fills — when an IBKR SLD/BOT execution fully exits
+//          a tracked PNTHR position, write a canonical close (exits[],
+//          realizedPnl.*, journal sync, discipline score, washRule).
+// Phase 3: Auto-open from new positions — when IBKR holds a ticker that has
+//          no matching ACTIVE PNTHR position, create one with the canonical
+//          PNTHR Stop (Wilder ATR(3) ratchet + 2-week structural floor).
 //
 // Called every 60s by the Python bridge running on the admin's machine.
 // Authenticates via JWT (req.user.userId = admin's ownerId).
@@ -7,7 +15,7 @@
 
 import { connectToDatabase, upsertUserProfile } from './database.js';
 import { validatePortfolioUpdate } from './portfolioGuard.js';
-import { syncExitToJournal } from './exitService.js';
+import { recordExit } from './exitService.js';
 
 // ── processExecutions ─────────────────────────────────────────────────────────
 // Phase 2: Match TWS fills to PNTHR positions and auto-close on full exit.
@@ -91,69 +99,40 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
 
     // Determine exit reason: fill within 1% of stored stop → STOP_HIT
     const stop       = pnthr.stopPrice;
-    const exitReason = (stop != null && Math.abs(exec.price - stop) / stop < 0.01)
+    const exitPrice  = exec.price;
+    const exitReason = (stop != null && Math.abs(exitPrice - stop) / stop < 0.01)
       ? 'STOP_HIT'
       : 'MANUAL';
 
-    // Calculate outcome (same math as commandCenter.positionsClose)
-    const totalCost    = Object.values(fills)
-      .reduce((s, f) => s + (f.filled ? (+f.shares || 0) * (+f.price || 0) : 0), 0);
-    const avgCost      = pnthrShares > 0 ? totalCost / pnthrShares : pnthr.entryPrice;
-    const exitPrice    = exec.price;
-    const profitPct    = closingDir === 'LONG'
-      ? (exitPrice - avgCost) / avgCost * 100
-      : (avgCost - exitPrice) / avgCost * 100;
-    const profitDollar = closingDir === 'LONG'
-      ? (exitPrice - avgCost) * pnthrShares
-      : (avgCost - exitPrice) * pnthrShares;
-    const holdingDays  = Math.floor((Date.now() - new Date(pnthr.createdAt).getTime()) / 86400000);
+    // Canonical close — funnel through recordExit so portfolio gets the full
+    // schema (exits[], realizedPnl.*, totalFilledShares/Exited/remaining,
+    // washRule for losses) and journal gets the matching update + discipline
+    // score. This is the SAME path Command Center uses for manual closes;
+    // there is now exactly one code path for closing a position.
+    const exitData = {
+      shares: pnthrShares,
+      price:  exitPrice,
+      date:   syncedAt.toISOString().split('T')[0],
+      time:   syncedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }),
+      reason: exitReason,
+      note:   'Auto-closed by IBKR TWS fill detection',
+    };
 
-    // Close the position
+    let result;
+    try {
+      result = await recordExit(db, pnthr.id, userId, exitData);
+    } catch (e) {
+      console.error(`[IBKR] recordExit failed for ${symbol}: ${e.message} — execId NOT marked processed (will retry next sync)`);
+      // Don't insert into pnthr_ibkr_executions on failure — leaves the exec
+      // available for retry on the next sync rather than swallowing the error.
+      continue;
+    }
+
+    // IBKR-specific audit fields (not part of canonical close schema)
     await db.collection('pnthr_portfolio').updateOne(
       { id: pnthr.id, ownerId: userId },
-      {
-        $set: {
-          status:             'CLOSED',
-          closedAt:           syncedAt,
-          updatedAt:          syncedAt,
-          autoClosedByIBKR:   true,
-          ibkrExecId:         exec.execId,
-          outcome: {
-            exitPrice,
-            profitPct:    +profitPct.toFixed(2),
-            profitDollar: +profitDollar.toFixed(2),
-            holdingDays,
-            exitReason,
-          },
-        },
-      }
+      { $set: { autoClosedByIBKR: true, ibkrExecId: exec.execId } }
     );
-
-    // Sync exit to journal so the trade card shows CLOSED with P&L and triggers discipline score
-    try {
-      const exitRecord = {
-        id:              'E1',
-        shares:          pnthrShares,
-        price:           exitPrice,
-        date:            syncedAt.toISOString().split('T')[0],
-        time:            syncedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }),
-        reason:          exitReason,
-        note:            'Auto-closed by IBKR TWS fill detection',
-        isOverride:      exitReason === 'MANUAL',
-        isFinalExit:     true,
-        pnl: {
-          dollar:   +profitDollar.toFixed(2),
-          pct:      +profitPct.toFixed(2),
-          perShare: +(closingDir === 'LONG' ? exitPrice - avgCost : avgCost - exitPrice).toFixed(4),
-        },
-        remainingShares: 0,
-        marketAtExit:    {},
-        createdAt:       syncedAt,
-      };
-      await syncExitToJournal(db, pnthr.id, userId, exitRecord, 0, profitDollar, +profitPct.toFixed(2), exitPrice, 'CLOSED', pnthr);
-    } catch (e) {
-      console.warn(`[IBKR] Journal sync failed for ${symbol}:`, e.message);
-    }
 
     // Record this execId so it is never processed again
     await db.collection('pnthr_ibkr_executions').insertOne({
@@ -168,19 +147,181 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
     });
 
     autoClosed.push({
-      ticker:      symbol,
-      direction:   pnthr.direction,
+      ticker:        symbol,
+      direction:     pnthr.direction,
       exitPrice,
       exitReason,
-      profitPct:   +profitPct.toFixed(2),
-      profitDollar: +profitDollar.toFixed(2),
-      closedAt:    syncedAt.toISOString(),
+      profitPct:     result.exitRecord.pnl.pct,
+      profitDollar:  result.exitRecord.pnl.dollar,
+      closedAt:      syncedAt.toISOString(),
     });
 
-    console.log(`[IBKR] ⚡ Auto-closed ${symbol} (${pnthr.direction}) @ $${exitPrice} — ${exitReason}`);
+    console.log(`[IBKR] ⚡ Auto-closed ${symbol} (${pnthr.direction}) @ $${exitPrice} — ${exitReason} — pnl ${result.exitRecord.pnl.pct}%`);
   }
 
   return autoClosed;
+}
+
+// ── processNewPositions ─────────────────────────────────────────────────────
+// Phase 3: Auto-open. When IBKR holds a ticker that has no matching ACTIVE
+// PNTHR position for this owner+direction, create one with the canonical
+// PNTHR Stop. Mirrors to journal so the new trade is fully tracked from the
+// first sync after a fill.
+//
+// Skip rules:
+//   - Symbol = USD (cash, never tracked)
+//   - Position has 0 shares
+//   - PNTHR already has ACTIVE position for ticker+direction
+//   - A CLOSED position for this ticker was created within the last 5 minutes
+//     (avoids race where IBKR snapshot still shows the old position briefly
+//     after a Phase 2 close fires)
+//   - PNTHR Stop unavailable from signalService (refuse to open without a
+//     stop — too risky for automated trading)
+//
+async function processNewPositions(db, userId, ibkrPositions, syncedAt) {
+  if (!ibkrPositions?.length) return [];
+
+  const opened = [];
+
+  // Active PNTHR positions for this user, indexed by ticker+direction
+  const activePnthr = await db.collection('pnthr_portfolio')
+    .find({ ownerId: userId, status: 'ACTIVE' })
+    .project({ ticker: 1, direction: 1 })
+    .toArray();
+  const activeKeys = new Set(activePnthr.map(p => `${p.ticker?.toUpperCase()}_${p.direction?.toUpperCase()}`));
+
+  for (const pos of ibkrPositions) {
+    if (!pos.symbol || pos.symbol === 'USD') continue;
+    const shares = +pos.shares || 0;
+    if (shares === 0) continue;
+
+    const ticker    = pos.symbol.toUpperCase();
+    const direction = shares > 0 ? 'LONG' : 'SHORT';
+    const key       = `${ticker}_${direction}`;
+    if (activeKeys.has(key)) continue; // already tracked
+
+    // Race guard: if Phase 2 just closed a position for this ticker, IBKR
+    // snapshot may still show it. Wait for the next sync.
+    const recentClose = await db.collection('pnthr_portfolio').findOne({
+      ownerId:  userId,
+      ticker,
+      direction,
+      status:   'CLOSED',
+      closedAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) },
+    });
+    if (recentClose) continue;
+
+    const absShares = Math.abs(shares);
+    const entryDate = syncedAt.toISOString().split('T')[0];
+
+    // Sector via FMP profile (best-effort, used for OpEMA period + Analyze T1-D).
+    // Normalize FMP strings to PNTHR canonical so OpEMA lookup and sector gate
+    // logic see the right key (e.g. "Consumer Cyclical" → "Consumer Discretionary").
+    let sector = null;
+    try {
+      const r = await fetch(
+        `https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${process.env.FMP_API_KEY}`,
+        { signal: AbortSignal.timeout(8000) }
+      );
+      if (r.ok) {
+        const data = await r.json();
+        const raw  = data?.[0]?.sector || null;
+        if (raw) {
+          const { normalizeSector } = await import('./sectorUtils.js');
+          sector = normalizeSector(raw);
+        }
+      }
+    } catch { /* non-fatal — getSignals will fall back to default EMA period */ }
+
+    // Canonical PNTHR Stop from signalService (Wilder ATR(3) ratchet + 2-week
+    // structural floor; signalService picks the more conservative). REFUSE to
+    // open without a valid stop — automated trading must always have a defined
+    // exit. Surface as untracked so user can investigate.
+    let pnthrStop = null;
+    let signalDir = null;
+    try {
+      const { getSignals } = await import('./signalService.js');
+      const sigMap   = sector ? { [ticker]: sector } : {};
+      const signals  = await getSignals([ticker], { sectorMap: sigMap });
+      const sig      = signals[ticker] || {};
+      pnthrStop      = sig.pnthrStop ?? sig.stopPrice ?? null;
+      signalDir      = sig.signal || null;
+    } catch (e) {
+      console.warn(`[IBKR Phase 3] signal fetch failed for ${ticker}: ${e.message}`);
+    }
+
+    if (pnthrStop == null) {
+      console.warn(`[IBKR Phase 3] No PNTHR Stop available for ${ticker} ${direction} — refusing to auto-open. Manual review required.`);
+      continue;
+    }
+
+    // Build canonical position doc
+    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+    const positionDoc = {
+      id,
+      ownerId:    userId,
+      ticker,
+      direction,
+      sector:     sector || null,
+      entryDate,
+      entryPrice: +(+pos.avgCost).toFixed(4),
+      currentPrice: typeof pos.marketPrice === 'number' && pos.marketPrice > 0.01 && pos.marketPrice < 50000
+        ? +(+pos.marketPrice).toFixed(4)
+        : +(+pos.avgCost).toFixed(4),
+      stopPrice:    pnthrStop,
+      originalStop: pnthrStop,
+      signal:       signalDir || (direction === 'LONG' ? 'BL' : 'SS'),
+      // Single-shot fill: full position size enters as Lot 1. The pyramid lot
+      // structure (35/25/20/12/8%) doesn't apply when IBKR fills the full size
+      // in one execution — we record what actually happened.
+      fills: {
+        1: {
+          lot: 1, name: 'The Scent', filled: true, pct: 1.0,
+          shares: absShares,
+          price:  +(+pos.avgCost).toFixed(4),
+          date:   entryDate,
+        },
+      },
+      exits:                  [],
+      totalFilledShares:      absShares,
+      totalExitedShares:      0,
+      remainingShares:        absShares,
+      status:                 'ACTIVE',
+      autoOpenedByIBKR:       true,
+      createdAt:              syncedAt,
+      updatedAt:              syncedAt,
+      ibkrSyncedAt:           syncedAt,
+      ibkrShares:             absShares,
+      ibkrAvgCost:            +pos.avgCost,
+      ibkrUnrealizedPNL:      typeof pos.unrealizedPNL === 'number' ? pos.unrealizedPNL : null,
+      ibkrMarketValue:        typeof pos.marketValue   === 'number' ? pos.marketValue   : null,
+    };
+
+    try {
+      await db.collection('pnthr_portfolio').insertOne(positionDoc);
+
+      // Mirror to journal so the trade card / discipline scoring works from day 1
+      try {
+        const { createJournalEntry } = await import('./journalService.js');
+        await createJournalEntry(db, positionDoc, userId);
+      } catch (e) {
+        console.warn(`[IBKR Phase 3] Journal create failed for ${ticker}: ${e.message} (position already inserted; can backfill later)`);
+      }
+
+      opened.push({
+        ticker, direction, shares: absShares,
+        entryPrice: positionDoc.entryPrice,
+        stopPrice:  pnthrStop,
+        sector,
+        signal:     positionDoc.signal,
+      });
+      console.log(`[IBKR Phase 3] ⚡ Auto-opened ${ticker} (${direction}) ${absShares}sh @ $${positionDoc.entryPrice} stop $${pnthrStop} sector=${sector || '?'}`);
+    } catch (e) {
+      console.error(`[IBKR Phase 3] insertOne failed for ${ticker}: ${e.message}`);
+    }
+  }
+
+  return opened;
 }
 
 // ── getOvernightFills ─────────────────────────────────────────────────────────
@@ -332,8 +473,23 @@ export async function ibkrSync(req, res) {
       db, userId, executions, pnthrPositions, syncedAt, positions
     );
 
-    // 6. Identify IBKR positions not yet tracked in PNTHR (informational)
-    const pnthrTickers = new Set(pnthrPositions.map(p => p.ticker?.toUpperCase()));
+    // 5. Phase 3: Auto-open new positions detected in IBKR snapshot.
+    // Runs AFTER processExecutions so a sell→rebuy in the same sync cycle
+    // closes the old position first, then the new buy is detected as a
+    // fresh open on the next sync (the recent-close 5-minute guard
+    // prevents creating a new position from a snapshot that still shows
+    // the just-closed shares).
+    const autoOpenedPositions = await processNewPositions(
+      db, userId, positions, syncedAt
+    );
+
+    // 6. Identify IBKR positions not yet tracked in PNTHR (informational —
+    // anything Phase 3 refused to auto-open, e.g. when no PNTHR Stop was
+    // available — surfaces here so user can investigate.)
+    const refreshedPnthr = autoOpenedPositions.length
+      ? await db.collection('pnthr_portfolio').find({ ownerId: userId, status: 'ACTIVE' }).project({ ticker: 1 }).toArray()
+      : pnthrPositions;
+    const pnthrTickers = new Set(refreshedPnthr.map(p => p.ticker?.toUpperCase()));
     const untracked    = positions
       .filter(p => p.symbol !== 'USD' && !pnthrTickers.has(p.symbol.toUpperCase()))
       .map(p => ({ symbol: p.symbol, shares: p.shares, marketValue: p.marketValue }));
@@ -366,6 +522,7 @@ export async function ibkrSync(req, res) {
       stopMismatches,
       untracked,
       autoClosedPositions,
+      autoOpenedPositions,
       syncedAt:             syncedAt.toISOString(),
     });
   } catch (err) {

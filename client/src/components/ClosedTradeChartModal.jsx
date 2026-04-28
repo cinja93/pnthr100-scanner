@@ -454,12 +454,13 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
       });
     });
 
-    // Sector-specific EMA
+    // OpEMA — sector-optimized weekly EMA (blue line). Period varies 18-26W
+    // by entry.sector per sectorEmaConfig.js.
     const emaPeriod = getSectorEmaPeriod(entry?.sector);
-    const ema21Full = calculateEMA(allWeeklyData, emaPeriod);
-    if (ema21Full.length > 0) {
-      const ema21 = ema21Full.filter(d => filteredTimes.has(d.time));
-      if (ema21.length > 0) {
+    const opEmaFull = calculateEMA(allWeeklyData, emaPeriod);
+    if (opEmaFull.length > 0) {
+      const opEmaWindow = opEmaFull.filter(d => filteredTimes.has(d.time));
+      if (opEmaWindow.length > 0) {
         const emaSeries = chart.addSeries(LineSeries, {
           color: '#2563eb',
           lineWidth: 2,
@@ -467,7 +468,7 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
           lastValueVisible: false,
           crosshairMarkerVisible: false,
         });
-        emaSeries.setData(ema21);
+        emaSeries.setData(opEmaWindow);
       }
     }
 
@@ -732,6 +733,12 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
                 {entry.exchange}
               </span>
             )}
+            <span
+              style={{ background: 'rgba(37,99,235,0.12)', border: '1px solid rgba(37,99,235,0.35)', color: '#2563eb', padding: '1px 7px', borderRadius: 4, fontSize: '0.7rem', fontWeight: 600 }}
+              title={`OpEMA = sector-optimized weekly EMA. ${entry?.sector || 'Default'} sector uses ${getSectorEmaPeriod(entry?.sector)}-week period. Blue line on chart.`}
+            >
+              OpEMA {getSectorEmaPeriod(entry?.sector)}W
+            </span>
             {currentPrice != null && (
               <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#111' }}>
                 ${currentPrice.toFixed(2)}

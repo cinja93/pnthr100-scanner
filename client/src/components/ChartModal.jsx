@@ -351,7 +351,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
   const inWatchlist = stock ? watchlistSet.has(stock.ticker) : false;
 
   // Enrich stock with chart-detected signal AND chart-computed metrics so Analyze always has
-  // correct data. Page data often lacks signal, ema21, rsi14, weekly OHLC, and volumeRatio.
+  // correct data. Page data often lacks signal, OpEMA, rsi14, weekly OHLC, and volumeRatio.
   // All derived from allWeeklyData — already loaded to draw the chart, no extra API calls.
   const enrichedStock = useMemo(() => {
     if (!stock) return stock;
@@ -377,12 +377,15 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
 
     const emaPeriod = getSectorEmaPeriod(stock?.sector);
     if (allWeeklyData.length >= emaPeriod + 1) {
-      // Sector-specific EMA — same series drawn on chart; last two values give current value + slope
-      const ema21Series = calculateEMA(allWeeklyData, emaPeriod);
-      const lastEma = ema21Series.at(-1)?.value ?? null;
-      const prevEma = ema21Series.at(-2)?.value ?? null;
+      // OpEMA — sector-optimized period, same series drawn on chart;
+      // last two values give current value + slope
+      const opEmaSeries = calculateEMA(allWeeklyData, emaPeriod);
+      const lastEma = opEmaSeries.at(-1)?.value ?? null;
+      const prevEma = opEmaSeries.at(-2)?.value ?? null;
       if (lastEma) {
-        base.ema21 = lastEma;
+        base.ema21 = lastEma;             // legacy field name kept for back-compat with Analyze
+        base.opEma = lastEma;              // canonical field name
+        base.opEmaPeriod = emaPeriod;
         if (prevEma) base.emaSlope = parseFloat(((lastEma - prevEma) / prevEma * 100).toFixed(4));
       }
 
@@ -671,11 +674,11 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
       }
     }
 
-    // Sector-specific EMA — calculated on full history for accuracy
-    const ema21Full = calculateEMA(allWeeklyData, emaPeriod);
-    if (ema21Full.length > 0) {
-      const ema21 = ema21Full.filter(d => filteredTimes.has(d.time));
-      if (ema21.length > 0) {
+    // OpEMA (sector-optimized weekly EMA) — calculated on full history for accuracy
+    const opEmaFull = calculateEMA(allWeeklyData, emaPeriod);
+    if (opEmaFull.length > 0) {
+      const opEmaWindow = opEmaFull.filter(d => filteredTimes.has(d.time));
+      if (opEmaWindow.length > 0) {
         const emaSeries = chart.addSeries(LineSeries, {
           color: '#2563eb',
           lineWidth: 2,
@@ -683,7 +686,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
           lastValueVisible: false,
           crosshairMarkerVisible: false,
         });
-        emaSeries.setData(ema21);
+        emaSeries.setData(opEmaWindow);
       }
     }
 
@@ -959,6 +962,13 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
             <div className={styles.badges}>
               {stock.sector && <span className={styles.badge}>{stock.sector}</span>}
               {stock.exchange && <span className={styles.badge}>{stock.exchange}</span>}
+              <span
+                className={styles.badge}
+                style={{ background: 'rgba(37,99,235,0.15)', color: '#2563eb', borderColor: 'rgba(37,99,235,0.35)' }}
+                title={`OpEMA = sector-optimized weekly EMA. ${stock.sector || 'Default'} sector uses ${getSectorEmaPeriod(stock.sector)}-week period. Blue line on chart.`}
+              >
+                OpEMA {getSectorEmaPeriod(stock.sector)}W
+              </span>
             </div>
           </div>
           <div className={styles.headerActions}>

@@ -1894,13 +1894,17 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                         <tbody>
                           {sorted.map(entry => {
                             const isExpanded = expandedId === entry._id;
-                            const pnl = entry.performance?.realizedPnlDollar;
                             const lots = Array.isArray(entry.lots) ? entry.lots : [];
-                            const pnlPct = entry.performance?.realizedPnlPct ?? (() => {
+                            // Only treat realizedPnlDollar as meaningful when there's actually exit data.
+                            // Many legacy entries are status=CLOSED with no exits[] / no avgExitPrice but
+                            // realizedPnlDollar=0 — rendering "+$0" would falsely imply a breakeven trade.
+                            const hasExit = entry.performance?.avgExitPrice != null && (entry.exits?.length || 0) > 0;
+                            const pnl = hasExit ? entry.performance?.realizedPnlDollar : null;
+                            const pnlPct = hasExit ? (entry.performance?.realizedPnlPct ?? (() => {
                               if (pnl == null) return null;
                               const costBasis = lots.reduce((s, l) => s + (l.price || 0) * (l.shares || 0), 0);
                               return costBasis > 0 ? +(pnl / costBasis * 100).toFixed(2) : null;
-                            })();
+                            })()) : null;
                             const disc = entry.discipline?.totalScore;
                             const wash = entry.washSale?.isLoss ? entry.washSale : entry.washRule;
                             const washExpiry = wash?.isLoss && wash?.expiryDate ? new Date(wash.expiryDate) : null;
@@ -1923,7 +1927,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                     </span>
                                   </td>
                                   <td style={tdStyle}>{entry.entry?.fillPrice != null ? `$${entry.entry.fillPrice.toFixed(2)}` : '—'}</td>
-                                  <td style={tdStyle}>{entry.performance?.avgExitPrice != null ? `$${entry.performance.avgExitPrice.toFixed(2)}` : entry.performance?.status === 'ACTIVE' ? <span style={{ color: '#555' }}>—</span> : <span style={{ color: '#555' }}>partial</span>}</td>
+                                  <td style={tdStyle}>{entry.performance?.avgExitPrice != null ? `$${entry.performance.avgExitPrice.toFixed(2)}` : entry.performance?.status === 'PARTIAL' ? <span style={{ color: '#555' }}>partial</span> : <span style={{ color: '#555' }}>—</span>}</td>
                                   <td style={{ ...tdStyle, color: pnl == null ? '#555' : pnl >= 0 ? '#6bcb77' : '#ff6b6b', fontWeight: 700 }}>
                                     {pnl != null ? `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(0)}` : '—'}
                                   </td>

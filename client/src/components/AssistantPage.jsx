@@ -3410,7 +3410,10 @@ export default function AssistantPage({ onNavigate }) {
            Shows every ticker from IBKR positions + IBKR stops + Command Center
            with colored alignment indicators. Click a non-green cell to fix.
          ══════════════════════════════════════════════════════════════════════ */}
-      <AssistantLiveTable onNavigate={onNavigate} />
+      <AssistantLiveTable onNavigate={onNavigate} netLiquidity={nav} onOpenChart={(stocks, idx) => {
+        if (Array.isArray(stocks) && stocks.length > 0) { setChartStocks(stocks); setChartIndex(idx || 0); }
+        else if (stocks && stocks.ticker) { setChartStocks([stocks]); setChartIndex(0); }
+      }} />
 
       {/* ══════════════════════════════════════════════════════════════════════
            SECTION 1 — LIVE OPPORTUNITIES

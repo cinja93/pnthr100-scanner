@@ -757,7 +757,7 @@ function buildSubRows(row) {
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
-export default function AssistantLiveTable({ onNavigate }) {
+export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart }) {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1277,8 +1277,10 @@ export default function AssistantLiveTable({ onNavigate }) {
                   <div style={{ padding: '0 8px' }}>
                     <AssistantRowExpand
                       position={pos}
+                      netLiquidity={netLiquidity}
                       onClose={() => toggleExpanded(row.ticker)}
                       onPositionChanged={fetchData}
+                      onOpenChart={onOpenChart}
                     />
                   </div>
                 );

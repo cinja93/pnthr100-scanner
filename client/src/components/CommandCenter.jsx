@@ -682,7 +682,11 @@ function ExitPanel({ position, onClose, onConfirm }) {
 
 // ── Pyramid Card (position row) ───────────────────────────────────────────────
 
-function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onClearOverride, onDelete, onExitConfirmed, flashed, onOpenChart, onField, onDirectionChange }) {
+// Day 1 (2026-04-29): exported as a named export so AssistantRowExpand can
+// reuse the full editable lot card without copy-pasting 815 lines. Day 2
+// cleanup will move PyramidCard to its own file when CommandCenter.jsx is
+// retired entirely.
+export function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, onUpdatePrice, onClearOverride, onDelete, onExitConfirmed, flashed, onOpenChart, onField, onDirectionChange }) {
   const [expanded,      setExpanded]      = useState(false);
   const [editing,       setEditing]       = useState(null);
   const [ev,            setEv]            = useState({});

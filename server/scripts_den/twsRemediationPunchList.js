@@ -126,7 +126,11 @@ for (const p of pnthr) {
     continue;
   }
   const ibkrShares  = Math.abs(+ibkr.shares || 0);
-  const pnthrShares = +p.totalFilledShares || Object.values(p.fills || {}).reduce((s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0);
+  // Sum from fills[] is authoritative — the UI reads this. totalFilledShares
+  // is a denormalized field that drifts when lots 2-5 fill in Command Center,
+  // so only fall back to it when there are no fills (legacy docs).
+  const fillsSum = Object.values(p.fills || {}).reduce((s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0);
+  const pnthrShares = fillsSum > 0 ? fillsSum : (+p.totalFilledShares || 0);
   if (ibkrShares !== pnthrShares) {
     sharesMismatch.push({ ticker: t, dir: p.direction, ibkrShares, pnthrShares, kind: 'DIFF' });
   }

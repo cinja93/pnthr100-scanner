@@ -84,6 +84,7 @@ import { computeEMA21fromDailyBars, computeEMAFromDailyBars } from './technicalU
 import { getSectorEmaPeriod } from './sectorEmaConfig.js';
 import { createJournalEntry, calculateDisciplineScore } from './journalService.js';
 import {
+  connectToDatabase,
   getSupplementalStocks,
   addSupplementalStock,
   removeSupplementalStock,

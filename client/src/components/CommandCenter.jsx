@@ -1459,15 +1459,25 @@ export function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, on
             </div>
           )}
 
-          {/* EXIT SHARES button */}
+          {/* EXIT SHARES + CLOSE VIA TWS buttons (Phase 4f) */}
           {(position.remainingShares == null || position.remainingShares > 0) && (
-            <div style={{ margin: '0 18px 8px', textAlign: 'center' }}>
+            <div style={{ margin: '0 18px 8px', display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button
                 onClick={() => setExitPanelOpen(p => !p)}
                 style={{ background: 'transparent', border: '1px solid #FFD700', color: '#FFD700', borderRadius: 6, padding: '5px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 1 }}
+                title="Journal an exit you already executed in TWS. Does NOT place a sell order."
               >
-                {exitPanelOpen ? '✕ CANCEL' : '+ EXIT SHARES'}
+                {exitPanelOpen ? '✕ CANCEL' : '+ JOURNAL EXIT'}
               </button>
+              <CloseViaBridgeButton
+                position={position}
+                onClosed={onExitConfirmed}
+              />
+            </div>
+          )}
+          {position.sellPending && (
+            <div style={{ margin: '0 18px 8px', padding: '8px 12px', background: 'rgba(252,240,0,0.06)', border: '1px solid rgba(252,240,0,0.25)', borderRadius: 4, fontSize: 11, color: '#fcf000' }}>
+              ⏳ Sell order queued in bridge ({position.sellPending.orderType}{position.sellPending.orderType === 'LMT' ? ` @ $${(+position.sellPending.limitPrice).toFixed(2)}` : ''}). Position closes once the fill arrives via Phase 2 sync.
             </div>
           )}
 
@@ -1529,6 +1539,153 @@ function DeleteBtn({ onDelete }) {
       </button>
     </div>
   );
+}
+
+// ── Close Via Bridge button (Phase 4f) ────────────────────────────────────
+// Places a real TWS sell order via the IBKR outbox bridge. Click → confirm
+// → enqueue. The actual close (status flip, journal entry, P&L) happens
+// asynchronously when Phase 2 sees the SLD execution in the next bridge sync,
+// so the journal price equals the real fill price by construction.
+//
+// During RTH this defaults to a market order. Outside RTH the user must
+// supply a limit price (IBKR rejects MKT outside RTH). The check uses the
+// browser clock — close enough for UX purposes; the bridge enforces RTH on
+// the order itself.
+function CloseViaBridgeButton({ position, onClosed }) {
+  const [stage, setStage] = useState('idle'); // idle | confirm | submitting | error
+  const [orderType, setOrderType] = useState('MKT');
+  const [limitPrice, setLimitPrice] = useState('');
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  const isRTH = (() => {
+    const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const day = et.getDay();
+    if (day === 0 || day === 6) return false;
+    const m = et.getHours() * 60 + et.getMinutes();
+    return m >= 570 && m <= 960; // 9:30–16:00 ET
+  })();
+
+  if (position.sellPending) return null; // already queued, don't show button
+
+  if (stage === 'idle') {
+    return (
+      <button
+        onClick={() => {
+          setStage('confirm');
+          setOrderType(isRTH ? 'MKT' : 'LMT');
+          setLimitPrice(isRTH ? '' : (position.currentPrice ? (+position.currentPrice).toFixed(2) : ''));
+        }}
+        style={{ background: '#0a3a1a', border: '1px solid #86efac', color: '#86efac', borderRadius: 6, padding: '5px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 1 }}
+        title={isRTH ? 'Place a market sell in TWS to close this position. Journal records the actual fill price.' : 'Outside RTH — IBKR requires LMT. You\'ll be prompted for a limit price.'}
+      >
+        🔴 CLOSE VIA TWS
+      </button>
+    );
+  }
+
+  if (stage === 'confirm') {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+        padding: '6px 10px', background: 'rgba(0,0,0,0.3)',
+        border: '1px solid rgba(134,239,172,0.4)', borderRadius: 6,
+      }}>
+        <span style={{ fontSize: 11, color: '#86efac', fontWeight: 700 }}>
+          Sell {position.ticker}
+        </span>
+        <select
+          value={orderType}
+          onChange={e => setOrderType(e.target.value)}
+          disabled={!isRTH}
+          style={{ background: '#1a1a1a', color: '#86efac', border: '1px solid rgba(134,239,172,0.4)', borderRadius: 4, padding: '3px 6px', fontSize: 11 }}
+        >
+          {isRTH && <option value="MKT">MKT</option>}
+          <option value="LMT">LMT</option>
+        </select>
+        {orderType === 'LMT' && (
+          <>
+            <span style={{ fontSize: 11, color: '#888' }}>@</span>
+            <input
+              type="number"
+              step="0.01"
+              value={limitPrice}
+              onChange={e => setLimitPrice(e.target.value)}
+              placeholder="0.00"
+              style={{ background: '#1a1a1a', color: '#86efac', border: '1px solid rgba(134,239,172,0.4)', borderRadius: 4, padding: '3px 6px', fontSize: 11, width: 80 }}
+            />
+          </>
+        )}
+        {!isRTH && orderType === 'LMT' && (
+          <span style={{ fontSize: 9, color: '#fcf000' }}>(EXT-HRS)</span>
+        )}
+        <button
+          onClick={async () => {
+            if (orderType === 'LMT' && (!limitPrice || +limitPrice <= 0)) {
+              setErrorMsg('Limit price required');
+              return;
+            }
+            setStage('submitting');
+            setErrorMsg(null);
+            try {
+              const r = await fetch(`${API_BASE}/api/positions/close-via-bridge`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                body: JSON.stringify({
+                  id: position.id,
+                  orderType,
+                  limitPrice: orderType === 'LMT' ? +limitPrice : null,
+                }),
+              });
+              const data = await r.json();
+              if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+              setStage('idle');
+              onClosed?.({ pending: true, message: data.message });
+            } catch (e) {
+              setErrorMsg(e.message);
+              setStage('error');
+            }
+          }}
+          style={{ background: '#0a3a1a', border: '1px solid #86efac', color: '#86efac', borderRadius: 4, padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+        >
+          PLACE SELL
+        </button>
+        <button
+          onClick={() => { setStage('idle'); setErrorMsg(null); }}
+          style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#888', borderRadius: 4, padding: '3px 10px', fontSize: 11, cursor: 'pointer' }}
+        >
+          CANCEL
+        </button>
+      </div>
+    );
+  }
+
+  if (stage === 'submitting') {
+    return (
+      <span style={{ fontSize: 11, color: '#86efac', padding: '5px 16px' }}>
+        Queueing sell…
+      </span>
+    );
+  }
+
+  if (stage === 'error') {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '6px 10px', background: 'rgba(220,53,69,0.1)',
+        border: '1px solid rgba(220,53,69,0.4)', borderRadius: 6,
+      }}>
+        <span style={{ fontSize: 11, color: '#fca5a5' }}>{errorMsg}</span>
+        <button
+          onClick={() => { setStage('idle'); setErrorMsg(null); }}
+          style={{ background: 'transparent', border: '1px solid rgba(220,53,69,0.4)', color: '#fca5a5', borderRadius: 4, padding: '3px 10px', fontSize: 11, cursor: 'pointer' }}
+        >
+          DISMISS
+        </button>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ── Pending Entry Card ────────────────────────────────────────────────────────

@@ -461,6 +461,65 @@ class PNTHRBridge(EWrapper, EClient):
             'failures':  failures,
         }
 
+    def sell_position(self, ticker, action, shares, order_type='MKT',
+                      limit_price=None, tif='DAY', rth=True):
+        """Place a closing sell (LONG) or cover (SHORT) for an existing position.
+        Used by Phase 4f when the user clicks 'Close Position' in PNTHR — the
+        outbox enqueues a SELL_POSITION command and the bridge places the actual
+        TWS order. The fill arrives back via the next bridge sync's executions[]
+        and Phase 2's processExecutions records the canonical close at the
+        REAL fill price.
+
+        Order type:
+          • MKT (RTH default): immediate fill at market
+          • LMT (extended-hours required, also valid in RTH): user-specified
+            limit price; IBKR rejects MKT outside RTH so the UI must collect
+            a limit when the user is closing after hours.
+
+        Action: 'SELL' for LONG positions, 'BUY' for SHORT covers.
+
+        Returns {ok, orderId, permId, status, error}."""
+        if not self.connected:
+            return {'ok': False, 'error': 'BRIDGE_DISCONNECTED'}
+        oid = self._allocate_order_id()
+        if oid is None:
+            return {'ok': False, 'error': 'NO_NEXT_ORDER_ID'}
+        order_type = (order_type or 'MKT').upper()
+        if order_type not in ('MKT', 'LMT'):
+            return {'ok': False, 'error': f'BAD_ORDER_TYPE:{order_type}'}
+        if order_type == 'LMT' and (limit_price is None or float(limit_price) <= 0):
+            return {'ok': False, 'error': 'LMT_REQUIRES_LIMIT_PRICE'}
+        contract = self._build_stock_contract(ticker)
+        order = Order()
+        order.action        = action.upper()
+        order.orderType     = order_type
+        order.totalQuantity = int(shares)
+        order.tif           = tif
+        order.outsideRth    = not rth
+        if order_type == 'LMT':
+            order.lmtPrice  = float(limit_price)
+        order.eTradeOnly    = False
+        order.firmQuoteOnly = False
+        try:
+            self.placeOrder(oid, contract, order)
+        except Exception as e:
+            return {'ok': False, 'orderId': oid, 'error': f'PLACE_THREW: {e}'}
+        # Allow more time for fill confirmation than for stop placement —
+        # market orders fill quickly, but limit orders during ext-hours can
+        # take a moment to cross.
+        st = self._wait_for_status(oid, ('Submitted', 'PreSubmitted', 'Filled'), timeout=20.0)
+        if not st:
+            return {'ok': False, 'orderId': oid, 'error': 'NO_STATUS_AFTER_20S'}
+        return {
+            'ok':         st['status'] in ('Submitted', 'PreSubmitted', 'Filled'),
+            'orderId':    oid,
+            'permId':     st.get('permId'),
+            'status':     st['status'],
+            'orderType':  order_type,
+            'tif':        tif,
+            'rth':        rth,
+        }
+
     def modify_stop(self, ticker, old_perm_id, new_stop_price, action, shares,
                     tif='GTC', rth=True, order_type='STP', limit_price=None):
         """IB API has no true 'modify' — cancel old + place new. Both must
@@ -663,6 +722,22 @@ def _execute_command(app, rate_limiter, cmd):
             return False, None, 'MISSING_PERMID'
         result = app.cancel_order_by_perm_id(perm_id)
         return result.get('ok', False), result, (None if result.get('ok') else result.get('status'))
+
+    if command == 'SELL_POSITION':
+        # Action depends on the position direction we're closing.
+        # LONG → SELL (sell the shares we hold)
+        # SHORT → BUY (buy-to-cover the borrowed shares)
+        action = 'SELL' if (request.get('direction') or 'LONG').upper() != 'SHORT' else 'BUY'
+        result = app.sell_position(
+            ticker      = ticker,
+            action      = action,
+            shares      = request.get('shares'),
+            order_type  = request.get('orderType') or 'MKT',
+            limit_price = request.get('limitPrice'),
+            tif         = request.get('tif') or 'DAY',
+            rth         = bool(request.get('rth', True)),
+        )
+        return result.get('ok', False), result, (None if result.get('ok') else result.get('error') or result.get('status'))
 
     if command == 'MODIFY_STOP':
         action = 'SELL' if (request.get('direction') or 'LONG').upper() != 'SHORT' else 'BUY'

@@ -37,6 +37,7 @@ const VALID_COMMANDS = new Set([
   'CANCEL_ORDER',          // Phase 4b — cancel by permId
   'CANCEL_RELATED_ORDERS', // Phase 4b — cancel all open orders for a ticker
   'MODIFY_STOP',           // Phase 4c — daily ratchet sync (cancel + replace)
+  'SELL_POSITION',         // Phase 4f — close from PNTHR places real sell in TWS
 ]);
 
 // ── Stop-order shape helper (RTH vs extended-hours) ──────────────────────────
@@ -103,6 +104,46 @@ export function sanityCheckPlaceStop({ position, ibkrPosition, stopPrice }) {
   if (diffPct > 0.50) return { ok: false, reason: 'STOP_MORE_THAN_50PCT_AWAY' };
 
   return { ok: true, ibkrShares, isLong };
+}
+
+// ── Pre-enqueue sanity for SELL_POSITION (Phase 4f) ─────────────────────────
+// Refuse to enqueue a sell if anything looks wrong — never want PNTHR to
+// silently sell shares the user doesn't actually have, or sell during a
+// stale-snapshot window.
+//
+// Enforces:
+//   • IBKR still holds the position (matching ticker + direction sign)
+//   • Requested shares <= IBKR shares (no over-selling — IBKR rejects too)
+//   • Last-price reference is plausible
+//   • Limit-order request includes a positive limit price
+//   • Limit price is on the user's side of last (won't fill at a stupid price)
+export function sanityCheckSellPosition({ position, ibkrPosition, shares, orderType, limitPrice }) {
+  if (!position || !position.id) return { ok: false, reason: 'POSITION_MISSING' };
+  if (!ibkrPosition) return { ok: false, reason: 'IBKR_POSITION_MISSING' };
+  const ibkrShares = Math.abs(+ibkrPosition.shares || 0);
+  if (ibkrShares <= 0) return { ok: false, reason: 'IBKR_SHARES_ZERO' };
+  const reqShares  = +shares;
+  if (!Number.isFinite(reqShares) || reqShares <= 0) return { ok: false, reason: 'BAD_SHARES' };
+  if (reqShares > ibkrShares) return { ok: false, reason: 'SHARES_EXCEED_IBKR' };
+
+  const lastPrice = +ibkrPosition.lastPrice || +position.currentPrice || 0;
+  if (lastPrice <= 0) return { ok: false, reason: 'NO_PRICE_REFERENCE' };
+
+  const ot = (orderType || 'MKT').toUpperCase();
+  if (ot !== 'MKT' && ot !== 'LMT') return { ok: false, reason: 'BAD_ORDER_TYPE' };
+
+  if (ot === 'LMT') {
+    const lp = +limitPrice;
+    if (!Number.isFinite(lp) || lp <= 0) return { ok: false, reason: 'BAD_LIMIT_PRICE' };
+    // For a LONG sell, the limit should not be wildly above last (or it'll
+    // never fill). Cap at +20% of last as a typo guard. Below last is fine
+    // (aggressive limit). Mirror for SHORT cover.
+    const isLong = (position.direction || 'LONG').toUpperCase() !== 'SHORT';
+    if (isLong && lp > lastPrice * 1.20) return { ok: false, reason: 'LMT_TOO_HIGH_VS_LAST' };
+    if (!isLong && lp < lastPrice * 0.80) return { ok: false, reason: 'LMT_TOO_LOW_VS_LAST' };
+  }
+
+  return { ok: true, ibkrShares, reqShares, lastPrice };
 }
 
 export function sanityCheckModifyStop({ position, ibkrPosition, oldStopPrice, newStopPrice }) {

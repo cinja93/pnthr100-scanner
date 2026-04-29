@@ -330,6 +330,9 @@ const TRANSIENT_FIELDS = new Set([
   'outcome', 'closedAt', 'autoClosedByIBKR', 'ibkrExecId',
   // Denormalized counter — server recomputes from fills[] in stripTransientFields
   'totalFilledShares',
+  // Phase 4f bridge-sell pending state — set by /api/positions/close-via-bridge,
+  // unset by recordExit when fill arrives. Client must never write.
+  'sellPending',
 ]);
 
 function stripTransientFields(obj) {
@@ -543,6 +546,107 @@ export async function positionsClose(req, res) {
     res.json({ success: true, outcome: { profitPct: +profitPct.toFixed(2), profitDollar: +profitDollar.toFixed(2), holdingDays } });
   } catch (err) {
     console.error('[CC] Positions close error:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// ── POST /api/positions/close-via-bridge (Phase 4f) ──────────────────────────
+// Closes a position by enqueueing a SELL_POSITION command to the bridge so
+// the actual TWS market/limit order is placed. Does NOT call recordExit
+// directly — that fires from Phase 2 when the SLD execution arrives back
+// from the bridge with the REAL fill price. Eliminates the journal/reality
+// mismatch (CMG case 2026-04-29: PNTHR journal $34.20 vs TWS fill $34.38).
+//
+// Body: { id, orderType?: 'MKT'|'LMT', limitPrice?: number, exitReason?: string }
+//   orderType defaults to 'MKT' for RTH closes.
+//   For ext-hours closes the UI must collect a limit price (IBKR rejects MKT
+//   outside RTH).
+//
+// Gated by IBKR_AUTO_SELL_ON_CLOSE — when off (default), this endpoint
+// returns 503 so the UI can fall back to the legacy journal-only flow.
+//
+// State: position stays ACTIVE/PARTIAL until Phase 2 sees the SLD exec.
+// UI should poll the position state every 30-60s after this call resolves.
+
+export async function positionsCloseViaBridge(req, res) {
+  try {
+    if (process.env.IBKR_AUTO_SELL_ON_CLOSE !== 'true') {
+      return res.status(503).json({
+        error: 'IBKR_AUTO_SELL_ON_CLOSE flag is off — bridge sell-on-close is disabled. Sell in TWS manually, then use Journal Exit.',
+        flagOff: true,
+      });
+    }
+
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+
+    const { id, orderType = 'MKT', limitPrice = null } = req.body;
+    if (!id) return res.status(400).json({ error: 'id required' });
+
+    const userId   = req.user.userId;
+    const position = await db.collection('pnthr_portfolio').findOne({ id, ownerId: userId });
+    if (!position) return res.status(404).json({ error: 'Position not found' });
+    if (position.status === 'CLOSED') return res.status(400).json({ error: 'Position already closed' });
+
+    // Pull live IBKR snapshot for sanity check + share count.
+    const ibkrDoc = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
+    const ibkrPos = (ibkrDoc?.positions || []).find(p => p.symbol?.toUpperCase() === position.ticker?.toUpperCase());
+    if (!ibkrPos) {
+      return res.status(409).json({
+        error: `IBKR shows no position for ${position.ticker} — nothing to sell. If PNTHR's open record is stale, use Journal Exit instead.`,
+      });
+    }
+
+    const ibkrShares = Math.abs(+ibkrPos.shares || 0);
+    if (ibkrShares <= 0) {
+      return res.status(409).json({ error: `IBKR ${position.ticker} shares are 0 — nothing to sell.` });
+    }
+
+    // Sanity check (refuses bad limit prices, mismatched directions, etc.)
+    const { sanityCheckSellPosition, enqueue: enqueueOutbox } = await import('./ibkrOutbox.js');
+    const sanity = sanityCheckSellPosition({
+      position,
+      ibkrPosition: { shares: ibkrShares, lastPrice: ibkrPos.lastPrice || position.currentPrice, avgCost: ibkrPos.avgCost },
+      shares:       ibkrShares,
+      orderType,
+      limitPrice,
+    });
+    if (!sanity.ok) return res.status(400).json({ error: `SANITY_FAIL: ${sanity.reason}` });
+
+    // Enqueue the sell command. Bridge polls and executes within ~30s; the
+    // resulting SLD exec arrives back via the next /api/ibkr/sync and Phase 2
+    // calls recordExit with the actual fill price.
+    const result = await enqueueOutbox(db, userId, 'SELL_POSITION', {
+      ticker:      position.ticker,
+      direction:   position.direction || 'LONG',
+      shares:      ibkrShares,
+      orderType:   (orderType || 'MKT').toUpperCase(),
+      limitPrice:  orderType === 'LMT' ? +limitPrice : null,
+      tif:         'DAY',
+      rth:         orderType !== 'LMT', // ext-hours → must use LMT (caller's choice)
+      positionId:  position.id,
+      source:      'PHASE_4F_PNTHR_CLOSE',
+    }, { sanityCheck: { ok: true } /* already validated above */ });
+
+    if (result.skipped) {
+      return res.status(409).json({ error: `Outbox refused enqueue: ${result.skipped}` });
+    }
+
+    // Mark the position so the UI can show "sell pending" state. NOT a status
+    // change — the doc stays ACTIVE/PARTIAL until Phase 2 records the actual
+    // fill. This is a soft pending flag.
+    await db.collection('pnthr_portfolio').updateOne(
+      { id, ownerId: userId },
+      { $set: { sellPending: { commandId: result.id, enqueuedAt: new Date(), orderType, limitPrice } } }
+    );
+
+    res.json({
+      success:    true,
+      commandId:  result.id,
+      message:    `Sell order queued for ${position.ticker} (${orderType}${orderType === 'LMT' ? ` @ $${(+limitPrice).toFixed(2)}` : ''}). Bridge will execute within ~30s; PNTHR will record the close once the fill arrives.`,
+    });
+  } catch (err) {
+    console.error('[CC] close-via-bridge error:', err);
     res.status(500).json({ error: err.message });
   }
 }

@@ -101,6 +101,13 @@ async function recordExit(db, positionId, userId, exitData) {
     },
   };
 
+  // Clear the Phase 4f sell-pending banner once the actual fill arrives.
+  // The flag is set by /api/positions/close-via-bridge when the SELL_POSITION
+  // command is enqueued; once Phase 2 sees the resulting SLD exec and lands
+  // here, the position is canonically recorded and the UI hint is no longer
+  // needed regardless of remaining-shares state.
+  updateDoc.$unset = { sellPending: '' };
+
   // Wash rule on final loss exit
   if (newRemaining === 0 && realizedDollar < 0) {
     // Normalize to UTC midnight so expiry is always a clean calendar date

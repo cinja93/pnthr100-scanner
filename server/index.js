@@ -19,6 +19,7 @@ import {
   positionsGetAll,
   positionsSave,
   positionsClose,
+  positionsCloseViaBridge,
   positionsDelete,
   tickerHandler,
   regimeHandler,
@@ -2370,6 +2371,7 @@ app.get('/api/kill-pipeline',       authenticateJWT, killPipelineHandler);
 app.get('/api/positions',           authenticateJWT, positionsGetAll);
 app.post('/api/positions',          authenticateJWT, positionsSave);
 app.post('/api/positions/close',    authenticateJWT, positionsClose);
+app.post('/api/positions/close-via-bridge', authenticateJWT, requireAdmin, positionsCloseViaBridge);
 app.delete('/api/positions/:id',    authenticateJWT, positionsDelete);
 
 // PATCH /api/positions/:id/direction — explicit user-initiated direction correction
@@ -4839,6 +4841,7 @@ app.get('/api/admin/ibkr-outbox', authenticateJWT, requireAdmin, async (req, res
       IBKR_AUTO_SYNC_STOPS:        process.env.IBKR_AUTO_SYNC_STOPS        === 'true',
       IBKR_AUTO_RECORD_PARTIAL_SELL: process.env.IBKR_AUTO_RECORD_PARTIAL_SELL === 'true',
       IBKR_AUTO_RECORD_ADD_FILL:   process.env.IBKR_AUTO_RECORD_ADD_FILL   === 'true',
+      IBKR_AUTO_SELL_ON_CLOSE:     process.env.IBKR_AUTO_SELL_ON_CLOSE     === 'true',
     };
     res.json({ counts, flags, commands });
   } catch (err) {

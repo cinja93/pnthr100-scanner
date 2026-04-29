@@ -325,6 +325,29 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt) {
       continue;
     }
 
+    // Stop-side validation. signalService returns the stop computed for the
+    // CURRENT signal direction in the cache (BL or SS). If the IBKR fill is
+    // the OPPOSITE direction (e.g. user bought CMG long while signal cache
+    // has CMG as SS), the returned stop sits on the WRONG side of price for
+    // the actual position — a LONG with a stop above price, or SHORT with
+    // stop below. Refusing to auto-open in that case is safer than creating
+    // a position that would naked-fail the 4a sanity check OR (worse) place
+    // a stop that triggers immediately.
+    //
+    // Caught by sanityCheckPlaceStop downstream too, but rejecting at Phase 3
+    // means we don't even create the orphan PNTHR doc that has to be manually
+    // closed afterward. Surfaces in trades-today as UNTRACKED — user reviews.
+    const lastPrice = typeof pos.marketPrice === 'number' && pos.marketPrice > 0.01 && pos.marketPrice < 50000
+      ? +pos.marketPrice
+      : +pos.avgCost;
+    const stopOnRightSide = direction === 'LONG'
+      ? +pnthrStop < lastPrice
+      : +pnthrStop > lastPrice;
+    if (!stopOnRightSide) {
+      console.warn(`[IBKR Phase 3] Stop-side mismatch for ${ticker} ${direction}: pnthrStop=$${pnthrStop} vs price=$${lastPrice} (signalCache direction=${signalDir || 'unknown'}). Refusing to auto-open — manual review.`);
+      continue;
+    }
+
     // Build canonical position doc
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
     const positionDoc = {

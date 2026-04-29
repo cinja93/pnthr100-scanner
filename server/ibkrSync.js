@@ -184,9 +184,13 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt) {
 
   const opened = [];
 
-  // Active PNTHR positions for this user, indexed by ticker+direction
+  // Active OR partial PNTHR positions, indexed by ticker+direction. PARTIAL
+  // positions still hold real shares — only fully-CLOSED ones drop out. Pre-fix
+  // this filtered to status='ACTIVE' alone, which meant after a partial sale
+  // (DTCR yesterday → 102 → 51) the next IBKR sync would see 51 IBKR shares,
+  // not find DTCR in activeKeys, and auto-create a duplicate ACTIVE doc.
   const activePnthr = await db.collection('pnthr_portfolio')
-    .find({ ownerId: userId, status: 'ACTIVE' })
+    .find({ ownerId: userId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
     .project({ ticker: 1, direction: 1 })
     .toArray();
   const activeKeys = new Set(activePnthr.map(p => `${p.ticker?.toUpperCase()}_${p.direction?.toUpperCase()}`));
@@ -431,8 +435,16 @@ export async function ibkrSync(req, res) {
     // SAFE auto-update fields (written here):
     //   currentPrice, ibkrAvgCost, ibkrShares, ibkrSyncedAt,
     //   ibkrUnrealizedPNL, ibkrMarketValue
+    // Include PARTIAL alongside ACTIVE — PARTIAL positions still hold real
+    // shares, still need IBKR field updates (avgCost / marketPrice / shares),
+    // still feed Phase 2's auto-close lookup table (positionByTickerDir), and
+    // still need to be in the activeKeys set Phase 3 uses to avoid duplicate
+    // doc creation. Note: Phase 2's 90%-of-filled rule only triggers
+    // auto-close on full exits relative to the ORIGINAL fill count — partial-
+    // exit auto-recording is the deliberate scope of Phase 4d
+    // (IBKR_AUTO_RECORD_PARTIAL_SELL, Day 6 enable).
     const pnthrPositions = await db.collection('pnthr_portfolio')
-      .find({ ownerId: userId, status: 'ACTIVE' })
+      .find({ ownerId: userId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
       .toArray();
 
     const ibkrByTicker = {};
@@ -517,7 +529,7 @@ export async function ibkrSync(req, res) {
     // anything Phase 3 refused to auto-open, e.g. when no PNTHR Stop was
     // available — surfaces here so user can investigate.)
     const refreshedPnthr = autoOpenedPositions.length
-      ? await db.collection('pnthr_portfolio').find({ ownerId: userId, status: 'ACTIVE' }).project({ ticker: 1 }).toArray()
+      ? await db.collection('pnthr_portfolio').find({ ownerId: userId, status: { $in: ['ACTIVE', 'PARTIAL'] } }).project({ ticker: 1 }).toArray()
       : pnthrPositions;
     const pnthrTickers = new Set(refreshedPnthr.map(p => p.ticker?.toUpperCase()));
     const untracked    = positions

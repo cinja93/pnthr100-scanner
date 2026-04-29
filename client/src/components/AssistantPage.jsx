@@ -15,17 +15,22 @@
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   API_BASE, authHeaders, fetchIbkrDiscrepancies, fetchIbkrTradesToday,
   fetchAccessRequests, approveAccessAsMember, approveAccessAsInvestor, denyAccessRequest,
   resetMemberPassword,
   createMemberAdmin,
   createInvestor,
+  fetchNav,
+  updateUserProfile,
 } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ChartModal from './ChartModal';
 import AssistantLiveTable from './AssistantLiveTable';
+import RiskAdvisorModal from './RiskAdvisorModal';
+import CalculatorModal from './CalculatorModal';
+import AddPositionModal from './AddPositionModal';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
 
@@ -2566,6 +2571,14 @@ export default function AssistantPage({ onNavigate }) {
   const [ibkrTradesLoading,  setIbkrTradesLoading]  = useState(false);
   const [headlines,          setHeadlines]          = useState([]);
   const [headlinesLoading,   setHeadlinesLoading]   = useState(true);
+  // Day 1 toolbar — NAV inline edit + modal triggers + Bridge status badge
+  const [nav,           setNav]           = useState(null);
+  const [navInput,      setNavInput]      = useState('');
+  const [navSaving,     setNavSaving]     = useState(false);
+  const navSaveTimer = useRef(null);
+  const [riskAdvisorOpen, setRiskAdvisorOpen] = useState(false);
+  const [calcOpen,        setCalcOpen]        = useState(false);
+  const [addPosOpen,      setAddPosOpen]      = useState(false);
   const [devSignalsAge,      setDevSignalsAge]      = useState(null);
   const [sectorBreakdown,    setSectorBreakdown]    = useState([]);
   const [ordersData,         setOrdersData]         = useState(null);
@@ -2826,6 +2839,37 @@ export default function AssistantPage({ onNavigate }) {
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
+
+  // ── Day 1 toolbar — NAV fetch + inline-edit save ───────────────────────────
+  // NAV is read on mount and refreshed whenever the LIVE table refreshes (e.g.
+  // after IBKR sync writes a fresh accountSize). Edit-then-save uses a 1s
+  // debounce so per-keystroke NAV changes don't hammer the profile endpoint.
+  useEffect(() => {
+    let cancelled = false;
+    fetchNav().then(v => {
+      if (!cancelled && v != null) {
+        setNav(v);
+        setNavInput(String(Math.round(v)));
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  const handleNavChange = (e) => {
+    const v = e.target.value.replace(/[^0-9.]/g, '');
+    setNavInput(v);
+    if (navSaveTimer.current) clearTimeout(navSaveTimer.current);
+    navSaveTimer.current = setTimeout(async () => {
+      const num = Number(v);
+      if (!Number.isFinite(num) || num <= 0) return;
+      setNavSaving(true);
+      try {
+        await updateUserProfile({ accountSize: num });
+        setNav(num);
+      } catch { /* non-fatal — UI keeps the value the user typed */ }
+      setNavSaving(false);
+    }, 1000);
+  };
 
   // Auto-refresh countdown moved into CountdownTimer component
 
@@ -3263,6 +3307,105 @@ export default function AssistantPage({ onNavigate }) {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
+           Day 1 — Action toolbar
+           NAV (inline edit) · Risk Advisor · Calculator · + Add Position ·
+           Bridge status badge (Phase 4 placeholder; populated for real on Day 2)
+         ══════════════════════════════════════════════════════════════════════ */}
+      {isAdmin && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          padding: '10px 14px', marginBottom: 12,
+          background: 'rgba(252,240,0,0.04)',
+          border: '1px solid rgba(252,240,0,0.18)',
+          borderRadius: 8,
+        }}>
+          {/* NAV inline edit */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 800, letterSpacing: '0.08em' }}>NAV</span>
+            <span style={{ color: '#888', fontSize: 13, fontWeight: 700 }}>$</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={navInput}
+              onChange={handleNavChange}
+              placeholder="100000"
+              style={{
+                width: 110,
+                padding: '4px 8px',
+                background: 'rgba(0,0,0,0.4)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 4,
+                color: '#FCF000',
+                fontSize: 13, fontWeight: 700,
+                fontFamily: 'monospace',
+                fontVariantNumeric: 'tabular-nums',
+                outline: 'none',
+              }}
+            />
+            {navSaving && <span style={{ color: '#FCF000', fontSize: 11 }}>⟳</span>}
+          </div>
+
+          {/* Vertical divider */}
+          <span style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.1)' }} />
+
+          {/* Modal triggers */}
+          <button
+            type="button"
+            onClick={() => setRiskAdvisorOpen(true)}
+            style={{
+              padding: '6px 12px',
+              background: 'rgba(220,53,69,0.08)',
+              border: '1px solid rgba(220,53,69,0.4)',
+              color: '#dc3545', borderRadius: 4, fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', letterSpacing: '0.05em',
+            }}
+          >⚖ RISK ADVISOR</button>
+          <button
+            type="button"
+            onClick={() => setCalcOpen(true)}
+            style={{
+              padding: '6px 12px',
+              background: 'rgba(255,215,0,0.08)',
+              border: '1px solid rgba(255,215,0,0.4)',
+              color: '#FFD700', borderRadius: 4, fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', letterSpacing: '0.05em',
+            }}
+          >🔢 CALCULATOR</button>
+          <button
+            type="button"
+            onClick={() => setAddPosOpen(true)}
+            style={{
+              padding: '6px 14px',
+              background: '#FCF000',
+              border: '1px solid #FCF000',
+              color: '#000', borderRadius: 4, fontSize: 11, fontWeight: 800,
+              cursor: 'pointer', letterSpacing: '0.05em',
+            }}
+          >+ ADD POSITION</button>
+
+          {/* Spacer */}
+          <span style={{ flex: 1 }} />
+
+          {/* Bridge status badge — populated for real on Day 2 (Phase 4 D1).
+              Today it's a hard-coded placeholder so the layout is settled. */}
+          <span
+            title="Phase 4 (IBKR write bridge) ships Day 2; flags will live in .env.bridge."
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '4px 10px', borderRadius: 12,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              fontSize: 10, fontWeight: 700,
+              color: 'rgba(255,255,255,0.55)', letterSpacing: '0.05em',
+            }}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#666' }} />
+            BRIDGE: PHASE 4 DISABLED
+          </span>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
            PNTHR ASSISTANT LIVE — source-of-truth reconciliation table
            Shows every ticker from IBKR positions + IBKR stops + Command Center
            with colored alignment indicators. Click a non-green cell to fix.
@@ -3683,6 +3826,29 @@ export default function AssistantPage({ onNavigate }) {
           onClose={() => setChartStocks(null)}
         />
       )}
+
+      {/* Day 1 toolbar modals — Risk Advisor / Calculator / Add Position */}
+      <RiskAdvisorModal
+        open={riskAdvisorOpen}
+        onClose={() => setRiskAdvisorOpen(false)}
+        onOpenChart={(stocks, idx) => {
+          if (Array.isArray(stocks) && stocks.length > 0) {
+            setChartStocks(stocks);
+            setChartIndex(idx || 0);
+            setRiskAdvisorOpen(false);
+          }
+        }}
+      />
+      <CalculatorModal
+        open={calcOpen}
+        onClose={() => setCalcOpen(false)}
+        onCreated={() => { setRefreshKey(k => k + 1); fetchAll(); }}
+      />
+      <AddPositionModal
+        open={addPosOpen}
+        onClose={() => setAddPosOpen(false)}
+        onSaved={() => { setRefreshKey(k => k + 1); fetchAll(); }}
+      />
 
     </div>
   );

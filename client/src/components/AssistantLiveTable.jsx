@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
+import AssistantRowExpand from './AssistantRowExpand';
 
 const REFRESH_MS = 60_000;
 
@@ -763,15 +764,29 @@ export default function AssistantLiveTable({ onNavigate }) {
   const [error,      setError]      = useState(null);
   const [modalRow,   setModalRow]   = useState(null);
   const [collapsed,  setCollapsed]  = useState(false);
+  // Day 1: per-row expand panel — Set<ticker>. Always starts empty (locked
+  // decision #2 — collapse all on reload, clean slate every visit).
+  const [expandedTickers, setExpandedTickers] = useState(() => new Set());
+  // Mirror of pnthr_portfolio for the expanded-row panel. Fetched once
+  // alongside live-reconcile and refreshed on the same cadence.
+  const [positions, setPositions] = useState([]);
 
   const fetchData = useCallback(async () => {
     try {
       setError(null);
       setRefreshing(true);
-      const r = await fetch(`${API_BASE}/api/assistant/live-reconcile`, { headers: authHeaders() });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const d = await r.json();
+      const [reconcileRes, positionsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/assistant/live-reconcile`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/positions`, { headers: authHeaders() }),
+      ]);
+      if (!reconcileRes.ok) throw new Error(`HTTP ${reconcileRes.status}`);
+      const d = await reconcileRes.json();
       setData(d);
+      if (positionsRes.ok) {
+        const pd = await positionsRes.json();
+        const list = Array.isArray(pd?.positions) ? pd.positions : (Array.isArray(pd) ? pd : []);
+        setPositions(list);
+      }
     } catch (e) {
       setError(e.message || 'Failed to load');
     } finally {
@@ -779,6 +794,26 @@ export default function AssistantLiveTable({ onNavigate }) {
       setRefreshing(false);
     }
   }, []);
+
+  const toggleExpanded = useCallback((ticker) => {
+    setExpandedTickers(prev => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else next.add(ticker);
+      return next;
+    });
+  }, []);
+
+  // Find a PNTHR portfolio doc by ticker for the expand panel. Active first;
+  // falls back to most-recent regardless of status (rare, mainly for closed
+  // positions still surfaced by the reconciler).
+  const findPositionByTicker = useCallback((ticker) => {
+    if (!ticker) return null;
+    const t = ticker.toUpperCase();
+    const active = positions.find(p => p.ticker?.toUpperCase() === t && (p.status === 'ACTIVE' || p.status === 'PARTIAL'));
+    if (active) return active;
+    return positions.find(p => p.ticker?.toUpperCase() === t) || null;
+  }, [positions]);
 
   useEffect(() => {
     fetchData();
@@ -1012,7 +1047,23 @@ export default function AssistantLiveTable({ onNavigate }) {
                           verticalAlign: 'top',
                         }}
                       >
-                        <div style={s.ticker}>{row.ticker}</div>
+                        <div
+                          style={{
+                            ...s.ticker,
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                          onClick={() => toggleExpanded(row.ticker)}
+                          title={expandedTickers.has(row.ticker) ? 'Collapse details' : 'Expand details'}
+                        >
+                          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', width: 8 }}>
+                            {expandedTickers.has(row.ticker) ? '▼' : '▶'}
+                          </span>
+                          {row.ticker}
+                        </div>
                         <div style={{
                           fontSize: 11, color: 'rgba(255,255,255,0.55)',
                           fontVariantNumeric: 'tabular-nums', marginTop: 1,
@@ -1213,6 +1264,25 @@ export default function AssistantLiveTable({ onNavigate }) {
                   })}
                 </tbody>
               </table>
+              {expandedTickers.has(row.ticker) && (() => {
+                const pos = findPositionByTicker(row.ticker);
+                if (!pos) {
+                  return (
+                    <div style={{ padding: 14, fontSize: 11, color: '#888', fontStyle: 'italic' }}>
+                      No active PNTHR position record for {row.ticker}.
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ padding: '0 8px' }}>
+                    <AssistantRowExpand
+                      position={pos}
+                      onClose={() => toggleExpanded(row.ticker)}
+                      onPositionChanged={fetchData}
+                    />
+                  </div>
+                );
+              })()}
             </div>
           );
         })}

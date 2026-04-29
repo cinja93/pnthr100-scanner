@@ -22,7 +22,10 @@ const NAV_GROUPS = [
       { key: 'pulse',     label: 'PNTHR Pulse',     iconImg: true },
       { key: 'assistant', label: 'PNTHR Assistant',  iconImg: true },
       { key: 'orders',    label: 'PNTHR Orders',    iconImg: true },
-      { key: 'command',   label: 'PNTHR Command',   iconImg: true },
+      // PNTHR Command intentionally hidden 2026-04-29 (Day 1 UI consolidation).
+      // Page is still mounted at /?page=command for fallback editing — used by
+      // the AssistantRowExpand "OPEN IN COMMAND CENTER" deep link for full lot
+      // / ratchet controls until Day 2 expand-panel polish ships.
     ],
   },
   {
@@ -235,7 +238,8 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           { key: 'portfolio', label: 'PNTHR Portfolio', iconImg: true },
           { key: 'assistant', label: 'PNTHR Assistant', iconImg: true },
           { key: 'orders',    label: 'PNTHR Orders',    iconImg: true },
-          { key: 'command',   label: 'PNTHR Command',   iconImg: true },
+          // PNTHR Command hidden 2026-04-29 (Day 1 UI consolidation); see top
+          // of file for the ongoing fallback deep-link justification.
         ],
       }
     : null;

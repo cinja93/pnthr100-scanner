@@ -175,20 +175,71 @@ console.log(`  outcome:           ${JSON.stringify(after.outcome)}`);
 console.log(`  closedAt:          ${after.closedAt}`);
 console.log(`  washRule:          ${JSON.stringify(after.washRule || {})}`);
 
-// ── 7. Journal sanity check ────────────────────────────────────────────────
+// ── 7. Journal sanity check + sync ────────────────────────────────────────
 const journal = await db.collection('pnthr_journal').findOne({ positionId: TARGET_ID, ownerId: SCOTT });
 console.log(`\nJournal check:`);
 if (!journal) {
   console.log(`  No journal entry found for positionId=${TARGET_ID}.`);
   console.log(`  → If this position should appear in the journal, run a follow-up to create one.`);
 } else {
-  console.log(`  status:            ${journal.performance?.status}`);
-  console.log(`  remainingShares:   ${journal.performance?.remainingShares}`);
-  console.log(`  realizedPnlDollar: ${journal.performance?.realizedPnlDollar}`);
-  console.log(`  realizedPnlPct:    ${journal.performance?.realizedPnlPct}`);
-  console.log(`  exits in journal:  ${(journal.exits || []).length}`);
-  if (journal.performance?.status !== 'CLOSED') {
-    console.log(`  ⚠ journal.performance.status=${journal.performance?.status} but portfolio is CLOSED — journal may need a follow-up sync.`);
+  console.log(`  Before:`);
+  console.log(`    status:            ${journal.performance?.status}`);
+  console.log(`    remainingShares:   ${journal.performance?.remainingShares}`);
+  console.log(`    realizedPnlDollar: ${journal.performance?.realizedPnlDollar}`);
+  console.log(`    realizedPnlPct:    ${journal.performance?.realizedPnlPct}`);
+  console.log(`    avgExitPrice:      ${journal.performance?.avgExitPrice}`);
+  console.log(`    exits in journal:  ${(journal.exits || []).length}`);
+
+  const journalNeedsSync =
+    journal.performance?.status !== 'CLOSED' ||
+    journal.performance?.remainingShares !== 0 ||
+    journal.performance?.realizedPnlPct !== realizedPct ||
+    journal.performance?.realizedPnlDollar !== realizedDollar;
+
+  if (!journalNeedsSync) {
+    console.log(`  Journal already in sync — no patch needed.`);
+  } else {
+    const journalSet = {
+      'performance.status':            'CLOSED',
+      'performance.remainingShares':   0,
+      'performance.realizedPnlDollar': realizedDollar,
+      'performance.realizedPnlPct':    realizedPct,
+      'performance.avgExitPrice':      avgExitPrice,
+      closedAt,
+      updatedAt: new Date(),
+    };
+    // Wash sale on loss — mirror the portfolio washRule into the journal washSale
+    if (realizedDollar < 0) {
+      const dateStr = exit.date.split('T')[0];
+      const finalDate = new Date(dateStr + 'T00:00:00.000Z');
+      const expiryDate = new Date(finalDate);
+      expiryDate.setUTCDate(expiryDate.getUTCDate() + 30);
+      journalSet['washSale.isLoss']      = true;
+      journalSet['washSale.lossAmount']  = realizedDollar;
+      journalSet['washSale.exitDate']    = finalDate;
+      journalSet['washSale.expiryDate']  = expiryDate;
+      journalSet['washSale.triggered']   = false;
+    }
+
+    if (!APPLY) {
+      console.log(`  [dry run] would $set on pnthr_journal:`);
+      for (const [k, v] of Object.entries(journalSet)) {
+        console.log(`    ${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`);
+      }
+    } else {
+      const jr = await db.collection('pnthr_journal').updateOne(
+        { positionId: TARGET_ID, ownerId: SCOTT },
+        { $set: journalSet },
+      );
+      console.log(`  Journal update: matched=${jr.matchedCount} modified=${jr.modifiedCount}`);
+      const jAfter = await db.collection('pnthr_journal').findOne({ positionId: TARGET_ID, ownerId: SCOTT });
+      console.log(`  After:`);
+      console.log(`    status:            ${jAfter.performance?.status}`);
+      console.log(`    remainingShares:   ${jAfter.performance?.remainingShares}`);
+      console.log(`    realizedPnlDollar: ${jAfter.performance?.realizedPnlDollar}`);
+      console.log(`    realizedPnlPct:    ${jAfter.performance?.realizedPnlPct}`);
+      console.log(`    avgExitPrice:      ${jAfter.performance?.avgExitPrice}`);
+    }
   }
 }
 

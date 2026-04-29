@@ -20,6 +20,8 @@ import { normalizeSector } from './sectorUtils.js';
 import { calculateSectorExposure } from './sectorExposure.js';
 import { computeEMAFromDailyBars, computeEMA21fromDailyBars } from './technicalUtils.js';
 import { getSectorEmaPeriod } from './sectorEmaConfig.js';
+import { getSignals } from './signalService.js';
+import { ALL_ETF_TICKER_SET } from './etfService.js';
 
 const FMP_API_KEY  = process.env.FMP_API_KEY;
 const FMP_BASE     = 'https://financialmodelingprep.com';
@@ -577,7 +579,17 @@ export async function tickerHandler(req, res) {
     // Fetch EMA with sector-specific period (requires profile for sector)
     const sectorName = normalizeSector(p?.sector || '');
     const emaPeriod  = getSectorEmaPeriod(sectorName);
-    const e = await fetchEMA(ticker, emaPeriod).catch(() => null);
+    const isETF      = ALL_ETF_TICKER_SET.has(ticker);
+    const [e, signalsResult] = await Promise.all([
+      fetchEMA(ticker, emaPeriod).catch(() => null),
+      getSignals([ticker], { isETF, sectorMap: { [ticker]: sectorName } }).catch(() => ({})),
+    ]);
+    const sig = signalsResult?.[ticker] || null;
+    // Algorithmic PNTHR stop from signalService → stopCalculation.js
+    // (Wilder ATR(3) + 2-week structural floor, ratcheted forward if active).
+    // null when no current BL/SS signal exists for the ticker.
+    const suggestedStop = sig?.stopPrice != null ? +sig.stopPrice : null;
+    const pnthrSignal   = sig?.signal || null; // 'BL' | 'SS' | null
 
     // Gap risk: check cache first, compute if stale/missing
     let maxGapPct = 0;
@@ -606,9 +618,10 @@ export async function tickerHandler(req, res) {
     // Volume ratio
     const volumeRatio = q?.volume && q?.avgVolume ? +(q.volume / q.avgVolume).toFixed(2) : null;
 
-    // Suggested direction from Kill score or EMA
+    // Suggested direction prefers the live PNTHR signal (BL/SS) over Kill or EMA fallbacks.
     let suggestedDirection = null;
-    if (k?.signal) suggestedDirection = k.signal === 'SS' ? 'SHORT' : 'LONG';
+    if (pnthrSignal) suggestedDirection = pnthrSignal === 'SS' ? 'SHORT' : 'LONG';
+    else if (k?.signal) suggestedDirection = k.signal === 'SS' ? 'SHORT' : 'LONG';
     else if (e?.current && q?.price) suggestedDirection = q.price > e.current ? 'LONG' : 'SHORT';
 
     res.json({
@@ -635,6 +648,8 @@ export async function tickerHandler(req, res) {
       separationPct:    k?.separationPct || 0,
       signalAge:        k?.signalAge    || 0,
       suggestedDirection,
+      suggestedStop,
+      pnthrSignal,
       updatedAt: new Date().toISOString(),
     });
   } catch (err) {

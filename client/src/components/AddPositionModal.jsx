@@ -7,10 +7,11 @@
 // /api/ticker/:symbol on blur. Per locked decision #1 the user can override
 // any pre-filled field — autocomplete is a head-start, not a hard fill.
 //
-// "Suggested PNTHR Stop" is intentionally not auto-filled today: the
-// algorithmic stop (Wilder ATR(3) + 2-week structural floor) lives in the
-// admin-only signal cache. Adding a public endpoint for it is Day 2+ scope;
-// the form lets the user enter it manually for now (always has).
+// "Suggested PNTHR Stop" is auto-filled from /api/ticker/:symbol when the
+// signalService cache has a live BL/SS for the ticker. Source of truth is
+// stopCalculation.js (Wilder ATR(3) + 2-week structural floor, ratcheted
+// forward for active positions). User can override the field — autofill is
+// a head-start, not a hard fill.
 //
 // Props:
 //   open      (bool)  — show/hide
@@ -101,6 +102,8 @@ export default function AddPositionModal({ open, initial, onClose, onSaved }) {
         currentPrice:       data.currentPrice,
         sector:             data.sector,
         suggestedDirection: data.suggestedDirection,
+        suggestedStop:      data.suggestedStop,
+        pnthrSignal:        data.pnthrSignal,
         companyName:        data.companyName,
         signalAge:          data.signalAge,
       });
@@ -111,6 +114,10 @@ export default function AddPositionModal({ open, initial, onClose, onSaved }) {
       if (data.sector && !sector) setSector(data.sector);
       if (data.suggestedDirection && !initial?.direction && !onlyEnrich) {
         setDirection(data.suggestedDirection);
+      }
+      // Algorithmic PNTHR stop pre-fill — empty fields only, user wins on edit.
+      if (data.suggestedStop != null && !stopPrice) {
+        setStopPrice(String(data.suggestedStop.toFixed(2)));
       }
     } catch {
       setLookupHit(null);
@@ -366,7 +373,7 @@ export default function AddPositionModal({ open, initial, onClose, onSaved }) {
               value={stopPrice}
               disabled={saving}
               onChange={(e) => { setStopPrice(e.target.value); clearWarning(); }}
-              placeholder="230.63"
+              placeholder={direction === 'SHORT' ? 'above entry' : 'below entry'}
               style={inputStyle}
             />
           )}

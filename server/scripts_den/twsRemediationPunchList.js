@@ -146,8 +146,9 @@ else {
 
 // ── (4) STOP MISMATCH: IBKR stop ≠ PNTHR stop on active position ─────────
 console.log(`╭─ 4. STOP PRICE MISMATCH — IBKR stop ≠ PNTHR canonical stop ──────╮`);
-console.log(`│   ACTION: update IBKR stop to match PNTHR (PNTHR is source of    │`);
-console.log(`│           truth; ratchets only tighten, so PNTHR is at-or-better) │`);
+console.log(`│   ACTION: tightest stop wins. Per-row direction below:           │`);
+console.log(`│           IBKR-tighter  → run adoptTwsTighterStops.js (adopt)    │`);
+console.log(`│           PNTHR-tighter → update TWS to PNTHR's stop             │`);
 console.log(`╰───────────────────────────────────────────────────────────────────╯`);
 const stopMismatch = [];
 for (const p of pnthr) {
@@ -174,8 +175,14 @@ if (stopMismatch.length === 0) console.log('  ✓ none\n');
 else {
   let n = 1;
   for (const m of stopMismatch) {
-    const dirAction = m.dir === 'SHORT' ? 'BUY' : 'SELL';
-    console.log(`  ${n++}. ${m.ticker.padEnd(6)} ${m.dir} — IBKR ${dirAction} STOP ${fmtMoney(m.ibkrStop)} → update to ${fmtMoney(m.pnthrStop)} (${m.ibkrShares} shares, permId ${m.ibkrPermId}, diff ${m.diffPct.toFixed(2)}%)`);
+    const isLong      = (m.dir || 'LONG').toUpperCase() !== 'SHORT';
+    const ibkrTighter = isLong ? (m.ibkrStop > m.pnthrStop) : (m.ibkrStop < m.pnthrStop);
+    const dirAction   = isLong ? 'SELL' : 'BUY';
+    const verdict     = ibkrTighter
+      ? `IBKR-TIGHTER  → run adoptTwsTighterStops.js`
+      : `PNTHR-TIGHTER → update TWS ${dirAction} STOP (permId ${m.ibkrPermId}) to ${fmtMoney(m.pnthrStop)}`;
+    console.log(`  ${n++}. ${m.ticker.padEnd(6)} ${m.dir} — IBKR ${fmtMoney(m.ibkrStop)} vs PNTHR ${fmtMoney(m.pnthrStop)}  (diff ${m.diffPct.toFixed(2)}%, ${m.ibkrShares}sh)`);
+    console.log(`         ${verdict}`);
   }
   console.log();
 }

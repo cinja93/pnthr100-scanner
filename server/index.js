@@ -29,6 +29,8 @@ import { runOrdersPipeline, runOrdersDailyUpdate, ordersGetLatest, ordersGetGate
 import { getKillTestSettings, saveKillTestSettings } from './killTestSettings.js';
 import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import { runDailySignalJob } from './dailySignalJob.js';
+import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
+import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
 import { killTestMonthlyGet, killTestMetricsGet, killTestMonthlyGenerate, generateMonthlySnapshots } from './killTestMonthly.js';
 import {
   checkCaseStudyEntries,
@@ -4794,6 +4796,118 @@ app.post('/api/admin/run-daily-signal-job', authenticateJWT, requireAdmin, async
   }
 });
 
+// ── Phase 4 admin endpoints ───────────────────────────────────────────────────
+// GET /api/admin/ibkr-outbox      — queue inspector (recent commands, status,
+//                                    errors). Used by AssistantPage outbox
+//                                    section + bridge-status badge.
+// POST /api/admin/sync-stops      — manual trigger of stopRatchetCron logic.
+//                                    Always responds with the report; whether
+//                                    MODIFY_STOP commands are actually enqueued
+//                                    depends on IBKR_AUTO_SYNC_STOPS.
+//                                    `?dryRun=1` returns the diff without
+//                                    writing anything.
+// POST /api/admin/ibkr-outbox/flag-stuck — promote >5min EXECUTING to STUCK.
+//                                    Bridge calls this opportunistically so
+//                                    the UI surfaces stuck items.
+app.get('/api/admin/ibkr-outbox', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const ownerId = req.user.userId;
+    const [commands, counts] = await Promise.all([
+      ibkrOutboxRecent(db, ownerId, 50),
+      ibkrOutboxCounts(db, ownerId),
+    ]);
+    const flags = {
+      IBKR_AUTO_PLACE_STOP:        process.env.IBKR_AUTO_PLACE_STOP        === 'true',
+      IBKR_AUTO_CANCEL_ON_CLOSE:   process.env.IBKR_AUTO_CANCEL_ON_CLOSE   === 'true',
+      IBKR_AUTO_SYNC_STOPS:        process.env.IBKR_AUTO_SYNC_STOPS        === 'true',
+      IBKR_AUTO_RECORD_PARTIAL_SELL: process.env.IBKR_AUTO_RECORD_PARTIAL_SELL === 'true',
+      IBKR_AUTO_RECORD_ADD_FILL:   process.env.IBKR_AUTO_RECORD_ADD_FILL   === 'true',
+    };
+    res.json({ counts, flags, commands });
+  } catch (err) {
+    console.error('[admin/ibkr-outbox]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/sync-stops', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const dryRun = req.query.dryRun === '1' || req.body?.dryRun === true;
+    const report = await runStopRatchet({ db, dryRun });
+    res.json(report);
+  } catch (err) {
+    console.error('[admin/sync-stops]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/ibkr-outbox/flag-stuck', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const flagged = await ibkrOutboxFlagStuck(db);
+    res.json({ flagged });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Bridge-facing outbox endpoints ───────────────────────────────────────────
+// Called by pnthr-ibkr-bridge.py's outbox poller. Auth = same admin JWT the
+// read-only sync uses. Bridge polls /pending every 30s, marks EXECUTING
+// before placing the IB API call (idempotency lock), then DONE / FAILED on
+// completion. Commands stuck in EXECUTING for >5 min are surfaced as STUCK
+// by the flag-stuck endpoint (manual review only — never auto-retry).
+
+app.get('/api/admin/ibkr-outbox/pending', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const limit = Math.min(50, parseInt(req.query.limit, 10) || 25);
+    const pending = await ibkrOutboxFindPending(db, limit);
+    // Filter to this admin's ownerId (multi-tenant safety even though
+    // production has only one user today).
+    const mine = pending.filter(p => p.ownerId === req.user.userId);
+    res.json({ commands: mine });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/ibkr-outbox/:id/executing', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const result = await ibkrOutboxMarkExecuting(db, req.params.id);
+    res.json({ ok: result.modifiedCount === 1 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/ibkr-outbox/:id/done', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    await ibkrOutboxMarkDone(db, req.params.id, req.body || null);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/ibkr-outbox/:id/failed', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    await ibkrOutboxMarkFailed(db, req.params.id, req.body?.error || req.body || 'Unknown failure');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Daily 4:30 PM ET stop ratchet cron. Even when IBKR_AUTO_SYNC_STOPS is off,
+// the cron still runs and logs a diff report so the operator can preview.
+registerStopRatchetCron(cron);
+
 // ── Cron: auto-generate newsletter every Friday at 5pm ET ───────────────────
 // Uses perchService (single source of truth — same generator the admin UI's
 // Generate button hits). The older newsletterService.generateIssue path is
@@ -6527,6 +6641,11 @@ app.listen(PORT, () => {
   createKillHistoryIndexes().catch(() => {});
   ensureAssistantIndexes().catch(() => {});
   ensureInvestorIndexes().catch(() => {});
+  // Phase 4 outbox indexes (idempotent — safe to run on every boot).
+  // Errors are logged but never block startup.
+  connectToDatabase()
+    .then(db => ensureIbkrOutboxIndexes(db))
+    .catch(err => console.warn('[ibkrOutbox] ensureIndexes failed:', err.message));
   ensureAccessRequestIndexes().catch(() => {});
 });
 

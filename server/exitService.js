@@ -7,6 +7,7 @@
 import { calculateDisciplineScore } from './journalService.js';
 import { fetchMarketSnapshot } from './marketSnapshot.js';
 import { fetchTechnicalSnapshot } from './technicalSnapshot.js';
+import { enqueue as enqueueOutbox } from './ibkrOutbox.js';
 
 function getFillsArray(fills) {
   if (!fills) return [];
@@ -124,6 +125,32 @@ async function recordExit(db, positionId, userId, exitData) {
   try {
     await syncExitToJournal(db, positionId, userId, exitRecord, newRemaining, realizedDollar, realizedPct, avgExitPrice, newStatus, position);
   } catch (e) { console.warn('[EXIT] Journal sync failed:', e.message); }
+
+  // ── Phase 4b hook: cancel-on-close ───────────────────────────────────────
+  // When a position fully closes (newRemaining === 0), enqueue a
+  // CANCEL_RELATED_ORDERS command so the bridge cancels any leftover GTC
+  // protective stop in TWS. Both manual closes (Command Center,
+  // AssistantRowExpand) and auto-closes (Phase 2 ibkrSync executions) reach
+  // here, so this is the single canonical hook. Demo sentinel + dedup live
+  // inside enqueueOutbox(). Gated by IBKR_AUTO_CANCEL_ON_CLOSE — when off
+  // (default), this is dead code.
+  if (newRemaining === 0 && process.env.IBKR_AUTO_CANCEL_ON_CLOSE === 'true') {
+    try {
+      const result = await enqueueOutbox(db, userId, 'CANCEL_RELATED_ORDERS', {
+        ticker:     position.ticker,
+        positionId: positionId,
+        source:     `EXIT_${reason || 'MANUAL'}`,
+      });
+      if (result.skipped) {
+        console.warn(`[Phase 4b] CANCEL_RELATED_ORDERS not enqueued for ${position.ticker}: ${result.skipped}`);
+      } else {
+        console.log(`[Phase 4b] CANCEL_RELATED_ORDERS enqueued for ${position.ticker} (id=${result.id})`);
+      }
+    } catch (e) {
+      // Never let an outbox enqueue failure break the exit flow.
+      console.warn(`[Phase 4b] enqueue threw for ${position.ticker}: ${e.message}`);
+    }
+  }
 
   return { exitRecord, remainingShares: newRemaining, status: newStatus };
 }

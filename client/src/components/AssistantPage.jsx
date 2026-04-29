@@ -2579,6 +2579,8 @@ export default function AssistantPage({ onNavigate }) {
   const [riskAdvisorOpen, setRiskAdvisorOpen] = useState(false);
   const [calcOpen,        setCalcOpen]        = useState(false);
   const [addPosOpen,      setAddPosOpen]      = useState(false);
+  // Day 2 — Phase 4 outbox status (admin only)
+  const [outbox, setOutbox] = useState(null); // { counts, flags, commands }
   const [devSignalsAge,      setDevSignalsAge]      = useState(null);
   const [sectorBreakdown,    setSectorBreakdown]    = useState([]);
   const [ordersData,         setOrdersData]         = useState(null);
@@ -2854,6 +2856,27 @@ export default function AssistantPage({ onNavigate }) {
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [refreshKey]);
+
+  // ── Day 2 — Phase 4 outbox status poll (admin only, every 30s) ─────────────
+  // Drives the bridge-status badge in the toolbar + the FAILED/STUCK alert
+  // banner below it. Server returns {counts, flags, commands}; we re-render
+  // whichever pieces change.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    let intervalId = null;
+    const load = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/admin/ibkr-outbox`, { headers: authHeaders() });
+        if (!r.ok) return;
+        const data = await r.json();
+        if (!cancelled) setOutbox(data);
+      } catch { /* non-fatal */ }
+    };
+    load();
+    intervalId = setInterval(load, 30_000);
+    return () => { cancelled = true; if (intervalId) clearInterval(intervalId); };
+  }, [isAdmin]);
 
   const handleNavChange = (e) => {
     const v = e.target.value.replace(/[^0-9.]/g, '');
@@ -3386,21 +3409,60 @@ export default function AssistantPage({ onNavigate }) {
           {/* Spacer */}
           <span style={{ flex: 1 }} />
 
-          {/* Bridge status badge — populated for real on Day 2 (Phase 4 D1).
-              Today it's a hard-coded placeholder so the layout is settled. */}
-          <span
-            title="Phase 4 (IBKR write bridge) ships Day 2; flags will live in .env.bridge."
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '4px 10px', borderRadius: 12,
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              fontSize: 10, fontWeight: 700,
-              color: 'rgba(255,255,255,0.55)', letterSpacing: '0.05em',
-            }}
-          >
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#666' }} />
-            BRIDGE: PHASE 4 DISABLED
+          {/* Bridge status badge — driven by /api/admin/ibkr-outbox. Color +
+              label change once any IBKR_AUTO_* flag flips on (Day 3+). */}
+          {(() => {
+            const flags    = outbox?.flags || {};
+            const counts   = outbox?.counts || {};
+            const enabled  = Object.entries(flags).filter(([, v]) => v).map(([k]) => k.replace('IBKR_AUTO_', ''));
+            const anyOn    = enabled.length > 0;
+            const stuck    = (counts.STUCK || 0) + (counts.FAILED || 0);
+            const dotColor = stuck > 0 ? '#dc3545' : anyOn ? '#28a745' : '#666';
+            const label    = stuck > 0
+              ? `BRIDGE: ${stuck} ATTENTION`
+              : anyOn
+                ? `BRIDGE: LIVE (${enabled.join(', ').toLowerCase()})`
+                : 'BRIDGE: PHASE 4 DISABLED';
+            const tooltip  = anyOn
+              ? `Enabled flags: ${enabled.join(', ')}. Pending=${counts.PENDING || 0} Executing=${counts.EXECUTING || 0} Done=${counts.DONE || 0} Failed=${counts.FAILED || 0} Stuck=${counts.STUCK || 0}`
+              : 'No Phase 4 flags enabled. Toggle IBKR_AUTO_* env vars on the server (Render) to start writing through the bridge.';
+            return (
+              <span title={tooltip} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '4px 10px', borderRadius: 12,
+                background: stuck > 0 ? 'rgba(220,53,69,0.1)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${stuck > 0 ? 'rgba(220,53,69,0.5)' : 'rgba(255,255,255,0.15)'}`,
+                fontSize: 10, fontWeight: 700,
+                color: stuck > 0 ? '#dc3545' : 'rgba(255,255,255,0.55)',
+                letterSpacing: '0.05em',
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor }} />
+                {label}
+              </span>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Phase 4 FAILED / STUCK banner — only when there's something
+          actionable. Click-through to inspect via the bridge log or
+          /api/admin/ibkr-outbox response. */}
+      {isAdmin && outbox && ((outbox.counts?.FAILED || 0) + (outbox.counts?.STUCK || 0)) > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '8px 14px', marginBottom: 12,
+          background: 'rgba(220,53,69,0.08)',
+          border: '1px solid rgba(220,53,69,0.5)',
+          borderRadius: 6, color: '#dc3545',
+          fontSize: 12, fontWeight: 600,
+        }}>
+          <span style={{ fontSize: 14 }}>⚠</span>
+          <span>
+            Phase 4 outbox needs attention:&nbsp;
+            {outbox.counts?.FAILED ? `${outbox.counts.FAILED} FAILED` : ''}
+            {outbox.counts?.FAILED && outbox.counts?.STUCK ? ' · ' : ''}
+            {outbox.counts?.STUCK ? `${outbox.counts.STUCK} STUCK (>5 min EXECUTING)` : ''}
+            . Check bridge log + recent commands below.
           </span>
         </div>
       )}

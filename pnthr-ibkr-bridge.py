@@ -36,6 +36,8 @@ try:
     from ibapi.client import EClient
     from ibapi.wrapper import EWrapper
     from ibapi.execution import ExecutionFilter
+    from ibapi.contract import Contract
+    from ibapi.order    import Order
 except ImportError:
     print("[BRIDGE] ERROR: ibapi not installed. Run: pip install ibapi")
     sys.exit(1)
@@ -52,11 +54,58 @@ PNTHR_API_URL = os.getenv('PNTHR_API_URL', 'http://localhost:5000')
 TWS_HOST      = os.getenv('TWS_HOST', '127.0.0.1')
 TWS_PORT      = int(os.getenv('TWS_PORT', '7496'))
 TWS_CLIENT_ID = int(os.getenv('TWS_CLIENT_ID', '99'))
-SYNC_INTERVAL = 60  # seconds between pushes
+SYNC_INTERVAL = 60  # seconds between read-only pushes
+
+# ── Phase 4 write configuration ──────────────────────────────────────────────
+# Master kill switch — when false (default) the outbox poller does nothing.
+# Per-action gating lives server-side in the enqueue hooks (IBKR_AUTO_*
+# env vars on Render). Both layers must be on for a command to flow.
+IBKR_WRITES_ENABLED = os.getenv('IBKR_WRITES_ENABLED', 'false').lower() == 'true'
+# Dry-run logs commands and reports DONE without actually calling IB API.
+# Useful to verify the wire format before flipping IBKR_WRITES_ENABLED.
+IBKR_WRITES_DRY_RUN = os.getenv('IBKR_WRITES_DRY_RUN', 'true').lower() == 'true'
+OUTBOX_POLL_SEC     = int(os.getenv('OUTBOX_POLL_SEC', '30'))
+
+# Rate limits — hard-coded per the locked design (PLAN_2026-04-29.md universal
+# guardrails). Bridge enforces these even if server-side enqueue ever bypasses
+# its own checks.
+RATE_PER_SYMBOL_PER_MIN = 5
+RATE_GLOBAL_PER_MIN     = 50
 
 if '--paper' in sys.argv:
     TWS_PORT = 7497
     print("[BRIDGE] Using PAPER account (port 7497)")
+
+
+# ── Rate limiter — token bucket per symbol + global ──────────────────────────
+# Used by Phase 4 write methods. Cap is hardcoded (5/min/symbol, 50/min global)
+# per the locked design. Read-only sync calls are not rate-limited.
+class RateLimiter:
+    def __init__(self, per_symbol, per_global):
+        self.per_symbol = per_symbol
+        self.per_global = per_global
+        self._symbol_history = {}  # symbol → [timestamps]
+        self._global_history = []
+        self._lock = threading.Lock()
+
+    def can_send(self, symbol):
+        now = time.time()
+        cutoff = now - 60.0
+        with self._lock:
+            self._global_history = [t for t in self._global_history if t > cutoff]
+            sym_hist = [t for t in self._symbol_history.get(symbol, []) if t > cutoff]
+            self._symbol_history[symbol] = sym_hist
+            if len(self._global_history) >= self.per_global:
+                return False, 'GLOBAL_RATE_LIMIT'
+            if len(sym_hist) >= self.per_symbol:
+                return False, 'SYMBOL_RATE_LIMIT'
+            return True, None
+
+    def record(self, symbol):
+        now = time.time()
+        with self._lock:
+            self._global_history.append(now)
+            self._symbol_history.setdefault(symbol, []).append(now)
 
 
 # ── TWS Bridge App ─────────────────────────────────────────────────────────────
@@ -64,7 +113,10 @@ class PNTHRBridge(EWrapper, EClient):
     """
     Connects to TWS via the socket API, collects account data and positions,
     then pushes a JSON snapshot to the PNTHR Den server every 60 seconds.
-    Never places orders. Read-only.
+
+    Phase 1/2/3: read-only sync (NAV, positions, stop orders, executions).
+    Phase 4 (gated by IBKR_WRITES_ENABLED): also processes the server-side
+    outbox queue, placing/cancelling/modifying stop orders in TWS.
     """
 
     def __init__(self):
@@ -85,6 +137,14 @@ class PNTHRBridge(EWrapper, EClient):
         self.connected       = False
         self.account_id      = None
         self._exec_req_id    = 2000  # increments each cycle to avoid stale callbacks
+        # ── Phase 4 write-side state ──────────────────────────────────────────
+        # nextValidId is set by IB on connection — every subsequent placeOrder
+        # call must use a unique, monotonically increasing ID. We allocate by
+        # incrementing past the seed value.
+        self._next_order_id     = None
+        self._next_order_lock   = threading.Lock()
+        self._order_status      = {}  # orderId → {status, permId, filled, ...}
+        self._order_status_lock = threading.Lock()
 
     # ── Connection lifecycle ──────────────────────────────────────────────────
     def connectAck(self):
@@ -109,7 +169,10 @@ class PNTHRBridge(EWrapper, EClient):
         print(f"[BRIDGE] TWS Error {errorCode}: {errorString}")
 
     def nextValidId(self, orderId):
-        """Called when the connection is fully established and ready."""
+        """Called when the connection is fully established and ready.
+        Phase 4 needs this seed value to allocate IDs for new orders."""
+        with self._next_order_lock:
+            self._next_order_id = int(orderId)
         print(f"[BRIDGE] Ready (next order ID: {orderId})")
 
     # ── Data requests ─────────────────────────────────────────────────────────
@@ -219,6 +282,27 @@ class PNTHRBridge(EWrapper, EClient):
         """All open orders have been delivered for this request."""
         self.orders_ready.set()
 
+    # ── Phase 4 order-status tracking ─────────────────────────────────────────
+    # orderStatus callback fires multiple times per order lifecycle (Submitted,
+    # PreSubmitted, Filled, Cancelled). Phase 4 write methods wait for a
+    # terminal status (Submitted/Cancelled/Filled) before reporting back to
+    # the outbox, so the server only sees DONE when TWS has actually accepted
+    # the order.
+    def orderStatus(self, orderId, status, filled, remaining, avgFillPrice,
+                    permId, parentId, lastFillPrice, clientId, whyHeld, mktCapPrice):
+        with self._order_status_lock:
+            prev = self._order_status.get(orderId, {})
+            self._order_status[orderId] = {
+                'orderId':       orderId,
+                'status':        status,
+                'permId':        int(permId) if permId else prev.get('permId'),
+                'filled':        float(filled or 0),
+                'remaining':     float(remaining or 0),
+                'avgFillPrice':  float(avgFillPrice or 0),
+                'whyHeld':       whyHeld or '',
+                'updatedAt':     time.time(),
+            }
+
     # ── Execution callbacks (Phase 2) ─────────────────────────────────────────
     def execDetails(self, reqId, contract, execution):
         """Called once per execution when reqExecutions() is invoked."""
@@ -245,6 +329,143 @@ class PNTHRBridge(EWrapper, EClient):
     def execDetailsEnd(self, reqId):
         """All executions for this request have been delivered."""
         self.executions_ready.set()
+
+    # ── Phase 4 write methods ─────────────────────────────────────────────────
+    # Each method places exactly ONE IB API call (or a cancel + place pair for
+    # MODIFY_STOP) and returns a structured result the outbox poller can ship
+    # back to the server. None of these methods touch the read-only payload
+    # path — they're side-channel calls into the existing IB API connection.
+
+    def _allocate_order_id(self):
+        """Allocate the next unique orderId. Each placeOrder must use a fresh
+        ID so IB API can route status callbacks correctly."""
+        with self._next_order_lock:
+            if self._next_order_id is None:
+                return None
+            oid = self._next_order_id
+            self._next_order_id += 1
+            return oid
+
+    def _wait_for_status(self, order_id, terminal_states, timeout=15.0):
+        """Poll _order_status until one of the terminal_states arrives or
+        timeout. Returns the latest status dict (or None if no status ever
+        landed). terminal_states is e.g. ('Submitted','PreSubmitted','Filled')
+        for a place_order or ('Cancelled','ApiCancelled') for a cancel."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            with self._order_status_lock:
+                st = self._order_status.get(order_id)
+            if st and st['status'] in terminal_states:
+                return st
+            time.sleep(0.25)
+        with self._order_status_lock:
+            return self._order_status.get(order_id)
+
+    @staticmethod
+    def _build_stock_contract(ticker):
+        c = Contract()
+        c.symbol   = ticker.upper()
+        c.secType  = 'STK'
+        c.exchange = 'SMART'
+        c.currency = 'USD'
+        return c
+
+    def place_protective_stop(self, ticker, action, shares, stop_price,
+                              tif='GTC', rth=True):
+        """Place a stop-market order (STP). Action is 'SELL' for LONG protective
+        stops, 'BUY' for SHORT cover stops. Returns
+        {ok, orderId, permId, status, error}."""
+        if not self.connected:
+            return {'ok': False, 'error': 'BRIDGE_DISCONNECTED'}
+        oid = self._allocate_order_id()
+        if oid is None:
+            return {'ok': False, 'error': 'NO_NEXT_ORDER_ID'}
+        contract = self._build_stock_contract(ticker)
+        order = Order()
+        order.action        = action.upper()
+        order.orderType     = 'STP'
+        order.auxPrice      = float(stop_price)
+        order.totalQuantity = int(shares)
+        order.tif           = tif
+        order.outsideRth    = not rth
+        # Disable IB's deprecated/optional flag set explicitly to avoid noisy
+        # rejections on newer TWS builds.
+        order.eTradeOnly    = False
+        order.firmQuoteOnly = False
+        try:
+            self.placeOrder(oid, contract, order)
+        except Exception as e:
+            return {'ok': False, 'orderId': oid, 'error': f'PLACE_THREW: {e}'}
+        st = self._wait_for_status(oid, ('Submitted', 'PreSubmitted', 'Filled'), timeout=15.0)
+        if not st:
+            return {'ok': False, 'orderId': oid, 'error': 'NO_STATUS_AFTER_15S'}
+        return {
+            'ok':      st['status'] in ('Submitted', 'PreSubmitted', 'Filled'),
+            'orderId': oid,
+            'permId':  st.get('permId'),
+            'status':  st['status'],
+        }
+
+    def cancel_order_by_perm_id(self, perm_id):
+        """Cancel an existing order by permId. Looks up the orderId from our
+        cached open_orders map (TWS's manual orders use orderId=0, so cancel
+        by permId via the permId-keyed cancelOrder API)."""
+        if not self.connected:
+            return {'ok': False, 'error': 'BRIDGE_DISCONNECTED'}
+        # Find the cached order by permId
+        target = None
+        for k, o in self.open_orders.items():
+            if o.get('permId') == perm_id:
+                target = o
+                break
+        if not target:
+            return {'ok': False, 'error': f'PERMID_NOT_FOUND:{perm_id}'}
+        try:
+            # Pass empty string for OrderCancel since we don't need extra params.
+            self.cancelOrder(target['orderId'], '')
+        except Exception as e:
+            return {'ok': False, 'error': f'CANCEL_THREW: {e}'}
+        st = self._wait_for_status(target['orderId'], ('Cancelled', 'ApiCancelled'), timeout=10.0)
+        ok = st is not None and st['status'] in ('Cancelled', 'ApiCancelled')
+        return {'ok': ok, 'orderId': target['orderId'], 'permId': perm_id,
+                'status': st['status'] if st else 'NO_STATUS'}
+
+    def cancel_related_orders(self, ticker):
+        """Cancel every protective stop currently open for `ticker`. Used by
+        Phase 4b when a position fully closes."""
+        if not self.connected:
+            return {'ok': False, 'error': 'BRIDGE_DISCONNECTED'}
+        ticker = ticker.upper()
+        cancelled = []
+        failures  = []
+        for k, o in list(self.open_orders.items()):
+            if o['symbol'] != ticker or o['orderType'] not in ('STP', 'STP LMT'):
+                continue
+            res = self.cancel_order_by_perm_id(o['permId'])
+            (cancelled if res['ok'] else failures).append({**o, 'result': res})
+        return {
+            'ok':        len(failures) == 0,
+            'cancelled': cancelled,
+            'failures':  failures,
+        }
+
+    def modify_stop(self, ticker, old_perm_id, new_stop_price, action, shares,
+                    tif='GTC', rth=True):
+        """IB API has no true 'modify' — cancel old + place new. Both must
+        succeed for ok=True. If the cancel succeeds but the new place fails,
+        the position is briefly NAKED (and that's reported as 'NAKED_AFTER_MODIFY'
+        in the result so the operator knows to manually re-stop)."""
+        cancel = self.cancel_order_by_perm_id(old_perm_id)
+        if not cancel['ok']:
+            return {'ok': False, 'phase': 'CANCEL', 'cancelResult': cancel}
+        place = self.place_protective_stop(ticker, action, shares, new_stop_price, tif=tif, rth=rth)
+        return {
+            'ok':           place['ok'],
+            'phase':        'PLACE_AFTER_CANCEL',
+            'cancelResult': cancel,
+            'placeResult':  place,
+            'naked':        not place['ok'],  # true == we cancelled but couldn't replace
+        }
 
     # ── Payload builder ───────────────────────────────────────────────────────
     def get_payload(self):
@@ -325,13 +546,176 @@ def is_market_hours():
     return open_ <= now <= close_
 
 
+def is_in_blackout_window():
+    """Mirror of server/ibkrOutbox.isInBlackoutWindow — pause writes during
+    market open (9:25-9:35) and close (15:55-16:05) chaos."""
+    now = datetime.now(_ET)
+    minute_of_day = now.hour * 60 + now.minute
+    if 565 <= minute_of_day <= 575:
+        return 'OPEN_BLACKOUT'
+    if 955 <= minute_of_day <= 965:
+        return 'CLOSE_BLACKOUT'
+    return None
+
+
+# ── Phase 4 outbox poller ────────────────────────────────────────────────────
+# Runs in its own thread alongside the read-only sync loop. Polls the server
+# every OUTBOX_POLL_SEC seconds for PENDING commands, executes them via the
+# IB API, and reports DONE / FAILED back. Fully gated by IBKR_WRITES_ENABLED:
+# when off (default), the thread loops but never calls the IB API or even hits
+# the server (so server logs stay clean).
+def _outbox_get_pending():
+    try:
+        r = requests.get(
+            f"{PNTHR_API_URL}/api/admin/ibkr-outbox/pending",
+            headers={'Authorization': f'Bearer {PNTHR_TOKEN}'},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            return r.json().get('commands', [])
+        return []
+    except Exception as e:
+        print(f"[OUTBOX] ✗ pending fetch failed: {e}")
+        return []
+
+
+def _outbox_post(path, body=None):
+    try:
+        r = requests.post(
+            f"{PNTHR_API_URL}{path}",
+            json=body or {},
+            headers={
+                'Content-Type':  'application/json',
+                'Authorization': f'Bearer {PNTHR_TOKEN}',
+            },
+            timeout=10,
+        )
+        return r.status_code == 200
+    except Exception as e:
+        print(f"[OUTBOX] ✗ POST {path} failed: {e}")
+        return False
+
+
+def _execute_command(app, rate_limiter, cmd):
+    """Run a single outbox command. Returns (ok, response_dict, error_str)."""
+    request   = cmd.get('request') or {}
+    command   = cmd['command']
+    ticker    = (request.get('ticker') or '').upper()
+
+    # Rate limit — bridge-side enforcement on top of server-side dedup.
+    can_send, rate_reason = rate_limiter.can_send(ticker)
+    if not can_send:
+        return False, None, f'RATE_LIMITED:{rate_reason}'
+
+    # Blackout windows (open/close chaos).
+    blackout = is_in_blackout_window()
+    if blackout:
+        return False, None, f'BLACKOUT:{blackout}'
+
+    if IBKR_WRITES_DRY_RUN:
+        print(f"[OUTBOX] DRY-RUN {command} {ticker} {request} (no IB API call made)")
+        rate_limiter.record(ticker)
+        return True, {'dryRun': True, 'command': command, 'request': request}, None
+
+    # Real IB API path.
+    rate_limiter.record(ticker)
+
+    if command == 'PLACE_STOP':
+        action = 'SELL' if (request.get('direction') or 'LONG').upper() != 'SHORT' else 'BUY'
+        result = app.place_protective_stop(
+            ticker     = ticker,
+            action     = action,
+            shares     = request.get('shares'),
+            stop_price = request.get('stopPrice'),
+            tif        = request.get('tif') or 'GTC',
+            rth        = bool(request.get('rth', True)),
+        )
+        return result.get('ok', False), result, (None if result.get('ok') else result.get('error') or result.get('status'))
+
+    if command == 'CANCEL_RELATED_ORDERS':
+        result = app.cancel_related_orders(ticker)
+        return result.get('ok', False), result, (None if result.get('ok') else 'SOME_CANCEL_FAILED')
+
+    if command == 'CANCEL_ORDER':
+        perm_id = request.get('permId') or request.get('oldPermId')
+        if not perm_id:
+            return False, None, 'MISSING_PERMID'
+        result = app.cancel_order_by_perm_id(perm_id)
+        return result.get('ok', False), result, (None if result.get('ok') else result.get('status'))
+
+    if command == 'MODIFY_STOP':
+        action = 'SELL' if (request.get('direction') or 'LONG').upper() != 'SHORT' else 'BUY'
+        result = app.modify_stop(
+            ticker          = ticker,
+            old_perm_id     = request.get('oldPermId'),
+            new_stop_price  = request.get('newStopPrice'),
+            action          = action,
+            shares          = request.get('shares'),
+            tif             = request.get('tif') or 'GTC',
+            rth             = bool(request.get('rth', True)),
+        )
+        return result.get('ok', False), result, (None if result.get('ok') else f'MODIFY_FAILED_PHASE_{result.get("phase")}')
+
+    return False, None, f'UNKNOWN_COMMAND:{command}'
+
+
+def outbox_poller_loop(app, rate_limiter, stop_event):
+    """Background thread: polls outbox and dispatches write commands."""
+    print(f"[OUTBOX] Poller starting — every {OUTBOX_POLL_SEC}s | "
+          f"writes={'ENABLED' if IBKR_WRITES_ENABLED else 'DISABLED'} | "
+          f"dryRun={'ON' if IBKR_WRITES_DRY_RUN else 'OFF'}")
+    while not stop_event.is_set():
+        try:
+            if not IBKR_WRITES_ENABLED:
+                # Master kill switch off — skip polling entirely. The server
+                # also gates enqueue per IBKR_AUTO_* flags, so the queue is
+                # almost certainly empty anyway.
+                stop_event.wait(OUTBOX_POLL_SEC); continue
+
+            if not app.connected:
+                stop_event.wait(OUTBOX_POLL_SEC); continue
+
+            pending = _outbox_get_pending()
+            if not pending:
+                stop_event.wait(OUTBOX_POLL_SEC); continue
+
+            print(f"[OUTBOX] Found {len(pending)} pending command(s)")
+            for cmd in pending:
+                cmd_id = cmd.get('id')
+                if not cmd_id:
+                    continue
+                # Lock the row before executing — prevents double-execution
+                # if multiple bridges (paper + live, future) ever poll at once.
+                if not _outbox_post(f"/api/admin/ibkr-outbox/{cmd_id}/executing"):
+                    print(f"[OUTBOX] ✗ failed to mark EXECUTING for {cmd_id}; skipping")
+                    continue
+
+                try:
+                    ok, response, err = _execute_command(app, rate_limiter, cmd)
+                except Exception as e:
+                    ok, response, err = False, None, f'EXEC_THREW:{e}'
+
+                if ok:
+                    _outbox_post(f"/api/admin/ibkr-outbox/{cmd_id}/done", body=response)
+                    print(f"[OUTBOX] ✓ {cmd['command']} {cmd.get('request', {}).get('ticker')} → DONE")
+                else:
+                    _outbox_post(f"/api/admin/ibkr-outbox/{cmd_id}/failed", body={'error': err, 'response': response})
+                    print(f"[OUTBOX] ✗ {cmd['command']} {cmd.get('request', {}).get('ticker')} → FAILED: {err}")
+        except Exception as e:
+            print(f"[OUTBOX] ✗ poller loop error: {e}")
+        stop_event.wait(OUTBOX_POLL_SEC)
+    print("[OUTBOX] Poller stopped.")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
-    print("  PNTHR Den — IBKR TWS Bridge  (Phase 2: Auto-Close from Fills)")
+    print("  PNTHR Den — IBKR TWS Bridge")
     print(f"  TWS:    {TWS_HOST}:{TWS_PORT}  (client ID {TWS_CLIENT_ID})")
     print(f"  Server: {PNTHR_API_URL}")
-    print(f"  Sync:   every {SYNC_INTERVAL}s")
+    print(f"  Sync:   every {SYNC_INTERVAL}s  |  Outbox poll: every {OUTBOX_POLL_SEC}s")
+    print(f"  Phase 4 writes: {'ENABLED' if IBKR_WRITES_ENABLED else 'DISABLED'}"
+          f"{'  (DRY-RUN)' if IBKR_WRITES_ENABLED and IBKR_WRITES_DRY_RUN else ''}")
     print("=" * 60)
 
     if not PNTHR_TOKEN:
@@ -367,6 +751,19 @@ def main():
     # Wait for initial data load (up to 15s)
     app.account_ready.wait(timeout=15)
     app.positions_ready.wait(timeout=15)
+
+    # Phase 4 outbox poller — runs in its own daemon thread alongside the
+    # read-only sync loop. When IBKR_WRITES_ENABLED is false (default), the
+    # poller loops but never calls the server or IB API.
+    rate_limiter = RateLimiter(RATE_PER_SYMBOL_PER_MIN, RATE_GLOBAL_PER_MIN)
+    outbox_stop_event = threading.Event()
+    outbox_thread = threading.Thread(
+        target=outbox_poller_loop,
+        args=(app, rate_limiter, outbox_stop_event),
+        daemon=True,
+        name='outbox-poller',
+    )
+    outbox_thread.start()
 
     print(f"[BRIDGE] Syncing every {SYNC_INTERVAL}s. Press Ctrl+C to stop.\n")
 
@@ -411,6 +808,7 @@ def main():
 
     except KeyboardInterrupt:
         print("\n[BRIDGE] Shutting down...")
+        outbox_stop_event.set()
         try:
             app.reqAccountUpdates(False, "")
             app.cancelPositions()

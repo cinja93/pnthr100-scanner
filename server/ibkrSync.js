@@ -16,6 +16,7 @@
 import { connectToDatabase, upsertUserProfile } from './database.js';
 import { validatePortfolioUpdate } from './portfolioGuard.js';
 import { recordExit } from './exitService.js';
+import { enqueue as enqueueOutbox, sanityCheckPlaceStop } from './ibkrOutbox.js';
 
 // ── processExecutions ─────────────────────────────────────────────────────────
 // Phase 2: Match TWS fills to PNTHR positions and auto-close on full exit.
@@ -316,6 +317,35 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt) {
         signal:     positionDoc.signal,
       });
       console.log(`[IBKR Phase 3] ⚡ Auto-opened ${ticker} (${direction}) ${absShares}sh @ $${positionDoc.entryPrice} stop $${pnthrStop} sector=${sector || '?'}`);
+
+      // ── Phase 4a hook: enqueue PLACE_STOP so the bridge writes the
+      // protective stop to TWS. Gated by IBKR_AUTO_PLACE_STOP — when off
+      // (default), this is dead code. Demo sentinel runs inside enqueue().
+      // Sanity check refuses to enqueue if anything looks wrong (e.g. stop
+      // on the wrong side of price).
+      if (process.env.IBKR_AUTO_PLACE_STOP === 'true') {
+        const sanity = sanityCheckPlaceStop({
+          position:     positionDoc,
+          ibkrPosition: { shares: absShares, lastPrice: positionDoc.currentPrice, avgCost: pos.avgCost },
+          stopPrice:    pnthrStop,
+        });
+        const result = await enqueueOutbox(db, userId, 'PLACE_STOP', {
+          ticker,
+          direction,
+          shares:    absShares,
+          stopPrice: pnthrStop,
+          orderType: 'STP',
+          tif:       'GTC',
+          rth:       true,
+          positionId: positionDoc.id,
+          source:    'PHASE_3_AUTO_OPEN',
+        }, { sanityCheck: sanity });
+        if (result.skipped) {
+          console.warn(`[Phase 4a] PLACE_STOP not enqueued for ${ticker}: ${result.skipped}`);
+        } else {
+          console.log(`[Phase 4a] PLACE_STOP enqueued for ${ticker} (id=${result.id})`);
+        }
+      }
     } catch (e) {
       console.error(`[IBKR Phase 3] insertOne failed for ${ticker}: ${e.message}`);
     }

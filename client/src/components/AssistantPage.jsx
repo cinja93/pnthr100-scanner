@@ -2615,6 +2615,38 @@ export default function AssistantPage({ onNavigate }) {
 
   const pendingAccessCount = accessRequests.filter(r => r.status === 'pending').length;
 
+  // ── Data Integrity admin (sweep + punch list) ──────────────────────────────
+  const [diOpen,        setDiOpen]        = useState(false);
+  const [diBusy,        setDiBusy]        = useState(null); // 'punch' | 'dry' | 'apply' | null
+  const [diResult,      setDiResult]      = useState(null); // { kind, data }
+  const [diError,       setDiError]       = useState(null);
+
+  const runPunchList = useCallback(async () => {
+    if (diBusy) return;
+    setDiBusy('punch'); setDiError(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/tws-punch-list`, { headers: authHeaders() });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      setDiResult({ kind: 'punch', data });
+    } catch (e) { setDiError(e.message); }
+    setDiBusy(null);
+  }, [diBusy]);
+
+  const runSweep = useCallback(async (apply) => {
+    if (diBusy) return;
+    setDiBusy(apply ? 'apply' : 'dry'); setDiError(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/data-integrity-sweep${apply ? '?apply=1' : ''}`, {
+        method: 'POST', headers: authHeaders(),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      setDiResult({ kind: apply ? 'sweep-apply' : 'sweep-dry', data });
+    } catch (e) { setDiError(e.message); }
+    setDiBusy(null);
+  }, [diBusy]);
+
   // ── Password reset form state (admin-only) ─────────────────────────────
   const [pwResetOpen,      setPwResetOpen]      = useState(false);
   const [pwResetEmail,     setPwResetEmail]     = useState('');
@@ -3332,6 +3364,78 @@ export default function AssistantPage({ onNavigate }) {
         </div>
       )}
 
+      {/* ── Data Integrity (admin-only, collapsible) ──────────────────────── */}
+      {isAdmin && (
+        <div style={{
+          border: '1px solid rgba(252,240,0,0.35)', borderRadius: 8, marginBottom: 16,
+          background: 'rgba(252,240,0,0.04)',
+        }}>
+          <div
+            onClick={() => setDiOpen(o => !o)}
+            style={{
+              padding: '8px 14px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              borderBottom: diOpen ? '1px solid rgba(252,240,0,0.2)' : 'none',
+            }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#fcf000', letterSpacing: '0.04em' }}>
+              DATA INTEGRITY {diOpen ? '▼' : '▶'}
+            </span>
+            <span style={{ fontSize: 11, color: '#888' }}>
+              TWS punch list · PARTIAL/drift sweep
+            </span>
+          </div>
+          {diOpen && (
+            <div style={{ padding: '12px 14px' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                <button
+                  onClick={runPunchList}
+                  disabled={!!diBusy}
+                  style={{
+                    background: '#1a1a1a', color: '#fcf000', border: '1px solid #fcf000',
+                    padding: '7px 14px', borderRadius: 4, fontWeight: 700, fontSize: 12,
+                    cursor: diBusy ? 'wait' : 'pointer', opacity: diBusy && diBusy !== 'punch' ? 0.4 : 1,
+                  }}>
+                  {diBusy === 'punch' ? 'Running…' : 'TWS Punch List'}
+                </button>
+                <button
+                  onClick={() => runSweep(false)}
+                  disabled={!!diBusy}
+                  style={{
+                    background: '#1a1a1a', color: '#fcf000', border: '1px solid #fcf000',
+                    padding: '7px 14px', borderRadius: 4, fontWeight: 700, fontSize: 12,
+                    cursor: diBusy ? 'wait' : 'pointer', opacity: diBusy && diBusy !== 'dry' ? 0.4 : 1,
+                  }}>
+                  {diBusy === 'dry' ? 'Running…' : 'Sweep (Dry Run)'}
+                </button>
+                <button
+                  onClick={() => {
+                    if (!window.confirm('Apply data integrity fixes? This will repair any PARTIAL-stuck docs and totalFilledShares drift on your portfolio.')) return;
+                    runSweep(true);
+                  }}
+                  disabled={!!diBusy}
+                  style={{
+                    background: '#3a1010', color: '#fca5a5', border: '1px solid #fca5a5',
+                    padding: '7px 14px', borderRadius: 4, fontWeight: 700, fontSize: 12,
+                    cursor: diBusy ? 'wait' : 'pointer', opacity: diBusy && diBusy !== 'apply' ? 0.4 : 1,
+                  }}>
+                  {diBusy === 'apply' ? 'Applying…' : 'Sweep + Apply Fixes'}
+                </button>
+              </div>
+              {diError && (
+                <div style={{ background: '#3a1010', color: '#fca5a5', padding: '8px 12px', borderRadius: 4, fontSize: 12, marginBottom: 8 }}>
+                  Error: {diError}
+                </div>
+              )}
+              {diResult && (
+                <div style={{ background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: 12 }}>
+                  <DataIntegrityResultView result={diResult} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ══════════════════════════════════════════════════════════════════════
            Day 1 — Action toolbar
            NAV (inline edit) · Risk Advisor · Calculator · + Add Position ·
@@ -3924,6 +4028,93 @@ export default function AssistantPage({ onNavigate }) {
         onSaved={() => { setRefreshKey(k => k + 1); fetchAll(); }}
       />
 
+    </div>
+  );
+}
+
+// ── Data Integrity result view (admin) ─────────────────────────────────────
+function DataIntegrityResultView({ result }) {
+  const { kind, data } = result;
+  const cellRow = { display: 'flex', gap: 8, fontSize: 12, color: '#e8e6e3', padding: '3px 0' };
+  const label   = { color: '#888', minWidth: 130 };
+
+  if (kind === 'punch') {
+    const c = data.counts;
+    const pill = (n, ok = '#22c55e', bad = '#fca5a5') => (
+      <span style={{ color: n === 0 ? ok : bad, fontWeight: 700 }}>{n}</span>
+    );
+    return (
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#fcf000', marginBottom: 8 }}>
+          TWS PUNCH LIST · IBKR sync {data.ibkrSyncedAt ? new Date(data.ibkrSyncedAt).toLocaleString() : '—'}
+        </div>
+        <div style={cellRow}><span style={label}>Naked positions:</span>{pill(c.naked)}</div>
+        <div style={cellRow}><span style={label}>Stale GTC orders:</span>{pill(c.stale)}</div>
+        <div style={cellRow}><span style={label}>Shares mismatch:</span>{pill(c.sharesMismatch)}</div>
+        <div style={cellRow}><span style={label}>Stop mismatch:</span>{pill(c.stopMismatch)}</div>
+        <div style={cellRow}><span style={label}>Avg cost drift (info):</span>{pill(c.avgMismatch, '#888', '#888')}</div>
+        <div style={{ ...cellRow, borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 8, paddingTop: 8, fontWeight: 700 }}>
+          <span style={label}>Total actions:</span>{pill(c.totalActions)}
+        </div>
+        {c.totalActions === 0 ? (
+          <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(34,197,94,0.08)', color: '#86efac', fontSize: 12, borderRadius: 4 }}>
+            ✓ Books are clean — no manual TWS actions needed.
+          </div>
+        ) : (
+          <details style={{ marginTop: 10 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#fcf000' }}>View detail</summary>
+            <pre style={{ fontSize: 11, color: '#bbb', marginTop: 6, whiteSpace: 'pre-wrap' }}>
+{JSON.stringify({ naked: data.naked, stale: data.stale, sharesMismatch: data.sharesMismatch, stopMismatch: data.stopMismatch, avgMismatch: data.avgMismatch }, null, 2)}
+            </pre>
+          </details>
+        )}
+      </div>
+    );
+  }
+
+  // sweep-dry / sweep-apply
+  const f = data.found;
+  const a = data.applied;
+  const totalFound = f.partialBroken.length + f.drift.length;
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#fcf000', marginBottom: 8 }}>
+        DATA INTEGRITY SWEEP · {data.mode} · {new Date(data.runAt).toLocaleString()}
+      </div>
+      <div style={cellRow}><span style={label}>PARTIAL-stuck docs:</span>
+        <span style={{ color: f.partialBroken.length === 0 ? '#22c55e' : '#fca5a5', fontWeight: 700 }}>
+          {f.partialBroken.length}
+        </span>
+      </div>
+      <div style={cellRow}><span style={label}>totalFilledShares drift:</span>
+        <span style={{ color: f.drift.length === 0 ? '#22c55e' : '#fca5a5', fontWeight: 700 }}>
+          {f.drift.length}
+        </span>
+      </div>
+      {totalFound === 0 ? (
+        <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(34,197,94,0.08)', color: '#86efac', fontSize: 12, borderRadius: 4 }}>
+          ✓ Portfolio is clean — no broken docs, no drift.
+        </div>
+      ) : (
+        <>
+          {kind === 'sweep-dry' && (
+            <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(252,240,0,0.08)', color: '#fcf000', fontSize: 12, borderRadius: 4 }}>
+              Dry run — click "Sweep + Apply Fixes" to repair these.
+            </div>
+          )}
+          {kind === 'sweep-apply' && (
+            <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(34,197,94,0.08)', color: '#86efac', fontSize: 12, borderRadius: 4 }}>
+              ✓ Applied {a.partial.filter(x => x.ok).length} PARTIAL repairs and {a.drift.filter(x => x.ok).length} drift fixes.
+            </div>
+          )}
+          <details style={{ marginTop: 10 }} open>
+            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#fcf000' }}>Detail</summary>
+            <pre style={{ fontSize: 11, color: '#bbb', marginTop: 6, whiteSpace: 'pre-wrap' }}>
+{JSON.stringify({ found: f, applied: a }, null, 2)}
+            </pre>
+          </details>
+        </>
+      )}
     </div>
   );
 }

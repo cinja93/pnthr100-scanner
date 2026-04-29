@@ -3232,6 +3232,14 @@ app.patch('/api/journal/day-trades/:tradeKey/notes', authenticateJWT, async (req
 // POST /api/ibkr/sync-partial
 // Atomically updates remainingShares on the position AND marks the execId as
 // processed so it won't show a sync button on the next Trades Today refresh.
+//
+// Invariant: this endpoint is for TRUE partial reductions — the doc must
+// remain ACTIVE/PARTIAL with remainingShares > 0 afterwards. If the requested
+// remainingShares would land at 0, that's a full close; reject with 409 so
+// the user is routed through the canonical close path (positionsClose), which
+// writes the full close schema (status=CLOSED, exits[], realizedPnl, washRule).
+// Pre-fix this endpoint would silently leave the doc in PARTIAL/0 — exactly
+// the broken state DTCR mod0qqm9fajlg landed in on 2026-04-29.
 app.post('/api/ibkr/sync-partial', requireAdmin, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
@@ -3243,10 +3251,17 @@ app.post('/api/ibkr/sync-partial', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'positionId, execId, and remainingShares are required' });
     }
 
-    // 1. Update remainingShares on the PNTHR position
+    if (+remainingShares <= 0) {
+      return res.status(409).json({
+        error: 'sync-partial cannot land remainingShares at 0 — this is a full close. Use the position close UI (positionsClose) instead so the canonical close schema is written.',
+      });
+    }
+
+    // 1. Update remainingShares + transition ACTIVE→PARTIAL (status flip is
+    // safe here because we've guaranteed remainingShares > 0).
     await db.collection('pnthr_portfolio').updateOne(
       { id: positionId, ownerId: userId },
-      { $set: { remainingShares: +remainingShares, updatedAt: new Date() } }
+      { $set: { remainingShares: +remainingShares, status: 'PARTIAL', updatedAt: new Date() } }
     );
 
     // 2. Mark execId as processed so trades-today shows AUTO_CLOSED next poll
@@ -4850,6 +4865,52 @@ app.post('/api/admin/ibkr-outbox/flag-stuck', authenticateJWT, requireAdmin, asy
     const flagged = await ibkrOutboxFlagStuck(db);
     res.json({ flagged });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Data integrity sweep ──────────────────────────────────────────────────────
+// Detects + repairs PARTIAL-stuck portfolio docs (remainingShares=0 but
+// status='PARTIAL') and totalFilledShares drift (denorm field stale vs
+// sum(fills[])). Replaces scripts_den/sweepPartialAndDrift.js for UI use.
+//   ?apply=1 → write fixes (default: dry run)
+//   ?skipDrift=1 → only check PARTIAL-stuck (skip drift check)
+app.post('/api/admin/data-integrity-sweep', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { runDataIntegritySweep } = await import('./dataIntegrity.js');
+    const db = await connectToDatabase();
+    const apply     = req.query.apply === '1' || req.body?.apply === true;
+    const skipDrift = req.query.skipDrift === '1' || req.body?.skipDrift === true;
+    const result = await runDataIntegritySweep(db, req.user.userId, { apply, skipDrift });
+    res.json(result);
+  } catch (err) {
+    console.error('[admin/data-integrity-sweep]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/data-integrity-sweep/latest', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { getLatestDataAudit } = await import('./dataIntegrity.js');
+    const db = await connectToDatabase();
+    const latest = await getLatestDataAudit(db, req.user.userId);
+    res.json(latest || null);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── TWS remediation punch list ────────────────────────────────────────────────
+// Read-only diff of IBKR vs PNTHR canonical state. Replaces
+// scripts_den/twsRemediationPunchList.js for UI use.
+app.get('/api/admin/tws-punch-list', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { getRemediationPunchList } = await import('./twsRemediation.js');
+    const db = await connectToDatabase();
+    const result = await getRemediationPunchList(db, req.user.userId);
+    res.json(result);
+  } catch (err) {
+    console.error('[admin/tws-punch-list]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

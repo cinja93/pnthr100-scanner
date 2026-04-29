@@ -321,11 +321,29 @@ const TRANSIENT_FIELDS = new Set([
   'feastAlert', 'feastRSI',
   // IBKR fields are written exclusively by ibkrSync.js — reject any client values
   'ibkrAvgCost', 'ibkrShares', 'ibkrSyncedAt', 'ibkrUnrealizedPNL', 'ibkrMarketValue',
+  // Server-controlled close + audit fields. Client snapshots can be stale
+  // relative to a concurrent close (e.g. IBKR auto-close mid-edit), so allowing
+  // the client to write these would let a stale payload silently revert a
+  // CLOSED doc back to ACTIVE/PARTIAL — the suspected DTCR root cause.
+  'status', 'exits', 'totalExitedShares', 'remainingShares',
+  'avgExitPrice', 'realizedPnl', 'washRule',
+  'outcome', 'closedAt', 'autoClosedByIBKR', 'ibkrExecId',
+  // Denormalized counter — server recomputes from fills[] in stripTransientFields
+  'totalFilledShares',
 ]);
 
 function stripTransientFields(obj) {
   const clean = { ...obj };
   for (const key of TRANSIENT_FIELDS) delete clean[key];
+  // If fills was included in the patch, recompute totalFilledShares from it
+  // so the denormalized counter never drifts. The UI reads from fills[] so
+  // user-facing numbers are always correct, but server-side consumers (the
+  // TWS punch list, Friday pipeline counts) read totalFilledShares — and
+  // pre-fix would see stale values after a Lot 2-5 fill.
+  if (obj.fills && typeof obj.fills === 'object') {
+    clean.totalFilledShares = Object.values(obj.fills)
+      .reduce((s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0);
+  }
   return clean;
 }
 

@@ -2647,6 +2647,20 @@ export default function AssistantPage({ onNavigate }) {
     setDiBusy(null);
   }, [diBusy]);
 
+  const runStopSync = useCallback(async (dryRun) => {
+    if (diBusy) return;
+    setDiBusy(dryRun ? 'stops-dry' : 'stops-apply'); setDiError(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/sync-stops${dryRun ? '?dryRun=1' : ''}`, {
+        method: 'POST', headers: authHeaders(),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      setDiResult({ kind: dryRun ? 'stops-dry' : 'stops-apply', data });
+    } catch (e) { setDiError(e.message); }
+    setDiBusy(null);
+  }, [diBusy]);
+
   // ── Password reset form state (admin-only) ─────────────────────────────
   const [pwResetOpen,      setPwResetOpen]      = useState(false);
   const [pwResetEmail,     setPwResetEmail]     = useState('');
@@ -3381,7 +3395,7 @@ export default function AssistantPage({ onNavigate }) {
               DATA INTEGRITY {diOpen ? '▼' : '▶'}
             </span>
             <span style={{ fontSize: 11, color: '#888' }}>
-              TWS punch list · PARTIAL/drift sweep
+              TWS punch list · PARTIAL/drift sweep · stop sync
             </span>
           </div>
           {diOpen && (
@@ -3419,6 +3433,30 @@ export default function AssistantPage({ onNavigate }) {
                     cursor: diBusy ? 'wait' : 'pointer', opacity: diBusy && diBusy !== 'apply' ? 0.4 : 1,
                   }}>
                   {diBusy === 'apply' ? 'Applying…' : 'Sweep + Apply Fixes'}
+                </button>
+                <span style={{ width: '100%', height: 0, borderTop: '1px solid rgba(255,255,255,0.06)', margin: '4px 0' }} />
+                <button
+                  onClick={() => runStopSync(true)}
+                  disabled={!!diBusy}
+                  style={{
+                    background: '#1a1a1a', color: '#86efac', border: '1px solid #86efac',
+                    padding: '7px 14px', borderRadius: 4, fontWeight: 700, fontSize: 12,
+                    cursor: diBusy ? 'wait' : 'pointer', opacity: diBusy && diBusy !== 'stops-dry' ? 0.4 : 1,
+                  }}>
+                  {diBusy === 'stops-dry' ? 'Running…' : 'Stop Sync (Dry Run)'}
+                </button>
+                <button
+                  onClick={() => {
+                    if (!window.confirm('Run live stop sync? Tightest-wins reconciles every active position; PNTHR-tighter cases enqueue MODIFY_STOP commands to the bridge (only effective if IBKR_AUTO_SYNC_STOPS is on).')) return;
+                    runStopSync(false);
+                  }}
+                  disabled={!!diBusy}
+                  style={{
+                    background: '#0a3a1a', color: '#86efac', border: '1px solid #86efac',
+                    padding: '7px 14px', borderRadius: 4, fontWeight: 700, fontSize: 12,
+                    cursor: diBusy ? 'wait' : 'pointer', opacity: diBusy && diBusy !== 'stops-apply' ? 0.4 : 1,
+                  }}>
+                  {diBusy === 'stops-apply' ? 'Syncing…' : 'Sync Stops Now'}
                 </button>
               </div>
               {diError && (
@@ -4068,6 +4106,42 @@ function DataIntegrityResultView({ result }) {
             </pre>
           </details>
         )}
+      </div>
+    );
+  }
+
+  if (kind === 'stops-dry' || kind === 'stops-apply') {
+    const isApply = kind === 'stops-apply';
+    const enqueued = (data.modifications || []).filter(m => m.enqueued).length;
+    const adopted  = (data.adoptions || []).length;
+    const aligned  = (data.aligned || []).length;
+    const skipped  = (data.skips || []).length;
+    return (
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#86efac', marginBottom: 8 }}>
+          STOP SYNC · {isApply ? 'APPLY' : 'DRY RUN'} · flag {data.flagOn ? 'ON' : 'OFF'} · {new Date(data.reconciledAt).toLocaleString()}
+        </div>
+        <div style={cellRow}><span style={label}>Positions checked:</span><span style={{ color: '#e8e6e3', fontWeight: 700 }}>{data.positionsChecked}</span></div>
+        <div style={cellRow}><span style={label}>Already aligned:</span><span style={{ color: '#22c55e', fontWeight: 700 }}>{aligned}</span></div>
+        <div style={cellRow}><span style={label}>IBKR-tighter (PNTHR adopted):</span><span style={{ color: adopted ? '#fcf000' : '#888', fontWeight: 700 }}>{adopted}</span></div>
+        <div style={cellRow}><span style={label}>PNTHR-tighter (enqueued):</span><span style={{ color: enqueued ? '#86efac' : '#888', fontWeight: 700 }}>{enqueued}</span></div>
+        <div style={cellRow}><span style={label}>Skipped (no IBKR record etc):</span><span style={{ color: skipped ? '#fca5a5' : '#888', fontWeight: 700 }}>{skipped}</span></div>
+        {isApply && !data.flagOn && (
+          <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(252,240,0,0.08)', color: '#fcf000', fontSize: 12, borderRadius: 4 }}>
+            ⚠ IBKR_AUTO_SYNC_STOPS is OFF — adoptions wrote to PNTHR, but PNTHR-tighter modifications were NOT enqueued to the bridge.
+          </div>
+        )}
+        {isApply && data.flagOn && enqueued > 0 && (
+          <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(34,197,94,0.08)', color: '#86efac', fontSize: 12, borderRadius: 4 }}>
+            ✓ {enqueued} MODIFY_STOP command(s) queued to the bridge. Watch the bridge log to confirm execution.
+          </div>
+        )}
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 12, color: '#86efac' }}>Detail</summary>
+          <pre style={{ fontSize: 11, color: '#bbb', marginTop: 6, whiteSpace: 'pre-wrap' }}>
+{JSON.stringify({ adoptions: data.adoptions, modifications: data.modifications, skips: data.skips, aligned: data.aligned }, null, 2)}
+          </pre>
+        </details>
       </div>
     );
   }

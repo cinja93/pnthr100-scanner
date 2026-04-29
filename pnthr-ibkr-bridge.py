@@ -371,20 +371,31 @@ class PNTHRBridge(EWrapper, EClient):
         return c
 
     def place_protective_stop(self, ticker, action, shares, stop_price,
-                              tif='GTC', rth=True):
-        """Place a stop-market order (STP). Action is 'SELL' for LONG protective
-        stops, 'BUY' for SHORT cover stops. Returns
-        {ok, orderId, permId, status, error}."""
+                              tif='GTC', rth=True, order_type='STP', limit_price=None):
+        """Place a protective stop. Action is 'SELL' for LONG, 'BUY' for SHORT.
+
+        Two shapes (per Phase 4 locked design):
+          • RTH default: order_type='STP', limit_price=None — pure stop-market.
+          • Extended hours: order_type='STP LMT', limit_price set by caller —
+            IBKR rejects STP outside RTH, so the server sends STP LMT with a
+            slippage-cushion lmtPrice when stopExtendedHours=True.
+
+        Returns {ok, orderId, permId, status, error}."""
         if not self.connected:
             return {'ok': False, 'error': 'BRIDGE_DISCONNECTED'}
         oid = self._allocate_order_id()
         if oid is None:
             return {'ok': False, 'error': 'NO_NEXT_ORDER_ID'}
+        order_type = (order_type or 'STP').upper()
+        if order_type == 'STP LMT' and (limit_price is None or float(limit_price) <= 0):
+            return {'ok': False, 'error': 'STP_LMT_REQUIRES_LIMIT_PRICE'}
         contract = self._build_stock_contract(ticker)
         order = Order()
         order.action        = action.upper()
-        order.orderType     = 'STP'
+        order.orderType     = order_type
         order.auxPrice      = float(stop_price)
+        if order_type == 'STP LMT':
+            order.lmtPrice  = float(limit_price)
         order.totalQuantity = int(shares)
         order.tif           = tif
         order.outsideRth    = not rth
@@ -404,6 +415,7 @@ class PNTHRBridge(EWrapper, EClient):
             'orderId': oid,
             'permId':  st.get('permId'),
             'status':  st['status'],
+            'orderType': order_type,
         }
 
     def cancel_order_by_perm_id(self, perm_id):
@@ -450,15 +462,22 @@ class PNTHRBridge(EWrapper, EClient):
         }
 
     def modify_stop(self, ticker, old_perm_id, new_stop_price, action, shares,
-                    tif='GTC', rth=True):
+                    tif='GTC', rth=True, order_type='STP', limit_price=None):
         """IB API has no true 'modify' — cancel old + place new. Both must
         succeed for ok=True. If the cancel succeeds but the new place fails,
         the position is briefly NAKED (and that's reported as 'NAKED_AFTER_MODIFY'
-        in the result so the operator knows to manually re-stop)."""
+        in the result so the operator knows to manually re-stop).
+
+        Order shape (STP vs STP LMT) is plumbed through to place_protective_stop
+        so a position toggling stopExtendedHours mid-life rebuilds the order
+        in the right form on the next 4c sync."""
         cancel = self.cancel_order_by_perm_id(old_perm_id)
         if not cancel['ok']:
             return {'ok': False, 'phase': 'CANCEL', 'cancelResult': cancel}
-        place = self.place_protective_stop(ticker, action, shares, new_stop_price, tif=tif, rth=rth)
+        place = self.place_protective_stop(
+            ticker, action, shares, new_stop_price,
+            tif=tif, rth=rth, order_type=order_type, limit_price=limit_price,
+        )
         return {
             'ok':           place['ok'],
             'phase':        'PLACE_AFTER_CANCEL',
@@ -623,12 +642,14 @@ def _execute_command(app, rate_limiter, cmd):
     if command == 'PLACE_STOP':
         action = 'SELL' if (request.get('direction') or 'LONG').upper() != 'SHORT' else 'BUY'
         result = app.place_protective_stop(
-            ticker     = ticker,
-            action     = action,
-            shares     = request.get('shares'),
-            stop_price = request.get('stopPrice'),
-            tif        = request.get('tif') or 'GTC',
-            rth        = bool(request.get('rth', True)),
+            ticker      = ticker,
+            action      = action,
+            shares      = request.get('shares'),
+            stop_price  = request.get('stopPrice'),
+            tif         = request.get('tif') or 'GTC',
+            rth         = bool(request.get('rth', True)),
+            order_type  = request.get('orderType') or 'STP',
+            limit_price = request.get('lmtPrice'),
         )
         return result.get('ok', False), result, (None if result.get('ok') else result.get('error') or result.get('status'))
 
@@ -653,6 +674,8 @@ def _execute_command(app, rate_limiter, cmd):
             shares          = request.get('shares'),
             tif             = request.get('tif') or 'GTC',
             rth             = bool(request.get('rth', True)),
+            order_type      = request.get('orderType') or 'STP',
+            limit_price     = request.get('lmtPrice'),
         )
         return result.get('ok', False), result, (None if result.get('ok') else f'MODIFY_FAILED_PHASE_{result.get("phase")}')
 

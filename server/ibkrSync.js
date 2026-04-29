@@ -16,7 +16,7 @@
 import { connectToDatabase, upsertUserProfile } from './database.js';
 import { validatePortfolioUpdate } from './portfolioGuard.js';
 import { recordExit } from './exitService.js';
-import { enqueue as enqueueOutbox, sanityCheckPlaceStop } from './ibkrOutbox.js';
+import { enqueue as enqueueOutbox, sanityCheckPlaceStop, buildStopOrderShape } from './ibkrOutbox.js';
 
 // ── processExecutions ─────────────────────────────────────────────────────────
 // Phase 2: Match TWS fills to PNTHR positions and auto-close on full exit.
@@ -398,14 +398,23 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt) {
           ibkrPosition: { shares: absShares, lastPrice: positionDoc.currentPrice, avgCost: pos.avgCost },
           stopPrice:    pnthrStop,
         });
+        // Auto-opened positions inherit RTH-default; if the user opts a
+        // position into extended-hours protection later, the next 4c cron
+        // run picks up the new shape via MODIFY_STOP.
+        const shape = buildStopOrderShape({
+          stopPrice:           pnthrStop,
+          direction,
+          stopExtendedHours:   !!positionDoc.stopExtendedHours,
+        });
         const result = await enqueueOutbox(db, userId, 'PLACE_STOP', {
           ticker,
           direction,
           shares:    absShares,
           stopPrice: pnthrStop,
-          orderType: 'STP',
+          orderType: shape.orderType,
+          lmtPrice:  shape.lmtPrice,
           tif:       'GTC',
-          rth:       true,
+          rth:       shape.rth,
           positionId: positionDoc.id,
           source:    'PHASE_3_AUTO_OPEN',
         }, { sanityCheck: sanity });

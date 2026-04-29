@@ -158,6 +158,45 @@ export default function AssistantRowExpand({ position, netLiquidity, onClose, on
         flashed={false}
       />
 
+      {/* Extended-hours stop opt-in (Phase 4 — STP LMT outside RTH).
+          Default off. When on, the next 4a auto-place / 4c stop-sync uses
+          STP LMT with a 0.5% slippage cushion so the order can fill in
+          thin pre/post-market liquidity. Hard-gap fill risk warning shown
+          inline so the user understands the trade-off. */}
+      <div style={{
+        marginTop: 10, padding: '8px 12px',
+        background: 'rgba(0,0,0,0.2)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderRadius: 6,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+      }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
+          <input
+            type="checkbox"
+            checked={!!position.stopExtendedHours}
+            onChange={async (e) => {
+              const next = e.target.checked;
+              if (next && !window.confirm(
+                'Enable extended-hours stop protection?\n\n' +
+                'PNTHR will place STP LMT (stop-limit) instead of pure STP for this position. ' +
+                'This protects against pre/post-market price moves but introduces FILL RISK on a hard gap — ' +
+                'if price gaps past the limit, the order may not fill. Default cushion is 0.5%.'
+              )) return;
+              await handleField(position.id, { stopExtendedHours: next });
+            }}
+          />
+          <span style={{ color: position.stopExtendedHours ? '#fcf000' : '#aaa', fontWeight: 600 }}>
+            Extended-hours stop protection
+          </span>
+          {position.stopExtendedHours && (
+            <span style={{
+              fontSize: 10, padding: '2px 6px', borderRadius: 3,
+              background: 'rgba(252,240,0,0.15)', color: '#fcf000', letterSpacing: '0.05em',
+            }}>STP LMT · 0.5% cushion · hard-gap fill risk</span>
+          )}
+        </label>
+      </div>
+
       {/* Stop history — value-add over Command Center */}
       {stopHist.length > 0 && (
         <div style={{

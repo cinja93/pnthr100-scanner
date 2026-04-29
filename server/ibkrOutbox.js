@@ -39,6 +39,32 @@ const VALID_COMMANDS = new Set([
   'MODIFY_STOP',           // Phase 4c — daily ratchet sync (cancel + replace)
 ]);
 
+// ── Stop-order shape helper (RTH vs extended-hours) ──────────────────────────
+// Per the locked Phase 4 design (project_phase4_bridge_design.md):
+//   • RTH default: pure STP (stop-market). Guarantees fill, accepts whatever
+//     price the market gives during regular trading hours.
+//   • Extended hours: STP LMT required (IBKR rejects STP outside RTH). The
+//     limit price uses a slippage cushion (default 0.5%) so the order can
+//     still fill in thin pre/post-market liquidity.
+//
+// Returns the order shape (orderType, lmtPrice, rth, outsideRth) given the
+// position's stopExtendedHours flag. Caller passes the result into the outbox
+// request so the bridge has everything it needs to construct the IB order.
+const EXT_HOURS_SLIPPAGE_PCT = 0.005; // 0.5% default
+export function buildStopOrderShape({ stopPrice, direction, stopExtendedHours }) {
+  const isLong = (direction || 'LONG').toUpperCase() !== 'SHORT';
+  if (!stopExtendedHours) {
+    return { orderType: 'STP', lmtPrice: null, rth: true };
+  }
+  // Extended-hours STP LMT: limit on the WORST-fill side of the trigger so
+  // the order can still cross the spread in thin liquidity but caps the
+  // damage on a hard gap. LONG sells, so lmtPrice is below stopPrice; SHORT
+  // buys to cover, so lmtPrice is above stopPrice.
+  const cushion = +stopPrice * EXT_HOURS_SLIPPAGE_PCT;
+  const lmtPrice = isLong ? +stopPrice - cushion : +stopPrice + cushion;
+  return { orderType: 'STP LMT', lmtPrice: +lmtPrice.toFixed(2), rth: false };
+}
+
 // ── Daily auto-disable windows ──────────────────────────────────────────────
 // Returns true during the open/close blackout. Bridge-side code can ALSO
 // check, but enqueue-time blocking prevents the queue from filling up in

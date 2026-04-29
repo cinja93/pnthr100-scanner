@@ -26,7 +26,7 @@
 // itself also rejects demo at every call site.
 
 import { connectToDatabase } from './database.js';
-import { enqueue as enqueueOutbox, sanityCheckModifyStop, DEMO_OWNER_ID } from './ibkrOutbox.js';
+import { enqueue as enqueueOutbox, sanityCheckModifyStop, buildStopOrderShape, DEMO_OWNER_ID } from './ibkrOutbox.js';
 
 const TIGHTER_THRESHOLD = 0.05; // ignore stop diffs below $0.05 (numerical noise)
 
@@ -115,6 +115,11 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
         oldStopPrice: ibkrStop,
         newStopPrice: pnthrStop,
       });
+      const shape = buildStopOrderShape({
+        stopPrice:         pnthrStop,
+        direction:         isLong ? 'LONG' : 'SHORT',
+        stopExtendedHours: !!p.stopExtendedHours,
+      });
       const enqueueResult = !dryRun && process.env.IBKR_AUTO_SYNC_STOPS === 'true'
         ? await enqueueOutbox(db, p.ownerId, 'MODIFY_STOP', {
             ticker,
@@ -123,9 +128,10 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
             oldPermId:    protective.permId,
             oldStopPrice: ibkrStop,
             newStopPrice: pnthrStop,
-            orderType:    'STP',
+            orderType:    shape.orderType,
+            lmtPrice:     shape.lmtPrice,
             tif:          'GTC',
-            rth:          true,
+            rth:          shape.rth,
             positionId:   p.id,
             source:       'STOP_RATCHET_CRON',
           }, { sanityCheck: sanity })

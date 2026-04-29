@@ -404,9 +404,11 @@ export async function assistantLiveReconcile(req, res) {
     const db = await connectToDatabase();
     if (!db) return res.status(503).json({ error: 'DB unavailable' });
 
-    // Command positions
+    // Command positions — must include PARTIAL so partially-closed positions
+    // still render. Otherwise the duplicate guard in POST /api/positions
+    // (which spans ACTIVE+PARTIAL) blocks re-adds while the row shows "CMD —".
     const cmdPositions = await db.collection('pnthr_portfolio')
-      .find({ ownerId: userId, status: 'ACTIVE' })
+      .find({ ownerId: userId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
       .toArray();
 
     // NAV is needed so the lot-sizing math matches Command Center exactly.

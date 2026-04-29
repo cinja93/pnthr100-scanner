@@ -45,12 +45,13 @@ if (!doc) {
 
 console.log(`Found doc: id=${doc.id} status=${doc.status} ticker=${doc.ticker} direction=${doc.direction}`);
 
-if (doc.status === 'CLOSED') {
-  console.log('Already CLOSED. Nothing to do (idempotent no-op).\n');
-  process.exit(0);
-}
-if (doc.status !== 'PARTIAL') {
-  console.error(`Unexpected status '${doc.status}' — expected PARTIAL. Aborting to avoid bad write.`);
+// Allow re-runs: if the portfolio is already CLOSED, skip the portfolio
+// write but still proceed to journal sanity check + sync.
+const skipPortfolioWrite = doc.status === 'CLOSED';
+if (skipPortfolioWrite) {
+  console.log('Portfolio already CLOSED — skipping portfolio write, will still check/sync journal.');
+} else if (doc.status !== 'PARTIAL') {
+  console.error(`Unexpected status '${doc.status}' — expected PARTIAL or CLOSED. Aborting to avoid bad write.`);
   process.exit(1);
 }
 
@@ -145,27 +146,27 @@ const exitPatch = {
   'exits.0.pnl.pct':         realizedPct,
 };
 
-console.log(`\nPlanned $set on pnthr_portfolio.${TARGET_ID}:`);
-for (const [k, v] of Object.entries({ ...$set, ...exitPatch })) {
-  console.log(`  ${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`);
+if (skipPortfolioWrite) {
+  console.log(`\nPortfolio write skipped (already CLOSED).`);
+} else {
+  console.log(`\nPlanned $set on pnthr_portfolio.${TARGET_ID}:`);
+  for (const [k, v] of Object.entries({ ...$set, ...exitPatch })) {
+    console.log(`  ${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`);
+  }
 }
 
-// ── 5. Apply or dry-run ────────────────────────────────────────────────────
-if (!APPLY) {
-  console.log('\nDRY RUN — no writes performed. Re-run with --apply to write.\n');
-  process.exit(0);
+// ── 5. Apply portfolio write (if needed) ──────────────────────────────────
+if (APPLY && !skipPortfolioWrite) {
+  const result = await db.collection('pnthr_portfolio').updateOne(
+    { id: TARGET_ID, ownerId: SCOTT },
+    { $set: { ...$set, ...exitPatch } },
+  );
+  console.log(`\nUpdate result: matched=${result.matchedCount} modified=${result.modifiedCount}`);
 }
 
-const result = await db.collection('pnthr_portfolio').updateOne(
-  { id: TARGET_ID, ownerId: SCOTT },
-  { $set: { ...$set, ...exitPatch } },
-);
-
-console.log(`\nUpdate result: matched=${result.matchedCount} modified=${result.modifiedCount}`);
-
-// ── 6. Verify ──────────────────────────────────────────────────────────────
+// ── 6. Verify portfolio state (read-only — runs on dry-run too) ───────────
 const after = await db.collection('pnthr_portfolio').findOne({ id: TARGET_ID });
-console.log(`\nVerification:`);
+console.log(`\nPortfolio verification:`);
 console.log(`  status:            ${after.status}`);
 console.log(`  totalFilledShares: ${after.totalFilledShares}`);
 console.log(`  totalExitedShares: ${after.totalExitedShares}`);
@@ -243,5 +244,8 @@ if (!journal) {
   }
 }
 
-console.log('\n=== Done ===\n');
+if (!APPLY) {
+  console.log('\nDRY RUN — no writes performed. Re-run with --apply to write.\n');
+}
+console.log('=== Done ===\n');
 process.exit(0);

@@ -85,6 +85,71 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
     const pnthrShares = Object.values(fills)
       .reduce((s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0);
 
+    // ── Phase 4d: auto-record partial exits ────────────────────────────────
+    // When the exec is a true partial (< 90% of filled), the FULL-EXIT branch
+    // below skips it. Pre-4d behavior left the exec for the manual sync flow
+    // (trades-today PARTIAL row → /api/ibkr/sync-partial). With the flag on,
+    // we instead funnel it through recordExit so PNTHR's exits[]/realizedPnl/
+    // journal stay in sync without the user having to click anything.
+    //
+    // Re-fetches the position before recording so multi-partial-exec batches
+    // (rare, but possible if IBKR splits a fill into pieces) see the cumulative
+    // state accurately rather than stale pre-batch values.
+    if (pnthrShares > 0
+        && exec.shares < pnthrShares * 0.90
+        && process.env.IBKR_AUTO_RECORD_PARTIAL_SELL === 'true') {
+      const latest = await db.collection('pnthr_portfolio').findOne({ id: pnthr.id, ownerId: userId });
+      if (!latest || latest.status === 'CLOSED') continue;
+
+      const latestFilled = Object.values(latest.fills || {})
+        .reduce((s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0);
+      const latestExited = (latest.exits || []).reduce((s, e) => s + (+e.shares || 0), 0);
+      const latestRemaining = latestFilled - latestExited;
+
+      if (latestRemaining <= 0) continue; // already fully exited by an earlier exec
+      if (exec.shares > latestRemaining) {
+        console.warn(`[Phase 4d] Skipping ${symbol}: exec ${exec.shares}sh > remaining ${latestRemaining}sh (likely double-counted)`);
+        continue;
+      }
+
+      const stopP = latest.stopPrice;
+      const partialReason = (stopP != null && Math.abs(exec.price - stopP) / stopP < 0.01)
+        ? 'STOP_HIT'
+        : 'MANUAL';
+
+      const partialData = {
+        shares: exec.shares,
+        price:  exec.price,
+        date:   syncedAt.toISOString().split('T')[0],
+        time:   syncedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }),
+        reason: partialReason,
+        note:   'Auto-recorded partial exit by IBKR TWS fill detection',
+      };
+
+      let pResult;
+      try {
+        pResult = await recordExit(db, latest.id, userId, partialData);
+      } catch (e) {
+        console.error(`[Phase 4d] recordExit failed for ${symbol}: ${e.message} — execId NOT marked (will retry)`);
+        continue;
+      }
+
+      await db.collection('pnthr_ibkr_executions').insertOne({
+        ownerId:    userId,
+        execId:     exec.execId,
+        symbol,
+        side:       exec.side,
+        shares:     exec.shares,
+        price:      exec.price,
+        exitReason: partialReason,
+        type:       'PARTIAL_AUTO',
+        processedAt: syncedAt,
+      });
+
+      console.log(`[Phase 4d] ⚡ Auto-recorded partial ${symbol} (${pnthr.direction}) ${exec.shares}sh @ $${exec.price} — ${partialReason} — remaining ${pResult.remainingShares}sh`);
+      continue; // do NOT fall through to full-exit branch
+    }
+
     // Only auto-close when execution covers ≥ 90% of tracked shares (full exits)
     if (pnthrShares === 0 || exec.shares < pnthrShares * 0.90) continue;
 

@@ -2848,10 +2848,12 @@ export default function AssistantPage({ onNavigate }) {
   // debounce so per-keystroke NAV changes don't hammer the profile endpoint.
   useEffect(() => {
     let cancelled = false;
-    fetchNav().then(v => {
-      if (!cancelled && v != null) {
-        setNav(v);
-        setNavInput(String(Math.round(v)));
+    fetchNav().then(profile => {
+      // fetchNav returns { nav, ibkrLastSync } — peel out the number.
+      const v = profile?.nav;
+      if (!cancelled && Number.isFinite(+v) && +v > 0) {
+        setNav(+v);
+        setNavInput(String(Math.round(+v)));
       }
     }).catch(() => {});
     return () => { cancelled = true; };

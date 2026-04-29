@@ -448,7 +448,10 @@ for (const m of ibkrTighter) {
   console.log(`     ${m.ticker.padEnd(6)} ${m.direction}  PNTHR ${fm(m.pnthrStop)} → IBKR ${fm(m.ibkrStop)} (diff ${m.diffPct}%)`);
 }
 
-section('2c', 'PNTHR-TIGHTER stops (push to TWS)', pnthrTighter.length);
+// Section 2c is INFORMATIONAL — PNTHR's tighter stop is canonical per locked
+// decision (PNTHR never loosens). Phase 4 D5 cron pushes these to TWS once
+// enabled. Surfaced here so the operator can see the pending push set.
+console.log(`\n\x1b[36mℹ\x1b[0m 2c. PNTHR-TIGHTER stops — ${pnthrTighter.length} (informational; Phase 4 D5 will push)`);
 for (const m of pnthrTighter) {
   console.log(`     ${m.ticker.padEnd(6)} ${m.direction}  IBKR ${fm(m.ibkrStop)} → PNTHR ${fm(m.pnthrStop)} (diff ${m.diffPct}%)`);
 }
@@ -458,16 +461,26 @@ for (const m of stopSharesMismatch) {
   console.log(`     ${m.ticker.padEnd(6)} ${m.direction}  position ${m.ibkrPositionShares}sh, STP ${m.ibkrStopShares}sh @ ${fm(m.stopPrice)} (permId ${m.permId})`);
 }
 
-section('3', 'PYRAMID TRIGGER ORDERS in IBKR (vs PNTHR L2-5 plan)', triggerOrders.length);
-for (const t of triggerOrders) {
-  const filledLot = (t.pnthrFills || []).filter(f => f.filled).map(f => f.lot).sort().pop() || 0;
-  console.log(`     ${t.ticker.padEnd(6)} ${t.direction}  filled through Lot ${filledLot}`);
-  for (const tr of t.triggers) {
-    console.log(`        TWS: ${tr.action} ${tr.orderType} ${tr.shares}sh @ ${fm(tr.stopPrice)} (permId ${tr.permId})`);
+// Section 3 is INFORMATIONAL — Scott's discretionary pyramid Lot 2-5 BUY-STP
+// triggers in TWS, listed for visibility. Not counted as a finding because
+// they're his manual orders by design, not automation bugs. Phase 5 of the
+// roadmap (auto-fire pyramid Lot 2-5) will make this section actionable;
+// today it's documentation only.
+console.log(`\n\x1b[36mℹ\x1b[0m 3. PYRAMID TRIGGERS in IBKR — ${triggerOrders.length} ticker(s) (informational, not a finding)`);
+if (triggerOrders.length > 0) {
+  console.log('     Scott\'s discretionary Lot 2-5 BUY/SELL STP orders — not auto-managed yet.');
+  for (const t of triggerOrders) {
+    const filledLot = (t.pnthrFills || []).filter(f => f.filled).map(f => f.lot).sort().pop() || 0;
+    console.log(`     ${t.ticker.padEnd(6)} ${t.direction}  filled through Lot ${filledLot}`);
+    for (const tr of t.triggers) {
+      console.log(`        TWS: ${tr.action} ${tr.orderType} ${tr.shares}sh @ ${fm(tr.stopPrice)} (permId ${tr.permId})`);
+    }
   }
 }
 
-section('4', 'PHASE 3 ROOT-CAUSE diagnostics for orphaned-in-IBKR', phase3Diagnostics.length);
+// Section 4 is INFORMATIONAL — explains the WHY for section 1a's orphans.
+// The actionable count is section 1a; this is just diagnostic context.
+console.log(`\n\x1b[36mℹ\x1b[0m 4. PHASE 3 ROOT-CAUSE diagnostics — ${phase3Diagnostics.length} (informational; explains 1a)`);
 for (const d of phase3Diagnostics) {
   console.log(`     ${d.ticker.padEnd(6)} ${d.direction}  signal=${d.signalReturned || 'null'}  ema=${d.ema21 || 'null'}  pnthrStop=${d.pnthrStop ?? 'null'}  sector=${d.sectorCached || 'unknown'}  →  ${d.blockReason}`);
 }
@@ -482,14 +495,23 @@ for (const m of missingJournal) {
   console.log(`     ${m.ticker.padEnd(6)} status=${m.status} positionId=${m.id}`);
 }
 
+// Total ACTIONABLE findings — pyramid triggers (section 3) and Phase 3
+// diagnostics (section 4) are excluded. Section 3 is purely informational
+// (Scott's discretionary orders); section 4 explains WHY orphaned-in-IBKR
+// tickers were refused, but the actionable count for them lives in
+// section 1a. PNTHR-tighter (section 2c) is also informational — per
+// locked decision, PNTHR keeps canonical when tighter; Phase 4 D5 will
+// reconcile when enabled.
 const totalFindings =
     duplicatePortfolioDocs.length
   + orphanedInIbkr.length + orphanedInPnthr.length + sharesMismatches.length + avgCostDrift.length
-  + naked.length + ibkrTighter.length + pnthrTighter.length + stopSharesMismatch.length
-  + triggerOrders.length + phase3Diagnostics.length + stopHistoryGaps.length + missingJournal.length;
+  + naked.length + ibkrTighter.length + stopSharesMismatch.length
+  + stopHistoryGaps.length + missingJournal.length;
+const totalInformational = triggerOrders.length + phase3Diagnostics.length + pnthrTighter.length;
 
 console.log('\n╔══════════════════════════════════════════════════════════════════╗');
-console.log(`║  TOTAL FINDINGS: ${String(totalFindings).padStart(3)}  ${totalFindings === 0 ? '\x1b[32m✓ ZERO — proceed to Day 3 \x1b[0m' : '— review with Scott before any write   '} ║`);
+console.log(`║  ACTIONABLE FINDINGS: ${String(totalFindings).padStart(3)}  ${totalFindings === 0 ? '\x1b[32m✓ ZERO — Day 3 ready          \x1b[0m' : '— review before any write          '} ║`);
+console.log(`║  Informational (no fix needed): ${String(totalInformational).padStart(3)}                                ║`);
 console.log('╚══════════════════════════════════════════════════════════════════╝\n');
 
 console.log('Re-run any time:  node scripts_den/phase4PreflightAudit.js');

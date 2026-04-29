@@ -584,7 +584,7 @@ function ActionModal({ row, onClose }) {
             }}
           >
             <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4 }}>
-              {a.type === 'ibkr' ? '🔗 MANUAL — IN IBKR' : '→ IN COMMAND CENTER'}
+              {a.type === 'ibkr' ? '🔗 MANUAL — IN IBKR' : '→ IN ASSISTANT'}
             </div>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{a.label}</div>
             {a.instruction && (
@@ -757,7 +757,7 @@ function buildSubRows(row) {
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
-export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart }) {
+export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart, onAddPosition }) {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -824,8 +824,16 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
   const handleCellClick = (row) => {
     if (!row.actions?.length) return;
     const appAction = row.actions.find(a => a.type === 'app');
-    if (appAction?.route && onNavigate) {
-      onNavigate(appAction.route);
+    if (appAction?.expandTicker) {
+      setExpandedTickers(prev => {
+        const next = new Set(prev);
+        next.add(appAction.expandTicker);
+        return next;
+      });
+      return;
+    }
+    if (appAction?.addTicker && onAddPosition) {
+      onAddPosition({ ticker: appAction.addTicker });
       return;
     }
     setModalRow(row);

@@ -2579,6 +2579,7 @@ export default function AssistantPage({ onNavigate }) {
   const [riskAdvisorOpen, setRiskAdvisorOpen] = useState(false);
   const [calcOpen,        setCalcOpen]        = useState(false);
   const [addPosOpen,      setAddPosOpen]      = useState(false);
+  const [addPosInitial,   setAddPosInitial]   = useState(null);
   // Day 2 — Phase 4 outbox status (admin only)
   const [outbox, setOutbox] = useState(null); // { counts, flags, commands }
   const [devSignalsAge,      setDevSignalsAge]      = useState(null);
@@ -3474,10 +3475,15 @@ export default function AssistantPage({ onNavigate }) {
            Shows every ticker from IBKR positions + IBKR stops + Command Center
            with colored alignment indicators. Click a non-green cell to fix.
          ══════════════════════════════════════════════════════════════════════ */}
-      <AssistantLiveTable onNavigate={onNavigate} netLiquidity={nav} onOpenChart={(stocks, idx) => {
-        if (Array.isArray(stocks) && stocks.length > 0) { setChartStocks(stocks); setChartIndex(idx || 0); }
-        else if (stocks && stocks.ticker) { setChartStocks([stocks]); setChartIndex(0); }
-      }} />
+      <AssistantLiveTable
+        onNavigate={onNavigate}
+        netLiquidity={nav}
+        onOpenChart={(stocks, idx) => {
+          if (Array.isArray(stocks) && stocks.length > 0) { setChartStocks(stocks); setChartIndex(idx || 0); }
+          else if (stocks && stocks.ticker) { setChartStocks([stocks]); setChartIndex(0); }
+        }}
+        onAddPosition={(prefill) => { setAddPosInitial(prefill || null); setAddPosOpen(true); }}
+      />
 
       {/* ══════════════════════════════════════════════════════════════════════
            SECTION 1 — LIVE OPPORTUNITIES
@@ -3913,7 +3919,8 @@ export default function AssistantPage({ onNavigate }) {
       />
       <AddPositionModal
         open={addPosOpen}
-        onClose={() => setAddPosOpen(false)}
+        initial={addPosInitial}
+        onClose={() => { setAddPosOpen(false); setAddPosInitial(null); }}
         onSaved={() => { setRefreshKey(k => k + 1); fetchAll(); }}
       />
 

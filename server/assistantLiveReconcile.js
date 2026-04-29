@@ -344,16 +344,16 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
   if (cmdHas && (checks.shares.status === 'red' || checks.avg.status === 'red' || checks.direction.status === 'red')) {
     actions.push({
       type: 'app',
-      label: 'Open in Command Center',
-      route: 'command',
+      label: 'Open in Assistant',
+      expandTicker: ticker,
       positionId: cmd.id,
     });
   }
   if (!cmdHas && ibkrHas) {
     actions.push({
       type: 'app',
-      label: 'Add to Command Center',
-      route: 'command',
+      label: 'Add to Assistant',
+      addTicker: ticker,
     });
   }
 

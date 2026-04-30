@@ -42,12 +42,10 @@ import {
   DEMO_OWNER_ID,
 } from './ibkrOutbox.js';
 import {
-  computeLotTriggers,
+  computeLotPlan,
   classifyLotCompletion,
   expectedLotTriggerAction,
   matchTwsOrderToLot,
-  sizePosition,
-  isEtfTicker,
 } from './lotMath.js';
 
 // Default NAV when a user profile has none stored. Mirrors the client's
@@ -111,25 +109,20 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
     const ibkrShares = Math.abs(+ibkrPos.shares || 0);
     if (ibkrShares <= 0) { skips.push({ ticker, reason: 'IBKR_SHARES_ZERO' }); continue; }
 
-    // Recompute the pyramid plan using current NAV. Lot 1 anchor is fixed
-    // post-fill so trigger prices are stable; total shares (and therefore
-    // per-lot share counts) drift with NAV.
-    const nav   = navByOwner.get(p.ownerId);
-    const isETF = !!p.isETF || isEtfTicker(ticker);
-    const sizing = sizePosition({
-      netLiquidity: nav,
-      entryPrice:   +p.entryPrice,
-      stopPrice:    +p.stopPrice,
-      maxGapPct:    +p.maxGapPct || 0,
-      isETF,
-    });
-    if (!sizing.totalShares || sizing.totalShares <= 0) {
-      skips.push({ ticker, reason: 'PLAN_TOTAL_ZERO' }); continue;
-    }
+    // Compute the canonical pyramid plan via the L1-aware algorithm shared
+    // with the Live table (server/lotMath.js → computeLotPlan). Sizes off
+    // ORIGINAL stop and the actual L1 fill so the cron's plan matches what
+    // the user sees on screen — guarantees the cleanup pass doesn't flag
+    // legitimate pending pyramid orders as stale (verified the hard way
+    // during the 2026-04-30 dry run).
+    const nav  = navByOwner.get(p.ownerId);
     const lots = classifyLotCompletion(
-      computeLotTriggers({ position: p, totalShares: sizing.totalShares }),
+      computeLotPlan(p, nav),
       ibkrShares,
     );
+    if (!lots.length || lots.every(l => l.targetShares <= 0)) {
+      skips.push({ ticker, reason: 'PLAN_TOTAL_ZERO' }); continue;
+    }
 
     // 3. Filter IBKR stop orders to lot-trigger candidates only — opposite
     //    action from the protective stop (BUY for LONG pyramid, SELL for SHORT).

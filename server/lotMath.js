@@ -1,21 +1,28 @@
 // server/lotMath.js
-// ── Pyramid-lot math (server-side port of client/src/utils/sizingUtils.js) ──
+// ── Pyramid-lot math (server-side, used by Phase 4g lot-trigger cron) ───────
 //
-// The client computes lot recommendations (L1-L5 share counts + trigger
-// prices) dynamically from NAV every render. To reconcile against TWS
-// orders in a daily cron, the server needs the same math — kept here in
-// a pure module that mirrors the client EXACTLY so the cron's "this is
-// what TWS should show" matches what PyramidCard displays.
+// The numbers must match what the PNTHR Assistant LIVE table renders for each
+// position's L1-L5 plan. Otherwise the cron's "complete vs incomplete" judgment
+// will diverge from what the user sees on screen — and the cleanup pass could
+// cancel REAL pending pyramid orders (verified the hard way during the 4g
+// dry-run on 2026-04-30).
 //
-// Constants are duplicated from sizingUtils.js (not imported) because the
-// server can't pull from the client bundle. If you change one, change both —
-// the comparison rule is "client and server must produce identical lot arrays
-// for identical inputs."
+// Algorithm: ports `computeLotTargetShares` from server/assistantLiveReconcile.js
+// verbatim. That function is the canonical lot-share calculator — it already
+// powers the Live table the user is looking at. Key behaviors:
 //
-// Used by:
-//   • lotTriggerCron.js — daily reconciliation against IBKR open orders
-//   • POST /api/admin/sync-lot-triggers — manual trigger of same logic
-//   • Future: Phase 3 hook to pre-stage lot triggers for manual-add positions
+//   1. Sizes off ORIGINAL stop, not current ratcheted stop. Once a position's
+//      stop ratchets up, current rps shrinks and naive sizePosition would
+//      overstate the plan. Original stop preserves the intended risk frame.
+//   2. L1-aware adjustment: if the actual L1 fill differs from the recommended
+//      L1, recompute total off the actual fill (capped by ticker-cap and
+//      vitality), then redistribute remaining shares to L2-L5 using weights
+//      30/25/20/10 (sum 85) — NOT raw STRIKE_PCT[1..4] = 25/20/12/8 (sum 65).
+//      This is the historical rebalance Command Center does after a Lot-1
+//      over/under-fill.
+//
+// If you change anything here, mirror the change in assistantLiveReconcile.js
+// or refactor that file to import from this one (tracked as future cleanup).
 
 // ── Constants (mirror sizingUtils.js exactly) ────────────────────────────────
 export const STRIKE_PCT     = [0.35, 0.25, 0.20, 0.12, 0.08];
@@ -36,67 +43,98 @@ export function isEtfTicker(ticker, profileIsEtf = false) {
   return profileIsEtf || ETF_LIST.has((ticker || '').toUpperCase());
 }
 
-// ── Position sizing (mirror sizingUtils.js sizePosition) ─────────────────────
-// Returns the planned TOTAL shares for the position (sum of all 5 lots).
-// Caller passes NAV; the cron pulls that from user_profiles.accountSize.
-export function sizePosition({ netLiquidity, entryPrice, stopPrice, maxGapPct = 0, isETF = false }) {
-  if (!netLiquidity || !entryPrice || !stopPrice) {
-    return { totalShares: 0, vitality: 0, gapMult: 1, structRisk: 0 };
-  }
+// ── Lot target shares (the canonical algorithm) ──────────────────────────────
+// EXACT port of computeLotTargetShares in server/assistantLiveReconcile.js
+// (lines 60-102). Returns [L1, L2, L3, L4, L5] share counts. Same inputs +
+// same logic = same outputs as the Live table. Do not "improve" without
+// also changing assistantLiveReconcile.js.
+export function computeLotTargetShares(position, netLiquidity) {
+  const fills      = position?.fills || {};
+  const entry      = +position?.entryPrice || 0;
+  // CRITICAL: original stop, not current. Ratcheted current stop shrinks rps
+  // and inflates the plan total when used for sizing.
+  const sizingStop = +(position?.originalStop || position?.stopPrice) || 0;
+  const isETF      = !!position?.isETF;
+  if (!entry || !sizingStop || !netLiquidity) return [0, 0, 0, 0, 0];
+
   const tickerCap  = netLiquidity * 0.10;
   const vitality   = netLiquidity * (isETF ? 0.005 : 0.01);
-  const structRisk = Math.abs((entryPrice - stopPrice) / entryPrice);
+  const maxGapPct  = +position?.maxGapPct || 0;
+  const structRisk = Math.abs((entry - sizingStop) / entry);
   const gapMult    = maxGapPct > structRisk * 100 ? Math.max(0.3, structRisk * 100 / maxGapPct) : 1.0;
-  const rps        = Math.abs(entryPrice - stopPrice);
-  const totalShares = Math.floor(
-    Math.min(rps > 0 ? Math.floor(vitality / rps) : 0, Math.floor(tickerCap / entryPrice)) * gapMult
+  const rps        = Math.abs(entry - sizingStop);
+  const total      = Math.floor(
+    Math.min(rps > 0 ? Math.floor(vitality / rps) : 0, Math.floor(tickerCap / entry)) * gapMult
   );
-  return { totalShares, vitality: +vitality.toFixed(0), gapMult: +gapMult.toFixed(2), structRisk: +(structRisk * 100).toFixed(2) };
+
+  const lot1            = fills[1];
+  const lot1Actual      = lot1?.filled && lot1?.shares ? +lot1.shares : null;
+  const lot1FillPrice   = lot1?.price ? +lot1.price : entry;
+  const lot1RPS         = Math.abs(lot1FillPrice - sizingStop);
+  const lot1Recommended = Math.max(1, Math.round(total * STRIKE_PCT[0]));
+
+  let effectiveTotal = total;
+  let adjShares      = null;
+  if (lot1Actual !== null && lot1Actual !== lot1Recommended) {
+    const impliedTotal   = Math.round(lot1Actual / STRIKE_PCT[0]);
+    const maxByTickerCap = lot1FillPrice > 0 ? Math.floor(netLiquidity * 0.10 / lot1FillPrice) : impliedTotal;
+    const maxByVitality  = lot1RPS > 0 ? Math.floor(netLiquidity * (isETF ? 0.005 : 0.01) / lot1RPS) : impliedTotal;
+    const cappedTotal    = Math.min(impliedTotal, maxByTickerCap, maxByVitality);
+    effectiveTotal       = Math.max(lot1Actual, cappedTotal);
+
+    const remaining = Math.max(0, effectiveTotal - lot1Actual);
+    const l2 = Math.round(remaining * 30 / 85);
+    const l3 = Math.round(remaining * 25 / 85);
+    const l4 = Math.round(remaining * 20 / 85);
+    const l5 = Math.max(0, remaining - l2 - l3 - l4);
+    adjShares = [lot1Actual, l2, l3, l4, l5];
+  }
+
+  const targets = STRIKE_PCT.map(pct => Math.max(1, Math.round(effectiveTotal * pct)));
+  return targets.map((tgt, i) => adjShares && adjShares[i] !== tgt ? adjShares[i] : tgt);
 }
 
-// ── computeLotTriggers ───────────────────────────────────────────────────────
-// Pure recompute of L1-L5 from a position + plan total. Mirrors buildLots()
-// in sizingUtils.js with one addition: `cumulativeTargetShares` for the
-// cleanup-stale rule (per project_4g_lot_trigger_cleanup_rule.md).
+// ── computeLotPlan ───────────────────────────────────────────────────────────
+// Returns a 5-element array (L1-L5) with everything the cron needs:
+// targetShares from the canonical algorithm, deterministic trigger prices
+// from anchor + LOT_OFFSETS, fill state, and the running cumulative target.
 //
-// Inputs:
-//   • position: { direction, entryPrice, stopPrice, isETF, fills }
-//   • totalShares: planned sum across all 5 lots (from sizePosition)
-//
-// Returns: 5-element array, each entry:
-//   { lot, name, pct, offsetPct, timeGate, targetShares, cumulativeTargetShares,
-//     triggerPrice, filled, actualPrice, actualShares, anchor }
-export function computeLotTriggers({ position, totalShares }) {
+// `cumulativeTargetShares` is the keystone for the cleanup-stale rule: a
+// lot N is "complete" iff IBKR shares ≥ cumulative through L_N. The cron's
+// cleanup pass uses this to decide whether a TWS BUY/SELL STOP at L_N's
+// trigger price is stale.
+export function computeLotPlan(position, netLiquidity) {
   const direction = (position?.direction || 'LONG').toUpperCase();
   const isLong    = direction !== 'SHORT';
   const fills     = position?.fills || {};
-  // Anchor: Lot 1's actual fill if it filled, else the planned entryPrice.
-  // Once L1 fills, the anchor is FIXED — trigger prices stop moving.
+  // Anchor: actual L1 fill price if filled, else planned entryPrice.
+  // Once L1 fills, anchor is FIXED — trigger prices stop drifting forever.
   const anchor = fills[1]?.filled && fills[1]?.price
     ? +fills[1].price
     : +(position?.entryPrice || 0);
 
+  const targetShares = computeLotTargetShares(position, netLiquidity);
+
   let cumulative = 0;
-  return STRIKE_PCT.map((pct, i) => {
+  return targetShares.map((tgt, i) => {
     const lot          = i + 1;
-    const targetShares = Math.max(1, Math.round((+totalShares || 0) * pct));
-    cumulative        += targetShares;
+    cumulative        += tgt;
     const triggerPrice = isLong
       ? +(anchor * (1 + LOT_OFFSETS[i])).toFixed(2)
       : +(anchor * (1 - LOT_OFFSETS[i])).toFixed(2);
-    const fill         = fills[lot] || {};
+    const fill = fills[lot] || {};
     return {
       lot,
       name:                   LOT_NAMES[i],
-      pct,
+      pct:                    STRIKE_PCT[i],
       offsetPct:              Math.round(LOT_OFFSETS[i] * 100),
       timeGate:               LOT_TIME_GATES[i],
-      targetShares,
+      targetShares:           tgt,
       cumulativeTargetShares: cumulative,
       triggerPrice,
       filled:        !!fill.filled,
       actualPrice:   fill.price  != null ? +fill.price  : null,
-      actualShares:  fill.shares != null ? +fill.shares : (fill.filled ? targetShares : 0),
+      actualShares:  fill.shares != null ? +fill.shares : (fill.filled ? tgt : 0),
       anchor,
     };
   });
@@ -104,32 +142,30 @@ export function computeLotTriggers({ position, totalShares }) {
 
 // ── Lot completion classifier ────────────────────────────────────────────────
 // A lot N is "complete" when the position holds at least the cumulative target
-// shares through L_N. This is the criterion the 4g cleanup pass uses to decide
-// whether a TWS BUY/SELL STOP at L_N's trigger price is stale.
+// shares through L_N. The cron's cleanup pass uses this to decide whether a
+// TWS BUY/SELL STOP at L_N's trigger price is stale.
 //
-// Why it matters: if Scott market-bought past L2 because the L2 STP didn't fill
-// cleanly on a fast move, IBKR's actual share count may exceed cumulative-L2
-// even though `fills[2].filled` is still false. The cumulative comparison
-// catches that case; relying solely on fills[N].filled would miss it.
+// Why cumulative (not just `fills[n].filled`): if the user market-bought past
+// L_N because the L_N STP didn't fill cleanly on a fast move, IBKR shares may
+// exceed cumL_N even though `fills[n].filled` is still false. The cumulative
+// comparison catches that case.
 export function classifyLotCompletion(lots, ibkrShares) {
   const ibkr = Math.abs(+ibkrShares || 0);
   return lots.map(l => ({ ...l, complete: ibkr >= l.cumulativeTargetShares }));
 }
 
 // ── Direction → expected lot-trigger order action ───────────────────────────
-//   LONG pyramid adds = BUY  STOP above market
-//   SHORT pyramid adds = SELL STOP below market
+// LONG pyramid adds = BUY  STOP above market
+// SHORT pyramid adds = SELL STOP below market
 // (Inverse of the protective stop, which is SELL for LONG / BUY for SHORT.)
-// Used by the cron to filter IBKR orders to lot-trigger candidates.
 export function expectedLotTriggerAction(direction) {
   return (direction || 'LONG').toUpperCase() === 'SHORT' ? 'SELL' : 'BUY';
 }
 
 // ── Match TWS stop order to a plan lot by trigger price ─────────────────────
-// Tolerance is wider than the protective-stop check ($0.10 vs the $0.05 used
-// by stopRatchetCron) because lot triggers are pre-staged at planned levels
-// and may carry slight rounding differences from when they were placed. Picks
-// the closest match within tolerance.
+// Tolerance is wider than protective-stop matching ($0.10 vs $0.05) because
+// lot triggers are pre-staged at planned levels and may carry slight rounding
+// differences from when they were placed. Picks the closest match within tol.
 const LOT_PRICE_TOLERANCE = 0.10;
 export function matchTwsOrderToLot(order, lots) {
   if (!order || !Number.isFinite(+order.stopPrice)) return null;

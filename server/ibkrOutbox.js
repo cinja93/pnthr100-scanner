@@ -38,6 +38,8 @@ const VALID_COMMANDS = new Set([
   'CANCEL_RELATED_ORDERS', // Phase 4b — cancel all open orders for a ticker
   'MODIFY_STOP',           // Phase 4c — daily ratchet sync (cancel + replace)
   'SELL_POSITION',         // Phase 4f — close from PNTHR places real sell in TWS
+  'PLACE_LOT_TRIGGER',     // Phase 4g — pre-stage L2-L5 BUY/SELL STOP for pyramid adds
+  'MODIFY_LOT_TRIGGER',    // Phase 4g — daily reconcile (cancel + replace stale lot trigger)
 ]);
 
 // ── Stop-order shape helper (RTH vs extended-hours) ──────────────────────────
@@ -157,6 +159,82 @@ export function sanityCheckModifyStop({ position, ibkrPosition, oldStopPrice, ne
     ? +newStopPrice > +oldStopPrice
     : +newStopPrice < +oldStopPrice;
   if (!newTighter) return { ok: false, reason: 'NEW_STOP_NOT_TIGHTER_THAN_OLD' };
+  return placeCheck;
+}
+
+// ── Pre-enqueue sanity for PLACE_LOT_TRIGGER (Phase 4g) ──────────────────────
+// A lot trigger is a BUY STOP (LONG pyramid) or SELL STOP (SHORT pyramid)
+// staged at the L2-L5 trigger price computed from the entry anchor + per-lot
+// offset (3/6/10/14% per lotMath.js). Direction is inverted vs the protective
+// stop: LONG protective is SELL STOP below market; LONG lot trigger is BUY
+// STOP above market.
+//
+// Refuses to enqueue if anything looks wrong — never want PNTHR to silently
+// pre-stage an order on the wrong side of price, at a clearly-bad share
+// count, or for the entry lot (Lot 1 isn't a trigger; it's the actual fill).
+export function sanityCheckPlaceLotTrigger({ position, ibkrPosition, lot, triggerPrice, shares }) {
+  if (!position || !position.id) return { ok: false, reason: 'POSITION_MISSING' };
+  if (!ibkrPosition) return { ok: false, reason: 'IBKR_POSITION_MISSING' };
+  const ibkrShares = Math.abs(+ibkrPosition.shares || 0);
+  if (ibkrShares <= 0) return { ok: false, reason: 'IBKR_SHARES_ZERO' };
+
+  // Lot 1 is the entry fill, not a trigger. Lots 6+ don't exist.
+  const lotNum = +lot;
+  if (!Number.isInteger(lotNum) || lotNum < 2 || lotNum > 5) {
+    return { ok: false, reason: 'INVALID_LOT_NUM' };
+  }
+
+  const lastPrice = +ibkrPosition.lastPrice || +position.currentPrice || 0;
+  if (lastPrice <= 0) return { ok: false, reason: 'NO_PRICE_REFERENCE' };
+
+  const trig = +triggerPrice;
+  if (!Number.isFinite(trig) || trig <= 0) return { ok: false, reason: 'BAD_TRIGGER_PRICE' };
+
+  const reqShares = +shares;
+  if (!Number.isFinite(reqShares) || reqShares <= 0) return { ok: false, reason: 'BAD_SHARES' };
+  // Per-lot share cap. A single pyramid lot above 50% of the existing position
+  // is almost always a typo or stale-NAV recompute — refuse rather than place.
+  if (reqShares > ibkrShares * 0.50 + 1) return { ok: false, reason: 'LOT_SHARES_EXCEED_50PCT_OF_IBKR' };
+
+  const isLong = (position.direction || 'LONG').toUpperCase() !== 'SHORT';
+  // Trigger on the pyramid-add side of price.
+  //   LONG: BUY  STOP must be ABOVE current price (we're chasing strength up).
+  //   SHORT: SELL STOP must be BELOW current price (we're chasing weakness down).
+  if (isLong  && trig <= lastPrice) return { ok: false, reason: 'LONG_LOT_AT_OR_BELOW_PRICE' };
+  if (!isLong && trig >= lastPrice) return { ok: false, reason: 'SHORT_LOT_AT_OR_ABOVE_PRICE' };
+
+  // Within 50% of price (typo guard, same as protective stops).
+  const diffPct = Math.abs(trig - lastPrice) / lastPrice;
+  if (diffPct > 0.50) return { ok: false, reason: 'TRIGGER_MORE_THAN_50PCT_AWAY' };
+
+  return { ok: true, ibkrShares, isLong };
+}
+
+// ── Pre-enqueue sanity for MODIFY_LOT_TRIGGER (Phase 4g) ─────────────────────
+// Trigger prices for lot triggers are deterministic from the (fixed) entry
+// anchor, so they don't drift after L1 fills. Shares DO drift as NAV changes.
+// MODIFY is therefore primarily share-count adjustment. When trigger price
+// IS changing, PNTHR-side must be TIGHTER (lower trigger for LONG = earlier
+// pyramid commitment; mirror for SHORT) — never push a looser trigger.
+export function sanityCheckModifyLotTrigger({ position, ibkrPosition, lot, oldTriggerPrice, newTriggerPrice, oldShares, newShares }) {
+  const placeCheck = sanityCheckPlaceLotTrigger({ position, ibkrPosition, lot, triggerPrice: newTriggerPrice, shares: newShares });
+  if (!placeCheck.ok) return placeCheck;
+  if (!Number.isFinite(+oldTriggerPrice) || +oldTriggerPrice <= 0) return { ok: false, reason: 'BAD_OLD_TRIGGER' };
+
+  const triggerChanged = Math.abs(+newTriggerPrice - +oldTriggerPrice) >= 0.05;
+  const sharesChanged  = (+newShares || 0) !== (+oldShares || 0);
+  if (!triggerChanged && !sharesChanged) return { ok: false, reason: 'NO_CHANGE_TO_APPLY' };
+
+  if (triggerChanged) {
+    // Tighter = closer to anchor (earlier pyramid entry).
+    //   LONG: newTrigger < oldTrigger
+    //   SHORT: newTrigger > oldTrigger
+    const isLong = placeCheck.isLong;
+    const newTighter = isLong
+      ? +newTriggerPrice < +oldTriggerPrice
+      : +newTriggerPrice > +oldTriggerPrice;
+    if (!newTighter) return { ok: false, reason: 'NEW_TRIGGER_NOT_TIGHTER_THAN_OLD' };
+  }
   return placeCheck;
 }
 

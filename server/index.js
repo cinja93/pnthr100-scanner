@@ -32,6 +32,7 @@ import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import { runDailySignalJob } from './dailySignalJob.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
+import { runLotTriggerSync, registerLotTriggerCron } from './lotTriggerCron.js';
 import { killTestMonthlyGet, killTestMetricsGet, killTestMonthlyGenerate, generateMonthlySnapshots } from './killTestMonthly.js';
 import {
   checkCaseStudyEntries,
@@ -4842,6 +4843,7 @@ app.get('/api/admin/ibkr-outbox', authenticateJWT, requireAdmin, async (req, res
       IBKR_AUTO_RECORD_PARTIAL_SELL: process.env.IBKR_AUTO_RECORD_PARTIAL_SELL === 'true',
       IBKR_AUTO_RECORD_ADD_FILL:   process.env.IBKR_AUTO_RECORD_ADD_FILL   === 'true',
       IBKR_AUTO_SELL_ON_CLOSE:     process.env.IBKR_AUTO_SELL_ON_CLOSE     === 'true',
+      IBKR_AUTO_SYNC_LOT_TRIGGERS: process.env.IBKR_AUTO_SYNC_LOT_TRIGGERS === 'true',
     };
     res.json({ counts, flags, commands });
   } catch (err) {
@@ -4858,6 +4860,23 @@ app.post('/api/admin/sync-stops', authenticateJWT, requireAdmin, async (req, res
     res.json(report);
   } catch (err) {
     console.error('[admin/sync-stops]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Phase 4g — manual trigger of lotTriggerCron logic. Same dry-run/apply
+// pattern as sync-stops; report includes placements, modifications,
+// cancellations (cleanup-stale), adoptions (TWS-tighter user overrides),
+// skips, and aligned. Whether enqueues actually fire depends on
+// IBKR_AUTO_SYNC_LOT_TRIGGERS being true on Render.
+app.post('/api/admin/sync-lot-triggers', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const dryRun = req.query.dryRun === '1' || req.body?.dryRun === true;
+    const report = await runLotTriggerSync({ db, dryRun });
+    res.json(report);
+  } catch (err) {
+    console.error('[admin/sync-lot-triggers]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -4972,6 +4991,13 @@ app.post('/api/admin/ibkr-outbox/:id/failed', authenticateJWT, requireAdmin, asy
 // Daily 4:30 PM ET stop ratchet cron. Even when IBKR_AUTO_SYNC_STOPS is off,
 // the cron still runs and logs a diff report so the operator can preview.
 registerStopRatchetCron(cron);
+
+// Phase 4g — daily lot-trigger reconciliation cron. Same 4:30 PM ET slot
+// (after close, manual TWS edits settled). Cleanup pass cancels TWS lot
+// orders at filled/surpassed lot levels per the SWKS-style stale-trigger
+// rule; PLACE pass stages new triggers for incomplete lots; MODIFY pushes
+// PNTHR-tighter values when applicable. All gated by IBKR_AUTO_SYNC_LOT_TRIGGERS.
+registerLotTriggerCron(cron);
 
 // ── Cron: auto-generate newsletter every Friday at 5pm ET ───────────────────
 // Uses perchService (single source of truth — same generator the admin UI's

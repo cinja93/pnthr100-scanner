@@ -754,6 +754,45 @@ def _execute_command(app, rate_limiter, cmd):
         )
         return result.get('ok', False), result, (None if result.get('ok') else f'MODIFY_FAILED_PHASE_{result.get("phase")}')
 
+    # ── Phase 4g: pyramid lot triggers ─────────────────────────────────────
+    # A lot trigger is the SAME stop-order shape (STP/STP LMT) as a protective
+    # stop, but with the OPPOSITE action — LONG pyramid adds = BUY STOP above
+    # market, SHORT adds = SELL STOP below. We reuse place_protective_stop /
+    # modify_stop verbatim; only the action computation flips.
+    if command == 'PLACE_LOT_TRIGGER':
+        action = 'BUY' if (request.get('direction') or 'LONG').upper() != 'SHORT' else 'SELL'
+        result = app.place_protective_stop(
+            ticker      = ticker,
+            action      = action,
+            shares      = request.get('shares'),
+            stop_price  = request.get('triggerPrice'),
+            tif         = request.get('tif') or 'GTC',
+            rth         = bool(request.get('rth', True)),
+            order_type  = request.get('orderType') or 'STP',
+            limit_price = request.get('lmtPrice'),
+        )
+        # Annotate lot number on the response so the outbox audit log carries it.
+        if isinstance(result, dict):
+            result['lot'] = request.get('lot')
+        return result.get('ok', False), result, (None if result.get('ok') else result.get('error') or result.get('status'))
+
+    if command == 'MODIFY_LOT_TRIGGER':
+        action = 'BUY' if (request.get('direction') or 'LONG').upper() != 'SHORT' else 'SELL'
+        result = app.modify_stop(
+            ticker          = ticker,
+            old_perm_id     = request.get('oldPermId'),
+            new_stop_price  = request.get('newTriggerPrice'),
+            action          = action,
+            shares          = request.get('shares'),
+            tif             = request.get('tif') or 'GTC',
+            rth             = bool(request.get('rth', True)),
+            order_type      = request.get('orderType') or 'STP',
+            limit_price     = request.get('lmtPrice'),
+        )
+        if isinstance(result, dict):
+            result['lot'] = request.get('lot')
+        return result.get('ok', False), result, (None if result.get('ok') else f'MODIFY_LOT_FAILED_PHASE_{result.get("phase")}')
+
     return False, None, f'UNKNOWN_COMMAND:{command}'
 
 

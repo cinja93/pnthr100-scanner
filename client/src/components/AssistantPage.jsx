@@ -2661,6 +2661,24 @@ export default function AssistantPage({ onNavigate }) {
     setDiBusy(null);
   }, [diBusy]);
 
+  // Phase 4g — daily lot-trigger reconciliation. Same dry-run/apply pattern
+  // as runStopSync; the report distinguishes placements (new triggers),
+  // modifications (push tighter), cancellations (cleanup-stale per the
+  // SWKS rule), adoptions (silent TWS-tighter overrides), skips, and aligned.
+  const runLotTriggerSync = useCallback(async (dryRun) => {
+    if (diBusy) return;
+    setDiBusy(dryRun ? 'lot-triggers-dry' : 'lot-triggers-apply'); setDiError(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/sync-lot-triggers${dryRun ? '?dryRun=1' : ''}`, {
+        method: 'POST', headers: authHeaders(),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      setDiResult({ kind: dryRun ? 'lot-triggers-dry' : 'lot-triggers-apply', data });
+    } catch (e) { setDiError(e.message); }
+    setDiBusy(null);
+  }, [diBusy]);
+
   // ── Password reset form state (admin-only) ─────────────────────────────
   const [pwResetOpen,      setPwResetOpen]      = useState(false);
   const [pwResetEmail,     setPwResetEmail]     = useState('');
@@ -3458,6 +3476,29 @@ export default function AssistantPage({ onNavigate }) {
                   }}>
                   {diBusy === 'stops-apply' ? 'Syncing…' : 'Sync Stops Now'}
                 </button>
+                <button
+                  onClick={() => runLotTriggerSync(true)}
+                  disabled={!!diBusy}
+                  style={{
+                    background: '#1a1a1a', color: '#fcf000', border: '1px solid #fcf000',
+                    padding: '7px 14px', borderRadius: 4, fontWeight: 700, fontSize: 12,
+                    cursor: diBusy ? 'wait' : 'pointer', opacity: diBusy && diBusy !== 'lot-triggers-dry' ? 0.4 : 1,
+                  }}>
+                  {diBusy === 'lot-triggers-dry' ? 'Running…' : 'Lot Triggers (Dry Run)'}
+                </button>
+                <button
+                  onClick={() => {
+                    if (!window.confirm('Run live lot trigger sync?\n\n• CLEANUP cancels TWS BUY/SELL STOPs at filled/surpassed lot levels (the SWKS-style stale-trigger fix).\n• PLACE stages new triggers for incomplete lots without TWS orders.\n• MODIFY pushes PNTHR-tighter triggers when applicable.\n\nOnly effective if IBKR_AUTO_SYNC_LOT_TRIGGERS is on.')) return;
+                    runLotTriggerSync(false);
+                  }}
+                  disabled={!!diBusy}
+                  style={{
+                    background: '#3a3a0a', color: '#fcf000', border: '1px solid #fcf000',
+                    padding: '7px 14px', borderRadius: 4, fontWeight: 700, fontSize: 12,
+                    cursor: diBusy ? 'wait' : 'pointer', opacity: diBusy && diBusy !== 'lot-triggers-apply' ? 0.4 : 1,
+                  }}>
+                  {diBusy === 'lot-triggers-apply' ? 'Syncing…' : 'Sync Lot Triggers Now'}
+                </button>
               </div>
               {diError && (
                 <div style={{ background: '#3a1010', color: '#fca5a5', padding: '8px 12px', borderRadius: 4, fontSize: 12, marginBottom: 8 }}>
@@ -4140,6 +4181,47 @@ function DataIntegrityResultView({ result }) {
           <summary style={{ cursor: 'pointer', fontSize: 12, color: '#86efac' }}>Detail</summary>
           <pre style={{ fontSize: 11, color: '#bbb', marginTop: 6, whiteSpace: 'pre-wrap' }}>
 {JSON.stringify({ adoptions: data.adoptions, modifications: data.modifications, skips: data.skips, aligned: data.aligned }, null, 2)}
+          </pre>
+        </details>
+      </div>
+    );
+  }
+
+  if (kind === 'lot-triggers-dry' || kind === 'lot-triggers-apply') {
+    const isApply       = kind === 'lot-triggers-apply';
+    const placedQueued  = (data.placements    || []).filter(x => x.enqueued).length;
+    const modQueued     = (data.modifications || []).filter(x => x.enqueued).length;
+    const cancelQueued  = (data.cancellations || []).filter(x => x.enqueued).length;
+    const adopted       = (data.adoptions     || []).length;
+    const aligned       = (data.aligned       || []).length;
+    const skipped       = (data.skips         || []).length;
+    const totalEnqueued = placedQueued + modQueued + cancelQueued;
+    return (
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#fcf000', marginBottom: 8 }}>
+          LOT TRIGGER SYNC · {isApply ? 'APPLY' : 'DRY RUN'} · flag {data.flagOn ? 'ON' : 'OFF'} · {new Date(data.reconciledAt).toLocaleString()}
+        </div>
+        <div style={cellRow}><span style={label}>Positions checked:</span><span style={{ color: '#e8e6e3', fontWeight: 700 }}>{data.positionsChecked}</span></div>
+        <div style={cellRow}><span style={label}>Already aligned:</span><span style={{ color: '#22c55e', fontWeight: 700 }}>{aligned}</span></div>
+        <div style={cellRow}><span style={label}>Stale triggers cancelled:</span><span style={{ color: cancelQueued ? '#fca5a5' : '#888', fontWeight: 700 }}>{cancelQueued}</span></div>
+        <div style={cellRow}><span style={label}>New triggers placed:</span><span style={{ color: placedQueued ? '#86efac' : '#888', fontWeight: 700 }}>{placedQueued}</span></div>
+        <div style={cellRow}><span style={label}>Triggers modified (PNTHR-tighter):</span><span style={{ color: modQueued ? '#86efac' : '#888', fontWeight: 700 }}>{modQueued}</span></div>
+        <div style={cellRow}><span style={label}>TWS-tighter / user override (silent):</span><span style={{ color: adopted ? '#fcf000' : '#888', fontWeight: 700 }}>{adopted}</span></div>
+        <div style={cellRow}><span style={label}>Skipped (auto-opened, no plan, etc):</span><span style={{ color: skipped ? '#fca5a5' : '#888', fontWeight: 700 }}>{skipped}</span></div>
+        {isApply && !data.flagOn && (
+          <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(252,240,0,0.08)', color: '#fcf000', fontSize: 12, borderRadius: 4 }}>
+            ⚠ IBKR_AUTO_SYNC_LOT_TRIGGERS is OFF — nothing was enqueued to the bridge. Set the flag to true on Render to make this live.
+          </div>
+        )}
+        {isApply && data.flagOn && totalEnqueued > 0 && (
+          <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(34,197,94,0.08)', color: '#86efac', fontSize: 12, borderRadius: 4 }}>
+            ✓ {totalEnqueued} command(s) queued to the bridge ({cancelQueued} cancel, {placedQueued} place, {modQueued} modify). Watch the bridge log to confirm execution.
+          </div>
+        )}
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 12, color: '#fcf000' }}>Detail</summary>
+          <pre style={{ fontSize: 11, color: '#bbb', marginTop: 6, whiteSpace: 'pre-wrap' }}>
+{JSON.stringify({ cancellations: data.cancellations, placements: data.placements, modifications: data.modifications, adoptions: data.adoptions, skips: data.skips, aligned: data.aligned }, null, 2)}
           </pre>
         </details>
       </div>

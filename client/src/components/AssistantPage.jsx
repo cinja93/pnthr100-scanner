@@ -3653,6 +3653,113 @@ export default function AssistantPage({ onNavigate }) {
         </div>
       )}
 
+      {/* Phase 4 outbox — recent commands inspector. Admin only.
+          Auto-expands when there's a FAILED/STUCK to triage. */}
+      {isAdmin && outbox && Array.isArray(outbox.commands) && outbox.commands.length > 0 && (
+        <details
+          open={((outbox.counts?.FAILED || 0) + (outbox.counts?.STUCK || 0)) > 0}
+          style={{
+            border: '1px solid rgba(252, 240, 0, 0.3)',
+            borderRadius: 8,
+            marginBottom: 12,
+            background: 'rgba(0,0,0,0.35)',
+          }}
+        >
+          <summary style={{
+            padding: '7px 14px',
+            cursor: 'pointer',
+            borderBottom: '1px solid rgba(252, 240, 0, 0.12)',
+            fontSize: 10,
+            fontWeight: 900,
+            letterSpacing: '0.14em',
+            color: '#FCF000',
+            textTransform: 'uppercase',
+            fontFamily: "'Inter', 'Segoe UI', sans-serif",
+            userSelect: 'none',
+          }}>
+            Recent Bridge Commands ({outbox.commands.length})
+            &nbsp;—&nbsp;
+            <span style={{ color: '#dc3545' }}>F:{outbox.counts?.FAILED || 0}</span>
+            &nbsp;
+            <span style={{ color: '#ff8c00' }}>S:{outbox.counts?.STUCK || 0}</span>
+            &nbsp;
+            <span style={{ color: '#ffd24a' }}>P:{outbox.counts?.PENDING || 0}</span>
+            &nbsp;
+            <span style={{ color: '#5ab2ff' }}>E:{outbox.counts?.EXECUTING || 0}</span>
+            &nbsp;
+            <span style={{ color: '#7ed957' }}>D:{outbox.counts?.DONE || 0}</span>
+          </summary>
+          <div style={{ padding: '6px 8px 10px', overflowX: 'auto' }}>
+            <table style={{
+              width: '100%', borderCollapse: 'collapse', fontSize: 11,
+              fontFamily: "'Inter', 'Segoe UI', sans-serif",
+            }}>
+              <thead>
+                <tr style={{ color: '#888', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+                  <th style={{ padding: '6px 10px', fontWeight: 700, letterSpacing: '0.06em' }}>STATUS</th>
+                  <th style={{ padding: '6px 10px', fontWeight: 700, letterSpacing: '0.06em' }}>TIME</th>
+                  <th style={{ padding: '6px 10px', fontWeight: 700, letterSpacing: '0.06em' }}>COMMAND</th>
+                  <th style={{ padding: '6px 10px', fontWeight: 700, letterSpacing: '0.06em' }}>TICKER</th>
+                  <th style={{ padding: '6px 10px', fontWeight: 700, letterSpacing: '0.06em' }}>DETAILS / ERROR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...outbox.commands]
+                  .sort((a, b) => {
+                    const order = { FAILED: 0, STUCK: 1, EXECUTING: 2, PENDING: 3, DONE: 4 };
+                    const s = (order[a.status] ?? 9) - (order[b.status] ?? 9);
+                    if (s !== 0) return s;
+                    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+                  })
+                  .map((cmd, i) => {
+                    const statusColor = {
+                      FAILED:    '#dc3545',
+                      STUCK:     '#ff8c00',
+                      EXECUTING: '#5ab2ff',
+                      PENDING:   '#ffd24a',
+                      DONE:      '#7ed957',
+                    }[cmd.status] || '#888';
+                    const ts = cmd.createdAt ? new Date(cmd.createdAt) : null;
+                    const tsStr = ts ? ts.toLocaleString('en-US', {
+                      month: 'numeric', day: 'numeric',
+                      hour: 'numeric', minute: '2-digit', hour12: true,
+                    }) : '—';
+                    const r = cmd.request || {};
+                    const detailParts = [];
+                    if (cmd.errors) detailParts.push(String(cmd.errors));
+                    if (r.lot != null) detailParts.push(`L${r.lot}`);
+                    if (r.stopPrice != null) detailParts.push(`stop ${r.stopPrice}`);
+                    if (r.triggerPrice != null) detailParts.push(`trigger ${r.triggerPrice}`);
+                    if (r.limitPrice != null) detailParts.push(`limit ${r.limitPrice}`);
+                    if (r.shares != null) detailParts.push(`${r.shares}sh`);
+                    if (r.action) detailParts.push(r.action);
+                    return (
+                      <tr key={cmd.id || cmd._id || i}
+                          style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <td style={{ padding: '5px 10px', color: statusColor, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          {cmd.status}
+                        </td>
+                        <td style={{ padding: '5px 10px', color: '#bbb', whiteSpace: 'nowrap' }}>
+                          {tsStr}
+                        </td>
+                        <td style={{ padding: '5px 10px', color: '#ddd', whiteSpace: 'nowrap' }}>
+                          {cmd.command}
+                        </td>
+                        <td style={{ padding: '5px 10px', color: '#FCF000', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          {r.ticker || '—'}
+                        </td>
+                        <td style={{ padding: '5px 10px', color: cmd.errors ? '#ff8888' : '#aaa', maxWidth: 560, wordBreak: 'break-word' }}>
+                          {detailParts.join(' · ') || '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+
       {/* ══════════════════════════════════════════════════════════════════════
            PNTHR ASSISTANT LIVE — source-of-truth reconciliation table
            Shows every ticker from IBKR positions + IBKR stops + Command Center

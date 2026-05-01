@@ -5260,13 +5260,20 @@ app.post('/api/ibkr/sync-trade-close', authenticateJWT, requireAdmin, async (req
     const stop = position.stopPrice;
     const exitPrice  = aggPrice;
     const exitReason = (stop != null && Math.abs(exitPrice - stop) / stop < 0.01) ? 'STOP_HIT' : 'MANUAL';
-    const execTime   = matchedExecs[0].time ? new Date(matchedExecs[0].time) : new Date();
+    // IBKR exec time is in TWS's local timezone (Scott runs PT) and arrives
+    // as "YYYYMMDD  HH:MM:SS". Don't TZ-convert it — extract date and HH:MM
+    // directly from the string for the journal exit record. JS Date.parse
+    // returns NaN on this format and would throw later via toISOString.
+    const rawTime = matchedExecs[0].time || '';
+    const tm = /^(\d{4})(\d{2})(\d{2})[\s-]+(\d{2}):(\d{2}):(\d{2})/.exec(rawTime);
+    const exitDateStr = tm ? `${tm[1]}-${tm[2]}-${tm[3]}` : new Date().toISOString().split('T')[0];
+    const exitTimeStr = tm ? `${tm[4]}:${tm[5]}` : new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
     const exitData = {
       shares: pnthrShares,
       price:  exitPrice,
-      date:   execTime.toISOString().split('T')[0],
-      time:   execTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }),
+      date:   exitDateStr,
+      time:   exitTimeStr,
       reason: exitReason,
       note:   matchedExecs.length > 1
               ? `Synced from ${matchedExecs.length} TWS sub-fill executions via Position Audit (vw-avg)`

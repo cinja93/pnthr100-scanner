@@ -4961,6 +4961,44 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
       (s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0,
     );
 
+    // Build suggestedExit map: for each ticker with a non-CLOSED PNTHR
+    // position and zero IBKR shares, find the most recent matching exec
+    // from the bridge's latestExecutions snapshot (SLD for LONG closes,
+    // BOT for SHORT covers). This lets the UI offer a one-click "Sync
+    // from TWS @ $X" button so the operator never has to type prices —
+    // the same canonical recordExit path that auto-close uses.
+    const latestExecutions = ibkrSnap?.latestExecutions || [];
+    let processedIds = new Set();
+    if (latestExecutions.length > 0) {
+      const processedDocs = await db.collection('pnthr_ibkr_executions')
+        .find({ ownerId: userId, execId: { $in: latestExecutions.map(e => e.execId).filter(Boolean) } })
+        .project({ execId: 1 })
+        .toArray();
+      processedIds = new Set(processedDocs.map(d => d.execId));
+    }
+    const suggestedExitByTickerDir = {};
+    for (const exec of latestExecutions) {
+      const t = (exec.symbol || '').toUpperCase();
+      const closingDir = exec.side === 'SLD' ? 'LONG' : exec.side === 'BOT' ? 'SHORT' : null;
+      if (!t || !closingDir) continue;
+      const key = `${t}_${closingDir}`;
+      const prev = suggestedExitByTickerDir[key];
+      // Prefer the LATEST exec by time so multi-cycle day trades land on the
+      // most recent close that left position flat.
+      const execTime = exec.time ? new Date(exec.time).getTime() : 0;
+      if (!prev || execTime > prev.execTime) {
+        suggestedExitByTickerDir[key] = {
+          execId:   exec.execId,
+          price:    +exec.price,
+          shares:   +exec.shares,
+          side:     exec.side,
+          time:     exec.time || null,
+          execTime,
+          processed: processedIds.has(exec.execId),
+        };
+      }
+    }
+
     const both = [], pnthrOnly = [], ibkrOnly = [];
     for (const [t, p] of pnthrMap) {
       if (ibkrMap.has(t)) {
@@ -4973,14 +5011,18 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
           ibkrShares:  +ib.shares,
         });
       } else {
+        const dir = (p.direction || 'LONG').toUpperCase();
+        const sx  = suggestedExitByTickerDir[`${t}_${dir}`] || null;
         pnthrOnly.push({
-          ticker:      t,
-          status:      p.status,
-          direction:   p.direction || null,
-          pnthrShares: sumFilled(p) || +p.totalFilledShares || 0,
-          entryPrice:  +p.entryPrice || null,
-          stopPrice:   +p.stopPrice  || null,
-          createdAt:   p.createdAt || null,
+          ticker:        t,
+          positionId:    p.id || null,
+          status:        p.status,
+          direction:     p.direction || null,
+          pnthrShares:   sumFilled(p) || +p.totalFilledShares || 0,
+          entryPrice:    +p.entryPrice || null,
+          stopPrice:     +p.stopPrice  || null,
+          createdAt:     p.createdAt || null,
+          suggestedExit: sx, // { execId, price, shares, side, time, processed } or null
         });
       }
     }
@@ -5015,6 +5057,126 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
     });
   } catch (err) {
     console.error('[admin/position-audit]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Sync-trade-close: one-click close using a real TWS exec ─────────────────
+// On-demand version of processExecutions' full-close branch, used when the
+// 60s auto-sync didn't pick up the exec for some reason (race, restart,
+// dedup record without close, etc.). Takes { positionId, execId } where
+// execId must exist in pnthr_ibkr_positions.latestExecutions for this user.
+// Routes through the canonical recordExit so portfolio + journal +
+// discipline + wash-sale all stay in sync — same path manual closes use.
+//
+// Defense in depth:
+//   - Position must be non-CLOSED
+//   - Position direction must match exec side (SLD→LONG, BOT→SHORT)
+//   - Exec must cover ≥ 90% of PNTHR's filled shares (full-close threshold)
+//   - IBKR must currently show zero shares for the ticker (final authority)
+//   - Exec must NOT already be in pnthr_ibkr_executions (no double-record)
+app.post('/api/ibkr/sync-trade-close', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+    const userId   = req.user.userId;
+    const positionId = (req.body?.positionId || '').toString();
+    const execId     = (req.body?.execId || '').toString();
+    if (!positionId || !execId) return res.status(400).json({ error: 'positionId and execId required' });
+
+    const position = await db.collection('pnthr_portfolio').findOne({ id: positionId, ownerId: userId });
+    if (!position) return res.status(404).json({ error: 'Position not found' });
+    if (position.status === 'CLOSED') return res.status(409).json({ error: 'Position already CLOSED' });
+
+    const ibkrSnap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
+    const exec = (ibkrSnap?.latestExecutions || []).find(e => e.execId === execId);
+    if (!exec) return res.status(404).json({ error: `execId ${execId} not found in latestExecutions` });
+
+    const ticker = (position.ticker || '').toUpperCase();
+    if ((exec.symbol || '').toUpperCase() !== ticker) {
+      return res.status(409).json({ error: `Ticker mismatch: position=${ticker}, exec=${exec.symbol}` });
+    }
+
+    const pnthrDir   = (position.direction || 'LONG').toUpperCase();
+    const closingDir = exec.side === 'SLD' ? 'LONG' : exec.side === 'BOT' ? 'SHORT' : null;
+    if (closingDir !== pnthrDir) {
+      return res.status(409).json({ error: `Direction mismatch: position=${pnthrDir}, exec.side=${exec.side} (closes ${closingDir})` });
+    }
+
+    const pnthrShares = Object.values(position.fills || {})
+      .reduce((s, f) => s + (f?.filled ? (+f.shares || 0) : 0), 0);
+    if (pnthrShares <= 0) {
+      return res.status(422).json({ error: `Position has no filled shares; cannot compute close P&L` });
+    }
+    if (+exec.shares < pnthrShares * 0.90) {
+      return res.status(409).json({ error: `Exec ${exec.shares} shares < 90% of position ${pnthrShares} — partial, not full close` });
+    }
+
+    const liveIbkrShares = (ibkrSnap?.positions || [])
+      .filter(p => (p.symbol || '').toUpperCase() === ticker)
+      .reduce((s, p) => s + Math.abs(+p.shares || 0), 0);
+    if (liveIbkrShares > 0) {
+      return res.status(409).json({ error: `IBKR still holds ${liveIbkrShares} ${ticker} shares — exec was a reduction, not a full exit` });
+    }
+
+    const dup = await db.collection('pnthr_ibkr_executions').findOne({ ownerId: userId, execId });
+    if (dup) {
+      return res.status(409).json({ error: `execId ${execId} already processed — refusing to double-record` });
+    }
+
+    const stop = position.stopPrice;
+    const exitPrice = +exec.price;
+    const exitReason = (stop != null && Math.abs(exitPrice - stop) / stop < 0.01) ? 'STOP_HIT' : 'MANUAL';
+    const execTime = exec.time ? new Date(exec.time) : new Date();
+
+    const exitData = {
+      shares: pnthrShares,
+      price:  exitPrice,
+      date:   execTime.toISOString().split('T')[0],
+      time:   execTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }),
+      reason: exitReason,
+      note:   'Synced from TWS execution via Position Audit',
+    };
+
+    let result;
+    try {
+      result = await recordExit(db, position.id, userId, exitData);
+    } catch (e) {
+      console.error(`[sync-trade-close] recordExit failed for ${ticker}: ${e.message}`);
+      return res.status(500).json({ error: `recordExit failed: ${e.message}` });
+    }
+
+    await db.collection('pnthr_portfolio').updateOne(
+      { id: position.id, ownerId: userId },
+      { $set: { autoClosedByIBKR: true, ibkrExecId: execId } }
+    );
+
+    await db.collection('pnthr_ibkr_executions').insertOne({
+      ownerId:    userId,
+      execId,
+      symbol:     ticker,
+      side:       exec.side,
+      shares:     +exec.shares,
+      price:      exitPrice,
+      exitReason,
+      type:       'MANUAL_SYNC',
+      processedAt: new Date(),
+    });
+
+    console.log(`[sync-trade-close] ${ticker} (${pnthrDir}) ${pnthrShares}sh @ $${exitPrice} → ${exitReason} (P&L ${result.exitRecord.pnl.pct}%)`);
+
+    res.json({
+      ok: true,
+      ticker,
+      direction:    pnthrDir,
+      shares:       pnthrShares,
+      exitPrice,
+      exitReason,
+      profitDollar: result.exitRecord.pnl.dollar,
+      profitPct:    result.exitRecord.pnl.pct,
+    });
+  } catch (err) {
+    console.error('[sync-trade-close]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

@@ -2686,6 +2686,39 @@ export default function AssistantPage({ onNavigate }) {
   // P&L, tag ORPHAN_CLEANUP. Refreshes the audit so the row drops out
   // of the table on success.
   const [closingOrphan, setClosingOrphan] = useState(null); // ticker currently being closed
+
+  // Refreshes the Position Audit so the closed row drops out of the table.
+  const refreshAudit = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/position-audit`, { headers: authHeaders() });
+      const data = await r.json();
+      if (r.ok) setDiResult({ kind: 'position-audit', data });
+    } catch { /* ignore */ }
+  }, []);
+
+  // PRIMARY PATH — one-click sync using a real TWS execution. No typing.
+  // Routes through the same canonical recordExit() that auto-close uses
+  // so portfolio + journal + discipline + wash-sale stay in sync.
+  const syncOrphanFromTws = useCallback(async (ticker, positionId, execId) => {
+    if (closingOrphan) return;
+    if (!window.confirm(`Sync ${ticker} from TWS execution?\n\nUses the actual TWS fill price and routes through the canonical close path (same as auto-close). Journal will be updated automatically.`)) return;
+    setClosingOrphan(ticker); setDiError(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/ibkr/sync-trade-close`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ positionId, execId }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      await refreshAudit();
+    } catch (e) { setDiError(e.message); }
+    setClosingOrphan(null);
+  }, [closingOrphan, refreshAudit]);
+
+  // FALLBACK PATH — manual exit price (or null P&L) when TWS doesn't have
+  // a matching execution. Should be the rare case once auto-sync covers
+  // the common path.
   const closeOrphan = useCallback(async (ticker, exitPrice, exitDate) => {
     if (closingOrphan) return;
     const hasPrice = exitPrice !== null && exitPrice !== '' && Number.isFinite(+exitPrice) && +exitPrice > 0;
@@ -2705,13 +2738,10 @@ export default function AssistantPage({ onNavigate }) {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
-      // Refresh the audit view so the row disappears.
-      const audit = await fetch(`${API_BASE}/api/admin/position-audit`, { headers: authHeaders() });
-      const auditData = await audit.json();
-      if (audit.ok) setDiResult({ kind: 'position-audit', data: auditData });
+      await refreshAudit();
     } catch (e) { setDiError(e.message); }
     setClosingOrphan(null);
-  }, [closingOrphan]);
+  }, [closingOrphan, refreshAudit]);
 
   // Phase 4g — daily lot-trigger reconciliation. Same dry-run/apply pattern
   // as runStopSync; the report distinguishes placements (new triggers),
@@ -3577,6 +3607,7 @@ export default function AssistantPage({ onNavigate }) {
                   <DataIntegrityResultView
                     result={diResult}
                     onCloseOrphan={closeOrphan}
+                    onSyncOrphanFromTws={syncOrphanFromTws}
                     closingOrphan={closingOrphan}
                   />
                 </div>
@@ -4296,10 +4327,16 @@ export default function AssistantPage({ onNavigate }) {
 }
 
 // ── Data Integrity result view (admin) ─────────────────────────────────────
-// Per-row orphan close UI — exit price input + button.
-// Empty input => null-P&L cleanup. Filled => full P&L close + journal sync.
-function OrphanCloseTable({ rows, onCloseOrphan, closingOrphan, th, td, tableStyle }) {
-  const [drafts, setDrafts] = useState({}); // { TICKER: { exitPrice, exitDate } }
+// Per-row orphan close UI.
+// PRIMARY: when the row has a TWS suggestedExit, show a one-click
+// "Sync from TWS @ $X" button — closes via the canonical recordExit
+// path using the actual fill price. NO TYPING.
+// FALLBACK: a collapsible "Manual override" reveals exit-price input
+// for the rare case where TWS has no matching execution (ancient
+// orphan records).
+function OrphanCloseTable({ rows, onCloseOrphan, onSyncOrphanFromTws, closingOrphan, th, td, tableStyle }) {
+  const [manualOpen, setManualOpen] = useState({}); // { TICKER: bool }
+  const [drafts,     setDrafts]     = useState({}); // { TICKER: { exitPrice, exitDate } }
   const todayIso = new Date().toISOString().slice(0, 10);
   const setField = (ticker, field, value) => {
     setDrafts(d => ({ ...d, [ticker]: { ...(d[ticker] || {}), [field]: value } }));
@@ -4314,22 +4351,20 @@ function OrphanCloseTable({ rows, onCloseOrphan, closingOrphan, th, td, tableSty
           <th style={th}>Shares</th>
           <th style={th}>Entry</th>
           <th style={th}>Stop</th>
-          <th style={th}>Exit price</th>
-          <th style={th}>Exit date</th>
           <th style={th}>Action</th>
         </tr>
       </thead>
       <tbody>
         {rows.map(p => {
+          const isClosing   = closingOrphan === p.ticker;
+          const otherActive = closingOrphan && closingOrphan !== p.ticker;
+          const sx          = p.suggestedExit; // { execId, price, side, time, processed } or null
+          const hasTwsExit  = !!sx && !sx.processed && Number.isFinite(+sx.price);
+          const showManual  = !!manualOpen[p.ticker];
           const draft       = drafts[p.ticker] || {};
           const exitPrice   = draft.exitPrice ?? '';
           const exitDate    = draft.exitDate ?? todayIso;
-          const isClosing   = closingOrphan === p.ticker;
-          const otherActive = closingOrphan && closingOrphan !== p.ticker;
           const hasPrice    = exitPrice !== '' && Number.isFinite(+exitPrice) && +exitPrice > 0;
-          const buttonLabel = isClosing
-            ? 'Closing…'
-            : hasPrice ? 'Close + P&L' : 'Close (null P&L)';
           return (
             <tr key={p.ticker}>
               <td style={{ ...td, fontWeight: 700 }}>{p.ticker}</td>
@@ -4339,65 +4374,123 @@ function OrphanCloseTable({ rows, onCloseOrphan, closingOrphan, th, td, tableSty
               <td style={td}>{p.entryPrice != null ? `$${p.entryPrice}` : '—'}</td>
               <td style={td}>{p.stopPrice  != null ? `$${p.stopPrice}`  : '—'}</td>
               <td style={td}>
-                <input
-                  type="number"
-                  step="0.0001"
-                  min="0"
-                  placeholder="(unknown)"
-                  value={exitPrice}
-                  onChange={(e) => setField(p.ticker, 'exitPrice', e.target.value)}
-                  disabled={!!closingOrphan}
-                  style={{
-                    width: 90,
-                    background: '#111',
-                    color: '#e8e6e3',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    borderRadius: 3,
-                    padding: '2px 6px',
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                  }}
-                />
-              </td>
-              <td style={td}>
-                <input
-                  type="date"
-                  value={exitDate}
-                  onChange={(e) => setField(p.ticker, 'exitDate', e.target.value)}
-                  disabled={!!closingOrphan}
-                  style={{
-                    background: '#111',
-                    color: '#e8e6e3',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    borderRadius: 3,
-                    padding: '2px 6px',
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                  }}
-                />
-              </td>
-              <td style={td}>
-                {onCloseOrphan ? (
-                  <button
-                    onClick={() => onCloseOrphan(p.ticker, exitPrice, exitDate)}
-                    disabled={!!closingOrphan}
-                    style={{
-                      background: isClosing ? '#7f1d1d' : (otherActive ? '#3a1010' : (hasPrice ? '#166534' : '#991b1b')),
-                      color: '#fff',
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      borderRadius: 3,
-                      padding: '3px 8px',
-                      fontSize: 10,
-                      fontWeight: 700,
-                      cursor: closingOrphan ? 'not-allowed' : 'pointer',
-                      fontFamily: 'inherit',
-                      whiteSpace: 'nowrap',
-                    }}
-                    title={hasPrice ? 'Full P&L close + journal sync' : 'Null P&L — use only if exit price is unknown'}
-                  >
-                    {buttonLabel}
-                  </button>
-                ) : '—'}
+                {hasTwsExit && onSyncOrphanFromTws ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                    <button
+                      onClick={() => onSyncOrphanFromTws(p.ticker, p.positionId, sx.execId)}
+                      disabled={!!closingOrphan}
+                      style={{
+                        background: isClosing ? '#15803d' : (otherActive ? '#1a2e1a' : '#16a34a'),
+                        color: '#fff',
+                        border: '1px solid rgba(134,239,172,0.4)',
+                        borderRadius: 3,
+                        padding: '4px 10px',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: closingOrphan ? 'not-allowed' : 'pointer',
+                        fontFamily: 'inherit',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={`Sync via canonical recordExit() using TWS exec ${sx.execId}`}
+                    >
+                      {isClosing ? 'Syncing…' : `Sync from TWS @ $${(+sx.price).toFixed(4).replace(/\.?0+$/, '')}`}
+                    </button>
+                    <button
+                      onClick={() => setManualOpen(o => ({ ...o, [p.ticker]: !o[p.ticker] }))}
+                      disabled={!!closingOrphan}
+                      style={{
+                        background: 'none',
+                        color: '#888',
+                        border: 'none',
+                        padding: '0 0 0 2px',
+                        fontSize: 9,
+                        fontFamily: 'inherit',
+                        cursor: closingOrphan ? 'not-allowed' : 'pointer',
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      {showManual ? 'hide manual override' : 'manual override…'}
+                    </button>
+                    {showManual && (
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 2 }}>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          min="0"
+                          placeholder="(price)"
+                          value={exitPrice}
+                          onChange={(e) => setField(p.ticker, 'exitPrice', e.target.value)}
+                          disabled={!!closingOrphan}
+                          style={{ width: 80, background: '#111', color: '#e8e6e3', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 3, padding: '2px 6px', fontSize: 10, fontFamily: 'monospace' }}
+                        />
+                        <input
+                          type="date"
+                          value={exitDate}
+                          onChange={(e) => setField(p.ticker, 'exitDate', e.target.value)}
+                          disabled={!!closingOrphan}
+                          style={{ background: '#111', color: '#e8e6e3', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 3, padding: '2px 4px', fontSize: 10, fontFamily: 'monospace' }}
+                        />
+                        <button
+                          onClick={() => onCloseOrphan(p.ticker, exitPrice, exitDate)}
+                          disabled={!!closingOrphan}
+                          style={{
+                            background: hasPrice ? '#166534' : '#991b1b',
+                            color: '#fff',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            borderRadius: 3,
+                            padding: '2px 6px',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            cursor: closingOrphan ? 'not-allowed' : 'pointer',
+                            fontFamily: 'inherit',
+                          }}
+                        >
+                          {hasPrice ? 'Manual close' : 'Null P&L'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  // No TWS exec available — fall back to manual entry only.
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <span style={{ fontSize: 9, color: '#888', marginRight: 4 }}>(no TWS exec)</span>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      min="0"
+                      placeholder="(price)"
+                      value={exitPrice}
+                      onChange={(e) => setField(p.ticker, 'exitPrice', e.target.value)}
+                      disabled={!!closingOrphan}
+                      style={{ width: 80, background: '#111', color: '#e8e6e3', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 3, padding: '2px 6px', fontSize: 10, fontFamily: 'monospace' }}
+                    />
+                    <input
+                      type="date"
+                      value={exitDate}
+                      onChange={(e) => setField(p.ticker, 'exitDate', e.target.value)}
+                      disabled={!!closingOrphan}
+                      style={{ background: '#111', color: '#e8e6e3', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 3, padding: '2px 4px', fontSize: 10, fontFamily: 'monospace' }}
+                    />
+                    <button
+                      onClick={() => onCloseOrphan(p.ticker, exitPrice, exitDate)}
+                      disabled={!!closingOrphan}
+                      style={{
+                        background: isClosing ? '#7f1d1d' : (otherActive ? '#3a1010' : (hasPrice ? '#166534' : '#991b1b')),
+                        color: '#fff',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        borderRadius: 3,
+                        padding: '3px 8px',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: closingOrphan ? 'not-allowed' : 'pointer',
+                        fontFamily: 'inherit',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {isClosing ? 'Closing…' : (hasPrice ? 'Close + P&L' : 'Null P&L')}
+                    </button>
+                  </div>
+                )}
               </td>
             </tr>
           );
@@ -4407,7 +4500,7 @@ function OrphanCloseTable({ rows, onCloseOrphan, closingOrphan, th, td, tableSty
   );
 }
 
-function DataIntegrityResultView({ result, onCloseOrphan, closingOrphan }) {
+function DataIntegrityResultView({ result, onCloseOrphan, onSyncOrphanFromTws, closingOrphan }) {
   const { kind, data } = result;
   const cellRow = { display: 'flex', gap: 8, fontSize: 12, color: '#e8e6e3', padding: '3px 0' };
   const label   = { color: '#888', minWidth: 130 };
@@ -4470,6 +4563,7 @@ function DataIntegrityResultView({ result, onCloseOrphan, closingOrphan }) {
             <OrphanCloseTable
               rows={data.pnthrOnly}
               onCloseOrphan={onCloseOrphan}
+              onSyncOrphanFromTws={onSyncOrphanFromTws}
               closingOrphan={closingOrphan}
               th={th}
               td={td}

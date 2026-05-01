@@ -5002,31 +5002,80 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
     for (const arr of Object.values(closingExecsByTickerDir)) {
       arr.sort((a, b) => a.execTime - b.execTime);
     }
-    // Per-position match: find earliest closing exec after createdAt with
-    // shares within 10% of position's filled shares. Falls through to a
-    // share-only match (any time) if no time-window match is found, which
-    // handles cases where position.createdAt isn't reliable. Returns null
-    // if nothing matches at all.
+    // Build opening-side execs too (BOT for LONG closes, SLD for SHORT
+    // closes) so we can entry-match PNTHR's recorded entry price to the
+    // specific TWS BOT that created PNTHR's record. This lets us pick
+    // the correct SLD on multi-cycle day trades where time-only matching
+    // misfires. Falls through to time-after-createdAt for carried-over
+    // positions whose entry doesn't match any of today's opening execs.
+    const openingExecsByTickerDir = {};
+    for (const exec of latestExecutions) {
+      const t = (exec.symbol || '').toUpperCase();
+      // For a LONG position we want BOT execs (the entry-side of LONG).
+      // For a SHORT position we want SLD execs (the entry-side of SHORT).
+      const openingDirForExec = exec.side === 'BOT' ? 'LONG' : exec.side === 'SLD' ? 'SHORT' : null;
+      if (!t || !openingDirForExec) continue;
+      const key = `${t}_${openingDirForExec}`;
+      if (!openingExecsByTickerDir[key]) openingExecsByTickerDir[key] = [];
+      openingExecsByTickerDir[key].push({
+        execId:   exec.execId,
+        price:    +exec.price,
+        shares:   +exec.shares,
+        side:     exec.side,
+        time:     exec.time || null,
+        execTime: exec.time ? new Date(exec.time).getTime() : 0,
+      });
+    }
+    for (const arr of Object.values(openingExecsByTickerDir)) {
+      arr.sort((a, b) => a.execTime - b.execTime);
+    }
+
+    // Per-position match — multi-tier. Returns the closing exec that most
+    // plausibly closed THIS specific PNTHR position.
+    //
+    // Tier 1 (intra-day re-entry): find an opening exec (BOT for LONG)
+    //        with shares ≈ position shares AND entry price within 0.5% of
+    //        position's recorded entryPrice. Use the LATEST such opener
+    //        — that's the BOT that created PNTHR's record. Then return the
+    //        first closing exec chronologically AFTER that BOT.
+    // Tier 2 (carried-over close): no opening match — position was held
+    //        overnight. Return the EARLIEST closing exec today with shares
+    //        within tolerance.
+    // Tier 3 (last resort): shares-only match anywhere.
     function suggestExitForPosition(p) {
       const t = (p.ticker || '').toUpperCase();
       const dir = (p.direction || 'LONG').toUpperCase();
-      const candidates = closingExecsByTickerDir[`${t}_${dir}`] || [];
-      if (!candidates.length) return null;
+      const closers = closingExecsByTickerDir[`${t}_${dir}`] || [];
+      const openers = openingExecsByTickerDir[`${t}_${dir}`] || [];
+      if (!closers.length) return null;
       const filled = Object.values(p.fills || {}).reduce((s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0)
                   || +p.totalFilledShares || 0;
       const minShr = filled * 0.90;
       const maxShr = filled * 1.10;
-      const createdAt = p.createdAt ? new Date(p.createdAt).getTime() : 0;
-      // Prefer: shares-match AND time > createdAt (chronologically next close).
-      const timeMatch = candidates.find(c =>
-        c.execTime >= createdAt && c.shares >= minShr && c.shares <= maxShr,
-      );
-      if (timeMatch) return timeMatch;
-      // Fallback: shares-match regardless of time (last resort).
-      const sharesMatch = candidates.find(c => c.shares >= minShr && c.shares <= maxShr);
-      if (sharesMatch) return sharesMatch;
-      // Last fallback: latest exec at all (may be wrong for multi-cycle).
-      return candidates[candidates.length - 1] || null;
+      const pnthrEntry = +p.entryPrice;
+
+      // Tier 1: intra-day re-entry — match BOT by entry price + shares,
+      // then take the next closer after it.
+      if (Number.isFinite(pnthrEntry) && pnthrEntry > 0) {
+        const tol = pnthrEntry * 0.005; // 0.5% tolerance
+        // Walk openers latest-first so we land on the most recent matching BOT
+        // (in case the same ticker had multiple same-share buys at similar prices).
+        for (let i = openers.length - 1; i >= 0; i--) {
+          const o = openers[i];
+          if (o.shares < minShr || o.shares > maxShr) continue;
+          if (Math.abs(o.price - pnthrEntry) > tol) continue;
+          // Found the entry. The matching exit is the first closer after it.
+          const match = closers.find(c => c.execTime > o.execTime && c.shares >= minShr && c.shares <= maxShr);
+          if (match) return match;
+        }
+      }
+
+      // Tier 2: no entry match — assume carry-over. Earliest closer today.
+      const carryClose = closers.find(c => c.shares >= minShr && c.shares <= maxShr);
+      if (carryClose) return carryClose;
+
+      // Tier 3: any closer at all.
+      return closers[0] || null;
     }
 
     const both = [], pnthrOnly = [], ibkrOnly = [];

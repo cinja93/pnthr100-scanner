@@ -5019,6 +5019,83 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
   }
 });
 
+// ── Orphan-position cleanup ─────────────────────────────────────────────────
+// Marks a single PNTHR position as CLOSED with null P&L, tagged
+// ORPHAN_CLEANUP. Only acts on TRUE orphans — positions that exist in
+// pnthr_portfolio (non-CLOSED) but have NO matching IBKR shares. Anything
+// IBKR still holds must go through the normal close flow so P&L is captured.
+// P&L fields are deliberately null: we cannot honestly attribute an exit
+// price for records whose actual close happened in TWS without our seeing
+// it. Full audit trail via stopHistory + Render console log.
+app.post('/api/admin/close-orphan-position', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+    const userId = req.user.userId;
+    const ticker = (req.body?.ticker || '').toString().trim().toUpperCase();
+    if (!ticker) return res.status(400).json({ error: 'ticker required' });
+
+    const position = await db.collection('pnthr_portfolio').findOne({
+      ownerId: userId,
+      ticker,
+      status:  { $nin: ['CLOSED'] },
+    });
+    if (!position) {
+      return res.status(404).json({ error: `No non-CLOSED PNTHR position found for ${ticker}` });
+    }
+
+    // Defense: only orphans (IBKR has zero shares for this ticker) qualify.
+    const ibkrSnap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
+    const ibkrPositions = (ibkrSnap?.positions || []).filter(p => Math.abs(+p.shares || 0) > 0);
+    const ibkrMatch = ibkrPositions.find(p => (p.symbol || '').toUpperCase() === ticker);
+    if (ibkrMatch) {
+      return res.status(409).json({
+        error: `${ticker} is NOT an orphan — IBKR holds ${ibkrMatch.shares} shares. Use the normal close flow so P&L is captured.`,
+        ibkrShares: +ibkrMatch.shares,
+      });
+    }
+
+    const now = new Date();
+    const stopHistoryEntry = {
+      date:            now.toISOString().slice(0, 10),
+      reason:          'ORPHAN_CLEANUP',
+      source:          'POSITION_AUDIT',
+      previousStatus:  position.status,
+      previousStop:    position.stopPrice ?? null,
+    };
+
+    const result = await db.collection('pnthr_portfolio').updateOne(
+      { _id: position._id, ownerId: userId },
+      {
+        $set: {
+          status:                 'CLOSED',
+          closedAt:               now,
+          updatedAt:              now,
+          'outcome.exitPrice':    null,
+          'outcome.profitDollar': null,
+          'outcome.profitPct':    null,
+          'outcome.holdingDays':  null,
+          'outcome.exitReason':   'ORPHAN_CLEANUP',
+        },
+        $push: { stopHistory: stopHistoryEntry },
+      }
+    );
+
+    console.log(`[admin/close-orphan-position] ${ticker} (id=${position.id}) marked CLOSED — ORPHAN_CLEANUP by ${req.user.email || userId} (prevStatus=${position.status})`);
+
+    res.json({
+      ok:             true,
+      ticker,
+      previousStatus: position.status,
+      closedAt:       now,
+      modifiedCount:  result.modifiedCount,
+    });
+  } catch (err) {
+    console.error('[admin/close-orphan-position]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Bridge-facing outbox endpoints ───────────────────────────────────────────
 // Called by pnthr-ibkr-bridge.py's outbox poller. Auth = same admin JWT the
 // read-only sync uses. Bridge polls /pending every 30s, marks EXECUTING

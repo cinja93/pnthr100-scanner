@@ -2682,6 +2682,32 @@ export default function AssistantPage({ onNavigate }) {
     setDiBusy(null);
   }, [diBusy]);
 
+  // Per-row orphan cleanup — marks one PNTHR-only ticker CLOSED with null
+  // P&L, tag ORPHAN_CLEANUP. Refreshes the audit so the row drops out
+  // of the table on success.
+  const [closingOrphan, setClosingOrphan] = useState(null); // ticker currently being closed
+  const closeOrphan = useCallback(async (ticker) => {
+    if (closingOrphan) return;
+    if (!window.confirm(`Mark ${ticker} as orphan-closed?\n\nThis sets status=CLOSED with null P&L (we don't have a verified exit price). Use the normal close flow if you want P&L captured.`)) {
+      return;
+    }
+    setClosingOrphan(ticker); setDiError(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/close-orphan-position`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      // Refresh the audit view so the row disappears.
+      const audit = await fetch(`${API_BASE}/api/admin/position-audit`, { headers: authHeaders() });
+      const auditData = await audit.json();
+      if (audit.ok) setDiResult({ kind: 'position-audit', data: auditData });
+    } catch (e) { setDiError(e.message); }
+    setClosingOrphan(null);
+  }, [closingOrphan]);
+
   // Phase 4g — daily lot-trigger reconciliation. Same dry-run/apply pattern
   // as runStopSync; the report distinguishes placements (new triggers),
   // modifications (push tighter), cancellations (cleanup-stale per the
@@ -3543,7 +3569,11 @@ export default function AssistantPage({ onNavigate }) {
               )}
               {diResult && (
                 <div style={{ background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: 12 }}>
-                  <DataIntegrityResultView result={diResult} />
+                  <DataIntegrityResultView
+                    result={diResult}
+                    onCloseOrphan={closeOrphan}
+                    closingOrphan={closingOrphan}
+                  />
                 </div>
               )}
             </div>
@@ -4261,7 +4291,7 @@ export default function AssistantPage({ onNavigate }) {
 }
 
 // ── Data Integrity result view (admin) ─────────────────────────────────────
-function DataIntegrityResultView({ result }) {
+function DataIntegrityResultView({ result, onCloseOrphan, closingOrphan }) {
   const { kind, data } = result;
   const cellRow = { display: 'flex', gap: 8, fontSize: 12, color: '#e8e6e3', padding: '3px 0' };
   const label   = { color: '#888', minWidth: 130 };
@@ -4322,18 +4352,44 @@ function DataIntegrityResultView({ result }) {
               PNTHR-only — open in PNTHR but TWS shows no shares
             </div>
             <table style={tableStyle}>
-              <thead><tr><th style={th}>Ticker</th><th style={th}>Status</th><th style={th}>Dir</th><th style={th}>PNTHR shares</th><th style={th}>Entry</th><th style={th}>Stop</th></tr></thead>
+              <thead><tr><th style={th}>Ticker</th><th style={th}>Status</th><th style={th}>Dir</th><th style={th}>PNTHR shares</th><th style={th}>Entry</th><th style={th}>Stop</th><th style={th}>Action</th></tr></thead>
               <tbody>
-                {data.pnthrOnly.map(p => (
-                  <tr key={p.ticker}>
-                    <td style={{ ...td, fontWeight: 700 }}>{p.ticker}</td>
-                    <td style={td}>{p.status}</td>
-                    <td style={td}>{p.direction || '—'}</td>
-                    <td style={td}>{p.pnthrShares}</td>
-                    <td style={td}>{p.entryPrice != null ? `$${p.entryPrice}` : '—'}</td>
-                    <td style={td}>{p.stopPrice  != null ? `$${p.stopPrice}`  : '—'}</td>
-                  </tr>
-                ))}
+                {data.pnthrOnly.map(p => {
+                  const isClosing = closingOrphan === p.ticker;
+                  const otherClosing = closingOrphan && closingOrphan !== p.ticker;
+                  return (
+                    <tr key={p.ticker}>
+                      <td style={{ ...td, fontWeight: 700 }}>{p.ticker}</td>
+                      <td style={td}>{p.status}</td>
+                      <td style={td}>{p.direction || '—'}</td>
+                      <td style={td}>{p.pnthrShares}</td>
+                      <td style={td}>{p.entryPrice != null ? `$${p.entryPrice}` : '—'}</td>
+                      <td style={td}>{p.stopPrice  != null ? `$${p.stopPrice}`  : '—'}</td>
+                      <td style={td}>
+                        {onCloseOrphan ? (
+                          <button
+                            onClick={() => onCloseOrphan(p.ticker)}
+                            disabled={!!closingOrphan}
+                            style={{
+                              background: isClosing ? '#7f1d1d' : (otherClosing ? '#3a1010' : '#991b1b'),
+                              color: '#fff',
+                              border: '1px solid rgba(252,165,165,0.3)',
+                              borderRadius: 3,
+                              padding: '3px 8px',
+                              fontSize: 10,
+                              fontWeight: 700,
+                              cursor: closingOrphan ? 'not-allowed' : 'pointer',
+                              fontFamily: 'inherit',
+                            }}
+                            title="Mark CLOSED with null P&L, tagged ORPHAN_CLEANUP"
+                          >
+                            {isClosing ? 'Closing…' : 'Close Orphan'}
+                          </button>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

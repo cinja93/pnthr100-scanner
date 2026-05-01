@@ -4976,36 +4976,57 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
         .toArray();
       processedIds = new Set(processedDocs.map(d => d.execId));
     }
-    // Two suggestions per ticker+dir: the latest UNPROCESSED exec (preferred),
-    // and the latest exec overall (fallback to surface stale-dedup cases where
-    // the execId was marked processed but the position never closed).
-    const suggestedUnprocessed = {};
-    const suggestedAny         = {};
+    // Group all closing-side execs by ticker+dir for per-position matching.
+    // For multi-cycle day trades, "latest exec" is wrong — the right match is
+    // the FIRST SLD/BOT exec chronologically AFTER the position's createdAt
+    // whose shares are within tolerance of the position's filled shares.
+    // We compute this per-position below.
+    const closingExecsByTickerDir = {};
     for (const exec of latestExecutions) {
       const t = (exec.symbol || '').toUpperCase();
       const closingDir = exec.side === 'SLD' ? 'LONG' : exec.side === 'BOT' ? 'SHORT' : null;
       if (!t || !closingDir) continue;
       const key = `${t}_${closingDir}`;
-      const execTime = exec.time ? new Date(exec.time).getTime() : 0;
-      const candidate = {
+      if (!closingExecsByTickerDir[key]) closingExecsByTickerDir[key] = [];
+      closingExecsByTickerDir[key].push({
         execId:    exec.execId,
         price:     +exec.price,
         shares:    +exec.shares,
         side:      exec.side,
         time:      exec.time || null,
-        execTime,
+        execTime:  exec.time ? new Date(exec.time).getTime() : 0,
         processed: processedIds.has(exec.execId),
-      };
-      const prevAny = suggestedAny[key];
-      if (!prevAny || execTime > prevAny.execTime) suggestedAny[key] = candidate;
-      if (!candidate.processed) {
-        const prevU = suggestedUnprocessed[key];
-        if (!prevU || execTime > prevU.execTime) suggestedUnprocessed[key] = candidate;
-      }
+      });
     }
-    const suggestedExitByTickerDir = {};
-    for (const key of new Set([...Object.keys(suggestedAny), ...Object.keys(suggestedUnprocessed)])) {
-      suggestedExitByTickerDir[key] = suggestedUnprocessed[key] || suggestedAny[key];
+    // Sort each group ascending by time so first-after-createdAt is index 0.
+    for (const arr of Object.values(closingExecsByTickerDir)) {
+      arr.sort((a, b) => a.execTime - b.execTime);
+    }
+    // Per-position match: find earliest closing exec after createdAt with
+    // shares within 10% of position's filled shares. Falls through to a
+    // share-only match (any time) if no time-window match is found, which
+    // handles cases where position.createdAt isn't reliable. Returns null
+    // if nothing matches at all.
+    function suggestExitForPosition(p) {
+      const t = (p.ticker || '').toUpperCase();
+      const dir = (p.direction || 'LONG').toUpperCase();
+      const candidates = closingExecsByTickerDir[`${t}_${dir}`] || [];
+      if (!candidates.length) return null;
+      const filled = Object.values(p.fills || {}).reduce((s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0)
+                  || +p.totalFilledShares || 0;
+      const minShr = filled * 0.90;
+      const maxShr = filled * 1.10;
+      const createdAt = p.createdAt ? new Date(p.createdAt).getTime() : 0;
+      // Prefer: shares-match AND time > createdAt (chronologically next close).
+      const timeMatch = candidates.find(c =>
+        c.execTime >= createdAt && c.shares >= minShr && c.shares <= maxShr,
+      );
+      if (timeMatch) return timeMatch;
+      // Fallback: shares-match regardless of time (last resort).
+      const sharesMatch = candidates.find(c => c.shares >= minShr && c.shares <= maxShr);
+      if (sharesMatch) return sharesMatch;
+      // Last fallback: latest exec at all (may be wrong for multi-cycle).
+      return candidates[candidates.length - 1] || null;
     }
 
     const both = [], pnthrOnly = [], ibkrOnly = [];
@@ -5020,8 +5041,7 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
           ibkrShares:  +ib.shares,
         });
       } else {
-        const dir = (p.direction || 'LONG').toUpperCase();
-        const sx  = suggestedExitByTickerDir[`${t}_${dir}`] || null;
+        const sx = suggestExitForPosition(p);
         pnthrOnly.push({
           ticker:        t,
           positionId:    p.id || null,

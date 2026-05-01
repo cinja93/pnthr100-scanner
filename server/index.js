@@ -5020,20 +5020,34 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
 });
 
 // ── Orphan-position cleanup ─────────────────────────────────────────────────
-// Marks a single PNTHR position as CLOSED with null P&L, tagged
-// ORPHAN_CLEANUP. Only acts on TRUE orphans — positions that exist in
-// pnthr_portfolio (non-CLOSED) but have NO matching IBKR shares. Anything
-// IBKR still holds must go through the normal close flow so P&L is captured.
-// P&L fields are deliberately null: we cannot honestly attribute an exit
-// price for records whose actual close happened in TWS without our seeing
-// it. Full audit trail via stopHistory + Render console log.
+// Marks a single PNTHR position as CLOSED. Only acts on TRUE orphans —
+// positions that exist in pnthr_portfolio (non-CLOSED) but have NO matching
+// IBKR shares. Anything IBKR still holds is rejected (use normal close).
+//
+// Two modes, chosen by whether body.exitPrice is provided:
+//   - WITH exitPrice → full P&L close. Mirrors commandCenter.positionsClose:
+//                       avg-cost from fills, profit calc, journal sync, wash
+//                       sale tracking, discipline score. exitReason defaults
+//                       to 'ORPHAN_CLEANUP_WITH_EXIT' so the audit trail
+//                       distinguishes these from normal manual closes.
+//   - WITHOUT exitPrice → null P&L cleanup. For records where we genuinely
+//                          do not know the exit price (ancient orphans).
+//                          Sets outcome P&L fields to null + tags
+//                          'ORPHAN_CLEANUP_NULL_PNL'. No journal sync (no
+//                          P&L to record).
 app.post('/api/admin/close-orphan-position', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const db = await connectToDatabase();
     if (!db) return res.status(503).json({ error: 'DB unavailable' });
-    const userId = req.user.userId;
-    const ticker = (req.body?.ticker || '').toString().trim().toUpperCase();
+    const userId   = req.user.userId;
+    const ticker   = (req.body?.ticker || '').toString().trim().toUpperCase();
+    const rawPrice = req.body?.exitPrice;
+    const exitPrice = (rawPrice === undefined || rawPrice === null || rawPrice === '') ? null : +rawPrice;
+    const exitDate  = (req.body?.exitDate || '').toString().trim() || null; // optional ISO yyyy-mm-dd
     if (!ticker) return res.status(400).json({ error: 'ticker required' });
+    if (exitPrice !== null && (!Number.isFinite(exitPrice) || exitPrice <= 0)) {
+      return res.status(400).json({ error: 'exitPrice must be a positive number' });
+    }
 
     const position = await db.collection('pnthr_portfolio').findOne({
       ownerId: userId,
@@ -5055,40 +5069,164 @@ app.post('/api/admin/close-orphan-position', authenticateJWT, requireAdmin, asyn
       });
     }
 
-    const now = new Date();
-    const stopHistoryEntry = {
-      date:            now.toISOString().slice(0, 10),
-      reason:          'ORPHAN_CLEANUP',
-      source:          'POSITION_AUDIT',
-      previousStatus:  position.status,
-      previousStop:    position.stopPrice ?? null,
-    };
+    const now      = new Date();
+    const closedAt = exitDate ? new Date(`${exitDate}T20:00:00Z`) : now; // default 4 PM ET if date supplied
 
-    const result = await db.collection('pnthr_portfolio').updateOne(
+    // ── Mode A: null P&L cleanup ─────────────────────────────────────────────
+    if (exitPrice === null) {
+      const stopHistoryEntry = {
+        date:            now.toISOString().slice(0, 10),
+        reason:          'ORPHAN_CLEANUP_NULL_PNL',
+        source:          'POSITION_AUDIT',
+        previousStatus:  position.status,
+        previousStop:    position.stopPrice ?? null,
+      };
+      const result = await db.collection('pnthr_portfolio').updateOne(
+        { _id: position._id, ownerId: userId },
+        {
+          $set: {
+            status:                 'CLOSED',
+            closedAt:               now,
+            updatedAt:              now,
+            'outcome.exitPrice':    null,
+            'outcome.profitDollar': null,
+            'outcome.profitPct':    null,
+            'outcome.holdingDays':  null,
+            'outcome.exitReason':   'ORPHAN_CLEANUP_NULL_PNL',
+          },
+          $push: { stopHistory: stopHistoryEntry },
+        }
+      );
+      console.log(`[admin/close-orphan-position] ${ticker} (id=${position.id}) → NULL_PNL cleanup by ${req.user.email || userId}`);
+      return res.json({
+        ok: true, mode: 'null_pnl', ticker,
+        previousStatus: position.status, closedAt: now,
+        modifiedCount: result.modifiedCount,
+      });
+    }
+
+    // ── Mode B: full P&L close — mirrors commandCenter.positionsClose ────────
+    const isLong    = (position.direction || 'LONG') === 'LONG';
+    const fills     = position.fills || {};
+    const filledShr = Object.values(fills).reduce((s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0);
+    const totalCost = Object.values(fills).reduce((s, f) => s + (f.filled ? (+f.shares || 0) * (+f.price || 0) : 0), 0);
+    const avgCost   = filledShr > 0 ? totalCost / filledShr : (+position.entryPrice || 0);
+    if (!Number.isFinite(avgCost) || avgCost <= 0 || filledShr <= 0) {
+      return res.status(422).json({
+        error: `Cannot compute P&L for ${ticker} — avgCost=${avgCost}, filledShares=${filledShr}. Use null-P&L mode (omit exitPrice).`,
+      });
+    }
+    const profitPct    = isLong ? (exitPrice - avgCost) / avgCost * 100 : (avgCost - exitPrice) / avgCost * 100;
+    const profitDollar = isLong ? (exitPrice - avgCost) * filledShr     : (avgCost - exitPrice) * filledShr;
+    const holdingDays  = Math.floor((Date.now() - new Date(position.createdAt).getTime()) / 86400000);
+    const exitReason   = 'ORPHAN_CLEANUP_WITH_EXIT';
+
+    await db.collection('pnthr_portfolio').updateOne(
       { _id: position._id, ownerId: userId },
       {
         $set: {
-          status:                 'CLOSED',
-          closedAt:               now,
-          updatedAt:              now,
-          'outcome.exitPrice':    null,
-          'outcome.profitDollar': null,
-          'outcome.profitPct':    null,
-          'outcome.holdingDays':  null,
-          'outcome.exitReason':   'ORPHAN_CLEANUP',
+          status:    'CLOSED',
+          closedAt,
+          updatedAt: now,
+          outcome: {
+            exitPrice,
+            profitPct:    +profitPct.toFixed(2),
+            profitDollar: +profitDollar.toFixed(2),
+            holdingDays,
+            exitReason,
+          },
         },
-        $push: { stopHistory: stopHistoryEntry },
+        $push: {
+          stopHistory: {
+            date:            now.toISOString().slice(0, 10),
+            reason:          exitReason,
+            source:          'POSITION_AUDIT',
+            previousStatus:  position.status,
+            previousStop:    position.stopPrice ?? null,
+            exitPrice,
+            profitDollar:    +profitDollar.toFixed(2),
+          },
+        },
       }
     );
 
-    console.log(`[admin/close-orphan-position] ${ticker} (id=${position.id}) marked CLOSED — ORPHAN_CLEANUP by ${req.user.email || userId} (prevStatus=${position.status})`);
+    // Journal sync (best-effort — don't fail the close on journal errors).
+    try {
+      const closedPos = await db.collection('pnthr_portfolio').findOne({ _id: position._id, ownerId: userId });
+      await createJournalEntry(db, closedPos, userId);
+
+      const exitRecord = {
+        id:               'E1',
+        shares:           filledShr,
+        price:            +exitPrice,
+        date:             closedAt.toISOString().split('T')[0],
+        time:             closedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        reason:           exitReason,
+        note:             'Reconstructed via Position Audit / orphan cleanup',
+        isOverride:       false,
+        isFinalExit:      true,
+        pnl:              { dollar: +profitDollar.toFixed(2), pct: +profitPct.toFixed(2) },
+        remainingShares:  0,
+        createdAt:        now,
+      };
+
+      await db.collection('pnthr_journal').updateOne(
+        { positionId: position.id.toString(), ownerId: userId },
+        {
+          $push: { exits: exitRecord },
+          $set:  {
+            'performance.status':            'CLOSED',
+            'performance.remainingShares':   0,
+            'performance.avgExitPrice':      +exitPrice,
+            'performance.realizedPnlDollar': +profitDollar.toFixed(2),
+            'performance.realizedPnlPct':    +profitPct.toFixed(2),
+            closedAt,
+            updatedAt: now,
+          },
+        }
+      );
+
+      const journal = await db.collection('pnthr_journal').findOne(
+        { positionId: position.id.toString(), ownerId: userId },
+        { projection: { _id: 1 } }
+      );
+      if (journal) {
+        await calculateDisciplineScore(db, journal._id.toString());
+      }
+
+      if (profitDollar < 0) {
+        const lossDate = new Date(closedAt);
+        lossDate.setUTCHours(0, 0, 0, 0);
+        const expiry = new Date(lossDate);
+        expiry.setUTCDate(expiry.getUTCDate() + 30);
+        await db.collection('pnthr_journal').updateOne(
+          { positionId: position.id.toString(), ownerId: userId },
+          { $set: {
+            'washSale.isLoss':     true,
+            'washSale.lossAmount': +profitDollar.toFixed(2),
+            'washSale.exitDate':   lossDate,
+            'washSale.expiryDate': expiry,
+            'washSale.triggered':  false,
+          } }
+        );
+      }
+      console.log(`[admin/close-orphan-position] ${ticker} (id=${position.id}) → WITH_EXIT close: ${filledShr}sh @ avg ${avgCost.toFixed(4)} → exit ${exitPrice} P&L $${profitDollar.toFixed(2)} (${profitPct.toFixed(2)}%) by ${req.user.email || userId}`);
+    } catch (jerr) {
+      console.warn(`[admin/close-orphan-position] ${ticker} journal sync failed: ${jerr.message}`);
+    }
 
     res.json({
-      ok:             true,
+      ok: true,
+      mode: 'with_exit',
       ticker,
       previousStatus: position.status,
-      closedAt:       now,
-      modifiedCount:  result.modifiedCount,
+      closedAt,
+      shares: filledShr,
+      avgCost: +avgCost.toFixed(4),
+      exitPrice,
+      profitDollar: +profitDollar.toFixed(2),
+      profitPct:    +profitPct.toFixed(2),
+      holdingDays,
     });
   } catch (err) {
     console.error('[admin/close-orphan-position]', err.message);

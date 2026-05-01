@@ -4976,27 +4976,36 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
         .toArray();
       processedIds = new Set(processedDocs.map(d => d.execId));
     }
-    const suggestedExitByTickerDir = {};
+    // Two suggestions per ticker+dir: the latest UNPROCESSED exec (preferred),
+    // and the latest exec overall (fallback to surface stale-dedup cases where
+    // the execId was marked processed but the position never closed).
+    const suggestedUnprocessed = {};
+    const suggestedAny         = {};
     for (const exec of latestExecutions) {
       const t = (exec.symbol || '').toUpperCase();
       const closingDir = exec.side === 'SLD' ? 'LONG' : exec.side === 'BOT' ? 'SHORT' : null;
       if (!t || !closingDir) continue;
       const key = `${t}_${closingDir}`;
-      const prev = suggestedExitByTickerDir[key];
-      // Prefer the LATEST exec by time so multi-cycle day trades land on the
-      // most recent close that left position flat.
       const execTime = exec.time ? new Date(exec.time).getTime() : 0;
-      if (!prev || execTime > prev.execTime) {
-        suggestedExitByTickerDir[key] = {
-          execId:   exec.execId,
-          price:    +exec.price,
-          shares:   +exec.shares,
-          side:     exec.side,
-          time:     exec.time || null,
-          execTime,
-          processed: processedIds.has(exec.execId),
-        };
+      const candidate = {
+        execId:    exec.execId,
+        price:     +exec.price,
+        shares:    +exec.shares,
+        side:      exec.side,
+        time:      exec.time || null,
+        execTime,
+        processed: processedIds.has(exec.execId),
+      };
+      const prevAny = suggestedAny[key];
+      if (!prevAny || execTime > prevAny.execTime) suggestedAny[key] = candidate;
+      if (!candidate.processed) {
+        const prevU = suggestedUnprocessed[key];
+        if (!prevU || execTime > prevU.execTime) suggestedUnprocessed[key] = candidate;
       }
+    }
+    const suggestedExitByTickerDir = {};
+    for (const key of new Set([...Object.keys(suggestedAny), ...Object.keys(suggestedUnprocessed)])) {
+      suggestedExitByTickerDir[key] = suggestedUnprocessed[key] || suggestedAny[key];
     }
 
     const both = [], pnthrOnly = [], ibkrOnly = [];
@@ -5120,8 +5129,16 @@ app.post('/api/ibkr/sync-trade-close', authenticateJWT, requireAdmin, async (req
     }
 
     const dup = await db.collection('pnthr_ibkr_executions').findOne({ ownerId: userId, execId });
-    if (dup) {
-      return res.status(409).json({ error: `execId ${execId} already processed — refusing to double-record` });
+    const force = req.body?.force === true;
+    if (dup && !force) {
+      return res.status(409).json({
+        error: `execId ${execId} already in pnthr_ibkr_executions (type=${dup.type || 'unknown'}, processedAt=${dup.processedAt || dup.createdAt}). If the position is still open this is a stale dedup record blocking recovery — retry with { force: true } to clear it and re-run the close.`,
+        canForce: true,
+      });
+    }
+    if (dup && force) {
+      console.warn(`[sync-trade-close] FORCE clearing stale dedup for ${ticker} execId=${execId} (was type=${dup.type || 'unknown'}) by ${req.user.email || userId}`);
+      await db.collection('pnthr_ibkr_executions').deleteOne({ _id: dup._id });
     }
 
     const stop = position.stopPrice;

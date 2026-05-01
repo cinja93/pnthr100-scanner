@@ -2699,15 +2699,21 @@ export default function AssistantPage({ onNavigate }) {
   // PRIMARY PATH — one-click sync using a real TWS execution. No typing.
   // Routes through the same canonical recordExit() that auto-close uses
   // so portfolio + journal + discipline + wash-sale stay in sync.
-  const syncOrphanFromTws = useCallback(async (ticker, positionId, execId) => {
+  // When isProcessed=true, asks the server to force-clear the stale dedup
+  // record before re-running the close (recovers from the bug state where
+  // an execId was marked processed but the position never actually closed).
+  const syncOrphanFromTws = useCallback(async (ticker, positionId, execId, isProcessed) => {
     if (closingOrphan) return;
-    if (!window.confirm(`Sync ${ticker} from TWS execution?\n\nUses the actual TWS fill price and routes through the canonical close path (same as auto-close). Journal will be updated automatically.`)) return;
+    const msg = isProcessed
+      ? `FORCE-sync ${ticker} from TWS execution?\n\nThis execId is already marked processed in pnthr_ibkr_executions but the position is still open — likely a stale dedup record. Confirming will:\n  1. Delete the stale dedup record\n  2. Run the canonical close using the actual TWS fill price\n  3. Re-mark the execId processed`
+      : `Sync ${ticker} from TWS execution?\n\nUses the actual TWS fill price and routes through the canonical close path (same as auto-close). Journal will be updated automatically.`;
+    if (!window.confirm(msg)) return;
     setClosingOrphan(ticker); setDiError(null);
     try {
       const r = await fetch(`${API_BASE}/api/ibkr/sync-trade-close`, {
         method: 'POST',
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ positionId, execId }),
+        body: JSON.stringify({ positionId, execId, force: !!isProcessed }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
@@ -4359,7 +4365,8 @@ function OrphanCloseTable({ rows, onCloseOrphan, onSyncOrphanFromTws, closingOrp
           const isClosing   = closingOrphan === p.ticker;
           const otherActive = closingOrphan && closingOrphan !== p.ticker;
           const sx          = p.suggestedExit; // { execId, price, side, time, processed } or null
-          const hasTwsExit  = !!sx && !sx.processed && Number.isFinite(+sx.price);
+          const hasTwsExit  = !!sx && Number.isFinite(+sx.price);
+          const isStaleDedup= !!sx && sx.processed; // exec exists but was prev-marked done
           const showManual  = !!manualOpen[p.ticker];
           const draft       = drafts[p.ticker] || {};
           const exitPrice   = draft.exitPrice ?? '';
@@ -4377,12 +4384,14 @@ function OrphanCloseTable({ rows, onCloseOrphan, onSyncOrphanFromTws, closingOrp
                 {hasTwsExit && onSyncOrphanFromTws ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                     <button
-                      onClick={() => onSyncOrphanFromTws(p.ticker, p.positionId, sx.execId)}
+                      onClick={() => onSyncOrphanFromTws(p.ticker, p.positionId, sx.execId, isStaleDedup)}
                       disabled={!!closingOrphan}
                       style={{
-                        background: isClosing ? '#15803d' : (otherActive ? '#1a2e1a' : '#16a34a'),
+                        background: isClosing
+                          ? (isStaleDedup ? '#a16207' : '#15803d')
+                          : (otherActive ? '#1a2e1a' : (isStaleDedup ? '#ca8a04' : '#16a34a')),
                         color: '#fff',
-                        border: '1px solid rgba(134,239,172,0.4)',
+                        border: `1px solid ${isStaleDedup ? 'rgba(254,240,138,0.5)' : 'rgba(134,239,172,0.4)'}`,
                         borderRadius: 3,
                         padding: '4px 10px',
                         fontSize: 11,
@@ -4391,10 +4400,19 @@ function OrphanCloseTable({ rows, onCloseOrphan, onSyncOrphanFromTws, closingOrp
                         fontFamily: 'inherit',
                         whiteSpace: 'nowrap',
                       }}
-                      title={`Sync via canonical recordExit() using TWS exec ${sx.execId}`}
+                      title={isStaleDedup
+                        ? `Stale dedup record detected — exec ${sx.execId} marked processed but position still open. Force-sync clears the dedup and runs canonical close.`
+                        : `Sync via canonical recordExit() using TWS exec ${sx.execId}`}
                     >
-                      {isClosing ? 'Syncing…' : `Sync from TWS @ $${(+sx.price).toFixed(4).replace(/\.?0+$/, '')}`}
+                      {isClosing
+                        ? (isStaleDedup ? 'Force-syncing…' : 'Syncing…')
+                        : `${isStaleDedup ? '⚠ Force ' : ''}Sync from TWS @ $${(+sx.price).toFixed(4).replace(/\.?0+$/, '')}`}
                     </button>
+                    {isStaleDedup && (
+                      <span style={{ fontSize: 9, color: '#fde68a' }}>
+                        stale dedup record (clears on force-sync)
+                      </span>
+                    )}
                     <button
                       onClick={() => setManualOpen(o => ({ ...o, [p.ticker]: !o[p.ticker] }))}
                       disabled={!!closingOrphan}

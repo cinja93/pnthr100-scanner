@@ -1408,8 +1408,16 @@ function DismissBox({ onDismiss }) {
   );
 }
 
-function RecentFillsSection({ fills, onNavigate }) {
-  const [expanded,   setExpanded]   = useState(true);
+function RecentFillsSection({ fills, onNavigate, isOpen: extOpen, onToggle: extToggle }) {
+  // Allow the parent to control collapse state (used by AssistantPage's
+  // central localStorage-persisted collapse map). Falls back to internal
+  // state when no controller is supplied.
+  const [internalExpanded, setInternalExpanded] = useState(true);
+  const expanded = (typeof extOpen === 'boolean') ? extOpen : internalExpanded;
+  const setExpanded = (v) => {
+    if (extToggle) extToggle();
+    else setInternalExpanded(typeof v === 'function' ? v(internalExpanded) : v);
+  };
   // Track which positionIds have been dismissed locally so the row vanishes
   // immediately without waiting for the next data fetch.
   const [dismissed, setDismissed] = useState(new Set());
@@ -2621,6 +2629,28 @@ export default function AssistantPage({ onNavigate }) {
 
   const pendingAccessCount = accessRequests.filter(r => r.status === 'pending').length;
 
+  // ── Collapsible sections — persists per-section open/closed in localStorage.
+  // Default: open. Click any wrapped section header (or its arrow) to toggle.
+  const COLLAPSE_KEY = 'pnthrAssistant.collapse';
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') || {}; }
+    catch { return {}; }
+  });
+  const isOpen = useCallback((id) => !collapsed[id], [collapsed]);
+  const toggleSection = useCallback((id) => {
+    setCollapsed(prev => {
+      const next = { ...prev, [id]: !prev[id] };
+      try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+  // Reusable arrow glyph for section headers — caller controls placement/color.
+  const collapseArrow = (id, color = '#888') => (
+    <span style={{ fontSize: 10, color, marginRight: 6, userSelect: 'none' }}>
+      {isOpen(id) ? '▼' : '▶'}
+    </span>
+  );
+
   // ── Data Integrity admin (sweep + punch list) ──────────────────────────────
   const [diOpen,        setDiOpen]        = useState(false);
   const [diBusy,        setDiBusy]        = useState(null); // 'punch' | 'dry' | 'apply' | null
@@ -3764,10 +3794,15 @@ export default function AssistantPage({ onNavigate }) {
       )}
 
       {/* Phase 4 outbox — recent commands inspector. Admin only.
-          Auto-expands when there's a FAILED/STUCK to triage. */}
+          Collapse state persisted via central collapse map; auto-opens
+          if it's never been toggled and there's a FAILED/STUCK to triage. */}
       {isAdmin && outbox && Array.isArray(outbox.commands) && outbox.commands.length > 0 && (
         <details
-          open={((outbox.counts?.FAILED || 0) + (outbox.counts?.STUCK || 0)) > 0}
+          open={isOpen('recent-bridge-commands')}
+          onToggle={(e) => {
+            const nowOpen = e.currentTarget.open;
+            if (nowOpen !== isOpen('recent-bridge-commands')) toggleSection('recent-bridge-commands');
+          }}
           style={{
             border: '1px solid rgba(252, 240, 0, 0.3)',
             borderRadius: 8,
@@ -3875,6 +3910,32 @@ export default function AssistantPage({ onNavigate }) {
            Shows every ticker from IBKR positions + IBKR stops + Command Center
            with colored alignment indicators. Click a non-green cell to fix.
          ══════════════════════════════════════════════════════════════════════ */}
+      <div style={{ marginBottom: 12 }}>
+        <div
+          onClick={() => toggleSection('pnthr-assistant-live')}
+          style={{
+            padding: '7px 14px 5px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            cursor: 'pointer',
+            border: '1px solid rgba(252, 240, 0, 0.3)',
+            borderBottom: isOpen('pnthr-assistant-live') ? 'none' : '1px solid rgba(252, 240, 0, 0.3)',
+            borderRadius: isOpen('pnthr-assistant-live') ? '8px 8px 0 0' : 8,
+            background: 'rgba(252, 240, 0, 0.01)',
+          }}
+        >
+          {collapseArrow('pnthr-assistant-live', '#FCF000')}
+          <span style={{
+            color: '#FCF000',
+            fontWeight: 900,
+            fontSize: 10,
+            letterSpacing: '0.14em',
+            fontFamily: "'Inter', 'Segoe UI', sans-serif",
+          }}>PNTHR ASSISTANT LIVE</span>
+          <span style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, rgba(252,240,0,0.15), transparent 80%)' }} />
+        </div>
+        {isOpen('pnthr-assistant-live') && (
       <AssistantLiveTable
         onNavigate={onNavigate}
         netLiquidity={nav}
@@ -3884,6 +3945,8 @@ export default function AssistantPage({ onNavigate }) {
         }}
         onAddPosition={(prefill) => { setAddPosInitial(prefill || null); setAddPosOpen(true); }}
       />
+        )}
+      </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
            SECTION 1 — LIVE OPPORTUNITIES
@@ -3895,13 +3958,18 @@ export default function AssistantPage({ onNavigate }) {
         marginBottom: 16,
         background: 'rgba(252, 240, 0, 0.01)',
       }}>
-        <div style={{
-          padding: '7px 14px 5px',
-          borderBottom: '1px solid rgba(252, 240, 0, 0.12)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}>
+        <div
+          onClick={() => toggleSection('live-opportunities')}
+          style={{
+            padding: '7px 14px 5px',
+            borderBottom: isOpen('live-opportunities') ? '1px solid rgba(252, 240, 0, 0.12)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            cursor: 'pointer',
+          }}
+        >
+          {collapseArrow('live-opportunities', '#FCF000')}
           <span style={{
             color: '#FCF000',
             fontWeight: 900,
@@ -3916,6 +3984,7 @@ export default function AssistantPage({ onNavigate }) {
           }} />
         </div>
 
+        {isOpen('live-opportunities') && (
         <div style={{ padding: '8px 10px 4px' }}>
           {/* Weekly Orders */}
           {ordersData && <WeeklyOrdersSection data={ordersData} onNavigate={onNavigate} />}
@@ -3995,13 +4064,17 @@ export default function AssistantPage({ onNavigate }) {
                   above. For non-admins (or impersonating sessions) we
                   still want the header to show. */}
               {!showFridayPreview && (
-                <div style={s.sectionHeader}>
+                <div
+                  style={{ ...s.sectionHeader, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  onClick={() => toggleSection('critical')}
+                >
+                  {collapseArrow('critical', PRIORITY_COLOR[1])}
                   <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[1] }}>
                     ● {PRIORITY_LABEL[1]} ({p1Count} open)
                   </span>
                 </div>
               )}
-              {p1Tasks.map(task => (
+              {isOpen('critical') && p1Tasks.map(task => (
                 <TaskCard
                   key={task.id}
                   task={task}
@@ -4096,13 +4169,17 @@ export default function AssistantPage({ onNavigate }) {
                   outside Friday 2pm) we still want the standard ACTION
                   header to show. */}
               {!showFridayReminders && (
-                <div style={s.sectionHeader}>
+                <div
+                  style={{ ...s.sectionHeader, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  onClick={() => toggleSection('action')}
+                >
+                  {collapseArrow('action', PRIORITY_COLOR[2])}
                   <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[2] }}>
                     ● {PRIORITY_LABEL[2]} ({p2Count} open)
                   </span>
                 </div>
               )}
-              {p2Tasks.map(task => (
+              {isOpen('action') && p2Tasks.map(task => (
                 <TaskCard
                   key={task.id}
                   task={task}
@@ -4139,6 +4216,7 @@ export default function AssistantPage({ onNavigate }) {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
@@ -4151,13 +4229,18 @@ export default function AssistantPage({ onNavigate }) {
         marginBottom: 16,
         background: 'rgba(252, 240, 0, 0.01)',
       }}>
-        <div style={{
-          padding: '7px 14px 5px',
-          borderBottom: '1px solid rgba(252, 240, 0, 0.12)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}>
+        <div
+          onClick={() => toggleSection('live-watch')}
+          style={{
+            padding: '7px 14px 5px',
+            borderBottom: isOpen('live-watch') ? '1px solid rgba(252, 240, 0, 0.12)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            cursor: 'pointer',
+          }}
+        >
+          {collapseArrow('live-watch', '#FCF000')}
           <span style={{
             color: '#FCF000',
             fontWeight: 900,
@@ -4172,6 +4255,7 @@ export default function AssistantPage({ onNavigate }) {
           }} />
         </div>
 
+        {isOpen('live-watch') && (
         <div style={{ padding: '8px 10px 4px' }}>
           {/* IBKR Discrepancy Check removed — replaced by the PNTHR Assistant
               LIVE table at the top of this page. */}
@@ -4223,22 +4307,29 @@ export default function AssistantPage({ onNavigate }) {
           {/* Routines */}
           {filteredRoutines.length > 0 && (
             <>
-              <div style={s.sectionHeader}>
+              <div
+                style={{ ...s.sectionHeader, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                onClick={() => toggleSection('routine')}
+              >
+                {collapseArrow('routine', PRIORITY_COLOR[4])}
                 <span style={{ ...s.sectionLabel, color: PRIORITY_COLOR[4] }}>
                   ● {PRIORITY_LABEL[4]}
                 </span>
               </div>
-              <RoutineSection
-                routines={filteredRoutines}
-                dayLabel={routineDayLbl}
-                completedIds={routineIds}
-                onToggle={handleToggleRoutine}
-                onChipClick={handleChipClick}
-                busyTicker={chartBusy}
-              />
+              {isOpen('routine') && (
+                <RoutineSection
+                  routines={filteredRoutines}
+                  dayLabel={routineDayLbl}
+                  completedIds={routineIds}
+                  onToggle={handleToggleRoutine}
+                  onChipClick={handleChipClick}
+                  busyTicker={chartBusy}
+                />
+              )}
             </>
           )}
         </div>
+        )}
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
@@ -4251,13 +4342,18 @@ export default function AssistantPage({ onNavigate }) {
         marginBottom: 16,
         background: 'rgba(252, 240, 0, 0.01)',
       }}>
-        <div style={{
-          padding: '7px 14px 5px',
-          borderBottom: '1px solid rgba(252, 240, 0, 0.12)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}>
+        <div
+          onClick={() => toggleSection('todays-accomplishments')}
+          style={{
+            padding: '7px 14px 5px',
+            borderBottom: isOpen('todays-accomplishments') ? '1px solid rgba(252, 240, 0, 0.12)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            cursor: 'pointer',
+          }}
+        >
+          {collapseArrow('todays-accomplishments', '#FCF000')}
           <span style={{
             color: '#FCF000',
             fontWeight: 900,
@@ -4272,6 +4368,7 @@ export default function AssistantPage({ onNavigate }) {
           }} />
         </div>
 
+        {isOpen('todays-accomplishments') && (
         <div style={{ padding: '8px 10px 4px' }}>
           {/* Today's IBKR Trades — admin-only (broker fill reconciliation) */}
           {isAdmin && (
@@ -4284,11 +4381,17 @@ export default function AssistantPage({ onNavigate }) {
           )}
 
           {/* Recent Fills */}
-          <RecentFillsSection fills={recentFills} onNavigate={onNavigate} />
+          <RecentFillsSection
+            fills={recentFills}
+            onNavigate={onNavigate}
+            isOpen={isOpen('recent-fills')}
+            onToggle={() => toggleSection('recent-fills')}
+          />
 
           {/* Completed Today */}
           <CompletedSection completed={completed} />
         </div>
+        )}
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════

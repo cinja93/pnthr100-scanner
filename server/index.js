@@ -4976,6 +4976,20 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
         .toArray();
       processedIds = new Set(processedDocs.map(d => d.execId));
     }
+    // IBKR sends exec time in "YYYYMMDD  HH:MM:SS" format (double space) —
+    // JS Date.parse returns NaN on that. Without proper parsing, execTime
+    // comparisons all fail and the chronological-ordering algorithm falls
+    // back to insertion order, which mismatches multi-cycle day trades.
+    function parseIbkrExecTime(s) {
+      if (!s) return 0;
+      const std = Date.parse(s);
+      if (!Number.isNaN(std)) return std;
+      // Match YYYYMMDD followed by space(s) or dash, then HH:MM:SS, optional TZ.
+      const m = /^(\d{4})(\d{2})(\d{2})[\s-]+(\d{2}):(\d{2}):(\d{2})/.exec(s);
+      if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+      return 0;
+    }
+
     // Group all closing-side execs by ticker+dir for per-position matching.
     // For multi-cycle day trades, "latest exec" is wrong — the right match is
     // the FIRST SLD/BOT exec chronologically AFTER the position's createdAt
@@ -4994,7 +5008,7 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
         shares:    +exec.shares,
         side:      exec.side,
         time:      exec.time || null,
-        execTime:  exec.time ? new Date(exec.time).getTime() : 0,
+        execTime:  parseIbkrExecTime(exec.time),
         processed: processedIds.has(exec.execId),
       });
     }
@@ -5023,7 +5037,7 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
         shares:   +exec.shares,
         side:     exec.side,
         time:     exec.time || null,
-        execTime: exec.time ? new Date(exec.time).getTime() : 0,
+        execTime: parseIbkrExecTime(exec.time),
       });
     }
     for (const arr of Object.values(openingExecsByTickerDir)) {

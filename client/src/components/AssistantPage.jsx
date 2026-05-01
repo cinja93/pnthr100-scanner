@@ -23,6 +23,7 @@ import {
   createMemberAdmin,
   createInvestor,
   fetchNav,
+  fetchPulse,
   updateUserProfile,
 } from '../services/api';
 import { useAuth } from '../AuthContext';
@@ -2562,11 +2563,10 @@ export default function AssistantPage({ onNavigate }) {
   const [chartBusy,   setChartBusy]   = useState(null);  // ticker currently loading
   const [healthPositions, setHealthPositions] = useState([]);
   const [healthLoading,   setHealthLoading]   = useState(true);
-  // Canonical pnthr_portfolio docs (entryPrice, stopPrice, fills, direction,
-  // isEtf) — required for the bottom RiskSummaryBar's calcHeat() math.
-  // healthPositions above is a stripped RSI-only projection and is not
-  // suitable for risk calculation.
-  const [riskPositions, setRiskPositions] = useState([]);
+  // Server-precomputed positions block from /api/pulse — used by the bottom
+  // RiskSummaryBar so its numbers always match the PNTHR Pulse panel exactly.
+  // Shape: { total, long, short, recycled, heat: {...}, nav }.
+  const [pulsePositions, setPulsePositions] = useState(null);
   const [recentFills,     setRecentFills]     = useState([]);
   // ibkrConnected is still used by TradesTodaySection to gate rendering —
   // its value now comes from the /api/ibkr/discrepancies fetch below (which
@@ -2812,11 +2812,10 @@ export default function AssistantPage({ onNavigate }) {
         .catch(() => setHealthPositions([]))
         .finally(() => setHealthLoading(false));
 
-      // Canonical positions fetch — used by the bottom RiskSummaryBar.
-      fetch(`${API_BASE}/api/positions`, { headers: authHeaders() })
-        .then(r => r.ok ? r.json() : { positions: [] })
-        .then(d => setRiskPositions(Array.isArray(d?.positions) ? d.positions : (Array.isArray(d) ? d : [])))
-        .catch(() => setRiskPositions([]));
+      // Server-precomputed positions block (matches PNTHR Pulse exactly).
+      fetchPulse()
+        .then(d => setPulsePositions(d?.positions || null))
+        .catch(() => setPulsePositions(null));
 
       // IBKR connected-signal — only the ibkrConnected bool is used now
       // (gates TradesTodaySection). The LIVE table handles the actual
@@ -4197,7 +4196,7 @@ export default function AssistantPage({ onNavigate }) {
            RISK SUMMARY BAR — duplicated from PNTHR Command for at-a-glance
            portfolio heat without leaving the Assistant page.
          ══════════════════════════════════════════════════════════════════════ */}
-      <RiskSummaryBar positions={riskPositions} nav={nav || 0} />
+      <RiskSummaryBar precomputed={pulsePositions} nav={nav || 0} />
 
       {/* Chart Modal — opened from chip clicks */}
       {chartStocks && (

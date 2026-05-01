@@ -1,6 +1,17 @@
 // client/src/components/RiskSummaryBar.jsx
 // Shared risk summary bar — single source of truth for the heat-math display.
 // Used at the bottom of PNTHR Assistant and inside PNTHR Command.
+//
+// Two input modes:
+//   • precomputed={pulsePositionsBlock}  — server-computed (used by Assistant)
+//                                          shape: { total, long, short, recycled,
+//                                                   heat: { stockRisk, etfRisk,
+//                                                   totalRisk, stockRiskPct,
+//                                                   etfRiskPct, totalRiskPct }, nav }
+//   • positions={array} + nav={number}   — client-computes via calcHeat
+//                                          (used by Command Center, which has
+//                                          local-state positions)
+// If both are passed, precomputed wins.
 
 import { calcHeat } from '../utils/sizingUtils.js';
 
@@ -18,10 +29,38 @@ function MC({ label, value, sub, sub2, accent }) {
   );
 }
 
-export default function RiskSummaryBar({ positions = [], nav = 0, isDemo = false, portfolioEquity = null }) {
-  const heat = calcHeat(positions || [], +nav || 0);
+export default function RiskSummaryBar({
+  positions = [],
+  nav = 0,
+  isDemo = false,
+  portfolioEquity = null,
+  precomputed = null,
+}) {
+  // Resolve heat + counts + nav from whichever input was provided.
+  let heat, totalPos, recycledCnt, liveCnt, navNum;
+  if (precomputed && precomputed.heat) {
+    heat = {
+      stockRisk:    +(+precomputed.heat.stockRisk    || 0).toFixed(0),
+      etfRisk:      +(+precomputed.heat.etfRisk      || 0).toFixed(0),
+      totalRisk:    +(+precomputed.heat.totalRisk    || 0).toFixed(0),
+      stockRiskPct: +(+precomputed.heat.stockRiskPct || 0),
+      etfRiskPct:   +(+precomputed.heat.etfRiskPct   || 0),
+      totalRiskPct: +(+precomputed.heat.totalRiskPct || 0),
+    };
+    totalPos    = +precomputed.total    || 0;
+    recycledCnt = +precomputed.recycled || 0;
+    liveCnt     = totalPos - recycledCnt;
+    navNum      = +precomputed.nav || +nav || 0;
+  } else {
+    const h = calcHeat(positions || [], +nav || 0);
+    heat        = h;
+    totalPos    = h.totalPos;
+    recycledCnt = h.recycledCnt;
+    liveCnt     = h.liveCnt;
+    navNum      = +nav || 0;
+  }
+
   const cols = isDemo && portfolioEquity != null ? 7 : 6;
-  const navNum = +nav || 0;
   const navDisplay = isDemo
     ? `$${navNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : `$${Math.round(navNum / 1000).toLocaleString()}K`;
@@ -50,8 +89,8 @@ export default function RiskSummaryBar({ positions = [], nav = 0, isDemo = false
         sub={`${heat.totalRiskPct}% of NAV`}
         sub2="Cap: 15%"
         accent={heat.totalRiskPct > 15 ? '#dc3545' : heat.totalRiskPct > 12 ? '#ffc107' : '#28a745'} />
-      <MC label="Recycled" value={heat.recycledCnt} sub="$0 risk" accent="#28a745" />
-      <MC label="Total positions" value={heat.totalPos} sub={`${heat.liveCnt} live · ${heat.recycledCnt} recycled`} />
+      <MC label="Recycled" value={recycledCnt} sub="$0 risk" accent="#28a745" />
+      <MC label="Total positions" value={totalPos} sub={`${liveCnt} live · ${recycledCnt} recycled`} />
     </div>
   );
 }

@@ -16,6 +16,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 import AssistantRowExpand from './AssistantRowExpand';
+import { sizePosition, isEtfTicker } from '../utils/sizingUtils.js';
 
 const REFRESH_MS = 60_000;
 
@@ -957,6 +958,25 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
           const spanAll = sub.length;
           const ibStops = row.ibkr?.stops || [];
 
+          // Pyramid sizing badge — "filled / target at 1% NAV risk".
+          // Shown top-right under the live-price badge. Hidden when no PNTHR
+          // position record exists for this ticker, or when sizing math
+          // returns 0 (recycled / invalid stop).
+          const pos = findPositionByTicker(row.ticker);
+          let targetShares = null;
+          if (pos && +pos.entryPrice > 0 && +pos.stopPrice > 0 && +netLiquidity > 0) {
+            const sizing = sizePosition({
+              netLiquidity,
+              entryPrice: +pos.entryPrice,
+              stopPrice:  +pos.stopPrice,
+              maxGapPct:  +pos.maxGapPct || 0,
+              direction:  (pos.direction || 'LONG').toUpperCase(),
+              isETF:      isEtfTicker(row.ticker, pos.isEtf),
+            });
+            if (sizing && sizing.totalShares > 0) targetShares = sizing.totalShares;
+          }
+          const currentShares = Math.abs(+row.ibkr?.shares || 0);
+
           return (
             <div key={row.ticker} style={tickerBoxStyle}>
               {/* Live-price badge — top-right corner. Refreshes with the
@@ -991,6 +1011,30 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                     boxShadow: '0 0 4px rgba(40,167,69,0.9)',
                   }} />
                   {fmtMoney(row.lastPrice)}
+                </div>
+              )}
+              {/* Pyramid sizing badge — filled / target at 1% NAV risk. */}
+              {targetShares != null && (
+                <div
+                  title="Filled shares / Target shares at 1% NAV risk (all 5 lots filled). Numerator = IBKR-canonical current holdings; denominator = max position size at full pyramid."
+                  style={{
+                    position:    'absolute',
+                    top:         32,
+                    right:       6,
+                    zIndex:      2,
+                    padding:     '2px 8px',
+                    background:  'rgba(13,110,253,0.18)',
+                    border:      '1px solid rgba(13,110,253,0.55)',
+                    borderRadius: 4,
+                    fontSize:    11,
+                    fontWeight:  800,
+                    color:       '#FFFFFF',
+                    fontVariantNumeric: 'tabular-nums',
+                    pointerEvents: 'none',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {currentShares} / {targetShares}
                 </div>
               )}
               <table style={{ ...s.table, tableLayout: 'fixed' }}>

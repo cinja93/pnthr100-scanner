@@ -28,6 +28,7 @@ import {
 import { useAuth } from '../AuthContext';
 import ChartModal from './ChartModal';
 import AssistantLiveTable from './AssistantLiveTable';
+import RiskSummaryBar from './RiskSummaryBar';
 import RiskAdvisorModal from './RiskAdvisorModal';
 import CalculatorModal from './CalculatorModal';
 import AddPositionModal from './AddPositionModal';
@@ -4180,6 +4181,12 @@ export default function AssistantPage({ onNavigate }) {
           <CompletedSection completed={completed} />
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+           RISK SUMMARY BAR — duplicated from PNTHR Command for at-a-glance
+           portfolio heat without leaving the Assistant page.
+         ══════════════════════════════════════════════════════════════════════ */}
+      <RiskSummaryBar positions={healthPositions} nav={nav || 0} />
 
       {/* Chart Modal — opened from chip clicks */}
       {chartStocks && (

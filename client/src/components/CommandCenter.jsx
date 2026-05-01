@@ -12,6 +12,7 @@ import { useDemo } from '../contexts/DemoContext';
 import { STRIKE_PCT, LOT_NAMES, LOT_OFFSETS, LOT_TIME_GATES, buildLots, enrichLots, sizePosition, calcHeat, isEtfTicker } from '../utils/sizingUtils.js';
 import ChartModal from './ChartModal';
 import AddCommandPositionModal from './AddCommandPositionModal';
+import RiskSummaryBar from './RiskSummaryBar';
 import pantherHead from '../assets/panther head.png';
 
 // (buildLots, enrichLots, sizePosition, calcHeat imported from ../utils/sizingUtils.js)
@@ -2844,33 +2845,14 @@ export default function CommandCenter({ onNavigate, refreshSignal }) {
               );
             })()}
 
-            {/* Metric cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isDemo ? 7 : 6}, 1fr)`, gap: 10, marginBottom: 16 }}>
-              {isDemo && <MC label="Portfolio equity"
-                value={`$${portfolioEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                sub={`${portfolioEquity >= nav ? '+' : ''}$${(portfolioEquity - nav).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} unrealized`}
-                accent={portfolioEquity >= nav ? '#28a745' : '#dc3545'} />}
-              <MC label={isDemo ? 'Net liquidity' : 'Net liquidity'} value={isDemo
-                ? `$${nav.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                : `$${Math.round(nav / 1000).toLocaleString()}K`} />
-              <MC label="Stock risk"
-                value={`$${heat.stockRisk.toLocaleString()}`}
-                sub={`${heat.stockRiskPct}% of NAV`}
-                sub2="Cap: 10%"
-                accent={heat.stockRiskPct > 10 ? '#dc3545' : heat.stockRiskPct > 8 ? '#ffc107' : '#28a745'} />
-              <MC label="ETF risk"
-                value={`$${heat.etfRisk.toLocaleString()}`}
-                sub={`${heat.etfRiskPct}% of NAV`}
-                sub2="Cap: 5%"
-                accent={heat.etfRiskPct > 5 ? '#dc3545' : heat.etfRiskPct > 4 ? '#ffc107' : '#28a745'} />
-              <MC label="Total risk"
-                value={`$${heat.totalRisk.toLocaleString()}`}
-                sub={`${heat.totalRiskPct}% of NAV`}
-                sub2="Cap: 15%"
-                accent={heat.totalRiskPct > 15 ? '#dc3545' : heat.totalRiskPct > 12 ? '#ffc107' : '#28a745'} />
-              <MC label="Recycled" value={heat.recycledCnt} sub="$0 risk" accent="#28a745" />
-              <MC label="Total positions" value={heat.totalPos} sub={`${heat.liveCnt} live · ${heat.recycledCnt} recycled`} />
-            </div>
+            {/* Metric cards — extracted to RiskSummaryBar so PNTHR Assistant
+                shares the same heat-math display (single source of truth). */}
+            <RiskSummaryBar
+              positions={positions}
+              nav={nav}
+              isDemo={isDemo}
+              portfolioEquity={isDemo ? portfolioEquity : null}
+            />
 
             {/* Risk Advisor — runs every time positions load */}
             <div ref={riskAdvisorRef}>

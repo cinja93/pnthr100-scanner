@@ -50,7 +50,11 @@ export default function RiskSummaryBar({
     totalPos    = +precomputed.total    || 0;
     recycledCnt = +precomputed.recycled || 0;
     liveCnt     = totalPos - recycledCnt;
-    navNum      = +precomputed.nav || +nav || 0;
+    // Prefer the caller-supplied nav (fresh from fetchNav() on the page).
+    // precomputed.nav is the user_profiles snapshot at the moment /api/pulse
+    // was computed; the prop is what the page tracks live and what other
+    // panels on the same page display, so use it for display consistency.
+    navNum      = +nav || +precomputed.nav || 0;
   } else {
     const h = calcHeat(positions || [], +nav || 0);
     heat        = h;

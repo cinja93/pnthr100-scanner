@@ -2667,6 +2667,21 @@ export default function AssistantPage({ onNavigate }) {
     setDiBusy(null);
   }, [diBusy]);
 
+  // Position Audit — symmetric diff of PNTHR portfolio vs IBKR positions.
+  // Read-only diagnostic; surfaces "PNTHR-only" (TWS doesn't have these)
+  // and "IBKR-only" (PNTHR doesn't track these) drift.
+  const runPositionAudit = useCallback(async () => {
+    if (diBusy) return;
+    setDiBusy('audit'); setDiError(null);
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/position-audit`, { headers: authHeaders() });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      setDiResult({ kind: 'position-audit', data });
+    } catch (e) { setDiError(e.message); }
+    setDiBusy(null);
+  }, [diBusy]);
+
   // Phase 4g — daily lot-trigger reconciliation. Same dry-run/apply pattern
   // as runStopSync; the report distinguishes placements (new triggers),
   // modifications (push tighter), cancellations (cleanup-stale per the
@@ -3439,6 +3454,16 @@ export default function AssistantPage({ onNavigate }) {
                     cursor: diBusy ? 'wait' : 'pointer', opacity: diBusy && diBusy !== 'punch' ? 0.4 : 1,
                   }}>
                   {diBusy === 'punch' ? 'Running…' : 'TWS Punch List'}
+                </button>
+                <button
+                  onClick={runPositionAudit}
+                  disabled={!!diBusy}
+                  style={{
+                    background: '#1a1a1a', color: '#60a5fa', border: '1px solid #60a5fa',
+                    padding: '7px 14px', borderRadius: 4, fontWeight: 700, fontSize: 12,
+                    cursor: diBusy ? 'wait' : 'pointer', opacity: diBusy && diBusy !== 'audit' ? 0.4 : 1,
+                  }}>
+                  {diBusy === 'audit' ? 'Running…' : 'Position Audit'}
                 </button>
                 <button
                   onClick={() => runSweep(false)}
@@ -4270,6 +4295,76 @@ function DataIntegrityResultView({ result }) {
 {JSON.stringify({ naked: data.naked, stale: data.stale, sharesMismatch: data.sharesMismatch, stopMismatch: data.stopMismatch, avgMismatch: data.avgMismatch }, null, 2)}
             </pre>
           </details>
+        )}
+      </div>
+    );
+  }
+
+  if (kind === 'position-audit') {
+    const c = data.counts || {};
+    const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'monospace', marginTop: 6 };
+    const th = { textAlign: 'left', color: '#888', padding: '4px 8px', borderBottom: '1px solid rgba(255,255,255,0.1)', fontWeight: 600 };
+    const td = { padding: '4px 8px', color: '#e8e6e3', borderBottom: '1px solid rgba(255,255,255,0.04)' };
+    return (
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa', marginBottom: 8 }}>
+          POSITION AUDIT · IBKR sync {data.ibkrSyncedAt ? new Date(data.ibkrSyncedAt).toLocaleString() : '—'}
+        </div>
+        <div style={cellRow}><span style={label}>PNTHR portfolio (non-CLOSED):</span><span style={{ color: '#e8e6e3', fontWeight: 700 }}>{data.pnthrCount}</span></div>
+        <div style={cellRow}><span style={label}>IBKR positions (non-zero shares):</span><span style={{ color: '#e8e6e3', fontWeight: 700 }}>{data.ibkrCount}</span></div>
+        <div style={cellRow}><span style={label}>Aligned (in both):</span><span style={{ color: '#22c55e', fontWeight: 700 }}>{c.aligned}</span></div>
+        <div style={cellRow}><span style={label}>PNTHR-only (TWS missing):</span><span style={{ color: c.pnthrOnly ? '#fca5a5' : '#888', fontWeight: 700 }}>{c.pnthrOnly}</span></div>
+        <div style={cellRow}><span style={label}>IBKR-only (PNTHR missing):</span><span style={{ color: c.ibkrOnly ? '#fcf000' : '#888', fontWeight: 700 }}>{c.ibkrOnly}</span></div>
+
+        {(c.pnthrOnly > 0) && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#fca5a5', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              PNTHR-only — open in PNTHR but TWS shows no shares
+            </div>
+            <table style={tableStyle}>
+              <thead><tr><th style={th}>Ticker</th><th style={th}>Status</th><th style={th}>Dir</th><th style={th}>PNTHR shares</th><th style={th}>Entry</th><th style={th}>Stop</th></tr></thead>
+              <tbody>
+                {data.pnthrOnly.map(p => (
+                  <tr key={p.ticker}>
+                    <td style={{ ...td, fontWeight: 700 }}>{p.ticker}</td>
+                    <td style={td}>{p.status}</td>
+                    <td style={td}>{p.direction || '—'}</td>
+                    <td style={td}>{p.pnthrShares}</td>
+                    <td style={td}>{p.entryPrice != null ? `$${p.entryPrice}` : '—'}</td>
+                    <td style={td}>{p.stopPrice  != null ? `$${p.stopPrice}`  : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {(c.ibkrOnly > 0) && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#fcf000', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              IBKR-only — TWS holds shares PNTHR doesn't track
+            </div>
+            <table style={tableStyle}>
+              <thead><tr><th style={th}>Ticker</th><th style={th}>IBKR shares</th><th style={th}>Side</th><th style={th}>Avg cost</th><th style={th}>Last price</th></tr></thead>
+              <tbody>
+                {data.ibkrOnly.map(p => (
+                  <tr key={p.ticker}>
+                    <td style={{ ...td, fontWeight: 700 }}>{p.ticker}</td>
+                    <td style={td}>{p.ibkrShares}</td>
+                    <td style={td}>{p.action}</td>
+                    <td style={td}>{p.avgCost   != null ? `$${p.avgCost.toFixed(2)}`   : '—'}</td>
+                    <td style={td}>{p.lastPrice != null ? `$${p.lastPrice.toFixed(2)}` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {c.pnthrOnly === 0 && c.ibkrOnly === 0 && (
+          <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(34,197,94,0.08)', color: '#86efac', fontSize: 12, borderRadius: 4 }}>
+            ✓ PNTHR and IBKR are perfectly aligned — every non-CLOSED PNTHR position has matching TWS shares and vice versa.
+          </div>
         )}
       </div>
     );

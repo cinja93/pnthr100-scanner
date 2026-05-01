@@ -4937,6 +4937,87 @@ app.get('/api/admin/tws-punch-list', authenticateJWT, requireAdmin, async (req, 
   }
 });
 
+// ── Position Audit — symmetric difference between PNTHR portfolio (non-CLOSED)
+// and IBKR positions snapshot. Surfaces drift for the admin to reconcile.
+// Read-only; no enqueues, no DB writes.
+app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+    const userId = req.user.userId;
+    const [pnthrPositions, ibkrSnap] = await Promise.all([
+      db.collection('pnthr_portfolio').find({
+        ownerId: userId,
+        status:  { $nin: ['CLOSED'] },
+      }).toArray(),
+      db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId }),
+    ]);
+    const ibkrPositions = (ibkrSnap?.positions || []).filter(p => Math.abs(+p.shares || 0) > 0);
+    const pnthrMap = new Map(pnthrPositions.map(p => [(p.ticker || '').toUpperCase(), p]));
+    const ibkrMap  = new Map(ibkrPositions .map(p => [(p.symbol || '').toUpperCase(), p]));
+
+    const sumFilled = (p) => Object.values(p.fills || {}).reduce(
+      (s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0,
+    );
+
+    const both = [], pnthrOnly = [], ibkrOnly = [];
+    for (const [t, p] of pnthrMap) {
+      if (ibkrMap.has(t)) {
+        const ib = ibkrMap.get(t);
+        both.push({
+          ticker:      t,
+          status:      p.status,
+          direction:   p.direction || null,
+          pnthrShares: sumFilled(p) || +p.totalFilledShares || 0,
+          ibkrShares:  +ib.shares,
+        });
+      } else {
+        pnthrOnly.push({
+          ticker:      t,
+          status:      p.status,
+          direction:   p.direction || null,
+          pnthrShares: sumFilled(p) || +p.totalFilledShares || 0,
+          entryPrice:  +p.entryPrice || null,
+          stopPrice:   +p.stopPrice  || null,
+          createdAt:   p.createdAt || null,
+        });
+      }
+    }
+    for (const [t, ib] of ibkrMap) {
+      if (!pnthrMap.has(t)) {
+        ibkrOnly.push({
+          ticker:     t,
+          ibkrShares: +ib.shares,
+          avgCost:    +ib.avgCost  || null,
+          lastPrice:  +ib.lastPrice || null,
+          action:     +ib.shares > 0 ? 'LONG' : 'SHORT',
+        });
+      }
+    }
+
+    // Sort each bucket alphabetically for predictable display.
+    [both, pnthrOnly, ibkrOnly].forEach(arr => arr.sort((a, b) => a.ticker.localeCompare(b.ticker)));
+
+    res.json({
+      reconciledAt:    new Date(),
+      ibkrSyncedAt:    ibkrSnap?.timestamp || null,
+      pnthrCount:      pnthrPositions.length,
+      ibkrCount:       ibkrPositions.length,
+      counts: {
+        aligned:       both.length,
+        pnthrOnly:     pnthrOnly.length,
+        ibkrOnly:      ibkrOnly.length,
+      },
+      both,
+      pnthrOnly,
+      ibkrOnly,
+    });
+  } catch (err) {
+    console.error('[admin/position-audit]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Bridge-facing outbox endpoints ───────────────────────────────────────────
 // Called by pnthr-ibkr-bridge.py's outbox poller. Auth = same admin JWT the
 // read-only sync uses. Bridge polls /pending every 30s, marks EXECUTING

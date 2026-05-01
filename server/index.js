@@ -33,6 +33,7 @@ import { runDailySignalJob } from './dailySignalJob.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
 import { runLotTriggerSync, registerLotTriggerCron } from './lotTriggerCron.js';
+import { registerReconciliationCron } from './reconciliationCron.js';
 import { killTestMonthlyGet, killTestMetricsGet, killTestMonthlyGenerate, generateMonthlySnapshots } from './killTestMonthly.js';
 import {
   checkCaseStudyEntries,
@@ -5069,16 +5070,17 @@ app.post('/api/admin/ibkr-outbox/:id/failed', authenticateJWT, requireAdmin, asy
   }
 });
 
-// Daily 4:30 PM ET stop ratchet cron. Even when IBKR_AUTO_SYNC_STOPS is off,
-// the cron still runs and logs a diff report so the operator can preview.
-registerStopRatchetCron(cron);
-
-// Phase 4g — daily lot-trigger reconciliation cron. Same 4:30 PM ET slot
-// (after close, manual TWS edits settled). Cleanup pass cancels TWS lot
-// orders at filled/surpassed lot levels per the SWKS-style stale-trigger
-// rule; PLACE pass stages new triggers for incomplete lots; MODIFY pushes
-// PNTHR-tighter values when applicable. All gated by IBKR_AUTO_SYNC_LOT_TRIGGERS.
-registerLotTriggerCron(cron);
+// Unified every-minute reconciliation cron (replaces the two daily 4:30 PM
+// ET crons). Runs runStopRatchet + runLotTriggerSync in sequence per tick
+// during market hours (9 AM - 4:59 PM ET, Mon-Fri). Triple-gated:
+//   1. RECONCILIATION_CRON_ENABLED (this file) — per-environment writer gate;
+//      set to 'true' on Render only so the local Mac Node server cannot
+//      duplicate ticks against the same Atlas DB.
+//   2. IBKR_AUTO_SYNC_STOPS — gates ratchet writes.
+//   3. IBKR_AUTO_SYNC_LOT_TRIGGERS — gates lot-trigger writes.
+// The original register*Cron functions remain exported (dormant) so we can
+// revert by swapping this single call back to the two daily registrations.
+registerReconciliationCron(cron);
 
 // ── Cron: auto-generate newsletter every Friday at 5pm ET ───────────────────
 // Uses perchService (single source of truth — same generator the admin UI's

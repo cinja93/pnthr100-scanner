@@ -2702,18 +2702,20 @@ export default function AssistantPage({ onNavigate }) {
   // When isProcessed=true, asks the server to force-clear the stale dedup
   // record before re-running the close (recovers from the bug state where
   // an execId was marked processed but the position never actually closed).
-  const syncOrphanFromTws = useCallback(async (ticker, positionId, execId, isProcessed) => {
+  const syncOrphanFromTws = useCallback(async (ticker, positionId, execIdOrIds, isProcessed) => {
     if (closingOrphan) return;
+    const execIds = Array.isArray(execIdOrIds) ? execIdOrIds : [execIdOrIds];
+    const subfillNote = execIds.length > 1 ? `\n\n${execIds.length} sub-fill executions will be aggregated (vw-avg price).` : '';
     const msg = isProcessed
-      ? `FORCE-sync ${ticker} from TWS execution?\n\nThis execId is already marked processed in pnthr_ibkr_executions but the position is still open — likely a stale dedup record. Confirming will:\n  1. Delete the stale dedup record\n  2. Run the canonical close using the actual TWS fill price\n  3. Re-mark the execId processed`
-      : `Sync ${ticker} from TWS execution?\n\nUses the actual TWS fill price and routes through the canonical close path (same as auto-close). Journal will be updated automatically.`;
+      ? `FORCE-sync ${ticker} from TWS execution?${subfillNote}\n\nThe sub-fill execIds are already marked processed in pnthr_ibkr_executions but the position is still open — stale dedup. Confirming will clear them and re-run the canonical close.`
+      : `Sync ${ticker} from TWS execution?${subfillNote}\n\nUses the actual TWS fill price and routes through the canonical close path (same as auto-close). Journal will be updated automatically.`;
     if (!window.confirm(msg)) return;
     setClosingOrphan(ticker); setDiError(null);
     try {
       const r = await fetch(`${API_BASE}/api/ibkr/sync-trade-close`, {
         method: 'POST',
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ positionId, execId, force: !!isProcessed }),
+        body: JSON.stringify({ positionId, execIds, force: !!isProcessed }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
@@ -4384,7 +4386,7 @@ function OrphanCloseTable({ rows, onCloseOrphan, onSyncOrphanFromTws, closingOrp
                 {hasTwsExit && onSyncOrphanFromTws ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                     <button
-                      onClick={() => onSyncOrphanFromTws(p.ticker, p.positionId, sx.execId, isStaleDedup)}
+                      onClick={() => onSyncOrphanFromTws(p.ticker, p.positionId, sx.execIds || [sx.execId], isStaleDedup)}
                       disabled={!!closingOrphan}
                       style={{
                         background: isClosing

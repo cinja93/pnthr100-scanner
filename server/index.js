@@ -4990,55 +4990,60 @@ app.get('/api/admin/position-audit', authenticateJWT, requireAdmin, async (req, 
       return 0;
     }
 
-    // Group all closing-side execs by ticker+dir for per-position matching.
-    // For multi-cycle day trades, "latest exec" is wrong — the right match is
-    // the FIRST SLD/BOT exec chronologically AFTER the position's createdAt
-    // whose shares are within tolerance of the position's filled shares.
-    // We compute this per-position below.
-    const closingExecsByTickerDir = {};
-    for (const exec of latestExecutions) {
-      const t = (exec.symbol || '').toUpperCase();
-      const closingDir = exec.side === 'SLD' ? 'LONG' : exec.side === 'BOT' ? 'SHORT' : null;
-      if (!t || !closingDir) continue;
-      const key = `${t}_${closingDir}`;
-      if (!closingExecsByTickerDir[key]) closingExecsByTickerDir[key] = [];
-      closingExecsByTickerDir[key].push({
-        execId:    exec.execId,
-        price:     +exec.price,
-        shares:    +exec.shares,
-        side:      exec.side,
-        time:      exec.time || null,
-        execTime:  parseIbkrExecTime(exec.time),
-        processed: processedIds.has(exec.execId),
+    // IBKR splits large orders into multiple sub-fill execs (e.g., a 213-
+    // share SLD arrives as 113 + 100 sub-fills, each with its own execId).
+    // Without aggregation the share-threshold filters (≥90% of position
+    // shares) reject each sub-fill individually and the matcher falls
+    // through to the wrong logical exec. Aggregate by (symbol, side, time)
+    // into one logical fill: total shares + volume-weighted-average price
+    // + the full set of execIds (all need to be marked processed when
+    // synced through pnthr_ibkr_executions).
+    const subfillGroups = new Map();
+    for (const e of latestExecutions) {
+      const sym = (e.symbol || '').toUpperCase();
+      if (!sym || !e.side || !e.time) continue;
+      const key = `${sym}|${e.side}|${e.time}`;
+      if (!subfillGroups.has(key)) subfillGroups.set(key, { execs: [], shr: 0, notional: 0 });
+      const g = subfillGroups.get(key);
+      g.execs.push(e);
+      g.shr      += +e.shares || 0;
+      g.notional += (+e.shares || 0) * (+e.price || 0);
+    }
+    const aggregatedExecs = [];
+    for (const [key, g] of subfillGroups) {
+      const [symbol, side, time] = key.split('|');
+      const ids = g.execs.map(e => e.execId);
+      aggregatedExecs.push({
+        execId:    ids[0],                          // representative
+        execIds:   ids,                             // full sub-fill list
+        symbol, side, time,
+        shares:    g.shr,
+        price:     g.shr > 0 ? g.notional / g.shr : (+g.execs[0].price || 0),
+        execTime:  parseIbkrExecTime(time),
+        processed: ids.some(id => processedIds.has(id)),
       });
     }
-    // Sort each group ascending by time so first-after-createdAt is index 0.
+
+    // Group aggregated closing-side execs by ticker+dir for per-position matching.
+    const closingExecsByTickerDir = {};
+    for (const exec of aggregatedExecs) {
+      const closingDir = exec.side === 'SLD' ? 'LONG' : exec.side === 'BOT' ? 'SHORT' : null;
+      if (!closingDir) continue;
+      const key = `${exec.symbol}_${closingDir}`;
+      if (!closingExecsByTickerDir[key]) closingExecsByTickerDir[key] = [];
+      closingExecsByTickerDir[key].push(exec);
+    }
     for (const arr of Object.values(closingExecsByTickerDir)) {
       arr.sort((a, b) => a.execTime - b.execTime);
     }
-    // Build opening-side execs too (BOT for LONG closes, SLD for SHORT
-    // closes) so we can entry-match PNTHR's recorded entry price to the
-    // specific TWS BOT that created PNTHR's record. This lets us pick
-    // the correct SLD on multi-cycle day trades where time-only matching
-    // misfires. Falls through to time-after-createdAt for carried-over
-    // positions whose entry doesn't match any of today's opening execs.
+    // Same for opening-side (BOT for LONG entry, SLD for SHORT entry).
     const openingExecsByTickerDir = {};
-    for (const exec of latestExecutions) {
-      const t = (exec.symbol || '').toUpperCase();
-      // For a LONG position we want BOT execs (the entry-side of LONG).
-      // For a SHORT position we want SLD execs (the entry-side of SHORT).
+    for (const exec of aggregatedExecs) {
       const openingDirForExec = exec.side === 'BOT' ? 'LONG' : exec.side === 'SLD' ? 'SHORT' : null;
-      if (!t || !openingDirForExec) continue;
-      const key = `${t}_${openingDirForExec}`;
+      if (!openingDirForExec) continue;
+      const key = `${exec.symbol}_${openingDirForExec}`;
       if (!openingExecsByTickerDir[key]) openingExecsByTickerDir[key] = [];
-      openingExecsByTickerDir[key].push({
-        execId:   exec.execId,
-        price:    +exec.price,
-        shares:   +exec.shares,
-        side:     exec.side,
-        time:     exec.time || null,
-        execTime: parseIbkrExecTime(exec.time),
-      });
+      openingExecsByTickerDir[key].push(exec);
     }
     for (const arr of Object.values(openingExecsByTickerDir)) {
       arr.sort((a, b) => a.execTime - b.execTime);
@@ -5171,37 +5176,62 @@ app.post('/api/ibkr/sync-trade-close', authenticateJWT, requireAdmin, async (req
   try {
     const db = await connectToDatabase();
     if (!db) return res.status(503).json({ error: 'DB unavailable' });
-    const userId   = req.user.userId;
+    const userId     = req.user.userId;
     const positionId = (req.body?.positionId || '').toString();
     const execId     = (req.body?.execId || '').toString();
-    if (!positionId || !execId) return res.status(400).json({ error: 'positionId and execId required' });
+    // execIds[] supports aggregated sub-fill closes (one logical SLD that
+    // arrived as multiple TWS executions, each with its own execId). When
+    // present we mark all of them processed; otherwise fall back to the
+    // single execId behavior.
+    const execIds    = Array.isArray(req.body?.execIds) && req.body.execIds.length
+                       ? req.body.execIds.map(s => s.toString())
+                       : [execId].filter(Boolean);
+    if (!positionId || execIds.length === 0) return res.status(400).json({ error: 'positionId and execId(s) required' });
 
     const position = await db.collection('pnthr_portfolio').findOne({ id: positionId, ownerId: userId });
     if (!position) return res.status(404).json({ error: 'Position not found' });
     if (position.status === 'CLOSED') return res.status(409).json({ error: 'Position already CLOSED' });
 
     const ibkrSnap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
-    const exec = (ibkrSnap?.latestExecutions || []).find(e => e.execId === execId);
-    if (!exec) return res.status(404).json({ error: `execId ${execId} not found in latestExecutions` });
+    const allExecs = ibkrSnap?.latestExecutions || [];
+    const matchedExecs = allExecs.filter(e => execIds.includes(e.execId));
+    if (matchedExecs.length === 0) {
+      return res.status(404).json({ error: `No execIds found in latestExecutions: ${execIds.join(', ')}` });
+    }
+    if (matchedExecs.length !== execIds.length) {
+      return res.status(404).json({
+        error: `Only ${matchedExecs.length} of ${execIds.length} execIds found in latestExecutions`,
+      });
+    }
 
     const ticker = (position.ticker || '').toUpperCase();
-    if ((exec.symbol || '').toUpperCase() !== ticker) {
-      return res.status(409).json({ error: `Ticker mismatch: position=${ticker}, exec=${exec.symbol}` });
+    const sides  = new Set(matchedExecs.map(e => e.side));
+    const times  = new Set(matchedExecs.map(e => e.time));
+    if (sides.size !== 1 || times.size !== 1) {
+      return res.status(409).json({ error: 'Sub-fill execs must share the same side and time to be aggregated' });
     }
+    const side = [...sides][0];
+    const allSym = matchedExecs.every(e => (e.symbol || '').toUpperCase() === ticker);
+    if (!allSym) return res.status(409).json({ error: `Ticker mismatch — at least one exec is not ${ticker}` });
 
     const pnthrDir   = (position.direction || 'LONG').toUpperCase();
-    const closingDir = exec.side === 'SLD' ? 'LONG' : exec.side === 'BOT' ? 'SHORT' : null;
+    const closingDir = side === 'SLD' ? 'LONG' : side === 'BOT' ? 'SHORT' : null;
     if (closingDir !== pnthrDir) {
-      return res.status(409).json({ error: `Direction mismatch: position=${pnthrDir}, exec.side=${exec.side} (closes ${closingDir})` });
+      return res.status(409).json({ error: `Direction mismatch: position=${pnthrDir}, exec.side=${side} (closes ${closingDir})` });
     }
+
+    // Aggregate sub-fills: total shares + volume-weighted average price.
+    const aggShares   = matchedExecs.reduce((s, e) => s + (+e.shares || 0), 0);
+    const aggNotional = matchedExecs.reduce((s, e) => s + (+e.shares || 0) * (+e.price || 0), 0);
+    const aggPrice    = aggShares > 0 ? aggNotional / aggShares : (+matchedExecs[0].price || 0);
 
     const pnthrShares = Object.values(position.fills || {})
       .reduce((s, f) => s + (f?.filled ? (+f.shares || 0) : 0), 0);
     if (pnthrShares <= 0) {
       return res.status(422).json({ error: `Position has no filled shares; cannot compute close P&L` });
     }
-    if (+exec.shares < pnthrShares * 0.90) {
-      return res.status(409).json({ error: `Exec ${exec.shares} shares < 90% of position ${pnthrShares} — partial, not full close` });
+    if (aggShares < pnthrShares * 0.90) {
+      return res.status(409).json({ error: `Aggregated exec ${aggShares} shares < 90% of position ${pnthrShares} — partial, not full close` });
     }
 
     const liveIbkrShares = (ibkrSnap?.positions || [])
@@ -5211,23 +5241,26 @@ app.post('/api/ibkr/sync-trade-close', authenticateJWT, requireAdmin, async (req
       return res.status(409).json({ error: `IBKR still holds ${liveIbkrShares} ${ticker} shares — exec was a reduction, not a full exit` });
     }
 
-    const dup = await db.collection('pnthr_ibkr_executions').findOne({ ownerId: userId, execId });
     const force = req.body?.force === true;
-    if (dup && !force) {
+    const dups  = await db.collection('pnthr_ibkr_executions')
+      .find({ ownerId: userId, execId: { $in: execIds } })
+      .toArray();
+    if (dups.length > 0 && !force) {
       return res.status(409).json({
-        error: `execId ${execId} already in pnthr_ibkr_executions (type=${dup.type || 'unknown'}, processedAt=${dup.processedAt || dup.createdAt}). If the position is still open this is a stale dedup record blocking recovery — retry with { force: true } to clear it and re-run the close.`,
+        error: `${dups.length} of ${execIds.length} execIds already in pnthr_ibkr_executions. If the position is still open these are stale dedup records blocking recovery — retry with { force: true } to clear them and re-run the close.`,
         canForce: true,
+        staleExecIds: dups.map(d => d.execId),
       });
     }
-    if (dup && force) {
-      console.warn(`[sync-trade-close] FORCE clearing stale dedup for ${ticker} execId=${execId} (was type=${dup.type || 'unknown'}) by ${req.user.email || userId}`);
-      await db.collection('pnthr_ibkr_executions').deleteOne({ _id: dup._id });
+    if (dups.length > 0 && force) {
+      console.warn(`[sync-trade-close] FORCE clearing ${dups.length} stale dedup records for ${ticker} execIds=[${dups.map(d => d.execId).join(', ')}] by ${req.user.email || userId}`);
+      await db.collection('pnthr_ibkr_executions').deleteMany({ _id: { $in: dups.map(d => d._id) } });
     }
 
     const stop = position.stopPrice;
-    const exitPrice = +exec.price;
+    const exitPrice  = aggPrice;
     const exitReason = (stop != null && Math.abs(exitPrice - stop) / stop < 0.01) ? 'STOP_HIT' : 'MANUAL';
-    const execTime = exec.time ? new Date(exec.time) : new Date();
+    const execTime   = matchedExecs[0].time ? new Date(matchedExecs[0].time) : new Date();
 
     const exitData = {
       shares: pnthrShares,
@@ -5235,7 +5268,9 @@ app.post('/api/ibkr/sync-trade-close', authenticateJWT, requireAdmin, async (req
       date:   execTime.toISOString().split('T')[0],
       time:   execTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }),
       reason: exitReason,
-      note:   'Synced from TWS execution via Position Audit',
+      note:   matchedExecs.length > 1
+              ? `Synced from ${matchedExecs.length} TWS sub-fill executions via Position Audit (vw-avg)`
+              : 'Synced from TWS execution via Position Audit',
     };
 
     let result;
@@ -5248,20 +5283,25 @@ app.post('/api/ibkr/sync-trade-close', authenticateJWT, requireAdmin, async (req
 
     await db.collection('pnthr_portfolio').updateOne(
       { id: position.id, ownerId: userId },
-      { $set: { autoClosedByIBKR: true, ibkrExecId: execId } }
+      { $set: { autoClosedByIBKR: true, ibkrExecId: execIds[0], ibkrExecIds: execIds } }
     );
 
-    await db.collection('pnthr_ibkr_executions').insertOne({
-      ownerId:    userId,
-      execId,
-      symbol:     ticker,
-      side:       exec.side,
-      shares:     +exec.shares,
-      price:      exitPrice,
-      exitReason,
-      type:       'MANUAL_SYNC',
-      processedAt: new Date(),
-    });
+    // Mark every sub-fill execId processed so the auto-sync dedup logic
+    // and Trades Today will recognize them as handled.
+    await db.collection('pnthr_ibkr_executions').insertMany(
+      matchedExecs.map(e => ({
+        ownerId:    userId,
+        execId:     e.execId,
+        symbol:     ticker,
+        side:       e.side,
+        shares:     +e.shares || 0,
+        price:      +e.price  || 0,
+        exitReason,
+        type:       matchedExecs.length > 1 ? 'MANUAL_SYNC_SUBFILL' : 'MANUAL_SYNC',
+        processedAt: new Date(),
+      })),
+      { ordered: false }
+    );
 
     console.log(`[sync-trade-close] ${ticker} (${pnthrDir}) ${pnthrShares}sh @ $${exitPrice} → ${exitReason} (P&L ${result.exitRecord.pnl.pct}%)`);
 

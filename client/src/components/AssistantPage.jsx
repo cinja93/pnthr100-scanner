@@ -2562,6 +2562,11 @@ export default function AssistantPage({ onNavigate }) {
   const [chartBusy,   setChartBusy]   = useState(null);  // ticker currently loading
   const [healthPositions, setHealthPositions] = useState([]);
   const [healthLoading,   setHealthLoading]   = useState(true);
+  // Canonical pnthr_portfolio docs (entryPrice, stopPrice, fills, direction,
+  // isEtf) — required for the bottom RiskSummaryBar's calcHeat() math.
+  // healthPositions above is a stripped RSI-only projection and is not
+  // suitable for risk calculation.
+  const [riskPositions, setRiskPositions] = useState([]);
   const [recentFills,     setRecentFills]     = useState([]);
   // ibkrConnected is still used by TradesTodaySection to gate rendering —
   // its value now comes from the /api/ibkr/discrepancies fetch below (which
@@ -2806,6 +2811,12 @@ export default function AssistantPage({ onNavigate }) {
         .then(d => setHealthPositions(d.positions || []))
         .catch(() => setHealthPositions([]))
         .finally(() => setHealthLoading(false));
+
+      // Canonical positions fetch — used by the bottom RiskSummaryBar.
+      fetch(`${API_BASE}/api/positions`, { headers: authHeaders() })
+        .then(r => r.ok ? r.json() : { positions: [] })
+        .then(d => setRiskPositions(Array.isArray(d?.positions) ? d.positions : (Array.isArray(d) ? d : [])))
+        .catch(() => setRiskPositions([]));
 
       // IBKR connected-signal — only the ibkrConnected bool is used now
       // (gates TradesTodaySection). The LIVE table handles the actual
@@ -4186,7 +4197,7 @@ export default function AssistantPage({ onNavigate }) {
            RISK SUMMARY BAR — duplicated from PNTHR Command for at-a-glance
            portfolio heat without leaving the Assistant page.
          ══════════════════════════════════════════════════════════════════════ */}
-      <RiskSummaryBar positions={healthPositions} nav={nav || 0} />
+      <RiskSummaryBar positions={riskPositions} nav={nav || 0} />
 
       {/* Chart Modal — opened from chip clicks */}
       {chartStocks && (

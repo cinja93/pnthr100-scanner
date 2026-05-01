@@ -67,7 +67,7 @@ export default function RiskSummaryBar({
   const cols = isDemo && portfolioEquity != null ? 7 : 6;
   const navDisplay = isDemo
     ? `$${navNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : `$${Math.round(navNum / 1000).toLocaleString()}K`;
+    : `$${(navNum / 1000).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}K`;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10, marginBottom: 16 }}>

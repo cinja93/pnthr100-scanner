@@ -15,7 +15,7 @@
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   API_BASE, authHeaders, fetchIbkrDiscrepancies, fetchIbkrTradesToday,
   fetchAccessRequests, approveAccessAsMember, approveAccessAsInvestor, denyAccessRequest,
@@ -24,7 +24,6 @@ import {
   createInvestor,
   fetchNav,
   fetchPulse,
-  updateUserProfile,
 } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ChartModal from './ChartModal';
@@ -2586,10 +2585,10 @@ export default function AssistantPage({ onNavigate }) {
   const [headlines,          setHeadlines]          = useState([]);
   const [headlinesLoading,   setHeadlinesLoading]   = useState(true);
   // Day 1 toolbar — NAV inline edit + modal triggers + Bridge status badge
+  // NAV is consumed by RiskSummaryBar and AssistantLiveTable; the inline
+  // NAV editor was removed — NET LIQUIDITY card in the bottom info bar
+  // is the canonical display now. Keep setNav for the fetchNav effect.
   const [nav,           setNav]           = useState(null);
-  const [navInput,      setNavInput]      = useState('');
-  const [navSaving,     setNavSaving]     = useState(false);
-  const navSaveTimer = useRef(null);
   const [riskAdvisorOpen, setRiskAdvisorOpen] = useState(false);
   const [calcOpen,        setCalcOpen]        = useState(false);
   const [addPosOpen,      setAddPosOpen]      = useState(false);
@@ -3043,15 +3042,15 @@ export default function AssistantPage({ onNavigate }) {
       const v = profile?.nav;
       if (!cancelled && Number.isFinite(+v) && +v > 0) {
         setNav(+v);
-        setNavInput(String(Math.round(+v)));
       }
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [refreshKey]);
 
   // ── Day 2 — Phase 4 outbox status poll (admin only, every 30s) ─────────────
-  // Drives the bridge-status badge in the toolbar + the FAILED/STUCK alert
-  // banner below it. Server returns {counts, flags, commands}; we re-render
+  // Drives the BRIDGE button in the toolbar (red w/ count when FAILED/STUCK,
+  // green when LIVE, gray when off) and the Recent Bridge Commands inspector
+  // below. Server returns {counts, flags, commands}; we re-render
   // whichever pieces change.
   useEffect(() => {
     if (!isAdmin) return;
@@ -3069,22 +3068,6 @@ export default function AssistantPage({ onNavigate }) {
     intervalId = setInterval(load, 30_000);
     return () => { cancelled = true; if (intervalId) clearInterval(intervalId); };
   }, [isAdmin]);
-
-  const handleNavChange = (e) => {
-    const v = e.target.value.replace(/[^0-9.]/g, '');
-    setNavInput(v);
-    if (navSaveTimer.current) clearTimeout(navSaveTimer.current);
-    navSaveTimer.current = setTimeout(async () => {
-      const num = Number(v);
-      if (!Number.isFinite(num) || num <= 0) return;
-      setNavSaving(true);
-      try {
-        await updateUserProfile({ accountSize: num });
-        setNav(num);
-      } catch { /* non-fatal — UI keeps the value the user typed */ }
-      setNavSaving(false);
-    }, 1000);
-  };
 
   // Auto-refresh countdown moved into CountdownTimer component
 

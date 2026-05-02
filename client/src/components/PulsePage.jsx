@@ -178,6 +178,7 @@ export default function PulsePage({ onNavigate }) {
         <YieldGauge label="30Y" subLabel="30-Year Yield" data={data.treasuryYields?.y30} />
         <RecessionGauge data={data.recessionIndicator} />
         <BuffettGauge data={data.buffettIndicator} />
+        <ConsumerSentimentGauge data={data.consumerSentiment} />
       </div>
       {/* Regime + Portfolio Heat compact strip */}
       <RegimeStrip regime={data.regime} signals={data.signals} positions={isInvestor ? null : data.positions} />
@@ -633,6 +634,60 @@ function BuffettGauge({ data }) {
           <div><span style={{ color: '#ff6b6b' }}>115–140%</span> = Overvalued</div>
           <div><span style={{ color: '#dc3545' }}>Above 140%</span> = Very Overvalued</div>
           {data && <div style={{ marginTop: 6, color: '#888' }}>As of: {data.asOf} (quarterly)</div>}
+        </div>
+      )}
+      {gauge}
+    </div>
+  );
+}
+
+const SENTIMENT_ZONES = [
+  { from: 50, to: 65, color: '#dc3545' },
+  { from: 65, to: 80, color: '#ff6b6b' },
+  { from: 80, to: 95, color: '#fcf000' },
+  { from: 95, to: 105, color: '#4ecdc4' },
+  { from: 105, to: 111, color: '#6bcb77' },
+];
+
+function ConsumerSentimentGauge({ data }) {
+  const [hover, setHover] = React.useState(false);
+  const color = data ? (data.value >= 100 ? '#6bcb77' : data.value >= 80 ? '#4ecdc4' : data.value >= 65 ? '#fcf000' : data.value >= 50 ? '#ff6b6b' : '#dc3545') : '#888';
+  const changeStr = data?.change != null ? `${data.change >= 0 ? '+' : ''}${data.change}` : null;
+  const changeColor = data?.change != null ? (data.change > 0 ? '#6bcb77' : data.change < 0 ? '#ff6b6b' : '#888') : '#888';
+  const gauge = !data ? (
+    <SemiGauge
+      value={80} min={50} max={111} zones={SENTIMENT_ZONES}
+      label="SENTIMENT"
+      gaugeW={150} gaugeH={100}
+      displayValue="—"
+      subLabel="Consumer Sentiment"
+      subValue="No data"
+      subValueColor="#888"
+    />
+  ) : (
+    <SemiGauge
+      value={data.value} min={50} max={111} zones={SENTIMENT_ZONES}
+      label="SENTIMENT"
+      gaugeW={150} gaugeH={100}
+      displayValue={data.value.toFixed(1)}
+      subLabel="Consumer Sentiment"
+      subValue={data.zone}
+      subValueColor={color}
+    />
+  );
+  return (
+    <div style={{ position: 'relative' }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      {hover && (
+        <div style={GAUGE_TOOLTIP_STYLE}>
+          <div style={{ color: '#fcf000', fontWeight: 700, marginBottom: 4 }}>PNTHR Consumer Sentiment</div>
+          <div>University of Michigan Consumer Sentiment Index. Measures consumer confidence in current and future economic conditions.</div>
+          <div style={{ marginTop: 6 }}><span style={{ color: '#6bcb77' }}>100+</span> = Optimistic</div>
+          <div><span style={{ color: '#4ecdc4' }}>80–100</span> = Healthy</div>
+          <div><span style={{ color: '#fcf000' }}>65–80</span> = Cautious</div>
+          <div><span style={{ color: '#ff6b6b' }}>50–65</span> = Pessimistic</div>
+          <div><span style={{ color: '#dc3545' }}>Below 50</span> = Distressed</div>
+          {changeStr && <div style={{ marginTop: 6, color: changeColor }}>Change: {changeStr} pts from prior reading</div>}
+          {data && <div style={{ marginTop: 4, color: '#888' }}>As of: {data.asOf} (monthly)</div>}
         </div>
       )}
       {gauge}

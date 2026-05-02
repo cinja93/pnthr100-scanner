@@ -6408,6 +6408,32 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       console.warn('[PULSE] Buffett indicator fetch failed:', e.message);
     }
 
+    // ── Consumer Sentiment (UMich) ──
+    let consumerSentiment = null;
+    try {
+      const fredKey = process.env.FRED_API_KEY;
+      if (fredKey) {
+        const csRes = await fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=UMCSENT&sort_order=desc&limit=4&api_key=${fredKey}&file_type=json`);
+        if (csRes.ok) {
+          const obs = (await csRes.json()).observations?.filter(o => o.value !== '.').map(o => ({ date: o.date, v: +o.value })) || [];
+          if (obs.length > 0) {
+            const val = +obs[0].v.toFixed(1);
+            const prev = obs.length > 1 ? +obs[1].v.toFixed(1) : null;
+            const change = prev != null ? +(val - prev).toFixed(1) : null;
+            const zone = val >= 100 ? 'OPTIMISTIC'
+              : val >= 80 ? 'HEALTHY'
+              : val >= 65 ? 'CAUTIOUS'
+              : val >= 50 ? 'PESSIMISTIC'
+              : 'DISTRESSED';
+            consumerSentiment = { value: val, prev, change, zone, asOf: obs[0].date };
+            console.log(`[PULSE] Consumer Sentiment: ${val} (${zone})`);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[PULSE] consumer sentiment fetch failed:', e.message);
+    }
+
     // Data freshness metadata — client shows "Scores: Fri Mar 20" vs "Scores: Live"
     const dataSource = liveApex ? 'live_apex' : 'friday_pipeline';
     const scoresAsOf = liveApex
@@ -6469,6 +6495,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       treasuryYields,
       recessionIndicator,
       buffettIndicator,
+      consumerSentiment,
     });
   } catch (err) {
     console.error('[/api/pulse]', err.message);

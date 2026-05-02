@@ -3569,7 +3569,7 @@ export default function AssistantPage({ onNavigate }) {
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
               borderBottom: diOpen ? '1px solid rgba(252,240,0,0.2)' : 'none',
             }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#fcf000', letterSpacing: '0.04em', display: 'flex', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, fontWeight: 900, color: '#fcf000', letterSpacing: '0.14em', fontFamily: "'Inter', 'Segoe UI', sans-serif", textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
               <span style={{ fontSize: 10, marginRight: 6, userSelect: 'none' }}>{diOpen ? '▼' : '▶'}</span>
               DATA INTEGRITY
             </span>
@@ -3704,36 +3704,8 @@ export default function AssistantPage({ onNavigate }) {
           border: '1px solid rgba(252,240,0,0.18)',
           borderRadius: 8,
         }}>
-          {/* NAV inline edit */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 800, letterSpacing: '0.08em' }}>NAV</span>
-            <span style={{ color: '#888', fontSize: 13, fontWeight: 700 }}>$</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={navInput}
-              onChange={handleNavChange}
-              placeholder="100000"
-              style={{
-                width: 110,
-                padding: '4px 8px',
-                background: 'rgba(0,0,0,0.4)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: 4,
-                color: '#FCF000',
-                fontSize: 13, fontWeight: 700,
-                fontFamily: 'monospace',
-                fontVariantNumeric: 'tabular-nums',
-                outline: 'none',
-              }}
-            />
-            {navSaving && <span style={{ color: '#FCF000', fontSize: 11 }}>⟳</span>}
-          </div>
-
-          {/* Vertical divider */}
-          <span style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.1)' }} />
-
-          {/* Modal triggers */}
+          {/* Modal triggers — NAV display moved to the bottom info bar
+              (NET LIQUIDITY card) so the toolbar stays focused on actions. */}
           <button
             type="button"
             onClick={() => setRiskAdvisorOpen(true)}
@@ -3755,7 +3727,7 @@ export default function AssistantPage({ onNavigate }) {
               color: '#FFD700', borderRadius: 4, fontSize: 11, fontWeight: 700,
               cursor: 'pointer', letterSpacing: '0.05em',
             }}
-          >🔢 CALCULATOR</button>
+          >🔢 POSITION CALCULATOR</button>
           <button
             type="button"
             onClick={() => setAddPosOpen(true)}
@@ -3771,63 +3743,67 @@ export default function AssistantPage({ onNavigate }) {
           {/* Spacer */}
           <span style={{ flex: 1 }} />
 
-          {/* Bridge status badge — driven by /api/admin/ibkr-outbox. Color +
-              label change once any IBKR_AUTO_* flag flips on (Day 3+). */}
+          {/* Bridge status — same size + style as the other toolbar buttons.
+              When there are FAILED/STUCK commands the button is red and
+              clickable: opens the Recent Bridge Commands section and scrolls
+              to it. Replaces the older non-clickable pill plus the redundant
+              "Phase 4 outbox needs attention" banner. */}
           {(() => {
             const flags    = outbox?.flags || {};
             const counts   = outbox?.counts || {};
             const enabled  = Object.entries(flags).filter(([, v]) => v).map(([k]) => k.replace('IBKR_AUTO_', ''));
             const anyOn    = enabled.length > 0;
             const stuck    = (counts.STUCK || 0) + (counts.FAILED || 0);
-            const dotColor = stuck > 0 ? '#dc3545' : anyOn ? '#28a745' : '#666';
             const label    = stuck > 0
-              ? `BRIDGE: ${stuck} ATTENTION`
+              ? `● BRIDGE: ${stuck} ATTENTION`
               : anyOn
-                ? `BRIDGE: LIVE (${enabled.join(', ').toLowerCase()})`
-                : 'BRIDGE: PHASE 4 DISABLED';
-            const tooltip  = anyOn
-              ? `Enabled flags: ${enabled.join(', ')}. Pending=${counts.PENDING || 0} Executing=${counts.EXECUTING || 0} Done=${counts.DONE || 0} Failed=${counts.FAILED || 0} Stuck=${counts.STUCK || 0}`
-              : 'No Phase 4 flags enabled. Toggle IBKR_AUTO_* env vars on the server (Render) to start writing through the bridge.';
+                ? `● BRIDGE: LIVE`
+                : '● BRIDGE: OFF';
+            const tooltip  = stuck > 0
+              ? `${counts.FAILED || 0} FAILED · ${counts.STUCK || 0} STUCK — click to open Recent Bridge Commands`
+              : anyOn
+                ? `Enabled flags: ${enabled.join(', ')}. Pending=${counts.PENDING || 0} Executing=${counts.EXECUTING || 0} Done=${counts.DONE || 0}`
+                : 'No Phase 4 flags enabled.';
+            const clickable = stuck > 0;
+            const handleClick = clickable ? () => {
+              // Force the Recent Bridge Commands section open in central state,
+              // then scroll to it. Small timeout lets the conditional render
+              // reflow before scrollIntoView.
+              if (!isOpen('recent-bridge-commands')) toggleSection('recent-bridge-commands');
+              setTimeout(() => {
+                const el = document.getElementById('recent-bridge-commands-anchor');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 50);
+            } : undefined;
             return (
-              <span title={tooltip} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '4px 10px', borderRadius: 12,
-                background: stuck > 0 ? 'rgba(220,53,69,0.1)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${stuck > 0 ? 'rgba(220,53,69,0.5)' : 'rgba(255,255,255,0.15)'}`,
-                fontSize: 10, fontWeight: 700,
-                color: stuck > 0 ? '#dc3545' : 'rgba(255,255,255,0.55)',
-                letterSpacing: '0.05em',
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor }} />
+              <button
+                type="button"
+                title={tooltip}
+                onClick={handleClick}
+                disabled={!clickable}
+                style={{
+                  padding: '6px 12px',
+                  background: stuck > 0 ? 'rgba(220,53,69,0.08)' : 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${stuck > 0 ? 'rgba(220,53,69,0.5)' : 'rgba(255,255,255,0.15)'}`,
+                  color: stuck > 0 ? '#dc3545' : (anyOn ? '#22c55e' : 'rgba(255,255,255,0.55)'),
+                  borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  cursor: clickable ? 'pointer' : 'default',
+                  letterSpacing: '0.05em',
+                  fontFamily: 'inherit',
+                }}
+              >
                 {label}
-              </span>
+              </button>
             );
           })()}
         </div>
       )}
 
-      {/* Phase 4 FAILED / STUCK banner — only when there's something
-          actionable. Click-through to inspect via the bridge log or
-          /api/admin/ibkr-outbox response. */}
-      {isAdmin && outbox && ((outbox.counts?.FAILED || 0) + (outbox.counts?.STUCK || 0)) > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12,
-          padding: '8px 14px', marginBottom: 12,
-          background: 'rgba(220,53,69,0.08)',
-          border: '1px solid rgba(220,53,69,0.5)',
-          borderRadius: 6, color: '#dc3545',
-          fontSize: 12, fontWeight: 600,
-        }}>
-          <span style={{ fontSize: 14 }}>⚠</span>
-          <span>
-            Phase 4 outbox needs attention:&nbsp;
-            {outbox.counts?.FAILED ? `${outbox.counts.FAILED} FAILED` : ''}
-            {outbox.counts?.FAILED && outbox.counts?.STUCK ? ' · ' : ''}
-            {outbox.counts?.STUCK ? `${outbox.counts.STUCK} STUCK (>5 min EXECUTING)` : ''}
-            . Check bridge log + recent commands below.
-          </span>
-        </div>
-      )}
+      {/* Standalone "Phase 4 outbox needs attention" banner removed —
+          the BRIDGE button above now serves as the single clickable
+          attention indicator (its red state + count + click-through to
+          the Recent Bridge Commands section consolidates what the banner
+          and the pill used to say separately). */}
 
       {/* Phase 4 outbox — recent commands inspector. Admin only.
           Collapse state persisted via central collapse map; matches the
@@ -3835,11 +3811,13 @@ export default function AssistantPage({ onNavigate }) {
           marker). */}
       {isAdmin && outbox && Array.isArray(outbox.commands) && outbox.commands.length > 0 && (
         <div
+          id="recent-bridge-commands-anchor"
           style={{
             border: '1px solid rgba(252, 240, 0, 0.3)',
             borderRadius: 8,
             marginBottom: 12,
             background: 'rgba(0,0,0,0.35)',
+            scrollMarginTop: 12,
           }}
         >
           <div

@@ -1357,13 +1357,12 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
 
   return (
     <div style={s.container}>
-      <div style={s.headerBar}>
-        <button
-          type="button"
-          onClick={() => setCollapsed(v => !v)}
-          style={s.collapseBtn}
-          title={collapsed ? 'Expand' : 'Collapse'}
-        >{collapsed ? '▶' : '▼'}</button>
+      <div
+        style={{ ...s.headerBar, cursor: 'pointer' }}
+        onClick={() => setCollapsed(v => !v)}
+        title={collapsed ? 'Expand' : 'Collapse'}
+      >
+        <span style={s.collapseBtn}>{collapsed ? '▶' : '▼'}</span>
         <span style={s.title}>PNTHR ASSISTANT LIVE — SOURCE OF TRUTH</span>
         {summary.red > 0    && <span style={s.pill(DOT_COLOR.red)}>    ● {summary.red} TO FIX</span>}
         {summary.yellow > 0 && <span style={s.pill(DOT_COLOR.yellow)}> ● {summary.yellow} WATCHING</span>}
@@ -1379,7 +1378,7 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
         </span>
         <button
           type="button"
-          onClick={fetchData}
+          onClick={(e) => { e.stopPropagation(); fetchData(); }}
           disabled={refreshing}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(252,240,0,0.22)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(252,240,0,0.1)';  }}

@@ -3320,6 +3320,36 @@ export default function AssistantPage({ onNavigate }) {
 
       {error && <div style={s.error}>{error}</div>}
 
+      {/* ── MEMBER ADMIN — wrapper around Reset Password + Create Account.
+            Collapsible via central state. Admin-only (renders nothing if
+            no admin tools are visible). ─────────────────────────────────── */}
+      {isAdmin && (
+        <div style={{
+          border: '1px solid rgba(255,255,255,0.18)',
+          borderRadius: 8,
+          marginBottom: 16,
+          background: '#0b0b0b',
+        }}>
+          <div
+            onClick={() => toggleSection('member-admin')}
+            style={{
+              padding: '8px 14px',
+              cursor: 'pointer',
+              borderBottom: isOpen('member-admin') ? '1px solid rgba(255,255,255,0.08)' : 'none',
+              display: 'flex',
+              alignItems: 'center',
+              fontSize: 12,
+              letterSpacing: '0.06em',
+              color: '#aaa',
+              userSelect: 'none',
+            }}
+          >
+            {collapseArrow('member-admin', '#aaa')}
+            <span style={{ fontWeight: 700 }}>👥 MEMBER ADMIN</span>
+          </div>
+          {isOpen('member-admin') && (
+          <div style={{ padding: '8px 8px 4px' }}>
+
       {/* ── Member password reset (admin-only, collapsible) ───────────────── */}
       {isAdmin && (
         <div style={{
@@ -3448,6 +3478,11 @@ export default function AssistantPage({ onNavigate }) {
                 </div>
               )}
             </form>
+          )}
+        </div>
+      )}
+
+          </div>
           )}
         </div>
       )}
@@ -3795,15 +3830,11 @@ export default function AssistantPage({ onNavigate }) {
       )}
 
       {/* Phase 4 outbox — recent commands inspector. Admin only.
-          Collapse state persisted via central collapse map; auto-opens
-          if it's never been toggled and there's a FAILED/STUCK to triage. */}
+          Collapse state persisted via central collapse map; matches the
+          arrow styling of the other sections (▶/▼ left, no native disclosure
+          marker). */}
       {isAdmin && outbox && Array.isArray(outbox.commands) && outbox.commands.length > 0 && (
-        <details
-          open={isOpen('recent-bridge-commands')}
-          onToggle={(e) => {
-            const nowOpen = e.currentTarget.open;
-            if (nowOpen !== isOpen('recent-bridge-commands')) toggleSection('recent-bridge-commands');
-          }}
+        <div
           style={{
             border: '1px solid rgba(252, 240, 0, 0.3)',
             borderRadius: 8,
@@ -3811,30 +3842,39 @@ export default function AssistantPage({ onNavigate }) {
             background: 'rgba(0,0,0,0.35)',
           }}
         >
-          <summary style={{
-            padding: '7px 14px',
-            cursor: 'pointer',
-            borderBottom: '1px solid rgba(252, 240, 0, 0.12)',
-            fontSize: 10,
-            fontWeight: 900,
-            letterSpacing: '0.14em',
-            color: '#FCF000',
-            textTransform: 'uppercase',
-            fontFamily: "'Inter', 'Segoe UI', sans-serif",
-            userSelect: 'none',
-          }}>
-            Recent Bridge Commands ({outbox.commands.length})
-            &nbsp;—&nbsp;
-            <span style={{ color: '#dc3545' }}>F:{outbox.counts?.FAILED || 0}</span>
-            &nbsp;
-            <span style={{ color: '#ff8c00' }}>S:{outbox.counts?.STUCK || 0}</span>
-            &nbsp;
-            <span style={{ color: '#ffd24a' }}>P:{outbox.counts?.PENDING || 0}</span>
-            &nbsp;
-            <span style={{ color: '#5ab2ff' }}>E:{outbox.counts?.EXECUTING || 0}</span>
-            &nbsp;
-            <span style={{ color: '#7ed957' }}>D:{outbox.counts?.DONE || 0}</span>
-          </summary>
+          <div
+            onClick={() => toggleSection('recent-bridge-commands')}
+            style={{
+              padding: '7px 14px',
+              cursor: 'pointer',
+              borderBottom: isOpen('recent-bridge-commands') ? '1px solid rgba(252, 240, 0, 0.12)' : 'none',
+              fontSize: 10,
+              fontWeight: 900,
+              letterSpacing: '0.14em',
+              color: '#FCF000',
+              textTransform: 'uppercase',
+              fontFamily: "'Inter', 'Segoe UI', sans-serif",
+              userSelect: 'none',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            {collapseArrow('recent-bridge-commands', '#FCF000')}
+            <span>
+              Recent Bridge Commands ({outbox.commands.length})
+              &nbsp;—&nbsp;
+              <span style={{ color: '#dc3545' }}>F:{outbox.counts?.FAILED || 0}</span>
+              &nbsp;
+              <span style={{ color: '#ff8c00' }}>S:{outbox.counts?.STUCK || 0}</span>
+              &nbsp;
+              <span style={{ color: '#ffd24a' }}>P:{outbox.counts?.PENDING || 0}</span>
+              &nbsp;
+              <span style={{ color: '#5ab2ff' }}>E:{outbox.counts?.EXECUTING || 0}</span>
+              &nbsp;
+              <span style={{ color: '#7ed957' }}>D:{outbox.counts?.DONE || 0}</span>
+            </span>
+          </div>
+          {isOpen('recent-bridge-commands') && (
           <div style={{ padding: '6px 8px 10px', overflowX: 'auto' }}>
             <table style={{
               width: '100%', borderCollapse: 'collapse', fontSize: 11,
@@ -3903,7 +3943,8 @@ export default function AssistantPage({ onNavigate }) {
               </tbody>
             </table>
           </div>
-        </details>
+          )}
+        </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════

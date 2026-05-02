@@ -861,8 +861,10 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
       userSelect: 'none',
     },
     collapseBtn: {
-      background: 'transparent', border: 'none', padding: '2px 4px',
-      color: '#FCF000', fontSize: 11, cursor: 'pointer',
+      background: 'transparent', border: 'none', padding: 0,
+      marginRight: 6,
+      color: '#FCF000', fontSize: 10, cursor: 'pointer', userSelect: 'none',
+      lineHeight: 1,
     },
     title: {
       color: '#FCF000', fontWeight: 900, fontSize: 10, letterSpacing: '0.14em',

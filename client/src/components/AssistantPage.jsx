@@ -2628,6 +2628,85 @@ export default function AssistantPage({ onNavigate }) {
 
   const pendingAccessCount = accessRequests.filter(r => r.status === 'pending').length;
 
+  // ── Reorderable top-level cards — order persists in localStorage so the
+  // user's chosen layout survives reloads. Sub-sections inside each card
+  // (Critical/Action inside Live Opportunities, Routine inside Live Watch,
+  // Recent Fills inside Today's Accomplishments) move with their parent.
+  // Implementation uses CSS `order` so we don't have to restructure the JSX.
+  const TOP_LEVEL_CARDS = useMemo(() => ([
+    'recent-bridge-commands',
+    'pnthr-assistant-live',
+    'live-opportunities',
+    'live-watch',
+    'todays-accomplishments',
+  ]), []);
+  const ORDER_KEY = 'pnthrAssistant.order';
+  const [cardOrder, setCardOrder] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(ORDER_KEY) || '[]');
+      if (Array.isArray(stored)
+          && stored.length === TOP_LEVEL_CARDS.length
+          && stored.every(id => TOP_LEVEL_CARDS.includes(id))
+          && new Set(stored).size === TOP_LEVEL_CARDS.length) {
+        return stored;
+      }
+    } catch { /* fall through */ }
+    return TOP_LEVEL_CARDS;
+  });
+  const moveCard = useCallback((id, direction) => {
+    setCardOrder(prev => {
+      const idx = prev.indexOf(id);
+      if (idx === -1) return prev;
+      const target = idx + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = prev.slice();
+      [next[idx], next[target]] = [next[target], next[idx]];
+      try { localStorage.setItem(ORDER_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+  // Renders a small ▲▼ pair for a card's header. Buttons disabled at the
+  // boundaries (top card can't move up, bottom can't move down).
+  const reorderControls = useCallback((id) => {
+    const idx = cardOrder.indexOf(id);
+    const isFirst = idx <= 0;
+    const isLast  = idx >= cardOrder.length - 1;
+    const btnStyle = (disabled) => ({
+      background: 'transparent',
+      border: '1px solid rgba(255,255,255,0.18)',
+      color: disabled ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.55)',
+      borderRadius: 3,
+      padding: '0 5px',
+      fontSize: 9,
+      lineHeight: 1.4,
+      cursor: disabled ? 'default' : 'pointer',
+      fontFamily: 'inherit',
+      userSelect: 'none',
+    });
+    return (
+      <span style={{ display: 'inline-flex', gap: 3, marginLeft: 8 }} onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          disabled={isFirst}
+          onClick={(e) => { e.stopPropagation(); moveCard(id, -1); }}
+          title="Move up"
+          style={btnStyle(isFirst)}
+        >▲</button>
+        <button
+          type="button"
+          disabled={isLast}
+          onClick={(e) => { e.stopPropagation(); moveCard(id, +1); }}
+          title="Move down"
+          style={btnStyle(isLast)}
+        >▼</button>
+      </span>
+    );
+  }, [cardOrder, moveCard]);
+  const orderStyle = useCallback((id) => {
+    const idx = cardOrder.indexOf(id);
+    return idx === -1 ? null : { order: idx };
+  }, [cardOrder]);
+
   // ── Collapsible sections — persists per-section open/closed in localStorage.
   // Default: open. Click any wrapped section header (or its arrow) to toggle.
   const COLLAPSE_KEY = 'pnthrAssistant.collapse';
@@ -3788,6 +3867,13 @@ export default function AssistantPage({ onNavigate }) {
           the Recent Bridge Commands section consolidates what the banner
           and the pill used to say separately). */}
 
+      {/* ══════════════════════════════════════════════════════════════════════
+           REORDERABLE CARDS WRAPPER — flex column with each card carrying
+           its own `order: N` style. Up/Down buttons in each card header
+           swap positions, persisted to localStorage as 'pnthrAssistant.order'.
+         ══════════════════════════════════════════════════════════════════════ */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+
       {/* Phase 4 outbox — recent commands inspector. Admin only.
           Collapse state persisted via central collapse map; matches the
           arrow styling of the other sections (▶/▼ left, no native disclosure
@@ -3796,6 +3882,7 @@ export default function AssistantPage({ onNavigate }) {
         <div
           id="recent-bridge-commands-anchor"
           style={{
+            ...orderStyle('recent-bridge-commands'),
             border: '1px solid rgba(252, 240, 0, 0.3)',
             borderRadius: 8,
             marginBottom: 12,
@@ -3834,6 +3921,8 @@ export default function AssistantPage({ onNavigate }) {
               &nbsp;
               <span style={{ color: '#7ed957' }}>D:{outbox.counts?.DONE || 0}</span>
             </span>
+            <span style={{ flex: 1 }} />
+            {reorderControls('recent-bridge-commands')}
           </div>
           {isOpen('recent-bridge-commands') && (
           <div style={{ padding: '6px 8px 10px', overflowX: 'auto' }}>
@@ -3915,22 +4004,26 @@ export default function AssistantPage({ onNavigate }) {
            ALIGNED pills, refresh button, etc.) — we just pass the controlled
            collapsed prop and a toggle handler.
          ══════════════════════════════════════════════════════════════════════ */}
+      <div style={orderStyle('pnthr-assistant-live') || undefined}>
       <AssistantLiveTable
         onNavigate={onNavigate}
         netLiquidity={nav}
         collapsed={!isOpen('pnthr-assistant-live')}
         onToggleCollapsed={() => toggleSection('pnthr-assistant-live')}
+        headerExtra={reorderControls('pnthr-assistant-live')}
         onOpenChart={(stocks, idx) => {
           if (Array.isArray(stocks) && stocks.length > 0) { setChartStocks(stocks); setChartIndex(idx || 0); }
           else if (stocks && stocks.ticker) { setChartStocks([stocks]); setChartIndex(0); }
         }}
         onAddPosition={(prefill) => { setAddPosInitial(prefill || null); setAddPosOpen(true); }}
       />
+      </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
            SECTION 1 — LIVE OPPORTUNITIES
          ══════════════════════════════════════════════════════════════════════ */}
       <div style={{
+        ...orderStyle('live-opportunities'),
         border: '1px solid rgba(252, 240, 0, 0.3)',
         borderRadius: 8,
         padding: '0 0 4px',
@@ -3961,6 +4054,7 @@ export default function AssistantPage({ onNavigate }) {
             height: 1,
             background: 'linear-gradient(90deg, rgba(252,240,0,0.15), transparent 80%)',
           }} />
+          {reorderControls('live-opportunities')}
         </div>
 
         {isOpen('live-opportunities') && (
@@ -4202,6 +4296,7 @@ export default function AssistantPage({ onNavigate }) {
            SECTION 2 — LIVE WATCH
          ══════════════════════════════════════════════════════════════════════ */}
       <div style={{
+        ...orderStyle('live-watch'),
         border: '1px solid rgba(252, 240, 0, 0.3)',
         borderRadius: 8,
         padding: '0 0 4px',
@@ -4232,6 +4327,7 @@ export default function AssistantPage({ onNavigate }) {
             height: 1,
             background: 'linear-gradient(90deg, rgba(252,240,0,0.15), transparent 80%)',
           }} />
+          {reorderControls('live-watch')}
         </div>
 
         {isOpen('live-watch') && (
@@ -4315,6 +4411,7 @@ export default function AssistantPage({ onNavigate }) {
            SECTION 3 — TODAY'S ACCOMPLISHMENTS
          ══════════════════════════════════════════════════════════════════════ */}
       <div style={{
+        ...orderStyle('todays-accomplishments'),
         border: '1px solid rgba(252, 240, 0, 0.3)',
         borderRadius: 8,
         padding: '0 0 4px',
@@ -4345,6 +4442,7 @@ export default function AssistantPage({ onNavigate }) {
             height: 1,
             background: 'linear-gradient(90deg, rgba(252,240,0,0.15), transparent 80%)',
           }} />
+          {reorderControls('todays-accomplishments')}
         </div>
 
         {isOpen('todays-accomplishments') && (
@@ -4372,6 +4470,8 @@ export default function AssistantPage({ onNavigate }) {
         </div>
         )}
       </div>
+
+      </div>{/* end reorderable cards wrapper */}
 
       {/* ══════════════════════════════════════════════════════════════════════
            RISK SUMMARY BAR — duplicated from PNTHR Command for at-a-glance

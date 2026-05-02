@@ -758,7 +758,7 @@ function buildSubRows(row) {
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
-export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart, onAddPosition, collapsed: extCollapsed, onToggleCollapsed }) {
+export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart, onAddPosition, collapsed: extCollapsed, onToggleCollapsed, headerExtra }) {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1394,6 +1394,7 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
             transition: 'background 0.15s',
           }}
         >{refreshing ? '… REFRESHING' : '↺ REFRESH'}</button>
+        {headerExtra}
       </div>
       {!collapsed && body()}
       <ActionModal row={modalRow} onClose={() => setModalRow(null)} />

@@ -2634,6 +2634,7 @@ export default function AssistantPage({ onNavigate }) {
   // Recent Fills inside Today's Accomplishments) move with their parent.
   // Implementation uses CSS `order` so we don't have to restructure the JSX.
   const TOP_LEVEL_CARDS = useMemo(() => ([
+    'data-integrity',
     'recent-bridge-commands',
     'pnthr-assistant-live',
     'live-opportunities',
@@ -3380,6 +3381,105 @@ export default function AssistantPage({ onNavigate }) {
         </div>
       </div>
 
+      {/* ══════════════════════════════════════════════════════════════════════
+           Action toolbar — moved here so it sits directly under the count
+           badges in the header. Risk Advisor / Position Calculator / + Add
+           Position on the left, BRIDGE status on the right.
+         ══════════════════════════════════════════════════════════════════════ */}
+      {isAdmin && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          padding: '10px 14px', marginBottom: 12,
+          background: 'rgba(252,240,0,0.04)',
+          border: '1px solid rgba(252,240,0,0.18)',
+          borderRadius: 8,
+        }}>
+          <button
+            type="button"
+            onClick={() => setRiskAdvisorOpen(true)}
+            style={{
+              padding: '6px 12px',
+              background: 'rgba(220,53,69,0.08)',
+              border: '1px solid rgba(220,53,69,0.4)',
+              color: '#dc3545', borderRadius: 4, fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', letterSpacing: '0.05em',
+            }}
+          >⚖ RISK ADVISOR</button>
+          <button
+            type="button"
+            onClick={() => setCalcOpen(true)}
+            style={{
+              padding: '6px 12px',
+              background: 'rgba(255,215,0,0.08)',
+              border: '1px solid rgba(255,215,0,0.4)',
+              color: '#FFD700', borderRadius: 4, fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', letterSpacing: '0.05em',
+            }}
+          >🔢 POSITION CALCULATOR</button>
+          <button
+            type="button"
+            onClick={() => setAddPosOpen(true)}
+            style={{
+              padding: '6px 14px',
+              background: '#FCF000',
+              border: '1px solid #FCF000',
+              color: '#000', borderRadius: 4, fontSize: 11, fontWeight: 800,
+              cursor: 'pointer', letterSpacing: '0.05em',
+            }}
+          >+ ADD POSITION</button>
+
+          <span style={{ flex: 1 }} />
+
+          {/* BRIDGE status button. Red + clickable when FAILED/STUCK > 0;
+              click opens the Recent Bridge Commands card and scrolls to it. */}
+          {(() => {
+            const flags    = outbox?.flags || {};
+            const counts   = outbox?.counts || {};
+            const enabled  = Object.entries(flags).filter(([, v]) => v).map(([k]) => k.replace('IBKR_AUTO_', ''));
+            const anyOn    = enabled.length > 0;
+            const stuck    = (counts.STUCK || 0) + (counts.FAILED || 0);
+            const label    = stuck > 0
+              ? `● BRIDGE: ${stuck} ATTENTION`
+              : anyOn
+                ? `● BRIDGE: LIVE`
+                : '● BRIDGE: OFF';
+            const tooltip  = stuck > 0
+              ? `${counts.FAILED || 0} FAILED · ${counts.STUCK || 0} STUCK — click to open Recent Bridge Commands`
+              : anyOn
+                ? `Enabled flags: ${enabled.join(', ')}. Pending=${counts.PENDING || 0} Executing=${counts.EXECUTING || 0} Done=${counts.DONE || 0}`
+                : 'No Phase 4 flags enabled.';
+            const clickable = stuck > 0;
+            const handleClick = clickable ? () => {
+              if (!isOpen('recent-bridge-commands')) toggleSection('recent-bridge-commands');
+              setTimeout(() => {
+                const el = document.getElementById('recent-bridge-commands-anchor');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 50);
+            } : undefined;
+            return (
+              <button
+                type="button"
+                title={tooltip}
+                onClick={handleClick}
+                disabled={!clickable}
+                style={{
+                  padding: '6px 12px',
+                  background: stuck > 0 ? 'rgba(220,53,69,0.08)' : 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${stuck > 0 ? 'rgba(220,53,69,0.5)' : 'rgba(255,255,255,0.15)'}`,
+                  color: stuck > 0 ? '#dc3545' : (anyOn ? '#22c55e' : 'rgba(255,255,255,0.55)'),
+                  borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  cursor: clickable ? 'pointer' : 'default',
+                  letterSpacing: '0.05em',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })()}
+        </div>
+      )}
+
       {error && <div style={s.error}>{error}</div>}
 
       {/* ── MEMBER ADMIN — wrapper around Reset Password + Create Account.
@@ -3618,9 +3718,19 @@ export default function AssistantPage({ onNavigate }) {
         </div>
       )}
 
-      {/* ── Data Integrity (admin-only, collapsible) ──────────────────────── */}
+      {/* ══════════════════════════════════════════════════════════════════════
+           REORDERABLE CARDS WRAPPER — flex column with each card carrying
+           its own `order: N` style. Up/Down buttons in each card header
+           swap positions, persisted to localStorage as 'pnthrAssistant.order'.
+           Data Integrity is inside this wrapper so it participates in the
+           reordering alongside the other 5 cards.
+         ══════════════════════════════════════════════════════════════════════ */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+
+      {/* ── Data Integrity (admin-only, collapsible, reorderable) ─────────── */}
       {isAdmin && (
         <div style={{
+          ...orderStyle('data-integrity'),
           border: '1px solid rgba(252,240,0,0.35)', borderRadius: 8, marginBottom: 16,
           background: 'rgba(252,240,0,0.04)',
         }}>
@@ -3635,8 +3745,11 @@ export default function AssistantPage({ onNavigate }) {
               <span style={{ fontSize: 10, marginRight: 6, userSelect: 'none' }}>{diOpen ? '▼' : '▶'}</span>
               DATA INTEGRITY
             </span>
-            <span style={{ fontSize: 11, color: '#888' }}>
-              TWS punch list · PARTIAL/drift sweep · stop sync
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: '#888' }}>
+                TWS punch list · PARTIAL/drift sweep · stop sync
+              </span>
+              {reorderControls('data-integrity')}
             </span>
           </div>
           {diOpen && (
@@ -3753,126 +3866,10 @@ export default function AssistantPage({ onNavigate }) {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════════
-           Day 1 — Action toolbar
-           NAV (inline edit) · Risk Advisor · Calculator · + Add Position ·
-           Bridge status badge (Phase 4 placeholder; populated for real on Day 2)
-         ══════════════════════════════════════════════════════════════════════ */}
-      {isAdmin && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          padding: '10px 14px', marginBottom: 12,
-          background: 'rgba(252,240,0,0.04)',
-          border: '1px solid rgba(252,240,0,0.18)',
-          borderRadius: 8,
-        }}>
-          {/* Modal triggers — NAV display moved to the bottom info bar
-              (NET LIQUIDITY card) so the toolbar stays focused on actions. */}
-          <button
-            type="button"
-            onClick={() => setRiskAdvisorOpen(true)}
-            style={{
-              padding: '6px 12px',
-              background: 'rgba(220,53,69,0.08)',
-              border: '1px solid rgba(220,53,69,0.4)',
-              color: '#dc3545', borderRadius: 4, fontSize: 11, fontWeight: 700,
-              cursor: 'pointer', letterSpacing: '0.05em',
-            }}
-          >⚖ RISK ADVISOR</button>
-          <button
-            type="button"
-            onClick={() => setCalcOpen(true)}
-            style={{
-              padding: '6px 12px',
-              background: 'rgba(255,215,0,0.08)',
-              border: '1px solid rgba(255,215,0,0.4)',
-              color: '#FFD700', borderRadius: 4, fontSize: 11, fontWeight: 700,
-              cursor: 'pointer', letterSpacing: '0.05em',
-            }}
-          >🔢 POSITION CALCULATOR</button>
-          <button
-            type="button"
-            onClick={() => setAddPosOpen(true)}
-            style={{
-              padding: '6px 14px',
-              background: '#FCF000',
-              border: '1px solid #FCF000',
-              color: '#000', borderRadius: 4, fontSize: 11, fontWeight: 800,
-              cursor: 'pointer', letterSpacing: '0.05em',
-            }}
-          >+ ADD POSITION</button>
-
-          {/* Spacer */}
-          <span style={{ flex: 1 }} />
-
-          {/* Bridge status — same size + style as the other toolbar buttons.
-              When there are FAILED/STUCK commands the button is red and
-              clickable: opens the Recent Bridge Commands section and scrolls
-              to it. Replaces the older non-clickable pill plus the redundant
-              "Phase 4 outbox needs attention" banner. */}
-          {(() => {
-            const flags    = outbox?.flags || {};
-            const counts   = outbox?.counts || {};
-            const enabled  = Object.entries(flags).filter(([, v]) => v).map(([k]) => k.replace('IBKR_AUTO_', ''));
-            const anyOn    = enabled.length > 0;
-            const stuck    = (counts.STUCK || 0) + (counts.FAILED || 0);
-            const label    = stuck > 0
-              ? `● BRIDGE: ${stuck} ATTENTION`
-              : anyOn
-                ? `● BRIDGE: LIVE`
-                : '● BRIDGE: OFF';
-            const tooltip  = stuck > 0
-              ? `${counts.FAILED || 0} FAILED · ${counts.STUCK || 0} STUCK — click to open Recent Bridge Commands`
-              : anyOn
-                ? `Enabled flags: ${enabled.join(', ')}. Pending=${counts.PENDING || 0} Executing=${counts.EXECUTING || 0} Done=${counts.DONE || 0}`
-                : 'No Phase 4 flags enabled.';
-            const clickable = stuck > 0;
-            const handleClick = clickable ? () => {
-              // Force the Recent Bridge Commands section open in central state,
-              // then scroll to it. Small timeout lets the conditional render
-              // reflow before scrollIntoView.
-              if (!isOpen('recent-bridge-commands')) toggleSection('recent-bridge-commands');
-              setTimeout(() => {
-                const el = document.getElementById('recent-bridge-commands-anchor');
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }, 50);
-            } : undefined;
-            return (
-              <button
-                type="button"
-                title={tooltip}
-                onClick={handleClick}
-                disabled={!clickable}
-                style={{
-                  padding: '6px 12px',
-                  background: stuck > 0 ? 'rgba(220,53,69,0.08)' : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${stuck > 0 ? 'rgba(220,53,69,0.5)' : 'rgba(255,255,255,0.15)'}`,
-                  color: stuck > 0 ? '#dc3545' : (anyOn ? '#22c55e' : 'rgba(255,255,255,0.55)'),
-                  borderRadius: 4, fontSize: 11, fontWeight: 700,
-                  cursor: clickable ? 'pointer' : 'default',
-                  letterSpacing: '0.05em',
-                  fontFamily: 'inherit',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })()}
-        </div>
-      )}
-
-      {/* Standalone "Phase 4 outbox needs attention" banner removed —
+      {/* Toolbar moved up to right below the count badges in the header.
+          Standalone "Phase 4 outbox needs attention" banner removed —
           the BRIDGE button above now serves as the single clickable
-          attention indicator (its red state + count + click-through to
-          the Recent Bridge Commands section consolidates what the banner
-          and the pill used to say separately). */}
-
-      {/* ══════════════════════════════════════════════════════════════════════
-           REORDERABLE CARDS WRAPPER — flex column with each card carrying
-           its own `order: N` style. Up/Down buttons in each card header
-           swap positions, persisted to localStorage as 'pnthrAssistant.order'.
-         ══════════════════════════════════════════════════════════════════════ */}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
+          attention indicator. */}
 
       {/* Phase 4 outbox — recent commands inspector. Admin only.
           Collapse state persisted via central collapse map; matches the

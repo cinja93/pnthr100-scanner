@@ -3534,8 +3534,9 @@ export default function AssistantPage({ onNavigate }) {
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
               borderBottom: diOpen ? '1px solid rgba(252,240,0,0.2)' : 'none',
             }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#fcf000', letterSpacing: '0.04em' }}>
-              DATA INTEGRITY {diOpen ? '▼' : '▶'}
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#fcf000', letterSpacing: '0.04em', display: 'flex', alignItems: 'center' }}>
+              <span style={{ fontSize: 10, marginRight: 6, userSelect: 'none' }}>{diOpen ? '▼' : '▶'}</span>
+              DATA INTEGRITY
             </span>
             <span style={{ fontSize: 11, color: '#888' }}>
               TWS punch list · PARTIAL/drift sweep · stop sync
@@ -3906,47 +3907,23 @@ export default function AssistantPage({ onNavigate }) {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-           PNTHR ASSISTANT LIVE — source-of-truth reconciliation table
-           Shows every ticker from IBKR positions + IBKR stops + Command Center
-           with colored alignment indicators. Click a non-green cell to fix.
+           PNTHR ASSISTANT LIVE — source-of-truth reconciliation table.
+           Collapse state is owned by this page's central collapse map so it
+           survives reloads. The table renders its own header (with the
+           ALIGNED pills, refresh button, etc.) — we just pass the controlled
+           collapsed prop and a toggle handler.
          ══════════════════════════════════════════════════════════════════════ */}
-      <div style={{ marginBottom: 12 }}>
-        <div
-          onClick={() => toggleSection('pnthr-assistant-live')}
-          style={{
-            padding: '7px 14px 5px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            cursor: 'pointer',
-            border: '1px solid rgba(252, 240, 0, 0.3)',
-            borderBottom: isOpen('pnthr-assistant-live') ? 'none' : '1px solid rgba(252, 240, 0, 0.3)',
-            borderRadius: isOpen('pnthr-assistant-live') ? '8px 8px 0 0' : 8,
-            background: 'rgba(252, 240, 0, 0.01)',
-          }}
-        >
-          {collapseArrow('pnthr-assistant-live', '#FCF000')}
-          <span style={{
-            color: '#FCF000',
-            fontWeight: 900,
-            fontSize: 10,
-            letterSpacing: '0.14em',
-            fontFamily: "'Inter', 'Segoe UI', sans-serif",
-          }}>PNTHR ASSISTANT LIVE</span>
-          <span style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, rgba(252,240,0,0.15), transparent 80%)' }} />
-        </div>
-        {isOpen('pnthr-assistant-live') && (
       <AssistantLiveTable
         onNavigate={onNavigate}
         netLiquidity={nav}
+        collapsed={!isOpen('pnthr-assistant-live')}
+        onToggleCollapsed={() => toggleSection('pnthr-assistant-live')}
         onOpenChart={(stocks, idx) => {
           if (Array.isArray(stocks) && stocks.length > 0) { setChartStocks(stocks); setChartIndex(idx || 0); }
           else if (stocks && stocks.ticker) { setChartStocks([stocks]); setChartIndex(0); }
         }}
         onAddPosition={(prefill) => { setAddPosInitial(prefill || null); setAddPosOpen(true); }}
       />
-        )}
-      </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
            SECTION 1 — LIVE OPPORTUNITIES

@@ -758,13 +758,20 @@ function buildSubRows(row) {
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
-export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart, onAddPosition }) {
+export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart, onAddPosition, collapsed: extCollapsed, onToggleCollapsed }) {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error,      setError]      = useState(null);
   const [modalRow,   setModalRow]   = useState(null);
-  const [collapsed,  setCollapsed]  = useState(false);
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  // Allow parent (AssistantPage) to control collapse state via central
+  // localStorage map. Falls back to internal state when not controlled.
+  const collapsed    = (typeof extCollapsed === 'boolean') ? extCollapsed : internalCollapsed;
+  const setCollapsed = (v) => {
+    if (onToggleCollapsed) onToggleCollapsed();
+    else setInternalCollapsed(typeof v === 'function' ? v(internalCollapsed) : v);
+  };
   // Day 1: per-row expand panel — Set<ticker>. Always starts empty (locked
   // decision #2 — collapse all on reload, clean slate every visit).
   const [expandedTickers, setExpandedTickers] = useState(() => new Set());

@@ -860,11 +860,16 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
       display: 'flex', alignItems: 'center', gap: 12,
       userSelect: 'none',
     },
+    // LOCKED arrow spec — must match ARROW_STYLE in AssistantPage.jsx.
+    // Fixed-width box (12px) + textAlign center + 6px right margin so the
+    // title 'PNTHR ASSISTANT LIVE' always starts at the same X-coord as
+    // every other section header on the page. Do not edit independently.
     collapseBtn: {
+      display: 'inline-block', width: 12, textAlign: 'center',
       background: 'transparent', border: 'none', padding: 0,
       marginRight: 6,
       color: '#FCF000', fontSize: 10, cursor: 'pointer', userSelect: 'none',
-      lineHeight: 1,
+      lineHeight: 1, flexShrink: 0,
     },
     title: {
       color: '#FCF000', fontWeight: 900, fontSize: 10, letterSpacing: '0.14em',

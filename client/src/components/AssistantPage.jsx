@@ -2633,13 +2633,17 @@ export default function AssistantPage({ onNavigate }) {
   // (Critical/Action inside Live Opportunities, Routine inside Live Watch,
   // Recent Fills inside Today's Accomplishments) move with their parent.
   // Implementation uses CSS `order` so we don't have to restructure the JSX.
+  // Default order — matches Scott's locked layout from 2026-05-01:
+  // PNTHR Assistant Live → Live Opportunities → Live Watch → Data Integrity
+  // → Today's Accomplishments → Recent Bridge Commands.
+  // User can reorder via ▲▼ buttons; their choice persists in localStorage.
   const TOP_LEVEL_CARDS = useMemo(() => ([
-    'data-integrity',
-    'recent-bridge-commands',
     'pnthr-assistant-live',
     'live-opportunities',
     'live-watch',
+    'data-integrity',
     'todays-accomplishments',
+    'recent-bridge-commands',
   ]), []);
   const ORDER_KEY = 'pnthrAssistant.order';
   const [cardOrder, setCardOrder] = useState(() => {
@@ -2723,9 +2727,23 @@ export default function AssistantPage({ onNavigate }) {
       return next;
     });
   }, []);
-  // Reusable arrow glyph for section headers — caller controls placement/color.
+  // Reusable arrow glyph for section headers. LOCKED SPACING: fixed-width
+  // inline-block (width 12px, text-align center) so the next element after
+  // the arrow always starts at exactly the same X-coordinate, regardless of
+  // which glyph (▶/▼) renders or what the first letter of the title is.
+  // Do not change these values without updating the design memory entry.
+  const ARROW_STYLE = useMemo(() => ({
+    display: 'inline-block',
+    width: 12,
+    fontSize: 10,
+    lineHeight: 1,
+    textAlign: 'center',
+    marginRight: 6,
+    userSelect: 'none',
+    flexShrink: 0,
+  }), []);
   const collapseArrow = (id, color = '#888') => (
-    <span style={{ fontSize: 10, color, marginRight: 6, userSelect: 'none' }}>
+    <span style={{ ...ARROW_STYLE, color }}>
       {isOpen(id) ? '▼' : '▶'}
     </span>
   );
@@ -3742,7 +3760,7 @@ export default function AssistantPage({ onNavigate }) {
               borderBottom: diOpen ? '1px solid rgba(252,240,0,0.2)' : 'none',
             }}>
             <span style={{ fontSize: 10, fontWeight: 900, color: '#fcf000', letterSpacing: '0.14em', fontFamily: "'Inter', 'Segoe UI', sans-serif", textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
-              <span style={{ fontSize: 10, marginRight: 6, userSelect: 'none' }}>{diOpen ? '▼' : '▶'}</span>
+              <span style={ARROW_STYLE}>{diOpen ? '▼' : '▶'}</span>
               DATA INTEGRITY
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

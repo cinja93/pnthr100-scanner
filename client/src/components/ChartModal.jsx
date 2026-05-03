@@ -8,7 +8,6 @@ import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeAnalyzeScore, computeETFAnalyzeScore } from '../utils/analyzeScore';
 import { isClassifiedETF } from '../utils/etfClassification';
 import { getSectorEmaPeriod } from '../utils/sectorEmaConfig';
-import { detectTrendlines } from '../utils/trendlineDetection';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
 import KillBadge from './KillBadge';
@@ -714,29 +713,6 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
       });
       cwsLineSeries.setData(last3.map(b => ({ time: b.time, value: cws })));
     }
-
-    // Auto-detected trendlines: green = active uptrend support, red = active
-    // downtrend resistance, blue = active horizontal support, orange = active
-    // horizontal resistance, black = any line broken by a weekly close. Active
-    // diagonals + horizontals project forward 26 weeks for future support/resistance.
-    const trendlines = detectTrendlines(allWeeklyData);
-    const drawTrendline = (tl, lineWidth = 2) => {
-      if (!tl) return;
-      const s = chart.addSeries(LineSeries, {
-        color: tl.color,
-        lineWidth,
-        priceLineVisible: false,
-        lastValueVisible: false,
-        crosshairMarkerVisible: false,
-      });
-      s.setData(tl.segment);
-    };
-    drawTrendline(trendlines.activeUptrend);
-    drawTrendline(trendlines.activeDowntrend);
-    drawTrendline(trendlines.activeSupport);
-    drawTrendline(trendlines.activeResistance);
-    for (const tl of trendlines.brokenDiagonals)   drawTrendline(tl, 1);
-    for (const tl of trendlines.brokenHorizontals) drawTrendline(tl, 1);
 
     chart.timeScale().fitContent();
 

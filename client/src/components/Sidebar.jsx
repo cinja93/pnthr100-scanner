@@ -252,6 +252,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
     dataItems.push({ key: 'history',        label: 'PNTHR Kill 10',   iconImg: true });
     dataItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test', iconImg: true });
     dataItems.push({ key: 'signal-history', label: 'PNTHR History',   iconImg: true });
+    dataItems.push({ key: 'test',           label: 'TEST',            icon: '🧪' });
   }
   dataItems.push({ key: 'watchlist', label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' });
 

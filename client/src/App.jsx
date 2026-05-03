@@ -37,6 +37,7 @@ import SignalHistoryPage from './components/SignalHistoryPage';
 import { getSectorEmaPeriod } from './utils/sectorEmaConfig';
 import HistoryPage from './components/HistoryPage';
 import KillTestPage from './components/KillTestPage';
+import TestPage from './components/TestPage';
 import AssistantPage from './components/AssistantPage';
 import OrdersPage from './components/OrdersPage';
 import LoginPage from './components/LoginPage';
@@ -1336,6 +1337,12 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR Kill Test — admin only */}
           {activePage === 'kill-test' && (isAdmin
             ? <KillTestPage />
+            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
+          )}
+
+          {/* TEST page — admin only */}
+          {activePage === 'test' && (isAdmin
+            ? <TestPage />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 

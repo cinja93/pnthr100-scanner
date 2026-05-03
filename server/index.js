@@ -7352,6 +7352,70 @@ app.get('/api/assistant/headlines', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TEST PAGE — admin-only chart playground using historical backtest candles
+// ─────────────────────────────────────────────────────────────────────────────
+
+let _denDb = null;
+async function getDenDb() {
+  if (_denDb) return _denDb;
+  const { MongoClient } = await import('mongodb');
+  const c = new MongoClient(process.env.MONGODB_URI);
+  await c.connect();
+  _denDb = c.db('pnthr_den');
+  return _denDb;
+}
+
+app.get('/api/test/tickers', authenticateJWT, requireAdmin, async (_req, res) => {
+  try {
+    const db = await getDenDb();
+    const tickers = await db.collection('pnthr_bt_candles_weekly').distinct('ticker');
+    tickers.sort();
+    const meta = await db.collection('pnthr_bt_box_alerts_meta').findOne({ _id: 'latest' });
+    res.json({ tickers, meta });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/test/candles', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const ticker = String(req.query.ticker || '').toUpperCase();
+    if (!ticker) return res.status(400).json({ error: 'ticker required' });
+    const db = await getDenDb();
+    const doc = await db.collection('pnthr_bt_candles_weekly').findOne({ ticker });
+    if (!doc) return res.json({ ticker, weekly: [] });
+    res.json({ ticker, weekly: doc.weekly || [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/test/box-alerts', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const ticker = String(req.query.ticker || '').toUpperCase();
+    if (!ticker) return res.status(400).json({ error: 'ticker required' });
+    const db = await getDenDb();
+    const doc = await db.collection('pnthr_bt_box_alerts').findOne({ ticker });
+    res.json({ ticker, boxes: doc?.boxes || [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/test/recompute', authenticateJWT, requireAdmin, async (req, res) => {
+  const overlay = String(req.query.overlay || '');
+  if (overlay !== 'box-breakout') return res.status(400).json({ error: 'unknown overlay' });
+  try {
+    const { computeBoxBreakouts } = await import('./backtests/computeBoxBreakouts.js');
+    const result = await computeBoxBreakouts();
+    res.json(result);
+  } catch (e) {
+    console.error('[test/recompute]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);

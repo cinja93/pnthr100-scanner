@@ -164,7 +164,6 @@ function TickerChart({ ticker, enabled }) {
   const [tempLine, setTempLine]     = useState(null); // {x1,y1,x2,y2} screen-px during drag
   const [hoverSnap, setHoverSnap]   = useState(null); // {x, y} preview of where click would snap
   const [ctxMenu, setCtxMenu]       = useState(null); // {x, y, hitId}
-  const [debug, setDebug]           = useState('idle');  // visible status badge for diagnosing issues
 
   useEffect(() => {
     let cancelled = false;
@@ -393,26 +392,28 @@ function TickerChart({ ticker, enabled }) {
   }
 
   function onDrawDown(e) {
-    if (!drawMode) {
-      setDebug(`down ignored — drawMode off`);
-      return;
-    }
+    if (!drawMode) return;
     e.preventDefault();
-    setDebug(`down @ (${e.clientX},${e.clientY}) — looking for snap…`);
-    // Endpoint-editing temporarily disabled while we fix the basic draw flow.
-    // Re-enable once Scott confirms new-line drawing is rock solid.
-    // const grab = findEndpointHit(e.clientX, e.clientY);
-    // if (grab) { ... }
-    const snap = snapAt(e.clientX, e.clientY);
-    if (!snap) {
-      setDebug(`snap FAILED — chart=${!!chartRef.current} series=${!!seriesRef.current} bars=${sliceRef.current?.length || 0}`);
+    // First check: is the user grabbing an existing endpoint to edit?
+    const grab = findEndpointHit(e.clientX, e.clientY);
+    if (grab) {
+      const chart = chartRef.current, series = seriesRef.current;
+      const xOther = chart.timeScale().timeToCoordinate(grab.otherTime);
+      const yOther = series.priceToCoordinate(grab.otherVal);
+      editingRef.current = grab;
+      const rect = overlayRef.current.getBoundingClientRect();
+      setTempLine({ x1: xOther, y1: yOther, x2: e.clientX - rect.left, y2: e.clientY - rect.top });
+      setHoverSnap(null);
+      attachWindowDragListeners();
       return;
     }
+    // Otherwise: starting a brand new line
+    const snap = snapAt(e.clientX, e.clientY);
+    if (!snap) return;
     drawStartRef.current = snap;
     setTempLine({ x1: snap.x, y1: snap.y, x2: snap.x, y2: snap.y });
     setHoverSnap(null);
     attachWindowDragListeners();
-    setDebug(`drawing — start=${snap.time} @ $${snap.value.toFixed(2)} (${snap.snapHigh ? 'high' : 'low'})`);
   }
 
   function onDrawMove(e) {
@@ -433,7 +434,6 @@ function TickerChart({ ticker, enabled }) {
 
   async function onDrawUp(e) {
     if (!drawMode) return;
-    setDebug(`up @ (${e.clientX},${e.clientY})`);
     // Endpoint-edit completion
     if (editingRef.current) {
       const edit = editingRef.current;
@@ -469,15 +469,11 @@ function TickerChart({ ticker, enabled }) {
     const end = snapAt(e.clientX, e.clientY);
     drawStartRef.current = null;
     setTempLine(null);
-    if (!end || end.time === start.time) {
-      setDebug(`rejected — ${!end ? 'no snap' : 'same bar as start'}`);
-      return;
-    }
+    if (!end || end.time === start.time) return;
     const [a, b] = start.time < end.time ? [start, end] : [end, start];
     const expectSide = computeExpectSide(a.time, a.value, b.time, b.value);
     const payload = { ticker, t1: a.time, v1: a.value, t2: b.time, v2: b.value, expectSide };
     setDrawnLines(prev => [...prev, { ...payload, _id: 'pending-' + Date.now() }]);
-    setDebug(`saved ${a.time} → ${b.time} (${expectSide})`);
     try {
       const r = await fetch(`${API_BASE}/api/test/trendlines`, {
         method: 'POST',
@@ -487,13 +483,8 @@ function TickerChart({ ticker, enabled }) {
       const j = await r.json();
       if (j.ok) {
         setDrawnLines(prev => prev.map(l => l._id?.startsWith?.('pending-') && l.t1 === payload.t1 && l.t2 === payload.t2 ? { ...l, _id: j._id } : l));
-      } else {
-        setDebug(`server error: ${j.error || 'unknown'}`);
       }
-    } catch (err) {
-      setDebug(`network error: ${err.message}`);
-      console.error('save trendline failed', err);
-    }
+    } catch (err) { console.error('save trendline failed', err); }
   }
 
   // ── Right-click context menu ──
@@ -631,16 +622,6 @@ function TickerChart({ ticker, enabled }) {
       </div>
       <div style={{ position: 'relative', width: '100%', height: CHART_HEIGHT }}>
         <div ref={containerRef} style={{ width: '100%', height: CHART_HEIGHT }} />
-        {drawMode && (
-          <div style={{
-            position: 'absolute', top: 6, left: 6, zIndex: 11,
-            background: 'rgba(0,0,0,0.85)', color: '#fcf000',
-            padding: '4px 10px', borderRadius: 4, fontSize: 11, fontFamily: 'monospace',
-            pointerEvents: 'none',
-          }}>
-            🐞 {debug}
-          </div>
-        )}
         {/* Drawing overlay — DIV (reliable event capture) on top of chart, with
             inner SVG for visuals only. zIndex forces it above any chart canvases. */}
         <div

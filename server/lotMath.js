@@ -162,22 +162,22 @@ export function expectedLotTriggerAction(direction) {
   return (direction || 'LONG').toUpperCase() === 'SHORT' ? 'SELL' : 'BUY';
 }
 
-// ── Pair TWS stop orders to plan lots in price order ────────────────────────
-// Order-based pairing: sort plan lots by tightness-to-anchor, sort IBKR orders
-// by tightness-to-anchor, pair 1:1 in order. Extras beyond the lot count fall
-// into trulyUnmatched (left alone — likely user-placed tactical).
+// ── Pair TWS stop orders to plan lots ───────────────────────────────────────
+// Two-pass algorithm so both the anchor-drift case (HOOD: 3 off-by-$1.50 orders
+// shifted up one lot under closest-distance match) and the duplicate-orders
+// case (CSCO: 4 canonical-priced + 4 stale orders) reconcile correctly.
 //
-// Why not closest-distance match: when the L1 anchor drifts, IBKR orders
-// originally placed for L2 may end up closer to L3 than to L2, causing each
-// order to "shift up" one lot. Result: L2 looks unmatched (PLACE adds a 4th
-// order), L3-L5 see "looser" candidates, MODIFYs get rejected, IBKR diverges
-// from PNTHR plan and never reconciles. Order-based pairing matches user
-// intent: the lowest BUY STP is L2's order regardless of price drift.
-//
-// LONG pyramid: BUY STPs above market, lower price = tighter (sooner trigger).
-//               Sort lots ASC, orders ASC.
-// SHORT pyramid: SELL STPs below market, higher price = tighter.
-//                Sort lots DESC, orders DESC.
+// PASS A — tight match. Any IBKR order already within ~0.5%/$0.10 of a plan
+//   lot pairs directly with that lot. Greedy by smallest distance so a
+//   canonical-priced order wins over a stale-anchor near-match.
+// PASS B — order-based pairing. Remaining unmatched IBKR orders pair 1:1
+//   with remaining unmatched plan lots in tightness-to-anchor order. Lowest
+//   BUY STP for a LONG pyramid pairs with the lowest unmatched lot, etc.
+// PASS C — excess as duplicates. Orders left over (more BUY STPs than plan
+//   lots) get assigned to their nearest plan lot if within 5% — the per-lot
+//   processing in lotTriggerCron then cancels them as DUPLICATE_AT_*. Orders
+//   farther than 5% from any lot are returned as trulyUnmatched (left alone
+//   — preserves genuine tactical user orders).
 //
 // Returns { candidatesByLot: Map<lotNum, [order]>, trulyUnmatched: [order] }.
 export function pairTwsOrdersToLots(orders, lots, isLong) {
@@ -190,14 +190,57 @@ export function pairTwsOrdersToLots(orders, lots, isLong) {
 
   const candidatesByLot = new Map();
   const trulyUnmatched  = [];
-  for (let i = 0; i < sortedOrders.length; i++) {
-    if (i < planLots.length) {
-      const lot = planLots[i];
-      if (!candidatesByLot.has(lot.lot)) candidatesByLot.set(lot.lot, []);
-      candidatesByLot.get(lot.lot).push(sortedOrders[i]);
-    } else {
-      trulyUnmatched.push(sortedOrders[i]);
+  if (planLots.length === 0) return { candidatesByLot, trulyUnmatched: sortedOrders };
+
+  // PASS A — tight match
+  const TIGHT_ABS = 0.10;
+  const TIGHT_PCT = 0.005;
+  const tightCandidates = [];
+  for (const order of sortedOrders) {
+    for (const lot of planLots) {
+      const tol  = Math.max(TIGHT_ABS, lot.triggerPrice * TIGHT_PCT);
+      const diff = Math.abs(+order.stopPrice - lot.triggerPrice);
+      if (diff <= tol) tightCandidates.push({ order, lot, diff });
     }
   }
+  tightCandidates.sort((a, b) => a.diff - b.diff);
+
+  const claimedOrders  = new Set();
+  const claimedLotNums = new Set();
+  for (const c of tightCandidates) {
+    if (claimedOrders.has(c.order) || claimedLotNums.has(c.lot.lot)) continue;
+    candidatesByLot.set(c.lot.lot, [c.order]);
+    claimedOrders.add(c.order);
+    claimedLotNums.add(c.lot.lot);
+  }
+
+  // PASS B — order-based pairing for remainders
+  const remOrders = sortedOrders.filter(o => !claimedOrders.has(o));
+  const remLots   = planLots.filter(l => !claimedLotNums.has(l.lot));
+  const pairedCount = Math.min(remOrders.length, remLots.length);
+  for (let i = 0; i < pairedCount; i++) {
+    candidatesByLot.set(remLots[i].lot, [remOrders[i]]);
+  }
+
+  // PASS C — excess orders → duplicates of nearest lot (if within 5%) else
+  // truly unmatched. The per-lot duplicate-cancellation logic in lotTriggerCron
+  // will pick up the duplicates and cancel them.
+  const EXCESS_DEDUP_PCT = 0.05;
+  const excessOrders = remOrders.slice(pairedCount);
+  for (const order of excessOrders) {
+    let nearestLot = null;
+    let nearestDiff = Infinity;
+    for (const lot of planLots) {
+      const d = Math.abs(+order.stopPrice - lot.triggerPrice);
+      if (d < nearestDiff) { nearestLot = lot; nearestDiff = d; }
+    }
+    if (nearestLot && nearestDiff <= nearestLot.triggerPrice * EXCESS_DEDUP_PCT) {
+      if (!candidatesByLot.has(nearestLot.lot)) candidatesByLot.set(nearestLot.lot, []);
+      candidatesByLot.get(nearestLot.lot).push(order);
+    } else {
+      trulyUnmatched.push(order);
+    }
+  }
+
   return { candidatesByLot, trulyUnmatched };
 }

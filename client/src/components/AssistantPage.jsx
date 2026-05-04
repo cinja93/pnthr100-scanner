@@ -3873,7 +3873,7 @@ export default function AssistantPage({ onNavigate }) {
                 </button>
                 <button
                   onClick={() => {
-                    if (!window.confirm('Run live lot trigger sync?\n\n• CLEANUP cancels TWS BUY/SELL STOPs at filled/surpassed lot levels (the SWKS-style stale-trigger fix).\n• PLACE stages new triggers for incomplete lots without TWS orders.\n• MODIFY pushes PNTHR-tighter triggers when applicable.\n\nOnly effective if IBKR_AUTO_SYNC_LOT_TRIGGERS is on.')) return;
+                    if (!window.confirm('Run live lot trigger sync?\n\n• CLEANUP cancels TWS BUY/SELL STOPs at filled/surpassed lot levels and excess duplicates near plan prices.\n• PLACE stages new triggers for incomplete lots without TWS orders.\n• MODIFY pushes PNTHR plan prices to drifted TWS orders (in either direction — PNTHR plan is law).\n\nOnly effective if IBKR_AUTO_SYNC_LOT_TRIGGERS is on.')) return;
                     runLotTriggerSync(false);
                   }}
                   disabled={!!diBusy}
@@ -4964,6 +4964,12 @@ function DataIntegrityResultView({ result, onCloseOrphan, onSyncOrphanFromTws, c
 
   if (kind === 'lot-triggers-dry' || kind === 'lot-triggers-apply') {
     const isApply       = kind === 'lot-triggers-apply';
+    // Count actions IDENTIFIED (not just enqueued). In dry run nothing
+    // enqueues; in apply with flag off, nothing enqueues either. Either way
+    // the user wants to see what the cron WOULD do. Track enqueued separately.
+    const placedTotal   = (data.placements    || []).length;
+    const modTotal      = (data.modifications || []).length;
+    const cancelTotal   = (data.cancellations || []).length;
     const placedQueued  = (data.placements    || []).filter(x => x.enqueued).length;
     const modQueued     = (data.modifications || []).filter(x => x.enqueued).length;
     const cancelQueued  = (data.cancellations || []).filter(x => x.enqueued).length;
@@ -4971,6 +4977,9 @@ function DataIntegrityResultView({ result, onCloseOrphan, onSyncOrphanFromTws, c
     const aligned       = (data.aligned       || []).length;
     const skipped       = (data.skips         || []).length;
     const totalEnqueued = placedQueued + modQueued + cancelQueued;
+    const totalIdentified = placedTotal + modTotal + cancelTotal;
+    const fmtCount = (total, queued) => isApply && total !== queued
+      ? `${total} (${queued} enqueued)` : `${total}`;
     return (
       <div>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#fcf000', marginBottom: 8 }}>
@@ -4978,10 +4987,12 @@ function DataIntegrityResultView({ result, onCloseOrphan, onSyncOrphanFromTws, c
         </div>
         <div style={cellRow}><span style={label}>Positions checked:</span><span style={{ color: '#e8e6e3', fontWeight: 700 }}>{data.positionsChecked}</span></div>
         <div style={cellRow}><span style={label}>Already aligned:</span><span style={{ color: '#22c55e', fontWeight: 700 }}>{aligned}</span></div>
-        <div style={cellRow}><span style={label}>Stale triggers cancelled:</span><span style={{ color: cancelQueued ? '#fca5a5' : '#888', fontWeight: 700 }}>{cancelQueued}</span></div>
-        <div style={cellRow}><span style={label}>New triggers placed:</span><span style={{ color: placedQueued ? '#86efac' : '#888', fontWeight: 700 }}>{placedQueued}</span></div>
-        <div style={cellRow}><span style={label}>Triggers modified (PNTHR-tighter):</span><span style={{ color: modQueued ? '#86efac' : '#888', fontWeight: 700 }}>{modQueued}</span></div>
-        <div style={cellRow}><span style={label}>TWS-tighter / user override (silent):</span><span style={{ color: adopted ? '#fcf000' : '#888', fontWeight: 700 }}>{adopted}</span></div>
+        <div style={cellRow}><span style={label}>Stale triggers cancelled:</span><span style={{ color: cancelTotal ? '#fca5a5' : '#888', fontWeight: 700 }}>{fmtCount(cancelTotal, cancelQueued)}</span></div>
+        <div style={cellRow}><span style={label}>New triggers placed:</span><span style={{ color: placedTotal ? '#86efac' : '#888', fontWeight: 700 }}>{fmtCount(placedTotal, placedQueued)}</span></div>
+        <div style={cellRow}><span style={label}>Triggers modified:</span><span style={{ color: modTotal ? '#86efac' : '#888', fontWeight: 700 }}>{fmtCount(modTotal, modQueued)}</span></div>
+        {adopted > 0 && (
+          <div style={cellRow}><span style={label}>TWS-tighter / user override (silent):</span><span style={{ color: '#fcf000', fontWeight: 700 }}>{adopted}</span></div>
+        )}
         <div style={cellRow}><span style={label}>Skipped (auto-opened, no plan, etc):</span><span style={{ color: skipped ? '#fca5a5' : '#888', fontWeight: 700 }}>{skipped}</span></div>
         {isApply && !data.flagOn && (
           <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(252,240,0,0.08)', color: '#fcf000', fontSize: 12, borderRadius: 4 }}>

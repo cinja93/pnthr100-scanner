@@ -192,9 +192,24 @@ export function sanityCheckPlaceLotTrigger({ position, ibkrPosition, lot, trigge
 
   const reqShares = +shares;
   if (!Number.isFinite(reqShares) || reqShares <= 0) return { ok: false, reason: 'BAD_SHARES' };
-  // Per-lot share cap. A single pyramid lot above 50% of the existing position
-  // is almost always a typo or stale-NAV recompute — refuse rather than place.
-  if (reqShares > ibkrShares * 0.50 + 1) return { ok: false, reason: 'LOT_SHARES_EXCEED_50PCT_OF_IBKR' };
+  // Per-lot share cap. Computed against the projected TOTAL position size
+  // (filled L1 actual + planned L2-L5 target shares) so legitimate early-
+  // stage pyramid lots that exceed 50% of CURRENT IBKR shares don't get
+  // rejected — XYZ pattern: 39 sh L1 with planned L2=25, L3=21 (well under
+  // 50% of the 111-share projected total) was failing the prior 50%-of-
+  // current-IBKR check. Typo-guard intent (any one lot being a huge chunk
+  // of the PLAN) is preserved.
+  const fills = position?.fills || {};
+  let projectedTotal = 0;
+  for (let n = 1; n <= 5; n++) {
+    const f = fills[n];
+    if (!f) continue;
+    projectedTotal += f.filled ? (+f.shares || 0) : (+f.targetShares || 0);
+  }
+  // Fall back to current IBKR shares as the denominator if no plan is set
+  // (defensive — shouldn't happen at PLACE_LOT_TRIGGER time, but covers it).
+  const denom = projectedTotal > 0 ? projectedTotal : ibkrShares;
+  if (reqShares > denom * 0.50 + 1) return { ok: false, reason: 'LOT_SHARES_EXCEED_50PCT_OF_PROJECTED_TOTAL' };
 
   const isLong = (position.direction || 'LONG').toUpperCase() !== 'SHORT';
   // Trigger on the pyramid-add side of price.

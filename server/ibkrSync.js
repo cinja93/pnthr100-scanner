@@ -17,6 +17,9 @@ import { connectToDatabase, upsertUserProfile } from './database.js';
 import { validatePortfolioUpdate } from './portfolioGuard.js';
 import { recordExit } from './exitService.js';
 import { enqueue as enqueueOutbox, sanityCheckPlaceStop, buildStopOrderShape } from './ibkrOutbox.js';
+import { recordLotFill } from './lotFillRecorder.js';
+
+const DEFAULT_NAV = 100_000;
 
 // ── processExecutions ─────────────────────────────────────────────────────────
 // Phase 2: Match TWS fills to PNTHR positions and auto-close on full exit.
@@ -70,10 +73,104 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
 
   const autoClosed = [];
 
+  // Cache user NAV once per call so the lot-plan recomputed inside
+  // recordLotFill matches the rest of the server.
+  let cachedNav = null;
+  const getNav = async () => {
+    if (cachedNav != null) return cachedNav;
+    const profile = await db.collection('user_profiles').findOne({ userId });
+    cachedNav = +profile?.accountSize || DEFAULT_NAV;
+    return cachedNav;
+  };
+
+  const lotFillsRecorded = [];
+
   for (const exec of executions) {
     if (processedIds.has(exec.execId)) continue; // already handled
 
-    const symbol     = exec.symbol?.toUpperCase();
+    const symbol = exec.symbol?.toUpperCase();
+
+    // ── Phase 4h: auto-record pyramid lot fills ────────────────────────────
+    // BOT for an ACTIVE LONG (or SLD for an ACTIVE SHORT) that already has
+    // at least one filled lot is a pyramid ADD, not an exit. Route through
+    // recordLotFill so PNTHR's fills[N] catches up to the TWS fill without
+    // requiring the user to mark it manually (Command Center is gone).
+    // Falls through to the exit branch below if recordLotFill declines
+    // (e.g., side mismatches direction, or no matching plan lot).
+    const addingDir = exec.side === 'BOT' ? 'LONG' : exec.side === 'SLD' ? 'SHORT' : null;
+    if (addingDir) {
+      const addPos = positionByTickerDir[`${symbol}_${addingDir}`];
+      const addFills = addPos?.fills || {};
+      const addPriorShares = Object.values(addFills)
+        .reduce((s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0);
+
+      if (addPos && addPos.status !== 'CLOSED' && addPriorShares > 0) {
+        const dryRun = process.env.IBKR_AUTO_RECORD_ADD_FILL !== 'true';
+        const nav = await getNav();
+        let lotResult;
+        try {
+          lotResult = await recordLotFill({
+            db, ownerId: userId, position: addPos, execution: exec,
+            syncedAt, nav, dryRun,
+          });
+        } catch (e) {
+          console.error(`[Phase 4h] recordLotFill threw for ${symbol}: ${e.message} — execId NOT marked`);
+          continue;
+        }
+
+        if (lotResult.recorded) {
+          await db.collection('pnthr_ibkr_executions').insertOne({
+            ownerId:    userId,
+            execId:     exec.execId,
+            symbol,
+            side:       exec.side,
+            shares:     exec.shares,
+            price:      exec.price,
+            type:       'AUTO_RECORD_LOT_FILL',
+            lot:        lotResult.lot,
+            ratchetTo:  lotResult.ratchet?.newStop ?? null,
+            processedAt: syncedAt,
+          });
+          lotFillsRecorded.push({
+            ticker: symbol, direction: addingDir, lot: lotResult.lot, lotName: lotResult.lotName,
+            shares: lotResult.fillShares, price: lotResult.fillPrice,
+            ratchet: lotResult.ratchet || null,
+          });
+          console.log(`[Phase 4h] ⚡ Auto-recorded ${symbol} L${lotResult.lot} (${lotResult.lotName}) — ${lotResult.fillShares}sh @ $${lotResult.fillPrice}` +
+            (lotResult.ratchet ? ` — stop ratcheted to $${lotResult.ratchet.newStop} (${lotResult.ratchet.reason})` : ''));
+          continue; // handled — do NOT fall through to exit branch
+        }
+
+        // Dry-run mode: log what we WOULD have done so the user can see the
+        // recorder is behaving correctly before flipping the flag.
+        if (lotResult.skipReason === 'DRY_RUN') {
+          console.log(`[Phase 4h] (DRY) Would auto-record ${symbol} L${lotResult.lot} ${exec.shares}sh @ $${exec.price}` +
+            (lotResult.ratchet ? ` + stop ratchet to $${lotResult.ratchet.newStop}` : '') +
+            ' — set IBKR_AUTO_RECORD_ADD_FILL=true on Render to apply');
+          // Mark as processed even in dry run so we don't keep re-logging it
+          // every minute. The user can replay manually via the admin endpoint
+          // once they're ready to apply.
+          await db.collection('pnthr_ibkr_executions').insertOne({
+            ownerId:    userId, execId: exec.execId, symbol, side: exec.side,
+            shares: exec.shares, price: exec.price,
+            type: 'AUTO_RECORD_LOT_FILL_DRY_RUN', lot: lotResult.lot,
+            processedAt: syncedAt,
+          });
+          continue;
+        }
+
+        // Other skip reasons (NO_MATCHING_LOT, LOT_ALREADY_FILLED, etc.) — fall
+        // through to the exit branch only if this could plausibly be an exit
+        // (BOT on SHORT or SLD on LONG). For BOT on LONG that didn't match a
+        // lot, there's nothing else to do — log and skip.
+        if (addingDir === 'LONG' && exec.side === 'BOT' || addingDir === 'SHORT' && exec.side === 'SLD') {
+          console.log(`[Phase 4h] ${symbol} ADD not auto-recorded: ${lotResult.skipReason}` +
+            (lotResult.diagnostic ? ` (price=$${exec.price} shares=${exec.shares})` : ''));
+          continue;
+        }
+      }
+    }
+
     const closingDir = exec.side === 'SLD' ? 'LONG' : exec.side === 'BOT' ? 'SHORT' : null;
     if (!closingDir) continue; // unknown side — skip
 
@@ -225,7 +322,7 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
     console.log(`[IBKR] ⚡ Auto-closed ${symbol} (${pnthr.direction}) @ $${exitPrice} — ${exitReason} — pnl ${result.exitRecord.pnl.pct}%`);
   }
 
-  return autoClosed;
+  return { autoClosed, lotFillsRecorded };
 }
 
 // ── processNewPositions ─────────────────────────────────────────────────────
@@ -644,9 +741,11 @@ export async function ibkrSync(req, res) {
     // We pass the live IBKR positions so processExecutions can refuse to
     // close a position that IBKR still holds (guards against stale partial
     // exits triggering auto-close after the user aligns CMD shares).
-    const autoClosedPositions = await processExecutions(
+    const execResult = await processExecutions(
       db, userId, executions, pnthrPositions, syncedAt, positions
     );
+    const autoClosedPositions = execResult.autoClosed || [];
+    const lotFillsRecorded    = execResult.lotFillsRecorded || [];
 
     // 5. Phase 3: Auto-open new positions detected in IBKR snapshot.
     // Runs AFTER processExecutions so a sell→rebuy in the same sync cycle
@@ -698,6 +797,7 @@ export async function ibkrSync(req, res) {
       untracked,
       autoClosedPositions,
       autoOpenedPositions,
+      lotFillsRecorded,
       syncedAt:             syncedAt.toISOString(),
     });
   } catch (err) {

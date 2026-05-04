@@ -5176,6 +5176,111 @@ app.post('/api/admin/sync-lot-triggers', authenticateJWT, requireAdmin, async (r
   }
 });
 
+// Phase 4h — manual replay of recent IBKR executions through the auto-fill
+// recorder. Catches up the CMD POS for positions whose pyramid lots filled
+// in TWS before IBKR_AUTO_RECORD_ADD_FILL was turned on (e.g., PBF/MU
+// shares mismatch). Reads pnthr_ibkr_executions, finds BOT/SLD execs for
+// ACTIVE pyramid positions that are NOT yet recorded as lot fills, and
+// runs them through recordLotFill. Use ?dryRun=1 (default) to preview.
+app.post('/api/admin/replay-lot-fills', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { recordLotFill } = await import('./lotFillRecorder.js');
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const dryRun = req.query.dryRun !== '0' && req.body?.dryRun !== false; // default DRY
+    const tickerFilter = (req.query.ticker || req.body?.ticker || '').toUpperCase() || null;
+    const lookbackDays = +(req.query.days || req.body?.days || 30);
+
+    const profile = await db.collection('user_profiles').findOne({ userId });
+    const nav = +profile?.accountSize || 100_000;
+
+    // All ACTIVE/PARTIAL positions (the candidate pool for matching)
+    const positions = await db.collection('pnthr_portfolio')
+      .find({ ownerId: userId, status: { $in: ['ACTIVE', 'PARTIAL'] }, ...(tickerFilter ? { ticker: tickerFilter } : {}) })
+      .toArray();
+    const posByTickerDir = {};
+    for (const p of positions) posByTickerDir[`${p.ticker?.toUpperCase()}_${(p.direction || 'LONG').toUpperCase()}`] = p;
+
+    // Recent executions — only adds (BOT for LONG / SLD for SHORT). Skip
+    // anything already recorded as a lot fill or other AUTO_RECORD type so
+    // replays are idempotent.
+    const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+    const execs = await db.collection('pnthr_ibkr_executions')
+      .find({ ownerId: userId, processedAt: { $gte: cutoff }, ...(tickerFilter ? { symbol: tickerFilter } : {}) })
+      .sort({ processedAt: 1 })
+      .toArray();
+
+    const results = { recorded: [], wouldRecord: [], skipped: [], noMatch: [] };
+    for (const exec of execs) {
+      const symbol = exec.symbol?.toUpperCase();
+      const addingDir = exec.side === 'BOT' ? 'LONG' : exec.side === 'SLD' ? 'SHORT' : null;
+      if (!addingDir) { results.skipped.push({ symbol, execId: exec.execId, reason: 'NOT_AN_ADD_SIDE' }); continue; }
+
+      // Skip exits — these have type='STOP_HIT'/'MANUAL'/'PARTIAL_AUTO' and
+      // are already recorded canonically. Skip prior auto-records too.
+      if (['AUTO_RECORD_LOT_FILL', 'AUTO_RECORD_LOT_FILL_DRY_RUN'].includes(exec.type)) {
+        results.skipped.push({ symbol, execId: exec.execId, reason: 'ALREADY_RECORDED', lot: exec.lot });
+        continue;
+      }
+      if (exec.exitReason) {
+        results.skipped.push({ symbol, execId: exec.execId, reason: 'IS_EXIT_NOT_ADD' });
+        continue;
+      }
+
+      const pos = posByTickerDir[`${symbol}_${addingDir}`];
+      if (!pos) { results.skipped.push({ symbol, execId: exec.execId, reason: 'NO_ACTIVE_POSITION' }); continue; }
+
+      const lotResult = await recordLotFill({
+        db, ownerId: userId, position: pos,
+        execution: { execId: exec.execId, symbol, side: exec.side, shares: exec.shares, price: exec.price, permId: exec.permId },
+        syncedAt: exec.processedAt || new Date(),
+        nav, dryRun,
+      });
+
+      if (lotResult.recorded) {
+        // Mark the original execution doc so subsequent replays/syncs skip it.
+        await db.collection('pnthr_ibkr_executions').updateOne(
+          { _id: exec._id },
+          { $set: { type: 'AUTO_RECORD_LOT_FILL', lot: lotResult.lot, ratchetTo: lotResult.ratchet?.newStop ?? null, replayedAt: new Date() } }
+        );
+        results.recorded.push({ symbol, execId: exec.execId, lot: lotResult.lot, lotName: lotResult.lotName, shares: lotResult.fillShares, price: lotResult.fillPrice, ratchet: lotResult.ratchet });
+        // Re-fetch position so subsequent execs in same batch see updated state
+        const refreshed = await db.collection('pnthr_portfolio').findOne({ id: pos.id, ownerId: userId });
+        if (refreshed) posByTickerDir[`${symbol}_${addingDir}`] = refreshed;
+      } else if (lotResult.skipReason === 'DRY_RUN') {
+        results.wouldRecord.push({ symbol, execId: exec.execId, lot: lotResult.lot, ratchet: lotResult.ratchet });
+        // In dry run, simulate the fill in our local cache so the next exec
+        // for the same ticker tries the next lot up.
+        if (lotResult.lot && pos.fills) {
+          pos.fills[lotResult.lot] = { filled: true, shares: exec.shares, price: exec.price };
+        }
+      } else if (lotResult.skipReason === 'NO_MATCHING_LOT') {
+        results.noMatch.push({ symbol, execId: exec.execId, price: exec.price, shares: exec.shares, diagnostic: lotResult.diagnostic });
+      } else {
+        results.skipped.push({ symbol, execId: exec.execId, reason: lotResult.skipReason });
+      }
+    }
+
+    res.json({
+      dryRun,
+      flagOn: process.env.IBKR_AUTO_RECORD_ADD_FILL === 'true',
+      lookbackDays,
+      ticker: tickerFilter,
+      execsExamined: execs.length,
+      counts: {
+        recorded: results.recorded.length,
+        wouldRecord: results.wouldRecord.length,
+        skipped: results.skipped.length,
+        noMatch: results.noMatch.length,
+      },
+      results,
+    });
+  } catch (err) {
+    console.error('[admin/replay-lot-fills]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4 orphan janitor — manual trigger of orphanOrderJanitor logic.
 // Finds TWS STP/STP LMT orders for tickers with no ACTIVE/PARTIAL PNTHR
 // position (e.g., XYZ lot triggers left dangling after a stop hit) and

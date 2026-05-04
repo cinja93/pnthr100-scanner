@@ -300,6 +300,12 @@ function TickerChart({ ticker, enabled }) {
       const s = chart.addSeries(LineSeries, {
         color: '#fcf000', lineWidth: 2,
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        // Don't let user-drawn lines force the price axis to expand. Without
+        // this, a steeply-sloped line extended forward could project to
+        // values far below current bars, causing the chart to auto-rescale
+        // and shrink the candles. Returning null tells lightweight-charts
+        // "ignore this series for autoscale calculations."
+        autoscaleInfoProvider: () => null,
       });
       s.setData([
         { time: ln.t1, value: ln.v1 },
@@ -537,24 +543,37 @@ function TickerChart({ ticker, enabled }) {
     setCtxMenu(null);
   }
 
-  // Extend a drawn line in either direction. Slope stays the same; only the
-  // chosen endpoint moves to the leftmost/rightmost visible bar's date, with
-  // its value recomputed along the original line.
+  // Extend a drawn line in either direction. Slope is preserved. Endpoint
+  // moves to the visible chart edge — but if the extrapolated value would
+  // go below $0, the endpoint is clamped to the date where the line
+  // mathematically crosses zero (price floor for stock charts).
   async function extendLine(lineId, direction) {
     const slice = sliceRef.current;
     if (!slice || slice.length === 0) return;
     const ln = drawnLines.find(l => l._id === lineId);
     if (!ln) return;
     const slope = (ln.v2 - ln.v1) / Math.max(1, daysBetweenIso(ln.t2, ln.t1));
+
+    function clampAtZero(targetT, anchorT, anchorV) {
+      let newV = anchorV + slope * daysBetweenIso(targetT, anchorT);
+      let newT = targetT;
+      if (newV < 0 && slope !== 0) {
+        // Line equation: anchorV + slope * (t - anchorT) = 0  →  t = anchorT - anchorV/slope (in days)
+        const daysToZero = -anchorV / slope;
+        const zeroMs = new Date(anchorT + 'T12:00:00Z').getTime() + daysToZero * 86400000;
+        newT = new Date(zeroMs).toISOString().slice(0, 10);
+        newV = 0;
+      }
+      return { newT, newV: +newV.toFixed(2) };
+    }
+
     let updated;
     if (direction === 'left') {
-      const newT1 = slice[0].weekOf;
-      const newV1 = +(ln.v1 + slope * daysBetweenIso(newT1, ln.t1)).toFixed(2);
-      updated = { ...ln, t1: newT1, v1: newV1 };
+      const { newT, newV } = clampAtZero(slice[0].weekOf, ln.t1, ln.v1);
+      updated = { ...ln, t1: newT, v1: newV };
     } else {
-      const newT2 = slice[slice.length - 1].weekOf;
-      const newV2 = +(ln.v2 + slope * daysBetweenIso(newT2, ln.t2)).toFixed(2);
-      updated = { ...ln, t2: newT2, v2: newV2 };
+      const { newT, newV } = clampAtZero(slice[slice.length - 1].weekOf, ln.t2, ln.v2);
+      updated = { ...ln, t2: newT, v2: newV };
     }
     const expectSide = computeExpectSide(updated.t1, updated.v1, updated.t2, updated.v2);
     updated.expectSide = expectSide;

@@ -7488,6 +7488,68 @@ app.get('/api/test/box-alerts', authenticateJWT, requireAdmin, async (req, res) 
   }
 });
 
+// User-drawn trendlines (per-user, per-ticker). Stored in pnthr_user_trendlines.
+//   { userId, ticker, t1, v1, t2, v2, expectSide ('above'|'below'),
+//     status ('active'|'broken'|'deleted'), createdAt, brokenAt, brokenPrice,
+//     alertedAt, dismissedAt }
+// expectSide is determined at draw-time: line above the current price → expect
+// break ABOVE (resistance); line below current price → expect break BELOW
+// (support).
+app.get('/api/test/trendlines', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const ticker = String(req.query.ticker || '').toUpperCase();
+    const db = await getDenDb();
+    const filter = { userId: req.user.userId, status: { $ne: 'deleted' } };
+    if (ticker) filter.ticker = ticker;
+    const lines = await db.collection('pnthr_user_trendlines').find(filter).sort({ createdAt: -1 }).toArray();
+    res.json({ trendlines: lines });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/test/trendlines', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { ticker, t1, v1, t2, v2, expectSide } = req.body || {};
+    if (!ticker || !t1 || !t2 || v1 == null || v2 == null) return res.status(400).json({ error: 'missing fields' });
+    if (!['above', 'below'].includes(expectSide)) return res.status(400).json({ error: 'expectSide must be above|below' });
+    const db = await getDenDb();
+    const doc = {
+      userId: req.user.userId,
+      ticker: String(ticker).toUpperCase(),
+      t1, v1: +v1, t2, v2: +v2,
+      expectSide,
+      status: 'active',
+      createdAt: new Date(),
+    };
+    const r = await db.collection('pnthr_user_trendlines').insertOne(doc);
+    res.json({ ok: true, _id: r.insertedId, trendline: doc });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/test/trendlines/:id', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { ObjectId } = await import('mongodb');
+    const db = await getDenDb();
+    const r = await db.collection('pnthr_user_trendlines').updateOne(
+      { _id: new ObjectId(req.params.id), userId: req.user.userId },
+      { $set: { status: 'deleted', deletedAt: new Date() } },
+    );
+    res.json({ ok: true, modified: r.modifiedCount });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/test/trendlines', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const ticker = String(req.query.ticker || '').toUpperCase();
+    if (!ticker) return res.status(400).json({ error: 'ticker required' });
+    const db = await getDenDb();
+    const r = await db.collection('pnthr_user_trendlines').updateMany(
+      { userId: req.user.userId, ticker, status: { $ne: 'deleted' } },
+      { $set: { status: 'deleted', deletedAt: new Date() } },
+    );
+    res.json({ ok: true, modified: r.modifiedCount });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/test/recompute', authenticateJWT, requireAdmin, async (req, res) => {
   const overlay = String(req.query.overlay || '');
   if (overlay !== 'box-breakout') return res.status(400).json({ error: 'unknown overlay' });

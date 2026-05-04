@@ -160,8 +160,9 @@ function TickerChart({ ticker, enabled }) {
   const [tlCount, setTlCount] = useState(0);
   const [error, setError]     = useState(null);
   const [drawMode, setDrawMode]     = useState(false);
-  const [drawnLines, setDrawnLines] = useState([]);   // [{t1,v1,t2,v2}]
+  const [drawnLines, setDrawnLines] = useState([]);   // [{_id, t1, v1, t2, v2, expectSide}]
   const [tempLine, setTempLine]     = useState(null); // {x1,y1,x2,y2} screen-px during drag
+  const [ctxMenu, setCtxMenu]       = useState(null); // {x, y, hitId}
 
   useEffect(() => {
     let cancelled = false;
@@ -169,12 +170,14 @@ function TickerChart({ ticker, enabled }) {
       fetch(`${API_BASE}/api/test/candles?ticker=${ticker}`, { headers: authHeaders() }).then(r => r.json()),
       fetch(`${API_BASE}/api/test/box-alerts?ticker=${ticker}`, { headers: authHeaders() }).then(r => r.json()),
       fetch(`${API_BASE}/api/test/signals?ticker=${ticker}`, { headers: authHeaders() }).then(r => r.json()),
+      fetch(`${API_BASE}/api/test/trendlines?ticker=${ticker}`, { headers: authHeaders() }).then(r => r.json()),
     ])
-      .then(([candles, boxData, sigData]) => {
+      .then(([candles, boxData, sigData, tlData]) => {
         if (cancelled) return;
         setData({ weekly: candles?.weekly || [], sector: candles?.sector || null });
         setBoxes(boxData?.boxes || []);
         setEvents(sigData?.events || []);
+        setDrawnLines(tlData?.trendlines || []);
       })
       .catch(e => !cancelled && setError(e.message));
     return () => { cancelled = true; };
@@ -342,7 +345,7 @@ function TickerChart({ ticker, enabled }) {
     const rect = overlayRef.current.getBoundingClientRect();
     setTempLine({ x1: drawStartRef.current.x, y1: drawStartRef.current.y, x2: e.clientX - rect.left, y2: e.clientY - rect.top });
   }
-  function onDrawUp(e) {
+  async function onDrawUp(e) {
     if (!drawMode || !drawStartRef.current) return;
     const start = drawStartRef.current;
     const end = snapAt(e.clientX, e.clientY);
@@ -350,7 +353,76 @@ function TickerChart({ ticker, enabled }) {
     setTempLine(null);
     if (!end || end.time === start.time) return;
     const [a, b] = start.time < end.time ? [start, end] : [end, start];
-    setDrawnLines(prev => [...prev, { t1: a.time, v1: a.value, t2: b.time, v2: b.value }]);
+    // Determine expectSide: where is the line relative to the latest bar's close?
+    const slice = sliceRef.current;
+    const lastBar = slice[slice.length - 1];
+    const slope = (b.value - a.value) / Math.max(1, daysBetweenIso(b.time, a.time));
+    const lineAtLast = a.value + slope * daysBetweenIso(lastBar.weekOf, a.time);
+    const expectSide = lineAtLast >= lastBar.close ? 'above' : 'below';
+    const payload = { ticker, t1: a.time, v1: a.value, t2: b.time, v2: b.value, expectSide };
+    // Optimistic add — replace with server response (gets _id)
+    setDrawnLines(prev => [...prev, { ...payload, _id: 'pending-' + Date.now() }]);
+    try {
+      const r = await fetch(`${API_BASE}/api/test/trendlines`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        setDrawnLines(prev => prev.map(l => l._id?.startsWith?.('pending-') && l.t1 === payload.t1 && l.t2 === payload.t2 ? { ...l, _id: j._id } : l));
+      }
+    } catch (err) {
+      // leave optimistic line so user sees it; persistence will retry next interaction
+      console.error('save trendline failed', err);
+    }
+  }
+
+  // ── Right-click context menu ──
+  function findHitLine(clientX, clientY) {
+    const chart = chartRef.current, series = seriesRef.current;
+    if (!chart || !series || !overlayRef.current) return null;
+    const rect = overlayRef.current.getBoundingClientRect();
+    const x = clientX - rect.left, y = clientY - rect.top;
+    const tAtX = chart.timeScale().coordinateToTime(x);
+    if (tAtX == null) return null;
+    const dateAtX = typeof tAtX === 'string' ? tAtX : (tAtX.year ? `${tAtX.year}-${String(tAtX.month).padStart(2, '0')}-${String(tAtX.day).padStart(2, '0')}` : null);
+    if (!dateAtX) return null;
+    const HIT_TOLERANCE_PX = 6;
+    let best = null, bestDy = Infinity;
+    for (const ln of drawnLines) {
+      const slope = (ln.v2 - ln.v1) / Math.max(1, daysBetweenIso(ln.t2, ln.t1));
+      const lineVal = ln.v1 + slope * daysBetweenIso(dateAtX, ln.t1);
+      const lineY = series.priceToCoordinate(lineVal);
+      if (lineY == null) continue;
+      const dy = Math.abs(lineY - y);
+      if (dy < HIT_TOLERANCE_PX && dy < bestDy) { best = ln; bestDy = dy; }
+    }
+    return best;
+  }
+
+  function onContextMenu(e) {
+    e.preventDefault();
+    if (drawnLines.length === 0) return;
+    const hit = findHitLine(e.clientX, e.clientY);
+    const rect = overlayRef.current.getBoundingClientRect();
+    setCtxMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, hitId: hit?._id || null });
+  }
+
+  async function deleteOne(id) {
+    if (!id || String(id).startsWith('pending-')) {
+      setDrawnLines(prev => prev.filter(l => l._id !== id));
+    } else {
+      setDrawnLines(prev => prev.filter(l => l._id !== id));
+      await fetch(`${API_BASE}/api/test/trendlines/${id}`, { method: 'DELETE', headers: authHeaders() });
+    }
+    setCtxMenu(null);
+  }
+
+  async function deleteAllForChart() {
+    setDrawnLines([]);
+    await fetch(`${API_BASE}/api/test/trendlines?ticker=${ticker}`, { method: 'DELETE', headers: authHeaders() });
+    setCtxMenu(null);
   }
 
   if (error) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef5350' }}>Error: {error}</div>;
@@ -394,16 +466,17 @@ function TickerChart({ ticker, enabled }) {
       </div>
       <div style={{ position: 'relative', width: '100%', height: CHART_HEIGHT }}>
         <div ref={containerRef} style={{ width: '100%', height: CHART_HEIGHT }} />
-        {/* Drawing overlay: only intercepts events when drawMode is on */}
+        {/* Drawing overlay: intercepts mouse when drawMode on, OR right-click anytime if there are drawn lines */}
         <svg
           ref={overlayRef}
           onMouseDown={onDrawDown}
           onMouseMove={onDrawMove}
           onMouseUp={onDrawUp}
           onMouseLeave={() => { drawStartRef.current = null; setTempLine(null); }}
+          onContextMenu={onContextMenu}
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
-            pointerEvents: drawMode ? 'auto' : 'none',
+            pointerEvents: (drawMode || drawnLines.length > 0) ? 'auto' : 'none',
             cursor: drawMode ? 'crosshair' : 'default',
           }}
         >
@@ -414,6 +487,49 @@ function TickerChart({ ticker, enabled }) {
             />
           )}
         </svg>
+        {ctxMenu && (
+          <>
+            <div
+              onClick={() => setCtxMenu(null)}
+              style={{ position: 'fixed', inset: 0, zIndex: 99 }}
+            />
+            <div style={{
+              position: 'absolute',
+              left: ctxMenu.x, top: ctxMenu.y,
+              background: '#0a0a0a', border: '1px solid #444', borderRadius: 4,
+              padding: 4, fontSize: 12, color: '#e0e0e0', zIndex: 100,
+              minWidth: 220, boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
+            }}>
+              <button
+                onClick={() => deleteOne(ctxMenu.hitId)}
+                disabled={!ctxMenu.hitId}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  background: 'transparent', border: 'none', borderRadius: 3,
+                  color: ctxMenu.hitId ? '#e0e0e0' : '#555',
+                  padding: '6px 10px', cursor: ctxMenu.hitId ? 'pointer' : 'not-allowed',
+                  fontSize: 12,
+                }}
+                onMouseEnter={e => ctxMenu.hitId && (e.currentTarget.style.background = '#222')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                Delete this trendline {ctxMenu.hitId ? '' : '(none under cursor)'}
+              </button>
+              <button
+                onClick={deleteAllForChart}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  background: 'transparent', border: 'none', borderRadius: 3, color: '#e0e0e0',
+                  padding: '6px 10px', cursor: 'pointer', fontSize: 12,
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#222'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                Delete ALL trendlines on this chart ({drawnLines.length})
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </>
   );
@@ -433,6 +549,10 @@ function addOneWeek(weekOfStr) {
   const d = new Date(weekOfStr + 'T12:00:00Z');
   d.setUTCDate(d.getUTCDate() + 7);
   return d.toISOString().slice(0, 10);
+}
+
+function daysBetweenIso(a, b) {
+  return (new Date(a + 'T12:00:00Z') - new Date(b + 'T12:00:00Z')) / 86400000;
 }
 
 function computeEMA(weeklyBars, period) {

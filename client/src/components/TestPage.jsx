@@ -351,59 +351,106 @@ function drawBoxes(chart, boxes, slice) {
 
 // ─────────────────────────── Rule #1 — 3-Point Diagonal ───────────────────────────
 //
-// Find diagonals connecting 3 highs (downtrend) or 3 lows (uptrend) where:
-//  - Each anchor within ±1% of the line connecting them
-//  - ≥ 3 weeks between adjacent anchors
-//  - Wicks only (highs for downtrend, lows for uptrend)
-//  - Direction strict: h1 > h2 > h3 for downtrend, l1 < l2 < l3 for uptrend
-//  - Break = wick pierces line by > 1% AFTER the third anchor
-//  - Cap: 2 active up + 2 active down
-//  - Selection: longest span (P1 date → today/break)
-//  - Broken lines disappear 5 weeks after break
-const TL_FIT_PCT       = 0.01;
-const TL_MIN_SPACING_W = 3;
-const TL_BREAK_PCT     = 0.01;
-const TL_MAX_LINES_PER_DIR = 2;
-const TL_BROKEN_FADE_W = 5;
+// REVISED 2026-05-03 — three new filters added to eliminate near-horizontal
+// "coincidence" lines that aren't visually meaningful trendlines:
+//
+//  - SWING PIVOT FILTER: only consider bars that are local maxima (high >
+//    both 2-bar neighbors on each side) for downtrends, or local minima (low <
+//    both 2-bar neighbors) for uptrends. Restricts anchors to actual peaks /
+//    valleys instead of arbitrary bars whose values happen to align.
+//  - MIN SLOPE: |slope|/mid_price ≥ 0.15%/week. Flatter than that = treat as
+//    horizontal S/R (the box detection already covers that case).
+//  - ANCHOR PROXIMITY: hi - hk ≥ 10% × hi for downtrend; lk - li ≥ 10% × li for
+//    uptrend. P1 and P3 must be visually distinguishable.
+const TL_FIT_PCT             = 0.01;
+const TL_MIN_SPACING_W       = 3;
+const TL_BREAK_PCT           = 0.01;
+const TL_MAX_LINES_PER_DIR   = 2;
+const TL_BROKEN_FADE_W       = 5;
+const TL_PIVOT_LOOKAROUND    = 2;     // bars on each side for swing-pivot test
+const TL_MIN_SLOPE_PCT_PER_W = 0.0015; // 0.15%/week (vs mid-price)
+const TL_MIN_ANCHOR_GAP_PCT  = 0.10;  // P1 and P3 must differ by ≥10%
+
+function isSwingHigh(weekly, idx, look = TL_PIVOT_LOOKAROUND) {
+  const h = weekly[idx].high;
+  for (let m = Math.max(0, idx - look); m < idx; m++) if (weekly[m].high >= h) return false;
+  for (let m = idx + 1; m <= Math.min(weekly.length - 1, idx + look); m++) if (weekly[m].high >= h) return false;
+  return true;
+}
+function isSwingLow(weekly, idx, look = TL_PIVOT_LOOKAROUND) {
+  const l = weekly[idx].low;
+  for (let m = Math.max(0, idx - look); m < idx; m++) if (weekly[m].low <= l) return false;
+  for (let m = idx + 1; m <= Math.min(weekly.length - 1, idx + look); m++) if (weekly[m].low <= l) return false;
+  return true;
+}
 
 function computeTrendlines(weekly) {
   const N = weekly.length;
   if (N < 7) return { active: [], broken: [] };
 
-  const downCandidates = []; // { i, j, k, slope, intercept }
+  // Pre-compute swing pivots — anchors are restricted to these
+  const swingHighs = [];
+  const swingLows  = [];
+  for (let i = TL_PIVOT_LOOKAROUND; i < N - TL_PIVOT_LOOKAROUND; i++) {
+    if (isSwingHigh(weekly, i)) swingHighs.push(i);
+    if (isSwingLow(weekly, i))  swingLows.push(i);
+  }
+
+  const downCandidates = [];
   const upCandidates   = [];
 
-  // For each (i, k) pair, find any j between them that fits
-  for (let i = 0; i < N - 6; i++) {
-    for (let k = i + 6; k < N; k++) {
-      const dx = k - i;
+  // Downtrends — pair each swing-high with each later swing-high
+  for (let a = 0; a < swingHighs.length; a++) {
+    for (let b = a + 1; b < swingHighs.length; b++) {
+      const i = swingHighs[a], k = swingHighs[b];
+      if (k - i < 6) continue;
       const hi = weekly[i].high, hk = weekly[k].high;
-      const li = weekly[i].low,  lk = weekly[k].low;
+      if (hi <= hk) continue;
+      // Anchor proximity: P1 and P3 must differ by ≥ TL_MIN_ANCHOR_GAP_PCT
+      if ((hi - hk) / hi < TL_MIN_ANCHOR_GAP_PCT) continue;
+      const slope = (hk - hi) / (k - i);
+      // Min slope: line shouldn't be near-horizontal
+      const midPrice = (hi + hk) / 2;
+      if (Math.abs(slope) / midPrice < TL_MIN_SLOPE_PCT_PER_W) continue;
+      // Need at least one swing high between i and k that fits the line within ±1%
+      let foundJ = false;
+      for (let c = a + 1; c < b; c++) {
+        const j = swingHighs[c];
+        if (j - i < TL_MIN_SPACING_W || k - j < TL_MIN_SPACING_W) continue;
+        const lineAtJ = hi + slope * (j - i);
+        const hj = weekly[j].high;
+        if (hj <= hi && hj >= hk && Math.abs(hj - lineAtJ) / lineAtJ <= TL_FIT_PCT) {
+          foundJ = true;
+          break;
+        }
+      }
+      if (foundJ) downCandidates.push({ i, k, slope, intercept: hi - slope * i });
+    }
+  }
 
-      // Downtrend: hi > hk
-      if (hi > hk) {
-        const slope = (hk - hi) / dx;
-        for (let j = i + TL_MIN_SPACING_W; j <= k - TL_MIN_SPACING_W; j++) {
-          const lineAtJ = hi + slope * (j - i);
-          const hj = weekly[j].high;
-          if (hj <= hi && hj >= hk && Math.abs(hj - lineAtJ) / lineAtJ <= TL_FIT_PCT) {
-            downCandidates.push({ i, j, k, slope, intercept: hi - slope * i });
-            break; // one valid j is enough to flag this (i,k) pair
-          }
+  // Uptrends — pair each swing-low with each later swing-low
+  for (let a = 0; a < swingLows.length; a++) {
+    for (let b = a + 1; b < swingLows.length; b++) {
+      const i = swingLows[a], k = swingLows[b];
+      if (k - i < 6) continue;
+      const li = weekly[i].low, lk = weekly[k].low;
+      if (li >= lk) continue;
+      if ((lk - li) / li < TL_MIN_ANCHOR_GAP_PCT) continue;
+      const slope = (lk - li) / (k - i);
+      const midPrice = (li + lk) / 2;
+      if (Math.abs(slope) / midPrice < TL_MIN_SLOPE_PCT_PER_W) continue;
+      let foundJ = false;
+      for (let c = a + 1; c < b; c++) {
+        const j = swingLows[c];
+        if (j - i < TL_MIN_SPACING_W || k - j < TL_MIN_SPACING_W) continue;
+        const lineAtJ = li + slope * (j - i);
+        const lj = weekly[j].low;
+        if (lj >= li && lj <= lk && Math.abs(lj - lineAtJ) / lineAtJ <= TL_FIT_PCT) {
+          foundJ = true;
+          break;
         }
       }
-      // Uptrend: li < lk
-      if (li < lk) {
-        const slope = (lk - li) / dx;
-        for (let j = i + TL_MIN_SPACING_W; j <= k - TL_MIN_SPACING_W; j++) {
-          const lineAtJ = li + slope * (j - i);
-          const lj = weekly[j].low;
-          if (lj >= li && lj <= lk && Math.abs(lj - lineAtJ) / lineAtJ <= TL_FIT_PCT) {
-            upCandidates.push({ i, j, k, slope, intercept: li - slope * i });
-            break;
-          }
-        }
-      }
+      if (foundJ) upCandidates.push({ i, k, slope, intercept: li - slope * i });
     }
   }
 

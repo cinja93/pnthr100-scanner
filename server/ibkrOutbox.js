@@ -226,11 +226,12 @@ export function sanityCheckPlaceLotTrigger({ position, ibkrPosition, lot, trigge
 }
 
 // ── Pre-enqueue sanity for MODIFY_LOT_TRIGGER (Phase 4g) ─────────────────────
-// Trigger prices for lot triggers are deterministic from the (fixed) entry
-// anchor, so they don't drift after L1 fills. Shares DO drift as NAV changes.
-// MODIFY is therefore primarily share-count adjustment. When trigger price
-// IS changing, PNTHR-side must be TIGHTER (lower trigger for LONG = earlier
-// pyramid commitment; mirror for SHORT) — never push a looser trigger.
+// PNTHR plan is law for lot triggers. MODIFY pushes the canonical price/shares
+// to IBKR regardless of whether the change is tighter or looser — the plan is
+// computed deterministically from the L1 anchor, so any drift in IBKR is by
+// definition stale (placed against an old anchor) and needs to be corrected.
+// Other safety rails (within 50% of price, share-count caps, blackout windows)
+// still apply via the underlying place-check.
 export function sanityCheckModifyLotTrigger({ position, ibkrPosition, lot, oldTriggerPrice, newTriggerPrice, oldShares, newShares }) {
   const placeCheck = sanityCheckPlaceLotTrigger({ position, ibkrPosition, lot, triggerPrice: newTriggerPrice, shares: newShares });
   if (!placeCheck.ok) return placeCheck;
@@ -240,16 +241,6 @@ export function sanityCheckModifyLotTrigger({ position, ibkrPosition, lot, oldTr
   const sharesChanged  = (+newShares || 0) !== (+oldShares || 0);
   if (!triggerChanged && !sharesChanged) return { ok: false, reason: 'NO_CHANGE_TO_APPLY' };
 
-  if (triggerChanged) {
-    // Tighter = closer to anchor (earlier pyramid entry).
-    //   LONG: newTrigger < oldTrigger
-    //   SHORT: newTrigger > oldTrigger
-    const isLong = placeCheck.isLong;
-    const newTighter = isLong
-      ? +newTriggerPrice < +oldTriggerPrice
-      : +newTriggerPrice > +oldTriggerPrice;
-    if (!newTighter) return { ok: false, reason: 'NEW_TRIGGER_NOT_TIGHTER_THAN_OLD' };
-  }
   return placeCheck;
 }
 

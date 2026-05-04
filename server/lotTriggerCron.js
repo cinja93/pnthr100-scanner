@@ -45,7 +45,7 @@ import {
   computeLotPlan,
   classifyLotCompletion,
   expectedLotTriggerAction,
-  matchTwsOrderToLot,
+  pairTwsOrdersToLots,
 } from './lotMath.js';
 
 // Default NAV when a user profile has none stored. Mirrors the client's
@@ -134,27 +134,15 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
       && (s.orderType === 'STP' || s.orderType === 'STP LMT')
     );
 
-    // ── Pre-pass: group candidate TWS orders by best-matching lot ────────────
-    // This unifies the old PASS 1 + PASS 2 into a per-lot view. Instead of
-    // walking each TWS order in isolation (which couldn't see when MULTIPLE
-    // orders matched the same lot — the CSCO 5/4 case), we collect all
-    // matches per lot, pick the best one, and cancel duplicates.
-    //
-    // With the broader 3% match tolerance in lotMath.js, stale-anchor orders
-    // that previously fell out as 'TWS_ORDER_UNMATCHED_TO_PLAN' now slot into
-    // the right lot and get either MODIFIED to plan (for incomplete lots) or
-    // CANCELLED (for complete lots).
-    const candidatesByLot = new Map(); // lotNum → [order1, order2, ...]
-    const trulyUnmatched  = [];        // outside even the broader tolerance — likely user-placed
-    for (const order of candidateOrders) {
-      const matchedLot = matchTwsOrderToLot(order, lots);
-      if (!matchedLot) {
-        trulyUnmatched.push(order);
-        continue;
-      }
-      if (!candidatesByLot.has(matchedLot.lot)) candidatesByLot.set(matchedLot.lot, []);
-      candidatesByLot.get(matchedLot.lot).push(order);
-    }
+    // ── Pre-pass: pair candidate TWS orders to plan lots in price order ──────
+    // Order-based pairing (lotMath.pairTwsOrdersToLots): the lowest BUY STP
+    // for a LONG pyramid pairs with L2, next with L3, etc. — regardless of
+    // anchor drift. Replaces the old closest-distance match which would shift
+    // every order up one lot when the anchor moved (HOOD/IWM/MUR cases),
+    // leaving L2 looking unmatched and L3-L5 seeing "looser" candidates that
+    // failed the old tighter-only sanity check, so nothing ever got modified.
+    // Extras beyond the lot count fall into trulyUnmatched (left alone).
+    const { candidatesByLot, trulyUnmatched } = pairTwsOrdersToLots(candidateOrders, lots, isLong);
     for (const order of trulyUnmatched) {
       // Likely user-placed tactical order well outside the pyramid plan.
       // Leave it alone — janitor handles it iff position closes entirely.

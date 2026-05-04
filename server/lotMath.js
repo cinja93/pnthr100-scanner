@@ -162,31 +162,42 @@ export function expectedLotTriggerAction(direction) {
   return (direction || 'LONG').toUpperCase() === 'SHORT' ? 'SELL' : 'BUY';
 }
 
-// ── Match TWS stop order to a plan lot by trigger price ─────────────────────
-// Tolerance now scales with the trigger price (3% pct, $0.10 abs floor).
-// Pre-fix this used a hard $0.10 — too tight when the L1 anchor drifts and
-// pre-existing TWS orders end up off-target by $0.20-$3 (e.g., CSCO 5/4:
-// stale TWS orders from $92.44 anchor vs current $92.65 anchor diverged by
-// $0.22 per lot, fell outside $0.10, were skipped as "user-placed unrelated"
-// → cron then placed fresh canonical orders alongside, accumulating dupes).
-// 3% is wide enough for any reasonable anchor drift, narrow enough that
-// truly unrelated user orders (e.g., a tactical BUY STOP $20 away) still
-// don't get auto-modified.
-const LOT_PRICE_TOLERANCE_ABS = 0.10;
-const LOT_PRICE_TOLERANCE_PCT = 0.03;
-export function matchTwsOrderToLot(order, lots) {
-  if (!order || !Number.isFinite(+order.stopPrice)) return null;
-  const px = +order.stopPrice;
-  let best = null;
-  let bestDiff = Infinity;
-  for (const l of lots) {
-    if (l.lot === 1) continue; // L1 is the entry, not a trigger
-    const tolerance = Math.max(LOT_PRICE_TOLERANCE_ABS, l.triggerPrice * LOT_PRICE_TOLERANCE_PCT);
-    const diff = Math.abs(l.triggerPrice - px);
-    if (diff <= tolerance && diff < bestDiff) {
-      best = l;
-      bestDiff = diff;
+// ── Pair TWS stop orders to plan lots in price order ────────────────────────
+// Order-based pairing: sort plan lots by tightness-to-anchor, sort IBKR orders
+// by tightness-to-anchor, pair 1:1 in order. Extras beyond the lot count fall
+// into trulyUnmatched (left alone — likely user-placed tactical).
+//
+// Why not closest-distance match: when the L1 anchor drifts, IBKR orders
+// originally placed for L2 may end up closer to L3 than to L2, causing each
+// order to "shift up" one lot. Result: L2 looks unmatched (PLACE adds a 4th
+// order), L3-L5 see "looser" candidates, MODIFYs get rejected, IBKR diverges
+// from PNTHR plan and never reconciles. Order-based pairing matches user
+// intent: the lowest BUY STP is L2's order regardless of price drift.
+//
+// LONG pyramid: BUY STPs above market, lower price = tighter (sooner trigger).
+//               Sort lots ASC, orders ASC.
+// SHORT pyramid: SELL STPs below market, higher price = tighter.
+//                Sort lots DESC, orders DESC.
+//
+// Returns { candidatesByLot: Map<lotNum, [order]>, trulyUnmatched: [order] }.
+export function pairTwsOrdersToLots(orders, lots, isLong) {
+  const planLots = lots
+    .filter(l => l.lot !== 1)
+    .sort((a, b) => isLong ? a.triggerPrice - b.triggerPrice : b.triggerPrice - a.triggerPrice);
+  const sortedOrders = (orders || [])
+    .filter(o => o && Number.isFinite(+o.stopPrice))
+    .sort((a, b) => isLong ? +a.stopPrice - +b.stopPrice : +b.stopPrice - +a.stopPrice);
+
+  const candidatesByLot = new Map();
+  const trulyUnmatched  = [];
+  for (let i = 0; i < sortedOrders.length; i++) {
+    if (i < planLots.length) {
+      const lot = planLots[i];
+      if (!candidatesByLot.has(lot.lot)) candidatesByLot.set(lot.lot, []);
+      candidatesByLot.get(lot.lot).push(sortedOrders[i]);
+    } else {
+      trulyUnmatched.push(sortedOrders[i]);
     }
   }
-  return best;
+  return { candidatesByLot, trulyUnmatched };
 }

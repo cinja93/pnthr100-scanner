@@ -7427,18 +7427,21 @@ app.get('/api/test/signals', authenticateJWT, requireAdmin, async (req, res) => 
     let activeKind = null;          // 'BL' | 'SS' | null
     let lastWeekOfActive = null;    // track end of each series to emit BE/SE
 
+    // CORE INVARIANT: every BL series produces a BE; every SS series produces
+    // an SE. A "series" = one consecutive run of signalAge weeks for a given
+    // signal kind. A fresh signal (signalAge=0) ALWAYS opens a new series —
+    // even when the prior series was the same kind (e.g. BL → gap → BL).
+    // Therefore on EVERY fresh row we close out any prior open series first.
     for (const r of rows) {
       const isFresh = (r.signalAge || 0) === 0;
       if (isFresh) {
-        // Series end for the prior series, if different kind
-        if (activeKind && activeKind !== r.signal) {
+        if (activeKind && lastWeekOfActive) {
           events.push({
             type: activeKind === 'BL' ? 'BE' : 'SE',
             weekOf: nextWeek(lastWeekOfActive),
             derivedFromLastWeek: lastWeekOfActive,
           });
         }
-        // New fresh signal
         events.push({
           type: r.signal,
           weekOf: r.weekOf,
@@ -7448,17 +7451,16 @@ app.get('/api/test/signals', authenticateJWT, requireAdmin, async (req, res) => 
         activeKind = r.signal;
         lastWeekOfActive = r.weekOf;
       } else {
-        // Continuation week — just update the lastWeekOfActive (signal still alive)
         if (r.signal === activeKind) lastWeekOfActive = r.weekOf;
       }
     }
-    // Trailing series end — if last row was an active signal, emit closing event
+    // Trailing — if the dataset ends with an open series, emit its close
     if (activeKind && lastWeekOfActive) {
       events.push({
         type: activeKind === 'BL' ? 'BE' : 'SE',
         weekOf: nextWeek(lastWeekOfActive),
         derivedFromLastWeek: lastWeekOfActive,
-        trailing: true,    // last series of the dataset, no new fresh signal followed
+        trailing: true,
       });
     }
 

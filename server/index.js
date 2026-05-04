@@ -2403,6 +2403,130 @@ app.patch('/api/positions/:id/direction', authenticateJWT, async (req, res) => {
   }
 });
 
+// POST /api/positions/:id/convert-to-pyramid — promotes a single-shot auto-
+// opened position (Phase 3 detected a TWS fill at full size with no plan) into
+// a real 5-lot pyramid. Treats current fills[1].shares as L1 actually-filled,
+// computes L2-L5 target shares + trigger prices via the canonical lot math,
+// writes the new fills structure, and clears the autoOpenedByIBKR flag so the
+// every-minute lot-trigger cron starts staging L2-L5 BUY/SELL STOPs in TWS.
+//
+// Refuses if the position already has a pyramid plan (avoid stomping on a
+// real plan and double-staging triggers).
+//
+// Use ?dryRun=1 to preview the computed plan without saving — handy for the
+// confirmation modal in AssistantRowExpand.
+app.post('/api/positions/:id/convert-to-pyramid', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const { computeLotPlan }    = await import('./lotMath.js');
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+
+    const dryRun = req.query.dryRun === '1' || req.body?.dryRun === true;
+
+    const position = await db.collection('pnthr_portfolio').findOne({
+      id: req.params.id, ownerId: req.user.userId,
+    });
+    if (!position) return res.status(404).json({ error: 'Position not found' });
+
+    // Eligibility check — only single-shot auto-opens. If the position already
+    // has a pyramid plan (any L2+ planned), refuse so we don't clobber it.
+    const lot1 = position.fills?.[1];
+    if (!lot1 || !lot1.filled || !(lot1.shares > 0) || !(lot1.price > 0)) {
+      return res.status(400).json({ error: 'Position has no filled Lot 1 to use as the pyramid anchor' });
+    }
+    const isSingleShot = position.autoOpenedByIBKR === true || lot1.pct === 1.0;
+    if (!isSingleShot) {
+      return res.status(400).json({ error: 'Position already has a pyramid plan — nothing to convert' });
+    }
+
+    // Get NAV for sizing math (mirrors lotTriggerCron's per-owner lookup).
+    const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
+    const nav     = +profile?.accountSize || 100000;
+
+    // computeLotPlan reads fills[1] as the L1 anchor. We're keeping the actual
+    // L1 share count from the TWS fill, so the L1-aware redistribution path
+    // computes L2-L5 off the actual L1 fill (not the canonical L1 recommendation).
+    // This matches what the user sees in the Live table.
+    const lots = computeLotPlan(position, nav);
+    if (!lots.length || lots.every(l => l.targetShares <= 0)) {
+      return res.status(400).json({ error: 'Lot plan computed all zeros — check entry, original stop, and NAV' });
+    }
+
+    // Build the new fills structure. L1 keeps the actual TWS fill data (shares,
+    // price, date) — only the lot-plan metadata (pct, name) gets refreshed.
+    // L2-L5 are PLANNED entries: filled=false, no shares actually filled yet,
+    // target shares + trigger price visible so the lot-trigger cron + Live
+    // table render correctly.
+    const newFills = {
+      1: {
+        ...lot1,                                       // preserve actual fill data
+        lot:    1,
+        name:   lots[0].name,
+        pct:    lots[0].pct,
+        filled: true,
+      },
+    };
+    for (let i = 2; i <= 5; i++) {
+      const plan = lots[i - 1];
+      newFills[i] = {
+        lot:          i,
+        name:         plan.name,
+        pct:          plan.pct,
+        filled:       false,
+        targetShares: plan.targetShares,
+        triggerPrice: plan.triggerPrice,
+      };
+    }
+
+    if (dryRun) {
+      return res.json({
+        dryRun:    true,
+        positionId: position.id,
+        ticker:    position.ticker,
+        currentL1: { shares: lot1.shares, price: lot1.price, date: lot1.date },
+        plan:      lots.map(l => ({
+          lot:           l.lot,
+          name:          l.name,
+          targetShares:  l.targetShares,
+          triggerPrice:  l.triggerPrice,
+          filled:        l.filled,
+          actualShares:  l.actualShares,
+          actualPrice:   l.actualPrice,
+        })),
+      });
+    }
+
+    // Apply: write new fills + clear autoOpenedByIBKR flag.
+    await db.collection('pnthr_portfolio').updateOne(
+      { id: position.id, ownerId: req.user.userId },
+      {
+        $set:   { fills: newFills, updatedAt: new Date() },
+        $unset: { autoOpenedByIBKR: '' },
+      }
+    );
+
+    console.log(`[convert-to-pyramid] ${position.ticker} → L1=${newFills[1].shares} (actual) + L2/L3/L4/L5=${[2,3,4,5].map(i => newFills[i].targetShares).join('/')}`);
+
+    res.json({
+      success:    true,
+      positionId: position.id,
+      ticker:     position.ticker,
+      plan: lots.map(l => ({
+        lot:          l.lot,
+        name:         l.name,
+        targetShares: l.targetShares,
+        triggerPrice: l.triggerPrice,
+        filled:       l.filled,
+      })),
+      message: 'Pyramid plan applied. The lot-trigger cron will stage L2-L5 in TWS within ~60 seconds.',
+    });
+  } catch (err) {
+    console.error('[convert-to-pyramid]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Inline-edit endpoint used by the PNTHR Assistant LIVE table so the user can
 // ratchet a stop price without leaving Assistant. User-initiated; bypasses
 // portfolioGuard (which protects sacred fields from AUTO operations only).

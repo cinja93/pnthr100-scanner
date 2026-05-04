@@ -62,14 +62,71 @@ async function apiPatch(path, body) {
 }
 
 export default function AssistantRowExpand({ position, netLiquidity, onClose, onPositionChanged, onOpenChart }) {
-  const [showAllStops, setShowAllStops] = useState(false);
-  const [error,        setError]        = useState(null);
+  const [showAllStops,    setShowAllStops]    = useState(false);
+  const [error,           setError]           = useState(null);
+  const [convertBusy,     setConvertBusy]     = useState(false);
+  const [convertMessage,  setConvertMessage]  = useState(null);
+
+  // A position is eligible for "Convert to Pyramid" when it was opened as a
+  // single-shot full-size fill — either auto-detected by the bridge (Phase 3
+  // sets autoOpenedByIBKR=true with fills[1].pct=1.0) or any other path that
+  // left fills[1] at pct=1.0 with no L2-L5 plan. Mirrors the same eligibility
+  // check the lot-trigger cron uses to decide whether to skip a position.
+  const isSingleShot = !!(
+    position?.autoOpenedByIBKR === true ||
+    position?.fills?.[1]?.pct === 1.0
+  );
 
   // ── PyramidCard callbacks — each writes via the same wire format
   // CommandCenter uses, then triggers a parent refresh so the panel re-renders
   // with the new position state. No optimistic updates here; the LIVE table's
   // 60s reconcile poll provides the eventual-consistency baseline anyway.
   const refresh = useCallback(() => { onPositionChanged?.(); }, [onPositionChanged]);
+
+  // ── Convert to Pyramid ────────────────────────────────────────────────────
+  // Promotes a single-shot auto-opened position into a real 5-lot pyramid.
+  // Two-step UX: dry-run preview shown in a window.confirm so the trader sees
+  // L2-L5 target shares + trigger prices BEFORE any write. On confirm, the
+  // server writes the new fills structure and clears autoOpenedByIBKR; the
+  // every-minute lot-trigger cron then stages the BUY/SELL STOPs in TWS.
+  const handleConvertToPyramid = useCallback(async () => {
+    if (!position?.id) return;
+    setError(null);
+    setConvertMessage(null);
+    setConvertBusy(true);
+
+    let preview;
+    try {
+      preview = await apiPost(`/api/positions/${position.id}/convert-to-pyramid?dryRun=1`, {});
+    } catch (e) {
+      setConvertBusy(false);
+      setError(e.message || 'Preview failed');
+      return;
+    }
+
+    const planLines = (preview?.plan || []).map(l => {
+      if (l.lot === 1) return `L1 (${l.name}): ${l.actualShares} sh @ $${l.actualPrice} — already filled`;
+      return `L${l.lot} (${l.name}): ${l.targetShares} sh @ trigger $${l.triggerPrice}`;
+    }).join('\n');
+    const ok = window.confirm(
+      `Convert ${position.ticker} to a 5-lot pyramid?\n\n` +
+      planLines +
+      '\n\n' +
+      'On confirm, PNTHR will write this plan to the position. Within ~60 seconds, the lot-trigger cron will stage L2-L5 BUY/SELL STOPs in TWS automatically.\n\n' +
+      'This is reversible only by manually editing the fills in Command Center.'
+    );
+    if (!ok) { setConvertBusy(false); return; }
+
+    try {
+      const r = await apiPost(`/api/positions/${position.id}/convert-to-pyramid`, {});
+      setConvertMessage(r?.message || 'Pyramid plan applied.');
+      refresh();
+    } catch (e) {
+      setError(e.message || 'Convert failed');
+    } finally {
+      setConvertBusy(false);
+    }
+  }, [position?.id, position?.ticker, refresh]);
 
   const handleUpdate = useCallback(async (id, fields) => {
     try { await apiPost('/api/positions', { id, ...fields }); refresh(); }
@@ -196,6 +253,62 @@ export default function AssistantRowExpand({ position, netLiquidity, onClose, on
           )}
         </label>
       </div>
+
+      {/* Convert-to-Pyramid — only shown for single-shot auto-opens (no
+          existing pyramid plan). Lives just above the stop history so it
+          sits at the bottom of the card next to the ratchet section. */}
+      {isSingleShot && (
+        <div style={{
+          marginTop: 10, padding: '10px 14px',
+          background: 'rgba(252,240,0,0.06)',
+          border: '1px solid rgba(252,240,0,0.30)',
+          borderRadius: 6,
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 11, fontWeight: 800, letterSpacing: '0.06em',
+                color: '#FCF000', textTransform: 'uppercase',
+              }}>
+                Convert to Pyramid
+              </div>
+              <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>
+                This position was opened as a single-shot fill — no L2-L5
+                ratchet orders are staged. Click to compute the 5-lot pyramid
+                plan from your actual Lot 1 fill and auto-place L2-L5 BUY/SELL
+                STOPs in TWS within ~60s.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleConvertToPyramid}
+              disabled={convertBusy}
+              style={{
+                padding: '8px 16px',
+                background: convertBusy ? '#666' : '#FCF000',
+                color: '#000',
+                border: 'none', borderRadius: 4,
+                fontSize: 11, fontWeight: 800, letterSpacing: '0.06em',
+                cursor: convertBusy ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {convertBusy ? 'WORKING…' : 'CONVERT TO PYRAMID'}
+            </button>
+          </div>
+          {convertMessage && (
+            <div style={{
+              fontSize: 11, color: '#7ed957', fontWeight: 600,
+              padding: '4px 0',
+            }}>
+              ✓ {convertMessage}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stop history — value-add over Command Center */}
       {stopHist.length > 0 && (

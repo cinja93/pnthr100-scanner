@@ -38,6 +38,7 @@ import { getSectorEmaPeriod } from './utils/sectorEmaConfig';
 import HistoryPage from './components/HistoryPage';
 import KillTestPage from './components/KillTestPage';
 import TestPage from './components/TestPage';
+import TrendlineAlertBanner from './components/TrendlineAlertBanner';
 import AssistantPage from './components/AssistantPage';
 import OrdersPage from './components/OrdersPage';
 import LoginPage from './components/LoginPage';
@@ -1025,6 +1026,11 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
   return (
     <div className="app" style={isImpersonating ? { paddingTop: IMPERSONATION_BANNER_HEIGHT } : undefined}>
+      {/* Top-of-app trendline-break banner. Polls every 30s; admin-only.
+          Click "View on Assistant" to jump to the full alerts list. */}
+      {isAuthenticated && (
+        <TrendlineAlertBanner onNavigateToAssistant={() => navigate('assistant')} />
+      )}
       <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
 
       <div className="content-wrapper">

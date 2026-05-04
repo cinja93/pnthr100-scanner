@@ -403,6 +403,28 @@ export default function ChartDrawingOverlay({
     setCtxMenu(null);
   }
 
+  // Toggle alert on/off for a specific line. Server cron only checks lines
+  // where alertEnabled !== false (legacy lines without the field are treated
+  // as enabled for backward compat).
+  async function toggleLineAlert(lineId) {
+    const ln = drawnLines.find(l => l._id === lineId);
+    if (!ln) return;
+    // Default missing field → true (legacy lines were on); toggle from there
+    const currentlyOn = ln.alertEnabled !== false;
+    const newValue = !currentlyOn;
+    setDrawnLines(prev => prev.map(l => l._id === lineId ? { ...l, alertEnabled: newValue } : l));
+    setCtxMenu(null);
+    if (lineId && !String(lineId).startsWith('pending-')) {
+      try {
+        await fetch(`${API_BASE}/api/test/trendlines/${lineId}`, {
+          method: 'PATCH',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ alertEnabled: newValue }),
+        });
+      } catch (err) { console.error('toggle alert failed', err); }
+    }
+  }
+
   async function extendLine(lineId, direction) {
     const slice = sliceRef.current;
     if (!slice || slice.length === 0) return;
@@ -512,6 +534,7 @@ export default function ChartDrawingOverlay({
             const x2 = chart.timeScale().timeToCoordinate(ln.t2);
             const y2 = series.priceToCoordinate((ln.kind === 'horizontal') ? ln.v1 : ln.v2);
             const handleFill = lineColor(ln);
+            const alertOn = ln.alertEnabled !== false; // legacy lines treated as on
             return (
               <g key={ln._id}>
                 {x1 != null && y1 != null && (
@@ -519,6 +542,11 @@ export default function ChartDrawingOverlay({
                 )}
                 {x2 != null && y2 != null && (
                   <circle cx={x2} cy={y2} r="6" fill={handleFill} stroke="#000" strokeWidth="1.5" />
+                )}
+                {/* Bell indicator: shows next to start endpoint when alert
+                    is enabled on this line. Subtle so it doesn't clutter. */}
+                {alertOn && x1 != null && y1 != null && (
+                  <text x={x1 + 9} y={y1 + 4} fontSize="11" pointerEvents="none">🔔</text>
                 )}
               </g>
             );
@@ -559,6 +587,13 @@ export default function ChartDrawingOverlay({
           }}>
             <CtxBtn onClick={() => deleteOne(ctxMenu.hitId)} disabled={!ctxMenu.hitId}>
               Delete this trendline {ctxMenu.hitId ? '' : '(none under cursor)'}
+            </CtxBtn>
+            <CtxBtn onClick={() => toggleLineAlert(ctxMenu.hitId)} disabled={!ctxMenu.hitId}>
+              {(() => {
+                const ln = drawnLines.find(l => l._id === ctxMenu.hitId);
+                const on = ln?.alertEnabled !== false;
+                return on ? '🔕 Disable alert on this trendline' : '🔔 Set alert on this trendline';
+              })()}
             </CtxBtn>
             <CtxBtn onClick={() => extendLine(ctxMenu.hitId, 'left')} disabled={!ctxMenu.hitId}>
               ← Extend line to the left

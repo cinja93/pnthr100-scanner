@@ -7530,6 +7530,11 @@ app.post('/api/test/trendlines', authenticateJWT, requireAdmin, async (req, res)
       t1, v1: +v1, t2, v2: +v2,
       kind: kind === 'horizontal' ? 'horizontal' : 'free',
       expectSide,
+      // NEW lines start with alerts OFF by default. User opts in per-line via
+      // the right-click "Set Alert" menu. Existing lines without this field
+      // (created before this change) are treated as alertEnabled=true for
+      // backward compatibility — see runTrendlineBreakSweep filter below.
+      alertEnabled: false,
       status: 'active',
       createdAt: new Date(),
     };
@@ -7542,13 +7547,14 @@ app.post('/api/test/trendlines', authenticateJWT, requireAdmin, async (req, res)
 app.patch('/api/test/trendlines/:id', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { ObjectId } = await import('mongodb');
-    const { t1, v1, t2, v2, expectSide } = req.body || {};
+    const { t1, v1, t2, v2, expectSide, alertEnabled } = req.body || {};
     const update = {};
     if (t1 != null) update.t1 = t1;
     if (v1 != null) update.v1 = +v1;
     if (t2 != null) update.t2 = t2;
     if (v2 != null) update.v2 = +v2;
     if (['above', 'below'].includes(expectSide)) update.expectSide = expectSide;
+    if (typeof alertEnabled === 'boolean') update.alertEnabled = alertEnabled;
     update.updatedAt = new Date();
     const db = await getDenDb();
     const r = await db.collection('pnthr_user_trendlines').updateOne(
@@ -7629,9 +7635,13 @@ app.post('/api/test/trendline-check', authenticateJWT, requireAdmin, async (req,
 // surfaces it. One-shot per trendline (alertedAt is set so we don't re-fire).
 async function runTrendlineBreakSweep() {
   const db = await getDenDb();
-  const lines = await db.collection('pnthr_user_trendlines').find(
-    { status: 'active', alertedAt: null },
-  ).toArray();
+  // Only check lines with alerts enabled. alertEnabled === false → skip.
+  // Missing field (legacy lines created before opt-in model) → treat as
+  // enabled so existing alerts behavior is preserved.
+  const lines = await db.collection('pnthr_user_trendlines').find({
+    status: 'active', alertedAt: null,
+    $or: [{ alertEnabled: { $exists: false } }, { alertEnabled: { $ne: false } }],
+  }).toArray();
   if (lines.length === 0) return { checked: 0, broken: 0 };
   const tickers = [...new Set(lines.map(l => l.ticker))];
   // Batch quote fetch (FMP supports comma-separated)

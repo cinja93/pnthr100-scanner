@@ -244,7 +244,7 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
 //   - PNTHR Stop unavailable from signalService (refuse to open without a
 //     stop — too risky for automated trading)
 //
-async function processNewPositions(db, userId, ibkrPositions, syncedAt) {
+async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStopOrders = []) {
   if (!ibkrPositions?.length) return [];
 
   const opened = [];
@@ -410,20 +410,56 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt) {
       });
       console.log(`[IBKR Phase 3] ⚡ Auto-opened ${ticker} (${direction}) ${absShares}sh @ $${positionDoc.entryPrice} stop $${pnthrStop} sector=${sector || '?'}`);
 
-      // ── Phase 4a hook: enqueue PLACE_STOP so the bridge writes the
-      // protective stop to TWS. Gated by IBKR_AUTO_PLACE_STOP — when off
-      // (default), this is dead code. Demo sentinel runs inside enqueue().
-      // Sanity check refuses to enqueue if anything looks wrong (e.g. stop
-      // on the wrong side of price).
-      if (process.env.IBKR_AUTO_PLACE_STOP === 'true') {
+      // ── Phase 4a hook: place OR adopt the protective stop ────────────────
+      // Pre-fix this always enqueued PLACE_STOP, which created a duplicate
+      // when the trader had already placed their own stop in TWS before the
+      // 60-second sync caught the position. The duplicate is messy: when
+      // price drops, the tighter stop fires first, the position closes, and
+      // the looser stop is then naked.
+      //
+      // Mirror Phase 4c (stopRatchetCron) silent-adoption pattern:
+      //   • If TWS already has a protective STP/STP LMT for this ticker on
+      //     the right side (SELL for LONG, BUY for SHORT) → ADOPT it. Set
+      //     the position's stopPrice to the trader's value, log the adoption
+      //     in stopHistory, never enqueue a duplicate.
+      //   • Otherwise → enqueue PLACE_STOP as before.
+      //
+      // Future stop ratchet ticks (every minute) keep tightest-wins running
+      // either way, so the trader's manual stop is preserved unless PNTHR's
+      // canonical stop later ratchets tighter via weekly ATR.
+      const expectedAction = direction === 'LONG' ? 'SELL' : 'BUY';
+      const existingStops  = (ibkrStopOrders || []).filter(s =>
+        s.symbol?.toUpperCase() === ticker
+        && s.action === expectedAction
+        && (s.orderType === 'STP' || s.orderType === 'STP LMT')
+      );
+      const existingStop = existingStops[0] || null;
+
+      if (existingStop && Number.isFinite(+existingStop.stopPrice) && +existingStop.stopPrice > 0) {
+        // ADOPT the trader's manual stop. Update PNTHR's stopPrice to match
+        // and log the adoption so the journal can show where it came from.
+        const adoptedStop = +existingStop.stopPrice;
+        await db.collection('pnthr_portfolio').updateOne(
+          { id: positionDoc.id, ownerId: userId },
+          {
+            $set:  { stopPrice: adoptedStop, updatedAt: new Date() },
+            $push: { stopHistory: {
+              date:       new Date().toISOString().slice(0, 10),
+              stop:       adoptedStop,
+              reason:     'USER_PLACED_AT_OPEN',
+              from:       pnthrStop,
+              ibkrPermId: existingStop.permId,
+              source:     'PHASE_3_AUTO_OPEN',
+            } },
+          }
+        );
+        console.log(`[Phase 4a] Adopted user-placed TWS stop for ${ticker}: $${adoptedStop} (PNTHR canonical was $${pnthrStop}). No duplicate placed.`);
+      } else if (process.env.IBKR_AUTO_PLACE_STOP === 'true') {
         const sanity = sanityCheckPlaceStop({
           position:     positionDoc,
           ibkrPosition: { shares: absShares, lastPrice: positionDoc.currentPrice, avgCost: pos.avgCost },
           stopPrice:    pnthrStop,
         });
-        // Auto-opened positions inherit RTH-default; if the user opts a
-        // position into extended-hours protection later, the next 4c cron
-        // run picks up the new shape via MODIFY_STOP.
         const shape = buildStopOrderShape({
           stopPrice:           pnthrStop,
           direction,
@@ -619,7 +655,7 @@ export async function ibkrSync(req, res) {
     // prevents creating a new position from a snapshot that still shows
     // the just-closed shares).
     const autoOpenedPositions = await processNewPositions(
-      db, userId, positions, syncedAt
+      db, userId, positions, syncedAt, stopOrders
     );
 
     // 6. Identify IBKR positions not yet tracked in PNTHR (informational —

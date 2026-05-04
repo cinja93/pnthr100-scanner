@@ -480,7 +480,10 @@ function TickerChart({ ticker, enabled }) {
       </div>
       <div style={{ position: 'relative', width: '100%', height: CHART_HEIGHT }}>
         <div ref={containerRef} style={{ width: '100%', height: CHART_HEIGHT }} />
-        {/* Drawing overlay: intercepts mouse when drawMode on, OR right-click anytime if there are drawn lines */}
+        {/* Drawing overlay: intercepts mouse when drawMode on, OR right-click anytime if there are drawn lines.
+            CRITICAL: SVG only captures pointer events on drawn shapes by default.
+            To make the entire overlay area clickable, we add a full-size
+            transparent rect AND set pointer-events:all (not just auto). */}
         <svg
           ref={overlayRef}
           onMouseDown={onDrawDown}
@@ -488,17 +491,23 @@ function TickerChart({ ticker, enabled }) {
           onMouseUp={onDrawUp}
           onMouseLeave={() => { drawStartRef.current = null; setTempLine(null); setHoverSnap(null); }}
           onContextMenu={onContextMenu}
+          onWheel={(e) => { if (drawMode) e.preventDefault(); }}
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
-            pointerEvents: (drawMode || drawnLines.length > 0) ? 'auto' : 'none',
+            pointerEvents: (drawMode || drawnLines.length > 0) ? 'all' : 'none',
             cursor: drawMode ? 'crosshair' : 'default',
+            // Visible border in draw mode confirms the overlay is present and on top
+            outline: drawMode ? '1px dashed rgba(252,240,0,0.4)' : 'none',
+            outlineOffset: '-1px',
           }}
         >
+          {/* Transparent capture rect — required so empty SVG areas catch events */}
+          <rect x="0" y="0" width="100%" height="100%" fill="transparent" pointerEvents="all" />
           {/* Hover preview: where the click would land + which level (high/low) */}
           {drawMode && hoverSnap && !tempLine && (
             <>
-              <circle cx={hoverSnap.x} cy={hoverSnap.y} r="6" fill="none" stroke="#fcf000" strokeWidth="1.5" strokeDasharray="2 2" />
-              <text x={hoverSnap.x + 10} y={hoverSnap.y - 8} fill="#fcf000" fontSize="10" fontFamily="monospace">
+              <circle cx={hoverSnap.x} cy={hoverSnap.y} r="6" fill="none" stroke="#fcf000" strokeWidth="1.5" strokeDasharray="2 2" pointerEvents="none" />
+              <text x={hoverSnap.x + 10} y={hoverSnap.y - 8} fill="#fcf000" fontSize="10" fontFamily="monospace" pointerEvents="none">
                 {hoverSnap.snapHigh ? 'high' : 'low'}
               </text>
             </>
@@ -508,9 +517,9 @@ function TickerChart({ ticker, enabled }) {
             <>
               <line
                 x1={tempLine.x1} y1={tempLine.y1} x2={tempLine.x2} y2={tempLine.y2}
-                stroke="#fcf000" strokeWidth="2" strokeDasharray="4 3"
+                stroke="#fcf000" strokeWidth="2" strokeDasharray="4 3" pointerEvents="none"
               />
-              <circle cx={tempLine.x1} cy={tempLine.y1} r="5" fill="#fcf000" stroke="#000" strokeWidth="1" />
+              <circle cx={tempLine.x1} cy={tempLine.y1} r="5" fill="#fcf000" stroke="#000" strokeWidth="1" pointerEvents="none" />
             </>
           )}
         </svg>

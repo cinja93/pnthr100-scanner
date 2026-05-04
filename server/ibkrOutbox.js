@@ -244,14 +244,34 @@ export function sanityCheckModifyLotTrigger({ position, ibkrPosition, lot, oldTr
   return placeCheck;
 }
 
-// ── Duplicate suppression (60s window per {ownerId, ticker, command}) ───────
-async function isDuplicate(db, ownerId, ticker, command) {
+// ── Duplicate suppression (60s window) ──────────────────────────────────────
+// Discriminator scopes the dedup key to the actual command identity rather
+// than just (ticker, command). Without this, a single "Sync Lot Triggers Now"
+// click on a position with 4 stale BUY STPs would only enqueue the first
+// CANCEL_ORDER — the other 3 collide on (ticker, command) and silently drop.
+//   CANCEL_ORDER          → permId (which order to cancel)
+//   MODIFY_STOP           → oldPermId
+//   MODIFY_LOT_TRIGGER    → lot number (which pyramid level)
+//   PLACE_LOT_TRIGGER     → lot number
+//   PLACE_STOP / SELL_POSITION / CANCEL_RELATED_ORDERS → ticker is enough
+function dedupExtraMatch(command, request) {
+  switch (command) {
+    case 'CANCEL_ORDER':       return { 'request.permId':    request.permId };
+    case 'MODIFY_STOP':        return { 'request.oldPermId': request.oldPermId };
+    case 'MODIFY_LOT_TRIGGER': return { 'request.lot':       request.lot };
+    case 'PLACE_LOT_TRIGGER':  return { 'request.lot':       request.lot };
+    default:                   return {};
+  }
+}
+
+async function isDuplicate(db, ownerId, ticker, command, request) {
   const since = new Date(Date.now() - DEDUP_WINDOW_MS);
   const dup = await db.collection(COLLECTION).findOne({
     ownerId,
     'request.ticker': ticker,
     command,
     createdAt: { $gt: since },
+    ...dedupExtraMatch(command, request),
   });
   return !!dup;
 }
@@ -281,7 +301,7 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
     return { skipped: opts.sanityCheck.reason || 'SANITY_FAIL' };
   }
   // Rule 2 — dedup
-  if (!opts.skipDedup && await isDuplicate(db, ownerId, request.ticker, command)) {
+  if (!opts.skipDedup && await isDuplicate(db, ownerId, request.ticker, command, request)) {
     return { skipped: 'DUPLICATE_WITHIN_60S' };
   }
 

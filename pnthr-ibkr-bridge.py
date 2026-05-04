@@ -268,6 +268,10 @@ class PNTHRBridge(EWrapper, EClient):
         # permId is guaranteed unique across the account lifetime.
         perm_id = getattr(order, 'permId', 0) or 0
         key = perm_id if perm_id else f"_synth_{len(self.open_orders)}_{contract.symbol}_{orderId}"
+        # Capture orderRef — empty/missing for orders the user entered manually
+        # in TWS, set to 'PNTHR' for orders this bridge placed via the API.
+        # The orphan janitor uses this as its primary whitelist.
+        order_ref = (getattr(order, 'orderRef', '') or '').strip()
         self.open_orders[key] = {
             'orderId':   orderId,
             'permId':    perm_id,
@@ -276,6 +280,7 @@ class PNTHRBridge(EWrapper, EClient):
             'action':    order.action,
             'orderType': order.orderType,
             'shares':    shares,
+            'orderRef':  order_ref,
         }
 
     def openOrderEnd(self):
@@ -370,6 +375,14 @@ class PNTHRBridge(EWrapper, EClient):
         c.currency = 'USD'
         return c
 
+    # Order-reference tag stamped on every order PNTHR places via the API.
+    # TWS's manual order entry UI does NOT expose this field, so any order
+    # carrying this tag was placed by us. The orphan janitor uses this as a
+    # whitelist: only orders tagged with PNTHR_ORDER_REF are eligible for
+    # auto-cancel. Manual stops/limits the user places directly in TWS will
+    # have an empty orderRef and are invisible to the janitor.
+    PNTHR_ORDER_REF = 'PNTHR'
+
     def place_protective_stop(self, ticker, action, shares, stop_price,
                               tif='GTC', rth=True, order_type='STP', limit_price=None):
         """Place a protective stop. Action is 'SELL' for LONG, 'BUY' for SHORT.
@@ -399,6 +412,9 @@ class PNTHRBridge(EWrapper, EClient):
         order.totalQuantity = int(shares)
         order.tif           = tif
         order.outsideRth    = not rth
+        # Stamp the PNTHR fingerprint so the orphan janitor can distinguish
+        # bridge-placed orders from manual orders the trader entered in TWS.
+        order.orderRef      = self.PNTHR_ORDER_REF
         # Disable IB's deprecated/optional flag set explicitly to avoid noisy
         # rejections on newer TWS builds.
         order.eTradeOnly    = False
@@ -416,6 +432,7 @@ class PNTHRBridge(EWrapper, EClient):
             'permId':  st.get('permId'),
             'status':  st['status'],
             'orderType': order_type,
+            'orderRef':  self.PNTHR_ORDER_REF,
         }
 
     def cancel_order_by_perm_id(self, perm_id):
@@ -506,6 +523,10 @@ class PNTHRBridge(EWrapper, EClient):
         order.outsideRth    = not rth
         if order_type == 'LMT':
             order.lmtPrice  = float(limit_price)
+        # Stamp the PNTHR fingerprint so the orphan janitor recognizes this
+        # as bridge-placed (relevant when a partial fill leaves a working
+        # remainder that later orphans).
+        order.orderRef      = self.PNTHR_ORDER_REF
         order.eTradeOnly    = False
         order.firmQuoteOnly = False
         try:

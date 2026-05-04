@@ -110,6 +110,7 @@ export function registerReconciliationCron(cron) {
       const ltSkip        = (lt.skips         || []).length;
       const ojOrphans     = (oj.orphans       || []).length;
       const ojEnq         = (oj.orphans       || []).filter(x => x.enqueued).length;
+      const ojProtected   = oj.userOrdersProtected || 0;
 
       const anyChange = ratchetAdopt || ratchetPush || ltPlace || ltModify || ltCancel || ltAdopt || ojEnq;
 
@@ -118,7 +119,7 @@ export function registerReconciliationCron(cron) {
           `[reconciliation] ${ts()} checked=${ra.positionsChecked || 0}` +
           ` ratchet:adopt=${ratchetAdopt} push=${ratchetPush} align=${ratchetAlign} skip=${ratchetSkip}` +
           ` / lotTrig:place=${ltPlace} modify=${ltModify} cancel=${ltCancel} adopt=${ltAdopt} skip=${ltSkip}` +
-          ` / orphans:found=${ojOrphans} enq=${ojEnq}` +
+          ` / orphans:found=${ojOrphans} enq=${ojEnq} userProtected=${ojProtected}` +
           ` (${r.durationMs}ms${ra.flagOn ? '' : ' RATCHET_FLAG_OFF'}${lt.flagOn ? '' : ' LOTTRIG_FLAG_OFF'}${oj.flagOn ? '' : ' ORPHANS_FLAG_OFF'})`
         );
       } else {

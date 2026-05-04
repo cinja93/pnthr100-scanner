@@ -359,6 +359,41 @@ export async function statusCounts(db, ownerId) {
   return out;
 }
 
+// ── PNTHR-placed permId whitelist (orphan-janitor secondary fingerprint) ────
+// Returns the set of TWS permIds that this outbox knows it placed for the
+// given owner. Used by orphanOrderJanitor as a fallback whitelist alongside
+// the bridge-stamped orderRef='PNTHR' tag — covers orders placed before the
+// orderRef tagging shipped (transition period) and orders whose orderRef
+// somehow got cleared (defense in depth).
+//
+// Permanent IDs (permIds) come back in the bridge's response payload. We
+// look at every DONE place/modify command and pull the permId out:
+//   • PLACE_STOP / PLACE_LOT_TRIGGER:  response.permId
+//   • MODIFY_STOP / MODIFY_LOT_TRIGGER: response.placeResult.permId (the
+//     replacement order's permId — the original was cancelled)
+//
+// Bound to 90-day hot retention (DONE records older than that are archived).
+// That's plenty: any TWS order older than 90 days that's still working has
+// almost certainly been touched by a Phase 4c ratchet which generates a
+// fresh DONE record.
+export async function getPnthrPlacedPermIds(db, ownerId) {
+  const cmds = await db.collection(COLLECTION).find({
+    ownerId,
+    status:  'DONE',
+    command: { $in: ['PLACE_STOP', 'PLACE_LOT_TRIGGER', 'MODIFY_STOP', 'MODIFY_LOT_TRIGGER'] },
+  }).project({ command: 1, response: 1 }).toArray();
+
+  const permIds = new Set();
+  for (const c of cmds) {
+    const r = c.response;
+    if (!r) continue;
+    if (r.permId) permIds.add(Number(r.permId));
+    // MODIFY commands carry the replacement permId on placeResult
+    if (r.placeResult && r.placeResult.permId) permIds.add(Number(r.placeResult.permId));
+  }
+  return permIds;
+}
+
 // ── Cold-archive helper (90-day retention) ───────────────────────────────────
 // Moves DONE commands older than 90 days into pnthr_ibkr_outbox_archive.
 // FAILED and STUCK commands NEVER auto-archive — they live in the hot

@@ -163,10 +163,17 @@ export function expectedLotTriggerAction(direction) {
 }
 
 // ── Match TWS stop order to a plan lot by trigger price ─────────────────────
-// Tolerance is wider than protective-stop matching ($0.10 vs $0.05) because
-// lot triggers are pre-staged at planned levels and may carry slight rounding
-// differences from when they were placed. Picks the closest match within tol.
-const LOT_PRICE_TOLERANCE = 0.10;
+// Tolerance now scales with the trigger price (3% pct, $0.10 abs floor).
+// Pre-fix this used a hard $0.10 — too tight when the L1 anchor drifts and
+// pre-existing TWS orders end up off-target by $0.20-$3 (e.g., CSCO 5/4:
+// stale TWS orders from $92.44 anchor vs current $92.65 anchor diverged by
+// $0.22 per lot, fell outside $0.10, were skipped as "user-placed unrelated"
+// → cron then placed fresh canonical orders alongside, accumulating dupes).
+// 3% is wide enough for any reasonable anchor drift, narrow enough that
+// truly unrelated user orders (e.g., a tactical BUY STOP $20 away) still
+// don't get auto-modified.
+const LOT_PRICE_TOLERANCE_ABS = 0.10;
+const LOT_PRICE_TOLERANCE_PCT = 0.03;
 export function matchTwsOrderToLot(order, lots) {
   if (!order || !Number.isFinite(+order.stopPrice)) return null;
   const px = +order.stopPrice;
@@ -174,8 +181,9 @@ export function matchTwsOrderToLot(order, lots) {
   let bestDiff = Infinity;
   for (const l of lots) {
     if (l.lot === 1) continue; // L1 is the entry, not a trigger
+    const tolerance = Math.max(LOT_PRICE_TOLERANCE_ABS, l.triggerPrice * LOT_PRICE_TOLERANCE_PCT);
     const diff = Math.abs(l.triggerPrice - px);
-    if (diff <= LOT_PRICE_TOLERANCE && diff < bestDiff) {
+    if (diff <= tolerance && diff < bestDiff) {
       best = l;
       bestDiff = diff;
     }

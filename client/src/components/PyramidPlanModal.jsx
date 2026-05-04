@@ -61,26 +61,51 @@ export default function PyramidPlanModal({ ticker, positionId, onClose, onApplie
 
         const direction = (data.direction || 'LONG').toUpperCase();
         const anchor    = data.anchor || data.currentL1?.price || 0;
+        const nav       = data.nav || 0;
+        const origStop  = data.originalStop || 0;
         setMeta({
-          nav:          data.nav || 0,
-          originalStop: data.originalStop || 0,
+          nav,
+          originalStop: origStop,
           direction,
           anchor,
           currentL1:    data.currentL1 || {},
         });
 
-        // Pre-fill share inputs with canonical recommendation if non-zero,
-        // else with the trader's actual L1 redistributed at canonical weights
-        // for a sensible starting point.
-        if (data.plan && data.plan.length === 5) {
-          const canonical = {
-            2: data.plan[1].targetShares || 0,
-            3: data.plan[2].targetShares || 0,
-            4: data.plan[3].targetShares || 0,
-            5: data.plan[4].targetShares || 0,
-          };
-          setShares(canonical);
+        // ── 1% NAV risk-budget recommendation ─────────────────────────────────
+        // Pre-fix the modal pre-filled with canonical share-weighted math
+        // (35/25/20/12/8 of total shares from `floor(vitality / L1_rps)`).
+        // That sizes L1 to 1% NAV but L2-L5 ADD risk on top because their
+        // trigger prices are higher (greater rps). Cumulative risk routinely
+        // exceeded 1% — OVV came in at 1.21%, MUR at 1.36%.
+        //
+        // The PNTHR fund rule is 1% TOTAL NAV across the full pyramid, not
+        // 1% on L1 alone. So the real recommendation is:
+        //   • Total risk budget = 1% × NAV
+        //   • Subtract L1 actual risk (already filled, fixed)
+        //   • Distribute remaining budget across L2-L5 by 30/25/20/10 weights
+        //     (canonical L1-aware redistribution shape, sum 85)
+        //   • shares = budgetForLot / lotRiskPerShare
+        const isLong   = direction !== 'SHORT';
+        const l1Shares = +data.currentL1?.shares || 0;
+        const l1Risk   = origStop > 0 && anchor > 0
+          ? (isLong ? Math.max(0, anchor - origStop) : Math.max(0, origStop - anchor)) * l1Shares
+          : 0;
+        const budgetTotal     = nav * 0.01;
+        const budgetRemaining = Math.max(0, budgetTotal - l1Risk);
+
+        const weights = { 2: 30, 3: 25, 4: 20, 5: 10 };
+        const sumW    = 30 + 25 + 20 + 10;
+        const rec     = { 2: 0, 3: 0, 4: 0, 5: 0 };
+        for (const lot of [2, 3, 4, 5]) {
+          const i = lot - 1;
+          const trigger = +(anchor * (isLong ? (1 + LOT_OFFSETS[i]) : (1 - LOT_OFFSETS[i]))).toFixed(2);
+          const rps     = isLong
+            ? Math.max(0, trigger - origStop)
+            : Math.max(0, origStop - trigger);
+          const lotBudget = budgetRemaining * weights[lot] / sumW;
+          rec[lot] = rps > 0 ? Math.floor(lotBudget / rps) : 0;
         }
+        setShares(rec);
         setLoading(false);
       } catch (e) {
         if (!cancelled) {
@@ -221,7 +246,7 @@ export default function PyramidPlanModal({ ticker, positionId, onClose, onApplie
               ▲ PYRAMID PLAN — {ticker}
             </div>
             <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
-              Edit per-lot shares. L1 is your actual TWS fill (not editable). Risk math updates live.
+              L2-L5 pre-filled to target <span style={{ color: '#FCF000', fontWeight: 700 }}>1% NAV total risk</span> if all lots fill. L1 is your actual TWS fill (not editable). Edit any lot to override.
             </div>
           </div>
           <button

@@ -134,79 +134,123 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
       && (s.orderType === 'STP' || s.orderType === 'STP LMT')
     );
 
-    // Track which lots have been matched to a TWS order (for the PLACE pass).
-    const matchedLotNums = new Set();
-
-    // ── PASS 1: CLEANUP + PASS 2: MODIFY/ADOPT ────────────────────────────────
+    // ── Pre-pass: group candidate TWS orders by best-matching lot ────────────
+    // This unifies the old PASS 1 + PASS 2 into a per-lot view. Instead of
+    // walking each TWS order in isolation (which couldn't see when MULTIPLE
+    // orders matched the same lot — the CSCO 5/4 case), we collect all
+    // matches per lot, pick the best one, and cancel duplicates.
+    //
+    // With the broader 3% match tolerance in lotMath.js, stale-anchor orders
+    // that previously fell out as 'TWS_ORDER_UNMATCHED_TO_PLAN' now slot into
+    // the right lot and get either MODIFIED to plan (for incomplete lots) or
+    // CANCELLED (for complete lots).
+    const candidatesByLot = new Map(); // lotNum → [order1, order2, ...]
+    const trulyUnmatched  = [];        // outside even the broader tolerance — likely user-placed
     for (const order of candidateOrders) {
       const matchedLot = matchTwsOrderToLot(order, lots);
       if (!matchedLot) {
-        // Order doesn't sit at any plan lot price — leave it alone (could be
-        // a tactical user-placed order outside the pyramid plan). Log only.
-        skips.push({
-          ticker, reason: 'TWS_ORDER_UNMATCHED_TO_PLAN',
-          permId: order.permId, stopPrice: order.stopPrice, shares: order.shares,
-        });
+        trulyUnmatched.push(order);
         continue;
       }
-      matchedLotNums.add(matchedLot.lot);
+      if (!candidatesByLot.has(matchedLot.lot)) candidatesByLot.set(matchedLot.lot, []);
+      candidatesByLot.get(matchedLot.lot).push(order);
+    }
+    for (const order of trulyUnmatched) {
+      // Likely user-placed tactical order well outside the pyramid plan.
+      // Leave it alone — janitor handles it iff position closes entirely.
+      skips.push({
+        ticker, reason: 'TWS_ORDER_UNMATCHED_TO_PLAN',
+        permId: order.permId, stopPrice: order.stopPrice, shares: order.shares,
+      });
+    }
 
-      // CLEANUP pass: matched a complete lot → stale, must cancel.
-      // (SWKS pattern — manual market-buy past the trigger left the order
-      // dangling; could over-allocate if price re-trips the level.)
-      if (matchedLot.complete) {
+    // ── PASS 1+2: per-lot processing ─────────────────────────────────────────
+    for (const lot of lots) {
+      if (lot.lot === 1) continue; // L1 is the entry, never a trigger
+      const candidates = candidatesByLot.get(lot.lot) || [];
+
+      // CLEANUP: complete lot → cancel ALL candidates.
+      if (lot.complete) {
+        for (const order of candidates) {
+          const enqRes = !dryRun && flagOn
+            ? await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
+                ticker,
+                permId:    order.permId,
+                direction: isLong ? 'LONG' : 'SHORT',
+                source:    'LOT_TRIGGER_CRON_CLEANUP',
+                lot:       lot.lot,
+                reason:    candidates.length > 1 ? 'DUPLICATE_AT_COMPLETE_LOT' : 'STALE_LOT_TRIGGER_PAST_CUMULATIVE',
+              })
+            : { skipped: dryRun ? 'DRY_RUN' : 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF' };
+          cancellations.push({
+            ticker, lot: lot.lot, dir: isLong ? 'LONG' : 'SHORT',
+            stalePrice: +order.stopPrice, staleShares: order.shares,
+            ibkrShares, cumulativeTarget: lot.cumulativeTargetShares,
+            permId: order.permId,
+            enqueued:   !enqRes.skipped, outboxId: enqRes.id,
+            skipReason: enqRes.skipped || null,
+          });
+        }
+        continue;
+      }
+
+      // No candidates → falls through to PASS 3 (PLACE).
+      if (candidates.length === 0) continue;
+
+      // Pick the BEST candidate (closest to plan price). Cancel the rest as
+      // duplicates — this is how the CSCO 7-orders-for-4-lots mess gets
+      // cleaned up: the new canonical-price order stays, the stale-anchor
+      // ones get cancelled.
+      const planTrigger = lot.triggerPrice;
+      const planShares  = lot.targetShares;
+      candidates.sort((a, b) =>
+        Math.abs(+a.stopPrice - planTrigger) - Math.abs(+b.stopPrice - planTrigger)
+      );
+      const best       = candidates[0];
+      const duplicates = candidates.slice(1);
+
+      // Cancel duplicates first.
+      for (const dup of duplicates) {
         const enqRes = !dryRun && flagOn
           ? await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
               ticker,
-              permId:    order.permId,
+              permId:    dup.permId,
               direction: isLong ? 'LONG' : 'SHORT',
-              source:    'LOT_TRIGGER_CRON_CLEANUP',
-              lot:       matchedLot.lot,
-              reason:    'STALE_LOT_TRIGGER_PAST_CUMULATIVE',
+              source:    'LOT_TRIGGER_CRON_DEDUP',
+              lot:       lot.lot,
+              reason:    'DUPLICATE_AT_INCOMPLETE_LOT',
             })
           : { skipped: dryRun ? 'DRY_RUN' : 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF' };
         cancellations.push({
-          ticker, lot: matchedLot.lot, dir: isLong ? 'LONG' : 'SHORT',
-          stalePrice: +order.stopPrice, staleShares: order.shares,
-          ibkrShares, cumulativeTarget: matchedLot.cumulativeTargetShares,
-          permId: order.permId,
+          ticker, lot: lot.lot, dir: isLong ? 'LONG' : 'SHORT',
+          stalePrice: +dup.stopPrice, staleShares: dup.shares,
+          permId: dup.permId, reason: 'DEDUP',
           enqueued:   !enqRes.skipped, outboxId: enqRes.id,
           skipReason: enqRes.skipped || null,
         });
-        continue;
       }
 
-      // MODIFY/ADOPT pass: incomplete lot with a TWS order present.
-      const twsTrigger    = +order.stopPrice;
-      const twsShares     = Math.abs(+order.shares || 0);
-      const planTrigger   = matchedLot.triggerPrice;
-      const planShares    = matchedLot.targetShares;
-      const triggerDiff   = Math.abs(twsTrigger - planTrigger);
-      const triggerLooser = isLong ? twsTrigger > planTrigger : twsTrigger < planTrigger;
-      const sharesMatch   = twsShares === planShares;
+      // Now align/modify the best candidate.
+      const twsTrigger  = +best.stopPrice;
+      const twsShares   = Math.abs(+best.shares || 0);
+      const triggerDiff = Math.abs(twsTrigger - planTrigger);
+      const sharesMatch = twsShares === planShares;
 
       if (triggerDiff < 0.05 && sharesMatch) {
-        aligned.push({ ticker, lot: matchedLot.lot, trigger: twsTrigger, shares: twsShares });
+        aligned.push({ ticker, lot: lot.lot, trigger: twsTrigger, shares: twsShares });
         continue;
       }
 
-      // TWS-tighter or share-override → silent adoption (no enqueue).
-      // The order stays as Scott set it; PNTHR doesn't push back.
-      if (!triggerLooser || !sharesMatch) {
-        adoptions.push({
-          ticker, lot: matchedLot.lot, dir: isLong ? 'LONG' : 'SHORT',
-          tws: { trigger: twsTrigger, shares: twsShares },
-          plan: { trigger: planTrigger, shares: planShares },
-          reason: !sharesMatch ? 'USER_SHARE_OVERRIDE' : 'TWS_TRIGGER_TIGHTER',
-        });
-        continue;
-      }
-
-      // PNTHR-tighter trigger AND shares match → push to TWS via MODIFY.
+      // PNTHR plan is law for lot triggers. Drop the silent-adoption path —
+      // any drift gets pushed to plan via MODIFY. Lot triggers aren't risk-
+      // symmetric like protective stops (tighter trigger = MORE risk, not
+      // less), so the tightest-wins rule doesn't apply. If the trader wants
+      // a custom L_N entry price, they edit the plan in PNTHR (Command
+      // Center / Pyramid modal), not in TWS.
       const sanity = sanityCheckModifyLotTrigger({
         position:        p,
         ibkrPosition:    { shares: ibkrShares, lastPrice: ibkrPos.lastPrice || p.currentPrice, avgCost: ibkrPos.avgCost },
-        lot:             matchedLot.lot,
+        lot:             lot.lot,
         oldTriggerPrice: twsTrigger,
         newTriggerPrice: planTrigger,
         oldShares:       twsShares,
@@ -221,9 +265,9 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
         ? await enqueueOutbox(db, p.ownerId, 'MODIFY_LOT_TRIGGER', {
             ticker,
             direction:       isLong ? 'LONG' : 'SHORT',
-            lot:             matchedLot.lot,
+            lot:             lot.lot,
             shares:          planShares,
-            oldPermId:       order.permId,
+            oldPermId:       best.permId,
             oldTriggerPrice: twsTrigger,
             newTriggerPrice: planTrigger,
             orderType:       shape.orderType,
@@ -235,10 +279,10 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
           }, { sanityCheck: sanity })
         : { skipped: dryRun ? 'DRY_RUN' : (flagOn ? 'UNKNOWN' : 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF') };
       modifications.push({
-        ticker, lot: matchedLot.lot, dir: isLong ? 'LONG' : 'SHORT',
+        ticker, lot: lot.lot, dir: isLong ? 'LONG' : 'SHORT',
         from: { trigger: twsTrigger, shares: twsShares },
         to:   { trigger: planTrigger, shares: planShares },
-        permId: order.permId,
+        permId: best.permId,
         enqueued:   !enqRes.skipped, outboxId: enqRes.id,
         skipReason: enqRes.skipped || null,
       });
@@ -248,7 +292,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
     for (const lot of lots) {
       if (lot.lot === 1) continue;          // L1 is the entry, never a trigger
       if (lot.complete) continue;           // Already filled/surpassed — covered by cleanup
-      if (matchedLotNums.has(lot.lot)) continue; // Already has a TWS order
+      if ((candidatesByLot.get(lot.lot) || []).length > 0) continue; // Already has a TWS order
 
       const sanity = sanityCheckPlaceLotTrigger({
         position:     p,

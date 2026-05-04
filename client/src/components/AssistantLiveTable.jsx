@@ -1314,23 +1314,27 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                           }}
                         >
                           {remaining.map(t => {
-                            // Three-state dot:
-                            //   • green = a matching STP IS staged in IBKR
-                            //   • gray  = no action needed (target shares = 0;
-                            //             position is at vitality/ticker-cap)
-                            //   • red   = SHOULD be staged but isn't
-                            // Pre-fix this collapsed gray + green into the same
-                            // green color, which made "intentionally not in
-                            // TWS" indistinguishable from "actually in TWS."
-                            const noAction = !t.targetShares || t.targetShares <= 0;
-                            const dotStatus = noAction ? 'gray'
-                                            : t.staged ? 'green'
-                                            :            'red';
-                            const dotTitle = noAction
-                              ? `Lot ${t.lot}: no shares to add (position already at size cap — click PYRAMID to override total size)`
-                              : t.staged
-                                ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR`
-                                : `Lot ${t.lot}: NO pending ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)}`;
+                            // Four-state dot, in priority order:
+                            //   • complete (gray)  — position already covers
+                            //     this lot's cumulative target. No more shares
+                            //     needed. e.g., QTUM 5/4: 52 sh held against
+                            //     a 19-sh canonical plan = all lots done.
+                            //   • zero target (gray) — plan calls for 0 sh
+                            //     here (vitality/ticker-cap reached).
+                            //   • staged (green) — order IS in TWS.
+                            //   • red — should be staged but isn't.
+                            const isComplete = t.complete === true;
+                            const noAction   = isComplete || !t.targetShares || t.targetShares <= 0;
+                            const dotStatus  = noAction ? 'gray'
+                                             : t.staged ? 'green'
+                                             :            'red';
+                            const dotTitle = isComplete
+                              ? `Lot ${t.lot}: position already covers this lot's cumulative target — no action needed`
+                              : noAction
+                                ? `Lot ${t.lot}: no shares to add (position at size cap — click PYRAMID to override total size)`
+                                : t.staged
+                                  ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR`
+                                  : `Lot ${t.lot}: NO pending ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)}`;
                             return (
                               <div key={t.lot} style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'flex-end',

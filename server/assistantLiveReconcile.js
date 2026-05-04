@@ -111,8 +111,14 @@ function computeLotTriggers(position, netLiquidity) {
     : +position.entryPrice || null;
   if (!anchor) return [];
   const targetShares = computeLotTargetShares(position, netLiquidity);
+  // Cumulative target through L_N — used to determine whether the position
+  // already covers a given lot (over-fill or single-shot at canonical full
+  // size both yield "complete" lots that need no further action).
+  let cumulative = 0;
   return [2, 3, 4, 5].map(n => {
     const i = n - 1;
+    cumulative = (targetShares[0] || 0); // start with L1 cumulative
+    for (let k = 1; k <= i; k++) cumulative += (targetShares[k] || 0);
     const triggerPrice = isLong
       ? +(anchor * (1 + LOT_OFFSETS[i])).toFixed(2)
       : +(anchor * (1 - LOT_OFFSETS[i])).toFixed(2);
@@ -120,6 +126,7 @@ function computeLotTriggers(position, netLiquidity) {
       lot: n,
       triggerPrice,
       targetShares: targetShares[i] || 0,
+      cumulativeTargetShares: cumulative,
       filled: fills[n]?.filled || false,
       expectedSide: isLong ? 'BUY' : 'SELL', // lot-entry orders are the same side as the position
     };
@@ -143,15 +150,21 @@ function filterProtectiveStops(ibkrStops, direction) {
 
 // For each unfilled lot trigger, check if there's a matching pending order in
 // IBKR (same side + same price within tolerance). Returns an array enriched
-// with `staged: bool` so the client can render green/red dots.
-function enrichLotTriggersWithIbkrStatus(triggers, ibkrStops) {
+// with `staged: bool` and `complete: bool` so the client can render the
+// right dot color:
+//   • complete (cumulative target ≤ position shares) → no action needed; gray
+//   • staged                                          → order in TWS; green
+//   • neither                                          → should be staged but isn't; red
+function enrichLotTriggersWithIbkrStatus(triggers, ibkrStops, ibkrShares = 0) {
+  const heldShares = Math.abs(+ibkrShares || 0);
   return triggers.map(t => {
-    if (t.filled) return { ...t, staged: null }; // already happened — no dot
+    const complete = heldShares >= (t.cumulativeTargetShares || 0);
+    if (t.filled) return { ...t, staged: null, complete }; // already happened — no dot
     const match = ibkrStops.find(s =>
       s.action === t.expectedSide &&
       Math.abs(+s.stopPrice - t.triggerPrice) < 0.05
     );
-    return { ...t, staged: !!match };
+    return { ...t, staged: !!match, complete };
   });
 }
 
@@ -239,20 +252,27 @@ function classifyStopShares(ibkrStops, cmdShr) {
   return { status: 'red', reason: `Over-stopped: ${covered} sh stopping ${cmdShr} sh position` };
 }
 
-// Classify the overall ratchet-column status based on the NEXT unfilled lot
-// trigger only. Per-lot dots inside the cell still reflect each individual
-// trigger's staging state, but only the next unfilled one drives the row-
-// level roll-up.
+// Classify the overall ratchet-column status. The roll-up drives the row's
+// far-left card dot via buildRow's rowStatus computation.
 //
-// Green = next unfilled lot is staged in IBKR
-//       OR next unfilled lot has 0 target shares (position front-loaded at
-//       vitality/ticker cap — there's nothing more to stage, which means
-//       no action required → green)
-// Red   = next unfilled lot has shares to stage but NO matching pending order
-// Gray  = all lots filled (no upcoming trigger)
+// Gray  = all lots are COMPLETE (cumulative target ≤ position shares — i.e.,
+//         the position already covers every planned lot). This includes
+//         single-shot fills where canonical full size = L1 actual, and over-
+//         filled positions like QTUM (52 sh on a 19-sh canonical plan).
+//         No action needed → display says "you're done."
+// Green = next incomplete unfilled lot is staged in IBKR (or has 0 shares
+//         to add and is therefore implicitly OK).
+// Red   = next incomplete unfilled lot has shares to stage but no matching
+//         pending order in IBKR.
 function classifyLotTriggers(enrichedTriggers) {
-  const next = enrichedTriggers.find(t => !t.filled);
-  if (!next) return { status: 'gray', reason: 'all lots filled' };
+  // If every lot is "complete" (position covers cumulative target), the
+  // pyramid is done. No further action.
+  if (enrichedTriggers.length > 0 && enrichedTriggers.every(t => t.complete)) {
+    return { status: 'gray', reason: 'All lots covered — position is at or above full plan size' };
+  }
+  // Next ACTIONABLE lot — incomplete + unfilled.
+  const next = enrichedTriggers.find(t => !t.filled && !t.complete);
+  if (!next) return { status: 'gray', reason: 'all lots filled or covered' };
   if (!next.targetShares || next.targetShares <= 0) {
     return { status: 'green', reason: 'position already at size cap — no more shares to add' };
   }
@@ -285,7 +305,7 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
   // Each enriched with staged:true/false based on whether a matching pending order
   // exists in IBKR. The client stacks these in the NEXT RATCHET column with dots.
   const rawLotTriggers     = cmd ? computeLotTriggers(cmd, netLiquidity) : [];
-  const enrichedLotTriggers = enrichLotTriggersWithIbkrStatus(rawLotTriggers, ibkrTickerStops);
+  const enrichedLotTriggers = enrichLotTriggersWithIbkrStatus(rawLotTriggers, ibkrTickerStops, ibkrShares);
 
   // For the protective-stop checks (side / price / shares / multi-stop flag),
   // look only at PROTECTIVE stops. A BUY STP on a long is a lot-entry order

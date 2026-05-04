@@ -957,13 +957,24 @@ def main():
                 app.reqAllOpenOrders()
                 app.orders_ready.wait(timeout=5)  # orders arrive fast
 
-                # Phase 2: request today's executions (fills) from TWS.
-                # ExecutionFilter() with no args returns all fills for today.
-                # The server deduplicates by execId so sending all each cycle is safe.
+                # Request executions (fills) from TWS. Default lookback is
+                # 7 days so the server's auto-fill recorder (Phase 4h) can
+                # backfill pyramid lot fills that fired before the recorder
+                # was deployed. The server dedups by execId in
+                # pnthr_ibkr_executions, so re-sending old fills each cycle
+                # is harmless after the first sync (processed execs are
+                # filtered out before Phase 2/4h logic runs). TWS itself
+                # limits history to ~7 days; set EXECUTION_LOOKBACK_DAYS to
+                # tune (e.g., 1 = today only).
+                lookback_days = int(os.getenv('EXECUTION_LOOKBACK_DAYS', '7'))
+                exec_filter = ExecutionFilter()
+                cutoff = datetime.now(_ET) - timedelta(days=lookback_days)
+                exec_filter.time = cutoff.strftime('%Y%m%d-%H:%M:%S')
+
                 app.executions = []
                 app.executions_ready.clear()
                 app._exec_req_id += 1
-                app.reqExecutions(app._exec_req_id, ExecutionFilter())
+                app.reqExecutions(app._exec_req_id, exec_filter)
                 app.executions_ready.wait(timeout=5)
 
                 payload = app.get_payload()

@@ -7537,6 +7537,27 @@ app.post('/api/test/trendlines', authenticateJWT, requireAdmin, async (req, res)
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Update an existing trendline's endpoints (after click-drag on a handle).
+app.patch('/api/test/trendlines/:id', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { ObjectId } = await import('mongodb');
+    const { t1, v1, t2, v2, expectSide } = req.body || {};
+    const update = {};
+    if (t1 != null) update.t1 = t1;
+    if (v1 != null) update.v1 = +v1;
+    if (t2 != null) update.t2 = t2;
+    if (v2 != null) update.v2 = +v2;
+    if (['above', 'below'].includes(expectSide)) update.expectSide = expectSide;
+    update.updatedAt = new Date();
+    const db = await getDenDb();
+    const r = await db.collection('pnthr_user_trendlines').updateOne(
+      { _id: new ObjectId(req.params.id), userId: req.user.userId },
+      { $set: update },
+    );
+    res.json({ ok: true, modified: r.modifiedCount });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.delete('/api/test/trendlines/:id', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { ObjectId } = await import('mongodb');

@@ -332,49 +332,148 @@ function TickerChart({ ticker, enabled }) {
     return { time: bestBar.weekOf, value: snappedPrice, x: bestPx, y: snappedY, snapHigh };
   }
 
-  const drawStartRef = useRef(null);
+  const drawStartRef     = useRef(null); // {time, value, x, y, snapHigh} when drawing new line
+  const editingRef       = useRef(null); // {lineId, endpoint:'start'|'end', otherTime, otherVal} when editing
+  const windowHandlersRef = useRef(null); // for cleanup of document-level listeners
+
+  // Compute expectSide for a line given its endpoints, vs latest bar's close.
+  function computeExpectSide(t1, v1, t2, v2) {
+    const slice = sliceRef.current;
+    if (!slice || slice.length === 0) return 'above';
+    const lastBar = slice[slice.length - 1];
+    const slope = (v2 - v1) / Math.max(1, daysBetweenIso(t2, t1));
+    const lineAtLast = v1 + slope * daysBetweenIso(lastBar.weekOf, t1);
+    return lineAtLast >= lastBar.close ? 'above' : 'below';
+  }
+
+  // Hit test: is the click near an endpoint of an existing drawn line? Returns
+  // {lineId, endpoint, otherTime, otherVal} for handle-drag, or null.
+  function findEndpointHit(clientX, clientY) {
+    const chart = chartRef.current, series = seriesRef.current;
+    if (!chart || !series || !overlayRef.current) return null;
+    const rect = overlayRef.current.getBoundingClientRect();
+    const x = clientX - rect.left, y = clientY - rect.top;
+    const HANDLE_R = 10;
+    for (const ln of drawnLines) {
+      const x1 = chart.timeScale().timeToCoordinate(ln.t1);
+      const y1 = series.priceToCoordinate(ln.v1);
+      const x2 = chart.timeScale().timeToCoordinate(ln.t2);
+      const y2 = series.priceToCoordinate(ln.v2);
+      if (x1 != null && y1 != null && Math.hypot(x1 - x, y1 - y) <= HANDLE_R) {
+        return { lineId: ln._id, endpoint: 'start', otherTime: ln.t2, otherVal: ln.v2 };
+      }
+      if (x2 != null && y2 != null && Math.hypot(x2 - x, y2 - y) <= HANDLE_R) {
+        return { lineId: ln._id, endpoint: 'end', otherTime: ln.t1, otherVal: ln.v1 };
+      }
+    }
+    return null;
+  }
+
+  function attachWindowDragListeners() {
+    if (windowHandlersRef.current) return;
+    const onMove = (ev) => onDrawMove(ev);
+    const onUp   = (ev) => { onDrawUp(ev); detachWindowDragListeners(); };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    windowHandlersRef.current = { onMove, onUp };
+  }
+  function detachWindowDragListeners() {
+    const h = windowHandlersRef.current;
+    if (!h) return;
+    window.removeEventListener('mousemove', h.onMove);
+    window.removeEventListener('mouseup', h.onUp);
+    windowHandlersRef.current = null;
+  }
+
   function onDrawDown(e) {
     if (!drawMode) return;
     e.preventDefault();
+    // First check: is the user grabbing an existing endpoint to edit?
+    const grab = findEndpointHit(e.clientX, e.clientY);
+    if (grab) {
+      const chart = chartRef.current, series = seriesRef.current;
+      const xOther = chart.timeScale().timeToCoordinate(grab.otherTime);
+      const yOther = series.priceToCoordinate(grab.otherVal);
+      editingRef.current = grab;
+      // Show temp line from the FIXED endpoint to current cursor
+      const rect = overlayRef.current.getBoundingClientRect();
+      setTempLine({ x1: xOther, y1: yOther, x2: e.clientX - rect.left, y2: e.clientY - rect.top });
+      setHoverSnap(null);
+      attachWindowDragListeners();
+      return;
+    }
+    // Otherwise: starting a brand new line
     const snap = snapAt(e.clientX, e.clientY);
     if (!snap) {
-      console.warn('[TEST draw] snap returned null — chart not ready or click outside bars');
+      console.warn('[TEST draw] snap returned null — click outside bars');
       return;
     }
     drawStartRef.current = snap;
-    // Set tempLine so the start dot + zero-length line render immediately,
-    // confirming to the user that the click registered.
     setTempLine({ x1: snap.x, y1: snap.y, x2: snap.x, y2: snap.y });
     setHoverSnap(null);
+    attachWindowDragListeners();
   }
+
   function onDrawMove(e) {
     if (!drawMode) return;
     const rect = overlayRef.current.getBoundingClientRect();
+    const cursorX = e.clientX - rect.left;
+    const cursorY = e.clientY - rect.top;
     if (drawStartRef.current) {
-      // Mid-drag — extend the temp line
-      setTempLine({ x1: drawStartRef.current.x, y1: drawStartRef.current.y, x2: e.clientX - rect.left, y2: e.clientY - rect.top });
+      setTempLine({ x1: drawStartRef.current.x, y1: drawStartRef.current.y, x2: cursorX, y2: cursorY });
+    } else if (editingRef.current) {
+      // Show the line being edited: fixed end → cursor
+      setTempLine(prev => prev ? { x1: prev.x1, y1: prev.y1, x2: cursorX, y2: cursorY } : null);
     } else {
-      // Hover preview — show where the click WOULD snap if released
       const snap = snapAt(e.clientX, e.clientY);
       setHoverSnap(snap ? { x: snap.x, y: snap.y, snapHigh: snap.snapHigh } : null);
     }
   }
+
   async function onDrawUp(e) {
-    if (!drawMode || !drawStartRef.current) return;
+    if (!drawMode) return;
+    // Endpoint-edit completion
+    if (editingRef.current) {
+      const edit = editingRef.current;
+      const snap = snapAt(e.clientX, e.clientY);
+      editingRef.current = null;
+      setTempLine(null);
+      if (!snap) return;
+      // Build updated endpoints
+      const isStart = edit.endpoint === 'start';
+      const newT1 = isStart ? snap.time : edit.otherTime;
+      const newV1 = isStart ? snap.value : edit.otherVal;
+      const newT2 = isStart ? edit.otherTime : snap.time;
+      const newV2 = isStart ? edit.otherVal : snap.value;
+      if (newT1 === newT2) return; // refuse zero-length
+      const expectSide = computeExpectSide(newT1, newV1, newT2, newV2);
+      // Optimistic UI update
+      setDrawnLines(prev => prev.map(l => l._id === edit.lineId
+        ? { ...l, t1: newT1, v1: newV1, t2: newT2, v2: newV2, expectSide }
+        : l));
+      // Persist
+      try {
+        await fetch(`${API_BASE}/api/test/trendlines/${edit.lineId}`, {
+          method: 'PATCH',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ t1: newT1, v1: newV1, t2: newT2, v2: newV2, expectSide }),
+        });
+      } catch (err) { console.error('PATCH trendline failed', err); }
+      return;
+    }
+    // New-line completion
+    if (!drawStartRef.current) return;
     const start = drawStartRef.current;
     const end = snapAt(e.clientX, e.clientY);
     drawStartRef.current = null;
     setTempLine(null);
-    if (!end || end.time === start.time) return;
+    if (!end || end.time === start.time) {
+      console.warn('[TEST draw] line rejected — released on same bar or outside chart');
+      return;
+    }
     const [a, b] = start.time < end.time ? [start, end] : [end, start];
-    // Determine expectSide: where is the line relative to the latest bar's close?
-    const slice = sliceRef.current;
-    const lastBar = slice[slice.length - 1];
-    const slope = (b.value - a.value) / Math.max(1, daysBetweenIso(b.time, a.time));
-    const lineAtLast = a.value + slope * daysBetweenIso(lastBar.weekOf, a.time);
-    const expectSide = lineAtLast >= lastBar.close ? 'above' : 'below';
+    const expectSide = computeExpectSide(a.time, a.value, b.time, b.value);
     const payload = { ticker, t1: a.time, v1: a.value, t2: b.time, v2: b.value, expectSide };
-    // Optimistic add — replace with server response (gets _id)
     setDrawnLines(prev => [...prev, { ...payload, _id: 'pending-' + Date.now() }]);
     try {
       const r = await fetch(`${API_BASE}/api/test/trendlines`, {
@@ -386,10 +485,7 @@ function TickerChart({ ticker, enabled }) {
       if (j.ok) {
         setDrawnLines(prev => prev.map(l => l._id?.startsWith?.('pending-') && l.t1 === payload.t1 && l.t2 === payload.t2 ? { ...l, _id: j._id } : l));
       }
-    } catch (err) {
-      // leave optimistic line so user sees it; persistence will retry next interaction
-      console.error('save trendline failed', err);
-    }
+    } catch (err) { console.error('save trendline failed', err); }
   }
 
   // ── Right-click context menu ──
@@ -487,7 +583,13 @@ function TickerChart({ ticker, enabled }) {
           onMouseDown={onDrawDown}
           onMouseMove={onDrawMove}
           onMouseUp={onDrawUp}
-          onMouseLeave={() => { drawStartRef.current = null; setTempLine(null); setHoverSnap(null); }}
+          onMouseLeave={() => {
+            // Only clear hover preview — never cancel an in-progress drag
+            // (the window-level mouseup will catch the release outside).
+            if (!drawStartRef.current && !editingRef.current) {
+              setHoverSnap(null);
+            }
+          }}
           onContextMenu={onContextMenu}
           onWheel={(e) => { if (drawMode) e.preventDefault(); }}
           style={{
@@ -495,12 +597,31 @@ function TickerChart({ ticker, enabled }) {
             pointerEvents: (drawMode || drawnLines.length > 0) ? 'auto' : 'none',
             cursor: drawMode ? 'crosshair' : 'default',
             zIndex: 10,
-            // While drawing: faint yellow tint so Scott can SEE the overlay is on
             background: drawMode ? 'rgba(252,240,0,0.04)' : 'transparent',
             border: drawMode ? '1px dashed rgba(252,240,0,0.5)' : 'none',
           }}
         >
           <svg width="100%" height="100%" style={{ pointerEvents: 'none', display: 'block' }}>
+            {/* Endpoint handles for existing drawn lines (only visible in draw mode) */}
+            {drawMode && drawnLines.map(ln => {
+              const chart = chartRef.current, series = seriesRef.current;
+              if (!chart || !series) return null;
+              const x1 = chart.timeScale().timeToCoordinate(ln.t1);
+              const y1 = series.priceToCoordinate(ln.v1);
+              const x2 = chart.timeScale().timeToCoordinate(ln.t2);
+              const y2 = series.priceToCoordinate(ln.v2);
+              return (
+                <g key={ln._id}>
+                  {x1 != null && y1 != null && (
+                    <circle cx={x1} cy={y1} r="6" fill="#fcf000" stroke="#000" strokeWidth="1.5" />
+                  )}
+                  {x2 != null && y2 != null && (
+                    <circle cx={x2} cy={y2} r="6" fill="#fcf000" stroke="#000" strokeWidth="1.5" />
+                  )}
+                </g>
+              );
+            })}
+            {/* Hover preview */}
             {drawMode && hoverSnap && !tempLine && (
               <>
                 <circle cx={hoverSnap.x} cy={hoverSnap.y} r="6" fill="none" stroke="#fcf000" strokeWidth="1.5" strokeDasharray="2 2" />
@@ -509,6 +630,7 @@ function TickerChart({ ticker, enabled }) {
                 </text>
               </>
             )}
+            {/* Active drag */}
             {tempLine && (
               <>
                 <line x1={tempLine.x1} y1={tempLine.y1} x2={tempLine.x2} y2={tempLine.y2} stroke="#fcf000" strokeWidth="2" strokeDasharray="4 3" />

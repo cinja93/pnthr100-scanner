@@ -11,6 +11,7 @@ import { getSectorEmaPeriod } from '../utils/sectorEmaConfig';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
 import KillBadge from './KillBadge';
+import ChartDrawingOverlay from './ChartDrawingOverlay';
 
 // ── Module-level kill rank cache ─────────────────────────────────────────────
 // Fetched once per session; Map<ticker, killRank (1-10)> for the current week's
@@ -308,7 +309,7 @@ function formatWeekDate(timeStr) {
 const EMPTY_EARNINGS = Object.freeze({});
 
 export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARNINGS, onClose, onWatchlistChange }) {
-  const { isInvestor } = useAuth() || {};
+  const { isInvestor, isAdmin } = useAuth() || {};
   const { isAuthenticated, queuedTickers, toggleQueue, nav: contextNav } = useQueue() || {};
   const { analyzeContext } = useAnalyzeContext() || {};
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -343,6 +344,9 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
   const navCache = useRef(null);
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
+  const barSeriesRef = useRef(null);    // bar series — needed by drawing overlay for price↔coord
+  const visibleBarsRef = useRef([]);    // sorted weekly bars currently rendered (for snap)
+  const [barsTick, setBarsTick] = useState(0); // bumps when chart rebuilds, so overlay reattaches
   const cacheRef = useRef({});
   const entryDatesRef = useRef({});
 
@@ -554,8 +558,16 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
       priceLineVisible: false,
       lastValueVisible: false,
     });
+    barSeriesRef.current = series;
 
     series.setData(filtered);
+    // Snapshot visible bars for the drawing overlay's snap detection. The
+    // overlay uses bar.weekOf / bar.high / bar.low which are present on each
+    // entry (filtered shape: {time, open, high, low, close}).
+    visibleBarsRef.current = filtered.map(b => ({
+      weekOf: b.time, open: b.open, high: b.high, low: b.low, close: b.close,
+    }));
+    setBarsTick(t => t + 1);
 
     const filteredTimes = new Set(filtered.map(d => d.time));
 
@@ -728,6 +740,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
         chartRef.current.remove();
         chartRef.current = null;
       }
+      barSeriesRef.current = null;
     };
   }, [allWeeklyData, range, loading, entryDatesLoaded, earnings]);
 
@@ -1472,6 +1485,21 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
           {!loading && !error && (
             <div className={styles.chartWrapper}>
               <div ref={chartContainerRef} className={styles.chartContainer} />
+
+              {/* Trendline drawing tool — admin-only. Overlays the chart with
+                  click-and-drag drawing, magnetic snap to bar high/low,
+                  endpoint editing, right-click extend/delete, and persistence
+                  to MongoDB. Hourly cron checks lines for breaks → alerts on
+                  PNTHR Assistant. */}
+              <ChartDrawingOverlay
+                key={stock.ticker + ':' + barsTick}
+                chartRef={chartRef}
+                seriesRef={barSeriesRef}
+                weeklyBars={visibleBarsRef.current}
+                ticker={stock.ticker}
+                enabled={isAdmin}
+                buttonPosition="top-left"
+              />
 
               {/* PNTHR Kill badge — upper-left overlay for top-10 Kill stocks */}
               {(() => {

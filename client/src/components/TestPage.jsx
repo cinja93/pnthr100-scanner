@@ -480,11 +480,9 @@ function TickerChart({ ticker, enabled }) {
       </div>
       <div style={{ position: 'relative', width: '100%', height: CHART_HEIGHT }}>
         <div ref={containerRef} style={{ width: '100%', height: CHART_HEIGHT }} />
-        {/* Drawing overlay: intercepts mouse when drawMode on, OR right-click anytime if there are drawn lines.
-            CRITICAL: SVG only captures pointer events on drawn shapes by default.
-            To make the entire overlay area clickable, we add a full-size
-            transparent rect AND set pointer-events:all (not just auto). */}
-        <svg
+        {/* Drawing overlay — DIV (reliable event capture) on top of chart, with
+            inner SVG for visuals only. zIndex forces it above any chart canvases. */}
+        <div
           ref={overlayRef}
           onMouseDown={onDrawDown}
           onMouseMove={onDrawMove}
@@ -494,35 +492,31 @@ function TickerChart({ ticker, enabled }) {
           onWheel={(e) => { if (drawMode) e.preventDefault(); }}
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
-            pointerEvents: (drawMode || drawnLines.length > 0) ? 'all' : 'none',
+            pointerEvents: (drawMode || drawnLines.length > 0) ? 'auto' : 'none',
             cursor: drawMode ? 'crosshair' : 'default',
-            // Visible border in draw mode confirms the overlay is present and on top
-            outline: drawMode ? '1px dashed rgba(252,240,0,0.4)' : 'none',
-            outlineOffset: '-1px',
+            zIndex: 10,
+            // While drawing: faint yellow tint so Scott can SEE the overlay is on
+            background: drawMode ? 'rgba(252,240,0,0.04)' : 'transparent',
+            border: drawMode ? '1px dashed rgba(252,240,0,0.5)' : 'none',
           }}
         >
-          {/* Transparent capture rect — required so empty SVG areas catch events */}
-          <rect x="0" y="0" width="100%" height="100%" fill="transparent" pointerEvents="all" />
-          {/* Hover preview: where the click would land + which level (high/low) */}
-          {drawMode && hoverSnap && !tempLine && (
-            <>
-              <circle cx={hoverSnap.x} cy={hoverSnap.y} r="6" fill="none" stroke="#fcf000" strokeWidth="1.5" strokeDasharray="2 2" pointerEvents="none" />
-              <text x={hoverSnap.x + 10} y={hoverSnap.y - 8} fill="#fcf000" fontSize="10" fontFamily="monospace" pointerEvents="none">
-                {hoverSnap.snapHigh ? 'high' : 'low'}
-              </text>
-            </>
-          )}
-          {/* Active drag: line from start point to current cursor + filled circle at start */}
-          {tempLine && (
-            <>
-              <line
-                x1={tempLine.x1} y1={tempLine.y1} x2={tempLine.x2} y2={tempLine.y2}
-                stroke="#fcf000" strokeWidth="2" strokeDasharray="4 3" pointerEvents="none"
-              />
-              <circle cx={tempLine.x1} cy={tempLine.y1} r="5" fill="#fcf000" stroke="#000" strokeWidth="1" pointerEvents="none" />
-            </>
-          )}
-        </svg>
+          <svg width="100%" height="100%" style={{ pointerEvents: 'none', display: 'block' }}>
+            {drawMode && hoverSnap && !tempLine && (
+              <>
+                <circle cx={hoverSnap.x} cy={hoverSnap.y} r="6" fill="none" stroke="#fcf000" strokeWidth="1.5" strokeDasharray="2 2" />
+                <text x={hoverSnap.x + 10} y={hoverSnap.y - 8} fill="#fcf000" fontSize="10" fontFamily="monospace">
+                  {hoverSnap.snapHigh ? 'high' : 'low'}
+                </text>
+              </>
+            )}
+            {tempLine && (
+              <>
+                <line x1={tempLine.x1} y1={tempLine.y1} x2={tempLine.x2} y2={tempLine.y2} stroke="#fcf000" strokeWidth="2" strokeDasharray="4 3" />
+                <circle cx={tempLine.x1} cy={tempLine.y1} r="5" fill="#fcf000" stroke="#000" strokeWidth="1" />
+              </>
+            )}
+          </svg>
+        </div>
         {ctxMenu && (
           <>
             <div

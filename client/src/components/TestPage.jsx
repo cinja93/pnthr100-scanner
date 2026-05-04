@@ -162,6 +162,7 @@ function TickerChart({ ticker, enabled }) {
   const [drawMode, setDrawMode]     = useState(false);
   const [drawnLines, setDrawnLines] = useState([]);   // [{_id, t1, v1, t2, v2, expectSide}]
   const [tempLine, setTempLine]     = useState(null); // {x1,y1,x2,y2} screen-px during drag
+  const [hoverSnap, setHoverSnap]   = useState(null); // {x, y} preview of where click would snap
   const [ctxMenu, setCtxMenu]       = useState(null); // {x, y, hitId}
 
   useEffect(() => {
@@ -336,14 +337,27 @@ function TickerChart({ ticker, enabled }) {
     if (!drawMode) return;
     e.preventDefault();
     const snap = snapAt(e.clientX, e.clientY);
-    if (!snap) return;
+    if (!snap) {
+      console.warn('[TEST draw] snap returned null — chart not ready or click outside bars');
+      return;
+    }
     drawStartRef.current = snap;
+    // Set tempLine so the start dot + zero-length line render immediately,
+    // confirming to the user that the click registered.
     setTempLine({ x1: snap.x, y1: snap.y, x2: snap.x, y2: snap.y });
+    setHoverSnap(null);
   }
   function onDrawMove(e) {
-    if (!drawMode || !drawStartRef.current) return;
+    if (!drawMode) return;
     const rect = overlayRef.current.getBoundingClientRect();
-    setTempLine({ x1: drawStartRef.current.x, y1: drawStartRef.current.y, x2: e.clientX - rect.left, y2: e.clientY - rect.top });
+    if (drawStartRef.current) {
+      // Mid-drag — extend the temp line
+      setTempLine({ x1: drawStartRef.current.x, y1: drawStartRef.current.y, x2: e.clientX - rect.left, y2: e.clientY - rect.top });
+    } else {
+      // Hover preview — show where the click WOULD snap if released
+      const snap = snapAt(e.clientX, e.clientY);
+      setHoverSnap(snap ? { x: snap.x, y: snap.y, snapHigh: snap.snapHigh } : null);
+    }
   }
   async function onDrawUp(e) {
     if (!drawMode || !drawStartRef.current) return;
@@ -472,7 +486,7 @@ function TickerChart({ ticker, enabled }) {
           onMouseDown={onDrawDown}
           onMouseMove={onDrawMove}
           onMouseUp={onDrawUp}
-          onMouseLeave={() => { drawStartRef.current = null; setTempLine(null); }}
+          onMouseLeave={() => { drawStartRef.current = null; setTempLine(null); setHoverSnap(null); }}
           onContextMenu={onContextMenu}
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
@@ -480,11 +494,24 @@ function TickerChart({ ticker, enabled }) {
             cursor: drawMode ? 'crosshair' : 'default',
           }}
         >
+          {/* Hover preview: where the click would land + which level (high/low) */}
+          {drawMode && hoverSnap && !tempLine && (
+            <>
+              <circle cx={hoverSnap.x} cy={hoverSnap.y} r="6" fill="none" stroke="#fcf000" strokeWidth="1.5" strokeDasharray="2 2" />
+              <text x={hoverSnap.x + 10} y={hoverSnap.y - 8} fill="#fcf000" fontSize="10" fontFamily="monospace">
+                {hoverSnap.snapHigh ? 'high' : 'low'}
+              </text>
+            </>
+          )}
+          {/* Active drag: line from start point to current cursor + filled circle at start */}
           {tempLine && (
-            <line
-              x1={tempLine.x1} y1={tempLine.y1} x2={tempLine.x2} y2={tempLine.y2}
-              stroke="#fcf000" strokeWidth="2" strokeDasharray="4 3"
-            />
+            <>
+              <line
+                x1={tempLine.x1} y1={tempLine.y1} x2={tempLine.x2} y2={tempLine.y2}
+                stroke="#fcf000" strokeWidth="2" strokeDasharray="4 3"
+              />
+              <circle cx={tempLine.x1} cy={tempLine.y1} r="5" fill="#fcf000" stroke="#000" strokeWidth="1" />
+            </>
           )}
         </svg>
         {ctxMenu && (

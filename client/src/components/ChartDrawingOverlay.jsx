@@ -62,6 +62,7 @@ export default function ChartDrawingOverlay({
   const [tempLine, setTempLine]     = useState(null);
   const [hoverSnap, setHoverSnap]   = useState(null);
   const [ctxMenu, setCtxMenu]       = useState(null);
+  const [bodyDragLineId, setBodyDragLineId] = useState(null); // hide original line series while body-dragging
   const isDrawing = drawMode != null;
 
   // Keep weeklyBars accessible from event handlers without re-binding
@@ -88,6 +89,8 @@ export default function ChartDrawingOverlay({
     }
     drawnSeriesRef.current = [];
     for (const ln of drawnLines) {
+      // Hide the line being body-dragged — the temp line shows its new position
+      if (ln._id === bodyDragLineId) continue;
       const s = chart.addSeries(LineSeries, {
         color: lineColor(ln), lineWidth: 2,
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
@@ -101,7 +104,7 @@ export default function ChartDrawingOverlay({
       ]);
       drawnSeriesRef.current.push(s);
     }
-  }, [drawnLines, chartRef]);
+  }, [drawnLines, chartRef, bodyDragLineId]);
 
   // ── Snap helpers ──
   function snapAt(clientX, clientY) {
@@ -155,6 +158,49 @@ export default function ChartDrawingOverlay({
     return null;
   }
 
+  // Hit-test the BODY of any drawn line (between the two endpoints, not on
+  // them). Returns {lineId, x1, x2, lineY} or null. Used for two purposes:
+  //   - Body-drag: left-click on a horizontal line's body slides it up/down
+  //   - Right-click context menu: identifies which line the menu applies to
+  // Distance from cursor to a line segment is computed in screen pixels.
+  function findBodyHit(clientX, clientY) {
+    const chart = chartRef.current, series = seriesRef.current;
+    if (!chart || !series || !overlayRef.current) return null;
+    const rect = overlayRef.current.getBoundingClientRect();
+    const x = clientX - rect.left, y = clientY - rect.top;
+    const HIT_TOL_PX = 6;     // perpendicular distance to line counts as a hit
+    const ENDPOINT_BUFFER = 10;  // skip body hit if cursor is on an endpoint
+    let best = null, bestD = Infinity;
+    for (const ln of drawnLines) {
+      const x1 = chart.timeScale().timeToCoordinate(ln.t1);
+      const x2 = chart.timeScale().timeToCoordinate(ln.t2);
+      const y1 = series.priceToCoordinate(ln.v1);
+      const y2render = (ln.kind === 'horizontal') ? ln.v1 : ln.v2;
+      const y2 = series.priceToCoordinate(y2render);
+      if (x1 == null || x2 == null || y1 == null || y2 == null) continue;
+      // Skip if cursor is within endpoint hit-radius (endpoints take priority)
+      if (Math.hypot(x1 - x, y1 - y) <= ENDPOINT_BUFFER) continue;
+      if (Math.hypot(x2 - x, y2 - y) <= ENDPOINT_BUFFER) continue;
+      // Perpendicular distance from point to line segment
+      const d = pointToSegmentDistance(x, y, x1, y1, x2, y2);
+      if (d <= HIT_TOL_PX && d < bestD) {
+        bestD = d;
+        best = { lineId: ln._id, x1, x2, y1, y2, isHoriz: ln.kind === 'horizontal' || Math.abs(ln.v2 - ln.v1) < 0.01 };
+      }
+    }
+    return best;
+  }
+
+  function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const projX = x1 + t * dx, projY = y1 + t * dy;
+    return Math.hypot(px - projX, py - projY);
+  }
+
   function attachWindowDragListeners() {
     if (windowHandlersRef.current) return;
     const onMove = (ev) => onDrawMove(ev);
@@ -175,18 +221,33 @@ export default function ChartDrawingOverlay({
   function onDrawDown(e) {
     if (!isDrawing) return;
     e.preventDefault();
+    // 1) Endpoint grab — highest priority (within 10px of an endpoint handle)
     const grab = findEndpointHit(e.clientX, e.clientY);
     if (grab) {
       const chart = chartRef.current, series = seriesRef.current;
       const xOther = chart.timeScale().timeToCoordinate(grab.otherTime);
       const yOther = series.priceToCoordinate(grab.otherVal);
-      editingRef.current = grab;
+      editingRef.current = { ...grab, kind: 'endpoint' };
       const rect = overlayRef.current.getBoundingClientRect();
       setTempLine({ x1: xOther, y1: yOther, x2: e.clientX - rect.left, y2: e.clientY - rect.top });
       setHoverSnap(null);
       attachWindowDragListeners();
       return;
     }
+    // 2) Body hit — slide a horizontal line up/down (or in future, parallel
+    //    translate any line). For now, only horizontal lines support sliding.
+    const body = findBodyHit(e.clientX, e.clientY);
+    if (body && body.isHoriz) {
+      const rect = overlayRef.current.getBoundingClientRect();
+      const cursorY = e.clientY - rect.top;
+      editingRef.current = { kind: 'body', lineId: body.lineId };
+      setBodyDragLineId(body.lineId);
+      setTempLine({ x1: body.x1, y1: cursorY, x2: body.x2, y2: cursorY });
+      setHoverSnap(null);
+      attachWindowDragListeners();
+      return;
+    }
+    // 3) New line draw
     const snap = snapAt(e.clientX, e.clientY);
     if (!snap) return;
     drawStartRef.current = snap;
@@ -209,6 +270,9 @@ export default function ChartDrawingOverlay({
         x2: cursorX,
         y2: isHoriz ? drawStartRef.current.y : cursorY,
       });
+    } else if (editingRef.current?.kind === 'body') {
+      // Body-drag (horizontal slide): keep line flat, follow cursor y
+      setTempLine(prev => prev ? { x1: prev.x1, y1: cursorY, x2: prev.x2, y2: cursorY } : null);
     } else if (editingRef.current) {
       setTempLine(prev => prev ? { x1: prev.x1, y1: prev.y1, x2: cursorX, y2: cursorY } : null);
     } else {
@@ -219,6 +283,45 @@ export default function ChartDrawingOverlay({
 
   async function onDrawUp(e) {
     if (!isDrawing) return;
+    // Body-drag (horizontal slide) — convert release y to a price, snap to
+    // the nearest visible bar's high/low, persist new v1=v2.
+    if (editingRef.current?.kind === 'body') {
+      const edit = editingRef.current;
+      const series = seriesRef.current;
+      const rect = overlayRef.current.getBoundingClientRect();
+      const cursorY = e.clientY - rect.top;
+      editingRef.current = null;
+      setTempLine(null);
+      setBodyDragLineId(null);
+      const releasePrice = series ? series.coordinateToPrice(cursorY) : null;
+      if (releasePrice == null || releasePrice < 0) return;
+      // Snap to nearest visible bar's high or low (typical S/R alignment)
+      const slice = sliceRef.current;
+      let bestVal = releasePrice, bestDist = Infinity;
+      for (const b of slice) {
+        for (const candidate of [b.high, b.low]) {
+          const d = Math.abs(candidate - releasePrice);
+          if (d < bestDist) { bestDist = d; bestVal = candidate; }
+        }
+      }
+      const newPrice = +bestVal.toFixed(2);
+      const ln = drawnLines.find(l => l._id === edit.lineId);
+      if (!ln) return;
+      const expectSide = computeExpectSide(ln.t1, newPrice, ln.t2, newPrice);
+      setDrawnLines(prev => prev.map(l => l._id === edit.lineId
+        ? { ...l, v1: newPrice, v2: newPrice, expectSide }
+        : l));
+      if (!String(edit.lineId).startsWith('pending-')) {
+        try {
+          await fetch(`${API_BASE}/api/test/trendlines/${edit.lineId}`, {
+            method: 'PATCH',
+            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ t1: ln.t1, v1: newPrice, t2: ln.t2, v2: newPrice, expectSide }),
+          });
+        } catch (err) { console.error('slide trendline failed', err); }
+      }
+      return;
+    }
     if (editingRef.current) {
       const edit = editingRef.current;
       const snap = snapAt(e.clientX, e.clientY);
@@ -276,9 +379,12 @@ export default function ChartDrawingOverlay({
   function onContextMenu(e) {
     e.preventDefault();
     if (drawnLines.length === 0) return;
-    const hit = findEndpointHit(e.clientX, e.clientY);    // close-enough is OK for menu purposes
+    // Try endpoint first (10px tolerance), then body (6px perpendicular)
+    const endpointHit = findEndpointHit(e.clientX, e.clientY);
+    const bodyHit     = endpointHit ? null : findBodyHit(e.clientX, e.clientY);
+    const hitId = endpointHit?.lineId || bodyHit?.lineId || null;
     const rect = overlayRef.current.getBoundingClientRect();
-    setCtxMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, hitId: hit?.lineId || null });
+    setCtxMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, hitId });
   }
 
   async function deleteOne(id) {
@@ -478,11 +584,13 @@ function CtxBtn({ children, onClick, disabled = false }) {
       style={{
         display: 'block', width: '100%', textAlign: 'left',
         background: 'transparent', border: 'none', borderRadius: 3,
-        color: disabled ? '#555' : '#e0e0e0',
+        // Bumped disabled color from #555 (unreadable on dark bg) to a
+        // muted-but-legible tone. Enabled stays bright white.
+        color: disabled ? '#9a9a9a' : '#ffffff',
         padding: '6px 10px', cursor: disabled ? 'not-allowed' : 'pointer',
         fontSize: 12,
       }}
-      onMouseEnter={e => !disabled && (e.currentTarget.style.background = '#222')}
+      onMouseEnter={e => !disabled && (e.currentTarget.style.background = '#2a2a2a')}
       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
     >
       {children}

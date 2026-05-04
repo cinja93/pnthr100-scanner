@@ -537,6 +537,40 @@ function TickerChart({ ticker, enabled }) {
     setCtxMenu(null);
   }
 
+  // Extend a drawn line in either direction. Slope stays the same; only the
+  // chosen endpoint moves to the leftmost/rightmost visible bar's date, with
+  // its value recomputed along the original line.
+  async function extendLine(lineId, direction) {
+    const slice = sliceRef.current;
+    if (!slice || slice.length === 0) return;
+    const ln = drawnLines.find(l => l._id === lineId);
+    if (!ln) return;
+    const slope = (ln.v2 - ln.v1) / Math.max(1, daysBetweenIso(ln.t2, ln.t1));
+    let updated;
+    if (direction === 'left') {
+      const newT1 = slice[0].weekOf;
+      const newV1 = +(ln.v1 + slope * daysBetweenIso(newT1, ln.t1)).toFixed(2);
+      updated = { ...ln, t1: newT1, v1: newV1 };
+    } else {
+      const newT2 = slice[slice.length - 1].weekOf;
+      const newV2 = +(ln.v2 + slope * daysBetweenIso(newT2, ln.t2)).toFixed(2);
+      updated = { ...ln, t2: newT2, v2: newV2 };
+    }
+    const expectSide = computeExpectSide(updated.t1, updated.v1, updated.t2, updated.v2);
+    updated.expectSide = expectSide;
+    setDrawnLines(prev => prev.map(l => l._id === lineId ? updated : l));
+    setCtxMenu(null);
+    if (lineId && !String(lineId).startsWith('pending-')) {
+      try {
+        await fetch(`${API_BASE}/api/test/trendlines/${lineId}`, {
+          method: 'PATCH',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ t1: updated.t1, v1: updated.v1, t2: updated.t2, v2: updated.v2, expectSide }),
+        });
+      } catch (err) { console.error('extend trendline failed', err); }
+    }
+  }
+
   if (error) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef5350' }}>Error: {error}</div>;
   if (!data) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>Loading {ticker}...</div>;
 
@@ -678,6 +712,36 @@ function TickerChart({ ticker, enabled }) {
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
                 Delete this trendline {ctxMenu.hitId ? '' : '(none under cursor)'}
+              </button>
+              <button
+                onClick={() => extendLine(ctxMenu.hitId, 'left')}
+                disabled={!ctxMenu.hitId}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  background: 'transparent', border: 'none', borderRadius: 3,
+                  color: ctxMenu.hitId ? '#e0e0e0' : '#555',
+                  padding: '6px 10px', cursor: ctxMenu.hitId ? 'pointer' : 'not-allowed',
+                  fontSize: 12,
+                }}
+                onMouseEnter={e => ctxMenu.hitId && (e.currentTarget.style.background = '#222')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                ← Extend line to the left
+              </button>
+              <button
+                onClick={() => extendLine(ctxMenu.hitId, 'right')}
+                disabled={!ctxMenu.hitId}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  background: 'transparent', border: 'none', borderRadius: 3,
+                  color: ctxMenu.hitId ? '#e0e0e0' : '#555',
+                  padding: '6px 10px', cursor: ctxMenu.hitId ? 'pointer' : 'not-allowed',
+                  fontSize: 12,
+                }}
+                onMouseEnter={e => ctxMenu.hitId && (e.currentTarget.style.background = '#222')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                Extend line to the right →
               </button>
               <button
                 onClick={deleteAllForChart}

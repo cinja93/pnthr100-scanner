@@ -27,16 +27,24 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// ── Tunable parameters ──
+// ── Tunable parameters (v2 — refined 2026-05-03) ──
+//   v1 → v2 changes:
+//     B1: MIN_GAP_WEEKS_BETWEEN_BASES new (4 weeks) — fixes ABT-style stacking
+//     C1: MAX_SLOPE_PCT_PER_WK 1.5 → 2.5 — admits INTC-style slow grinds
+//     D : REQUIRE_VOLUME_CONTRACTION new — Wyckoff accumulation signature
+//     G2: DAILY_VOL_MULTIPLIER 1.5 → 2.0 — stronger breakout confirmation
 const MIN_BASE_WEEKS        = 8;
 const VOL_LOOKBACK_WEEKS    = 20;
-const VOL_SPIKE_MULTIPLIER  = 1.5;
-const MAX_SLOPE_PCT_PER_WK  = 1.5;     // 1.5%/week (absolute) off first close
-const BREAKOUT_PCT          = 0.01;    // 1% pierce required
+const VOL_SPIKE_MULTIPLIER  = 1.5;     // inside-base check (unchanged)
+const MAX_SLOPE_PCT_PER_WK  = 2.5;     // v2: was 1.5
+const BREAKOUT_PCT          = 0.01;
 const DAILY_VOL_LOOKBACK    = 20;
-const DAILY_VOL_MULTIPLIER  = 1.5;
-const BACKTEST_START_WEEK   = '2020-05-04';  // last 5 years (Mon-aligned)
-const BOX_VISIBLE_AFTER_BREAK_WEEKS = 4;  // box stays drawn 4 weeks post-break
+const DAILY_VOL_MULTIPLIER  = 2.0;     // v2: was 1.5 (stronger breakout vol)
+const BACKTEST_START_WEEK   = '2020-05-04';
+const BOX_VISIBLE_AFTER_BREAK_WEEKS = 4;
+const MIN_GAP_WEEKS_BETWEEN_BASES = 4; // v2 NEW
+const REQUIRE_VOLUME_CONTRACTION  = true; // v2 NEW
+const CONTRACTION_BUCKET_WEEKS    = 4; // last-N vs first-N weeks
 
 function rollingAvg(arr, idx, lookback) {
   const start = Math.max(0, idx - lookback);
@@ -115,27 +123,42 @@ function detectBases(weekly) {
     const baseLen = lastIdx - baseStart + 1;
 
     if (baseLen >= MIN_BASE_WEEKS) {
-      // Recompute box top/bottom from the actual span (since runHigh/runLow
-      // tracked with mutations above).
+      // Recompute box top/bottom from the actual span
       let top = weekly[baseStart].high;
       let bot = weekly[baseStart].low;
       for (let j = baseStart; j <= lastIdx; j++) {
         if (weekly[j].high > top) top = weekly[j].high;
         if (weekly[j].low  < bot) bot = weekly[j].low;
       }
-      bases.push({
-        startIdx: baseStart,
-        endIdx:   lastIdx,
-        startDate: weekly[baseStart].weekOf,
-        endDate:   weekly[lastIdx].weekOf,
-        top,
-        bottom: bot,
-      });
-      // Continue search after the breakout week (lastIdx + 2, skipping the
-      // breakout itself if present).
-      baseStart = lastIdx + 2;
+
+      // v2 — D: Wyckoff volume contraction filter
+      // Average volume in the LAST CONTRACTION_BUCKET_WEEKS of the base must
+      // be ≤ average in the FIRST CONTRACTION_BUCKET_WEEKS. Real accumulation
+      // bases show declining volume as the consolidation matures.
+      let baseAccepted = true;
+      if (REQUIRE_VOLUME_CONTRACTION && baseLen >= CONTRACTION_BUCKET_WEEKS * 2) {
+        let firstSum = 0, lastSum = 0;
+        for (let j = baseStart; j < baseStart + CONTRACTION_BUCKET_WEEKS; j++) firstSum += weekly[j].volume;
+        for (let j = lastIdx - CONTRACTION_BUCKET_WEEKS + 1; j <= lastIdx; j++) lastSum += weekly[j].volume;
+        if (lastSum > firstSum) baseAccepted = false;
+      }
+
+      if (baseAccepted) {
+        bases.push({
+          startIdx: baseStart,
+          endIdx:   lastIdx,
+          startDate: weekly[baseStart].weekOf,
+          endDate:   weekly[lastIdx].weekOf,
+          top,
+          bottom: bot,
+        });
+        // v2 — B1: skip ahead MIN_GAP_WEEKS_BETWEEN_BASES weeks past the break
+        baseStart = lastIdx + 1 + MIN_GAP_WEEKS_BETWEEN_BASES;
+      } else {
+        // Base failed contraction filter — slide forward by 1
+        baseStart += 1;
+      }
     } else {
-      // Not long enough — slide forward by one and retry.
       baseStart += 1;
     }
   }

@@ -7377,14 +7377,46 @@ app.get('/api/test/tickers', authenticateJWT, requireAdmin, async (_req, res) =>
   }
 });
 
+// Cached ticker → sector lookup (built once from trade-log data, refreshed on
+// startup). Used to pick the right OpEMA period per ticker on the TEST page.
+let _sectorCache = null;
+async function getSectorMap() {
+  if (_sectorCache) return _sectorCache;
+  const db = await getDenDb();
+  const rows = await db.collection('pnthr_bt_pyramid_nav_1m_trade_log').aggregate([
+    { $group: { _id: '$ticker', sector: { $first: '$sector' } } },
+  ]).toArray();
+  _sectorCache = new Map();
+  for (const r of rows) _sectorCache.set(r._id, r.sector);
+  return _sectorCache;
+}
+
 app.get('/api/test/candles', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const ticker = String(req.query.ticker || '').toUpperCase();
     if (!ticker) return res.status(400).json({ error: 'ticker required' });
     const db = await getDenDb();
-    const doc = await db.collection('pnthr_bt_candles_weekly').findOne({ ticker });
-    if (!doc) return res.json({ ticker, weekly: [] });
-    res.json({ ticker, weekly: doc.weekly || [] });
+    const [doc, sectorMap] = await Promise.all([
+      db.collection('pnthr_bt_candles_weekly').findOne({ ticker }),
+      getSectorMap(),
+    ]);
+    if (!doc) return res.json({ ticker, weekly: [], sector: null });
+    res.json({ ticker, weekly: doc.weekly || [], sector: sectorMap.get(ticker) || null });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/test/signals', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const ticker = String(req.query.ticker || '').toUpperCase();
+    if (!ticker) return res.status(400).json({ error: 'ticker required' });
+    const db = await getDenDb();
+    const docs = await db.collection('pnthr_bt_pyramid_nav_1m_trade_log').find(
+      { ticker, navTier: 1000000 },
+      { projection: { signal: 1, entryDate: 1, entryPrice: 1, exitDate: 1, exitPrice: 1, exitReason: 1, netDollarPnl: 1, weekOf: 1 } },
+    ).toArray();
+    res.json({ ticker, signals: docs });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

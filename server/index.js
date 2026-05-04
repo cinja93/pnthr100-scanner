@@ -33,6 +33,7 @@ import { runDailySignalJob } from './dailySignalJob.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
 import { runLotTriggerSync, registerLotTriggerCron } from './lotTriggerCron.js';
+import { runOrphanCleanup } from './orphanOrderJanitor.js';
 import { registerReconciliationCron } from './reconciliationCron.js';
 import { killTestMonthlyGet, killTestMetricsGet, killTestMonthlyGenerate, generateMonthlySnapshots } from './killTestMonthly.js';
 import {
@@ -4890,6 +4891,23 @@ app.post('/api/admin/sync-lot-triggers', authenticateJWT, requireAdmin, async (r
     res.json(report);
   } catch (err) {
     console.error('[admin/sync-lot-triggers]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Phase 4 orphan janitor — manual trigger of orphanOrderJanitor logic.
+// Finds TWS STP/STP LMT orders for tickers with no ACTIVE/PARTIAL PNTHR
+// position (e.g., XYZ lot triggers left dangling after a stop hit) and
+// enqueues per-permId CANCEL_ORDER. Whether enqueues actually fire depends
+// on IBKR_AUTO_CANCEL_ORPHANS being true. Use ?dryRun=1 to preview safely.
+app.post('/api/admin/cleanup-orphans', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const dryRun = req.query.dryRun === '1' || req.body?.dryRun === true;
+    const report = await runOrphanCleanup({ db, dryRun });
+    res.json(report);
+  } catch (err) {
+    console.error('[admin/cleanup-orphans]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

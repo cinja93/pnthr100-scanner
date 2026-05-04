@@ -4076,7 +4076,14 @@ export default function AssistantPage({ onNavigate }) {
                     }) : '—';
                     const r = cmd.request || {};
                     const detailParts = [];
-                    if (cmd.errors) detailParts.push(String(cmd.errors));
+                    if (cmd.errors) {
+                      // Errors arrive as either a string (normal path) or an
+                      // object (pre-fix bridge bug where err=None caused the
+                      // server fallback to store the whole body). Stringify
+                      // objects so they never render as "[object Object]".
+                      const e = cmd.errors;
+                      detailParts.push(typeof e === 'string' ? e : JSON.stringify(e));
+                    }
                     if (r.lot != null) detailParts.push(`L${r.lot}`);
                     if (r.stopPrice != null) detailParts.push(`stop ${r.stopPrice}`);
                     if (r.triggerPrice != null) detailParts.push(`trigger ${r.triggerPrice}`);

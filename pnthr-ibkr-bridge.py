@@ -421,7 +421,15 @@ class PNTHRBridge(EWrapper, EClient):
     def cancel_order_by_perm_id(self, perm_id):
         """Cancel an existing order by permId. Looks up the orderId from our
         cached open_orders map (TWS's manual orders use orderId=0, so cancel
-        by permId via the permId-keyed cancelOrder API)."""
+        by permId via the permId-keyed cancelOrder API).
+
+        Idempotent: if the permId is not in our cache, the order is already
+        gone (filled, cancelled in TWS, or never existed) — treat as success
+        with status='ALREADY_GONE'. Without this, every cancel retry against
+        a stale permId fails forever, which (a) leaves CANCEL_RELATED_ORDERS
+        marked FAILED so orphan lot triggers sit in TWS, and (b) makes
+        MODIFY_STOP abort with the position naked. The desired end state of
+        a cancel is "order absent" — and absent it is."""
         if not self.connected:
             return {'ok': False, 'error': 'BRIDGE_DISCONNECTED'}
         # Find the cached order by permId
@@ -431,7 +439,7 @@ class PNTHRBridge(EWrapper, EClient):
                 target = o
                 break
         if not target:
-            return {'ok': False, 'error': f'PERMID_NOT_FOUND:{perm_id}'}
+            return {'ok': True, 'permId': perm_id, 'status': 'ALREADY_GONE'}
         try:
             # Pass empty string for OrderCancel since we don't need extra params.
             self.cancelOrder(target['orderId'], '')
@@ -714,14 +722,27 @@ def _execute_command(app, rate_limiter, cmd):
 
     if command == 'CANCEL_RELATED_ORDERS':
         result = app.cancel_related_orders(ticker)
-        return result.get('ok', False), result, (None if result.get('ok') else 'SOME_CANCEL_FAILED')
+        if result.get('ok'):
+            return True, result, None
+        # Surface specific failure detail instead of opaque SOME_CANCEL_FAILED
+        # so the outbox audit log shows which permIds + reasons actually broke.
+        failures = result.get('failures') or []
+        detail = '; '.join(
+            f"{f.get('permId')}:{(f.get('result') or {}).get('error') or (f.get('result') or {}).get('status') or 'UNKNOWN'}"
+            for f in failures[:5]
+        ) or 'SOME_CANCEL_FAILED'
+        return False, result, f'SOME_CANCEL_FAILED[{detail}]'
 
     if command == 'CANCEL_ORDER':
         perm_id = request.get('permId') or request.get('oldPermId')
         if not perm_id:
             return False, None, 'MISSING_PERMID'
         result = app.cancel_order_by_perm_id(perm_id)
-        return result.get('ok', False), result, (None if result.get('ok') else result.get('status'))
+        # Always coalesce error first, then status — pre-fix this read status
+        # only, which left err=None when result carried error (PERMID_NOT_FOUND)
+        # and the server fell back to storing the whole response object as the
+        # error string ("[object Object]" in the UI).
+        return result.get('ok', False), result, (None if result.get('ok') else (result.get('error') or result.get('status') or 'CANCEL_FAILED'))
 
     if command == 'SELL_POSITION':
         # Action depends on the position direction we're closing.

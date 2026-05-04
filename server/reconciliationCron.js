@@ -25,9 +25,10 @@
 // no errors) log a short "ok" line so absence of output never masks a
 // stuck cron; verbose detail only when something actually moved.
 
-import { connectToDatabase } from './database.js';
-import { runStopRatchet }    from './stopRatchetCron.js';
-import { runLotTriggerSync } from './lotTriggerCron.js';
+import { connectToDatabase }   from './database.js';
+import { runStopRatchet }      from './stopRatchetCron.js';
+import { runLotTriggerSync }   from './lotTriggerCron.js';
+import { runOrphanCleanup }    from './orphanOrderJanitor.js';
 
 const SCHEDULE = '* 9-16 * * 1-5'; // every minute, 9-16:59 ET, Mon-Fri
 const TZ       = 'America/New_York';
@@ -54,6 +55,10 @@ export async function runUnifiedReconciliation({ db, dryRun = false } = {}) {
   const startedAt = new Date();
   const ratchet   = await runStopRatchet({ db, dryRun });
   const lotTrig   = await runLotTriggerSync({ db, dryRun });
+  // Orphan janitor runs LAST so it sees the post-ratchet/post-lottrig state.
+  // (e.g., if a position closed mid-tick, ratchet/lotTrig won't have touched
+  // its triggers — janitor is the safety net.)
+  const orphans   = await runOrphanCleanup({ db, dryRun });
   const finishedAt = new Date();
 
   return {
@@ -63,6 +68,7 @@ export async function runUnifiedReconciliation({ db, dryRun = false } = {}) {
     dryRun,
     ratchet,
     lotTrig,
+    orphans,
   };
 }
 
@@ -92,6 +98,7 @@ export function registerReconciliationCron(cron) {
 
       const ra = r.ratchet || {};
       const lt = r.lotTrig || {};
+      const oj = r.orphans || {};
       const ratchetAdopt  = (ra.adoptions     || []).length;
       const ratchetPush   = (ra.modifications || []).filter(m => m.enqueued).length;
       const ratchetAlign  = (ra.aligned       || []).length;
@@ -101,15 +108,18 @@ export function registerReconciliationCron(cron) {
       const ltCancel      = (lt.cancellations || []).filter(x => x.enqueued).length;
       const ltAdopt       = (lt.adoptions     || []).length;
       const ltSkip        = (lt.skips         || []).length;
+      const ojOrphans     = (oj.orphans       || []).length;
+      const ojEnq         = (oj.orphans       || []).filter(x => x.enqueued).length;
 
-      const anyChange = ratchetAdopt || ratchetPush || ltPlace || ltModify || ltCancel || ltAdopt;
+      const anyChange = ratchetAdopt || ratchetPush || ltPlace || ltModify || ltCancel || ltAdopt || ojEnq;
 
-      if (anyChange) {
+      if (anyChange || ojOrphans) {
         console.log(
           `[reconciliation] ${ts()} checked=${ra.positionsChecked || 0}` +
           ` ratchet:adopt=${ratchetAdopt} push=${ratchetPush} align=${ratchetAlign} skip=${ratchetSkip}` +
           ` / lotTrig:place=${ltPlace} modify=${ltModify} cancel=${ltCancel} adopt=${ltAdopt} skip=${ltSkip}` +
-          ` (${r.durationMs}ms${ra.flagOn ? '' : ' RATCHET_FLAG_OFF'}${lt.flagOn ? '' : ' LOTTRIG_FLAG_OFF'})`
+          ` / orphans:found=${ojOrphans} enq=${ojEnq}` +
+          ` (${r.durationMs}ms${ra.flagOn ? '' : ' RATCHET_FLAG_OFF'}${lt.flagOn ? '' : ' LOTTRIG_FLAG_OFF'}${oj.flagOn ? '' : ' ORPHANS_FLAG_OFF'})`
         );
       } else {
         console.log(`[reconciliation] ${ts()} ok checked=${ra.positionsChecked || 0} (${r.durationMs}ms)`);

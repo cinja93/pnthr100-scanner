@@ -984,3 +984,17 @@ export async function trackInvestorEvent(type, metadata = {}) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+// Custom trendline alerts — surfaced in PNTHR Assistant
+export async function fetchTrendlineAlerts() {
+  const res = await apiFetch(`${API_BASE}/api/test/trendline-alerts`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+export async function dismissTrendlineAlert(id) {
+  const res = await apiFetch(`${API_BASE}/api/test/trendline-alerts/${id}/dismiss`, {
+    method: 'PATCH', headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

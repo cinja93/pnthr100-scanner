@@ -4805,6 +4805,18 @@ cron.schedule('5 17 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
+// ── Cron: User-drawn trendline break sweep — hourly during US market hours
+// (10am-4pm ET, Mon-Fri). Detects when a user's custom trendline is broken
+// by >1% and posts an alert to the user's PNTHR Assistant feed.
+cron.schedule('0 10-16 * * 1-5', async () => {
+  try {
+    const r = await runTrendlineBreakSweep();
+    if (r.broken > 0) console.log(`[tl-cron] ${r.broken} new break alerts (${r.checked} lines checked)`);
+  } catch (err) {
+    console.error('[tl-cron] sweep failed:', err.message);
+  }
+}, { timezone: 'America/New_York' });
+
 // POST /api/admin/run-daily-signal-job — manual trigger (per dailySignalJob.js header).
 // Useful for backfilling immediately after deploy without waiting for the 5:05pm cron.
 app.post('/api/admin/run-daily-signal-job', authenticateJWT, requireAdmin, async (req, res) => {
@@ -7549,6 +7561,108 @@ app.delete('/api/test/trendlines', authenticateJWT, requireAdmin, async (req, re
     res.json({ ok: true, modified: r.modifiedCount });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// Custom-trendline break alerts. Fired by hourly cron when a daily close
+// pierces a user-drawn line by >1% in the expected direction. Stay in the
+// user's PNTHR Assistant feed until manually dismissed.
+app.get('/api/test/trendline-alerts', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await getDenDb();
+    const alerts = await db.collection('pnthr_user_trendline_alerts').find(
+      { userId: req.user.userId, dismissedAt: null },
+    ).sort({ brokenAt: -1 }).toArray();
+    res.json({ alerts });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.patch('/api/test/trendline-alerts/:id/dismiss', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { ObjectId } = await import('mongodb');
+    const db = await getDenDb();
+    await db.collection('pnthr_user_trendline_alerts').updateOne(
+      { _id: new ObjectId(req.params.id), userId: req.user.userId },
+      { $set: { dismissedAt: new Date() } },
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Manual trigger to run the break-detection sweep on demand (admin-only).
+// The cron also calls this at the top of every hour during market hours.
+app.post('/api/test/trendline-check', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await runTrendlineBreakSweep();
+    res.json(result);
+  } catch (e) {
+    console.error('[trendline-check]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Break-detection sweep — runs hourly during market hours via cron.
+// For each active user trendline, fetches the current FMP quote and checks
+// whether the line has been broken in its expected direction (above/below)
+// by more than 1%. On break: marks the trendline 'broken' and inserts a
+// row into pnthr_user_trendline_alerts so the user's PNTHR Assistant feed
+// surfaces it. One-shot per trendline (alertedAt is set so we don't re-fire).
+async function runTrendlineBreakSweep() {
+  const db = await getDenDb();
+  const lines = await db.collection('pnthr_user_trendlines').find(
+    { status: 'active', alertedAt: null },
+  ).toArray();
+  if (lines.length === 0) return { checked: 0, broken: 0 };
+  const tickers = [...new Set(lines.map(l => l.ticker))];
+  // Batch quote fetch (FMP supports comma-separated)
+  const quotes = {};
+  for (let i = 0; i < tickers.length; i += 50) {
+    const chunk = tickers.slice(i, i + 50);
+    try {
+      const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${process.env.FMP_API_KEY}`);
+      const arr = await r.json();
+      for (const q of (arr || [])) quotes[q.symbol] = q.price;
+    } catch (e) { console.warn('[tl-sweep] quote chunk failed:', e.message); }
+  }
+  const now = new Date();
+  let brokenCount = 0;
+  for (const ln of lines) {
+    const price = quotes[ln.ticker];
+    if (price == null) continue;
+    // Linear extrapolation of the user-drawn line to today
+    const t1 = new Date(ln.t1 + 'T12:00:00Z'), t2 = new Date(ln.t2 + 'T12:00:00Z');
+    const dx = (t2 - t1) / 86400000;
+    if (dx === 0) continue;
+    const slope = (ln.v2 - ln.v1) / dx;
+    const today = new Date(now.toISOString().slice(0, 10) + 'T12:00:00Z');
+    const lineToday = ln.v1 + slope * ((today - t1) / 86400000);
+    let broken = false, breakDirection = null;
+    if (ln.expectSide === 'above' && price > lineToday * 1.01) {
+      broken = true; breakDirection = 'above';
+    } else if (ln.expectSide === 'below' && price < lineToday * 0.99) {
+      broken = true; breakDirection = 'below';
+    }
+    if (!broken) continue;
+    brokenCount++;
+    // Mark the trendline broken + alerted, then insert alert
+    await db.collection('pnthr_user_trendlines').updateOne(
+      { _id: ln._id },
+      { $set: { status: 'broken', brokenAt: now, brokenPrice: price, alertedAt: now } },
+    );
+    await db.collection('pnthr_user_trendline_alerts').insertOne({
+      userId: ln.userId,
+      trendlineId: ln._id,
+      ticker: ln.ticker,
+      breakDirection,                     // 'above' or 'below'
+      breakPrice: price,
+      lineValue: +lineToday.toFixed(2),
+      brokenAt: now,
+      dismissedAt: null,
+      // human-readable summary for the Assistant card
+      message: `${ln.ticker} — custom trendline broken ${breakDirection.toUpperCase()} at $${price.toFixed(2)} (line: $${lineToday.toFixed(2)})`,
+    });
+  }
+  console.log(`[tl-sweep] checked ${lines.length} lines, fired ${brokenCount} alerts`);
+  return { checked: lines.length, broken: brokenCount };
+}
 
 app.post('/api/test/recompute', authenticateJWT, requireAdmin, async (req, res) => {
   const overlay = String(req.query.overlay || '');

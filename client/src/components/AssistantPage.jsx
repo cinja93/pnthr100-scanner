@@ -24,6 +24,7 @@ import {
   createInvestor,
   fetchNav,
   fetchPulse,
+  fetchTrendlineAlerts, dismissTrendlineAlert,
 } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ChartModal from './ChartModal';
@@ -2595,12 +2596,31 @@ export default function AssistantPage({ onNavigate }) {
   const [addPosInitial,   setAddPosInitial]   = useState(null);
   // Day 2 — Phase 4 outbox status (admin only)
   const [outbox, setOutbox] = useState(null); // { counts, flags, commands }
+  // Custom trendline alerts (loaded after isAdmin is declared below)
+  const [trendlineAlerts, setTrendlineAlerts] = useState([]);
   const [devSignalsAge,      setDevSignalsAge]      = useState(null);
   const [sectorBreakdown,    setSectorBreakdown]    = useState([]);
   const [ordersData,         setOrdersData]         = useState(null);
   const [accessRequests,     setAccessRequests]     = useState([]);
   const [accessActioning,    setAccessActioning]    = useState(null); // { id, action } while in flight
   const { isAdmin } = useAuth() || {};
+  // Load custom trendline alerts (admin only). Refresh every 5 min so
+  // newly-fired cron alerts appear without a full page reload.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    const load = () => fetchTrendlineAlerts()
+      .then(d => { if (!cancelled) setTrendlineAlerts(d.alerts || []); })
+      .catch(() => { /* silent */ });
+    load();
+    const id = setInterval(load, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [isAdmin]);
+  const dismissTLAlert = useCallback(async (alertId) => {
+    setTrendlineAlerts(prev => prev.filter(a => a._id !== alertId));
+    try { await dismissTrendlineAlert(alertId); }
+    catch (e) { console.error('dismiss failed', e); }
+  }, []);
 
   const reloadAccessRequests = useCallback(async () => {
     if (!isAdmin) return;
@@ -2642,6 +2662,7 @@ export default function AssistantPage({ onNavigate }) {
     'live-opportunities',
     'live-watch',
     'data-integrity',
+    'custom-trendline-alerts',
     'todays-accomplishments',
     'recent-bridge-commands',
   ]), []);
@@ -3888,6 +3909,84 @@ export default function AssistantPage({ onNavigate }) {
           Standalone "Phase 4 outbox needs attention" banner removed —
           the BRIDGE button above now serves as the single clickable
           attention indicator. */}
+
+      {/* Custom Trendline Alerts (admin-only, reorderable)
+          Fed by hourly cron that detects breaks of user-drawn trendlines on
+          the TEST page. Stays in the feed until manually dismissed. */}
+      {isAdmin && (
+        <div style={{
+          ...orderStyle('custom-trendline-alerts'),
+          border: '1px solid rgba(252, 240, 0, 0.3)',
+          borderRadius: 8,
+          marginBottom: 12,
+          background: trendlineAlerts.length > 0 ? 'rgba(252,240,0,0.04)' : 'transparent',
+        }}>
+          <div
+            onClick={() => toggleSection('custom-trendline-alerts')}
+            style={{
+              padding: '8px 14px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              borderBottom: isOpen('custom-trendline-alerts') ? '1px solid rgba(252, 240, 0, 0.12)' : 'none',
+            }}
+          >
+            <span style={{ fontSize: 10, fontWeight: 900, color: '#fcf000', letterSpacing: '0.14em', fontFamily: "'Inter', 'Segoe UI', sans-serif", textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+              {collapseArrow('custom-trendline-alerts', '#FCF000')}
+              CUSTOM TRENDLINE ALERTS
+              {trendlineAlerts.length > 0 && (
+                <span style={{
+                  marginLeft: 8, background: '#fcf000', color: '#000',
+                  padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 900,
+                }}>{trendlineAlerts.length}</span>
+              )}
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: '#888' }}>
+                {trendlineAlerts.length === 0 ? 'No active alerts' : 'Click row to dismiss'}
+              </span>
+              {reorderControls('custom-trendline-alerts')}
+            </span>
+          </div>
+          {isOpen('custom-trendline-alerts') && (
+            <div style={{ padding: '10px 14px' }}>
+              {trendlineAlerts.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#666', padding: '12px 0', textAlign: 'center' }}>
+                  Draw trendlines in TEST and you'll be alerted here when they break.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {trendlineAlerts.map(a => (
+                    <div key={a._id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 10px', background: '#0a0a0a', border: '1px solid #333', borderRadius: 4,
+                    }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div style={{ fontSize: 13, color: '#fcf000', fontWeight: 700 }}>
+                          {a.ticker} — broke {a.breakDirection?.toUpperCase()}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#aaa' }}>
+                          Price ${a.breakPrice?.toFixed(2)} vs trendline ${a.lineValue?.toFixed(2)}
+                          <span style={{ color: '#666', marginLeft: 8 }}>
+                            {a.brokenAt ? new Date(a.brokenAt).toLocaleString() : ''}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => dismissTLAlert(a._id)}
+                        style={{
+                          background: '#222', color: '#888', border: '1px solid #444',
+                          padding: '4px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
+                        }}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Phase 4 outbox — recent commands inspector. Admin only.
           Collapse state persisted via central collapse map; matches the

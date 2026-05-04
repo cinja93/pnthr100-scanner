@@ -540,8 +540,8 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
       {/* Dismiss button */}
       {uiState === 'default' && (
         <button
-          onClick={onDismiss}
-          style={{ background: 'none', border: `1px solid ${onDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)'}`, color: muted, borderRadius: 4, padding: '2px 8px', fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
+          onClick={e => { e.stopPropagation(); onDismiss(); }}
+          style={{ background: 'none', border: `1px solid ${onDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)'}`, color: muted, borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }}
         >
           ✕
         </button>
@@ -1147,18 +1147,18 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                 </button>
               </div>
             )}
-            {visibleDiscrepancies.map(d => {
-              const key = `${d.type}:${d.ticker}`;
+            {visibleDiscrepancies.map((d, i) => {
+              const dismissKey = `${d.type}:${d.ticker}`;
+              const reactKey = `${dismissKey}:${d.ibkrStop || ''}:${i}`;
               return (
                 <IbkrDiscrepancyBanner
-                  key={key}
+                  key={reactKey}
                   d={d}
-                  onDismiss={() => dismissIbkrDiscrepancy(key)}
+                  onDismiss={() => dismissIbkrDiscrepancy(dismissKey)}
                   onNavigate={navigate}
                   onFixed={() => {
-                    // Remove from list + re-poll discrepancies + refresh Command positions
-                    dismissIbkrDiscrepancy(key);
-                    setCommandRefreshKey(k => k + 1); // triggers CommandCenter refetch
+                    dismissIbkrDiscrepancy(dismissKey);
+                    setCommandRefreshKey(k => k + 1);
                     fetchIbkrDiscrepancies()
                       .then(data => {
                         if (data.ibkrConnected) setIbkrDiscrepancies(data.discrepancies || []);

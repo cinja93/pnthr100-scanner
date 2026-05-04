@@ -149,11 +149,19 @@ function LazyTickerRow({ ticker, enabled }) {
 
 function TickerChart({ ticker, enabled }) {
   const containerRef = useRef(null);
-  const [data, setData]       = useState(null);   // { weekly, sector }
+  const chartRef     = useRef(null);
+  const seriesRef    = useRef(null);
+  const overlayRef   = useRef(null);
+  const drawnSeriesRef = useRef([]);
+  const sliceRef     = useRef([]);
+  const [data, setData]       = useState(null);
   const [boxes, setBoxes]     = useState(null);
-  const [events, setEvents]   = useState(null);   // [{type:'BL'|'SS'|'BE'|'SE', weekOf, ...}]
+  const [events, setEvents]   = useState(null);
   const [tlCount, setTlCount] = useState(0);
   const [error, setError]     = useState(null);
+  const [drawMode, setDrawMode]     = useState(false);
+  const [drawnLines, setDrawnLines] = useState([]);   // [{t1,v1,t2,v2}]
+  const [tempLine, setTempLine]     = useState(null); // {x1,y1,x2,y2} screen-px during drag
 
   useEffect(() => {
     let cancelled = false;
@@ -189,6 +197,9 @@ function TickerChart({ ticker, enabled }) {
     const bars = slice.map(b => ({ time: b.weekOf, open: b.open, high: b.high, low: b.low, close: b.close }));
     const barSeries = chart.addSeries(BarSeries, { upColor: '#26a69a', downColor: '#ef5350' });
     barSeries.setData(bars);
+    chartRef.current  = chart;
+    seriesRef.current = barSeries;
+    sliceRef.current  = slice;
 
     // ── OpEMA overlay ──
     if (enabled.opema) {
@@ -262,8 +273,85 @@ function TickerChart({ ticker, enabled }) {
     });
     ro.observe(containerRef.current);
 
-    return () => { ro.disconnect(); chart.remove(); };
+    return () => {
+      ro.disconnect();
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+      drawnSeriesRef.current = [];
+    };
   }, [data, boxes, events, enabled]);
+
+  // Render user-drawn lines as LineSeries on the chart (re-runs when drawnLines changes)
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    // Remove prior drawn series
+    for (const s of drawnSeriesRef.current) {
+      try { chart.removeSeries(s); } catch (e) { /* chart may have been disposed */ }
+    }
+    drawnSeriesRef.current = [];
+    for (const ln of drawnLines) {
+      const s = chart.addSeries(LineSeries, {
+        color: '#fcf000', lineWidth: 2,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      });
+      s.setData([
+        { time: ln.t1, value: ln.v1 },
+        { time: ln.t2, value: ln.v2 },
+      ]);
+      drawnSeriesRef.current.push(s);
+    }
+  }, [drawnLines, data]);
+
+  // ── Draw mode mouse handlers (only active when drawMode is true) ──
+  function snapAt(clientX, clientY) {
+    const chart = chartRef.current, series = seriesRef.current, slice = sliceRef.current;
+    if (!chart || !series || !slice.length || !overlayRef.current) return null;
+    const rect = overlayRef.current.getBoundingClientRect();
+    const x = clientX - rect.left, y = clientY - rect.top;
+    // Find nearest bar by x-coordinate
+    let bestBar = null, bestDx = Infinity, bestPx = null;
+    for (const b of slice) {
+      const px = chart.timeScale().timeToCoordinate(b.weekOf);
+      if (px == null) continue;
+      const dx = Math.abs(px - x);
+      if (dx < bestDx) { bestDx = dx; bestBar = b; bestPx = px; }
+    }
+    if (!bestBar) return null;
+    const priceAtY = series.coordinateToPrice(y);
+    if (priceAtY == null) return null;
+    // Snap to whichever of high/low is closer to the click
+    const snapHigh = Math.abs(priceAtY - bestBar.high) <= Math.abs(priceAtY - bestBar.low);
+    const snappedPrice = snapHigh ? bestBar.high : bestBar.low;
+    const snappedY = series.priceToCoordinate(snappedPrice);
+    return { time: bestBar.weekOf, value: snappedPrice, x: bestPx, y: snappedY, snapHigh };
+  }
+
+  const drawStartRef = useRef(null);
+  function onDrawDown(e) {
+    if (!drawMode) return;
+    e.preventDefault();
+    const snap = snapAt(e.clientX, e.clientY);
+    if (!snap) return;
+    drawStartRef.current = snap;
+    setTempLine({ x1: snap.x, y1: snap.y, x2: snap.x, y2: snap.y });
+  }
+  function onDrawMove(e) {
+    if (!drawMode || !drawStartRef.current) return;
+    const rect = overlayRef.current.getBoundingClientRect();
+    setTempLine({ x1: drawStartRef.current.x, y1: drawStartRef.current.y, x2: e.clientX - rect.left, y2: e.clientY - rect.top });
+  }
+  function onDrawUp(e) {
+    if (!drawMode || !drawStartRef.current) return;
+    const start = drawStartRef.current;
+    const end = snapAt(e.clientX, e.clientY);
+    drawStartRef.current = null;
+    setTempLine(null);
+    if (!end || end.time === start.time) return;
+    const [a, b] = start.time < end.time ? [start, end] : [end, start];
+    setDrawnLines(prev => [...prev, { t1: a.time, v1: a.value, t2: b.time, v2: b.value }]);
+  }
 
   if (error) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef5350' }}>Error: {error}</div>;
   if (!data) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>Loading {ticker}...</div>;
@@ -277,14 +365,56 @@ function TickerChart({ ticker, enabled }) {
           {ticker}
           {data.sector && <span style={{ fontSize: 11, fontWeight: 400, color: '#888', marginLeft: 8 }}>· {data.sector}</span>}
         </div>
-        <div style={{ fontSize: 10, color: '#666', display: 'flex', gap: 12 }}>
-          {enabled.opema && <span><span style={{ color: '#3b82f6' }}>━</span> OpEMA {period}W</span>}
-          {enabled.boxes && boxes != null && <span>📦 {boxes.length} box{boxes.length === 1 ? '' : 'es'}</span>}
-          {enabled.signals && events != null && <span>🎯 {events.length} event{events.length === 1 ? '' : 's'}</span>}
-          {enabled.trendlines && <span>📈 {tlCount} trendline{tlCount === 1 ? '' : 's'}</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <label style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            background: drawMode ? '#fcf000' : '#222',
+            color: drawMode ? '#000' : '#888',
+            border: '1px solid #444', borderRadius: 4, padding: '3px 8px',
+            fontSize: 11, fontWeight: 700, cursor: 'pointer',
+          }}>
+            <input type="checkbox" checked={drawMode} onChange={() => setDrawMode(v => !v)} style={{ display: 'none' }} />
+            ✏️ Draw
+          </label>
+          {drawnLines.length > 0 && (
+            <button
+              onClick={() => setDrawnLines([])}
+              style={{ background: '#222', color: '#888', border: '1px solid #444', borderRadius: 4, padding: '3px 8px', fontSize: 11, cursor: 'pointer' }}
+            >
+              Clear ({drawnLines.length})
+            </button>
+          )}
+          <div style={{ fontSize: 10, color: '#666', display: 'flex', gap: 12 }}>
+            {enabled.opema && <span><span style={{ color: '#3b82f6' }}>━</span> OpEMA {period}W</span>}
+            {enabled.boxes && boxes != null && <span>📦 {boxes.length} box{boxes.length === 1 ? '' : 'es'}</span>}
+            {enabled.signals && events != null && <span>🎯 {events.length} event{events.length === 1 ? '' : 's'}</span>}
+            {enabled.trendlines && <span>📈 {tlCount} trendline{tlCount === 1 ? '' : 's'}</span>}
+          </div>
         </div>
       </div>
-      <div ref={containerRef} style={{ width: '100%', height: CHART_HEIGHT }} />
+      <div style={{ position: 'relative', width: '100%', height: CHART_HEIGHT }}>
+        <div ref={containerRef} style={{ width: '100%', height: CHART_HEIGHT }} />
+        {/* Drawing overlay: only intercepts events when drawMode is on */}
+        <svg
+          ref={overlayRef}
+          onMouseDown={onDrawDown}
+          onMouseMove={onDrawMove}
+          onMouseUp={onDrawUp}
+          onMouseLeave={() => { drawStartRef.current = null; setTempLine(null); }}
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            pointerEvents: drawMode ? 'auto' : 'none',
+            cursor: drawMode ? 'crosshair' : 'default',
+          }}
+        >
+          {tempLine && (
+            <line
+              x1={tempLine.x1} y1={tempLine.y1} x2={tempLine.x2} y2={tempLine.y2}
+              stroke="#fcf000" strokeWidth="2" strokeDasharray="4 3"
+            />
+          )}
+        </svg>
+      </div>
     </>
   );
 }
@@ -362,14 +492,14 @@ function drawBoxes(chart, boxes, slice) {
 //    horizontal S/R (the box detection already covers that case).
 //  - ANCHOR PROXIMITY: hi - hk ≥ 10% × hi for downtrend; lk - li ≥ 10% × li for
 //    uptrend. P1 and P3 must be visually distinguishable.
-const TL_FIT_PCT             = 0.01;
+const TL_FIT_PCT             = 0.03;   // ±3% — was 1%, too tight for real peaks
 const TL_MIN_SPACING_W       = 3;
 const TL_BREAK_PCT           = 0.01;
 const TL_MAX_LINES_PER_DIR   = 2;
 const TL_BROKEN_FADE_W       = 5;
-const TL_PIVOT_LOOKAROUND    = 2;     // bars on each side for swing-pivot test
-const TL_MIN_SLOPE_PCT_PER_W = 0.0015; // 0.15%/week (vs mid-price)
-const TL_MIN_ANCHOR_GAP_PCT  = 0.10;  // P1 and P3 must differ by ≥10%
+const TL_PIVOT_LOOKAROUND    = 2;
+const TL_MIN_SLOPE_PCT_PER_W = 0.0005; // 0.05%/week — catches slow multi-year grinds
+const TL_MIN_ANCHOR_GAP_PCT  = 0.10;
 
 function isSwingHigh(weekly, idx, look = TL_PIVOT_LOOKAROUND) {
   const h = weekly[idx].high;

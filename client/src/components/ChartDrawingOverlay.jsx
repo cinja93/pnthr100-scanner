@@ -33,6 +33,16 @@ function daysBetweenIso(a, b) {
   return (new Date(a + 'T12:00:00Z') - new Date(b + 'T12:00:00Z')) / 86400000;
 }
 
+// Color rule: black for horizontal (kind='horizontal' or v1≈v2), green for
+// uptrends (v2>v1, since t2>t1 always), red for downtrends.
+const COLOR_UP = '#26a69a';
+const COLOR_DOWN = '#ef5350';
+const COLOR_HORIZ = '#000000';
+function lineColor(ln) {
+  if (ln.kind === 'horizontal' || Math.abs(ln.v2 - ln.v1) < 0.01) return COLOR_HORIZ;
+  return ln.v2 > ln.v1 ? COLOR_UP : COLOR_DOWN;
+}
+
 export default function ChartDrawingOverlay({
   chartRef,
   seriesRef,
@@ -47,11 +57,12 @@ export default function ChartDrawingOverlay({
   const editingRef        = useRef(null);
   const windowHandlersRef = useRef(null);
 
-  const [drawMode, setDrawMode]     = useState(false);
+  const [drawMode, setDrawMode]     = useState(null);   // null | 'free' | 'horizontal'
   const [drawnLines, setDrawnLines] = useState([]);
   const [tempLine, setTempLine]     = useState(null);
   const [hoverSnap, setHoverSnap]   = useState(null);
   const [ctxMenu, setCtxMenu]       = useState(null);
+  const isDrawing = drawMode != null;
 
   // Keep weeklyBars accessible from event handlers without re-binding
   const sliceRef = useRef(weeklyBars);
@@ -78,13 +89,15 @@ export default function ChartDrawingOverlay({
     drawnSeriesRef.current = [];
     for (const ln of drawnLines) {
       const s = chart.addSeries(LineSeries, {
-        color: '#fcf000', lineWidth: 2,
+        color: lineColor(ln), lineWidth: 2,
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
         autoscaleInfoProvider: () => null,
       });
+      // For horizontal lines, force v2 = v1 so screen rendering is exactly flat
+      const v2render = (ln.kind === 'horizontal') ? ln.v1 : ln.v2;
       s.setData([
         { time: ln.t1, value: ln.v1 },
-        { time: ln.t2, value: ln.v2 },
+        { time: ln.t2, value: v2render },
       ]);
       drawnSeriesRef.current.push(s);
     }
@@ -160,7 +173,7 @@ export default function ChartDrawingOverlay({
   useEffect(() => () => detachWindowDragListeners(), []);
 
   function onDrawDown(e) {
-    if (!drawMode) return;
+    if (!isDrawing) return;
     e.preventDefault();
     const grab = findEndpointHit(e.clientX, e.clientY);
     if (grab) {
@@ -183,12 +196,19 @@ export default function ChartDrawingOverlay({
   }
 
   function onDrawMove(e) {
-    if (!drawMode || !overlayRef.current) return;
+    if (!isDrawing || !overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
     const cursorX = e.clientX - rect.left;
     const cursorY = e.clientY - rect.top;
+    const isHoriz = drawMode === 'horizontal';
     if (drawStartRef.current) {
-      setTempLine({ x1: drawStartRef.current.x, y1: drawStartRef.current.y, x2: cursorX, y2: cursorY });
+      // Horizontal mode: lock y2 to start's y so the temp line is flat
+      setTempLine({
+        x1: drawStartRef.current.x,
+        y1: drawStartRef.current.y,
+        x2: cursorX,
+        y2: isHoriz ? drawStartRef.current.y : cursorY,
+      });
     } else if (editingRef.current) {
       setTempLine(prev => prev ? { x1: prev.x1, y1: prev.y1, x2: cursorX, y2: cursorY } : null);
     } else {
@@ -198,7 +218,7 @@ export default function ChartDrawingOverlay({
   }
 
   async function onDrawUp(e) {
-    if (!drawMode) return;
+    if (!isDrawing) return;
     if (editingRef.current) {
       const edit = editingRef.current;
       const snap = snapAt(e.clientX, e.clientY);
@@ -227,12 +247,18 @@ export default function ChartDrawingOverlay({
     if (!drawStartRef.current) return;
     const start = drawStartRef.current;
     const end = snapAt(e.clientX, e.clientY);
+    const isHoriz = drawMode === 'horizontal';
     drawStartRef.current = null;
     setTempLine(null);
     if (!end || end.time === start.time) return;
     const [a, b] = start.time < end.time ? [start, end] : [end, start];
-    const expectSide = computeExpectSide(a.time, a.value, b.time, b.value);
-    const payload = { ticker, t1: a.time, v1: a.value, t2: b.time, v2: b.value, expectSide };
+    // Horizontal lines: force both y-values to the original click's value
+    // (whichever bar that was, regardless of time-order swap).
+    const v1 = isHoriz ? start.value : a.value;
+    const v2 = isHoriz ? start.value : b.value;
+    const kind = isHoriz ? 'horizontal' : 'free';
+    const expectSide = computeExpectSide(a.time, v1, b.time, v2);
+    const payload = { ticker, t1: a.time, v1, t2: b.time, v2, expectSide, kind };
     setDrawnLines(prev => [...prev, { ...payload, _id: 'pending-' + Date.now() }]);
     try {
       const r = await fetch(`${API_BASE}/api/test/trendlines`, {
@@ -323,15 +349,26 @@ export default function ChartDrawingOverlay({
 
   return (
     <>
-      {/* Floating Draw / Clear button cluster */}
+      {/* Floating button stack: Draw, Horizontal, Clear (shown when ≥1 line) */}
       <div style={{
         position: 'absolute', top: 6,
         [buttonPosition === 'top-right' ? 'right' : 'left']: 6,
         zIndex: 12,
-        display: 'flex', gap: 6,
+        display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start',
       }}>
-        <button onClick={() => setDrawMode(v => !v)} style={buttonStyle(drawMode)}>
-          ✏️ {drawMode ? 'Drawing' : 'Draw'}
+        <button
+          onClick={() => setDrawMode(prev => prev === 'free' ? null : 'free')}
+          style={buttonStyle(drawMode === 'free')}
+          title="Free-form trendline (any direction)"
+        >
+          ✏️ {drawMode === 'free' ? 'Drawing' : 'Draw'}
+        </button>
+        <button
+          onClick={() => setDrawMode(prev => prev === 'horizontal' ? null : 'horizontal')}
+          style={buttonStyle(drawMode === 'horizontal')}
+          title="Horizontal line — locks the second click to the same price level as the first"
+        >
+          ─ {drawMode === 'horizontal' ? 'Horizontal' : 'Horizontal'}
         </button>
         {drawnLines.length > 0 && (
           <button onClick={deleteAllForChart} style={buttonStyle(false)}>
@@ -340,7 +377,7 @@ export default function ChartDrawingOverlay({
         )}
       </div>
 
-      {/* Drawing overlay — captures events only when drawMode is on */}
+      {/* Drawing overlay — captures events only when a draw mode is active */}
       <div
         ref={overlayRef}
         onMouseDown={onDrawDown}
@@ -350,36 +387,37 @@ export default function ChartDrawingOverlay({
           if (!drawStartRef.current && !editingRef.current) setHoverSnap(null);
         }}
         onContextMenu={onContextMenu}
-        onWheel={(e) => { if (drawMode) e.preventDefault(); }}
+        onWheel={(e) => { if (isDrawing) e.preventDefault(); }}
         style={{
           position: 'absolute', inset: 0, width: '100%', height: '100%',
-          pointerEvents: (drawMode || drawnLines.length > 0) ? 'auto' : 'none',
-          cursor: drawMode ? 'crosshair' : 'default',
+          pointerEvents: (isDrawing || drawnLines.length > 0) ? 'auto' : 'none',
+          cursor: isDrawing ? 'crosshair' : 'default',
           zIndex: 10,
-          background: drawMode ? 'rgba(252,240,0,0.04)' : 'transparent',
-          border: drawMode ? '1px dashed rgba(252,240,0,0.5)' : 'none',
+          background: isDrawing ? 'rgba(252,240,0,0.04)' : 'transparent',
+          border: isDrawing ? '1px dashed rgba(252,240,0,0.5)' : 'none',
         }}
       >
         <svg width="100%" height="100%" style={{ pointerEvents: 'none', display: 'block' }}>
-          {drawMode && drawnLines.map(ln => {
+          {isDrawing && drawnLines.map(ln => {
             const chart = chartRef.current, series = seriesRef.current;
             if (!chart || !series) return null;
             const x1 = chart.timeScale().timeToCoordinate(ln.t1);
             const y1 = series.priceToCoordinate(ln.v1);
             const x2 = chart.timeScale().timeToCoordinate(ln.t2);
-            const y2 = series.priceToCoordinate(ln.v2);
+            const y2 = series.priceToCoordinate((ln.kind === 'horizontal') ? ln.v1 : ln.v2);
+            const handleFill = lineColor(ln);
             return (
               <g key={ln._id}>
                 {x1 != null && y1 != null && (
-                  <circle cx={x1} cy={y1} r="6" fill="#fcf000" stroke="#000" strokeWidth="1.5" />
+                  <circle cx={x1} cy={y1} r="6" fill={handleFill} stroke="#000" strokeWidth="1.5" />
                 )}
                 {x2 != null && y2 != null && (
-                  <circle cx={x2} cy={y2} r="6" fill="#fcf000" stroke="#000" strokeWidth="1.5" />
+                  <circle cx={x2} cy={y2} r="6" fill={handleFill} stroke="#000" strokeWidth="1.5" />
                 )}
               </g>
             );
           })}
-          {drawMode && hoverSnap && !tempLine && (
+          {isDrawing && hoverSnap && !tempLine && (
             <>
               <circle cx={hoverSnap.x} cy={hoverSnap.y} r="6" fill="none" stroke="#fcf000" strokeWidth="1.5" strokeDasharray="2 2" />
               <text x={hoverSnap.x + 10} y={hoverSnap.y - 8} fill="#fcf000" fontSize="10" fontFamily="monospace">
@@ -387,12 +425,19 @@ export default function ChartDrawingOverlay({
               </text>
             </>
           )}
-          {tempLine && (
-            <>
-              <line x1={tempLine.x1} y1={tempLine.y1} x2={tempLine.x2} y2={tempLine.y2} stroke="#fcf000" strokeWidth="2" strokeDasharray="4 3" />
-              <circle cx={tempLine.x1} cy={tempLine.y1} r="5" fill="#fcf000" stroke="#000" strokeWidth="1" />
-            </>
-          )}
+          {tempLine && (() => {
+            // Color the temp line by direction so user previews red/green/black
+            const tempStroke = drawMode === 'horizontal' ? COLOR_HORIZ
+              : tempLine.y2 < tempLine.y1 ? COLOR_UP   // cursor higher on screen = higher price
+              : tempLine.y2 > tempLine.y1 ? COLOR_DOWN
+              : COLOR_HORIZ;
+            return (
+              <>
+                <line x1={tempLine.x1} y1={tempLine.y1} x2={tempLine.x2} y2={tempLine.y2} stroke={tempStroke} strokeWidth="2" strokeDasharray="4 3" />
+                <circle cx={tempLine.x1} cy={tempLine.y1} r="5" fill={tempStroke} stroke="#000" strokeWidth="1" />
+              </>
+            );
+          })()}
         </svg>
       </div>
 

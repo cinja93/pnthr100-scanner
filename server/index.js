@@ -7520,7 +7520,7 @@ app.get('/api/test/trendlines', authenticateJWT, requireAdmin, async (req, res) 
 
 app.post('/api/test/trendlines', authenticateJWT, requireAdmin, async (req, res) => {
   try {
-    const { ticker, t1, v1, t2, v2, expectSide } = req.body || {};
+    const { ticker, t1, v1, t2, v2, expectSide, kind } = req.body || {};
     if (!ticker || !t1 || !t2 || v1 == null || v2 == null) return res.status(400).json({ error: 'missing fields' });
     if (!['above', 'below'].includes(expectSide)) return res.status(400).json({ error: 'expectSide must be above|below' });
     const db = await getDenDb();
@@ -7528,6 +7528,7 @@ app.post('/api/test/trendlines', authenticateJWT, requireAdmin, async (req, res)
       userId: req.user.userId,
       ticker: String(ticker).toUpperCase(),
       t1, v1: +v1, t2, v2: +v2,
+      kind: kind === 'horizontal' ? 'horizontal' : 'free',
       expectSide,
       status: 'active',
       createdAt: new Date(),

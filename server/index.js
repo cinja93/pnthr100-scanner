@@ -7407,20 +7407,72 @@ app.get('/api/test/candles', authenticateJWT, requireAdmin, async (req, res) => 
   }
 });
 
+// Returns ALL BL/SS signals from the analyze-signals universe + derived BE/SE
+// events. PNTHR's signal model stores one row PER WEEK a signal stays valid,
+// with signalAge incrementing. So a "fresh BL" event = a row with signalAge=0.
+// A "BE" event = the week AFTER the last consecutive BL row (signal series
+// ended). Same for SS → SE. Returns events flat for the chart to render.
 app.get('/api/test/signals', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const ticker = String(req.query.ticker || '').toUpperCase();
     if (!ticker) return res.status(400).json({ error: 'ticker required' });
     const db = await getDenDb();
-    const docs = await db.collection('pnthr_bt_pyramid_nav_1m_trade_log').find(
-      { ticker, navTier: 1000000 },
-      { projection: { signal: 1, entryDate: 1, entryPrice: 1, exitDate: 1, exitPrice: 1, exitReason: 1, netDollarPnl: 1, weekOf: 1 } },
-    ).toArray();
-    res.json({ ticker, signals: docs });
+    const rows = await db.collection('pnthr_bt_analyze_signals').find(
+      { ticker },
+      { projection: { weekOf: 1, signal: 1, signalAge: 1, entryPrice: 1, stopPrice: 1 } },
+    ).sort({ weekOf: 1 }).toArray();
+
+    // Walk the rows and emit fresh-signal events + derived BE/SE events
+    const events = [];
+    let activeKind = null;          // 'BL' | 'SS' | null
+    let lastWeekOfActive = null;    // track end of each series to emit BE/SE
+
+    for (const r of rows) {
+      const isFresh = (r.signalAge || 0) === 0;
+      if (isFresh) {
+        // Series end for the prior series, if different kind
+        if (activeKind && activeKind !== r.signal) {
+          events.push({
+            type: activeKind === 'BL' ? 'BE' : 'SE',
+            weekOf: nextWeek(lastWeekOfActive),
+            derivedFromLastWeek: lastWeekOfActive,
+          });
+        }
+        // New fresh signal
+        events.push({
+          type: r.signal,
+          weekOf: r.weekOf,
+          entryPrice: r.entryPrice,
+          stopPrice: r.stopPrice,
+        });
+        activeKind = r.signal;
+        lastWeekOfActive = r.weekOf;
+      } else {
+        // Continuation week — just update the lastWeekOfActive (signal still alive)
+        if (r.signal === activeKind) lastWeekOfActive = r.weekOf;
+      }
+    }
+    // Trailing series end — if last row was an active signal, emit closing event
+    if (activeKind && lastWeekOfActive) {
+      events.push({
+        type: activeKind === 'BL' ? 'BE' : 'SE',
+        weekOf: nextWeek(lastWeekOfActive),
+        derivedFromLastWeek: lastWeekOfActive,
+        trailing: true,    // last series of the dataset, no new fresh signal followed
+      });
+    }
+
+    res.json({ ticker, events, count: events.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
+
+function nextWeek(weekOfStr) {
+  const d = new Date(weekOfStr + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
 
 app.get('/api/test/box-alerts', authenticateJWT, requireAdmin, async (req, res) => {
   try {

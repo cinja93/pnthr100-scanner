@@ -151,7 +151,8 @@ function TickerChart({ ticker, enabled }) {
   const containerRef = useRef(null);
   const [data, setData]       = useState(null);   // { weekly, sector }
   const [boxes, setBoxes]     = useState(null);
-  const [signals, setSignals] = useState(null);
+  const [events, setEvents]   = useState(null);   // [{type:'BL'|'SS'|'BE'|'SE', weekOf, ...}]
+  const [tlCount, setTlCount] = useState(0);
   const [error, setError]     = useState(null);
 
   useEffect(() => {
@@ -165,7 +166,7 @@ function TickerChart({ ticker, enabled }) {
         if (cancelled) return;
         setData({ weekly: candles?.weekly || [], sector: candles?.sector || null });
         setBoxes(boxData?.boxes || []);
-        setSignals(sigData?.signals || []);
+        setEvents(sigData?.events || []);
       })
       .catch(e => !cancelled && setError(e.message));
     return () => { cancelled = true; };
@@ -208,32 +209,48 @@ function TickerChart({ ticker, enabled }) {
     }
 
     // ── Trendlines ──
+    let tlCountLocal = 0;
     if (enabled.trendlines) {
       const tl = computeTrendlines(slice);
       drawTrendlines(chart, tl, slice);
+      tlCountLocal = tl.active.length + tl.broken.length;
     }
+    setTlCount(tlCountLocal);
 
-    // ── Signals ──
-    if (enabled.signals && signals && signals.length) {
+    // ── Signals (BL / SS / BE / SE) ──
+    // BL = green ↑ below bar (long entry)
+    // BE = green × above bar (long exit, BL state ended)
+    // SS = red ↓ above bar (short entry)
+    // SE = red × below bar (short exit, SS state ended)
+    if (enabled.signals && events && events.length) {
       const visibleStart = slice[0].weekOf;
       const visibleEnd   = slice[slice.length - 1].weekOf;
+      // Map weekOf strings → which bar in slice contains that week. Trade-log
+      // weekOf is Friday-aligned, but we need to snap to the Mon-aligned bar.
+      function snapToBar(targetWeek) {
+        if (targetWeek < visibleStart || targetWeek > addOneWeek(visibleEnd)) return null;
+        let lastMatch = null;
+        for (const b of slice) {
+          if (b.weekOf <= targetWeek) lastMatch = b;
+          else break;
+        }
+        return lastMatch;
+      }
       const markers = [];
-      for (const s of signals) {
-        if (s.entryDate < visibleStart || s.entryDate > visibleEnd) continue;
-        // Snap entry to its weekOf bar
-        const wk = slice.find(b => s.entryDate >= b.weekOf && (slice.indexOf(b) === slice.length - 1 || s.entryDate < slice[slice.indexOf(b) + 1].weekOf));
-        if (!wk) continue;
-        const isBL = s.signal === 'BL';
+      for (const e of events) {
+        const bar = snapToBar(e.weekOf);
+        if (!bar) continue;
+        const cfg = MARKER_CONFIG[e.type];
+        if (!cfg) continue;
         markers.push({
-          time: wk.weekOf,
-          position: isBL ? 'belowBar' : 'aboveBar',
-          color: isBL ? '#26a69a' : '#ef5350',
-          shape: isBL ? 'arrowUp' : 'arrowDown',
-          text: s.signal,
-          size: 1,
+          time:     bar.weekOf,
+          position: cfg.position,
+          color:    cfg.color,
+          shape:    cfg.shape,
+          text:     e.type,
+          size:     1,
         });
       }
-      // Sort markers by time (required by lightweight-charts)
       markers.sort((a, b) => a.time.localeCompare(b.time));
       if (markers.length) createSeriesMarkers(barSeries, markers);
     }
@@ -246,7 +263,7 @@ function TickerChart({ ticker, enabled }) {
     ro.observe(containerRef.current);
 
     return () => { ro.disconnect(); chart.remove(); };
-  }, [data, boxes, signals, enabled]);
+  }, [data, boxes, events, enabled]);
 
   if (error) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef5350' }}>Error: {error}</div>;
   if (!data) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>Loading {ticker}...</div>;
@@ -263,7 +280,8 @@ function TickerChart({ ticker, enabled }) {
         <div style={{ fontSize: 10, color: '#666', display: 'flex', gap: 12 }}>
           {enabled.opema && <span><span style={{ color: '#3b82f6' }}>━</span> OpEMA {period}W</span>}
           {enabled.boxes && boxes != null && <span>📦 {boxes.length} box{boxes.length === 1 ? '' : 'es'}</span>}
-          {enabled.signals && signals != null && <span>🎯 {signals.length} signal{signals.length === 1 ? '' : 's'}</span>}
+          {enabled.signals && events != null && <span>🎯 {events.length} event{events.length === 1 ? '' : 's'}</span>}
+          {enabled.trendlines && <span>📈 {tlCount} trendline{tlCount === 1 ? '' : 's'}</span>}
         </div>
       </div>
       <div ref={containerRef} style={{ width: '100%', height: CHART_HEIGHT }} />
@@ -272,6 +290,20 @@ function TickerChart({ ticker, enabled }) {
 }
 
 // ─────────────────────────── Helpers ───────────────────────────
+
+// Marker visual config per signal type. BL/SS = entries (arrows). BE/SE = exits (X marks).
+const MARKER_CONFIG = {
+  BL: { color: '#26a69a', position: 'belowBar', shape: 'arrowUp'   }, // long entry
+  SS: { color: '#ef5350', position: 'aboveBar', shape: 'arrowDown' }, // short entry
+  BE: { color: '#26a69a', position: 'aboveBar', shape: 'circle'    }, // long exit (BL state ended)
+  SE: { color: '#ef5350', position: 'belowBar', shape: 'circle'    }, // short exit (SS state ended)
+};
+
+function addOneWeek(weekOfStr) {
+  const d = new Date(weekOfStr + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
 
 function computeEMA(weeklyBars, period) {
   if (weeklyBars.length < period) return [];

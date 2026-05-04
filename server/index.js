@@ -2422,20 +2422,46 @@ app.post('/api/positions/:id/convert-to-pyramid', authenticateJWT, async (req, r
     const db = await connectToDatabase();
     if (!db) return res.status(503).json({ error: 'DB unavailable' });
 
-    const dryRun = req.query.dryRun === '1' || req.body?.dryRun === true;
-    // Optional trader override of the canonical "full size." Required when the
-    // canonical math caps the position below the actual L1 fill (e.g., CDNS:
-    // bought 27 shares, canonical full size = 25 shares due to wide stop +
-    // 1% NAV vitality cap → all L2-L5 targets compute to 0). The trader can
-    // override to pyramid up beyond canonical sizing.
+    const dryRun  = req.query.dryRun === '1' || req.body?.dryRun === true;
+    const dismiss = req.body?.dismiss === true;
+    // Two override paths (pick at most one):
+    //   • targetTotalShares = N → distribute (N - L1) across L2-L5 using
+    //                              30/25/20/10 weights (for traders who just
+    //                              want a target total, no per-lot tinkering).
+    //   • lotShares = { 2: x, 3: y, 4: z, 5: w } → exact per-lot share
+    //                              counts. Total comes out to L1 + sum(lotShares).
+    //                              For traders who want fine control over each
+    //                              ratchet level (e.g., heavier on L2/L3 when
+    //                              expecting a strong move, lighter on L5).
     const targetTotalShares = req.body?.targetTotalShares != null
       ? Math.floor(+req.body.targetTotalShares)
+      : null;
+    const lotSharesRaw = req.body?.lotShares;
+    const lotSharesOverride = (lotSharesRaw && typeof lotSharesRaw === 'object')
+      ? {
+          2: Math.max(0, Math.floor(+lotSharesRaw[2] || 0)),
+          3: Math.max(0, Math.floor(+lotSharesRaw[3] || 0)),
+          4: Math.max(0, Math.floor(+lotSharesRaw[4] || 0)),
+          5: Math.max(0, Math.floor(+lotSharesRaw[5] || 0)),
+        }
       : null;
 
     const position = await db.collection('pnthr_portfolio').findOne({
       id: req.params.id, ownerId: req.user.userId,
     });
     if (!position) return res.status(404).json({ error: 'Position not found' });
+
+    // Dismiss path — trader has acknowledged this position is intentionally
+    // single-shot at canonical size and doesn't want to be prompted further.
+    // Sets pyramidDismissed=true so the LIVE table's PYRAMID button hides on
+    // this row. Reversible via Command Center (clear the field manually).
+    if (dismiss && !dryRun) {
+      await db.collection('pnthr_portfolio').updateOne(
+        { id: req.params.id, ownerId: req.user.userId },
+        { $set: { pyramidDismissed: true, updatedAt: new Date() } }
+      );
+      return res.json({ success: true, dismissed: true, ticker: position.ticker });
+    }
 
     // Eligibility check — only single-shot auto-opens. If the position already
     // has a pyramid plan (any L2+ planned), refuse so we don't clobber it.
@@ -2452,19 +2478,53 @@ app.post('/api/positions/:id/convert-to-pyramid', authenticateJWT, async (req, r
     const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
     const nav     = +profile?.accountSize || 100000;
 
-    // Compute the lot plan. Two paths:
+    // Compute the lot plan. Three paths:
     //   1. No override → canonical computeLotPlan (L1-aware, capped by
     //      vitality + ticker cap). Same math the Live table uses.
-    //   2. Override → bypass cap, distribute (override - L1) across L2-L5
-    //      using the 30/25/20/10 weights (sum 85, same as canonical L1-aware
-    //      redistribution). Trigger prices come from the canonical 0/3/6/10/14
-    //      offset table off the actual L1 fill price.
+    //   2. targetTotalShares → distribute (target - L1) across L2-L5 with
+    //      30/25/20/10 weights.
+    //   3. lotShares → use exact per-lot share counts the trader specified.
     let lots;
-    if (targetTotalShares != null && targetTotalShares > 0) {
-      const lot1Actual    = +lot1.shares;
-      const anchor        = +lot1.price;
-      const isLong        = (position.direction || 'LONG').toUpperCase() !== 'SHORT';
-      const remaining     = Math.max(0, targetTotalShares - lot1Actual);
+    if (lotSharesOverride) {
+      const lot1Actual = +lot1.shares;
+      const anchor     = +lot1.price;
+      const isLong     = (position.direction || 'LONG').toUpperCase() !== 'SHORT';
+      const overrideShares = [
+        lot1Actual,
+        lotSharesOverride[2],
+        lotSharesOverride[3],
+        lotSharesOverride[4],
+        lotSharesOverride[5],
+      ];
+      const LOT_OFFSETS = [0, 0.03, 0.06, 0.10, 0.14];
+      const LOT_NAMES   = ['The Scent', 'The Stalk', 'The Strike', 'The Jugular', 'The Kill'];
+      const STRIKE_PCT  = [0.35, 0.25, 0.20, 0.12, 0.08];
+      let cumulative = 0;
+      lots = overrideShares.map((tgt, i) => {
+        cumulative += tgt;
+        const triggerPrice = isLong
+          ? +(anchor * (1 + LOT_OFFSETS[i])).toFixed(2)
+          : +(anchor * (1 - LOT_OFFSETS[i])).toFixed(2);
+        return {
+          lot:                    i + 1,
+          name:                   LOT_NAMES[i],
+          pct:                    STRIKE_PCT[i],
+          offsetPct:              Math.round(LOT_OFFSETS[i] * 100),
+          targetShares:           tgt,
+          cumulativeTargetShares: cumulative,
+          triggerPrice,
+          filled:        i === 0,
+          actualPrice:   i === 0 ? +lot1.price : null,
+          actualShares:  i === 0 ? lot1Actual : 0,
+          anchor,
+          override:      true,
+        };
+      });
+    } else if (targetTotalShares != null && targetTotalShares > 0) {
+      const lot1Actual = +lot1.shares;
+      const anchor     = +lot1.price;
+      const isLong     = (position.direction || 'LONG').toUpperCase() !== 'SHORT';
+      const remaining  = Math.max(0, targetTotalShares - lot1Actual);
       const l2 = Math.round(remaining * 30 / 85);
       const l3 = Math.round(remaining * 25 / 85);
       const l4 = Math.round(remaining * 20 / 85);
@@ -2497,15 +2557,20 @@ app.post('/api/positions/:id/convert-to-pyramid', authenticateJWT, async (req, r
     } else {
       lots = computeLotPlan(position, nav);
       if (!lots.length || lots.every(l => l.targetShares <= 0)) {
-        // Canonical math says no shares to add — let the client know so it
-        // can prompt the trader for an override total instead of failing.
+        // Canonical math says no shares to add. Return needsOverride so the
+        // client can render the per-lot modal pre-filled with zeros for the
+        // trader to fill in (or they can dismiss the prompt entirely).
         return res.status(200).json({
           dryRun:    true,
           needsOverride: true,
           positionId: position.id,
           ticker:    position.ticker,
-          message:   'Canonical pyramid math returned 0 shares for L2-L5 (position is at vitality/ticker-cap ceiling at the current Lot 1 fill). Provide targetTotalShares to override.',
+          message:   'Canonical pyramid math returned 0 shares for L2-L5 (position is at vitality/ticker-cap ceiling at the current Lot 1 fill). Provide lotShares per L2-L5, a targetTotalShares total, or dismiss the prompt.',
           currentL1: { shares: lot1.shares, price: lot1.price, date: lot1.date },
+          // Echo back canonical anchor + offsets so the client can render
+          // trigger-price preview at L2-L5 (offsets 3/6/10/14% above anchor).
+          anchor:    +lot1.price,
+          direction: position.direction || 'LONG',
         });
       }
     }
@@ -2537,20 +2602,54 @@ app.post('/api/positions/:id/convert-to-pyramid', authenticateJWT, async (req, r
     }
 
     if (dryRun) {
+      // Enrich the preview with risk math so the modal can show, per lot,
+      // how much $ risk this lot adds and what the cumulative total exposure
+      // becomes. Risk is measured against the ORIGINAL stop (not current
+      // ratcheted) — that's the trade's intended max risk frame.
+      const isLong   = (position.direction || 'LONG').toUpperCase() !== 'SHORT';
+      const origStop = +(position.originalStop || position.stopPrice) || 0;
+      const planWithRisk = (() => {
+        let cumShares  = 0;
+        let cumCost    = 0;
+        let cumRisk    = 0;
+        return lots.map(l => {
+          const px = l.filled ? (l.actualPrice || l.triggerPrice) : l.triggerPrice;
+          const sh = l.filled ? (l.actualShares || l.targetShares) : l.targetShares;
+          // Per-lot risk (USD) at this trigger vs original stop.
+          const riskPerShare = origStop > 0
+            ? (isLong ? Math.max(0, px - origStop) : Math.max(0, origStop - px))
+            : 0;
+          const lotRisk = +(riskPerShare * sh).toFixed(2);
+          cumShares += sh;
+          cumCost   += px * sh;
+          cumRisk   += lotRisk;
+          return {
+            lot:           l.lot,
+            name:          l.name,
+            targetShares:  l.targetShares,
+            triggerPrice:  l.triggerPrice,
+            filled:        l.filled,
+            actualShares:  l.actualShares,
+            actualPrice:   l.actualPrice,
+            // Live risk math:
+            riskPerShare:  +riskPerShare.toFixed(2),
+            lotRisk,
+            cumulativeShares: cumShares,
+            cumulativeCost:   +cumCost.toFixed(2),
+            cumulativeRisk:   +cumRisk.toFixed(2),
+            cumulativeRiskPctNav: nav > 0 ? +(cumRisk / nav * 100).toFixed(3) : 0,
+          };
+        });
+      })();
       return res.json({
-        dryRun:    true,
+        dryRun:     true,
         positionId: position.id,
-        ticker:    position.ticker,
-        currentL1: { shares: lot1.shares, price: lot1.price, date: lot1.date },
-        plan:      lots.map(l => ({
-          lot:           l.lot,
-          name:          l.name,
-          targetShares:  l.targetShares,
-          triggerPrice:  l.triggerPrice,
-          filled:        l.filled,
-          actualShares:  l.actualShares,
-          actualPrice:   l.actualPrice,
-        })),
+        ticker:     position.ticker,
+        nav,
+        originalStop: origStop,
+        direction:    position.direction || 'LONG',
+        currentL1:    { shares: lot1.shares, price: lot1.price, date: lot1.date },
+        plan:         planWithRisk,
       });
     }
 

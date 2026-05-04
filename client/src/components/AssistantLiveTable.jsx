@@ -16,6 +16,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 import AssistantRowExpand from './AssistantRowExpand';
+import PyramidPlanModal from './PyramidPlanModal';
 import { sizePosition, isEtfTicker } from '../utils/sizingUtils.js';
 
 const REFRESH_MS = 60_000;
@@ -829,94 +830,14 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
     return () => clearInterval(iv);
   }, [fetchData]);
 
-  // Convert a single-shot auto-opened position into a real 5-lot pyramid.
-  // Two-step UX: dry-run preview → if canonical math returns 0 sh L2-L5
-  // (CDNS pattern), prompt the trader for an override target. Otherwise
-  // confirm the canonical plan + apply.
-  const handleConvertToPyramid = useCallback(async (positionId, ticker) => {
+  // Pyramid modal state — { positionId, ticker } when open, null when closed.
+  // The modal owns its own fetch + state; we just track which row triggered it
+  // and provide a refresh callback for when it applies.
+  const [pyramidModal, setPyramidModal] = useState(null);
+  const handleConvertToPyramid = useCallback((positionId, ticker) => {
     if (!positionId) return;
-    try {
-      // Step 1: dry-run with no override.
-      const r0 = await fetch(`${API_BASE}/api/positions/${positionId}/convert-to-pyramid?dryRun=1`, {
-        method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      if (!r0.ok) {
-        const e = await r0.json().catch(() => ({}));
-        alert(`Preview failed: ${e.error || `HTTP ${r0.status}`}`);
-        return;
-      }
-      const preview = await r0.json();
-
-      let body = {};
-      const planLinesFromArr = (arr) => arr.map(l => {
-        if (l.lot === 1) return `L1 (${l.name}): ${l.actualShares} sh @ $${l.actualPrice} — already filled`;
-        return `L${l.lot} (${l.name}): ${l.targetShares} sh @ trigger $${l.triggerPrice}`;
-      }).join('\n');
-
-      if (preview.needsOverride) {
-        // Canonical math returned all zeros. Ask for an override total.
-        const l1Shares = +preview.currentL1?.shares || 0;
-        const suggested = String(Math.max(l1Shares + 1, Math.round(l1Shares * 2))); // default ≈ 2× L1
-        const input = window.prompt(
-          `${ticker}: canonical pyramid math says no shares to add (you're at the vitality/ticker-cap ceiling at the current Lot 1 fill of ${l1Shares} sh).\n\n` +
-          `If you want to pyramid up beyond canonical sizing, enter your TARGET TOTAL SHARES (including the ${l1Shares} you already hold).\n\n` +
-          `Cancel to abort.`,
-          suggested
-        );
-        if (input == null) return;
-        const target = Math.floor(+input);
-        if (!(target > l1Shares)) {
-          alert(`Target total must be greater than current ${l1Shares} shares.`);
-          return;
-        }
-        // Re-preview with override.
-        const r1 = await fetch(`${API_BASE}/api/positions/${positionId}/convert-to-pyramid?dryRun=1`, {
-          method: 'POST',
-          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetTotalShares: target }),
-        });
-        if (!r1.ok) {
-          const e = await r1.json().catch(() => ({}));
-          alert(`Override preview failed: ${e.error || `HTTP ${r1.status}`}`);
-          return;
-        }
-        const previewOverride = await r1.json();
-        const ok = window.confirm(
-          `Convert ${ticker} to a 5-lot pyramid (target total ${target} shares)?\n\n` +
-          planLinesFromArr(previewOverride.plan || []) +
-          '\n\nOn confirm, PNTHR writes this plan and the lot-trigger cron stages L2-L5 BUY/SELL STOPs in TWS within ~60s.'
-        );
-        if (!ok) return;
-        body = { targetTotalShares: target };
-      } else {
-        const ok = window.confirm(
-          `Convert ${ticker} to a 5-lot pyramid?\n\n` +
-          planLinesFromArr(preview.plan || []) +
-          '\n\nOn confirm, PNTHR writes this plan and the lot-trigger cron stages L2-L5 BUY/SELL STOPs in TWS within ~60s.'
-        );
-        if (!ok) return;
-      }
-
-      // Step 2: apply.
-      const r2 = await fetch(`${API_BASE}/api/positions/${positionId}/convert-to-pyramid`, {
-        method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!r2.ok) {
-        const e = await r2.json().catch(() => ({}));
-        alert(`Convert failed: ${e.error || `HTTP ${r2.status}`}`);
-        return;
-      }
-      // Refresh so the row picks up the new plan + L2-L5 dots flip from
-      // (whatever they were) to red until the cron stages them in TWS.
-      await fetchData();
-    } catch (e) {
-      alert(`Convert failed: ${e.message || 'Network error'}`);
-    }
-  }, [fetchData]);
+    setPyramidModal({ positionId, ticker });
+  }, []);
 
   const handleCellClick = (row) => {
     if (!row.actions?.length) return;
@@ -1081,13 +1002,16 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
           const currentShares = Math.abs(+row.ibkr?.shares || 0);
 
           // Pyramid-eligibility flag: position exists, was opened single-shot
-          // (autoOpenedByIBKR or fills[1].pct=1.0), so no L2-L5 plan exists yet.
-          // The PYRAMID button shows ONLY on these rows so its presence is a
-          // one-glance "this position has no ratchet plan" indicator.
+          // (autoOpenedByIBKR or fills[1].pct=1.0), AND the trader has not
+          // dismissed the prompt for this position. The PYRAMID button shows
+          // ONLY on eligible rows so its presence is a one-glance "this
+          // position has no ratchet plan and you haven't told me to stop
+          // asking" indicator.
           const isPyramidEligible = !!(
             pos &&
             row.command?.positionId &&
-            (pos.autoOpenedByIBKR === true || pos.fills?.[1]?.pct === 1.0)
+            (pos.autoOpenedByIBKR === true || pos.fills?.[1]?.pct === 1.0) &&
+            pos.pyramidDismissed !== true
           );
 
           return (
@@ -1538,6 +1462,14 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
       </div>
       {!collapsed && body()}
       <ActionModal row={modalRow} onClose={() => setModalRow(null)} />
+      {pyramidModal && (
+        <PyramidPlanModal
+          ticker={pyramidModal.ticker}
+          positionId={pyramidModal.positionId}
+          onClose={() => setPyramidModal(null)}
+          onApplied={() => fetchData()}
+        />
+      )}
     </div>
   );
 }

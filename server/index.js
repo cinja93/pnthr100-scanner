@@ -34,6 +34,7 @@ import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxR
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
 import { runLotTriggerSync, registerLotTriggerCron } from './lotTriggerCron.js';
 import { runOrphanCleanup } from './orphanOrderJanitor.js';
+import { runGhostReconcile } from './ghostPositionReconciler.js';
 import { registerReconciliationCron } from './reconciliationCron.js';
 import { killTestMonthlyGet, killTestMetricsGet, killTestMonthlyGenerate, generateMonthlySnapshots } from './killTestMonthly.js';
 import {
@@ -4908,6 +4909,21 @@ app.post('/api/admin/cleanup-orphans', authenticateJWT, requireAdmin, async (req
     res.json(report);
   } catch (err) {
     console.error('[admin/cleanup-orphans]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Phase 4 ghost-position reconciler — manual trigger for the auto-closer
+// of PNTHR ACTIVE/PARTIAL positions that IBKR has shown 0 shares for >5 min.
+// Use ?dryRun=1 to preview which positions would be closed without acting.
+app.post('/api/admin/reconcile-ghosts', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const dryRun = req.query.dryRun === '1' || req.body?.dryRun === true;
+    const report = await runGhostReconcile({ db, dryRun });
+    res.json(report);
+  } catch (err) {
+    console.error('[admin/reconcile-ghosts]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

@@ -25,10 +25,11 @@
 // no errors) log a short "ok" line so absence of output never masks a
 // stuck cron; verbose detail only when something actually moved.
 
-import { connectToDatabase }   from './database.js';
-import { runStopRatchet }      from './stopRatchetCron.js';
-import { runLotTriggerSync }   from './lotTriggerCron.js';
-import { runOrphanCleanup }    from './orphanOrderJanitor.js';
+import { connectToDatabase }    from './database.js';
+import { runStopRatchet }       from './stopRatchetCron.js';
+import { runLotTriggerSync }    from './lotTriggerCron.js';
+import { runOrphanCleanup }     from './orphanOrderJanitor.js';
+import { runGhostReconcile }    from './ghostPositionReconciler.js';
 
 const SCHEDULE = '* 9-16 * * 1-5'; // every minute, 9-16:59 ET, Mon-Fri
 const TZ       = 'America/New_York';
@@ -53,11 +54,15 @@ export async function runUnifiedReconciliation({ db, dryRun = false } = {}) {
   if (!db) return { error: 'NO_DB' };
 
   const startedAt = new Date();
+  // Ghost reconciler runs FIRST: if it closes a position this tick, the
+  // orphan janitor (which runs last) will see the ticker as no-longer-active
+  // and clean up any leftover triggers in the same tick instead of waiting
+  // a minute. recordExit() also fires Phase 4b CANCEL_RELATED_ORDERS
+  // synchronously, so most of the time the orphans never make it to the
+  // janitor at all — the cancel queues directly.
+  const ghosts    = await runGhostReconcile({ db, dryRun });
   const ratchet   = await runStopRatchet({ db, dryRun });
   const lotTrig   = await runLotTriggerSync({ db, dryRun });
-  // Orphan janitor runs LAST so it sees the post-ratchet/post-lottrig state.
-  // (e.g., if a position closed mid-tick, ratchet/lotTrig won't have touched
-  // its triggers — janitor is the safety net.)
   const orphans   = await runOrphanCleanup({ db, dryRun });
   const finishedAt = new Date();
 
@@ -66,6 +71,7 @@ export async function runUnifiedReconciliation({ db, dryRun = false } = {}) {
     finishedAt,
     durationMs: finishedAt - startedAt,
     dryRun,
+    ghosts,
     ratchet,
     lotTrig,
     orphans,
@@ -96,9 +102,13 @@ export function registerReconciliationCron(cron) {
         return;
       }
 
+      const gh = r.ghosts  || {};
       const ra = r.ratchet || {};
       const lt = r.lotTrig || {};
       const oj = r.orphans || {};
+      const ghObserved = (gh.observed || []).length;
+      const ghClosed   = (gh.closed   || []).length;
+      const ghCleared  = (gh.cleared  || []).length;
       const ratchetAdopt  = (ra.adoptions     || []).length;
       const ratchetPush   = (ra.modifications || []).filter(m => m.enqueued).length;
       const ratchetAlign  = (ra.aligned       || []).length;
@@ -112,15 +122,16 @@ export function registerReconciliationCron(cron) {
       const ojEnq         = (oj.orphans       || []).filter(x => x.enqueued).length;
       const ojProtected   = oj.userOrdersProtected || 0;
 
-      const anyChange = ratchetAdopt || ratchetPush || ltPlace || ltModify || ltCancel || ltAdopt || ojEnq;
+      const anyChange = ratchetAdopt || ratchetPush || ltPlace || ltModify || ltCancel || ltAdopt || ojEnq || ghObserved || ghClosed || ghCleared;
 
       if (anyChange || ojOrphans) {
         console.log(
           `[reconciliation] ${ts()} checked=${ra.positionsChecked || 0}` +
-          ` ratchet:adopt=${ratchetAdopt} push=${ratchetPush} align=${ratchetAlign} skip=${ratchetSkip}` +
+          ` ghosts:obs=${ghObserved} closed=${ghClosed} cleared=${ghCleared}` +
+          ` / ratchet:adopt=${ratchetAdopt} push=${ratchetPush} align=${ratchetAlign} skip=${ratchetSkip}` +
           ` / lotTrig:place=${ltPlace} modify=${ltModify} cancel=${ltCancel} adopt=${ltAdopt} skip=${ltSkip}` +
           ` / orphans:found=${ojOrphans} enq=${ojEnq} userProtected=${ojProtected}` +
-          ` (${r.durationMs}ms${ra.flagOn ? '' : ' RATCHET_FLAG_OFF'}${lt.flagOn ? '' : ' LOTTRIG_FLAG_OFF'}${oj.flagOn ? '' : ' ORPHANS_FLAG_OFF'})`
+          ` (${r.durationMs}ms${gh.flagOn ? '' : ' GHOSTS_FLAG_OFF'}${ra.flagOn ? '' : ' RATCHET_FLAG_OFF'}${lt.flagOn ? '' : ' LOTTRIG_FLAG_OFF'}${oj.flagOn ? '' : ' ORPHANS_FLAG_OFF'})`
         );
       } else {
         console.log(`[reconciliation] ${ts()} ok checked=${ra.positionsChecked || 0} (${r.durationMs}ms)`);

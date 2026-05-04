@@ -2423,6 +2423,14 @@ app.post('/api/positions/:id/convert-to-pyramid', authenticateJWT, async (req, r
     if (!db) return res.status(503).json({ error: 'DB unavailable' });
 
     const dryRun = req.query.dryRun === '1' || req.body?.dryRun === true;
+    // Optional trader override of the canonical "full size." Required when the
+    // canonical math caps the position below the actual L1 fill (e.g., CDNS:
+    // bought 27 shares, canonical full size = 25 shares due to wide stop +
+    // 1% NAV vitality cap → all L2-L5 targets compute to 0). The trader can
+    // override to pyramid up beyond canonical sizing.
+    const targetTotalShares = req.body?.targetTotalShares != null
+      ? Math.floor(+req.body.targetTotalShares)
+      : null;
 
     const position = await db.collection('pnthr_portfolio').findOne({
       id: req.params.id, ownerId: req.user.userId,
@@ -2444,13 +2452,62 @@ app.post('/api/positions/:id/convert-to-pyramid', authenticateJWT, async (req, r
     const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
     const nav     = +profile?.accountSize || 100000;
 
-    // computeLotPlan reads fills[1] as the L1 anchor. We're keeping the actual
-    // L1 share count from the TWS fill, so the L1-aware redistribution path
-    // computes L2-L5 off the actual L1 fill (not the canonical L1 recommendation).
-    // This matches what the user sees in the Live table.
-    const lots = computeLotPlan(position, nav);
-    if (!lots.length || lots.every(l => l.targetShares <= 0)) {
-      return res.status(400).json({ error: 'Lot plan computed all zeros — check entry, original stop, and NAV' });
+    // Compute the lot plan. Two paths:
+    //   1. No override → canonical computeLotPlan (L1-aware, capped by
+    //      vitality + ticker cap). Same math the Live table uses.
+    //   2. Override → bypass cap, distribute (override - L1) across L2-L5
+    //      using the 30/25/20/10 weights (sum 85, same as canonical L1-aware
+    //      redistribution). Trigger prices come from the canonical 0/3/6/10/14
+    //      offset table off the actual L1 fill price.
+    let lots;
+    if (targetTotalShares != null && targetTotalShares > 0) {
+      const lot1Actual    = +lot1.shares;
+      const anchor        = +lot1.price;
+      const isLong        = (position.direction || 'LONG').toUpperCase() !== 'SHORT';
+      const remaining     = Math.max(0, targetTotalShares - lot1Actual);
+      const l2 = Math.round(remaining * 30 / 85);
+      const l3 = Math.round(remaining * 25 / 85);
+      const l4 = Math.round(remaining * 20 / 85);
+      const l5 = Math.max(0, remaining - l2 - l3 - l4);
+      const overrideShares = [lot1Actual, l2, l3, l4, l5];
+      const LOT_OFFSETS = [0, 0.03, 0.06, 0.10, 0.14];
+      const LOT_NAMES   = ['The Scent', 'The Stalk', 'The Strike', 'The Jugular', 'The Kill'];
+      const STRIKE_PCT  = [0.35, 0.25, 0.20, 0.12, 0.08];
+      let cumulative = 0;
+      lots = overrideShares.map((tgt, i) => {
+        cumulative += tgt;
+        const triggerPrice = isLong
+          ? +(anchor * (1 + LOT_OFFSETS[i])).toFixed(2)
+          : +(anchor * (1 - LOT_OFFSETS[i])).toFixed(2);
+        return {
+          lot:                    i + 1,
+          name:                   LOT_NAMES[i],
+          pct:                    STRIKE_PCT[i],
+          offsetPct:              Math.round(LOT_OFFSETS[i] * 100),
+          targetShares:           tgt,
+          cumulativeTargetShares: cumulative,
+          triggerPrice,
+          filled:        i === 0,
+          actualPrice:   i === 0 ? +lot1.price : null,
+          actualShares:  i === 0 ? lot1Actual : 0,
+          anchor,
+          override:      true,
+        };
+      });
+    } else {
+      lots = computeLotPlan(position, nav);
+      if (!lots.length || lots.every(l => l.targetShares <= 0)) {
+        // Canonical math says no shares to add — let the client know so it
+        // can prompt the trader for an override total instead of failing.
+        return res.status(200).json({
+          dryRun:    true,
+          needsOverride: true,
+          positionId: position.id,
+          ticker:    position.ticker,
+          message:   'Canonical pyramid math returned 0 shares for L2-L5 (position is at vitality/ticker-cap ceiling at the current Lot 1 fill). Provide targetTotalShares to override.',
+          currentL1: { shares: lot1.shares, price: lot1.price, date: lot1.date },
+        });
+      }
     }
 
     // Build the new fills structure. L1 keeps the actual TWS fill data (shares,

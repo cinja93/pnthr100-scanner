@@ -829,6 +829,95 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
     return () => clearInterval(iv);
   }, [fetchData]);
 
+  // Convert a single-shot auto-opened position into a real 5-lot pyramid.
+  // Two-step UX: dry-run preview → if canonical math returns 0 sh L2-L5
+  // (CDNS pattern), prompt the trader for an override target. Otherwise
+  // confirm the canonical plan + apply.
+  const handleConvertToPyramid = useCallback(async (positionId, ticker) => {
+    if (!positionId) return;
+    try {
+      // Step 1: dry-run with no override.
+      const r0 = await fetch(`${API_BASE}/api/positions/${positionId}/convert-to-pyramid?dryRun=1`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!r0.ok) {
+        const e = await r0.json().catch(() => ({}));
+        alert(`Preview failed: ${e.error || `HTTP ${r0.status}`}`);
+        return;
+      }
+      const preview = await r0.json();
+
+      let body = {};
+      const planLinesFromArr = (arr) => arr.map(l => {
+        if (l.lot === 1) return `L1 (${l.name}): ${l.actualShares} sh @ $${l.actualPrice} — already filled`;
+        return `L${l.lot} (${l.name}): ${l.targetShares} sh @ trigger $${l.triggerPrice}`;
+      }).join('\n');
+
+      if (preview.needsOverride) {
+        // Canonical math returned all zeros. Ask for an override total.
+        const l1Shares = +preview.currentL1?.shares || 0;
+        const suggested = String(Math.max(l1Shares + 1, Math.round(l1Shares * 2))); // default ≈ 2× L1
+        const input = window.prompt(
+          `${ticker}: canonical pyramid math says no shares to add (you're at the vitality/ticker-cap ceiling at the current Lot 1 fill of ${l1Shares} sh).\n\n` +
+          `If you want to pyramid up beyond canonical sizing, enter your TARGET TOTAL SHARES (including the ${l1Shares} you already hold).\n\n` +
+          `Cancel to abort.`,
+          suggested
+        );
+        if (input == null) return;
+        const target = Math.floor(+input);
+        if (!(target > l1Shares)) {
+          alert(`Target total must be greater than current ${l1Shares} shares.`);
+          return;
+        }
+        // Re-preview with override.
+        const r1 = await fetch(`${API_BASE}/api/positions/${positionId}/convert-to-pyramid?dryRun=1`, {
+          method: 'POST',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetTotalShares: target }),
+        });
+        if (!r1.ok) {
+          const e = await r1.json().catch(() => ({}));
+          alert(`Override preview failed: ${e.error || `HTTP ${r1.status}`}`);
+          return;
+        }
+        const previewOverride = await r1.json();
+        const ok = window.confirm(
+          `Convert ${ticker} to a 5-lot pyramid (target total ${target} shares)?\n\n` +
+          planLinesFromArr(previewOverride.plan || []) +
+          '\n\nOn confirm, PNTHR writes this plan and the lot-trigger cron stages L2-L5 BUY/SELL STOPs in TWS within ~60s.'
+        );
+        if (!ok) return;
+        body = { targetTotalShares: target };
+      } else {
+        const ok = window.confirm(
+          `Convert ${ticker} to a 5-lot pyramid?\n\n` +
+          planLinesFromArr(preview.plan || []) +
+          '\n\nOn confirm, PNTHR writes this plan and the lot-trigger cron stages L2-L5 BUY/SELL STOPs in TWS within ~60s.'
+        );
+        if (!ok) return;
+      }
+
+      // Step 2: apply.
+      const r2 = await fetch(`${API_BASE}/api/positions/${positionId}/convert-to-pyramid`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r2.ok) {
+        const e = await r2.json().catch(() => ({}));
+        alert(`Convert failed: ${e.error || `HTTP ${r2.status}`}`);
+        return;
+      }
+      // Refresh so the row picks up the new plan + L2-L5 dots flip from
+      // (whatever they were) to red until the cron stages them in TWS.
+      await fetchData();
+    } catch (e) {
+      alert(`Convert failed: ${e.message || 'Network error'}`);
+    }
+  }, [fetchData]);
+
   const handleCellClick = (row) => {
     if (!row.actions?.length) return;
     const appAction = row.actions.find(a => a.type === 'app');
@@ -990,6 +1079,16 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
             if (sizing && sizing.totalShares > 0) targetShares = sizing.totalShares;
           }
           const currentShares = Math.abs(+row.ibkr?.shares || 0);
+
+          // Pyramid-eligibility flag: position exists, was opened single-shot
+          // (autoOpenedByIBKR or fills[1].pct=1.0), so no L2-L5 plan exists yet.
+          // The PYRAMID button shows ONLY on these rows so its presence is a
+          // one-glance "this position has no ratchet plan" indicator.
+          const isPyramidEligible = !!(
+            pos &&
+            row.command?.positionId &&
+            (pos.autoOpenedByIBKR === true || pos.fills?.[1]?.pct === 1.0)
+          );
 
           return (
             <div key={row.ticker} style={tickerBoxStyle}>
@@ -1158,6 +1257,37 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                             fontSize: 9, fontWeight: 800, display: 'inline-block',
                           }}>{ibStops.length} STOPS</div>
                         )}
+                        {/* PYRAMID button — only on single-shot positions
+                            (autoOpenedByIBKR or fills[1].pct=1.0). Visible
+                            without expanding the row, so its presence is a
+                            one-glance "this position has no L2-L5 ratchet
+                            plan" indicator. Clicking pops a confirm dialog
+                            with the proposed plan; if canonical math returns
+                            0 sh L2-L5, prompts for a target-total override. */}
+                        {isPyramidEligible && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation(); // don't toggle row expand
+                              handleConvertToPyramid(row.command.positionId, row.ticker);
+                            }}
+                            title="Convert this single-shot position into a 5-lot pyramid plan and auto-stage L2-L5 BUY/SELL STOPs in TWS"
+                            style={{
+                              marginTop: 6,
+                              padding: '4px 8px',
+                              background: '#FCF000',
+                              color: '#000',
+                              border: 'none',
+                              borderRadius: 3,
+                              fontSize: 9,
+                              fontWeight: 800,
+                              letterSpacing: '0.06em',
+                              cursor: 'pointer',
+                              display: 'inline-block',
+                              fontFamily: "'Inter', 'Segoe UI', sans-serif",
+                            }}
+                          >▲ PYRAMID</button>
+                        )}
                       </td>
                     )}
 
@@ -1260,15 +1390,20 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                           }}
                         >
                           {remaining.map(t => {
-                            // If target shares is 0 the plan has nothing to
-                            // add for this lot (position already at vitality /
-                            // ticker-cap ceiling). No action needed → green.
+                            // Three-state dot:
+                            //   • green = a matching STP IS staged in IBKR
+                            //   • gray  = no action needed (target shares = 0;
+                            //             position is at vitality/ticker-cap)
+                            //   • red   = SHOULD be staged but isn't
+                            // Pre-fix this collapsed gray + green into the same
+                            // green color, which made "intentionally not in
+                            // TWS" indistinguishable from "actually in TWS."
                             const noAction = !t.targetShares || t.targetShares <= 0;
-                            const dotStatus = noAction ? 'green'
+                            const dotStatus = noAction ? 'gray'
                                             : t.staged ? 'green'
                                             :            'red';
                             const dotTitle = noAction
-                              ? `Lot ${t.lot}: no shares to add (position already at size cap)`
+                              ? `Lot ${t.lot}: no shares to add (position already at size cap — click PYRAMID to override total size)`
                               : t.staged
                                 ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR`
                                 : `Lot ${t.lot}: NO pending ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)}`;

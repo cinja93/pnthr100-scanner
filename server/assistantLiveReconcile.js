@@ -261,30 +261,54 @@ function classifyStopShares(ibkrStops, cmdShr) {
 // Classify the overall ratchet-column status. The roll-up drives the row's
 // far-left card dot via buildRow's rowStatus computation.
 //
-// Gray  = all lots are COMPLETE (cumulative target ≤ position shares — i.e.,
-//         the position already covers every planned lot). This includes
-//         single-shot fills where canonical full size = L1 actual, and over-
-//         filled positions like QTUM (52 sh on a 19-sh canonical plan).
-//         No action needed → display says "you're done."
-// Green = next incomplete unfilled lot is staged in IBKR (or has 0 shares
-//         to add and is therefore implicitly OK).
-// Red   = next incomplete unfilled lot has shares to stage but no matching
-//         pending order in IBKR.
+// Standard raised 2026-05-05: green now requires the FULL pyramid (every
+// actionable lot through L5) to be staged in IBKR with correct share counts,
+// not just the next-up lot. Old behavior would show green as soon as L2 was
+// staged even if L3-L5 were missing — that hid real drift.
+//
+// Gray   = all lots COMPLETE (cumulative target ≤ position shares). The
+//          position already covers every planned lot. This includes over-
+//          filled positions like QTUM (52 sh on a 19-sh canonical plan).
+//          No action needed.
+// Green  = every actionable lot (incomplete + unfilled + shares > 0) is
+//          staged in IBKR with the correct share count.
+// Yellow = every actionable lot is staged at the right price/side, but
+//          ≥1 has the wrong share count.
+// Red    = ≥1 actionable lot is not staged in IBKR.
 function classifyLotTriggers(enrichedTriggers) {
   // If every lot is "complete" (position covers cumulative target), the
   // pyramid is done. No further action.
   if (enrichedTriggers.length > 0 && enrichedTriggers.every(t => t.complete)) {
     return { status: 'gray', reason: 'All lots covered — position is at or above full plan size' };
   }
-  // Next ACTIONABLE lot — incomplete + unfilled.
-  const next = enrichedTriggers.find(t => !t.filled && !t.complete);
-  if (!next) return { status: 'gray', reason: 'all lots filled or covered' };
-  if (!next.targetShares || next.targetShares <= 0) {
-    return { status: 'green', reason: 'position already at size cap — no more shares to add' };
+
+  // Actionable = unfilled, not yet covered by position, and plan calls for >0 sh.
+  const actionable = enrichedTriggers.filter(t =>
+    !t.filled && !t.complete && t.targetShares && t.targetShares > 0
+  );
+  if (actionable.length === 0) {
+    return { status: 'gray', reason: 'No more lots to stage — position at plan size or cap' };
   }
-  return next.staged
-    ? { status: 'green', reason: `Next lot (L${next.lot}) staged in IBKR` }
-    : { status: 'red',   reason: `Next lot (L${next.lot}) NOT staged in IBKR` };
+
+  // Any actionable lot missing in TWS → red.
+  const unstaged = actionable.filter(t => !t.staged);
+  if (unstaged.length > 0) {
+    const lots = unstaged.map(t => `L${t.lot}`).join(', ');
+    return { status: 'red', reason: `Lot(s) not staged in IBKR: ${lots}` };
+  }
+
+  // All staged at right price/side, but any with share mismatch → yellow.
+  const mismatched = actionable.filter(t => (t.stagedShares || 0) !== t.targetShares);
+  if (mismatched.length > 0) {
+    const detail = mismatched.map(t =>
+      `L${t.lot} (plan ${t.targetShares} sh, TWS ${t.stagedShares || 0} sh)`
+    ).join('; ');
+    return { status: 'yellow', reason: `Share count mismatch on ${mismatched.length} lot(s): ${detail}` };
+  }
+
+  // Every actionable lot staged with correct shares.
+  const lots = actionable.map(t => `L${t.lot}`).join(', ');
+  return { status: 'green', reason: `All actionable lots staged with correct shares (${lots})` };
 }
 
 // ── Row builder ──────────────────────────────────────────────────────────────
@@ -383,9 +407,17 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
     });
   }
 
+  // Pyramid complete = every planned lot is covered by the actual position
+  // (no actionable shares left to stage). When true, the position is in
+  // "maintenance mode" — only stop ratchets remain. Client renders these
+  // cards with a light green background to visually flag them as done-growing.
+  const pyramidComplete = enrichedLotTriggers.length > 0
+    && enrichedLotTriggers.every(t => t.complete);
+
   return {
     ticker,
     rowStatus,
+    pyramidComplete,
     ibkr: {
       hasPosition: ibkrHas,
       direction:   ibkrDir,

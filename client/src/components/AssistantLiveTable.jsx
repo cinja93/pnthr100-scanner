@@ -1014,8 +1014,15 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
             pos.pyramidDismissed !== true
           );
 
+          // Pyramid in maintenance mode (every lot covered by position) gets
+          // a light green tinted background so Scott can see at a glance which
+          // tickers are done growing and only need stop-ratchet attention.
+          const cardStyle = row.pyramidComplete
+            ? { ...tickerBoxStyle, background: 'rgba(40, 167, 69, 0.10)' }
+            : tickerBoxStyle;
+
           return (
-            <div key={row.ticker} style={tickerBoxStyle}>
+            <div key={row.ticker} style={cardStyle}>
               {/* Live-price badge — top-right corner. Refreshes with the
                   reconcile poll (every 60s). Hidden when price is unknown. */}
               {row.lastPrice != null && (

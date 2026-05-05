@@ -5310,6 +5310,94 @@ app.get('/api/admin/list-executions', authenticateJWT, requireAdmin, async (req,
   }
 });
 
+// Phase 4h — surgical fills repair. Used to fix positions where fills[1] was
+// stuffed with the full IBKR share count (so future auto-records would
+// over-count). Two operation types in one batch endpoint:
+//   { op: 'split', ticker, l1Shares, l1Price, l2Shares, l2Price, fillDate, l2ExecId }
+//      Sets fills.1 to {filled, shares=l1Shares, price=l1Price, date=fillDate}
+//      Sets fills.2 to {filled, shares=l2Shares, price=l2Price, date=fillDate, execId=l2ExecId, source='MANUAL_SPLIT'}
+//      Updates the matching exec doc to type=AUTO_RECORD_LOT_FILL with lot=2.
+//   { op: 'mark_inert', execIds: [...] }
+//      Sets type='IGNORED_NOT_PYRAMID_ADD' on each exec doc so future replays
+//      and live syncs skip them. Used for stale dry-run markers on
+//      single-shot entries (no L2 needed).
+// Default dryRun=true; pass body.dryRun=false to actually write.
+app.post('/api/admin/fills-surgery', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const dryRun = req.body?.dryRun !== false;
+    const ops = Array.isArray(req.body?.ops) ? req.body.ops : [];
+    if (ops.length === 0) return res.status(400).json({ error: 'body.ops required' });
+
+    const planned = []; // what we would do (or did)
+    for (const op of ops) {
+      if (op.op === 'split') {
+        const ticker = (op.ticker || '').toUpperCase();
+        const pos = await db.collection('pnthr_portfolio').findOne(
+          { ownerId: userId, ticker, status: { $in: ['ACTIVE', 'PARTIAL'] } }
+        );
+        if (!pos) { planned.push({ op: 'split', ticker, ok: false, reason: 'NO_POSITION' }); continue; }
+
+        const l1Shares = +op.l1Shares, l1Price = +op.l1Price;
+        const l2Shares = +op.l2Shares, l2Price = +op.l2Price;
+        const fillDate = op.fillDate || new Date().toISOString().slice(0, 10);
+        const execId   = op.l2ExecId;
+        if (!Number.isFinite(l1Shares) || !Number.isFinite(l2Shares) ||
+            !Number.isFinite(l1Price)  || !Number.isFinite(l2Price)) {
+          planned.push({ op: 'split', ticker, ok: false, reason: 'BAD_NUMERICS' }); continue;
+        }
+
+        const before = {
+          fills1: pos.fills?.[1] || null,
+          fills2: pos.fills?.[2] || null,
+        };
+        const after = {
+          fills1: { filled: true, shares: l1Shares, price: l1Price, date: pos.fills?.[1]?.date || fillDate, source: pos.fills?.[1]?.source || 'MANUAL_SPLIT_L1' },
+          fills2: { filled: true, shares: l2Shares, price: l2Price, date: fillDate, execId, source: 'MANUAL_SPLIT_L2' },
+        };
+        const sumAfter = l1Shares + l2Shares;
+        const avgAfter = (l1Shares*l1Price + l2Shares*l2Price) / sumAfter;
+
+        if (!dryRun) {
+          await db.collection('pnthr_portfolio').updateOne(
+            { id: pos.id, ownerId: userId },
+            { $set: {
+              'fills.1': after.fills1,
+              'fills.2': after.fills2,
+              updatedAt: new Date(),
+            } }
+          );
+          if (execId) {
+            await db.collection('pnthr_ibkr_executions').updateOne(
+              { ownerId: userId, execId },
+              { $set: { type: 'AUTO_RECORD_LOT_FILL', lot: 2, manualSplitAt: new Date() } }
+            );
+          }
+        }
+        planned.push({ op: 'split', ticker, ok: true, before, after, sumAfter, avgAfter: +avgAfter.toFixed(4) });
+      } else if (op.op === 'mark_inert') {
+        const ids = Array.isArray(op.execIds) ? op.execIds : [];
+        if (!dryRun && ids.length > 0) {
+          const r = await db.collection('pnthr_ibkr_executions').updateMany(
+            { ownerId: userId, execId: { $in: ids } },
+            { $set: { type: 'IGNORED_NOT_PYRAMID_ADD', markedInertAt: new Date() } }
+          );
+          planned.push({ op: 'mark_inert', execIds: ids, ok: true, modified: r.modifiedCount });
+        } else {
+          planned.push({ op: 'mark_inert', execIds: ids, ok: true, dryRun: true });
+        }
+      } else {
+        planned.push({ op: op.op, ok: false, reason: 'UNKNOWN_OP' });
+      }
+    }
+    res.json({ dryRun, count: planned.length, results: planned });
+  } catch (err) {
+    console.error('[admin/fills-surgery]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4h — undo a recorded lot fill. Used to reverse an auto-record that
 // double-counted shares because the position's fills[1] was pre-aggregated to
 // include L2's shares (so adding fills[2] inflated sum-of-fills above IBKR's

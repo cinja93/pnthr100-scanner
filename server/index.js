@@ -5286,6 +5286,30 @@ app.post('/api/admin/replay-lot-fills', authenticateJWT, requireAdmin, async (re
   }
 });
 
+// Phase 4h — read-only audit: list raw exec docs for a ticker, sorted by
+// processedAt ascending, with full price/shares/side/type/exitReason. Lets
+// the admin reconstruct the true entry/lot history when the canonical
+// fills[N] state is suspect (e.g., L1 was stuffed with full IBKR shares).
+app.get('/api/admin/list-executions', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const ticker = (req.query.ticker || '').toUpperCase();
+    const days   = +(req.query.days || 14);
+    if (!ticker) return res.status(400).json({ error: 'ticker required' });
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const docs = await db.collection('pnthr_ibkr_executions')
+      .find({ ownerId: userId, symbol: ticker, processedAt: { $gte: cutoff } })
+      .project({ _id: 0, execId: 1, symbol: 1, side: 1, shares: 1, price: 1, type: 1, lot: 1, exitReason: 1, processedAt: 1, permId: 1 })
+      .sort({ processedAt: 1 })
+      .toArray();
+    res.json({ ticker, days, count: docs.length, executions: docs });
+  } catch (err) {
+    console.error('[admin/list-executions]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4h — undo a recorded lot fill. Used to reverse an auto-record that
 // double-counted shares because the position's fills[1] was pre-aggregated to
 // include L2's shares (so adding fills[2] inflated sum-of-fills above IBKR's

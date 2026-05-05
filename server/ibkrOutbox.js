@@ -244,6 +244,52 @@ export function sanityCheckModifyLotTrigger({ position, ibkrPosition, lot, oldTr
   return placeCheck;
 }
 
+// ── Concentration cap (10% NAV hard gate on adds) ───────────────────────────
+// Set 2026-05-05 after CRWD's runaway loop (server cron + offline bridge =
+// queue backlog → bridge wakes → drains all PLACE/MODIFY → position grew to
+// 20% NAV before manual intervention). When a single ticker's notional ≥ 10%
+// of accountSize, refuse PLACE_LOT_TRIGGER / MODIFY_LOT_TRIGGER. Stop and
+// exit commands are never gated.
+//
+// Computation: shares from totalFilledShares (or sum of fills[N].shares),
+// price from position.currentPrice (most recent FMP/IBKR sync), nav from
+// user_profiles.accountSize (default 100k matches the rest of the server).
+const CONCENTRATION_CAP_PCT = 0.10;
+const DEFAULT_NAV_FOR_CAP   = 100_000;
+
+async function checkConcentrationCap(db, ownerId, ticker) {
+  const pos = await db.collection('pnthr_portfolio').findOne(
+    { ownerId, ticker, status: { $in: ['ACTIVE', 'PARTIAL'] } },
+    { projection: { fills: 1, currentPrice: 1, totalFilledShares: 1, shares: 1 } },
+  );
+  if (!pos) return { over: false, reason: 'NO_POSITION' };
+
+  let shares = +pos.totalFilledShares;
+  if (!Number.isFinite(shares) || shares <= 0) {
+    shares = Object.values(pos.fills || {}).reduce(
+      (s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0,
+    );
+  }
+  if (!Number.isFinite(shares) || shares <= 0) {
+    shares = Math.abs(+pos.shares || 0);
+  }
+  const price = +pos.currentPrice || 0;
+  if (!shares || !price) return { over: false, reason: 'INSUFFICIENT_DATA' };
+
+  const profile = await db.collection('user_profiles').findOne(
+    { userId: ownerId }, { projection: { accountSize: 1 } },
+  );
+  const nav = +profile?.accountSize || DEFAULT_NAV_FOR_CAP;
+  if (!nav) return { over: false, reason: 'NO_NAV' };
+
+  const notional = shares * price;
+  const concentration = notional / nav;
+  return {
+    over:  concentration >= CONCENTRATION_CAP_PCT,
+    concentration, shares, price, nav, notional,
+  };
+}
+
 // ── Duplicate suppression (60s window) ──────────────────────────────────────
 // Discriminator scopes the dedup key to the actual command identity rather
 // than just (ticker, command). Without this, a single "Sync Lot Triggers Now"
@@ -303,6 +349,34 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
   // Rule 2 — dedup
   if (!opts.skipDedup && await isDuplicate(db, ownerId, request.ticker, command, request)) {
     return { skipped: 'DUPLICATE_WITHIN_60S' };
+  }
+
+  // Rule 2b — pending-state dedup for adds. The 60s window above can be defeated
+  // when the bridge is offline for hours: every minute past the window enqueues
+  // a fresh PLACE_LOT_TRIGGER. When the bridge wakes up it drains them all into
+  // TWS — that's exactly how PBF got 12 identical BUY STPs at $50.41 on
+  // 2026-05-05. For PLACE/MODIFY of lot triggers, refuse if ANY pending
+  // command of the same identity already exists, regardless of age.
+  if (!opts.skipDedup && (command === 'PLACE_LOT_TRIGGER' || command === 'MODIFY_LOT_TRIGGER')) {
+    const existing = await db.collection(COLLECTION).findOne({
+      ownerId,
+      'request.ticker': request.ticker,
+      command,
+      status: 'PENDING',
+      ...dedupExtraMatch(command, request),
+    });
+    if (existing) return { skipped: 'PENDING_DUPLICATE_EXISTS' };
+  }
+
+  // Rule 5 — concentration cap (10% NAV). HARD GATE on adds: when a ticker's
+  // current notional ≥ 10% of NAV, refuse any command that could grow it.
+  // Set 2026-05-05 after CRWD's runaway loop hit 20%. Protective/exit commands
+  // (PLACE_STOP, MODIFY_STOP, CANCEL_*, SELL_POSITION) are never gated.
+  if (command === 'PLACE_LOT_TRIGGER' || command === 'MODIFY_LOT_TRIGGER') {
+    const cap = await checkConcentrationCap(db, ownerId, request.ticker);
+    if (cap.over) {
+      return { skipped: `CONCENTRATION_CAP_${(cap.concentration * 100).toFixed(1)}PCT_GTE_10PCT` };
+    }
   }
 
   const doc = {

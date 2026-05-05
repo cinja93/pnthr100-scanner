@@ -5216,9 +5216,14 @@ app.post('/api/admin/replay-lot-fills', authenticateJWT, requireAdmin, async (re
       const addingDir = exec.side === 'BOT' ? 'LONG' : exec.side === 'SLD' ? 'SHORT' : null;
       if (!addingDir) { results.skipped.push({ symbol, execId: exec.execId, reason: 'NOT_AN_ADD_SIDE' }); continue; }
 
-      // Skip exits — these have type='STOP_HIT'/'MANUAL'/'PARTIAL_AUTO' and
-      // are already recorded canonically. Skip prior auto-records too.
-      if (['AUTO_RECORD_LOT_FILL', 'AUTO_RECORD_LOT_FILL_DRY_RUN'].includes(exec.type)) {
+      // Skip exits and prior REAL auto-records. AUTO_RECORD_LOT_FILL_DRY_RUN
+      // is NOT skipped: that marker is only "we saw this exec in dry-run mode"
+      // — the position's fills[N] was never actually written. If the user
+      // flipped the env var off mid-stream (as happened with MU 2026-05-04),
+      // the exec gets stuck unless we let replay retry it. recordLotFill is
+      // idempotent (LOT_ALREADY_FILLED / NO_MATCHING_LOT both safe), so
+      // re-running a stale dry-run marker is harmless.
+      if (exec.type === 'AUTO_RECORD_LOT_FILL') {
         results.skipped.push({ symbol, execId: exec.execId, reason: 'ALREADY_RECORDED', lot: exec.lot });
         continue;
       }

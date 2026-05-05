@@ -351,13 +351,29 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
     return { skipped: 'DUPLICATE_WITHIN_60S' };
   }
 
-  // Rule 2b — pending-state dedup for adds. The 60s window above can be defeated
-  // when the bridge is offline for hours: every minute past the window enqueues
-  // a fresh PLACE_LOT_TRIGGER. When the bridge wakes up it drains them all into
-  // TWS — that's exactly how PBF got 12 identical BUY STPs at $50.41 on
-  // 2026-05-05. For PLACE/MODIFY of lot triggers, refuse if ANY pending
-  // command of the same identity already exists, regardless of age.
-  if (!opts.skipDedup && (command === 'PLACE_LOT_TRIGGER' || command === 'MODIFY_LOT_TRIGGER')) {
+  // Rule 2b — pending-state dedup. The 60s window above can be defeated when
+  // the bridge is offline for hours OR when TWS rate-limits same-symbol
+  // operations: every minute past the window enqueues a fresh duplicate.
+  //
+  // Two failure modes this guards against:
+  //   1. PLACE/MODIFY adds — bridge offline for hours stacks identical lot
+  //      trigger places. PBF had 12 identical BUY STPs at $50.41 on 2026-05-05.
+  //   2. CANCEL/MODIFY of existing orders — bridge online but TWS rate-limits
+  //      same-symbol cancels (RATE_LIMITED:SYMBOL_RATE_LIMIT). Orphan janitor
+  //      sees same orders next tick (IBKR snapshot cached, cancels haven't
+  //      landed) and re-enqueues. 1,275 FAILED CANCEL_ORDERs in 8 min on
+  //      2026-05-05 evening came from this loop.
+  //
+  // For any command with a stable identity discriminator (permId for CANCEL,
+  // oldPermId for MODIFY_STOP, lot for PLACE/MODIFY_LOT_TRIGGER), refuse if
+  // ANY pending command of the same identity already exists, regardless of age.
+  const PENDING_DEDUP_COMMANDS = new Set([
+    'PLACE_LOT_TRIGGER',
+    'MODIFY_LOT_TRIGGER',
+    'CANCEL_ORDER',
+    'MODIFY_STOP',
+  ]);
+  if (!opts.skipDedup && PENDING_DEDUP_COMMANDS.has(command)) {
     const existing = await db.collection(COLLECTION).findOne({
       ownerId,
       'request.ticker': request.ticker,

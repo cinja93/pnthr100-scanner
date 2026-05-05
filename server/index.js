@@ -5286,6 +5286,48 @@ app.post('/api/admin/replay-lot-fills', authenticateJWT, requireAdmin, async (re
   }
 });
 
+// Phase 4 — bulk targeted CANCEL_ORDER enqueue. Used to clean up duplicate /
+// orphan TWS orders surgically, especially after a bridge-offline backlog
+// drained and created the 2026-05-05 PBF 12-dupe / CSCO duplicate-pyramid /
+// COP+TXN orphan mess. Body: { dryRun?, cancels: [{ticker, permId, reason?}] }.
+// Each entry enqueues a CANCEL_ORDER with skipDedup so prior cancels in the
+// 60s window don't block (caller is asserting they want this exact cancel).
+app.post('/api/admin/bulk-cancel', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { enqueue: enqueueOutbox } = await import('./ibkrOutbox.js');
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const dryRun = req.body?.dryRun !== false;
+    const cancels = Array.isArray(req.body?.cancels) ? req.body.cancels : [];
+    if (cancels.length === 0) return res.status(400).json({ error: 'body.cancels required: [{ticker, permId, reason}]' });
+
+    const results = [];
+    for (const c of cancels) {
+      const ticker = (c.ticker || '').toUpperCase();
+      const permId = c.permId;
+      const reason = c.reason || 'BULK_CLEANUP_2026_05_05';
+      if (!ticker || !permId) { results.push({ ticker, permId, ok: false, skip: 'BAD_INPUT' }); continue; }
+
+      if (dryRun) {
+        results.push({ ticker, permId, ok: true, dryRun: true });
+        continue;
+      }
+
+      const enq = await enqueueOutbox(db, userId, 'CANCEL_ORDER', {
+        ticker, permId,
+        source: 'ADMIN_BULK_CANCEL',
+        reason,
+      }, { skipDedup: true });
+      results.push({ ticker, permId, ok: !enq.skipped, skip: enq.skipped || null, id: enq.id || null });
+    }
+    const enqueued = results.filter(r => r.ok && !r.dryRun).length;
+    res.json({ dryRun, total: results.length, enqueued, results });
+  } catch (err) {
+    console.error('[admin/bulk-cancel]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4 — outbox purge. Marks PENDING commands as CANCELLED so the bridge
 // poller skips them (findPending filters by status='PENDING'). Used to clear
 // the queue safely before a bridge restart so the bridge doesn't drain stale

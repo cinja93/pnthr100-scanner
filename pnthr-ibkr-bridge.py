@@ -457,9 +457,18 @@ class PNTHRBridge(EWrapper, EClient):
                 break
         if not target:
             return {'ok': True, 'permId': perm_id, 'status': 'ALREADY_GONE'}
+        # ibapi signature changed across versions — older releases take just
+        # cancelOrder(orderId), newer ones take cancelOrder(orderId, manualOrderCancelTime).
+        # Bridge crashed silently on 2026-05-05 13:52 because it always passed
+        # 2 args against an older ibapi installation. Try the 2-arg call first,
+        # fall back to 1-arg on TypeError so either ibapi version works.
         try:
-            # Pass empty string for OrderCancel since we don't need extra params.
             self.cancelOrder(target['orderId'], '')
+        except TypeError:
+            try:
+                self.cancelOrder(target['orderId'])
+            except Exception as e:
+                return {'ok': False, 'error': f'CANCEL_THREW: {e}'}
         except Exception as e:
             return {'ok': False, 'error': f'CANCEL_THREW: {e}'}
         st = self._wait_for_status(target['orderId'], ('Cancelled', 'ApiCancelled'), timeout=10.0)

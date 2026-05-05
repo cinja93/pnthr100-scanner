@@ -150,21 +150,27 @@ function filterProtectiveStops(ibkrStops, direction) {
 
 // For each unfilled lot trigger, check if there's a matching pending order in
 // IBKR (same side + same price within tolerance). Returns an array enriched
-// with `staged: bool` and `complete: bool` so the client can render the
-// right dot color:
+// with `staged: bool`, `stagedShares: number`, and `complete: bool` so the
+// client can render the right dot color:
 //   • complete (cumulative target ≤ position shares) → no action needed; gray
-//   • staged                                          → order in TWS; green
-//   • neither                                          → should be staged but isn't; red
+//   • staged AND stagedShares == targetShares        → order in TWS; green
+//   • staged BUT stagedShares != targetShares        → price right, share count
+//     wrong; yellow (e.g., GOOGL plan 3 sh @ $399.73, TWS has 2 sh @ same price)
+//   • not staged                                     → should be staged but isn't; red
+//
+// Shares are summed across all matching orders so multi-order TWS state still
+// reconciles cleanly (1 sh + 2 sh @ same price = 3 sh staged, matches plan).
 function enrichLotTriggersWithIbkrStatus(triggers, ibkrStops, ibkrShares = 0) {
   const heldShares = Math.abs(+ibkrShares || 0);
   return triggers.map(t => {
     const complete = heldShares >= (t.cumulativeTargetShares || 0);
-    if (t.filled) return { ...t, staged: null, complete }; // already happened — no dot
-    const match = ibkrStops.find(s =>
+    if (t.filled) return { ...t, staged: null, stagedShares: 0, complete }; // already happened — no dot
+    const matches = ibkrStops.filter(s =>
       s.action === t.expectedSide &&
       Math.abs(+s.stopPrice - t.triggerPrice) < 0.05
     );
-    return { ...t, staged: !!match, complete };
+    const stagedShares = matches.reduce((sum, m) => sum + Math.abs(+m.shares || 0), 0);
+    return { ...t, staged: matches.length > 0, stagedShares, complete };
   });
 }
 

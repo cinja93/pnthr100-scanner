@@ -1314,27 +1314,36 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                           }}
                         >
                           {remaining.map(t => {
-                            // Four-state dot, in priority order:
+                            // Five-state dot, in priority order:
                             //   • complete (gray)  — position already covers
                             //     this lot's cumulative target. No more shares
                             //     needed. e.g., QTUM 5/4: 52 sh held against
                             //     a 19-sh canonical plan = all lots done.
                             //   • zero target (gray) — plan calls for 0 sh
                             //     here (vitality/ticker-cap reached).
-                            //   • staged (green) — order IS in TWS.
+                            //   • staged + shares match (green) — TWS order
+                            //     at right price AND right share count.
+                            //   • staged + shares MISMATCH (yellow) — TWS has
+                            //     an order at the right price but wrong share
+                            //     count (e.g., GOOGL plan 3 sh @ $399.73, TWS
+                            //     has 2 sh — bug surfaced 2026-05-05).
                             //   • red — should be staged but isn't.
-                            const isComplete = t.complete === true;
-                            const noAction   = isComplete || !t.targetShares || t.targetShares <= 0;
-                            const dotStatus  = noAction ? 'gray'
-                                             : t.staged ? 'green'
-                                             :            'red';
+                            const isComplete  = t.complete === true;
+                            const noAction    = isComplete || !t.targetShares || t.targetShares <= 0;
+                            const sharesMatch = (t.stagedShares || 0) === t.targetShares;
+                            const dotStatus  = noAction                   ? 'gray'
+                                             : t.staged && sharesMatch    ? 'green'
+                                             : t.staged && !sharesMatch   ? 'yellow'
+                                             :                              'red';
                             const dotTitle = isComplete
                               ? `Lot ${t.lot}: position already covers this lot's cumulative target — no action needed`
                               : noAction
                                 ? `Lot ${t.lot}: no shares to add (position at size cap — click PYRAMID to override total size)`
-                                : t.staged
-                                  ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR`
-                                  : `Lot ${t.lot}: NO pending ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)}`;
+                                : t.staged && sharesMatch
+                                  ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR (${t.targetShares} sh ✓)`
+                                  : t.staged && !sharesMatch
+                                    ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR but SHARE COUNT MISMATCH — plan ${t.targetShares} sh, TWS ${t.stagedShares || 0} sh`
+                                    : `Lot ${t.lot}: NO pending ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)}`;
                             return (
                               <div key={t.lot} style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'flex-end',

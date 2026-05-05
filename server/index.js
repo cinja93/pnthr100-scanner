@@ -5286,6 +5286,58 @@ app.post('/api/admin/replay-lot-fills', authenticateJWT, requireAdmin, async (re
   }
 });
 
+// Phase 4 — outbox purge. Marks PENDING commands as CANCELLED so the bridge
+// poller skips them (findPending filters by status='PENDING'). Used to clear
+// the queue safely before a bridge restart so the bridge doesn't drain stale
+// commands all at once into TWS (the 2026-05-05 PBF 12-dupe and CRWD runaway
+// scenario). Body: { dryRun?: bool, command?: string, ticker?: string }.
+// dryRun default true. Cron will re-enqueue current/needed commands on the
+// next tick — anything truly stale stays cancelled.
+app.post('/api/admin/outbox-purge-pending', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const dryRun = req.body?.dryRun !== false;
+    const filter = { ownerId: userId, status: 'PENDING' };
+    if (req.body?.command) filter.command = req.body.command;
+    if (req.body?.ticker)  filter['request.ticker'] = (req.body.ticker || '').toUpperCase();
+
+    const matchingCount = await db.collection('pnthr_ibkr_outbox').countDocuments(filter);
+
+    // Distribution by (command, ticker) so we can show the impact.
+    const breakdown = await db.collection('pnthr_ibkr_outbox').aggregate([
+      { $match: filter },
+      { $group: { _id: { command: '$command', ticker: '$request.ticker' }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 30 },
+    ]).toArray();
+
+    let modified = 0;
+    if (!dryRun && matchingCount > 0) {
+      const r = await db.collection('pnthr_ibkr_outbox').updateMany(filter, {
+        $set: {
+          status: 'CANCELLED',
+          cancelledAt: new Date(),
+          cancelledBy: req.user.email || userId,
+          cancelReason: 'STALE_PRE_BRIDGE_RESTART_2026_05_05',
+        },
+      });
+      modified = r.modifiedCount;
+    }
+
+    res.json({
+      dryRun,
+      matchingCount,
+      modified,
+      filter: { command: req.body?.command || 'ALL', ticker: req.body?.ticker || 'ALL' },
+      breakdown: breakdown.map(b => ({ command: b._id.command, ticker: b._id.ticker, count: b.count })),
+    });
+  } catch (err) {
+    console.error('[admin/outbox-purge-pending]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4 — outbox processing health snapshot. Returns most-recent DONE/FAILED
 // timestamps + status counts so we can tell at a glance whether the bridge is
 // draining the queue. If "minutesSinceLastDone" > 5 during market hours, the

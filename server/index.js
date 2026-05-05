@@ -5286,6 +5286,30 @@ app.post('/api/admin/replay-lot-fills', authenticateJWT, requireAdmin, async (re
   }
 });
 
+// Phase 4 — outbox audit by ticker. Returns ALL outbox docs (not just last 50)
+// for a given ticker, sorted newest first. Used to debug why cancels for
+// stopped-out positions remain unprocessed (e.g., COP/TXN orphan stops).
+app.get('/api/admin/outbox-by-ticker', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const ticker = (req.query.ticker || '').toUpperCase();
+    if (!ticker) return res.status(400).json({ error: 'ticker required' });
+    const docs = await db.collection('pnthr_ibkr_outbox')
+      .find({ ownerId: userId, 'request.ticker': ticker })
+      .project({ id: 1, command: 1, request: 1, status: 1, createdAt: 1, executedAt: 1, errors: 1, response: 1 })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .toArray();
+    const counts = {};
+    for (const d of docs) counts[d.status] = (counts[d.status] || 0) + 1;
+    res.json({ ticker, total: docs.length, counts, docs });
+  } catch (err) {
+    console.error('[admin/outbox-by-ticker]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4h — read-only audit: list raw exec docs for a ticker, sorted by
 // processedAt ascending, with full price/shares/side/type/exitReason. Lets
 // the admin reconstruct the true entry/lot history when the canonical

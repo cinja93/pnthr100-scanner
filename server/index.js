@@ -5286,6 +5286,55 @@ app.post('/api/admin/replay-lot-fills', authenticateJWT, requireAdmin, async (re
   }
 });
 
+// Phase 4h — undo a recorded lot fill. Used to reverse an auto-record that
+// double-counted shares because the position's fills[1] was pre-aggregated to
+// include L2's shares (so adding fills[2] inflated sum-of-fills above IBKR's
+// total). Body: { undoes: [{ ticker, lot }, ...] }. For each entry, unsets
+// fills.{lot} on the position and reverts the matching exec doc's type back
+// to AUTO_RECORD_LOT_FILL_DRY_RUN so future replays can reconsider it.
+app.post('/api/admin/undo-lot-fill', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const undoes = Array.isArray(req.body?.undoes) ? req.body.undoes : [];
+    if (undoes.length === 0) return res.status(400).json({ error: 'body.undoes required: [{ticker, lot}]' });
+
+    const results = [];
+    for (const u of undoes) {
+      const ticker = (u.ticker || '').toUpperCase();
+      const lot    = +u.lot;
+      if (!ticker || !lot) { results.push({ ticker, lot, ok: false, reason: 'BAD_INPUT' }); continue; }
+
+      const pos = await db.collection('pnthr_portfolio').findOne({ ownerId: userId, ticker, status: { $in: ['ACTIVE', 'PARTIAL'] } });
+      if (!pos) { results.push({ ticker, lot, ok: false, reason: 'NO_POSITION' }); continue; }
+      const fillBefore = pos.fills?.[lot];
+      if (!fillBefore?.filled) { results.push({ ticker, lot, ok: false, reason: 'LOT_NOT_FILLED' }); continue; }
+
+      const upd = await db.collection('pnthr_portfolio').updateOne(
+        { id: pos.id, ownerId: userId },
+        { $unset: { [`fills.${lot}`]: '' }, $set: { updatedAt: new Date() } }
+      );
+
+      // Revert the matching exec doc so replay can reconsider it (or the user
+      // can decide to leave it as-is). Match by execId if we recorded one.
+      let execReverted = 0;
+      if (fillBefore.execId) {
+        const r = await db.collection('pnthr_ibkr_executions').updateOne(
+          { ownerId: userId, execId: fillBefore.execId, type: 'AUTO_RECORD_LOT_FILL' },
+          { $set: { type: 'AUTO_RECORD_LOT_FILL_DRY_RUN' }, $unset: { lot: '', ratchetTo: '', replayedAt: '' } }
+        );
+        execReverted = r.modifiedCount;
+      }
+
+      results.push({ ticker, lot, ok: upd.modifiedCount > 0, execReverted, removedShares: fillBefore.shares, removedPrice: fillBefore.price });
+    }
+    res.json({ count: results.length, results });
+  } catch (err) {
+    console.error('[admin/undo-lot-fill]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4 orphan janitor — manual trigger of orphanOrderJanitor logic.
 // Finds TWS STP/STP LMT orders for tickers with no ACTIVE/PARTIAL PNTHR
 // position (e.g., XYZ lot triggers left dangling after a stop hit) and

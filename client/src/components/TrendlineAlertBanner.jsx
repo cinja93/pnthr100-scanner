@@ -54,10 +54,10 @@ export default function TrendlineAlertBanner({ onNavigateToAssistant }) {
         <span style={{ fontSize: 18 }}>🔔</span>
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 13, letterSpacing: '0.04em' }}>
-            TRENDLINE BROKEN — {newest.ticker}
+            TRENDLINE BROKEN — ${newest.ticker}
           </div>
           <div style={{ fontSize: 12, opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {newest.message || `${newest.ticker} broke ${newest.breakDirection?.toUpperCase()} at $${newest.breakPrice?.toFixed(2)} (line: $${newest.lineValue?.toFixed(2)})`}
+            {newest.message?.startsWith('$') ? newest.message : `$${newest.ticker} broke ${newest.breakDirection?.toUpperCase()} at $${newest.breakPrice?.toFixed(2)} (line: $${newest.lineValue?.toFixed(2)})`}
           </div>
         </div>
         {restCount > 0 && (

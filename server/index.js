@@ -8274,7 +8274,7 @@ async function runTrendlineBreakSweep() {
       brokenAt: now,
       dismissedAt: null,
       // human-readable summary for the Assistant card
-      message: `${ln.ticker} — custom trendline broken ${breakDirection.toUpperCase()} at $${price.toFixed(2)} (line: $${lineToday.toFixed(2)})`,
+      message: `$${ln.ticker} — custom trendline broken ${breakDirection.toUpperCase()} at $${price.toFixed(2)} (line: $${lineToday.toFixed(2)})`,
     });
   }
   console.log(`[tl-sweep] checked ${lines.length} lines, fired ${brokenCount} alerts`);

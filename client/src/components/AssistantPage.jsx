@@ -3961,7 +3961,7 @@ export default function AssistantPage({ onNavigate }) {
                     }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <div style={{ fontSize: 13, color: '#fcf000', fontWeight: 700 }}>
-                          {a.ticker} — broke {a.breakDirection?.toUpperCase()}
+                          ${a.ticker} — broke {a.breakDirection?.toUpperCase()}
                         </div>
                         <div style={{ fontSize: 11, color: '#aaa' }}>
                           Price ${a.breakPrice?.toFixed(2)} vs trendline ${a.lineValue?.toFixed(2)}

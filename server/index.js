@@ -5286,6 +5286,39 @@ app.post('/api/admin/replay-lot-fills', authenticateJWT, requireAdmin, async (re
   }
 });
 
+// Phase 4 — outbox processing health snapshot. Returns most-recent DONE/FAILED
+// timestamps + status counts so we can tell at a glance whether the bridge is
+// draining the queue. If "minutesSinceLastDone" > 5 during market hours, the
+// bridge is stuck.
+app.get('/api/admin/outbox-health', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const lastDone = await db.collection('pnthr_ibkr_outbox')
+      .find({ ownerId: userId, status: 'DONE' })
+      .project({ command: 1, 'request.ticker': 1, executedAt: 1, createdAt: 1 })
+      .sort({ executedAt: -1 }).limit(5).toArray();
+    const lastFailed = await db.collection('pnthr_ibkr_outbox')
+      .find({ ownerId: userId, status: 'FAILED' })
+      .project({ command: 1, 'request.ticker': 1, errors: 1, createdAt: 1 })
+      .sort({ createdAt: -1 }).limit(5).toArray();
+    const oldestPending = await db.collection('pnthr_ibkr_outbox')
+      .find({ ownerId: userId, status: 'PENDING' })
+      .project({ command: 1, 'request.ticker': 1, createdAt: 1 })
+      .sort({ createdAt: 1 }).limit(5).toArray();
+    const counts = {};
+    for (const s of ['PENDING','EXECUTING','DONE','FAILED','STUCK']) {
+      counts[s] = await db.collection('pnthr_ibkr_outbox').countDocuments({ ownerId: userId, status: s });
+    }
+    const lastDoneAt = lastDone[0]?.executedAt || lastDone[0]?.createdAt || null;
+    const minutesSinceLastDone = lastDoneAt ? Math.round((Date.now() - new Date(lastDoneAt).getTime()) / 60000) : null;
+    res.json({ counts, minutesSinceLastDone, lastDone, lastFailed, oldestPending });
+  } catch (err) {
+    console.error('[admin/outbox-health]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4 — outbox audit by ticker. Returns ALL outbox docs (not just last 50)
 // for a given ticker, sorted newest first. Used to debug why cancels for
 // stopped-out positions remain unprocessed (e.g., COP/TXN orphan stops).

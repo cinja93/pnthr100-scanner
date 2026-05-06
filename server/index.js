@@ -5688,6 +5688,101 @@ app.get('/api/admin/tws-punch-list', authenticateJWT, requireAdmin, async (req, 
   }
 });
 
+// ── Ticker Forensic — full data dump for one ticker for root-cause debugging
+// of share/avg/stop drift. Returns:
+//   • Full PNTHR portfolio docs (active + closed in last 30d) with raw fills/exits
+//   • Current IBKR position snapshot for this ticker
+//   • All IBKR executions (latestExecutions) for this ticker
+//   • All pnthr_ibkr_executions processing records (DRY_RUN + AUTO_RECORD_*)
+//   • All pnthr_ibkr_outbox commands for this ticker in the last 24h
+// Read-only; no writes, no enqueues. Intended for forensic analysis when the
+// live table shows a mismatch and we need to see exactly what each subsystem
+// thinks happened.
+app.get('/api/admin/ticker-forensic/:ticker', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+    const userId = req.user.userId;
+    const ticker = (req.params.ticker || '').toUpperCase();
+    if (!ticker) return res.status(400).json({ error: 'ticker required' });
+
+    const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [portfolio, ibkrSnap, processingRecords, outboxRecords] = await Promise.all([
+      db.collection('pnthr_portfolio').find({
+        ownerId: userId, ticker,
+        $or: [{ status: { $ne: 'CLOSED' } }, { closedAt: { $gte: since30d } }, { updatedAt: { $gte: since30d } }],
+      }).sort({ createdAt: -1 }).toArray(),
+      db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId }),
+      db.collection('pnthr_ibkr_executions').find({ ownerId: userId, symbol: ticker }).sort({ processedAt: -1 }).toArray(),
+      db.collection('pnthr_ibkr_outbox').find({ ownerId: userId, 'request.ticker': ticker, createdAt: { $gte: since24h } }).sort({ createdAt: -1 }).toArray(),
+    ]);
+
+    const ibkrPosition  = (ibkrSnap?.positions  || []).find(p => p.symbol?.toUpperCase() === ticker) || null;
+    const ibkrStops     = (ibkrSnap?.stopOrders || []).filter(s => s.symbol?.toUpperCase() === ticker);
+    const ibkrExecs     = (ibkrSnap?.latestExecutions || []).filter(e => e.symbol?.toUpperCase() === ticker);
+
+    const sumFilled = (p) => Object.values(p?.fills || {}).reduce((s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0);
+    const sumExited = (p) => (p?.exits || []).reduce((s, e) => s + (+e.shares || 0), 0);
+
+    res.json({
+      ticker,
+      generatedAt: new Date(),
+      ibkrSyncedAt: ibkrSnap?.syncedAt || null,
+      portfolio: portfolio.map(p => ({
+        id:                  p.id,
+        status:              p.status,
+        direction:           p.direction,
+        signal:              p.signal,
+        entryPrice:          p.entryPrice,
+        stopPrice:           p.stopPrice,
+        originalStop:        p.originalStop,
+        totalFilledShares:   p.totalFilledShares,
+        totalExitedShares:   p.totalExitedShares,
+        remainingShares:     p.remainingShares,
+        sumFilled_computed:  sumFilled(p),
+        sumExited_computed:  sumExited(p),
+        fills:               p.fills,
+        exits:               p.exits,
+        stopHistory:         p.stopHistory,
+        autoOpenedByIBKR:    p.autoOpenedByIBKR,
+        source:              p.source,
+        createdAt:           p.createdAt,
+        updatedAt:           p.updatedAt,
+        closedAt:            p.closedAt,
+        ibkrSyncedAt:        p.ibkrSyncedAt,
+        ibkrShares:          p.ibkrShares,
+        ibkrAvgCost:         p.ibkrAvgCost,
+      })),
+      ibkr: {
+        position: ibkrPosition,
+        stops:    ibkrStops,
+        executions: ibkrExecs,
+      },
+      processingRecords,
+      outboxRecords,
+      // Reconciliation hint: starting from sumFilled, applying execs, end at IBKR shares?
+      reconciliation: portfolio.map(p => {
+        const startFilled = sumFilled(p);
+        const startExited = sumExited(p);
+        const ibkrShares  = ibkrPosition ? Math.abs(+ibkrPosition.shares || 0) : 0;
+        return {
+          positionId: p.id,
+          pnthr_sumFilled: startFilled,
+          pnthr_sumExited: startExited,
+          pnthr_net:       startFilled - startExited,
+          ibkr_shares:     ibkrShares,
+          drift:           (startFilled - startExited) - ibkrShares,
+        };
+      }),
+    });
+  } catch (err) {
+    console.error('[admin/ticker-forensic]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Position Audit — symmetric difference between PNTHR portfolio (non-CLOSED)
 // and IBKR positions snapshot. Surfaces drift for the admin to reconcile.
 // Read-only; no enqueues, no DB writes.

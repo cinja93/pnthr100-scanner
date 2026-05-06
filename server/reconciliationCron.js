@@ -25,11 +25,12 @@
 // no errors) log a short "ok" line so absence of output never masks a
 // stuck cron; verbose detail only when something actually moved.
 
-import { connectToDatabase }    from './database.js';
-import { runStopRatchet }       from './stopRatchetCron.js';
-import { runLotTriggerSync }    from './lotTriggerCron.js';
-import { runOrphanCleanup }     from './orphanOrderJanitor.js';
-import { runGhostReconcile }    from './ghostPositionReconciler.js';
+import { connectToDatabase }       from './database.js';
+import { runStopRatchet }          from './stopRatchetCron.js';
+import { runLotTriggerSync }       from './lotTriggerCron.js';
+import { runOrphanCleanup }        from './orphanOrderJanitor.js';
+import { runGhostReconcile }       from './ghostPositionReconciler.js';
+import { runPositionReconciler }   from './positionReconciler.js';
 
 const SCHEDULE = '* 9-16 * * 1-5'; // every minute, 9-16:59 ET, Mon-Fri
 const TZ       = 'America/New_York';
@@ -64,6 +65,12 @@ export async function runUnifiedReconciliation({ db, dryRun = false } = {}) {
   const ratchet   = await runStopRatchet({ db, dryRun });
   const lotTrig   = await runLotTriggerSync({ db, dryRun });
   const orphans   = await runOrphanCleanup({ db, dryRun });
+  // Position reconciler runs LAST so any fills/exits that the earlier passes
+  // (ghost, ratchet, lotTrig) have just written are reflected in the drift
+  // calculation. Catches everything those passes can't: manual market buys
+  // outside lot tolerance, partial sells the bridge dropped, historical
+  // record drift inherited from old import-position imports, etc.
+  const reconcile = await runPositionReconciler({ db, dryRun });
   const finishedAt = new Date();
 
   return {
@@ -75,6 +82,7 @@ export async function runUnifiedReconciliation({ db, dryRun = false } = {}) {
     ratchet,
     lotTrig,
     orphans,
+    reconcile,
   };
 }
 
@@ -121,8 +129,12 @@ export function registerReconciliationCron(cron) {
       const ojOrphans     = (oj.orphans       || []).length;
       const ojEnq         = (oj.orphans       || []).filter(x => x.enqueued).length;
       const ojProtected   = oj.userOrdersProtected || 0;
+      const rc = r.reconcile || {};
+      const rcActions     = (rc.actions       || []).length;
+      const rcSkips       = (rc.skips         || []).length;
+      const rcAligned     = (rc.aligned       || []).length;
 
-      const anyChange = ratchetAdopt || ratchetPush || ltPlace || ltModify || ltCancel || ltAdopt || ojEnq || ghObserved || ghClosed || ghCleared;
+      const anyChange = ratchetAdopt || ratchetPush || ltPlace || ltModify || ltCancel || ltAdopt || ojEnq || ghObserved || ghClosed || ghCleared || rcActions;
 
       if (anyChange || ojOrphans) {
         console.log(
@@ -131,10 +143,11 @@ export function registerReconciliationCron(cron) {
           ` / ratchet:adopt=${ratchetAdopt} push=${ratchetPush} align=${ratchetAlign} skip=${ratchetSkip}` +
           ` / lotTrig:place=${ltPlace} modify=${ltModify} cancel=${ltCancel} adopt=${ltAdopt} skip=${ltSkip}` +
           ` / orphans:found=${ojOrphans} enq=${ojEnq} userProtected=${ojProtected}` +
+          ` / drift:actions=${rcActions} aligned=${rcAligned} skip=${rcSkips}` +
           ` (${r.durationMs}ms${gh.flagOn ? '' : ' GHOSTS_FLAG_OFF'}${ra.flagOn ? '' : ' RATCHET_FLAG_OFF'}${lt.flagOn ? '' : ' LOTTRIG_FLAG_OFF'}${oj.flagOn ? '' : ' ORPHANS_FLAG_OFF'})`
         );
       } else {
-        console.log(`[reconciliation] ${ts()} ok checked=${ra.positionsChecked || 0} (${r.durationMs}ms)`);
+        console.log(`[reconciliation] ${ts()} ok checked=${ra.positionsChecked || 0} aligned=${rcAligned} (${r.durationMs}ms)`);
       }
     } catch (e) {
       console.error(`[reconciliation] ${ts()} FAILED: ${e.message}`);

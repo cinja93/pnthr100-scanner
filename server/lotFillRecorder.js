@@ -168,8 +168,25 @@ export async function recordLotFill({ db, ownerId, position, execution, syncedAt
     return { recorded: false, skipReason: 'DRY_RUN', lot: lot.lot, ratchet, projectedShares: totalFilled + fillShares };
   }
 
-  // ── Write fills[N] + (optionally) stopPrice ratchet ──────────────────────
-  const setOps = { [`fills.${lot.lot}`]: projectedFills[lot.lot], updatedAt: new Date() };
+  // ── Write fills[N] + share totals + (optionally) stopPrice ratchet ──────────
+  // Recompute totalFilledShares / remainingShares from the projected fills set
+  // so PNTHR's bookkeeping stays consistent with sum(fills[].shares). Without
+  // this, every auto-recorded fill grew the fills[] array but left
+  // totalFilledShares stale, causing the live table to display sum-of-fills
+  // (e.g., 16) while internal accounting (badge, P&L) used the stale value
+  // (e.g., 4) — exactly the ADI 2026-05-06 drift.
+  const projectedFilled = Object.values(projectedFills).reduce(
+    (s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0,
+  );
+  const projectedExited = (position.exits || []).reduce((s, e) => s + (+e.shares || 0), 0);
+  const projectedRemaining = projectedFilled - projectedExited;
+
+  const setOps = {
+    [`fills.${lot.lot}`]: projectedFills[lot.lot],
+    totalFilledShares:    projectedFilled,
+    remainingShares:      projectedRemaining,
+    updatedAt:            new Date(),
+  };
   if (ratchet) {
     setOps.stopPrice         = ratchet.newStop;
     setOps.stopRatchetSource = 'AUTO_FILL_' + ratchet.reason;

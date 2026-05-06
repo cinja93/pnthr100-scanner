@@ -474,47 +474,6 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
     });
   }
 
-  // ── Card-level metrics for the collapsed live-table card. These mirror the
-  // values shown in PyramidCard's expanded panel ($ at risk / next lot %
-  // away / P&L $ / P&L %) so Scott can read them at a glance without
-  // expanding each row.
-  const metrics = (() => {
-    if (!cmdHas || !cmdShares || !cmdAvg) return null;
-    const isLong   = cmdDir === 'LONG';
-    const stop     = cmd?.stopPrice ?? null;
-    // $ at risk = (avg − stop) × shares for LONG, (stop − avg) × shares for SHORT.
-    // When stop is on the wrong side of avg (recycled / locked-in profit), risk is 0.
-    let atRisk = null;
-    if (stop != null) {
-      const isRecycled = isLong ? stop >= cmdAvg : stop <= cmdAvg;
-      if (isRecycled) atRisk = 0;
-      else {
-        const perShr = isLong ? Math.max(cmdAvg - stop, 0) : Math.max(stop - cmdAvg, 0);
-        atRisk = +(perShr * cmdShares).toFixed(2);
-      }
-    }
-    // P&L
-    let pnlDollar = null, pnlPct = null;
-    if (lastPrice != null) {
-      const diff = isLong ? (lastPrice - cmdAvg) : (cmdAvg - lastPrice);
-      pnlDollar = +(diff * cmdShares).toFixed(2);
-      pnlPct    = +(diff / cmdAvg * 100).toFixed(2);
-    }
-    // Next-lot distance: closest unfilled lot trigger by % gap from current price.
-    let nextLotPct = null;
-    if (lastPrice && enrichedLotTriggers.length > 0) {
-      const candidates = enrichedLotTriggers
-        .filter(t => !t.filled && t.targetShares > 0 && t.triggerPrice > 0)
-        .map(t => ({ lot: t.lot, gapPct: ((t.triggerPrice - lastPrice) / lastPrice) * 100 }))
-        .filter(c => isLong ? c.gapPct > 0 : c.gapPct < 0); // direction-aware
-      if (candidates.length) {
-        candidates.sort((a, b) => Math.abs(a.gapPct) - Math.abs(b.gapPct));
-        nextLotPct = +candidates[0].gapPct.toFixed(1);
-      }
-    }
-    return { atRisk, pnlDollar, pnlPct, nextLotPct };
-  })();
-
   // Pyramid complete = every planned lot is covered by the actual position
   // (no actionable shares left to stage). When true, the position is in
   // "maintenance mode" — only stop ratchets remain. Client renders these
@@ -527,7 +486,6 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
     rowStatus,
     pyramidComplete,
     planTotalShares,
-    metrics,
     ibkr: {
       hasPosition: ibkrHas,
       direction:   ibkrDir,

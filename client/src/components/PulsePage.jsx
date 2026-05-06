@@ -158,12 +158,12 @@ export default function PulsePage({ onNavigate }) {
 
       {/* ROW 1: Equity markets + VIX */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <SpyGauge regime={data.regime} onClick={() => { setChartList([{ ticker: 'SPY' }]); setChartIndex(0); }} />
-        <QqqGauge regime={data.regime} onClick={() => { setChartList([{ ticker: 'QQQ' }]); setChartIndex(0); }} />
-        <MarketGauge label="NYSE" subLabel="Composite" data={data.marketGauges?.nyse} onClick={() => { setChartList([{ ticker: '^NYA' }]); setChartIndex(0); }} />
-        <MarketGauge label="NASDAQ" subLabel="Composite" data={data.marketGauges?.nasdaq} onClick={() => { setChartList([{ ticker: '^IXIC' }]); setChartIndex(0); }} />
-        <MarketGauge label="IWM" subLabel="Russell 2000" data={data.marketGauges?.iwm} onClick={() => { setChartList([{ ticker: 'IWM' }]); setChartIndex(0); }} />
-        <MarketGauge label="DJI" subLabel="Dow Jones" data={data.marketGauges?.dji} onClick={() => { setChartList([{ ticker: '^DJI' }]); setChartIndex(0); }} />
+        <SpyGauge regime={data.regime} rsi={data.indexRsi?.spy} onClick={() => { setChartList([{ ticker: 'SPY' }]); setChartIndex(0); }} />
+        <QqqGauge regime={data.regime} rsi={data.indexRsi?.qqq} onClick={() => { setChartList([{ ticker: 'QQQ' }]); setChartIndex(0); }} />
+        <MarketGauge label="NYSE" subLabel="Composite" data={data.marketGauges?.nyse} rsi={data.indexRsi?.nyse} onClick={() => { setChartList([{ ticker: '^NYA' }]); setChartIndex(0); }} />
+        <MarketGauge label="NASDAQ" subLabel="Composite" data={data.marketGauges?.nasdaq} rsi={data.indexRsi?.nasdaq} onClick={() => { setChartList([{ ticker: '^IXIC' }]); setChartIndex(0); }} />
+        <MarketGauge label="IWM" subLabel="Russell 2000" data={data.marketGauges?.iwm} rsi={data.indexRsi?.iwm} onClick={() => { setChartList([{ ticker: 'IWM' }]); setChartIndex(0); }} />
+        <MarketGauge label="DJI" subLabel="Dow Jones" data={data.marketGauges?.dji} rsi={data.indexRsi?.dji} onClick={() => { setChartList([{ ticker: '^DJI' }]); setChartIndex(0); }} />
         <VixThermometer vix={vix} onClick={() => { setChartList([{ ticker: '^VIX' }]); setChartIndex(0); }} />
       </div>
       {/* ROW 2: Commodities & Currency */}
@@ -324,7 +324,26 @@ function StatusLight({ status, message, positions, pulseData, lastRefresh, isRef
   );
 }
 
-function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subValue, subValueColor, gaugeW, gaugeH, onClick }) {
+function RsiBadge({ rsi }) {
+  if (rsi == null) return null;
+  return (
+    <div
+      title="Daily RSI(14)"
+      style={{
+        position: 'absolute', bottom: 6, left: 6,
+        background: '#FCF000', color: '#000',
+        fontSize: 10, fontWeight: 800, letterSpacing: 0.3,
+        padding: '2px 6px', borderRadius: 3,
+        fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums',
+        pointerEvents: 'none', lineHeight: 1.1,
+      }}
+    >
+      RSI {rsi}
+    </div>
+  );
+}
+
+function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subValue, subValueColor, gaugeW, gaugeH, onClick, rsi }) {
   const W = gaugeW ?? 180, H = gaugeH ?? 110;
   const cx = W / 2, cy = H - 10, r = Math.round(W * 80 / 180);
 
@@ -346,7 +365,8 @@ function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subV
   const ny = cy + r * 0.8 * Math.sin(needleAngle);
 
   return (
-    <div onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', borderRadius: 12, padding: '12px 16px', minWidth: 160, cursor: onClick ? 'pointer' : 'default', transition: 'filter 0.15s ease' }} onMouseEnter={e => { if (onClick) e.currentTarget.style.filter = 'brightness(1.15)'; }} onMouseLeave={e => { if (onClick) e.currentTarget.style.filter = 'none'; }}>
+    <div onClick={onClick} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', borderRadius: 12, padding: '12px 16px', minWidth: 160, cursor: onClick ? 'pointer' : 'default', transition: 'filter 0.15s ease' }} onMouseEnter={e => { if (onClick) e.currentTarget.style.filter = 'brightness(1.15)'; }} onMouseLeave={e => { if (onClick) e.currentTarget.style.filter = 'none'; }}>
+      <RsiBadge rsi={rsi} />
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
         <path d={arcPath(Math.PI, 2 * Math.PI)} fill="none" stroke="#222" strokeWidth={14} />
         {zones.map((z, i) => {
@@ -366,7 +386,7 @@ function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subV
   );
 }
 
-function SpyGauge({ regime, onClick }) {
+function SpyGauge({ regime, rsi, onClick }) {
   const spy = regime?.spy;
   const sep = (spy?.close && spy?.ema21 > 0) ? +((spy.close - spy.ema21) / spy.ema21 * 100).toFixed(1) : null;
   // Compute separation from stored regime fields (indexPosition/spyAboveEma)
@@ -390,11 +410,12 @@ function SpyGauge({ regime, onClick }) {
       subValue={sep !== null ? `${sep > 0 ? '+' : ''}${sep}%` : (pos ? `${pos} EMA` : null)}
       subValueColor={sep !== null ? (sep >= 0 ? '#28a745' : '#dc3545') : (pos === 'above' ? '#28a745' : '#dc3545')}
       onClick={onClick}
+      rsi={rsi}
     />
   );
 }
 
-function QqqGauge({ regime, onClick }) {
+function QqqGauge({ regime, rsi, onClick }) {
   const qqq = regime?.qqq;
   const sep = (qqq?.close && qqq?.ema21 > 0) ? +((qqq.close - qqq.ema21) / qqq.ema21 * 100).toFixed(1) : null;
   const pos = regime?.qqqAboveEma != null ? (regime.qqqAboveEma ? 'above' : 'below') : null;
@@ -416,6 +437,7 @@ function QqqGauge({ regime, onClick }) {
       subValue={sep !== null ? `${sep > 0 ? '+' : ''}${sep}%` : (pos ? `${pos} EMA` : null)}
       subValueColor={sep !== null ? (sep >= 0 ? '#28a745' : '#dc3545') : (pos === 'above' ? '#28a745' : '#dc3545')}
       onClick={onClick}
+      rsi={rsi}
     />
   );
 }
@@ -481,7 +503,7 @@ const BTC_ZONES = [
   { from:  5,  to:  10, color: '#F7931A' },
 ];
 
-function MarketGauge({ label, subLabel, data, isGold, isIndex, isBtc, onClick }) {
+function MarketGauge({ label, subLabel, data, isGold, isIndex, isBtc, onClick, rsi }) {
   const price = data?.price ?? null;
   const changePct = data?.changePct ?? null;
   const needleVal = changePct !== null ? Math.max(-10, Math.min(10, changePct)) : 0;
@@ -507,6 +529,7 @@ function MarketGauge({ label, subLabel, data, isGold, isIndex, isBtc, onClick })
       subValue={changePct !== null ? `${arrow} ${Math.abs(changePct).toFixed(2)}%` : 'No data'}
       subValueColor={pctColor}
       onClick={onClick}
+      rsi={rsi}
     />
   );
 }

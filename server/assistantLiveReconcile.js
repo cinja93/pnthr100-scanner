@@ -201,7 +201,7 @@ function computeDailyRSI14(closes) {
   return rsi;
 }
 
-async function fetchDailyRSI(ticker) {
+export async function fetchDailyRSI(ticker) {
   const cached = RSI_CACHE.get(ticker);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   if (!RSI_API_KEY) return null;

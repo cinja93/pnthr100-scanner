@@ -7028,6 +7028,23 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       } catch (e) { console.warn('[PULSE] WTI fallback failed:', e.message); }
     }
 
+    // Daily RSI(14) for the 6 index gauges (1-hour cache via fetchDailyRSI)
+    let indexRsi = { spy: null, qqq: null, nyse: null, nasdaq: null, iwm: null, dji: null };
+    try {
+      const { fetchDailyRSI } = await import('./assistantLiveReconcile.js');
+      const [spyR, qqqR, nyaR, ixicR, iwmR, djiR] = await Promise.all([
+        fetchDailyRSI('SPY'),
+        fetchDailyRSI('QQQ'),
+        fetchDailyRSI('^NYA'),
+        fetchDailyRSI('^IXIC'),
+        fetchDailyRSI('IWM'),
+        fetchDailyRSI('^DJI'),
+      ]);
+      indexRsi = { spy: spyR, qqq: qqqR, nyse: nyaR, nasdaq: ixicR, iwm: iwmR, dji: djiR };
+    } catch (e) {
+      console.warn('[PULSE] indexRsi fetch failed:', e.message);
+    }
+
     // Treasury yields: Fed (1mo proxy), 2Y, 10Y, 30Y
     let treasuryYields = { fed: null, y2: null, y10: null, y30: null };
     try {
@@ -7240,6 +7257,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       lotsReady: lotsReady.slice(0, 5),
       marketSnapshot: { ...(marketSnapshot || {}), treasury10y, dxy },
       marketGauges,
+      indexRsi,
       treasuryYields,
       recessionIndicator,
       buffettIndicator,

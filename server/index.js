@@ -69,7 +69,7 @@ import { generateAndSavePerch } from './perchService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
 import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateToken, resolveRole, generateApprovalToken, verifyApprovalToken } from './auth.js';
 import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
-import { calculateSectorExposure, generateSectorRecommendations } from './sectorExposure.js';
+import { calculateSectorExposure, generateSectorRecommendations, buildSectorCandidates } from './sectorExposure.js';
 import { sendApprovalRequestEmail, sendWelcomeEmail, sendDenialEmail } from './emailService.js';
 import { ibkrSync, getOvernightFills } from './ibkrSync.js';
 import { assistantLiveReconcile } from './assistantLiveReconcile.js';
@@ -1345,10 +1345,12 @@ app.get('/api/sector-exposure', authenticateJWT, async (req, res) => {
     }
 
     const recommendations = generateSectorRecommendations(exposure, killMap);
+    const oppositesBySector = buildSectorCandidates(exposure, killMap, 6);
 
     res.json({
       exposure,
       recommendations,
+      oppositesBySector,
       summary: {
         totalSectors:    Object.keys(exposure).length,
         heightenedCount: recommendations.filter(r => r.level === 'HEIGHTENED').length,

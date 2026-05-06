@@ -162,3 +162,51 @@ export function generateSectorRecommendations(sectorExposure, killMap = {}) {
 
   return recommendations;
 }
+
+/**
+ * Build a per-sector list of opposite-direction Kill candidates that could
+ * balance the sector's exposure. Unlike generateSectorRecommendations, this
+ * runs for EVERY sector in the exposure map (including CLEAR ones) so the
+ * Pulse sector modal can surface candidates regardless of severity.
+ *
+ * For sectors with positions, "opposite" = inverse of net direction. For
+ * empty sectors, returns both BL and SS candidates so the user can see what
+ * Kill is offering in that area.
+ *
+ * @returns {Object} { [sector]: { direction, candidates: [...] } }
+ */
+export function buildSectorCandidates(sectorExposure, killMap = {}, limit = 6) {
+  // Bucket Kill scores by sector for fast lookup.
+  const bySector = {};
+  for (const s of Object.values(killMap)) {
+    if (!s?.sector) continue;
+    const sec = normalizeSector(s.sector);
+    if (!bySector[sec]) bySector[sec] = [];
+    bySector[sec].push(s);
+  }
+
+  const out = {};
+  for (const [sector, data] of Object.entries(sectorExposure)) {
+    const oppositeSignal = data.netDirection === 'LONG' ? 'SS'
+                         : data.netDirection === 'SHORT' ? 'BL'
+                         : null;
+    const candidates = (bySector[sector] || [])
+      .filter(s =>
+        (oppositeSignal == null || s.signal === oppositeSignal) &&
+        !data.longs.includes(s.ticker) &&
+        !data.shorts.includes(s.ticker)
+      )
+      .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
+      .slice(0, limit)
+      .map(c => ({
+        ticker:    c.ticker,
+        signal:    c.signal,
+        killScore: Math.round(c.totalScore || 0),
+        rank:      c.killRank,
+        tier:      c.tier,
+        signalAge: c.signalAge ?? null,
+      }));
+    out[sector] = { direction: oppositeSignal, candidates };
+  }
+  return out;
+}

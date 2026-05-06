@@ -216,6 +216,7 @@ export default function PulsePage({ onNavigate }) {
         <SectorTickersModal
           sector={sectorModal.sector}
           data={sectorModal.data}
+          opposites={sectorExposure?.oppositesBySector?.[sectorModal.sector] || null}
           onClose={() => setSectorModal(null)}
           onTickerClick={(ticker, allTickers) => {
             setSectorModal(null);
@@ -1868,10 +1869,12 @@ function SectorCard({ sector, data, onClick }) {
   );
 }
 
-function SectorTickersModal({ sector, data, onClose, onTickerClick }) {
+function SectorTickersModal({ sector, data, opposites, onClose, onTickerClick }) {
   const longs  = data?.longs  || [];
   const shorts = data?.shorts || [];
-  const all = [...longs, ...shorts];
+  const oppCandidates = opposites?.candidates || [];
+  const oppDir        = opposites?.direction || null; // 'BL' / 'SS' / null
+  const all = [...longs, ...shorts, ...oppCandidates.map(c => c.ticker)];
   const name = getSectorDisplayName(sector);
 
   const TickerChip = ({ ticker, dir }) => (
@@ -1942,7 +1945,37 @@ function SectorTickersModal({ sector, data, onClose, onTickerClick }) {
           </div>
         )}
         {longs.length === 0 && shorts.length === 0 && (
-          <div style={{ color: '#666', fontSize: 12, textAlign: 'center', padding: 16 }}>No positions in this sector.</div>
+          <div style={{ color: '#666', fontSize: 12, textAlign: 'center', padding: '16px 0' }}>No positions in this sector.</div>
+        )}
+
+        {oppCandidates.length > 0 && (
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(255,215,0,0.15)' }}>
+            <div style={{ color: '#FFD700', fontSize: 10, letterSpacing: 1.5, marginBottom: 8, fontWeight: 700 }}>
+              ⚡ TOP KILL CANDIDATES{oppDir ? ` (${oppDir} — opposite direction to balance)` : ''}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {oppCandidates.map(c => (
+                <button
+                  key={c.ticker}
+                  onClick={() => onTickerClick?.(c.ticker, all)}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '70px 1fr 60px 70px 50px', gap: 8,
+                    alignItems: 'center', padding: '5px 8px',
+                    background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: 4,
+                    cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, textAlign: 'left',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#0a0a0a'}
+                >
+                  <span style={{ color: '#FFD700', fontWeight: 800 }}>${c.ticker}</span>
+                  <span style={{ color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.tier || '—'}</span>
+                  <span style={{ color: c.signal === 'BL' ? '#28a745' : '#dc3545', fontWeight: 700 }}>{c.signal || ''}</span>
+                  <span style={{ color: '#fff', fontWeight: 700, textAlign: 'right' }}>{c.killScore != null ? c.killScore : '—'}</span>
+                  <span style={{ color: '#666', textAlign: 'right' }}>{c.signalAge != null ? `${c.signalAge}w` : ''}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

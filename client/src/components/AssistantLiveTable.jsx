@@ -987,21 +987,25 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
           // position record exists for this ticker, or when sizing math
           // returns 0 (recycled / invalid stop).
           const pos = findPositionByTicker(row.ticker);
+          // Badge target = the SAME plan total the server uses for the lot
+          // trigger distribution. Single source of truth — the badge can never
+          // disagree with the L2-L5 plan or the pyramid-complete flag again.
+          // Server's planTotalShares respects the recompute branch in
+          // computeLotTargetShares (which caps the plan to L1 actual when the
+          // trader took L1 bigger than recommended — see CTRA on 2026-05-05
+          // where badge showed "85/249" but pyramid was correctly complete
+          // at 85 sh).
+          //
+          // Falls back to client-side sizePosition only when planTotalShares
+          // isn't available (e.g., row has no PNTHR position record yet).
           let targetShares = null;
-          // Pyramid sizing is locked at entry by the ORIGINAL 1% NAV risk plan.
-          // As stops ratchet up (or down for shorts), the position is already
-          // sized — it does NOT grow with each ratchet. Use originalStop when
-          // available so the badge reports the locked-in plan target, not an
-          // inflated number from current ratcheted-stop math. Falls back to
-          // stopPrice for older positions that predate originalStop.
-          // Mirrors server-side computeLotTargetShares behavior — keeps the
-          // badge and the L2-L5 plan in agreement (2026-05-05).
-          const sizingStop = +(pos?.originalStop || pos?.stopPrice) || 0;
-          if (pos && +pos.entryPrice > 0 && sizingStop > 0 && +netLiquidity > 0) {
+          if (row.planTotalShares && row.planTotalShares > 0) {
+            targetShares = row.planTotalShares;
+          } else if (pos && +pos.entryPrice > 0 && +(pos?.originalStop || pos?.stopPrice) > 0 && +netLiquidity > 0) {
             const sizing = sizePosition({
               netLiquidity,
               entryPrice: +pos.entryPrice,
-              stopPrice:  sizingStop,
+              stopPrice:  +(pos.originalStop || pos.stopPrice),
               maxGapPct:  +pos.maxGapPct || 0,
               direction:  (pos.direction || 'LONG').toUpperCase(),
               isETF:      isEtfTicker(row.ticker, pos.isEtf),

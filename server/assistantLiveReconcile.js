@@ -395,6 +395,15 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
   const rawLotTriggers     = cmd ? computeLotTriggers(cmd, netLiquidity) : [];
   const enrichedLotTriggers = enrichLotTriggersWithIbkrStatus(rawLotTriggers, ibkrTickerStops, ibkrShares);
 
+  // Plan total = sum of L1-L5 target shares (after the recompute branch in
+  // computeLotTargetShares, if Scott took L1 bigger than recommended). This
+  // is the SAME number the lot trigger plan distributes across lots — single
+  // source of truth so the badge target and the lot-trigger math agree.
+  // Without this the client's sizePosition() can disagree (e.g., CTRA showed
+  // "85/249" badge while pyramid was correctly marked complete at 85 sh).
+  const lotTargetShares = cmd ? computeLotTargetShares(cmd, netLiquidity) : [0, 0, 0, 0, 0];
+  const planTotalShares = lotTargetShares.reduce((s, v) => s + (+v || 0), 0);
+
   // For the protective-stop checks (side / price / shares / multi-stop flag),
   // look only at PROTECTIVE stops. A BUY STP on a long is a lot-entry order
   // staged at a ratchet price, not a protective stop — it shouldn't inflate
@@ -476,6 +485,7 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
     ticker,
     rowStatus,
     pyramidComplete,
+    planTotalShares,
     ibkr: {
       hasPosition: ibkrHas,
       direction:   ibkrDir,

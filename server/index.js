@@ -5794,6 +5794,33 @@ app.get('/api/admin/ticker-forensic/:ticker', authenticateJWT, requireAdmin, asy
           drift:           (startFilled - startExited) - ibkrShares,
         };
       }),
+      // Live cron diagnostic — runs lot-trigger sync in dry-run mode against
+      // current state and returns only the entries for THIS ticker. Use this
+      // to debug "why isn't the cron modifying L_N" without needing log access.
+      cronDryRun: await (async () => {
+        try {
+          const r = await runLotTriggerSync({ db, dryRun: true });
+          const filt = (arr) => (arr || []).filter(x => x.ticker?.toUpperCase() === ticker);
+          return {
+            envFlags: {
+              RECONCILIATION_CRON_ENABLED:  process.env.RECONCILIATION_CRON_ENABLED === 'true',
+              IBKR_AUTO_SYNC_LOT_TRIGGERS:  process.env.IBKR_AUTO_SYNC_LOT_TRIGGERS === 'true',
+              IBKR_AUTO_SYNC_STOPS:         process.env.IBKR_AUTO_SYNC_STOPS === 'true',
+              IBKR_AUTO_CLOSE_GHOSTS:       process.env.IBKR_AUTO_CLOSE_GHOSTS === 'true',
+              IBKR_AUTO_RECORD_ADD_FILL:    process.env.IBKR_AUTO_RECORD_ADD_FILL === 'true',
+            },
+            cronFlagOn:    r.flagOn,
+            placements:    filt(r.placements),
+            modifications: filt(r.modifications),
+            cancellations: filt(r.cancellations),
+            adoptions:     filt(r.adoptions),
+            skips:         filt(r.skips),
+            aligned:       filt(r.aligned),
+          };
+        } catch (e) {
+          return { error: e.message };
+        }
+      })(),
     });
   } catch (err) {
     console.error('[admin/ticker-forensic]', err.message);

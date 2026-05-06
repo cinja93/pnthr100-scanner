@@ -174,6 +174,64 @@ function enrichLotTriggersWithIbkrStatus(triggers, ibkrStops, ibkrShares = 0) {
   });
 }
 
+// ── Daily RSI(14) for the stock badge on the Live table card ─────────────────
+// Computed from FMP historical daily closes (60-day window = ~42 trading days,
+// enough for Wilder's RSI-14 to settle). Cached 1 hour because RSI values
+// don't move meaningfully minute-to-minute and the live table polls every 60s.
+const RSI_CACHE = new Map(); // ticker -> { value, expiresAt }
+const RSI_TTL_MS = 60 * 60 * 1000;
+const RSI_API_KEY = process.env.FMP_API_KEY;
+
+function computeDailyRSI14(closes) {
+  const n = closes.length;
+  if (n < 15) return null;
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i <= 14; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) avgGain += d; else avgLoss += Math.abs(d);
+  }
+  avgGain /= 14; avgLoss /= 14;
+  let rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  for (let i = 15; i < n; i++) {
+    const d = closes[i] - closes[i - 1];
+    avgGain = (avgGain * 13 + Math.max(d, 0)) / 14;
+    avgLoss = (avgLoss * 13 + Math.max(-d, 0)) / 14;
+    rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+  return rsi;
+}
+
+async function fetchDailyRSI(ticker) {
+  const cached = RSI_CACHE.get(ticker);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (!RSI_API_KEY) return null;
+  try {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 60);
+    const fmt = d => d.toISOString().split('T')[0];
+    const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?from=${fmt(from)}&to=${fmt(to)}&apikey=${RSI_API_KEY}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const daily = (data?.historical || []).slice().sort((a, b) => a.date > b.date ? 1 : -1);
+    if (daily.length < 16) return null;
+    const rsi = computeDailyRSI14(daily.map(b => b.close));
+    if (rsi == null) return null;
+    const rounded = Math.round(rsi);
+    RSI_CACHE.set(ticker, { value: rounded, expiresAt: Date.now() + RSI_TTL_MS });
+    return rounded;
+  } catch {
+    return null;
+  }
+}
+
+// Market RSI comparator: NASDAQ-listed → QQQ; everything else → SPY.
+// Mirrors the NASDAQ check in disciplineScoring.scoreIndexTrend.
+function marketTickerFor(exchange) {
+  return (exchange || '').toUpperCase() === 'NASDAQ' ? 'QQQ' : 'SPY';
+}
+
 // ── FMP live price fetch (mirrors headlines endpoint pattern) ────────────────
 async function fetchLivePrices(tickers) {
   const out = {};
@@ -504,6 +562,25 @@ export async function assistantLiveReconcile(req, res) {
       const last    = prices[ticker] ?? ibkrPos?.marketPrice ?? cmd?.currentPrice ?? null;
       return buildRow(ticker, cmd, ibkrPos, stops, last, netLiquidity);
     });
+
+    // Enrich rows with daily RSI(14) for the stock + the relevant market
+    // index (QQQ for NASDAQ-listed, SPY otherwise). Cached for 1 hour so the
+    // 60-second poll doesn't hammer FMP. Renders as a small "76 / 58" badge
+    // in the bottom-left of each ticker card.
+    const allRsiTickers = [...new Set([...tickers, 'SPY', 'QQQ'])];
+    const rsiResults = await Promise.all(allRsiTickers.map(t =>
+      fetchDailyRSI(t).then(v => [t, v]).catch(() => [t, null])
+    ));
+    const rsiMap = Object.fromEntries(rsiResults);
+    for (const r of rows) {
+      const cmd = cmdPositions.find(p => p.ticker?.toUpperCase() === r.ticker);
+      const marketTicker = marketTickerFor(cmd?.exchange);
+      r.rsi = {
+        stock:        rsiMap[r.ticker] ?? null,
+        market:       rsiMap[marketTicker] ?? null,
+        marketTicker,
+      };
+    }
 
     // Sort: red first, then yellow, then green; within each by ticker
     const order = { red: 0, yellow: 1, green: 2, gray: 3 };

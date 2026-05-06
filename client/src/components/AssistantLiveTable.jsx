@@ -1032,6 +1032,33 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
 
           return (
             <div key={row.ticker} style={cardStyle}>
+              {/* RSI badge — bottom-left corner. "stock / market" daily RSI(14).
+                  Yellow background, blue text. Market index = QQQ for NASDAQ-
+                  listed stocks, SPY otherwise (server decides via cmd.exchange).
+                  Hidden when both values are unknown. */}
+              {(row.rsi?.stock != null || row.rsi?.market != null) && (
+                <div
+                  title={`Daily RSI(14) — stock vs ${row.rsi?.marketTicker || 'market'} (cached 1h, refreshes lazily)`}
+                  style={{
+                    position:     'absolute',
+                    bottom:       6,
+                    left:         6,
+                    zIndex:       2,
+                    padding:      '2px 8px',
+                    background:   '#FCF000',
+                    borderRadius: 4,
+                    fontSize:     11,
+                    fontWeight:   800,
+                    color:        '#0066cc',
+                    letterSpacing: '0.02em',
+                    fontVariantNumeric: 'tabular-nums',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {row.rsi?.stock ?? '—'} / {row.rsi?.market ?? '—'}
+                </div>
+              )}
+
               {/* Live-price badge — top-right corner. Refreshes with the
                   reconcile poll (every 60s). Hidden when price is unknown. */}
               {row.lastPrice != null && (

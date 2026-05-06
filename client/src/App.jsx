@@ -248,6 +248,7 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
   const [uiState,     setUiState]     = useState('default');    // default | confirming | fixing | fixed
   const [chosen,      setChosen]      = useState(null);         // 'ibkr' | 'assistant'
   const [createState, setCreateState] = useState('idle');       // idle | confirming | creating | created | error
+  const [createError, setCreateError] = useState('');            // server-side error message when createState='error'
   const [closeState,  setCloseState]  = useState('idle');       // idle | confirming | closing | closed | error
 
   const band = DISC_BAND[d.severity] || DISC_BAND.MEDIUM;
@@ -424,16 +425,28 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
       // ── IBKR_ONLY: position in IBKR but missing from PNTHR ─────────────
       async function doCreate() {
         setCreateState('creating');
+        setCreateError('');
         try {
           const res = await fetch(`${API_BASE}/api/ibkr/import-position`, {
             method: 'POST',
             headers: { ...authHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ ticker: d.ticker }),
           });
-          if (!res.ok) throw new Error('import failed');
+          if (!res.ok) {
+            // Surface the server's specific error so the user can act on it
+            // (already-active position, ticker not in current snapshot, etc.)
+            // instead of seeing a generic "Create failed".
+            let msg = `HTTP ${res.status}`;
+            try {
+              const body = await res.json();
+              if (body?.error) msg = body.error;
+            } catch { /* response wasn't JSON; keep HTTP code */ }
+            throw new Error(msg);
+          }
           setCreateState('created');
           setTimeout(() => onFixed(), 2000);
-        } catch {
+        } catch (e) {
+          setCreateError(e.message || 'unknown error');
           setCreateState('error');
         }
       }
@@ -457,9 +470,12 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
       if (createState === 'created')  return <span style={{ color: text, fontWeight: 700, fontSize: 11 }}>✓ Position created! Go to PNTHR Assistant to set stop + expand lots.</span>;
       if (createState === 'error') {
         return (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: muted, fontSize: 11 }}>Create failed — try again</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ color: muted, fontSize: 11 }}>
+              Create failed: <b style={{ color: text }}>{createError || 'unknown error'}</b>
+            </span>
             <button onClick={() => setCreateState('confirming')} style={btnStyle('danger')}>Retry</button>
+            <button onClick={() => onNavigate('assistant')} style={btnStyle('secondary')}>Open Assistant →</button>
           </span>
         );
       }

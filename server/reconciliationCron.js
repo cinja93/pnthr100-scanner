@@ -32,7 +32,15 @@ import { runOrphanCleanup }        from './orphanOrderJanitor.js';
 import { runGhostReconcile }       from './ghostPositionReconciler.js';
 import { runPositionReconciler }   from './positionReconciler.js';
 
-const SCHEDULE = '* 9-16 * * 1-5'; // every minute, 9-16:59 ET, Mon-Fri
+// Run every minute, 24/7. The position-share reconciler must catch drift
+// (manual buys, partial sells, post-hours fills) regardless of whether the
+// market is open — Scott trades at his discretion and IBKR positions can
+// change after-hours. Each sub-reconciler has its own staleness guard
+// (skips when bridge sync > 5 min) so off-hours ticks are essentially
+// no-ops when the bridge is offline. Previous schedule was 9-16:59 ET
+// Mon-Fri only, which left a 17-hour window per weekday + entire weekends
+// where drift would compound silently.
+const SCHEDULE = '* * * * *';
 const TZ       = 'America/New_York';
 
 let tickInProgress = false;

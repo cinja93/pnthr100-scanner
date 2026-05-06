@@ -5161,6 +5161,24 @@ app.post('/api/admin/sync-stops', authenticateJWT, requireAdmin, async (req, res
   }
 });
 
+// Manual trigger of the position-share auto-reconciler. Same shape as
+// sync-stops / sync-lot-triggers. Used to run the share-drift correction
+// immediately (e.g., right after deploy, after-hours when the every-minute
+// cron is dormant). Always reports actions/skips/aligned regardless of
+// dryRun. Use ?dryRun=1 to preview without writing.
+app.post('/api/admin/reconcile-positions', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { runPositionReconciler } = await import('./positionReconciler.js');
+    const db = await connectToDatabase();
+    const dryRun = req.query.dryRun === '1' || req.body?.dryRun === true;
+    const report = await runPositionReconciler({ db, dryRun });
+    res.json(report);
+  } catch (err) {
+    console.error('[admin/reconcile-positions]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4g — manual trigger of lotTriggerCron logic. Same dry-run/apply
 // pattern as sync-stops; report includes placements, modifications,
 // cancellations (cleanup-stale), adoptions (TWS-tighter user overrides),

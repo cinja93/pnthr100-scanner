@@ -688,13 +688,30 @@ export async function ibkrSync(req, res) {
     // 2. Upsert full IBKR positions + stop orders + today's executions snapshot
     // latestExecutions stores every fill the bridge sends today — used by the
     // trades-today reconciliation endpoint and the discrepancy IBKR_ONLY suppression.
+    //
+    // Dedup stop orders by permId before storing. Defensive: TWS occasionally
+    // delivers the same openOrder() event twice (transient state, reconnects,
+    // multiple subscription paths) which would otherwise show as duplicate
+    // IBKR_RATCHET rows in the live table and an inflated "N STOPS" badge.
+    // permId is the permanent unique identifier per order in the IB account
+    // lifecycle — there is no legitimate reason to store the same permId twice.
+    const dedupedStopOrders = (() => {
+      if (!Array.isArray(stopOrders)) return [];
+      const seen = new Map();
+      for (const o of stopOrders) {
+        const key = o?.permId ? `p:${o.permId}` : `o:${o?.orderId ?? ''}:${o?.symbol ?? ''}:${o?.stopPrice ?? ''}:${o?.shares ?? ''}`;
+        if (!seen.has(key)) seen.set(key, o);
+      }
+      return Array.from(seen.values());
+    })();
+
     await db.collection('pnthr_ibkr_positions').updateOne(
       { ownerId: userId },
       {
         $set: {
           ownerId:            userId,
           positions,
-          stopOrders:         Array.isArray(stopOrders) ? stopOrders : [],
+          stopOrders:         dedupedStopOrders,
           stopOrdersSyncedAt: syncedAt,
           latestExecutions:   Array.isArray(executions) ? executions : [],
           latestExecSyncedAt: syncedAt,

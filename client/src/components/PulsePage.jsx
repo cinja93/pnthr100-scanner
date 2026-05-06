@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchPulse, fetchLiveVix, fetchSignalStocks, fetchDevelopingSignals, fetchSectorExposure } from '../services/api';
+import { fetchPulse, fetchLiveVix, fetchSignalStocks, fetchDevelopingSignals, fetchSectorExposure, fetchMovers } from '../services/api';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { useAuth } from '../AuthContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
@@ -71,6 +71,7 @@ export default function PulsePage({ onNavigate }) {
   const [devSignals,      setDevSignals]      = useState(null);
   const [devLoading,      setDevLoading]      = useState(false);
   const [sectorExposure,  setSectorExposure]  = useState(null);
+  const [movers,          setMovers]          = useState(null);
   const autoRefreshTimer = React.useRef(null);
   const showDev = shouldShowDevelopingSignals();
 
@@ -107,6 +108,7 @@ export default function PulsePage({ onNavigate }) {
     }
     // Re-fetch developing signals on manual refresh
     loadDevSignals();
+    fetchMovers().then(setMovers).catch(err => console.warn('Movers refresh failed:', err));
   }
 
   useEffect(() => {
@@ -125,6 +127,7 @@ export default function PulsePage({ onNavigate }) {
       .finally(() => setLoading(false));
     // Load developing signals in parallel (separate request — may take longer)
     loadDevSignals();
+    fetchMovers().then(setMovers).catch(err => console.warn('Movers load failed:', err));
     return () => { if (autoRefreshTimer.current) clearTimeout(autoRefreshTimer.current); };
   }, []);
 
@@ -202,6 +205,8 @@ export default function PulsePage({ onNavigate }) {
         />
       )}
       <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
+
+      <MoversPanel movers={movers} onTickerClick={(ticker) => { setChartList([{ ticker }]); setChartIndex(0); }} />
 
       {/* TIER 3: Portfolio — Heat gauge + positions + alerts/lots in one band (hidden for investors) */}
       {!isInvestor && <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} />}
@@ -1479,6 +1484,79 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick, analyzeCon
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MoversPanel({ movers, onTickerClick }) {
+  if (!movers) {
+    return (
+      <div style={{ background: '#111', borderRadius: 12, padding: '12px 16px', marginBottom: 12, color: '#666', fontSize: 12 }}>
+        Loading PNTHR Movers...
+      </div>
+    );
+  }
+  const stocks = movers.stocks || { gainers: [], decliners: [] };
+  const etfs = movers.etfs || { gainers: [], decliners: [] };
+
+  const Clickable = ({ rows, kind }) => {
+    const isGain = kind === 'gainers';
+    const color = isGain ? '#16a34a' : '#dc2626';
+    const maxAbs = rows.reduce((m, r) => Math.max(m, Math.abs(r.changePct || 0)), 0) || 1;
+    if (!rows || rows.length === 0) return <div style={{ color: '#666', fontSize: 12, padding: '8px 0' }}>—</div>;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {rows.map(r => {
+          const pct = r.changePct ?? 0;
+          const widthPct = Math.max(2, (Math.abs(pct) / maxAbs) * 100);
+          return (
+            <div
+              key={r.ticker}
+              onClick={() => onTickerClick?.(r.ticker)}
+              style={{ display: 'grid', gridTemplateColumns: '60px 1fr 80px 70px 1fr', gap: 8, alignItems: 'center', fontSize: 12, cursor: 'pointer', padding: '2px 4px', borderRadius: 4 }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#1a1a1a'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <div style={{ color: '#D4A017', fontWeight: 700, letterSpacing: 0.5 }}>{r.ticker}</div>
+              <div style={{ color: '#bbb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.name}>{r.name}</div>
+              <div style={{ color: '#eee', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                {r.price >= 1000 ? r.price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : r.price.toFixed(2)}
+              </div>
+              <div style={{ color, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{pct >= 0 ? '+' : ''}{pct.toFixed(3)}%</div>
+              <div style={{ height: 14, background: '#1a1a1a', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ width: `${widthPct}%`, height: '100%', background: color, transition: 'width 200ms' }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ background: '#111', borderRadius: 12, padding: '14px 18px', marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ color: '#D4A017', fontSize: 13, letterSpacing: 2, fontWeight: 700 }}>📈 PNTHR MOVERS</div>
+        <div style={{ color: '#666', fontSize: 10 }}>
+          {movers.asOf ? `as of ${new Date(movers.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 480 }}>
+          <div style={{ color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 8 }}>PNTHR 679 STOCKS</div>
+          <div style={{ color: '#16a34a', fontSize: 10, letterSpacing: 1.5, marginBottom: 4 }}>TOP GAINERS</div>
+          <div style={{ marginBottom: 12 }}><Clickable rows={stocks.gainers} kind="gainers" /></div>
+          <div style={{ color: '#dc2626', fontSize: 10, letterSpacing: 1.5, marginBottom: 4 }}>TOP DECLINERS</div>
+          <Clickable rows={stocks.decliners} kind="decliners" />
+        </div>
+        <div style={{ flex: 1, minWidth: 480 }}>
+          <div style={{ color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 8 }}>PNTHR ETFs</div>
+          <div style={{ color: '#16a34a', fontSize: 10, letterSpacing: 1.5, marginBottom: 4 }}>TOP GAINERS</div>
+          <div style={{ marginBottom: 12 }}><Clickable rows={etfs.gainers} kind="gainers" /></div>
+          <div style={{ color: '#dc2626', fontSize: 10, letterSpacing: 1.5, marginBottom: 4 }}>TOP DECLINERS</div>
+          <Clickable rows={etfs.decliners} kind="decliners" />
+        </div>
+      </div>
     </div>
   );
 }

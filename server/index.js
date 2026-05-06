@@ -7291,6 +7291,18 @@ app.get('/api/pulse/signal-stocks', authenticateJWT, async (req, res) => {
   }
 });
 
+// ── PNTHR Movers — top intraday gainers/decliners (679 stocks + PNTHR ETFs) ───
+app.get('/api/pulse/movers', authenticateJWT, async (req, res) => {
+  try {
+    const { getMovers } = await import('./moversService.js');
+    const data = await getMovers(req.query.refresh === '1');
+    res.json(data);
+  } catch (err) {
+    console.error('[movers]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Developing Signals — intra-week 3/4 condition detection ───────────────────
 // Mon–Thu: stocks where 3 of 4 BL (or SS) conditions are confirmed intra-week.
 // The 4th condition (weekly close) is still pending (resolves Friday close).

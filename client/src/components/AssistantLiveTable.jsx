@@ -780,6 +780,24 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
   // alongside live-reconcile and refreshed on the same cadence.
   const [positions, setPositions] = useState([]);
 
+  // Forensic diagnostic modal — populated when user clicks DIAG on a card.
+  // Shows the full forensic dump for one ticker so it can be copy-pasted into
+  // a debug session without DevTools.
+  const [diagModal, setDiagModal] = useState(null); // { ticker, status: 'loading'|'ready'|'error', text }
+  const openDiag = useCallback(async (ticker) => {
+    setDiagModal({ ticker, status: 'loading', text: '' });
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/ticker-forensic/${encodeURIComponent(ticker)}`, {
+        headers: authHeaders(),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      setDiagModal({ ticker, status: 'ready', text: JSON.stringify(d, null, 2) });
+    } catch (e) {
+      setDiagModal({ ticker, status: 'error', text: e.message || 'failed' });
+    }
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
       setError(null);
@@ -1438,6 +1456,22 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                             }}
                           >FIX</button>
                         )}
+                        <button
+                          onClick={() => openDiag(row.ticker)}
+                          title={`Forensic dump for ${row.ticker} — copyable JSON`}
+                          style={{
+                            display: 'block',
+                            marginTop: 4,
+                            padding: '2px 6px',
+                            background: 'transparent',
+                            color: '#888',
+                            border: '1px solid #444',
+                            borderRadius: 4,
+                            fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
+                            cursor: 'pointer',
+                            width: '100%',
+                          }}
+                        >DIAG</button>
                       </td>
                     )}
                   </tr>
@@ -1526,6 +1560,81 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
           onClose={() => setPyramidModal(null)}
           onApplied={() => fetchData()}
         />
+      )}
+      {diagModal && (
+        <div
+          onClick={() => setDiagModal(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#1a1a1a', border: '1px solid #444', borderRadius: 8,
+              width: 'min(900px, 90vw)', maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+              padding: 16, gap: 12,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ color: '#fcf000', fontWeight: 800, fontSize: 14, letterSpacing: '0.05em' }}>
+                FORENSIC DUMP — {diagModal.ticker}
+              </div>
+              <button
+                onClick={() => setDiagModal(null)}
+                style={{
+                  background: 'transparent', color: '#888', border: '1px solid #444',
+                  borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontSize: 12,
+                }}
+              >Close ✕</button>
+            </div>
+            {diagModal.status === 'loading' && (
+              <div style={{ color: '#aaa', fontSize: 12, padding: 20, textAlign: 'center' }}>Loading…</div>
+            )}
+            {diagModal.status === 'error' && (
+              <div style={{ color: '#dc3545', fontSize: 12, padding: 20 }}>
+                Failed: {diagModal.text}
+              </div>
+            )}
+            {diagModal.status === 'ready' && (
+              <>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(diagModal.text);
+                        setDiagModal({ ...diagModal, copied: true });
+                        setTimeout(() => setDiagModal(prev => prev ? { ...prev, copied: false } : prev), 2000);
+                      } catch {
+                        // Clipboard API blocked — user can manually select
+                      }
+                    }}
+                    style={{
+                      background: diagModal.copied ? '#28a745' : '#fcf000',
+                      color: '#000', border: 'none', borderRadius: 4,
+                      padding: '6px 14px', fontWeight: 800, fontSize: 12, cursor: 'pointer',
+                    }}
+                  >{diagModal.copied ? '✓ Copied' : 'Copy to clipboard'}</button>
+                  <span style={{ color: '#888', fontSize: 11, alignSelf: 'center' }}>
+                    Then paste it into chat
+                  </span>
+                </div>
+                <textarea
+                  readOnly
+                  value={diagModal.text}
+                  onClick={(e) => e.target.select()}
+                  style={{
+                    flex: 1, minHeight: 400, background: '#000', color: '#0f0',
+                    fontFamily: 'monospace', fontSize: 11, padding: 10,
+                    border: '1px solid #333', borderRadius: 4, resize: 'none',
+                  }}
+                />
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

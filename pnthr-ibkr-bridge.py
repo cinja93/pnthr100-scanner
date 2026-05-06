@@ -166,6 +166,25 @@ class PNTHRBridge(EWrapper, EClient):
         if errorCode == 504:
             print("[BRIDGE] Not connected to TWS")
             return
+        # Error 10147 = "OrderId X that needs to be cancelled is not found".
+        # TWS has no record of this orderId — the order is already gone (filled,
+        # manually cancelled in TWS, expired, or a stale orderId from our cache
+        # that was rebuilt during a reconnect). The desired end state of a
+        # cancel is "order absent" — and absent it is. Mark the orderId as
+        # ALREADY_GONE in _order_status so the cancel waiter in
+        # cancel_order_by_perm_id exits successfully instead of timing out and
+        # dragging MODIFY_LOT_TRIGGER / MODIFY_STOP into PHASE_CANCEL failure.
+        if errorCode == 10147 and isinstance(reqId, int) and reqId > 0:
+            with self._order_status_lock:
+                prev = self._order_status.get(reqId, {})
+                self._order_status[reqId] = {
+                    **prev,
+                    'orderId':   reqId,
+                    'status':    'ALREADY_GONE',
+                    'updatedAt': time.time(),
+                }
+            print(f"[BRIDGE] TWS Error 10147 for orderId {reqId}: treating as already-gone (cancel succeeds)")
+            return
         print(f"[BRIDGE] TWS Error {errorCode}: {errorString}")
 
     def nextValidId(self, orderId):
@@ -471,8 +490,11 @@ class PNTHRBridge(EWrapper, EClient):
                 return {'ok': False, 'error': f'CANCEL_THREW: {e}'}
         except Exception as e:
             return {'ok': False, 'error': f'CANCEL_THREW: {e}'}
-        st = self._wait_for_status(target['orderId'], ('Cancelled', 'ApiCancelled'), timeout=10.0)
-        ok = st is not None and st['status'] in ('Cancelled', 'ApiCancelled')
+        # ALREADY_GONE is set by the error() callback when TWS responds with
+        # error 10147 (orderId not found). Treat as a terminal success — the
+        # order is absent, which is the desired end state of a cancel.
+        st = self._wait_for_status(target['orderId'], ('Cancelled', 'ApiCancelled', 'ALREADY_GONE'), timeout=10.0)
+        ok = st is not None and st['status'] in ('Cancelled', 'ApiCancelled', 'ALREADY_GONE')
         return {'ok': ok, 'orderId': target['orderId'], 'permId': perm_id,
                 'status': st['status'] if st else 'NO_STATUS'}
 

@@ -25,6 +25,7 @@ import {
   fetchNav,
   fetchPulse,
   fetchTrendlineAlerts, dismissTrendlineAlert,
+  fetchMovers,
 } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ChartModal from './ChartModal';
@@ -2622,6 +2623,39 @@ export default function AssistantPage({ onNavigate }) {
     catch (e) { console.error('dismiss failed', e); }
   }, []);
 
+  // PNTHR Movers alerts — fresh BL+1 in gainers / SS+1 in decliners.
+  // Same conditions as the top-of-app banner. Polls every 60s.
+  const [moversAlerts, setMoversAlerts] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    const buildAlerts = (m) => {
+      if (!m) return [];
+      const out = [];
+      const seen = new Set();
+      const push = (r, kind) => {
+        if (!r || seen.has(r.ticker)) return;
+        if (r.signalLabel === 'BL+1' && kind === 'gainer') {
+          out.push({ ticker: r.ticker, name: r.name, signal: 'BL+1', changePct: r.changePct, price: r.price });
+          seen.add(r.ticker);
+        } else if (r.signalLabel === 'SS+1' && kind === 'decliner') {
+          out.push({ ticker: r.ticker, name: r.name, signal: 'SS+1', changePct: r.changePct, price: r.price });
+          seen.add(r.ticker);
+        }
+      };
+      for (const r of m.stocks?.gainers   || []) push(r, 'gainer');
+      for (const r of m.stocks?.decliners || []) push(r, 'decliner');
+      for (const r of m.etfs?.gainers     || []) push(r, 'gainer');
+      for (const r of m.etfs?.decliners   || []) push(r, 'decliner');
+      return out;
+    };
+    const load = () => fetchMovers()
+      .then(d => { if (!cancelled) setMoversAlerts(buildAlerts(d)); })
+      .catch(() => { /* silent */ });
+    load();
+    const id = setInterval(load, 60 * 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
   const reloadAccessRequests = useCallback(async () => {
     if (!isAdmin) return;
     try {
@@ -2663,6 +2697,7 @@ export default function AssistantPage({ onNavigate }) {
     'live-watch',
     'data-integrity',
     'custom-trendline-alerts',
+    'movers-alerts',
     'todays-accomplishments',
     'recent-bridge-commands',
   ]), []);
@@ -3987,6 +4022,90 @@ export default function AssistantPage({ onNavigate }) {
           )}
         </div>
       )}
+
+      {/* PNTHR Movers Alerts — clickable ticker pills for the same fresh
+          BL+1/SS+1 signals surfaced in the top banner. Visible to all roles. */}
+      <div style={{
+        ...orderStyle('movers-alerts'),
+        border: '1px solid rgba(252, 240, 0, 0.3)',
+        borderRadius: 8,
+        marginBottom: 12,
+        background: moversAlerts.length > 0 ? 'rgba(252,240,0,0.04)' : 'transparent',
+      }}>
+        <div
+          onClick={() => toggleSection('movers-alerts')}
+          style={{
+            padding: '8px 14px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            borderBottom: isOpen('movers-alerts') ? '1px solid rgba(252, 240, 0, 0.12)' : 'none',
+          }}
+        >
+          <span style={{ fontSize: 10, fontWeight: 900, color: '#fcf000', letterSpacing: '0.14em', fontFamily: "'Inter', 'Segoe UI', sans-serif", textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+            {collapseArrow('movers-alerts', '#FCF000')}
+            PNTHR MOVERS ALERTS
+            {moversAlerts.length > 0 && (
+              <span style={{
+                marginLeft: 8, background: '#fcf000', color: '#000',
+                padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 900,
+              }}>{moversAlerts.length}</span>
+            )}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: '#888' }}>
+              {moversAlerts.length === 0 ? 'No active alerts' : 'Click ticker for chart'}
+            </span>
+            {reorderControls('movers-alerts')}
+          </span>
+        </div>
+        {isOpen('movers-alerts') && (
+          <div style={{ padding: '10px 14px' }}>
+            {moversAlerts.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#666', padding: '12px 0', textAlign: 'center' }}>
+                Fresh BL+1 / SS+1 signals on PNTHR Movers will appear here.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {moversAlerts.map(a => {
+                  const isBL = a.signal === 'BL+1';
+                  const sigBg = isBL ? '#28a745' : '#dc3545';
+                  const groupTickers = moversAlerts.map(x => x.ticker);
+                  return (
+                    <button
+                      key={a.ticker}
+                      onClick={() => handleChipClick({ ticker: a.ticker, groupTickers })}
+                      disabled={chartBusy === a.ticker}
+                      title={`${a.name || a.ticker} — ${a.signal} (${a.changePct >= 0 ? '+' : ''}${a.changePct?.toFixed(2)}% today)`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 8,
+                        padding: '6px 10px',
+                        background: '#0a0a0a',
+                        border: '1px solid #333',
+                        borderRadius: 6,
+                        cursor: chartBusy === a.ticker ? 'wait' : 'pointer',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      <span style={{ color: '#fcf000', fontWeight: 800, fontSize: 13 }}>${a.ticker}</span>
+                      <span style={{
+                        background: sigBg, color: '#fff',
+                        fontSize: 10, fontWeight: 800, letterSpacing: 0.3,
+                        padding: '2px 6px', borderRadius: 3,
+                      }}>{a.signal}</span>
+                      <span style={{
+                        color: a.changePct >= 0 ? '#6bcb77' : '#ff6b6b',
+                        fontSize: 11, fontWeight: 700,
+                        fontVariantNumeric: 'tabular-nums',
+                      }}>
+                        {a.changePct >= 0 ? '+' : ''}{a.changePct?.toFixed(2)}%
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Phase 4 outbox — recent commands inspector. Admin only.
           Collapse state persisted via central collapse map; matches the

@@ -223,26 +223,31 @@ export async function runPositionReconciler({ db, dryRun = false } = {}) {
       const matchedShares = unprocessed.reduce((s, e) => s + (+e.shares || 0), 0);
 
       if (unprocessed.length > 0 && matchedShares >= drift && matchedShares <= drift + 1) {
-        // Found exec(s) that explain the drift. Route each through recordExit
-        // so journal / discipline / wash all stay consistent.
+        // Found exec(s) that explain the drift. Route through recordExit but
+        // cap total exited shares to exactly the drift — never overshoot.
         if (dryRun) {
           actions.push({ ticker, kind: 'WOULD_RECORD_EXIT_FROM_EXEC', drift, execIds: unprocessed.map(e => e.execId) });
         } else {
+          let exitedSoFar = 0;
           for (const e of unprocessed) {
+            const sharesNeeded = drift - exitedSoFar;
+            if (sharesNeeded <= 0) break;
+            const sharesToExit = Math.min(+e.shares, sharesNeeded);
             try {
               await recordExit(db, p.id, p.ownerId, {
-                shares: +e.shares,
+                shares: sharesToExit,
                 price:  +e.price,
                 date:   new Date().toISOString().split('T')[0],
                 reason: 'AUTO_RECONCILE_FROM_EXEC',
-                note:   `Reconciler matched IBKR exec ${e.execId} (${e.shares} sh @ $${e.price}) to drift fix.`,
+                note:   `Reconciler matched IBKR exec ${e.execId} (${sharesToExit} sh @ $${e.price}) to drift fix.`,
               });
               await db.collection('pnthr_ibkr_executions').updateOne(
                 { ownerId: p.ownerId, execId: e.execId },
                 { $set: { ownerId: p.ownerId, execId: e.execId, symbol: ticker, side: e.side, shares: e.shares, price: e.price, type: 'AUTO_RECONCILE_FROM_EXEC', processedAt: new Date() } },
                 { upsert: true },
               );
-              actions.push({ ticker, kind: 'RECORD_EXIT_FROM_EXEC', execId: e.execId, shares: e.shares, price: e.price });
+              exitedSoFar += sharesToExit;
+              actions.push({ ticker, kind: 'RECORD_EXIT_FROM_EXEC', execId: e.execId, shares: sharesToExit, price: e.price });
             } catch (err) {
               actions.push({ ticker, kind: 'RECORD_EXIT_FROM_EXEC_FAILED', execId: e.execId, error: err.message });
             }
@@ -270,18 +275,19 @@ export async function runPositionReconciler({ db, dryRun = false } = {}) {
       const matchedShares = unprocessed.reduce((s, e) => s + (+e.shares || 0), 0);
 
       if (unprocessed.length > 0 && matchedShares >= want && matchedShares <= want + 1) {
-        // Append unprocessed BOT execs as additional fills. We don't try to
-        // match each to a specific lot slot here — that's lotFillRecorder's
-        // job when the share count is in tolerance. This path runs ONLY
-        // when lotFillRecorder couldn't match (off-tolerance manual buys).
-        // Append to next unfilled slot; reuses appendSyntheticFill writer.
+        // Append unprocessed BOT execs as additional fills. Cap total added
+        // shares to exactly the drift — never overshoot.
         if (dryRun) {
           actions.push({ ticker, kind: 'WOULD_APPEND_FROM_EXEC', want, execIds: unprocessed.map(e => e.execId) });
         } else {
+          let addedSoFar = 0;
           for (const e of unprocessed) {
+            const sharesNeeded = want - addedSoFar;
+            if (sharesNeeded <= 0) break;
+            const sharesToAdd = Math.min(+e.shares, sharesNeeded);
             await appendSyntheticFill({
               db, position: p, ownerId: p.ownerId,
-              shares: +e.shares,
+              shares: sharesToAdd,
               ibkrMarketPrice: +e.price,
               ibkrAvgCost: +ibkrPos?.avgCost || 0,
               log: actions,
@@ -291,6 +297,7 @@ export async function runPositionReconciler({ db, dryRun = false } = {}) {
               { $set: { ownerId: p.ownerId, execId: e.execId, symbol: ticker, side: e.side, shares: e.shares, price: e.price, type: 'AUTO_RECONCILE_APPEND_EXEC', processedAt: new Date() } },
               { upsert: true },
             );
+            addedSoFar += sharesToAdd;
             // Refresh position so the next iteration sees updated fills
             const fresh = await db.collection('pnthr_portfolio').findOne({ id: p.id, ownerId: p.ownerId });
             if (fresh) Object.assign(p, fresh);

@@ -72,6 +72,7 @@ export default function PulsePage({ onNavigate }) {
   const [devLoading,      setDevLoading]      = useState(false);
   const [sectorExposure,  setSectorExposure]  = useState(null);
   const [movers,          setMovers]          = useState(null);
+  const [sectorModal,     setSectorModal]     = useState(null); // { sector, data }
   const autoRefreshTimer = React.useRef(null);
   const showDev = shouldShowDevelopingSignals();
 
@@ -209,7 +210,22 @@ export default function PulsePage({ onNavigate }) {
       <MoversPanel movers={movers} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} />
 
       {/* TIER 3: Portfolio — Heat gauge + positions + alerts/lots in one band (hidden for investors) */}
-      {!isInvestor && <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} />}
+      {!isInvestor && <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} onSectorClick={(sector, sectorData) => setSectorModal({ sector, data: sectorData })} />}
+
+      {sectorModal && (
+        <SectorTickersModal
+          sector={sectorModal.sector}
+          data={sectorModal.data}
+          onClose={() => setSectorModal(null)}
+          onTickerClick={(ticker, allTickers) => {
+            setSectorModal(null);
+            const stocks = allTickers.map(t => ({ ticker: t }));
+            const idx = Math.max(0, stocks.findIndex(s => s.ticker === ticker));
+            setChartList(stocks);
+            setChartIndex(idx);
+          }}
+        />
+      )}
 
       {signalModal && (
         <SignalStockModal
@@ -1825,7 +1841,7 @@ function AlertStrip({ alerts, lotsReady, onNavigate }) {
   );
 }
 
-function SectorCard({ sector, data }) {
+function SectorCard({ sector, data, onClick }) {
   const isHeightened = data.level === 'HEIGHTENED';
   const isElevated   = data.level === 'ELEVATED';
   const dot     = isHeightened ? '#dc3545' : isElevated ? '#FFD700' : '#28a745';
@@ -1835,9 +1851,14 @@ function SectorCard({ sector, data }) {
   const name    = getSectorDisplayName(sector);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px',
-      backgroundColor: bg, border: `1px solid ${border}`, borderRadius: 6 }}
-      title={`${sector}: ${data.longCount}L / ${data.shortCount}S — net exposure ${data.netExposure} ${data.netDirection}`}>
+    <div
+      onClick={onClick ? () => onClick(sector, data) : undefined}
+      style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px',
+      backgroundColor: bg, border: `1px solid ${border}`, borderRadius: 6,
+      cursor: onClick ? 'pointer' : 'default', transition: 'filter 0.12s ease' }}
+      onMouseEnter={e => { if (onClick) e.currentTarget.style.filter = 'brightness(1.25)'; }}
+      onMouseLeave={e => { if (onClick) e.currentTarget.style.filter = 'none'; }}
+      title={`${sector}: ${data.longCount}L / ${data.shortCount}S — net exposure ${data.netExposure} ${data.netDirection}${onClick ? ' (click to view tickers)' : ''}`}>
       <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: dot, flexShrink: 0 }} />
       <span style={{ fontSize: 12, color: '#e8e6e3', fontWeight: 600, flex: 1,
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
@@ -1847,7 +1868,88 @@ function SectorCard({ sector, data }) {
   );
 }
 
-function SectorExposureGrid({ sectorExposure }) {
+function SectorTickersModal({ sector, data, onClose, onTickerClick }) {
+  const longs  = data?.longs  || [];
+  const shorts = data?.shorts || [];
+  const all = [...longs, ...shorts];
+  const name = getSectorDisplayName(sector);
+
+  const TickerChip = ({ ticker, dir }) => (
+    <button
+      onClick={() => onTickerClick?.(ticker, all)}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '6px 10px',
+        background: '#0a0a0a',
+        border: `1px solid ${dir === 'LONG' ? 'rgba(40,167,69,0.45)' : 'rgba(220,53,69,0.45)'}`,
+        borderRadius: 6, cursor: 'pointer', fontFamily: 'monospace',
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
+      onMouseLeave={e => e.currentTarget.style.background = '#0a0a0a'}
+    >
+      <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13 }}>${ticker}</span>
+      <span style={{
+        background: dir === 'LONG' ? '#28a745' : '#dc3545', color: '#fff',
+        fontSize: 9, fontWeight: 800, letterSpacing: 0.3,
+        padding: '1px 5px', borderRadius: 3,
+      }}>{dir === 'LONG' ? 'L' : 'S'}</span>
+    </button>
+  );
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#111', border: '1px solid rgba(252,240,0,0.3)', borderRadius: 12,
+          padding: '20px 24px', minWidth: 360, maxWidth: 600, maxHeight: '80vh', overflow: 'auto',
+          fontFamily: 'monospace',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div>
+            <div style={{ color: '#FFD700', fontSize: 16, fontWeight: 700, letterSpacing: 1 }}>{name}</div>
+            <div style={{ color: '#888', fontSize: 11, marginTop: 4 }}>
+              {longs.length}L / {shorts.length}S — net {data?.netExposure} {data?.netDirection}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: 'none', color: '#888', fontSize: 22, cursor: 'pointer', lineHeight: 1,
+          }}>×</button>
+        </div>
+
+        {longs.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ color: '#28a745', fontSize: 10, letterSpacing: 1.5, marginBottom: 6, fontWeight: 700 }}>LONGS ({longs.length})</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {longs.map(t => <TickerChip key={`L-${t}`} ticker={t} dir="LONG" />)}
+            </div>
+          </div>
+        )}
+        {shorts.length > 0 && (
+          <div>
+            <div style={{ color: '#dc3545', fontSize: 10, letterSpacing: 1.5, marginBottom: 6, fontWeight: 700 }}>SHORTS ({shorts.length})</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {shorts.map(t => <TickerChip key={`S-${t}`} ticker={t} dir="SHORT" />)}
+            </div>
+          </div>
+        )}
+        {longs.length === 0 && shorts.length === 0 && (
+          <div style={{ color: '#666', fontSize: 12, textAlign: 'center', padding: 16 }}>No positions in this sector.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectorExposureGrid({ sectorExposure, onSectorClick }) {
   const sorted = Object.entries(sectorExposure)
     .sort(([, a], [, b]) => {
       const order = { HEIGHTENED: 0, ELEVATED: 1, CLEAR: 2 };
@@ -1859,14 +1961,14 @@ function SectorExposureGrid({ sectorExposure }) {
     <div>
       <div style={{ fontSize: 12, color: '#888', letterSpacing: '0.06em', marginBottom: 10 }}>SECTOR EXPOSURE</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
-        {sorted.map(([sector, data]) => <SectorCard key={sector} sector={sector} data={data} />)}
+        {sorted.map(([sector, data]) => <SectorCard key={sector} sector={sector} data={data} onClick={onSectorClick} />)}
       </div>
     </div>
   );
 }
 
 // ── Tier 3: Portfolio Status panel (redesigned) ────────────────────────────────
-function PortfolioStatus({ positions, lotsReady, onNavigate, sectorExposure }) {
+function PortfolioStatus({ positions, lotsReady, onNavigate, sectorExposure, onSectorClick }) {
   const heat = positions?.heat || {};
   const nav  = positions?.nav  || 100000;
 
@@ -1970,7 +2072,7 @@ function PortfolioStatus({ positions, lotsReady, onNavigate, sectorExposure }) {
 
       {/* Sector exposure grid */}
       {sectorExposure?.exposure && Object.keys(sectorExposure.exposure).length > 0 && (
-        <SectorExposureGrid sectorExposure={sectorExposure.exposure} />
+        <SectorExposureGrid sectorExposure={sectorExposure.exposure} onSectorClick={onSectorClick} />
       )}
     </div>
   );

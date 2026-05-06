@@ -1131,7 +1131,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
           <div style={{ textAlign: 'center', padding: 48 }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
             <div style={{ color: '#555', fontSize: 14, marginBottom: 6 }}>No day trades recorded yet.</div>
-            <div style={{ color: '#444', fontSize: 12 }}>Day trades are auto-recorded from IBKR when you open and close a position on the same day without tracking it in Command.</div>
+            <div style={{ color: '#444', fontSize: 12 }}>Day trades are auto-recorded from IBKR when you open and close a position on the same day without tracking it in PNTHR.</div>
           </div>
         ) : (
           <>
@@ -1944,7 +1944,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                   {sorted.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: 40 }}>
                       <div style={{ color: '#555', fontSize: 14, marginBottom: 16 }}>
-                        No journal entries yet. Journal entries are auto-created when you confirm a position in Command.
+                        No journal entries yet. Journal entries are auto-created when you confirm a position in PNTHR Assistant.
                       </div>
                       {isAdmin && (
                         <div>

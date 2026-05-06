@@ -182,7 +182,7 @@ export default function PyramidPlanModal({ ticker, positionId, onClose, onApplie
     if (submitting) return;
     if (!window.confirm(
       `Dismiss the pyramid prompt for ${ticker}?\n\n` +
-      `The PYRAMID button will stop appearing on this row. The position stays single-shot at its current size. Re-enable later by editing the position's pyramidDismissed flag in Command Center.`
+      `The PYRAMID button will stop appearing on this row. The position stays single-shot at its current size. Re-enable later by editing the position's pyramidDismissed flag.`
     )) return;
     setSubmitting(true);
     setError(null);

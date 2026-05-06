@@ -1833,7 +1833,7 @@ function AlertStrip({ alerts, lotsReady, onNavigate }) {
           {(lotsReady || []).map(l => `${l.ticker} Lot ${l.lot}`).join(', ')}
         </span>
       )}
-      <span onClick={() => { sessionStorage.setItem('scrollToRiskAdvisor', '1'); onNavigate?.('command'); }}
+      <span onClick={() => { sessionStorage.setItem('openRiskAdvisor', '1'); onNavigate?.('assistant'); }}
         style={{ marginLeft: 'auto', fontSize: 12, color: '#888', cursor: 'pointer',
           textDecoration: 'underline', textDecorationColor: 'rgba(136,136,136,0.3)', textUnderlineOffset: 3 }}>
         View risk advisor →
@@ -2040,10 +2040,10 @@ function PortfolioStatus({ positions, lotsReady, onNavigate, sectorExposure, onS
             PNTHR PORTFOLIO STATUS
           </span>
         </div>
-        <button onClick={() => onNavigate?.('command')}
+        <button onClick={() => onNavigate?.('assistant')}
           style={{ fontSize: 12, padding: '4px 12px', backgroundColor: 'transparent',
             border: '1px solid rgba(255,215,0,0.3)', borderRadius: 5, color: '#FFD700', cursor: 'pointer' }}>
-          GO TO COMMAND →
+          GO TO ASSISTANT →
         </button>
       </div>
 

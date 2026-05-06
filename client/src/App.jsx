@@ -247,7 +247,7 @@ const DISC_BAND = {
 
 function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
   const [uiState,     setUiState]     = useState('default');    // default | confirming | fixing | fixed
-  const [chosen,      setChosen]      = useState(null);         // 'ibkr' | 'command'
+  const [chosen,      setChosen]      = useState(null);         // 'ibkr' | 'assistant'
   const [createState, setCreateState] = useState('idle');       // idle | confirming | creating | created | error
   const [closeState,  setCloseState]  = useState('idle');       // idle | confirming | closing | closed | error
 
@@ -275,7 +275,7 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
   // ── content per type ──────────────────────────────────────────────────────
   function renderContent() {
     if (uiState === 'fixing')  return <span style={{ color: muted, fontSize: 11 }}>Saving…</span>;
-    if (uiState === 'fixed')   return <span style={{ color: text, fontWeight: 700, fontSize: 11 }}>✓ Fixed! Command updated.</span>;
+    if (uiState === 'fixed')   return <span style={{ color: text, fontWeight: 700, fontSize: 11 }}>✓ Fixed! PNTHR updated.</span>;
 
     const dirLabel = d.direction === 'SHORT' ? 'SHORT' : 'LONG';
 
@@ -284,14 +284,14 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
       let confirmText = '';
       let fixFields   = {};
       if (d.type === 'SHARES_MISMATCH') {
-        confirmText = `Fix Command: set ${d.ticker} to ${chosen === 'ibkr' ? d.ibkrShares : d.pnthrShares} shares?`;
+        confirmText = `Fix PNTHR: set ${d.ticker} to ${chosen === 'ibkr' ? d.ibkrShares : d.pnthrShares} shares?`;
         fixFields   = { remainingShares: chosen === 'ibkr' ? d.ibkrShares : d.pnthrShares };
       } else if (d.type === 'PRICE_MISMATCH') {
-        confirmText = `Fix Command avg cost for ${d.ticker} to $${chosen === 'ibkr' ? d.ibkrAvg.toFixed(2) : d.pnthrAvg.toFixed(2)}?`;
+        confirmText = `Fix PNTHR avg cost for ${d.ticker} to $${chosen === 'ibkr' ? d.ibkrAvg.toFixed(2) : d.pnthrAvg.toFixed(2)}?`;
         fixFields   = { manualAvgCost: chosen === 'ibkr' ? d.ibkrAvg : d.pnthrAvg };
       } else if (d.type === 'STOP_MISSING' || d.type === 'STOP_MISMATCH') {
         const newStop = chosen === 'ibkr' ? d.ibkrStop : d.pnthrStop;
-        confirmText   = `Set ${d.ticker} stop to $${(+newStop).toFixed(2)} in Command?`;
+        confirmText   = `Set ${d.ticker} stop to $${(+newStop).toFixed(2)} in PNTHR Assistant?`;
         fixFields     = { stopPrice: +newStop };
       }
       return (
@@ -310,8 +310,8 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
           <span style={{ color: muted, fontSize: 11 }}>
             {dirLabel} · <b style={{ color: text }}>{Math.abs(d.diff)}</b> share diff — which count is correct?
           </span>
-          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('secondary')}>
-            Command: {d.pnthrShares} shr
+          <button onClick={() => { setChosen('assistant'); setUiState('confirming'); }} style={btnStyle('secondary')}>
+            PNTHR: {d.pnthrShares} shr
           </button>
           <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle('primary')}>
             IBKR: {d.ibkrShares} shr ← use this
@@ -325,8 +325,8 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
           <span style={{ color: muted, fontSize: 11 }}>
             Avg cost <b style={{ color: text }}>{d.diffPct}%</b> off — which is correct?
           </span>
-          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('secondary')}>
-            Command: ${d.pnthrAvg?.toFixed(2)}
+          <button onClick={() => { setChosen('assistant'); setUiState('confirming'); }} style={btnStyle('secondary')}>
+            PNTHR: ${d.pnthrAvg?.toFixed(2)}
           </button>
           <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle('primary')}>
             IBKR: ${d.ibkrAvg?.toFixed(2)} ← use this
@@ -342,14 +342,14 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
             <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle('primary')}>
               Use IBKR stop: ${(+d.ibkrStop).toFixed(2)}
             </button>
-            <button onClick={() => onNavigate('command')} style={btnStyle('secondary')}>Set manually in Command →</button>
+            <button onClick={() => onNavigate('assistant')} style={btnStyle('secondary')}>Set manually in Assistant →</button>
           </span>
         );
       }
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: muted, fontSize: 11 }}>No stop in Command or IBKR — position is UNPROTECTED</span>
-          <button onClick={() => onNavigate('command')} style={btnStyle('primary')}>Set Stop in Command →</button>
+          <span style={{ color: muted, fontSize: 11 }}>No stop in PNTHR Assistant or IBKR — position is UNPROTECTED</span>
+          <button onClick={() => onNavigate('assistant')} style={btnStyle('primary')}>Set Stop in PNTHR Assistant →</button>
         </span>
       );
     }
@@ -357,8 +357,8 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ color: muted, fontSize: 11 }}>Stop prices differ — which is correct?</span>
-          <button onClick={() => { setChosen('command'); setUiState('confirming'); }} style={btnStyle('secondary')}>
-            Command: ${(+d.pnthrStop).toFixed(2)}
+          <button onClick={() => { setChosen('assistant'); setUiState('confirming'); }} style={btnStyle('secondary')}>
+            PNTHR: ${(+d.pnthrStop).toFixed(2)}
           </button>
           <button onClick={() => { setChosen('ibkr'); setUiState('confirming'); }} style={btnStyle('primary')}>
             IBKR: ${(+d.ibkrStop).toFixed(2)} ← use this
@@ -369,11 +369,11 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
     if (d.type === 'TICKER_MISSING') {
       const isCmdOnly = d.side === 'COMMAND_ONLY';
 
-      // ── COMMAND_ONLY: position in Command but not (or 0) in IBKR ─────────
+      // ── COMMAND_ONLY: position in PNTHR Assistant but not (or 0) in IBKR ─────────
       if (isCmdOnly) {
         const desc = d.ibkrShowsZero
-          ? `In Command (${d.pnthrShares} shr) — IBKR now shows 0 shares (closed there)`
-          : `In Command (${d.pnthrShares} shr) — not found in IBKR at all`;
+          ? `In PNTHR (${d.pnthrShares} shr) — IBKR now shows 0 shares (closed there)`
+          : `In PNTHR (${d.pnthrShares} shr) — not found in IBKR at all`;
 
         async function doClose() {
           if (!d.positionId || !d.ibkrExitPrice) return;
@@ -393,11 +393,11 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
         }
 
         if (closeState === 'closing') return <span style={{ color: muted, fontSize: 11 }}>Closing…</span>;
-        if (closeState === 'closed')  return <span style={{ color: text, fontWeight: 700, fontSize: 11 }}>✓ Closed in Command.</span>;
+        if (closeState === 'closed')  return <span style={{ color: text, fontWeight: 700, fontSize: 11 }}>✓ Closed in PNTHR Assistant.</span>;
         if (closeState === 'error')   return (
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: muted, fontSize: 11 }}>Close failed — try manually in Command</span>
-            <button onClick={() => onNavigate('command')} style={btnStyle('secondary')}>Open Command →</button>
+            <span style={{ color: muted, fontSize: 11 }}>Close failed — try manually in PNTHR Assistant</span>
+            <button onClick={() => onNavigate('assistant')} style={btnStyle('secondary')}>Open PNTHR Assistant →</button>
           </span>
         );
 
@@ -415,14 +415,14 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ color: muted, fontSize: 11 }}>{desc}</span>
             {d.ibkrExitPrice
-              ? <button onClick={() => setCloseState('confirming')} style={btnStyle('primary')}>Close in Command →</button>
-              : <button onClick={() => onNavigate('command')} style={btnStyle('primary')}>Close in Command →</button>
+              ? <button onClick={() => setCloseState('confirming')} style={btnStyle('primary')}>Close in PNTHR Assistant →</button>
+              : <button onClick={() => onNavigate('assistant')} style={btnStyle('primary')}>Close in PNTHR Assistant →</button>
             }
           </span>
         );
       }
 
-      // ── IBKR_ONLY: position in IBKR but missing from Command ─────────────
+      // ── IBKR_ONLY: position in IBKR but missing from PNTHR ─────────────
       async function doCreate() {
         setCreateState('creating');
         try {
@@ -454,8 +454,8 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
           </span>
         );
       }
-      if (createState === 'creating') return <span style={{ color: muted, fontSize: 11 }}>Creating position in Command…</span>;
-      if (createState === 'created')  return <span style={{ color: text, fontWeight: 700, fontSize: 11 }}>✓ Position created! Go to Command to set stop + expand lots.</span>;
+      if (createState === 'creating') return <span style={{ color: muted, fontSize: 11 }}>Creating position in PNTHR Assistant…</span>;
+      if (createState === 'created')  return <span style={{ color: text, fontWeight: 700, fontSize: 11 }}>✓ Position created! Go to PNTHR Assistant to set stop + expand lots.</span>;
       if (createState === 'error') {
         return (
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -468,10 +468,10 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ color: muted, fontSize: 11 }}>
-            In IBKR — {dirLabel} {d.ibkrShares} shr{costStr} — NOT in Command{staleNote}
+            In IBKR — {dirLabel} {d.ibkrShares} shr{costStr} — NOT in PNTHR Assistant{staleNote}
           </span>
           <button onClick={() => setCreateState('confirming')} style={btnStyle('primary')}>
-            Create in Command →
+            Create in PNTHR Assistant →
           </button>
         </span>
       );
@@ -1059,7 +1059,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
               </span>
             ))}
             <button
-              onClick={() => navigate('command')}
+              onClick={() => navigate('assistant')}
               style={{
                 marginLeft: 'auto',
                 background: '#28a745',
@@ -1073,7 +1073,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                 whiteSpace: 'nowrap',
               }}
             >
-              GO TO COMMAND →
+              GO TO ASSISTANT →
             </button>
           </div>
         )}
@@ -1327,8 +1327,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* Jungle page */}
           {activePage === 'jungle' && <JunglePage />}
 
-          {/* PNTHR Command Center */}
-          {activePage === 'command' && <CommandCenter onNavigate={navigate} refreshSignal={commandRefreshKey} />}
+          {/* PNTHR Command Center route removed — Assistant is the sole
+              destination now. CommandCenter import/state stays until PR 8
+              final cleanup. */}
 
           {/* PNTHR Journal */}
           {activePage === 'journal' && <JournalPage onNavigate={navigate} initialFilter={journalInitFilter} focusPositionId={journalFocusId} focusTicker={journalFocusTicker} />}
@@ -1404,7 +1405,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 200,
           background: '#28a745', color: '#fff', fontWeight: 700, fontSize: 12,
           padding: '10px 18px', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}>
-          ✓ Entries sent to Command!
+          ✓ Entries sent to PNTHR Assistant!
         </div>
       )}
 

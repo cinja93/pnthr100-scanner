@@ -1118,13 +1118,13 @@ function TradesTodaySection({ trades, loading, ibkrConnected, onNavigate }) {
                           </span>
                         )}
                         <button
-                          onClick={() => onNavigate('command')}
+                          onClick={() => onNavigate('assistant')}
                           style={{
                             background: 'none', border: '1px solid #ff8c00', color: '#ff8c00',
                             borderRadius: 3, padding: '1px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 700,
                           }}
                         >
-                          Close in Command →
+                          Close in Assistant →
                         </button>
                       </>
                     )}
@@ -1142,7 +1142,7 @@ function TradesTodaySection({ trades, loading, ibkrConnected, onNavigate }) {
                     )}
 
                     {t.category === 'UNTRACKED' && (
-                      <span style={{ fontSize: 10, color: '#555' }}>not tracked in Command</span>
+                      <span style={{ fontSize: 10, color: '#555' }}>not tracked in PNTHR</span>
                     )}
 
                     {t.category === 'DAY_TRADE' && (
@@ -2595,6 +2595,15 @@ export default function AssistantPage({ onNavigate }) {
   // is the canonical display now. Keep setNav for the fetchNav effect.
   const [nav,           setNav]           = useState(null);
   const [riskAdvisorOpen, setRiskAdvisorOpen] = useState(false);
+  // If Pulse navigated us here with 'openRiskAdvisor' set, pop the modal once.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('openRiskAdvisor') === '1') {
+        sessionStorage.removeItem('openRiskAdvisor');
+        setRiskAdvisorOpen(true);
+      }
+    } catch { /* ignore */ }
+  }, []);
   const [calcOpen,        setCalcOpen]        = useState(false);
   const [addPosOpen,      setAddPosOpen]      = useState(false);
   const [addPosInitial,   setAddPosInitial]   = useState(null);

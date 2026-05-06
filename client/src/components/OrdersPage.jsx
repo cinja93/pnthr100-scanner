@@ -1475,7 +1475,7 @@ const COLUMN_TOOLTIPS = {
     'walks rows top-down, so strongest names get their full size first). ' +
     'Green = full Lot 1 fits. Green with red "−N" = trimmed so adding this ' +
     'row stays within the 10% cap. Red 0 = budget exhausted, trim existing ' +
-    'positions in Command Center before taking this one.',
+    'positions in PNTHR Assistant before taking this one.',
   'Entry (Limit)':
     'Suggested limit-order entry price — the breakout (BL) or breakdown (SS) ' +
     'level detected by the signal engine. Place a GTD BUY STOP LIMIT ' +
@@ -1513,8 +1513,8 @@ const COLUMN_TOOLTIPS = {
     'mostly upper tiers since the 4 gates filter weaker stocks out. A tier ' +
     'downgrade between weeks is a signal to tighten stops.',
   'Status':
-    'IN PORTFOLIO = you already own this ticker in Command Center. Do NOT ' +
-    'double up — manage lots 2–5 via Command\'s lot system. ' +
+    'IN PORTFOLIO = you already own this ticker in PNTHR Assistant. Do NOT ' +
+    'double up — manage lots 2–5 via the row-expand lot system. ' +
     'NEW = not in your current portfolio; this is a fresh Lot 1 entry if you ' +
     'take it.',
 };

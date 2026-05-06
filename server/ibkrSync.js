@@ -42,9 +42,18 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
     .createIndex({ ownerId: 1, execId: 1 }, { unique: true })
     .catch(() => {}); // fire-and-forget; unique constraint also prevents double-processing
 
-  // Load already-processed execIds for this user
+  // Load already-processed execIds for this user.
+  // Exclude DRY_RUN markers — those record what *would* have happened when
+  // IBKR_AUTO_RECORD_ADD_FILL was false; once the flag flips to true, the
+  // execution should re-process and actually write fills[N]. The unique index
+  // on (ownerId, execId) is reused: when the real record is inserted, the
+  // dry-run row is updated in-place via $set rather than duplicate-keyed.
   const processedDocs = await db.collection('pnthr_ibkr_executions')
-    .find({ ownerId: userId, execId: { $in: executions.map(e => e.execId) } })
+    .find({
+      ownerId: userId,
+      execId:  { $in: executions.map(e => e.execId) },
+      type:    { $ne: 'AUTO_RECORD_LOT_FILL_DRY_RUN' },
+    })
     .project({ execId: 1 })
     .toArray();
   const processedIds = new Set(processedDocs.map(d => d.execId));
@@ -119,18 +128,25 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
         }
 
         if (lotResult.recorded) {
-          await db.collection('pnthr_ibkr_executions').insertOne({
-            ownerId:    userId,
-            execId:     exec.execId,
-            symbol,
-            side:       exec.side,
-            shares:     exec.shares,
-            price:      exec.price,
-            type:       'AUTO_RECORD_LOT_FILL',
-            lot:        lotResult.lot,
-            ratchetTo:  lotResult.ratchet?.newStop ?? null,
-            processedAt: syncedAt,
-          });
+          // Upsert so a prior DRY_RUN marker for this execId is overwritten
+          // when the flag flips and the execution actually gets recorded.
+          await db.collection('pnthr_ibkr_executions').updateOne(
+            { ownerId: userId, execId: exec.execId },
+            { $set: {
+                ownerId:    userId,
+                execId:     exec.execId,
+                symbol,
+                side:       exec.side,
+                shares:     exec.shares,
+                price:      exec.price,
+                type:       'AUTO_RECORD_LOT_FILL',
+                lot:        lotResult.lot,
+                ratchetTo:  lotResult.ratchet?.newStop ?? null,
+                processedAt: syncedAt,
+              },
+            },
+            { upsert: true }
+          );
           lotFillsRecorded.push({
             ticker: symbol, direction: addingDir, lot: lotResult.lot, lotName: lotResult.lotName,
             shares: lotResult.fillShares, price: lotResult.fillPrice,
@@ -149,13 +165,24 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
             ' — set IBKR_AUTO_RECORD_ADD_FILL=true on Render to apply');
           // Mark as processed even in dry run so we don't keep re-logging it
           // every minute. The user can replay manually via the admin endpoint
-          // once they're ready to apply.
-          await db.collection('pnthr_ibkr_executions').insertOne({
-            ownerId:    userId, execId: exec.execId, symbol, side: exec.side,
-            shares: exec.shares, price: exec.price,
-            type: 'AUTO_RECORD_LOT_FILL_DRY_RUN', lot: lotResult.lot,
-            processedAt: syncedAt,
-          });
+          // once they're ready to apply. Use upsert in case a prior DRY_RUN
+          // row already exists (e.g., re-running same execId snapshot).
+          await db.collection('pnthr_ibkr_executions').updateOne(
+            { ownerId: userId, execId: exec.execId },
+            { $set: {
+                ownerId:    userId,
+                execId:     exec.execId,
+                symbol,
+                side:       exec.side,
+                shares:     exec.shares,
+                price:      exec.price,
+                type:       'AUTO_RECORD_LOT_FILL_DRY_RUN',
+                lot:        lotResult.lot,
+                processedAt: syncedAt,
+              },
+            },
+            { upsert: true }
+          );
           continue;
         }
 

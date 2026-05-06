@@ -988,11 +988,20 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
           // returns 0 (recycled / invalid stop).
           const pos = findPositionByTicker(row.ticker);
           let targetShares = null;
-          if (pos && +pos.entryPrice > 0 && +pos.stopPrice > 0 && +netLiquidity > 0) {
+          // Pyramid sizing is locked at entry by the ORIGINAL 1% NAV risk plan.
+          // As stops ratchet up (or down for shorts), the position is already
+          // sized — it does NOT grow with each ratchet. Use originalStop when
+          // available so the badge reports the locked-in plan target, not an
+          // inflated number from current ratcheted-stop math. Falls back to
+          // stopPrice for older positions that predate originalStop.
+          // Mirrors server-side computeLotTargetShares behavior — keeps the
+          // badge and the L2-L5 plan in agreement (2026-05-05).
+          const sizingStop = +(pos?.originalStop || pos?.stopPrice) || 0;
+          if (pos && +pos.entryPrice > 0 && sizingStop > 0 && +netLiquidity > 0) {
             const sizing = sizePosition({
               netLiquidity,
               entryPrice: +pos.entryPrice,
-              stopPrice:  +pos.stopPrice,
+              stopPrice:  sizingStop,
               maxGapPct:  +pos.maxGapPct || 0,
               direction:  (pos.direction || 'LONG').toUpperCase(),
               isETF:      isEtfTicker(row.ticker, pos.isEtf),

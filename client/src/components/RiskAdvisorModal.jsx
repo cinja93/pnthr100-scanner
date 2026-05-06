@@ -160,7 +160,11 @@ function runRiskAdvisor(positions, nav) {
       const trigger = p.direction === 'LONG' ? +(lot1Price * 1.03).toFixed(2) : +(lot1Price * 0.97).toFixed(2);
       const priceReady = p.direction === 'LONG' ? getDisplayPrice(p) >= trigger : getDisplayPrice(p) <= trigger;
       if (priceReady) {
-        const sizing = sizePosition({ netLiquidity: nav, entryPrice: p.entryPrice, stopPrice: p.stopPrice, maxGapPct: p.maxGapPct || 0, direction: p.direction });
+        // Use originalStop for sizing (the locked-in 1% NAV plan from entry),
+        // not the current ratcheted stop. Otherwise, ratcheted positions get
+        // a falsely-inflated target and Lot 2 recommendations push past the
+        // original 1% risk discipline. Mirrors AssistantLiveTable badge fix.
+        const sizing = sizePosition({ netLiquidity: nav, entryPrice: p.entryPrice, stopPrice: (p.originalStop || p.stopPrice), maxGapPct: p.maxGapPct || 0, direction: p.direction });
         const lot2Shares = Math.round(sizing.totalShares * 0.25);
         recs.push({
           priority: 'ACTION', type: 'LOT2_READY',

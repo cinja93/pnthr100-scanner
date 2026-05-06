@@ -337,7 +337,7 @@ export default function QueueReviewPanel({ onClose }) {
                   🔴 OPTION A — Close weakest positions to create room
                 </div>
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
-                  Go to Command to close these first, then return and SEND:
+                  Go to PNTHR Assistant to close these first, then return and SEND:
                 </div>
                 {closeStockTickers.length > 0 && (
                   <div style={{ fontSize: 11, color: '#ff6b6b', fontFamily: 'monospace', marginBottom: 2 }}>

@@ -61,7 +61,7 @@ async function apiPatch(path, body) {
   return res.json().catch(() => ({}));
 }
 
-export default function AssistantRowExpand({ position, netLiquidity, onClose, onPositionChanged, onOpenChart }) {
+export default function AssistantRowExpand({ position, netLiquidity, onClose, onPositionChanged, onOpenChart, onExitConfirmed }) {
   const [showAllStops, setShowAllStops] = useState(false);
   const [error,        setError]        = useState(null);
 
@@ -98,7 +98,10 @@ export default function AssistantRowExpand({ position, netLiquidity, onClose, on
     catch (e) { setError(e.message || 'Delete failed'); }
   }, [refresh, onClose]);
 
-  const handleExitConfirmed = useCallback(() => { refresh(); }, [refresh]);
+  const handleExitConfirmed = useCallback((exitResult) => {
+    refresh();
+    onExitConfirmed?.(exitResult, position);
+  }, [refresh, onExitConfirmed, position]);
 
   const handleField = useCallback(async (id, fields) => {
     try { await apiPost('/api/positions', { id, ...fields }); refresh(); }

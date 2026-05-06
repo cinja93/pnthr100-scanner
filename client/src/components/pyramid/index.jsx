@@ -4,7 +4,7 @@
 //
 // Imported by AssistantRowExpand (and CommandCenter while it still exists).
 
-import { useState, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { API_BASE, authHeaders } from '../../services/api.js';
 import { STRIKE_PCT, buildLots, enrichLots, sizePosition } from '../../utils/sizingUtils.js';
 
@@ -1275,4 +1275,201 @@ export function CloseViaBridgeButton({ position, onClosed }) {
 }
 
 // ── Pending Entry Card ────────────────────────────────────────────────────────
+
+export const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+
+export function PendingCard({ entry, nav, onConfirm, onDismiss }) {
+  const [fillPrice, setFillPrice] = useState(String(entry.currentPrice || ''));
+  const [shares,    setShares]    = useState(String(entry.lot1Shares || ''));
+  const [date,      setDate]      = useState(new Date().toISOString().split('T')[0]);
+  const [stop,      setStop]      = useState(String(entry.adjustedStop || entry.suggestedStop || ''));
+  const [direction, setDirection] = useState(entry.direction || 'LONG');
+  const [saving,    setSaving]    = useState(false);
+  const stopUserEdited            = useRef(false);
+
+  // ── Entry Conditions — pre-populate from Analyze snapshot ─────────────────
+  const raw           = entry.analyzeScore?.rawData || {};
+  const isNasdaq      = (entry.exchange || '').toUpperCase() === 'NASDAQ';
+  const indexEtfName  = isNasdaq ? 'QQQ' : 'SPY';
+  const indexAbove    = isNasdaq ? (raw.market?.qqq?.aboveEma ?? null) : (raw.market?.spy?.aboveEma ?? null);
+  const sectorAbove   = raw.sector?.aboveEma ?? null;
+  const sectorEtfName = raw.sector?.etf || (entry.sector ? `${entry.sector} ETF` : 'Sector ETF');
+  const initDir       = entry.direction || 'LONG';
+  const condAuto      = { index: indexAbove != null, sector: sectorAbove != null };
+  const [conditions, setConditions] = useState({
+    indexTrendAligned:  indexAbove  != null ? (initDir === 'LONG' ? indexAbove  : !indexAbove)  : null,
+    sectorTrendAligned: sectorAbove != null ? (initDir === 'LONG' ? sectorAbove : !sectorAbove) : null,
+    sizingCorrect: true,
+  });
+
+  // On mount: fetch live PNTHR stop for this ticker and use it as the default
+  // (unless the user has already edited the stop field manually)
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchLiveStop() {
+      try {
+        const res  = await fetch(`${API_BASE}/api/signals`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ tickers: [entry.ticker] }),
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const s    = data[entry.ticker.toUpperCase()];
+        const liveStop = s?.pnthrStop ?? s?.stopPrice ?? null;
+        if (liveStop && !stopUserEdited.current) {
+          setStop(String(liveStop));
+        }
+      } catch { /* non-fatal — keep queued stop */ }
+    }
+    fetchLiveStop();
+    return () => { cancelled = true; };
+  }, [entry.ticker]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isExpired  = Date.now() - new Date(entry.queuedAt).getTime() > FIVE_DAYS_MS;
+  const isLong     = direction === 'LONG';
+
+  // Preview lot 2 / lot 3 triggers from current fill price
+  const previewLots = fillPrice && +fillPrice > 0 ? buildLots({
+    entryPrice: +fillPrice, stopPrice: +stop || entry.adjustedStop || entry.suggestedStop || 0,
+    totalShares: entry.totalTargetShares || 1, direction, fills: {},
+  }) : null;
+
+  const handleConfirm = async () => {
+    if (!fillPrice || !shares) return;
+    setSaving(true);
+    try {
+      await onConfirm(entry.id, {
+        fillPrice: +fillPrice, shares: +shares, date, stop: +stop || undefined, direction,
+        userConfirmed: {
+          indexTrendAligned:  conditions.indexTrendAligned,
+          sectorTrendAligned: conditions.sectorTrendAligned,
+          sizingCorrect:      conditions.sizingCorrect,
+          confirmedAt:        new Date().toISOString(),
+        },
+      });
+    } catch { /* non-fatal */ }
+    setSaving(false);
+  };
+
+  const fI2 = { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,215,0,0.3)',
+    borderRadius: 4, padding: '4px 8px', color: '#FFD700', fontSize: 12,
+    fontFamily: 'monospace', outline: 'none', textAlign: 'right' };
+
+  return (
+    <div style={{ borderRadius: 10, overflow: 'hidden',
+      border: '1px dashed rgba(255,215,0,0.4)',
+      background: 'rgba(255,215,0,0.02)',
+      opacity: isExpired ? 0.6 : 1 }}>
+      {/* Card header */}
+      <div style={{ padding: '10px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        background: 'rgba(255,215,0,0.04)', borderBottom: '1px dashed rgba(255,215,0,0.15)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 16, fontWeight: 800, fontFamily: 'monospace', color: '#FFD700' }}>{entry.ticker}</span>
+          {/* Direction toggle — click to flip LONG ↔ SHORT */}
+          <button onClick={() => setDirection(d => d === 'LONG' ? 'SHORT' : 'LONG')}
+            title="Click to flip direction"
+            style={{ background: isLong ? 'rgba(40,167,69,0.15)' : 'rgba(220,53,69,0.15)',
+              border: `1px solid ${isLong ? '#28a745' : '#dc3545'}`,
+              color: isLong ? '#28a745' : '#dc3545',
+              borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 800,
+              cursor: 'pointer', letterSpacing: '0.05em', userSelect: 'none' }}>
+            {direction} ⇄
+          </button>
+          {entry.killTier && <TierBadge t={entry.killTier} />}
+          {entry.sector && <span style={{ fontSize: 11, color: '#555' }}>{entry.sector}</span>}
+          {entry.killScore != null && <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>Score: {entry.killScore}</span>}
+          {entry.isManualOverride && (
+            <span title="Manual override — queued from the OVERRIDE dialog on the chart; does not match the Friday system recommendation"
+              style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: '#2563eb',
+                borderRadius: 3, padding: '2px 7px', letterSpacing: '0.08em' }}>
+              OVERRIDE
+            </span>
+          )}
+          {isExpired && <Badge color="#fff" bg="rgba(220,53,69,0.4)" small>EXPIRED</Badge>}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={handleConfirm} disabled={saving || !fillPrice || !shares}
+            style={{ background: saving ? 'rgba(40,167,69,0.3)' : '#28a745', color: '#fff',
+              border: 'none', borderRadius: 5, padding: '5px 14px', fontWeight: 700,
+              fontSize: 11, cursor: saving ? 'not-allowed' : 'pointer', letterSpacing: '0.04em' }}>
+            {saving ? '…' : 'CONFIRM ENTRY ✓'}
+          </button>
+          <button onClick={() => onDismiss(entry.id)}
+            style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', color: '#666',
+              borderRadius: 5, padding: '5px 10px', fontSize: 11, cursor: 'pointer' }}>
+            DISMISS ✕
+          </button>
+        </div>
+      </div>
+      {/* Fill fields */}
+      <div style={{ padding: '10px 18px', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 9, color: '#666', marginBottom: 2, textTransform: 'uppercase' }}>Fill Price</div>
+          <input type="number" step="0.01" value={fillPrice} onChange={e => setFillPrice(e.target.value)}
+            style={{ ...fI2, width: 72 }} placeholder={String(entry.currentPrice || '')} />
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: '#666', marginBottom: 2, textTransform: 'uppercase' }}>Shares (Lot 1)</div>
+          <input type="number" value={shares} onChange={e => setShares(e.target.value)}
+            style={{ ...fI2, width: 56 }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: '#666', marginBottom: 2, textTransform: 'uppercase' }}>Date</div>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            style={{ ...fI2, width: 112, color: '#aaa', fontSize: 11 }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: '#666', marginBottom: 2, textTransform: 'uppercase' }}>Stop <span style={{ color: '#28a745', fontSize: 8 }}>PNTHR</span></div>
+          <input type="number" step="0.01" value={stop}
+            onChange={e => { stopUserEdited.current = true; setStop(e.target.value); }}
+            style={{ ...fI2, width: 80, borderColor: 'rgba(220,53,69,0.35)', color: '#dc3545' }} />
+        </div>
+        {previewLots && (
+          <div style={{ fontSize: 11, color: '#555', fontFamily: 'monospace' }}>
+            Lot 2 trigger: <span style={{ color: '#888' }}>${previewLots[1]?.triggerPrice}</span>
+            {' · '}
+            Lot 3: <span style={{ color: '#888' }}>${previewLots[2]?.triggerPrice}</span>
+            {' · '}
+            Total target: <span style={{ color: '#888' }}>{entry.totalTargetShares} shr</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Entry Conditions ───────────────────────────────────────────────── */}
+      <div style={{ padding: '8px 18px 12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 7 }}>
+          Entry Conditions
+          <span style={{ color: '#28a745', marginLeft: 5 }}>⚡</span>
+          <span style={{ color: '#444', fontWeight: 400 }}> = auto-detected from Analyze · click to override</span>
+        </div>
+        {[
+          { key: 'indexTrendAligned',  label: `${indexEtfName} ${isLong ? 'above' : 'below'} 21W Index EMA at entry?`, auto: condAuto.index  },
+          { key: 'sectorTrendAligned', label: `${sectorEtfName} ${isLong ? 'above' : 'below'} OpEMA at entry?`,        auto: condAuto.sector },
+          { key: 'sizingCorrect',      label: 'Used SIZE IT for Lot 1?',                     auto: false           },
+        ].map(({ key, label, auto }) => (
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+            <span style={{ fontSize: 10, color: '#777', flex: 1 }}>
+              {label}
+              {auto && <span style={{ color: '#28a745', marginLeft: 4, fontSize: 9 }}>⚡</span>}
+            </span>
+            {[true, false].map(val => (
+              <button key={String(val)} onClick={() => setConditions(c => ({ ...c, [key]: val }))}
+                style={{
+                  background: conditions[key] === val
+                    ? (val ? 'rgba(40,167,69,0.75)' : 'rgba(220,53,69,0.75)')
+                    : 'rgba(255,255,255,0.05)',
+                  color: conditions[key] === val ? '#fff' : '#444',
+                  border: 'none', borderRadius: 3, padding: '2px 10px',
+                  fontSize: 10, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em',
+                }}>
+                {val ? 'YES' : 'NO'}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 

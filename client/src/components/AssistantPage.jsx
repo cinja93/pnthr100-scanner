@@ -26,7 +26,9 @@ import {
   fetchPulse,
   fetchTrendlineAlerts, dismissTrendlineAlert,
   fetchMovers,
+  fetchPendingEntries, confirmPendingEntry, dismissPendingEntry,
 } from '../services/api';
+import { PendingCard, FIVE_DAYS_MS } from './pyramid';
 import { useAuth } from '../AuthContext';
 import ChartModal from './ChartModal';
 import AssistantLiveTable from './AssistantLiveTable';
@@ -2623,6 +2625,79 @@ export default function AssistantPage({ onNavigate }) {
     catch (e) { console.error('dismiss failed', e); }
   }, []);
 
+  // ── Pending Entries — queued setups awaiting fill confirmation. ────────────
+  // Replaces CommandCenter's pending-entry inbox. Polls every 60s. The three
+  // companion UIs (wash sale modal, journal snapshot toast, closed-position
+  // toast) are also rendered here so the trade-event UX lives entirely on
+  // PNTHR Assistant.
+  const [pendingEntries,  setPendingEntries]  = useState([]);
+  const [washWarning,     setWashWarning]     = useState(null);
+  const [journalSnapshot, setJournalSnapshot] = useState(null);
+  const [closedToast,     setClosedToast]     = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => fetchPendingEntries()
+      .then(d => { if (!cancelled && Array.isArray(d)) setPendingEntries(d); })
+      .catch(() => { /* silent */ });
+    load();
+    const id = setInterval(load, 60 * 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  const handleConfirmEntry = useCallback(async (id, fillData, forceConfirm = false) => {
+    if (!forceConfirm) {
+      const pEntry = pendingEntries.find(e => e.id === id);
+      if (pEntry?.ticker) {
+        try {
+          const rules = await fetch(`${API_BASE}/api/wash-rules?ticker=${encodeURIComponent(pEntry.ticker)}`, { headers: authHeaders() })
+            .then(r => r.ok ? r.json() : []).catch(() => []);
+          const active = rules.find(w => !w.washSale?.triggered && (w.washSale?.daysRemaining ?? 0) > 0);
+          if (active) {
+            setWashWarning({
+              ticker:        pEntry.ticker,
+              lossAmount:    active.washSale.lossAmount,
+              exitDate:      active.washSale.exitDate,
+              expiryDate:    active.washSale.expiryDate,
+              daysRemaining: active.washSale.daysRemaining,
+              pendingId:     id,
+              fillData,
+            });
+            return;
+          }
+        } catch { /* non-fatal */ }
+      }
+    }
+    setWashWarning(null);
+    const result = await confirmPendingEntry(id, fillData);
+    if (result?.journalSnapshot) setJournalSnapshot(result.journalSnapshot);
+    setPendingEntries(prev => prev.filter(e => e.id !== id));
+  }, [pendingEntries]);
+
+  const handleDismissEntry = useCallback(async (id) => {
+    try { await dismissPendingEntry(id); } catch { /* non-fatal */ }
+    setPendingEntries(prev => prev.filter(e => e.id !== id));
+  }, []);
+
+  // Bubbled up from AssistantRowExpand → PyramidCard's exit flow.
+  const handleExitConfirmed = useCallback((exitResult, position) => {
+    if (exitResult?.status !== 'CLOSED' || !position) return;
+    let cost = 0, sh = 0;
+    for (let i = 1; i <= 5; i++) {
+      const f = position.fills?.[i];
+      if (f?.filled && f?.price && f?.shares) { cost += +f.shares * +f.price; sh += +f.shares; }
+    }
+    const avg = sh > 0 ? cost / sh : (position.entryPrice || 0);
+    setClosedToast({
+      ticker:    position.ticker,
+      avgCost:   avg,
+      exitPrice: exitResult.exitRecord?.price,
+      pnlDollar: exitResult.exitRecord?.pnl?.dollar,
+      pnlPct:    exitResult.exitRecord?.pnl?.pct,
+    });
+    setTimeout(() => setClosedToast(null), 10000);
+  }, []);
+
   // PNTHR Movers alerts — fresh BL+1 in gainers / SS+1 in decliners.
   // Same conditions as the top-of-app banner. Polls every 60s.
   const [moversAlerts, setMoversAlerts] = useState([]);
@@ -2692,6 +2767,7 @@ export default function AssistantPage({ onNavigate }) {
   // → Today's Accomplishments → Recent Bridge Commands.
   // User can reorder via ▲▼ buttons; their choice persists in localStorage.
   const TOP_LEVEL_CARDS = useMemo(() => ([
+    'pending-entries',
     'pnthr-assistant-live',
     'live-opportunities',
     'live-watch',
@@ -3945,6 +4021,73 @@ export default function AssistantPage({ onNavigate }) {
           the BRIDGE button above now serves as the single clickable
           attention indicator. */}
 
+      {/* Pending Entries — queued setups awaiting fill confirmation.
+          Replaces the inbox that used to live on PNTHR Command. Each
+          PendingCard handles its own SIZE IT confirm flow with full lot
+          preview + entry conditions checks. */}
+      <div style={{
+        ...orderStyle('pending-entries'),
+        border: '1px solid rgba(252, 240, 0, 0.3)',
+        borderRadius: 8,
+        marginBottom: 12,
+        background: pendingEntries.length > 0 ? 'rgba(252,240,0,0.06)' : 'transparent',
+      }}>
+        <div
+          onClick={() => toggleSection('pending-entries')}
+          style={{
+            padding: '8px 14px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            borderBottom: isOpen('pending-entries') ? '1px solid rgba(252, 240, 0, 0.12)' : 'none',
+          }}
+        >
+          <span style={{ fontSize: 10, fontWeight: 900, color: '#fcf000', letterSpacing: '0.14em', fontFamily: "'Inter', 'Segoe UI', sans-serif", textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+            {collapseArrow('pending-entries', '#FCF000')}
+            ⏳ PENDING ENTRIES
+            {pendingEntries.length > 0 && (
+              <span style={{
+                marginLeft: 8, background: '#fcf000', color: '#000',
+                padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 900,
+              }}>{pendingEntries.length}</span>
+            )}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: '#888' }}>
+              {pendingEntries.length === 0 ? 'No queued entries' : 'Enter fill price & shares, then CONFIRM'}
+            </span>
+            {reorderControls('pending-entries')}
+          </span>
+        </div>
+        {isOpen('pending-entries') && (
+          <div style={{ padding: '10px 14px' }}>
+            {pendingEntries.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#666', padding: '12px 0', textAlign: 'center' }}>
+                Queue setups from PNTHR Kill via SIZE IT → SEND. They'll land here for fill confirmation.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[...pendingEntries]
+                  .sort((a, b) => {
+                    const aExp = Date.now() - new Date(a.queuedAt).getTime() > FIVE_DAYS_MS;
+                    const bExp = Date.now() - new Date(b.queuedAt).getTime() > FIVE_DAYS_MS;
+                    if (aExp && !bExp) return 1;
+                    if (!aExp && bExp) return -1;
+                    return new Date(a.queuedAt) - new Date(b.queuedAt);
+                  })
+                  .map(entry => (
+                    <PendingCard
+                      key={entry.id}
+                      entry={entry}
+                      nav={nav}
+                      onConfirm={handleConfirmEntry}
+                      onDismiss={handleDismissEntry}
+                    />
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Custom Trendline Alerts (admin-only, reorderable)
           Fed by hourly cron that detects breaks of user-drawn trendlines on
           the TEST page. Stays in the feed until manually dismissed. */}
@@ -4256,6 +4399,7 @@ export default function AssistantPage({ onNavigate }) {
           else if (stocks && stocks.ticker) { setChartStocks([stocks]); setChartIndex(0); }
         }}
         onAddPosition={(prefill) => { setAddPosInitial(prefill || null); setAddPosOpen(true); }}
+        onExitConfirmed={handleExitConfirmed}
       />
       </div>
 
@@ -4751,6 +4895,123 @@ export default function AssistantPage({ onNavigate }) {
         onClose={() => { setAddPosOpen(false); setAddPosInitial(null); }}
         onSaved={() => { setRefreshKey(k => k + 1); fetchAll(); }}
       />
+
+      {/* Wash sale warning modal — guards pending-entry confirms when the
+          ticker is still inside its IRS 30-day disallowance window. */}
+      {washWarning && (() => {
+        const { ticker, lossAmount, exitDate, expiryDate, daysRemaining } = washWarning;
+        const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—';
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#1a1a1a', border: '1px solid #dc3545', borderRadius: 10, padding: '24px 28px', maxWidth: 440, width: '90vw', boxShadow: '0 8px 32px rgba(0,0,0,0.8)' }}>
+              <div style={{ color: '#dc3545', fontWeight: 800, fontSize: '1.1rem', marginBottom: 12, letterSpacing: '0.03em' }}>
+                ⚠ WASH SALE WARNING
+              </div>
+              <div style={{ color: '#ccc', lineHeight: 1.75, fontSize: 13, marginBottom: 20 }}>
+                <b style={{ color: '#FFD700' }}>{ticker}</b> closed at a loss of{' '}
+                <b style={{ color: '#dc3545' }}>-${Math.abs(lossAmount || 0).toFixed(2)}</b> on {fmtD(exitDate)}.<br/>
+                Re-entering before <b style={{ color: '#FFD700' }}>{fmtD(expiryDate)}</b> ({daysRemaining}d remaining)
+                will trigger a wash sale, <b style={{ color: '#fff' }}>disallowing that tax loss.</b>
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => handleConfirmEntry(washWarning.pendingId, washWarning.fillData, true)}
+                  style={{ background: '#dc3545', color: '#fff', padding: '8px 20px', borderRadius: 6, border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: 12, letterSpacing: '0.05em' }}>
+                  ENTER ANYWAY
+                </button>
+                <button onClick={() => setWashWarning(null)}
+                  style={{ background: 'transparent', color: '#888', padding: '8px 20px', borderRadius: 6, border: '1px solid #444', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>
+                  CANCEL
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Journal entry snapshot banner — fires after CONFIRM ENTRY succeeds.
+          Stays visible until manually dismissed so Scott can see what got
+          captured (Kill, signal, regime, sector trend, etc.). */}
+      {journalSnapshot && (() => {
+        const { allCaptured, isETF, fields } = journalSnapshot;
+        const STOCK_LABELS = {
+          killScore: 'Kill score', killRank: 'Kill rank', killTier: 'Kill tier',
+          signal: 'Signal', signalAge: 'Signal age', entryContext: 'Entry context',
+          indexTrend: 'Index trend', sectorTrend: 'Sector trend', regime: 'Regime',
+        };
+        const ETF_LABELS = { regime: 'Regime' };
+        const FIELD_LABELS = isETF ? ETF_LABELS : STOCK_LABELS;
+        const missing = Object.entries(fields || {})
+          .filter(([, v]) => v == null)
+          .map(([k]) => FIELD_LABELS[k] || k);
+        const capturedMsg = isETF
+          ? '⚡ ETF journal snapshot captured — regime auto-saved (Kill/signal fields N/A for ETFs)'
+          : '⚡ Journal snapshot captured — Kill, signal, regime & market context auto-saved';
+        const partialMsg = isETF
+          ? '⚡ ETF journal snapshot partial — regime not captured (Kill/signal fields N/A for ETFs)'
+          : '⚡ Journal snapshot partial — some fields need manual input at close';
+        return (
+          <div style={{
+            position: 'fixed', top: 80, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 350, minWidth: 420, maxWidth: 560,
+            background: allCaptured ? 'rgba(40,167,69,0.1)' : 'rgba(255,193,7,0.1)',
+            border: `1px solid ${allCaptured ? 'rgba(40,167,69,0.4)' : 'rgba(255,193,7,0.4)'}`,
+            borderRadius: 8, padding: '10px 14px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+          }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: allCaptured ? '#51cf66' : '#ffd43b', marginBottom: allCaptured ? 0 : 4 }}>
+                {allCaptured ? capturedMsg : partialMsg}
+              </div>
+              {!allCaptured && missing.length > 0 && (
+                <div style={{ fontSize: 11, color: '#999' }}>Missing: {missing.join(', ')}</div>
+              )}
+            </div>
+            <button onClick={() => setJournalSnapshot(null)}
+              style={{ background: 'none', border: 'none', color: allCaptured ? '#51cf66' : '#ffd43b', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }}>×</button>
+          </div>
+        );
+      })()}
+
+      {/* Closed position toast — fires after a full exit, auto-dismisses 10s. */}
+      {closedToast && (() => {
+        const { ticker, avgCost, exitPrice, pnlDollar, pnlPct } = closedToast;
+        const isGain = (pnlDollar ?? 0) >= 0;
+        const pnlColor = isGain ? '#28a745' : '#dc3545';
+        return (
+          <div style={{
+            position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 300, background: '#1a1a1a', border: `1px solid ${pnlColor}`,
+            borderRadius: 10, padding: '14px 20px', minWidth: 280, maxWidth: 380,
+            boxShadow: `0 4px 24px rgba(0,0,0,0.6), 0 0 0 1px ${pnlColor}22`,
+          }}>
+            <button onClick={() => setClosedToast(null)} style={{
+              position: 'absolute', top: 8, right: 10, background: 'none', border: 'none',
+              color: '#555', cursor: 'pointer', fontSize: 14, lineHeight: 1,
+            }}>✕</button>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>✓ Position closed</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 6 }}>{ticker}</div>
+            {avgCost != null && exitPrice != null && (
+              <div style={{ fontSize: 12, color: '#aaa', marginBottom: 4, fontFamily: 'monospace' }}>
+                Avg cost ${avgCost.toFixed(2)} → Exit ${Number(exitPrice).toFixed(2)}
+              </div>
+            )}
+            {pnlDollar != null && (
+              <div style={{ fontSize: 14, fontWeight: 700, color: pnlColor, marginBottom: 10 }}>
+                P&L: {isGain ? '+' : ''}${pnlDollar.toFixed(2)}
+                {pnlPct != null && <span style={{ fontSize: 12, marginLeft: 6 }}>({isGain ? '+' : ''}{pnlPct.toFixed(1)}%)</span>}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: '#555', marginBottom: onNavigate ? 8 : 0 }}>Moved to PNTHR Journal</div>
+            {onNavigate && (
+              <button onClick={() => { setClosedToast(null); onNavigate('journal'); }}
+                style={{ background: 'none', border: '1px solid #444', borderRadius: 4, color: '#FFD700',
+                  fontSize: 11, fontWeight: 700, padding: '4px 10px', cursor: 'pointer', letterSpacing: '0.05em' }}>
+                VIEW IN JOURNAL →
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
     </div>
   );

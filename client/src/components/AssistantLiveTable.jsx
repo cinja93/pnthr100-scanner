@@ -759,7 +759,7 @@ function buildSubRows(row) {
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
-export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart, onAddPosition, collapsed: extCollapsed, onToggleCollapsed, headerExtra }) {
+export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart, onAddPosition, collapsed: extCollapsed, onToggleCollapsed, headerExtra, onExitConfirmed }) {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1466,6 +1466,7 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                       onClose={() => toggleExpanded(row.ticker)}
                       onPositionChanged={fetchData}
                       onOpenChart={onOpenChart}
+                      onExitConfirmed={onExitConfirmed}
                     />
                   </div>
                 );

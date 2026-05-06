@@ -440,9 +440,40 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
     const stopOnRightSide = direction === 'LONG'
       ? +pnthrStop < lastPrice
       : +pnthrStop > lastPrice;
+    // Track whether the stop came from the signal cache or from a TWS fallback —
+    // affects journal/audit trail. Default: signal cache.
+    let stopSourceTwsFallback = false;
     if (!stopOnRightSide) {
-      console.warn(`[IBKR Phase 3] Stop-side mismatch for ${ticker} ${direction}: pnthrStop=$${pnthrStop} vs price=$${lastPrice} (signalCache direction=${signalDir || 'unknown'}). Refusing to auto-open — manual review.`);
-      continue;
+      // Signal-direction mismatch: user traded against the signal (e.g., bought
+      // long while signalCache had this ticker as SS). The signal-derived stop
+      // sits on the wrong side of price. Before refusing to auto-open, check
+      // TWS for a user-placed protective stop on the correct side. If found,
+      // use that as the position's stopPrice — preserves automation when the
+      // user has already defined their own exit.
+      const expectedAction = direction === 'LONG' ? 'SELL' : 'BUY';
+      const fallbackStops = (ibkrStopOrders || []).filter(s => {
+        if (s.symbol?.toUpperCase() !== ticker) return false;
+        if (s.action !== expectedAction) return false;
+        if (s.orderType !== 'STP' && s.orderType !== 'STP LMT') return false;
+        const sp = +s.stopPrice;
+        if (!Number.isFinite(sp) || sp <= 0) return false;
+        return direction === 'LONG' ? sp < lastPrice : sp > lastPrice;
+      });
+      // Tightest wins (highest for LONG, lowest for SHORT) when multiple exist.
+      const fallback = fallbackStops.length === 0 ? null
+        : fallbackStops.reduce((best, s) =>
+            (direction === 'LONG' ? +s.stopPrice > +best.stopPrice : +s.stopPrice < +best.stopPrice)
+              ? s : best
+          );
+      if (fallback) {
+        const fallbackPrice = +fallback.stopPrice;
+        console.log(`[IBKR Phase 3] ${ticker} ${direction} signal-direction conflict — using user's TWS protective stop $${fallbackPrice} as fallback (signal-derived $${pnthrStop} was on wrong side of price $${lastPrice}).`);
+        pnthrStop = fallbackPrice;
+        stopSourceTwsFallback = true;
+      } else {
+        console.warn(`[IBKR Phase 3] Stop-side mismatch for ${ticker} ${direction}: pnthrStop=$${pnthrStop} vs price=$${lastPrice} (signalCache direction=${signalDir || 'unknown'}) and no user TWS fallback stop. Refusing to auto-open — manual review.`);
+        continue;
+      }
     }
 
     // Build canonical position doc
@@ -478,6 +509,7 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
       remainingShares:        absShares,
       status:                 'ACTIVE',
       autoOpenedByIBKR:       true,
+      stopSourceTwsFallback:  stopSourceTwsFallback || undefined,
       createdAt:              syncedAt,
       updatedAt:              syncedAt,
       ibkrSyncedAt:           syncedAt,
@@ -525,12 +557,29 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
       // either way, so the trader's manual stop is preserved unless PNTHR's
       // canonical stop later ratchets tighter via weekly ATR.
       const expectedAction = direction === 'LONG' ? 'SELL' : 'BUY';
-      const existingStops  = (ibkrStopOrders || []).filter(s =>
-        s.symbol?.toUpperCase() === ticker
-        && s.action === expectedAction
-        && (s.orderType === 'STP' || s.orderType === 'STP LMT')
-      );
-      const existingStop = existingStops[0] || null;
+      // Filter to protective stops only:
+      //   • Right ticker, right side, STP/STP LMT type
+      //   • For LONG: stopPrice MUST be BELOW lastPrice (a SELL STP above price
+      //     is a lot trigger, not a protective stop — adopting it as the
+      //     position stop would set the protective floor above current price
+      //     and trigger immediately).
+      //   • For SHORT: stopPrice MUST be ABOVE lastPrice (mirror reasoning).
+      const refPrice = +positionDoc.currentPrice || +pos.avgCost;
+      const protectiveStops = (ibkrStopOrders || []).filter(s => {
+        if (s.symbol?.toUpperCase() !== ticker) return false;
+        if (s.action !== expectedAction) return false;
+        if (s.orderType !== 'STP' && s.orderType !== 'STP LMT') return false;
+        const sp = +s.stopPrice;
+        if (!Number.isFinite(sp) || sp <= 0) return false;
+        return direction === 'LONG' ? sp < refPrice : sp > refPrice;
+      });
+      // Pick the TIGHTEST protective stop (highest for LONG, lowest for SHORT)
+      // when multiple exist. Tightest-wins is the universal rule.
+      const existingStop = protectiveStops.length === 0 ? null
+        : protectiveStops.reduce((best, s) =>
+            (direction === 'LONG' ? +s.stopPrice > +best.stopPrice : +s.stopPrice < +best.stopPrice)
+              ? s : best
+          );
 
       if (existingStop && Number.isFinite(+existingStop.stopPrice) && +existingStop.stopPrice > 0) {
         // ADOPT the trader's manual stop. Update PNTHR's stopPrice to match

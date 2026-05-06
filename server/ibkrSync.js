@@ -13,7 +13,7 @@
 // Authenticates via JWT (req.user.userId = admin's ownerId).
 // Writes ONLY to that user's data — impossible to touch another user's records.
 
-import { connectToDatabase, upsertUserProfile } from './database.js';
+import { connectToDatabase, upsertUserProfile, getUserProfile } from './database.js';
 import { validatePortfolioUpdate } from './portfolioGuard.js';
 import { recordExit } from './exitService.js';
 import { enqueue as enqueueOutbox, sanityCheckPlaceStop, buildStopOrderShape } from './ibkrOutbox.js';
@@ -87,7 +87,7 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
   let cachedNav = null;
   const getNav = async () => {
     if (cachedNav != null) return cachedNav;
-    const profile = await db.collection('user_profiles').findOne({ userId });
+    const profile = await getUserProfile(userId);
     cachedNav = +profile?.accountSize || DEFAULT_NAV;
     return cachedNav;
   };

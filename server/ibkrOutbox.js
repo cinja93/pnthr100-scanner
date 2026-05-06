@@ -26,6 +26,7 @@
 //   - Per-symbol (5/min) and global (50/min) rate limits
 
 import { randomUUID } from 'crypto';
+import { getUserProfile } from './database.js';
 
 export const DEMO_OWNER_ID = 'demo_fund';
 const COLLECTION             = 'pnthr_ibkr_outbox';
@@ -288,9 +289,7 @@ async function checkConcentrationCap(db, ownerId, ticker) {
   const price = +pos.currentPrice || 0;
   if (!shares || !price) return { over: false, reason: 'INSUFFICIENT_DATA' };
 
-  const profile = await db.collection('user_profiles').findOne(
-    { userId: ownerId }, { projection: { accountSize: 1 } },
-  );
+  const profile = await getUserProfile(ownerId);
   const nav = +profile?.accountSize || DEFAULT_NAV_FOR_CAP;
   if (!nav) return { over: false, reason: 'NO_NAV' };
 

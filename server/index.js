@@ -2477,7 +2477,7 @@ app.post('/api/positions/:id/convert-to-pyramid', authenticateJWT, async (req, r
     }
 
     // Get NAV for sizing math (mirrors lotTriggerCron's per-owner lookup).
-    const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
+    const profile = await getUserProfile(req.user.userId);
     const nav     = +profile?.accountSize || 100000;
 
     // Compute the lot plan. Three paths:
@@ -5211,7 +5211,7 @@ app.post('/api/admin/replay-lot-fills', authenticateJWT, requireAdmin, async (re
     const tickerFilter = (req.query.ticker || req.body?.ticker || '').toUpperCase() || null;
     const lookbackDays = +(req.query.days || req.body?.days || 30);
 
-    const profile = await db.collection('user_profiles').findOne({ userId });
+    const profile = await getUserProfile(userId);
     const nav = +profile?.accountSize || 100_000;
 
     // All ACTIVE/PARTIAL positions (the candidate pool for matching)
@@ -6883,7 +6883,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       // matched nothing and let every closed position through, inflating Active
       // count + heat. Match Command Center's $nin: ['CLOSED'] exactly.
       db.collection('pnthr_portfolio').find({ ownerId: userId, status: { $nin: ['CLOSED'] } }).toArray(),
-      db.collection('user_profiles').findOne({ userId }),
+      getUserProfile(userId),
       db.collection('pnthr_weekly_market_snapshot').findOne({}, { sort: { weekOf: -1 } }),
     ]);
 
@@ -7688,7 +7688,7 @@ app.get('/api/assistant/tasks', async (req, res) => {
     }));
 
     // Fetch NAV from user profile
-    const profileDoc = await db.collection('user_profiles').findOne({ userId: req.user.userId });
+    const profileDoc = await getUserProfile(req.user.userId);
     const nav = profileDoc?.accountSize ?? 100000;
 
     const tasks = await generateAssistantTasks(req.user.userId, positions, nav);

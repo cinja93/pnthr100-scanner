@@ -29,7 +29,6 @@ import JunglePage from './components/JunglePage';
 import SearchPage from './components/SearchPage';
 import PreyPage from './components/PreyPage';
 import ApexPage from './components/ApexPage';
-import CommandCenter from './components/CommandCenter';
 import JournalPage from './components/JournalPage';
 import NewsPage from './components/NewsPage';
 import PulsePage from './components/PulsePage';
@@ -614,7 +613,6 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const isInvestor = currentUser?.role === 'investor';
   const [lotAlerts,         setLotAlerts]         = useState([]);
   const [positions,         setPositions]         = useState([]); // full positions for EMA alerts
-  const [commandRefreshKey, setCommandRefreshKey] = useState(0);  // increments to trigger Command refetch
 
   // ── Rolling price history (last 10 ticks per ticker, in-memory only) ────────
   const priceHistoryRef = useRef({}); // { [ticker]: [{price, time}] }
@@ -1160,7 +1158,6 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                   onNavigate={navigate}
                   onFixed={() => {
                     dismissIbkrDiscrepancy(dismissKey);
-                    setCommandRefreshKey(k => k + 1);
                     fetchIbkrDiscrepancies()
                       .then(data => {
                         if (data.ibkrConnected) setIbkrDiscrepancies(data.discrepancies || []);
@@ -1327,9 +1324,6 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* Jungle page */}
           {activePage === 'jungle' && <JunglePage />}
 
-          {/* PNTHR Command Center route removed — Assistant is the sole
-              destination now. CommandCenter import/state stays until PR 8
-              final cleanup. */}
 
           {/* PNTHR Journal */}
           {activePage === 'journal' && <JournalPage onNavigate={navigate} initialFilter={journalInitFilter} focusPositionId={journalFocusId} focusTicker={journalFocusTicker} />}

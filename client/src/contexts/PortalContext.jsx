@@ -18,9 +18,9 @@ export const PORTAL_PAGES = {
   den:      null, // Admin demo mode — full access, no page filtering
   investor: ['apex', 'perch', 'sectors', 'etf', 'earnings', 'jungle', 'pulse', 'data-room'],
   // VIP: member-scoped view. Per-user data isolation (portfolio/journal/
-  // command/assistant/watchlist) is enforced server-side via ownerId filters.
+  // assistant/watchlist) is enforced server-side via ownerId filters.
   vip: [
-    'perch', 'earnings', 'pulse', 'portfolio', 'assistant', 'command',
+    'perch', 'earnings', 'pulse', 'portfolio', 'assistant',
     'search', 'prey', 'apex', 'jungle', 'long', 'short', 'etf', 'sectors',
     'journal', 'watchlist', 'orders', 'data-room',
   ],

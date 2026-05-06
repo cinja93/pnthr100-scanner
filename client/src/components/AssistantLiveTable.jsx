@@ -1201,10 +1201,6 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                           {row.ticker}
                         </div>
                         <div style={{
-                          fontSize: 11, color: 'rgba(255,255,255,0.55)',
-                          fontVariantNumeric: 'tabular-nums', marginTop: 1,
-                        }}>{fmtMoney(row.lastPrice)}</div>
-                        <div style={{
                           marginTop: 4, fontSize: 11,
                           display: 'flex', alignItems: 'center', gap: 0,
                           fontVariantNumeric: 'tabular-nums',

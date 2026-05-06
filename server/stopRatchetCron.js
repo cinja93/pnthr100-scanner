@@ -59,6 +59,7 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
   const modifications = []; // PNTHR-tighter, enqueue MODIFY_STOP
   const skips         = []; // unable to reconcile (no IBKR record, etc.)
   const aligned       = []; // already at-or-below threshold; no-op
+  const orphanCancels = []; // stale PNTHR-tagged stops cancelled when a tighter user stop was adopted
 
   for (const p of positions) {
     const ticker = p.ticker?.toUpperCase();
@@ -70,12 +71,31 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
 
     const isLong = (p.direction || 'LONG').toUpperCase() !== 'SHORT';
     const expectedAction = isLong ? 'SELL' : 'BUY';
-    const stops = (ibkrSnap.stopOrders || []).filter(s =>
+    // Reference price for the protective-side filter — discriminates real
+    // protective stops from lot-trigger BUY STPs (which are above price for
+    // longs, below for shorts) so we never mistake a lot trigger for a
+    // protective stop and adopt it as the position's exit.
+    const refPrice = +ibkrPos.lastPrice || +p.currentPrice || 0;
+    const allMatchingStops = (ibkrSnap.stopOrders || []).filter(s =>
       s.symbol?.toUpperCase() === ticker
       && s.action === expectedAction
-      && s.orderType === 'STP'
+      && (s.orderType === 'STP' || s.orderType === 'STP LMT')
     );
-    const protective = stops[0] || null;
+    const stops = refPrice > 0
+      ? allMatchingStops.filter(s => {
+          const sp = +s.stopPrice;
+          if (!Number.isFinite(sp) || sp <= 0) return false;
+          return isLong ? sp < refPrice : sp > refPrice;
+        })
+      : allMatchingStops;
+    // Pick the TIGHTEST protective stop (highest for LONG, lowest for SHORT).
+    // If multiple stops exist (e.g., user's tighter manual stop + PNTHR's
+    // looser auto-placed stop), this ensures we adopt the user's intent.
+    const protective = stops.length === 0 ? null
+      : stops.reduce((best, s) =>
+          (isLong ? +s.stopPrice > +best.stopPrice : +s.stopPrice < +best.stopPrice)
+            ? s : best
+        );
     if (!protective) { skips.push({ ticker, reason: 'NAKED_NO_IBKR_STOP' }); continue; }
 
     const pnthrStop = +p.stopPrice;
@@ -106,6 +126,37 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
             $push: { stopHistory: historyEntry },
           }
         );
+      }
+
+      // Orphan cleanup: when we adopt a tighter user stop, any OTHER protective
+      // stop on this ticker that was placed by PNTHR (orderRef='PNTHR') is now
+      // stale — the position has a single canonical stop, not two. Enqueue
+      // CANCEL_ORDER to remove the orphan so TWS doesn't carry a redundant
+      // looser stop that would fire if the user's tighter stop was later
+      // hand-cancelled. Only target PNTHR-tagged stops; never touch the user's
+      // own stops (orderRef empty/missing).
+      const orphans = stops.filter(s =>
+        s.permId !== protective.permId
+        && (s.orderRef || '').trim().toUpperCase() === 'PNTHR'
+      );
+      for (const orphan of orphans) {
+        if (dryRun || process.env.IBKR_AUTO_SYNC_STOPS !== 'true') {
+          orphanCancels.push({ ticker, permId: orphan.permId, stopPrice: +orphan.stopPrice, enqueued: false, skipReason: dryRun ? 'DRY_RUN' : 'IBKR_AUTO_SYNC_STOPS_OFF' });
+          continue;
+        }
+        const cancelResult = await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
+          ticker,
+          permId:     orphan.permId,
+          stopPrice:  +orphan.stopPrice,
+          positionId: p.id,
+          source:     'STOP_RATCHET_ORPHAN_CANCEL',
+        });
+        orphanCancels.push({
+          ticker, permId: orphan.permId, stopPrice: +orphan.stopPrice,
+          enqueued: !cancelResult.skipped,
+          outboxId: cancelResult.id,
+          skipReason: cancelResult.skipped || null,
+        });
       }
     } else if (pnthrTighter) {
       // PNTHR has a tighter stop (likely from weekly ATR ratchet) — push to TWS.
@@ -158,6 +209,7 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
     modifications,
     skips,
     aligned,
+    orphanCancels,
   };
 }
 

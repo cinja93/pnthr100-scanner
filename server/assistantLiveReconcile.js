@@ -380,7 +380,14 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
 
   // Shares
   const ibkrShares = ibkrPos ? Math.abs(ibkrPos.shares) : null;
-  const { totShr: cmdShares, avgCost: fillsAvg } = cmd ? summarizeFills(cmd.fills) : { totShr: null, avgCost: null };
+  const { totShr: cmdFilled, avgCost: fillsAvg } = cmd ? summarizeFills(cmd.fills) : { totShr: null, avgCost: null };
+  // CMD POS = net (sum of fills minus exits). Without subtracting exits, a
+  // partial-exit position shows the gross fill total and disagrees with IBKR
+  // even when the reconciler has already corrected the underlying record.
+  // avgCost still comes from gross fills — cost basis doesn't change on a
+  // partial sell.
+  const cmdExited = cmd ? (cmd.exits || []).reduce((s, e) => s + (+e.shares || 0), 0) : 0;
+  const cmdShares = cmdFilled != null ? cmdFilled - cmdExited : null;
   const cmdSharesOrNull = cmdHas ? cmdShares : null;
 
   // Avg — IBKR is source of truth (commissions, slippage, borrow fees baked in).

@@ -400,6 +400,22 @@ export function getCachedSignals() {
   return result;
 }
 
+// Same shape as getCachedSignals() but for the ETF cache. Returns null if cold.
+export function getCachedEtfSignals() {
+  const today = getToday();
+  if (etfSignalCache.weekKey !== today) return null;
+  const count = Object.keys(etfSignalCache.signals).length;
+  if (count === 0) return null;
+  const result = {};
+  for (const [ticker, s] of Object.entries(etfSignalCache.signals)) {
+    result[ticker] = {
+      signal:     s.signal,
+      signalDate: s.signalDate || null,
+    };
+  }
+  return result;
+}
+
 /**
  * Return a Map of tickers currently showing developing signal characteristics.
  * Keys are uppercase ticker strings, values are the developing direction ('BL' or 'SS').

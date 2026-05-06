@@ -1523,8 +1523,18 @@ function MoversPanel({ movers, onTickerClick }) {
                 {r.price >= 1000 ? r.price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : r.price.toFixed(2)}
               </div>
               <div style={{ color, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{pct >= 0 ? '+' : ''}{pct.toFixed(3)}%</div>
-              <div style={{ height: 14, background: '#1a1a1a', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ position: 'relative', height: 16, background: '#1a1a1a', borderRadius: 2, overflow: 'hidden' }}>
                 <div style={{ width: `${widthPct}%`, height: '100%', background: color, transition: 'width 200ms' }} />
+                {r.signalLabel && (
+                  <div style={{
+                    position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)',
+                    background: '#fff', color: '#000', fontWeight: 700, fontSize: 9,
+                    letterSpacing: 0.3, padding: '1px 4px', borderRadius: 2, lineHeight: 1.2,
+                    fontFamily: 'monospace', boxShadow: '0 0 0 1px rgba(0,0,0,0.3)'
+                  }}>
+                    {r.signalLabel}
+                  </div>
+                )}
               </div>
             </div>
           );

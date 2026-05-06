@@ -3,6 +3,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import { getAllTickers } from './constituents.js';
+import { getCachedSignals, getCachedEtfSignals } from './signalService.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
@@ -37,7 +38,30 @@ async function fetchBulkQuotes(tickers) {
   return results;
 }
 
-function buildMovers(quoteMap, tickers, topN) {
+// Monday of the current ISO week (matches signalService weekKey logic)
+function currentWeekMonday() {
+  const d = new Date();
+  const day = d.getUTCDay(); // 0=Sun..6=Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
+
+function signalLabel(signalMap, ticker) {
+  const s = signalMap?.[ticker];
+  if (!s || !s.signal) return null;
+  if (s.signal !== 'BL' && s.signal !== 'SS') return null;
+  let weeks = 1;
+  if (s.signalDate) {
+    const sigMs = new Date(s.signalDate + 'T12:00:00').getTime();
+    const curMs = new Date(currentWeekMonday() + 'T12:00:00').getTime();
+    const ageWeeks = Math.max(0, Math.round((curMs - sigMs) / (7 * 24 * 60 * 60 * 1000)));
+    weeks = ageWeeks + 1; // BL+1 = fired this week
+  }
+  return `${s.signal}+${weeks}`;
+}
+
+function buildMovers(quoteMap, tickers, topN, signalMap) {
   const rows = [];
   for (const t of tickers) {
     const q = quoteMap[t];
@@ -50,6 +74,7 @@ function buildMovers(quoteMap, tickers, topN) {
       name: q.name || q.symbol,
       price: parseFloat(price.toFixed(2)),
       changePct: parseFloat(pct.toFixed(3)),
+      signalLabel: signalLabel(signalMap, q.symbol),
     });
   }
   const sorted = [...rows].sort((a, b) => b.changePct - a.changePct);
@@ -75,9 +100,12 @@ export async function getMovers(forceRefresh = false) {
     fetchBulkQuotes(etfTickers),
   ]);
 
+  const stockSignals = getCachedSignals() || {};
+  const etfSignals = getCachedEtfSignals() || {};
+
   const data = {
-    stocks: buildMovers(stockQuotes, stockTickers, STOCK_TOP_N),
-    etfs: buildMovers(etfQuotes, etfTickers, ETF_TOP_N),
+    stocks: buildMovers(stockQuotes, stockTickers, STOCK_TOP_N, stockSignals),
+    etfs: buildMovers(etfQuotes, etfTickers, ETF_TOP_N, etfSignals),
     asOf: new Date().toISOString(),
   };
 

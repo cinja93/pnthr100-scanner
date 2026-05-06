@@ -612,6 +612,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const isAdmin = currentUser?.role === 'admin';
   const isInvestor = currentUser?.role === 'investor';
   const [lotAlerts,         setLotAlerts]         = useState([]);
+  const [dismissedLotKeys,  setDismissedLotKeys]  = useState(new Set());
   const [positions,         setPositions]         = useState([]); // full positions for EMA alerts
 
   // ── Rolling price history (last 10 ticks per ticker, in-memory only) ────────
@@ -767,6 +768,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   }, [positions, emaValues]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const visibleEmaAlerts = emaAlerts.filter(a => !dismissedEmaKeys.has(a.dismissKey));
+  const visibleLotAlerts = lotAlerts.filter(a => !dismissedLotKeys.has(`${a.ticker}-${a.lot}`));
 
   // ── IBKR discrepancy polling ──────────────────────────────────────────────
   // Active discrepancies; each item has { type, severity, ticker, message, ... }
@@ -1035,7 +1037,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
       <div className="content-wrapper">
         {/* Lot Ready banner — visible on all pages when a pyramid lot is triggered */}
-        {isAuthenticated && lotAlerts.length > 0 && (
+        {isAuthenticated && visibleLotAlerts.length > 0 && (
           <div style={{
             background: 'linear-gradient(90deg, rgba(40,167,69,0.15), rgba(40,167,69,0.05))',
             borderBottom: '1px solid rgba(40,167,69,0.3)',
@@ -1047,13 +1049,13 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
             flexWrap: 'wrap',
           }}>
             <span style={{ color: '#28a745', fontWeight: 800, whiteSpace: 'nowrap' }}>
-              🎯 {lotAlerts.length} LOT{lotAlerts.length > 1 ? 'S' : ''} READY
+              🎯 {visibleLotAlerts.length} LOT{visibleLotAlerts.length > 1 ? 'S' : ''} READY
             </span>
-            {lotAlerts.map((a, i) => (
+            {visibleLotAlerts.map((a, i) => (
               <span key={i} style={{ color: '#aaa' }}>
                 <b style={{ color: '#fff' }}>{a.ticker}</b>
                 {' '}Lot {a.lot} ({a.lotName}) — trigger ${a.trigger.toFixed(2)}
-                {i < lotAlerts.length - 1 ? <span style={{ color: '#444', margin: '0 6px' }}>|</span> : null}
+                {i < visibleLotAlerts.length - 1 ? <span style={{ color: '#444', margin: '0 6px' }}>|</span> : null}
               </span>
             ))}
             <button
@@ -1072,6 +1074,23 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
               }}
             >
               GO TO ASSISTANT →
+            </button>
+            <button
+              onClick={() => setDismissedLotKeys(prev => new Set([...prev, ...visibleLotAlerts.map(a => `${a.ticker}-${a.lot}`)]))}
+              title="Dismiss until next session or until a new lot becomes ready"
+              style={{
+                background: 'none',
+                border: '1px solid rgba(40,167,69,0.4)',
+                color: 'rgba(255,255,255,0.7)',
+                borderRadius: 4,
+                padding: '4px 10px',
+                fontWeight: 700,
+                fontSize: 14,
+                lineHeight: 1,
+                cursor: 'pointer',
+              }}
+            >
+              ✕
             </button>
           </div>
         )}

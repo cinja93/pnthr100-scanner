@@ -400,6 +400,19 @@ export function getCachedSignals() {
   return result;
 }
 
+// Force-recompute signals for a small subset of tickers — clears their cache
+// entries so the next getSignals() call fetches fresh daily bars and re-runs
+// the state machine. Used by Movers panel to guarantee live, up-to-date signal
+// labels independent of when the daily signal cache was first populated.
+export async function freshSignalsFor(tickers, opts = {}) {
+  const { isETF = false } = opts;
+  const cache = isETF ? etfSignalCache : signalCache;
+  for (const t of tickers) {
+    if (cache.signals && cache.signals[t]) delete cache.signals[t];
+  }
+  return getSignals(tickers, opts);
+}
+
 // Same shape as getCachedSignals() but for the ETF cache. Returns null if cold.
 export function getCachedEtfSignals() {
   const today = getToday();

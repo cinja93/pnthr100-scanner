@@ -3,7 +3,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import { getAllTickers } from './constituents.js';
-import { getCachedSignals, getCachedEtfSignals } from './signalService.js';
+import { freshSignalsFor } from './signalService.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
@@ -100,8 +100,38 @@ export async function getMovers(forceRefresh = false) {
     fetchBulkQuotes(etfTickers),
   ]);
 
-  const stockSignals = getCachedSignals() || {};
-  const etfSignals = getCachedEtfSignals() || {};
+  // Pre-pick top-N tickers so we only force-recompute signals for what's shown.
+  const preStocks = buildMovers(stockQuotes, stockTickers, STOCK_TOP_N, {});
+  const preEtfs   = buildMovers(etfQuotes,   etfTickers,   ETF_TOP_N,   {});
+  const stockTopTickers = [...preStocks.gainers, ...preStocks.decliners].map(r => r.ticker);
+  const etfTopTickers   = [...preEtfs.gainers,   ...preEtfs.decliners].map(r => r.ticker);
+
+  // Build sectorMap for stock recompute from FMP profiles in one call (24-tickers max).
+  const sectorMap = {};
+  if (stockTopTickers.length > 0) {
+    try {
+      const profiles = await fetchJson(`/profile/${stockTopTickers.join(',')}`);
+      if (Array.isArray(profiles)) {
+        const { normalizeSector } = await import('./sectorUtils.js');
+        for (const p of profiles) {
+          if (p?.symbol && p?.sector) sectorMap[p.symbol] = normalizeSector(p.sector);
+        }
+      }
+    } catch (err) {
+      console.error('[Movers] sectorMap profile fetch failed:', err.message);
+    }
+  }
+
+  const [stockSignals, etfSignals] = await Promise.all([
+    freshSignalsFor(stockTopTickers, { sectorMap }).catch(err => {
+      console.error('[Movers] stock signals recompute failed:', err.message);
+      return {};
+    }),
+    freshSignalsFor(etfTopTickers, { isETF: true }).catch(err => {
+      console.error('[Movers] etf signals recompute failed:', err.message);
+      return {};
+    }),
+  ]);
 
   const data = {
     stocks: buildMovers(stockQuotes, stockTickers, STOCK_TOP_N, stockSignals),

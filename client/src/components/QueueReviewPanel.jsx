@@ -377,7 +377,7 @@ export default function QueueReviewPanel({ onClose }) {
               <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.02)',
                 border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}>
                 <div style={{ fontWeight: 700, fontSize: 11, color: '#888', marginBottom: 4 }}>
-                  ⚪ OPTION C — Remove entries from the queue above, then SEND TO COMMAND
+                  ⚪ OPTION C — Remove entries from the queue above, then SEND TO ASSISTANT
                 </div>
                 <div style={{ fontSize: 11, color: '#555' }}>
                   {stockOver && `Need to cut ~${dol(stockShortfall)} of stock risk. `}
@@ -401,7 +401,7 @@ export default function QueueReviewPanel({ onClose }) {
               border: 'none', borderRadius: 6, padding: '8px 20px', fontWeight: 800,
               fontSize: 12, cursor: sending || items.length === 0 ? 'not-allowed' : 'pointer',
               letterSpacing: '0.04em', opacity: items.length === 0 ? 0.5 : 1 }}>
-            {sending ? '⟳ Sending…' : `SEND ${items.length} TO COMMAND →`}
+            {sending ? '⟳ Sending…' : `SEND ${items.length} TO ASSISTANT →`}
           </button>
         </div>
       </div>

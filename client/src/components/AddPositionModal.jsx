@@ -16,7 +16,7 @@
 // Props:
 //   open      (bool)  — show/hide
 //   initial   (obj?)  — pre-fill { ticker, direction, shares, entryPrice, stopPrice, sector }
-//                       (e.g. when launched from QueueReviewPanel "Send to Command")
+//                       (e.g. when launched from QueueReviewPanel "Send to Assistant")
 //   onClose   (fn)    — backdrop / Escape / Cancel
 //   onSaved   (fn?)   — called with new position id after successful save
 

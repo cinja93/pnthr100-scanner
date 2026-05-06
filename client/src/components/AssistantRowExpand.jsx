@@ -21,7 +21,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
-import { PyramidCard } from './CommandCenter';
+import { PyramidCard } from './pyramid';
 
 function fmtMoney(n) {
   if (n == null || !Number.isFinite(+n)) return '—';

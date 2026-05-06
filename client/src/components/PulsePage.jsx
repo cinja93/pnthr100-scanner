@@ -206,7 +206,7 @@ export default function PulsePage({ onNavigate }) {
       )}
       <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
 
-      <MoversPanel movers={movers} onTickerClick={(ticker) => { setChartList([{ ticker }]); setChartIndex(0); }} />
+      <MoversPanel movers={movers} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} />
 
       {/* TIER 3: Portfolio — Heat gauge + positions + alerts/lots in one band (hidden for investors) */}
       {!isInvestor && <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} />}
@@ -1499,6 +1499,15 @@ function MoversPanel({ movers, onTickerClick }) {
   const stocks = movers.stocks || { gainers: [], decliners: [] };
   const etfs = movers.etfs || { gainers: [], decliners: [] };
 
+  // Single combined chart list — click any row to scroll through all 34 with arrows.
+  const combined = [
+    ...stocks.gainers,
+    ...stocks.decliners,
+    ...etfs.gainers,
+    ...etfs.decliners,
+  ].map(r => ({ ticker: r.ticker, companyName: r.name }));
+  const indexOf = (ticker) => combined.findIndex(c => c.ticker === ticker);
+
   const Clickable = ({ rows, kind }) => {
     const isGain = kind === 'gainers';
     const color = isGain ? '#16a34a' : '#dc2626';
@@ -1512,7 +1521,7 @@ function MoversPanel({ movers, onTickerClick }) {
           return (
             <div
               key={r.ticker}
-              onClick={() => onTickerClick?.(r.ticker)}
+              onClick={() => onTickerClick?.(combined, indexOf(r.ticker))}
               style={{ display: 'grid', gridTemplateColumns: '60px 1fr 80px 70px 1fr', gap: 8, alignItems: 'center', fontSize: 12, cursor: 'pointer', padding: '2px 4px', borderRadius: 4 }}
               onMouseEnter={(e) => e.currentTarget.style.background = '#1a1a1a'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}

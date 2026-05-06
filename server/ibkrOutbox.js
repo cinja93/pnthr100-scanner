@@ -260,15 +260,27 @@ const DEFAULT_NAV_FOR_CAP   = 100_000;
 async function checkConcentrationCap(db, ownerId, ticker) {
   const pos = await db.collection('pnthr_portfolio').findOne(
     { ownerId, ticker, status: { $in: ['ACTIVE', 'PARTIAL'] } },
-    { projection: { fills: 1, currentPrice: 1, totalFilledShares: 1, shares: 1 } },
+    { projection: { fills: 1, exits: 1, currentPrice: 1, totalFilledShares: 1, totalExitedShares: 1, remainingShares: 1, shares: 1 } },
   );
   if (!pos) return { over: false, reason: 'NO_POSITION' };
 
-  let shares = +pos.totalFilledShares;
+  // Use NET shares (filled minus exited) — this is what you actually hold and
+  // therefore what counts toward concentration. Pre-fix used gross
+  // totalFilledShares, which overstates after a partial exit (ADI: 16 filled
+  // − 6 exit = 10 held; cap was checking 16 and blocking MODIFY_LOT_TRIGGER
+  // even though held notional was well under 10%).
+  let shares = +pos.remainingShares;
   if (!Number.isFinite(shares) || shares <= 0) {
-    shares = Object.values(pos.fills || {}).reduce(
+    const filled = +pos.totalFilledShares;
+    const exited = +pos.totalExitedShares || 0;
+    if (Number.isFinite(filled) && filled > 0) shares = filled - exited;
+  }
+  if (!Number.isFinite(shares) || shares <= 0) {
+    const filledFromMap = Object.values(pos.fills || {}).reduce(
       (s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0,
     );
+    const exitedFromArr = (pos.exits || []).reduce((s, e) => s + (+e.shares || 0), 0);
+    shares = filledFromMap - exitedFromArr;
   }
   if (!Number.isFinite(shares) || shares <= 0) {
     shares = Math.abs(+pos.shares || 0);

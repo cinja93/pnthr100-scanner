@@ -380,11 +380,13 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
 
   // Shares
   const ibkrShares = ibkrPos ? Math.abs(ibkrPos.shares) : null;
-  const { totShr: cmdShares, avgCost: cmdAvg } = cmd ? summarizeFills(cmd.fills) : { totShr: null, avgCost: null };
+  const { totShr: cmdShares, avgCost: fillsAvg } = cmd ? summarizeFills(cmd.fills) : { totShr: null, avgCost: null };
   const cmdSharesOrNull = cmdHas ? cmdShares : null;
 
-  // Avg
+  // Avg — IBKR is source of truth (commissions, slippage, borrow fees baked in).
+  // Fall back to fills-derived avg only when IBKR has no position data.
   const ibkrAvg = ibkrPos?.avgCost ?? null;
+  const cmdAvg  = (ibkrAvg != null && ibkrAvg > 0) ? ibkrAvg : fillsAvg;
 
   // Stop side expected
   const expectedStopSide = cmdDir === 'LONG' ? 'SELL' : cmdDir === 'SHORT' ? 'BUY' : null;

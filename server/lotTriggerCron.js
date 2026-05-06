@@ -33,7 +33,7 @@
 //
 // Demo sentinel: filter at query level + every enqueue() also rejects demo.
 
-import { connectToDatabase } from './database.js';
+import { connectToDatabase, getUserProfile } from './database.js';
 import {
   enqueue as enqueueOutbox,
   sanityCheckPlaceLotTrigger,
@@ -79,7 +79,15 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
   for (const oid of ownerIds) {
     const ibkr    = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: oid });
     ibkrByOwner.set(oid, ibkr || { positions: [], stopOrders: [] });
-    const profile = await db.collection('user_profiles').findOne({ userId: oid });
+    // Use getUserProfile() so this cron's NAV matches the LIVE table's. Pre-fix
+    // an inline findOne({ userId: oid }) was used here — but getUserProfile()
+    // converts hex-24 userIds to ObjectId before querying, while this inline
+    // version passed the plain string. Whichever shape the user_profiles doc
+    // actually stores, only one path matched — the other returned null and
+    // fell back to DEFAULT_NAV. That divergence produced different lot plans
+    // (live table L4=3, cron L4=2 aligned), so the cron never enqueued the
+    // MODIFY to align TWS to plan.
+    const profile = await getUserProfile(oid);
     navByOwner.set(oid, +profile?.accountSize || DEFAULT_NAV);
   }
 

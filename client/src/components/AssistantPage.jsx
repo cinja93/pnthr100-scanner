@@ -37,6 +37,7 @@ import RiskAdvisorModal from './RiskAdvisorModal';
 import CalculatorModal from './CalculatorModal';
 import AddPositionModal from './AddPositionModal';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
+import { useDemo } from '../contexts/DemoContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -2607,6 +2608,24 @@ export default function AssistantPage({ onNavigate }) {
   const [accessRequests,     setAccessRequests]     = useState([]);
   const [accessActioning,    setAccessActioning]    = useState(null); // { id, action } while in flight
   const { isAdmin } = useAuth() || {};
+  const { isDemo } = useDemo() || {};
+
+  // ── Fund period toggle (demo-only). Swaps NAV between the full-backtest
+  // figure and the live-fund snapshot started 6-16-25. Choice persists in
+  // localStorage so navigating away and back keeps the same view.
+  const FUND_PERIOD_KEY = 'pnthr.fundPeriod';
+  const [fundPeriod, setFundPeriod] = useState(() => {
+    try { return localStorage.getItem(FUND_PERIOD_KEY) || 'full_backtest'; } catch { return 'full_backtest'; }
+  });
+  useEffect(() => {
+    if (!isDemo) return;
+    try { localStorage.setItem(FUND_PERIOD_KEY, fundPeriod); } catch {}
+    fetchNav().then(profile => {
+      if (!profile) return;
+      const target = fundPeriod === 'live_fund' ? profile.liveFundNav : profile.nav;
+      if (Number.isFinite(+target) && +target > 0) setNav(+target);
+    }).catch(() => {});
+  }, [fundPeriod, isDemo]);
   // Load custom trendline alerts (admin only). Refresh every 5 min so
   // newly-fired cron alerts appear without a full page reload.
   useEffect(() => {
@@ -3579,6 +3598,35 @@ export default function AssistantPage({ onNavigate }) {
           >+ ADD POSITION</button>
 
           <span style={{ flex: 1 }} />
+
+          {/* Fund period toggle — demo-only. Swaps NAV between the full
+              backtest snapshot and the live PNTHR fund (starts 6-16-25).
+              Mirror of CommandCenter's header toggle. */}
+          {isDemo && (
+            <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #333' }}>
+              <button
+                type="button"
+                onClick={() => setFundPeriod('full_backtest')}
+                style={{
+                  padding: '5px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer', border: 'none',
+                  background: fundPeriod === 'full_backtest' ? '#fcf000' : '#1a1a1a',
+                  color: fundPeriod === 'full_backtest' ? '#111' : '#888',
+                  letterSpacing: 0.3,
+                }}
+              >5 YEARS</button>
+              <button
+                type="button"
+                onClick={() => setFundPeriod('live_fund')}
+                style={{
+                  padding: '5px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer', border: 'none',
+                  borderLeft: '1px solid #333',
+                  background: fundPeriod === 'live_fund' ? '#fcf000' : '#1a1a1a',
+                  color: fundPeriod === 'live_fund' ? '#111' : '#888',
+                  letterSpacing: 0.3,
+                }}
+              >PNTHR 6-16-25</button>
+            </div>
+          )}
 
           {/* BRIDGE status button. Red + clickable when FAILED/STUCK > 0;
               click opens the Recent Bridge Commands card and scrolls to it. */}

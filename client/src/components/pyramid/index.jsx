@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { API_BASE, authHeaders } from '../../services/api.js';
-import { STRIKE_PCT, buildLots, enrichLots, sizePosition } from '../../utils/sizingUtils.js';
+import { STRIKE_PCT, buildLots, enrichLots, sizePosition, calcHeat } from '../../utils/sizingUtils.js';
 
 export function getDisplayPrice(p) {
   const ov = p.manualPriceOverride;
@@ -1468,6 +1468,156 @@ export function PendingCard({ entry, nav, onConfirm, onDismiss }) {
             ))}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// KillPipelineModal — wraps PipelineTab in a fullscreen modal so it can be
+// launched from anywhere (PNTHR Kill header). Fetches positions + NAV
+// internally so callers don't need to pre-load them.
+export function KillPipelineModal({ open, onClose }) {
+  const [positions, setPositions] = useState([]);
+  const [nav, setNav] = useState(100000);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiGet('/api/positions');
+        if (!cancelled) setPositions(data?.positions || []);
+      } catch { /* fallback to empty list */ }
+      try {
+        const profileRes = await fetch(`${API_BASE}/api/user/profile`, { headers: authHeaders() });
+        if (profileRes.ok) {
+          const profile = await profileRes.json();
+          const v = +profile?.accountSize;
+          if (!cancelled && Number.isFinite(v) && v > 0) setNav(v);
+        }
+      } catch { /* keep default */ }
+    })();
+    return () => { cancelled = true; };
+  }, [open]);
+
+  if (!open) return null;
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        zIndex: 9999, padding: '5vh 16px', overflow: 'auto',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#0a0a0a', border: '1px solid rgba(255,215,0,0.3)', borderRadius: 12,
+          padding: '20px 24px', width: 'min(1100px, 96vw)',
+          color: '#e8e6e3', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ color: '#FFD700', fontSize: 16, fontWeight: 800, letterSpacing: 1 }}>
+            ⚡ KILL PIPELINE
+          </div>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: 'none', color: '#888',
+            fontSize: 22, cursor: 'pointer', lineHeight: 1,
+          }}>×</button>
+        </div>
+        <PipelineTab positions={positions} nav={nav} />
+      </div>
+    </div>
+  );
+}
+
+export function PipelineTab({ positions, nav }) {
+  const [signals,  setSignals]  = useState([]);
+  const [weekOf,   setWeekOf]   = useState(null);
+  const [regime,   setRegime]   = useState(null);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    apiGet('/api/kill-pipeline?confirmed=false&limit=50')
+      .then(data => {
+        setSignals(data.signals || []);
+        setWeekOf(data.weekOf);
+        setRegime(data.regime);
+        setLoading(false);
+      })
+      .catch(e => {
+        // Fallback: try to use the existing /api/apex data
+        setError('Pipeline data not yet available. Run the Friday pipeline or visit PNTHR Kill to generate scores.');
+        setLoading(false);
+      });
+  }, []);
+
+  const inPort = new Set(positions.map(p => p.ticker));
+  const heat   = calcHeat(positions, nav);
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#555' }}>Loading Kill pipeline...</div>;
+
+  if (error || signals.length === 0) {
+    return (
+      <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 10, padding: 32, border: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
+        <div style={{ fontSize: 24, marginBottom: 12 }}>⚡</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#FFD700', marginBottom: 8 }}>Kill Pipeline — No Data Yet</div>
+        <div style={{ fontSize: 12, color: '#666', maxWidth: 480, margin: '0 auto', lineHeight: 1.6 }}>
+          {error || 'The Friday pipeline runs automatically at 4:15 PM ET each Friday. Visit the PNTHR Kill page to force a refresh, then check back here.'}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {regime && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <Badge color="#888" small>{regime.indexPosition?.toUpperCase()} · {regime.indexSlope?.toUpperCase()}</Badge>
+          <Badge color="#888" small>BL: {regime.blCount} · SS: {regime.ssCount}</Badge>
+          {weekOf && <Badge color="#555" small>Week of {weekOf}</Badge>}
+          <Badge color="#FFD700" bg="rgba(255,215,0,0.08)" small>{heat.totalRiskPct}% risk used · {heat.liveCnt} live</Badge>
+        </div>
+      )}
+      <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 14, fontWeight: 600 }}>
+          <span style={{ color: '#FFD700' }}>⚡</span> Kill pipeline — {signals.length} signals
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: 'monospace' }}>
+          <thead>
+            <tr style={{ fontSize: 10, color: '#555', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              {['#', 'Ticker', 'Dir', 'Tier', 'Score', 'Price', 'Conv', 'Slope', 'Sep', 'Age', ''].map(h => (
+                <th key={h} style={{ padding: '7px 8px', textAlign: 'left', fontWeight: 500 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {signals.map((s, i) => (
+              <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', opacity: inPort.has(s.ticker) ? 0.4 : 1,
+                background: s.tier === 'ALPHA PNTHR KILL' ? 'rgba(255,215,0,0.04)' : 'transparent' }}>
+                <td style={{ padding: '10px 8px', color: '#666' }}>{i + 1}</td>
+                <td style={{ padding: '10px 8px', fontWeight: 700 }}>{s.ticker}</td>
+                <td style={{ padding: '10px 8px' }}><SigBadge d={s.signal === 'BL' ? 'LONG' : 'SHORT'} /></td>
+                <td style={{ padding: '10px 8px' }}><TierBadge t={s.tier} /></td>
+                <td style={{ padding: '10px 8px', fontWeight: 700, color: s.score >= 100 ? '#FFD700' : '#e8e6e3' }}>{s.score}</td>
+                <td style={{ padding: '10px 8px', color: '#aaa' }}>{s.price ? `$${s.price.toFixed(0)}` : '—'}</td>
+                <td style={{ padding: '10px 8px', color: (s.convPct || 0) >= 8 ? '#28a745' : '#aaa' }}>{s.convPct?.toFixed(1) || '—'}%</td>
+                <td style={{ padding: '10px 8px', color: '#aaa' }}>{s.slopePct != null ? `${s.slopePct > 0 ? '+' : ''}${s.slopePct}` : '—'}</td>
+                <td style={{ padding: '10px 8px', color: '#aaa' }}>{s.sepPct?.toFixed(1) || '—'}%</td>
+                <td style={{ padding: '10px 8px', color: '#777', fontSize: 11 }}>{s.signalAge === 0 ? <Badge color="#28a745" bg="rgba(40,167,69,0.1)" small>NEW</Badge> : `${s.signalAge}w`}</td>
+                <td style={{ padding: '10px 8px' }}>
+                  {inPort.has(s.ticker)
+                    ? <Badge color="#555" small>IN PORT</Badge>
+                    : <Badge color="#FFD700" bg="rgba(255,215,0,0.1)" small>SIZE IT</Badge>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

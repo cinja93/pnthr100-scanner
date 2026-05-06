@@ -6,6 +6,7 @@ import { computeAnalyzeScore } from '../utils/analyzeScore';
 import { computeWeeksAgo } from '../utils/dateUtils';
 import ChartModal from './ChartModal';
 import KillBadge from './KillBadge';
+import { KillPipelineModal } from './pyramid';
 import { fetchApexStocks, API_BASE, authHeaders } from '../services/api';
 import styles from './ApexPage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -259,6 +260,7 @@ export default function ApexPage() {
   const [formulaOpen, setFormulaOpen] = useState(false);
   const [formulaPos, setFormulaPos]   = useState({ x: 0, y: 0 });
   const formulaBtnRef = useRef(null);
+  const [pipelineOpen,  setPipelineOpen]  = useState(false);
   const [healthOpen,    setHealthOpen]    = useState(false);
   const [healthData,    setHealthData]    = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
@@ -431,14 +433,30 @@ export default function ApexPage() {
             KILL tells you WHAT to trade. ANALYZE tells you WHEN to trade it. A stock can be Kill #1 RANK for weeks. But there's only a narrow window in the first 1-3 weeks after signal where the Analyze score says NOW. If you miss that window, you wait for the next signal. You don't chase. Minimum gates: Kill rank: Top 20 (HUNTING tier or better, score ≥80), Analyze: ≥75%, Composite: ≥65. That's the floor. That's when the PNTHR Eats!
           </p>
         </div>
-        <button
-          className={styles.refreshBtn}
-          onClick={() => load(true)}
-          disabled={loading}
-        >
-          {loading ? 'Loading…' : '↻ Refresh'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setPipelineOpen(true)}
+              title="Inspect the Friday Kill scoring pipeline (admin diagnostic)"
+              style={{
+                padding: '8px 14px', background: 'rgba(255,215,0,0.08)',
+                border: '1px solid rgba(255,215,0,0.4)', color: '#FFD700',
+                borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                letterSpacing: '0.05em', whiteSpace: 'nowrap',
+              }}
+            >⚡ KILL PIPELINE</button>
+          )}
+          <button
+            className={styles.refreshBtn}
+            onClick={() => load(true)}
+            disabled={loading}
+          >
+            {loading ? 'Loading…' : '↻ Refresh'}
+          </button>
+        </div>
       </div>
+      <KillPipelineModal open={pipelineOpen} onClose={() => setPipelineOpen(false)} />
 
       {/* ── Loading / Error ─────────────────────────────────────────────────── */}
       {loading && (

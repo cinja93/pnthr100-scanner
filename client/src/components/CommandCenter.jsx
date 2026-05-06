@@ -20,6 +20,7 @@ import {
   apiGet, apiPost,
   ExitPanel, PyramidCard, DeleteBtn, CloseViaBridgeButton,
   PendingCard, FIVE_DAYS_MS,
+  PipelineTab,
 } from './pyramid';
 import pantherHead from '../assets/panther head.png';
 
@@ -575,95 +576,6 @@ function Calculator({ netLiquidity, onCreate }) {
 
 // ── Kill Pipeline Tab ─────────────────────────────────────────────────────────
 
-function PipelineTab({ positions, nav }) {
-  const [signals,  setSignals]  = useState([]);
-  const [weekOf,   setWeekOf]   = useState(null);
-  const [regime,   setRegime]   = useState(null);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState(null);
-
-  useEffect(() => {
-    setLoading(true);
-    apiGet('/api/kill-pipeline?confirmed=false&limit=50')
-      .then(data => {
-        setSignals(data.signals || []);
-        setWeekOf(data.weekOf);
-        setRegime(data.regime);
-        setLoading(false);
-      })
-      .catch(e => {
-        // Fallback: try to use the existing /api/apex data
-        setError('Pipeline data not yet available. Run the Friday pipeline or visit PNTHR Kill to generate scores.');
-        setLoading(false);
-      });
-  }, []);
-
-  const inPort = new Set(positions.map(p => p.ticker));
-  const heat   = calcHeat(positions, nav);
-
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#555' }}>Loading Kill pipeline...</div>;
-
-  if (error || signals.length === 0) {
-    return (
-      <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 10, padding: 32, border: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
-        <div style={{ fontSize: 24, marginBottom: 12 }}>⚡</div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#FFD700', marginBottom: 8 }}>Kill Pipeline — No Data Yet</div>
-        <div style={{ fontSize: 12, color: '#666', maxWidth: 480, margin: '0 auto', lineHeight: 1.6 }}>
-          {error || 'The Friday pipeline runs automatically at 4:15 PM ET each Friday. Visit the PNTHR Kill page to force a refresh, then check back here.'}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {regime && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-          <Badge color="#888" small>{regime.indexPosition?.toUpperCase()} · {regime.indexSlope?.toUpperCase()}</Badge>
-          <Badge color="#888" small>BL: {regime.blCount} · SS: {regime.ssCount}</Badge>
-          {weekOf && <Badge color="#555" small>Week of {weekOf}</Badge>}
-          <Badge color="#FFD700" bg="rgba(255,215,0,0.08)" small>{heat.totalRiskPct}% risk used · {heat.liveCnt} live</Badge>
-        </div>
-      )}
-      <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-        <div style={{ padding: '12px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 14, fontWeight: 600 }}>
-          <span style={{ color: '#FFD700' }}>⚡</span> Kill pipeline — {signals.length} signals
-        </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: 'monospace' }}>
-          <thead>
-            <tr style={{ fontSize: 10, color: '#555', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-              {['#', 'Ticker', 'Dir', 'Tier', 'Score', 'Price', 'Conv', 'Slope', 'Sep', 'Age', ''].map(h => (
-                <th key={h} style={{ padding: '7px 8px', textAlign: 'left', fontWeight: 500 }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {signals.map((s, i) => (
-              <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', opacity: inPort.has(s.ticker) ? 0.4 : 1,
-                background: s.tier === 'ALPHA PNTHR KILL' ? 'rgba(255,215,0,0.04)' : 'transparent' }}>
-                <td style={{ padding: '10px 8px', color: '#666' }}>{i + 1}</td>
-                <td style={{ padding: '10px 8px', fontWeight: 700 }}>{s.ticker}</td>
-                <td style={{ padding: '10px 8px' }}><SigBadge d={s.signal === 'BL' ? 'LONG' : 'SHORT'} /></td>
-                <td style={{ padding: '10px 8px' }}><TierBadge t={s.tier} /></td>
-                <td style={{ padding: '10px 8px', fontWeight: 700, color: s.score >= 100 ? '#FFD700' : '#e8e6e3' }}>{s.score}</td>
-                <td style={{ padding: '10px 8px', color: '#aaa' }}>{s.price ? `$${s.price.toFixed(0)}` : '—'}</td>
-                <td style={{ padding: '10px 8px', color: (s.convPct || 0) >= 8 ? '#28a745' : '#aaa' }}>{s.convPct?.toFixed(1) || '—'}%</td>
-                <td style={{ padding: '10px 8px', color: '#aaa' }}>{s.slopePct != null ? `${s.slopePct > 0 ? '+' : ''}${s.slopePct}` : '—'}</td>
-                <td style={{ padding: '10px 8px', color: '#aaa' }}>{s.sepPct?.toFixed(1) || '—'}%</td>
-                <td style={{ padding: '10px 8px', color: '#777', fontSize: 11 }}>{s.signalAge === 0 ? <Badge color="#28a745" bg="rgba(40,167,69,0.1)" small>NEW</Badge> : `${s.signalAge}w`}</td>
-                <td style={{ padding: '10px 8px' }}>
-                  {inPort.has(s.ticker)
-                    ? <Badge color="#555" small>IN PORT</Badge>
-                    : <Badge color="#FFD700" bg="rgba(255,215,0,0.1)" small>SIZE IT</Badge>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
 // ── Market Hours Helper ───────────────────────────────────────────────────────
 

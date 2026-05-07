@@ -18,6 +18,7 @@ import { normalizeSector } from './sectorUtils.js';
 import { getDevelopingSignalTickers } from './signalService.js';
 import { calculateSectorExposure } from './sectorExposure.js';
 import { getCachedSignalStocks } from './apexService.js';
+import { computeTargetAvg } from './lotMath.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE    = 'https://financialmodelingprep.com';
@@ -412,6 +413,21 @@ export async function pendingEntryConfirm(req, res) {
     const fills = { 1: { filled: true, price: +fillPrice, shares: +shares, date: date || new Date().toISOString().split('T')[0] } };
     for (let i = 2; i <= 5; i++) fills[i] = { filled: false };
 
+    // Compute targetAvg — share-weighted price the position would reach if
+    // every lot fills at its planned price (L1 actual + L2-L5 triggers). Locked
+    // here at L1 fill; never recomputed. Used by the live-table outline-box
+    // display and by missed-lot catch-up math.
+    const partialPosForTargetAvg = {
+      direction: resolvedDirection,
+      entryPrice: +fillPrice,
+      originalStop: entry.adjustedStop || entry.suggestedStop || null,
+      maxGapPct: entry.gapPct || 0,
+      isETF: entry.isETF || false,
+      fills,
+    };
+    const navForTargetAvg = +(await getUserProfile(req.user.userId).catch(() => null))?.accountSize || 100000;
+    const targetAvg = computeTargetAvg(partialPosForTargetAvg, navForTargetAvg);
+
     const position = {
       id:             posId,
       pendingEntryId: req.params.id, // idempotency key
@@ -426,6 +442,7 @@ export async function pendingEntryConfirm(req, res) {
       sector:       resolvedSector,
       exchange,
       fills,
+      targetAvg,
       status:       'ACTIVE',
       ownerId:      req.user.userId,
       createdAt:    new Date(),

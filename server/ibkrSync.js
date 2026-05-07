@@ -534,6 +534,11 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
       totalFilledShares:      absShares,
       totalExitedShares:      0,
       remainingShares:        absShares,
+      // Auto-opened positions enter as a single-shot full-size L1 (pct=1.0)
+      // and have no L2-L5 pyramid plan to enforce. Target avg simplifies to
+      // the L1 fill price — no upper-lot triggers contribute. Stored anyway
+      // for UI consistency (every active position has a targetAvg).
+      targetAvg:              +(+pos.avgCost).toFixed(4),
       status:                 'ACTIVE',
       autoOpenedByIBKR:       true,
       stopSourceTwsFallback:  stopSourceTwsFallback || undefined,

@@ -140,6 +140,40 @@ export function computeLotPlan(position, netLiquidity) {
   });
 }
 
+// ── Target average price ────────────────────────────────────────────────────
+// Computed once at L1 fill and stored on the position as `targetAvg`. Never
+// recomputed. This is the share-weighted avg the position WOULD reach if every
+// lot fills exactly at its planned price (L1 actual + L2-L5 trigger prices).
+//
+// Used by the live table card (displayed in outlined box under ticker) and
+// by the missed-lot catch-up algorithm (preserves this avg through rebalance
+// of upper lot share counts).
+//
+// Returns null if the plan is empty or invalid.
+export function computeTargetAvg(position, netLiquidity) {
+  const plan = computeLotPlan(position, netLiquidity);
+  if (!plan || plan.length === 0) return null;
+  // L1 anchor (actual fill price if filled, else entry price). Upper lots
+  // contribute at their planned trigger prices.
+  const fills = position?.fills || {};
+  const l1Price = fills[1]?.filled && fills[1]?.price
+    ? +fills[1].price
+    : +(position?.entryPrice || 0);
+  if (!l1Price) return null;
+  let totalCost = 0;
+  let totalShares = 0;
+  for (const lot of plan) {
+    const shares = +lot.targetShares || 0;
+    if (shares <= 0) continue;
+    const price = lot.lot === 1 ? l1Price : +lot.triggerPrice;
+    if (!price) continue;
+    totalCost += shares * price;
+    totalShares += shares;
+  }
+  if (totalShares <= 0) return null;
+  return +(totalCost / totalShares).toFixed(4);
+}
+
 // ── Lot completion classifier ────────────────────────────────────────────────
 // A lot N is "complete" when the position holds at least the cumulative target
 // shares through L_N. The cron's cleanup pass uses this to decide whether a

@@ -5,6 +5,7 @@
 // and returns one row per ticker (union of all three sources) with color-coded checks.
 
 import { connectToDatabase, getUserProfile } from './database.js';
+import { computeTargetAvg } from './lotMath.js';
 
 // ── Tolerance thresholds ──────────────────────────────────────────────────────
 // Centralized so tuning doesn't require chasing through the file.
@@ -521,6 +522,10 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
       // CMD avg cost is inline-editable (only editable for single-lot positions
       // where avg == lot 1 fill price unambiguously).
       filledLotCount: cmd ? summarizeFills(cmd.fills).filledCount : 0,
+      // Target avg: stored on position when L1 fills; live-computed as a
+      // fallback for positions that pre-date the field. Card displays this in
+      // an outlined box under the ticker — never changes once set.
+      targetAvg:      cmd ? (cmd.targetAvg ?? computeTargetAvg(cmd, netLiquidity)) : null,
     },
     lastPrice,
     lotTriggers:  enrichedLotTriggers, // [{lot, triggerPrice, filled, expectedSide, staged}, ...]

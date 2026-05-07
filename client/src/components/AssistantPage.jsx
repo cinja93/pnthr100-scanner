@@ -151,7 +151,7 @@ function formatTimeAgo(iso) {
 // tooltip floats above or below — top-row buttons use 'above' so the
 // tooltip doesn't cover the bottom row, and vice versa.
 function DiTipButton({ tooltip, placement = 'above', children }) {
-  const [show, setShow] = React.useState(false);
+  const [show, setShow] = useState(false);
   return (
     <span
       style={{ position: 'relative', display: 'inline-flex' }}

@@ -257,9 +257,21 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
       // share count needs to expand to cover the new total. The existing
       // ratchet only adjusts price; without this branch a 5-sh stop on an
       // 8-sh position stays at 5 sh forever (QQQ 2026-05-06).
-      const stopShares = Math.abs(+protective.shares || 0);
+      // Sum ALL same-price stops as true coverage — not just the one picked
+      // as "protective". When gap-coverage fired previously, multiple stops
+      // exist at the same price (user's 85sh + PNTHR gap stops). Counting
+      // only one undercounts coverage and causes runaway gap-stop placement.
+      // DTCR 2026-05-07: 8 stops at $29.51 totalling ~679 shares for a 212
+      // share position — every minute the cron picked one stop, saw an
+      // illusory gap, placed another. Now: total coverage = sum of all
+      // stops at protective.stopPrice ± $0.05.
+      const protPriceKey = +protective.stopPrice;
+      const sameSidePriceStops = stops.filter(s =>
+        Math.abs((+s.stopPrice || 0) - protPriceKey) < 0.005
+      );
+      const stopShares = sameSidePriceStops.reduce((sum, s) => sum + Math.abs(+s.shares || 0), 0);
       const posShares  = Math.abs(+ibkrPos.shares || 0);
-      if (posShares > 0 && Number.isFinite(stopShares) && stopShares !== posShares) {
+      if (posShares > 0 && Number.isFinite(stopShares) && stopShares < posShares) {
         // orderId=0 means the protective stop was placed in a prior TWS
         // session — IB API can't cancel it, so MODIFY (cancel+place) will
         // FAIL at the cancel phase. Hard-learned 2026-05-07: NVDA/TSLA/SMCI

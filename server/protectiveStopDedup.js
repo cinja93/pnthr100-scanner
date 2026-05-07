@@ -82,31 +82,47 @@ export async function runProtectiveStopDedup({ db, dryRun = false } = {}) {
     for (const [priceKey, group] of groups) {
       if (group.length < 2) continue;
 
-      // Skip dedup when one stop is a user-placed orderId=0 (uncancellable
-      // by the bridge) AND a PNTHR-tagged stop sits next to it at the same
-      // price. That pairing isn't an accidental duplicate — it's the
-      // intentional GAP_COVERAGE pattern from stopRatchetCron when a lot
-      // fill grew the position past the user stop's coverage. Both stops
-      // together = full position coverage. Trying to cancel the user stop
-      // here just generates 3 FAILED CANCEL_ORDERs and triggers backoff.
-      const hasUncancellableUserStop = group.some(s =>
-        +s.orderId === 0 && (s.orderRef || '').trim().toUpperCase() !== 'PNTHR'
-      );
-      const hasPnthrTagged = group.some(s => (s.orderRef || '').trim().toUpperCase() === 'PNTHR');
-      if (hasUncancellableUserStop && hasPnthrTagged) {
+      const isUncancellableUserStop = (s) =>
+        +s.orderId === 0 && (s.orderRef || '').trim().toUpperCase() !== 'PNTHR';
+      const isPnthrTagged = (s) => (s.orderRef || '').trim().toUpperCase() === 'PNTHR';
+
+      const userUncancellableStops = group.filter(isUncancellableUserStop);
+      const pnthrTagged             = group.filter(isPnthrTagged);
+      const others                  = group.filter(s => !isUncancellableUserStop(s) && !isPnthrTagged(s));
+
+      // CASE A: pure runaway PNTHR gap stops — multiple PNTHR-tagged stops
+      // at same price (DTCR 2026-05-07: 8 SELL STPs at $29.51 from buggy
+      // gap-coverage that placed one every minute). Consolidate down to
+      // ONE PNTHR-tagged stop covering whatever's still needed; cancel
+      // the rest. Keep the LARGEST-share PNTHR stop so the position is
+      // most fully covered after the dust settles. The next stopRatchetCron
+      // tick will adjust shares if needed via gap-coverage place.
+      // CASE B: user uncancellable stop + a single PNTHR gap stop —
+      // intentional gap-coverage pattern. Skip dedup entirely.
+      // CASE C: standard dedup — multiple stops, no uncancellable user
+      // stop in the mix. Keep PNTHR-tagged (oldest by permId), else
+      // oldest by permId outright.
+      let keeper;
+      let toCancel;
+      if (userUncancellableStops.length > 0 && pnthrTagged.length === 1 && others.length === 0) {
         skips.push({ ticker, priceKey: +priceKey, reason: 'GAP_COVERAGE_INTENTIONAL_USER_STOP_UNCANCELLABLE' });
         continue;
+      } else if (userUncancellableStops.length > 0 && pnthrTagged.length > 1) {
+        // Keep the LARGEST PNTHR-tagged stop, cancel all OTHER PNTHR-tagged
+        // stops. NEVER attempt to cancel the user uncancellable stop(s) —
+        // bridge can't reach them and we'd just thrash the outbox.
+        keeper = pnthrTagged.slice().sort((a, b) => Math.abs(+b.shares || 0) - Math.abs(+a.shares || 0))[0];
+        toCancel = pnthrTagged.filter(s => s.permId !== keeper.permId);
+      } else {
+        // Standard: prefer PNTHR-tagged keeper, else lowest permId.
+        keeper = pnthrTagged.length > 0
+          ? pnthrTagged.slice().sort((a, b) => +a.permId - +b.permId)[0]
+          : group.slice().sort((a, b) => +a.permId - +b.permId)[0];
+        toCancel = group.filter(s => s.permId !== keeper.permId);
       }
 
-      // Pick the keeper: prefer PNTHR-tagged, else lowest permId.
-      const pnthrTagged = group.filter(s => (s.orderRef || '').trim() === 'PNTHR');
-      const keeper = pnthrTagged.length > 0
-        ? pnthrTagged.sort((a, b) => +a.permId - +b.permId)[0]
-        : group.slice().sort((a, b) => +a.permId - +b.permId)[0];
-
       const cancellations = [];
-      for (const s of group) {
-        if (s.permId === keeper.permId) continue;
+      for (const s of toCancel) {
         const enqRes = !dryRun && flagOn
           ? await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
               ticker,

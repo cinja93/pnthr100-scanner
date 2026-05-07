@@ -1218,6 +1218,36 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                           </span>
                           {row.ticker}
                         </div>
+                        {/* Target avg — locked at L1 fill, never changes.
+                            Outlined box under ticker so it's a constant
+                            reference point. Color reflects how current
+                            realized avg compares: green if within target,
+                            yellow if drifted higher. */}
+                        {row.command?.targetAvg != null && (
+                          <div
+                            title="Target avg = share-weighted price if every lot fills at its planned price. Locked at L1 fill."
+                            style={{
+                              marginTop: 4,
+                              padding: '2px 6px',
+                              border: `1px solid ${
+                                row.command.avgCost != null && row.command.avgCost > row.command.targetAvg + 0.01
+                                  ? 'rgba(255,193,7,0.7)'
+                                  : 'rgba(96,239,166,0.7)'
+                              }`,
+                              borderRadius: 3,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              letterSpacing: '0.04em',
+                              color: '#fff',
+                              background: 'rgba(0,0,0,0.35)',
+                              display: 'inline-block',
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
+                            <span style={{ opacity: 0.55, marginRight: 4 }}>TGT</span>
+                            {fmtMoney(row.command.targetAvg)}
+                          </div>
+                        )}
                         <div style={{
                           marginTop: 4, fontSize: 11,
                           display: 'flex', alignItems: 'center', gap: 0,

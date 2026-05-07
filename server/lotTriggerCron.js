@@ -103,23 +103,23 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
   const catchUps      = []; // step 5: catch-up market orders enqueued (or skipped w/ reason)
 
   // ── RTH gate for catch-up firing (step 5) ──────────────────────────────
-  // Catch-up market orders only fire during regular trading hours, and
-  // outside the open/close blackout windows enforced in ibkrOutbox. The
+  // Catch-up market orders only fire during regular trading hours. The
   // detection (step 3) runs 24/7 and writes pendingCatchUp; the firing
-  // (here) holds for next RTH tick. Gives tight-spread fills and avoids
-  // pre-market gap chaos.
+  // (here) holds for next RTH tick. Gives a clean MKT fill and avoids
+  // pre-market gap chaos (IBKR rejects MKT outside RTH anyway).
   //
-  // Window: 9:35 AM – 3:55 PM ET, Monday-Friday. (Open blackout 9:25-9:35
-  // and close blackout 15:55-16:05 are enforced again at enqueue time, so
-  // catch-ups can technically fire 9:35-15:55; using slightly wider window
-  // here for clarity and letting blackout reject if right on the edge.)
+  // Window: 9:30 AM – 3:55 PM ET, Monday-Friday. Trader directive 2026-05-07
+  // moved this from 9:35 to 9:30 — fire at the bell to minimize the time
+  // a missed lot is uncovered. The OPEN_BLACKOUT in ibkrOutbox.isInBlackoutWindow
+  // is exempted for BUY_MARKET_TO_CATCH_UP so the 9:30 fire isn't blocked
+  // by the 9:25-9:35 blanket window.
   const isRthForCatchUp = (() => {
     const now = new Date();
     const et  = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
     const day = et.getDay(); // 0=Sun, 6=Sat
     if (day === 0 || day === 6) return false;
     const minutes = et.getHours() * 60 + et.getMinutes();
-    return minutes >= 575 && minutes <= 955; // 9:35 - 15:55 ET
+    return minutes >= 570 && minutes <= 955; // 9:30 - 15:55 ET
   })();
 
   const flagOn = process.env.IBKR_AUTO_SYNC_LOT_TRIGGERS === 'true';

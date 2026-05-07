@@ -154,13 +154,18 @@ export function sanityCheckModifyStop({ position, ibkrPosition, oldStopPrice, ne
   const placeCheck = sanityCheckPlaceStop({ position, ibkrPosition, stopPrice: newStopPrice });
   if (!placeCheck.ok) return placeCheck;
   if (!Number.isFinite(+oldStopPrice) || +oldStopPrice <= 0) return { ok: false, reason: 'BAD_OLD_STOP' };
-  // Tightest-wins: PNTHR only pushes a new stop when it's TIGHTER than the
-  // current IBKR value (per feedback_earnings_week_stops.md).
+  // Tightest-wins: PNTHR refuses any MODIFY that would LOOSEN the stop.
+  // Equal price is allowed because share-coverage MODIFYs (issued when a
+  // pyramid lot fills and the protective stop's share count needs to grow
+  // to cover the new total) keep the same stop level — only the share
+  // count changes. Pre-fix this check required STRICTLY tighter and
+  // silently rejected every share-coverage MODIFY ever attempted (NVDA,
+  // TSLA, SMCI 2026-05-07: stop shares stuck at L1 count for hours).
   const isLong = placeCheck.isLong;
-  const newTighter = isLong
-    ? +newStopPrice > +oldStopPrice
-    : +newStopPrice < +oldStopPrice;
-  if (!newTighter) return { ok: false, reason: 'NEW_STOP_NOT_TIGHTER_THAN_OLD' };
+  const looserThanOld = isLong
+    ? +newStopPrice < +oldStopPrice
+    : +newStopPrice > +oldStopPrice;
+  if (looserThanOld) return { ok: false, reason: 'NEW_STOP_LOOSER_THAN_OLD' };
   return placeCheck;
 }
 
@@ -403,8 +408,17 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
     return { skipped: 'MISSING_TICKER' };
   }
   // Rule 4 — daily auto-disable windows
+  // BUY_MARKET_TO_CATCH_UP is exempt from OPEN_BLACKOUT (9:25-9:35) so the
+  // 9:30 catch-up fire isn't blocked by the open-auction window. The trader
+  // accepts open-auction fill risk explicitly when they let a lot get
+  // missed; better to chase the missed lot at the bell than wait an extra
+  // 5 minutes (trader directive 2026-05-07). CLOSE_BLACKOUT still blocks
+  // catch-up — no point firing a market order in the last 5 minutes.
   const blackout = isInBlackoutWindow();
-  if (blackout && !opts.skipBlackoutCheck) {
+  const blackoutBypass =
+    !!opts.skipBlackoutCheck ||
+    (command === 'BUY_MARKET_TO_CATCH_UP' && blackout === 'OPEN_BLACKOUT');
+  if (blackout && !blackoutBypass) {
     return { skipped: blackout };
   }
   // Rule 3 — caller-supplied sanity check

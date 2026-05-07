@@ -866,6 +866,33 @@ def _execute_command(app, rate_limiter, cmd):
             result['lot'] = request.get('lot')
         return result.get('ok', False), result, (None if result.get('ok') else f'MODIFY_LOT_FAILED_PHASE_{result.get("phase")}')
 
+    # ── Catch-up market order ──────────────────────────────────────────────
+    # Fired when price crossed an L2/L3/L4 trigger by 5+ ticks without the
+    # original BUY/SELL STP filling (cancelled, never placed, or fired without
+    # filling). RTH-only — server gates outside-RTH by holding the catch-up
+    # in pendingCatchUp on the position; enqueue happens at next RTH cron tick
+    # and IBKR rejects MKT outside RTH anyway.
+    #
+    # Uses the existing sell_position() helper which is a generic market-order
+    # placer for LONG-buy / SHORT-sell — direction logic flips action like
+    # PLACE_LOT_TRIGGER. Designed for immediate fill so the rebalance math
+    # for L3+/L4+/L5 can run on confirmed fill data.
+    if command == 'BUY_MARKET_TO_CATCH_UP':
+        action = 'BUY' if (request.get('direction') or 'LONG').upper() != 'SHORT' else 'SELL'
+        result = app.sell_position(
+            ticker      = ticker,
+            action      = action,
+            shares      = request.get('shares'),
+            order_type  = 'MKT',          # always market — RTH-only enforced upstream
+            limit_price = None,
+            tif         = 'DAY',
+            rth         = True,
+        )
+        if isinstance(result, dict):
+            result['lot']    = request.get('lot')
+            result['source'] = 'CATCH_UP'
+        return result.get('ok', False), result, (None if result.get('ok') else result.get('error') or result.get('status'))
+
     return False, None, f'UNKNOWN_COMMAND:{command}'
 
 

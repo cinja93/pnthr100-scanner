@@ -41,6 +41,7 @@ const VALID_COMMANDS = new Set([
   'SELL_POSITION',         // Phase 4f — close from PNTHR places real sell in TWS
   'PLACE_LOT_TRIGGER',     // Phase 4g — pre-stage L2-L5 BUY/SELL STOP for pyramid adds
   'MODIFY_LOT_TRIGGER',    // Phase 4g — daily reconcile (cancel + replace stale lot trigger)
+  'BUY_MARKET_TO_CATCH_UP',// Catch-up — RTH market order when price crossed L_N trigger w/o fill
 ]);
 
 // ── Stop-order shape helper (RTH vs extended-hours) ──────────────────────────
@@ -245,6 +246,51 @@ export function sanityCheckModifyLotTrigger({ position, ibkrPosition, lot, oldTr
   return placeCheck;
 }
 
+// ── Pre-enqueue sanity for BUY_MARKET_TO_CATCH_UP ───────────────────────────
+// Catch-up market order fired when price has crossed a lot trigger by 5+ ticks
+// without the lot filling. Per design, only L2/L3/L4 are eligible — L5 missed
+// is left unchased (chasing the smallest, highest-priced lot at an even
+// worse price is bad risk/reward).
+//
+// Caller must ensure: (1) RTH window (open blackout 9:25-9:35 + close
+// blackout 15:55-16:05 already gate this at enqueue time via Rule 4); and
+// (2) the catch-up + remaining-plan share counts have been pre-shrunk to
+// fit the 10% concentration cap (or position has cap headroom). This
+// sanity check covers shape; the caller covers timing & cap math.
+export function sanityCheckBuyMarketToCatchUp({ position, ibkrPosition, lot, shares, currentPrice }) {
+  if (!position || !position.id) return { ok: false, reason: 'POSITION_MISSING' };
+  if (!ibkrPosition) return { ok: false, reason: 'IBKR_POSITION_MISSING' };
+  const ibkrShares = Math.abs(+ibkrPosition.shares || 0);
+  if (ibkrShares <= 0) return { ok: false, reason: 'IBKR_SHARES_ZERO' };
+
+  const lotNum = +lot;
+  if (!Number.isInteger(lotNum) || lotNum < 2 || lotNum > 4) {
+    // L1 = entry (never via catch-up). L5 = no chase, by design.
+    return { ok: false, reason: 'INVALID_LOT_FOR_CATCHUP' };
+  }
+
+  const reqShares = +shares;
+  if (!Number.isFinite(reqShares) || reqShares <= 0) return { ok: false, reason: 'BAD_SHARES' };
+
+  const px = +currentPrice;
+  if (!Number.isFinite(px) || px <= 0) return { ok: false, reason: 'BAD_CURRENT_PRICE' };
+
+  // Per-catch-up size cap: the catch-up shouldn't exceed 50% of the projected
+  // pyramid total. Mirrors PLACE_LOT_TRIGGER's typo-guard. Step 5 sizes the
+  // catch-up via the rebalance algorithm; this is just a sanity floor.
+  const fills = position?.fills || {};
+  let projectedTotal = 0;
+  for (let n = 1; n <= 5; n++) {
+    const f = fills[n];
+    if (!f) continue;
+    projectedTotal += f.filled ? (+f.shares || 0) : (+f.targetShares || 0);
+  }
+  const denom = projectedTotal > 0 ? projectedTotal : ibkrShares;
+  if (reqShares > denom * 0.50 + 1) return { ok: false, reason: 'CATCHUP_EXCEEDS_50PCT_OF_PROJECTED_TOTAL' };
+
+  return { ok: true, ibkrShares };
+}
+
 // ── Concentration cap (10% NAV hard gate on adds) ───────────────────────────
 // Set 2026-05-05 after CRWD's runaway loop (server cron + offline bridge =
 // queue backlog → bridge wakes → drains all PLACE/MODIFY → position grew to
@@ -313,11 +359,12 @@ async function checkConcentrationCap(db, ownerId, ticker) {
 //   PLACE_STOP / SELL_POSITION / CANCEL_RELATED_ORDERS → ticker is enough
 function dedupExtraMatch(command, request) {
   switch (command) {
-    case 'CANCEL_ORDER':       return { 'request.permId':    request.permId };
-    case 'MODIFY_STOP':        return { 'request.oldPermId': request.oldPermId };
-    case 'MODIFY_LOT_TRIGGER': return { 'request.lot':       request.lot };
-    case 'PLACE_LOT_TRIGGER':  return { 'request.lot':       request.lot };
-    default:                   return {};
+    case 'CANCEL_ORDER':           return { 'request.permId':    request.permId };
+    case 'MODIFY_STOP':            return { 'request.oldPermId': request.oldPermId };
+    case 'MODIFY_LOT_TRIGGER':     return { 'request.lot':       request.lot };
+    case 'PLACE_LOT_TRIGGER':      return { 'request.lot':       request.lot };
+    case 'BUY_MARKET_TO_CATCH_UP': return { 'request.lot':       request.lot };
+    default:                       return {};
   }
 }
 
@@ -381,6 +428,7 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
   const PENDING_DEDUP_COMMANDS = new Set([
     'PLACE_LOT_TRIGGER',
     'MODIFY_LOT_TRIGGER',
+    'BUY_MARKET_TO_CATCH_UP',
     'CANCEL_ORDER',
     'MODIFY_STOP',
   ]);
@@ -399,7 +447,7 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
   // current notional ≥ 10% of NAV, refuse any command that could grow it.
   // Set 2026-05-05 after CRWD's runaway loop hit 20%. Protective/exit commands
   // (PLACE_STOP, MODIFY_STOP, CANCEL_*, SELL_POSITION) are never gated.
-  if (command === 'PLACE_LOT_TRIGGER' || command === 'MODIFY_LOT_TRIGGER') {
+  if (command === 'PLACE_LOT_TRIGGER' || command === 'MODIFY_LOT_TRIGGER' || command === 'BUY_MARKET_TO_CATCH_UP') {
     const cap = await checkConcentrationCap(db, ownerId, request.ticker);
     if (cap.over) {
       return { skipped: `CONCENTRATION_CAP_${(cap.concentration * 100).toFixed(1)}PCT_GTE_10PCT` };

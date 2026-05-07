@@ -97,6 +97,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
   const adoptions     = []; // TWS-tighter user overrides — silent, no enqueue
   const skips         = []; // unable to reconcile (no plan, no IBKR record, etc.)
   const aligned       = []; // already at-or-within tolerance
+  const missedLots    = []; // step 3: lots where price has crossed trigger w/o fill (catch-up flagged)
 
   const flagOn = process.env.IBKR_AUTO_SYNC_LOT_TRIGGERS === 'true';
 
@@ -330,6 +331,72 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
         skipReason: enqRes.skipped || null,
       });
     }
+
+    // ── PASS 4: MISSED-LOT DETECTION (step 3 of catch-up feature) ───────────
+    // Detect lots where price has CROSSED the trigger but no fill happened
+    // (BUY/SELL STP was cancelled, never placed, or fired without filling).
+    // Sets `pendingCatchUp` flag on the position. Step 5 of the feature will
+    // read this flag during RTH and fire the catch-up market order.
+    //
+    // Eligibility: only L2/L3/L4 (per design — chasing L5 at an even higher
+    // price is bad risk/reward, so missed L5 just gets skipped).
+    //
+    // Threshold: price ≥ trigger + 5 ticks ($0.05 for stocks > $1). This
+    // avoids flagging on a one-tick fluctuation across the trigger.
+    const TICK_SIZE   = 0.01;
+    const MISS_TICKS  = 5;
+    const missThresh  = TICK_SIZE * MISS_TICKS;
+    const currPrice   = +ibkrPos?.marketPrice || +p.currentPrice || 0;
+    let detectedMiss  = null;
+    if (currPrice > 0) {
+      for (const lot of lots) {
+        if (lot.lot < 2 || lot.lot > 4) continue;     // only L2-L4 eligible
+        if (lot.filled || lot.complete) continue;     // already filled / surpassed
+        const triggerCrossed = isLong
+          ? currPrice >= lot.triggerPrice + missThresh
+          : currPrice <= lot.triggerPrice - missThresh;
+        if (!triggerCrossed) continue;
+        // First eligible miss in lot order wins (catch up the LOWEST missed
+        // lot first — it has the most leverage on avg cost).
+        detectedMiss = {
+          lot: lot.lot,
+          triggerPrice: lot.triggerPrice,
+          currentPrice: currPrice,
+          plannedShares: lot.targetShares,
+          detectedAt: new Date(),
+        };
+        break;
+      }
+    }
+    // Persist or clear the pendingCatchUp flag.
+    const existingFlag = p.pendingCatchUp || null;
+    if (detectedMiss && (!existingFlag || existingFlag.lot !== detectedMiss.lot)) {
+      // New miss or different lot — write/overwrite the flag.
+      if (!dryRun) {
+        await db.collection('pnthr_portfolio').updateOne(
+          { id: p.id, ownerId: p.ownerId },
+          { $set: { pendingCatchUp: detectedMiss, updatedAt: new Date() } }
+        );
+      }
+      missedLots.push({ ticker, ...detectedMiss, flagWritten: !dryRun, prior: existingFlag?.lot || null });
+    } else if (!detectedMiss && existingFlag) {
+      // Previously flagged but no longer missed (lot must have been filled or
+      // price retreated). Clear the flag so the catch-up step doesn't fire
+      // for a stale state. Note: clearing on price retreat is intentional —
+      // if price drops back below trigger, we want the original BUY STP to
+      // handle it, not a catch-up.
+      if (!dryRun) {
+        await db.collection('pnthr_portfolio').updateOne(
+          { id: p.id, ownerId: p.ownerId },
+          { $unset: { pendingCatchUp: '' }, $set: { updatedAt: new Date() } }
+        );
+      }
+      missedLots.push({ ticker, lot: existingFlag.lot, cleared: true, flagWritten: !dryRun });
+    } else if (detectedMiss && existingFlag && existingFlag.lot === detectedMiss.lot) {
+      // Same lot still missed — no DB write needed, but report it so the
+      // dryRun output is honest about what's pending.
+      missedLots.push({ ticker, ...detectedMiss, flagWritten: false, alreadyFlagged: true });
+    }
   }
 
   return {
@@ -341,6 +408,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
     modifications,
     cancellations,
     adoptions,
+    missedLots,
     skips,
     aligned,
   };

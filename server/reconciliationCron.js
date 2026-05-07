@@ -31,6 +31,7 @@ import { runLotTriggerSync }       from './lotTriggerCron.js';
 import { runOrphanCleanup }        from './orphanOrderJanitor.js';
 import { runGhostReconcile }       from './ghostPositionReconciler.js';
 import { runPositionReconciler }   from './positionReconciler.js';
+import { runProtectiveStopDedup }  from './protectiveStopDedup.js';
 
 // Run every minute, 24/7. The position-share reconciler must catch drift
 // (manual buys, partial sells, post-hours fills) regardless of whether the
@@ -71,6 +72,7 @@ export async function runUnifiedReconciliation({ db, dryRun = false } = {}) {
   // janitor at all — the cancel queues directly.
   const ghosts    = await runGhostReconcile({ db, dryRun });
   const ratchet   = await runStopRatchet({ db, dryRun });
+  const stopDedup = await runProtectiveStopDedup({ db, dryRun });
   const lotTrig   = await runLotTriggerSync({ db, dryRun });
   const orphans   = await runOrphanCleanup({ db, dryRun });
   // Position reconciler runs LAST so any fills/exits that the earlier passes
@@ -88,6 +90,7 @@ export async function runUnifiedReconciliation({ db, dryRun = false } = {}) {
     dryRun,
     ghosts,
     ratchet,
+    stopDedup,
     lotTrig,
     orphans,
     reconcile,
@@ -129,6 +132,9 @@ export function registerReconciliationCron(cron) {
       const ratchetPush   = (ra.modifications || []).filter(m => m.enqueued).length;
       const ratchetAlign  = (ra.aligned       || []).length;
       const ratchetSkip   = (ra.skips         || []).length;
+      const sd            = r.stopDedup || {};
+      const sdDeduped     = (sd.deduped       || []).length;
+      const sdCancelled   = (sd.deduped       || []).reduce((s, d) => s + (d.cancelled?.filter(c => c.enqueued).length || 0), 0);
       const ltPlace       = (lt.placements    || []).filter(x => x.enqueued).length;
       const ltModify      = (lt.modifications || []).filter(x => x.enqueued).length;
       const ltCancel      = (lt.cancellations || []).filter(x => x.enqueued).length;
@@ -142,13 +148,14 @@ export function registerReconciliationCron(cron) {
       const rcSkips       = (rc.skips         || []).length;
       const rcAligned     = (rc.aligned       || []).length;
 
-      const anyChange = ratchetAdopt || ratchetPush || ltPlace || ltModify || ltCancel || ltAdopt || ojEnq || ghObserved || ghClosed || ghCleared || rcActions;
+      const anyChange = ratchetAdopt || ratchetPush || ltPlace || ltModify || ltCancel || ltAdopt || ojEnq || ghObserved || ghClosed || ghCleared || rcActions || sdCancelled;
 
       if (anyChange || ojOrphans) {
         console.log(
           `[reconciliation] ${ts()} checked=${ra.positionsChecked || 0}` +
           ` ghosts:obs=${ghObserved} closed=${ghClosed} cleared=${ghCleared}` +
           ` / ratchet:adopt=${ratchetAdopt} push=${ratchetPush} align=${ratchetAlign} skip=${ratchetSkip}` +
+          ` / stopDedup:groups=${sdDeduped} cancel=${sdCancelled}` +
           ` / lotTrig:place=${ltPlace} modify=${ltModify} cancel=${ltCancel} adopt=${ltAdopt} skip=${ltSkip}` +
           ` / orphans:found=${ojOrphans} enq=${ojEnq} userProtected=${ojProtected}` +
           ` / drift:actions=${rcActions} aligned=${rcAligned} skip=${rcSkips}` +

@@ -450,6 +450,29 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
     if (existing) return { skipped: 'PENDING_DUPLICATE_EXISTS' };
   }
 
+  // Rule 2c — failure backoff. If this exact command identity has FAILED 3+
+  // times in the last 30 min, refuse to re-enqueue. Without this guard, a
+  // permanently-uncancellable order (e.g., orderId=0 user-placed stop the
+  // bridge can't reach via the IB API session) gets retried every minute
+  // forever — MCK's permId 1375431589 had 25+ failures with status
+  // "PreSubmitted" in a single hour. Caller-side detection (e.g., the dedup
+  // pass) should surface this state to the UI rather than silently retrying.
+  const FAILURE_BACKOFF_WINDOW_MS = 30 * 60 * 1000;
+  const FAILURE_THRESHOLD         = 3;
+  if (!opts.skipDedup && PENDING_DEDUP_COMMANDS.has(command)) {
+    const recentFailCount = await db.collection(COLLECTION).countDocuments({
+      ownerId,
+      'request.ticker': request.ticker,
+      command,
+      status: 'FAILED',
+      createdAt: { $gt: new Date(Date.now() - FAILURE_BACKOFF_WINDOW_MS) },
+      ...dedupExtraMatch(command, request),
+    });
+    if (recentFailCount >= FAILURE_THRESHOLD) {
+      return { skipped: `RECENT_FAILURES_${recentFailCount}_BACKOFF` };
+    }
+  }
+
   // Rule 5 — concentration cap (10% NAV). HARD GATE on adds: when a ticker's
   // current notional ≥ 10% of NAV, refuse any command that could grow it.
   // Set 2026-05-05 after CRWD's runaway loop hit 20%. Protective/exit commands

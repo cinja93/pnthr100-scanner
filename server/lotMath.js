@@ -118,24 +118,34 @@ export function computeLotPlan(position, netLiquidity) {
   let cumulative = 0;
   return targetShares.map((tgt, i) => {
     const lot          = i + 1;
-    cumulative        += tgt;
+    const fill         = fills[lot] || {};
+    // If a catch-up rebalance has stored an explicit targetShares on this
+    // lot's fill record (rebalancedFromCatchUp=true), honor that over the
+    // canonical algorithmic value. Otherwise the lotTriggerCron's MODIFY
+    // pass would compute the algorithmic count and overwrite the rebalance
+    // every tick. Locked-in by computeCatchUpRebalance + lotFillRecorder
+    // step-6 logic.
+    const effectiveTarget = fill.rebalancedFromCatchUp && Number.isFinite(+fill.targetShares)
+      ? +fill.targetShares
+      : tgt;
+    cumulative        += effectiveTarget;
     const triggerPrice = isLong
       ? +(anchor * (1 + LOT_OFFSETS[i])).toFixed(2)
       : +(anchor * (1 - LOT_OFFSETS[i])).toFixed(2);
-    const fill = fills[lot] || {};
     return {
       lot,
       name:                   LOT_NAMES[i],
       pct:                    STRIKE_PCT[i],
       offsetPct:              Math.round(LOT_OFFSETS[i] * 100),
       timeGate:               LOT_TIME_GATES[i],
-      targetShares:           tgt,
+      targetShares:           effectiveTarget,
       cumulativeTargetShares: cumulative,
       triggerPrice,
       filled:        !!fill.filled,
       actualPrice:   fill.price  != null ? +fill.price  : null,
-      actualShares:  fill.shares != null ? +fill.shares : (fill.filled ? tgt : 0),
+      actualShares:  fill.shares != null ? +fill.shares : (fill.filled ? effectiveTarget : 0),
       anchor,
+      rebalanced:    !!fill.rebalancedFromCatchUp,
     };
   });
 }

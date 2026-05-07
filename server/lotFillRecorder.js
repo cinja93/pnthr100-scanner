@@ -139,7 +139,29 @@ export async function recordLotFill({ db, ownerId, position, execution, syncedAt
 
   // Compute the canonical plan (anchor + offsets) and identify which lot.
   const lotPlan = computeLotPlan(position, nav || DEFAULT_NAV);
-  const lot     = identifyLotForFill({ position, lotPlan, fillPrice, fillShares, isLong });
+
+  // Step 6: catch-up matching. If the position has a catchUpRebalancePlan
+  // (set by lotTriggerCron PASS 5 when the catch-up was enqueued), check
+  // whether THIS execution is the catch-up filling. The catch-up market
+  // order ships at Sa shares with current-market price — usually well above
+  // the original L_N trigger, so the standard identifyLotForFill match
+  // (5% price tolerance from trigger) won't pair it. We pair by Sa share
+  // match instead. The catch-up writes to fills[missedLot] like a normal
+  // pyramid fill, then applies the persisted rebalance plan to upper lots.
+  const catchUpPlan = position.catchUpRebalancePlan || null;
+  let isCatchUp = false;
+  let lot = null;
+  if (catchUpPlan && catchUpPlan.missedLot && catchUpPlan.Sa) {
+    // Match by share count tolerance (allow ±1 sh for fractional rounding).
+    const sharesMatch = Math.abs(fillShares - +catchUpPlan.Sa) <= 1;
+    if (sharesMatch && !fills[catchUpPlan.missedLot]?.filled) {
+      isCatchUp = true;
+      lot = lotPlan.find(l => l.lot === catchUpPlan.missedLot);
+    }
+  }
+  if (!lot) {
+    lot = identifyLotForFill({ position, lotPlan, fillPrice, fillShares, isLong });
+  }
   if (!lot) {
     return { recorded: false, skipReason: 'NO_MATCHING_LOT', diagnostic: {
       fillPrice, fillShares, planLots: lotPlan.filter(l => l.lot !== 1).map(l => ({ lot: l.lot, trig: l.triggerPrice, target: l.targetShares, filled: l.filled }))
@@ -153,6 +175,10 @@ export async function recordLotFill({ db, ownerId, position, execution, syncedAt
 
   // Project the new fills state (for stop-ratchet computation) without
   // writing yet — we want the ratchet to see this fill as "just filled".
+  // For a catch-up fill, also pre-update the unfilled upper lots'
+  // targetShares per the persisted rebalance plan, so subsequent share
+  // total + ratchet calculations operate on the new plan.
+  const fillSource = isCatchUp ? 'IBKR_AUTO_RECORD_CATCHUP' : 'IBKR_AUTO_RECORD';
   const projectedFills = { ...fills, [lot.lot]: {
     filled: true,
     shares: fillShares,
@@ -160,8 +186,29 @@ export async function recordLotFill({ db, ownerId, position, execution, syncedAt
     date:   fillDate,
     execId: execution.execId,
     permId: execution.permId,
-    source: 'IBKR_AUTO_RECORD',
+    source: fillSource,
   } };
+  // Apply rebalance plan to UNFILLED upper lots (only when this is the
+  // catch-up filling). Each newUpperShares entry replaces that lot's
+  // targetShares; trigger price stays put (anchored at L1).
+  if (isCatchUp && Array.isArray(catchUpPlan.newUpperShares)) {
+    for (const u of catchUpPlan.newUpperShares) {
+      const ln = +u.lot;
+      if (!ln || ln <= lot.lot || ln > 5) continue;
+      // Don't touch a lot that has independently filled in the meantime.
+      if (projectedFills[ln]?.filled) continue;
+      // Preserve any existing fields on the unfilled lot record; just
+      // overwrite the planned targetShares.
+      projectedFills[ln] = {
+        ...(projectedFills[ln] || {}),
+        filled:       false,
+        targetShares: +u.shares,
+        triggerPrice: +u.triggerPrice,
+        lot:          ln,
+        rebalancedFromCatchUp: true,
+      };
+    }
+  }
   const ratchet = computeStopRatchet({ position, fills: projectedFills, isLong });
 
   if (dryRun) {
@@ -192,9 +239,25 @@ export async function recordLotFill({ db, ownerId, position, execution, syncedAt
     setOps.stopRatchetSource = 'AUTO_FILL_' + ratchet.reason;
     setOps.stopRatchetAt     = new Date();
   }
+  // Catch-up fill: persist rebalanced upper-lot target shares so the next
+  // lotTriggerCron tick MODIFYs TWS BUY/SELL STPs to the new counts.
+  // Clear the pendingCatchUp + catchUpRebalancePlan flags now that the
+  // catch-up has filled and been recorded.
+  let unsetOps = null;
+  if (isCatchUp && Array.isArray(catchUpPlan.newUpperShares)) {
+    for (const u of catchUpPlan.newUpperShares) {
+      const ln = +u.lot;
+      if (!ln || ln <= lot.lot || ln > 5) continue;
+      if (projectedFills[ln]?.filled) continue;
+      setOps[`fills.${ln}`] = projectedFills[ln];
+    }
+    unsetOps = { pendingCatchUp: '', catchUpRebalancePlan: '' };
+  }
+  const updateDoc = { $set: setOps };
+  if (unsetOps) updateDoc.$unset = unsetOps;
   const writeRes = await db.collection('pnthr_portfolio').updateOne(
     { id: position.id, ownerId },
-    { $set: setOps }
+    updateDoc
   );
   if (writeRes.matchedCount === 0) return { recorded: false, skipReason: 'POSITION_DISAPPEARED' };
 
@@ -204,5 +267,5 @@ export async function recordLotFill({ db, ownerId, position, execution, syncedAt
     await appendJournalNote({ db, ownerId, positionId: position.id, lot, fillPrice, fillShares, fillDate, ratchetMsg });
   } catch (e) { console.warn(`[lotFill] journal note failed for ${position.ticker} L${lot.lot}: ${e.message}`); }
 
-  return { recorded: true, lot: lot.lot, lotName: lot.name, fillPrice, fillShares, fillDate, ratchet };
+  return { recorded: true, lot: lot.lot, lotName: lot.name, fillPrice, fillShares, fillDate, ratchet, isCatchUp };
 }

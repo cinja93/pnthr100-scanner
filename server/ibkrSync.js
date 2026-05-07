@@ -504,11 +504,6 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
       console.warn(`[IBKR Phase 3] signal fetch failed for ${ticker}: ${e.message}`);
     }
 
-    if (pnthrStop == null) {
-      console.warn(`[IBKR Phase 3] No PNTHR Stop available for ${ticker} ${direction} — refusing to auto-open. Manual review required.`);
-      continue;
-    }
-
     // Stop-side validation. signalService returns the stop computed for the
     // CURRENT signal direction in the cache (BL or SS). If the IBKR fill is
     // the OPPOSITE direction (e.g. user bought CMG long while signal cache
@@ -524,13 +519,17 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
     const lastPrice = typeof pos.marketPrice === 'number' && pos.marketPrice > 0.01 && pos.marketPrice < 50000
       ? +pos.marketPrice
       : +pos.avgCost;
-    const stopOnRightSide = direction === 'LONG'
+    // Two failure modes: (a) signalService returned null pnthrStop entirely
+    // (signal expired or ticker dropped from cache — NVDA today), or
+    // (b) returned a stop on the wrong side (signal-direction mismatch).
+    // Both need the same TWS-fallback rescue before refusing.
+    const stopOnRightSide = pnthrStop != null && (direction === 'LONG'
       ? +pnthrStop < lastPrice
-      : +pnthrStop > lastPrice;
+      : +pnthrStop > lastPrice);
     // Track whether the stop came from the signal cache or from a TWS fallback —
     // affects journal/audit trail. Default: signal cache.
     let stopSourceTwsFallback = false;
-    if (!stopOnRightSide) {
+    if (pnthrStop == null || !stopOnRightSide) {
       // Signal-direction mismatch: user traded against the signal (e.g., bought
       // long while signalCache had this ticker as SS). The signal-derived stop
       // sits on the wrong side of price. Before refusing to auto-open, check
@@ -554,11 +553,13 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
           );
       if (fallback) {
         const fallbackPrice = +fallback.stopPrice;
-        console.log(`[IBKR Phase 3] ${ticker} ${direction} signal-direction conflict — using user's TWS protective stop $${fallbackPrice} as fallback (signal-derived $${pnthrStop} was on wrong side of price $${lastPrice}).`);
+        const reason = pnthrStop == null ? 'no signal-cache stop' : `signal-derived $${pnthrStop} on wrong side of price $${lastPrice}`;
+        console.log(`[IBKR Phase 3] ${ticker} ${direction} — using user's TWS protective stop $${fallbackPrice} as fallback (${reason}).`);
         pnthrStop = fallbackPrice;
         stopSourceTwsFallback = true;
       } else {
-        console.warn(`[IBKR Phase 3] Stop-side mismatch for ${ticker} ${direction}: pnthrStop=$${pnthrStop} vs price=$${lastPrice} (signalCache direction=${signalDir || 'unknown'}) and no user TWS fallback stop. Refusing to auto-open — manual review.`);
+        const reason = pnthrStop == null ? 'no signal-cache stop available' : `pnthrStop=$${pnthrStop} on wrong side of price $${lastPrice}`;
+        console.warn(`[IBKR Phase 3] ${ticker} ${direction}: ${reason} (signalCache direction=${signalDir || 'unknown'}) and no user TWS fallback stop. Refusing to auto-open — manual review.`);
         continue;
       }
     }

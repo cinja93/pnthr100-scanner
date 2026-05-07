@@ -208,13 +208,29 @@ export async function runPositionReconciler({ db, dryRun = false } = {}) {
       continue;
     }
 
+    const isLong = (p.direction || 'LONG').toUpperCase() !== 'SHORT';
+
+    // 50%-drift safety guard — refuse mass-correction from a single bad sync.
+    // EXCEPTION: when there are unprocessed IBKR executions in latestExecutions
+    // that explain the drift exactly (within ±1 sh rounding), the drift is
+    // backed by concrete execution data, not a sync glitch. Allow the
+    // correction in that case — it's the exact scenario the reconciler was
+    // built for (catch up missed fills/exits).
     const denom = Math.max(pnthrNet, ibkrShares, 1);
     if (Math.abs(drift) / denom > MAX_DRIFT_FRACTION) {
-      skips.push({ ticker, reason: 'DRIFT_EXCEEDS_50PCT_MANUAL_REVIEW', pnthrNet, ibkrShares, drift });
-      continue;
+      const expectedSideForDrift = drift > 0
+        ? (isLong ? 'SLD' : 'BOT')
+        : (isLong ? 'BOT' : 'SLD');
+      const unprocPreview = await findUnprocessedExecs(db, p.ownerId, ticker, expectedSideForDrift, snap.latestExecutions);
+      const matchPreview  = unprocPreview.reduce((s, e) => s + (+e.shares || 0), 0);
+      const want          = Math.abs(drift);
+      const execsExplain  = unprocPreview.length > 0 && matchPreview >= want && matchPreview <= want + 1;
+      if (!execsExplain) {
+        skips.push({ ticker, reason: 'DRIFT_EXCEEDS_50PCT_MANUAL_REVIEW', pnthrNet, ibkrShares, drift, unprocessedExecs: unprocPreview.length });
+        continue;
+      }
+      // Fall through with execs to handle in CASE A/B below.
     }
-
-    const isLong = (p.direction || 'LONG').toUpperCase() !== 'SHORT';
 
     if (drift > 0) {
       // CASE A — PNTHR has more than IBKR; an exit slipped through.

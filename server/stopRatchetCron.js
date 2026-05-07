@@ -26,7 +26,7 @@
 // itself also rejects demo at every call site.
 
 import { connectToDatabase } from './database.js';
-import { enqueue as enqueueOutbox, sanityCheckModifyStop, buildStopOrderShape, DEMO_OWNER_ID } from './ibkrOutbox.js';
+import { enqueue as enqueueOutbox, sanityCheckModifyStop, sanityCheckPlaceStop, buildStopOrderShape, DEMO_OWNER_ID } from './ibkrOutbox.js';
 
 const TIGHTER_THRESHOLD = 0.05; // ignore stop diffs below $0.05 (numerical noise)
 
@@ -60,6 +60,10 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
   const skips         = []; // unable to reconcile (no IBKR record, etc.)
   const aligned       = []; // already at-or-below threshold; no-op
   const orphanCancels = []; // stale PNTHR-tagged stops cancelled when a tighter user stop was adopted
+  const nakedFixes    = []; // protective stop missing in TWS — enqueue PLACE_STOP to restore
+
+  const flagOnSync = process.env.IBKR_AUTO_SYNC_STOPS === 'true';
+  const flagOnPlace = process.env.IBKR_AUTO_PLACE_STOP === 'true';
 
   for (const p of positions) {
     const ticker = p.ticker?.toUpperCase();
@@ -96,7 +100,59 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
           (isLong ? +s.stopPrice > +best.stopPrice : +s.stopPrice < +best.stopPrice)
             ? s : best
         );
-    if (!protective) { skips.push({ ticker, reason: 'NAKED_NO_IBKR_STOP' }); continue; }
+    if (!protective) {
+      // NAKED — position has no protective stop in TWS. PNTHR has a stopPrice
+      // on the position record (from auto-open or earlier user-tightening),
+      // but the actual SELL/BUY STP isn't in IBKR. Could be: Phase 4b's
+      // CANCEL_RELATED_ORDERS cancelled it during a prior partial close on
+      // the same ticker; user manually cancelled in TWS; or auto-open never
+      // placed it. Whatever caused it, we should re-place to restore protection.
+      //
+      // IWM 2026-05-06: ACTIVE 17 sh, PNTHR stopPrice=$282.65 from earlier
+      // USER_TIGHTENED_VIA_TWS, but no SELL STP in IBKR. The screen showed
+      // "NAKED" red but no cron acted on it.
+      const pnthrStop = +p.stopPrice;
+      const ibkrShares = Math.abs(+ibkrPos.shares || 0);
+      if (!Number.isFinite(pnthrStop) || pnthrStop <= 0) {
+        skips.push({ ticker, reason: 'NAKED_NO_PNTHR_STOP_TO_PLACE', ibkrShares });
+        continue;
+      }
+      if (ibkrShares <= 0) {
+        skips.push({ ticker, reason: 'NAKED_BUT_IBKR_ZERO' });
+        continue;
+      }
+      const sanity = sanityCheckPlaceStop({
+        position:     p,
+        ibkrPosition: { shares: ibkrShares, lastPrice: refPrice, avgCost: ibkrPos.avgCost },
+        stopPrice:    pnthrStop,
+      });
+      const shape = buildStopOrderShape({
+        stopPrice:           pnthrStop,
+        direction:           isLong ? 'LONG' : 'SHORT',
+        stopExtendedHours:   !!p.stopExtendedHours,
+      });
+      const enqRes = sanity.ok && !dryRun && flagOnPlace
+        ? await enqueueOutbox(db, p.ownerId, 'PLACE_STOP', {
+            ticker,
+            direction:  isLong ? 'LONG' : 'SHORT',
+            shares:     ibkrShares,
+            stopPrice:  pnthrStop,
+            orderType:  shape.orderType,
+            lmtPrice:   shape.lmtPrice,
+            tif:        'GTC',
+            rth:        shape.rth,
+            positionId: p.id,
+            source:     'STOP_RATCHET_NAKED_FIX',
+          }, { sanityCheck: sanity })
+        : { skipped: !sanity.ok ? sanity.reason : (dryRun ? 'DRY_RUN' : (flagOnPlace ? 'UNKNOWN' : 'IBKR_AUTO_PLACE_STOP_OFF')) };
+      nakedFixes.push({
+        ticker, dir: isLong ? 'LONG' : 'SHORT',
+        stopPrice: pnthrStop, shares: ibkrShares,
+        enqueued: !enqRes.skipped, outboxId: enqRes.id,
+        skipReason: enqRes.skipped || null,
+      });
+      continue;
+    }
 
     const pnthrStop = +p.stopPrice;
     const ibkrStop  = +protective.stopPrice;
@@ -210,6 +266,7 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
     skips,
     aligned,
     orphanCancels,
+    nakedFixes,
   };
 }
 

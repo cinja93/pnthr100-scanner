@@ -5179,6 +5179,107 @@ app.post('/api/admin/reconcile-positions', authenticateJWT, requireAdmin, async 
   }
 });
 
+// Reset a contaminated position's fills/exits to match IBKR truth.
+// Clears all auto-recorded fills above L1 + all auto-recorded exits, then
+// rewrites L1 to match current ibkrShares at the original L1 price (or
+// current avgCost if L1 missing). Use when intraday execs from a prior
+// AMD/etc. position got matched to a fresh autoOpened position
+// (the "AMD 14:21 ET created → 6:30 AM execs misapplied" pattern).
+//
+// Body: { ticker: 'AMD' } — finds the latest ACTIVE/PARTIAL position.
+// Or:   { positionId: 'moudwa5yv52zb' } — explicit.
+// Always re-checks IBKR shares from the latest snapshot before overwriting.
+// Returns the before/after diff so the operator can verify.
+app.post('/api/admin/reset-position-to-ibkr', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const ticker = (req.body?.ticker || req.query?.ticker || '').toUpperCase();
+    const positionId = req.body?.positionId || req.query?.positionId;
+    if (!ticker && !positionId) return res.status(400).json({ error: 'ticker or positionId required' });
+
+    const query = positionId
+      ? { id: positionId, ownerId: userId }
+      : { ticker, ownerId: userId, status: { $in: ['ACTIVE', 'PARTIAL'] } };
+    const pos = await db.collection('pnthr_portfolio').findOne(query);
+    if (!pos) return res.status(404).json({ error: 'Position not found', query });
+
+    const ibkrSnap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
+    const ibkrPos = (ibkrSnap?.positions || []).find(p => p.symbol?.toUpperCase() === pos.ticker?.toUpperCase());
+    if (!ibkrPos) return res.status(409).json({ error: 'No IBKR position for this ticker — use ghost reconciler instead' });
+    const ibkrShares = Math.abs(+ibkrPos.shares || 0);
+    if (ibkrShares <= 0) return res.status(409).json({ error: 'IBKR shares zero — use ghost reconciler instead' });
+
+    const before = {
+      totalFilledShares: pos.totalFilledShares,
+      totalExitedShares: pos.totalExitedShares,
+      remainingShares:   pos.remainingShares,
+      sumFilledLots:     Object.values(pos.fills || {}).reduce((s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0),
+      exitsCount:        (pos.exits || []).length,
+    };
+
+    // Build clean fills: L1 only at IBKR avgCost (or existing L1 price if present),
+    // L2-L5 reset to unfilled targetShares only.
+    const existingL1 = pos.fills?.[1] || {};
+    const l1Price = existingL1.price || +ibkrPos.avgCost || pos.entryPrice;
+    const l1Date  = existingL1.date  || (pos.createdAt ? new Date(pos.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+    const cleanFills = {
+      1: {
+        lot: 1, name: 'The Scent',
+        filled: true, pct: existingL1.pct ?? 1.0,
+        shares: ibkrShares,
+        price:  +(+l1Price).toFixed(4),
+        date:   l1Date,
+        source: 'RESET_TO_IBKR',
+      },
+      2: { lot: 2, name: 'The Stalk',   pct: 0.25, filled: false },
+      3: { lot: 3, name: 'The Strike',  pct: 0.20, filled: false },
+      4: { lot: 4, name: 'The Jugular', pct: 0.12, filled: false },
+      5: { lot: 5, name: 'The Kill',    pct: 0.08, filled: false },
+    };
+
+    await db.collection('pnthr_portfolio').updateOne(
+      { id: pos.id, ownerId: userId },
+      { $set: {
+          fills:             cleanFills,
+          exits:             [],
+          totalFilledShares: ibkrShares,
+          totalExitedShares: 0,
+          remainingShares:   ibkrShares,
+          status:            'ACTIVE',
+          updatedAt:         new Date(),
+          resetAt:           new Date(),
+          resetSource:       'ADMIN_RESET_TO_IBKR',
+          'realizedPnl.dollar': 0,
+          'realizedPnl.pct':    0,
+        },
+        $unset: {
+          pendingCatchUp:        '',
+          catchUpRebalancePlan:  '',
+          avgExitPrice:          '',
+          closedAt:              '',
+        },
+      }
+    );
+
+    res.json({
+      ok: true,
+      ticker: pos.ticker,
+      positionId: pos.id,
+      before,
+      after: {
+        totalFilledShares: ibkrShares,
+        totalExitedShares: 0,
+        remainingShares:   ibkrShares,
+        l1Price:           +(+l1Price).toFixed(4),
+      },
+    });
+  } catch (err) {
+    console.error('[admin/reset-position-to-ibkr]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4g — manual trigger of lotTriggerCron logic. Same dry-run/apply
 // pattern as sync-stops; report includes placements, modifications,
 // cancellations (cleanup-stale), adoptions (TWS-tighter user overrides),

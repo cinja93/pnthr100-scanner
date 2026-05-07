@@ -94,10 +94,33 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
 
   const lotFillsRecorded = [];
 
+  // Parse TWS exec time ("20260506  06:30:25", ET) into a Date so we can
+  // compare against position.createdAt. Without this, executions that
+  // happened BEFORE a position was created get applied to it — exactly
+  // the AMD 2026-05-06 contamination (Phase 3 auto-opened a fresh
+  // position at 14:21 ET, then ibkrSync pulled morning execs from
+  // latestExecutions and matched them to the new position as "fills" and
+  // "exits" that pre-dated its existence).
+  function parseExecTime(s) {
+    if (!s || typeof s !== 'string') return null;
+    // Handle the canonical "YYYYMMDD  HH:MM:SS" plus a forgiving
+    // "YYYYMMDD HH:MM:SS" variant (single space) just in case.
+    const m = s.match(/^(\d{4})(\d{2})(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    // ET (America/New_York) is UTC-5 (EST) or UTC-4 (EDT). Construct
+    // the date in ET, convert to UTC by adding the offset. Approximation:
+    // use Intl to compute the offset via toLocaleString round-trip.
+    const [, yyyy, mm, dd, hh, mi, ss] = m;
+    const naive = new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}-04:00`); // assume EDT
+    if (isNaN(naive)) return null;
+    return naive;
+  }
+
   for (const exec of executions) {
     if (processedIds.has(exec.execId)) continue; // already handled
 
     const symbol = exec.symbol?.toUpperCase();
+    const execAt = parseExecTime(exec.time);
 
     // ── Phase 4h: auto-record pyramid lot fills ────────────────────────────
     // BOT for an ACTIVE LONG (or SLD for an ACTIVE SHORT) that already has
@@ -113,6 +136,25 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
       const addPriorShares = Object.values(addFills)
         .reduce((s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0);
 
+      // Timestamp guard: don't apply an exec to a position that didn't exist
+      // when the exec happened. Prevents stale-intraday-activity contamination
+      // of fresh autoOpened positions (AMD case).
+      if (addPos && execAt && addPos.createdAt && execAt < new Date(addPos.createdAt)) {
+        // Mark as processed so we don't re-evaluate every minute. This exec
+        // belongs to a different (likely earlier-closed) AMD position; the
+        // current position is not the right home for it.
+        await db.collection('pnthr_ibkr_executions').updateOne(
+          { ownerId: userId, execId: exec.execId },
+          { $set: {
+              ownerId: userId, execId: exec.execId, symbol,
+              side: exec.side, shares: exec.shares, price: exec.price,
+              type: 'SKIPPED_PRE_POSITION_CREATE',
+              processedAt: syncedAt,
+            } },
+          { upsert: true },
+        );
+        continue;
+      }
       if (addPos && addPos.status !== 'CLOSED' && addPriorShares > 0) {
         const dryRun = process.env.IBKR_AUTO_RECORD_ADD_FILL !== 'true';
         const nav = await getNav();
@@ -203,6 +245,24 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
 
     const pnthr = positionByTickerDir[`${symbol}_${closingDir}`];
     if (!pnthr) continue; // no matching PNTHR position for this direction
+
+    // Timestamp guard (mirror of Phase 4h): don't apply an exit exec to a
+    // position that didn't exist when the exec happened. This was the bug
+    // that contaminated AMD's fresh autoOpened position with morning SLDs
+    // from a prior closed position.
+    if (execAt && pnthr.createdAt && execAt < new Date(pnthr.createdAt)) {
+      await db.collection('pnthr_ibkr_executions').updateOne(
+        { ownerId: userId, execId: exec.execId },
+        { $set: {
+            ownerId: userId, execId: exec.execId, symbol,
+            side: exec.side, shares: exec.shares, price: exec.price,
+            type: 'SKIPPED_PRE_POSITION_CREATE',
+            processedAt: syncedAt,
+          } },
+        { upsert: true },
+      );
+      continue;
+    }
 
     // Count PNTHR-tracked filled shares
     const fills     = pnthr.fills || {};

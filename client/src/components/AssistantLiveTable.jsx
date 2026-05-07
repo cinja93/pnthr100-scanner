@@ -1630,7 +1630,7 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
             )}
             {diagModal.status === 'ready' && (
               <>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     onClick={async () => {
                       try {
@@ -1647,8 +1647,45 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                       padding: '6px 14px', fontWeight: 800, fontSize: 12, cursor: 'pointer',
                     }}
                   >{diagModal.copied ? '✓ Copied' : 'Copy to clipboard'}</button>
+                  <button
+                    onClick={async () => {
+                      const ok = window.confirm(
+                        `RESET ${diagModal.ticker} to match IBKR?\n\n` +
+                        `This wipes auto-recorded fills (L2-L5) + auto-recorded exits and ` +
+                        `rewrites L1 to match IBKR's current share count. Use this when ` +
+                        `the position got contaminated by stale intraday execs from a ` +
+                        `prior closed position on the same ticker.\n\n` +
+                        `Cannot be undone.`
+                      );
+                      if (!ok) return;
+                      try {
+                        const r = await fetch(`${API_BASE}/api/admin/reset-position-to-ibkr`, {
+                          method: 'POST',
+                          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ ticker: diagModal.ticker }),
+                        });
+                        const d = await r.json();
+                        if (!r.ok) throw new Error(d?.error || `HTTP ${r.status}`);
+                        window.alert(
+                          `${diagModal.ticker} reset.\n\n` +
+                          `Before: filled=${d.before.totalFilledShares}, exited=${d.before.totalExitedShares}, remaining=${d.before.remainingShares}\n` +
+                          `After:  filled=${d.after.totalFilledShares}, exited=0, remaining=${d.after.remainingShares} @ $${d.after.l1Price}\n\n` +
+                          `Card will refresh automatically.`
+                        );
+                        setDiagModal(null);
+                        fetchData();
+                      } catch (e) {
+                        window.alert(`Reset failed: ${e.message}`);
+                      }
+                    }}
+                    style={{
+                      background: '#dc3545', color: '#fff', border: 'none', borderRadius: 4,
+                      padding: '6px 14px', fontWeight: 800, fontSize: 12, cursor: 'pointer',
+                    }}
+                    title="Wipe auto-recorded fills/exits, rewrite L1 to match IBKR. Use when stale intraday execs contaminated this position."
+                  >RESET TO IBKR</button>
                   <span style={{ color: '#888', fontSize: 11, alignSelf: 'center' }}>
-                    Then paste it into chat
+                    Then paste JSON into chat
                   </span>
                 </div>
                 <textarea

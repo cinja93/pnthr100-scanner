@@ -48,6 +48,7 @@ import {
   expectedLotTriggerAction,
   pairTwsOrdersToLots,
   computeCatchUpRebalance,
+  computeTargetAvg,
 } from './lotMath.js';
 
 // Default NAV when a user profile has none stored. Mirrors the client's
@@ -442,11 +443,22 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
       // Skip outside RTH — wait for next eligible tick.
       if (!isRthForCatchUp) {
         catchUps.push({ ticker, lot: flag.lot, skipped: 'OUTSIDE_RTH', detectedAt: flag.detectedAt });
-      } else if (!p.targetAvg) {
-        // No locked target avg → can't compute rebalance. Skip + log; user
-        // may need to backfill targetAvg for older positions.
-        catchUps.push({ ticker, lot: flag.lot, skipped: 'NO_TARGET_AVG' });
       } else {
+        // Pre-existing positions created before targetAvg was added (commit
+        // 7f54fd9 on 2026-05-06) don't have the field stored. Fall back to
+        // computing it from the canonical lot plan — same formula the live
+        // table uses for display fallback (assistantLiveReconcile.js:528).
+        // DTCR 2026-05-07: created 2026-04-29, no stored targetAvg, was
+        // skipping every catch-up tick with NO_TARGET_AVG. Now unblocked.
+        const effectiveTargetAvg = p.targetAvg || computeTargetAvg(p, nav);
+        if (!effectiveTargetAvg) {
+          catchUps.push({ ticker, lot: flag.lot, skipped: 'NO_TARGET_AVG_NO_FALLBACK' });
+          continue;
+        }
+        // Patch onto the position object in memory so computeCatchUpRebalance
+        // (which reads position.targetAvg) sees the fallback value. Not
+        // persisted — let the existing once-at-L1-fill writer own that.
+        const pWithAvg = p.targetAvg ? p : { ...p, targetAvg: effectiveTargetAvg };
         // Recompute Pa from CURRENT price (may differ from detection-time
         // price if hours have passed waiting for RTH).
         const Pa = +ibkrPos?.marketPrice || +p.currentPrice || 0;
@@ -454,11 +466,11 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
           catchUps.push({ ticker, lot: flag.lot, skipped: 'NO_LIVE_PRICE' });
         } else {
           const rebal = computeCatchUpRebalance({
-            position:     p,
+            position:     pWithAvg,
             netLiquidity: nav,
             missedLot:    flag.lot,
             currentPrice: Pa,
-            targetAvg:    p.targetAvg,
+            targetAvg:    effectiveTargetAvg,
           });
           if (!rebal.ok) {
             catchUps.push({ ticker, lot: flag.lot, skipped: `REBAL_${rebal.reason}` });

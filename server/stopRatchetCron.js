@@ -260,38 +260,85 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
       const stopShares = Math.abs(+protective.shares || 0);
       const posShares  = Math.abs(+ibkrPos.shares || 0);
       if (posShares > 0 && Number.isFinite(stopShares) && stopShares !== posShares) {
-        const sanity = sanityCheckModifyStop({
-          position:     p,
-          ibkrPosition: { shares: ibkrPos.shares, lastPrice: ibkrPos.lastPrice || p.currentPrice, avgCost: ibkrPos.avgCost },
-          oldStopPrice: ibkrStop,
-          newStopPrice: pnthrStop,
-        });
+        // orderId=0 means the protective stop was placed in a prior TWS
+        // session — IB API can't cancel it, so MODIFY (cancel+place) will
+        // FAIL at the cancel phase. Hard-learned 2026-05-07: NVDA/TSLA/SMCI
+        // accumulated 3 FAILED MODIFY_STOPs each before the failure backoff
+        // kicked in, leaving the protective stop short-covered for hours.
+        // Switch strategy for this case: place an ADDITIONAL PNTHR-tagged
+        // SELL/BUY STP covering only the GAP shares at the same price.
+        // When price hits the trigger, both stops fire — total coverage =
+        // user stop shares + PNTHR gap stop shares = full position.
+        const isUncancellableUserStop = (+protective.orderId === 0)
+          && ((protective.orderRef || '').trim().toUpperCase() !== 'PNTHR');
+        const gapShares = posShares - stopShares;
+        const useGapPlace = isUncancellableUserStop && gapShares > 0;
+
         const shape = buildStopOrderShape({
           stopPrice:         pnthrStop,
           direction:         isLong ? 'LONG' : 'SHORT',
           stopExtendedHours: !!p.stopExtendedHours,
         });
-        const enqRes = !dryRun && process.env.IBKR_AUTO_SYNC_STOPS === 'true'
-          ? await enqueueOutbox(db, p.ownerId, 'MODIFY_STOP', {
-              ticker,
-              direction:    isLong ? 'LONG' : 'SHORT',
-              shares:       posShares,
-              oldPermId:    protective.permId,
-              oldStopPrice: ibkrStop,
-              newStopPrice: pnthrStop,  // unchanged — only the share count moves
-              orderType:    shape.orderType,
-              lmtPrice:     shape.lmtPrice,
-              tif:          'GTC',
-              rth:          shape.rth,
-              positionId:   p.id,
-              source:       'STOP_RATCHET_SHARE_COVERAGE',
-            }, { sanityCheck: sanity })
-          : { skipped: dryRun ? 'DRY_RUN' : (process.env.IBKR_AUTO_SYNC_STOPS !== 'true' ? 'IBKR_AUTO_SYNC_STOPS_OFF' : 'UNKNOWN') };
+
+        let enqRes;
+        let cmdName;
+        if (useGapPlace) {
+          // PLACE gap-coverage stop (additive, leaves user stop alone).
+          const sanity = sanityCheckPlaceStop({
+            position:     p,
+            ibkrPosition: { shares: gapShares, lastPrice: ibkrPos.lastPrice || p.currentPrice, avgCost: ibkrPos.avgCost },
+            stopPrice:    pnthrStop,
+          });
+          cmdName = 'PLACE_STOP';
+          enqRes = !dryRun && process.env.IBKR_AUTO_SYNC_STOPS === 'true' && flagOnPlace
+            ? await enqueueOutbox(db, p.ownerId, 'PLACE_STOP', {
+                ticker,
+                direction:  isLong ? 'LONG' : 'SHORT',
+                shares:     gapShares,
+                stopPrice:  pnthrStop,
+                orderType:  shape.orderType,
+                lmtPrice:   shape.lmtPrice,
+                tif:        'GTC',
+                rth:        shape.rth,
+                positionId: p.id,
+                source:     'STOP_RATCHET_GAP_COVERAGE_USER_STOP_UNCANCELLABLE',
+              }, { sanityCheck: sanity })
+            : { skipped: dryRun ? 'DRY_RUN'
+                  : (process.env.IBKR_AUTO_SYNC_STOPS !== 'true' ? 'IBKR_AUTO_SYNC_STOPS_OFF'
+                  : (!flagOnPlace ? 'IBKR_AUTO_PLACE_STOP_OFF' : 'UNKNOWN')) };
+        } else {
+          // Standard MODIFY (cancel+place). Works when orderId is non-zero.
+          const sanity = sanityCheckModifyStop({
+            position:     p,
+            ibkrPosition: { shares: ibkrPos.shares, lastPrice: ibkrPos.lastPrice || p.currentPrice, avgCost: ibkrPos.avgCost },
+            oldStopPrice: ibkrStop,
+            newStopPrice: pnthrStop,
+          });
+          cmdName = 'MODIFY_STOP';
+          enqRes = !dryRun && process.env.IBKR_AUTO_SYNC_STOPS === 'true'
+            ? await enqueueOutbox(db, p.ownerId, 'MODIFY_STOP', {
+                ticker,
+                direction:    isLong ? 'LONG' : 'SHORT',
+                shares:       posShares,
+                oldPermId:    protective.permId,
+                oldStopPrice: ibkrStop,
+                newStopPrice: pnthrStop,  // unchanged — only the share count moves
+                orderType:    shape.orderType,
+                lmtPrice:     shape.lmtPrice,
+                tif:          'GTC',
+                rth:          shape.rth,
+                positionId:   p.id,
+                source:       'STOP_RATCHET_SHARE_COVERAGE',
+              }, { sanityCheck: sanity })
+            : { skipped: dryRun ? 'DRY_RUN' : (process.env.IBKR_AUTO_SYNC_STOPS !== 'true' ? 'IBKR_AUTO_SYNC_STOPS_OFF' : 'UNKNOWN') };
+        }
         modifications.push({
           ticker, dir: isLong ? 'LONG' : 'SHORT',
           from: { stop: ibkrStop, shares: stopShares },
           to:   { stop: pnthrStop, shares: posShares },
-          reason: 'SHARE_COVERAGE_GAP',
+          reason: useGapPlace ? 'GAP_COVERAGE_PLACE_USER_STOP_UNCANCELLABLE' : 'SHARE_COVERAGE_GAP',
+          command: cmdName,
+          gapShares: useGapPlace ? gapShares : null,
           permId: protective.permId,
           enqueued: !enqRes.skipped,
           outboxId: enqRes.id,

@@ -82,6 +82,22 @@ export async function runProtectiveStopDedup({ db, dryRun = false } = {}) {
     for (const [priceKey, group] of groups) {
       if (group.length < 2) continue;
 
+      // Skip dedup when one stop is a user-placed orderId=0 (uncancellable
+      // by the bridge) AND a PNTHR-tagged stop sits next to it at the same
+      // price. That pairing isn't an accidental duplicate — it's the
+      // intentional GAP_COVERAGE pattern from stopRatchetCron when a lot
+      // fill grew the position past the user stop's coverage. Both stops
+      // together = full position coverage. Trying to cancel the user stop
+      // here just generates 3 FAILED CANCEL_ORDERs and triggers backoff.
+      const hasUncancellableUserStop = group.some(s =>
+        +s.orderId === 0 && (s.orderRef || '').trim().toUpperCase() !== 'PNTHR'
+      );
+      const hasPnthrTagged = group.some(s => (s.orderRef || '').trim().toUpperCase() === 'PNTHR');
+      if (hasUncancellableUserStop && hasPnthrTagged) {
+        skips.push({ ticker, priceKey: +priceKey, reason: 'GAP_COVERAGE_INTENTIONAL_USER_STOP_UNCANCELLABLE' });
+        continue;
+      }
+
       // Pick the keeper: prefer PNTHR-tagged, else lowest permId.
       const pnthrTagged = group.filter(s => (s.orderRef || '').trim() === 'PNTHR');
       const keeper = pnthrTagged.length > 0

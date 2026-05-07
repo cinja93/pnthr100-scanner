@@ -73,6 +73,7 @@ export default function MoversAlertBanner() {
 
   const newest = visible[0];
   const restCount = visible.length - 1;
+  const restTickers = visible.slice(1).map(m => m.ticker);
   const isBL = newest.signal === 'BL+1';
 
   function dismissOne() {
@@ -108,7 +109,8 @@ export default function MoversAlertBanner() {
           <span style={{
             background: '#000', color: '#fcf000', fontWeight: 800, fontSize: 11,
             padding: '2px 8px', borderRadius: 10, marginLeft: 8,
-          }}>+{restCount} more</span>
+            whiteSpace: 'nowrap',
+          }}>+ {restTickers.join(', ')}</span>
         )}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>

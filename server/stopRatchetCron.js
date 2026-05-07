@@ -252,7 +252,54 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
         skipReason: enqueueResult.skipped || null,
       });
     } else {
-      aligned.push({ ticker, stop: pnthrStop });
+      // Prices match within tolerance. Check SHARE COVERAGE — when a pyramid
+      // lot fills (or any add grows the position) the protective stop's
+      // share count needs to expand to cover the new total. The existing
+      // ratchet only adjusts price; without this branch a 5-sh stop on an
+      // 8-sh position stays at 5 sh forever (QQQ 2026-05-06).
+      const stopShares = Math.abs(+protective.shares || 0);
+      const posShares  = Math.abs(+ibkrPos.shares || 0);
+      if (posShares > 0 && Number.isFinite(stopShares) && stopShares !== posShares) {
+        const sanity = sanityCheckModifyStop({
+          position:     p,
+          ibkrPosition: { shares: ibkrPos.shares, lastPrice: ibkrPos.lastPrice || p.currentPrice, avgCost: ibkrPos.avgCost },
+          oldStopPrice: ibkrStop,
+          newStopPrice: pnthrStop,
+        });
+        const shape = buildStopOrderShape({
+          stopPrice:         pnthrStop,
+          direction:         isLong ? 'LONG' : 'SHORT',
+          stopExtendedHours: !!p.stopExtendedHours,
+        });
+        const enqRes = !dryRun && process.env.IBKR_AUTO_SYNC_STOPS === 'true'
+          ? await enqueueOutbox(db, p.ownerId, 'MODIFY_STOP', {
+              ticker,
+              direction:    isLong ? 'LONG' : 'SHORT',
+              shares:       posShares,
+              oldPermId:    protective.permId,
+              oldStopPrice: ibkrStop,
+              newStopPrice: pnthrStop,  // unchanged — only the share count moves
+              orderType:    shape.orderType,
+              lmtPrice:     shape.lmtPrice,
+              tif:          'GTC',
+              rth:          shape.rth,
+              positionId:   p.id,
+              source:       'STOP_RATCHET_SHARE_COVERAGE',
+            }, { sanityCheck: sanity })
+          : { skipped: dryRun ? 'DRY_RUN' : (process.env.IBKR_AUTO_SYNC_STOPS !== 'true' ? 'IBKR_AUTO_SYNC_STOPS_OFF' : 'UNKNOWN') };
+        modifications.push({
+          ticker, dir: isLong ? 'LONG' : 'SHORT',
+          from: { stop: ibkrStop, shares: stopShares },
+          to:   { stop: pnthrStop, shares: posShares },
+          reason: 'SHARE_COVERAGE_GAP',
+          permId: protective.permId,
+          enqueued: !enqRes.skipped,
+          outboxId: enqRes.id,
+          skipReason: enqRes.skipped || null,
+        });
+      } else {
+        aligned.push({ ticker, stop: pnthrStop });
+      }
     }
   }
 

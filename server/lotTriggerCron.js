@@ -156,6 +156,14 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
       skips.push({ ticker, reason: 'PLAN_TOTAL_ZERO' }); continue;
     }
 
+    // Pre-compute the projected pyramid total from the canonical lot plan so
+    // sanity checks use the correct denominator. position.fills doesn't store
+    // targetShares for IBKR_IMPORT positions, so the in-place recomputation
+    // inside the sanity check would underestimate the total (UBER 2026-05-06:
+    // 12 sh L1, fills[2-5] empty, sanity computed denom=12 instead of plan
+    // total 34, rejected L2=8sh as exceeding 50%).
+    const planProjectedTotal = lots.reduce((s, l) => s + (+l.targetShares || 0), 0);
+
     // 3. Filter IBKR stop orders to lot-trigger candidates only — opposite
     //    action from the protective stop (BUY for LONG pyramid, SELL for SHORT).
     const isLong = (p.direction || 'LONG').toUpperCase() !== 'SHORT';
@@ -275,6 +283,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
         newTriggerPrice: planTrigger,
         oldShares:       twsShares,
         newShares:       planShares,
+        projectedTotal:  planProjectedTotal,
       });
       const shape = buildStopOrderShape({
         stopPrice:         planTrigger,
@@ -315,11 +324,12 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
       if ((candidatesByLot.get(lot.lot) || []).length > 0) continue; // Already has a TWS order
 
       const sanity = sanityCheckPlaceLotTrigger({
-        position:     p,
-        ibkrPosition: { shares: ibkrShares, lastPrice: ibkrPos.lastPrice || p.currentPrice, avgCost: ibkrPos.avgCost },
-        lot:          lot.lot,
-        triggerPrice: lot.triggerPrice,
-        shares:       lot.targetShares,
+        position:        p,
+        ibkrPosition:    { shares: ibkrShares, lastPrice: ibkrPos.lastPrice || p.currentPrice, avgCost: ibkrPos.avgCost },
+        lot:             lot.lot,
+        triggerPrice:    lot.triggerPrice,
+        shares:          lot.targetShares,
+        projectedTotal:  planProjectedTotal,
       });
       if (!sanity.ok) {
         skips.push({ ticker, lot: lot.lot, reason: `PLACE_SANITY_${sanity.reason}` });

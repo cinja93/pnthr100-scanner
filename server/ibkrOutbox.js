@@ -174,7 +174,7 @@ export function sanityCheckModifyStop({ position, ibkrPosition, oldStopPrice, ne
 // Refuses to enqueue if anything looks wrong — never want PNTHR to silently
 // pre-stage an order on the wrong side of price, at a clearly-bad share
 // count, or for the entry lot (Lot 1 isn't a trigger; it's the actual fill).
-export function sanityCheckPlaceLotTrigger({ position, ibkrPosition, lot, triggerPrice, shares }) {
+export function sanityCheckPlaceLotTrigger({ position, ibkrPosition, lot, triggerPrice, shares, projectedTotal: projectedTotalArg }) {
   if (!position || !position.id) return { ok: false, reason: 'POSITION_MISSING' };
   if (!ibkrPosition) return { ok: false, reason: 'IBKR_POSITION_MISSING' };
   const ibkrShares = Math.abs(+ibkrPosition.shares || 0);
@@ -201,12 +201,19 @@ export function sanityCheckPlaceLotTrigger({ position, ibkrPosition, lot, trigge
   // 50% of the 111-share projected total) was failing the prior 50%-of-
   // current-IBKR check. Typo-guard intent (any one lot being a huge chunk
   // of the PLAN) is preserved.
-  const fills = position?.fills || {};
-  let projectedTotal = 0;
-  for (let n = 1; n <= 5; n++) {
-    const f = fills[n];
-    if (!f) continue;
-    projectedTotal += f.filled ? (+f.shares || 0) : (+f.targetShares || 0);
+  //
+  // Caller can pass projectedTotal explicitly — recommended when the caller
+  // has computed the canonical lot plan (lotTriggerCron). Otherwise we
+  // recompute from position.fills, which only works if fills[2-5] have
+  // targetShares stored (IBKR_IMPORT positions don't have them — UBER bug).
+  let projectedTotal = +projectedTotalArg || 0;
+  if (!projectedTotal) {
+    const fills = position?.fills || {};
+    for (let n = 1; n <= 5; n++) {
+      const f = fills[n];
+      if (!f) continue;
+      projectedTotal += f.filled ? (+f.shares || 0) : (+f.targetShares || 0);
+    }
   }
   // Fall back to current IBKR shares as the denominator if no plan is set
   // (defensive — shouldn't happen at PLACE_LOT_TRIGGER time, but covers it).
@@ -234,8 +241,8 @@ export function sanityCheckPlaceLotTrigger({ position, ibkrPosition, lot, trigge
 // definition stale (placed against an old anchor) and needs to be corrected.
 // Other safety rails (within 50% of price, share-count caps, blackout windows)
 // still apply via the underlying place-check.
-export function sanityCheckModifyLotTrigger({ position, ibkrPosition, lot, oldTriggerPrice, newTriggerPrice, oldShares, newShares }) {
-  const placeCheck = sanityCheckPlaceLotTrigger({ position, ibkrPosition, lot, triggerPrice: newTriggerPrice, shares: newShares });
+export function sanityCheckModifyLotTrigger({ position, ibkrPosition, lot, oldTriggerPrice, newTriggerPrice, oldShares, newShares, projectedTotal }) {
+  const placeCheck = sanityCheckPlaceLotTrigger({ position, ibkrPosition, lot, triggerPrice: newTriggerPrice, shares: newShares, projectedTotal });
   if (!placeCheck.ok) return placeCheck;
   if (!Number.isFinite(+oldTriggerPrice) || +oldTriggerPrice <= 0) return { ok: false, reason: 'BAD_OLD_TRIGGER' };
 

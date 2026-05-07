@@ -38,6 +38,7 @@ import {
   enqueue as enqueueOutbox,
   sanityCheckPlaceLotTrigger,
   sanityCheckModifyLotTrigger,
+  sanityCheckBuyMarketToCatchUp,
   buildStopOrderShape,
   DEMO_OWNER_ID,
 } from './ibkrOutbox.js';
@@ -46,6 +47,7 @@ import {
   classifyLotCompletion,
   expectedLotTriggerAction,
   pairTwsOrdersToLots,
+  computeCatchUpRebalance,
 } from './lotMath.js';
 
 // Default NAV when a user profile has none stored. Mirrors the client's
@@ -98,6 +100,27 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
   const skips         = []; // unable to reconcile (no plan, no IBKR record, etc.)
   const aligned       = []; // already at-or-within tolerance
   const missedLots    = []; // step 3: lots where price has crossed trigger w/o fill (catch-up flagged)
+  const catchUps      = []; // step 5: catch-up market orders enqueued (or skipped w/ reason)
+
+  // ── RTH gate for catch-up firing (step 5) ──────────────────────────────
+  // Catch-up market orders only fire during regular trading hours, and
+  // outside the open/close blackout windows enforced in ibkrOutbox. The
+  // detection (step 3) runs 24/7 and writes pendingCatchUp; the firing
+  // (here) holds for next RTH tick. Gives tight-spread fills and avoids
+  // pre-market gap chaos.
+  //
+  // Window: 9:35 AM – 3:55 PM ET, Monday-Friday. (Open blackout 9:25-9:35
+  // and close blackout 15:55-16:05 are enforced again at enqueue time, so
+  // catch-ups can technically fire 9:35-15:55; using slightly wider window
+  // here for clarity and letting blackout reject if right on the edge.)
+  const isRthForCatchUp = (() => {
+    const now = new Date();
+    const et  = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const day = et.getDay(); // 0=Sun, 6=Sat
+    if (day === 0 || day === 6) return false;
+    const minutes = et.getHours() * 60 + et.getMinutes();
+    return minutes >= 575 && minutes <= 955; // 9:35 - 15:55 ET
+  })();
 
   const flagOn = process.env.IBKR_AUTO_SYNC_LOT_TRIGGERS === 'true';
 
@@ -397,6 +420,133 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
       // dryRun output is honest about what's pending.
       missedLots.push({ ticker, ...detectedMiss, flagWritten: false, alreadyFlagged: true });
     }
+
+    // ── PASS 5: CATCH-UP FIRING (step 5 of catch-up feature) ────────────────
+    // If the position has a pendingCatchUp flag AND we're inside RTH AND the
+    // missed condition is still real (price still past trigger), compute the
+    // catch-up + rebalance math and enqueue a BUY_MARKET_TO_CATCH_UP. After
+    // the bridge fires it and we see the fill via ibkrSync, step 6 will
+    // rewrite L_{N+1}..L5 share counts on the position.
+    const flag = detectedMiss || existingFlag;
+    if (flag && flag.lot >= 2 && flag.lot <= 4) {
+      // Skip outside RTH — wait for next eligible tick.
+      if (!isRthForCatchUp) {
+        catchUps.push({ ticker, lot: flag.lot, skipped: 'OUTSIDE_RTH', detectedAt: flag.detectedAt });
+      } else if (!p.targetAvg) {
+        // No locked target avg → can't compute rebalance. Skip + log; user
+        // may need to backfill targetAvg for older positions.
+        catchUps.push({ ticker, lot: flag.lot, skipped: 'NO_TARGET_AVG' });
+      } else {
+        // Recompute Pa from CURRENT price (may differ from detection-time
+        // price if hours have passed waiting for RTH).
+        const Pa = +ibkrPos?.marketPrice || +p.currentPrice || 0;
+        if (Pa <= 0) {
+          catchUps.push({ ticker, lot: flag.lot, skipped: 'NO_LIVE_PRICE' });
+        } else {
+          const rebal = computeCatchUpRebalance({
+            position:     p,
+            netLiquidity: nav,
+            missedLot:    flag.lot,
+            currentPrice: Pa,
+            targetAvg:    p.targetAvg,
+          });
+          if (!rebal.ok) {
+            catchUps.push({ ticker, lot: flag.lot, skipped: `REBAL_${rebal.reason}` });
+          } else {
+            // ── Cap-aware shrinkage ─────────────────────────────────────
+            // If post-catch-up notional ≥ 10% NAV, shrink upper lots from
+            // top down (L5 → L4 → L3 — only those above missedLot in newUpperShares)
+            // by 1 share at a time until under cap. If we run out of upper
+            // lots and still over cap, refuse with MISSED_LOT_CAP_UNRESOLVABLE.
+            const tickerNotionalAfter = (saShares, upperShares) =>
+              (Math.abs(+ibkrPos.shares || 0) + saShares) * Pa
+              + upperShares.reduce((s, u) => s + u.shares * u.triggerPrice, 0);
+            const capDollar = 0.10 * nav;
+            // Note: the cap rule in ibkrOutbox is a current-notional check.
+            // Here we model the projected post-fill cap so we can pre-shrink
+            // BEFORE enqueue, rather than getting silently rejected later.
+            // Walk upper lots HIGH→LOW (L5 first) reducing by 1 sh per pass.
+            const upperDesc = rebal.newUpperShares.slice().sort((a, b) => b.lot - a.lot);
+            let safetyIters = 200;
+            while (
+              safetyIters-- > 0 &&
+              tickerNotionalAfter(rebal.Sa, rebal.newUpperShares) > capDollar
+            ) {
+              // Find the highest-lot row with shares > 0 and decrement.
+              const target = upperDesc.find(u => u.shares > 0);
+              if (!target) break; // can't reduce further from upper
+              target.shares -= 1;
+              // (rebal.newUpperShares and upperDesc share refs — both updated)
+            }
+            const stillOver = tickerNotionalAfter(rebal.Sa, rebal.newUpperShares) > capDollar;
+            if (stillOver) {
+              // Try reducing Sa as last resort.
+              while (
+                safetyIters-- > 0 &&
+                rebal.Sa > 1 &&
+                tickerNotionalAfter(rebal.Sa, rebal.newUpperShares) > capDollar
+              ) {
+                rebal.Sa -= 1;
+              }
+              if (tickerNotionalAfter(rebal.Sa, rebal.newUpperShares) > capDollar) {
+                catchUps.push({ ticker, lot: flag.lot, skipped: 'MISSED_LOT_CAP_UNRESOLVABLE' });
+              }
+            }
+
+            // Final feasibility check: still positive Sa and positive notional?
+            if (!stillOver || tickerNotionalAfter(rebal.Sa, rebal.newUpperShares) <= capDollar) {
+              const sanity = sanityCheckBuyMarketToCatchUp({
+                position:     p,
+                ibkrPosition: { shares: ibkrShares, lastPrice: ibkrPos.marketPrice || p.currentPrice, avgCost: ibkrPos.avgCost },
+                lot:          flag.lot,
+                shares:       rebal.Sa,
+                currentPrice: Pa,
+              });
+              const enqRes = sanity.ok && !dryRun && flagOn
+                ? await enqueueOutbox(db, p.ownerId, 'BUY_MARKET_TO_CATCH_UP', {
+                    ticker,
+                    direction:    isLong ? 'LONG' : 'SHORT',
+                    lot:          flag.lot,
+                    shares:       rebal.Sa,
+                    currentPrice: Pa,
+                    triggerPrice: flag.triggerPrice,
+                    targetAvg:    p.targetAvg,
+                    positionId:   p.id,
+                    source:       'LOT_TRIGGER_CRON_CATCHUP',
+                  }, { sanityCheck: sanity })
+                : { skipped: !sanity.ok ? sanity.reason : (dryRun ? 'DRY_RUN' : (flagOn ? 'UNKNOWN' : 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF')) };
+              // Persist the rebalance plan on the position so step 6 can read
+              // it after the fill confirms (without re-doing the math against
+              // a different current price).
+              if (!dryRun && enqRes.id) {
+                await db.collection('pnthr_portfolio').updateOne(
+                  { id: p.id, ownerId: p.ownerId },
+                  { $set: {
+                      catchUpRebalancePlan: {
+                        missedLot:      flag.lot,
+                        Sa:             rebal.Sa,
+                        catchUpPrice:   Pa,
+                        newUpperShares: rebal.newUpperShares,
+                        finalAvg:       rebal.finalAvg,
+                        outboxId:       enqRes.id,
+                        plannedAt:      new Date(),
+                      },
+                      updatedAt: new Date(),
+                    } }
+                );
+              }
+              catchUps.push({
+                ticker, lot: flag.lot, dir: isLong ? 'LONG' : 'SHORT',
+                Sa: rebal.Sa, Pa, targetAvg: p.targetAvg, finalAvg: rebal.finalAvg,
+                newUpperShares: rebal.newUpperShares,
+                enqueued: !enqRes.skipped, outboxId: enqRes.id,
+                skipReason: enqRes.skipped || null,
+              });
+            }
+          }
+        }
+      }
+    }
   }
 
   return {
@@ -409,6 +559,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
     cancellations,
     adoptions,
     missedLots,
+    catchUps,
     skips,
     aligned,
   };

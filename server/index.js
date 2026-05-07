@@ -5815,6 +5815,7 @@ app.get('/api/admin/ticker-forensic/:ticker', authenticateJWT, requireAdmin, asy
             cancellations: filt(r.cancellations),
             adoptions:     filt(r.adoptions),
             missedLots:    filt(r.missedLots),
+            catchUps:      filt(r.catchUps),
             skips:         filt(r.skips),
             aligned:       filt(r.aligned),
           };

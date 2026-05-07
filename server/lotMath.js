@@ -174,6 +174,143 @@ export function computeTargetAvg(position, netLiquidity) {
   return +(totalCost / totalShares).toFixed(4);
 }
 
+// ── Catch-up rebalance math ─────────────────────────────────────────────────
+// When a lot trigger N is missed (price crossed without fill), compute the
+// catch-up shares Sa + a scale factor k for upper lots (N+1..5) such that:
+//   1. final share-weighted avg = targetAvg (T) — exactly preserved
+//   2. total final share count ≈ original plan total (preserves position size)
+//
+// Per design: front-load Sa (more than originally planned for L_N) at the
+// "lower" catch-up price Pa, scale upper lots DOWN to compensate. This
+// gives MORE shares earlier in the trade (better partial-exit outcomes)
+// vs scaling everything uniformly.
+//
+// Two-equation solve:
+//   Sa + k·S_upper_total = plan_total - S1                ← preserves total
+//   S1·P1 + Sa·Pa + k·sum(S_i·P_i) = T·plan_total         ← preserves avg
+//
+// Returns { ok, Sa, k, newUpperShares, finalTotal, finalAvg, reason }.
+// Returns ok=false with reason when no positive solution exists (e.g.,
+// Pa too high above T to recover even with k=0).
+//
+// Inputs:
+//   position      — the PNTHR position document (reads fills, direction)
+//   netLiquidity  — current NAV
+//   missedLot     — the lot number missed (2, 3, or 4)
+//   currentPrice  — Pa, the price at which catch-up will fill (live market)
+//   targetAvg     — T, the locked target avg from L1 fill (REQUIRED — never recompute)
+export function computeCatchUpRebalance({ position, netLiquidity, missedLot, currentPrice, targetAvg }) {
+  if (!position || !targetAvg || !currentPrice || !missedLot) {
+    return { ok: false, reason: 'MISSING_INPUT' };
+  }
+  if (missedLot < 2 || missedLot > 4) {
+    return { ok: false, reason: 'INVALID_LOT_FOR_CATCHUP' };
+  }
+  const plan = computeLotPlan(position, netLiquidity);
+  if (!plan || plan.length < 5) return { ok: false, reason: 'PLAN_INCOMPLETE' };
+
+  const fills = position?.fills || {};
+  const l1 = plan[0];
+  const S1 = +l1.actualShares || +l1.targetShares || 0;
+  const P1 = fills[1]?.filled && fills[1]?.price ? +fills[1].price : +l1.triggerPrice;
+  if (S1 <= 0 || P1 <= 0) return { ok: false, reason: 'L1_NOT_FILLED' };
+
+  const Pa = +currentPrice;
+  const T  = +targetAvg;
+
+  // Plan total — fixed reference for "preserve total size".
+  const planTotal = plan.reduce((s, l) => s + (+l.targetShares || 0), 0);
+
+  // Upper lots = lots ABOVE the missed lot (N+1..5). These are the ones
+  // we'll scale by k. The missed lot itself becomes the catch-up (Sa).
+  const upperLots = plan.filter(l => l.lot > missedLot && !l.filled);
+  const S_upper_total = upperLots.reduce((s, l) => s + (+l.targetShares || 0), 0);
+  const C_upper       = upperLots.reduce((s, l) => s + (+l.targetShares || 0) * (+l.triggerPrice || 0), 0);
+
+  // Solve the two-equation system:
+  //   Sa + k·S_upper_total = planTotal - S1                    [eq1]
+  //   S1·P1 + Sa·Pa + k·C_upper = T·planTotal                  [eq2]
+  //
+  // From [eq1]: Sa = (planTotal - S1) - k·S_upper_total
+  // Substitute into [eq2]:
+  //   S1·P1 + Pa·(planTotal - S1) - k·S_upper_total·Pa + k·C_upper = T·planTotal
+  //   k·(C_upper - S_upper_total·Pa) = T·planTotal - S1·P1 - Pa·(planTotal - S1)
+  const denom = C_upper - S_upper_total * Pa;
+  const numer = T * planTotal - S1 * P1 - Pa * (planTotal - S1);
+  // Edge case: no upper lots (missed lot was L4, no lots to scale).
+  // Then k is irrelevant — Sa = planTotal - S1 directly. Avg may not hit T
+  // exactly because we have no degree of freedom left.
+  let k, Sa;
+  if (Math.abs(denom) < 1e-9) {
+    if (Math.abs(numer) > 1e-3) return { ok: false, reason: 'NO_FEASIBLE_K' };
+    k  = 1;
+    Sa = planTotal - S1;
+  } else {
+    k  = numer / denom;
+    Sa = (planTotal - S1) - k * S_upper_total;
+  }
+  if (!Number.isFinite(k) || !Number.isFinite(Sa)) return { ok: false, reason: 'MATH_NONFINITE' };
+  if (Sa <= 0) return { ok: false, reason: 'CATCHUP_REQUIRES_NEGATIVE_SHARES' };
+  if (k < 0)   return { ok: false, reason: 'UPPER_SCALE_NEGATIVE_PRICE_TOO_HIGH' };
+
+  // Round-up Sa per spec ("round up early").
+  const SaRounded = Math.ceil(Sa);
+
+  // Apply k to upper lots, round up each, then absorb rounding error in
+  // the LAST lot (highest-numbered) by solving for exact T preservation.
+  const upperRoundedAsc = upperLots
+    .slice()
+    .sort((a, b) => a.lot - b.lot); // ascending lot order
+  const newUpper = upperRoundedAsc.map(l => ({
+    lot: l.lot,
+    triggerPrice: +l.triggerPrice,
+    shares: Math.ceil((+l.targetShares || 0) * k),
+  }));
+
+  // If we have ≥1 upper lot, recompute the LAST (highest-numbered) lot to
+  // absorb rounding error. Solve: T = (S1·P1 + Sa·Pa + Σ_locked + L_n·P_n) / (S1 + Sa + Σ_lockedShares + L_n)
+  if (newUpper.length >= 1) {
+    const last      = newUpper[newUpper.length - 1];
+    const lockedAll = newUpper.slice(0, -1);
+    const lockedShares = lockedAll.reduce((s, l) => s + l.shares, 0);
+    const lockedCost   = lockedAll.reduce((s, l) => s + l.shares * l.triggerPrice, 0);
+    const num = T * (S1 + SaRounded + lockedShares) - S1 * P1 - SaRounded * Pa - lockedCost;
+    const den = last.triggerPrice - T;
+    if (Math.abs(den) > 1e-9) {
+      const Ln = num / den;
+      // Round to nearest non-negative integer; if it'd go negative, set to 0.
+      // Per spec: "round up early, then adjust in later lots if possible. If
+      // not, rounding up is fine." So we floor-vs-round-up by which gives
+      // a final avg closer to T (or both, if very close).
+      const Lnceil  = Math.max(0, Math.ceil(Ln));
+      const Lnfloor = Math.max(0, Math.floor(Ln));
+      // Compute deviation for each candidate
+      const totalCostFor = (lastShares) =>
+        S1 * P1 + SaRounded * Pa + lockedCost + lastShares * last.triggerPrice;
+      const totalSharesFor = (lastShares) => S1 + SaRounded + lockedShares + lastShares;
+      const devFor = (lastShares) => Math.abs(totalCostFor(lastShares) / totalSharesFor(lastShares) - T);
+      last.shares = devFor(Lnfloor) <= devFor(Lnceil) ? Lnfloor : Lnceil;
+    }
+  }
+
+  const finalShares = S1 + SaRounded + newUpper.reduce((s, l) => s + l.shares, 0);
+  const finalCost   = S1 * P1 + SaRounded * Pa + newUpper.reduce((s, l) => s + l.shares * l.triggerPrice, 0);
+  const finalAvg    = finalShares > 0 ? +(finalCost / finalShares).toFixed(4) : null;
+
+  return {
+    ok: true,
+    Sa: SaRounded,
+    SaRaw: +Sa.toFixed(4),
+    k: +k.toFixed(4),
+    catchUpPrice: Pa,
+    newUpperShares: newUpper, // [{ lot, triggerPrice, shares }, ...]
+    finalTotal: finalShares,
+    finalAvg,
+    targetAvg: T,
+    avgDeviation: finalAvg != null ? +(finalAvg - T).toFixed(4) : null,
+  };
+}
+
 // ── Lot completion classifier ────────────────────────────────────────────────
 // A lot N is "complete" when the position holds at least the cumulative target
 // shares through L_N. The cron's cleanup pass uses this to decide whether a

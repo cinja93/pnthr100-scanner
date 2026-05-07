@@ -146,6 +146,49 @@ function formatTimeAgo(iso) {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
+// Wrapper that adds a hover tooltip explaining what a Data Integrity
+// button does and when to use it. `placement` controls whether the
+// tooltip floats above or below — top-row buttons use 'above' so the
+// tooltip doesn't cover the bottom row, and vice versa.
+function DiTipButton({ tooltip, placement = 'above', children }) {
+  const [show, setShow] = React.useState(false);
+  return (
+    <span
+      style={{ position: 'relative', display: 'inline-flex' }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      {children}
+      {show && tooltip && (
+        <div
+          style={{
+            position: 'absolute',
+            ...(placement === 'above'
+              ? { bottom: 'calc(100% + 8px)' }
+              : { top: 'calc(100% + 8px)' }),
+            left: 0,
+            background: '#0a0a0a',
+            color: '#e8e6e3',
+            border: '1px solid rgba(252, 240, 0, 0.3)',
+            borderRadius: 4,
+            padding: '8px 10px',
+            fontSize: 11,
+            fontWeight: 400,
+            lineHeight: 1.45,
+            width: 300,
+            zIndex: 1000,
+            pointerEvents: 'none',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
+            whiteSpace: 'normal',
+          }}
+        >
+          {tooltip}
+        </div>
+      )}
+    </span>
+  );
+}
+
 // Style helper for the access-request action buttons.
 function accessBtn(bg, color, disabled = false, outline = false) {
   return {
@@ -3962,6 +4005,9 @@ export default function AssistantPage({ onNavigate }) {
           {diOpen && (
             <div style={{ padding: '12px 14px' }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                <DiTipButton placement="above" tooltip={
+                  <span><b>What it does:</b> read-only audit. Counts naked stops, stale GTC orders, PNTHR-vs-IBKR share mismatches, stop coverage gaps.<br/><br/><b>When to use:</b> first thing in the morning, or anytime you want a quick "what's wrong" snapshot. Just shows results — no changes made.</span>
+                }>
                 <button
                   onClick={runPunchList}
                   disabled={!!diBusy}
@@ -3972,6 +4018,10 @@ export default function AssistantPage({ onNavigate }) {
                   }}>
                   {diBusy === 'punch' ? 'Running…' : 'TWS Punch List'}
                 </button>
+                </DiTipButton>
+                <DiTipButton placement="above" tooltip={
+                  <span><b>What it does:</b> side-by-side diff of every PNTHR position vs IBKR. Lists tickers in PNTHR but not in TWS (stuck/orphan) and vice versa.<br/><br/><b>When to use:</b> after closing positions in TWS — this gives you per-row <b>Manual Close</b> buttons to mark them closed in PNTHR with proper exit price, P&amp;L, and journal entry.</span>
+                }>
                 <button
                   onClick={runPositionAudit}
                   disabled={!!diBusy}
@@ -3982,6 +4032,10 @@ export default function AssistantPage({ onNavigate }) {
                   }}>
                   {diBusy === 'audit' ? 'Running…' : 'Position Audit'}
                 </button>
+                </DiTipButton>
+                <DiTipButton placement="above" tooltip={
+                  <span><b>What it does:</b> previews internal data fixes — PARTIAL-stuck positions, stale totalFilledShares counts, fills/exits drift. Shows what WOULD be repaired. No changes made.<br/><br/><b>When to use:</b> always run this before clicking "Sweep + Apply Fixes" so you can see what's about to change.</span>
+                }>
                 <button
                   onClick={() => runSweep(false)}
                   disabled={!!diBusy}
@@ -3992,6 +4046,10 @@ export default function AssistantPage({ onNavigate }) {
                   }}>
                   {diBusy === 'dry' ? 'Running…' : 'Sweep (Dry Run)'}
                 </button>
+                </DiTipButton>
+                <DiTipButton placement="above" tooltip={
+                  <span><b>What it does:</b> actually applies the internal data fixes from the dry run. Repairs PARTIAL-stuck positions and stale share counts in PNTHR's database. Does NOT touch TWS orders.<br/><br/><b>When to use:</b> only after running "Sweep (Dry Run)" and confirming the proposed changes look correct.</span>
+                }>
                 <button
                   onClick={() => {
                     if (!window.confirm('Apply data integrity fixes? This will repair any PARTIAL-stuck docs and totalFilledShares drift on your portfolio.')) return;
@@ -4005,7 +4063,11 @@ export default function AssistantPage({ onNavigate }) {
                   }}>
                   {diBusy === 'apply' ? 'Applying…' : 'Sweep + Apply Fixes'}
                 </button>
+                </DiTipButton>
                 <span style={{ width: '100%', height: 0, borderTop: '1px solid rgba(255,255,255,0.06)', margin: '4px 0' }} />
+                <DiTipButton placement="below" tooltip={
+                  <span><b>What it does:</b> previews protective stop reconciliation between PNTHR and IBKR using the tightest-wins rule. Shows which stops would be modified, adopted from your TWS tightening, or are already aligned. No changes made.<br/><br/><b>When to use:</b> when you suspect stops are out of sync between PNTHR and TWS. Always run before "Sync Stops Now".</span>
+                }>
                 <button
                   onClick={() => runStopSync(true)}
                   disabled={!!diBusy}
@@ -4016,6 +4078,10 @@ export default function AssistantPage({ onNavigate }) {
                   }}>
                   {diBusy === 'stops-dry' ? 'Running…' : 'Stop Sync (Dry Run)'}
                 </button>
+                </DiTipButton>
+                <DiTipButton placement="below" tooltip={
+                  <span><b>What it does:</b> live protective stop sync. Pushes any PNTHR-tighter stop to TWS via MODIFY_STOP. Adopts user-tightened TWS stops silently. Tightest-wins.<br/><br/><b>When to use:</b> after running the dry run and confirming PNTHR's plan looks right. The reconciliation cron does this every minute automatically — manual trigger is for when you want it to fire NOW.</span>
+                }>
                 <button
                   onClick={() => {
                     if (!window.confirm('Run live stop sync? Tightest-wins reconciles every active position; PNTHR-tighter cases enqueue MODIFY_STOP commands to the bridge (only effective if IBKR_AUTO_SYNC_STOPS is on).')) return;
@@ -4029,6 +4095,10 @@ export default function AssistantPage({ onNavigate }) {
                   }}>
                   {diBusy === 'stops-apply' ? 'Syncing…' : 'Sync Stops Now'}
                 </button>
+                </DiTipButton>
+                <DiTipButton placement="below" tooltip={
+                  <span><b>What it does:</b> previews pyramid lot-trigger reconciliation. Shows which TWS BUY/SELL STOPs would be cancelled (lots already filled), placed (incomplete lots with no TWS order), or modified (drifted prices/shares). No changes made.<br/><br/><b>When to use:</b> when pyramid orders in TWS don't match PNTHR's L2-L5 plan. Always run before "Sync Lot Triggers Now".</span>
+                }>
                 <button
                   onClick={() => runLotTriggerSync(true)}
                   disabled={!!diBusy}
@@ -4039,6 +4109,10 @@ export default function AssistantPage({ onNavigate }) {
                   }}>
                   {diBusy === 'lot-triggers-dry' ? 'Running…' : 'Lot Triggers (Dry Run)'}
                 </button>
+                </DiTipButton>
+                <DiTipButton placement="below" tooltip={
+                  <span><b>What it does:</b> live pyramid lot-trigger sync. Cancels stale TWS orders for filled/surpassed lots, places missing ones, modifies drift. PNTHR's plan is canonical.<br/><br/><b>When to use:</b> after running the dry run. The reconciliation cron does this every minute — manual trigger forces immediate execution.</span>
+                }>
                 <button
                   onClick={() => {
                     if (!window.confirm('Run live lot trigger sync?\n\n• CLEANUP cancels TWS BUY/SELL STOPs at filled/surpassed lot levels and excess duplicates near plan prices.\n• PLACE stages new triggers for incomplete lots without TWS orders.\n• MODIFY pushes PNTHR plan prices to drifted TWS orders (in either direction — PNTHR plan is law).\n\nOnly effective if IBKR_AUTO_SYNC_LOT_TRIGGERS is on.')) return;
@@ -4052,6 +4126,7 @@ export default function AssistantPage({ onNavigate }) {
                   }}>
                   {diBusy === 'lot-triggers-apply' ? 'Syncing…' : 'Sync Lot Triggers Now'}
                 </button>
+                </DiTipButton>
               </div>
               {diError && (
                 <div style={{ background: '#3a1010', color: '#fca5a5', padding: '8px 12px', borderRadius: 4, fontSize: 12, marginBottom: 8 }}>

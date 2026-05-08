@@ -25,7 +25,7 @@ function ChartPanel({ title, period, fallback, bars, signals, chartType, current
   const containerRef = useRef(null);
   const chartRef     = useRef(null);
   const [hoveredBar, setHoveredBar] = useState(null);
-  const [barSpacing, setBarSpacing] = useState(title === 'Weekly' ? 12 : 12);  // Daily +4, Weekly +2 wider default per Scott
+  const [barSpacing, setBarSpacing] = useState(title === 'Weekly' ? 12 : 14);  // Daily 14 (one more click than 12), Weekly 12 — per Scott's tuning
   const barSpacingRef = useRef(barSpacing);
   useEffect(() => { barSpacingRef.current = barSpacing; }, [barSpacing]);
 

@@ -148,7 +148,9 @@ export default function Pnthr300ChartModal({ onClose }) {
     }));
     setBarsTick(t => t + 1);
 
-    chart.timeScale().fitContent();
+    // DO NOT call fitContent — it overrides the configured barSpacing,
+    // collapsing the bars to fit ALL data in the viewport. The chart already
+    // shows the rightmost data at the configured spacing.
 
     // Crosshair OHLC tooltip
     let destroyed = false;

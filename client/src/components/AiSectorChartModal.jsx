@@ -114,7 +114,9 @@ export default function AiSectorChartModal({ sector, onClose }) {
       weekOf: b.date, open: b.open, high: b.high, low: b.low, close: b.close,
     }));
     setBarsTick(t => t + 1);
-    chart.timeScale().fitContent();
+    // DO NOT call fitContent — it overrides the configured barSpacing,
+    // collapsing bars to fit ALL data in the viewport. The chart already
+    // shows the rightmost data at the configured spacing.
 
     let destroyed = false;
     chart.subscribeCrosshairMove(param => {

@@ -86,7 +86,13 @@ function ChartPanel({ title, period, fallback, bars, signals, chartType, current
       createSeriesMarkers(priceSeries, markers);
     }
 
-    chart.timeScale().fitContent();
+    // DO NOT call chart.timeScale().fitContent() — it auto-zooms to fit ALL
+    // bars in the viewport, overriding our configured barSpacing. The chart
+    // already shows the rightmost (most recent) data at the configured
+    // spacing — that's exactly what we want. Scroll/pan with the mouse to
+    // see older history. Issue: with fitContent, daily panel was squished
+    // to ~1-2px effective spacing, then the first expand-click jumped to
+    // the actual configured value (12-14px) — looking like 4+ clicks.
 
     let destroyed = false;
     chart.subscribeCrosshairMove(param => {

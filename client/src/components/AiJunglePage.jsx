@@ -117,7 +117,8 @@ export default function AiJunglePage() {
   const [error, setError]                 = useState(null);
   const [sectorFilter, setSectorFilter]   = useState('all'); // 'all' | sectorId number
   const [groupBySector, setGroupBySector] = useState(false);
-  const [chartTicker, setChartTicker]     = useState(null);  // ticker string when a row is clicked
+  const [chartTickers, setChartTickers]   = useState([]);    // sorted ticker list as displayed in the table
+  const [chartIndex, setChartIndex]       = useState(0);
   const [showIndexChart, setShowIndexChart] = useState(false);
   const [showWeights, setShowWeights]       = useState(false);
 
@@ -158,8 +159,11 @@ export default function AiJunglePage() {
     return stocks.filter(s => s.sectorId === sectorFilter);
   }, [stocks, sectorFilter]);
 
-  function handleTickerClick(stock) {
-    setChartTicker(stock.ticker);
+  function handleTickerClick(_stock, sortedIdx, sortedStocks) {
+    // StockTable hands back the currently-displayed sort order so the
+    // ◀ / ▶ nav inside the modal walks tickers in the same order Scott sees.
+    setChartTickers((sortedStocks || []).map(s => s.ticker));
+    setChartIndex(sortedIdx);
   }
 
   const totalCount = stocks.length;
@@ -253,10 +257,11 @@ export default function AiJunglePage() {
         />
       )}
 
-      {chartTicker && (
+      {chartTickers.length > 0 && (
         <AiTickerChartModal
-          ticker={chartTicker}
-          onClose={() => setChartTicker(null)}
+          tickers={chartTickers}
+          initialIndex={chartIndex}
+          onClose={() => setChartTickers([])}
         />
       )}
 

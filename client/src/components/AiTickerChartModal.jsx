@@ -210,7 +210,14 @@ function ChartPanel({ title, period, fallback, bars, signals, chartType, current
 }
 
 // ── Modal ──────────────────────────────────────────────────────────────────
-export default function AiTickerChartModal({ ticker, onClose }) {
+// Accepts EITHER a single `ticker` (back-compat) OR a `tickers` array +
+// `initialIndex` for prev/next navigation. When given a list, ◀ / ▶ buttons
+// (and ← / → keyboard) cycle through them without closing the modal.
+export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, onClose }) {
+  const tickerList = tickers && tickers.length > 0 ? tickers : (ticker ? [ticker] : []);
+  const [currentIdx, setCurrentIdx] = useState(Math.min(Math.max(0, initialIndex), Math.max(0, tickerList.length - 1)));
+  const activeTicker = tickerList[currentIdx];
+
   const { queuedTickers, toggleQueue, nav: contextNav } = useQueue() || {};
 
   const [data, setData]           = useState(null);
@@ -220,6 +227,28 @@ export default function AiTickerChartModal({ ticker, onClose }) {
   const [sizeLoading, setSizeLoading] = useState(false);
   const [sizePanel, setSizePanel]     = useState(null);
   const navCache = useRef(null);
+
+  const canPrev = currentIdx > 0;
+  const canNext = currentIdx < tickerList.length - 1;
+  function gotoPrev() { if (canPrev) setCurrentIdx(i => i - 1); }
+  function gotoNext() { if (canNext) setCurrentIdx(i => i + 1); }
+
+  // Keyboard nav: ← / → cycle through tickers, Esc closes
+  useEffect(() => {
+    function onKey(e) {
+      // Don't hijack while typing in an input (e.g. the SIZE IT stop field)
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); gotoPrev(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); gotoNext(); }
+      if (e.key === 'Escape')     { e.preventDefault(); onClose(); }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [canPrev, canNext, onClose]);
+
+  // Reset SIZE IT panel + chart data on ticker change
+  useEffect(() => { setSizePanel(null); }, [activeTicker]);
 
   // ── SIZE IT — derive sizing from current AI signal + PNTHR Stop ──────────
   // Direction picks weekly signal first, daily second. Stop picks weekly
@@ -292,13 +321,13 @@ export default function AiTickerChartModal({ ticker, onClose }) {
 
   function handleQueueToggle() {
     if (!toggleQueue || !sizePanel) return;
-    const isQueued = queuedTickers?.has(ticker);
+    const isQueued = queuedTickers?.has(activeTicker);
     if (isQueued) {
-      toggleQueue({ ticker, _remove: true });
+      toggleQueue({ ticker: activeTicker, _remove: true });
     } else {
       toggleQueue({
         id:                Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-        ticker,
+        ticker:            activeTicker,
         signal:            data?.weekly?.currentSignal || data?.daily?.currentSignal || null,
         direction:         sizePanel.direction,
         currentPrice:      sizePanel.entry,
@@ -317,9 +346,10 @@ export default function AiTickerChartModal({ ticker, onClose }) {
   }
 
   useEffect(() => {
+    if (!activeTicker) return;
     let cancelled = false;
-    setLoading(true); setError(null);
-    fetchAiStockChartData(ticker)
+    setLoading(true); setError(null); setData(null);
+    fetchAiStockChartData(activeTicker)
       .then(d => {
         if (cancelled) return;
         if (!d.ok) { setError(d.error || 'Failed to load'); return; }
@@ -328,7 +358,7 @@ export default function AiTickerChartModal({ ticker, onClose }) {
       .catch(e => { if (!cancelled) setError(e.message || 'Failed to load'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [ticker]);
+  }, [activeTicker]);
 
   const dayChangeColor = data?.dayChangePct == null ? '#888' : data.dayChangePct >= 0 ? '#16a34a' : '#dc2626';
 
@@ -352,9 +382,45 @@ export default function AiTickerChartModal({ ticker, onClose }) {
           display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
         }}>
           <img src={pantherHead} alt="PNTHR" style={{ width: 36, height: 36, opacity: 0.9 }} />
+
+          {/* Prev / Next nav (only when more than one ticker passed) */}
+          {tickerList.length > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                onClick={gotoPrev}
+                disabled={!canPrev}
+                title="Previous ticker (← arrow)"
+                style={{
+                  background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
+                  color: canPrev ? '#fcf000' : '#444',
+                  padding: '5px 10px', fontSize: 14, fontWeight: 700,
+                  cursor: canPrev ? 'pointer' : 'not-allowed',
+                }}
+              >
+                ◀
+              </button>
+              <span style={{ color: '#666', fontSize: 11, fontFamily: 'monospace', minWidth: 70, textAlign: 'center' }}>
+                {currentIdx + 1} / {tickerList.length}
+              </span>
+              <button
+                onClick={gotoNext}
+                disabled={!canNext}
+                title="Next ticker (→ arrow)"
+                style={{
+                  background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
+                  color: canNext ? '#fcf000' : '#444',
+                  padding: '5px 10px', fontSize: 14, fontWeight: 700,
+                  cursor: canNext ? 'pointer' : 'not-allowed',
+                }}
+              >
+                ▶
+              </button>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <span style={{ color: '#fcf000', fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', fontFamily: 'monospace' }}>
-              {ticker}
+              {activeTicker}
             </span>
             {data?.name && <span style={{ color: '#888', fontSize: 13 }}>{data.name}</span>}
           </div>

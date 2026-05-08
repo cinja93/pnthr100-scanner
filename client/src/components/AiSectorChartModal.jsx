@@ -32,7 +32,7 @@ export default function AiSectorChartModal({ sector, onClose }) {
   const [error, setError]           = useState(null);
   const [hoveredBar, setHoveredBar] = useState(null);
   const [barsTick, setBarsTick]     = useState(0);
-  const [tickerChart, setTickerChart] = useState(null);  // { ticker, companyName, sector } when a holding is clicked
+  const [tickerChartIdx, setTickerChartIdx] = useState(null);  // index into holdings list when a holding is clicked
   const [barSpacing, setBarSpacing]   = useState(12);  // +4 wider default per Scott
 
   const containerRef    = useRef(null);
@@ -343,10 +343,10 @@ export default function AiSectorChartModal({ sector, onClose }) {
               {holdings.holdings.length} Holdings in this Sector
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '4px 12px', fontFamily: 'monospace', fontSize: 11 }}>
-              {holdings.holdings.map(h => (
+              {holdings.holdings.map((h, i) => (
                 <button
                   key={h.ticker}
-                  onClick={() => setTickerChart({ ticker: h.ticker, companyName: h.name, sector: sector.name })}
+                  onClick={() => setTickerChartIdx(i)}
                   title={`Open ${h.ticker} chart`}
                   style={{
                     background: 'transparent', border: 'none', textAlign: 'left',
@@ -366,13 +366,14 @@ export default function AiSectorChartModal({ sector, onClose }) {
         )}
       </div>
 
-      {/* Holding chart — opens on top of the sector modal. Uses the AI
-          Universe ticker chart (daily + weekly side-by-side, sector-tuned
-          EMA, signal markers). Closing returns to the sector. */}
-      {tickerChart && (
+      {/* Holding chart — opens on top of the sector modal. Passes the full
+          sector ticker list so ◀ / ▶ in the modal cycles through holdings.
+          Closing returns to the sector chart. */}
+      {tickerChartIdx != null && holdings?.holdings && (
         <AiTickerChartModal
-          ticker={tickerChart.ticker}
-          onClose={() => setTickerChart(null)}
+          tickers={holdings.holdings.map(h => h.ticker)}
+          initialIndex={tickerChartIdx}
+          onClose={() => setTickerChartIdx(null)}
         />
       )}
     </div>

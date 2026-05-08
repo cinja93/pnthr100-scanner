@@ -516,43 +516,9 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
           padding: '12px 18px', borderBottom: '1px solid #1f1f1f',
           display: 'flex', alignItems: 'center', gap: 14,
         }}>
-          {/* Left: panther + prev/next nav */}
+          {/* Left: panther only (prev/next nav moved to bottom center) */}
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'flex-start', minWidth: 0 }}>
             <img src={pantherHead} alt="PNTHR" style={{ width: 36, height: 36, opacity: 0.9 }} />
-
-            {tickerList.length > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <button
-                  onClick={gotoPrev}
-                  disabled={!canPrev}
-                  title="Previous ticker (← arrow)"
-                  style={{
-                    background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
-                    color: canPrev ? '#fcf000' : '#444',
-                    padding: '5px 10px', fontSize: 14, fontWeight: 700,
-                    cursor: canPrev ? 'pointer' : 'not-allowed',
-                  }}
-                >
-                  ◀
-                </button>
-                <span style={{ color: '#666', fontSize: 11, fontFamily: 'monospace', minWidth: 70, textAlign: 'center' }}>
-                  {currentIdx + 1} / {tickerList.length}
-                </span>
-                <button
-                  onClick={gotoNext}
-                  disabled={!canNext}
-                  title="Next ticker (→ arrow)"
-                  style={{
-                    background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
-                    color: canNext ? '#fcf000' : '#444',
-                    padding: '5px 10px', fontSize: 14, fontWeight: 700,
-                    cursor: canNext ? 'pointer' : 'not-allowed',
-                  }}
-                >
-                  ▶
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Center: ticker info — centered over the two chart panels */}
@@ -646,6 +612,51 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
             </>
           )}
         </div>
+
+        {/* Prev / Next nav — bottom center, between the charts and the footer */}
+        {tickerList.length > 1 && (
+          <div style={{
+            padding: '8px 18px', borderTop: '1px solid #1f1f1f',
+            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14,
+            background: '#0a0a0a',
+          }}>
+            <button
+              onClick={gotoPrev}
+              disabled={!canPrev}
+              title="Previous ticker (← arrow)"
+              style={{
+                background: canPrev ? '#fcf000' : 'transparent',
+                border: `2px solid ${canPrev ? '#fcf000' : '#333'}`,
+                borderRadius: 6,
+                color: canPrev ? '#000' : '#444',
+                padding: '6px 22px', fontSize: 18, fontWeight: 800,
+                cursor: canPrev ? 'pointer' : 'not-allowed',
+                lineHeight: 1,
+              }}
+            >
+              ◀
+            </button>
+            <span style={{ color: '#fff', fontSize: 13, fontFamily: 'monospace', minWidth: 90, textAlign: 'center', fontWeight: 600 }}>
+              {currentIdx + 1} / {tickerList.length}
+            </span>
+            <button
+              onClick={gotoNext}
+              disabled={!canNext}
+              title="Next ticker (→ arrow)"
+              style={{
+                background: canNext ? '#fcf000' : 'transparent',
+                border: `2px solid ${canNext ? '#fcf000' : '#333'}`,
+                borderRadius: 6,
+                color: canNext ? '#000' : '#444',
+                padding: '6px 22px', fontSize: 18, fontWeight: 800,
+                cursor: canNext ? 'pointer' : 'not-allowed',
+                lineHeight: 1,
+              }}
+            >
+              ▶
+            </button>
+          </div>
+        )}
 
         {/* Footer methodology note */}
         <div style={{

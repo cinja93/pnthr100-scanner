@@ -510,70 +510,76 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
         height: '90vh', display: 'flex', flexDirection: 'column',
         border: '1px solid #2a2a2a', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
       }}>
-        {/* Header */}
+        {/* Header — three-column flex so the ticker block sits CENTERED
+            over the two charts regardless of left/right toolbar width. */}
         <div style={{
           padding: '12px 18px', borderBottom: '1px solid #1f1f1f',
-          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+          display: 'flex', alignItems: 'center', gap: 14,
         }}>
-          <img src={pantherHead} alt="PNTHR" style={{ width: 36, height: 36, opacity: 0.9 }} />
+          {/* Left: panther + prev/next nav */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'flex-start', minWidth: 0 }}>
+            <img src={pantherHead} alt="PNTHR" style={{ width: 36, height: 36, opacity: 0.9 }} />
 
-          {tickerList.length > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <button
-                onClick={gotoPrev}
-                disabled={!canPrev}
-                title="Previous ticker (← arrow)"
-                style={{
-                  background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
-                  color: canPrev ? '#fcf000' : '#444',
-                  padding: '5px 10px', fontSize: 14, fontWeight: 700,
-                  cursor: canPrev ? 'pointer' : 'not-allowed',
-                }}
-              >
-                ◀
-              </button>
-              <span style={{ color: '#666', fontSize: 11, fontFamily: 'monospace', minWidth: 70, textAlign: 'center' }}>
-                {currentIdx + 1} / {tickerList.length}
-              </span>
-              <button
-                onClick={gotoNext}
-                disabled={!canNext}
-                title="Next ticker (→ arrow)"
-                style={{
-                  background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
-                  color: canNext ? '#fcf000' : '#444',
-                  padding: '5px 10px', fontSize: 14, fontWeight: 700,
-                  cursor: canNext ? 'pointer' : 'not-allowed',
-                }}
-              >
-                ▶
-              </button>
-            </div>
-          )}
+            {tickerList.length > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button
+                  onClick={gotoPrev}
+                  disabled={!canPrev}
+                  title="Previous ticker (← arrow)"
+                  style={{
+                    background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
+                    color: canPrev ? '#fcf000' : '#444',
+                    padding: '5px 10px', fontSize: 14, fontWeight: 700,
+                    cursor: canPrev ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  ◀
+                </button>
+                <span style={{ color: '#666', fontSize: 11, fontFamily: 'monospace', minWidth: 70, textAlign: 'center' }}>
+                  {currentIdx + 1} / {tickerList.length}
+                </span>
+                <button
+                  onClick={gotoNext}
+                  disabled={!canNext}
+                  title="Next ticker (→ arrow)"
+                  style={{
+                    background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
+                    color: canNext ? '#fcf000' : '#444',
+                    padding: '5px 10px', fontSize: 14, fontWeight: 700,
+                    cursor: canNext ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  ▶
+                </button>
+              </div>
+            )}
+          </div>
 
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          {/* Center: ticker info — centered over the two chart panels */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
             <span style={{ color: '#fcf000', fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', fontFamily: 'monospace' }}>
               {activeTicker}
             </span>
             {data?.name && <span style={{ color: '#888', fontSize: 13 }}>{data.name}</span>}
+            {data?.ok && (
+              <>
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ color: '#fff', fontSize: 20, fontWeight: 700, fontFamily: 'monospace' }}>
+                    ${fmtNum(data.currentPrice)}
+                  </span>
+                  <span style={{ color: dayChangeColor, fontSize: 13, fontWeight: 600, fontFamily: 'monospace' }}>
+                    {fmtPct(data.dayChangePct)}
+                  </span>
+                </span>
+                <span style={{ color: '#666', fontSize: 11, fontFamily: 'monospace' }}>
+                  {data.sectorName} · {data.emaPeriod}-period OpEMA
+                </span>
+              </>
+            )}
           </div>
-          {data?.ok && (
-            <>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ color: '#fff', fontSize: 20, fontWeight: 700, fontFamily: 'monospace' }}>
-                  ${fmtNum(data.currentPrice)}
-                </span>
-                <span style={{ color: dayChangeColor, fontSize: 13, fontWeight: 600, fontFamily: 'monospace' }}>
-                  {fmtPct(data.dayChangePct)}
-                </span>
-              </div>
-              <span style={{ color: '#666', fontSize: 11, fontFamily: 'monospace' }}>
-                {data.sectorName} · {data.emaPeriod}-period OpEMA
-              </span>
-            </>
-          )}
 
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+          {/* Right: chart-type toggle + close */}
+          <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end', minWidth: 0 }}>
             <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
               {[
                 { key: 'bars',    label: 'OHLC Bars' },

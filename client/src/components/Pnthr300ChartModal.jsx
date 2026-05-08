@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { createChart, BarSeries, CandlestickSeries, LineSeries } from 'lightweight-charts';
+import { createChart, BarSeries, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
 import { fetchPnthrAi300Latest, fetchPnthrAi300Bars } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ChartDrawingOverlay from './ChartDrawingOverlay';
+import { detectAllSignals } from '../utils/signalDetection';
 import pantherHead from '../assets/panther head.png';
 
 // Pnthr300ChartModal — dedicated chart for the PNTHR AI 300 (PAI300).
@@ -104,6 +105,27 @@ export default function Pnthr300ChartModal({ onClose }) {
       time: b.date, open: b.open, high: b.high, low: b.low, close: b.close,
     })));
     ema.setData(bars.filter(b => b.ema != null).map(b => ({ time: b.date, value: b.ema })));
+
+    // PNTHR signal markers (BL / SS / BE / SE) — same state machine the 679
+    // weekly chart uses, run on this timeframe's bars + EMA period. PAI300 is
+    // a broad index → isETF=true (tighter daylight zone).
+    const sigBars = bars.map(b => ({ time: b.date, open: b.open, high: b.high, low: b.low, close: b.close }));
+    const { events: sigEvents } = detectAllSignals(sigBars, emaPeriod, true);
+    if (sigEvents.length > 0) {
+      const markers = sigEvents.map(ev => {
+        const isLong = ev.signal === 'BL';
+        const isShort = ev.signal === 'SS';
+        const isExitOfLong  = ev.signal === 'BE';
+        const isExitOfShort = ev.signal === 'SE';
+        let color, position, shape, text;
+        if (isLong)        { color = '#16a34a'; position = 'belowBar'; shape = 'arrowUp';   text = 'BL'; }
+        else if (isShort)  { color = '#dc2626'; position = 'aboveBar'; shape = 'arrowDown'; text = 'SS'; }
+        else if (isExitOfLong)  { color = '#f59e0b'; position = 'aboveBar'; shape = 'square'; text = 'BE'; }
+        else if (isExitOfShort) { color = '#f59e0b'; position = 'belowBar'; shape = 'square'; text = 'SE'; }
+        return { time: ev.time, position, color, shape, text, size: 1 };
+      });
+      createSeriesMarkers(priceSeries, markers);
+    }
 
     // Snapshot bars for the drawing overlay's snap-to-high/low logic. The
     // overlay expects a `weekOf` field — map from `date` regardless of

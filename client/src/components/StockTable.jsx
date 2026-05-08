@@ -130,6 +130,26 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
       return (aWks * 10000 + aType - (bWks * 10000 + bType)) * dir;
     }
 
+    // ── Daily-signal sort (mirrors weekly logic, reads from dailySignals map) ──
+    if (sortConfig.key === 'dailySignal') {
+      const aSig  = dailySignals[a.ticker];
+      const bSig  = dailySignals[b.ticker];
+      const aType = SIGNAL_ORDER[aSig?.signal] ?? 99;
+      const bType = SIGNAL_ORDER[bSig?.signal] ?? 99;
+      const aWks  = computeWeeksAgo(aSig?.signalDate) ?? 9999;
+      const bWks  = computeWeeksAgo(bSig?.signalDate) ?? 9999;
+      return (aType * 10000 + aWks - (bType * 10000 + bWks)) * dir;
+    }
+    if (sortConfig.key === 'dailyWeeksAgo') {
+      const aSig  = dailySignals[a.ticker];
+      const bSig  = dailySignals[b.ticker];
+      const aWks  = computeWeeksAgo(aSig?.signalDate) ?? 9999;
+      const bWks  = computeWeeksAgo(bSig?.signalDate) ?? 9999;
+      const aType = SIGNAL_ORDER[aSig?.signal] ?? 99;
+      const bType = SIGNAL_ORDER[bSig?.signal] ?? 99;
+      return (aWks * 10000 + aType - (bWks * 10000 + bType)) * dir;
+    }
+
     // Special handling for stop price / risk columns — 3-state sort:
     //   asc:         active (low→high) → PAUSE → no signal
     //   desc:        active (high→low) → PAUSE → no signal
@@ -315,11 +335,11 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
               </th>
             )}
             {/* Daily pair first (light blue tint), then Weekly pair (light yellow tint) */}
-            {showDailySignal && <th className={styles.signalColumn} style={{ backgroundColor: 'rgba(59,130,246,0.18)' }}>
-              PNTHR Daily Signal
+            {showDailySignal && <th onClick={() => handleSort('dailySignal')} className={`${styles.signalColumn} ${styles.sortable}`} style={{ backgroundColor: 'rgba(59,130,246,0.18)' }}>
+              PNTHR Daily Signal {getSortIndicator('dailySignal')}
             </th>}
-            {showDailySignal && <th className={styles.signalColumn} style={{ backgroundColor: 'rgba(59,130,246,0.18)' }}>
-              Daily Wks Since
+            {showDailySignal && <th onClick={() => handleSort('dailyWeeksAgo')} className={`${styles.signalColumn} ${styles.sortable}`} style={{ backgroundColor: 'rgba(59,130,246,0.18)' }}>
+              Daily Wks Since {getSortIndicator('dailyWeeksAgo')}
             </th>}
             <th onClick={() => handleSort('signal')} className={`${styles.signalColumn} ${styles.sortable}`} style={{ backgroundColor: 'rgba(252,240,0,0.13)' }}>
               {showDailySignal ? 'PNTHR Weekly Signal' : weeklySignalLabel} {getSortIndicator('signal')}

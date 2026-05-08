@@ -32,6 +32,7 @@ import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import { runDailySignalJob } from './dailySignalJob.js';
 import { getAiUniverse, clearAiUniverseCache } from './aiUniverseService.js';
 import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
+import { getPnthrAi300Latest, getPnthrAi300Bars, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
 import { runLotTriggerSync, registerLotTriggerCron } from './lotTriggerCron.js';
@@ -1796,6 +1797,47 @@ app.get('/api/ai-universe', async (req, res) => {
   } catch (err) {
     console.error('Error in /api/ai-universe:', err);
     res.status(500).json({ error: 'Failed to load AI Universe' });
+  }
+});
+
+// ── PNTHR AI 300 (PAI300 — proprietary AI-economy index) ────────────────────
+// Capped market-cap weighted, monthly rebalance, 304 holdings, base 2022-11-30=1000.
+// See server/data/pnthrAiIndexConfig.js + scripts/aiUniverse/buildPnthrAi300Index.js
+// for full methodology. Storage: pnthr_ai_index_candles (+ _weekly + _meta).
+// Refreshed daily by the 5:30pm AI Universe cron after constituent candles update.
+
+// Latest snapshot — value, day-change, 21D/21W EMA, regime gate
+app.get('/api/pnthr-ai-300', async (req, res) => {
+  try {
+    if (req.query.refresh) clearPnthrAi300Cache();
+    const data = await getPnthrAi300Latest();
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/pnthr-ai-300:', err);
+    res.status(500).json({ error: 'Failed to load PNTHR AI 300' });
+  }
+});
+
+// OHLC bars + EMA series for the chart modal
+app.get('/api/pnthr-ai-300/bars', async (req, res) => {
+  try {
+    const timeframe = req.query.timeframe === 'weekly' ? 'weekly' : 'daily';
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : null;
+    const data = await getPnthrAi300Bars({ timeframe, limit: limit || null });
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/pnthr-ai-300/bars:', err);
+    res.status(500).json({ error: 'Failed to load PNTHR AI 300 bars' });
+  }
+});
+
+// Admin manual trigger for the daily rebuild (handy after deploys / backfills)
+app.post('/api/admin/run-pnthr-ai-300', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    runPnthrAi300DailyAppend().catch(err => console.error('[PAI300] Manual run failed:', err.message));
+    res.json({ ok: true, message: 'PNTHR AI 300 rebuild started — check server logs.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -5117,6 +5159,11 @@ cron.schedule('30 17 * * 1-5', async () => {
   try {
     console.log('[AI Universe Daily] starting cron…');
     await runAiUniverseDailyUpdate();
+    // Chain the PNTHR AI 300 index rebuild — constituent bars are now fresh
+    // so this is the right moment. Idempotent + monthly rebalance handled
+    // automatically by the build script (first trading day of month).
+    console.log('[PAI300] starting daily rebuild…');
+    await runPnthrAi300DailyAppend();
   } catch (err) {
     console.error('[AI Universe Daily] cron failed:', err.message);
   }

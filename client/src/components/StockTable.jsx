@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { computeWeeksAgo } from '../utils/dateUtils';
+import { computeWeeksAgo, computeTradingDaysAgo } from '../utils/dateUtils';
 import styles from './StockTable.module.css';
 
 import confirmedBuyIcon from './Confirmed Buy Signal.png';
@@ -130,24 +130,24 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
       return (aWks * 10000 + aType - (bWks * 10000 + bType)) * dir;
     }
 
-    // ── Daily-signal sort (mirrors weekly logic, reads from dailySignals map) ──
+    // ── Daily-signal sort (uses trading-days, NOT weeks — daily bars need bar-count semantics) ──
     if (sortConfig.key === 'dailySignal') {
       const aSig  = dailySignals[a.ticker];
       const bSig  = dailySignals[b.ticker];
       const aType = SIGNAL_ORDER[aSig?.signal] ?? 99;
       const bType = SIGNAL_ORDER[bSig?.signal] ?? 99;
-      const aWks  = computeWeeksAgo(aSig?.signalDate) ?? 9999;
-      const bWks  = computeWeeksAgo(bSig?.signalDate) ?? 9999;
-      return (aType * 10000 + aWks - (bType * 10000 + bWks)) * dir;
+      const aDays = computeTradingDaysAgo(aSig?.signalDate) ?? 9999;
+      const bDays = computeTradingDaysAgo(bSig?.signalDate) ?? 9999;
+      return (aType * 10000 + aDays - (bType * 10000 + bDays)) * dir;
     }
     if (sortConfig.key === 'dailyWeeksAgo') {
       const aSig  = dailySignals[a.ticker];
       const bSig  = dailySignals[b.ticker];
-      const aWks  = computeWeeksAgo(aSig?.signalDate) ?? 9999;
-      const bWks  = computeWeeksAgo(bSig?.signalDate) ?? 9999;
+      const aDays = computeTradingDaysAgo(aSig?.signalDate) ?? 9999;
+      const bDays = computeTradingDaysAgo(bSig?.signalDate) ?? 9999;
       const aType = SIGNAL_ORDER[aSig?.signal] ?? 99;
       const bType = SIGNAL_ORDER[bSig?.signal] ?? 99;
-      return (aWks * 10000 + aType - (bWks * 10000 + bType)) * dir;
+      return (aDays * 10000 + aType - (bDays * 10000 + bType)) * dir;
     }
 
     // Special handling for stop price / risk columns — 3-state sort:
@@ -499,7 +499,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 {showDailySignal && (() => {
                   const ds = dailySignals[stock.ticker];
                   const sig = ds?.signal;
-                  const wks = computeWeeksAgo(ds?.signalDate);
+                  const days = computeTradingDaysAgo(ds?.signalDate);  // signal day = +1
                   const cls = sig === 'BL' ? styles.pnthrBadgeBL
                             : sig === 'SS' ? styles.pnthrBadgeSS
                             : (sig === 'BE' || sig === 'SE') ? styles.pnthrBadgeBE
@@ -513,8 +513,8 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                           : <span className={styles.signalNone}>—</span>}
                       </td>
                       <td className={styles.signalColumn} style={dailyTint}>
-                        {sig && wks != null
-                          ? <span className={`${styles.pnthrBadge} ${cls}`}>{sig}+{wks}</span>
+                        {sig && days != null
+                          ? <span className={`${styles.pnthrBadge} ${cls}`}>{sig}+{days}</span>
                           : <span className={styles.signalNone}>—</span>}
                       </td>
                     </>

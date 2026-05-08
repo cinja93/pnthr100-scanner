@@ -30,6 +30,8 @@ import { runOrdersPipeline, runOrdersDailyUpdate, ordersGetLatest, ordersGetGate
 import { getKillTestSettings, saveKillTestSettings } from './killTestSettings.js';
 import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import { runDailySignalJob } from './dailySignalJob.js';
+import { getAiUniverse, clearAiUniverseCache } from './aiUniverseService.js';
+import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
 import { runLotTriggerSync, registerLotTriggerCron } from './lotTriggerCron.js';
@@ -1778,6 +1780,22 @@ app.get('/api/jungle-stocks', async (req, res) => {
   } catch (err) {
     console.error('Error in /api/jungle-stocks:', err);
     res.status(500).json({ error: 'Failed to load jungle stocks' });
+  }
+});
+
+// ── PNTHR AI Jungle (AI Universe — 304 holdings, 16 sectors) ────────────────
+// Mirrors /api/jungle-stocks: 5-min cache, ?refresh=1 bypass.
+// Returns { stocks, signals: {}, dailySignals: {}, sectors, fundMeta }.
+// Signal maps stay empty until AI Universe methodology is locked.
+app.get('/api/ai-universe', async (req, res) => {
+  try {
+    const refresh = !!req.query.refresh;
+    if (refresh) clearAiUniverseCache();
+    const payload = await getAiUniverse({ refresh });
+    res.json(payload);
+  } catch (err) {
+    console.error('Error in /api/ai-universe:', err);
+    res.status(500).json({ error: 'Failed to load AI Universe' });
   }
 });
 
@@ -5088,6 +5106,32 @@ cron.schedule('5 17 * * 1-5', async () => {
     console.error('[dailySignalJob] Failed:', err.message);
   }
 }, { timezone: 'America/New_York' });
+
+// ── Cron: AI Universe daily candle update Mon–Fri at 5:30pm ET ──────────────
+// Appends yesterday's daily bar to pnthr_ai_bt_candles and re-aggregates the
+// developing weekly bar in pnthr_ai_bt_candles_weekly. Runs after the 5:05pm
+// 679 daily signal job to spread FMP load. Idempotent — safe to re-run.
+// System of record for AI Universe historical bars; powers eventual Pulse
+// Score / weekly+daily signals / backtests once methodology locks.
+cron.schedule('30 17 * * 1-5', async () => {
+  try {
+    console.log('[AI Universe Daily] starting cron…');
+    await runAiUniverseDailyUpdate();
+  } catch (err) {
+    console.error('[AI Universe Daily] cron failed:', err.message);
+  }
+}, { timezone: 'America/New_York' });
+
+// POST /api/admin/run-ai-universe-daily — manual trigger for ops.
+// Useful after deploys (catch up missing bars without waiting for 5:30pm).
+app.post('/api/admin/run-ai-universe-daily', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    runAiUniverseDailyUpdate().catch(err => console.error('[AI Universe Daily] Manual run failed:', err.message));
+    res.json({ ok: true, message: 'AI Universe daily update started — check server logs for completion.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── Cron: User-drawn trendline break sweep — hourly during US market hours
 // (10am-4pm ET, Mon-Fri). Detects when a user's custom trendline is broken

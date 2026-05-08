@@ -8,6 +8,14 @@
       "port": 5174,
       "autoPort": true,
       "cwd": "client"
+    },
+    {
+      "name": "server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["index.js"],
+      "port": 3000,
+      "autoPort": true,
+      "cwd": "server"
     }
   ]
 }

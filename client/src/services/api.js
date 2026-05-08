@@ -399,6 +399,14 @@ export async function fetchJungleStocks(forceRefresh = false) {
   return response.json();
 }
 
+// Fetch PNTHR AI Jungle: 304 AI Universe holdings across 16 sectors
+export async function fetchAiUniverse(forceRefresh = false) {
+  const url = `${API_BASE}/api/ai-universe${forceRefresh ? '?refresh=1' : ''}`;
+  const response = await apiFetch(url, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // Fetch PNTHR PREY results (Alphas, Springs, Dinner)
 export async function fetchPreyStocks(forceRefresh = false) {
   const url = `${API_BASE}/api/prey${forceRefresh ? '?refresh=1' : ''}`;

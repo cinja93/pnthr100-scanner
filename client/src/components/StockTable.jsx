@@ -43,7 +43,7 @@ function matchesPinSignal(sigData, pinSignal) {
   return sigData.signal === pinSignal;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null }) {
   const [sortConfig, setSortConfig] = useState({ key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
   const listRef = useRef([]);
@@ -254,6 +254,8 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
     (!hideSector ? 1 : 0) +
     (onRemove ? 1 : 0) +
     (hideEarnings ? -1 : 0) +
+    (hideExchange ? -1 : 0) +
+    (showDailySignal ? 2 : 0) +
     (analyzeScores ? 1 : 0);
 
   return (
@@ -270,9 +272,9 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             <th onClick={() => handleSort('ticker')} className={styles.sortable}>
               Ticker {getSortIndicator('ticker')}
             </th>
-            <th onClick={() => handleSort('exchange')} className={styles.sortable}>
+            {!hideExchange && <th onClick={() => handleSort('exchange')} className={styles.sortable}>
               Exchange {getSortIndicator('exchange')}
-            </th>
+            </th>}
             {!hideSector && <th onClick={() => handleSort('sector')} className={styles.sortable}>
               Sector {getSortIndicator('sector')}
             </th>}
@@ -297,11 +299,17 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
               </th>
             )}
             <th onClick={() => handleSort('signal')} className={`${styles.signalColumn} ${styles.sortable}`}>
-              PNTHR Signal {getSortIndicator('signal')}
+              {weeklySignalLabel} {getSortIndicator('signal')}
             </th>
             <th onClick={() => handleSort('weeksAgo')} className={`${styles.signalColumn} ${styles.sortable}`}>
-              Wks Since {getSortIndicator('weeksAgo')}
+              {showDailySignal ? 'Weekly Wks Since' : 'Wks Since'} {getSortIndicator('weeksAgo')}
             </th>
+            {showDailySignal && <th className={styles.signalColumn}>
+              PNTHR Daily Signal
+            </th>}
+            {showDailySignal && <th className={styles.signalColumn}>
+              Daily Wks Since
+            </th>}
             {!hideEarnings && <th onClick={() => handleSort('earningsDate')} className={styles.sortable}>
               Next Earnings {getSortIndicator('earningsDate')}
             </th>}
@@ -404,7 +412,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                   </div>
                   {stock.companyName && <div className={styles.companyName}>{stock.companyName}</div>}
                 </td>
-                <td>{stock.exchange}</td>
+                {!hideExchange && <td>{stock.exchange}</td>}
                 {!hideSector && <td>{stock.sector}</td>}
                 <td className={styles.price}>${stock.currentPrice.toLocaleString()}</td>
                 <td className={stock.ytdReturn != null ? (stock.ytdReturn >= 0 ? styles.positive : styles.negative) : ''}>
@@ -474,6 +482,29 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                         return <span className={`${styles.pnthrBadge} ${cls}`}>{isNew ? '★ ' : ''}{sig}+{wks}</span>;
                       })()}
                 </td>
+                {showDailySignal && (() => {
+                  const ds = dailySignals[stock.ticker];
+                  const sig = ds?.signal;
+                  const wks = computeWeeksAgo(ds?.signalDate);
+                  const cls = sig === 'BL' ? styles.pnthrBadgeBL
+                            : sig === 'SS' ? styles.pnthrBadgeSS
+                            : (sig === 'BE' || sig === 'SE') ? styles.pnthrBadgeBE
+                            : null;
+                  return (
+                    <>
+                      <td className={styles.signalColumn}>
+                        {sig
+                          ? <span className={`${styles.pnthrBadge} ${cls}`}>{sig}</span>
+                          : <span className={styles.signalNone}>—</span>}
+                      </td>
+                      <td className={styles.signalColumn}>
+                        {sig && wks != null
+                          ? <span className={`${styles.pnthrBadge} ${cls}`}>{sig}+{wks}</span>
+                          : <span className={styles.signalNone}>—</span>}
+                      </td>
+                    </>
+                  );
+                })()}
                 {!hideEarnings && <td>
                   {earningsInfo.display}
                   {earningsInfo.highlight && (

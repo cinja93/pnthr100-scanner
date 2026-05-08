@@ -26,6 +26,7 @@ import EmaCrossoverPage from './components/EmaCrossoverPage';
 import EtfPage from './components/EtfPage';
 import CalendarPage from './components/CalendarPage';
 import JunglePage from './components/JunglePage';
+import AiJunglePage from './components/AiJunglePage';
 import SearchPage from './components/SearchPage';
 import PreyPage from './components/PreyPage';
 import ApexPage from './components/ApexPage';
@@ -1358,6 +1359,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* Jungle page */}
           {activePage === 'jungle' && <JunglePage />}
+
+          {/* PNTHR AI Jungle — AI Universe (304 holdings, 16 sectors) */}
+          {activePage === 'aiJungle' && <AiJunglePage />}
 
 
           {/* PNTHR Journal */}

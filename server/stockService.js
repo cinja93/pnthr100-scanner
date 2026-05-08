@@ -17,7 +17,7 @@ function getYearStartDate() {
 }
 
 // Fetch data from FMP API with retry on rate limit (429)
-async function fetchFMP(endpoint, retries = 3) {
+export async function fetchFMP(endpoint, retries = 3) {
   const url = `${FMP_BASE_URL}${endpoint}${endpoint.includes('?') ? '&' : '?'}apikey=${FMP_API_KEY}`;
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -47,7 +47,7 @@ let yearStartPriceCache = { year: null, prices: {} };
 
 // Fetch year-start (Dec 31) close prices for a list of tickers.
 // Already-cached tickers are returned immediately; only missing ones hit FMP.
-async function getYearStartPrices(tickers) {
+export async function getYearStartPrices(tickers) {
   const currentYear = new Date().getFullYear();
   const yearStart = getYearStartDate();
 

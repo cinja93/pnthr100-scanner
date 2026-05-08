@@ -39,8 +39,9 @@ const NAV_GROUPS = [
   {
     groupLabel: 'PNTHR Jungle',
     items: [
-      { key: 'jungle',  label: 'PNTHR 679 Jungle', iconImg: true },
-      { key: 'long',    label: 'PNTHR 100 Longs',  icon: '📈' },
+      { key: 'jungle',   label: 'PNTHR 679 Jungle', iconImg: true },
+      { key: 'aiJungle', label: 'PNTHR AI Jungle',  iconImg: true },
+      { key: 'long',     label: 'PNTHR 100 Longs',  icon: '📈' },
       { key: 'short',   label: 'PNTHR 100 Shorts', icon: '📉' },
       { key: 'etf',     label: "PNTHR ETF's",      iconImg: true },
       { key: 'sectors', label: 'PNTHR Sectors',    iconImg: true },

@@ -238,7 +238,9 @@ export default function AiSectorChartModal({ sector, onClose }) {
 
           {hoveredBar && (
             <div style={{
-              position: 'absolute', top: 12, right: 16, zIndex: 4,
+              // Sit immediately to the right of the 160px panther watermark
+              // (panther is at top:14, left:14, width:160 → box starts at left:184)
+              position: 'absolute', top: 14, left: 184, zIndex: 4,
               background: 'rgba(15,15,15,0.95)', border: '1px solid #2a2a2a', borderRadius: 4,
               padding: '8px 12px', fontSize: 11, fontFamily: 'monospace',
               color: '#d4d4d4', minWidth: 180, pointerEvents: 'none',

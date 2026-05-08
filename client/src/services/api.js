@@ -407,6 +407,14 @@ export async function fetchPnthrAi300Latest(forceRefresh = false) {
   return response.json();
 }
 
+// PNTHR AI 300 — current constituent weights (304 names + sector roll-up + as-of rebalance date)
+export async function fetchPnthrAi300Weights() {
+  const url = `${API_BASE}/api/pnthr-ai-300/weights`;
+  const response = await apiFetch(url, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // PNTHR AI 300 OHLC bars + EMA series for the chart modal (timeframe: 'daily' | 'weekly')
 export async function fetchPnthrAi300Bars(timeframe = 'daily', limit = null) {
   const params = new URLSearchParams({ timeframe });

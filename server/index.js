@@ -32,7 +32,7 @@ import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import { runDailySignalJob } from './dailySignalJob.js';
 import { getAiUniverse, clearAiUniverseCache } from './aiUniverseService.js';
 import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
-import { getPnthrAi300Latest, getPnthrAi300Bars, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
+import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
 import { runLotTriggerSync, registerLotTriggerCron } from './lotTriggerCron.js';
@@ -1815,6 +1815,17 @@ app.get('/api/pnthr-ai-300', async (req, res) => {
   } catch (err) {
     console.error('Error in /api/pnthr-ai-300:', err);
     res.status(500).json({ error: 'Failed to load PNTHR AI 300' });
+  }
+});
+
+// Latest constituent weights — every name's % of the index, plus per-sector roll-up
+app.get('/api/pnthr-ai-300/weights', async (req, res) => {
+  try {
+    const data = await getPnthrAi300Weights();
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/pnthr-ai-300/weights:', err);
+    res.status(500).json({ error: 'Failed to load PNTHR AI 300 weights' });
   }
 });
 

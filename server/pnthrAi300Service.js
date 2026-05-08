@@ -48,6 +48,7 @@ export function clearPnthrAi300Cache() {
   cacheDaily = null; cacheDailyAt = 0;
   cacheWeekly = null; cacheWeeklyAt = 0;
   cacheLatest = null; cacheLatestAt = 0;
+  cacheWeights = null; cacheWeightsAt = 0;
 }
 
 async function loadDailyBars() {
@@ -131,6 +132,70 @@ export async function getPnthrAi300Latest() {
     baseValue: BASE_VALUE,
   };
   cacheLatest = out; cacheLatestAt = now;
+  return out;
+}
+
+// Latest constituent weights — read from pnthr_ai_index_meta (key: 'current_weights')
+// and enriched with name + sector from the canonical white-paper data file.
+// Sorted desc by weight. Includes the asOf rebalance date for transparency.
+let cacheWeights = null; let cacheWeightsAt = 0;
+
+export async function getPnthrAi300Weights() {
+  const now = Date.now();
+  if (cacheWeights && (now - cacheWeightsAt) < CACHE_MS) return cacheWeights;
+
+  const db = await connectToDatabase();
+  if (!db) return { ok: false, error: 'Mongo connect failed' };
+
+  const meta = await db.collection('pnthr_ai_index_meta').findOne({ key: 'current_weights' });
+  if (!meta?.weights) return { ok: false, error: 'No weights yet — run buildPnthrAi300Index.js' };
+
+  // Lookup: ticker → { name, sectorId, sectorName, sectorWeight }
+  const { SECTORS } = await import('./scripts/aiUniverse/aiUniverseData.js');
+  const lookup = {};
+  for (const sec of SECTORS) {
+    for (const h of sec.holdings) {
+      lookup[h.ticker] = {
+        name:        h.name,
+        sectorId:    sec.id,
+        sectorName:  sec.name,
+        sectorTargetWeight: sec.weight,
+      };
+    }
+  }
+
+  const constituents = Object.entries(meta.weights)
+    .map(([ticker, w]) => ({
+      ticker,
+      name:       lookup[ticker]?.name || ticker,
+      sectorId:   lookup[ticker]?.sectorId ?? null,
+      sector:     lookup[ticker]?.sectorName || 'Unknown',
+      weight:     parseFloat((w * 100).toFixed(4)),  // 0..100
+    }))
+    .sort((a, b) => b.weight - a.weight)
+    .map((row, i) => ({ rank: i + 1, ...row }));
+
+  // Per-sector roll-up
+  const sectorMap = {};
+  for (const c of constituents) {
+    const key = c.sectorId ?? 0;
+    if (!sectorMap[key]) sectorMap[key] = { id: c.sectorId, name: c.sector, count: 0, weight: 0, target: lookup[c.ticker]?.sectorTargetWeight ?? null };
+    sectorMap[key].count++;
+    sectorMap[key].weight += c.weight;
+  }
+  const sectorRollup = Object.values(sectorMap)
+    .map(s => ({ ...s, weight: parseFloat(s.weight.toFixed(4)) }))
+    .sort((a, b) => b.weight - a.weight);
+
+  const out = {
+    ok:               true,
+    asOfRebalance:    meta.asOfRebalance,
+    constituentCount: constituents.length,
+    totalWeight:      parseFloat(constituents.reduce((s, c) => s + c.weight, 0).toFixed(4)),
+    sectors:          sectorRollup,
+    constituents,
+  };
+  cacheWeights = out; cacheWeightsAt = now;
   return out;
 }
 

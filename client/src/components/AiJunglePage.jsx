@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
 import Pnthr300ChartModal from './Pnthr300ChartModal';
+import Pnthr300WeightsModal from './Pnthr300WeightsModal';
 import { fetchAiUniverse, fetchEarnings, fetchPnthrAi300Latest } from '../services/api';
 import styles from './JunglePage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -9,7 +10,7 @@ import pantherHead from '../assets/panther head.png';
 // ── PNTHR AI 300 header strip ───────────────────────────────────────────────
 // Live snapshot of the proprietary index. Clickable → opens Pnthr300ChartModal.
 // Polls /api/pnthr-ai-300 on mount + every 60s while the page is open.
-function Pnthr300Strip({ onOpenChart }) {
+function Pnthr300Strip({ onOpenChart, onOpenWeights }) {
   const [data, setData] = useState(null);
 
   useEffect(() => {
@@ -32,9 +33,9 @@ function Pnthr300Strip({ onOpenChart }) {
   const regimeLabel    = data.regime === 'bull' ? '🟢 BULL REGIME' : '🔴 BEAR REGIME';
 
   return (
-    <button
+    <div
       onClick={onOpenChart}
-      title="Click for full PNTHR AI 300 chart (OHLC + 21D / 21W EMA, daily/weekly toggle)"
+      title="Click for full PNTHR AI 300 chart (OHLC bars + OpEMA, daily/weekly toggle)"
       style={{
         display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14,
         padding: '10px 16px', margin: '12px 0',
@@ -75,10 +76,25 @@ function Pnthr300Strip({ onOpenChart }) {
         Since launch <strong style={{ color: '#16a34a' }}>+{data.inceptionPct?.toFixed(1)}%</strong>
       </span>
 
-      <span style={{ marginLeft: 'auto', color: '#fcf000', fontSize: 11, fontWeight: 600 }}>
-        Open chart →
+      <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          onClick={e => { e.stopPropagation(); onOpenWeights(); }}
+          title="Show how each of the 304 holdings is weighted in the index"
+          style={{
+            padding: '5px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+            background: 'transparent', border: '1px solid #fcf000', borderRadius: 4,
+            color: '#fcf000', cursor: 'pointer',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#fcf000'; e.currentTarget.style.color = '#000'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#fcf000'; }}
+        >
+          📊 Weights
+        </button>
+        <span style={{ color: '#fcf000', fontSize: 11, fontWeight: 600 }}>
+          Open chart →
+        </span>
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -104,6 +120,7 @@ export default function AiJunglePage() {
   const [chartIndex, setChartIndex]       = useState(null);
   const [chartStocks, setChartStocks]     = useState([]);
   const [showIndexChart, setShowIndexChart] = useState(false);
+  const [showWeights, setShowWeights]       = useState(false);
 
   function load(forceRefresh = false) {
     setLoading(true);
@@ -182,7 +199,10 @@ export default function AiJunglePage() {
       </div>
 
       {!loading && !error && (
-        <Pnthr300Strip onOpenChart={() => setShowIndexChart(true)} />
+        <Pnthr300Strip
+          onOpenChart={() => setShowIndexChart(true)}
+          onOpenWeights={() => setShowWeights(true)}
+        />
       )}
 
       {!loading && !error && stocks.length > 0 && (
@@ -245,6 +265,10 @@ export default function AiJunglePage() {
 
       {showIndexChart && (
         <Pnthr300ChartModal onClose={() => setShowIndexChart(false)} />
+      )}
+
+      {showWeights && (
+        <Pnthr300WeightsModal onClose={() => setShowWeights(false)} />
       )}
     </div>
   );

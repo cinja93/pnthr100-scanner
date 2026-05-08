@@ -425,6 +425,30 @@ export async function fetchPnthrAi300Bars(timeframe = 'daily', limit = null) {
   return response.json();
 }
 
+// PNTHR AI Sectors — latest snapshot for all 16 sector indices (grid page)
+export async function fetchPnthrAiSectorsLatest(forceRefresh = false) {
+  const url = `${API_BASE}/api/pnthr-ai-sectors${forceRefresh ? '?refresh=1' : ''}`;
+  const response = await apiFetch(url, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+// PNTHR AI Sectors — bars + EMA series for one sector chart
+export async function fetchPnthrAiSectorBars(sectorId, timeframe = 'weekly') {
+  const url = `${API_BASE}/api/pnthr-ai-sectors/${sectorId}/bars?timeframe=${timeframe}`;
+  const response = await apiFetch(url, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+// PNTHR AI Sectors — constituents (holdings inside one sector)
+export async function fetchPnthrAiSectorConstituents(sectorId) {
+  const url = `${API_BASE}/api/pnthr-ai-sectors/${sectorId}/constituents`;
+  const response = await apiFetch(url, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // Fetch PNTHR AI Jungle: 304 AI Universe holdings across 16 sectors
 export async function fetchAiUniverse(forceRefresh = false) {
   const url = `${API_BASE}/api/ai-universe${forceRefresh ? '?refresh=1' : ''}`;

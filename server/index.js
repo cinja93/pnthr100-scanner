@@ -33,6 +33,7 @@ import { runDailySignalJob } from './dailySignalJob.js';
 import { getAiUniverse, clearAiUniverseCache } from './aiUniverseService.js';
 import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
 import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
+import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
 import { runLotTriggerSync, registerLotTriggerCron } from './lotTriggerCron.js';
@@ -1847,6 +1848,55 @@ app.post('/api/admin/run-pnthr-ai-300', authenticateJWT, requireAdmin, async (re
   try {
     runPnthrAi300DailyAppend().catch(err => console.error('[PAI300] Manual run failed:', err.message));
     res.json({ ok: true, message: 'PNTHR AI 300 rebuild started — check server logs.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PNTHR AI Sectors (16 synthetic sector indices, capped market-cap) ───────
+// Sister service to PAI300; storage is pnthr_ai_sector_candles* (separate from
+// PAI300's pnthr_ai_index_candles*). Same monthly rebalance dates, same caps,
+// renormalized within each sector. Tunable per-sector EMA periods —
+// data/pnthrAiSectorsConfig.js holds SECTOR_EMA_WEEKLY_PERIODS / DAILY.
+app.get('/api/pnthr-ai-sectors', async (req, res) => {
+  try {
+    if (req.query.refresh) clearPnthrAiSectorsCache();
+    const data = await getPnthrAiSectorsLatest();
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/pnthr-ai-sectors:', err);
+    res.status(500).json({ error: 'Failed to load AI sectors' });
+  }
+});
+
+app.get('/api/pnthr-ai-sectors/:sectorId/bars', async (req, res) => {
+  try {
+    const sectorId  = parseInt(req.params.sectorId, 10);
+    const timeframe = req.query.timeframe === 'weekly' ? 'weekly' : 'daily';
+    const limit     = req.query.limit ? parseInt(req.query.limit, 10) : null;
+    const data = await getPnthrAiSectorBars({ sectorId, timeframe, limit: limit || null });
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/pnthr-ai-sectors/bars:', err);
+    res.status(500).json({ error: 'Failed to load AI sector bars' });
+  }
+});
+
+app.get('/api/pnthr-ai-sectors/:sectorId/constituents', async (req, res) => {
+  try {
+    const sectorId = parseInt(req.params.sectorId, 10);
+    const data = await getPnthrAiSectorConstituents({ sectorId });
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/pnthr-ai-sectors/constituents:', err);
+    res.status(500).json({ error: 'Failed to load constituents' });
+  }
+});
+
+app.post('/api/admin/run-pnthr-ai-sectors', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    runPnthrAiSectorsDailyAppend().catch(err => console.error('[AI Sectors] Manual run failed:', err.message));
+    res.json({ ok: true, message: 'AI Sectors rebuild started — check server logs.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -5175,6 +5225,10 @@ cron.schedule('30 17 * * 1-5', async () => {
     // automatically by the build script (first trading day of month).
     console.log('[PAI300] starting daily rebuild…');
     await runPnthrAi300DailyAppend();
+    // 16 sector indices come last — they read the same fresh constituent
+    // bars and use the same monthly rebalance dates as PAI300.
+    console.log('[AI Sectors] starting daily rebuild…');
+    await runPnthrAiSectorsDailyAppend();
   } catch (err) {
     console.error('[AI Universe Daily] cron failed:', err.message);
   }

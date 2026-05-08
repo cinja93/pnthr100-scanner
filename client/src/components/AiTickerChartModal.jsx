@@ -19,10 +19,21 @@ function fmtPct(n) {
 }
 
 // ── Single chart panel (daily or weekly) ───────────────────────────────────
-function ChartPanel({ title, period, bars, signals, chartType, currentSignal, pnthrStop }) {
+function ChartPanel({ title, period, fallback, bars, signals, chartType, currentSignal, pnthrStop }) {
   const containerRef = useRef(null);
   const chartRef     = useRef(null);
   const [hoveredBar, setHoveredBar] = useState(null);
+  const [barSpacing, setBarSpacing] = useState(title === 'Weekly' ? 6 : 4);
+  const barSpacingRef = useRef(barSpacing);
+  useEffect(() => { barSpacingRef.current = barSpacing; }, [barSpacing]);
+
+  function adjustBarSpacing(delta) {
+    setBarSpacing(prev => {
+      const next = Math.max(2, Math.min(40, prev + delta));
+      chartRef.current?.timeScale().applyOptions({ barSpacing: next });
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!containerRef.current || !bars || bars.length === 0) return;
@@ -32,7 +43,7 @@ function ChartPanel({ title, period, bars, signals, chartType, currentSignal, pn
       layout: { background: { color: '#0c0c0c' }, textColor: '#d4d4d4', attributionLogo: false, fontSize: 10 },
       grid: { vertLines: { color: '#1a1a1a' }, horzLines: { color: '#1a1a1a' } },
       rightPriceScale: { borderColor: '#333' },
-      timeScale: { borderColor: '#333', timeVisible: title === 'Daily', barSpacing: title === 'Weekly' ? 6 : 4 },
+      timeScale: { borderColor: '#333', timeVisible: title === 'Daily', barSpacing: barSpacingRef.current },
       crosshair: { mode: 1 },
     });
     chartRef.current = chart;
@@ -101,28 +112,58 @@ function ChartPanel({ title, period, bars, signals, chartType, currentSignal, pn
       {/* Panel title bar */}
       <div style={{
         padding: '8px 12px', borderBottom: '1px solid #1f1f1f',
-        display: 'flex', alignItems: 'center', gap: 12, background: '#0a0a0a',
+        display: 'flex', alignItems: 'center', gap: 10, background: '#0a0a0a',
       }}>
         <span style={{ color: '#fcf000', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
           {title}
         </span>
-        <span style={{ color: '#888', fontSize: 11, fontFamily: 'monospace' }}>
-          {period}{title === 'Daily' ? 'D' : 'W'} OpEMA
-        </span>
-        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {currentSignal && (
-            <span style={{
-              padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700,
-              background: sigColor, color: '#fff', letterSpacing: '0.06em',
-            }}>
-              {currentSignal}
-            </span>
-          )}
-          {pnthrStop != null && (
-            <span style={{ color: '#fcf000', fontSize: 10, fontFamily: 'monospace' }}>
-              Stop ${fmtNum(pnthrStop)}
-            </span>
-          )}
+        {period != null && (
+          <span style={{ color: '#888', fontSize: 11, fontFamily: 'monospace' }}>
+            {period}{title === 'Daily' ? 'D' : 'W'} OpEMA{fallback ? ' (21-fallback, short history)' : ''}
+          </span>
+        )}
+        {currentSignal && (
+          <span style={{
+            padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+            background: sigColor, color: '#fff', letterSpacing: '0.06em',
+          }}>
+            {currentSignal}
+          </span>
+        )}
+        {pnthrStop != null && (
+          <span style={{ color: '#fcf000', fontSize: 10, fontFamily: 'monospace' }}>
+            Stop ${fmtNum(pnthrStop)}
+          </span>
+        )}
+
+        {/* Bar-spacing expand/contract buttons (per panel — daily and weekly tune independently) */}
+        <span style={{ marginLeft: 'auto', display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
+          <button
+            onClick={() => adjustBarSpacing(-2)}
+            title="Contract — bring bars closer together"
+            style={{
+              padding: '3px 8px', fontSize: 11, fontWeight: 700,
+              background: 'transparent', color: '#888',
+              border: 'none', cursor: 'pointer',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#fcf000'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#888'; }}
+          >
+            →←
+          </button>
+          <button
+            onClick={() => adjustBarSpacing(2)}
+            title="Expand — push bars further apart"
+            style={{
+              padding: '3px 8px', fontSize: 11, fontWeight: 700,
+              background: 'transparent', color: '#888',
+              border: 'none', cursor: 'pointer', borderLeft: '1px solid #2a2a2a',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#fcf000'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#888'; }}
+          >
+            ←→
+          </button>
         </span>
       </div>
 
@@ -273,7 +314,8 @@ export default function AiTickerChartModal({ ticker, onClose }) {
             <>
               <ChartPanel
                 title="Daily"
-                period={data.emaPeriod}
+                period={data.dailyEmaPeriod ?? data.emaPeriod}
+                fallback={data.fallbackDaily}
                 bars={data.daily.bars}
                 signals={data.daily.signals}
                 chartType={chartType}
@@ -282,7 +324,8 @@ export default function AiTickerChartModal({ ticker, onClose }) {
               />
               <ChartPanel
                 title="Weekly"
-                period={data.emaPeriod}
+                period={data.weeklyEmaPeriod ?? data.emaPeriod}
+                fallback={data.fallbackWeekly}
                 bars={data.weekly.bars}
                 signals={data.weekly.signals}
                 chartType={chartType}

@@ -61,7 +61,7 @@ export async function getAiStockChartData(ticker) {
   const db = await connectToDatabase();
   if (!db) return { ok: false, error: 'Mongo connect failed' };
 
-  const period = SECTOR_EMA_PERIODS[meta.sectorId] || 30;
+  const sectorPeriod = SECTOR_EMA_PERIODS[meta.sectorId] || 30;
 
   // Pull both bar series in parallel
   const [dailyDoc, weeklyDoc] = await Promise.all([
@@ -76,16 +76,28 @@ export async function getAiStockChartData(ticker) {
   const dailyAsc  = [...dailyRaw].sort((a, b) => a.date.localeCompare(b.date));
   const weeklyAsc = [...weeklyRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
 
-  // Compute EMA series aligned to bars
-  const dailyEma  = emaSeriesAlignedTo(dailyAsc, period);
-  const weeklyEma = emaSeriesAlignedTo(weeklyAsc, period);
+  // Recent-IPO fallback: to use the sector's tuned period we need ~3× history
+  // (so EMA has settled and produces meaningful crosses). Otherwise fall back
+  // to 21W per Scott's "21 as a standard" rule. Chart label surfaces which
+  // period was actually used for transparency ("21W (fallback, short history)").
+  function pickPeriod(barCount) {
+    if (barCount >= sectorPeriod * 3) return sectorPeriod;
+    if (barCount >= 21 + 2)           return 21;
+    return null;
+  }
+  const dailyPeriod  = pickPeriod(dailyAsc.length);
+  const weeklyPeriod = pickPeriod(weeklyAsc.length);
 
-  // Run signal state machine on each (period applied to its own bars)
+  // Compute EMA series aligned to bars (using whichever period was picked)
+  const dailyEma  = dailyPeriod  ? emaSeriesAlignedTo(dailyAsc,  dailyPeriod)  : new Array(dailyAsc.length).fill(null);
+  const weeklyEma = weeklyPeriod ? emaSeriesAlignedTo(weeklyAsc, weeklyPeriod) : new Array(weeklyAsc.length).fill(null);
+
+  // Run signal state machine on each (its picked period applied to its own bars)
   const dailySigBars  = dailyAsc.map(b => ({ time: b.date,   open: b.open, high: b.high, low: b.low, close: b.close }));
   const weeklySigBars = weeklyAsc.map(b => ({ time: b.weekOf, open: b.open, high: b.high, low: b.low, close: b.close }));
 
-  const dailyDetect  = dailySigBars.length  >= period + 2 ? detectAllSignals(dailySigBars,  period, false) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
-  const weeklyDetect = weeklySigBars.length >= period + 2 ? detectAllSignals(weeklySigBars, period, false) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
+  const dailyDetect  = dailyPeriod  ? detectAllSignals(dailySigBars,  dailyPeriod,  false) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
+  const weeklyDetect = weeklyPeriod ? detectAllSignals(weeklySigBars, weeklyPeriod, false) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
 
   // Last bar info per timeframe
   const lastDaily  = dailyAsc[dailyAsc.length - 1] || null;
@@ -103,7 +115,11 @@ export async function getAiStockChartData(ticker) {
     name:         meta.name,
     sectorId:     meta.sectorId,
     sectorName:   meta.sectorName,
-    emaPeriod:    period,           // one number, applied to both timeframes
+    emaPeriod:        sectorPeriod,    // canonical sector period
+    dailyEmaPeriod:   dailyPeriod,     // period actually used for daily (may be 21W fallback)
+    weeklyEmaPeriod:  weeklyPeriod,    // period actually used for weekly (may be 21W fallback)
+    fallbackDaily:    dailyPeriod  != null && dailyPeriod  !== sectorPeriod,
+    fallbackWeekly:   weeklyPeriod != null && weeklyPeriod !== sectorPeriod,
     asOf:         lastDaily?.date || null,
     currentPrice: lastDaily ? parseFloat(lastDaily.close.toFixed(2)) : null,
     dayChangePct: dayChangePct != null ? parseFloat(dayChangePct.toFixed(2)) : null,

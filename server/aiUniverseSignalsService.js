@@ -58,19 +58,33 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
   const dailySignals = {};
   let withWeeklySig = 0, withDailySig = 0, openLongs = 0, openShorts = 0;
 
+  // For recent IPOs (e.g. SNDK, CRWV) the sector's long EMA period (e.g. 30W)
+  // can produce zero signals — even with sectorPeriod + 2 bars the state machine
+  // hasn't had room to detect a legit cross. To use the sector's tuned period
+  // we need ~3× history so the EMA has settled and crosses are meaningful.
+  // Otherwise fall back to 21W per Scott's rule:
+  //   "If nothing exists currently in our database, we will use the 21 as a
+  //    standard for weekly too."
+  function effectivePeriod(barCount, sectorPeriod) {
+    if (barCount >= sectorPeriod * 3) return sectorPeriod;
+    if (barCount >= 21 + 2)           return 21;
+    return null;  // not enough bars even for the fallback — skip
+  }
+
   for (const ticker of tickers) {
     const sectorId = TICKER_TO_SECTOR_ID[ticker];
     const period   = SECTOR_EMA_PERIODS[sectorId] || 30;  // sector-tuned period (number)
 
     // ── Weekly signal + PNTHR Stop ─────────────────────────────────────────
     const weeklyRaw = weeklyByTicker[ticker] || [];
-    if (weeklyRaw.length >= period + 2) {
+    const wPeriod = effectivePeriod(weeklyRaw.length, period);
+    if (wPeriod) {
       const weeklyAsc = [...weeklyRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
       // Map to {time, ohlc} shape the state machine expects
       const wBars = weeklyAsc.map(b => ({
         time: b.weekOf, open: b.open, high: b.high, low: b.low, close: b.close,
       }));
-      const { events, pnthrStop, currentSignal, activeType } = detectAllSignals(wBars, period, false);
+      const { events, pnthrStop, currentSignal, activeType } = detectAllSignals(wBars, wPeriod, false);
       const lastBarTime = wBars[wBars.length - 1].time;
       const lastEvent   = events[events.length - 1];
       const isNewSignal = lastEvent && lastEvent.time === lastBarTime;
@@ -93,12 +107,13 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
 
     // ── Daily signal (same sector period, daily bars) ──────────────────────
     const dailyRaw = dailyByTicker[ticker] || [];
-    if (dailyRaw.length >= period + 2) {
+    const dPeriod = effectivePeriod(dailyRaw.length, period);
+    if (dPeriod) {
       const dailyAsc = [...dailyRaw].sort((a, b) => a.date.localeCompare(b.date));
       const dBars = dailyAsc.map(b => ({
         time: b.date, open: b.open, high: b.high, low: b.low, close: b.close,
       }));
-      const { events, currentSignal, activeType } = detectAllSignals(dBars, period, false);
+      const { events, currentSignal, activeType } = detectAllSignals(dBars, dPeriod, false);
       const lastBarTime = dBars[dBars.length - 1].time;
       const lastEvent   = events[events.length - 1];
       const isNewSignal = lastEvent && lastEvent.time === lastBarTime;

@@ -363,7 +363,7 @@ export async function getAiUniverseKill({ refresh = false } = {}) {
 
   for (const ticker of allTickers) {
     const sectorId = TICKER_TO_SECTOR_ID[ticker];
-    const period   = SECTOR_EMA_PERIODS[sectorId] || 30;
+    const sectorPeriod = SECTOR_EMA_PERIODS[sectorId] || 30;
     const sig      = weeklySignals[ticker];
     if (!sig || !sig.signal) {
       stocks[ticker] = { signal: null, total: 0, tier: 'STIRRING' };
@@ -371,12 +371,17 @@ export async function getAiUniverseKill({ refresh = false } = {}) {
     }
 
     const wRaw = weeklyByTicker[ticker] || [];
-    if (wRaw.length < period + 2) {
+    // Recent-IPO fallback: need 3× sector period for the long EMA to be useful;
+    // otherwise fall back to 21W (matches the signals + chart services).
+    let period;
+    if (wRaw.length >= sectorPeriod * 3)      period = sectorPeriod;
+    else if (wRaw.length >= 21 + 2)           period = 21;
+    else {
       stocks[ticker] = { signal: sig.signal, total: 0, tier: 'STIRRING', note: 'insufficient bars' };
       continue;
     }
     const weekly = [...wRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
-    // Compute EMA at the sector's tuned period
+    // Compute EMA at the picked period
     const emaSeries = calculateEMA(weekly.map(b => ({ time: b.weekOf, close: b.close })), period);
     // Build ema array aligned to weekly (null until period-1)
     const ema = new Array(weekly.length).fill(null);

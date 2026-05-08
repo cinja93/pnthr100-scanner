@@ -44,7 +44,7 @@ export function sectorTicker(sectorId) {
 //   Format: sectorId → period
 //   Example: "AI Compute, try 35" → set 1: 35
 const SECTOR_EMA_WEEKLY_OVERRIDES = {
-  4: 34,  // AI Cloud, Data Centers & Edge
+  4: 36,  // AI Cloud, Data Centers & Edge (iterated 30 → 34 → 36)
 };
 const SECTOR_EMA_DAILY_OVERRIDES = {
   // (none yet — daily period stays at 21 default)

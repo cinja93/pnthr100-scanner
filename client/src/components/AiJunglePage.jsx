@@ -118,6 +118,7 @@ export default function AiJunglePage() {
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState(null);
   const [sectorFilter, setSectorFilter]   = useState('all'); // 'all' | sectorId number
+  const [searchQuery, setSearchQuery]     = useState('');    // ticker or company name filter
   const [groupBySector, setGroupBySector] = useState(false);
   const [chartTickers, setChartTickers]   = useState([]);    // sorted ticker list as displayed in the table
   const [chartIndex, setChartIndex]       = useState(0);
@@ -163,10 +164,24 @@ export default function AiJunglePage() {
     return out;
   }, [stocks]);
 
+  // Compose sector filter + search filter. Sector chips narrow the universe;
+  // the search box matches ticker prefix OR company name substring (case-
+  // insensitive), mirroring PNTHR Search's match style. Empty query = no
+  // search filter applied.
   const filteredStocks = useMemo(() => {
-    if (sectorFilter === 'all') return stocks;
-    return stocks.filter(s => s.sectorId === sectorFilter);
-  }, [stocks, sectorFilter]);
+    let list = (sectorFilter === 'all')
+      ? stocks
+      : stocks.filter(s => s.sectorId === sectorFilter);
+    const q = searchQuery.trim().toUpperCase();
+    if (q) {
+      list = list.filter(s => {
+        const ticker = (s.ticker || '').toUpperCase();
+        const name   = (s.companyName || '').toUpperCase();
+        return ticker.startsWith(q) || name.includes(q);
+      });
+    }
+    return list;
+  }, [stocks, sectorFilter, searchQuery]);
 
   function handleTickerClick(_stock, sortedIdx, sortedStocks) {
     // StockTable hands back the currently-displayed sort order so the
@@ -217,6 +232,38 @@ export default function AiJunglePage() {
       )}
 
       {!loading && !error && stocks.length > 0 && (
+        <div className={styles.aiSearchRow}>
+          <div className={styles.aiSearchInputWrap}>
+            <span className={styles.aiSearchIcon} aria-hidden="true">⌕</span>
+            <input
+              type="text"
+              className={styles.aiSearchInput}
+              placeholder="Search AI 300 ticker or company name…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className={styles.aiSearchClear}
+                onClick={() => setSearchQuery('')}
+                title="Clear search"
+                aria-label="Clear search"
+              >×</button>
+            )}
+          </div>
+          {searchQuery && (
+            <span className={styles.aiSearchResultCount}>
+              {filteredStocks.length} match{filteredStocks.length === 1 ? '' : 'es'}
+              {sectorFilter !== 'all' && ' in selected sector'}
+            </span>
+          )}
+        </div>
+      )}
+
+      {!loading && !error && stocks.length > 0 && (
         <div className={styles.filterRow}>
           <button
             key="all"
@@ -264,6 +311,19 @@ export default function AiJunglePage() {
           onTickerClick={handleTickerClick}
           scanType="long"
         />
+      )}
+
+      {!loading && !error && stocks.length > 0 && filteredStocks.length === 0 && (
+        <div className={styles.aiNoResults}>
+          No AI 300 stocks match
+          {searchQuery ? <> "<strong>{searchQuery}</strong>"</> : null}
+          {sectorFilter !== 'all' ? ' in this sector' : null}.
+          {searchQuery && (
+            <button className={styles.aiNoResultsClear} onClick={() => setSearchQuery('')}>
+              Clear search
+            </button>
+          )}
+        </div>
       )}
 
       {chartTickers.length > 0 && (

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { createChart, CandlestickSeries, LineSeries } from 'lightweight-charts';
+import { createChart, BarSeries, CandlestickSeries, LineSeries } from 'lightweight-charts';
 import { fetchPnthrAi300Latest, fetchPnthrAi300Bars } from '../services/api';
+import pantherHead from '../assets/panther head.png';
 
 // Pnthr300ChartModal — dedicated chart for the PNTHR AI 300 (PAI300).
 //
@@ -21,6 +22,7 @@ function fmtPct(n) {
 
 export default function Pnthr300ChartModal({ onClose }) {
   const [timeframe, setTimeframe] = useState('weekly');
+  const [chartType, setChartType] = useState('bars');  // 'bars' (OHLC) or 'candles'
   const [latest, setLatest] = useState(null);
   const [bars, setBars] = useState([]);
   const [emaPeriod, setEmaPeriod] = useState(21);
@@ -66,19 +68,26 @@ export default function Pnthr300ChartModal({ onClose }) {
       crosshair: { mode: 1 },
     });
 
-    const candle = chart.addSeries(CandlestickSeries, {
-      upColor: '#16a34a', downColor: '#dc2626',
-      borderUpColor: '#16a34a', borderDownColor: '#dc2626',
-      wickUpColor: '#16a34a', wickDownColor: '#dc2626',
-      priceLineVisible: false,
-    });
+    const priceSeries = chartType === 'candles'
+      ? chart.addSeries(CandlestickSeries, {
+          upColor: '#16a34a', downColor: '#dc2626',
+          borderUpColor: '#16a34a', borderDownColor: '#dc2626',
+          wickUpColor: '#16a34a', wickDownColor: '#dc2626',
+          priceLineVisible: false,
+        })
+      : chart.addSeries(BarSeries, {
+          upColor: '#16a34a', downColor: '#dc2626',
+          priceLineVisible: false, lastValueVisible: true,
+          openVisible: true, thinBars: false,
+        });
+
     const ema = chart.addSeries(LineSeries, {
       color: '#fcf000', lineWidth: 2,
       priceLineVisible: false, lastValueVisible: true,
       title: `${emaPeriod}${timeframe === 'weekly' ? 'W' : 'D'} EMA`,
     });
 
-    candle.setData(bars.map(b => ({
+    priceSeries.setData(bars.map(b => ({
       time: b.date, open: b.open, high: b.high, low: b.low, close: b.close,
     })));
     ema.setData(bars
@@ -88,7 +97,7 @@ export default function Pnthr300ChartModal({ onClose }) {
     chart.timeScale().fitContent();
 
     return () => chart.remove();
-  }, [bars, timeframe, emaPeriod]);
+  }, [bars, timeframe, emaPeriod, chartType]);
 
   const dayChange = latest?.dayChangePct;
   const dayChangeClass = dayChange == null ? '' : dayChange >= 0 ? 'pos' : 'neg';
@@ -153,6 +162,29 @@ export default function Pnthr300ChartModal({ onClose }) {
           )}
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+            {/* Chart type: OHLC bars (default) vs candlesticks */}
+            <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
+              {[
+                { key: 'bars',    label: 'OHLC Bars' },
+                { key: 'candles', label: 'Candles' },
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  onClick={() => setChartType(opt.key)}
+                  style={{
+                    padding: '6px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+                    background: chartType === opt.key ? '#fcf000' : 'transparent',
+                    color: chartType === opt.key ? '#000' : '#888',
+                    border: 'none', cursor: 'pointer', textTransform: 'uppercase',
+                  }}
+                  title={opt.key === 'bars' ? 'Traditional OHLC bars (open tick on left, close tick on right)' : 'Japanese candlesticks (filled body shows open→close range)'}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Timeframe: daily vs weekly */}
             <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
               {['daily', 'weekly'].map(tf => (
                 <button
@@ -184,8 +216,18 @@ export default function Pnthr300ChartModal({ onClose }) {
 
         {/* Chart body */}
         <div style={{ flex: 1, position: 'relative' }}>
-          {loading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>Loading…</div>}
-          {error && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>{error}</div>}
+          {/* Panther head watermark — fixed top-left of chart canvas */}
+          <img
+            src={pantherHead}
+            alt="PNTHR"
+            style={{
+              position: 'absolute', top: 12, left: 12, width: 36, height: 36,
+              opacity: 0.85, zIndex: 2, pointerEvents: 'none',
+              filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.6))',
+            }}
+          />
+          {loading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', zIndex: 3 }}>Loading…</div>}
+          {error && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', zIndex: 3 }}>{error}</div>}
           <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
         </div>
 

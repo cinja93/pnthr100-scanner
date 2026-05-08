@@ -157,11 +157,11 @@ export default function AiJunglePage() {
         <div>
           <h1 className={styles.title}>
             <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            PNTHR AI Jungle
+            PNTHR AI 300 Index
           </h1>
           {!loading && !error && (
             <p className={styles.subtitle}>
-              PNTHR AI Universe {versionLabel} — {totalCount} AI-elite holdings across {sectorCount} sectors,
+              PNTHR AI 300 Index {versionLabel} — {totalCount} AI-elite holdings across {sectorCount} sectors,
               ranked by YTD return.
             </p>
           )}

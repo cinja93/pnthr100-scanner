@@ -19,6 +19,7 @@
 
 import { SECTORS, FUND_META } from './scripts/aiUniverse/aiUniverseData.js';
 import { fetchFMP, getYearStartPrices } from './stockService.js';
+import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 
 // ── Flatten holdings once at module load ────────────────────────────────────
 const FLAT_HOLDINGS = [];
@@ -105,10 +106,15 @@ export async function getAiUniverse({ refresh = false } = {}) {
   });
   const ranked = stocks.map((s, i) => ({ ...s, rank: i + 1 }));
 
+  // Per-stock BL/SS/BE/SE + PNTHR Stops. Each stock uses its AI sector's
+  // tunable EMA period applied to its weekly bars (weekly signal) and the
+  // same period applied to its daily bars (daily signal).
+  const { signals: weeklySig, dailySignals: dailySig } = await getAiUniverseSignals();
+
   const payload = {
     stocks:        ranked,
-    signals:       {}, // weekly PNTHR signals — populated when AI methodology locks
-    dailySignals:  {}, // daily  PNTHR signals — populated when AI methodology locks
+    signals:       weeklySig,
+    dailySignals:  dailySig,
     sectors:       SECTOR_META,
     fundMeta:      FUND_META,
     fetchedCount:  ranked.length,

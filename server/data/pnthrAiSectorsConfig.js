@@ -39,25 +39,25 @@ export function sectorTicker(sectorId) {
   return `PAI_S${sectorId}`;
 }
 
-// Per-sector weekly EMA period. Default 30 for all 16; per-sector overrides
-// below are added one line at a time as Scott observes the charts and tunes.
+// Per-sector EMA period. ONE number per sector — applied to weekly bars for
+// the weekly signal/EMA (e.g. 36W) and to the same-numbered daily EMA (36D).
+// Default 30 for all 16; per-sector overrides below are added one line at a
+// time as Scott observes the charts and tunes.
 //   Format: sectorId → period
 //   Example: "AI Compute, try 35" → set 1: 35
-const SECTOR_EMA_WEEKLY_OVERRIDES = {
+const SECTOR_EMA_OVERRIDES = {
   4:  36,  // AI Cloud, Data Centers & Edge                  (iterated 30 → 34 → 36)
   7:  36,  // AI Software & Agentic Platforms                (iterated 30 → 36)
   12: 40,  // AI Healthcare, Genomics & Drug Discovery       (iterated 30 → 40)
 };
-const SECTOR_EMA_DAILY_OVERRIDES = {
-  // (none yet — daily period stays at 21 default)
-};
 
-export const SECTOR_EMA_WEEKLY_PERIODS = Object.fromEntries(
-  SECTORS.map(s => [s.id, SECTOR_EMA_WEEKLY_OVERRIDES[s.id] ?? 30])
+export const SECTOR_EMA_PERIODS = Object.fromEntries(
+  SECTORS.map(s => [s.id, SECTOR_EMA_OVERRIDES[s.id] ?? 30])
 );
-export const SECTOR_EMA_DAILY_PERIODS = Object.fromEntries(
-  SECTORS.map(s => [s.id, SECTOR_EMA_DAILY_OVERRIDES[s.id] ?? 21])
-);
+
+// Back-compat aliases — both timeframes resolve to the same number.
+export const SECTOR_EMA_WEEKLY_PERIODS = SECTOR_EMA_PERIODS;
+export const SECTOR_EMA_DAILY_PERIODS  = SECTOR_EMA_PERIODS;
 
 // Convenience export — sector metadata for frontend (id, name, count, target weight)
 export const SECTOR_METADATA = SECTORS.map(s => ({

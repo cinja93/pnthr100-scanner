@@ -23,7 +23,7 @@ function ChartPanel({ title, period, fallback, bars, signals, chartType, current
   const containerRef = useRef(null);
   const chartRef     = useRef(null);
   const [hoveredBar, setHoveredBar] = useState(null);
-  const [barSpacing, setBarSpacing] = useState(title === 'Weekly' ? 6 : 4);
+  const [barSpacing, setBarSpacing] = useState(title === 'Weekly' ? 10 : 8);  // +4 wider default per Scott
   const barSpacingRef = useRef(barSpacing);
   useEffect(() => { barSpacingRef.current = barSpacing; }, [barSpacing]);
 

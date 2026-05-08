@@ -35,7 +35,7 @@ export default function Pnthr300ChartModal({ onClose }) {
   const [error, setError]           = useState(null);
   const [hoveredBar, setHoveredBar] = useState(null);
   const [barsTick, setBarsTick]     = useState(0);
-  const [barSpacing, setBarSpacing] = useState(8);  // px between bars (lightweight-charts unit)
+  const [barSpacing, setBarSpacing] = useState(12);  // px between bars (+4 wider default per Scott)
 
   const containerRef    = useRef(null);
   const chartRef        = useRef(null);

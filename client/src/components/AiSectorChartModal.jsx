@@ -33,7 +33,7 @@ export default function AiSectorChartModal({ sector, onClose }) {
   const [hoveredBar, setHoveredBar] = useState(null);
   const [barsTick, setBarsTick]     = useState(0);
   const [tickerChart, setTickerChart] = useState(null);  // { ticker, companyName, sector } when a holding is clicked
-  const [barSpacing, setBarSpacing]   = useState(8);
+  const [barSpacing, setBarSpacing]   = useState(12);  // +4 wider default per Scott
 
   const containerRef    = useRef(null);
   const chartRef        = useRef(null);

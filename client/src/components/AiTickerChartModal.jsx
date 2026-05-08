@@ -105,47 +105,29 @@ function ChartPanel({
     })));
     ema.setData(bars.filter(b => b.ema != null).map(b => ({ time: b.date, value: b.ema })));
 
-    // Signal markers — render the last N entry/exit pairs so you can see
-    // recent trade-by-trade history without saturating the chart.
-    //   N = 5 entries + their exits (≈ last 6-12 months on daily, longer on weekly)
-    // Showing every historical event creates a sea of markers (EA daily had
-    // 168). Showing only ONE entry hides too much (SNDK daily had 5+ recent
-    // BLs that all matter). N=5 entries is the right balance.
+    // Signal markers — render EVERY BL/SS/BE/SE event in the bar series so
+    // the chart reflects the full signal history.
+    //
+    // Prior behavior: filter to the last 5 entry/exit pairs to "avoid
+    // saturation." That filter was hiding real production signals from the
+    // chart — a trader spotting a clean BL setup on, say, 5-19-25 wouldn't
+    // see a marker drawn even though the state machine had fired a BL there,
+    // because there were 5+ later pairs and the older signal got pushed out.
+    // For decision-making, hiding real signals is unacceptable. Saturation on
+    // a few extreme names (e.g., chop kings with 100+ events) is the lesser
+    // evil — and zoom/pan still works to focus on a window.
     if (signals && signals.length > 0) {
-      const ENTRY_PAIRS_TO_SHOW = 5;
-      const visibleEvents = [];
-      let pairsCollected = 0;
-      // Walk backward, collect last N BL/SS entries + the exit that closed each
-      for (let i = signals.length - 1; i >= 0 && pairsCollected < ENTRY_PAIRS_TO_SHOW; i--) {
-        const ev = signals[i];
-        if (ev.signal === 'BL' || ev.signal === 'SS') {
-          // Find the BE/SE that closed this entry (between i+1 and the NEXT BL/SS)
-          let exitEvent = null;
-          for (let j = i + 1; j < signals.length; j++) {
-            const e = signals[j];
-            if (e.signal === 'BE' || e.signal === 'SE') { exitEvent = e; break; }
-            if (e.signal === 'BL' || e.signal === 'SS') break; // next entry — this one had no exit (still open)
-          }
-          if (exitEvent) visibleEvents.push(exitEvent);
-          visibleEvents.push(ev);
-          pairsCollected++;
-        }
-      }
-
-      if (visibleEvents.length > 0) {
-        // Markers must be in chronological order for lightweight-charts
-        visibleEvents.sort((a, b) => a.time.localeCompare(b.time));
-        const markers = visibleEvents.map(ev => {
-          let position, shape, text, color;
-          if (ev.signal === 'BL')      { color = '#16a34a'; position = 'belowBar'; shape = 'arrowUp';   text = 'BL'; }
-          else if (ev.signal === 'SS') { color = '#dc2626'; position = 'aboveBar'; shape = 'arrowDown'; text = 'SS'; }
-          else if (ev.signal === 'BE') { color = '#f59e0b'; position = 'aboveBar'; shape = 'square';    text = 'BE'; }
-          else if (ev.signal === 'SE') { color = '#f59e0b'; position = 'belowBar'; shape = 'square';    text = 'SE'; }
-          return { time: ev.time, position, color, shape, text, size: 2 };
-        });
-        // Save the marker manager to a ref so it isn't garbage-collected
-        markersRef.current = createSeriesMarkers(priceSeries, markers);
-      }
+      const visibleEvents = [...signals].sort((a, b) => a.time.localeCompare(b.time));
+      const markers = visibleEvents.map(ev => {
+        let position, shape, text, color;
+        if (ev.signal === 'BL')      { color = '#16a34a'; position = 'belowBar'; shape = 'arrowUp';   text = 'BL'; }
+        else if (ev.signal === 'SS') { color = '#dc2626'; position = 'aboveBar'; shape = 'arrowDown'; text = 'SS'; }
+        else if (ev.signal === 'BE') { color = '#f59e0b'; position = 'aboveBar'; shape = 'square';    text = 'BE'; }
+        else if (ev.signal === 'SE') { color = '#f59e0b'; position = 'belowBar'; shape = 'square';    text = 'SE'; }
+        return { time: ev.time, position, color, shape, text, size: 2 };
+      });
+      // Save the marker manager to a ref so it isn't garbage-collected
+      markersRef.current = createSeriesMarkers(priceSeries, markers);
     }
 
     // Dashed PNTHR Stop line — only the last 5 bars on the right edge so it

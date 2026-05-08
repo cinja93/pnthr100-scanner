@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, BarSeries, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
-import { fetchAiStockChartData } from '../services/api';
+import { fetchAiStockChartData, fetchNav } from '../services/api';
+import { sizePosition, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils';
+import { useQueue } from '../contexts/QueueContext';
 import pantherHead from '../assets/panther head.png';
 
 // AiTickerChartModal — daily + weekly OHLC charts side-by-side for any AI
@@ -209,10 +211,110 @@ function ChartPanel({ title, period, fallback, bars, signals, chartType, current
 
 // ── Modal ──────────────────────────────────────────────────────────────────
 export default function AiTickerChartModal({ ticker, onClose }) {
+  const { queuedTickers, toggleQueue, nav: contextNav } = useQueue() || {};
+
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const [chartType, setChartType] = useState('bars');
+  const [sizeLoading, setSizeLoading] = useState(false);
+  const [sizePanel, setSizePanel]     = useState(null);
+  const navCache = useRef(null);
+
+  // ── SIZE IT — derive sizing from current AI signal + PNTHR Stop ──────────
+  // Direction picks weekly signal first, daily second. Stop picks weekly
+  // pnthrStop first, daily second, falls back to ±2% of entry. NAV from
+  // QueueContext (loaded on mount) or one-shot fetchNav.
+  async function handleSizeIt() {
+    if (sizeLoading || !data?.ok) return;
+    setSizeLoading(true); setSizePanel(null);
+    try {
+      let nav = contextNav;
+      if (!nav) {
+        if (!navCache.current) {
+          const d = await fetchNav();
+          navCache.current = d?.nav || 100000;
+        }
+        nav = navCache.current;
+      }
+
+      const entryPrice = data.currentPrice;
+
+      // Direction: weekly first, daily fallback
+      let direction = 'LONG';
+      const wkSig = data.weekly?.currentSignal;
+      const dSig  = data.daily?.currentSignal;
+      if (wkSig === 'BL' || dSig === 'BL')      direction = 'LONG';
+      else if (wkSig === 'SS' || dSig === 'SS') direction = 'SHORT';
+
+      // Stop: weekly pnthrStop → daily pnthrStop → ±2% of entry
+      const stopDefault = data.weekly?.pnthrStop
+        || data.daily?.pnthrStop
+        || (direction === 'SHORT'
+            ? +(entryPrice * 1.02).toFixed(2)
+            : +(entryPrice * 0.98).toFixed(2));
+
+      const isETF = isEtfTicker(ticker);
+      const maxGapPct = 0;  // gap-risk fetch skipped for AI v1; can layer in later
+
+      const sizing     = sizePosition({ netLiquidity: nav, entryPrice, stopPrice: stopDefault, maxGapPct, direction, isETF });
+      const lot1Shr    = Math.max(1, Math.round(sizing.totalShares * STRIKE_PCT[0]));
+      const riskDollar = lot1Shr * Math.abs(entryPrice - stopDefault);
+
+      setSizePanel({
+        nav, entry: entryPrice, stop: stopDefault, adjustedStop: stopDefault,
+        totalShares: sizing.totalShares, lot1Shares: lot1Shr,
+        risk$: +riskDollar.toFixed(0), direction, isETF,
+        vitality: sizing.vitality, vitalityPct: sizing.vitalityPct,
+        gapPct: maxGapPct, gapMult: sizing.gapMult,
+      });
+    } catch (e) {
+      console.error('[SIZE IT]', e.message);
+    }
+    setSizeLoading(false);
+  }
+
+  function recalcWithStop(newStopStr) {
+    const newStop = parseFloat(newStopStr);
+    if (!sizePanel || !newStop || newStop <= 0) return;
+    const sizing = sizePosition({
+      netLiquidity: sizePanel.nav, entryPrice: sizePanel.entry, stopPrice: newStop,
+      maxGapPct: sizePanel.gapPct, direction: sizePanel.direction, isETF: sizePanel.isETF,
+    });
+    const lot1Shr = Math.max(1, Math.round(sizing.totalShares * STRIKE_PCT[0]));
+    const risk    = lot1Shr * Math.abs(sizePanel.entry - newStop);
+    setSizePanel(prev => ({
+      ...prev, adjustedStop: newStop, totalShares: sizing.totalShares,
+      lot1Shares: lot1Shr, risk$: +risk.toFixed(0),
+      gapMult: sizing.gapMult, vitality: sizing.vitality,
+    }));
+  }
+
+  function handleQueueToggle() {
+    if (!toggleQueue || !sizePanel) return;
+    const isQueued = queuedTickers?.has(ticker);
+    if (isQueued) {
+      toggleQueue({ ticker, _remove: true });
+    } else {
+      toggleQueue({
+        id:                Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        ticker,
+        signal:            data?.weekly?.currentSignal || data?.daily?.currentSignal || null,
+        direction:         sizePanel.direction,
+        currentPrice:      sizePanel.entry,
+        suggestedStop:     sizePanel.stop,
+        adjustedStop:      sizePanel.adjustedStop,
+        gapPct:            sizePanel.gapPct,
+        gapMultiplier:     sizePanel.gapMult,
+        totalTargetShares: sizePanel.totalShares,
+        lot1Shares:        sizePanel.lot1Shares,
+        risk:              sizePanel.risk$,
+        isETF:             sizePanel.isETF,
+        vitalityPct:       sizePanel.vitalityPct,
+        addedAt:           new Date().toISOString(),
+      });
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -273,6 +375,43 @@ export default function AiTickerChartModal({ ticker, onClose }) {
           )}
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+            {/* SIZE IT — gold pill, computes lot 1 sizing from AI signal + PNTHR Stop */}
+            <button
+              onClick={handleSizeIt}
+              disabled={sizeLoading || !data?.ok}
+              style={{
+                background: sizeLoading ? 'rgba(255,215,0,0.3)' : '#FFD700',
+                color: '#000', border: 'none', borderRadius: 5,
+                padding: '5px 12px', fontSize: 11, fontWeight: 800,
+                cursor: sizeLoading ? 'not-allowed' : 'pointer',
+                letterSpacing: '0.06em',
+              }}
+              title="Size this position using AI sector EMA + PNTHR Stop"
+            >
+              {sizeLoading ? '⟳' : 'SIZE IT'}
+            </button>
+
+            {/* QUEUE IT — visible after SIZE IT runs */}
+            {sizePanel && toggleQueue && (() => {
+              const isQueued = queuedTickers?.has(ticker);
+              return (
+                <button
+                  onClick={handleQueueToggle}
+                  style={{
+                    background: isQueued ? '#28a745' : 'rgba(40,167,69,0.15)',
+                    color:      isQueued ? '#fff'    : '#28a745',
+                    border:     `1px solid ${isQueued ? '#28a745' : 'rgba(40,167,69,0.4)'}`,
+                    borderRadius: 5, padding: '5px 12px',
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    letterSpacing: '0.04em',
+                  }}
+                  title={isQueued ? 'Remove from queue' : 'Add to entry queue'}
+                >
+                  {isQueued ? 'QUEUED ✓' : 'QUEUE IT'}
+                </button>
+              );
+            })()}
+
             <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
               {[
                 { key: 'bars',    label: 'OHLC Bars' },
@@ -304,6 +443,39 @@ export default function AiTickerChartModal({ ticker, onClose }) {
             </button>
           </div>
         </div>
+
+        {/* SIZE IT panel — appears below header after sizing computed */}
+        {sizePanel && (
+          <div style={{
+            padding: '8px 18px', borderBottom: '1px solid #1f1f1f',
+            background: '#111', display: 'flex', gap: 14, alignItems: 'center',
+            fontSize: 11, fontFamily: 'monospace', color: '#d4d4d4', flexWrap: 'wrap',
+          }}>
+            <span style={{ color: '#FFD700', fontWeight: 800, letterSpacing: '0.06em' }}>SIZE IT</span>
+            <span style={{ color: '#888' }}>NAV <strong style={{ color: '#fff' }}>${sizePanel.nav.toLocaleString()}</strong></span>
+            <span style={{ color: '#888' }}>Entry <strong style={{ color: '#fff' }}>${sizePanel.entry.toFixed(2)}</strong></span>
+            <span style={{ color: '#888' }}>Dir <strong style={{ color: sizePanel.direction === 'LONG' ? '#16a34a' : '#dc2626' }}>{sizePanel.direction}</strong></span>
+            <span style={{ color: '#888' }}>Stop&nbsp;
+              <input
+                type="number" step="0.01"
+                value={sizePanel.adjustedStop}
+                onChange={e => recalcWithStop(e.target.value)}
+                style={{
+                  width: 84, padding: '2px 6px', fontSize: 11, fontFamily: 'monospace',
+                  background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: 3,
+                  color: '#fcf000', outline: 'none',
+                }}
+              />
+            </span>
+            <span style={{ color: '#888' }}>Total Shares <strong style={{ color: '#fff' }}>{sizePanel.totalShares.toLocaleString()}</strong></span>
+            <span style={{ color: '#888' }}>Lot 1 <strong style={{ color: '#fcf000' }}>{sizePanel.lot1Shares.toLocaleString()}</strong></span>
+            <span style={{ color: '#888' }}>Risk <strong style={{ color: '#dc2626' }}>${sizePanel.risk$.toLocaleString()}</strong></span>
+            <span style={{ color: '#888' }}>Vitality <strong style={{ color: '#fff' }}>{(sizePanel.vitalityPct * 100).toFixed(1)}%</strong></span>
+            {sizePanel.gapMult > 1 && (
+              <span style={{ color: '#888' }}>Gap mult <strong style={{ color: '#f59e0b' }}>{sizePanel.gapMult.toFixed(2)}×</strong></span>
+            )}
+          </div>
+        )}
 
         {/* Body — two charts side by side */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0 }}>

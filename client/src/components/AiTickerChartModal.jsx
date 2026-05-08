@@ -377,11 +377,10 @@ function ChartPanel({
       {/* SIZE IT strip — appears below title bar after sizing computed */}
       {sizePanel && (
         <div style={{
-          padding: '6px 12px', borderBottom: '1px solid #1f1f1f',
-          background: '#111', display: 'flex', gap: 10, alignItems: 'center',
-          fontSize: 10, fontFamily: 'monospace', color: '#d4d4d4', flexWrap: 'wrap',
+          padding: '8px 14px', borderBottom: '1px solid #1f1f1f',
+          background: '#111', display: 'flex', gap: 14, alignItems: 'center',
+          fontSize: 13, fontFamily: 'monospace', color: '#d4d4d4', flexWrap: 'wrap',
         }}>
-          <span style={{ color: '#888' }}>NAV <strong style={{ color: '#fff' }}>${sizePanel.nav.toLocaleString()}</strong></span>
           <span style={{ color: '#888' }}>Entry <strong style={{ color: '#fff' }}>${sizePanel.entry.toFixed(2)}</strong></span>
           <span style={{ color: '#888' }}>Dir <strong style={{ color: sizePanel.direction === 'LONG' ? '#16a34a' : '#dc2626' }}>{sizePanel.direction}</strong></span>
           <span style={{ color: '#888' }}>Stop&nbsp;
@@ -390,9 +389,9 @@ function ChartPanel({
               value={sizePanel.adjustedStop}
               onChange={e => recalcWithStop(e.target.value)}
               style={{
-                width: 76, padding: '1px 5px', fontSize: 10, fontFamily: 'monospace',
+                width: 92, padding: '2px 6px', fontSize: 13, fontFamily: 'monospace',
                 background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: 3,
-                color: '#fcf000', outline: 'none',
+                color: '#fcf000', outline: 'none', fontWeight: 700,
               }}
             />
           </span>

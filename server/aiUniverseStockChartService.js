@@ -82,9 +82,104 @@ export async function getAiStockChartData(ticker) {
   const dailyRaw  = dailyDoc?.daily   || [];
   const weeklyRaw = weeklyDoc?.weekly || [];
 
-  // Sort ascending for chart consumption
-  const dailyAsc  = [...dailyRaw].sort((a, b) => a.date.localeCompare(b.date));
-  const weeklyAsc = [...weeklyRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
+  // Sort ascending for chart consumption.
+  // We keep TWO views of the bars:
+  //   • *Sig*: Mongo-only, fed to the state machine — closed bars / cron-aggregated
+  //     in-progress weekly bar. This is the source of truth for BL/SS markers,
+  //     PNTHR Stop, and the "is there an open position?" flag.
+  //   • Render arrays (dailyAsc / weeklyAsc): Mongo + today's live FMP overlay.
+  //     This is what the chart draws so the user sees today's bar breathe.
+  const dailyAscSig  = [...dailyRaw].sort((a, b) => a.date.localeCompare(b.date));
+  const weeklyAscSig = [...weeklyRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
+  const dailyAsc  = [...dailyAscSig];
+  const weeklyAsc = [...weeklyAscSig];
+
+  // ── Intraday synthesis: append today's live bar so the chart "breathes" ──
+  // Mongo bars are end-of-day only — written by the 5:30pm cron. During RTH,
+  // the latest stored daily bar is yesterday's, and the chart looks frozen
+  // even while the tape moves. We use the FMP /quote we already pulled to
+  // synthesize today's intraday bar (open, dayHigh, dayLow, live close) and
+  // append it to dailyAsc. Same idea for weekly: this week's weekly bar gets
+  // its high/low/close updated using today's live data.
+  //
+  // CRITICAL: signal state machine does NOT see this synthesized bar (signals
+  // confirm only on closed bars). The chart shows today's bar visually, but
+  // BL/SS/BE/SE markers and the PNTHR Stop are still computed off the closed
+  // bar history. This prevents intraday signal whipsaws.
+  function ymdET(unixSec) {
+    if (!unixSec) return null;
+    const d = new Date(unixSec * 1000);
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    return fmt.format(d); // "YYYY-MM-DD"
+  }
+  function mondayOfET(ymd) {
+    if (!ymd) return null;
+    // Parse as ET noon to avoid TZ slop, then walk back to Monday.
+    const d = new Date(`${ymd}T12:00:00-05:00`);
+    const dow = d.getUTCDay(); // 0=Sun..6=Sat (UTC ok since we anchored noon ET)
+    const daysToMonday = dow === 0 ? -6 : 1 - dow;
+    d.setUTCDate(d.getUTCDate() + daysToMonday);
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    return fmt.format(d);
+  }
+  const todayET = liveQuote?.timestamp ? ymdET(liveQuote.timestamp) : null;
+  const lastStoredDaily = dailyAsc[dailyAsc.length - 1] || null;
+  const liveOpen   = (liveQuote && typeof liveQuote.open    === 'number') ? liveQuote.open    : null;
+  const liveHigh   = (liveQuote && typeof liveQuote.dayHigh === 'number') ? liveQuote.dayHigh : null;
+  const liveLow    = (liveQuote && typeof liveQuote.dayLow  === 'number') ? liveQuote.dayLow  : null;
+  const liveClose  = (liveQuote && typeof liveQuote.price   === 'number') ? liveQuote.price   : null;
+  const liveVol    = (liveQuote && typeof liveQuote.volume  === 'number') ? liveQuote.volume  : 0;
+  const haveLiveBar = todayET && liveOpen != null && liveHigh != null && liveLow != null && liveClose != null;
+
+  // Append today's daily bar if it's missing (the usual case during RTH).
+  // If the cron has already written today's bar (post-5:30pm ET), we replace
+  // its OHLC with the live values to keep the chart in sync until close.
+  if (haveLiveBar && lastStoredDaily) {
+    const lastIsToday = lastStoredDaily.date === todayET;
+    const todayBar = {
+      date:   todayET,
+      open:   liveOpen,
+      high:   Math.max(liveHigh, lastIsToday ? lastStoredDaily.high : liveHigh),
+      low:    Math.min(liveLow,  lastIsToday ? lastStoredDaily.low  : liveLow),
+      close:  liveClose,
+      volume: Math.max(liveVol,  lastIsToday ? (lastStoredDaily.volume || 0) : liveVol),
+    };
+    if (lastIsToday) dailyAsc[dailyAsc.length - 1] = todayBar;
+    else if (todayET > lastStoredDaily.date) dailyAsc.push(todayBar);
+  }
+
+  // Update / append this week's weekly bar with today's live data.
+  // The weekly bar represents the Mon→Fri aggregation. During RTH on any
+  // weekday, this week's weekly bar should reflect today's live high/low/close.
+  if (haveLiveBar && weeklyAsc.length > 0) {
+    const thisMonday = mondayOfET(todayET);
+    const lastWk = weeklyAsc[weeklyAsc.length - 1];
+    if (thisMonday && lastWk) {
+      if (lastWk.weekOf === thisMonday) {
+        // Update in place: keep stored open (Monday's open), update H/L/C.
+        weeklyAsc[weeklyAsc.length - 1] = {
+          ...lastWk,
+          high:  Math.max(lastWk.high, liveHigh),
+          low:   Math.min(lastWk.low,  liveLow),
+          close: liveClose,
+        };
+      } else if (thisMonday > lastWk.weekOf) {
+        // New week starting today (e.g. Monday morning, no aggregator run yet).
+        weeklyAsc.push({
+          weekOf: thisMonday,
+          open:   liveOpen,
+          high:   liveHigh,
+          low:    liveLow,
+          close:  liveClose,
+          volume: liveVol,
+        });
+      }
+    }
+  }
 
   // Stale-data guard: if the last available bar is > 14 days old, the ticker
   // has been delisted/acquired and signals on the frozen tail are meaningless.
@@ -116,13 +211,16 @@ export async function getAiStockChartData(ticker) {
   const dailyPeriod  = !dailyStaleData  ? pickPeriod(dailyAsc.length)  : null;
   const weeklyPeriod = !weeklyStaleData ? pickPeriod(weeklyAsc.length) : null;
 
-  // Compute EMA series aligned to bars (using whichever period was picked)
+  // Compute EMA series aligned to bars (using whichever period was picked).
+  // EMA includes today's synthesized bar so the line extends to today's price.
   const dailyEma  = dailyPeriod  ? emaSeriesAlignedTo(dailyAsc,  dailyPeriod)  : new Array(dailyAsc.length).fill(null);
   const weeklyEma = weeklyPeriod ? emaSeriesAlignedTo(weeklyAsc, weeklyPeriod) : new Array(weeklyAsc.length).fill(null);
 
-  // Run signal state machine on each (its picked period applied to its own bars)
-  const dailySigBars  = dailyAsc.map(b => ({ time: b.date,   open: b.open, high: b.high, low: b.low, close: b.close }));
-  const weeklySigBars = weeklyAsc.map(b => ({ time: b.weekOf, open: b.open, high: b.high, low: b.low, close: b.close }));
+  // Signal state machine runs on the Mongo-only series (no live intraday
+  // overlay) so today's tape can't whip BL/SS markers around mid-session.
+  // dailyAscSig and weeklyAscSig are the bars exactly as the cron wrote them.
+  const dailySigBars  = dailyAscSig.map(b => ({ time: b.date,   open: b.open, high: b.high, low: b.low, close: b.close }));
+  const weeklySigBars = weeklyAscSig.map(b => ({ time: b.weekOf, open: b.open, high: b.high, low: b.low, close: b.close }));
 
   // Daily uses 0.3% daylight zone (vs 1% weekly) — daily ranges are tighter
   // than weekly so the 1% threshold starves daily signals on chop-zone names.
@@ -133,29 +231,31 @@ export async function getAiStockChartData(ticker) {
   const lastDaily  = dailyAsc[dailyAsc.length - 1] || null;
   const lastWeekly = weeklyAsc[weeklyAsc.length - 1] || null;
 
-  // Header price + day change come from live FMP quote, not the latest bar.
-  // The previous code echoed lastDaily.close as "current price" — during the
-  // trading day before the 5:30pm cron appends today's bar, that's yesterday's
-  // close (e.g. SNDK showed $1,339.96 in the modal while the live tape was at
-  // $1,510). Pull live quote and compute day change against yesterday's close.
-  // Fall back to bar-based math if FMP is unreachable (offline / rate-limited).
-  const prevDaily = dailyAsc.length >= 2 ? dailyAsc[dailyAsc.length - 2] : null;
+  // Header price + day change come from live FMP quote.
+  // Day change preference order:
+  //   1. FMP's canonical changesPercentage (matches TWS / Bloomberg)
+  //   2. (livePrice - prior close) / prior close — where "prior close" is the
+  //      last Mongo bar that is NOT today (i.e., yesterday's close, even when
+  //      today's synthesized bar has been appended).
+  //   3. Bar-based math when FMP is unreachable.
+  const priorCloseBar = (() => {
+    // Walk dailyAscSig (Mongo only) backwards skipping any same-day entry.
+    for (let i = dailyAscSig.length - 1; i >= 0; i--) {
+      if (dailyAscSig[i].date !== todayET) return dailyAscSig[i];
+    }
+    return null;
+  })();
   let livePrice    = (liveQuote && typeof liveQuote.price === 'number') ? liveQuote.price : null;
   let dayChangePct = null;
-  if (livePrice != null && lastDaily) {
-    // Today's % move = (live - yesterday's close) / yesterday's close. lastDaily
-    // IS yesterday's bar during RTH (today's bar lands at 5:30pm cron). Once
-    // today's bar lands, lastDaily becomes today's bar — in which case the math
-    // (live - today's open close-stamped value) drifts; fall back to FMP's own
-    // changesPercentage when FMP returns it (it's the canonical day move).
+  if (livePrice != null) {
     if (typeof liveQuote.changesPercentage === 'number') {
       dayChangePct = liveQuote.changesPercentage;
-    } else if (prevDaily) {
-      dayChangePct = ((livePrice - lastDaily.close) / lastDaily.close) * 100;
+    } else if (priorCloseBar) {
+      dayChangePct = ((livePrice - priorCloseBar.close) / priorCloseBar.close) * 100;
     }
-  } else if (lastDaily && prevDaily) {
+  } else if (lastDaily && priorCloseBar && lastDaily !== priorCloseBar) {
     livePrice    = lastDaily.close;
-    dayChangePct = ((lastDaily.close - prevDaily.close) / prevDaily.close) * 100;
+    dayChangePct = ((lastDaily.close - priorCloseBar.close) / priorCloseBar.close) * 100;
   }
 
   const out = {

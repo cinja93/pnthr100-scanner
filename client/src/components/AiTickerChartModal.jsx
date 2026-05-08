@@ -55,6 +55,17 @@ function ChartPanel({
   // Reset sizing when ticker changes
   useEffect(() => { setSizePanel(null); }, [ticker]);
 
+  // Auto-fire SIZE IT as soon as inputs are ready — Scott wants the sizing
+  // info (NAV / Stop / Shares / Risk / etc.) visible by default without
+  // having to click the button. Re-fires when ticker / entryPrice / signal /
+  // stop change (e.g. on ◀ ▶ navigation). User edits to the stop input
+  // don't change deps, so they're preserved between auto-runs.
+  useEffect(() => {
+    if (entryPrice == null) return;
+    handleSizeIt();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker, entryPrice, pnthrStop, currentSignal]);
+
   // ── Chart render ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || !bars || bars.length === 0) return;

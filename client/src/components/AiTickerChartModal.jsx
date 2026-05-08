@@ -106,16 +106,25 @@ function ChartPanel({
       createSeriesMarkers(priceSeries, markers);
     }
 
-    // Dashed PNTHR Stop price line — drawn at the timeframe-specific stop
-    if (pnthrStop != null) {
-      priceLineRef.current = priceSeries.createPriceLine({
-        price: pnthrStop,
+    // Dashed PNTHR Stop line — only the last 5 bars on the right edge so it
+    // doesn't bisect the whole chart. Implemented as a LineSeries (not a
+    // priceLine) so we can control its x-extent. Price label still appears
+    // on the right Y axis via lastValueVisible. No floating chart-overlay
+    // label (priceLine's `title` blocked the bars).
+    if (pnthrStop != null && bars.length >= 1) {
+      const stopLine = chart.addSeries(LineSeries, {
         color: '#fcf000',
         lineWidth: 1,
         lineStyle: 2,                     // 0=Solid 1=Dotted 2=Dashed 3=LargeDashed 4=SparseDotted
-        axisLabelVisible: true,
-        title: `STOP $${pnthrStop.toFixed(2)}`,
+        priceLineVisible: false,
+        lastValueVisible: true,           // shows the stop $ on the right axis
+        crosshairMarkerVisible: false,
+        title: '',                        // no floating overlay label
       });
+      const lastN = Math.min(5, bars.length);
+      const stopData = bars.slice(-lastN).map(b => ({ time: b.date, value: pnthrStop }));
+      stopLine.setData(stopData);
+      priceLineRef.current = stopLine;    // ref points to the series so we can update it
     }
 
     // (do NOT call fitContent — see comment in earlier commit)
@@ -142,18 +151,19 @@ function ChartPanel({
     };
   }, [bars, signals, chartType, title, pnthrStop]);
 
-  // Update the dashed price line live when SIZE IT's adjustable stop changes
+  // Update the dashed stop line live when SIZE IT's adjustable stop changes.
+  // The line is a LineSeries pinned to the last 5 bars at a constant Y value;
+  // we re-set its data with the new stop value to redraw at the new level.
   useEffect(() => {
-    if (!priceLineRef.current) return;
+    if (!priceLineRef.current || !bars || bars.length === 0) return;
     const live = sizePanel?.adjustedStop ?? pnthrStop;
     if (live == null) return;
     try {
-      priceLineRef.current.applyOptions({
-        price: live,
-        title: `STOP $${Number(live).toFixed(2)}`,
-      });
-    } catch { /* line may have been disposed during a chart rebuild */ }
-  }, [sizePanel?.adjustedStop, pnthrStop]);
+      const lastN = Math.min(5, bars.length);
+      const newData = bars.slice(-lastN).map(b => ({ time: b.date, value: Number(live) }));
+      priceLineRef.current.setData(newData);
+    } catch { /* series may have been disposed during a chart rebuild */ }
+  }, [sizePanel?.adjustedStop, pnthrStop, bars]);
 
   // ── SIZE IT — uses THIS timeframe's signal + stop ──────────────────────
   async function handleSizeIt() {
@@ -245,10 +255,21 @@ function ChartPanel({
   }
 
   const sigColor = currentSignal === 'BL' ? '#16a34a' : currentSignal === 'SS' ? '#dc2626' : currentSignal ? '#f59e0b' : '#666';
-  const hoveredChangePct = hoveredBar && hoveredBar.open
-    ? ((hoveredBar.close - hoveredBar.open) / hoveredBar.open) * 100
-    : null;
   const isQueued = queuedTickers?.has(ticker);
+
+  // Data box always shows: latest bar by default, hovered bar when crosshair active.
+  const lastBar = bars && bars.length > 0 ? bars[bars.length - 1] : null;
+  const displayBar = hoveredBar || (lastBar ? {
+    time:  lastBar.date,
+    open:  lastBar.open,
+    high:  lastBar.high,
+    low:   lastBar.low,
+    close: lastBar.close,
+    ema:   lastBar.ema,
+  } : null);
+  const displayChangePct = displayBar && displayBar.open
+    ? ((displayBar.close - displayBar.open) / displayBar.open) * 100
+    : null;
 
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', borderRight: title === 'Daily' ? '1px solid #1f1f1f' : 'none' }}>
@@ -367,7 +388,9 @@ function ChartPanel({
 
       {/* Chart body */}
       <div style={{ flex: 1, position: 'relative' }}>
-        {hoveredBar && (
+        {/* Data box — always visible upper-left. Shows the LATEST bar by
+            default; switches to the HOVERED bar when crosshair is on a bar. */}
+        {displayBar && (
           <div style={{
             position: 'absolute', top: 8, left: 8, zIndex: 4,
             background: 'rgba(15,15,15,0.95)', border: '1px solid #2a2a2a', borderRadius: 4,
@@ -375,25 +398,28 @@ function ChartPanel({
             color: '#d4d4d4', minWidth: 140, pointerEvents: 'none',
             boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
           }}>
-            <div style={{ color: '#fcf000', fontWeight: 700, marginBottom: 3 }}>{hoveredBar.time}</div>
+            <div style={{ color: '#fcf000', fontWeight: 700, marginBottom: 3, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span>{displayBar.time}</span>
+              {!hoveredBar && <span style={{ fontSize: 8, color: '#666', fontWeight: 500 }}>LATEST</span>}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '1px 10px' }}>
-              <span style={{ color: '#888' }}>O</span><span>{fmtNum(hoveredBar.open)}</span>
-              <span style={{ color: '#888' }}>H</span><span style={{ color: '#16a34a' }}>{fmtNum(hoveredBar.high)}</span>
-              <span style={{ color: '#888' }}>L</span><span style={{ color: '#dc2626' }}>{fmtNum(hoveredBar.low)}</span>
+              <span style={{ color: '#888' }}>O</span><span>{fmtNum(displayBar.open)}</span>
+              <span style={{ color: '#888' }}>H</span><span style={{ color: '#16a34a' }}>{fmtNum(displayBar.high)}</span>
+              <span style={{ color: '#888' }}>L</span><span style={{ color: '#dc2626' }}>{fmtNum(displayBar.low)}</span>
               <span style={{ color: '#888' }}>C</span>
-              <span style={{ color: hoveredBar.close >= hoveredBar.open ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
-                {fmtNum(hoveredBar.close)}
+              <span style={{ color: displayBar.close >= displayBar.open ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
+                {fmtNum(displayBar.close)}
               </span>
-              {hoveredChangePct != null && (
+              {displayChangePct != null && (
                 <>
                   <span style={{ color: '#888' }}>%</span>
-                  <span style={{ color: hoveredChangePct >= 0 ? '#16a34a' : '#dc2626' }}>{fmtPct(hoveredChangePct)}</span>
+                  <span style={{ color: displayChangePct >= 0 ? '#16a34a' : '#dc2626' }}>{fmtPct(displayChangePct)}</span>
                 </>
               )}
-              {hoveredBar.ema != null && (
+              {displayBar.ema != null && (
                 <>
                   <span style={{ color: '#888' }}>EMA</span>
-                  <span style={{ color: '#fcf000' }}>{fmtNum(hoveredBar.ema)}</span>
+                  <span style={{ color: '#fcf000' }}>{fmtNum(displayBar.ema)}</span>
                 </>
               )}
             </div>

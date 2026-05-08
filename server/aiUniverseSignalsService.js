@@ -118,6 +118,10 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
         signals[ticker] = {
           signal:       finalSignal,
           signalDate:   finalDate,
+          // Bar anchor for the BL+N counter — pins the count to the latest
+          // weekly bar in our DB so the displayed counter matches the chart
+          // even when this week's bar hasn't been re-aggregated yet.
+          lastBarDate:  lastBarTime,
           isNewSignal:  !!isNewSignal,
           stopPrice:    activeType ? pnthrStop : null,  // only carry stop when position is open
         };
@@ -153,6 +157,10 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
         dailySignals[ticker] = {
           signal:       finalSignal,
           signalDate:   finalDate,
+          // Bar anchor for the BL+N counter — pins the count to the latest
+          // daily bar in our DB so the displayed counter matches the chart
+          // even before today's bar has been appended by the 5:30pm cron.
+          lastBarDate:  lastBarTime,
           isNewSignal:  !!isNewSignal,
         };
         withDailySig++;

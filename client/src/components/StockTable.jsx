@@ -113,8 +113,8 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
       const bSig  = signals[b.ticker];
       const aType = SIGNAL_ORDER[aSig?.signal] ?? 99;
       const bType = SIGNAL_ORDER[bSig?.signal] ?? 99;
-      const aWks  = computeWeeksAgo(aSig?.signalDate) ?? 9999;
-      const bWks  = computeWeeksAgo(bSig?.signalDate) ?? 9999;
+      const aWks  = computeWeeksAgo(aSig?.signalDate, aSig?.lastBarDate) ?? 9999;
+      const bWks  = computeWeeksAgo(bSig?.signalDate, bSig?.lastBarDate) ?? 9999;
       return (aType * 10000 + aWks - (bType * 10000 + bWks)) * dir;
     }
 
@@ -123,8 +123,8 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
     if (sortConfig.key === 'weeksAgo') {
       const aSig  = signals[a.ticker];
       const bSig  = signals[b.ticker];
-      const aWks  = computeWeeksAgo(aSig?.signalDate) ?? 9999;
-      const bWks  = computeWeeksAgo(bSig?.signalDate) ?? 9999;
+      const aWks  = computeWeeksAgo(aSig?.signalDate, aSig?.lastBarDate) ?? 9999;
+      const bWks  = computeWeeksAgo(bSig?.signalDate, bSig?.lastBarDate) ?? 9999;
       const aType = SIGNAL_ORDER[aSig?.signal] ?? 99;
       const bType = SIGNAL_ORDER[bSig?.signal] ?? 99;
       return (aWks * 10000 + aType - (bWks * 10000 + bType)) * dir;
@@ -136,15 +136,15 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
       const bSig  = dailySignals[b.ticker];
       const aType = SIGNAL_ORDER[aSig?.signal] ?? 99;
       const bType = SIGNAL_ORDER[bSig?.signal] ?? 99;
-      const aDays = computeTradingDaysAgo(aSig?.signalDate) ?? 9999;
-      const bDays = computeTradingDaysAgo(bSig?.signalDate) ?? 9999;
+      const aDays = computeTradingDaysAgo(aSig?.signalDate, aSig?.lastBarDate) ?? 9999;
+      const bDays = computeTradingDaysAgo(bSig?.signalDate, bSig?.lastBarDate) ?? 9999;
       return (aType * 10000 + aDays - (bType * 10000 + bDays)) * dir;
     }
     if (sortConfig.key === 'dailyWeeksAgo') {
       const aSig  = dailySignals[a.ticker];
       const bSig  = dailySignals[b.ticker];
-      const aDays = computeTradingDaysAgo(aSig?.signalDate) ?? 9999;
-      const bDays = computeTradingDaysAgo(bSig?.signalDate) ?? 9999;
+      const aDays = computeTradingDaysAgo(aSig?.signalDate, aSig?.lastBarDate) ?? 9999;
+      const bDays = computeTradingDaysAgo(bSig?.signalDate, bSig?.lastBarDate) ?? 9999;
       const aType = SIGNAL_ORDER[aSig?.signal] ?? 99;
       const bType = SIGNAL_ORDER[bSig?.signal] ?? 99;
       return (aDays * 10000 + aType - (bDays * 10000 + bType)) * dir;
@@ -499,7 +499,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 {showDailySignal && (() => {
                   const ds = dailySignals[stock.ticker];
                   const sig = ds?.signal;
-                  const days = computeTradingDaysAgo(ds?.signalDate);  // signal day = +1
+                  const days = computeTradingDaysAgo(ds?.signalDate, ds?.lastBarDate);  // signal day = +1, anchored to latest daily bar
                   const cls = sig === 'BL' ? styles.pnthrBadgeBL
                             : sig === 'SS' ? styles.pnthrBadgeSS
                             : (sig === 'BE' || sig === 'SE') ? styles.pnthrBadgeBE
@@ -540,7 +540,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                     ? <span className={styles.loadingDots}>···</span>
                     : (() => {
                         const sig = signalData?.signal;
-                        const wks = computeWeeksAgo(signalData?.signalDate);
+                        const wks = computeWeeksAgo(signalData?.signalDate, signalData?.lastBarDate);
                         if (!sig || wks == null) return <span className={styles.signalNone}>—</span>;
                         const cls = sig === 'BL' ? styles.pnthrBadgeBL
                                   : sig === 'SS' ? styles.pnthrBadgeSS

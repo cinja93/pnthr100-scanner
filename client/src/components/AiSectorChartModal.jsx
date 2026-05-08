@@ -33,11 +33,22 @@ export default function AiSectorChartModal({ sector, onClose }) {
   const [hoveredBar, setHoveredBar] = useState(null);
   const [barsTick, setBarsTick]     = useState(0);
   const [tickerChart, setTickerChart] = useState(null);  // { ticker, companyName, sector } when a holding is clicked
+  const [barSpacing, setBarSpacing]   = useState(8);
 
   const containerRef    = useRef(null);
   const chartRef        = useRef(null);
   const priceSeriesRef  = useRef(null);
   const visibleBarsRef  = useRef([]);
+  const barSpacingRef   = useRef(barSpacing);
+  useEffect(() => { barSpacingRef.current = barSpacing; }, [barSpacing]);
+
+  function adjustBarSpacing(delta) {
+    setBarSpacing(prev => {
+      const next = Math.max(2, Math.min(40, prev + delta));
+      chartRef.current?.timeScale().applyOptions({ barSpacing: next });
+      return next;
+    });
+  }
 
   // Bars
   useEffect(() => {
@@ -72,7 +83,7 @@ export default function AiSectorChartModal({ sector, onClose }) {
       layout: { background: { color: '#0c0c0c' }, textColor: '#d4d4d4', attributionLogo: false },
       grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
       rightPriceScale: { borderColor: '#333' },
-      timeScale: { borderColor: '#333', timeVisible: timeframe === 'daily' },
+      timeScale: { borderColor: '#333', timeVisible: timeframe === 'daily', barSpacing: barSpacingRef.current },
       crosshair: { mode: 1 },
     });
     chartRef.current = chart;
@@ -178,6 +189,36 @@ export default function AiSectorChartModal({ sector, onClose }) {
           )}
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+            {/* Bar spacing: contract ⇨⇦  /  expand ⇦⇨ */}
+            <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
+              <button
+                onClick={() => adjustBarSpacing(-2)}
+                title="Contract — bring bars closer together"
+                style={{
+                  padding: '6px 10px', fontSize: 13, fontWeight: 700,
+                  background: 'transparent', color: '#888',
+                  border: 'none', cursor: 'pointer',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#fcf000'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#888'; }}
+              >
+                →←
+              </button>
+              <button
+                onClick={() => adjustBarSpacing(2)}
+                title="Expand — push bars further apart"
+                style={{
+                  padding: '6px 10px', fontSize: 13, fontWeight: 700,
+                  background: 'transparent', color: '#888',
+                  border: 'none', cursor: 'pointer', borderLeft: '1px solid #2a2a2a',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#fcf000'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#888'; }}
+              >
+                ←→
+              </button>
+            </div>
+
             <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
               {[
                 { key: 'bars', label: 'OHLC Bars' },

@@ -35,11 +35,24 @@ export default function Pnthr300ChartModal({ onClose }) {
   const [error, setError]           = useState(null);
   const [hoveredBar, setHoveredBar] = useState(null);
   const [barsTick, setBarsTick]     = useState(0);
+  const [barSpacing, setBarSpacing] = useState(8);  // px between bars (lightweight-charts unit)
 
   const containerRef    = useRef(null);
   const chartRef        = useRef(null);
   const priceSeriesRef  = useRef(null);
   const visibleBarsRef  = useRef([]);
+  const barSpacingRef   = useRef(barSpacing);
+  useEffect(() => { barSpacingRef.current = barSpacing; }, [barSpacing]);
+
+  // Imperative spacing adjuster — applies to the live chart without triggering
+  // a full re-render. Clamped to [2, 40] so bars stay readable at extremes.
+  function adjustBarSpacing(delta) {
+    setBarSpacing(prev => {
+      const next = Math.max(2, Math.min(40, prev + delta));
+      chartRef.current?.timeScale().applyOptions({ barSpacing: next });
+      return next;
+    });
+  }
 
   // Latest snapshot (for header summary)
   useEffect(() => {
@@ -75,7 +88,7 @@ export default function Pnthr300ChartModal({ onClose }) {
       layout: { background: { color: '#0c0c0c' }, textColor: '#d4d4d4', attributionLogo: false },
       grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
       rightPriceScale: { borderColor: '#333' },
-      timeScale: { borderColor: '#333', timeVisible: timeframe === 'daily' },
+      timeScale: { borderColor: '#333', timeVisible: timeframe === 'daily', barSpacing: barSpacingRef.current },
       crosshair: { mode: 1 },
     });
     chartRef.current = chart;
@@ -221,6 +234,36 @@ export default function Pnthr300ChartModal({ onClose }) {
           )}
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+            {/* Bar spacing: contract ⇨⇦  /  expand ⇦⇨ — adjusts the gap between bars */}
+            <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
+              <button
+                onClick={() => adjustBarSpacing(-2)}
+                title="Contract — bring bars closer together (more bars on screen)"
+                style={{
+                  padding: '6px 10px', fontSize: 13, fontWeight: 700,
+                  background: 'transparent', color: '#888',
+                  border: 'none', cursor: 'pointer',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#fcf000'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#888'; }}
+              >
+                →←
+              </button>
+              <button
+                onClick={() => adjustBarSpacing(2)}
+                title="Expand — push bars further apart (fewer bars on screen, wider candles)"
+                style={{
+                  padding: '6px 10px', fontSize: 13, fontWeight: 700,
+                  background: 'transparent', color: '#888',
+                  border: 'none', cursor: 'pointer', borderLeft: '1px solid #2a2a2a',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#fcf000'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#888'; }}
+              >
+                ←→
+              </button>
+            </div>
+
             {/* Chart type: OHLC bars (default) vs candlesticks */}
             <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
               {[

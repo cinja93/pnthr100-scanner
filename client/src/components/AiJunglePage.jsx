@@ -121,6 +121,17 @@ export default function AiJunglePage() {
   const [sectorFilter, setSectorFilter]   = useState('all'); // 'all' | sectorId number
   const [searchQuery, setSearchQuery]     = useState('');    // ticker or company name filter
   const [groupBySector, setGroupBySector] = useState(false);
+  // Sector chip row expand/collapse — persisted across sessions so Scott's
+  // preference sticks. Default expanded for first-time users (no key yet).
+  const [sectorChipsExpanded, setSectorChipsExpanded] = useState(() => {
+    try {
+      const v = localStorage.getItem('aiJungle.sectorChipsExpanded');
+      return v === null ? true : v === '1';
+    } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('aiJungle.sectorChipsExpanded', sectorChipsExpanded ? '1' : '0'); } catch { /* ignore */ }
+  }, [sectorChipsExpanded]);
   const [chartTickers, setChartTickers]   = useState([]);    // sorted ticker list as displayed in the table
   const [chartIndex, setChartIndex]       = useState(0);
   const [showIndexChart, setShowIndexChart] = useState(false);
@@ -218,6 +229,41 @@ export default function AiJunglePage() {
           )}
         </div>
         <div className={styles.headerActions}>
+          {!loading && !error && stocks.length > 0 && (
+            <div className={styles.headerSearchWrap}>
+              <span className={styles.headerSearchIcon} aria-hidden="true">⌕</span>
+              <input
+                type="text"
+                className={styles.headerSearchInput}
+                placeholder="Search AI 300 ticker or company…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className={styles.headerSearchClear}
+                  onClick={() => setSearchQuery('')}
+                  title="Clear search"
+                  aria-label="Clear search"
+                >×</button>
+              )}
+            </div>
+          )}
+          {!loading && !error && stocks.length > 0 && (
+            <button
+              className={styles.sectorToggle}
+              onClick={() => setSectorChipsExpanded(v => !v)}
+              title={sectorChipsExpanded ? 'Hide sector chips' : 'Show sector chips'}
+            >
+              {sectorChipsExpanded ? '▾' : '▸'} Sectors
+              {sectorFilter !== 'all' && (
+                <span className={styles.sectorTogglePill}>{counts[sectorFilter] ?? 0}</span>
+              )}
+            </button>
+          )}
           <button
             className={`${styles.sectorToggle} ${groupBySector ? styles.sectorToggleActive : ''}`}
             onClick={() => setGroupBySector(v => !v)}
@@ -239,39 +285,16 @@ export default function AiJunglePage() {
         />
       )}
 
-      {!loading && !error && stocks.length > 0 && (
-        <div className={styles.aiSearchRow}>
-          <div className={styles.aiSearchInputWrap}>
-            <span className={styles.aiSearchIcon} aria-hidden="true">⌕</span>
-            <input
-              type="text"
-              className={styles.aiSearchInput}
-              placeholder="Search AI 300 ticker or company name…"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                className={styles.aiSearchClear}
-                onClick={() => setSearchQuery('')}
-                title="Clear search"
-                aria-label="Clear search"
-              >×</button>
-            )}
-          </div>
-          {searchQuery && (
-            <span className={styles.aiSearchResultCount}>
-              {filteredStocks.length} match{filteredStocks.length === 1 ? '' : 'es'}
-              {sectorFilter !== 'all' && ' in selected sector'}
-            </span>
-          )}
+      {!loading && !error && searchQuery && (
+        <div className={styles.aiSearchResultRow}>
+          {filteredStocks.length} match{filteredStocks.length === 1 ? '' : 'es'}
+          {sectorFilter !== 'all' && ' in selected sector'}
+          {' for '}
+          <strong>"{searchQuery}"</strong>
         </div>
       )}
 
-      {!loading && !error && stocks.length > 0 && (
+      {!loading && !error && stocks.length > 0 && sectorChipsExpanded && (
         <div className={styles.filterRow}>
           <button
             key="all"

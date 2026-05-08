@@ -89,66 +89,54 @@
   flex-wrap: wrap;
 }
 
-/* ── AI 300 search bar ─────────────────────────────────────────────────────
-   Lives directly above the sector chips. Composes with the sector filter:
-   typing narrows the currently-selected sector (or the full universe). */
-.aiSearchRow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 24px 0 24px;
-  background: #f8f8f8;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-
-.aiSearchInputWrap {
+/* ── AI 300 search bar (header-mounted, dark theme) ────────────────────────
+   Lives in the header to the right alongside Sectors / By Sector / Refresh
+   so the chip-row area is freed up. Styled to match the muted dark "By
+   Sector" toggle so the four header controls feel like a single group. */
+.headerSearchWrap {
   position: relative;
   display: flex;
   align-items: center;
-  flex: 0 0 360px;
+  width: 280px;
   max-width: 100%;
 }
-
-.aiSearchIcon {
+.headerSearchIcon {
   position: absolute;
-  left: 12px;
+  left: 11px;
   color: #888;
-  font-size: 16px;
+  font-size: 14px;
   pointer-events: none;
   user-select: none;
 }
-
-.aiSearchInput {
+.headerSearchInput {
   width: 100%;
-  padding: 9px 36px 9px 34px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #111;
-  font-size: 14px;
+  padding: 8px 32px 8px 30px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 13px;
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.aiSearchInput::placeholder { color: #9ca3af; }
-.aiSearchInput:focus {
-  border-color: #d4a017;
-  box-shadow: 0 0 0 3px rgba(212, 160, 23, 0.18);
+.headerSearchInput::placeholder { color: #777; }
+.headerSearchInput:focus {
+  border-color: #fcf000;
+  box-shadow: 0 0 0 3px rgba(252, 240, 0, 0.15);
 }
-
-.aiSearchClear {
+.headerSearchClear {
   position: absolute;
-  right: 8px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border: none;
   border-radius: 50%;
-  background: #e5e7eb;
-  color: #555;
-  font-size: 16px;
+  background: #333;
+  color: #ccc;
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
   display: inline-flex;
@@ -157,13 +145,30 @@
   padding: 0;
   transition: background 0.15s, color 0.15s;
 }
-.aiSearchClear:hover { background: #d1d5db; color: #111; }
+.headerSearchClear:hover { background: #555; color: #fff; }
 
-.aiSearchResultCount {
+/* Pill on the Sectors collapse toggle when a specific sector is filtered */
+.sectorTogglePill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: rgba(252, 240, 0, 0.2);
+  color: #fcf000;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Result-count strip shown only while a search query is active */
+.aiSearchResultRow {
+  padding: 8px 24px;
+  background: #f8f8f8;
+  border-bottom: 1px solid #e5e5e5;
   color: #555;
   font-size: 13px;
   font-weight: 500;
 }
+.aiSearchResultRow strong { color: #111; }
 
 .aiNoResults {
   padding: 32px 24px;

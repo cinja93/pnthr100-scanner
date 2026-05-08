@@ -40,8 +40,8 @@ const NAV_GROUPS = [
     groupLabel: 'PNTHR Jungle',
     items: [
       { key: 'jungle',   label: 'PNTHR 679 Jungle', iconImg: true },
-      { key: 'aiJungle',  label: 'PNTHR AI 300 Index',iconImg: true },
-      { key: 'aiSectors', label: 'PNTHR AI Sectors', iconImg: true },
+      { key: 'aiJungle',  label: 'PNTHR AI 300 Index',iconImg: true, aiHighlight: true },
+      { key: 'aiSectors', label: 'PNTHR AI Sectors', iconImg: true, aiHighlight: true },
       { key: 'long',      label: 'PNTHR 100 Longs',  icon: '📈' },
       { key: 'short',   label: 'PNTHR 100 Shorts', icon: '📉' },
       { key: 'etf',     label: "PNTHR ETF's",      iconImg: true },
@@ -330,26 +330,39 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           <div key={group.groupLabel} className={styles.navGroup}>
             <span className={styles.navGroupLabel}>{group.groupLabel}</span>
             <div className={styles.navGroupBox}>
-              {group.items.map((item) => (
-                <button
-                  key={item.key}
-                  ref={el => { if (el) btnRefs.current[item.key] = el; }}
-                  className={`${styles.navItem} ${activePage === item.key ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
-                  onClick={() => !item.soon && handleNav(item.key)}
-                  disabled={item.soon}
-                  title={item.soon ? 'Coming soon' : item.label}
-                  onMouseEnter={() => handleMouseEnter(item.key)}
-                  onMouseLeave={() => setTooltipKey(null)}
-                >
-                  <span className={styles.navIcon}>
-                    {item.iconImg
-                      ? <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
-                      : item.icon}
-                  </span>
-                  <span className={styles.navLabel}>{item.label}</span>
-                  {item.soon && <span className={styles.soonBadge}>Soon</span>}
-                </button>
-              ))}
+              {group.items.map((item) => {
+                const isActive = activePage === item.key;
+                // AI Universe sidebar buttons get a distinct yellow-on-black
+                // treatment to visually separate the proprietary PAI300 / AI
+                // Sectors family from the existing 679-stock pages.
+                const aiStyle = item.aiHighlight ? {
+                  background: isActive ? '#000' : '#fcf000',
+                  color:      isActive ? '#fcf000' : '#000',
+                  fontWeight: 700,
+                  border:     isActive ? '1px solid #fcf000' : '1px solid #fcf000',
+                } : undefined;
+                return (
+                  <button
+                    key={item.key}
+                    ref={el => { if (el) btnRefs.current[item.key] = el; }}
+                    className={`${styles.navItem} ${isActive ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
+                    style={aiStyle}
+                    onClick={() => !item.soon && handleNav(item.key)}
+                    disabled={item.soon}
+                    title={item.soon ? 'Coming soon' : item.label}
+                    onMouseEnter={() => handleMouseEnter(item.key)}
+                    onMouseLeave={() => setTooltipKey(null)}
+                  >
+                    <span className={styles.navIcon}>
+                      {item.iconImg
+                        ? <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
+                        : item.icon}
+                    </span>
+                    <span className={styles.navLabel}>{item.label}</span>
+                    {item.soon && <span className={styles.soonBadge}>Soon</span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}

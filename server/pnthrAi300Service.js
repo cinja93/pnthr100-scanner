@@ -157,9 +157,8 @@ export async function getPnthrAi300Latest() {
   const dayChangeBase = (liveSource === 'live' && liveAsOf > lastBar.date)
     ? lastBarClose
     : (priorBar ? priorBar.close : lastBarClose);
-  const dayChangePct = dayChangeBase > 0
-    ? ((liveValue - dayChangeBase) / dayChangeBase) * 100
-    : 0;
+  const dayChangePct    = dayChangeBase > 0 ? ((liveValue - dayChangeBase) / dayChangeBase) * 100 : 0;
+  const dayChangePoints = liveValue - dayChangeBase;
 
   const closesD = daily.map(b => b.close);
   const emaD    = computeEMA(closesD, INDEX_EMA_DAILY_PERIOD);
@@ -187,7 +186,8 @@ export async function getPnthrAi300Latest() {
     open:        parseFloat((intraday?.ok ? intraday.open : lastBar.open).toFixed(2)),
     high:        parseFloat((intraday?.ok ? intraday.high : lastBar.high).toFixed(2)),
     low:         parseFloat((intraday?.ok ? intraday.low  : lastBar.low ).toFixed(2)),
-    dayChangePct: parseFloat(dayChangePct.toFixed(2)),
+    dayChangePct:    parseFloat(dayChangePct.toFixed(2)),
+    dayChangePoints: parseFloat(dayChangePoints.toFixed(2)),
     ytdPct:      ytdPct != null ? parseFloat(ytdPct.toFixed(2)) : null,
     inceptionPct: parseFloat(inceptionPct.toFixed(2)),
     ema21D:      ema21D != null ? parseFloat(ema21D.toFixed(2)) : null,

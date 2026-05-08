@@ -59,7 +59,12 @@ function Pnthr300Strip({ onOpenChart, onOpenWeights }) {
         {data.value?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </span>
       <span style={{ color: dayChangeColor, fontSize: 13, fontWeight: 600, fontFamily: 'monospace' }}>
-        {data.dayChangePct >= 0 ? '▲' : '▼'} {data.dayChangePct >= 0 ? '+' : ''}{data.dayChangePct?.toFixed(2)}% today
+        {data.dayChangePct >= 0 ? '▲' : '▼'}
+        {data.dayChangePoints != null && (
+          <> {data.dayChangePoints >= 0 ? '+' : ''}{data.dayChangePoints.toFixed(2)}</>
+        )}
+        {' '}
+        ({data.dayChangePct >= 0 ? '+' : ''}{data.dayChangePct?.toFixed(2)}%) today
       </span>
 
       <span style={{

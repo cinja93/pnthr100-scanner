@@ -332,7 +332,10 @@ export default function Pnthr300ChartModal({ onClose }) {
           {/* OHLC crosshair tooltip — positioned near cursor, doesn't block hits */}
           {hoveredBar && (
             <div style={{
-              position: 'absolute', top: 12, right: 16, zIndex: 4,
+              // HARD-CODED next to the panther head — panther is at
+              // top:14, left:14, width:200 → box starts at left:224.
+              // Do NOT move back to top-right; Scott's preference is locked.
+              position: 'absolute', top: 14, left: 224, zIndex: 4,
               background: 'rgba(15,15,15,0.95)', border: '1px solid #2a2a2a', borderRadius: 4,
               padding: '8px 12px', fontSize: 11, fontFamily: 'monospace',
               color: '#d4d4d4', minWidth: 180, pointerEvents: 'none',

@@ -19,6 +19,7 @@ import { connectToDatabase } from './database.js';
 import { detectAllSignals } from './signalDetection.js';
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
+import { fetchAiQuotesBatch, ymdET, mondayOfET } from './aiIntradayOverlay.js';
 
 // Build ticker → sectorId lookup once at module load.
 const TICKER_TO_SECTOR_ID = {};
@@ -29,8 +30,10 @@ for (const sec of SECTORS) {
 }
 
 // ── Cache ──
+// 30s cache matches the AI Universe table + chart cadence so the BL+N
+// counter rolls forward in lockstep with what the user sees on the chart.
 let cache = null; let cacheAt = 0;
-const CACHE_MS = 5 * 60 * 1000;
+const CACHE_MS = 30 * 1000;
 export function clearAiUniverseSignalsCache() { cache = null; cacheAt = 0; }
 
 // ── Main ──
@@ -53,6 +56,29 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
   ]);
   const dailyByTicker  = Object.fromEntries(dailyDocs.map(d => [d.ticker, d.daily || []]));
   const weeklyByTicker = Object.fromEntries(weeklyDocs.map(d => [d.ticker, d.weekly || []]));
+
+  // Pull live FMP quotes once to determine the ET market day for the BL+N
+  // counter. This is the SAME anchor the chart synthesizes today's bar from
+  // (aiIntradayOverlay.computeIntradayBar), so the counter and chart agree:
+  // when the chart shows today's intraday bar, the counter reflects today
+  // as the latest bar. Uses the shared overlay quote cache → 0 extra FMP
+  // calls when the AI Universe table or PAI300 strip just ran.
+  let marketDay        = null;  // ET YYYY-MM-DD of the most recent FMP timestamp
+  let marketWeekMonday = null;  // Monday of marketDay's week (ET)
+  try {
+    const qmap = await fetchAiQuotesBatch(tickers);
+    let latestTs = 0;
+    for (const t of tickers) {
+      const q = qmap[t];
+      if (q && typeof q.timestamp === 'number' && q.timestamp > latestTs) latestTs = q.timestamp;
+    }
+    if (latestTs > 0) {
+      marketDay        = ymdET(latestTs);
+      marketWeekMonday = mondayOfET(marketDay);
+    }
+  } catch (err) {
+    console.warn('[AI signals] live market-day lookup failed; counter will use Mongo bar dates:', err.message);
+  }
 
   const signals      = {};
   const dailySignals = {};
@@ -115,13 +141,19 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
       const finalDate   = lastEvent ? lastEvent.time : null;
 
       if (finalSignal) {
+        // Anchor the BL+N counter to whichever is later — the latest stored
+        // weekly bar OR the Monday of today's market week (when FMP confirms
+        // today is a live trading day). This keeps the counter aligned with
+        // what the chart shows: once the chart synthesizes this week's bar
+        // from live constituent quotes, the counter reflects this week as
+        // the latest "bar" rather than the last cron-aggregated weekOf.
+        const effectiveLastBarDate = (marketWeekMonday && marketWeekMonday > lastBarTime)
+          ? marketWeekMonday
+          : lastBarTime;
         signals[ticker] = {
           signal:       finalSignal,
           signalDate:   finalDate,
-          // Bar anchor for the BL+N counter — pins the count to the latest
-          // weekly bar in our DB so the displayed counter matches the chart
-          // even when this week's bar hasn't been re-aggregated yet.
-          lastBarDate:  lastBarTime,
+          lastBarDate:  effectiveLastBarDate,
           isNewSignal:  !!isNewSignal,
           stopPrice:    activeType ? pnthrStop : null,  // only carry stop when position is open
         };
@@ -154,13 +186,19 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
       const finalDate   = lastEvent ? lastEvent.time : null;
 
       if (finalSignal) {
+        // Anchor BL+N to whichever is later — the latest stored daily bar OR
+        // today's ET market day (when FMP confirms today is a live trading
+        // day). Matches what the chart displays after the intraday bar
+        // synthesis: when today's synthesized bar is on the chart, the
+        // counter must reflect today as the latest bar so signal-fired-
+        // yesterday correctly reads BL+2.
+        const effectiveLastBarDate = (marketDay && marketDay > lastBarTime)
+          ? marketDay
+          : lastBarTime;
         dailySignals[ticker] = {
           signal:       finalSignal,
           signalDate:   finalDate,
-          // Bar anchor for the BL+N counter — pins the count to the latest
-          // daily bar in our DB so the displayed counter matches the chart
-          // even before today's bar has been appended by the 5:30pm cron.
-          lastBarDate:  lastBarTime,
+          lastBarDate:  effectiveLastBarDate,
           isNewSignal:  !!isNewSignal,
         };
         withDailySig++;

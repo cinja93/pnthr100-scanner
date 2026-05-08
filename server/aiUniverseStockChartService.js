@@ -17,6 +17,7 @@ import { connectToDatabase } from './database.js';
 import { detectAllSignals, calculateEMA } from './signalDetection.js';
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
+import { fetchFMP } from './stockService.js';
 
 // Build ticker → { sectorId, sectorName, name } lookup once
 const TICKER_META = {};
@@ -30,7 +31,11 @@ for (const sec of SECTORS) {
   }
 }
 
-const CACHE_MS = 5 * 60 * 1000;
+// 30s cache matches the AI Universe table cadence so the modal header price
+// stays in lockstep with the table. Bars themselves are end-of-day Mongo data
+// (don't change intraday) but currentPrice + dayChangePct are pulled live from
+// FMP /quote on every cache miss — see fetch below.
+const CACHE_MS = 30 * 1000;
 const cache = new Map();   // ticker → { data, ts }
 
 export function clearAiStockChartCache(ticker = null) {
@@ -63,11 +68,16 @@ export async function getAiStockChartData(ticker) {
 
   const sectorPeriod = SECTOR_EMA_PERIODS[meta.sectorId] || 30;
 
-  // Pull both bar series in parallel
-  const [dailyDoc, weeklyDoc] = await Promise.all([
+  // Pull both bar series + live quote in parallel.
+  // Bars are end-of-day historical (Mongo) — used for chart rendering and
+  // signal state machine. Live quote is FMP — used for the modal header
+  // currentPrice + day-change %. Pulling them together keeps one round trip.
+  const [dailyDoc, weeklyDoc, liveQuoteArr] = await Promise.all([
     db.collection('pnthr_ai_bt_candles').findOne({ ticker }),
     db.collection('pnthr_ai_bt_candles_weekly').findOne({ ticker }),
+    fetchFMP(`/quote/${ticker}`).catch(() => null),
   ]);
+  const liveQuote = Array.isArray(liveQuoteArr) && liveQuoteArr.length > 0 ? liveQuoteArr[0] : null;
 
   const dailyRaw  = dailyDoc?.daily   || [];
   const weeklyRaw = weeklyDoc?.weekly || [];
@@ -123,11 +133,30 @@ export async function getAiStockChartData(ticker) {
   const lastDaily  = dailyAsc[dailyAsc.length - 1] || null;
   const lastWeekly = weeklyAsc[weeklyAsc.length - 1] || null;
 
-  // Day change %
+  // Header price + day change come from live FMP quote, not the latest bar.
+  // The previous code echoed lastDaily.close as "current price" — during the
+  // trading day before the 5:30pm cron appends today's bar, that's yesterday's
+  // close (e.g. SNDK showed $1,339.96 in the modal while the live tape was at
+  // $1,510). Pull live quote and compute day change against yesterday's close.
+  // Fall back to bar-based math if FMP is unreachable (offline / rate-limited).
   const prevDaily = dailyAsc.length >= 2 ? dailyAsc[dailyAsc.length - 2] : null;
-  const dayChangePct = (lastDaily && prevDaily)
-    ? ((lastDaily.close - prevDaily.close) / prevDaily.close) * 100
-    : null;
+  let livePrice    = (liveQuote && typeof liveQuote.price === 'number') ? liveQuote.price : null;
+  let dayChangePct = null;
+  if (livePrice != null && lastDaily) {
+    // Today's % move = (live - yesterday's close) / yesterday's close. lastDaily
+    // IS yesterday's bar during RTH (today's bar lands at 5:30pm cron). Once
+    // today's bar lands, lastDaily becomes today's bar — in which case the math
+    // (live - today's open close-stamped value) drifts; fall back to FMP's own
+    // changesPercentage when FMP returns it (it's the canonical day move).
+    if (typeof liveQuote.changesPercentage === 'number') {
+      dayChangePct = liveQuote.changesPercentage;
+    } else if (prevDaily) {
+      dayChangePct = ((livePrice - lastDaily.close) / lastDaily.close) * 100;
+    }
+  } else if (lastDaily && prevDaily) {
+    livePrice    = lastDaily.close;
+    dayChangePct = ((lastDaily.close - prevDaily.close) / prevDaily.close) * 100;
+  }
 
   const out = {
     ok:           true,
@@ -143,7 +172,7 @@ export async function getAiStockChartData(ticker) {
     staleDaily:       dailyStaleData,
     staleWeekly:      weeklyStaleData,
     asOf:         lastDaily?.date || null,
-    currentPrice: lastDaily ? parseFloat(lastDaily.close.toFixed(2)) : null,
+    currentPrice: livePrice != null ? parseFloat(livePrice.toFixed(2)) : null,
     dayChangePct: dayChangePct != null ? parseFloat(dayChangePct.toFixed(2)) : null,
     daily: {
       bars: dailyAsc.map((b, i) => ({

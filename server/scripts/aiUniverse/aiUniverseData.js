@@ -1,13 +1,23 @@
 // PNTHR AI Universe, Master holdings data with PNTHR investment-thesis paragraphs
 // Each paragraph reads as: "Why PNTHR believes this name belongs in the AI Elite Universe"
-// 305 holdings across 16 sectors. Last updated: 2026-05-07.
+// 297 holdings across 16 sectors. Last updated: 2026-05-08.
+//
+// v3.0 (2026-05-08): removed 7 delisted/acquired tickers — ABB (delisted 2023),
+//   OLO (acquired Thoma Bravo Sept 2025), ZK (acquired late 2025), IAS
+//   (acquired Vista 2025), CYBR (acquired Palo Alto Networks 2026), COMM
+//   (CommScope distress), CFLT (acquired Salesforce 2026). Bar data for these
+//   was frozen at delisting date, producing misleading signals (e.g. ★ BL+153w
+//   on ABB whose data ended 2023-06). 304 → 297 holdings, sector counts:
+//   S3 -1 (COMM), S5 -2 (ABB, ZK), S7 -1 (CFLT), S8 -1 (CYBR), S9 -1 (IAS),
+//   S11 -1 (OLO).
+// v2.0 (2026-05-07): KRKN removed (OTC/TSXV listing only).
 
 export const FUND_META = {
   fundName: 'PNTHR AI Universe',
   fullName: 'PNTHR AI Elite Universe Fund',
-  version: 'v2.0',
+  version: 'v3.0',
   date: 'May 2026',
-  totalHoldings: 304,
+  totalHoldings: 297,
   totalSectors: 16,
 };
 
@@ -124,7 +134,6 @@ export const SECTORS = [
     holdings: [
       { ticker: 'ANET', name: 'Arista Networks', thesis: 'Arista is the leader in high-speed Ethernet switching for AI data centers. Their 800G platforms ship into every major hyperscaler AI cluster, displacing InfiniBand. PNTHR holds ANET as a top-tier AI networking Elite holding, bandwidth bottleneck monetized.' },
       { ticker: 'CSCO', name: 'Cisco Systems', thesis: 'Cisco is the legacy networking giant adding AI-native switching, security, and observability through their Splunk acquisition. AI data center networking refresh creates re-rating optionality. PNTHR holds CSCO as the diversified mega-cap AI networking play.' },
-      { ticker: 'COMM', name: 'CommScope Holding', thesis: 'CommScope makes the structured cabling, fiber connectivity, and wireless infrastructure underlying AI data centers and 5G networks. PNTHR holds COMM as a deep-value AI infrastructure leg.' },
       { ticker: 'COHR', name: 'Coherent Corp', thesis: 'Coherent is a leading optical components and laser supplier, they make the transceivers, lasers, and optics inside every AI data center optical link. PNTHR holds COHR as a focused AI-optical pure play.' },
       { ticker: 'LITE', name: 'Lumentum Holdings', thesis: 'Lumentum supplies high-speed optical components for AI data center interconnects and 3D sensing. AI bandwidth scaling is the structural revenue tailwind. PNTHR holds LITE as a top-tier AI photonics name.' },
       { ticker: 'FN', name: 'Fabrinet', thesis: 'Fabrinet is the contract manufacturer building optical transceivers and modules for NVIDIA, AVGO, and the entire AI optical supply chain. Pure-play AI bandwidth manufacturing. PNTHR holds FN as a focused AI optical manufacturing pure play.' },
@@ -176,7 +185,6 @@ export const SECTORS = [
     thesis: 'AI is breaking out of data centers and into the physical world, robots, autonomous cars, autonomous trucks, drones, eVTOLs. PNTHR captures the leaders making AI-first hardware that moves: industrial robots, surgical robots, autonomous driving, LIDAR, and the Tier 1 suppliers that integrate AI into vehicles.',
     holdings: [
       { ticker: 'TSLA', name: 'Tesla Inc.', thesis: 'Tesla is building the largest fleet of AI-enabled vehicles, the Optimus humanoid robot, and Dojo training infrastructure. Full Self-Driving plus humanoid robotics make TSLA the most diversified AI-physical-world bet. PNTHR holds TSLA as a top-tier AI Elite holding spanning autonomy and robotics.' },
-      { ticker: 'ABB', name: 'ABB Ltd', thesis: 'ABB is a global industrial robotics and automation leader supplying factory robots, electrification, and AI-enabled industrial software. PNTHR holds ABB as the diversified industrial robotics Elite holding.' },
       { ticker: 'ISRG', name: 'Intuitive Surgical', thesis: 'Intuitive Surgical owns the da Vinci surgical robot platform, AI-augmented robotic surgery is exploding. Massive installed base, recurring revenue, AI imaging upgrades. PNTHR holds ISRG as a top-tier AI medical robotics Elite name.' },
       { ticker: 'SYM', name: 'Symbotic Inc.', thesis: 'Symbotic builds AI-driven warehouse automation systems for Walmart and others. Pure-play warehouse AI robotics. PNTHR holds SYM as a focused AI warehouse robotics pure play.' },
       { ticker: 'SERV', name: 'Serve Robotics', thesis: 'Serve Robotics operates autonomous sidewalk delivery robots backed by NVIDIA and Uber. Pure-play autonomous last-mile robotics. PNTHR holds SERV as a small-cap robotics lottery ticket with NVIDIA partnership.' },
@@ -202,7 +210,6 @@ export const SECTORS = [
       { ticker: 'NIO', name: 'NIO Inc.', thesis: 'NIO is a leading Chinese premium EV maker with NIO Pilot ADAS and battery-swap network. PNTHR holds NIO as a premium Chinese EV-AI play.' },
       { ticker: 'LI', name: 'Li Auto', thesis: 'Li Auto sells Chinese hybrid SUVs with AI-driven cabin and driving features, fastest-growing premium Chinese EV. PNTHR holds LI as a focused Chinese EV-AI bet.' },
       { ticker: 'XPEV', name: 'XPeng Inc.', thesis: 'XPeng builds Chinese EVs with leading XNGP autonomous driving capabilities and humanoid-robot ambitions. PNTHR holds XPEV as a focused Chinese AI-EV play.' },
-      { ticker: 'ZK', name: 'ZEEKR Intelligent Technology', thesis: 'ZEEKR is Geely\'s premium Chinese EV brand with advanced AI driver assistance. PNTHR holds ZK as our fourth leg of Chinese EV-AI exposure.' },
     ],
   },
   {
@@ -237,7 +244,6 @@ export const SECTORS = [
       { ticker: 'GTLB', name: 'GitLab Inc.', thesis: 'GitLab launched Duo AI, AI-augmented DevSecOps for the full software lifecycle. PNTHR holds GTLB as a focused AI dev-tools play.' },
       { ticker: 'ESTC', name: 'Elastic NV', thesis: 'Elastic is the leading search-AI platform, vector search and RAG infrastructure for enterprise AI. PNTHR holds ESTC as a focused AI search and observability play.' },
       { ticker: 'PEGA', name: 'Pegasystems', thesis: 'Pegasystems delivers AI-driven workflow automation and decisioning for enterprise. PNTHR holds PEGA as a focused enterprise-AI-decisioning play.' },
-      { ticker: 'CFLT', name: 'Confluent Inc.', thesis: 'Confluent runs Apache Kafka as a service, the real-time data streaming backbone for AI applications. PNTHR holds CFLT as the data-streaming-for-AI pure play.' },
       { ticker: 'MNDY', name: 'Monday.com Ltd', thesis: 'Monday.com integrates AI across work management with Monday AI features. PNTHR holds MNDY as a focused AI work management play.' },
       { ticker: 'INTU', name: 'Intuit Inc.', thesis: 'Intuit embeds AI in TurboTax, QuickBooks, and Credit Karma, consumer AI fintech at massive scale. PNTHR holds INTU as a quality consumer-AI compounder.' },
       { ticker: 'WDAY', name: 'Workday Inc.', thesis: 'Workday integrates AI across HR and finance enterprise SaaS. PNTHR holds WDAY as the enterprise HR/finance AI play.' },
@@ -275,7 +281,6 @@ export const SECTORS = [
       { ticker: 'S', name: 'SentinelOne Inc.', thesis: 'SentinelOne provides AI-native endpoint protection, autonomous threat detection and response. PNTHR holds S as a focused AI-endpoint pure play.' },
       { ticker: 'RBRK', name: 'Rubrik Inc.', thesis: 'Rubrik delivers AI-driven data security and recovery, protecting AI training data and enterprise backups. Recently public with strong growth. PNTHR holds RBRK as a focused AI-data-security play.' },
       { ticker: 'OKTA', name: 'Okta Inc.', thesis: 'Okta is the leading identity-as-a-service platform, AI-driven authentication and access management. AI agents need identity. PNTHR holds OKTA as the identity-AI cornerstone.' },
-      { ticker: 'CYBR', name: 'CyberArk Software', thesis: 'CyberArk leads in privileged access management, protecting AI-agent credentials and machine identities. PNTHR holds CYBR as a focused identity-security AI play.' },
       { ticker: 'VRNS', name: 'Varonis Systems', thesis: 'Varonis provides AI-driven data security and access governance. PNTHR holds VRNS as a focused AI-data-governance play.' },
       { ticker: 'TENB', name: 'Tenable Holdings', thesis: 'Tenable leads in AI-augmented vulnerability management and exposure management. PNTHR holds TENB as a focused vulnerability-management AI play.' },
       { ticker: 'RPD', name: 'Rapid7 Inc.', thesis: 'Rapid7 delivers AI-augmented security operations and threat detection. PNTHR holds RPD as a focused security-operations AI play.' },
@@ -291,7 +296,6 @@ export const SECTORS = [
       { ticker: 'TTD', name: 'The Trade Desk', thesis: 'The Trade Desk is the leading independent demand-side ad platform, AI-driven programmatic advertising with Kokai AI agent. PNTHR holds TTD as the cornerstone AI-ad-tech Elite holding.' },
       { ticker: 'RDDT', name: 'Reddit Inc.', thesis: 'Reddit licenses its training data to OpenAI and Google, pure-play AI data licensing plus AI-driven advertising. Recently public, AI-native data play. PNTHR holds RDDT as a unique AI training data licensing pure play.' },
       { ticker: 'DV', name: 'DoubleVerify Holdings', thesis: 'DoubleVerify delivers AI-driven ad verification and brand safety. PNTHR holds DV as a focused ad-verification AI play.' },
-      { ticker: 'IAS', name: 'Integral Ad Science', thesis: 'IAS provides AI-driven ad measurement and verification across digital channels. PNTHR holds IAS as DV\'s peer in our ad-verification book.' },
       { ticker: 'MGNI', name: 'Magnite Inc.', thesis: 'Magnite is the largest independent sell-side ad platform, AI-driven CTV and programmatic advertising. PNTHR holds MGNI as a focused supply-side ad-tech AI play.' },
       { ticker: 'PUBM', name: 'PubMatic Inc.', thesis: 'PubMatic operates an AI-driven sell-side ad platform with strong CTV growth. PNTHR holds PUBM as a small-cap sell-side ad-tech AI play.' },
       { ticker: 'CRTO', name: 'Criteo SA', thesis: 'Criteo provides AI-driven retail media and performance advertising. PNTHR holds CRTO as a focused retail-media AI play.' },
@@ -325,7 +329,6 @@ export const SECTORS = [
       { ticker: 'WIX', name: 'Wix.com Ltd', thesis: 'Wix integrates AI website builder and content generation. PNTHR holds WIX as a focused web-AI play.' },
       { ticker: 'GLBE', name: 'Global-E Online', thesis: 'Global-E delivers AI-driven cross-border ecommerce optimization. PNTHR holds GLBE as a focused ecommerce-AI play.' },
       { ticker: 'TOST', name: 'Toast Inc.', thesis: 'Toast provides AI-augmented restaurant operations platform. PNTHR holds TOST as a focused restaurant-AI play.' },
-      { ticker: 'OLO', name: 'Olo Inc.', thesis: 'Olo runs AI-driven digital ordering and delivery for multi-location restaurants. PNTHR holds OLO as a focused restaurant-AI play.' },
       { ticker: 'Z', name: 'Zillow Group', thesis: 'Zillow uses AI for home valuations and personalized real estate search. PNTHR holds Z as a focused real-estate AI play.' },
       { ticker: 'OPEN', name: 'Opendoor Technologies', thesis: 'Opendoor operates AI-driven iBuying and home transactions. PNTHR holds OPEN as a small-cap real-estate AI optionality bet.' },
       { ticker: 'CSGP', name: 'CoStar Group', thesis: 'CoStar Group delivers AI-augmented commercial real estate data and analytics. PNTHR holds CSGP as a focused commercial-real-estate AI data play.' },

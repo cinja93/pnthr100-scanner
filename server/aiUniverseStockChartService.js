@@ -114,8 +114,10 @@ export async function getAiStockChartData(ticker) {
   const dailySigBars  = dailyAsc.map(b => ({ time: b.date,   open: b.open, high: b.high, low: b.low, close: b.close }));
   const weeklySigBars = weeklyAsc.map(b => ({ time: b.weekOf, open: b.open, high: b.high, low: b.low, close: b.close }));
 
-  const dailyDetect  = dailyPeriod  ? detectAllSignals(dailySigBars,  dailyPeriod,  false) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
-  const weeklyDetect = weeklyPeriod ? detectAllSignals(weeklySigBars, weeklyPeriod, false) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
+  // Daily uses 0.3% daylight zone (vs 1% weekly) — daily ranges are tighter
+  // than weekly so the 1% threshold starves daily signals on chop-zone names.
+  const dailyDetect  = dailyPeriod  ? detectAllSignals(dailySigBars,  dailyPeriod,  false, 0.003) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
+  const weeklyDetect = weeklyPeriod ? detectAllSignals(weeklySigBars, weeklyPeriod, false)        : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
 
   // Last bar info per timeframe
   const lastDaily  = dailyAsc[dailyAsc.length - 1] || null;

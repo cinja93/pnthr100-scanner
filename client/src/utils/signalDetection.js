@@ -63,8 +63,12 @@ export function ssInitStop(twoBarHigh, entryClose, atr) {
 
 // Full signal scan. Same logic as ChartModal's detectAllSignals.
 // `isETF=true` uses the tighter 0.3% daylight-zone threshold (vs 1% for stocks).
+// `dPctOverride` (optional) — explicit daylight % (0..1) for the daylight-zone
+// gate. Takes precedence over isETF. Use 0.003 (0.3%) for DAILY signals on
+// individual stocks: daily ranges are tighter than weekly so the 1% rule is
+// too strict.
 // PNTHR AI 300 + each sector index behave like ETFs (broad baskets), so pass true.
-export function detectAllSignals(bars, period = 21, isETF = false) {
+export function detectAllSignals(bars, period = 21, isETF = false, dPctOverride = null) {
   if (bars.length < period + 2) return { events: [], pnthrStop: null, currentWeekStop: null, activeType: null, currentSignal: null };
   const emaData = calculateEMA(bars, period);
   const atrArr  = computeWilderATR(bars);
@@ -133,7 +137,7 @@ export function detectAllSignals(bars, period = 21, isETF = false) {
       const emaPrev  = emaData[emaIdx - 1].value;
       const blPhase1 = current.close > emaCurrent && emaCurrent > emaPrev && current.high >= twoBarHigh + 0.01;
       const ssPhase1 = current.close < emaCurrent && emaCurrent < emaPrev && current.low  <= twoBarLow  - 0.01;
-      const dPct = isETF ? 0.003 : 0.01;
+      const dPct = dPctOverride != null ? dPctOverride : (isETF ? 0.003 : 0.01);
       const blZone   = current.low  >= emaCurrent * (1 + dPct) && current.low  <= emaCurrent * 1.10;
       const ssZone   = current.high <= emaCurrent * (1 - dPct) && current.high >= emaCurrent * 0.90;
 

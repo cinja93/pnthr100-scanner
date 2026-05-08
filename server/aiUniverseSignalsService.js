@@ -139,7 +139,9 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
       const dBars = dailyAsc.map(b => ({
         time: b.date, open: b.open, high: b.high, low: b.low, close: b.close,
       }));
-      const { events, currentSignal, activeType } = detectAllSignals(dBars, dPeriod, false);
+      // Daily uses 0.3% daylight zone (vs 1% weekly default) — daily bar ranges
+      // are tight enough that 1% locks out signals on chop-zone names.
+      const { events, currentSignal, activeType } = detectAllSignals(dBars, dPeriod, false, 0.003);
       const lastBarTime = dBars[dBars.length - 1].time;
       const lastEvent   = events[events.length - 1];
       const isNewSignal = lastEvent && lastEvent.time === lastBarTime;

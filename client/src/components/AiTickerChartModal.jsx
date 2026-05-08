@@ -272,7 +272,13 @@ function ChartPanel({
     : null;
 
   return (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', borderRight: title === 'Daily' ? '1px solid #1f1f1f' : 'none' }}>
+    <div style={{
+      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+      border: '1px solid rgba(252,240,0,0.45)',     // thin yellow outline
+      borderRadius: 4,
+      margin: title === 'Daily' ? '6px 3px 6px 6px' : '6px 6px 6px 3px',
+      overflow: 'hidden',
+    }}>
       {/* Panel title bar */}
       <div style={{
         padding: '8px 12px', borderBottom: '1px solid #1f1f1f',

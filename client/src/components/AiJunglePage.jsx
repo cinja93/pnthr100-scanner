@@ -4,6 +4,7 @@ import AiTickerChartModal from './AiTickerChartModal';
 import Pnthr300ChartModal from './Pnthr300ChartModal';
 import Pnthr300WeightsModal from './Pnthr300WeightsModal';
 import { fetchAiUniverse, fetchEarnings, fetchPnthrAi300Latest } from '../services/api';
+import { getCalendarWeekWindow } from '../utils/dateUtils';
 import styles from './JunglePage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -194,6 +195,13 @@ export default function AiJunglePage() {
   const sectorCount = sectors.length;
   const versionLabel = fundMeta?.version ? `${fundMeta.version}` : '';
 
+  // Earnings highlight window — synchronized with PNTHR Calendar so any AI 300
+  // stock reporting "this week" (or "next week" once we cross Thursday) lights
+  // up yellow on this page in lockstep with what Calendar shows. Memoized with
+  // an empty dep list so the window is captured on mount; re-renders within
+  // the same session don't shift the window mid-day.
+  const earningsHighlightWindow = useMemo(() => getCalendarWeekWindow(), []);
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -303,6 +311,7 @@ export default function AiJunglePage() {
           dailySignals={dailySignals}
           signalsLoading={false}
           earnings={earnings}
+          earningsHighlightWindow={earningsHighlightWindow}
           groupBySector={groupBySector}
           hideExchange
           weeklySignalLabel="PNTHR Weekly Signal"

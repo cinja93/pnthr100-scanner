@@ -42,13 +42,24 @@ const KILL_TIER_COLOR = {
 
 const TODAY = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
 
-function getEarningsInfo(dateStr) {
+// Compute earnings cell display + highlight flag for a row.
+// • dateStr     — earnings date (YYYY-MM-DD) or null/undefined
+// • highlightWindow — optional { from, to } YYYY-MM-DD strings; when present,
+//   row highlights iff earnings date falls inside the window. This is how
+//   the AI 300 Index page synchronizes its yellow earnings highlight with
+//   PNTHR Calendar's "this week / next week" window. When omitted, falls
+//   back to the legacy "next 0–5 days" window so 679 pages keep their
+//   existing behavior unchanged.
+function getEarningsInfo(dateStr, highlightWindow = null) {
   if (!dateStr) return { display: '—', daysAway: null, highlight: false };
   const [y, m, d] = dateStr.split('-').map(Number);
   const earningsDate = new Date(y, m - 1, d);
   const daysAway = Math.round((earningsDate - TODAY) / (1000 * 60 * 60 * 24));
   const display = earningsDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return { display, daysAway, highlight: daysAway >= 0 && daysAway <= 5 };
+  const highlight = highlightWindow
+    ? (dateStr >= highlightWindow.from && dateStr <= highlightWindow.to)
+    : (daysAway >= 0 && daysAway <= 5);
+  return { display, daysAway, highlight };
 }
 
 function matchesPinSignal(sigData, pinSignal) {
@@ -58,7 +69,7 @@ function matchesPinSignal(sigData, pinSignal) {
   return sigData.signal === pinSignal;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null }) {
   const [sortConfig, setSortConfig] = useState({ key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
   const listRef = useRef([]);
@@ -392,7 +403,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             const riskPct = riskDollar != null ? (riskDollar / stock.currentPrice) * 100 : null;
             const rankDisplay = getRankChangeDisplay(stock);
 
-            const earningsInfo = getEarningsInfo(earnings[stock.ticker]);
+            const earningsInfo = getEarningsInfo(earnings[stock.ticker], earningsHighlightWindow);
 
             rows.push(
               <tr

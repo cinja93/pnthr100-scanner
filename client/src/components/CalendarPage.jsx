@@ -3,33 +3,9 @@ import StockTable from './StockTable';
 import ChartModal from './ChartModal';
 import EarningsSeasonTable from './EarningsSeasonTable';
 import { fetchJungleStocks, fetchEarnings, fetchWashRules } from '../services/api';
+import { getCalendarWeekWindow } from '../utils/dateUtils';
 import styles from './CalendarPage.module.css';
 import pantherHead from '../assets/panther head.png';
-
-// Returns { from, to, isNextWeek } for the relevant week window.
-// Thu–Sun: show NEXT week Mon–Fri (users plan ahead on Thursday).
-// Mon–Wed: show current week today through Friday.
-function getWeekWindow() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dow = today.getDay(); // 0=Sun, 1=Mon…5=Fri, 6=Sat
-  const fmt = d => d.toISOString().split('T')[0];
-
-  const start = new Date(today);
-  const end   = new Date(today);
-
-  const showNextWeek = dow >= 4 || dow === 0 || dow === 6; // Thu/Fri/Sat/Sun
-
-  if (showNextWeek) {
-    const daysToNextMon = dow === 0 ? 1 : dow === 6 ? 2 : (8 - dow);
-    start.setDate(today.getDate() + daysToNextMon);
-    end.setDate(today.getDate() + daysToNextMon + 4); // Mon–Fri
-  } else {
-    end.setDate(today.getDate() + (5 - dow)); // today through Friday
-  }
-
-  return { from: fmt(start), to: fmt(end), isNextWeek: showNextWeek };
-}
 
 function formatDayHeader(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -125,7 +101,7 @@ export default function CalendarPage() {
 
   useEffect(() => { load(); }, []);
 
-  const { from, to, isNextWeek } = useMemo(() => getWeekWindow(), []);
+  const { from, to, isNextWeek } = useMemo(() => getCalendarWeekWindow(), []);
 
   // Earnings grouped by date
   const earningsByDate = useMemo(() => {

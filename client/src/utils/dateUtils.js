@@ -50,6 +50,39 @@ export function computeWeeksAgo(signalDate, lastBarDate = null) {
   return Math.floor(diffDays / 7) + 1; // inclusive: signal week = week 1
 }
 
+// Returns { from, to, isNextWeek } as YYYY-MM-DD strings — the date window
+// PNTHR Calendar uses to display "this week" or "next week" earnings.
+//
+// Logic (matches CalendarPage.getWeekWindow):
+//   • Mon–Wed → window = today through this Friday (4–5 days)
+//   • Thu–Sun → window = next Monday through next Friday (Thu users plan ahead)
+//
+// Used by Calendar to filter earnings dates AND by the AI 300 Index page to
+// drive the same yellow row-highlight on stocks reporting in that window.
+// Single source of truth so both pages always agree on which stocks count
+// as "reporting this week / next week".
+export function getCalendarWeekWindow() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dow = today.getDay(); // 0=Sun..6=Sat
+  const fmt = d => d.toISOString().split('T')[0];
+
+  const start = new Date(today);
+  const end   = new Date(today);
+
+  const showNextWeek = dow >= 4 || dow === 0 || dow === 6; // Thu/Fri/Sat/Sun
+
+  if (showNextWeek) {
+    const daysToNextMon = dow === 0 ? 1 : dow === 6 ? 2 : (8 - dow);
+    start.setDate(today.getDate() + daysToNextMon);
+    end.setDate(today.getDate() + daysToNextMon + 4); // Mon–Fri
+  } else {
+    end.setDate(today.getDate() + (5 - dow)); // today through Friday
+  }
+
+  return { from: fmt(start), to: fmt(end), isNextWeek: showNextWeek };
+}
+
 // Compute inclusive TRADING days between signal and reference.
 // Signal day = day 1 (so a signal fired on the reference date returns 1, not 0).
 // Excludes weekends (Sat/Sun); does not currently exclude US market holidays.

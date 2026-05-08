@@ -76,6 +76,24 @@ export async function getAiStockChartData(ticker) {
   const dailyAsc  = [...dailyRaw].sort((a, b) => a.date.localeCompare(b.date));
   const weeklyAsc = [...weeklyRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
 
+  // Stale-data guard: if the last available bar is > 14 days old, the ticker
+  // has been delisted/acquired and signals on the frozen tail are meaningless.
+  // We still return the historical bars so the chart can render context, but
+  // we suppress signal events + currentSignal + pnthrStop and flag the data
+  // as stale.
+  const STALE_DAYS = 14;
+  const todayMs = Date.now();
+  function isStale(lastDate) {
+    if (!lastDate) return true;
+    const lastMs = Date.parse(lastDate + 'T00:00:00Z');
+    if (isNaN(lastMs)) return true;
+    return (todayMs - lastMs) > STALE_DAYS * 24 * 60 * 60 * 1000;
+  }
+  const lastDailyBar  = dailyAsc[dailyAsc.length - 1];
+  const lastWeeklyBar = weeklyAsc[weeklyAsc.length - 1];
+  const dailyStaleData  = isStale(lastDailyBar?.date);
+  const weeklyStaleData = isStale(lastWeeklyBar?.weekOf);
+
   // Recent-IPO fallback: to use the sector's tuned period we need ~3× history
   // (so EMA has settled and produces meaningful crosses). Otherwise fall back
   // to 21W per Scott's "21 as a standard" rule. Chart label surfaces which
@@ -85,8 +103,8 @@ export async function getAiStockChartData(ticker) {
     if (barCount >= 21 + 2)           return 21;
     return null;
   }
-  const dailyPeriod  = pickPeriod(dailyAsc.length);
-  const weeklyPeriod = pickPeriod(weeklyAsc.length);
+  const dailyPeriod  = !dailyStaleData  ? pickPeriod(dailyAsc.length)  : null;
+  const weeklyPeriod = !weeklyStaleData ? pickPeriod(weeklyAsc.length) : null;
 
   // Compute EMA series aligned to bars (using whichever period was picked)
   const dailyEma  = dailyPeriod  ? emaSeriesAlignedTo(dailyAsc,  dailyPeriod)  : new Array(dailyAsc.length).fill(null);
@@ -120,6 +138,8 @@ export async function getAiStockChartData(ticker) {
     weeklyEmaPeriod:  weeklyPeriod,    // period actually used for weekly (may be 21W fallback)
     fallbackDaily:    dailyPeriod  != null && dailyPeriod  !== sectorPeriod,
     fallbackWeekly:   weeklyPeriod != null && weeklyPeriod !== sectorPeriod,
+    staleDaily:       dailyStaleData,
+    staleWeekly:      weeklyStaleData,
     asOf:         lastDaily?.date || null,
     currentPrice: lastDaily ? parseFloat(lastDaily.close.toFixed(2)) : null,
     dayChangePct: dayChangePct != null ? parseFloat(dayChangePct.toFixed(2)) : null,

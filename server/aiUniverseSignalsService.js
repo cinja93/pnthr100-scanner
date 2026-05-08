@@ -71,13 +71,35 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
     return null;  // not enough bars even for the fallback — skip
   }
 
+  // Stale-data guard: if the last available bar is more than 14 calendar days
+  // old, the ticker has been delisted / acquired and the bar pipeline froze.
+  // The state machine still produces "current" signals on the frozen tail, but
+  // those are meaningless for trading today. Suppress the signal entirely so
+  // the table cell shows "—" rather than e.g. "★ BL+153" (stale star = lie).
+  // 14 days covers normal market closures + slow earnings windows; clean
+  // delistings always blow through it.
+  const todayMs = Date.now();
+  const STALE_THRESHOLD_MS = 14 * 24 * 60 * 60 * 1000;
+  function isStale(lastBarDate) {
+    if (!lastBarDate) return true;
+    const lastMs = Date.parse(lastBarDate + 'T00:00:00Z');
+    if (isNaN(lastMs)) return true;
+    return (todayMs - lastMs) > STALE_THRESHOLD_MS;
+  }
+  let staleSkipped = 0;
+
   for (const ticker of tickers) {
     const sectorId = TICKER_TO_SECTOR_ID[ticker];
     const period   = SECTOR_EMA_PERIODS[sectorId] || 30;  // sector-tuned period (number)
 
     // ── Weekly signal + PNTHR Stop ─────────────────────────────────────────
     const weeklyRaw = weeklyByTicker[ticker] || [];
-    const wPeriod = effectivePeriod(weeklyRaw.length, period);
+    const lastWeeklyDate = weeklyRaw.length > 0
+      ? weeklyRaw.reduce((max, b) => (b.weekOf > max ? b.weekOf : max), weeklyRaw[0].weekOf)
+      : null;
+    const weeklyStale = isStale(lastWeeklyDate);
+    const wPeriod = !weeklyStale ? effectivePeriod(weeklyRaw.length, period) : null;
+    if (weeklyStale && weeklyRaw.length > 0) staleSkipped++;
     if (wPeriod) {
       const weeklyAsc = [...weeklyRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
       // Map to {time, ohlc} shape the state machine expects
@@ -107,7 +129,11 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
 
     // ── Daily signal (same sector period, daily bars) ──────────────────────
     const dailyRaw = dailyByTicker[ticker] || [];
-    const dPeriod = effectivePeriod(dailyRaw.length, period);
+    const lastDailyDate = dailyRaw.length > 0
+      ? dailyRaw.reduce((max, b) => (b.date > max ? b.date : max), dailyRaw[0].date)
+      : null;
+    const dailyStale = isStale(lastDailyDate);
+    const dPeriod = !dailyStale ? effectivePeriod(dailyRaw.length, period) : null;
     if (dPeriod) {
       const dailyAsc = [...dailyRaw].sort((a, b) => a.date.localeCompare(b.date));
       const dBars = dailyAsc.map(b => ({
@@ -132,7 +158,7 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
     }
   }
 
-  console.log(`🧠 AI Universe signals: weekly=${withWeeklySig}/${tickers.length} (BL=${openLongs}, SS=${openShorts}), daily=${withDailySig}/${tickers.length}`);
+  console.log(`🧠 AI Universe signals: weekly=${withWeeklySig}/${tickers.length} (BL=${openLongs}, SS=${openShorts}), daily=${withDailySig}/${tickers.length}, stale-suppressed=${staleSkipped}`);
   const out = { signals, dailySignals };
   cache = out; cacheAt = now;
   return out;

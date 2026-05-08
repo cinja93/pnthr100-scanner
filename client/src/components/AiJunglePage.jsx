@@ -66,7 +66,7 @@ function Pnthr300Strip({ onOpenChart }) {
       </span>
 
       <span style={{ color: '#888', fontSize: 11, fontFamily: 'monospace' }}>
-        21W EMA <strong style={{ color: '#fcf000' }}>{data.ema21W?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</strong>
+        OpEMA <strong style={{ color: '#fcf000' }}>{data.ema21W?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</strong>
       </span>
       <span style={{ color: '#888', fontSize: 11, fontFamily: 'monospace' }}>
         YTD <strong style={{ color: ytdColor }}>{data.ytdPct >= 0 ? '+' : ''}{data.ytdPct?.toFixed(2)}%</strong>

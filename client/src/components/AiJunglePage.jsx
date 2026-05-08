@@ -122,8 +122,8 @@ export default function AiJunglePage() {
   const [showIndexChart, setShowIndexChart] = useState(false);
   const [showWeights, setShowWeights]       = useState(false);
 
-  function load(forceRefresh = false) {
-    setLoading(true);
+  function load(forceRefresh = false, { silent = false } = {}) {
+    if (!silent) setLoading(true);
     setError(null);
     fetchAiUniverse(forceRefresh)
       .then(data => {
@@ -137,12 +137,19 @@ export default function AiJunglePage() {
       })
       .catch(err => {
         console.error(err);
-        setError('Failed to load AI Universe. Please try again.');
+        if (!silent) setError('Failed to load AI Universe. Please try again.');
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!silent) setLoading(false); });
   }
 
-  useEffect(() => { load(); }, []);
+  // Initial load + 30s auto-refresh. Server cache is also 30s, so each tick
+  // pulls a freshly-fetched FMP /quote batch (~120 calls/hour during RTH).
+  // Silent option keeps the spinner from blinking every cycle.
+  useEffect(() => {
+    load();
+    const id = setInterval(() => load(false, { silent: true }), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   // Counts by sectorId from current stock list (live, not from sectors metadata —
   // so the count reflects what FMP actually priced today).

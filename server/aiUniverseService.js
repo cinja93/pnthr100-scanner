@@ -46,15 +46,23 @@ export function getAiUniverseHoldings() { return FLAT_HOLDINGS; }
 export function getAiUniverseSectorMeta() { return SECTOR_META; }
 export function getAiUniverseFundMeta() { return FUND_META; }
 
-// ── In-memory cache (5 min, refresh=1 bypass) ───────────────────────────────
+// ── In-memory cache (30s, refresh=1 bypass) ─────────────────────────────────
+// 30s matches the Den's auto-refresh cadence on AiJunglePage. The /api/ai-universe
+// payload is dominated by one batched FMP /quote call (300 tickers fits in a
+// single call — see QUOTE_CHUNK below), and signals/Kill come from their own
+// 5-min caches and return instantly here. So at 30s the only real work each
+// cycle is one FMP call: ~120 calls/hour during RTH, well under any plan.
 let cache     = null;
 let cacheTime = 0;
-const CACHE_MS = 5 * 60 * 1000;
+const CACHE_MS = 30 * 1000;
 
 export function clearAiUniverseCache() { cache = null; cacheTime = 0; }
 
 // ── Main entry ──────────────────────────────────────────────────────────────
-const QUOTE_CHUNK = 200;
+// FMP /quote/<csv> accepts up to 1000 tickers per call; the AI Universe basket
+// is 297, so one chunk = one call. (Was 200, which split into 2 calls + a 250ms
+// inter-chunk sleep — wasted work.)
+const QUOTE_CHUNK = 300;
 
 export async function getAiUniverse({ refresh = false } = {}) {
   const now = Date.now();

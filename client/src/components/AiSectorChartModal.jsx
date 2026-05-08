@@ -3,7 +3,7 @@ import { createChart, BarSeries, CandlestickSeries, LineSeries } from 'lightweig
 import { fetchPnthrAiSectorBars, fetchPnthrAiSectorConstituents } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ChartDrawingOverlay from './ChartDrawingOverlay';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import pantherHead from '../assets/panther head.png';
 
 // AiSectorChartModal — full chart for one AI sector index. Clones the PAI300
@@ -366,13 +366,12 @@ export default function AiSectorChartModal({ sector, onClose }) {
         )}
       </div>
 
-      {/* Holding chart — opens on top of the sector modal so closing it
-          returns you to the sector. Existing ChartModal handles per-ticker
-          fetch via /api/ticker/{ticker}. */}
+      {/* Holding chart — opens on top of the sector modal. Uses the AI
+          Universe ticker chart (daily + weekly side-by-side, sector-tuned
+          EMA, signal markers). Closing returns to the sector. */}
       {tickerChart && (
-        <ChartModal
-          stocks={[tickerChart]}
-          initialIndex={0}
+        <AiTickerChartModal
+          ticker={tickerChart.ticker}
           onClose={() => setTickerChart(null)}
         />
       )}

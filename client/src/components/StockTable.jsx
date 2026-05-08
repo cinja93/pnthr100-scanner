@@ -314,18 +314,19 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                 Analyze % {getSortIndicator('analyzeScore')}
               </th>
             )}
-            <th onClick={() => handleSort('signal')} className={`${styles.signalColumn} ${styles.sortable}`}>
-              {weeklySignalLabel} {getSortIndicator('signal')}
-            </th>
-            <th onClick={() => handleSort('weeksAgo')} className={`${styles.signalColumn} ${styles.sortable}`}>
-              {showDailySignal ? 'Weekly Wks Since' : 'Wks Since'} {getSortIndicator('weeksAgo')}
-            </th>
-            {showDailySignal && <th className={styles.signalColumn}>
+            {/* Daily pair first (light blue tint), then Weekly pair (light yellow tint) */}
+            {showDailySignal && <th className={styles.signalColumn} style={{ backgroundColor: 'rgba(59,130,246,0.18)' }}>
               PNTHR Daily Signal
             </th>}
-            {showDailySignal && <th className={styles.signalColumn}>
+            {showDailySignal && <th className={styles.signalColumn} style={{ backgroundColor: 'rgba(59,130,246,0.18)' }}>
               Daily Wks Since
             </th>}
+            <th onClick={() => handleSort('signal')} className={`${styles.signalColumn} ${styles.sortable}`} style={{ backgroundColor: 'rgba(252,240,0,0.13)' }}>
+              {showDailySignal ? 'PNTHR Weekly Signal' : weeklySignalLabel} {getSortIndicator('signal')}
+            </th>
+            <th onClick={() => handleSort('weeksAgo')} className={`${styles.signalColumn} ${styles.sortable}`} style={{ backgroundColor: 'rgba(252,240,0,0.13)' }}>
+              {showDailySignal ? 'Weekly Wks Since' : 'Wks Since'} {getSortIndicator('weeksAgo')}
+            </th>
             {showKillScore && <th onClick={() => handleSort('killScore')} className={styles.sortable} style={{ textAlign: 'center', backgroundColor: '#0a0a0a' }}>
               PNTHR Kill {getSortIndicator('killScore')}
             </th>}
@@ -474,7 +475,34 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                     })()}
                   </>
                 )}
-                <td className={styles.signalColumn}>
+                {/* Daily pair FIRST (light blue tint when showing both timeframes) */}
+                {showDailySignal && (() => {
+                  const ds = dailySignals[stock.ticker];
+                  const sig = ds?.signal;
+                  const wks = computeWeeksAgo(ds?.signalDate);
+                  const cls = sig === 'BL' ? styles.pnthrBadgeBL
+                            : sig === 'SS' ? styles.pnthrBadgeSS
+                            : (sig === 'BE' || sig === 'SE') ? styles.pnthrBadgeBE
+                            : null;
+                  const dailyTint = { backgroundColor: 'rgba(59,130,246,0.18)' };
+                  return (
+                    <>
+                      <td className={styles.signalColumn} style={dailyTint}>
+                        {sig
+                          ? <span className={`${styles.pnthrBadge} ${cls}`}>{sig}</span>
+                          : <span className={styles.signalNone}>—</span>}
+                      </td>
+                      <td className={styles.signalColumn} style={dailyTint}>
+                        {sig && wks != null
+                          ? <span className={`${styles.pnthrBadge} ${cls}`}>{sig}+{wks}</span>
+                          : <span className={styles.signalNone}>—</span>}
+                      </td>
+                    </>
+                  );
+                })()}
+
+                {/* Weekly pair SECOND (light yellow tint when showing both timeframes) */}
+                <td className={styles.signalColumn} style={showDailySignal ? { backgroundColor: 'rgba(252,240,0,0.13)' } : undefined}>
                   {signalsLoading
                     ? <span className={styles.loadingDots}>···</span>
                     : signalData?.signal === 'BL'
@@ -487,7 +515,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                             ? <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeSE}`}>SE</span>
                             : <span className={styles.signalNone}>—</span>}
                 </td>
-                <td className={styles.signalColumn}>
+                <td className={styles.signalColumn} style={showDailySignal ? { backgroundColor: 'rgba(252,240,0,0.13)' } : undefined}>
                   {signalsLoading
                     ? <span className={styles.loadingDots}>···</span>
                     : (() => {
@@ -501,29 +529,6 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                         return <span className={`${styles.pnthrBadge} ${cls}`}>{isNew ? '★ ' : ''}{sig}+{wks}</span>;
                       })()}
                 </td>
-                {showDailySignal && (() => {
-                  const ds = dailySignals[stock.ticker];
-                  const sig = ds?.signal;
-                  const wks = computeWeeksAgo(ds?.signalDate);
-                  const cls = sig === 'BL' ? styles.pnthrBadgeBL
-                            : sig === 'SS' ? styles.pnthrBadgeSS
-                            : (sig === 'BE' || sig === 'SE') ? styles.pnthrBadgeBE
-                            : null;
-                  return (
-                    <>
-                      <td className={styles.signalColumn}>
-                        {sig
-                          ? <span className={`${styles.pnthrBadge} ${cls}`}>{sig}</span>
-                          : <span className={styles.signalNone}>—</span>}
-                      </td>
-                      <td className={styles.signalColumn}>
-                        {sig && wks != null
-                          ? <span className={`${styles.pnthrBadge} ${cls}`}>{sig}+{wks}</span>
-                          : <span className={styles.signalNone}>—</span>}
-                      </td>
-                    </>
-                  );
-                })()}
                 {showKillScore && (() => {
                   const score = stock.killScore;
                   const tier  = stock.killTier;

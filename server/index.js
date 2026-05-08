@@ -34,6 +34,7 @@ import { getAiUniverse, clearAiUniverseCache } from './aiUniverseService.js';
 import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
 import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
+import { getAiStockChartData } from './aiUniverseStockChartService.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
 import { runLotTriggerSync, registerLotTriggerCron } from './lotTriggerCron.js';
@@ -1850,6 +1851,20 @@ app.post('/api/admin/run-pnthr-ai-300', authenticateJWT, requireAdmin, async (re
     res.json({ ok: true, message: 'PNTHR AI 300 rebuild started — check server logs.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PNTHR AI Universe — per-stock chart data (daily + weekly OHLC + EMA + signals) ──
+// Powers the side-by-side daily/weekly chart modal opened from the AI 300
+// Index table and AI Sector chart modals. EMA period comes from the stock's
+// AI sector (NOT GICS / NOT XLK).
+app.get('/api/pnthr-ai-stock/:ticker', async (req, res) => {
+  try {
+    const data = await getAiStockChartData(req.params.ticker);
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/pnthr-ai-stock:', err);
+    res.status(500).json({ error: 'Failed to load AI stock chart data' });
   }
 });
 

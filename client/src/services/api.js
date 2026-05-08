@@ -425,6 +425,14 @@ export async function fetchPnthrAi300Bars(timeframe = 'daily', limit = null) {
   return response.json();
 }
 
+// PNTHR AI Universe — daily + weekly chart data for a single AI ticker (side-by-side modal)
+export async function fetchAiStockChartData(ticker) {
+  const url = `${API_BASE}/api/pnthr-ai-stock/${encodeURIComponent(ticker)}`;
+  const response = await apiFetch(url, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // PNTHR AI Sectors — latest snapshot for all 16 sector indices (grid page)
 export async function fetchPnthrAiSectorsLatest(forceRefresh = false) {
   const url = `${API_BASE}/api/pnthr-ai-sectors${forceRefresh ? '?refresh=1' : ''}`;

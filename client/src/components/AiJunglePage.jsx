@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import StockTable from './StockTable';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import Pnthr300ChartModal from './Pnthr300ChartModal';
 import Pnthr300WeightsModal from './Pnthr300WeightsModal';
 import { fetchAiUniverse, fetchEarnings, fetchPnthrAi300Latest } from '../services/api';
@@ -117,8 +117,7 @@ export default function AiJunglePage() {
   const [error, setError]                 = useState(null);
   const [sectorFilter, setSectorFilter]   = useState('all'); // 'all' | sectorId number
   const [groupBySector, setGroupBySector] = useState(false);
-  const [chartIndex, setChartIndex]       = useState(null);
-  const [chartStocks, setChartStocks]     = useState([]);
+  const [chartTicker, setChartTicker]     = useState(null);  // ticker string when a row is clicked
   const [showIndexChart, setShowIndexChart] = useState(false);
   const [showWeights, setShowWeights]       = useState(false);
 
@@ -159,9 +158,8 @@ export default function AiJunglePage() {
     return stocks.filter(s => s.sectorId === sectorFilter);
   }, [stocks, sectorFilter]);
 
-  function handleTickerClick(_stock, sortedIdx, sortedStocks) {
-    setChartStocks(sortedStocks);
-    setChartIndex(sortedIdx);
+  function handleTickerClick(stock) {
+    setChartTicker(stock.ticker);
   }
 
   const totalCount = stocks.length;
@@ -255,12 +253,10 @@ export default function AiJunglePage() {
         />
       )}
 
-      {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
-          initialIndex={chartIndex}
-          earnings={earnings}
-          onClose={() => setChartIndex(null)}
+      {chartTicker && (
+        <AiTickerChartModal
+          ticker={chartTicker}
+          onClose={() => setChartTicker(null)}
         />
       )}
 

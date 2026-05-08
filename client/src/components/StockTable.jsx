@@ -25,6 +25,21 @@ function getSignalDisplay(signalData) {
 // Signal sort order: buys first, sells last, no signal at bottom
 const SIGNAL_ORDER = { BL: 1, BUY: 1, BE: 2, YELLOW_BUY: 3, YELLOW_SELL: 4, SE: 5, SS: 6, SELL: 6 };
 
+// PNTHR Kill tier → color (matches AI_KILL_TIERS in aiUniverseKillService)
+const KILL_TIER_COLOR = {
+  'ALPHA PNTHR KILL': '#FFD700',
+  'STRIKING':         '#22c55e',
+  'HUNTING':          '#3b82f6',
+  'POUNCING':         '#06b6d4',
+  'COILING':          '#a855f7',
+  'STALKING':         '#ec4899',
+  'TRACKING':         '#f59e0b',
+  'PROWLING':         '#ef4444',
+  'STIRRING':         '#6b7280',
+  'DORMANT':          '#374151',
+  'OVEREXTENDED':     '#1f2937',
+};
+
 const TODAY = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
 
 function getEarningsInfo(dateStr) {
@@ -43,7 +58,7 @@ function matchesPinSignal(sigData, pinSignal) {
   return sigData.signal === pinSignal;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null }) {
   const [sortConfig, setSortConfig] = useState({ key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
   const listRef = useRef([]);
@@ -256,6 +271,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
     (hideEarnings ? -1 : 0) +
     (hideExchange ? -1 : 0) +
     (showDailySignal ? 2 : 0) +
+    (showKillScore ? 1 : 0) +
     (analyzeScores ? 1 : 0);
 
   return (
@@ -309,6 +325,9 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             </th>}
             {showDailySignal && <th className={styles.signalColumn}>
               Daily Wks Since
+            </th>}
+            {showKillScore && <th onClick={() => handleSort('killScore')} className={styles.sortable} style={{ textAlign: 'center', backgroundColor: '#0a0a0a' }}>
+              PNTHR Kill {getSortIndicator('killScore')}
             </th>}
             {!hideEarnings && <th onClick={() => handleSort('earningsDate')} className={styles.sortable}>
               Next Earnings {getSortIndicator('earningsDate')}
@@ -503,6 +522,31 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                           : <span className={styles.signalNone}>—</span>}
                       </td>
                     </>
+                  );
+                })()}
+                {showKillScore && (() => {
+                  const score = stock.killScore;
+                  const tier  = stock.killTier;
+                  const tierColor = KILL_TIER_COLOR[tier] || '#555';
+                  if (score == null || tier === 'STIRRING' || tier === 'DORMANT') {
+                    return <td style={{ textAlign: 'center', backgroundColor: '#0a0a0a', color: '#555', fontFamily: 'monospace', fontSize: 11 }}>—</td>;
+                  }
+                  if (tier === 'OVEREXTENDED') {
+                    return (
+                      <td style={{ textAlign: 'center', backgroundColor: '#0a0a0a', fontFamily: 'monospace', fontSize: 10 }}>
+                        <span style={{ color: tierColor, fontWeight: 700 }}>OVR</span>
+                      </td>
+                    );
+                  }
+                  return (
+                    <td style={{ textAlign: 'center', backgroundColor: '#0a0a0a', fontFamily: 'monospace' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                        <span style={{ color: tierColor, fontWeight: 700, fontSize: 13 }}>{score.toFixed(1)}</span>
+                        <span style={{ color: tierColor, fontSize: 8, fontWeight: 700, letterSpacing: '0.05em' }}>
+                          {tier === 'ALPHA PNTHR KILL' ? 'ALPHA' : tier}
+                        </span>
+                      </div>
+                    </td>
                   );
                 })()}
                 {!hideEarnings && <td>

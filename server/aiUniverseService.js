@@ -20,6 +20,7 @@
 import { SECTORS, FUND_META } from './scripts/aiUniverse/aiUniverseData.js';
 import { fetchFMP, getYearStartPrices } from './stockService.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
+import { getAiUniverseKill } from './aiUniverseKillService.js';
 
 // ── Flatten holdings once at module load ────────────────────────────────────
 const FLAT_HOLDINGS = [];
@@ -111,11 +112,31 @@ export async function getAiUniverse({ refresh = false } = {}) {
   // same period applied to its daily bars (daily signal).
   const { signals: weeklySig, dailySignals: dailySig } = await getAiUniverseSignals();
 
+  // PNTHR AI Kill — D1-D8 with AI substitutions (PAI300 regime, AI sector
+  // indices, sector-tuned EMAs). Merged onto each stock for the Kill column.
+  const killData = await getAiUniverseKill();
+  for (const s of ranked) {
+    const k = killData.stocks?.[s.ticker];
+    if (k) {
+      s.killScore = k.total;
+      s.killTier  = k.tier;
+      s.killRank  = k.rank ?? null;
+      s.killD3Confirmation = k.d3?.confirmation ?? null;
+    }
+  }
+
   const payload = {
     stocks:        ranked,
     signals:       weeklySig,
     dailySignals:  dailySig,
     sectors:       SECTOR_META,
+    killSummary:   {
+      asOf:         killData.asOf,
+      pai300Regime: killData.pai300 ? (killData.pai300.aboveEma ? 'bull' : 'bear') : null,
+      pai300Slope:  killData.pai300?.emaSlope ?? null,
+      signalCounts: killData.signalCounts,
+      top10:        killData.ranked?.slice(0, 10) ?? [],
+    },
     fundMeta:      FUND_META,
     fetchedCount:  ranked.length,
     requestedCount: FLAT_HOLDINGS.length,

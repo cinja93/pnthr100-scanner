@@ -3,6 +3,7 @@ import { createChart, BarSeries, CandlestickSeries, LineSeries } from 'lightweig
 import { fetchPnthrAiSectorBars, fetchPnthrAiSectorConstituents } from '../services/api';
 import { useAuth } from '../AuthContext';
 import ChartDrawingOverlay from './ChartDrawingOverlay';
+import ChartModal from './ChartModal';
 import pantherHead from '../assets/panther head.png';
 
 // AiSectorChartModal — full chart for one AI sector index. Clones the PAI300
@@ -31,6 +32,7 @@ export default function AiSectorChartModal({ sector, onClose }) {
   const [error, setError]           = useState(null);
   const [hoveredBar, setHoveredBar] = useState(null);
   const [barsTick, setBarsTick]     = useState(0);
+  const [tickerChart, setTickerChart] = useState(null);  // { ticker, companyName, sector } when a holding is clicked
 
   const containerRef    = useRef(null);
   const chartRef        = useRef(null);
@@ -301,15 +303,38 @@ export default function AiSectorChartModal({ sector, onClose }) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '4px 12px', fontFamily: 'monospace', fontSize: 11 }}>
               {holdings.holdings.map(h => (
-                <div key={h.ticker}>
-                  <span style={{ color: '#fcf000', fontWeight: 700 }}>{h.ticker}</span>
+                <button
+                  key={h.ticker}
+                  onClick={() => setTickerChart({ ticker: h.ticker, companyName: h.name, sector: sector.name })}
+                  title={`Open ${h.ticker} chart`}
+                  style={{
+                    background: 'transparent', border: 'none', textAlign: 'left',
+                    padding: '2px 4px', borderRadius: 3, cursor: 'pointer',
+                    fontFamily: 'monospace', fontSize: 11,
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(252,240,0,0.12)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span style={{ color: '#fcf000', fontWeight: 700, textDecoration: 'underline', textDecorationColor: 'rgba(252,240,0,0.4)' }}>{h.ticker}</span>
                   <span style={{ color: '#666', marginLeft: 6, fontSize: 10 }}>{h.name}</span>
-                </div>
+                </button>
               ))}
             </div>
           </div>
         )}
       </div>
+
+      {/* Holding chart — opens on top of the sector modal so closing it
+          returns you to the sector. Existing ChartModal handles per-ticker
+          fetch via /api/ticker/{ticker}. */}
+      {tickerChart && (
+        <ChartModal
+          stocks={[tickerChart]}
+          initialIndex={0}
+          onClose={() => setTickerChart(null)}
+        />
+      )}
     </div>
   );
 }

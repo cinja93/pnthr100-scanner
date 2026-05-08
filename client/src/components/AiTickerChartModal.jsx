@@ -32,6 +32,7 @@ function ChartPanel({
   const chartRef        = useRef(null);
   const priceSeriesRef  = useRef(null);
   const priceLineRef    = useRef(null);
+  const markersRef      = useRef(null);
   const navCache        = useRef(null);
 
   const { queuedTickers, toggleQueue, nav: contextNav } = useQueue() || {};
@@ -104,17 +105,35 @@ function ChartPanel({
     })));
     ema.setData(bars.filter(b => b.ema != null).map(b => ({ time: b.date, value: b.ema })));
 
-    // Signal markers
+    // Signal markers — render only the LAST BL/SS entry + its corresponding
+    // BE/SE exit (if any). Matches the 679 ChartModal convention. Showing
+    // every historical event (e.g. EA daily had 168 events going back to
+    // 2022) creates a visually saturated chart where individual markers
+    // are indistinguishable.
     if (signals && signals.length > 0) {
-      const markers = signals.map(ev => {
-        let position, shape, text, color;
-        if (ev.signal === 'BL')      { color = '#16a34a'; position = 'belowBar'; shape = 'arrowUp';   text = 'BL'; }
-        else if (ev.signal === 'SS') { color = '#dc2626'; position = 'aboveBar'; shape = 'arrowDown'; text = 'SS'; }
-        else if (ev.signal === 'BE') { color = '#f59e0b'; position = 'aboveBar'; shape = 'square';    text = 'BE'; }
-        else if (ev.signal === 'SE') { color = '#f59e0b'; position = 'belowBar'; shape = 'square';    text = 'SE'; }
-        return { time: ev.time, position, color, shape, text, size: 1 };
-      });
-      createSeriesMarkers(priceSeries, markers);
+      let lastEntryIdx = -1;
+      for (let i = signals.length - 1; i >= 0; i--) {
+        if (signals[i].signal === 'BL' || signals[i].signal === 'SS') { lastEntryIdx = i; break; }
+      }
+      const lastEntry = lastEntryIdx >= 0 ? signals[lastEntryIdx] : null;
+      const exitEvent = lastEntry
+        ? signals.slice(lastEntryIdx + 1).find(e => e.signal === 'BE' || e.signal === 'SE')
+        : null;
+      const visibleEvents = [lastEntry, exitEvent].filter(Boolean);
+
+      if (visibleEvents.length > 0) {
+        const markers = visibleEvents.map(ev => {
+          let position, shape, text, color;
+          if (ev.signal === 'BL')      { color = '#16a34a'; position = 'belowBar'; shape = 'arrowUp';   text = 'BL'; }
+          else if (ev.signal === 'SS') { color = '#dc2626'; position = 'aboveBar'; shape = 'arrowDown'; text = 'SS'; }
+          else if (ev.signal === 'BE') { color = '#f59e0b'; position = 'aboveBar'; shape = 'square';    text = 'BE'; }
+          else if (ev.signal === 'SE') { color = '#f59e0b'; position = 'belowBar'; shape = 'square';    text = 'SE'; }
+          return { time: ev.time, position, color, shape, text, size: 2 };
+        });
+        // Save the marker manager to a ref so it isn't garbage-collected
+        // (lightweight-charts v5 attaches markers via the returned manager)
+        markersRef.current = createSeriesMarkers(priceSeries, markers);
+      }
     }
 
     // Dashed PNTHR Stop line — only the last 5 bars on the right edge so it
@@ -159,6 +178,7 @@ function ChartPanel({
       chartRef.current = null;
       priceSeriesRef.current = null;
       priceLineRef.current = null;
+      markersRef.current = null;
     };
   }, [bars, signals, chartType, title, pnthrStop]);
 

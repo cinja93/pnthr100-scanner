@@ -23,3 +23,22 @@ export function computeWeeksAgo(signalDate) {
   const diffDays = Math.round((currentMonday - signalMonday) / (1000 * 60 * 60 * 24));
   return Math.floor(diffDays / 7) + 1; // inclusive: signal week = week 1
 }
+
+// Compute inclusive TRADING days since a daily signal date.
+// Signal day = day 1 (so a signal fired today returns 1, not 0).
+// Excludes weekends (Sat/Sun); does not currently exclude US market holidays.
+export function computeTradingDaysAgo(signalDate) {
+  if (!signalDate) return null;
+  const sig   = new Date(signalDate + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (sig >= today) return 1;  // signal today (or future bar) = day 1
+  let count = 0;
+  const cur = new Date(sig);
+  while (cur < today) {
+    cur.setDate(cur.getDate() + 1);
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count + 1; // signal day = day 1
+}

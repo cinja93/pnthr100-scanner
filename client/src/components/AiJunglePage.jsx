@@ -9,7 +9,9 @@ import pantherHead from '../assets/panther head.png';
 
 // ── PNTHR AI 300 header strip ───────────────────────────────────────────────
 // Live snapshot of the proprietary index. Clickable → opens Pnthr300ChartModal.
-// Polls /api/pnthr-ai-300 on mount + every 60s while the page is open.
+// Polls /api/pnthr-ai-300 every 30s — matches the server's 30s LATEST_CACHE_MS
+// so each tick pulls a freshly recomputed live overlay (constituent quotes ×
+// stored weights → live index value).
 function Pnthr300Strip({ onOpenChart, onOpenWeights }) {
   const [data, setData] = useState(null);
 
@@ -21,7 +23,7 @@ function Pnthr300Strip({ onOpenChart, onOpenWeights }) {
         .catch(() => {});
     };
     load();
-    const id = setInterval(load, 60000);
+    const id = setInterval(load, 30000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 

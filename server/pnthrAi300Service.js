@@ -16,6 +16,7 @@ import {
   COLL_INDEX_DAILY, COLL_INDEX_WEEKLY,
   INDEX_EMA_DAILY_PERIOD, INDEX_EMA_WEEKLY_PERIOD,
 } from './data/pnthrAiIndexConfig.js';
+import { fetchFMP } from './stockService.js';
 
 // Standard EMA — first value = simple average of first `period` closes,
 // then α-weighted recursion. Matches the 679 EMA convention.
@@ -39,10 +40,15 @@ function computeEMA(closes, period) {
 }
 
 // ── In-memory caches ────────────────────────────────────────────────────────
+// Bars are end-of-day (cron-written) — 5 min cache is fine; the underlying
+// data only changes once a day at 5:30pm. The latest snapshot, however, is
+// recomputed from live FMP quotes overlaid on the most recent stored close,
+// so its cache matches the AI Universe table cadence (30s).
 let cacheDaily   = null; let cacheDailyAt   = 0;
 let cacheWeekly  = null; let cacheWeeklyAt  = 0;
 let cacheLatest  = null; let cacheLatestAt  = 0;
-const CACHE_MS = 5 * 60 * 1000;
+const CACHE_MS         = 5 * 60 * 1000;  // bars + weights — change at 5:30pm cron only
+const LATEST_CACHE_MS  = 30 * 1000;      // strip snapshot — live FMP refresh
 
 export function clearPnthrAi300Cache() {
   cacheDaily = null; cacheDailyAt = 0;
@@ -79,9 +85,26 @@ async function loadWeeklyBars() {
 // ── Public API ──────────────────────────────────────────────────────────────
 
 // Latest snapshot for the AI Jungle header strip + regime gate.
+//
+// Architecture:
+//   • Bars (pnthr_ai_index_candles) are end-of-day only — written by the 5:30pm
+//     cron. During RTH, daily[length-1] is YESTERDAY's close, not today's.
+//   • To make the strip update live, we overlay live FMP quotes for the 297
+//     constituents onto the most recent stored close using the index's standing
+//     weights (from pnthr_ai_index_meta). The math is identical to the cron's
+//     end-of-day rebuild — capped market-cap weighted — just substituting live
+//     prices for end-of-day closes.
+//   • Live formula:
+//       liveIndex = lastClose * Σ ( weight_i * livePrice_i / previousClose_i )
+//     where previousClose_i comes from FMP's /quote response (FMP's canonical
+//     yesterday close). Σ(weight_i * 1) collapses to 1.0 when prices haven't
+//     moved, giving back lastClose. Otherwise the weighted constituent move
+//     scales the index value forward.
+//   • If FMP is unreachable for any reason, the function falls back to the
+//     stored close (current behavior) so the strip never goes blank.
 export async function getPnthrAi300Latest() {
   const now = Date.now();
-  if (cacheLatest && (now - cacheLatestAt) < CACHE_MS) return cacheLatest;
+  if (cacheLatest && (now - cacheLatestAt) < LATEST_CACHE_MS) return cacheLatest;
 
   const [daily, weekly] = await Promise.all([loadDailyBars(), loadWeeklyBars()]);
   if (!daily.length || !weekly.length) {
@@ -93,9 +116,74 @@ export async function getPnthrAi300Latest() {
     };
   }
 
-  const todayBar     = daily[daily.length - 1];
-  const yesterdayBar = daily.length >= 2 ? daily[daily.length - 2] : null;
-  const dayChangePct = yesterdayBar ? ((todayBar.close - yesterdayBar.close) / yesterdayBar.close) * 100 : 0;
+  const lastBar       = daily[daily.length - 1];                       // most recent stored close
+  const priorBar      = daily.length >= 2 ? daily[daily.length - 2] : null;
+  const lastBarClose  = lastBar.close;
+
+  // ── Live overlay from FMP quotes ──
+  // Pull weights + live quotes in parallel. Only constituents with non-zero
+  // weight contribute. We use FMP's previousClose as the per-constituent
+  // baseline so the math doesn't require a separate Mongo lookup of each
+  // constituent's stored close.
+  let liveValue   = lastBarClose;          // default to stored close (cron-written value)
+  let liveAsOf    = lastBar.date;          // default to bar date
+  let liveSource  = 'stored';              // 'live' once overlay succeeds
+  try {
+    const db = await connectToDatabase();
+    const meta = db ? await db.collection('pnthr_ai_index_meta').findOne({ key: 'current_weights' }) : null;
+    const weights = meta?.weights || null;
+    if (weights) {
+      const tickers = Object.keys(weights).filter(t => weights[t] > 0);
+      // FMP /quote accepts up to 1000 tickers per call; 297 fits in one.
+      const quotes = await fetchFMP(`/quote/${tickers.join(',')}`).catch(() => null);
+      if (Array.isArray(quotes) && quotes.length > 0) {
+        const qmap = {};
+        let liveTimestamp = 0;
+        for (const q of quotes) {
+          qmap[q.symbol] = q;
+          if (typeof q.timestamp === 'number' && q.timestamp > liveTimestamp) liveTimestamp = q.timestamp;
+        }
+        // Σ ( weight_i * livePrice_i / previousClose_i ). Skip constituents the
+        // quote response missed or where previousClose is invalid — their weight
+        // gets dropped from the sum (rare, but resilient).
+        let weightedRatio = 0;
+        let usedWeight    = 0;
+        for (const [ticker, w] of Object.entries(weights)) {
+          if (!w || w <= 0) continue;
+          const q = qmap[ticker];
+          if (!q || typeof q.price !== 'number' || typeof q.previousClose !== 'number' || q.previousClose <= 0) continue;
+          weightedRatio += w * (q.price / q.previousClose);
+          usedWeight    += w;
+        }
+        // Renormalize against the weight that actually contributed (covers any
+        // missing tickers cleanly without dragging the index toward zero).
+        if (usedWeight > 0) {
+          const ratio = weightedRatio / usedWeight;
+          liveValue   = lastBarClose * ratio;
+          liveSource  = 'live';
+          if (liveTimestamp) {
+            const fmt = new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+            });
+            liveAsOf = fmt.format(new Date(liveTimestamp * 1000));
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[PAI300] live overlay failed; using stored close:', err.message);
+  }
+
+  // Day change anchored to the prior session close. When the overlay is live
+  // and lastBar IS today's bar (post-cron), priorBar is yesterday — perfect.
+  // When the overlay is live and lastBar is yesterday's bar (pre-cron during
+  // RTH), the prior session is lastBar itself, so use lastBarClose.
+  const dayChangeBase = (liveSource === 'live' && liveAsOf > lastBar.date)
+    ? lastBarClose
+    : (priorBar ? priorBar.close : lastBarClose);
+  const dayChangePct = dayChangeBase > 0
+    ? ((liveValue - dayChangeBase) / dayChangeBase) * 100
+    : 0;
 
   const closesD = daily.map(b => b.close);
   const emaD    = computeEMA(closesD, INDEX_EMA_DAILY_PERIOD);
@@ -104,23 +192,26 @@ export async function getPnthrAi300Latest() {
 
   const ema21D = emaD[emaD.length - 1] ?? null;
   const ema21W = emaW[emaW.length - 1] ?? null;
-  const regime = (ema21W != null && todayBar.close >= ema21W) ? 'bull' : 'bear';
+  // Regime gate compares LIVE index value against the weekly OpEMA — matches
+  // how a trader reads it ("are we above the EMA right now?").
+  const regime = (ema21W != null && liveValue >= ema21W) ? 'bull' : 'bear';
 
-  // YTD / since-inception returns
+  // YTD / since-inception now anchor on the live value.
   const yearStart = `${new Date().getFullYear()}-01-01`;
   const ytdSeed   = daily.find(b => b.date >= yearStart);
-  const ytdPct    = ytdSeed ? ((todayBar.close - ytdSeed.close) / ytdSeed.close) * 100 : null;
-  const inceptionPct = ((todayBar.close - BASE_VALUE) / BASE_VALUE) * 100;
+  const ytdPct    = ytdSeed ? ((liveValue - ytdSeed.close) / ytdSeed.close) * 100 : null;
+  const inceptionPct = ((liveValue - BASE_VALUE) / BASE_VALUE) * 100;
 
   const out = {
     ok: true,
     indexName:   INDEX_NAME,
     indexTicker: INDEX_TICKER,
-    asOf:        todayBar.date,
-    value:       parseFloat(todayBar.close.toFixed(2)),
-    open:        parseFloat(todayBar.open.toFixed(2)),
-    high:        parseFloat(todayBar.high.toFixed(2)),
-    low:         parseFloat(todayBar.low.toFixed(2)),
+    asOf:        liveAsOf,
+    value:       parseFloat(liveValue.toFixed(2)),
+    valueSource: liveSource,                 // 'live' | 'stored' (for diagnostics)
+    open:        parseFloat(lastBar.open.toFixed(2)),
+    high:        parseFloat(lastBar.high.toFixed(2)),
+    low:         parseFloat(lastBar.low.toFixed(2)),
     dayChangePct: parseFloat(dayChangePct.toFixed(2)),
     ytdPct:      ytdPct != null ? parseFloat(ytdPct.toFixed(2)) : null,
     inceptionPct: parseFloat(inceptionPct.toFixed(2)),

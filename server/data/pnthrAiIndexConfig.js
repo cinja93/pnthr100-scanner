@@ -43,8 +43,10 @@ export const COLL_INDEX_WEEKLY  = 'pnthr_ai_index_candles_weekly';
 export const COLL_INDEX_META    = 'pnthr_ai_index_meta';
 
 // EMA periods — empirically tuned to ride support / resistance on PAI300's own
-// historical pullbacks (Oct 2023, Jul 2024). Weekly OpEMA = 20 (was 21);
-// daily kept at 21 pending observation. These can be re-tuned without affecting
-// 679's sector-optimized EMA system — this index has its own EMA spec.
+// historical pullbacks (Oct 2023, Jul 2024). Weekly OpEMA = 23 (was 20, then
+// 21); the longer period sits a hair higher than 21W and lets the bars touch
+// the EMA on those pullbacks instead of cutting through. Daily kept at 21
+// pending observation. These can be re-tuned without affecting 679's
+// sector-optimized EMA system — this index has its own EMA spec.
 export const INDEX_EMA_DAILY_PERIOD  = 21;
-export const INDEX_EMA_WEEKLY_PERIOD = 20;
+export const INDEX_EMA_WEEKLY_PERIOD = 23;

@@ -50,6 +50,7 @@ export default function ChartDrawingOverlay({
   ticker,
   enabled = true,
   buttonPosition = 'top-right',     // 'top-right' | 'top-left'
+  topOffset = 6,                    // px from chart top to button stack — bump down to clear watermarks
 }) {
   const overlayRef        = useRef(null);
   const drawnSeriesRef    = useRef([]);
@@ -479,7 +480,7 @@ export default function ChartDrawingOverlay({
     <>
       {/* Floating button stack: Draw, Horizontal, Clear (shown when ≥1 line) */}
       <div style={{
-        position: 'absolute', top: 6,
+        position: 'absolute', top: topOffset,
         [buttonPosition === 'top-right' ? 'right' : 'left']: 6,
         zIndex: 12,
         display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start',

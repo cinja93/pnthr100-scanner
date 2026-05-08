@@ -253,14 +253,14 @@ export default function Pnthr300ChartModal({ onClose }) {
 
         {/* Chart body */}
         <div style={{ flex: 1, position: 'relative' }}>
-          {/* Panther head — sized roughly to match the "PNTHR AI 300" label width */}
+          {/* Panther head — sized to match the width of "PNTHR AI 300" yellow label above */}
           <img
             src={pantherHead}
             alt="PNTHR"
             style={{
-              position: 'absolute', top: 14, left: 14, width: 90, height: 90,
-              opacity: 0.9, zIndex: 2, pointerEvents: 'none',
-              filter: 'drop-shadow(0 3px 10px rgba(0,0,0,0.7))',
+              position: 'absolute', top: 14, left: 14, width: 200, height: 200,
+              opacity: 0.92, zIndex: 2, pointerEvents: 'none',
+              filter: 'drop-shadow(0 3px 12px rgba(0,0,0,0.75))',
             }}
           />
 
@@ -315,7 +315,8 @@ export default function Pnthr300ChartModal({ onClose }) {
               weeklyBars={visibleBarsRef.current}
               ticker="PAI300"
               enabled={isAdmin}
-              buttonPosition="top-right"
+              buttonPosition="top-left"
+              topOffset={224}
             />
           )}
         </div>

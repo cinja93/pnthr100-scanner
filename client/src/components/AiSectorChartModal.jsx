@@ -50,20 +50,25 @@ export default function AiSectorChartModal({ sector, onClose }) {
     });
   }
 
-  // Bars
+  // Bars on mount + when sector/timeframe changes; silent 30s auto-refresh
+  // keeps today's intraday bar (spliced in by getPnthrAiSectorBars overlay) live.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true); setError(null);
-    fetchPnthrAiSectorBars(sector.id, timeframe)
-      .then(d => {
-        if (cancelled) return;
-        if (!d.ok || !d.bars?.length) { setError('No data'); setBars([]); return; }
-        setBars(d.bars);
-        setEmaPeriod(d.emaPeriod);
-      })
-      .catch(e => { if (!cancelled) setError(e.message || 'Failed to load'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    const load = (silent) => {
+      if (!silent) { setLoading(true); setError(null); }
+      fetchPnthrAiSectorBars(sector.id, timeframe)
+        .then(d => {
+          if (cancelled) return;
+          if (!d.ok || !d.bars?.length) { if (!silent) { setError('No data'); setBars([]); } return; }
+          setBars(d.bars);
+          setEmaPeriod(d.emaPeriod);
+        })
+        .catch(e => { if (!cancelled && !silent) setError(e.message || 'Failed to load'); })
+        .finally(() => { if (!cancelled && !silent) setLoading(false); });
+    };
+    load(false);
+    const id = setInterval(() => load(true), 30000);
+    return () => { cancelled = true; clearInterval(id); };
   }, [sector.id, timeframe]);
 
   // Constituents (holdings list — load once)

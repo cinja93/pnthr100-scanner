@@ -54,29 +54,38 @@ export default function Pnthr300ChartModal({ onClose }) {
     });
   }
 
-  // Latest snapshot (for header summary)
+  // Latest snapshot (for header summary) — 30s silent auto-refresh
   useEffect(() => {
     let cancelled = false;
-    fetchPnthrAi300Latest()
-      .then(d => { if (!cancelled) setLatest(d); })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    const load = () => {
+      fetchPnthrAi300Latest()
+        .then(d => { if (!cancelled) setLatest(d); })
+        .catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  // Bars on mount + when timeframe changes
+  // Bars on mount + when timeframe changes; silent 30s auto-refresh keeps
+  // today's intraday bar (spliced in by getPnthrAi300Bars overlay) live.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true); setError(null);
-    fetchPnthrAi300Bars(timeframe)
-      .then(d => {
-        if (cancelled) return;
-        if (!d.ok || !d.bars?.length) { setError('No data'); setBars([]); return; }
-        setBars(d.bars);
-        setEmaPeriod(d.emaPeriod);
-      })
-      .catch(e => { if (!cancelled) setError(e.message || 'Failed to load'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    const load = (silent) => {
+      if (!silent) { setLoading(true); setError(null); }
+      fetchPnthrAi300Bars(timeframe)
+        .then(d => {
+          if (cancelled) return;
+          if (!d.ok || !d.bars?.length) { if (!silent) { setError('No data'); setBars([]); } return; }
+          setBars(d.bars);
+          setEmaPeriod(d.emaPeriod);
+        })
+        .catch(e => { if (!cancelled && !silent) setError(e.message || 'Failed to load'); })
+        .finally(() => { if (!cancelled && !silent) setLoading(false); });
+    };
+    load(false);
+    const id = setInterval(() => load(true), 30000);
+    return () => { cancelled = true; clearInterval(id); };
   }, [timeframe]);
 
   // Chart render

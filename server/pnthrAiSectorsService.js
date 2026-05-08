@@ -18,6 +18,36 @@ import {
   SECTOR_EMA_DAILY_PERIODS, SECTOR_EMA_WEEKLY_PERIODS,
   SECTOR_METADATA, sectorTicker,
 } from './data/pnthrAiSectorsConfig.js';
+import {
+  fetchAiQuotesBatch, computeIntradayBar,
+  spliceTodayDaily, spliceTodayWeekly,
+} from './aiIntradayOverlay.js';
+
+// ── Per-sector weights cache ────────────────────────────────────────────────
+// Each sector's capped weights live in pnthr_ai_sector_meta under
+// key='current_weights:S{id}'. Loaded once per CACHE_MS; cleared by the
+// monthly rebalance cron via clearPnthrAiSectorsCache().
+let cacheSectorWeights   = null;
+let cacheSectorWeightsAt = 0;
+async function loadAllSectorWeights() {
+  const now = Date.now();
+  if (cacheSectorWeights && (now - cacheSectorWeightsAt) < CACHE_MS) return cacheSectorWeights;
+  const db = await connectToDatabase();
+  if (!db) return null;
+  const docs = await db.collection('pnthr_ai_sector_meta')
+    .find({ key: { $regex: /^current_weights:S/ } })
+    .toArray();
+  const out = {};
+  for (const d of docs) {
+    // key looks like "current_weights:S4" → sectorId 4
+    const m = /^current_weights:S(\d+)$/.exec(d.key);
+    if (!m) continue;
+    out[parseInt(m[1], 10)] = d.weights || {};
+  }
+  cacheSectorWeights   = out;
+  cacheSectorWeightsAt = now;
+  return out;
+}
 
 function computeEMA(closes, period) {
   if (!closes || closes.length < period) return [];
@@ -37,20 +67,31 @@ function computeEMA(closes, period) {
   return out;
 }
 
-const CACHE_MS = 5 * 60 * 1000;
+// Bar/weights caches stay 5 min — they only change at the daily 5:30pm cron
+// (or monthly rebalance). Latest snapshot uses a 30s cache so the live
+// overlay rolls forward with the AI Universe table cadence.
+const CACHE_MS         = 5 * 60 * 1000;
+const LATEST_CACHE_MS  = 30 * 1000;
 let cacheLatest = null; let cacheLatestAt = 0;
 const cacheBars = new Map(); // key = `${sectorId}:${timeframe}` → { data, ts }
 
 export function clearPnthrAiSectorsCache() {
   cacheLatest = null; cacheLatestAt = 0;
   cacheBars.clear();
+  cacheSectorWeights = null; cacheSectorWeightsAt = 0;
 }
 
 // Latest snapshot for all 16 sectors — for the AI Sectors grid page.
 // Returns { ok, asOf, sectors: [{ id, ticker, name, value, dayChangePct, ytdPct, inceptionPct, ema21D, emaW, regime, ... }] }
+//
+// Each sector's value is recomputed live by overlaying constituent FMP quotes
+// on the most recent stored close using that sector's capped weights. One
+// batched FMP call covers all 16 sectors (the 297-name basket is shared
+// across them via aiIntradayOverlay's quote cache). Sectors without weights
+// or quotes fall back cleanly to the stored close.
 export async function getPnthrAiSectorsLatest() {
   const now = Date.now();
-  if (cacheLatest && (now - cacheLatestAt) < CACHE_MS) return cacheLatest;
+  if (cacheLatest && (now - cacheLatestAt) < LATEST_CACHE_MS) return cacheLatest;
 
   const db = await connectToDatabase();
   if (!db) return { ok: false, error: 'Mongo connect failed' };
@@ -58,13 +99,30 @@ export async function getPnthrAiSectorsLatest() {
   const dailyCol  = db.collection(COLL_SECTOR_DAILY);
   const weeklyCol = db.collection(COLL_SECTOR_WEEKLY);
 
-  const [dailyDocs, weeklyDocs] = await Promise.all([
+  const [dailyDocs, weeklyDocs, allWeights] = await Promise.all([
     dailyCol.find({ ticker: /^PAI_S/ }).toArray(),
     weeklyCol.find({ ticker: /^PAI_S/ }).toArray(),
+    loadAllSectorWeights(),
   ]);
 
   const dailyByTicker  = Object.fromEntries(dailyDocs.map(d => [d.ticker, d]));
   const weeklyByTicker = Object.fromEntries(weeklyDocs.map(d => [d.ticker, d]));
+
+  // Pull live quotes for all constituents across all sectors in one batch.
+  // The shared aiIntradayOverlay quote cache means any subsequent call within
+  // 30s (PAI300 strip, sector chart, etc.) hits the cache instead of FMP.
+  let qmap = {};
+  if (allWeights) {
+    const tickerSet = new Set();
+    for (const w of Object.values(allWeights)) {
+      for (const t of Object.keys(w || {})) {
+        if (w[t] > 0) tickerSet.add(t);
+      }
+    }
+    if (tickerSet.size > 0) {
+      qmap = await fetchAiQuotesBatch([...tickerSet], { cacheKey: 'ai-universe-all' });
+    }
+  }
 
   const yearStart = `${new Date().getFullYear()}-01-01`;
   let asOf = null;
@@ -80,7 +138,27 @@ export async function getPnthrAiSectorsLatest() {
 
     const lastDaily = dailyAsc[dailyAsc.length - 1];
     const prevDaily = dailyAsc.length >= 2 ? dailyAsc[dailyAsc.length - 2] : null;
-    const dayChangePct = prevDaily ? ((lastDaily.close - prevDaily.close) / prevDaily.close) * 100 : 0;
+
+    // Live overlay for this sector's value — same shared helper.
+    const sectorWeights = allWeights ? allWeights[meta.id] : null;
+    const intraday = sectorWeights
+      ? computeIntradayBar({ weights: sectorWeights, lastClose: lastDaily.close, quoteMap: qmap })
+      : { ok: false };
+    const live = intraday.ok;
+    const liveValue  = live ? intraday.close : lastDaily.close;
+    const liveOpen   = live ? intraday.open  : lastDaily.open;
+    const liveHigh   = live ? intraday.high  : lastDaily.high;
+    const liveLow    = live ? intraday.low   : lastDaily.low;
+    const liveAsOf   = live ? (intraday.todayET || lastDaily.date) : lastDaily.date;
+
+    // Day change anchored to prior-session close (handles pre-cron and
+    // post-cron lastDaily semantics — same logic as PAI300 strip).
+    const dayChangeBase = (live && liveAsOf > lastDaily.date)
+      ? lastDaily.close
+      : (prevDaily ? prevDaily.close : lastDaily.close);
+    const dayChangePct = dayChangeBase > 0
+      ? ((liveValue - dayChangeBase) / dayChangeBase) * 100
+      : 0;
 
     const dailyPeriod  = SECTOR_EMA_DAILY_PERIODS[meta.id]  ?? 21;
     const weeklyPeriod = SECTOR_EMA_WEEKLY_PERIODS[meta.id] ?? 30;
@@ -89,21 +167,24 @@ export async function getPnthrAiSectorsLatest() {
     const lastEmaD = emaD[emaD.length - 1] ?? null;
     const lastEmaW = emaW[emaW.length - 1] ?? null;
 
-    const regime = (lastEmaW != null && lastDaily.close >= lastEmaW) ? 'bull' : 'bear';
+    // Regime gate compares LIVE sector value vs weekly OpEMA — matches how
+    // a trader reads "is this sector above its OpEMA right now?"
+    const regime = (lastEmaW != null && liveValue >= lastEmaW) ? 'bull' : 'bear';
 
     const ytdSeed = dailyAsc.find(b => b.date >= yearStart);
-    const ytdPct  = ytdSeed ? ((lastDaily.close - ytdSeed.close) / ytdSeed.close) * 100 : null;
-    const inceptionPct = ((lastDaily.close - SECTOR_BASE_VALUE) / SECTOR_BASE_VALUE) * 100;
+    const ytdPct  = ytdSeed ? ((liveValue - ytdSeed.close) / ytdSeed.close) * 100 : null;
+    const inceptionPct = ((liveValue - SECTOR_BASE_VALUE) / SECTOR_BASE_VALUE) * 100;
 
-    if (!asOf || lastDaily.date > asOf) asOf = lastDaily.date;
+    if (!asOf || liveAsOf > asOf) asOf = liveAsOf;
 
     return {
       ...meta,
       ok:           true,
-      value:        parseFloat(lastDaily.close.toFixed(2)),
-      open:         parseFloat(lastDaily.open.toFixed(2)),
-      high:         parseFloat(lastDaily.high.toFixed(2)),
-      low:          parseFloat(lastDaily.low.toFixed(2)),
+      value:        parseFloat(liveValue.toFixed(2)),
+      valueSource:  live ? 'live' : 'stored',
+      open:         parseFloat(liveOpen.toFixed(2)),
+      high:         parseFloat(liveHigh.toFixed(2)),
+      low:          parseFloat(liveLow.toFixed(2)),
       dayChangePct: parseFloat(dayChangePct.toFixed(2)),
       ytdPct:       ytdPct != null ? parseFloat(ytdPct.toFixed(2)) : null,
       inceptionPct: parseFloat(inceptionPct.toFixed(2)),
@@ -112,7 +193,7 @@ export async function getPnthrAiSectorsLatest() {
       emaDailyPeriod:  dailyPeriod,
       emaWeeklyPeriod: weeklyPeriod,
       regime,
-      asOf:         lastDaily.date,
+      asOf:         liveAsOf,
       barCount:     { daily: dailyAsc.length, weekly: weeklyAsc.length },
     };
   });
@@ -132,35 +213,80 @@ export async function getPnthrAiSectorsLatest() {
 }
 
 // Per-sector bars + EMA for chart modal. timeframe = 'daily' | 'weekly'.
+//
+// Stored bars come from the cron-written sector candle collection. Today's
+// intraday bar is synthesized via the shared aiIntradayOverlay helper using
+// this sector's capped weights × constituent live quotes — same math as the
+// 16-card grid and PAI300 chart. Bars cache stays at 5 min (covers stored
+// data); the live overlay re-runs every call (overlay quote cache is 30s
+// inside the helper, so a cluster of sector-chart opens hits FMP once).
 export async function getPnthrAiSectorBars({ sectorId, timeframe = 'daily', limit = null } = {}) {
   const cacheKey = `${sectorId}:${timeframe}`;
-  const cached = cacheBars.get(cacheKey);
-  if (cached && (Date.now() - cached.ts) < CACHE_MS) {
-    if (limit && cached.data?.bars && cached.data.bars.length > limit) {
-      return { ...cached.data, bars: cached.data.bars.slice(-limit) };
-    }
-    return cached.data;
+  let stored = cacheBars.get(cacheKey);
+  // Re-fetch bars from Mongo only when the stored cache is cold; otherwise
+  // reuse the stored series and rerun just the live overlay each call.
+  if (!stored || (Date.now() - stored.ts) >= CACHE_MS) {
+    const db = await connectToDatabase();
+    if (!db) return { ok: false, bars: [] };
+    const ticker = sectorTicker(sectorId);
+    const coll   = timeframe === 'weekly' ? COLL_SECTOR_WEEKLY : COLL_SECTOR_DAILY;
+    const doc    = await db.collection(coll).findOne({ ticker });
+    if (!doc) return { ok: false, bars: [] };
+    const series   = timeframe === 'weekly' ? doc.weekly : doc.daily;
+    const labelKey = timeframe === 'weekly' ? 'weekOf'   : 'date';
+    const asc      = [...series].sort((a, b) => a[labelKey].localeCompare(b[labelKey]));
+    stored = { ts: Date.now(), asc, ticker, labelKey };
+    cacheBars.set(cacheKey, stored);
   }
-
-  const db = await connectToDatabase();
-  if (!db) return { ok: false, bars: [] };
-  const ticker = sectorTicker(sectorId);
-  const coll   = timeframe === 'weekly' ? COLL_SECTOR_WEEKLY : COLL_SECTOR_DAILY;
-  const doc    = await db.collection(coll).findOne({ ticker });
-  if (!doc) return { ok: false, bars: [] };
+  const { asc, ticker, labelKey } = stored;
 
   const period = timeframe === 'weekly'
     ? (SECTOR_EMA_WEEKLY_PERIODS[sectorId] ?? 30)
     : (SECTOR_EMA_DAILY_PERIODS[sectorId]  ?? 21);
 
-  const series   = timeframe === 'weekly' ? doc.weekly : doc.daily;
-  const labelKey = timeframe === 'weekly' ? 'weekOf'   : 'date';
-  const asc      = [...series].sort((a, b) => a[labelKey].localeCompare(b[labelKey]));
-  const closes   = asc.map(b => b.close);
+  // Live overlay for this sector. Anchor uses the daily series' last close
+  // since daily is always the most recent; for weekly timeframe we need to
+  // pull daily separately to anchor properly.
+  let augmented = asc.slice();
+  try {
+    const allWeights    = await loadAllSectorWeights();
+    const sectorWeights = allWeights ? allWeights[sectorId] : null;
+    if (sectorWeights) {
+      // Need daily anchor close (most recent stored daily close for THIS sector).
+      let anchorClose = null;
+      if (timeframe === 'daily') {
+        anchorClose = asc[asc.length - 1]?.close ?? null;
+      } else {
+        const db = await connectToDatabase();
+        const doc = db ? await db.collection(COLL_SECTOR_DAILY).findOne({ ticker }) : null;
+        const dseries = doc?.daily || [];
+        const dasc = [...dseries].sort((a, b) => a.date.localeCompare(b.date));
+        anchorClose = dasc[dasc.length - 1]?.close ?? null;
+      }
+      if (anchorClose != null) {
+        const tickers = Object.keys(sectorWeights).filter(t => sectorWeights[t] > 0);
+        // Reuse the shared all-universe quote cache when present (the grid
+        // page populates it); fall back to a sector-scoped cache otherwise.
+        const qmap = await fetchAiQuotesBatch(tickers, { cacheKey: 'ai-universe-all' });
+        const intraday = computeIntradayBar({
+          weights: sectorWeights, lastClose: anchorClose, quoteMap: qmap,
+        });
+        if (intraday.ok) {
+          augmented = timeframe === 'weekly'
+            ? spliceTodayWeekly(asc, intraday)
+            : spliceTodayDaily(asc,  intraday);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[AI Sector ${sectorId}] bars overlay failed; rendering stored bars only:`, err.message);
+  }
+
+  const closes    = augmented.map(b => b.close);
   const emaSeries = computeEMA(closes, period);
 
   const sectorMeta = SECTORS.find(s => s.id === sectorId);
-  const bars = asc.map((b, i) => ({
+  let bars = augmented.map((b, i) => ({
     date:   b[labelKey],
     open:   b.open,
     high:   b.high,
@@ -169,8 +295,9 @@ export async function getPnthrAiSectorBars({ sectorId, timeframe = 'daily', limi
     volume: b.volume || 0,
     ema:    emaSeries[i] != null ? parseFloat(emaSeries[i].toFixed(2)) : null,
   }));
+  if (limit && bars.length > limit) bars = bars.slice(-limit);
 
-  const out = {
+  return {
     ok:           true,
     timeframe,
     sectorId,
@@ -181,12 +308,6 @@ export async function getPnthrAiSectorBars({ sectorId, timeframe = 'daily', limi
     holdingCount: sectorMeta?.holdings?.length ?? null,
     bars,
   };
-  cacheBars.set(cacheKey, { data: out, ts: Date.now() });
-
-  if (limit && out.bars.length > limit) {
-    return { ...out, bars: out.bars.slice(-limit) };
-  }
-  return out;
 }
 
 // Per-sector constituents list (the holdings inside that sector). Used by

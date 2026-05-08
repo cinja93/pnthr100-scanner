@@ -136,15 +136,22 @@ export default function AiSectorsPage() {
   const [sortBy, setSortBy]   = useState('inception'); // 'inception' | 'ytd' | 'day' | 'name' | 'target'
   const [openSector, setOpenSector] = useState(null);
 
-  function load(forceRefresh = false) {
-    setLoading(true); setError(null);
+  function load(forceRefresh = false, { silent = false } = {}) {
+    if (!silent) { setLoading(true); setError(null); }
     fetchPnthrAiSectorsLatest(forceRefresh)
       .then(setData)
-      .catch(err => { console.error(err); setError('Failed to load AI sectors.'); })
-      .finally(() => setLoading(false));
+      .catch(err => { if (!silent) { console.error(err); setError('Failed to load AI sectors.'); } })
+      .finally(() => { if (!silent) setLoading(false); });
   }
 
-  useEffect(() => { load(); }, []);
+  // Initial load + 30s silent auto-refresh — server cache for the 16-card
+  // grid is also 30s, so each tick rolls live constituent quotes through
+  // the per-sector overlay and updates every card.
+  useEffect(() => {
+    load();
+    const id = setInterval(() => load(false, { silent: true }), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   const sortedSectors = useMemo(() => {
     if (!data?.sectors) return [];

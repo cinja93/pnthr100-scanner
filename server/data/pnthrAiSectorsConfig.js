@@ -39,15 +39,22 @@ export function sectorTicker(sectorId) {
   return `PAI_S${sectorId}`;
 }
 
-// Per-sector weekly EMA period. All start at 30 (matches the parent PAI300's
-// current setting). Tune individually as Scott observes the charts:
-//   "AI Compute, try 35"  →  flip just SECTOR_EMA_WEEKLY_PERIODS[1]
-// Daily period is also tunable per-sector but starts at 21.
+// Per-sector weekly EMA period. Default 30 for all 16; per-sector overrides
+// below are added one line at a time as Scott observes the charts and tunes.
+//   Format: sectorId → period
+//   Example: "AI Compute, try 35" → set 1: 35
+const SECTOR_EMA_WEEKLY_OVERRIDES = {
+  4: 34,  // AI Cloud, Data Centers & Edge
+};
+const SECTOR_EMA_DAILY_OVERRIDES = {
+  // (none yet — daily period stays at 21 default)
+};
+
 export const SECTOR_EMA_WEEKLY_PERIODS = Object.fromEntries(
-  SECTORS.map(s => [s.id, 30])
+  SECTORS.map(s => [s.id, SECTOR_EMA_WEEKLY_OVERRIDES[s.id] ?? 30])
 );
 export const SECTOR_EMA_DAILY_PERIODS = Object.fromEntries(
-  SECTORS.map(s => [s.id, 21])
+  SECTORS.map(s => [s.id, SECTOR_EMA_DAILY_OVERRIDES[s.id] ?? 21])
 );
 
 // Convenience export — sector metadata for frontend (id, name, count, target weight)

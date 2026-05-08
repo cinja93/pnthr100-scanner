@@ -510,19 +510,28 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
     return () => window.removeEventListener('keydown', onKey);
   }, [canPrev, canNext, onClose]);
 
+  // Initial load + 30s silent auto-refresh while the modal is open.
+  // Server cache for /api/pnthr-ai-stock/:ticker is also 30s and pulls a fresh
+  // FMP /quote on every miss, so each tick rolls live currentPrice + day-change
+  // forward. Spinner only shows on the initial load (or ticker change), not
+  // on the silent ticks. Cleared on unmount or when activeTicker changes.
   useEffect(() => {
     if (!activeTicker) return;
     let cancelled = false;
-    setLoading(true); setError(null); setData(null);
-    fetchAiStockChartData(activeTicker)
-      .then(d => {
-        if (cancelled) return;
-        if (!d.ok) { setError(d.error || 'Failed to load'); return; }
-        setData(d);
-      })
-      .catch(e => { if (!cancelled) setError(e.message || 'Failed to load'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    const fetchOnce = (silent) => {
+      if (!silent) { setLoading(true); setError(null); setData(null); }
+      fetchAiStockChartData(activeTicker)
+        .then(d => {
+          if (cancelled) return;
+          if (!d.ok) { if (!silent) setError(d.error || 'Failed to load'); return; }
+          setData(d);
+        })
+        .catch(e => { if (!cancelled && !silent) setError(e.message || 'Failed to load'); })
+        .finally(() => { if (!cancelled && !silent) setLoading(false); });
+    };
+    fetchOnce(false);
+    const id = setInterval(() => fetchOnce(true), 30000);
+    return () => { cancelled = true; clearInterval(id); };
   }, [activeTicker]);
 
   const dayChangeColor = data?.dayChangePct == null ? '#888' : data.dayChangePct >= 0 ? '#16a34a' : '#dc2626';

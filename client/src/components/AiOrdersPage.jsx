@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { fetchLatestAiOrders, runAiOrders } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
+import { computeWeeksAgo } from '../utils/dateUtils';
 
 // PNTHR AI Orders — APEX v6 weekly order sheet
 //
@@ -66,7 +67,8 @@ export default function AiOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all'); // all | bl | ss | new
-  const [chartTicker, setChartTicker] = useState(null);
+  const [chartTickers, setChartTickers] = useState([]);
+  const [chartIndex, setChartIndex] = useState(0);
   const [running, setRunning] = useState(false);
   const [runMsg, setRunMsg] = useState(null);
 
@@ -204,11 +206,21 @@ export default function AiOrdersPage() {
                   background: o.isNewSignal ? 'rgba(252,240,0,0.04)' : 'transparent',
                   cursor: 'pointer',
                 }}
-                onClick={() => setChartTicker(o.ticker)}
+                onClick={() => {
+                  const tickers = orders.map(x => x.ticker);
+                  setChartTickers(tickers);
+                  setChartIndex(tickers.indexOf(o.ticker));
+                }}
                 onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
                 onMouseLeave={e => e.currentTarget.style.background = o.isNewSignal ? 'rgba(252,240,0,0.04)' : 'transparent'}
                 >
-                  <td style={{ padding: '6px 10px', fontWeight: 700, color: o.signal === 'BL' ? '#16a34a' : '#dc2626' }}>{o.signal}</td>
+                  <td style={{ padding: '6px 10px', fontWeight: 700, color: o.signal === 'BL' ? '#16a34a' : '#dc2626' }}>
+                    {o.signal}
+                    {(() => {
+                      const n = computeWeeksAgo(o.signalDate, o.lastBarDate);
+                      return n != null ? <span style={{ color: '#aaa', fontWeight: 500 }}>+{n}</span> : null;
+                    })()}
+                  </td>
                   <td style={{ padding: '6px 10px', fontWeight: 700, color: '#fff' }}>{o.ticker}</td>
                   <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{o.sectorId} {o.sectorName?.split(' ').slice(0, 2).join(' ')}</td>
                   <td style={{ padding: '6px 10px' }}><TierPill tier={o.sectorTier} /></td>
@@ -238,9 +250,13 @@ export default function AiOrdersPage() {
         Sector rank refreshes daily ~5:30pm ET after constituent close.
       </div>
 
-      {/* Chart modal — clicking a row opens the AI ticker chart */}
-      {chartTicker && (
-        <AiTickerChartModal ticker={chartTicker} onClose={() => setChartTicker(null)} />
+      {/* Chart modal — clicking a row opens the AI ticker chart with prev/next */}
+      {chartTickers.length > 0 && (
+        <AiTickerChartModal
+          tickers={chartTickers}
+          initialIndex={chartIndex}
+          onClose={() => setChartTickers([])}
+        />
       )}
     </div>
   );

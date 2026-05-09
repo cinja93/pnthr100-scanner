@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { fetchLatestAiKill, runAiKill } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
+import { computeWeeksAgo } from '../utils/dateUtils';
 
 // PNTHR AI Kill v1
 //   Total = (D2 + D3 + D4) × D1   — D5/D6/D7/D8 deferred (set 0 in v1)
@@ -42,7 +43,8 @@ export default function AiKillPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all'); // all | bl | ss | top10
-  const [chartTicker, setChartTicker] = useState(null);
+  const [chartTickers, setChartTickers] = useState([]);
+  const [chartIndex, setChartIndex] = useState(0);
   const [running, setRunning] = useState(false);
   const [runMsg, setRunMsg] = useState(null);
 
@@ -178,14 +180,24 @@ export default function AiKillPage() {
                   background: s.killRank <= 4 ? 'rgba(252,240,0,0.06)' : 'transparent',
                   cursor: 'pointer',
                 }}
-                onClick={() => setChartTicker(s.ticker)}
+                onClick={() => {
+                  const tickers = scores.map(x => x.ticker);
+                  setChartTickers(tickers);
+                  setChartIndex(tickers.indexOf(s.ticker));
+                }}
                 onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
                 onMouseLeave={e => e.currentTarget.style.background = s.killRank <= 4 ? 'rgba(252,240,0,0.06)' : 'transparent'}
                 >
                   <td style={{ padding: '6px 10px', color: '#888' }}>{s.killRank}</td>
                   <td style={{ padding: '6px 10px' }}><TierPill tier={s.tierName} /></td>
                   <td style={{ padding: '6px 10px', fontWeight: 700, color: '#fff' }}>{s.ticker}</td>
-                  <td style={{ padding: '6px 10px', fontWeight: 700, color: s.signal === 'BL' ? '#16a34a' : '#dc2626' }}>{s.signal}</td>
+                  <td style={{ padding: '6px 10px', fontWeight: 700, color: s.signal === 'BL' ? '#16a34a' : '#dc2626' }}>
+                    {s.signal}
+                    {(() => {
+                      const n = computeWeeksAgo(s.signalDate, s.lastBarDate);
+                      return n != null ? <span style={{ color: '#aaa', fontWeight: 500 }}>+{n}</span> : null;
+                    })()}
+                  </td>
                   <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{s.sectorId} {s.sectorName?.split(' ').slice(0, 2).join(' ')}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: '#fcf000', fontWeight: 700 }}>{s.total?.toFixed(1)}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{s.scores?.d1?.toFixed(2)}×</td>
@@ -217,7 +229,13 @@ export default function AiKillPage() {
         Cron refreshes daily ~5:30pm ET.
       </div>
 
-      {chartTicker && <AiTickerChartModal ticker={chartTicker} onClose={() => setChartTicker(null)} />}
+      {chartTickers.length > 0 && (
+        <AiTickerChartModal
+          tickers={chartTickers}
+          initialIndex={chartIndex}
+          onClose={() => setChartTickers([])}
+        />
+      )}
     </div>
   );
 }

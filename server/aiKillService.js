@@ -225,6 +225,7 @@ export async function runAiKillPipeline() {
       stopPrice: sig.stopPrice,
       riskPct: riskPct != null ? +riskPct.toFixed(2) : null,
       signalDate: sig.signalDate,
+      lastBarDate: sig.lastBarDate,
       isNewSignal: !!sig.isNewSignal,
       scores: { d1, d2: +d2.toFixed(1), d3: +d3.toFixed(1), d4, d5, d6, d7, d8 },
       subtotal: +subtotal.toFixed(2),

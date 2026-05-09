@@ -105,19 +105,22 @@ function ChartPanel({
     })));
     ema.setData(bars.filter(b => b.ema != null).map(b => ({ time: b.date, value: b.ema })));
 
-    // Signal markers — render EVERY BL/SS/BE/SE event in the bar series so
-    // the chart reflects the full signal history.
-    //
-    // Prior behavior: filter to the last 5 entry/exit pairs to "avoid
-    // saturation." That filter was hiding real production signals from the
-    // chart — a trader spotting a clean BL setup on, say, 5-19-25 wouldn't
-    // see a marker drawn even though the state machine had fired a BL there,
-    // because there were 5+ later pairs and the older signal got pushed out.
-    // For decision-making, hiding real signals is unacceptable. Saturation on
-    // a few extreme names (e.g., chop kings with 100+ events) is the lesser
-    // evil — and zoom/pan still works to focus on a window.
+    // Signal markers — AI charts render only the LAST signal event group
+    // (per Scott 2026-05-09): if the position is currently open (latest event
+    // is BL or SS with no matching close yet), show just that single marker.
+    // If the position closed, show the BL→BE or SS→SE pair (two markers).
+    // Reversed from the prior "every signal" rule to keep AI charts readable.
     if (signals && signals.length > 0) {
-      const visibleEvents = [...signals].sort((a, b) => a.time.localeCompare(b.time));
+      const sortedAsc = [...signals].sort((a, b) => a.time.localeCompare(b.time));
+      // Walk backward to find the last entry (BL or SS). Anything after it is
+      // the matching close (BE/SE). Anything before is older history — drop.
+      let lastEntryIdx = -1;
+      for (let i = sortedAsc.length - 1; i >= 0; i--) {
+        if (sortedAsc[i].signal === 'BL' || sortedAsc[i].signal === 'SS') {
+          lastEntryIdx = i; break;
+        }
+      }
+      const visibleEvents = lastEntryIdx >= 0 ? sortedAsc.slice(lastEntryIdx) : sortedAsc.slice(-1);
       const markers = visibleEvents.map(ev => {
         let position, shape, text, color;
         if (ev.signal === 'BL')      { color = '#16a34a'; position = 'belowBar'; shape = 'arrowUp';   text = 'BL'; }

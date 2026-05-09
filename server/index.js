@@ -7733,29 +7733,34 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     // PAI300 — PNTHR AI 300 index snapshot for Pulse gauge
     let pai300 = null;
     try {
-      const [ai300, ai300Bars] = await Promise.all([
-        getPnthrAi300Latest(),
-        getPnthrAi300Bars({ timeframe: 'daily' }),
-      ]);
+      const ai300 = await getPnthrAi300Latest();
       if (ai300?.ok) {
+        // RSI(14) from last 30 stored daily closes (lightweight — no live overlay needed)
         let rsi = null;
-        if (ai300Bars?.ok && ai300Bars.bars?.length >= 16) {
-          const closes = ai300Bars.bars.map(b => b.close);
-          const n = closes.length;
-          let avgGain = 0, avgLoss = 0;
-          for (let i = 1; i <= 14; i++) {
-            const d = closes[i] - closes[i - 1];
-            if (d > 0) avgGain += d; else avgLoss += Math.abs(d);
-          }
-          avgGain /= 14; avgLoss /= 14;
-          rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-          for (let i = 15; i < n; i++) {
-            const d = closes[i] - closes[i - 1];
-            avgGain = (avgGain * 13 + Math.max(d, 0)) / 14;
-            avgLoss = (avgLoss * 13 + Math.max(-d, 0)) / 14;
+        try {
+          const recentBars = await db.collection('pnthr_ai_index_candles_daily')
+            .find({}, { projection: { close: 1, _id: 0 } })
+            .sort({ date: -1 }).limit(30).toArray();
+          if (recentBars.length >= 16) {
+            const closes = recentBars.reverse().map(b => b.close);
+            const n = closes.length;
+            let avgGain = 0, avgLoss = 0;
+            for (let i = 1; i <= 14; i++) {
+              const d = closes[i] - closes[i - 1];
+              if (d > 0) avgGain += d; else avgLoss += Math.abs(d);
+            }
+            avgGain /= 14; avgLoss /= 14;
             rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+            for (let i = 15; i < n; i++) {
+              const d = closes[i] - closes[i - 1];
+              avgGain = (avgGain * 13 + Math.max(d, 0)) / 14;
+              avgLoss = (avgLoss * 13 + Math.max(-d, 0)) / 14;
+              rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+            }
+            rsi = Math.round(rsi);
           }
-          rsi = Math.round(rsi);
+        } catch (rsiErr) {
+          console.warn('[PULSE] PAI300 RSI calc failed:', rsiErr.message);
         }
         pai300 = {
           value:        ai300.value,

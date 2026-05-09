@@ -240,26 +240,67 @@ export default function Pnthr300ChartModal({ onClose }) {
     chart.timeScale().subscribeVisibleLogicalRangeChange(syncFromMain);
     rsiChart.timeScale().subscribeVisibleLogicalRangeChange(syncFromRsi);
 
+    // Initial sync — force RSI chart to match main chart's visible range
+    requestAnimationFrame(() => {
+      const range = chart.timeScale().getVisibleLogicalRange();
+      if (range) rsiChart.timeScale().setVisibleLogicalRange(range);
+    });
+
+    // Price lookup for reverse crosshair sync (RSI chart → price chart)
+    const priceByDate = {};
+    bars.forEach(b => { priceByDate[b.date] = b.close; });
+
     // Snapshot bars for drawing overlay
     visibleBarsRef.current = bars.map(b => ({
       weekOf: b.date, open: b.open, high: b.high, low: b.low, close: b.close,
     }));
     setBarsTick(t => t + 1);
 
-    // Crosshair OHLC tooltip + RSI value lookup
+    // Crosshair sync: price chart → RSI chart + tooltip
     let destroyed = false;
+    let crosshairSyncing = false;
     chart.subscribeCrosshairMove(param => {
-      if (destroyed) return;
+      if (destroyed || crosshairSyncing) return;
+      crosshairSyncing = true;
       const data = param?.seriesData?.get(priceSeries);
-      if (!param?.time || !param?.point || !data) { setHoveredBar(null); return; }
+      if (!param?.time || !param?.point || !data) {
+        setHoveredBar(null);
+        rsiChart.clearCrosshairPosition();
+        crosshairSyncing = false;
+        return;
+      }
       const emaData = param.seriesData?.get(ema);
+      const rsiVal = rsiByDate[param.time] ?? null;
       setHoveredBar({
         x: param.point.x, y: param.point.y,
         time: param.time,
         open: data.open, high: data.high, low: data.low, close: data.close,
         ema: emaData?.value ?? null,
-        rsi: rsiByDate[param.time] ?? null,
+        rsi: rsiVal,
       });
+      if (rsiVal != null) {
+        rsiChart.setCrosshairPosition(rsiVal, param.time, rsiLine);
+      } else {
+        rsiChart.clearCrosshairPosition();
+      }
+      crosshairSyncing = false;
+    });
+
+    // Crosshair sync: RSI chart → price chart
+    rsiChart.subscribeCrosshairMove(param => {
+      if (destroyed || crosshairSyncing) return;
+      crosshairSyncing = true;
+      if (!param?.time) {
+        chart.clearCrosshairPosition();
+        setHoveredBar(null);
+        crosshairSyncing = false;
+        return;
+      }
+      const price = priceByDate[param.time];
+      if (price != null) {
+        chart.setCrosshairPosition(price, param.time, priceSeries);
+      }
+      crosshairSyncing = false;
     });
 
     return () => {

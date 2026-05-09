@@ -34,6 +34,7 @@ import { getAiUniverse, clearAiUniverseCache } from './aiUniverseService.js';
 import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
 import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
+import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { getAiStockChartData } from './aiUniverseStockChartService.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
@@ -1913,6 +1914,39 @@ app.post('/api/admin/run-pnthr-ai-sectors', authenticateJWT, requireAdmin, async
     runPnthrAiSectorsDailyAppend().catch(err => console.error('[AI Sectors] Manual run failed:', err.message));
     res.json({ ok: true, message: 'AI Sectors rebuild started — check server logs.' });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PNTHR AI 300 — 5-day Sector Rotation (APEX v6 alpha layer) ──────────────
+app.get('/api/ai-sector-rotation/latest', async (req, res) => {
+  try {
+    const doc = await getLatestAiSectorRanks();
+    if (!doc) return res.json({ date: null, ranks: [] });
+    res.json({ date: doc.date, lookback: doc.lookback, ranks: doc.ranks });
+  } catch (err) {
+    console.error('Error in /api/ai-sector-rotation/latest:', err);
+    res.status(500).json({ error: 'Failed to load sector rotation' });
+  }
+});
+
+app.get('/api/ai-sector-rotation/on/:date', async (req, res) => {
+  try {
+    const doc = await getAiSectorRanksOn(req.params.date);
+    if (!doc) return res.json({ date: null, ranks: [] });
+    res.json({ date: doc.date, lookback: doc.lookback, ranks: doc.ranks });
+  } catch (err) {
+    console.error('Error in /api/ai-sector-rotation/on:', err);
+    res.status(500).json({ error: 'Failed to load sector rotation' });
+  }
+});
+
+app.post('/api/admin/backfill-ai-sector-ranks', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await backfillAiSectorRanks(req.body || {});
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[AI Sector Ranks] backfill failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -5244,6 +5278,11 @@ cron.schedule('30 17 * * 1-5', async () => {
     // bars and use the same monthly rebalance dates as PAI300.
     console.log('[AI Sectors] starting daily rebuild…');
     await runPnthrAiSectorsDailyAppend();
+    // After sector candles are fresh, append today's 5D sector rotation rank.
+    // Powers APEX v6 (sector-tier sizing) for AI Orders + AI Kill.
+    console.log('[AI Sector Rotation] computing today’s 5D rank…');
+    const rotResult = await updateAiSectorRankToday();
+    console.log(`[AI Sector Rotation] done: ${JSON.stringify(rotResult)}`);
   } catch (err) {
     console.error('[AI Universe Daily] cron failed:', err.message);
   }

@@ -36,9 +36,12 @@ export default function Pnthr300ChartModal({ onClose }) {
   const [hoveredBar, setHoveredBar] = useState(null);
   const [barsTick, setBarsTick]     = useState(0);
   const [barSpacing, setBarSpacing] = useState(12);  // px between bars (+4 wider default per Scott)
+  const [showAllSignals, setShowAllSignals] = useState(false);
 
   const containerRef    = useRef(null);
+  const rsiContainerRef = useRef(null);
   const chartRef        = useRef(null);
+  const rsiChartRef     = useRef(null);
   const priceSeriesRef  = useRef(null);
   const visibleBarsRef  = useRef([]);
   const barSpacingRef   = useRef(barSpacing);
@@ -50,6 +53,7 @@ export default function Pnthr300ChartModal({ onClose }) {
     setBarSpacing(prev => {
       const next = Math.max(2, Math.min(40, prev + delta));
       chartRef.current?.timeScale().applyOptions({ barSpacing: next });
+      rsiChartRef.current?.timeScale().applyOptions({ barSpacing: next });
       return next;
     });
   }
@@ -88,10 +92,31 @@ export default function Pnthr300ChartModal({ onClose }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [timeframe]);
 
+  // Compute RSI(14) series from bar closes
+  function computeRsiSeries(closes) {
+    const out = [];
+    if (closes.length < 15) return out;
+    let avgGain = 0, avgLoss = 0;
+    for (let i = 1; i <= 14; i++) {
+      const d = closes[i] - closes[i - 1];
+      if (d > 0) avgGain += d; else avgLoss += Math.abs(d);
+    }
+    avgGain /= 14; avgLoss /= 14;
+    out.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+    for (let i = 15; i < closes.length; i++) {
+      const d = closes[i] - closes[i - 1];
+      avgGain = (avgGain * 13 + Math.max(d, 0)) / 14;
+      avgLoss = (avgLoss * 13 + Math.max(-d, 0)) / 14;
+      out.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+    }
+    return out;
+  }
+
   // Chart render
   useEffect(() => {
-    if (!containerRef.current || bars.length === 0) return;
+    if (!containerRef.current || !rsiContainerRef.current || bars.length === 0) return;
 
+    // ── Main price chart ──
     const chart = createChart(containerRef.current, {
       autoSize: true,
       layout: { background: { color: '#0c0c0c' }, textColor: '#d4d4d4', attributionLogo: false },
@@ -116,8 +141,6 @@ export default function Pnthr300ChartModal({ onClose }) {
         });
     priceSeriesRef.current = priceSeries;
 
-    // EMA overlay — title removed (was overlapping bars on the right). The
-    // right-axis price tag (lastValueVisible) still shows the live value.
     const ema = chart.addSeries(LineSeries, {
       color: '#fcf000', lineWidth: 2,
       priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false,
@@ -128,38 +151,103 @@ export default function Pnthr300ChartModal({ onClose }) {
     })));
     ema.setData(bars.filter(b => b.ema != null).map(b => ({ time: b.date, value: b.ema })));
 
-    // PNTHR signal markers (BL / SS / BE / SE) — same state machine the 679
-    // weekly chart uses, run on this timeframe's bars + EMA period. PAI300 is
-    // a broad index → isETF=true (tighter daylight zone).
+    // Signal markers — default: last signal only; toggle shows all
     const sigBars = bars.map(b => ({ time: b.date, open: b.open, high: b.high, low: b.low, close: b.close }));
     const { events: sigEvents } = detectAllSignals(sigBars, emaPeriod, true);
     if (sigEvents.length > 0) {
-      const markers = sigEvents.map(ev => {
-        const isLong = ev.signal === 'BL';
-        const isShort = ev.signal === 'SS';
-        const isExitOfLong  = ev.signal === 'BE';
-        const isExitOfShort = ev.signal === 'SE';
-        let color, position, shape, text;
-        if (isLong)        { color = '#16a34a'; position = 'belowBar'; shape = 'arrowUp';   text = 'BL'; }
-        else if (isShort)  { color = '#dc2626'; position = 'aboveBar'; shape = 'arrowDown'; text = 'SS'; }
-        else if (isExitOfLong)  { color = '#f59e0b'; position = 'aboveBar'; shape = 'square'; text = 'BE'; }
-        else if (isExitOfShort) { color = '#f59e0b'; position = 'belowBar'; shape = 'square'; text = 'SE'; }
-        return { time: ev.time, position, color, shape, text, size: 1 };
-      });
-      createSeriesMarkers(priceSeries, markers);
+      let visibleEvents = sigEvents;
+      if (!showAllSignals) {
+        // Walk backward to find the last entry (BL or SS), show from there
+        let lastEntryIdx = -1;
+        for (let i = sigEvents.length - 1; i >= 0; i--) {
+          if (sigEvents[i].signal === 'BL' || sigEvents[i].signal === 'SS') { lastEntryIdx = i; break; }
+        }
+        visibleEvents = lastEntryIdx >= 0 ? sigEvents.slice(lastEntryIdx) : [];
+      }
+      if (visibleEvents.length > 0) {
+        const markers = visibleEvents.map(ev => {
+          let color, position, shape, text;
+          if (ev.signal === 'BL')      { color = '#16a34a'; position = 'belowBar'; shape = 'arrowUp';   text = 'BL'; }
+          else if (ev.signal === 'SS') { color = '#dc2626'; position = 'aboveBar'; shape = 'arrowDown'; text = 'SS'; }
+          else if (ev.signal === 'BE') { color = '#f59e0b'; position = 'aboveBar'; shape = 'square';    text = 'BE'; }
+          else if (ev.signal === 'SE') { color = '#f59e0b'; position = 'belowBar'; shape = 'square';    text = 'SE'; }
+          return { time: ev.time, position, color, shape, text, size: 1 };
+        });
+        createSeriesMarkers(priceSeries, markers);
+      }
     }
 
-    // Snapshot bars for the drawing overlay's snap-to-high/low logic. The
-    // overlay expects a `weekOf` field — map from `date` regardless of
-    // timeframe (the overlay just keys off it).
+    // ── RSI sub-chart ──
+    const rsiChart = createChart(rsiContainerRef.current, {
+      autoSize: true,
+      layout: { background: { color: '#0c0c0c' }, textColor: '#d4d4d4', attributionLogo: false },
+      grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
+      rightPriceScale: { borderColor: '#333', scaleMargins: { top: 0.1, bottom: 0.1 } },
+      timeScale: { borderColor: '#333', timeVisible: timeframe === 'daily', barSpacing: barSpacingRef.current, visible: false },
+      crosshair: { mode: 1 },
+    });
+    rsiChartRef.current = rsiChart;
+
+    const closes = bars.map(b => b.close);
+    const rsiVals = computeRsiSeries(closes);
+    const rsiStartIdx = bars.length - rsiVals.length;
+
+    const rsiLine = rsiChart.addSeries(LineSeries, {
+      color: '#D4A017', lineWidth: 2,
+      priceLineVisible: true, lastValueVisible: true, crosshairMarkerVisible: true,
+    });
+    rsiLine.setData(rsiVals.map((v, i) => ({ time: bars[rsiStartIdx + i].date, value: parseFloat(v.toFixed(1)) })));
+
+    // Overbought (70) / Oversold (30) reference lines
+    const rsi70 = rsiChart.addSeries(LineSeries, {
+      color: '#dc3545', lineWidth: 1, lineStyle: 2,
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+    const rsi30 = rsiChart.addSeries(LineSeries, {
+      color: '#28a745', lineWidth: 1, lineStyle: 2,
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+    const rsiDates = rsiVals.map((_, i) => bars[rsiStartIdx + i].date);
+    if (rsiDates.length >= 2) {
+      const first = rsiDates[0], last = rsiDates[rsiDates.length - 1];
+      rsi70.setData([{ time: first, value: 70 }, { time: last, value: 70 }]);
+      rsi30.setData([{ time: first, value: 30 }, { time: last, value: 30 }]);
+    }
+
+    // Sync time scales: scroll/zoom one → the other follows
+    let syncing = false;
+    const syncFromMain = () => {
+      if (syncing) return;
+      syncing = true;
+      const range = chart.timeScale().getVisibleLogicalRange();
+      if (range) rsiChart.timeScale().setVisibleLogicalRange(range);
+      syncing = false;
+    };
+    const syncFromRsi = () => {
+      if (syncing) return;
+      syncing = true;
+      const range = rsiChart.timeScale().getVisibleLogicalRange();
+      if (range) chart.timeScale().setVisibleLogicalRange(range);
+      syncing = false;
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(syncFromMain);
+    rsiChart.timeScale().subscribeVisibleLogicalRangeChange(syncFromRsi);
+
+    // Sync crosshair
+    chart.subscribeCrosshairMove(param => {
+      if (param?.time) rsiChart.setCrosshairPosition(undefined, param.time, rsiLine);
+      else rsiChart.clearCrosshairPosition();
+    });
+    rsiChart.subscribeCrosshairMove(param => {
+      if (param?.time) chart.setCrosshairPosition(undefined, param.time, priceSeries);
+      else chart.clearCrosshairPosition();
+    });
+
+    // Snapshot bars for drawing overlay
     visibleBarsRef.current = bars.map(b => ({
       weekOf: b.date, open: b.open, high: b.high, low: b.low, close: b.close,
     }));
     setBarsTick(t => t + 1);
-
-    // DO NOT call fitContent — it overrides the configured barSpacing,
-    // collapsing the bars to fit ALL data in the viewport. The chart already
-    // shows the rightmost data at the configured spacing.
 
     // Crosshair OHLC tooltip
     let destroyed = false;
@@ -176,8 +264,14 @@ export default function Pnthr300ChartModal({ onClose }) {
       });
     });
 
-    return () => { destroyed = true; chart.remove(); chartRef.current = null; priceSeriesRef.current = null; };
-  }, [bars, timeframe, emaPeriod, chartType]);
+    return () => {
+      destroyed = true;
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(syncFromMain);
+      rsiChart.timeScale().unsubscribeVisibleLogicalRangeChange(syncFromRsi);
+      chart.remove(); rsiChart.remove();
+      chartRef.current = null; rsiChartRef.current = null; priceSeriesRef.current = null;
+    };
+  }, [bars, timeframe, emaPeriod, chartType, showAllSignals]);
 
   const dayChange = latest?.dayChangePct;
   const dayChangeColor = dayChange == null ? '#888' : dayChange >= 0 ? '#16a34a' : '#dc2626';
@@ -245,6 +339,21 @@ export default function Pnthr300ChartModal({ onClose }) {
           )}
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+            {/* Signals toggle */}
+            <button
+              onClick={() => setShowAllSignals(v => !v)}
+              style={{
+                padding: '6px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+                background: showAllSignals ? '#fcf000' : 'transparent',
+                color: showAllSignals ? '#000' : '#888',
+                border: '1px solid #2a2a2a', borderRadius: 4, cursor: 'pointer',
+                textTransform: 'uppercase',
+              }}
+              title={showAllSignals ? 'Showing all signals — click to show only the most recent' : 'Showing most recent signal — click to show all'}
+            >
+              {showAllSignals ? 'ALL SIGNALS' : 'SIGNALS'}
+            </button>
+
             {/* Bar spacing: contract ⇨⇦  /  expand ⇦⇨ — adjusts the gap between bars */}
             <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
               <button
@@ -327,77 +436,87 @@ export default function Pnthr300ChartModal({ onClose }) {
           </div>
         </div>
 
-        {/* Chart body */}
-        <div style={{ flex: 1, position: 'relative' }}>
-          {/* Panther head — sized to match the width of "PNTHR AI 300" yellow label above */}
-          <img
-            src={pantherHead}
-            alt="PNTHR"
-            style={{
-              position: 'absolute', top: 14, left: 14, width: 200, height: 200,
-              opacity: 0.92, zIndex: 2, pointerEvents: 'none',
-              filter: 'drop-shadow(0 3px 12px rgba(0,0,0,0.75))',
-            }}
-          />
-
-          {/* OHLC crosshair tooltip — positioned near cursor, doesn't block hits */}
-          {hoveredBar && (
-            <div style={{
-              // HARD-CODED next to the panther head — panther is at
-              // top:14, left:14, width:200 → box starts at left:224.
-              // Do NOT move back to top-right; Scott's preference is locked.
-              position: 'absolute', top: 14, left: 224, zIndex: 4,
-              background: 'rgba(15,15,15,0.95)', border: '1px solid #2a2a2a', borderRadius: 4,
-              padding: '8px 12px', fontSize: 11, fontFamily: 'monospace',
-              color: '#d4d4d4', minWidth: 180, pointerEvents: 'none',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-            }}>
-              <div style={{ color: '#fcf000', fontWeight: 700, marginBottom: 4 }}>{hoveredBar.time}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '2px 12px' }}>
-                <span style={{ color: '#888' }}>Open</span><span>{fmtNum(hoveredBar.open)}</span>
-                <span style={{ color: '#888' }}>High</span><span style={{ color: '#16a34a' }}>{fmtNum(hoveredBar.high)}</span>
-                <span style={{ color: '#888' }}>Low</span><span style={{ color: '#dc2626' }}>{fmtNum(hoveredBar.low)}</span>
-                <span style={{ color: '#888' }}>Close</span>
-                <span style={{ color: hoveredBar.close >= hoveredBar.open ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
-                  {fmtNum(hoveredBar.close)}
-                </span>
-                {hoveredChangePct != null && (
-                  <>
-                    <span style={{ color: '#888' }}>Change</span>
-                    <span style={{ color: hoveredChangePct >= 0 ? '#16a34a' : '#dc2626' }}>
-                      {fmtPct(hoveredChangePct)}
-                    </span>
-                  </>
-                )}
-                {hoveredBar.ema != null && (
-                  <>
-                    <span style={{ color: '#888' }}>OpEMA</span>
-                    <span style={{ color: '#fcf000' }}>{fmtNum(hoveredBar.ema)}</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
+        {/* Chart body — price chart (top) + RSI sub-chart (bottom) */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
           {loading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', zIndex: 3 }}>Loading…</div>}
           {error && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', zIndex: 3 }}>{error}</div>}
 
-          <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-
-          {/* Trendline drawing tool (admin) — same overlay the 679 ChartModal uses.
-              Persists per ticker to MongoDB; 'PAI300' gets its own bucket. */}
-          {!loading && !error && bars.length > 0 && (
-            <ChartDrawingOverlay
-              key={`PAI300:${timeframe}:${chartType}:${barsTick}`}
-              chartRef={chartRef}
-              seriesRef={priceSeriesRef}
-              weeklyBars={visibleBarsRef.current}
-              ticker="PAI300"
-              enabled={isAdmin}
-              buttonPosition="top-left"
-              topOffset={224}
+          {/* Price chart */}
+          <div style={{ flex: 3, position: 'relative', minHeight: 0 }}>
+            <img
+              src={pantherHead}
+              alt="PNTHR"
+              style={{
+                position: 'absolute', top: 14, left: 14, width: 200, height: 200,
+                opacity: 0.92, zIndex: 2, pointerEvents: 'none',
+                filter: 'drop-shadow(0 3px 12px rgba(0,0,0,0.75))',
+              }}
             />
-          )}
+
+            {hoveredBar && (
+              <div style={{
+                position: 'absolute', top: 14, left: 224, zIndex: 4,
+                background: 'rgba(15,15,15,0.95)', border: '1px solid #2a2a2a', borderRadius: 4,
+                padding: '8px 12px', fontSize: 11, fontFamily: 'monospace',
+                color: '#d4d4d4', minWidth: 180, pointerEvents: 'none',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+              }}>
+                <div style={{ color: '#fcf000', fontWeight: 700, marginBottom: 4 }}>{hoveredBar.time}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '2px 12px' }}>
+                  <span style={{ color: '#888' }}>Open</span><span>{fmtNum(hoveredBar.open)}</span>
+                  <span style={{ color: '#888' }}>High</span><span style={{ color: '#16a34a' }}>{fmtNum(hoveredBar.high)}</span>
+                  <span style={{ color: '#888' }}>Low</span><span style={{ color: '#dc2626' }}>{fmtNum(hoveredBar.low)}</span>
+                  <span style={{ color: '#888' }}>Close</span>
+                  <span style={{ color: hoveredBar.close >= hoveredBar.open ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
+                    {fmtNum(hoveredBar.close)}
+                  </span>
+                  {hoveredChangePct != null && (
+                    <>
+                      <span style={{ color: '#888' }}>Change</span>
+                      <span style={{ color: hoveredChangePct >= 0 ? '#16a34a' : '#dc2626' }}>
+                        {fmtPct(hoveredChangePct)}
+                      </span>
+                    </>
+                  )}
+                  {hoveredBar.ema != null && (
+                    <>
+                      <span style={{ color: '#888' }}>OpEMA</span>
+                      <span style={{ color: '#fcf000' }}>{fmtNum(hoveredBar.ema)}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+
+            {!loading && !error && bars.length > 0 && (
+              <ChartDrawingOverlay
+                key={`PAI300:${timeframe}:${chartType}:${barsTick}`}
+                chartRef={chartRef}
+                seriesRef={priceSeriesRef}
+                weeklyBars={visibleBarsRef.current}
+                ticker="PAI300"
+                enabled={isAdmin}
+                buttonPosition="top-left"
+                topOffset={224}
+              />
+            )}
+          </div>
+
+          {/* RSI label */}
+          <div style={{
+            padding: '2px 20px', borderTop: '1px solid #2a2a2a',
+            fontSize: 10, color: '#D4A017', fontWeight: 700, letterSpacing: '0.08em',
+            background: '#0c0c0c',
+          }}>
+            RSI (14)
+          </div>
+
+          {/* RSI sub-chart */}
+          <div style={{ flex: 1, position: 'relative', minHeight: 80 }}>
+            <div ref={rsiContainerRef} style={{ position: 'absolute', inset: 0 }} />
+          </div>
         </div>
 
         {/* Footer methodology note */}

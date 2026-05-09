@@ -7733,8 +7733,30 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     // PAI300 — PNTHR AI 300 index snapshot for Pulse gauge
     let pai300 = null;
     try {
-      const ai300 = await getPnthrAi300Latest();
+      const [ai300, ai300Bars] = await Promise.all([
+        getPnthrAi300Latest(),
+        getPnthrAi300Bars({ timeframe: 'daily' }),
+      ]);
       if (ai300?.ok) {
+        let rsi = null;
+        if (ai300Bars?.ok && ai300Bars.bars?.length >= 16) {
+          const closes = ai300Bars.bars.map(b => b.close);
+          const n = closes.length;
+          let avgGain = 0, avgLoss = 0;
+          for (let i = 1; i <= 14; i++) {
+            const d = closes[i] - closes[i - 1];
+            if (d > 0) avgGain += d; else avgLoss += Math.abs(d);
+          }
+          avgGain /= 14; avgLoss /= 14;
+          rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+          for (let i = 15; i < n; i++) {
+            const d = closes[i] - closes[i - 1];
+            avgGain = (avgGain * 13 + Math.max(d, 0)) / 14;
+            avgLoss = (avgLoss * 13 + Math.max(-d, 0)) / 14;
+            rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+          }
+          rsi = Math.round(rsi);
+        }
         pai300 = {
           value:        ai300.value,
           dayChangePct: ai300.dayChangePct,
@@ -7743,6 +7765,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
           ytdPct:       ai300.ytdPct,
           inceptionPct: ai300.inceptionPct,
           asOf:         ai300.asOf,
+          rsi,
         };
       }
     } catch (e) {

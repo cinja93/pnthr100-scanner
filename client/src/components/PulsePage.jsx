@@ -465,35 +465,31 @@ function QqqGauge({ regime, rsi, onClick }) {
   );
 }
 
-// PAI300 zones — yellow/black AI 300 branding
-const PAI300_ZONES = [
-  { from: -20, to: -10, color: '#7a5400' },
-  { from: -10, to: -3,  color: '#a87400' },
-  { from: -3,  to:  3,  color: '#555' },
-  { from:  3,  to:  10, color: '#c8a000' },
-  { from:  10, to:  20, color: '#D4A017' },
-];
-
 function Pai300Gauge({ pai300, onClick }) {
   const value = pai300?.value ?? null;
   const ema   = pai300?.ema21W ?? null;
   const sep   = (value && ema > 0) ? +((value - ema) / ema * 100).toFixed(1) : null;
   const regime = pai300?.regime ?? null;
   const needleVal = sep !== null ? sep : (regime === 'bull' ? 5 : regime === 'bear' ? -5 : 0);
-  const changePct = pai300?.dayChangePct ?? null;
-  const pctColor = changePct === null ? '#888' : changePct >= 0 ? '#6bcb77' : '#ff6b6b';
-  const arrow = changePct === null ? '' : changePct >= 0 ? '▲' : '▼';
+  const zones = [
+    { from: -20, to: -10, color: '#dc3545' },
+    { from: -10, to: -3,  color: '#ff6b6b' },
+    { from: -3,  to:  3,  color: '#555' },
+    { from:  3,  to:  10, color: '#6bcb77' },
+    { from:  10, to:  20, color: '#28a745' },
+  ];
 
   return (
     <SemiGauge
-      value={needleVal} min={-20} max={20} zones={PAI300_ZONES}
+      value={needleVal} min={-20} max={20} zones={zones}
       label="PAI 300"
       gaugeW={150} gaugeH={100}
-      displayValue={value ? value.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'}
-      subLabel={ema > 0 ? `vs ${ema.toFixed(0)} EMA` : 'PNTHR AI 300'}
-      subValue={changePct !== null ? `${arrow} ${Math.abs(changePct).toFixed(2)}%` : (regime ? `${regime === 'bull' ? '▲' : '▼'} ${regime.toUpperCase()}` : null)}
-      subValueColor={pctColor}
+      displayValue={value ? value.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}
+      subLabel={ema > 0 ? `vs ${ema.toFixed(2)} EMA` : 'PNTHR AI 300'}
+      subValue={sep !== null ? `${sep > 0 ? '+' : ''}${sep}%` : (regime ? `${regime === 'bull' ? 'above' : 'below'} EMA` : null)}
+      subValueColor={sep !== null ? (sep >= 0 ? '#28a745' : '#dc3545') : (regime === 'bull' ? '#28a745' : '#dc3545')}
       onClick={onClick}
+      rsi={pai300?.rsi ?? null}
     />
   );
 }

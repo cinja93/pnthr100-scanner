@@ -183,6 +183,22 @@ export default function AiJunglePage() {
     return out;
   }, [stocks]);
 
+  // 16-step palettes — LOCKED. Use for any ranked sector visualization.
+  // Greens: index 0 = darkest forest, index 15 = lightest emerald
+  const SECTOR_GREENS = [
+    '#0B3D0B', '#104D10', '#155D15', '#1A6D1A',
+    '#1F7D1F', '#248D24', '#299D29', '#2EAD2E',
+    '#35BA35', '#3FC53F', '#4ACE4A', '#56D656',
+    '#63DD63', '#70E370', '#7DE97D', '#8BEF8B',
+  ];
+  // Reds: index 0 = lightest salmon, index 15 = darkest blood red
+  const SECTOR_REDS = [
+    '#E08080', '#D97272', '#D16464', '#C95656',
+    '#C14949', '#B93D3D', '#B03232', '#A62828',
+    '#9B2020', '#8F1A1A', '#831515', '#761111',
+    '#690D0D', '#5C0A0A', '#4F0707', '#420505',
+  ];
+
   // Sectors sorted by 5D return (most bullish first) with gradient colors
   const sortedSectors = useMemo(() => {
     if (!sectors.length) return [];
@@ -197,27 +213,23 @@ export default function AiJunglePage() {
       const rb = rankMap[b.id]?.fiveDayReturn ?? -Infinity;
       return rb - ra;
     });
-    const n = sorted.length;
-    return sorted.map((sec, i) => {
-      const pct = n > 1 ? i / (n - 1) : 0.5;
-      let bg, color;
-      if (pct <= 0.5) {
-        const t = pct / 0.5;
-        const r = Math.round(20 + t * 40);
-        const g = Math.round(120 + (1 - t) * 60);
-        const b = Math.round(20 + t * 20);
-        bg = `rgb(${r}, ${g}, ${b})`;
-        color = '#fff';
-      } else {
-        const t = (pct - 0.5) / 0.5;
-        const r = Math.round(120 + t * 80);
-        const g = Math.round(40 * (1 - t));
-        const b = Math.round(20 * (1 - t));
-        bg = `rgb(${r}, ${g}, ${b})`;
-        color = '#fff';
-      }
+    const bullish = sorted.filter(s => (rankMap[s.id]?.fiveDayReturn ?? 0) >= 0);
+    const bearish = sorted.filter(s => (rankMap[s.id]?.fiveDayReturn ?? 0) < 0);
+
+    return sorted.map(sec => {
       const rank = rankMap[sec.id];
-      return { ...sec, bg, color, fiveDayReturn: rank?.fiveDayReturn, tier: rank?.tier };
+      const ret = rank?.fiveDayReturn ?? 0;
+      let bg;
+      if (ret >= 0) {
+        const idx = bullish.indexOf(sec);
+        const step = bullish.length > 1 ? Math.round(idx * 15 / (bullish.length - 1)) : 0;
+        bg = SECTOR_GREENS[step];
+      } else {
+        const idx = bearish.indexOf(sec);
+        const step = bearish.length > 1 ? Math.round(idx * 15 / (bearish.length - 1)) : 15;
+        bg = SECTOR_REDS[step];
+      }
+      return { ...sec, bg, color: '#fff', fiveDayReturn: rank?.fiveDayReturn, tier: rank?.tier };
     });
   }, [sectors, sectorRanks]);
 

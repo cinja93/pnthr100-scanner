@@ -221,29 +221,36 @@ export default function Pnthr300ChartModal({ onClose }) {
       rsi30.setData([{ time: first, value: 30 }, { time: last, value: 30 }]);
     }
 
-    // Sync time scales: scroll/zoom one → the other follows
+    // Sync time scales using time-based range (not logical index — RSI has
+    // 14 fewer bars so logical indices are offset between the two charts).
     let syncing = false;
     const syncFromMain = () => {
       if (syncing) return;
       syncing = true;
-      const range = chart.timeScale().getVisibleLogicalRange();
-      if (range) rsiChart.timeScale().setVisibleLogicalRange(range);
+      try {
+        const range = chart.timeScale().getVisibleRange();
+        if (range) rsiChart.timeScale().setVisibleRange(range);
+      } catch (_) {}
       syncing = false;
     };
     const syncFromRsi = () => {
       if (syncing) return;
       syncing = true;
-      const range = rsiChart.timeScale().getVisibleLogicalRange();
-      if (range) chart.timeScale().setVisibleLogicalRange(range);
+      try {
+        const range = rsiChart.timeScale().getVisibleRange();
+        if (range) chart.timeScale().setVisibleRange(range);
+      } catch (_) {}
       syncing = false;
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(syncFromMain);
     rsiChart.timeScale().subscribeVisibleLogicalRangeChange(syncFromRsi);
 
-    // Initial sync — force RSI chart to match main chart's visible range
+    // Initial sync — force RSI chart to match main chart on first render
     requestAnimationFrame(() => {
-      const range = chart.timeScale().getVisibleLogicalRange();
-      if (range) rsiChart.timeScale().setVisibleLogicalRange(range);
+      try {
+        const range = chart.timeScale().getVisibleRange();
+        if (range) rsiChart.timeScale().setVisibleRange(range);
+      } catch (_) {}
     });
 
     // Price lookup for reverse crosshair sync (RSI chart → price chart)

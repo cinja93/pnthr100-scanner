@@ -224,8 +224,10 @@ export async function getAiStockChartData(ticker) {
 
   // Daily uses 0.3% daylight zone (vs 1% weekly) — daily ranges are tighter
   // than weekly so the 1% threshold starves daily signals on chop-zone names.
-  const dailyDetect  = dailyPeriod  ? detectAllSignals(dailySigBars,  dailyPeriod,  false, 0.003) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
-  const weeklyDetect = weeklyPeriod ? detectAllSignals(weeklySigBars, weeklyPeriod, false)        : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
+  // AI mode: 1.25× first-BL gate (gateOffset 0.25) per locked AI Universe spec.
+  const AI_GATE_OFFSET = 0.25;
+  const dailyDetect  = dailyPeriod  ? detectAllSignals(dailySigBars,  dailyPeriod,  false, 0.003, AI_GATE_OFFSET) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
+  const weeklyDetect = weeklyPeriod ? detectAllSignals(weeklySigBars, weeklyPeriod, false, null,  AI_GATE_OFFSET) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
 
   // Last bar info per timeframe
   const lastDaily  = dailyAsc[dailyAsc.length - 1] || null;

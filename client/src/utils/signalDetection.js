@@ -68,7 +68,9 @@ export function ssInitStop(twoBarHigh, entryClose, atr) {
 // individual stocks: daily ranges are tighter than weekly so the 1% rule is
 // too strict.
 // PNTHR AI 300 + each sector index behave like ETFs (broad baskets), so pass true.
-export function detectAllSignals(bars, period = 21, isETF = false, dPctOverride = null) {
+// `gateOffset` (default 0.10) — first-BL upper bound is `ema × (1 + gateOffset)`.
+// 679 stays at 0.10 (1.10× EMA). AI mode uses 0.25 (1.25× EMA) per the AI Universe spec.
+export function detectAllSignals(bars, period = 21, isETF = false, dPctOverride = null, gateOffset = 0.10) {
   if (bars.length < period + 2) return { events: [], pnthrStop: null, currentWeekStop: null, activeType: null, currentSignal: null };
   const emaData = calculateEMA(bars, period);
   const atrArr  = computeWilderATR(bars);
@@ -138,8 +140,8 @@ export function detectAllSignals(bars, period = 21, isETF = false, dPctOverride 
       const blPhase1 = current.close > emaCurrent && emaCurrent > emaPrev && current.high >= twoBarHigh + 0.01;
       const ssPhase1 = current.close < emaCurrent && emaCurrent < emaPrev && current.low  <= twoBarLow  - 0.01;
       const dPct = dPctOverride != null ? dPctOverride : (isETF ? 0.003 : 0.01);
-      const blZone   = current.low  >= emaCurrent * (1 + dPct) && current.low  <= emaCurrent * 1.10;
-      const ssZone   = current.high <= emaCurrent * (1 - dPct) && current.high >= emaCurrent * 0.90;
+      const blZone   = current.low  >= emaCurrent * (1 + dPct) && current.low  <= emaCurrent * (1 + gateOffset);
+      const ssZone   = current.high <= emaCurrent * (1 - dPct) && current.high >= emaCurrent * (1 - gateOffset);
 
       const blReentry    = longTrendActive  && current.low  >= emaCurrent * (1 + dPct) && (!longTrendCapped  || current.low  <= emaCurrent * 1.25);
       const ssReentry    = shortTrendActive && current.high <= emaCurrent * (1 - dPct) && (!shortTrendCapped || current.high >= emaCurrent * 0.75);

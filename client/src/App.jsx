@@ -29,6 +29,7 @@ import JunglePage from './components/JunglePage';
 import AiJunglePage from './components/AiJunglePage';
 import AiSectorsPage from './components/AiSectorsPage';
 import AiOrdersPage from './components/AiOrdersPage';
+import AiKillPage from './components/AiKillPage';
 import SearchPage from './components/SearchPage';
 import PreyPage from './components/PreyPage';
 import ApexPage from './components/ApexPage';
@@ -1370,6 +1371,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR AI Orders — APEX v6 weekly order sheet */}
           {activePage === 'aiOrders' && <AiOrdersPage />}
+
+          {/* PNTHR AI Kill — v1 ranked predatory scoring */}
+          {activePage === 'aiKill' && <AiKillPage />}
 
 
           {/* PNTHR Journal */}

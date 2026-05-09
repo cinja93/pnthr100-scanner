@@ -36,6 +36,7 @@ import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrA
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './aiOrdersPipeline.js';
+import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getAiStockChartData } from './aiUniverseStockChartService.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
@@ -1981,6 +1982,39 @@ app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, 
     res.json({ ok: true, weekOf: doc.weekOf, totalOrders: doc.stats.totalOrders, stats: doc.stats });
   } catch (err) {
     console.error('[AI Orders] manual run failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PNTHR AI Kill (v1) ──────────────────────────────────────────────────────
+app.get('/api/ai-kill/latest', async (req, res) => {
+  try {
+    const doc = await getLatestAiKillScores();
+    if (!doc) return res.json({ weekOf: null, scores: [], tierBreakdown: {} });
+    res.json(doc);
+  } catch (err) {
+    console.error('Error in /api/ai-kill/latest:', err);
+    res.status(500).json({ error: 'Failed to load AI Kill scores' });
+  }
+});
+
+app.get('/api/ai-kill/history', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 12, 50);
+    const docs = await getAiKillHistory({ limit });
+    res.json({ count: docs.length, docs });
+  } catch (err) {
+    console.error('Error in /api/ai-kill/history:', err);
+    res.status(500).json({ error: 'Failed to load AI Kill history' });
+  }
+});
+
+app.post('/api/admin/run-ai-kill', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const doc = await runAiKillPipeline();
+    res.json({ ok: true, weekOf: doc.weekOf, scoredCount: doc.scoredCount, tierBreakdown: doc.tierBreakdown });
+  } catch (err) {
+    console.error('[AI Kill] manual run failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -5317,6 +5351,10 @@ cron.schedule('30 17 * * 1-5', async () => {
     console.log('[AI Sector Rotation] computing today’s 5D rank…');
     const rotResult = await updateAiSectorRankToday();
     console.log(`[AI Sector Rotation] done: ${JSON.stringify(rotResult)}`);
+    // Then AI Kill scoring — consumes sector tiers + signals.
+    console.log('[AI Kill] scoring all signals…');
+    const killDoc = await runAiKillPipeline();
+    console.log(`[AI Kill] done: ${killDoc.scoredCount} scored, top=${killDoc.scores[0]?.ticker}`);
     // Final step: regenerate the AI Orders sheet (consumes fresh sector tiers).
     console.log('[AI Orders] regenerating order sheet…');
     const ordersDoc = await runAiOrdersPipeline({ type: 'DAILY' });

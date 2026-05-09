@@ -488,6 +488,20 @@ export async function runAiOrders(opts = {}) {
   return response.json();
 }
 
+// PNTHR AI Kill — v1 ranked scores
+export async function fetchLatestAiKill() {
+  const response = await apiFetch(`${API_BASE}/api/ai-kill/latest`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+export async function runAiKill() {
+  const response = await apiFetch(`${API_BASE}/api/admin/run-ai-kill`, {
+    method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // Fetch PNTHR PREY results (Alphas, Springs, Dinner)
 export async function fetchPreyStocks(forceRefresh = false) {
   const url = `${API_BASE}/api/prey${forceRefresh ? '?refresh=1' : ''}`;

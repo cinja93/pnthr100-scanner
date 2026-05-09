@@ -465,6 +465,29 @@ export async function fetchAiUniverse(forceRefresh = false) {
   return response.json();
 }
 
+// PNTHR AI 5-day Sector Rotation rank (latest)
+export async function fetchAiSectorRotation() {
+  const response = await apiFetch(`${API_BASE}/api/ai-sector-rotation/latest`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+// PNTHR AI Orders — APEX v6 weekly order sheet
+export async function fetchLatestAiOrders() {
+  const response = await apiFetch(`${API_BASE}/api/ai-orders/latest`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+export async function runAiOrders(opts = {}) {
+  const response = await apiFetch(`${API_BASE}/api/admin/run-ai-orders`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(opts),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // Fetch PNTHR PREY results (Alphas, Springs, Dinner)
 export async function fetchPreyStocks(forceRefresh = false) {
   const url = `${API_BASE}/api/prey${forceRefresh ? '?refresh=1' : ''}`;

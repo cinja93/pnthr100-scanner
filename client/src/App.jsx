@@ -28,6 +28,7 @@ import CalendarPage from './components/CalendarPage';
 import JunglePage from './components/JunglePage';
 import AiJunglePage from './components/AiJunglePage';
 import AiSectorsPage from './components/AiSectorsPage';
+import AiOrdersPage from './components/AiOrdersPage';
 import SearchPage from './components/SearchPage';
 import PreyPage from './components/PreyPage';
 import ApexPage from './components/ApexPage';
@@ -1366,6 +1367,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR AI Sectors — 16 synthetic sector indices */}
           {activePage === 'aiSectors' && <AiSectorsPage />}
+
+          {/* PNTHR AI Orders — APEX v6 weekly order sheet */}
+          {activePage === 'aiOrders' && <AiOrdersPage />}
 
 
           {/* PNTHR Journal */}

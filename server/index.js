@@ -35,6 +35,7 @@ import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
 import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
+import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './aiOrdersPipeline.js';
 import { getAiStockChartData } from './aiUniverseStockChartService.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
@@ -1947,6 +1948,39 @@ app.post('/api/admin/backfill-ai-sector-ranks', authenticateJWT, requireAdmin, a
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('[AI Sector Ranks] backfill failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PNTHR AI Orders (APEX v6 weekly order sheet) ────────────────────────────
+app.get('/api/ai-orders/latest', async (req, res) => {
+  try {
+    const doc = await getLatestAiOrders();
+    if (!doc) return res.json({ weekOf: null, orders: [], stats: {}, sectorSummary: {} });
+    res.json(doc);
+  } catch (err) {
+    console.error('Error in /api/ai-orders/latest:', err);
+    res.status(500).json({ error: 'Failed to load AI orders' });
+  }
+});
+
+app.get('/api/ai-orders/history', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+    const docs = await getAiOrdersHistory({ limit });
+    res.json({ count: docs.length, docs });
+  } catch (err) {
+    console.error('Error in /api/ai-orders/history:', err);
+    res.status(500).json({ error: 'Failed to load AI orders history' });
+  }
+});
+
+app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const doc = await runAiOrdersPipeline(req.body || {});
+    res.json({ ok: true, weekOf: doc.weekOf, totalOrders: doc.stats.totalOrders, stats: doc.stats });
+  } catch (err) {
+    console.error('[AI Orders] manual run failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -5283,6 +5317,10 @@ cron.schedule('30 17 * * 1-5', async () => {
     console.log('[AI Sector Rotation] computing today’s 5D rank…');
     const rotResult = await updateAiSectorRankToday();
     console.log(`[AI Sector Rotation] done: ${JSON.stringify(rotResult)}`);
+    // Final step: regenerate the AI Orders sheet (consumes fresh sector tiers).
+    console.log('[AI Orders] regenerating order sheet…');
+    const ordersDoc = await runAiOrdersPipeline({ type: 'DAILY' });
+    console.log(`[AI Orders] done: ${ordersDoc.stats.totalOrders} orders this week`);
   } catch (err) {
     console.error('[AI Universe Daily] cron failed:', err.message);
   }

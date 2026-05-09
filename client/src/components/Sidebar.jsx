@@ -22,6 +22,7 @@ const NAV_GROUPS = [
       { key: 'pulse',     label: 'PNTHR Pulse',     iconImg: true },
       { key: 'assistant', label: 'PNTHR Assistant',  iconImg: true },
       { key: 'orders',    label: 'PNTHR Orders',    iconImg: true },
+      { key: 'aiOrders',  label: 'PNTHR AI Orders', iconImg: true, aiHighlight: true },
       // PNTHR Command intentionally hidden 2026-04-29 (Day 1 UI consolidation).
       // Page is still mounted at /?page=command for fallback editing — used by
       // the AssistantRowExpand "OPEN IN COMMAND CENTER" deep link for full lot

@@ -7730,6 +7730,25 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       console.warn('[PULSE] consumer sentiment fetch failed:', e.message);
     }
 
+    // PAI300 — PNTHR AI 300 index snapshot for Pulse gauge
+    let pai300 = null;
+    try {
+      const ai300 = await getPnthrAi300Latest();
+      if (ai300?.ok) {
+        pai300 = {
+          value:        ai300.value,
+          dayChangePct: ai300.dayChangePct,
+          ema21W:       ai300.ema21W,
+          regime:       ai300.regime,
+          ytdPct:       ai300.ytdPct,
+          inceptionPct: ai300.inceptionPct,
+          asOf:         ai300.asOf,
+        };
+      }
+    } catch (e) {
+      console.warn('[PULSE] PAI300 fetch failed:', e.message);
+    }
+
     // Data freshness metadata — client shows "Scores: Fri Mar 20" vs "Scores: Live"
     const dataSource = liveApex ? 'live_apex' : 'friday_pipeline';
     const scoresAsOf = liveApex
@@ -7793,6 +7812,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       recessionIndicator,
       buffettIndicator,
       consumerSentiment,
+      pai300,
     });
   } catch (err) {
     console.error('[/api/pulse]', err.message);

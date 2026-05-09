@@ -4,6 +4,7 @@ import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { useAuth } from '../AuthContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
 import ChartModal from './ChartModal';
+import Pnthr300ChartModal from './Pnthr300ChartModal';
 
 // Returns true if developing signals should be shown (Mon–Thu anytime; Fri before 4:15 PM ET)
 function shouldShowDevelopingSignals() {
@@ -73,6 +74,7 @@ export default function PulsePage({ onNavigate }) {
   const [sectorExposure,  setSectorExposure]  = useState(null);
   const [movers,          setMovers]          = useState(null);
   const [sectorModal,     setSectorModal]     = useState(null); // { sector, data }
+  const [showPai300Chart, setShowPai300Chart] = useState(false);
   const autoRefreshTimer = React.useRef(null);
   const showDev = shouldShowDevelopingSignals();
 
@@ -157,18 +159,19 @@ export default function PulsePage({ onNavigate }) {
         onRefresh={refreshPulse}
       />
 
-      {/* ROW 1: Equity markets + VIX */}
+      {/* ROW 1: PAI300 + Equity markets */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <Pai300Gauge pai300={data.pai300} onClick={() => setShowPai300Chart(true)} />
         <SpyGauge regime={data.regime} rsi={data.indexRsi?.spy} onClick={() => { setChartList([{ ticker: 'SPY' }]); setChartIndex(0); }} />
         <QqqGauge regime={data.regime} rsi={data.indexRsi?.qqq} onClick={() => { setChartList([{ ticker: 'QQQ' }]); setChartIndex(0); }} />
         <MarketGauge label="NYSE" subLabel="Composite" data={data.marketGauges?.nyse} rsi={data.indexRsi?.nyse} onClick={() => { setChartList([{ ticker: '^NYA' }]); setChartIndex(0); }} />
         <MarketGauge label="NASDAQ" subLabel="Composite" data={data.marketGauges?.nasdaq} rsi={data.indexRsi?.nasdaq} onClick={() => { setChartList([{ ticker: '^IXIC' }]); setChartIndex(0); }} />
         <MarketGauge label="IWM" subLabel="Russell 2000" data={data.marketGauges?.iwm} rsi={data.indexRsi?.iwm} onClick={() => { setChartList([{ ticker: 'IWM' }]); setChartIndex(0); }} />
         <MarketGauge label="DJI" subLabel="Dow Jones" data={data.marketGauges?.dji} rsi={data.indexRsi?.dji} onClick={() => { setChartList([{ ticker: '^DJI' }]); setChartIndex(0); }} />
-        <VixThermometer vix={vix} onClick={() => { setChartList([{ ticker: '^VIX' }]); setChartIndex(0); }} />
       </div>
-      {/* ROW 2: Commodities & Currency */}
+      {/* ROW 2: VIX + Commodities & Currency */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <VixThermometer vix={vix} onClick={() => { setChartList([{ ticker: '^VIX' }]); setChartIndex(0); }} />
         <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} onClick={() => { setChartList([{ ticker: 'GLD' }]); setChartIndex(0); }} />
         <MarketGauge label={data.marketGauges?.crude?.symbol === 'USO' ? 'USO' : 'WTI'} subLabel="Crude Oil" data={data.marketGauges?.crude} onClick={() => { setChartList([{ ticker: data.marketGauges?.crude?.symbol || 'USO' }]); setChartIndex(0); }} />
         <MarketGauge label="USD" subLabel="Dollar Index" data={data.marketGauges?.usd} isIndex={true} onClick={() => { setChartList([{ ticker: 'UUP' }]); setChartIndex(0); }} />
@@ -241,6 +244,9 @@ export default function PulsePage({ onNavigate }) {
           initialIndex={chartIndex}
           onClose={() => { setChartList([]); setChartIndex(0); }}
         />
+      )}
+      {showPai300Chart && (
+        <Pnthr300ChartModal onClose={() => setShowPai300Chart(false)} />
       )}
     </div>
   );
@@ -455,6 +461,39 @@ function QqqGauge({ regime, rsi, onClick }) {
       subValueColor={sep !== null ? (sep >= 0 ? '#28a745' : '#dc3545') : (pos === 'above' ? '#28a745' : '#dc3545')}
       onClick={onClick}
       rsi={rsi}
+    />
+  );
+}
+
+// PAI300 zones — yellow/black AI 300 branding
+const PAI300_ZONES = [
+  { from: -20, to: -10, color: '#7a5400' },
+  { from: -10, to: -3,  color: '#a87400' },
+  { from: -3,  to:  3,  color: '#555' },
+  { from:  3,  to:  10, color: '#c8a000' },
+  { from:  10, to:  20, color: '#D4A017' },
+];
+
+function Pai300Gauge({ pai300, onClick }) {
+  const value = pai300?.value ?? null;
+  const ema   = pai300?.ema21W ?? null;
+  const sep   = (value && ema > 0) ? +((value - ema) / ema * 100).toFixed(1) : null;
+  const regime = pai300?.regime ?? null;
+  const needleVal = sep !== null ? sep : (regime === 'bull' ? 5 : regime === 'bear' ? -5 : 0);
+  const changePct = pai300?.dayChangePct ?? null;
+  const pctColor = changePct === null ? '#888' : changePct >= 0 ? '#6bcb77' : '#ff6b6b';
+  const arrow = changePct === null ? '' : changePct >= 0 ? '▲' : '▼';
+
+  return (
+    <SemiGauge
+      value={needleVal} min={-20} max={20} zones={PAI300_ZONES}
+      label="PAI 300"
+      gaugeW={150} gaugeH={100}
+      displayValue={value ? value.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'}
+      subLabel={ema > 0 ? `vs ${ema.toFixed(0)} EMA` : 'PNTHR AI 300'}
+      subValue={changePct !== null ? `${arrow} ${Math.abs(changePct).toFixed(2)}%` : (regime ? `${regime === 'bull' ? '▲' : '▼'} ${regime.toUpperCase()}` : null)}
+      subValueColor={pctColor}
+      onClick={onClick}
     />
   );
 }

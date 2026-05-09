@@ -196,7 +196,12 @@ export default function Pnthr300ChartModal({ onClose }) {
       color: '#D4A017', lineWidth: 2,
       priceLineVisible: true, lastValueVisible: true, crosshairMarkerVisible: true,
     });
-    rsiLine.setData(rsiVals.map((v, i) => ({ time: bars[rsiStartIdx + i].date, value: parseFloat(v.toFixed(1)) })));
+    const rsiData = rsiVals.map((v, i) => ({ time: bars[rsiStartIdx + i].date, value: parseFloat(v.toFixed(1)) }));
+    rsiLine.setData(rsiData);
+
+    // Build date→RSI lookup for crosshair tooltip
+    const rsiByDate = {};
+    rsiData.forEach(d => { rsiByDate[d.time] = d.value; });
 
     // Overbought (70) / Oversold (30) reference lines
     const rsi70 = rsiChart.addSeries(LineSeries, {
@@ -208,8 +213,10 @@ export default function Pnthr300ChartModal({ onClose }) {
       priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
     });
     const rsiDates = rsiVals.map((_, i) => bars[rsiStartIdx + i].date);
+    const lastBarDate = bars[bars.length - 1].date;
     if (rsiDates.length >= 2) {
-      const first = rsiDates[0], last = rsiDates[rsiDates.length - 1];
+      const first = rsiDates[0];
+      const last = lastBarDate > rsiDates[rsiDates.length - 1] ? lastBarDate : rsiDates[rsiDates.length - 1];
       rsi70.setData([{ time: first, value: 70 }, { time: last, value: 70 }]);
       rsi30.setData([{ time: first, value: 30 }, { time: last, value: 30 }]);
     }
@@ -233,23 +240,13 @@ export default function Pnthr300ChartModal({ onClose }) {
     chart.timeScale().subscribeVisibleLogicalRangeChange(syncFromMain);
     rsiChart.timeScale().subscribeVisibleLogicalRangeChange(syncFromRsi);
 
-    // Sync crosshair
-    chart.subscribeCrosshairMove(param => {
-      if (param?.time) rsiChart.setCrosshairPosition(undefined, param.time, rsiLine);
-      else rsiChart.clearCrosshairPosition();
-    });
-    rsiChart.subscribeCrosshairMove(param => {
-      if (param?.time) chart.setCrosshairPosition(undefined, param.time, priceSeries);
-      else chart.clearCrosshairPosition();
-    });
-
     // Snapshot bars for drawing overlay
     visibleBarsRef.current = bars.map(b => ({
       weekOf: b.date, open: b.open, high: b.high, low: b.low, close: b.close,
     }));
     setBarsTick(t => t + 1);
 
-    // Crosshair OHLC tooltip
+    // Crosshair OHLC tooltip + RSI value lookup
     let destroyed = false;
     chart.subscribeCrosshairMove(param => {
       if (destroyed) return;
@@ -261,6 +258,7 @@ export default function Pnthr300ChartModal({ onClose }) {
         time: param.time,
         open: data.open, high: data.high, low: data.low, close: data.close,
         ema: emaData?.value ?? null,
+        rsi: rsiByDate[param.time] ?? null,
       });
     });
 
@@ -482,6 +480,15 @@ export default function Pnthr300ChartModal({ onClose }) {
                     <>
                       <span style={{ color: '#888' }}>OpEMA</span>
                       <span style={{ color: '#fcf000' }}>{fmtNum(hoveredBar.ema)}</span>
+                    </>
+                  )}
+                  {hoveredBar.rsi != null && (
+                    <>
+                      <span style={{ color: '#888' }}>RSI</span>
+                      <span style={{
+                        color: hoveredBar.rsi >= 70 ? '#dc3545' : hoveredBar.rsi <= 30 ? '#28a745' : '#D4A017',
+                        fontWeight: 700,
+                      }}>{hoveredBar.rsi.toFixed(1)}</span>
                     </>
                   )}
                 </div>

@@ -3,7 +3,7 @@ import StockTable from './StockTable';
 import AiTickerChartModal from './AiTickerChartModal';
 import Pnthr300ChartModal from './Pnthr300ChartModal';
 import Pnthr300WeightsModal from './Pnthr300WeightsModal';
-import { fetchAiUniverse, fetchEarnings, fetchPnthrAi300Latest } from '../services/api';
+import { fetchAiUniverse, fetchEarnings, fetchPnthrAi300Latest, fetchAiSectorRotation } from '../services/api';
 import { getCalendarWeekWindow } from '../utils/dateUtils';
 import styles from './JunglePage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -119,6 +119,7 @@ export default function AiJunglePage() {
   const [signals, setSignals]             = useState({});
   const [dailySignals, setDailySignals]   = useState({});
   const [sectors, setSectors]             = useState([]);  // [{ id, name, weight, count }]
+  const [sectorRanks, setSectorRanks]     = useState(null); // sector rotation rank doc
   const [fundMeta, setFundMeta]           = useState(null);
   const [earnings, setEarnings]           = useState({});
   const [loading, setLoading]             = useState(true);
@@ -167,6 +168,7 @@ export default function AiJunglePage() {
   // Silent option keeps the spinner from blinking every cycle.
   useEffect(() => {
     load();
+    fetchAiSectorRotation().then(setSectorRanks).catch(() => {});
     const id = setInterval(() => load(false, { silent: true }), 30000);
     return () => clearInterval(id);
   }, []);
@@ -180,6 +182,44 @@ export default function AiJunglePage() {
     }
     return out;
   }, [stocks]);
+
+  // Sectors sorted by 5D return (most bullish first) with gradient colors
+  const sortedSectors = useMemo(() => {
+    if (!sectors.length) return [];
+    const rankMap = {};
+    if (sectorRanks?.ranks) {
+      for (const r of sectorRanks.ranks) {
+        rankMap[r.sectorId] = r;
+      }
+    }
+    const sorted = sectors.slice().sort((a, b) => {
+      const ra = rankMap[a.id]?.fiveDayReturn ?? -Infinity;
+      const rb = rankMap[b.id]?.fiveDayReturn ?? -Infinity;
+      return rb - ra;
+    });
+    const n = sorted.length;
+    return sorted.map((sec, i) => {
+      const pct = n > 1 ? i / (n - 1) : 0.5;
+      let bg, color;
+      if (pct <= 0.5) {
+        const t = pct / 0.5;
+        const r = Math.round(20 + t * 40);
+        const g = Math.round(120 + (1 - t) * 60);
+        const b = Math.round(20 + t * 20);
+        bg = `rgb(${r}, ${g}, ${b})`;
+        color = '#fff';
+      } else {
+        const t = (pct - 0.5) / 0.5;
+        const r = Math.round(120 + t * 80);
+        const g = Math.round(40 * (1 - t));
+        const b = Math.round(20 * (1 - t));
+        bg = `rgb(${r}, ${g}, ${b})`;
+        color = '#fff';
+      }
+      const rank = rankMap[sec.id];
+      return { ...sec, bg, color, fiveDayReturn: rank?.fiveDayReturn, tier: rank?.tier };
+    });
+  }, [sectors, sectorRanks]);
 
   // Compose sector filter + search filter. Sector chips narrow the universe;
   // the search box matches ticker prefix OR company name substring (case-
@@ -309,15 +349,16 @@ export default function AiJunglePage() {
             Full AI Jungle
             <span className={styles.filterCount}>{counts.all}</span>
           </button>
-          {sectors.map(sec => (
+          {sortedSectors.map(sec => (
             <button
               key={sec.id}
               className={`${styles.filterBtn} ${sectorFilter === sec.id ? styles.filterBtnActive : ''}`}
               onClick={() => setSectorFilter(sec.id)}
-              title={`Target weight: ${sec.weight}%`}
+              title={`${sec.tier || '—'} · 5D return: ${sec.fiveDayReturn != null ? (sec.fiveDayReturn * 100).toFixed(2) + '%' : '—'}`}
+              style={sectorFilter !== sec.id ? { background: sec.bg, color: sec.color, borderColor: 'transparent' } : undefined}
             >
               {sec.name}
-              <span className={styles.filterCount}>{counts[sec.id] ?? 0}</span>
+              <span className={styles.filterCount} style={sectorFilter !== sec.id ? { color: 'rgba(255,255,255,0.8)' } : undefined}>{counts[sec.id] ?? 0}</span>
             </button>
           ))}
         </div>

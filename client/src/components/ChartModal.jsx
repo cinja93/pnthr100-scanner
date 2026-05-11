@@ -618,12 +618,17 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
     setPnthrStop(resolvedStop);
     setCurrentWeekStop(cws);
     setCurrentSignal(cs);
-    // Render EVERY BL/SS/BE/SE event in the visible bar range so the chart
-    // reflects the full signal history. Prior behavior rendered ONLY the
-    // most recent entry + its exit, which hid all earlier signal history
-    // from the trader. For chart-based decisions, hiding real signals is
-    // unacceptable — if the state machine fired a BL, the chart must show it.
-    const allSignalEvents = allDetected.filter(e => filteredTimes.has(e.time));
+    // Show only the LAST signal or completed trade pair (BL→BE or SS→SE),
+    // matching AI 300 chart behavior. Walk backward to find the last entry
+    // (BL or SS), then slice from there forward to include its exit if any.
+    const allInRange = allDetected.filter(e => filteredTimes.has(e.time));
+    let lastEntryIdx = -1;
+    for (let i = allInRange.length - 1; i >= 0; i--) {
+      if (allInRange[i].signal === 'BL' || allInRange[i].signal === 'SS') {
+        lastEntryIdx = i; break;
+      }
+    }
+    const allSignalEvents = lastEntryIdx >= 0 ? allInRange.slice(lastEntryIdx) : allInRange.slice(-1);
     if (allSignalEvents.length > 0) {
       const BADGE_H = 22;
       const updateAllMarkers = () => {

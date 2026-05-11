@@ -1,9 +1,26 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, BarSeries, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
-import { fetchAiStockChartData, fetchNav } from '../services/api';
+import { fetchAiStockChartData, fetchNav, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils';
 import { useQueue } from '../contexts/QueueContext';
 import pantherHead from '../assets/panther head.png';
+
+const washPulseCSS = `
+@keyframes aiWashPulse {
+  0%, 100% { background-color: #cc1111; box-shadow: 0 0 0 0 rgba(204,17,17,0); }
+  50%       { background-color: #ff2233; box-shadow: 0 0 6px 2px rgba(255,34,51,0.6); }
+}
+@keyframes aiWashPulseFast {
+  0%, 100% { background-color: #aa0000; box-shadow: 0 0 0 0 rgba(170,0,0,0); }
+  50%       { background-color: #ff1122; box-shadow: 0 0 8px 3px rgba(255,17,34,0.7); }
+}
+`;
+const washBadgeBase = {
+  display: 'inline-flex', alignItems: 'center', gap: 5,
+  backgroundColor: '#cc1111', color: '#fff', border: 'none',
+  padding: '4px 12px', borderRadius: 4, fontWeight: 800,
+  fontSize: '0.72rem', letterSpacing: '0.06em', whiteSpace: 'nowrap',
+};
 
 // AiTickerChartModal — daily + weekly OHLC charts side-by-side for any AI
 // Universe ticker. EMA period comes from the stock's AI sector (one number,
@@ -477,6 +494,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const [chartType, setChartType] = useState('bars');
+  const [washWarning, setWashWarning] = useState(null);
 
   const canPrev = currentIdx > 0;
   const canNext = currentIdx < tickerList.length - 1;
@@ -519,6 +537,22 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
     return () => { cancelled = true; clearInterval(id); };
   }, [activeTicker]);
 
+  // Wash rule check whenever active ticker changes
+  useEffect(() => {
+    if (!activeTicker) { setWashWarning(null); return; }
+    let cancelled = false;
+    fetch(`${API_BASE}/api/wash-rules?ticker=${encodeURIComponent(activeTicker)}`, { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        if (cancelled) return;
+        const active    = data.find(w => !w.washSale?.triggered && (w.washSale?.daysRemaining ?? 0) > 0);
+        const triggered = data.find(w =>  w.washSale?.triggered);
+        setWashWarning(active || triggered || null);
+      })
+      .catch(() => { if (!cancelled) setWashWarning(null); });
+    return () => { cancelled = true; };
+  }, [activeTicker]);
+
   const dayChangeColor = data?.dayChangePct == null ? '#888' : data.dayChangePct >= 0 ? '#16a34a' : '#dc2626';
 
   return (
@@ -530,6 +564,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
         zIndex: 9999, padding: 16,
       }}
     >
+      <style dangerouslySetInnerHTML={{ __html: washPulseCSS }} />
       <div style={{
         background: '#0a0a0a', borderRadius: 8, width: '100%', maxWidth: 1600,
         height: '90vh', display: 'flex', flexDirection: 'column',
@@ -569,8 +604,30 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
             )}
           </div>
 
-          {/* Right: chart-type toggle + close */}
+          {/* Right: wash badge + chart-type toggle + close */}
           <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end', minWidth: 0 }}>
+            {washWarning && (() => {
+              const ws = washWarning.washSale;
+              if (ws?.triggered) {
+                return (
+                  <span style={{ ...washBadgeBase, animation: 'none' }}
+                    title={`Wash sale triggered — the prior loss on ${washWarning.ticker} is disallowed for tax purposes`}>
+                    ⚠ WASH TRIGGERED
+                  </span>
+                );
+              }
+              const days   = ws?.daysRemaining ?? 0;
+              const urgent = days <= 7;
+              const loss   = ws?.lossAmount != null ? ` · -$${Math.abs(ws.lossAmount).toFixed(2)} loss` : '';
+              return (
+                <span
+                  style={{ ...washBadgeBase, animation: urgent ? 'aiWashPulseFast 0.9s ease-in-out infinite' : 'aiWashPulse 2s ease-in-out infinite' }}
+                  title={`Wash sale window active${loss}. Re-entering before ${ws?.expiryDate ? new Date(ws.expiryDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'} will disallow the prior loss for tax purposes.`}
+                >
+                  ⚠ WASH RULE — {days}d
+                </span>
+              );
+            })()}
             <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
               {[
                 { key: 'bars',    label: 'OHLC Bars' },

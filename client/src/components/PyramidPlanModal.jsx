@@ -63,6 +63,12 @@ export default function PyramidPlanModal({ ticker, positionId, onClose, onApplie
         const anchor    = data.anchor || data.currentL1?.price || 0;
         const nav       = data.nav || 0;
         const origStop  = data.originalStop || 0;
+
+        const isLong   = direction !== 'SHORT';
+        const l1Shares = +data.currentL1?.shares || 0;
+        const l1Risk   = origStop > 0 && anchor > 0
+          ? (isLong ? Math.max(0, anchor - origStop) : Math.max(0, origStop - anchor)) * l1Shares
+          : 0;
         const l1RiskPctNav = nav > 0 ? l1Risk / nav * 100 : 0;
         setMeta({
           nav,
@@ -74,24 +80,9 @@ export default function PyramidPlanModal({ ticker, positionId, onClose, onApplie
         });
 
         // ── 1% NAV risk-budget recommendation ─────────────────────────────────
-        // Pre-fix the modal pre-filled with canonical share-weighted math
-        // (35/25/20/12/8 of total shares from `floor(vitality / L1_rps)`).
-        // That sizes L1 to 1% NAV but L2-L5 ADD risk on top because their
-        // trigger prices are higher (greater rps). Cumulative risk routinely
-        // exceeded 1% — OVV came in at 1.21%, MUR at 1.36%.
-        //
-        // The PNTHR fund rule is 1% TOTAL NAV across the full pyramid, not
-        // 1% on L1 alone. So the real recommendation is:
-        //   • Total risk budget = 1% × NAV
-        //   • Subtract L1 actual risk (already filled, fixed)
-        //   • Distribute remaining budget across L2-L5 by 30/25/20/10 weights
-        //     (canonical L1-aware redistribution shape, sum 85)
-        //   • shares = budgetForLot / lotRiskPerShare
-        const isLong   = direction !== 'SHORT';
-        const l1Shares = +data.currentL1?.shares || 0;
-        const l1Risk   = origStop > 0 && anchor > 0
-          ? (isLong ? Math.max(0, anchor - origStop) : Math.max(0, origStop - anchor)) * l1Shares
-          : 0;
+        // Total risk budget = 1% × NAV. Subtract L1 actual risk (already
+        // filled, fixed). Distribute remaining budget across L2-L5 by
+        // 30/25/20/10 weights. shares = budgetForLot / lotRiskPerShare.
         const budgetTotal     = nav * 0.01;
         const budgetRemaining = Math.max(0, budgetTotal - l1Risk);
 

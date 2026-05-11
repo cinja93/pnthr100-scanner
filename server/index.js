@@ -8821,6 +8821,75 @@ app.get('/api/assistant/tasks', async (req, res) => {
   }
 });
 
+// GET /api/assistant/l1-risk-audit — show positions where L1 exceeds 35% of 1% NAV
+app.get('/api/assistant/l1-risk-audit', authenticateJWT, async (req, res) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+    const { connectToDatabase: _getDb } = await import('./database.js');
+    const db = await _getDb();
+    if (!db) return res.status(503).json({ error: 'DB unavailable' });
+
+    const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
+    const nav = +(profile?.accountSize) || 100000;
+
+    const positions = await db.collection('pnthr_portfolio')
+      .find({ status: { $in: ['ACTIVE', 'PARTIAL'] }, ownerId: req.user.userId })
+      .toArray();
+
+    const rows = [];
+    for (const p of positions) {
+      const fills = p.fills || {};
+      const l1 = fills[1];
+      if (!l1?.filled) continue;
+      const l1Shares = +l1.shares || 0;
+      const l1Price  = +l1.price || +p.entryPrice || 0;
+      const origStop = +(p.originalStop || p.stopPrice) || 0;
+      if (!l1Price || !origStop || l1Shares <= 0) continue;
+
+      const isLong = (p.direction || 'LONG').toUpperCase() !== 'SHORT';
+      const rps = isLong ? Math.max(0, l1Price - origStop) : Math.max(0, origStop - l1Price);
+      if (rps <= 0) continue;
+
+      const isETF = !!p.isETF;
+      const vitality = nav * (isETF ? 0.005 : 0.01);
+      const tickerCap = nav * 0.10;
+      const totalByVitality = Math.floor(vitality / rps);
+      const totalByTickerCap = Math.floor(tickerCap / l1Price);
+      const total = Math.min(totalByVitality, totalByTickerCap);
+      const recommendedL1 = Math.min(Math.max(1, Math.round(total * 0.35)), totalByVitality);
+
+      const l1Risk = l1Shares * rps;
+      const l1RiskPct = (l1Risk / nav * 100);
+      const recRisk = recommendedL1 * rps;
+      const recRiskPct = (recRisk / nav * 100);
+
+      rows.push({
+        ticker:     p.ticker,
+        direction:  p.direction || 'LONG',
+        isETF,
+        l1Shares,
+        l1Price:    +l1Price.toFixed(2),
+        origStop:   +origStop.toFixed(2),
+        rps:        +rps.toFixed(2),
+        l1Risk$:    +l1Risk.toFixed(0),
+        l1RiskPct:  +l1RiskPct.toFixed(2),
+        recommendedL1,
+        recRisk$:   +recRisk.toFixed(0),
+        recRiskPct: +recRiskPct.toFixed(2),
+        overBy:     l1Shares - recommendedL1,
+        status:     l1Shares > recommendedL1 ? 'OVER' : l1Shares === recommendedL1 ? 'OK' : 'UNDER',
+      });
+    }
+
+    rows.sort((a, b) => b.l1RiskPct - a.l1RiskPct);
+    const over = rows.filter(r => r.status === 'OVER');
+    res.json({ nav, positions: rows.length, over: over.length, rows });
+  } catch (err) {
+    console.error('[l1-risk-audit]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/assistant/stop-sync — compare PNTHR stop vs position.stopPrice
 app.get('/api/assistant/stop-sync', async (req, res) => {
   try {

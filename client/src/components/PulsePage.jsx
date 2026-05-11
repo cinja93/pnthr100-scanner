@@ -87,6 +87,7 @@ export default function PulsePage({ onNavigate }) {
   const [ai300ChartList,  setAi300ChartList]  = useState([]);
   const [ai300ChartIndex, setAi300ChartIndex] = useState(0);
   const [ai300SignalModal, setAi300SignalModal] = useState(null);
+  const [ai300SectorModal, setAi300SectorModal] = useState(null); // sector name string
   const autoRefreshTimer = React.useRef(null);
   const showDev = shouldShowDevelopingSignals();
 
@@ -271,7 +272,7 @@ export default function PulsePage({ onNavigate }) {
           <Ai300RegimeStrip regime={ai300Data.regime} signals={ai300Data.signals} positions={isInvestor ? null : ai300Data.positions} pai300={ai300Data.pai300} />
           <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
             <KillTop10 killTop10={ai300Data.killTop10} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} killDataLive={ai300Data.killDataLive} analyzeContext={analyzeContext} universeLabel="AI 300" />
-            <Ai300SectorPulse signals={ai300Data.signals} sectorTiers={ai300Data.sectorTiers} killDataLive={ai300Data.killDataLive} newSignals={ai300Data.newSignals} onNavigate={onNavigate} />
+            <Ai300SectorPulse signals={ai300Data.signals} sectorTiers={ai300Data.sectorTiers} killDataLive={ai300Data.killDataLive} newSignals={ai300Data.newSignals} onNavigate={onNavigate} allSignalStocks={ai300Data.allSignalStocks} onSectorStockClick={(sectorName) => setAi300SectorModal(sectorName)} />
           </div>
           <NewSignalsPanel newSignals={ai300Data.newSignals} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} analyzeContext={analyzeContext} universeLabel="AI 300" />
           {showDev && <DevelopingSignalsPanel devSignals={ai300DevSignals} loading={ai300DevLoading} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} analyzeContext={analyzeContext} />}
@@ -303,6 +304,15 @@ export default function PulsePage({ onNavigate }) {
       )}
       {signalModal && (
         <SignalStockModal signal={signalModal} onClose={() => setSignalModal(null)} onTickerClick={(stocks, idx) => { setSignalModal(null); setChartList(stocks); setChartIndex(idx); }} />
+      )}
+      {ai300SectorModal && ai300Data && (
+        <Ai300SectorStocksModal
+          sectorName={ai300SectorModal}
+          allSignalStocks={ai300Data.allSignalStocks || []}
+          sectorTier={ai300Data.sectorTiers?.[ai300SectorModal] || null}
+          onClose={() => setAi300SectorModal(null)}
+          onTickerClick={(tickers, idx) => { setAi300SectorModal(null); setAi300ChartList(tickers); setAi300ChartIndex(idx); }}
+        />
       )}
       {ai300SignalModal && (
         <Ai300SignalStockModal signal={ai300SignalModal} onClose={() => setAi300SignalModal(null)} onTickerClick={(stocks, idx) => { setAi300SignalModal(null); setAi300ChartList(stocks); setAi300ChartIndex(idx); }} />
@@ -1968,7 +1978,7 @@ function Ai300RegimeStrip({ regime, signals, positions, pai300 }) {
 
 const AI_SECTOR_TIER_COLORS = { GO: '#28a745', NEUTRAL: '#FFD700', NO_GO: '#dc3545' };
 
-function Ai300SectorPulse({ signals, sectorTiers, killDataLive, newSignals, onNavigate }) {
+function Ai300SectorPulse({ signals, sectorTiers, killDataLive, newSignals, onNavigate, allSignalStocks, onSectorStockClick }) {
   const bySector = signals?.bySector || {};
   const totalStocksBySector = signals?.totalStocksBySector || {};
 
@@ -2020,7 +2030,7 @@ function Ai300SectorPulse({ signals, sectorTiers, killDataLive, newSignals, onNa
           const tierColor = tier ? AI_SECTOR_TIER_COLORS[tier.tier] || '#555' : '#555';
           return (
             <div key={sName} style={{ position: 'relative' }}>
-              <PNTHRMiniGauge label={sName} bl={d.bl} ss={d.ss} newBl={nd.bl} newSs={nd.ss} totalStocks={ts} onClick={() => onNavigate?.('jungle')} />
+              <PNTHRMiniGauge label={sName} bl={d.bl} ss={d.ss} newBl={nd.bl} newSs={nd.ss} totalStocks={ts} onClick={() => onSectorStockClick?.(sName)} />
               {tier && (
                 <span style={{
                   position: 'absolute', top: 4, right: 6, fontSize: 8, fontWeight: 700,
@@ -2169,6 +2179,72 @@ function Ai300SignalStockModal({ signal, onClose, onTickerClick }) {
               })}
             </tbody>
           </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Ai300SectorStocksModal({ sectorName, allSignalStocks, sectorTier, onClose, onTickerClick }) {
+  const sectorStocks = (allSignalStocks || []).filter(s => s.sector === sectorName);
+  const blStocks = sectorStocks.filter(s => s.signal === 'BL').sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+  const ssStocks = sectorStocks.filter(s => s.signal === 'SS').sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+  const allTickers = sectorStocks.map(s => ({ ticker: s.ticker }));
+
+  const tierColor = sectorTier ? (AI_SECTOR_TIER_COLORS[sectorTier.tier] || '#888') : '#888';
+
+  const StockRow = ({ s, idx }) => {
+    const t = tierBadge(s.tier);
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer', transition: 'background 0.15s' }}
+        onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        onClick={() => onTickerClick(allTickers, idx)}>
+        <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 55, fontFamily: 'monospace' }}>{s.ticker}</span>
+        <span style={{ background: s.signal === 'SS' ? 'rgba(220,53,69,0.2)' : 'rgba(40,167,69,0.2)', color: s.signal === 'SS' ? '#ff6b6b' : '#6bcb77', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>{s.signal}</span>
+        <span style={{ color: '#ccc', fontSize: 12, minWidth: 65, textAlign: 'right', fontFamily: 'monospace' }}>{s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}</span>
+        <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, minWidth: 40, textAlign: 'right', fontFamily: 'monospace' }}>{s.totalScore != null ? s.totalScore.toFixed(1) : '—'}</span>
+        <span style={{ minWidth: 80 }}>{t}</span>
+        <span style={{ color: '#FFD700', fontSize: 11, marginLeft: 'auto' }}>▸</span>
+      </div>
+    );
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#111', border: '1px solid rgba(255,215,0,0.25)', borderRadius: 12, padding: '20px 24px', maxWidth: 560, width: '90vw', maxHeight: '80vh', overflow: 'auto', fontFamily: 'monospace' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div>
+            <div style={{ color: '#FFD700', fontSize: 16, fontWeight: 700, letterSpacing: 1 }}>{sectorName}</div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 4, fontSize: 11 }}>
+              <span style={{ color: '#6bcb77' }}>{blStocks.length} BL</span>
+              <span style={{ color: '#ff6b6b' }}>{ssStocks.length} SS</span>
+              <span style={{ color: '#888' }}>{sectorStocks.length} active signals</span>
+              {sectorTier && (
+                <span style={{ color: tierColor, fontWeight: 700 }}>#{sectorTier.rank} {sectorTier.tier} ({(sectorTier.fiveDayReturn * 100).toFixed(2)}%)</span>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+
+        {sectorStocks.length === 0 ? (
+          <div style={{ color: '#555', fontSize: 12, textAlign: 'center', padding: '20px 0' }}>No active signals in this sector.</div>
+        ) : (
+          <>
+            {blStocks.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ color: '#28a745', fontSize: 10, letterSpacing: 1.5, fontWeight: 700, padding: '4px 10px', borderBottom: '1px solid #28a74544' }}>BUY LONG ({blStocks.length})</div>
+                {blStocks.map((s, i) => <StockRow key={s.ticker} s={s} idx={sectorStocks.indexOf(s)} />)}
+              </div>
+            )}
+            {ssStocks.length > 0 && (
+              <div>
+                <div style={{ color: '#dc3545', fontSize: 10, letterSpacing: 1.5, fontWeight: 700, padding: '4px 10px', borderBottom: '1px solid #dc354544' }}>SELL SHORT ({ssStocks.length})</div>
+                {ssStocks.map((s, i) => <StockRow key={s.ticker} s={s} idx={sectorStocks.indexOf(s)} />)}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -1262,9 +1262,8 @@ function NewSignalsPanel({ newSignals, onTickerClick, analyzeContext, universeLa
   const blEtfChartList   = blEtfs.map(toChartItem);
   const ssEtfChartList   = ssEtfs.map(toChartItem);
 
-  // ── Stock row (Kill-scored, has tier badge + RSI) ──
+  // ── Stock row (Kill-scored + RSI, no tier badge) ──
   function StockRow({ s, idx, chartList }) {
-    const t = tierBadge(s.tier);
     const ar = analyzeContext ? computeAnalyzeScore(s, analyzeContext) : null;
     const hasRsi = s.rsiCurrent != null;
     const rsiColor = hasRsi ? (s.rsiCurrent >= 70 ? '#ff6b6b' : s.rsiCurrent <= 30 ? '#6bcb77' : '#ccc') : '#444';
@@ -1276,9 +1275,8 @@ function NewSignalsPanel({ newSignals, onTickerClick, analyzeContext, universeLa
       >
         <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 50, fontFamily: 'monospace' }}>{s.ticker}</span>
         <span style={{ color: '#555', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector || '—'}</span>
-        <span style={{ color: '#ccc', fontSize: 12, minWidth: 60, textAlign: 'right', fontFamily: 'monospace' }}>{s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}</span>
-        <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, minWidth: 40, textAlign: 'right', fontFamily: 'monospace' }}>{s.totalScore != null ? s.totalScore.toFixed(1) : '—'}</span>
-        <span style={{ minWidth: 84 }}>{t}</span>
+        <span style={{ color: '#ccc', fontSize: 12, minWidth: 70, textAlign: 'right', fontFamily: 'monospace' }}>{s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}</span>
+        <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, minWidth: 44, textAlign: 'right', fontFamily: 'monospace' }}>{s.totalScore != null ? s.totalScore.toFixed(1) : '—'}</span>
         {hasRsi ? (
           <span style={{ fontSize: 10, fontFamily: 'monospace', minWidth: 100, textAlign: 'right', letterSpacing: 0.3 }} title={`RSI(14) — Low: ${s.rsiLow}  Current: ${s.rsiCurrent}  High: ${s.rsiHigh}`}>
             <span style={{ color: '#6bcb77' }}>{s.rsiLow}</span>
@@ -1296,6 +1294,21 @@ function NewSignalsPanel({ newSignals, onTickerClick, analyzeContext, universeLa
     );
   }
 
+  // ── Sticky column header row ──
+  function ColumnHeaders() {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 10px', borderBottom: '1px solid #333', position: 'sticky', top: 0, background: '#151515', zIndex: 2 }}>
+        <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 50, fontFamily: 'monospace' }}>TICKER</span>
+        <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, flex: 1, fontFamily: 'monospace' }}>SECTOR</span>
+        <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 70, textAlign: 'right', fontFamily: 'monospace' }}>PRICE</span>
+        <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 44, textAlign: 'right', fontFamily: 'monospace' }}>SCORE</span>
+        <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 100, textAlign: 'right', fontFamily: 'monospace' }}>RSI L · C · H</span>
+        <span style={{ minWidth: 32 }} />
+        <span style={{ minWidth: 11 }} />
+      </div>
+    );
+  }
+
   // ── Stock column (BL or SS) — stocks only, no ETFs ──
   function StockColumn({ direction, stocks, chartList }) {
     const borderColor = direction === 'BL' ? '#28a745' : '#dc3545';
@@ -1303,15 +1316,19 @@ function NewSignalsPanel({ newSignals, onTickerClick, analyzeContext, universeLa
     const badgeColor  = direction === 'BL' ? '#6bcb77' : '#ff6b6b';
     const label       = direction === 'BL' ? 'NEW BUY LONG (BL+1)' : 'NEW SELL SHORT (SS+1)';
     return (
-      <div style={{ flex: 1, minWidth: 0, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`, borderRadius: 8, overflow: 'hidden' }}>
-        <div style={{ background: headerBg, padding: '6px 10px' }}>
+      <div style={{ flex: 1, minWidth: 0, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`, borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ background: headerBg, padding: '6px 10px', flexShrink: 0 }}>
           <span style={{ color: badgeColor, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>{label}</span>
           <span style={{ color: '#444', fontSize: 10, marginLeft: 8 }}>STOCKS ({stocks.length})</span>
         </div>
-        {stocks.length > 0
-          ? stocks.map((s, i) => <StockRow key={s.ticker} s={s} idx={i} chartList={chartList} />)
-          : <div style={{ padding: '10px 14px', color: '#333', fontSize: 12 }}>No new {direction} signals this week.</div>
-        }
+        {stocks.length > 0 ? (
+          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+            <ColumnHeaders />
+            {stocks.map((s, i) => <StockRow key={s.ticker} s={s} idx={i} chartList={chartList} />)}
+          </div>
+        ) : (
+          <div style={{ padding: '10px 14px', color: '#333', fontSize: 12 }}>No new {direction} signals this week.</div>
+        )}
       </div>
     );
   }

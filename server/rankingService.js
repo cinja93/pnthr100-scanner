@@ -1,4 +1,5 @@
 import { getMostRecentRanking, getRankingBeforeDate, saveRanking, getRankingByDate, cleanupOldRankings } from './database.js';
+import { getMostRecentAiRanking, getAiRankingBeforeDate, saveAiRanking, getAiRankingByDate, cleanupOldAiRankings } from './database.js';
 
 // US Eastern timezone for market close
 const MARKET_TZ = 'America/New_York';
@@ -202,5 +203,76 @@ export async function autoSaveRankingIfFriday(longStocks, shortStocks = null) {
     await cleanupOldRankings(12);
   } catch (error) {
     console.error('Error in auto-save:', error);
+  }
+}
+
+// ── AI 300 ranking comparison (mirrors 679 pattern, separate collection) ─────
+
+export async function addAiRankingComparison(currentStocks) {
+  try {
+    const mostRecent = await getMostRecentAiRanking();
+    if (!mostRecent) {
+      return currentStocks.map((stock, index) => ({ ...stock, rank: index + 1, rankChange: null, previousRank: null }));
+    }
+    const previousRanking = await getAiRankingBeforeDate(mostRecent.date);
+    if (!previousRanking) {
+      return currentStocks.map((stock, index) => ({ ...stock, rank: index + 1, rankChange: null, previousRank: null }));
+    }
+    const previousRankMap = new Map();
+    previousRanking.rankings.forEach((stock, index) => {
+      const key = (stock.ticker || '').toUpperCase();
+      if (key) previousRankMap.set(key, stock.rank ?? index + 1);
+    });
+    return currentStocks.map((stock, index) => {
+      const currentRank = index + 1;
+      const previousRank = previousRankMap.get((stock.ticker || '').toUpperCase());
+      return { ...stock, rank: currentRank, rankChange: previousRank !== undefined ? previousRank - currentRank : null, previousRank: previousRank ?? null };
+    });
+  } catch (error) {
+    console.error('Error in AI ranking comparison:', error);
+    return currentStocks.map((stock, index) => ({ ...stock, rank: index + 1, rankChange: null, previousRank: null }));
+  }
+}
+
+export async function addAiShortRankingComparison(bottomStocks) {
+  try {
+    const mostRecent = await getMostRecentAiRanking();
+    if (!mostRecent?.shortRankings) {
+      return bottomStocks.map((stock, index) => ({ ...stock, rank: index + 1, rankChange: null, previousRank: null }));
+    }
+    const previousRanking = await getAiRankingBeforeDate(mostRecent.date);
+    if (!previousRanking?.shortRankings) {
+      return bottomStocks.map((stock, index) => ({ ...stock, rank: index + 1, rankChange: null, previousRank: null }));
+    }
+    const previousRankMap = new Map();
+    previousRanking.shortRankings.forEach((stock) => {
+      const key = (stock.ticker || '').toUpperCase();
+      if (key) previousRankMap.set(key, stock.rank ?? null);
+    });
+    return bottomStocks.map((stock, index) => {
+      const currentRank = index + 1;
+      const previousRank = previousRankMap.get((stock.ticker || '').toUpperCase());
+      return { ...stock, rank: currentRank, rankChange: previousRank != null ? previousRank - currentRank : null, previousRank: previousRank ?? null };
+    });
+  } catch (error) {
+    console.error('Error in AI short ranking comparison:', error);
+    return bottomStocks.map((stock, index) => ({ ...stock, rank: index + 1, rankChange: null, previousRank: null }));
+  }
+}
+
+export async function autoSaveAiRankingIfFriday(longStocks, shortStocks = null) {
+  try {
+    if (!isFriday()) return;
+    const rankingDate = getRankingDate();
+    const existing = await getAiRankingByDate(rankingDate);
+    if (existing) {
+      console.log(`✅ AI ranking already saved for ${rankingDate}`);
+      return;
+    }
+    console.log(`💾 Auto-saving AI ranking for Friday ${rankingDate}...`);
+    await saveAiRanking(rankingDate, longStocks, shortStocks);
+    await cleanupOldAiRankings(12);
+  } catch (error) {
+    console.error('Error in AI auto-save:', error);
   }
 }

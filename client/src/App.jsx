@@ -1409,7 +1409,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                     {aiLoading ? '🔄 Loading...' : '🔄 Refresh AI Data'}
                   </button>
                   <span style={{ color: '#555', fontSize: 11, fontFamily: 'monospace' }}>
-                    {aiStocks.length} AI {scanType === 'long' ? 'BL' : 'SS'} stocks ranked by Kill score
+                    {aiStocks.length} AI {scanType === 'long' ? 'long' : 'short'} stocks ranked by YTD return
                   </span>
                 </div>
 
@@ -1429,12 +1429,12 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                 )}
 
                 {!aiLoading && !aiError && aiStocks.length > 0 && (
-                  <StockTable key={`ai-${activePage}`} stocks={aiStocks} signals={aiSignals} laserSignals={{}} signalsLoading={false} earnings={{}} onTickerClick={handleRowClick} scanType={scanType} rankLabel="Kill Rank" showKillScore hideExchange />
+                  <StockTable key={`ai-${activePage}`} stocks={aiStocks} signals={aiSignals} laserSignals={{}} signalsLoading={false} earnings={{}} onTickerClick={handleRowClick} scanType={scanType} hideExchange />
                 )}
 
                 {!aiLoading && !aiError && aiStocks.length === 0 && (
                   <div style={{ color: '#555', fontSize: 13, fontFamily: 'monospace', padding: 20, textAlign: 'center' }}>
-                    No AI Kill scores available. Run the AI Kill pipeline first.
+                    No AI stock data available yet.
                   </div>
                 )}
               </>}

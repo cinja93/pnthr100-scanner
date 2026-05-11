@@ -557,6 +557,89 @@ export async function cleanupOldRankings(weeksToKeep = 12) {
   }
 }
 
+// ── AI 300 ranking storage (separate collection from 679) ────────────────────
+
+export async function saveAiRanking(date, rankings, shortRankings = null) {
+  try {
+    const database = await connectToDatabase();
+    if (!database) return null;
+    const collection = database.collection('ai_rankings');
+    const normalized = sortRankingsByYtdAndAssignRank(rankings);
+    const document = { date, timestamp: new Date(), rankings: normalized };
+    if (shortRankings?.length) {
+      document.shortRankings = sortShortRankingsByYtdAndAssignRank(shortRankings);
+    }
+    const result = await collection.insertOne(document);
+    console.log(`✅ Saved AI ranking for ${date} (${normalized.length} long${document.shortRankings ? `, ${document.shortRankings.length} short` : ''})`);
+    return result;
+  } catch (error) {
+    console.error('Error saving AI ranking:', error.message);
+    return null;
+  }
+}
+
+export async function getMostRecentAiRanking() {
+  try {
+    const database = await connectToDatabase();
+    if (!database) return null;
+    const collection = database.collection('ai_rankings');
+    const docs = await collection.find().sort({ date: -1 }).limit(1).toArray();
+    if (!docs.length) return null;
+    const doc = docs[0];
+    doc.rankings = sortRankingsByYtdAndAssignRank(doc.rankings);
+    if (doc.shortRankings) doc.shortRankings = sortShortRankingsByYtdAndAssignRank(doc.shortRankings);
+    return doc;
+  } catch (error) {
+    console.error('Error getting most recent AI ranking:', error.message);
+    return null;
+  }
+}
+
+export async function getAiRankingBeforeDate(date) {
+  try {
+    const database = await connectToDatabase();
+    if (!database) return null;
+    const collection = database.collection('ai_rankings');
+    const docs = await collection.find({ date: { $lt: date } }).sort({ date: -1 }).limit(1).toArray();
+    if (!docs.length) return null;
+    const doc = docs[0];
+    doc.rankings = sortRankingsByYtdAndAssignRank(doc.rankings);
+    if (doc.shortRankings) doc.shortRankings = sortShortRankingsByYtdAndAssignRank(doc.shortRankings);
+    return doc;
+  } catch (error) {
+    console.error('Error getting AI ranking before date:', error.message);
+    return null;
+  }
+}
+
+export async function getAiRankingByDate(date) {
+  try {
+    const database = await connectToDatabase();
+    if (!database) return null;
+    const collection = database.collection('ai_rankings');
+    return await collection.findOne({ date });
+  } catch (error) {
+    console.error('Error getting AI ranking by date:', error.message);
+    return null;
+  }
+}
+
+export async function cleanupOldAiRankings(weeksToKeep = 12) {
+  try {
+    const database = await connectToDatabase();
+    if (!database) return { deletedCount: 0 };
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - (weeksToKeep * 7));
+    const collection = database.collection('ai_rankings');
+    const result = await collection.deleteMany({ date: { $lt: cutoffDate.toISOString().split('T')[0] } });
+    if (result.deletedCount > 0) console.log(`🗑️  Cleaned up ${result.deletedCount} old AI rankings`);
+    return result;
+  } catch (error) {
+    console.error('Error cleaning up old AI rankings:', error.message);
+    return { deletedCount: 0 };
+  }
+}
+
 // ── Mobile app integration (READ-ONLY from stt-production-db) ──
 // This never writes, updates, or deletes anything in the mobile app's database.
 

@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
 import { getAllTickers, getDow30Tickers, getSp500Tickers, getNasdaq100Tickers } from './constituents.js';
 import { addRankingComparison, addShortRankingComparison, autoSaveRankingIfFriday } from './rankingService.js';
+import { addAiRankingComparison, addAiShortRankingComparison, autoSaveAiRankingIfFriday } from './rankingService.js';
+import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
 
@@ -355,4 +357,78 @@ export async function getJungleStocks(specLongs = [], specShorts = []) {
 
   console.log(`🌿 Jungle final: ${trimmed.length} stocks (sp517: ${Math.min(sp517Stocks.length, allowedSp517)}, spec: ${specStocks.length}, target: ${TARGET})`);
   return trimmed.map((s, i) => ({ ...s, rank: i + 1 }));
+}
+
+// ── AI 300: top 100 longs + bottom 100 shorts by YTD return ─────────────────
+let aiStocksCache = null;
+let aiStocksCacheTime = 0;
+const AI_CACHE_TTL = 60 * 60 * 1000; // 60 min
+
+export async function getAiTopStocks() {
+  if (aiStocksCache && Date.now() - aiStocksCacheTime < AI_CACHE_TTL) {
+    return aiStocksCache;
+  }
+  try {
+    const tickers = AI_SECTORS.flatMap(s => s.holdings.map(h => h.ticker));
+    const nameMap = {};
+    const sectorMap = {};
+    for (const sec of AI_SECTORS) {
+      for (const h of sec.holdings) {
+        nameMap[h.ticker] = h.name;
+        sectorMap[h.ticker] = sec.name;
+      }
+    }
+    console.log(`🤖 AI 100: fetching data for ${tickers.length} AI universe tickers...`);
+
+    const quoteMap = {};
+    const bulkChunk = 200;
+    for (let i = 0; i < tickers.length; i += bulkChunk) {
+      const chunk = tickers.slice(i, i + bulkChunk);
+      try {
+        const quotes = await fetchFMP(`/quote/${chunk.join(',')}`);
+        if (Array.isArray(quotes)) for (const q of quotes) quoteMap[q.symbol] = q;
+      } catch (err) {
+        console.error(`AI bulk quote error (chunk ${i / bulkChunk + 1}):`, err.message);
+      }
+      if (i + bulkChunk < tickers.length) await new Promise(r => setTimeout(r, 500));
+    }
+
+    const yearStartPrices = await getYearStartPrices(tickers);
+
+    const stockData = [];
+    for (const ticker of tickers) {
+      const q = quoteMap[ticker];
+      const ysp = yearStartPrices[ticker];
+      if (!q?.price || !ysp) continue;
+      const ytdReturn = ((q.price - ysp) / ysp) * 100;
+      stockData.push({
+        ticker,
+        companyName: nameMap[ticker] || q.name || '',
+        exchange: 'AI',
+        sector: sectorMap[ticker] || 'N/A',
+        currentPrice: parseFloat(q.price.toFixed(2)),
+        ytdReturn: parseFloat(ytdReturn.toFixed(2)),
+      });
+    }
+
+    const sorted = [...stockData].sort((a, b) => b.ytdReturn - a.ytdReturn);
+    const top100 = sorted.slice(0, 100).map(s => ({ ...s, rankList: 'LONG' }));
+    const bottom100 = [...sorted.slice(-100)].sort((a, b) => a.ytdReturn - b.ytdReturn).map(s => ({ ...s, rankList: 'SHORT' }));
+
+    console.log(`✅ AI 100: ${stockData.length} stocks | Long #1: ${top100[0]?.ticker} +${top100[0]?.ytdReturn}% | Short #1: ${bottom100[0]?.ticker} ${bottom100[0]?.ytdReturn}%`);
+
+    const [longWithRankings, shortWithRankings] = await Promise.all([
+      addAiRankingComparison(top100),
+      addAiShortRankingComparison(bottom100),
+    ]);
+
+    await autoSaveAiRankingIfFriday(longWithRankings, shortWithRankings);
+
+    aiStocksCache = { long: longWithRankings, short: shortWithRankings };
+    aiStocksCacheTime = Date.now();
+    return aiStocksCache;
+  } catch (error) {
+    console.error('Error in getAiTopStocks:', error);
+    throw error;
+  }
 }

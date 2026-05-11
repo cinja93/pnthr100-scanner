@@ -49,7 +49,8 @@ import LoginPage from './components/LoginPage';
 import DataRoomPage from './components/DataRoomPage';
 import CompliancePage from './components/CompliancePage';
 import InvestorManagementPage from './components/InvestorManagementPage';
-import { fetchTopStocks, fetchShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchInvestorProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
+import AiTickerChartModal from './components/AiTickerChartModal';
+import { fetchTopStocks, fetchShortStocks, fetchAiTopStocks, fetchAiShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchInvestorProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
 import { computeWeeksAgo } from './utils/dateUtils';
 import './App.css';
@@ -888,13 +889,60 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [filters, setFilters] = useState(defaultFilters);
   const [longBatchStats, setLongBatchStats] = useState(null);
   const [shortBatchStats, setShortBatchStats] = useState(null);
+  // AI 100 universe toggle (persisted in sessionStorage)
+  const [scannerUniverse, setScannerUniverse] = useState(() => sessionStorage.getItem('scannerUniverse') || '679');
+  const [aiStocks, setAiStocks] = useState([]);
+  const [aiSignals, setAiSignals] = useState({});
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const [aiChartTickers, setAiChartTickers] = useState([]);
+  const [aiChartIndex, setAiChartIndex] = useState(null);
 
   const isScanner = activePage === 'long' || activePage === 'short';
+  const isAiScanner = isScanner && scannerUniverse === 'ai300';
 
   // Reset filters when tab or date changes
   useEffect(() => {
     setFilters(defaultFilters);
   }, [activePage, selectedDate]);
+
+  function switchScannerUniverse(u) {
+    setScannerUniverse(u);
+    sessionStorage.setItem('scannerUniverse', u);
+    if (u === 'ai300') loadAiStocks();
+  }
+
+  async function loadAiStocks() {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const fetchFn = scanType === 'short' ? fetchAiShortStocks : fetchAiTopStocks;
+      const data = await fetchFn();
+      setAiStocks(data);
+      const sigMap = {};
+      for (const s of data) {
+        if (s._signal) {
+          sigMap[s.ticker] = {
+            signal: s._signal,
+            stopPrice: s._stopPrice ?? null,
+            signalDate: s._signalDate ?? null,
+            isNewSignal: s._isNewSignal ?? false,
+          };
+        }
+      }
+      setAiSignals(sigMap);
+    } catch (err) {
+      console.error('AI stocks fetch failed:', err);
+      setAiError('Failed to load AI stock data.');
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  // Load AI stocks when switching to AI mode or changing long/short
+  useEffect(() => {
+    if (isScanner && scannerUniverse === 'ai300') loadAiStocks();
+  }, [activePage, scannerUniverse]);
 
   // Apply filters (risk values derived here since they need signals data)
   const filteredStocks = useMemo(() => {
@@ -1041,8 +1089,13 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   }
 
   function handleRowClick(_stock, sortedIdx, sortedStocks) {
-    setChartStocks(sortedStocks);
-    setChartIndex(sortedIdx);
+    if (isAiScanner) {
+      setAiChartTickers(sortedStocks.map(s => s.ticker));
+      setAiChartIndex(sortedIdx);
+    } else {
+      setChartStocks(sortedStocks);
+      setChartIndex(sortedIdx);
+    }
   }
 
   return (
@@ -1268,59 +1321,123 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* Scanner pages (Long / Short) */}
           {isScanner && (
             <>
-              <div className="date-picker-container">
-                <label htmlFor="date-select" className="date-label">View:</label>
-                <select
-                  id="date-select"
-                  className="date-picker"
-                  value={selectedDate ?? ''}
-                  onChange={(e) => loadStocksByDate(e.target.value)}
-                  disabled={loading}
-                >
-                  {selectedDate == null && <option value="">Loading...</option>}
-                  <option value="current">Current Week (Live)</option>
-                  {availableDates.map((ranking) => (
-                    <option key={ranking.date} value={ranking.date}>
-                      {formatDate(ranking.date)} - {ranking.dayOfWeek}
-                    </option>
-                  ))}
-                </select>
-                {selectedDate === 'current' && (
-                  <button className="refresh-button" onClick={() => loadCurrentStocks(true)} disabled={loading}>
-                    {loading ? '🔄 Loading...' : '🔄 Refresh Data'}
-                  </button>
-                )}
+              {/* Universe toggle: PNTHR 679 vs AI 300 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                {[
+                  { key: '679', label: 'PNTHR 679' },
+                  { key: 'ai300', label: 'PNTHR AI 300' },
+                ].map(u => {
+                  const active = scannerUniverse === u.key;
+                  return (
+                    <button key={u.key} onClick={() => switchScannerUniverse(u.key)} style={{
+                      padding: '6px 16px', borderRadius: 6,
+                      border: active ? '1px solid #FFD700' : '1px solid #333',
+                      background: active ? 'rgba(255,215,0,0.12)' : '#111',
+                      color: active ? '#FFD700' : '#666',
+                      fontWeight: active ? 800 : 600, fontSize: 12,
+                      fontFamily: 'monospace', letterSpacing: 1.5,
+                      cursor: 'pointer', transition: 'all 0.15s',
+                    }}>{u.label}</button>
+                  );
+                })}
+                <span style={{ color: '#333', fontSize: 11, marginLeft: 6, fontFamily: 'monospace' }}>
+                  {scanType === 'long' ? '100 LONGS' : '100 SHORTS'}
+                </span>
               </div>
 
-              {loading && (
-                <div className="loading">
-                  <div className="spinner"></div>
-                  <p>{selectedDate === 'current' ? 'Fetching live data...' : 'Loading...'}</p>
-                  {selectedDate === 'current' && <p className="loading-note">This may take a few moments</p>}
-                </div>
-              )}
-
-              {error && (
-                <div className="error">
-                  <span className="error-icon">⚠️</span>
-                  <p>{error}</p>
-                  <button className="retry-button" onClick={() => loadCurrentStocks(true)}>
-                    Try Again
-                  </button>
-                </div>
-              )}
-
-              {!loading && !error && stocks.length > 0 && (
-                <>
-                  {selectedDate !== 'current' && (
-                    <div className="viewing-indicator">
-                      📅 Viewing historical data from {formatDate(selectedDate)}
-                    </div>
+              {/* ── 679 Universe ── */}
+              {scannerUniverse === '679' && <>
+                <div className="date-picker-container">
+                  <label htmlFor="date-select" className="date-label">View:</label>
+                  <select
+                    id="date-select"
+                    className="date-picker"
+                    value={selectedDate ?? ''}
+                    onChange={(e) => loadStocksByDate(e.target.value)}
+                    disabled={loading}
+                  >
+                    {selectedDate == null && <option value="">Loading...</option>}
+                    <option value="current">Current Week (Live)</option>
+                    {availableDates.map((ranking) => (
+                      <option key={ranking.date} value={ranking.date}>
+                        {formatDate(ranking.date)} - {ranking.dayOfWeek}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedDate === 'current' && (
+                    <button className="refresh-button" onClick={() => loadCurrentStocks(true)} disabled={loading}>
+                      {loading ? '🔄 Loading...' : '🔄 Refresh Data'}
+                    </button>
                   )}
-                  <FilterBar stocks={stocks} signals={signals} filters={filters} onChange={setFilters} scanType={scanType} />
-                  <StockTable key={activePage} stocks={filteredStocks} signals={signals} laserSignals={laserSignals} signalsLoading={signalsLoading} earnings={earnings} onTickerClick={handleRowClick} scanType={scanType} />
-                </>
+                </div>
+
+                {loading && (
+                  <div className="loading">
+                    <div className="spinner"></div>
+                    <p>{selectedDate === 'current' ? 'Fetching live data...' : 'Loading...'}</p>
+                    {selectedDate === 'current' && <p className="loading-note">This may take a few moments</p>}
+                  </div>
+                )}
+
+                {error && (
+                  <div className="error">
+                    <span className="error-icon">⚠️</span>
+                    <p>{error}</p>
+                    <button className="retry-button" onClick={() => loadCurrentStocks(true)}>
+                      Try Again
+                    </button>
+                  </div>
+                )}
+
+                {!loading && !error && stocks.length > 0 && (
+                  <>
+                    {selectedDate !== 'current' && (
+                      <div className="viewing-indicator">
+                        📅 Viewing historical data from {formatDate(selectedDate)}
+                      </div>
+                    )}
+                    <FilterBar stocks={stocks} signals={signals} filters={filters} onChange={setFilters} scanType={scanType} />
+                    <StockTable key={activePage} stocks={filteredStocks} signals={signals} laserSignals={laserSignals} signalsLoading={signalsLoading} earnings={earnings} onTickerClick={handleRowClick} scanType={scanType} />
+                  </>
               )}
+              </>}
+
+              {/* ── AI 300 Universe ── */}
+              {scannerUniverse === 'ai300' && <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <button className="refresh-button" onClick={loadAiStocks} disabled={aiLoading} style={{ fontSize: 12 }}>
+                    {aiLoading ? '🔄 Loading...' : '🔄 Refresh AI Data'}
+                  </button>
+                  <span style={{ color: '#555', fontSize: 11, fontFamily: 'monospace' }}>
+                    {aiStocks.length} AI {scanType === 'long' ? 'BL' : 'SS'} stocks ranked by Kill score
+                  </span>
+                </div>
+
+                {aiLoading && (
+                  <div className="loading">
+                    <div className="spinner"></div>
+                    <p>Loading AI {scanType === 'long' ? 'long' : 'short'} stocks...</p>
+                  </div>
+                )}
+
+                {aiError && (
+                  <div className="error">
+                    <span className="error-icon">⚠️</span>
+                    <p>{aiError}</p>
+                    <button className="retry-button" onClick={loadAiStocks}>Try Again</button>
+                  </div>
+                )}
+
+                {!aiLoading && !aiError && aiStocks.length > 0 && (
+                  <StockTable key={`ai-${activePage}`} stocks={aiStocks} signals={aiSignals} laserSignals={{}} signalsLoading={false} earnings={{}} onTickerClick={handleRowClick} scanType={scanType} rankLabel="Kill Rank" showKillScore hideExchange />
+                )}
+
+                {!aiLoading && !aiError && aiStocks.length === 0 && (
+                  <div style={{ color: '#555', fontSize: 13, fontFamily: 'monospace', padding: 20, textAlign: 'center' }}>
+                    No AI Kill scores available. Run the AI Kill pipeline first.
+                  </div>
+                )}
+              </>}
             </>
           )}
 
@@ -1421,7 +1538,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         </footer>
       </div>
 
-      {/* Chart Modal */}
+      {/* Chart Modal (679 scanner) */}
       {chartIndex != null && (
         <ChartModal
           stocks={chartStocks}
@@ -1429,6 +1546,15 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           signals={signals}
           earnings={earnings}
           onClose={() => setChartIndex(null)}
+        />
+      )}
+
+      {/* AI Chart Modal (AI 300 scanner) */}
+      {aiChartIndex != null && aiChartTickers.length > 0 && (
+        <AiTickerChartModal
+          tickers={aiChartTickers}
+          initialIndex={aiChartIndex}
+          onClose={() => { setAiChartIndex(null); setAiChartTickers([]); }}
         />
       )}
 

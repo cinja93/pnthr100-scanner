@@ -79,6 +79,20 @@ export async function fetchShortStocks(forceRefresh = false) {
   }
 }
 
+// AI 100 Longs: top AI universe BL stocks ranked by Kill score
+export async function fetchAiTopStocks() {
+  const response = await apiFetch(`${API_BASE}/api/ai-stocks`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
+// AI 100 Shorts: top AI universe SS stocks ranked by Kill score
+export async function fetchAiShortStocks() {
+  const response = await apiFetch(`${API_BASE}/api/ai-stocks/shorts`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // Fetch list of available historical rankings (last 12 weeks)
 export async function fetchAvailableDates() {
   try {

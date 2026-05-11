@@ -513,6 +513,74 @@ app.get('/api/stocks/shorts', async (req, res) => {
   }
 });
 
+// AI 100 Longs: top 100 AI universe BL stocks ranked by Kill score
+app.get('/api/ai-stocks', async (req, res) => {
+  try {
+    const doc = await getLatestAiKillScores();
+    if (!doc?.scores?.length) return res.json([]);
+    const longs = doc.scores
+      .filter(s => s.signal === 'BL')
+      .slice(0, 100)
+      .map((s, i) => ({
+        ticker: s.ticker,
+        companyName: s.companyName || '',
+        exchange: 'AI',
+        sector: s.sectorName || 'N/A',
+        currentPrice: s.currentPrice ?? 0,
+        ytdReturn: null,
+        performanceRank: i + 1,
+        rankChange: 0,
+        rankList: 'LONG',
+        killScore: s.total,
+        killTier: s.tierName,
+        killRank: s.killRank,
+        _signal: s.signal,
+        _stopPrice: s.stopPrice,
+        _riskPct: s.riskPct,
+        _signalDate: s.signalDate,
+        _isNewSignal: s.isNewSignal,
+      }));
+    res.json(longs);
+  } catch (err) {
+    console.error('Error fetching AI longs:', err);
+    res.status(500).json({ error: 'Failed to fetch AI long stocks' });
+  }
+});
+
+// AI 100 Shorts: top 100 AI universe SS stocks ranked by Kill score
+app.get('/api/ai-stocks/shorts', async (req, res) => {
+  try {
+    const doc = await getLatestAiKillScores();
+    if (!doc?.scores?.length) return res.json([]);
+    const shorts = doc.scores
+      .filter(s => s.signal === 'SS')
+      .slice(0, 100)
+      .map((s, i) => ({
+        ticker: s.ticker,
+        companyName: s.companyName || '',
+        exchange: 'AI',
+        sector: s.sectorName || 'N/A',
+        currentPrice: s.currentPrice ?? 0,
+        ytdReturn: null,
+        performanceRank: i + 1,
+        rankChange: 0,
+        rankList: 'SHORT',
+        killScore: s.total,
+        killTier: s.tierName,
+        killRank: s.killRank,
+        _signal: s.signal,
+        _stopPrice: s.stopPrice,
+        _riskPct: s.riskPct,
+        _signalDate: s.signalDate,
+        _isNewSignal: s.isNewSignal,
+      }));
+    res.json(shorts);
+  } catch (err) {
+    console.error('Error fetching AI shorts:', err);
+    res.status(500).json({ error: 'Failed to fetch AI short stocks' });
+  }
+});
+
 // EMA Crossover scan: stocks with a BUY signal + weekly close >= OpEMA, or
 // SELL signal + weekly close <= OpEMA, within the last 2 completed weeks.
 // Universe: top 100 long + top 100 short. Cached 60 min; pass ?refresh=1 to bust.

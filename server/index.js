@@ -7852,11 +7852,12 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         // RSI(14) from last 30 stored daily closes (lightweight — no live overlay needed)
         let rsi = null;
         try {
-          const recentBars = await db.collection('pnthr_ai_index_candles')
-            .find({}, { projection: { close: 1, _id: 0 } })
-            .sort({ date: -1 }).limit(30).toArray();
-          if (recentBars.length >= 16) {
-            const closes = recentBars.reverse().map(b => b.close);
+          const doc = await db.collection('pnthr_ai_index_candles')
+            .findOne({ ticker: 'PAI300' }, { projection: { daily: { $slice: 30 }, _id: 0 } });
+          const recentBars = doc?.daily;
+          if (recentBars && recentBars.length >= 16) {
+            const sorted = [...recentBars].sort((a, b) => a.date.localeCompare(b.date));
+            const closes = sorted.map(b => b.close);
             const n = closes.length;
             let avgGain = 0, avgLoss = 0;
             for (let i = 1; i <= 14; i++) {
@@ -8316,11 +8317,12 @@ app.get('/api/pulse/ai300', authenticateJWT, async (req, res) => {
     if (ai300Latest?.ok) {
       let rsi = null;
       try {
-        const recentBars = await db.collection('pnthr_ai_index_candles')
-          .find({}, { projection: { close: 1, _id: 0 } })
-          .sort({ date: -1 }).limit(30).toArray();
-        if (recentBars.length >= 16) {
-          const closes = recentBars.reverse().map(b => b.close);
+        const doc = await db.collection('pnthr_ai_index_candles')
+          .findOne({ ticker: 'PAI300' }, { projection: { daily: { $slice: 30 }, _id: 0 } });
+        const recentBars = doc?.daily;
+        if (recentBars && recentBars.length >= 16) {
+          const sorted = [...recentBars].sort((a, b) => a.date.localeCompare(b.date));
+          const closes = sorted.map(b => b.close);
           let avgGain = 0, avgLoss = 0;
           for (let i = 1; i <= 14; i++) {
             const d = closes[i] - closes[i - 1];

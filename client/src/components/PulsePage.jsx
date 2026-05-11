@@ -88,6 +88,7 @@ export default function PulsePage({ onNavigate }) {
   const [ai300ChartIndex, setAi300ChartIndex] = useState(0);
   const [ai300SignalModal, setAi300SignalModal] = useState(null);
   const [ai300SectorModal, setAi300SectorModal] = useState(null); // sector name string
+  const [ai300NewSigModal, setAi300NewSigModal] = useState(null); // { signal: 'BL'|'SS', sector: string|null }
   const autoRefreshTimer = React.useRef(null);
   const showDev = shouldShowDevelopingSignals();
 
@@ -272,7 +273,7 @@ export default function PulsePage({ onNavigate }) {
           <Ai300RegimeStrip regime={ai300Data.regime} signals={ai300Data.signals} positions={isInvestor ? null : ai300Data.positions} pai300={ai300Data.pai300} />
           <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
             <KillTop10 killTop10={ai300Data.killTop10} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} killDataLive={ai300Data.killDataLive} analyzeContext={analyzeContext} universeLabel="AI 300" />
-            <Ai300SectorPulse signals={ai300Data.signals} sectorTiers={ai300Data.sectorTiers} killDataLive={ai300Data.killDataLive} newSignals={ai300Data.newSignals} onNavigate={onNavigate} allSignalStocks={ai300Data.allSignalStocks} onSectorStockClick={(sectorName) => setAi300SectorModal(sectorName)} />
+            <Ai300SectorPulse signals={ai300Data.signals} sectorTiers={ai300Data.sectorTiers} killDataLive={ai300Data.killDataLive} newSignals={ai300Data.newSignals} onNavigate={onNavigate} allSignalStocks={ai300Data.allSignalStocks} onSectorStockClick={(sectorName) => setAi300SectorModal(sectorName)} onNewSignalClick={(sig, sector) => setAi300NewSigModal({ signal: sig, sector })} />
           </div>
           <NewSignalsPanel newSignals={ai300Data.newSignals} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} analyzeContext={analyzeContext} universeLabel="AI 300" />
           {showDev && <DevelopingSignalsPanel devSignals={ai300DevSignals} loading={ai300DevLoading} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} analyzeContext={analyzeContext} />}
@@ -304,6 +305,15 @@ export default function PulsePage({ onNavigate }) {
       )}
       {signalModal && (
         <SignalStockModal signal={signalModal} onClose={() => setSignalModal(null)} onTickerClick={(stocks, idx) => { setSignalModal(null); setChartList(stocks); setChartIndex(idx); }} />
+      )}
+      {ai300NewSigModal && ai300Data && (
+        <Ai300NewSignalModal
+          signal={ai300NewSigModal.signal}
+          sector={ai300NewSigModal.sector}
+          newSignals={ai300Data.newSignals}
+          onClose={() => setAi300NewSigModal(null)}
+          onTickerClick={(tickers, idx) => { setAi300NewSigModal(null); setAi300ChartList(tickers); setAi300ChartIndex(idx); }}
+        />
       )}
       {ai300SectorModal && ai300Data && (
         <Ai300SectorStocksModal
@@ -1022,10 +1032,9 @@ function KillTop10({ killTop10, onTickerClick, killDataLive, analyzeContext, uni
 }
 
 // ── PNTHR Sector Mini-Gauge ────────────────────────────────────────────────────
-function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, totalStocks = 0, highlight, onClick }) {
+function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, totalStocks = 0, highlight, onClick, onNewBlClick, onNewSsClick }) {
   const [hovered, setHovered] = useState(false);
   const total = bl + ss;
-  const ssRatio = total > 0 ? ss / total : 0.5;
   const W = 160, H = 96;
   const cx = W / 2, cy = H - 10, r = 66;
 
@@ -1037,15 +1046,13 @@ function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, totalStocks = 0, 
     return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
   };
 
-  // Left = bearish (red), right = bullish (green) — matches SPY/QQQ convention
-  // Needle tracks BL ratio: 0 = all SS (left/bearish), 1 = all BL (right/bullish)
   const blRatio = total > 0 ? bl / total : 0.5;
   const zones = [
-    { from: 0,    to: 0.30, color: '#DC3545' },  // strongly bearish (left)
-    { from: 0.30, to: 0.45, color: '#FF6B6B' },  // leaning bearish
-    { from: 0.45, to: 0.55, color: '#555555' },  // neutral
-    { from: 0.55, to: 0.70, color: '#6BCB77' },  // leaning bullish
-    { from: 0.70, to: 1.00, color: '#28A745' },  // strongly bullish (right)
+    { from: 0,    to: 0.30, color: '#DC3545' },
+    { from: 0.30, to: 0.45, color: '#FF6B6B' },
+    { from: 0.45, to: 0.55, color: '#555555' },
+    { from: 0.55, to: 0.70, color: '#6BCB77' },
+    { from: 0.70, to: 1.00, color: '#28A745' },
   ];
 
   const angle = toAngle(blRatio);
@@ -1056,10 +1063,10 @@ function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, totalStocks = 0, 
   const ssN = Number(ss) || 0;
   const tot = blN + ssN;
   const ssPct = tot > 0 ? Math.round((ssN / tot) * 100) : 0;
-  const blPct = tot > 0 ? Math.round((blN / tot) * 100) : 0;
-  const dir = tot === 0 ? '—' : ssPct > blPct ? `${ssPct}% SS` : blPct > ssPct ? `${blPct}% BL` : '50/50';
-  const dirColor = tot === 0 ? '#555' : ssPct > blPct ? '#ff6b6b' : blPct > ssPct ? '#6bcb77' : '#aaa';
-  const textY = cy - r * 0.58;
+  const blPctVal = tot > 0 ? Math.round((blN / tot) * 100) : 0;
+  const dir = tot === 0 ? '—' : ssPct > blPctVal ? `${ssPct}% SS` : blPctVal > ssPct ? `${blPctVal}% BL` : '50/50';
+  const dirColor = tot === 0 ? '#555' : ssPct > blPctVal ? '#ff6b6b' : blPctVal > ssPct ? '#6bcb77' : '#aaa';
+  const textY = cy - r * 0.55;
 
   return (
     <div
@@ -1078,19 +1085,18 @@ function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, totalStocks = 0, 
       }}
     >
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-        {/* Background track */}
         <path d={arcPath(Math.PI, 2 * Math.PI)} fill="none" stroke="#1e1e1e" strokeWidth={13} />
-        {/* Color zones */}
         {zones.map((z, i) => (
           <path key={i} d={arcPath(toAngle(z.from), toAngle(z.to))} fill="none" stroke={z.color} strokeWidth={11} opacity={0.75} />
         ))}
-        {/* BL/SS counts inside arc */}
-        <text x={cx} y={textY} textAnchor="middle" fill="#ccc" fontSize={11} fontFamily="monospace" fontWeight={600}>
-          {`↑${bl} ↓${ss}`}
+        {/* BL count (green) and SS count (red) inside arc */}
+        <text x={cx} y={textY} textAnchor="middle" fontFamily="monospace" fontSize={11} fontWeight={700}>
+          <tspan fill="#6bcb77">{bl}</tspan>
+          <tspan fill="#444" fontSize={8}>BL </tspan>
+          <tspan fill="#ff6b6b">{ss}</tspan>
+          <tspan fill="#444" fontSize={8}>SS</tspan>
         </text>
-        {/* Needle */}
         <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#FFD700" strokeWidth={3} strokeLinecap="round" />
-        {/* PNTHR head pivot */}
         <circle cx={cx} cy={cy} r={13} fill="#0a0a0a" stroke="#FFD700" strokeWidth={1.5} />
         <image href="/favicon.png" x={cx - 11} y={cy - 11} width={22} height={22} />
       </svg>
@@ -1099,7 +1105,7 @@ function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, totalStocks = 0, 
       </div>
       <div style={{ color: dirColor, fontSize: 11, fontWeight: 600, marginTop: 2 }}>{dir}</div>
 
-      {/* New signal ratio bar */}
+      {/* New signal ratio bar — click left=BL, right=SS */}
       {(() => {
         const total = newBl + newSs;
         if (total === 0) return (
@@ -1112,12 +1118,18 @@ function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, totalStocks = 0, 
         return (
           <div style={{ width: '90%', height: 18, marginTop: 5, borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
             {newBl > 0 && (
-              <div style={{ flex: blPct, background: '#28a745', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 18 }}>
+              <div onClick={e => { e.stopPropagation(); onNewBlClick?.(); }}
+                style={{ flex: blPct, background: '#28a745', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 18, cursor: onNewBlClick ? 'pointer' : 'default', transition: 'filter 0.12s' }}
+                onMouseEnter={e => { if (onNewBlClick) e.currentTarget.style.filter = 'brightness(1.3)'; }}
+                onMouseLeave={e => e.currentTarget.style.filter = 'none'}>
                 <span style={{ color: '#fff', fontSize: 10, fontWeight: 800, fontFamily: 'monospace' }}>{newBl}</span>
               </div>
             )}
             {newSs > 0 && (
-              <div style={{ flex: ssPct, background: '#c0392b', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 18 }}>
+              <div onClick={e => { e.stopPropagation(); onNewSsClick?.(); }}
+                style={{ flex: ssPct, background: '#c0392b', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 18, cursor: onNewSsClick ? 'pointer' : 'default', transition: 'filter 0.12s' }}
+                onMouseEnter={e => { if (onNewSsClick) e.currentTarget.style.filter = 'brightness(1.3)'; }}
+                onMouseLeave={e => e.currentTarget.style.filter = 'none'}>
                 <span style={{ color: '#fff', fontSize: 10, fontWeight: 800, fontFamily: 'monospace' }}>{newSs}</span>
               </div>
             )}
@@ -1266,7 +1278,6 @@ function NewSignalsPanel({ newSignals, onTickerClick, analyzeContext, universeLa
   function StockRow({ s, idx, chartList }) {
     const ar = analyzeContext ? computeAnalyzeScore(s, analyzeContext) : null;
     const hasRsi = s.rsiCurrent != null;
-    const rsiColor = hasRsi ? (s.rsiCurrent >= 70 ? '#ff6b6b' : s.rsiCurrent <= 30 ? '#6bcb77' : '#ccc') : '#444';
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 10px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer', transition: 'background 0.15s' }}
         onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
@@ -1279,11 +1290,11 @@ function NewSignalsPanel({ newSignals, onTickerClick, analyzeContext, universeLa
         <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, minWidth: 44, textAlign: 'right', fontFamily: 'monospace' }}>{s.totalScore != null ? s.totalScore.toFixed(1) : '—'}</span>
         {hasRsi ? (
           <span style={{ fontSize: 10, fontFamily: 'monospace', minWidth: 100, textAlign: 'right', letterSpacing: 0.3 }} title={`RSI(14) — Low: ${s.rsiLow}  Current: ${s.rsiCurrent}  High: ${s.rsiHigh}`}>
-            <span style={{ color: '#6bcb77' }}>{s.rsiLow}</span>
+            <span style={{ color: '#FFD700' }}>{s.rsiLow}</span>
             <span style={{ color: '#333' }}> · </span>
-            <span style={{ color: rsiColor, fontWeight: 700 }}>{s.rsiCurrent}</span>
+            <span style={{ color: '#fff', fontWeight: 700 }}>{s.rsiCurrent}</span>
             <span style={{ color: '#333' }}> · </span>
-            <span style={{ color: '#ff6b6b' }}>{s.rsiHigh}</span>
+            <span style={{ color: '#6bcb77' }}>{s.rsiHigh}</span>
           </span>
         ) : (
           <span style={{ fontSize: 10, fontFamily: 'monospace', minWidth: 100, textAlign: 'right', color: '#333' }}>— · — · —</span>
@@ -1302,7 +1313,9 @@ function NewSignalsPanel({ newSignals, onTickerClick, analyzeContext, universeLa
         <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, flex: 1, fontFamily: 'monospace' }}>SECTOR</span>
         <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 70, textAlign: 'right', fontFamily: 'monospace' }}>PRICE</span>
         <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 44, textAlign: 'right', fontFamily: 'monospace' }}>SCORE</span>
-        <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 100, textAlign: 'right', fontFamily: 'monospace' }}>RSI L · C · H</span>
+        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 100, textAlign: 'right', fontFamily: 'monospace' }}>
+          <span style={{ color: '#FFD700' }}>L</span><span style={{ color: '#444' }}> · </span><span style={{ color: '#ccc' }}>C</span><span style={{ color: '#444' }}> · </span><span style={{ color: '#6bcb77' }}>H</span><span style={{ color: '#555', marginLeft: 4 }}>RSI</span>
+        </span>
         <span style={{ minWidth: 32 }} />
         <span style={{ minWidth: 11 }} />
       </div>
@@ -1995,7 +2008,7 @@ function Ai300RegimeStrip({ regime, signals, positions, pai300 }) {
 
 const AI_SECTOR_TIER_COLORS = { GO: '#28a745', NEUTRAL: '#FFD700', NO_GO: '#dc3545' };
 
-function Ai300SectorPulse({ signals, sectorTiers, killDataLive, newSignals, onNavigate, allSignalStocks, onSectorStockClick }) {
+function Ai300SectorPulse({ signals, sectorTiers, killDataLive, newSignals, onNavigate, allSignalStocks, onSectorStockClick, onNewSignalClick }) {
   const bySector = signals?.bySector || {};
   const totalStocksBySector = signals?.totalStocksBySector || {};
 
@@ -2038,6 +2051,8 @@ function Ai300SectorPulse({ signals, sectorTiers, killDataLive, newSignals, onNa
           totalStocks={Object.values(totalStocksBySector).reduce((a, b) => a + b, 0)}
           highlight={true}
           onClick={() => onNavigate?.('jungle')}
+          onNewBlClick={() => onNewSignalClick?.('BL', null)}
+          onNewSsClick={() => onNewSignalClick?.('SS', null)}
         />
         {sectorNames.map(sName => {
           const d = bySector[sName] || { bl: 0, ss: 0 };
@@ -2047,7 +2062,9 @@ function Ai300SectorPulse({ signals, sectorTiers, killDataLive, newSignals, onNa
           const tierColor = tier ? AI_SECTOR_TIER_COLORS[tier.tier] || '#555' : '#555';
           return (
             <div key={sName} style={{ position: 'relative' }}>
-              <PNTHRMiniGauge label={sName} bl={d.bl} ss={d.ss} newBl={nd.bl} newSs={nd.ss} totalStocks={ts} onClick={() => onSectorStockClick?.(sName)} />
+              <PNTHRMiniGauge label={sName} bl={d.bl} ss={d.ss} newBl={nd.bl} newSs={nd.ss} totalStocks={ts} onClick={() => onSectorStockClick?.(sName)}
+                onNewBlClick={() => onNewSignalClick?.('BL', sName)}
+                onNewSsClick={() => onNewSignalClick?.('SS', sName)} />
               {tier && (
                 <span style={{
                   position: 'absolute', top: 4, right: 6, fontSize: 8, fontWeight: 700,

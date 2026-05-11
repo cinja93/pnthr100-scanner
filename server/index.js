@@ -9278,14 +9278,19 @@ app.get('/api/assistant/headlines', async (req, res) => {
     }
 
     // ── 2. Sector breakdown ──────────────────────────────────────────────────
-    // Replaces the old SECTOR CONCENTRATION headline lines with a full
-    // portfolio breakdown for the pie chart in PNTHR Assistant.
+    // Uses AI 300 sector names (16 granular sectors) when a ticker is in the
+    // AI universe, falls back to broad GICS sector from the position record.
+    const aiSectorLookup = {};
+    for (const sec of AI_SECTORS) {
+      for (const h of sec.holdings) aiSectorLookup[h.ticker] = sec.name;
+    }
     const sectorMap = {};
     for (const p of positions) {
-      if (!p.sector || p.isEtf) continue;
-      if (!sectorMap[p.sector]) sectorMap[p.sector] = { sector: p.sector, longTickers: [], shortTickers: [] };
-      if (p.direction === 'SHORT') sectorMap[p.sector].shortTickers.push(p.ticker);
-      else                         sectorMap[p.sector].longTickers.push(p.ticker);
+      const sector = aiSectorLookup[p.ticker] || p.sector;
+      if (!sector || p.isEtf) continue;
+      if (!sectorMap[sector]) sectorMap[sector] = { sector, longTickers: [], shortTickers: [] };
+      if (p.direction === 'SHORT') sectorMap[sector].shortTickers.push(p.ticker);
+      else                         sectorMap[sector].longTickers.push(p.ticker);
     }
     const sectorBreakdown = Object.values(sectorMap)
       .map(s => ({

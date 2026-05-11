@@ -90,6 +90,7 @@ export default function PulsePage({ onNavigate }) {
   const [ai300SectorModal, setAi300SectorModal] = useState(null); // sector name string
   const [ai300NewSigModal, setAi300NewSigModal] = useState(null); // { signal: 'BL'|'SS', sector: string|null }
   const autoRefreshTimer = React.useRef(null);
+  const pollingTimer = React.useRef(null);
   const showDev = shouldShowDevelopingSignals();
 
   async function loadDevSignals() {
@@ -160,19 +161,33 @@ export default function PulsePage({ onNavigate }) {
         setVix(vixData);
         if (secExp) setSectorExposure(secExp);
         setLastRefresh(new Date());
-        // Auto-refresh once warming completes (~90s for apex + ETF)
         if (pulse.cacheWarming) {
           autoRefreshTimer.current = setTimeout(refreshPulse, 90_000);
         }
       })
       .catch(err => { console.error(err); setError(err.message); })
       .finally(() => setLoading(false));
-    // Load developing signals in parallel (separate request — may take longer)
     loadDevSignals();
     fetchMovers().then(setMovers).catch(err => console.warn('Movers load failed:', err));
-    // If AI 300 tab was persisted, auto-load its data
     if (sessionStorage.getItem('pulseTab') === 'ai300') loadAi300();
-    return () => { if (autoRefreshTimer.current) clearTimeout(autoRefreshTimer.current); };
+
+    // 5-minute auto-refresh during extended market hours (7 AM – 8 PM ET, Mon–Fri)
+    function isMarketWindow() {
+      const now = new Date();
+      const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const day = et.getDay();
+      if (day === 0 || day === 6) return false;
+      const h = et.getHours();
+      return h >= 7 && h < 20;
+    }
+    pollingTimer.current = setInterval(() => {
+      if (isMarketWindow()) refreshPulse();
+    }, 5 * 60 * 1000);
+
+    return () => {
+      if (autoRefreshTimer.current) clearTimeout(autoRefreshTimer.current);
+      if (pollingTimer.current) clearInterval(pollingTimer.current);
+    };
   }, []);
 
   if (loading) return (
@@ -474,6 +489,7 @@ function StatusLight({ status, message, positions, pulseData, lastRefresh, isRef
           {scoresLabel}
           <span style={{ color: '#444', marginLeft: 12 }}>· Prices: Live</span>
           {loadedLabel && <span style={{ color: '#333', marginLeft: 12 }}>· {loadedLabel}</span>}
+          <span style={{ color: '#555', marginLeft: 12 }}>· Auto-refresh: 5m</span>
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
           <span style={{

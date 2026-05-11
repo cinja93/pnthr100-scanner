@@ -1007,6 +1007,15 @@ function KillTop10({ killTop10, onTickerClick, killDataLive, analyzeContext, uni
         {killDataLive === true && <span style={{ color: '#28a745', fontSize: 10 }}>● live</span>}
       </div>
       {(!killTop10 || killTop10.length === 0) && <div style={{ color: '#555', fontSize: 12 }}>No kill scores yet.</div>}
+      {killTop10 && killTop10.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', borderBottom: '1px solid #333', marginBottom: 2 }}>
+          <span style={{ color: '#555', fontSize: 8, fontWeight: 700, letterSpacing: 1, minWidth: 18, fontFamily: 'monospace' }}>#</span>
+          <span style={{ color: '#555', fontSize: 8, fontWeight: 700, letterSpacing: 1, minWidth: 52, fontFamily: 'monospace' }}>TICKER</span>
+          <span style={{ color: '#555', fontSize: 8, fontWeight: 700, letterSpacing: 1, minWidth: 44, fontFamily: 'monospace' }}>SCORE</span>
+          <span style={{ color: '#555', fontSize: 8, fontWeight: 700, letterSpacing: 1, minWidth: 40, textAlign: 'center', fontFamily: 'monospace' }}>TIER</span>
+          <span style={{ color: '#555', fontSize: 8, fontWeight: 700, letterSpacing: 1, fontFamily: 'monospace' }}>SIG</span>
+        </div>
+      )}
       {(killTop10 || []).map((s, i) => {
         const isAlpha = (s.tier || '').includes('ALPHA');
         const rc = s.rankChange;

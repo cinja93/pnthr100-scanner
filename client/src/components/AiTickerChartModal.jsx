@@ -82,7 +82,7 @@ function ChartPanel({
     if (entryPrice == null) return;
     handleSizeIt();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker, entryPrice, pnthrStop, weeklyStop, currentSignal]);
+  }, [ticker, entryPrice, pnthrStop, currentSignal]);
 
   // ── Chart render ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -229,17 +229,22 @@ function ChartPanel({
       if (currentSignal === 'BL') direction = 'LONG';
       else if (currentSignal === 'SS') direction = 'SHORT';
 
-      // Always size from the WEEKLY stop — weekly is the trading timeframe.
-      // Daily stop is shown as reference only.
-      const sizingStop = weeklyStop ?? pnthrStop;
-      const stopDefault = sizingStop != null
-        ? sizingStop
+      // Stop from THIS panel's pnthrStop, fall back to +/-2% of entry
+      const stopDefault = pnthrStop != null
+        ? pnthrStop
         : (direction === 'SHORT'
             ? +(entryPrice * 1.02).toFixed(2)
             : +(entryPrice * 0.98).toFixed(2));
 
       const isETF    = isEtfTicker(ticker);
-      const maxGapPct = 0;
+
+      let maxGapPct = 0;
+      try {
+        const tickerRes = await fetch(`${API_BASE}/api/ticker/${ticker}`, { headers: authHeaders() });
+        const tickerData = tickerRes.ok ? await tickerRes.json() : {};
+        maxGapPct = tickerData.maxGapPct || 0;
+      } catch { /* offline / timeout — size without gap */ }
+
       const sizing    = sizePosition({ netLiquidity: nav, entryPrice, stopPrice: stopDefault, maxGapPct, direction, isETF });
       const lot1Shr   = sizing.lot1Shares;
       const risk$     = lot1Shr * Math.abs(entryPrice - stopDefault);
@@ -440,6 +445,9 @@ function ChartPanel({
           <span style={{ color: '#888' }}>L1 <strong style={{ color: '#fcf000' }}>{sizePanel.lot1Shares.toLocaleString()}</strong></span>
           <span style={{ color: '#888' }}>Risk <strong style={{ color: '#dc2626' }}>${sizePanel.risk$.toLocaleString()}</strong></span>
           <span style={{ color: '#888' }}>Vit <strong style={{ color: '#fff' }}>{(sizePanel.vitalityPct * 100).toFixed(1)}%</strong></span>
+          {sizePanel.gapPct > 0 && (
+            <span style={{ color: '#f59e0b' }}>GAP {(sizePanel.gapPct * 100).toFixed(0)}% · {sizePanel.gapMult.toFixed(2)}×</span>
+          )}
         </div>
       )}
 

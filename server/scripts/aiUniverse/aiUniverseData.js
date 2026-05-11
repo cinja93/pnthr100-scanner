@@ -2,6 +2,7 @@
 // Each paragraph reads as: "Why PNTHR believes this name belongs in the AI Elite Universe"
 // 297 holdings across 16 sectors. Last updated: 2026-05-08.
 //
+// v3.1 (2026-05-11): added HAWK (AI satellite intelligence) to S13 Drones, Space & Defense AI. 297 → 298.
 // v3.0 (2026-05-08): removed 7 delisted/acquired tickers — ABB (delisted 2023),
 //   OLO (acquired Thoma Bravo Sept 2025), ZK (acquired late 2025), IAS
 //   (acquired Vista 2025), CYBR (acquired Palo Alto Networks 2026), COMM
@@ -15,9 +16,9 @@
 export const FUND_META = {
   fundName: 'PNTHR AI Universe',
   fullName: 'PNTHR AI Elite Universe Fund',
-  version: 'v3.0',
+  version: 'v3.1',
   date: 'May 2026',
-  totalHoldings: 297,
+  totalHoldings: 298,
   totalSectors: 16,
 };
 
@@ -392,6 +393,7 @@ export const SECTORS = [
       { ticker: 'CW', name: 'Curtiss-Wright', thesis: 'Curtiss-Wright builds defense electronics, naval nuclear, and aerospace, diversified AI defense exposure. PNTHR holds CW as a diversified defense AI play.' },
       { ticker: 'TXT', name: 'Textron Inc.', thesis: 'Textron operates Bell helicopters, Cessna, and AI-augmented defense platforms. PNTHR holds TXT as a diversified aerospace-defense AI play.' },
       { ticker: 'BBAI', name: 'BigBear.ai Holdings', thesis: 'BigBear.ai delivers AI-driven decision intelligence for defense and intelligence community. PNTHR holds BBAI as a small-cap defense-AI software lottery ticket.' },
+      { ticker: 'HAWK', name: 'BlackHawk Growth Corp', thesis: 'HAWK operates AI-powered satellite intelligence and geospatial analytics for commercial and government customers. As AI-driven Earth observation and satellite data processing become critical for defense, agriculture, and climate monitoring, HAWK captures the intersection of space infrastructure and AI analytics. PNTHR holds HAWK as a focused AI satellite intelligence play.' },
     ],
   },
   {

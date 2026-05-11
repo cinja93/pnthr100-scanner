@@ -1,11 +1,5 @@
-// MoversAlertBanner — top-of-app banner for fresh BL+1/SS+1 signals on a
-// PNTHR Mover. Triggers when a ticker is BOTH in the Movers list AND has a
-// brand-new (this-week) signal in the matching direction:
-//   - BL+1 must appear in the GAINERS column (intraday % up)
-//   - SS+1 must appear in the DECLINERS column (intraday % down)
-//
-// Polls /api/pulse/movers every 60s. Dismissals are per-device via
-// localStorage (key: pnthr.moversAlerts.dismissed.YYYY-MM-DD).
+// MoversAlertBanner — top-of-app banner for fresh BL+1/SS+1 signals on
+// PNTHR Movers. Static "PNTHR MOVERS" header with all tickers as badges.
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '../AuthContext';
@@ -19,14 +13,14 @@ function todayKey() {
 
 function loadDismissed() {
   try {
-    return new Set(JSON.parse(localStorage.getItem(todayKey()) || '[]'));
+    return JSON.parse(localStorage.getItem(todayKey()) || 'false');
   } catch {
-    return new Set();
+    return false;
   }
 }
 
-function saveDismissed(set) {
-  try { localStorage.setItem(todayKey(), JSON.stringify([...set])); } catch {}
+function saveDismissed(val) {
+  try { localStorage.setItem(todayKey(), JSON.stringify(val)); } catch {}
 }
 
 function buildAlerts(movers) {
@@ -53,8 +47,7 @@ function buildAlerts(movers) {
 export default function MoversAlertBanner({ onTickerClick }) {
   const { currentUser } = useAuth() || {};
   const [alerts, setAlerts] = useState([]);
-  const [dismissed, setDismissed] = useState(() => loadDismissed());
-  const [hidden, setHidden] = useState(false);
+  const [hidden, setHidden] = useState(() => loadDismissed());
 
   useEffect(() => {
     if (!currentUser) return;
@@ -67,20 +60,7 @@ export default function MoversAlertBanner({ onTickerClick }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [currentUser]);
 
-  if (!currentUser || hidden) return null;
-  const visible = alerts.filter(a => !dismissed.has(a.id));
-  if (visible.length === 0) return null;
-
-  const newest = visible[0];
-  const rest = visible.slice(1);
-  const isBL = newest.signal === 'BL+1';
-
-  function dismissOne() {
-    const next = new Set(dismissed);
-    next.add(newest.id);
-    setDismissed(next);
-    saveDismissed(next);
-  }
+  if (!currentUser || hidden || alerts.length === 0) return null;
 
   return (
     <div style={{
@@ -92,69 +72,48 @@ export default function MoversAlertBanner({ onTickerClick }) {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 18 }}>{isBL ? '📈' : '📉'}</span>
-        <div
-          onClick={() => onTickerClick?.(newest.ticker)}
-          style={{ display: 'flex', flexDirection: 'column', minWidth: 0, cursor: 'pointer' }}
-          title={`Open ${newest.ticker} chart`}
-        >
-          <div style={{ fontWeight: 800, fontSize: 13, letterSpacing: '0.04em' }}>
-            ${newest.ticker} — PNTHR MOVER — {newest.signal}
-          </div>
-          <div style={{ fontSize: 12, opacity: 0.85 }}>
-            {isBL
-              ? `Fresh BL signal in gainers (${newest.changePct >= 0 ? '+' : ''}${newest.changePct?.toFixed(2)}% today)`
-              : `Fresh SS signal in decliners (${newest.changePct?.toFixed(2)}% today)`}
-          </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
+        <span style={{ fontWeight: 900, fontSize: 13, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+          PNTHR MOVERS
+        </span>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {alerts.map(a => {
+            const isBL = a.signal === 'BL+1';
+            return (
+              <button
+                key={a.id}
+                onClick={() => onTickerClick?.(a.ticker)}
+                title={`Open ${a.ticker} chart`}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  background: isBL ? '#16a34a' : '#dc2626',
+                  color: '#fff', fontWeight: 800, fontSize: 12,
+                  padding: '4px 12px 3px', borderRadius: 5,
+                  cursor: 'pointer', border: 'none',
+                  letterSpacing: '0.04em', lineHeight: 1.3,
+                }}
+              >
+                <span>{a.ticker} {a.signal}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.9 }}>
+                  {a.changePct >= 0 ? '+' : ''}{a.changePct?.toFixed(2)}%
+                </span>
+              </button>
+            );
+          })}
         </div>
-        {rest.length > 0 && (
-          <div style={{ display: 'flex', gap: 5, marginLeft: 8, flexWrap: 'wrap' }}>
-            {rest.map(a => {
-              const bl = a.signal === 'BL+1';
-              return (
-                <button
-                  key={a.id}
-                  onClick={() => onTickerClick?.(a.ticker)}
-                  title={`Open ${a.ticker} chart`}
-                  style={{
-                    background: bl ? '#16a34a' : '#dc2626',
-                    color: '#fff', fontWeight: 800, fontSize: 11,
-                    padding: '3px 10px', borderRadius: 4,
-                    whiteSpace: 'nowrap', cursor: 'pointer',
-                    letterSpacing: '0.04em',
-                    border: 'none',
-                  }}
-                >
-                  {a.ticker} {a.signal}
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          onClick={dismissOne}
-          style={{
-            background: '#000', color: '#fcf000',
-            border: '1.5px solid #000', borderRadius: 4,
-            padding: '4px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-          }}
-        >
-          Dismiss
-        </button>
-        <button
-          onClick={() => setHidden(true)}
-          title="Hide banner for this session"
-          style={{
-            background: 'transparent', color: '#000', border: 'none',
-            fontSize: 18, lineHeight: 1, cursor: 'pointer', padding: '0 4px',
-          }}
-        >
-          ×
-        </button>
-      </div>
+      <button
+        onClick={() => { setHidden(true); saveDismissed(true); }}
+        title="Dismiss movers banner for today"
+        style={{
+          background: '#000', color: '#fcf000',
+          border: 'none', borderRadius: 4,
+          padding: '4px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          marginLeft: 8,
+        }}
+      >
+        Dismiss
+      </button>
     </div>
   );
 }

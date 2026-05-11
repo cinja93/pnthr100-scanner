@@ -207,9 +207,15 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
       if (lot.lot === 1) continue; // L1 is the entry, never a trigger
       const candidates = candidatesByLot.get(lot.lot) || [];
 
-      // CLEANUP: complete lot → cancel ALL candidates.
-      if (lot.complete) {
+      // CLEANUP: complete lot OR zero-share lot → cancel ALL candidates.
+      // Zero-share lots arise when NAV is too small to support L4/L5 (CRWD
+      // pattern: 11 sh @ $533 = tiny position, L4/L5 compute to 0 shares).
+      // TWS may still hold stale BUY STOPs from a prior plan — cancel them.
+      if (lot.complete || lot.targetShares <= 0) {
         for (const order of candidates) {
+          const reason = lot.complete
+            ? (candidates.length > 1 ? 'DUPLICATE_AT_COMPLETE_LOT' : 'STALE_LOT_TRIGGER_PAST_CUMULATIVE')
+            : 'ZERO_SHARE_LOT_STALE_ORDER';
           const enqRes = !dryRun && flagOn
             ? await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
                 ticker,
@@ -217,7 +223,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
                 direction: isLong ? 'LONG' : 'SHORT',
                 source:    'LOT_TRIGGER_CRON_CLEANUP',
                 lot:       lot.lot,
-                reason:    candidates.length > 1 ? 'DUPLICATE_AT_COMPLETE_LOT' : 'STALE_LOT_TRIGGER_PAST_CUMULATIVE',
+                reason,
               })
             : { skipped: dryRun ? 'DRY_RUN' : 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF' };
           cancellations.push({

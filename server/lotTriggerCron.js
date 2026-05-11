@@ -130,16 +130,15 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
     if (!ticker) { skips.push({ ticker: p.ticker, reason: 'NO_TICKER' }); continue; }
 
     // Skip auto-opened full-size positions that genuinely have no pyramid
-    // plan. Phase 3 sets fills[1].pct === 1.0 + autoOpenedByIBKR=true, but
-    // the user may later set up a pyramid (via convert-to-pyramid or manual
-    // lot editing) without clearing the flag. If fills[2-5] have any
-    // targetShares, the position HAS a plan and must not be skipped.
+    // plan. Phase 3 only stores fills[1] — fills[2-5] don't exist on the
+    // position record. So checking stored fills ALWAYS returns false for
+    // auto-opened positions, even when computeLotPlan derives a valid L2-L5
+    // plan from entryPrice + originalStop + NAV. Use the COMPUTED plan
+    // (same algorithm the live table renders) to decide.
     if (p.autoOpenedByIBKR === true || p.fills?.[1]?.pct === 1.0) {
-      const fills = p.fills || {};
-      const hasPyramidPlan = [2, 3, 4, 5].some(n => {
-        const f = fills[n];
-        return f && (+f.targetShares > 0 || +f.shares > 0 || f.filled);
-      });
+      const ownerNav = navByOwner.get(p.ownerId);
+      const computedPlan = computeLotPlan(p, ownerNav);
+      const hasPyramidPlan = computedPlan.some((l, i) => i > 0 && l.targetShares > 0);
       if (!hasPyramidPlan) {
         skips.push({ ticker, reason: 'AUTO_OPENED_NO_PYRAMID_PLAN' });
         continue;

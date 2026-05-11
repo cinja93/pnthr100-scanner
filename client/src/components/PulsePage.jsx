@@ -1089,12 +1089,12 @@ function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, totalStocks = 0, 
         {zones.map((z, i) => (
           <path key={i} d={arcPath(toAngle(z.from), toAngle(z.to))} fill="none" stroke={z.color} strokeWidth={11} opacity={0.75} />
         ))}
-        {/* BL count (green) and SS count (red) inside arc */}
+        {/* SS (red, left side) — BL (green, right side) matching arc colors */}
         <text x={cx} y={textY} textAnchor="middle" fontFamily="monospace" fontSize={11} fontWeight={700}>
-          <tspan fill="#6bcb77">{bl}</tspan>
-          <tspan fill="#444" fontSize={8}>BL </tspan>
           <tspan fill="#ff6b6b">{ss}</tspan>
-          <tspan fill="#444" fontSize={8}>SS</tspan>
+          <tspan fill="#444" fontSize={8}>SS </tspan>
+          <tspan fill="#6bcb77">{bl}</tspan>
+          <tspan fill="#444" fontSize={8}>BL</tspan>
         </text>
         <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#FFD700" strokeWidth={3} strokeLinecap="round" />
         <circle cx={cx} cy={cy} r={13} fill="#0a0a0a" stroke="#FFD700" strokeWidth={1.5} />

@@ -32,8 +32,10 @@ export function serverSizePosition({ nav, entryPrice, stopPrice, riskPct = 1 }) 
     Math.min(Math.floor(vitality / rps), Math.floor(tickerCap / entryPrice))
   );
   if (totalShares <= 0) return null;
+  const lot1Cap = Math.floor(vitality / rps);
   return {
     totalShares,
+    lot1Cap,
     vitalityDollar: +vitality.toFixed(2),
     maxRiskDollar:  +(totalShares * rps).toFixed(2),
     riskPerShare:   +rps.toFixed(4),

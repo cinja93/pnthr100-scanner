@@ -222,7 +222,7 @@ function ChartPanel({
       const isETF    = isEtfTicker(ticker);
       const maxGapPct = 0;
       const sizing    = sizePosition({ netLiquidity: nav, entryPrice, stopPrice: stopDefault, maxGapPct, direction, isETF });
-      const lot1Shr   = Math.max(1, Math.round(sizing.totalShares * STRIKE_PCT[0]));
+      const lot1Shr   = sizing.lot1Shares;
       const risk$     = lot1Shr * Math.abs(entryPrice - stopDefault);
 
       setSizePanel({
@@ -246,7 +246,7 @@ function ChartPanel({
       netLiquidity: sizePanel.nav, entryPrice: sizePanel.entry, stopPrice: newStop,
       maxGapPct: sizePanel.gapPct, direction: sizePanel.direction, isETF: sizePanel.isETF,
     });
-    const lot1Shr = Math.max(1, Math.round(sizing.totalShares * STRIKE_PCT[0]));
+    const lot1Shr = sizing.lot1Shares;
     const risk    = lot1Shr * Math.abs(sizePanel.entry - newStop);
     setSizePanel(prev => ({
       ...prev, adjustedStop: newStop, totalShares: sizing.totalShares,

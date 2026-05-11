@@ -866,7 +866,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
 
       // Sizing — ETF uses 0.5% vitality, stocks use 1%
       const sizing     = sizePosition({ netLiquidity: nav, entryPrice, stopPrice: stopDefault, maxGapPct, direction, isETF });
-      const lot1Shr    = Math.max(1, Math.round(sizing.totalShares * STRIKE_PCT[0]));
+      const lot1Shr    = sizing.lot1Shares;
       const riskDollar = lot1Shr * Math.abs(entryPrice - stopDefault);
 
       // Heat impact (fetch positions once and cache)
@@ -897,7 +897,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
     const newStop = parseFloat(newStopStr);
     if (!sizePanel || !newStop || newStop <= 0) return;
     const sizing   = sizePosition({ netLiquidity: sizePanel.nav, entryPrice: sizePanel.entry, stopPrice: newStop, maxGapPct: sizePanel.gapPct, direction: sizePanel.direction, isETF: sizePanel.isETF });
-    const lot1Shr  = Math.max(1, Math.round(sizing.totalShares * STRIKE_PCT[0]));
+    const lot1Shr  = sizing.lot1Shares;
     const risk     = lot1Shr * Math.abs(sizePanel.entry - newStop);
     setSizePanel(prev => ({ ...prev, adjustedStop: newStop, totalShares: sizing.totalShares, lot1Shares: lot1Shr, risk$: +risk.toFixed(0), gapMult: sizing.gapMult, vitality: sizing.vitality }));
   }
@@ -1679,7 +1679,7 @@ function OverrideDialog({ stock, sizePanel, currentSignal, allWeeklyData, analyz
       direction,
       isETF:        sizePanel.isETF,
     });
-    const lot1     = Math.max(1, Math.round(res.totalShares * STRIKE_PCT[0]));
+    const lot1     = res.lot1Shares;
     const riskDlr  = lot1 * Math.abs(sizePanel.entry - stop);
     const stockRiskPct = sizePanel.nav > 0 ? +(riskDlr / sizePanel.nav * 100).toFixed(2) : 0;
     return { direction, stop, totalShares: res.totalShares, lot1, riskDlr, stockRiskPct, gapMult: res.gapMult, vitality: res.vitality };

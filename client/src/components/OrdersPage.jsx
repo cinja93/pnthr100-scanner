@@ -1053,10 +1053,7 @@ export default function OrdersPage() {
             isETF:        isEtfTicker(o.ticker),
           })
         : null;
-      const totalShares = sized?.totalShares || 0;
-      // Lot 1 = 35% of full pyramid size. Floor (not round) so the integer
-      // share count never implies more risk than the dollars would pay for.
-      const idealLot1 = totalShares > 0 ? Math.max(1, Math.floor(totalShares * STRIKE_PCT[0])) : 0;
+      const idealLot1 = sized?.lot1Shares || 0;
 
       let cappedLot1 = idealLot1;
       let clamped    = false;

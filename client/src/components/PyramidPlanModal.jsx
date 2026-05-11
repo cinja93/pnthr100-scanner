@@ -63,12 +63,14 @@ export default function PyramidPlanModal({ ticker, positionId, onClose, onApplie
         const anchor    = data.anchor || data.currentL1?.price || 0;
         const nav       = data.nav || 0;
         const origStop  = data.originalStop || 0;
+        const l1RiskPctNav = nav > 0 ? l1Risk / nav * 100 : 0;
         setMeta({
           nav,
           originalStop: origStop,
           direction,
           anchor,
           currentL1:    data.currentL1 || {},
+          l1RiskPctNav,
         });
 
         // ── 1% NAV risk-budget recommendation ─────────────────────────────────
@@ -377,6 +379,19 @@ export default function PyramidPlanModal({ ticker, positionId, onClose, onApplie
                   </tr>
                 </tfoot>
               </table>
+
+              {/* L1-alone risk warning */}
+              {meta.l1RiskPctNav > 1.0 && (
+                <div style={{
+                  marginTop: 10, padding: '8px 12px',
+                  background: 'rgba(220,53,69,0.12)',
+                  border: '1px solid rgba(220,53,69,0.5)',
+                  borderRadius: 4, color: '#ff8888',
+                  fontSize: 11, fontWeight: 600,
+                }}>
+                  ⚠ L1 alone is {fmtPct(meta.l1RiskPctNav)} of NAV — already above the 1% PNTHR risk frame before any pyramid adds.
+                </div>
+              )}
 
               {/* Risk warning */}
               {overOnePct && (

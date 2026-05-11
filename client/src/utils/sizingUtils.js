@@ -79,8 +79,13 @@ export function sizePosition({ netLiquidity, entryPrice, stopPrice, maxGapPct, d
   const total      = Math.floor(
     Math.min(rps > 0 ? Math.floor(vitality / rps) : 0, Math.floor(tickerCap / entryPrice)) * gapMult
   );
+  const lot1Uncapped = Math.max(1, Math.round(total * STRIKE_PCT[0]));
+  const lot1Cap      = rps > 0 ? Math.floor(vitality / rps) : lot1Uncapped;
+  const lot1Shares   = Math.min(lot1Uncapped, lot1Cap);
   return {
     totalShares: total,
+    lot1Shares:  lot1Shares,
+    lot1Cap,
     vitality:    +vitality.toFixed(0),
     vitalityPct: isETF ? 0.5 : 1,
     gapMult:     +gapMult.toFixed(2),

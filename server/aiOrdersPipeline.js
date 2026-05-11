@@ -143,7 +143,8 @@ export async function runAiOrdersPipeline(opts = {}) {
 
     // 5-lot pyramid sizing (same as Phase 4 / v6)
     const STRIKE_PCT = [0.35, 0.25, 0.20, 0.12, 0.08];
-    const lot1Shares = Math.max(1, Math.round(targetShares * STRIKE_PCT[0]));
+    const lot1Cap    = riskPerShare > 0 ? Math.floor(vitalityDollar / riskPerShare) : targetShares;
+    const lot1Shares = Math.min(Math.max(1, Math.round(targetShares * STRIKE_PCT[0])), lot1Cap);
     const lot1Dollar = lot1Shares * livePrice;
 
     orders.push({

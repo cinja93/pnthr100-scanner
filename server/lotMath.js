@@ -71,7 +71,8 @@ export function computeLotTargetShares(position, netLiquidity) {
   const lot1Actual      = lot1?.filled && lot1?.shares ? +lot1.shares : null;
   const lot1FillPrice   = lot1?.price ? +lot1.price : entry;
   const lot1RPS         = Math.abs(lot1FillPrice - sizingStop);
-  const lot1Recommended = Math.max(1, Math.round(total * STRIKE_PCT[0]));
+  const lot1Cap         = rps > 0 ? Math.floor(vitality / rps) : total;
+  const lot1Recommended = Math.min(Math.max(1, Math.round(total * STRIKE_PCT[0])), lot1Cap);
 
   let effectiveTotal = total;
   let adjShares      = null;

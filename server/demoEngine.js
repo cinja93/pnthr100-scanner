@@ -147,7 +147,9 @@ async function openDemoPositions(db, killScores, regime, nav) {
     if (!sized || sized.totalShares <= 0) continue;
 
     const totalShares = sized.totalShares;
-    const lot1Shares  = Math.max(1, Math.round(totalShares * STRIKE_PCT[0]));
+    const rps         = Math.abs(refPrice - stopPrice);
+    const lot1Cap     = rps > 0 ? Math.floor(sized.vitalityDollar / rps) : totalShares;
+    const lot1Shares  = Math.min(Math.max(1, Math.round(totalShares * STRIKE_PCT[0])), lot1Cap);
 
     const posId    = genId();
 

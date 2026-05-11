@@ -135,6 +135,8 @@ export function registerReconciliationCron(cron) {
       const sd            = r.stopDedup || {};
       const sdDeduped     = (sd.deduped       || []).length;
       const sdCancelled   = (sd.deduped       || []).reduce((s, d) => s + (d.cancelled?.filter(c => c.enqueued).length || 0), 0);
+      const sdCrossPrice  = (sd.crossPriceDeduped || []).length;
+      const sdCrossCancelled = (sd.crossPriceDeduped || []).reduce((s, d) => s + (d.cancelled?.filter(c => c.enqueued).length || 0), 0);
       const ltPlace       = (lt.placements    || []).filter(x => x.enqueued).length;
       const ltModify      = (lt.modifications || []).filter(x => x.enqueued).length;
       const ltCancel      = (lt.cancellations || []).filter(x => x.enqueued).length;
@@ -148,14 +150,14 @@ export function registerReconciliationCron(cron) {
       const rcSkips       = (rc.skips         || []).length;
       const rcAligned     = (rc.aligned       || []).length;
 
-      const anyChange = ratchetAdopt || ratchetPush || ltPlace || ltModify || ltCancel || ltAdopt || ojEnq || ghObserved || ghClosed || ghCleared || rcActions || sdCancelled;
+      const anyChange = ratchetAdopt || ratchetPush || ltPlace || ltModify || ltCancel || ltAdopt || ojEnq || ghObserved || ghClosed || ghCleared || rcActions || sdCancelled || sdCrossCancelled;
 
       if (anyChange || ojOrphans) {
         console.log(
           `[reconciliation] ${ts()} checked=${ra.positionsChecked || 0}` +
           ` ghosts:obs=${ghObserved} closed=${ghClosed} cleared=${ghCleared}` +
           ` / ratchet:adopt=${ratchetAdopt} push=${ratchetPush} align=${ratchetAlign} skip=${ratchetSkip}` +
-          ` / stopDedup:groups=${sdDeduped} cancel=${sdCancelled}` +
+          ` / stopDedup:samePrice=${sdDeduped} cancel=${sdCancelled} crossPrice=${sdCrossPrice} crossCancel=${sdCrossCancelled}` +
           ` / lotTrig:place=${ltPlace} modify=${ltModify} cancel=${ltCancel} adopt=${ltAdopt} skip=${ltSkip}` +
           ` / orphans:found=${ojOrphans} enq=${ojEnq} userProtected=${ojProtected}` +
           ` / drift:actions=${rcActions} aligned=${rcAligned} skip=${rcSkips}` +

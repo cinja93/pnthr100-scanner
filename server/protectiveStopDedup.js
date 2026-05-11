@@ -2,23 +2,20 @@
 // ── Duplicate-protective-stop dedup ─────────────────────────────────────────
 //
 // For tickers with an active PNTHR position, detects when TWS has MULTIPLE
-// protective stops at the same price (within $0.01) — typically caused when
-// Phase 3 auto-open placed a SELL/BUY STP without adopting an existing
-// user-placed one at the same price, leaving two duplicates. The orphan
-// janitor doesn't touch tickers with active positions, and the lotTriggerCron
-// only dedupes on the BUY/SELL pyramid side, not the protective side. This
-// pass closes that specific gap.
+// protective stops and reduces to exactly ONE canonical stop. Two passes:
 //
-// Algorithm:
-//   1. For each active PNTHR position, collect IBKR stops on the
-//      protective-side (SELL for LONG, BUY for SHORT).
-//   2. Group by stopPrice (rounded to 2 decimals).
-//   3. For any group with >1 order at the same price: keep ONE, cancel the
-//      rest. Preference order:
-//        a. orderRef === 'PNTHR' (the bridge-placed one — system of record)
-//        b. lowest permId (oldest — user's pre-existing stop if Phase 3
-//           placed a duplicate later)
-//      Keep one, cancel the others.
+// PASS 1 — same-price dedup: when multiple stops exist at the same price
+//   (within $0.01), keep one and cancel the rest. Typically caused when
+//   Phase 3 auto-open placed a SELL/BUY STP without adopting an existing
+//   user-placed one at the same price.
+//
+// PASS 2 — cross-price dedup: after same-price dedup, if multiple stops
+//   STILL exist at DIFFERENT prices, keep the TIGHTEST (highest SELL for
+//   LONG, lowest BUY for SHORT) and cancel the rest. Prevents stale looser
+//   stops from lingering after ratchets, manual tightening, or bridge
+//   partial failures. Only cancels stops the bridge can reach (orderId !== 0
+//   or PNTHR-tagged). User uncancellable stops (orderId=0, non-PNTHR) are
+//   skipped with a logged reason.
 //
 // Gated by IBKR_AUTO_SYNC_STOPS — same flag as stopRatchetCron — so admins
 // can dry-run preview before flipping. Demo sentinel honored at enqueue.
@@ -150,5 +147,85 @@ export async function runProtectiveStopDedup({ db, dryRun = false } = {}) {
     }
   }
 
-  return { reconciledAt: new Date(), dryRun, flagOn, deduped, skips };
+  // ── PASS 2: Cross-price dedup ────────────────────────────────────────────
+  // After same-price dedup, re-scan each position. If >1 protective stop
+  // remains at DIFFERENT prices, keep the TIGHTEST and cancel the rest.
+  // A LONG position should have exactly one SELL stop; a SHORT exactly one
+  // BUY stop. Multiple at different prices means a ratchet or adoption left
+  // a stale looser stop behind.
+  const crossPriceDeduped = [];
+
+  for (const p of positions) {
+    const ticker = p.ticker?.toUpperCase();
+    if (!ticker) continue;
+    const isLong = (p.direction || 'LONG').toUpperCase() !== 'SHORT';
+    const protectiveSide = protectiveSideFor(p.direction);
+    const snap = ibkrByOwner.get(p.ownerId);
+    const tickerStops = (snap.stopOrders || []).filter(s =>
+      s.symbol?.toUpperCase() === ticker
+      && s.action === protectiveSide
+      && (s.orderType === 'STP' || s.orderType === 'STP LMT')
+    );
+
+    // Subtract any stops already cancelled in pass 1 (by permId).
+    const cancelledPermIds = new Set();
+    for (const d of deduped) {
+      if (d.ticker === ticker && d.ownerId === p.ownerId) {
+        for (const c of d.cancelled) {
+          if (c.enqueued || c.skipReason === 'DRY_RUN') cancelledPermIds.add(c.permId);
+        }
+      }
+    }
+    const remaining = tickerStops.filter(s => !cancelledPermIds.has(s.permId));
+    if (remaining.length < 2) continue;
+
+    // Pick the tightest as keeper (highest SELL for LONG, lowest BUY for SHORT).
+    const sorted = remaining.slice().sort((a, b) =>
+      isLong ? +b.stopPrice - +a.stopPrice : +a.stopPrice - +b.stopPrice
+    );
+    const keeper = sorted[0];
+    const extras = sorted.slice(1);
+
+    const cancellations = [];
+    for (const s of extras) {
+      const isUncancellable = +s.orderId === 0
+        && (s.orderRef || '').trim().toUpperCase() !== 'PNTHR';
+      if (isUncancellable) {
+        skips.push({
+          ticker, priceKey: +s.stopPrice,
+          reason: 'CROSS_PRICE_USER_STOP_UNCANCELLABLE',
+          permId: s.permId,
+        });
+        continue;
+      }
+
+      const enqRes = !dryRun && flagOn
+        ? await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
+            ticker,
+            permId:    s.permId,
+            direction: (p.direction || 'LONG').toUpperCase(),
+            source:    'PROTECTIVE_STOP_DEDUP',
+            reason:    'STALE_PROTECTIVE_STOP_LOOSER_PRICE',
+            stopPrice: s.stopPrice,
+            shares:    s.shares,
+            action:    s.action,
+          })
+        : { skipped: dryRun ? 'DRY_RUN' : (flagOn ? 'UNKNOWN' : 'IBKR_AUTO_SYNC_STOPS_OFF') };
+      cancellations.push({
+        permId: s.permId, orderRef: s.orderRef, stopPrice: s.stopPrice, shares: s.shares,
+        enqueued: !enqRes.skipped, outboxId: enqRes.id, skipReason: enqRes.skipped || null,
+      });
+    }
+
+    if (cancellations.length > 0) {
+      crossPriceDeduped.push({
+        ticker, ownerId: p.ownerId,
+        kept:       { permId: keeper.permId, orderRef: keeper.orderRef || null, stopPrice: +keeper.stopPrice, shares: keeper.shares },
+        cancelled:  cancellations,
+        stopsFound: remaining.length,
+      });
+    }
+  }
+
+  return { reconciledAt: new Date(), dryRun, flagOn, deduped, crossPriceDeduped, skips };
 }

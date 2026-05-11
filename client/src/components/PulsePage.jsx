@@ -216,7 +216,7 @@ export default function PulsePage({ onNavigate }) {
       />
 
       {/* ── MARKET OVERVIEW: 3 rows of gauges ── */}
-      <div style={{ border: '1px solid rgba(255,215,0,0.15)', borderRadius: 10, background: '#0d0d0d', padding: '14px 16px 10px', marginBottom: 14 }}>
+      <div style={{ border: '1px solid rgba(255,215,0,0.35)', borderRadius: 10, background: '#0d0d0d', padding: '14px 16px 10px', marginBottom: 14 }}>
         <div style={{ color: '#FFD700', fontSize: 10, fontWeight: 700, letterSpacing: 2.5, marginBottom: 10, textTransform: 'uppercase', opacity: 0.6 }}>MARKET OVERVIEW</div>
         {/* ROW 1: PAI300 + Equity markets */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -272,37 +272,37 @@ export default function PulsePage({ onNavigate }) {
       {/* ══════════════════════ PNTHR 679 TAB ══════════════════════ */}
       {pulseTab === '679' && <>
         {/* Regime */}
-        <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '12px 14px', marginBottom: 14 }}>
+        <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '12px 14px', marginBottom: 14 }}>
           <RegimeStrip regime={data.regime} signals={data.signals} positions={isInvestor ? null : data.positions} />
         </div>
         {/* Kill Top 10 + Sector Pulse */}
-        <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+        <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <KillTop10 killTop10={data.killTop10} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} killDataLive={data.killDataLive} analyzeContext={analyzeContext} />
             <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} newSignals={data.newSignals} />
           </div>
         </div>
         {/* New Signals */}
-        <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+        <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
           <NewSignalsPanel newSignals={data.newSignals} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} analyzeContext={analyzeContext} />
         </div>
         {/* Developing Signals */}
         {showDev && (
-          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+          <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
             <DevelopingSignalsPanel devSignals={devSignals} loading={devLoading} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} analyzeContext={analyzeContext} />
           </div>
         )}
         {/* Signal Breadth */}
-        <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+        <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
           <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
         </div>
         {/* Movers */}
-        <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+        <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
           <MoversPanel movers={movers} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} />
         </div>
         {/* Portfolio Status */}
         {!isInvestor && (
-          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+          <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
             <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} onSectorClick={(sector, sectorData) => setSectorModal({ sector, data: sectorData })} />
           </div>
         )}
@@ -316,37 +316,37 @@ export default function PulsePage({ onNavigate }) {
           </div>
         ) : ai300Data ? <>
           {/* Regime */}
-          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '12px 14px', marginBottom: 14 }}>
+          <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '12px 14px', marginBottom: 14 }}>
             <Ai300RegimeStrip regime={ai300Data.regime} signals={ai300Data.signals} positions={isInvestor ? null : ai300Data.positions} pai300={ai300Data.pai300} />
           </div>
           {/* Kill Top 10 + Sector Pulse */}
-          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+          <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               <KillTop10 killTop10={ai300Data.killTop10} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} killDataLive={ai300Data.killDataLive} analyzeContext={analyzeContext} universeLabel="AI 300" />
               <Ai300SectorPulse signals={ai300Data.signals} sectorTiers={ai300Data.sectorTiers} killDataLive={ai300Data.killDataLive} newSignals={ai300Data.newSignals} onNavigate={onNavigate} allSignalStocks={ai300Data.allSignalStocks} onSectorStockClick={(sectorName) => setAi300SectorModal(sectorName)} onNewSignalClick={(sig, sector) => setAi300NewSigModal({ signal: sig, sector })} />
             </div>
           </div>
           {/* New Signals */}
-          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+          <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
             <NewSignalsPanel newSignals={ai300Data.newSignals} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} analyzeContext={analyzeContext} universeLabel="AI 300" />
           </div>
           {/* Developing Signals */}
           {showDev && (
-            <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+            <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
               <DevelopingSignalsPanel devSignals={ai300DevSignals} loading={ai300DevLoading} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} analyzeContext={analyzeContext} />
             </div>
           )}
           {/* Signal Breadth */}
-          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+          <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
             <SignalBreadthBar signals={ai300Data.signals} onSignalClick={setAi300SignalModal} />
           </div>
           {/* Movers */}
-          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+          <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
             <Ai300MoversPanel movers={ai300Movers} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} />
           </div>
           {/* Portfolio Status */}
           {!isInvestor && (
-            <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+            <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
               <PortfolioStatus positions={ai300Data.positions} lotsReady={ai300Data.lotsReady} onNavigate={onNavigate} sectorExposure={null} onSectorClick={() => {}} />
             </div>
           )}
@@ -512,12 +512,11 @@ function RsiBadge({ rsi }) {
     <div
       title="Daily RSI(14)"
       style={{
-        position: 'absolute', bottom: 6, left: 6,
         background: '#FCF000', color: '#000',
         fontSize: 10, fontWeight: 800, letterSpacing: 0.3,
         padding: '2px 6px', borderRadius: 3,
         fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums',
-        pointerEvents: 'none', lineHeight: 1.1,
+        lineHeight: 1.1, marginTop: 2,
       }}
     >
       RSI {rsi}
@@ -547,8 +546,7 @@ function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subV
   const ny = cy + r * 0.8 * Math.sin(needleAngle);
 
   return (
-    <div onClick={onClick} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', borderRadius: 12, padding: '12px 16px', minWidth: 160, cursor: onClick ? 'pointer' : 'default', transition: 'filter 0.15s ease' }} onMouseEnter={e => { if (onClick) e.currentTarget.style.filter = 'brightness(1.15)'; }} onMouseLeave={e => { if (onClick) e.currentTarget.style.filter = 'none'; }}>
-      <RsiBadge rsi={rsi} />
+    <div onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', borderRadius: 12, padding: '12px 16px', minWidth: 160, cursor: onClick ? 'pointer' : 'default', transition: 'filter 0.15s ease' }} onMouseEnter={e => { if (onClick) e.currentTarget.style.filter = 'brightness(1.15)'; }} onMouseLeave={e => { if (onClick) e.currentTarget.style.filter = 'none'; }}>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
         <path d={arcPath(Math.PI, 2 * Math.PI)} fill="none" stroke="#222" strokeWidth={14} />
         {zones.map((z, i) => {
@@ -564,6 +562,7 @@ function SemiGauge({ value, min, max, zones, label, displayValue, subLabel, subV
       <div style={{ color: '#fff', fontSize: 20, fontWeight: 800 }}>{displayValue ?? '—'}</div>
       <div style={{ color: '#888', fontSize: 10 }}>{subLabel}</div>
       {subValue && <div style={{ color: subValueColor || '#fff', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>{subValue}</div>}
+      <RsiBadge rsi={rsi} />
     </div>
   );
 }
@@ -1658,7 +1657,7 @@ function DevelopingSignalsPanel({ devSignals, loading, onTickerClick, analyzeCon
           <>
             {hasTriggered && (
               <>
-                <span style={{ background: 'rgba(255,215,0,0.15)', border: '1px solid #FFD70066', color: '#FFD700', fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 3, letterSpacing: 1 }}>
+                <span style={{ background: 'rgba(255,215,0,0.35)', border: '1px solid #FFD70066', color: '#FFD700', fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 3, letterSpacing: 1 }}>
                   ✓ TRIGGERED
                 </span>
                 <span style={{ color: '#6bcb77', fontSize: 11, fontWeight: 700 }}>{triggeredToday.bl.length} BL</span>
@@ -2482,7 +2481,7 @@ function SectorCard({ sector, data, onClick }) {
   const dot     = isHeightened ? '#dc3545' : isElevated ? '#FFD700' : '#28a745';
   const netClr  = isHeightened ? '#dc3545' : isElevated ? '#FFD700' : '#28a745';
   const bg      = isHeightened ? 'rgba(220,53,69,0.06)' : isElevated ? 'rgba(255,215,0,0.04)' : '#1a1a1a';
-  const border  = isHeightened ? 'rgba(220,53,69,0.25)' : isElevated ? 'rgba(255,215,0,0.15)' : '#2a2a2a';
+  const border  = isHeightened ? 'rgba(220,53,69,0.25)' : isElevated ? 'rgba(255,215,0,0.35)' : '#2a2a2a';
   const name    = getSectorDisplayName(sector);
 
   return (
@@ -2583,7 +2582,7 @@ function SectorTickersModal({ sector, data, opposites, onClose, onTickerClick })
         )}
 
         {oppCandidates.length > 0 && (
-          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(255,215,0,0.15)' }}>
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(255,215,0,0.35)' }}>
             <div style={{ color: '#FFD700', fontSize: 10, letterSpacing: 1.5, marginBottom: 8, fontWeight: 700 }}>
               ⚡ TOP KILL CANDIDATES{oppDir ? ` (${oppDir} — opposite direction to balance)` : ''}
             </div>

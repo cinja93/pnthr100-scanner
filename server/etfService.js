@@ -62,6 +62,50 @@ const ETF_CATEGORIES = [
   },
 ];
 
+// ── PNTHR AI 300 ETFs — AI-themed ETFs organized by AI sector ────────────────
+const AI_ETF_CATEGORIES = [
+  {
+    label: 'Pure AI & Machine Learning',
+    tickers: ['BAI','AIQ','ARTY','CHAT','IGPT','WTAI','THNQ','LRNZ','XAIX','IVES'],
+  },
+  {
+    label: 'AI Semiconductors & Memory',
+    tickers: ['DRAM','SMH','SOXX','XSD'],
+  },
+  {
+    label: 'AI Infrastructure & Data Centers',
+    tickers: ['GRID','VRT','EQIX','DLR','AMT','CCI'],
+  },
+  {
+    label: 'Robotics & Automation',
+    tickers: ['BOTZ','ROBT','ROBO','BOTT','ARKQ'],
+  },
+  {
+    label: 'AI Software & Cloud',
+    tickers: ['CLOU','HACK','IGV','SKYY','WCLD'],
+  },
+  {
+    label: 'AI Quantum Computing',
+    tickers: ['QTUM','IONQ','RGTI','QBTS'],
+  },
+  {
+    label: 'AI Energy & Power',
+    tickers: ['NUKZ','GRID','ICLN','QCLN'],
+  },
+  {
+    label: 'AI Autonomous & EV',
+    tickers: ['DRIV','IDRV','MAGS'],
+  },
+  {
+    label: 'AI Income & Thematic',
+    tickers: ['AIPI','KOMP','RSPT','BUZZ'],
+  },
+  {
+    label: 'International AI',
+    tickers: ['DRGN','EEM','FXI','EWJ','EWY'],
+  },
+];
+
 // Build flat ticker→category map and ordered ticker list
 const TICKER_CATEGORY = {};
 const ALL_ETF_TICKERS = [];
@@ -69,6 +113,17 @@ for (const cat of ETF_CATEGORIES) {
   for (const t of cat.tickers) {
     TICKER_CATEGORY[t] = cat.label;
     ALL_ETF_TICKERS.push(t);
+  }
+}
+
+const AI_TICKER_CATEGORY = {};
+const ALL_AI_ETF_TICKERS = [];
+for (const cat of AI_ETF_CATEGORIES) {
+  for (const t of cat.tickers) {
+    if (!AI_TICKER_CATEGORY[t]) {
+      AI_TICKER_CATEGORY[t] = cat.label;
+      ALL_AI_ETF_TICKERS.push(t);
+    }
   }
 }
 
@@ -193,5 +248,68 @@ export async function getEtfStocks(forceRefresh = false) {
   console.log(`📊 ETF 140 complete: ${stocks.length} ETFs`);
   const result = { stocks, signals, categories: ETF_CATEGORIES.map(c => c.label) };
   etfCache = { data: result, timestamp: Date.now() };
+  return result;
+}
+
+// ── AI 300 ETF fetch (mirrors 679 pattern) ───────────────────────────────────
+let aiEtfCache = { data: null, timestamp: null };
+
+export async function getAiEtfStocks(forceRefresh = false) {
+  if (!forceRefresh && aiEtfCache.data && Date.now() - aiEtfCache.timestamp < CACHE_TTL_MS) {
+    console.log('🤖 AI ETF: serving from cache');
+    return aiEtfCache.data;
+  }
+
+  console.log(`🤖 AI ETF: fetching quotes and YTD for ${ALL_AI_ETF_TICKERS.length} tickers...`);
+
+  const [quoteMap, ytdMap] = await Promise.all([
+    fetchBulkQuotes(ALL_AI_ETF_TICKERS),
+    fetchYtdChanges(ALL_AI_ETF_TICKERS),
+  ]);
+
+  const prevRankMap = {};
+  if (aiEtfCache.data?.stocks) {
+    for (const s of aiEtfCache.data.stocks) {
+      if (s.ticker && s.rank != null) prevRankMap[s.ticker] = s.rank;
+    }
+  }
+
+  const unsorted = ALL_AI_ETF_TICKERS
+    .map(ticker => {
+      const q = quoteMap[ticker];
+      if (!q?.price) return null;
+      return {
+        ticker,
+        companyName: q.name || ticker,
+        exchange: q.exchange || 'N/A',
+        sector: AI_TICKER_CATEGORY[ticker] || 'AI ETF',
+        category: AI_TICKER_CATEGORY[ticker] || 'AI ETF',
+        currentPrice: parseFloat(Number(q.price).toFixed(2)),
+        ytdReturn: ytdMap[ticker] != null ? parseFloat(Number(ytdMap[ticker]).toFixed(2)) : null,
+        volumeRatio: (q.volume && q.avgVolume) ? parseFloat((q.volume / q.avgVolume).toFixed(2)) : null,
+      };
+    })
+    .filter(Boolean);
+
+  unsorted.sort((a, b) => {
+    if (a.ytdReturn == null && b.ytdReturn == null) return 0;
+    if (a.ytdReturn == null) return 1;
+    if (b.ytdReturn == null) return -1;
+    return b.ytdReturn - a.ytdReturn;
+  });
+
+  const stocks = unsorted.map((s, i) => {
+    const newRank = i + 1;
+    const prevRank = prevRankMap[s.ticker] ?? null;
+    const rankChange = prevRank != null ? prevRank - newRank : null;
+    return { ...s, rank: newRank, rankChange, previousRank: prevRank };
+  });
+
+  const stockTickers = stocks.map(s => s.ticker);
+  const signals = await getSignals(stockTickers, { isETF: true });
+
+  console.log(`🤖 AI ETF complete: ${stocks.length} ETFs`);
+  const result = { stocks, signals, categories: AI_ETF_CATEGORIES.map(c => c.label) };
+  aiEtfCache = { data: result, timestamp: Date.now() };
   return result;
 }

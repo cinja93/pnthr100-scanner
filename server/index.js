@@ -8,7 +8,7 @@ import { getSignals, getCachedSignals } from './signalService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
-import { getEtfStocks, ALL_ETF_TICKER_SET, getCachedEtfResults } from './etfService.js';
+import { getEtfStocks, getAiEtfStocks, ALL_ETF_TICKER_SET, getCachedEtfResults } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
@@ -572,6 +572,18 @@ app.get('/api/stocks/etfs', async (req, res) => {
   } catch (error) {
     console.error('Error running ETF scan:', error);
     res.status(500).json({ error: 'Failed to run ETF scan' });
+  }
+});
+
+// AI 300 ETF scan: AI-themed ETFs by YTD return with signals. Cached 60 min.
+app.get('/api/stocks/ai-etfs', async (req, res) => {
+  try {
+    const forceRefresh = req.query.refresh === '1';
+    const result = await getAiEtfStocks(forceRefresh);
+    res.json(result);
+  } catch (error) {
+    console.error('Error running AI ETF scan:', error);
+    res.status(500).json({ error: 'Failed to run AI ETF scan' });
   }
 });
 

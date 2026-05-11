@@ -331,6 +331,13 @@ export async function fetchEtfStocks(forceRefresh = false) {
   return response.json();
 }
 
+export async function fetchAiEtfStocks(forceRefresh = false) {
+  const qs = forceRefresh ? '?refresh=1' : '';
+  const response = await apiFetch(`${API_BASE}/api/stocks/ai-etfs${qs}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 export async function fetchStockSearch(ticker) {
   const response = await apiFetch(`${API_BASE}/api/stocks/search?ticker=${encodeURIComponent(ticker)}`, { headers: authHeaders() });
   if (!response.ok) {

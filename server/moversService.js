@@ -1,9 +1,11 @@
-// PNTHR Movers — top intraday gainers/decliners across the PNTHR 679 + PNTHR ETF universe.
+// PNTHR Movers — top intraday gainers/decliners across PNTHR 679 + AI 300 + PNTHR ETF universe.
 // 5-minute server cache; one bulk FMP /quote call per universe.
 import dotenv from 'dotenv';
 dotenv.config();
 import { getAllTickers } from './constituents.js';
+import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { freshSignalsFor } from './signalService.js';
+import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
@@ -91,10 +93,16 @@ export async function getMovers(forceRefresh = false) {
   const { ALL_ETF_TICKER_SET } = await import('./etfService.js');
   const etfTickers = Array.from(ALL_ETF_TICKER_SET);
   const stockTickersRaw = await getAllTickers();
-  // Defensive: ensure no ETFs leak into the stock universe.
-  const stockTickers = stockTickersRaw.filter(t => !ALL_ETF_TICKER_SET.has(t));
 
-  console.log(`[Movers] fetching quotes — ${stockTickers.length} stocks + ${etfTickers.length} ETFs`);
+  // Merge AI 300 tickers into stock universe (deduped)
+  const ai300Tickers = AI_SECTORS.flatMap(s => s.holdings.map(h => h.ticker));
+  const ai300Set = new Set(ai300Tickers);
+  const mergedSet = new Set(stockTickersRaw);
+  for (const t of ai300Tickers) mergedSet.add(t);
+  // Defensive: ensure no ETFs leak into the stock universe.
+  const stockTickers = [...mergedSet].filter(t => !ALL_ETF_TICKER_SET.has(t));
+
+  console.log(`[Movers] fetching quotes — ${stockTickers.length} stocks (679 + AI 300) + ${etfTickers.length} ETFs`);
   const [stockQuotes, etfQuotes] = await Promise.all([
     fetchBulkQuotes(stockTickers),
     fetchBulkQuotes(etfTickers),
@@ -106,11 +114,18 @@ export async function getMovers(forceRefresh = false) {
   const stockTopTickers = [...preStocks.gainers, ...preStocks.decliners].map(r => r.ticker);
   const etfTopTickers   = [...preEtfs.gainers,   ...preEtfs.decliners].map(r => r.ticker);
 
-  // Build sectorMap for stock recompute from FMP profiles in one call (24-tickers max).
+  // Split top-N tickers: 679-universe tickers use freshSignalsFor;
+  // AI-300-only tickers (not in 679) use getAiUniverseSignals.
+  const set679 = new Set(stockTickersRaw);
+  const stockTop679   = stockTopTickers.filter(t => set679.has(t));
+  const stockTopAiOnly = stockTopTickers.filter(t => !set679.has(t) && ai300Set.has(t));
+
+  // Build sectorMap for 679-universe stock recompute from FMP profiles.
   const sectorMap = {};
-  if (stockTopTickers.length > 0) {
+  const profileTickers = stockTop679.filter(t => !ai300Set.has(t));
+  if (profileTickers.length > 0) {
     try {
-      const profiles = await fetchJson(`/profile/${stockTopTickers.join(',')}`);
+      const profiles = await fetchJson(`/profile/${profileTickers.join(',')}`);
       if (Array.isArray(profiles)) {
         const { normalizeSector } = await import('./sectorUtils.js');
         for (const p of profiles) {
@@ -122,16 +137,28 @@ export async function getMovers(forceRefresh = false) {
     }
   }
 
-  const [stockSignals, etfSignals] = await Promise.all([
-    freshSignalsFor(stockTopTickers, { sectorMap }).catch(err => {
-      console.error('[Movers] stock signals recompute failed:', err.message);
+  const [stockSignals679, aiSignalsAll, etfSignals] = await Promise.all([
+    freshSignalsFor(stockTop679, { sectorMap }).catch(err => {
+      console.error('[Movers] 679 stock signals recompute failed:', err.message);
       return {};
     }),
+    stockTopAiOnly.length > 0
+      ? getAiUniverseSignals().then(r => r.signals || {}).catch(err => {
+          console.error('[Movers] AI 300 signals fetch failed:', err.message);
+          return {};
+        })
+      : Promise.resolve({}),
     freshSignalsFor(etfTopTickers, { isETF: true }).catch(err => {
       console.error('[Movers] etf signals recompute failed:', err.message);
       return {};
     }),
   ]);
+
+  // Merge signal maps — AI 300 signals fill in for tickers not in 679
+  const stockSignals = { ...stockSignals679 };
+  for (const t of stockTopTickers) {
+    if (!stockSignals[t] && aiSignalsAll[t]) stockSignals[t] = aiSignalsAll[t];
+  }
 
   const data = {
     stocks: buildMovers(stockQuotes, stockTickers, STOCK_TOP_N, stockSignals),

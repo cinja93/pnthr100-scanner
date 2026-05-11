@@ -6,6 +6,7 @@
 
 import { connectToDatabase, getUserProfile } from './database.js';
 import { computeTargetAvg } from './lotMath.js';
+import { ALL_ETF_TICKER_SET } from './etfService.js';
 
 // ── Tolerance thresholds ──────────────────────────────────────────────────────
 // Centralized so tuning doesn't require chasing through the file.
@@ -592,11 +593,23 @@ export async function assistantLiveReconcile(req, res) {
     // index (QQQ for NASDAQ-listed, SPY otherwise). Cached for 1 hour so the
     // 60-second poll doesn't hammer FMP. Renders as a small "76 / 58" badge
     // in the bottom-left of each ticker card.
+    //
+    // Non-blocking: serve cached RSI immediately; fire background fetch for
+    // any uncached tickers. On cold start the first response has no RSI —
+    // the next 60-second poll picks it up after the background fetch lands.
     const allRsiTickers = [...new Set([...tickers, 'SPY', 'QQQ'])];
-    const rsiResults = await Promise.all(allRsiTickers.map(t =>
-      fetchDailyRSI(t).then(v => [t, v]).catch(() => [t, null])
-    ));
-    const rsiMap = Object.fromEntries(rsiResults);
+    const rsiMap = {};
+    const uncached = [];
+    for (const t of allRsiTickers) {
+      const cached = RSI_CACHE.get(t);
+      if (cached && cached.expiresAt > Date.now()) rsiMap[t] = cached.value;
+      else uncached.push(t);
+    }
+    if (uncached.length > 0) {
+      Promise.all(uncached.map(t =>
+        fetchDailyRSI(t).catch(() => null)
+      )).catch(() => {});
+    }
     for (const r of rows) {
       const cmd = cmdPositions.find(p => p.ticker?.toUpperCase() === r.ticker);
       const marketTicker = marketTickerFor(cmd?.exchange);
@@ -614,11 +627,50 @@ export async function assistantLiveReconcile(req, res) {
     const summary = { green: 0, yellow: 0, red: 0, gray: 0, total: rows.length };
     for (const r of rows) summary[r.rowStatus]++;
 
+    // Compute heat from IBKR actuals so the risk bar works even when
+    // pnthr_portfolio is empty (positions only exist in IBKR/bridge).
+    let stockRisk = 0, etfRisk = 0, recycledCount = 0, totalPositions = 0;
+    for (const r of rows) {
+      const shares = r.ibkr.shares ?? r.command.shares;
+      if (!shares || shares <= 0) continue;
+      totalPositions++;
+      const stop = r.command.stopPrice ?? 0;
+      const avg  = r.command.avgCost ?? r.ibkr.avgCost ?? 0;
+      if (!stop || !avg) continue;
+      const dir = r.command.direction || r.ibkr.direction || 'LONG';
+      const isShort = dir === 'SHORT';
+      const isRecycled = isShort ? stop <= avg : stop >= avg;
+      if (isRecycled) { recycledCount++; continue; }
+      const rps = Math.abs(avg - stop);
+      const risk = shares * rps;
+      const isEtf = ALL_ETF_TICKER_SET.has(r.ticker);
+      if (isEtf) etfRisk += risk;
+      else stockRisk += risk;
+    }
+    const totalRisk = stockRisk + etfRisk;
+    const longCount = rows.filter(r => (r.command.direction || r.ibkr.direction) === 'LONG').length;
+    const shortCount = rows.filter(r => (r.command.direction || r.ibkr.direction) === 'SHORT').length;
+
     res.json({
       lastSyncedAt: ibkrSyncedAt,
       generatedAt:  new Date().toISOString(),
       summary,
       rows,
+      positions: {
+        total: totalPositions,
+        long: longCount,
+        short: shortCount,
+        recycled: recycledCount,
+        heat: {
+          stockRisk:    +stockRisk.toFixed(0),
+          etfRisk:      +etfRisk.toFixed(0),
+          totalRisk:    +totalRisk.toFixed(0),
+          stockRiskPct: netLiquidity > 0 ? +((stockRisk / netLiquidity) * 100).toFixed(2) : 0,
+          etfRiskPct:   netLiquidity > 0 ? +((etfRisk / netLiquidity) * 100).toFixed(2) : 0,
+          totalRiskPct: netLiquidity > 0 ? +((totalRisk / netLiquidity) * 100).toFixed(2) : 0,
+        },
+        nav: netLiquidity,
+      },
     });
   } catch (err) {
     console.error('[assistant/live-reconcile]', err);

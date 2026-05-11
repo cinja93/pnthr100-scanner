@@ -8,7 +8,7 @@ import { getSignals, getCachedSignals } from './signalService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
 import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
-import { getEtfStocks, getAiEtfStocks, ALL_ETF_TICKER_SET, getCachedEtfResults } from './etfService.js';
+import { getEtfStocks, getAiEtfStocks, ALL_ETF_TICKER_SET, AI_TICKER_CATEGORY, getCachedEtfResults } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
@@ -359,6 +359,9 @@ async function enrichCompanyNames(stocks) {
 let sectorCache = null;
 let sectorCacheTime = null;
 const SECTOR_CACHE_DURATION = 60 * 60 * 1000; // 1 hour — bust cache by restarting server
+
+// Pulse RSI cache — 1-hour TTL, populated in background so /api/pulse responds instantly
+const pulseRsiCache = new Map();
 
 // SPDR sector ETF ticker → internal sector key
 // These are the same ETFs that Barchart and most platforms use as sector benchmarks.
@@ -7400,65 +7403,72 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       }
     }
 
-    // Enrich new signal stocks + Kill Top 10 with RSI(14) current / 52-week low / 52-week high
+    // Enrich new signal stocks + Kill Top 10 with RSI(14) current / 52-week low / 52-week high.
+    // Non-blocking: use cached RSI immediately, fire background fetch for uncached.
+    // On cold start the first response has no RSI — next poll picks it up.
     const killTop10Tickers = (killTop10 || []).map(s => s.ticker);
     const newSigTickers = [...new Set([...newBLStocks.map(s => s.ticker), ...newSSStocks.map(s => s.ticker), ...killTop10Tickers])].filter(t => !t.includes('-new-'));
     if (newSigTickers.length > 0) {
-      try {
-        const rsiMap = {};
-        const RSI_BATCH = 5;
-        const toDate = new Date().toISOString().slice(0, 10);
-        const fromDate = new Date(Date.now() - 370 * 86400000).toISOString().slice(0, 10);
-        for (let i = 0; i < newSigTickers.length; i += RSI_BATCH) {
-          const chunk = newSigTickers.slice(i, i + RSI_BATCH);
-          const fetches = chunk.map(async (ticker) => {
-            try {
-              const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?from=${fromDate}&to=${toDate}&apikey=${FMP_KEY}`;
-              const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
-              if (!r.ok) return;
-              const d = await r.json();
-              const daily = (d?.historical || []).slice().sort((a, b) => a.date > b.date ? 1 : -1);
-              if (daily.length < 20) return;
-              const closes = daily.map(b => b.close);
-              const n = closes.length;
-              let avgGain = 0, avgLoss = 0;
-              for (let j = 1; j <= 14; j++) {
-                const delta = closes[j] - closes[j - 1];
-                if (delta > 0) avgGain += delta; else avgLoss += Math.abs(delta);
-              }
-              avgGain /= 14; avgLoss /= 14;
-              const rsiSeries = [];
-              let rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-              rsiSeries.push(rsi);
-              for (let j = 15; j < n; j++) {
-                const delta = closes[j] - closes[j - 1];
-                avgGain = (avgGain * 13 + Math.max(delta, 0)) / 14;
-                avgLoss = (avgLoss * 13 + Math.max(-delta, 0)) / 14;
-                rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-                rsiSeries.push(rsi);
-              }
-              // Use last 252 RSI values (52 weeks) for low/high range
-              const recent = rsiSeries.slice(-252);
-              rsiMap[ticker] = {
-                current: Math.round(recent[recent.length - 1]),
-                low:     Math.round(Math.min(...recent)),
-                high:    Math.round(Math.max(...recent)),
-              };
-            } catch {}
-          });
-          await Promise.all(fetches);
+      const rsiMap = {};
+      const uncached = [];
+      for (const ticker of newSigTickers) {
+        if (pulseRsiCache.has(ticker) && pulseRsiCache.get(ticker).expiresAt > Date.now()) {
+          rsiMap[ticker] = pulseRsiCache.get(ticker).value;
+        } else {
+          uncached.push(ticker);
         }
-        for (const ns of [...newBLStocks, ...newSSStocks]) {
-          const r = rsiMap[ns.ticker];
-          if (r) { ns.rsiCurrent = r.current; ns.rsiLow = r.low; ns.rsiHigh = r.high; }
-        }
-        for (const k of (killTop10 || [])) {
-          const r = rsiMap[k.ticker];
-          if (r) { k.rsiCurrent = r.current; k.rsiLow = r.low; k.rsiHigh = r.high; }
-        }
-        console.log(`[PULSE] RSI enriched ${Object.keys(rsiMap).length}/${newSigTickers.length} signal+kill tickers`);
-      } catch (rsiErr) {
-        console.warn('[PULSE] RSI enrichment failed:', rsiErr.message);
+      }
+      // Background-fetch uncached tickers (populates cache for next poll)
+      if (uncached.length > 0) {
+        (async () => {
+          const RSI_BATCH = 5;
+          const toDate = new Date().toISOString().slice(0, 10);
+          const fromDate = new Date(Date.now() - 370 * 86400000).toISOString().slice(0, 10);
+          for (let i = 0; i < uncached.length; i += RSI_BATCH) {
+            const chunk = uncached.slice(i, i + RSI_BATCH);
+            await Promise.all(chunk.map(async (ticker) => {
+              try {
+                const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?from=${fromDate}&to=${toDate}&apikey=${FMP_KEY}`;
+                const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+                if (!r.ok) return;
+                const d = await r.json();
+                const daily = (d?.historical || []).slice().sort((a, b) => a.date > b.date ? 1 : -1);
+                if (daily.length < 20) return;
+                const closes = daily.map(b => b.close);
+                const n = closes.length;
+                let avgGain = 0, avgLoss = 0;
+                for (let j = 1; j <= 14; j++) {
+                  const delta = closes[j] - closes[j - 1];
+                  if (delta > 0) avgGain += delta; else avgLoss += Math.abs(delta);
+                }
+                avgGain /= 14; avgLoss /= 14;
+                let rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+                const rsiSeries = [rsi];
+                for (let j = 15; j < n; j++) {
+                  const delta = closes[j] - closes[j - 1];
+                  avgGain = (avgGain * 13 + Math.max(delta, 0)) / 14;
+                  avgLoss = (avgLoss * 13 + Math.max(-delta, 0)) / 14;
+                  rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+                  rsiSeries.push(rsi);
+                }
+                const recent = rsiSeries.slice(-252);
+                pulseRsiCache.set(ticker, {
+                  value: { current: Math.round(recent[recent.length - 1]), low: Math.round(Math.min(...recent)), high: Math.round(Math.max(...recent)) },
+                  expiresAt: Date.now() + 60 * 60 * 1000,
+                });
+              } catch {}
+            }));
+          }
+          console.log(`[PULSE] RSI background-fetched ${uncached.length} tickers`);
+        })().catch(() => {});
+      }
+      for (const ns of [...newBLStocks, ...newSSStocks]) {
+        const r = rsiMap[ns.ticker];
+        if (r) { ns.rsiCurrent = r.current; ns.rsiLow = r.low; ns.rsiHigh = r.high; }
+      }
+      for (const k of (killTop10 || [])) {
+        const r = rsiMap[k.ticker];
+        if (r) { k.rsiCurrent = r.current; k.rsiLow = r.low; k.rsiHigh = r.high; }
       }
     }
 
@@ -9278,16 +9288,24 @@ app.get('/api/assistant/headlines', async (req, res) => {
     }
 
     // ── 2. Sector breakdown ──────────────────────────────────────────────────
-    // Uses AI 300 sector names (16 granular sectors) when a ticker is in the
-    // AI universe, falls back to broad GICS sector from the position record.
+    // Stocks: AI 300 sector name if in AI universe, else broad GICS sector.
+    // ETFs: AI ETF category from etfService (e.g. "Robotics & Automation"),
+    //       skipped if no AI ETF category (broad-market ETFs like SPY).
     const aiSectorLookup = {};
     for (const sec of AI_SECTORS) {
       for (const h of sec.holdings) aiSectorLookup[h.ticker] = sec.name;
     }
     const sectorMap = {};
     for (const p of positions) {
-      const sector = aiSectorLookup[p.ticker] || p.sector;
-      if (!sector || p.isEtf) continue;
+      const isEtf = p.isEtf || ALL_ETF_TICKER_SET.has(p.ticker);
+      let sector;
+      if (isEtf) {
+        sector = AI_TICKER_CATEGORY[p.ticker];
+        if (!sector) continue;
+      } else {
+        sector = aiSectorLookup[p.ticker] || p.sector;
+      }
+      if (!sector) continue;
       if (!sectorMap[sector]) sectorMap[sector] = { sector, longTickers: [], shortTickers: [] };
       if (p.direction === 'SHORT') sectorMap[sector].shortTickers.push(p.ticker);
       else                         sectorMap[sector].longTickers.push(p.ticker);

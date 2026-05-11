@@ -1719,6 +1719,7 @@ function CompletedSection({ completed }) {
 // right and click through to the chart modal via onTickerClick.
 
 const SECTOR_COLORS = {
+  // GICS broad sectors
   'Technology':             '#5E81F4',
   'Financial Services':     '#10B981',
   'Healthcare':             '#EC4899',
@@ -1731,6 +1732,34 @@ const SECTOR_COLORS = {
   'Real Estate':            '#FCD34D',
   'Basic Materials':        '#14B8A6',
   'Materials':              '#14B8A6',
+  // AI 300 sectors (16)
+  'AI Compute & Semiconductors':              '#22D3EE',
+  'AI Power, Energy & Electrification':       '#F97316',
+  'AI Optical, Photonics & Networking':       '#A78BFA',
+  'AI Cloud, Data Centers & Edge':            '#38BDF8',
+  'Robotics, Autonomous & Auto AI':           '#FB7185',
+  'AI Hyperscalers & Mega-Cap Software':      '#818CF8',
+  'AI Software & Agentic Platforms':          '#34D399',
+  'AI Cybersecurity':                         '#F43F5E',
+  'AI Ad-Tech, Marketing & Data Licensing':   '#FBBF24',
+  'AI Fintech':                               '#4ADE80',
+  'AI Vertical SaaS & Workflow':              '#C084FC',
+  'AI Healthcare, Genomics & Drug Discovery': '#F472B6',
+  'Drones, Space & Defense AI':               '#94A3B8',
+  'International AI / EM ADRs':               '#FB923C',
+  'Quantum Computing':                        '#67E8F9',
+  'AI Materials, Packaging, Thermal & Industrial': '#A3E635',
+  // AI ETF categories
+  'Pure AI & Machine Learning':   '#818CF8',
+  'AI Semiconductors & Memory':   '#22D3EE',
+  'AI Infrastructure & Data Centers': '#38BDF8',
+  'Robotics & Automation':        '#FB7185',
+  'AI Software & Cloud':          '#34D399',
+  'AI Quantum Computing':         '#67E8F9',
+  'AI Energy & Power':            '#F97316',
+  'AI Autonomous & EV':           '#E879F9',
+  'AI Income & Thematic':         '#FBBF24',
+  'International AI':             '#FB923C',
 };
 const sectorColor = (name) => SECTOR_COLORS[name] || '#64748B';
 
@@ -2618,10 +2647,12 @@ export default function AssistantPage({ onNavigate }) {
   const [chartBusy,   setChartBusy]   = useState(null);  // ticker currently loading
   const [healthPositions, setHealthPositions] = useState([]);
   const [healthLoading,   setHealthLoading]   = useState(true);
-  // Server-precomputed positions block from /api/pulse — used by the bottom
-  // RiskSummaryBar so its numbers always match the PNTHR Pulse panel exactly.
-  // Shape: { total, long, short, recycled, heat: {...}, nav }.
+  // Server-precomputed positions block — used by the bottom RiskSummaryBar.
+  // Preferred source: live-reconcile (IBKR + CMD union, always up to date).
+  // Fallback: /api/pulse positions block (CMD-only, can be empty when
+  // pnthr_portfolio has no records for this user).
   const [pulsePositions, setPulsePositions] = useState(null);
+  const [livePositions, setLivePositions] = useState(null);
   const [recentFills,     setRecentFills]     = useState([]);
   // ibkrConnected is still used by TradesTodaySection to gate rendering —
   // its value now comes from the /api/ibkr/discrepancies fetch below (which
@@ -4532,6 +4563,7 @@ export default function AssistantPage({ onNavigate }) {
         }}
         onAddPosition={(prefill) => { setAddPosInitial(prefill || null); setAddPosOpen(true); }}
         onExitConfirmed={handleExitConfirmed}
+        onPositionsSummary={setLivePositions}
       />
       </div>
 
@@ -4993,7 +5025,7 @@ export default function AssistantPage({ onNavigate }) {
            RISK SUMMARY BAR — duplicated from PNTHR Command for at-a-glance
            portfolio heat without leaving the Assistant page.
          ══════════════════════════════════════════════════════════════════════ */}
-      <RiskSummaryBar precomputed={pulsePositions} nav={nav || 0} />
+      <RiskSummaryBar precomputed={livePositions || pulsePositions} nav={nav || 0} />
 
       {/* Chart Modal — opened from chip clicks */}
       {chartStocks && (

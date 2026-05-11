@@ -129,11 +129,21 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
     const ticker = p.ticker?.toUpperCase();
     if (!ticker) { skips.push({ ticker: p.ticker, reason: 'NO_TICKER' }); continue; }
 
-    // Skip auto-opened full-size positions — they have no pyramid plan.
-    // Discriminator: Phase 3 sets fills[1].pct === 1.0 + autoOpenedByIBKR=true.
+    // Skip auto-opened full-size positions that genuinely have no pyramid
+    // plan. Phase 3 sets fills[1].pct === 1.0 + autoOpenedByIBKR=true, but
+    // the user may later set up a pyramid (via convert-to-pyramid or manual
+    // lot editing) without clearing the flag. If fills[2-5] have any
+    // targetShares, the position HAS a plan and must not be skipped.
     if (p.autoOpenedByIBKR === true || p.fills?.[1]?.pct === 1.0) {
-      skips.push({ ticker, reason: 'AUTO_OPENED_NO_PYRAMID_PLAN' });
-      continue;
+      const fills = p.fills || {};
+      const hasPyramidPlan = [2, 3, 4, 5].some(n => {
+        const f = fills[n];
+        return f && (+f.targetShares > 0 || +f.shares > 0 || f.filled);
+      });
+      if (!hasPyramidPlan) {
+        skips.push({ ticker, reason: 'AUTO_OPENED_NO_PYRAMID_PLAN' });
+        continue;
+      }
     }
 
     const ibkrSnap = ibkrByOwner.get(p.ownerId);

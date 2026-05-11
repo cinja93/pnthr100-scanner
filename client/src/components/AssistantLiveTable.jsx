@@ -759,7 +759,7 @@ function buildSubRows(row) {
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
-export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart, onAddPosition, collapsed: extCollapsed, onToggleCollapsed, headerExtra, onExitConfirmed }) {
+export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart, onAddPosition, collapsed: extCollapsed, onToggleCollapsed, headerExtra, onExitConfirmed, onPositionsSummary }) {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -809,6 +809,7 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
       if (!reconcileRes.ok) throw new Error(`HTTP ${reconcileRes.status}`);
       const d = await reconcileRes.json();
       setData(d);
+      if (d.positions) onPositionsSummary?.(d.positions);
       if (positionsRes.ok) {
         const pd = await positionsRes.json();
         const list = Array.isArray(pd?.positions) ? pd.positions : (Array.isArray(pd) ? pd : []);

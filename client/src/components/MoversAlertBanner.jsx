@@ -72,8 +72,7 @@ export default function MoversAlertBanner() {
   if (visible.length === 0) return null;
 
   const newest = visible[0];
-  const restCount = visible.length - 1;
-  const restTickers = visible.slice(1).map(m => m.ticker);
+  const rest = visible.slice(1);
   const isBL = newest.signal === 'BL+1';
 
   function dismissOne() {
@@ -94,7 +93,7 @@ export default function MoversAlertBanner() {
       fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 18 }}>📈</span>
+        <span style={{ fontSize: 18 }}>{isBL ? '📈' : '📉'}</span>
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 13, letterSpacing: '0.04em' }}>
             ${newest.ticker} — PNTHR MOVER — {newest.signal}
@@ -105,12 +104,23 @@ export default function MoversAlertBanner() {
               : `Fresh SS signal in decliners (${newest.changePct?.toFixed(2)}% today)`}
           </div>
         </div>
-        {restCount > 0 && (
-          <span style={{
-            background: '#000', color: '#fcf000', fontWeight: 800, fontSize: 11,
-            padding: '2px 8px', borderRadius: 10, marginLeft: 8,
-            whiteSpace: 'nowrap',
-          }}>+ {restTickers.join(', ')}</span>
+        {rest.length > 0 && (
+          <div style={{ display: 'flex', gap: 5, marginLeft: 8, flexWrap: 'wrap' }}>
+            {rest.map(a => {
+              const bl = a.signal === 'BL+1';
+              return (
+                <span key={a.id} style={{
+                  background: bl ? '#16a34a' : '#dc2626',
+                  color: '#fff', fontWeight: 800, fontSize: 11,
+                  padding: '3px 10px', borderRadius: 4,
+                  whiteSpace: 'nowrap', cursor: 'default',
+                  letterSpacing: '0.04em',
+                }}>
+                  {a.ticker}
+                </span>
+              );
+            })}
+          </div>
         )}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>

@@ -2219,6 +2219,53 @@ function Ai300SignalStockModal({ signal, onClose, onTickerClick }) {
   );
 }
 
+function Ai300NewSignalModal({ signal, sector, newSignals, onClose, onTickerClick }) {
+  const source = signal === 'BL' ? (newSignals?.blStocks || []) : (newSignals?.ssStocks || []);
+  const filtered = sector ? source.filter(s => s.sector === sector) : source;
+  const sorted = [...filtered].sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+  const chartItems = sorted.map(s => ({ ticker: s.ticker }));
+  const headerColor = signal === 'BL' ? '#6bcb77' : '#ff6b6b';
+  const dirLabel = signal === 'BL' ? 'BUY LONG' : 'SELL SHORT';
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#111', border: '1px solid rgba(255,215,0,0.25)', borderRadius: 12, padding: '20px 24px', maxWidth: 560, width: '90vw', maxHeight: '80vh', overflow: 'auto', fontFamily: 'monospace' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div>
+            <div style={{ color: headerColor, fontSize: 14, fontWeight: 800, letterSpacing: 1 }}>
+              AI 300 NEW {dirLabel} THIS WEEK
+            </div>
+            <div style={{ color: '#888', fontSize: 11, marginTop: 4 }}>
+              {sector ? `${sector} — ` : ''}{sorted.length} stock{sorted.length !== 1 ? 's' : ''}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+        {sorted.length === 0 ? (
+          <div style={{ color: '#555', fontSize: 12, textAlign: 'center', padding: '20px 0' }}>No new {signal} signals{sector ? ` in ${sector}` : ''} this week.</div>
+        ) : (
+          sorted.map((s, i) => {
+            const t = tierBadge(s.tier);
+            return (
+              <div key={s.ticker} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer', transition: 'background 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                onClick={() => onTickerClick(chartItems, i)}>
+                <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 55, fontFamily: 'monospace' }}>{s.ticker}</span>
+                <span style={{ color: '#555', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector || '—'}</span>
+                <span style={{ color: '#ccc', fontSize: 12, minWidth: 65, textAlign: 'right', fontFamily: 'monospace' }}>{s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}</span>
+                <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, minWidth: 40, textAlign: 'right', fontFamily: 'monospace' }}>{s.totalScore != null ? s.totalScore.toFixed(1) : '—'}</span>
+                <span style={{ minWidth: 80 }}>{t}</span>
+                <span style={{ color: '#FFD700', fontSize: 11 }}>▸</span>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Ai300SectorStocksModal({ sectorName, allSignalStocks, sectorTier, onClose, onTickerClick }) {
   const sectorStocks = (allSignalStocks || []).filter(s => s.sector === sectorName);
   const blStocks = sectorStocks.filter(s => s.signal === 'BL').sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));

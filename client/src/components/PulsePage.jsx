@@ -200,36 +200,41 @@ export default function PulsePage({ onNavigate }) {
         onRefresh={refreshPulse}
       />
 
-      {/* ROW 1: PAI300 + Equity markets */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <Pai300Gauge pai300={data.pai300} onClick={() => setShowPai300Chart(true)} />
-        <SpyGauge regime={data.regime} rsi={data.indexRsi?.spy} onClick={() => { setChartList([{ ticker: 'SPY' }]); setChartIndex(0); }} />
-        <QqqGauge regime={data.regime} rsi={data.indexRsi?.qqq} onClick={() => { setChartList([{ ticker: 'QQQ' }]); setChartIndex(0); }} />
-        <MarketGauge label="NYSE" subLabel="Composite" data={data.marketGauges?.nyse} rsi={data.indexRsi?.nyse} onClick={() => { setChartList([{ ticker: '^NYA' }]); setChartIndex(0); }} />
-        <MarketGauge label="NASDAQ" subLabel="Composite" data={data.marketGauges?.nasdaq} rsi={data.indexRsi?.nasdaq} onClick={() => { setChartList([{ ticker: '^IXIC' }]); setChartIndex(0); }} />
-        <MarketGauge label="IWM" subLabel="Russell 2000" data={data.marketGauges?.iwm} rsi={data.indexRsi?.iwm} onClick={() => { setChartList([{ ticker: 'IWM' }]); setChartIndex(0); }} />
-        <MarketGauge label="DJI" subLabel="Dow Jones" data={data.marketGauges?.dji} rsi={data.indexRsi?.dji} onClick={() => { setChartList([{ ticker: '^DJI' }]); setChartIndex(0); }} />
+      {/* ── MARKET OVERVIEW: 3 rows of gauges ── */}
+      <div style={{ border: '1px solid rgba(255,215,0,0.15)', borderRadius: 10, background: '#0d0d0d', padding: '14px 16px 10px', marginBottom: 14 }}>
+        <div style={{ color: '#FFD700', fontSize: 10, fontWeight: 700, letterSpacing: 2.5, marginBottom: 10, textTransform: 'uppercase', opacity: 0.6 }}>MARKET OVERVIEW</div>
+        {/* ROW 1: PAI300 + Equity markets */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <Pai300Gauge pai300={data.pai300} onClick={() => setShowPai300Chart(true)} />
+          <SpyGauge regime={data.regime} rsi={data.indexRsi?.spy} onClick={() => { setChartList([{ ticker: 'SPY' }]); setChartIndex(0); }} />
+          <QqqGauge regime={data.regime} rsi={data.indexRsi?.qqq} onClick={() => { setChartList([{ ticker: 'QQQ' }]); setChartIndex(0); }} />
+          <MarketGauge label="NYSE" subLabel="Composite" data={data.marketGauges?.nyse} rsi={data.indexRsi?.nyse} onClick={() => { setChartList([{ ticker: '^NYA' }]); setChartIndex(0); }} />
+          <MarketGauge label="NASDAQ" subLabel="Composite" data={data.marketGauges?.nasdaq} rsi={data.indexRsi?.nasdaq} onClick={() => { setChartList([{ ticker: '^IXIC' }]); setChartIndex(0); }} />
+          <MarketGauge label="IWM" subLabel="Russell 2000" data={data.marketGauges?.iwm} rsi={data.indexRsi?.iwm} onClick={() => { setChartList([{ ticker: 'IWM' }]); setChartIndex(0); }} />
+          <MarketGauge label="DJI" subLabel="Dow Jones" data={data.marketGauges?.dji} rsi={data.indexRsi?.dji} onClick={() => { setChartList([{ ticker: '^DJI' }]); setChartIndex(0); }} />
+        </div>
+        {/* ROW 2: VIX + Commodities & Currency */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <VixThermometer vix={vix} onClick={() => { setChartList([{ ticker: '^VIX' }]); setChartIndex(0); }} />
+          <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} onClick={() => { setChartList([{ ticker: 'GLD' }]); setChartIndex(0); }} />
+          <MarketGauge label={data.marketGauges?.crude?.symbol === 'USO' ? 'USO' : 'WTI'} subLabel="Crude Oil" data={data.marketGauges?.crude} onClick={() => { setChartList([{ ticker: data.marketGauges?.crude?.symbol || 'USO' }]); setChartIndex(0); }} />
+          <MarketGauge label="USD" subLabel="Dollar Index" data={data.marketGauges?.usd} isIndex={true} onClick={() => { setChartList([{ ticker: 'UUP' }]); setChartIndex(0); }} />
+          <MarketGauge label="BTC" subLabel="Bitcoin" data={data.marketGauges?.btc} isBtc={true} onClick={() => { setChartList([{ ticker: 'BTCUSD' }]); setChartIndex(0); }} />
+        </div>
+        {/* ROW 3: Interest rates + macro */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <YieldGauge label="FED" subLabel="Fed Rate (1mo)" data={data.treasuryYields?.fed} />
+          <YieldGauge label="2Y" subLabel="2-Year Yield" data={data.treasuryYields?.y2} />
+          <YieldGauge label="10Y" subLabel="10-Year Yield" data={data.treasuryYields?.y10} />
+          <YieldGauge label="30Y" subLabel="30-Year Yield" data={data.treasuryYields?.y30} />
+          <RecessionGauge data={data.recessionIndicator} />
+          <BuffettGauge data={data.buffettIndicator} />
+          <ConsumerSentimentGauge data={data.consumerSentiment} />
+        </div>
       </div>
-      {/* ROW 2: VIX + Commodities & Currency */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <VixThermometer vix={vix} onClick={() => { setChartList([{ ticker: '^VIX' }]); setChartIndex(0); }} />
-        <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} onClick={() => { setChartList([{ ticker: 'GLD' }]); setChartIndex(0); }} />
-        <MarketGauge label={data.marketGauges?.crude?.symbol === 'USO' ? 'USO' : 'WTI'} subLabel="Crude Oil" data={data.marketGauges?.crude} onClick={() => { setChartList([{ ticker: data.marketGauges?.crude?.symbol || 'USO' }]); setChartIndex(0); }} />
-        <MarketGauge label="USD" subLabel="Dollar Index" data={data.marketGauges?.usd} isIndex={true} onClick={() => { setChartList([{ ticker: 'UUP' }]); setChartIndex(0); }} />
-        <MarketGauge label="BTC" subLabel="Bitcoin" data={data.marketGauges?.btc} isBtc={true} onClick={() => { setChartList([{ ticker: 'BTCUSD' }]); setChartIndex(0); }} />
-      </div>
-      {/* ROW 3: Interest rates */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <YieldGauge label="FED" subLabel="Fed Rate (1mo)" data={data.treasuryYields?.fed} />
-        <YieldGauge label="2Y" subLabel="2-Year Yield" data={data.treasuryYields?.y2} />
-        <YieldGauge label="10Y" subLabel="10-Year Yield" data={data.treasuryYields?.y10} />
-        <YieldGauge label="30Y" subLabel="30-Year Yield" data={data.treasuryYields?.y30} />
-        <RecessionGauge data={data.recessionIndicator} />
-        <BuffettGauge data={data.buffettIndicator} />
-        <ConsumerSentimentGauge data={data.consumerSentiment} />
-      </div>
+
       {/* ── TAB BAR: PNTHR 679 | PNTHR AI 300 ── */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>
         {[
           { key: '679',   label: 'PNTHR 679',    count: data?.signals?.blCount != null ? `${data.signals.blCount + data.signals.ssCount} signals` : null },
           { key: 'ai300', label: 'PNTHR AI 300', count: ai300Data?.signals?.blCount != null ? `${ai300Data.signals.blCount + ai300Data.signals.ssCount} signals` : null },
@@ -251,16 +256,41 @@ export default function PulsePage({ onNavigate }) {
 
       {/* ══════════════════════ PNTHR 679 TAB ══════════════════════ */}
       {pulseTab === '679' && <>
-        <RegimeStrip regime={data.regime} signals={data.signals} positions={isInvestor ? null : data.positions} />
-        <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-          <KillTop10 killTop10={data.killTop10} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} killDataLive={data.killDataLive} analyzeContext={analyzeContext} />
-          <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} newSignals={data.newSignals} />
+        {/* Regime */}
+        <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '12px 14px', marginBottom: 14 }}>
+          <RegimeStrip regime={data.regime} signals={data.signals} positions={isInvestor ? null : data.positions} />
         </div>
-        <NewSignalsPanel newSignals={data.newSignals} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} analyzeContext={analyzeContext} />
-        {showDev && <DevelopingSignalsPanel devSignals={devSignals} loading={devLoading} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} analyzeContext={analyzeContext} />}
-        <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
-        <MoversPanel movers={movers} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} />
-        {!isInvestor && <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} onSectorClick={(sector, sectorData) => setSectorModal({ sector, data: sectorData })} />}
+        {/* Kill Top 10 + Sector Pulse */}
+        <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <KillTop10 killTop10={data.killTop10} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} killDataLive={data.killDataLive} analyzeContext={analyzeContext} />
+            <SectorPulse signals={data.signals} killDataLive={data.killDataLive} onNavigate={onNavigate} newSignals={data.newSignals} />
+          </div>
+        </div>
+        {/* New Signals */}
+        <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+          <NewSignalsPanel newSignals={data.newSignals} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} analyzeContext={analyzeContext} />
+        </div>
+        {/* Developing Signals */}
+        {showDev && (
+          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+            <DevelopingSignalsPanel devSignals={devSignals} loading={devLoading} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} analyzeContext={analyzeContext} />
+          </div>
+        )}
+        {/* Signal Breadth */}
+        <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+          <SignalBreadthBar signals={data.signals} onSignalClick={setSignalModal} />
+        </div>
+        {/* Movers */}
+        <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+          <MoversPanel movers={movers} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} />
+        </div>
+        {/* Portfolio Status */}
+        {!isInvestor && (
+          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+            <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} onSectorClick={(sector, sectorData) => setSectorModal({ sector, data: sectorData })} />
+          </div>
+        )}
       </>}
 
       {/* ══════════════════════ PNTHR AI 300 TAB ══════════════════════ */}
@@ -270,16 +300,41 @@ export default function PulsePage({ onNavigate }) {
             Loading AI 300 Pulse...
           </div>
         ) : ai300Data ? <>
-          <Ai300RegimeStrip regime={ai300Data.regime} signals={ai300Data.signals} positions={isInvestor ? null : ai300Data.positions} pai300={ai300Data.pai300} />
-          <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-            <KillTop10 killTop10={ai300Data.killTop10} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} killDataLive={ai300Data.killDataLive} analyzeContext={analyzeContext} universeLabel="AI 300" />
-            <Ai300SectorPulse signals={ai300Data.signals} sectorTiers={ai300Data.sectorTiers} killDataLive={ai300Data.killDataLive} newSignals={ai300Data.newSignals} onNavigate={onNavigate} allSignalStocks={ai300Data.allSignalStocks} onSectorStockClick={(sectorName) => setAi300SectorModal(sectorName)} onNewSignalClick={(sig, sector) => setAi300NewSigModal({ signal: sig, sector })} />
+          {/* Regime */}
+          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '12px 14px', marginBottom: 14 }}>
+            <Ai300RegimeStrip regime={ai300Data.regime} signals={ai300Data.signals} positions={isInvestor ? null : ai300Data.positions} pai300={ai300Data.pai300} />
           </div>
-          <NewSignalsPanel newSignals={ai300Data.newSignals} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} analyzeContext={analyzeContext} universeLabel="AI 300" />
-          {showDev && <DevelopingSignalsPanel devSignals={ai300DevSignals} loading={ai300DevLoading} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} analyzeContext={analyzeContext} />}
-          <SignalBreadthBar signals={ai300Data.signals} onSignalClick={setAi300SignalModal} />
-          <Ai300MoversPanel movers={ai300Movers} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} />
-          {!isInvestor && <PortfolioStatus positions={ai300Data.positions} lotsReady={ai300Data.lotsReady} onNavigate={onNavigate} sectorExposure={null} onSectorClick={() => {}} />}
+          {/* Kill Top 10 + Sector Pulse */}
+          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <KillTop10 killTop10={ai300Data.killTop10} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} killDataLive={ai300Data.killDataLive} analyzeContext={analyzeContext} universeLabel="AI 300" />
+              <Ai300SectorPulse signals={ai300Data.signals} sectorTiers={ai300Data.sectorTiers} killDataLive={ai300Data.killDataLive} newSignals={ai300Data.newSignals} onNavigate={onNavigate} allSignalStocks={ai300Data.allSignalStocks} onSectorStockClick={(sectorName) => setAi300SectorModal(sectorName)} onNewSignalClick={(sig, sector) => setAi300NewSigModal({ signal: sig, sector })} />
+            </div>
+          </div>
+          {/* New Signals */}
+          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+            <NewSignalsPanel newSignals={ai300Data.newSignals} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} analyzeContext={analyzeContext} universeLabel="AI 300" />
+          </div>
+          {/* Developing Signals */}
+          {showDev && (
+            <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+              <DevelopingSignalsPanel devSignals={ai300DevSignals} loading={ai300DevLoading} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} analyzeContext={analyzeContext} />
+            </div>
+          )}
+          {/* Signal Breadth */}
+          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+            <SignalBreadthBar signals={ai300Data.signals} onSignalClick={setAi300SignalModal} />
+          </div>
+          {/* Movers */}
+          <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+            <Ai300MoversPanel movers={ai300Movers} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} />
+          </div>
+          {/* Portfolio Status */}
+          {!isInvestor && (
+            <div style={{ border: '1px solid rgba(255,215,0,0.10)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+              <PortfolioStatus positions={ai300Data.positions} lotsReady={ai300Data.lotsReady} onNavigate={onNavigate} sectorExposure={null} onSectorClick={() => {}} />
+            </div>
+          )}
         </> : (
           <div style={{ background: '#111', borderRadius: 12, padding: '40px 20px', textAlign: 'center', color: '#ff6b6b', fontSize: 14, fontFamily: 'monospace' }}>
             Failed to load AI 300 data. Click REFRESH to retry.
@@ -882,7 +937,7 @@ function RegimeStrip({ regime, signals, positions }) {
     <div style={{
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       background: bg, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`,
-      borderRadius: 4, padding: '9px 18px', marginBottom: 12,
+      borderRadius: 4, padding: '9px 18px',
     }}>
       {/* Left: Regime */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
@@ -980,15 +1035,6 @@ function HeatGauge({ positions }) {
 }
 
 function KillTop10({ killTop10, onTickerClick, killDataLive, analyzeContext, universeLabel }) {
-  const tierShort = (tier) => {
-    if (!tier) return '';
-    if (tier.includes('ALPHA')) return 'ALPHA';
-    if (tier.includes('STRIKING')) return 'STRIK';
-    if (tier.includes('HUNTING')) return 'HUNT';
-    if (tier.includes('POUNCING')) return 'POUNCE';
-    return tier.slice(0, 5);
-  };
-
   // Build full chart-ready array once so every click gets the complete list
   const chartStocks = (killTop10 || []).map(x => ({
     ticker: x.ticker,
@@ -1008,30 +1054,43 @@ function KillTop10({ killTop10, onTickerClick, killDataLive, analyzeContext, uni
       </div>
       {(!killTop10 || killTop10.length === 0) && <div style={{ color: '#555', fontSize: 12 }}>No kill scores yet.</div>}
       {killTop10 && killTop10.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', borderBottom: '1px solid #333', marginBottom: 2 }}>
-          <span style={{ color: '#555', fontSize: 8, fontWeight: 700, letterSpacing: 1, minWidth: 18, fontFamily: 'monospace' }}>#</span>
-          <span style={{ color: '#555', fontSize: 8, fontWeight: 700, letterSpacing: 1, minWidth: 52, fontFamily: 'monospace' }}>TICKER</span>
-          <span style={{ color: '#555', fontSize: 8, fontWeight: 700, letterSpacing: 1, minWidth: 44, fontFamily: 'monospace' }}>SCORE</span>
-          <span style={{ color: '#555', fontSize: 8, fontWeight: 700, letterSpacing: 1, minWidth: 40, textAlign: 'center', fontFamily: 'monospace' }}>TIER</span>
-          <span style={{ color: '#555', fontSize: 8, fontWeight: 700, letterSpacing: 1, fontFamily: 'monospace' }}>SIG</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 10px', borderBottom: '1px solid #333', marginBottom: 2, position: 'sticky', top: 0, background: '#111', zIndex: 2 }}>
+          <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 18, fontFamily: 'monospace' }}>#</span>
+          <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 50, fontFamily: 'monospace' }}>TICKER</span>
+          <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 70, textAlign: 'right', fontFamily: 'monospace' }}>PRICE</span>
+          <span style={{ color: '#666', fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 44, textAlign: 'right', fontFamily: 'monospace' }}>SCORE</span>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, minWidth: 100, textAlign: 'right', fontFamily: 'monospace' }}>
+            <span style={{ color: '#FFD700' }}>L</span><span style={{ color: '#444' }}> · </span><span style={{ color: '#ccc' }}>C</span><span style={{ color: '#444' }}> · </span><span style={{ color: '#6bcb77' }}>H</span><span style={{ color: '#555', marginLeft: 4 }}>RSI</span>
+          </span>
+          <span style={{ minWidth: 32 }} />
         </div>
       )}
       {(killTop10 || []).map((s, i) => {
-        const isAlpha = (s.tier || '').includes('ALPHA');
         const rc = s.rankChange;
         const ar = analyzeContext ? computeAnalyzeScore(s, analyzeContext) : null;
+        const hasRsi = s.rsiCurrent != null;
         return (
-          <div key={s.ticker} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #1a1a1a' }}>
-            <span style={{ color: i === 0 ? '#FFD700' : '#555', fontSize: 11, minWidth: 18 }}>#{s.killRank || i + 1}</span>
-            <span
-              style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 52, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(212,160,23,0.4)' }}
-              onClick={() => onTickerClick(chartStocks, i)}
-            >{s.ticker}</span>
-            <span style={{ color: '#ccc', fontSize: 12, minWidth: 44 }}>{(s.totalScore || 0).toFixed(1)}</span>
-            <span style={{ background: isAlpha ? 'rgba(212,160,23,0.2)' : 'rgba(40,167,69,0.15)', color: isAlpha ? '#FFD700' : '#6bcb77', fontSize: 9, padding: '2px 5px', borderRadius: 4, minWidth: 40, textAlign: 'center' }}>{tierShort(s.tier)}</span>
-            <span style={{ background: s.signal === 'SS' ? 'rgba(220,53,69,0.2)' : 'rgba(40,167,69,0.2)', color: s.signal === 'SS' ? '#ff6b6b' : '#6bcb77', fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>{s.signal}</span>
-            {rc != null && rc !== 0 && <span style={{ color: rc > 0 ? '#28a745' : '#dc3545', fontSize: 10 }}>{rc > 0 ? '▲' : '▼'}{Math.abs(rc)}</span>}
-            {ar && <span style={{ color: ar.color, fontSize: 10, fontWeight: 700, fontFamily: 'monospace', marginLeft: 'auto' }} title={ar.warnings?.length ? ar.warnings[0] : `Pre-trade: ${ar.pct}%`}>{ar.pct}{ar.warnings?.length > 0 ? '⚠' : ''}</span>}
+          <div key={s.ticker} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 10px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer', transition: 'background 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            onClick={() => onTickerClick(chartStocks, i)}
+          >
+            <span style={{ color: i === 0 ? '#FFD700' : '#555', fontSize: 11, minWidth: 18, fontFamily: 'monospace' }}>#{s.killRank || i + 1}</span>
+            <span style={{ color: '#FFD700', fontWeight: 800, fontSize: 13, minWidth: 50, textDecoration: 'underline', textDecorationColor: 'rgba(212,160,23,0.4)', fontFamily: 'monospace' }}>{s.ticker}</span>
+            <span style={{ color: '#ccc', fontSize: 12, minWidth: 70, textAlign: 'right', fontFamily: 'monospace' }}>{s.currentPrice ? `$${(+s.currentPrice).toFixed(2)}` : '—'}</span>
+            <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, minWidth: 44, textAlign: 'right', fontFamily: 'monospace' }}>{(s.totalScore || 0).toFixed(1)}</span>
+            {hasRsi ? (
+              <span style={{ fontSize: 10, fontFamily: 'monospace', minWidth: 100, textAlign: 'right', letterSpacing: 0.3 }} title={`RSI(14) — Low: ${s.rsiLow}  Current: ${s.rsiCurrent}  High: ${s.rsiHigh}`}>
+                <span style={{ color: '#FFD700' }}>{s.rsiLow}</span>
+                <span style={{ color: '#333' }}> · </span>
+                <span style={{ color: '#fff', fontWeight: 700 }}>{s.rsiCurrent}</span>
+                <span style={{ color: '#333' }}> · </span>
+                <span style={{ color: '#6bcb77' }}>{s.rsiHigh}</span>
+              </span>
+            ) : (
+              <span style={{ fontSize: 10, fontFamily: 'monospace', minWidth: 100, textAlign: 'right', color: '#333' }}>— · — · —</span>
+            )}
+            {ar && <span style={{ color: ar.color, fontSize: 11, fontWeight: 700, fontFamily: 'monospace', minWidth: 32, textAlign: 'right' }} title={ar.warnings?.length ? ar.warnings[0] : `Pre-trade: ${ar.pct}%`}>{ar.pct}{ar.warnings?.length > 0 ? '⚠' : ''}</span>}
           </div>
         );
       })}
@@ -1969,7 +2028,7 @@ function Ai300RegimeStrip({ regime, signals, positions, pai300 }) {
     <div style={{
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       background: bg, border: `1px solid ${borderColor}33`, borderLeft: `3px solid ${borderColor}`,
-      borderRadius: 4, padding: '9px 18px', marginBottom: 12,
+      borderRadius: 4, padding: '9px 18px',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <span style={{ color: labelColor, fontWeight: 900, fontSize: 15, fontFamily: 'monospace', letterSpacing: 2 }}>

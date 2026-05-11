@@ -7366,8 +7366,9 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       }
     }
 
-    // Enrich new signal stocks with RSI(14) current / 52-week low / 52-week high
-    const newSigTickers = [...new Set([...newBLStocks.map(s => s.ticker), ...newSSStocks.map(s => s.ticker)])].filter(t => !t.includes('-new-'));
+    // Enrich new signal stocks + Kill Top 10 with RSI(14) current / 52-week low / 52-week high
+    const killTop10Tickers = (killTop10 || []).map(s => s.ticker);
+    const newSigTickers = [...new Set([...newBLStocks.map(s => s.ticker), ...newSSStocks.map(s => s.ticker), ...killTop10Tickers])].filter(t => !t.includes('-new-'));
     if (newSigTickers.length > 0) {
       try {
         const rsiMap = {};
@@ -7417,7 +7418,11 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
           const r = rsiMap[ns.ticker];
           if (r) { ns.rsiCurrent = r.current; ns.rsiLow = r.low; ns.rsiHigh = r.high; }
         }
-        console.log(`[PULSE] RSI enriched ${Object.keys(rsiMap).length}/${newSigTickers.length} new signal tickers`);
+        for (const k of (killTop10 || [])) {
+          const r = rsiMap[k.ticker];
+          if (r) { k.rsiCurrent = r.current; k.rsiLow = r.low; k.rsiHigh = r.high; }
+        }
+        console.log(`[PULSE] RSI enriched ${Object.keys(rsiMap).length}/${newSigTickers.length} signal+kill tickers`);
       } catch (rsiErr) {
         console.warn('[PULSE] RSI enrichment failed:', rsiErr.message);
       }
@@ -7813,7 +7818,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         // RSI(14) from last 30 stored daily closes (lightweight — no live overlay needed)
         let rsi = null;
         try {
-          const recentBars = await db.collection('pnthr_ai_index_candles_daily')
+          const recentBars = await db.collection('pnthr_ai_index_candles')
             .find({}, { projection: { close: 1, _id: 0 } })
             .sort({ date: -1 }).limit(30).toArray();
           if (recentBars.length >= 16) {
@@ -8231,8 +8236,9 @@ app.get('/api/pulse/ai300', authenticateJWT, async (req, res) => {
       }
     }
 
-    // Enrich AI 300 new signal stocks with RSI(14) current / 52-week low / 52-week high
-    const ai300NewSigTickers = [...new Set([...newBLStocks.map(s => s.ticker), ...newSSStocks.map(s => s.ticker)])];
+    // Enrich AI 300 new signal stocks + Kill Top 10 with RSI(14) current / 52-week low / 52-week high
+    const ai300KillTickers = killTop10.map(s => s.ticker);
+    const ai300NewSigTickers = [...new Set([...newBLStocks.map(s => s.ticker), ...newSSStocks.map(s => s.ticker), ...ai300KillTickers])];
     if (ai300NewSigTickers.length > 0) {
       try {
         const dailyDocs = await db.collection('pnthr_ai_bt_candles')
@@ -8261,7 +8267,7 @@ app.get('/api/pulse/ai300', authenticateJWT, async (req, res) => {
           }
           const recent = rsiSeries.slice(-252);
           const rsiData = { current: Math.round(recent[recent.length - 1]), low: Math.round(Math.min(...recent)), high: Math.round(Math.max(...recent)) };
-          for (const ns of [...newBLStocks, ...newSSStocks]) {
+          for (const ns of [...newBLStocks, ...newSSStocks, ...killTop10]) {
             if (ns.ticker === doc.ticker) { ns.rsiCurrent = rsiData.current; ns.rsiLow = rsiData.low; ns.rsiHigh = rsiData.high; }
           }
         }
@@ -8276,7 +8282,7 @@ app.get('/api/pulse/ai300', authenticateJWT, async (req, res) => {
     if (ai300Latest?.ok) {
       let rsi = null;
       try {
-        const recentBars = await db.collection('pnthr_ai_index_candles_daily')
+        const recentBars = await db.collection('pnthr_ai_index_candles')
           .find({}, { projection: { close: 1, _id: 0 } })
           .sort({ date: -1 }).limit(30).toArray();
         if (recentBars.length >= 16) {

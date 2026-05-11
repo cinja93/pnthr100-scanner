@@ -3019,11 +3019,37 @@ app.patch('/api/positions/:id/shares', authenticateJWT, async (req, res) => {
       });
     }
 
+    // Recompute summary fields from fills + exits so the display stays
+    // consistent. If sum(fills) now matches or exceeds totalShares but stale
+    // exits make net negative, clear exits — the user's intent is to set
+    // the canonical share count, not preserve stale exit records.
+    const updatedFills = { ...fills, 1: { ...lot1, shares: lot1New } };
+    const newSumFilled = Object.values(updatedFills).reduce(
+      (s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0,
+    );
+    const oldSumExited = (pos.exits || []).reduce((s, e) => s + (+e.shares || 0), 0);
+    const netAfterEdit = newSumFilled - oldSumExited;
+    // If exits make net negative or the user explicitly set total to match
+    // IBKR, clear the stale exit records.
+    const clearExits = netAfterEdit < 0 || netAfterEdit !== target;
+    const finalExited = clearExits ? 0 : oldSumExited;
+    const finalRemaining = newSumFilled - finalExited;
+
+    const $set = {
+      'fills.1.shares': lot1New,
+      totalFilledShares: newSumFilled,
+      totalExitedShares: finalExited,
+      remainingShares:   finalRemaining,
+      updatedAt:         new Date(),
+    };
+    const update = { $set };
+    if (clearExits) update.$set.exits = [];
+
     await db.collection('pnthr_portfolio').updateOne(
       { id: req.params.id, ownerId: req.user.userId },
-      { $set: { 'fills.1.shares': lot1New, updatedAt: new Date() } }
+      update,
     );
-    res.json({ success: true, totalShares: target, lot1Shares: lot1New });
+    res.json({ success: true, totalShares: target, lot1Shares: lot1New, exitsCleared: clearExits });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -4,6 +4,7 @@ client/node_modules
 server/.env
 client/.env
 .env
+.env.bridge
 .DS_Store
 dist
 

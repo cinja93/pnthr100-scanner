@@ -50,7 +50,7 @@ function buildAlerts(movers) {
   return out;
 }
 
-export default function MoversAlertBanner() {
+export default function MoversAlertBanner({ onTickerClick }) {
   const { currentUser } = useAuth() || {};
   const [alerts, setAlerts] = useState([]);
   const [dismissed, setDismissed] = useState(() => loadDismissed());
@@ -94,7 +94,11 @@ export default function MoversAlertBanner() {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
         <span style={{ fontSize: 18 }}>{isBL ? '📈' : '📉'}</span>
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div
+          onClick={() => onTickerClick?.(newest.ticker)}
+          style={{ display: 'flex', flexDirection: 'column', minWidth: 0, cursor: 'pointer' }}
+          title={`Open ${newest.ticker} chart`}
+        >
           <div style={{ fontWeight: 800, fontSize: 13, letterSpacing: '0.04em' }}>
             ${newest.ticker} — PNTHR MOVER — {newest.signal}
           </div>
@@ -109,15 +113,21 @@ export default function MoversAlertBanner() {
             {rest.map(a => {
               const bl = a.signal === 'BL+1';
               return (
-                <span key={a.id} style={{
-                  background: bl ? '#16a34a' : '#dc2626',
-                  color: '#fff', fontWeight: 800, fontSize: 11,
-                  padding: '3px 10px', borderRadius: 4,
-                  whiteSpace: 'nowrap', cursor: 'default',
-                  letterSpacing: '0.04em',
-                }}>
-                  {a.ticker}
-                </span>
+                <button
+                  key={a.id}
+                  onClick={() => onTickerClick?.(a.ticker)}
+                  title={`Open ${a.ticker} chart`}
+                  style={{
+                    background: bl ? '#16a34a' : '#dc2626',
+                    color: '#fff', fontWeight: 800, fontSize: 11,
+                    padding: '3px 10px', borderRadius: 4,
+                    whiteSpace: 'nowrap', cursor: 'pointer',
+                    letterSpacing: '0.04em',
+                    border: 'none',
+                  }}
+                >
+                  {a.ticker} {a.signal}
+                </button>
               );
             })}
           </div>

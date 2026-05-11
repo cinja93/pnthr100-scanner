@@ -1104,7 +1104,10 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       {isAuthenticated && (
         <TrendlineAlertBanner onNavigateToAssistant={() => navigate('assistant')} />
       )}
-      {isAuthenticated && <MoversAlertBanner />}
+      {isAuthenticated && <MoversAlertBanner onTickerClick={(ticker) => {
+        setChartStocks([{ ticker }]);
+        setChartIndex(0);
+      }} />}
       <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
 
       <div className="content-wrapper">

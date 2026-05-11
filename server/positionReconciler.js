@@ -210,6 +210,42 @@ export async function runPositionReconciler({ db, dryRun = false } = {}) {
 
     const isLong = (p.direction || 'LONG').toUpperCase() !== 'SHORT';
 
+    // Negative pnthrNet = definitively corrupted data (can't hold negative
+    // shares). Bypass the percentage guard entirely — clear stale exits so
+    // net resets to sumFilled, then let CASE B append any remaining shortfall.
+    if (pnthrNet < 0) {
+      if (dryRun) {
+        actions.push({ ticker, kind: 'WOULD_CLEAR_STALE_EXITS_NEGATIVE_NET', pnthrNet, ibkrShares, sumFilled, sumExited });
+      } else {
+        const freshFills = Object.values(p.fills || {});
+        const newSumFilled = freshFills.reduce((s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0);
+        const newRemaining = Math.min(newSumFilled, ibkrShares);
+        await db.collection('pnthr_portfolio').updateOne(
+          { id: p.id, ownerId: p.ownerId },
+          { $set: {
+              exits: [],
+              totalExitedShares: 0,
+              totalFilledShares: newSumFilled,
+              remainingShares:   newRemaining,
+              updatedAt:         new Date(),
+            },
+          },
+        );
+        actions.push({ ticker, kind: 'CLEARED_STALE_EXITS_NEGATIVE_NET', pnthrNet, ibkrShares, newSumFilled, newRemaining });
+        if (newSumFilled < ibkrShares) {
+          const shortfall = ibkrShares - newSumFilled;
+          await appendSyntheticFill({
+            db, position: p, ownerId: p.ownerId,
+            shares: shortfall,
+            ibkrMarketPrice: +ibkrPos?.marketPrice || +ibkrPos?.avgCost || 0,
+            ibkrAvgCost: +ibkrPos?.avgCost || 0,
+            log: actions,
+          });
+        }
+      }
+      continue;
+    }
+
     // 50%-drift safety guard — refuse mass-correction from a single bad sync.
     // EXCEPTION: when there are unprocessed IBKR executions in latestExecutions
     // that explain the drift exactly (within ±1 sh rounding), the drift is

@@ -895,6 +895,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [aiSignals, setAiSignals] = useState({});
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
+  const [aiEarnings, setAiEarnings] = useState({});
   const [aiChartTickers, setAiChartTickers] = useState([]);
   const [aiChartIndex, setAiChartIndex] = useState(null);
 
@@ -919,18 +920,16 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       const fetchFn = scanType === 'short' ? fetchAiShortStocks : fetchAiTopStocks;
       const data = await fetchFn();
       setAiStocks(data);
-      const sigMap = {};
-      for (const s of data) {
-        if (s._signal) {
-          sigMap[s.ticker] = {
-            signal: s._signal,
-            stopPrice: s._stopPrice ?? null,
-            signalDate: s._signalDate ?? null,
-            isNewSignal: s._isNewSignal ?? false,
-          };
-        }
-      }
-      setAiSignals(sigMap);
+      setAiSignals({});
+      const tickers = data.map(s => s.ticker);
+      const opts = { shortList: scanType === 'short' };
+      Promise.all([
+        fetchSignals(tickers, opts).catch(err => { console.error('AI signals error:', err); return {}; }),
+        fetchLaserSignals(tickers, opts).catch(err => { console.error('AI laser signals error:', err); return {}; }),
+      ]).then(([pnthr]) => {
+        setAiSignals(pnthr);
+      });
+      fetchEarnings(tickers).then(result => setAiEarnings(result)).catch(() => {});
     } catch (err) {
       console.error('AI stocks fetch failed:', err);
       setAiError('Failed to load AI stock data.');
@@ -1429,7 +1428,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                 )}
 
                 {!aiLoading && !aiError && aiStocks.length > 0 && (
-                  <StockTable key={`ai-${activePage}`} stocks={aiStocks} signals={aiSignals} laserSignals={{}} signalsLoading={false} earnings={{}} onTickerClick={handleRowClick} scanType={scanType} hideExchange />
+                  <StockTable key={`ai-${activePage}`} stocks={aiStocks} signals={aiSignals} laserSignals={{}} signalsLoading={false} earnings={aiEarnings} onTickerClick={handleRowClick} scanType={scanType} hideExchange />
                 )}
 
                 {!aiLoading && !aiError && aiStocks.length === 0 && (

@@ -70,7 +70,7 @@ const AI_ETF_CATEGORIES = [
   },
   {
     label: 'AI Semiconductors & Memory',
-    tickers: ['DRAM','SMH','SOXX','XSD'],
+    tickers: ['DRAM','SMH','SOXX','XSD','PSI'],
   },
   {
     label: 'AI Infrastructure & Data Centers',
@@ -178,7 +178,7 @@ async function fetchBulkQuotes(tickers) {
 }
 
 // Export the canonical ETF ticker set so other modules (e.g. pulse) can classify ETFs
-export const ALL_ETF_TICKER_SET = new Set(ALL_ETF_TICKERS);
+export const ALL_ETF_TICKER_SET = new Set([...ALL_ETF_TICKERS, ...ALL_AI_ETF_TICKERS]);
 
 // Export AI ETF category lookup (ticker → AI category label)
 export { AI_TICKER_CATEGORY };

@@ -807,6 +807,36 @@ export async function fetchLiveVix() {
   return res.json();
 }
 
+// ── AI 300 Pulse ─────────────────────────────────────────────────────────────
+
+export async function fetchPulseAi300() {
+  const res = await apiFetch(`${API_BASE}/api/pulse/ai300`, { headers: authHeaders() });
+  if (!res.ok) {
+    let msg = `AI 300 Pulse API error ${res.status}`;
+    try { const body = await res.json(); if (body?.error) msg += `: ${body.error}`; } catch {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function fetchAi300SignalStocks(signal) {
+  const res = await apiFetch(`${API_BASE}/api/pulse/ai300/signal-stocks?signal=${signal}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`AI 300 signal stocks error ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAi300Movers() {
+  const res = await apiFetch(`${API_BASE}/api/pulse/ai300/movers`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`AI 300 Movers API error ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAi300DevelopingSignals() {
+  const res = await apiFetch(`${API_BASE}/api/pulse/ai300/developing-signals`, { headers: authHeaders() });
+  if (!res.ok) return { status: 'ERROR', bl: [], ss: [] };
+  return res.json();
+}
+
 // ── Journal ───────────────────────────────────────────────────────────────────
 
 export async function fetchWashRules(ticker = null) {

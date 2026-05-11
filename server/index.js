@@ -37,6 +37,10 @@ import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstitu
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './aiOrdersPipeline.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
+import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
+import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
+import { SECTOR_EMA_PERIODS as AI_SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
+import { fetchAiQuotesBatch } from './aiIntradayOverlay.js';
 import { getAiStockChartData } from './aiUniverseStockChartService.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
@@ -7348,6 +7352,77 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       }
     }
 
+    // Enrich new signal stocks with Kill scores from apex cache
+    if (liveApex?.stocks) {
+      const apexByTicker = {};
+      for (const s of liveApex.stocks) apexByTicker[s.ticker] = s;
+      for (const ns of newBLStocks) {
+        const a = apexByTicker[ns.ticker];
+        if (a) { ns.totalScore = +(a.apexScore || 0).toFixed(1); ns.tier = a.tier || null; ns.killRank = a.killRank ?? null; ns.currentPrice = ns.currentPrice || a.currentPrice; }
+      }
+      for (const ns of newSSStocks) {
+        const a = apexByTicker[ns.ticker];
+        if (a) { ns.totalScore = +(a.apexScore || 0).toFixed(1); ns.tier = a.tier || null; ns.killRank = a.killRank ?? null; ns.currentPrice = ns.currentPrice || a.currentPrice; }
+      }
+    }
+
+    // Enrich new signal stocks with RSI(14) current / 52-week low / 52-week high
+    const newSigTickers = [...new Set([...newBLStocks.map(s => s.ticker), ...newSSStocks.map(s => s.ticker)])].filter(t => !t.includes('-new-'));
+    if (newSigTickers.length > 0) {
+      try {
+        const rsiMap = {};
+        const RSI_BATCH = 5;
+        const toDate = new Date().toISOString().slice(0, 10);
+        const fromDate = new Date(Date.now() - 370 * 86400000).toISOString().slice(0, 10);
+        for (let i = 0; i < newSigTickers.length; i += RSI_BATCH) {
+          const chunk = newSigTickers.slice(i, i + RSI_BATCH);
+          const fetches = chunk.map(async (ticker) => {
+            try {
+              const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?from=${fromDate}&to=${toDate}&apikey=${FMP_KEY}`;
+              const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+              if (!r.ok) return;
+              const d = await r.json();
+              const daily = (d?.historical || []).slice().sort((a, b) => a.date > b.date ? 1 : -1);
+              if (daily.length < 20) return;
+              const closes = daily.map(b => b.close);
+              const n = closes.length;
+              let avgGain = 0, avgLoss = 0;
+              for (let j = 1; j <= 14; j++) {
+                const delta = closes[j] - closes[j - 1];
+                if (delta > 0) avgGain += delta; else avgLoss += Math.abs(delta);
+              }
+              avgGain /= 14; avgLoss /= 14;
+              const rsiSeries = [];
+              let rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+              rsiSeries.push(rsi);
+              for (let j = 15; j < n; j++) {
+                const delta = closes[j] - closes[j - 1];
+                avgGain = (avgGain * 13 + Math.max(delta, 0)) / 14;
+                avgLoss = (avgLoss * 13 + Math.max(-delta, 0)) / 14;
+                rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+                rsiSeries.push(rsi);
+              }
+              // Use last 252 RSI values (52 weeks) for low/high range
+              const recent = rsiSeries.slice(-252);
+              rsiMap[ticker] = {
+                current: Math.round(recent[recent.length - 1]),
+                low:     Math.round(Math.min(...recent)),
+                high:    Math.round(Math.max(...recent)),
+              };
+            } catch {}
+          });
+          await Promise.all(fetches);
+        }
+        for (const ns of [...newBLStocks, ...newSSStocks]) {
+          const r = rsiMap[ns.ticker];
+          if (r) { ns.rsiCurrent = r.current; ns.rsiLow = r.low; ns.rsiHigh = r.high; }
+        }
+        console.log(`[PULSE] RSI enriched ${Object.keys(rsiMap).length}/${newSigTickers.length} new signal tickers`);
+      } catch (rsiErr) {
+        console.warn('[PULSE] RSI enrichment failed:', rsiErr.message);
+      }
+    }
+
     // ── ETFs: from the ETF cache (populated when /api/etf-stocks is visited) ──
     function calcSignalAge(signalDate) {
       if (!signalDate) return 99;
@@ -8046,6 +8121,574 @@ app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
     res.json({ status: 'OK', bl: devBL, ss: devSS });
   } catch (err) {
     console.error('[/api/pulse/developing-signals]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PNTHR AI 300 Pulse — mirror of /api/pulse for the 297-stock AI Universe ──
+// Sources data from AI-native services: aiUniverseSignalsService (BL/SS per
+// AI sector), aiKillService (D1-D4 scoring + tiers), pnthrAi300Service
+// (PAI300 regime gate), aiSectorRotationService (5D ranks).
+// Portfolio data filtered to fundId='ai300'.
+app.get('/api/pulse/ai300', authenticateJWT, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+
+    // Build ticker→sector lookup from AI Universe holdings
+    const aiTickerMeta = {};
+    for (const sec of AI_SECTORS) {
+      for (const h of sec.holdings) {
+        aiTickerMeta[h.ticker] = { sectorId: sec.id, sectorName: sec.name, companyName: h.name };
+      }
+    }
+    const aiTickers = Object.keys(aiTickerMeta);
+
+    // ── Parallel fetch: signals, kill scores, PAI300, sector ranks, portfolio ──
+    const [
+      aiSignalData,
+      aiKillDoc,
+      ai300Latest,
+      sectorRanks,
+      positions,
+      userProfile,
+    ] = await Promise.all([
+      getAiUniverseSignals().catch(err => { console.warn('[AI Pulse] signals failed:', err.message); return { signals: {}, dailySignals: {} }; }),
+      getLatestAiKillScores().catch(err => { console.warn('[AI Pulse] kill failed:', err.message); return null; }),
+      getPnthrAi300Latest().catch(err => { console.warn('[AI Pulse] PAI300 failed:', err.message); return null; }),
+      getLatestAiSectorRanks().catch(err => { console.warn('[AI Pulse] sector ranks failed:', err.message); return null; }),
+      db.collection('pnthr_portfolio').find({ ownerId: userId, status: { $nin: ['CLOSED'] }, fundId: 'ai300' }).toArray().catch(() => []),
+      getUserProfile(userId).catch(() => null),
+    ]);
+
+    const { signals: weeklySig } = aiSignalData;
+
+    // ── Kill Top 10 ──
+    let killTop10 = [];
+    let killDataLive = false;
+    if (aiKillDoc?.scores?.length) {
+      killDataLive = true;
+      killTop10 = aiKillDoc.scores
+        .slice(0, 10)
+        .map(s => ({
+          killRank:     s.killRank,
+          ticker:       s.ticker,
+          signal:       s.signal,
+          totalScore:   s.total,
+          tier:         s.tierName,
+          sector:       s.sectorName,
+          sectorId:     s.sectorId,
+          currentPrice: s.currentPrice,
+          rankChange:   null,
+          isNewSignal:  s.isNewSignal,
+        }));
+    }
+
+    // ── Signal counts by AI sector (16 sectors) ──
+    const sectorSignalMap = {};
+    const sectorTotalStocks = {};
+    let blCount = 0, ssCount = 0;
+    const newBLStocks = [], newSSStocks = [];
+
+    for (const sec of AI_SECTORS) {
+      const sName = sec.name;
+      sectorSignalMap[sName] = { bl: 0, ss: 0 };
+      sectorTotalStocks[sName] = sec.holdings.length;
+    }
+
+    for (const [ticker, sig] of Object.entries(weeklySig)) {
+      if (!sig?.signal) continue;
+      const mapped = sig.signal === 'BUY' ? 'BL' : sig.signal === 'SELL' ? 'SS' : sig.signal;
+      if (mapped !== 'BL' && mapped !== 'SS') continue;
+
+      const meta = aiTickerMeta[ticker];
+      if (!meta) continue;
+
+      if (mapped === 'BL') blCount++;
+      else ssCount++;
+
+      if (sectorSignalMap[meta.sectorName]) {
+        if (mapped === 'BL') sectorSignalMap[meta.sectorName].bl++;
+        else sectorSignalMap[meta.sectorName].ss++;
+      }
+
+      if (sig.isNewSignal) {
+        const killMatch = aiKillDoc?.scores?.find(s => s.ticker === ticker);
+        const entry = {
+          ticker,
+          sector: meta.sectorName,
+          sectorId: meta.sectorId,
+          signal: mapped,
+          currentPrice: killMatch?.currentPrice ?? null,
+          totalScore: killMatch?.total ?? 0,
+          tier: killMatch?.tierName ?? null,
+          signalAge: 0,
+          killRank: killMatch?.killRank ?? null,
+        };
+        if (mapped === 'BL') newBLStocks.push(entry);
+        else newSSStocks.push(entry);
+      }
+    }
+
+    // Enrich AI 300 new signal stocks with RSI(14) current / 52-week low / 52-week high
+    const ai300NewSigTickers = [...new Set([...newBLStocks.map(s => s.ticker), ...newSSStocks.map(s => s.ticker)])];
+    if (ai300NewSigTickers.length > 0) {
+      try {
+        const dailyDocs = await db.collection('pnthr_ai_bt_candles')
+          .find({ ticker: { $in: ai300NewSigTickers } }, { projection: { ticker: 1, daily: 1 } })
+          .toArray();
+        for (const doc of dailyDocs) {
+          const bars = (doc.daily || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+          if (bars.length < 20) continue;
+          const closes = bars.map(b => b.close);
+          const n = closes.length;
+          let avgGain = 0, avgLoss = 0;
+          for (let j = 1; j <= 14; j++) {
+            const delta = closes[j] - closes[j - 1];
+            if (delta > 0) avgGain += delta; else avgLoss += Math.abs(delta);
+          }
+          avgGain /= 14; avgLoss /= 14;
+          const rsiSeries = [];
+          let rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+          rsiSeries.push(rsi);
+          for (let j = 15; j < n; j++) {
+            const delta = closes[j] - closes[j - 1];
+            avgGain = (avgGain * 13 + Math.max(delta, 0)) / 14;
+            avgLoss = (avgLoss * 13 + Math.max(-delta, 0)) / 14;
+            rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+            rsiSeries.push(rsi);
+          }
+          const recent = rsiSeries.slice(-252);
+          const rsiData = { current: Math.round(recent[recent.length - 1]), low: Math.round(Math.min(...recent)), high: Math.round(Math.max(...recent)) };
+          for (const ns of [...newBLStocks, ...newSSStocks]) {
+            if (ns.ticker === doc.ticker) { ns.rsiCurrent = rsiData.current; ns.rsiLow = rsiData.low; ns.rsiHigh = rsiData.high; }
+          }
+        }
+      } catch (rsiErr) {
+        console.warn('[AI Pulse] RSI enrichment failed:', rsiErr.message);
+      }
+    }
+
+    // ── PAI300 Regime ──
+    let pai300 = null;
+    let pai300Bull = aiKillDoc?.pai300Bull ?? null;
+    if (ai300Latest?.ok) {
+      let rsi = null;
+      try {
+        const recentBars = await db.collection('pnthr_ai_index_candles_daily')
+          .find({}, { projection: { close: 1, _id: 0 } })
+          .sort({ date: -1 }).limit(30).toArray();
+        if (recentBars.length >= 16) {
+          const closes = recentBars.reverse().map(b => b.close);
+          let avgGain = 0, avgLoss = 0;
+          for (let i = 1; i <= 14; i++) {
+            const d = closes[i] - closes[i - 1];
+            if (d > 0) avgGain += d; else avgLoss += Math.abs(d);
+          }
+          avgGain /= 14; avgLoss /= 14;
+          rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+          for (let i = 15; i < closes.length; i++) {
+            const d = closes[i] - closes[i - 1];
+            avgGain = (avgGain * 13 + Math.max(d, 0)) / 14;
+            avgLoss = (avgLoss * 13 + Math.max(-d, 0)) / 14;
+            rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+          }
+          rsi = Math.round(rsi);
+        }
+      } catch {}
+      pai300 = {
+        value:        ai300Latest.value,
+        dayChangePct: ai300Latest.dayChangePct,
+        ema21W:       ai300Latest.ema21W,
+        regime:       ai300Latest.regime,
+        ytdPct:       ai300Latest.ytdPct,
+        inceptionPct: ai300Latest.inceptionPct,
+        asOf:         ai300Latest.asOf,
+        rsi,
+      };
+      if (pai300Bull == null) pai300Bull = ai300Latest.regime === 'bull';
+    }
+
+    // AI regime D1 multipliers — based on PAI300 regime + AI signal ratio
+    const openRatio = ssCount / Math.max(blCount, 1);
+    let indexScore = 0;
+    if (pai300Bull === false) indexScore = -2;
+    else if (pai300Bull === true) indexScore = 2;
+    let ratioScore = 0;
+    if (blCount + ssCount > 0) {
+      if (openRatio > 3) ratioScore = -2;
+      else if (openRatio > 2) ratioScore = -1;
+      else if (openRatio < 0.5) ratioScore = 2;
+      else if (openRatio < 1) ratioScore = 1;
+    }
+    const regimeScore = indexScore + ratioScore;
+    const ssD1 = Math.max(0.70, Math.min(1.30, Math.round((1.0 - regimeScore * 0.06) * 100) / 100));
+    const blD1 = Math.max(0.70, Math.min(1.30, Math.round((1.0 + regimeScore * 0.06) * 100) / 100));
+
+    // ── Sector rotation tiers ──
+    let sectorTiers = {};
+    if (sectorRanks?.ranks) {
+      for (const r of sectorRanks.ranks) {
+        const sec = AI_SECTORS.find(s => s.id === r.sectorId);
+        if (sec) sectorTiers[sec.name] = { tier: r.tier, rank: r.rank, fiveDayReturn: r.fiveDayReturn };
+      }
+    }
+
+    // ── Portfolio heat (AI 300 positions only) ──
+    const nav = userProfile?.accountSize || 100000;
+    function getFillsArray(p) {
+      if (Array.isArray(p.fills)) return p.fills;
+      if (p.fills && typeof p.fills === 'object') return Object.values(p.fills);
+      return [];
+    }
+    const filledPos = positions.filter(p => {
+      const fills = getFillsArray(p);
+      return fills.some(f => f.filled) || (p.shares > 0);
+    });
+    let stockRisk = 0;
+    for (const p of filledPos) {
+      const fills = getFillsArray(p);
+      const filledShares = fills.filter(f => f.filled).reduce((s, f) => s + (+f.shares || 0), 0);
+      const totalShares = filledShares || (p.shares || 0);
+      const stop = p.stopPrice || 0;
+      const avg = p.avgCost || p.entryPrice || 0;
+      const risk = totalShares * Math.abs(avg - stop);
+      const isShort = p.direction === 'SHORT';
+      const isRecycled = isShort ? stop <= avg : stop >= avg;
+      if (!isRecycled) stockRisk += risk;
+    }
+    const totalRisk = stockRisk;
+    const stockRiskPct = +((stockRisk / nav) * 100).toFixed(2);
+    const totalRiskPct = stockRiskPct;
+
+    const lotsReady = [];
+    for (const p of filledPos) {
+      const fills = getFillsArray(p);
+      for (const f of fills) {
+        if (f.filled) continue;
+        const priorFilled = f.lot === 1 || fills.find(x => x.lot === f.lot - 1)?.filled;
+        if (priorFilled && f.triggerPrice) {
+          lotsReady.push({ ticker: p.ticker, lot: f.lot, triggerPrice: f.triggerPrice });
+        }
+      }
+    }
+
+    const shortCount = positions.filter(p => p.direction === 'SHORT').length;
+    const longCount  = positions.filter(p => p.direction === 'LONG').length;
+    const recycledCount = filledPos.filter(p => {
+      const fills = getFillsArray(p);
+      const filledShares = fills.filter(f => f.filled).reduce((s, f) => s + (+f.shares || 0), 0);
+      const totalShares = filledShares || (p.shares || 0);
+      const stop = p.stopPrice || 0;
+      const avg = p.avgCost || p.entryPrice || 0;
+      const isShort = p.direction === 'SHORT';
+      return totalShares > 0 && (isShort ? stop <= avg : stop >= avg);
+    }).length;
+
+    // ── Signal stocks list (for signal drill-down modal) ──
+    const allSignalStocks = [];
+    for (const [ticker, sig] of Object.entries(weeklySig)) {
+      const mapped = sig.signal === 'BUY' ? 'BL' : sig.signal === 'SELL' ? 'SS' : sig.signal;
+      if (mapped !== 'BL' && mapped !== 'SS') continue;
+      const meta = aiTickerMeta[ticker];
+      if (!meta) continue;
+      const killMatch = aiKillDoc?.scores?.find(s => s.ticker === ticker);
+      allSignalStocks.push({
+        ticker,
+        sector: meta.sectorName,
+        signal: mapped,
+        currentPrice: killMatch?.currentPrice ?? null,
+        totalScore: killMatch?.total ?? 0,
+        tier: killMatch?.tierName ?? null,
+        signalAge: sig.isNewSignal ? 0 : null,
+        killRank: killMatch?.killRank ?? null,
+      });
+    }
+    allSignalStocks.sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+
+    const dataSource = aiKillDoc ? 'ai_kill' : 'ai_signals';
+    const scoresAsOf = aiKillDoc?.generatedAt ? new Date(aiKillDoc.generatedAt).toISOString() : new Date().toISOString();
+
+    res.json({
+      statusLight: 'GREEN',
+      statusMessage: 'AI 300 SYSTEMS OPERATIONAL',
+      killDataLive,
+      cacheWarming: false,
+      dataSource,
+      scoresAsOf,
+      weekOf: aiKillDoc?.weekOf ?? null,
+      universeSize: aiTickers.length,
+      regime: {
+        pai300Bull,
+        pai300Value: pai300?.value ?? null,
+        pai300Ema: pai300?.ema21W ?? null,
+        pai300Regime: pai300?.regime ?? null,
+        blCount, ssCount, ssD1, blD1, regimeScore,
+        signalRatio: openRatio,
+      },
+      killTop10,
+      newSignals: { blStocks: newBLStocks, ssStocks: newSSStocks },
+      signals: {
+        blCount, ssCount,
+        ratio: openRatio,
+        bySector: sectorSignalMap,
+        totalStocksBySector: sectorTotalStocks,
+      },
+      sectorTiers,
+      positions: {
+        total: positions.length,
+        short: shortCount,
+        long: longCount,
+        recycled: recycledCount,
+        heat: { stockRisk, etfRisk: 0, totalRisk, stockRiskPct, etfRiskPct: 0, totalRiskPct },
+        nav,
+      },
+      lotsReady: lotsReady.slice(0, 5),
+      pai300,
+      allSignalStocks,
+    });
+  } catch (err) {
+    console.error('[/api/pulse/ai300]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── AI 300 Pulse — signal drill-down ─────────────────────────────────────────
+app.get('/api/pulse/ai300/signal-stocks', authenticateJWT, async (req, res) => {
+  try {
+    const { signal } = req.query;
+    if (!['BL', 'SS'].includes(signal)) return res.status(400).json({ error: 'signal must be BL or SS' });
+
+    const { signals: weeklySig } = await getAiUniverseSignals();
+    const aiKillDoc = await getLatestAiKillScores().catch(() => null);
+
+    const aiTickerMeta = {};
+    for (const sec of AI_SECTORS) {
+      for (const h of sec.holdings) {
+        aiTickerMeta[h.ticker] = { sectorName: sec.name };
+      }
+    }
+
+    const stocks = [];
+    for (const [ticker, sig] of Object.entries(weeklySig)) {
+      const mapped = sig.signal === 'BUY' ? 'BL' : sig.signal === 'SELL' ? 'SS' : sig.signal;
+      if (mapped !== signal) continue;
+      const meta = aiTickerMeta[ticker];
+      if (!meta) continue;
+      const killMatch = aiKillDoc?.scores?.find(s => s.ticker === ticker);
+      stocks.push({
+        ticker,
+        sector: meta.sectorName,
+        currentPrice: killMatch?.currentPrice ?? null,
+        totalScore: +(killMatch?.total ?? 0).toFixed(1),
+        tier: killMatch?.tierName ?? null,
+        signalAge: sig.isNewSignal ? 0 : null,
+        killRank: killMatch?.killRank ?? null,
+      });
+    }
+    stocks.sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+
+    res.json({ signal, stocks, count: stocks.length });
+  } catch (err) {
+    console.error('[/api/pulse/ai300/signal-stocks]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── AI 300 Pulse — movers (top gainers/decliners from 297 AI stocks) ─────────
+app.get('/api/pulse/ai300/movers', authenticateJWT, async (req, res) => {
+  try {
+    const aiTickerMeta = {};
+    const tickers = [];
+    for (const sec of AI_SECTORS) {
+      for (const h of sec.holdings) {
+        aiTickerMeta[h.ticker] = { sectorName: sec.name, companyName: h.name };
+        tickers.push(h.ticker);
+      }
+    }
+
+    const { signals: weeklySig } = await getAiUniverseSignals().catch(() => ({ signals: {} }));
+
+    const FMP_KEY = process.env.FMP_API_KEY;
+    const quoteMap = {};
+    const BATCH = 200;
+    for (let i = 0; i < tickers.length; i += BATCH) {
+      const chunk = tickers.slice(i, i + BATCH);
+      try {
+        const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_KEY}`);
+        if (r.ok) {
+          const data = await r.json();
+          if (Array.isArray(data)) for (const q of data) quoteMap[q.symbol] = q;
+        }
+      } catch {}
+      if (i + BATCH < tickers.length) await new Promise(r => setTimeout(r, 300));
+    }
+
+    function currentWeekMonday() {
+      const d = new Date();
+      const day = d.getUTCDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      d.setUTCDate(d.getUTCDate() + diff);
+      return d.toISOString().slice(0, 10);
+    }
+    function getSignalLabel(ticker) {
+      const s = weeklySig?.[ticker];
+      if (!s?.signal || (s.signal !== 'BL' && s.signal !== 'SS')) return null;
+      let weeks = 1;
+      if (s.signalDate) {
+        const sigMs = new Date(s.signalDate + 'T12:00:00').getTime();
+        const curMs = new Date(currentWeekMonday() + 'T12:00:00').getTime();
+        weeks = Math.max(1, Math.round((curMs - sigMs) / (7 * 24 * 60 * 60 * 1000)) + 1);
+      }
+      return `${s.signal}+${weeks}`;
+    }
+
+    const rows = [];
+    for (const t of tickers) {
+      const q = quoteMap[t];
+      if (!q) continue;
+      const price = Number(q.price);
+      const pct = Number(q.changesPercentage);
+      if (!isFinite(price) || !isFinite(pct)) continue;
+      rows.push({
+        ticker: q.symbol,
+        name: q.name || aiTickerMeta[t]?.companyName || q.symbol,
+        price: parseFloat(price.toFixed(2)),
+        changePct: parseFloat(pct.toFixed(3)),
+        signalLabel: getSignalLabel(q.symbol),
+      });
+    }
+    const sorted = [...rows].sort((a, b) => b.changePct - a.changePct);
+    const gainers = sorted.slice(0, 12).filter(r => r.changePct > 0);
+    const decliners = [...sorted].reverse().slice(0, 12).filter(r => r.changePct < 0);
+
+    res.json({
+      stocks: { gainers, decliners },
+      asOf: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[/api/pulse/ai300/movers]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── AI 300 Pulse — developing signals (3/4 conditions met intra-week) ────────
+app.get('/api/pulse/ai300/developing-signals', authenticateJWT, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    if (!db) return res.json({ status: 'COLD', bl: [], ss: [] });
+
+    const aiTickerMeta = {};
+    const tickers = [];
+    for (const sec of AI_SECTORS) {
+      for (const h of sec.holdings) {
+        aiTickerMeta[h.ticker] = { sectorId: sec.id, sectorName: sec.name };
+        tickers.push(h.ticker);
+      }
+    }
+
+    // Pull weekly bars to get last-week candle data + EMA for each ticker
+    const weeklyDocs = await db.collection('pnthr_ai_bt_candles_weekly')
+      .find({ ticker: { $in: tickers } }, { projection: { ticker: 1, weekly: 1 } })
+      .toArray();
+    const weeklyByTicker = Object.fromEntries(weeklyDocs.map(d => [d.ticker, d.weekly || []]));
+
+    const blCandidates = [];
+    const ssCandidates = [];
+
+    for (const ticker of tickers) {
+      const rawBars = weeklyByTicker[ticker] || [];
+      if (rawBars.length < 5) continue;
+      const bars = [...rawBars].sort((a, b) => (a.weekOf || a.date || '').localeCompare(b.weekOf || b.date || ''));
+      const meta = aiTickerMeta[ticker];
+      const period = AI_SECTOR_EMA_PERIODS[meta.sectorId] || 30;
+      if (bars.length < period + 2) continue;
+
+      // Compute EMA
+      const closes = bars.map(b => b.close);
+      const k = 2 / (period + 1);
+      let ema = closes.slice(0, period).reduce((s, x) => s + x, 0) / period;
+      for (let i = period; i < closes.length; i++) ema = (closes[i] - ema) * k + ema;
+
+      // EMA slope (rising/falling)
+      let prevEma = closes.slice(0, period).reduce((s, x) => s + x, 0) / period;
+      for (let i = period; i < closes.length - 1; i++) prevEma = (closes[i] - prevEma) * k + prevEma;
+      const emaRising = ema > prevEma;
+
+      const lastBar = bars[bars.length - 1];
+      const prevBar = bars[bars.length - 2];
+
+      // Already has a signal? Check from AI signals cache
+      const { signals: weeklySig2 } = await getAiUniverseSignals();
+      const existingSig = weeklySig2[ticker]?.signal;
+
+      if (existingSig !== 'BL' && emaRising) {
+        blCandidates.push({
+          ticker, ema, sectorName: meta.sectorName,
+          lastWeekHigh: prevBar.high, lastWeekLow: prevBar.low,
+          lastWeekClose: prevBar.close,
+        });
+      }
+      if (existingSig !== 'SS' && !emaRising) {
+        ssCandidates.push({
+          ticker, ema, sectorName: meta.sectorName,
+          lastWeekHigh: prevBar.high, lastWeekLow: prevBar.low,
+          lastWeekClose: prevBar.close,
+        });
+      }
+    }
+
+    // Fetch live quotes for candidates
+    const allCandTickers = [...new Set([...blCandidates.map(c => c.ticker), ...ssCandidates.map(c => c.ticker)])];
+    const quoteMap = {};
+    try {
+      const qmap = await fetchAiQuotesBatch(allCandTickers.slice(0, 300));
+      for (const [t, q] of Object.entries(qmap)) if (q?.price) quoteMap[t] = q;
+    } catch {}
+
+    // Apply tighter developing BL checks
+    const devBL = [];
+    for (const c of blCandidates) {
+      const q = quoteMap[c.ticker];
+      if (!q?.price) continue;
+      const price = q.price;
+      const pctFromHigh = +((c.lastWeekHigh - price) / c.lastWeekHigh * 100).toFixed(2);
+      if (pctFromHigh > 2) continue;
+      if (price <= c.lastWeekClose) continue;
+      const priceVsEma = +((price - c.ema) / c.ema * 100).toFixed(2);
+      if (priceVsEma < -2 || priceVsEma > 20) continue;
+      devBL.push({
+        ticker: c.ticker, companyName: q.name || '', sector: c.sectorName,
+        price, ema21: c.ema, lastWeekHigh: c.lastWeekHigh,
+        pctFromHigh, priceVsEma, weekTrending: true,
+      });
+    }
+    devBL.sort((a, b) => a.pctFromHigh - b.pctFromHigh);
+
+    // Apply tighter developing SS checks
+    const devSS = [];
+    for (const c of ssCandidates) {
+      const q = quoteMap[c.ticker];
+      if (!q?.price) continue;
+      const price = q.price;
+      const pctFromLow = +((price - c.lastWeekLow) / c.lastWeekLow * 100).toFixed(2);
+      if (pctFromLow > 2) continue;
+      if (price >= c.lastWeekClose) continue;
+      const priceVsEma = +((price - c.ema) / c.ema * 100).toFixed(2);
+      if (priceVsEma > 2 || priceVsEma < -20) continue;
+      devSS.push({
+        ticker: c.ticker, companyName: q.name || '', sector: c.sectorName,
+        price, ema21: c.ema, lastWeekLow: c.lastWeekLow,
+        pctFromLow, priceVsEma, weekTrending: true,
+      });
+    }
+    devSS.sort((a, b) => a.pctFromLow - b.pctFromLow);
+
+    console.log(`[AI developing-signals] BL: ${blCandidates.length} → ${devBL.length} | SS: ${ssCandidates.length} → ${devSS.length}`);
+    res.json({ status: 'OK', bl: devBL, ss: devSS });
+  } catch (err) {
+    console.error('[/api/pulse/ai300/developing-signals]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

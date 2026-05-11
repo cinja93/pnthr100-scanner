@@ -42,7 +42,7 @@
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  background: white;
+  background: #111;
   font-size: 14px;
 }
 
@@ -80,11 +80,11 @@
 }
 
 .table tbody td {
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #222;
 }
 
 .table tbody tr:nth-child(even) {
-  background-color: #f7f8fa;
+  background-color: #0d0d0d;
 }
 
 .clickableRow {
@@ -111,7 +111,7 @@
 }
 
 .table tbody tr:hover {
-  background-color: #efefef;
+  background-color: #1a1a1a;
 }
 
 .table tbody tr:last-child {
@@ -120,7 +120,7 @@
 
 .table td {
   padding: 14px 16px;
-  color: #212121;
+  color: #e0e0e0;
 }
 
 .rankColumn {
@@ -132,15 +132,15 @@
 
 .ticker {
   font-weight: 700;
-  color: #111111;
+  color: #ffffff;
   font-size: 15px;
   cursor: pointer;
   transition: color 0.2s, background-color 0.2s;
 }
 
 .ticker:hover {
-  color: #000000;
-  background-color: #efefef;
+  color: #FFD700;
+  background-color: transparent;
 }
 
 .tickerRow {
@@ -170,7 +170,7 @@
 
 .price {
   font-weight: 500;
-  color: #212121;
+  color: #e0e0e0;
 }
 
 .positive {
@@ -226,8 +226,8 @@
   margin-left: 4px;
   vertical-align: middle;
 }
-.scannerBadgeLong  { background: #dcfce7; color: #15803d; }
-.scannerBadgeShort { background: #fee2e2; color: #b91c1c; }
+.scannerBadgeLong  { background: rgba(22, 163, 74, 0.2); color: #4ade80; }
+.scannerBadgeShort { background: rgba(220, 38, 38, 0.2); color: #f87171; }
 
 /* Signal column styles - override .table td color */
 .signalColumn {
@@ -271,12 +271,12 @@
 
 .stopPriceCell {
   font-weight: 500;
-  color: #212121;
+  color: #e0e0e0;
 }
 
 .riskCell {
   font-weight: 500;
-  color: #555;
+  color: #999;
 }
 
 .pauseCell {
@@ -361,17 +361,17 @@
 
 .removeBtn:hover {
   color: #dc2626;
-  background: #fef2f2;
+  background: rgba(220, 38, 38, 0.1);
 }
 
 /* Earnings within 14 days — amber row highlight */
 .earningsHighlight {
-  background: #fef3c7 !important;
+  background: rgba(245, 158, 11, 0.12) !important;
   box-shadow: inset 3px 0 0 #f59e0b;
 }
 
 .earningsHighlight:hover {
-  background: #fde68a !important;
+  background: rgba(245, 158, 11, 0.2) !important;
 }
 
 .earningsSoonBadge {

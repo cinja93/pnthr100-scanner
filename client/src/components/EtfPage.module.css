@@ -59,8 +59,8 @@
   display: flex;
   gap: 8px;
   padding: 12px 24px;
-  background: #f8f8f8;
-  border-bottom: 1px solid #e5e5e5;
+  background: #0a0a0a;
+  border-bottom: 1px solid #222;
   flex-shrink: 0;
   flex-wrap: wrap;
 }
@@ -70,17 +70,17 @@
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #333;
   border-radius: 20px;
-  background: #ffffff;
-  color: #374151;
+  background: #111;
+  color: #999;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
 }
-.filterBtn:hover { border-color: #111111; color: #111111; }
+.filterBtn:hover { border-color: #FFD700; color: #FFD700; }
 
 .filterBtnActive {
   background: #111111;
@@ -122,8 +122,8 @@
 .spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid #e5e7eb;
-  border-top-color: #111111;
+  border: 3px solid #333;
+  border-top-color: #fcf000;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import styles from './NewsPage.module.css';
 import pnthrLogo from '../assets/panther head.png';
 const scottAvatar = '/scott-pnthr-transparent.png';
@@ -474,7 +475,7 @@ export default function NewsPage() {
                   {/* Rendered article — tickers are clickable spans */}
                   <article
                     className={styles.articleBody}
-                    dangerouslySetInnerHTML={{ __html: renderedHtml }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderedHtml) }}
                     onClick={handleArticleClick}
                   />
                 </>

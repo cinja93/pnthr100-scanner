@@ -123,6 +123,15 @@ import {
   resetMemberPassword,
 } from './database.js';
 
+if (!process.env.MONGODB_URI) {
+  console.error('FATAL: MONGODB_URI environment variable is required');
+  process.exit(1);
+}
+if (!process.env.FMP_API_KEY) {
+  console.error('FATAL: FMP_API_KEY environment variable is required');
+  process.exit(1);
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -249,16 +258,16 @@ app.get('/auth/approve/:userId', async (req, res) => {
     const db = await getDb();
     const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });
     if (!user) return res.status(404).send('<h2>User not found.</h2>');
-    if (user.status !== 'pending') return res.send(page('Already Processed', '#aaa', `This account has already been processed (status: ${user.status}).`));
+    if (user.status !== 'pending') return res.send(page('Already Processed', '#aaa', `This account has already been processed (status: ${escHtml(user.status)}).`));
     if (action === 'approve') {
       await approveUser(userId);
       await sendWelcomeEmail({ to: user.email, name: user.name || user.email }).catch(() => {});
-      return res.send(page('✓ Account Approved', '#28a745', `${user.name || user.email} (${user.email}) has been approved and notified.`));
+      return res.send(page('✓ Account Approved', '#28a745', `${escHtml(user.name || user.email)} (${escHtml(user.email)}) has been approved and notified.`));
     }
     if (action === 'deny') {
       await denyUser(userId);
       await sendDenialEmail({ to: user.email, name: user.name || user.email }).catch(() => {});
-      return res.send(page('✗ Account Denied', '#dc3545', `${user.name || user.email} (${user.email}) has been denied.`));
+      return res.send(page('✗ Account Denied', '#dc3545', `${escHtml(user.name || user.email)} (${escHtml(user.email)}) has been denied.`));
     }
     res.status(400).send('<h2>Invalid action.</h2>');
   } catch (err) {
@@ -266,6 +275,10 @@ app.get('/auth/approve/:userId', async (req, res) => {
     res.status(500).send('<h2>Server error.</h2>');
   }
 });
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
 function page(title, color, body) {
   return `<html><body style="background:#0a0a0a;color:#fff;font-family:Arial;text-align:center;padding:60px;">
@@ -340,7 +353,7 @@ async function enrichCompanyNames(stocks) {
     const tickers = [...new Set(stocks.map(s => s.ticker))];
     const FMP_API_KEY = process.env.FMP_API_KEY;
     const url = `https://financialmodelingprep.com/api/v3/quote/${tickers.join(',')}?apikey=${FMP_API_KEY}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!response.ok) return stocks;
     const quotes = await response.json();
     if (!Array.isArray(quotes)) return stocks;
@@ -397,7 +410,7 @@ async function fetchEtfSectorData() {
   await Promise.all(etfSymbols.map(async symbol => {
     try {
       const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${symbol}?from=${fromStr}&apikey=${FMP_API_KEY}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
       if (!res.ok) throw new Error(`FMP ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data.historical) && data.historical.length > 0) {
@@ -601,9 +614,9 @@ app.get('/api/stocks/search', async (req, res) => {
 
     // Fetch quote, profile (sector), YTD price change, and index membership in parallel
     const [quoteRes, profileRes, changeRes, sp500Tickers, dow30Tickers, nasdaq100Tickers, sp400Longs, sp400Shorts] = await Promise.all([
-      fetch(`${FMP_BASE_URL}/quote/${ticker}?apikey=${FMP_API_KEY}`),
-      fetch(`${FMP_BASE_URL}/profile/${ticker}?apikey=${FMP_API_KEY}`),
-      fetch(`${FMP_BASE_URL}/stock-price-change/${ticker}?apikey=${FMP_API_KEY}`),
+      fetch(`${FMP_BASE_URL}/quote/${ticker}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) }),
+      fetch(`${FMP_BASE_URL}/profile/${ticker}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) }),
+      fetch(`${FMP_BASE_URL}/stock-price-change/${ticker}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) }),
       getSp500Tickers().catch(() => []),
       getDow30Tickers().catch(() => []),
       getNasdaq100Tickers().catch(() => []),
@@ -711,7 +724,7 @@ app.get('/api/earnings/week', async (req, res) => {
     const FMP_API_KEY = process.env.FMP_API_KEY;
 
     const url = `${FMP_BASE_URL}/earning_calendar?from=${from}&to=${to}&apikey=${FMP_API_KEY}`;
-    const data = await fetch(url).then(r => r.json());
+    const data = await fetch(url, { signal: AbortSignal.timeout(15000) }).then(r => r.json());
 
     if (!Array.isArray(data)) return res.json({ byDate: {}, dates: [] });
 
@@ -752,7 +765,7 @@ app.get('/api/search/autocomplete', async (req, res) => {
     const FMP_API_KEY = process.env.FMP_API_KEY;
 
     const url = `${FMP_BASE_URL}/search?query=${encodeURIComponent(q)}&limit=20&apikey=${FMP_API_KEY}`;
-    const data = await fetch(url).then(r => r.json());
+    const data = await fetch(url, { signal: AbortSignal.timeout(15000) }).then(r => r.json());
 
     const US_EXCHANGES = new Set(['NYSE', 'NASDAQ', 'AMEX', 'NYSEARCA', 'ETF']);
     const results = Array.isArray(data)
@@ -785,7 +798,7 @@ app.get('/api/supplemental-stocks', async (req, res) => {
 });
 
 // Add a supplemental stock
-app.post('/api/supplemental-stocks', async (req, res) => {
+app.post('/api/supplemental-stocks', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { ticker } = req.body;
 
@@ -819,7 +832,7 @@ app.post('/api/supplemental-stocks', async (req, res) => {
 });
 
 // Remove a supplemental stock
-app.delete('/api/supplemental-stocks/:ticker', async (req, res) => {
+app.delete('/api/supplemental-stocks/:ticker', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { ticker } = req.params;
     const result = await removeSupplementalStock(ticker);
@@ -1002,7 +1015,7 @@ app.get('/api/rankings/:date', async (req, res) => {
 // Force a fresh scan and save it for the most recent Friday (or a supplied date).
 // Useful for backfilling a missed Friday when the server was sleeping.
 // Body (optional): { date: 'YYYY-MM-DD' }
-app.post('/api/rankings/save', async (req, res) => {
+app.post('/api/rankings/save', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const date = req.body?.date || getLastFridayDate();
     const data = await getStocksCache(true); // force fresh scan
@@ -1109,7 +1122,7 @@ app.get('/api/chart/:ticker', async (req, res) => {
     from.setFullYear(from.getFullYear() - 5);
     const fromStr = from.toISOString().split('T')[0];
     const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?from=${fromStr}&apikey=${FMP_API_KEY}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!response.ok) throw new Error(`FMP error: ${response.status}`);
     const data = await response.json();
     if (data['Error Message']) throw new Error(data['Error Message']);
@@ -1268,7 +1281,7 @@ let sp500Cache = { date: null, constituents: null };
 async function getSP500Constituents(FMP_API_KEY) {
   const today = new Date().toISOString().split('T')[0];
   if (sp500Cache.date === today && sp500Cache.constituents) return sp500Cache.constituents;
-  const res = await fetch(`https://financialmodelingprep.com/api/v3/sp500_constituent?apikey=${FMP_API_KEY}`);
+  const res = await fetch(`https://financialmodelingprep.com/api/v3/sp500_constituent?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`FMP SP500 constituent ${res.status}`);
   const data = await res.json();
   // Normalize sector names at ingestion — FMP uses 'Consumer Cyclical', 'Consumer Defensive', etc.
@@ -1321,7 +1334,7 @@ async function computeSectorSignalCounts() {
         return (s?.isNew || s?.isNewSignal) && (s?.signal === 'BL' || s?.signal === 'BUY' || s?.signal === 'SS' || s?.signal === 'SELL');
       });
       if (newTickers.length > 0 && newTickers.length <= 100) {
-        const qRes = await fetch(`https://financialmodelingprep.com/api/v3/quote/${newTickers.join(',')}?apikey=${FMP_API_KEY}`);
+        const qRes = await fetch(`https://financialmodelingprep.com/api/v3/quote/${newTickers.join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) });
         if (qRes.ok) { const qData = await qRes.json(); if (Array.isArray(qData)) for (const q of qData) quotePriceMap[q.symbol] = q.price; }
       }
     } catch { /* best-effort */ }
@@ -1576,7 +1589,7 @@ async function fetchNextEarningsDate(ticker, FMP_API_KEY) {
   const today = new Date().toISOString().split('T')[0];
   try {
     const url = `https://financialmodelingprep.com/api/v3/historical/earning_calendar/${ticker}?limit=8&apikey=${FMP_API_KEY}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!res.ok) return null;
     const data = await res.json();
     // Response is a flat array (not { historical: [...] })
@@ -1675,13 +1688,13 @@ async function computeSpeculativeSignalCounts() {
     let specSectorMap = {};
     try {
       const FMP_API_KEY = process.env.FMP_API_KEY;
-      const profRes = await fetch(`https://financialmodelingprep.com/api/v3/profile/${allTickers.slice(0, 100).join(',')}?apikey=${FMP_API_KEY}`);
+      const profRes = await fetch(`https://financialmodelingprep.com/api/v3/profile/${allTickers.slice(0, 100).join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) });
       if (profRes.ok) {
         const profData = await profRes.json();
         if (Array.isArray(profData)) for (const p of profData) if (p.symbol && p.sector) specSectorMap[p.symbol] = normalizeSector(p.sector);
       }
       if (allTickers.length > 100) {
-        const profRes2 = await fetch(`https://financialmodelingprep.com/api/v3/profile/${allTickers.slice(100).join(',')}?apikey=${FMP_API_KEY}`);
+        const profRes2 = await fetch(`https://financialmodelingprep.com/api/v3/profile/${allTickers.slice(100).join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) });
         if (profRes2.ok) {
           const profData2 = await profRes2.json();
           if (Array.isArray(profData2)) for (const p of profData2) if (p.symbol && p.sector) specSectorMap[p.symbol] = normalizeSector(p.sector);
@@ -1740,11 +1753,11 @@ app.get('/api/speculative-stocks/:side', async (req, res) => {
 
     // Fetch quotes, YTD, and sector profile in parallel
     const [quoteRes, ytdRes, profileRes] = await Promise.all([
-      fetch(`${FMP_BASE}/quote/${tickers.join(',')}?apikey=${FMP_API_KEY}`),
-      fetch(`${FMP_BASE}/stock-price-change/${tickers.join(',')}?apikey=${FMP_API_KEY}`),
+      fetch(`${FMP_BASE}/quote/${tickers.join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) }),
+      fetch(`${FMP_BASE}/stock-price-change/${tickers.join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) }),
       speculativeSectorCache[side]
         ? Promise.resolve(null) // skip if cached
-        : fetch(`${FMP_BASE}/profile/${tickers.join(',')}?apikey=${FMP_API_KEY}`),
+        : fetch(`${FMP_BASE}/profile/${tickers.join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) }),
     ]);
 
     const quoteData = quoteRes.ok ? await quoteRes.json() : [];
@@ -2289,7 +2302,7 @@ app.post('/api/kill-test/refresh-prices', authenticateJWT, requireAdmin, async (
     for (let i = 0; i < tickers.length; i += 200) {
       const chunk = tickers.slice(i, i + 200).join(',');
       try {
-        const r    = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk}?apikey=${key}`);
+        const r    = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk}?apikey=${key}`, { signal: AbortSignal.timeout(15000) });
         const data = await r.json();
         if (Array.isArray(data)) {
           for (const q of data) {
@@ -2654,13 +2667,13 @@ app.get('/api/scoring-health', authenticateJWT, requireAdmin, async (req, res) =
 // ── PNTHR Command Center ───────────────────────────────────────────────────────
 app.get('/api/kill-pipeline',       authenticateJWT, killPipelineHandler);
 app.get('/api/positions',           authenticateJWT, positionsGetAll);
-app.post('/api/positions',          authenticateJWT, positionsSave);
-app.post('/api/positions/close',    authenticateJWT, positionsClose);
+app.post('/api/positions',          authenticateJWT, requireAdmin, positionsSave);
+app.post('/api/positions/close',    authenticateJWT, requireAdmin, positionsClose);
 app.post('/api/positions/close-via-bridge', authenticateJWT, requireAdmin, positionsCloseViaBridge);
-app.delete('/api/positions/:id',    authenticateJWT, positionsDelete);
+app.delete('/api/positions/:id',    authenticateJWT, requireAdmin, positionsDelete);
 
 // PATCH /api/positions/:id/direction — explicit user-initiated direction correction
-app.patch('/api/positions/:id/direction', authenticateJWT, async (req, res) => {
+app.patch('/api/positions/:id/direction', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { direction } = req.body;
     if (!['LONG', 'SHORT'].includes(direction)) {
@@ -2696,7 +2709,7 @@ app.patch('/api/positions/:id/direction', authenticateJWT, async (req, res) => {
 //
 // Use ?dryRun=1 to preview the computed plan without saving — handy for the
 // confirmation modal in AssistantRowExpand.
-app.post('/api/positions/:id/convert-to-pyramid', authenticateJWT, async (req, res) => {
+app.post('/api/positions/:id/convert-to-pyramid', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const { computeLotPlan }    = await import('./lotMath.js');
@@ -2967,7 +2980,7 @@ app.post('/api/positions/:id/convert-to-pyramid', authenticateJWT, async (req, r
 // Inline-edit endpoint used by the PNTHR Assistant LIVE table so the user can
 // ratchet a stop price without leaving Assistant. User-initiated; bypasses
 // portfolioGuard (which protects sacred fields from AUTO operations only).
-app.patch('/api/positions/:id/stop-price', authenticateJWT, async (req, res) => {
+app.patch('/api/positions/:id/stop-price', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { stopPrice } = req.body;
     const n = Number(stopPrice);
@@ -2991,7 +3004,7 @@ app.patch('/api/positions/:id/stop-price', authenticateJWT, async (req, res) => 
 // Strategy: adjust lot 1's shares so that the sum of all filled lots equals
 // the requested total. Lots 2-5 fill counts are preserved. Rejects if the
 // target is lower than what lots 2-5 alone already have.
-app.patch('/api/positions/:id/shares', authenticateJWT, async (req, res) => {
+app.patch('/api/positions/:id/shares', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { totalShares } = req.body;
     const target = Number(totalShares);
@@ -3064,7 +3077,7 @@ app.patch('/api/positions/:id/shares', authenticateJWT, async (req, res) => {
 //   lot1NewPrice = (targetAvg * totalShares - sum(otherShares * otherPrices)) / lot1Shares
 // Rejects if the math requires a negative lot 1 price (e.g. other lots alone
 // already exceed the target avg × total shares).
-app.patch('/api/positions/:id/avg-cost', authenticateJWT, async (req, res) => {
+app.patch('/api/positions/:id/avg-cost', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { avgCost } = req.body;
     const target = Number(avgCost);
@@ -3538,7 +3551,7 @@ app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
 // POST /api/positions/dedup — finds tickers with multiple ACTIVE positions for
 // the requesting user and deletes extras, keeping the richest record (queue-
 // confirmed entries preferred over IBKR_IMPORT; otherwise newest wins).
-app.post('/api/positions/dedup', requireAdmin, async (req, res) => {
+app.post('/api/positions/dedup', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db     = await connectToDatabase();
@@ -3889,7 +3902,7 @@ async function computeHourlyEma21(ticker) {
   from.setDate(from.getDate() - 10);
   const fromStr = from.toISOString().split('T')[0];
   const url = `https://financialmodelingprep.com/api/v3/historical-chart/1hour/${ticker}?from=${fromStr}&apikey=${FMP_API_KEY}`;
-  const resp = await fetch(url);
+  const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
   if (!resp.ok) return null;
   const data = await resp.json();
   if (!Array.isArray(data) || data.length < 22) return null;
@@ -4106,7 +4119,7 @@ app.post('/api/admin/create-member', authenticateJWT, requireAdmin, async (req, 
 // ── Exit Service ──────────────────────────────────────────────────────────────
 
 // POST /api/positions/:id/exit — record an exit (partial or full)
-app.post('/api/positions/:id/exit', authenticateJWT, async (req, res) => {
+app.post('/api/positions/:id/exit', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
@@ -4119,7 +4132,7 @@ app.post('/api/positions/:id/exit', authenticateJWT, async (req, res) => {
 });
 
 // DELETE /api/positions/:id/exits/:eid — undo an exit
-app.delete('/api/positions/:id/exits/:eid', authenticateJWT, async (req, res) => {
+app.delete('/api/positions/:id/exits/:eid', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
@@ -5092,7 +5105,7 @@ app.get('/api/journal/backtest/spy-benchmark', authenticateJWT, async (req, res)
 
     const apiKey = process.env.FMP_API_KEY;
     const url = `https://financialmodelingprep.com/api/v3/historical-price-full/SPY?from=2018-12-01&apikey=${apiKey}`;
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
     const data = await resp.json();
     if (!data.historical?.length) return res.json({ spyGrowth: [] });
 
@@ -5322,42 +5335,60 @@ app.get('/health', (req, res) => {
 // ── Cron: PNTHR Kill scoring pipeline every Friday at 4:15pm ET ─────────────
 // Runs right after market close to pre-compute Kill scores and persist to MongoDB.
 // The Command Center's /api/kill-pipeline reads from this data for instant response.
+let fridayKillRunning = false;
 cron.schedule('15 16 * * 5', async () => {
+  if (fridayKillRunning) return;
+  fridayKillRunning = true;
   try {
     console.log('[Kill Pipeline] Starting Friday Kill pipeline...');
     await runFridayKillPipeline();
   } catch (err) {
     console.error('[Kill Pipeline] Failed:', err.message);
+  } finally {
+    fridayKillRunning = false;
   }
 }, { timezone: 'America/New_York' });
 
 // ── Cron: PNTHR Orders — Friday 2:00 PM ET (PREVIEW) ─────────────────────────
 // Generates weekly order sheet 2 hours before close so user can set up GTD limit orders.
+let fridayPreviewRunning = false;
 cron.schedule('0 14 * * 5', async () => {
+  if (fridayPreviewRunning) return;
+  fridayPreviewRunning = true;
   try {
     console.log('[Orders] Running Friday PREVIEW pipeline...');
     await runOrdersPipeline({ type: 'WEEKLY' });
     console.log('[Orders] Friday PREVIEW complete.');
   } catch (err) {
     console.error('[Orders] Friday PREVIEW failed:', err.message);
+  } finally {
+    fridayPreviewRunning = false;
   }
 }, { timezone: 'America/New_York' });
 
 // ── Cron: PNTHR Orders — Daily 4:40 PM ET Mon–Fri (DAILY_UPDATE) ─────────────
 // Checks lot additions (time gate + +1% trigger), stale hunts, and exit signals.
+let dailyOrdersRunning = false;
 cron.schedule('40 16 * * 1-5', async () => {
+  if (dailyOrdersRunning) return;
+  dailyOrdersRunning = true;
   try {
     console.log('[Orders] Running daily update...');
     await runOrdersDailyUpdate();
     console.log('[Orders] Daily update complete.');
   } catch (err) {
     console.error('[Orders] Daily update failed:', err.message);
+  } finally {
+    dailyOrdersRunning = false;
   }
 }, { timezone: 'America/New_York' });
 
 // ── Cron: Kill Test monthly portfolio snapshot — first Friday of month, 6 PM ET
 // Generates equity curve snapshot + recomputes all analytics metrics
+let killTestMonthlyRunning = false;
 cron.schedule('0 18 1-7 * 5', async () => {
+  if (killTestMonthlyRunning) return;
+  killTestMonthlyRunning = true;
   try {
     console.log('[KillTest Monthly] Generating monthly snapshot...');
     const { connectToDatabase } = await import('./database.js');
@@ -5366,17 +5397,24 @@ cron.schedule('0 18 1-7 * 5', async () => {
     console.log('[KillTest Monthly] Done.');
   } catch (err) {
     console.error('[KillTest Monthly] Failed:', err.message);
+  } finally {
+    killTestMonthlyRunning = false;
   }
 }, { timezone: 'America/New_York' });
 
 // ── Cron: Kill Test daily price tracking Mon–Fri at 4:30pm ET ───────────────
 // Fetches OHLC for active appearances, processes lot fills, stop hits, P&L
+let killTestDailyRunning = false;
 cron.schedule('30 16 * * 1-5', async () => {
+  if (killTestDailyRunning) return;
+  killTestDailyRunning = true;
   try {
     console.log('[KillTest Daily] Starting daily price tracking...');
     await runKillTestDailyUpdate();
   } catch (err) {
     console.error('[KillTest Daily] Failed:', err.message);
+  } finally {
+    killTestDailyRunning = false;
   }
 }, { timezone: 'America/New_York' });
 
@@ -5386,11 +5424,16 @@ cron.schedule('30 16 * * 1-5', async () => {
 // Powers the "Triggered Today" feature and the Pulse dial counts.
 // 5:05pm leaves a 35-minute buffer after market close (4:00pm ET) for FMP data
 // to settle, and runs after the 4:30pm KillTest job + 4:40pm Orders Daily.
+let dailySignalRunning = false;
 cron.schedule('5 17 * * 1-5', async () => {
+  if (dailySignalRunning) return;
+  dailySignalRunning = true;
   try {
     await runDailySignalJob();
   } catch (err) {
     console.error('[dailySignalJob] Failed:', err.message);
+  } finally {
+    dailySignalRunning = false;
   }
 }, { timezone: 'America/New_York' });
 
@@ -5400,34 +5443,49 @@ cron.schedule('5 17 * * 1-5', async () => {
 // 679 daily signal job to spread FMP load. Idempotent — safe to re-run.
 // System of record for AI Universe historical bars; powers eventual Pulse
 // Score / weekly+daily signals / backtests once methodology locks.
+let aiUniverseDailyRunning = false;
 cron.schedule('30 17 * * 1-5', async () => {
+  if (aiUniverseDailyRunning) return;
+  aiUniverseDailyRunning = true;
   try {
-    console.log('[AI Universe Daily] starting cron…');
-    await runAiUniverseDailyUpdate();
+    try {
+      console.log('[AI Universe Daily] starting cron...');
+      await runAiUniverseDailyUpdate();
+    } catch (e) { console.error('[CRON] AI Universe daily update failed:', e.message); }
     // Chain the PNTHR AI 300 index rebuild — constituent bars are now fresh
     // so this is the right moment. Idempotent + monthly rebalance handled
     // automatically by the build script (first trading day of month).
-    console.log('[PAI300] starting daily rebuild…');
-    await runPnthrAi300DailyAppend();
+    try {
+      console.log('[PAI300] starting daily rebuild...');
+      await runPnthrAi300DailyAppend();
+    } catch (e) { console.error('[CRON] PAI300 daily rebuild failed:', e.message); }
     // 16 sector indices come last — they read the same fresh constituent
     // bars and use the same monthly rebalance dates as PAI300.
-    console.log('[AI Sectors] starting daily rebuild…');
-    await runPnthrAiSectorsDailyAppend();
+    try {
+      console.log('[AI Sectors] starting daily rebuild...');
+      await runPnthrAiSectorsDailyAppend();
+    } catch (e) { console.error('[CRON] AI Sectors daily rebuild failed:', e.message); }
     // After sector candles are fresh, append today's 5D sector rotation rank.
     // Powers APEX v6 (sector-tier sizing) for AI Orders + AI Kill.
-    console.log('[AI Sector Rotation] computing today’s 5D rank…');
-    const rotResult = await updateAiSectorRankToday();
-    console.log(`[AI Sector Rotation] done: ${JSON.stringify(rotResult)}`);
+    try {
+      console.log('[AI Sector Rotation] computing today\'s 5D rank...');
+      const rotResult = await updateAiSectorRankToday();
+      console.log(`[AI Sector Rotation] done: ${JSON.stringify(rotResult)}`);
+    } catch (e) { console.error('[CRON] AI Sector Rotation failed:', e.message); }
     // Then AI Kill scoring — consumes sector tiers + signals.
-    console.log('[AI Kill] scoring all signals…');
-    const killDoc = await runAiKillPipeline();
-    console.log(`[AI Kill] done: ${killDoc.scoredCount} scored, top=${killDoc.scores[0]?.ticker}`);
+    try {
+      console.log('[AI Kill] scoring all signals...');
+      const killDoc = await runAiKillPipeline();
+      console.log(`[AI Kill] done: ${killDoc.scoredCount} scored, top=${killDoc.scores[0]?.ticker}`);
+    } catch (e) { console.error('[CRON] AI Kill pipeline failed:', e.message); }
     // Final step: regenerate the AI Orders sheet (consumes fresh sector tiers).
-    console.log('[AI Orders] regenerating order sheet…');
-    const ordersDoc = await runAiOrdersPipeline({ type: 'DAILY' });
-    console.log(`[AI Orders] done: ${ordersDoc.stats.totalOrders} orders this week`);
-  } catch (err) {
-    console.error('[AI Universe Daily] cron failed:', err.message);
+    try {
+      console.log('[AI Orders] regenerating order sheet...');
+      const ordersDoc = await runAiOrdersPipeline({ type: 'DAILY' });
+      console.log(`[AI Orders] done: ${ordersDoc.stats.totalOrders} orders this week`);
+    } catch (e) { console.error('[CRON] AI Orders pipeline failed:', e.message); }
+  } finally {
+    aiUniverseDailyRunning = false;
   }
 }, { timezone: 'America/New_York' });
 
@@ -5445,12 +5503,17 @@ app.post('/api/admin/run-ai-universe-daily', authenticateJWT, requireAdmin, asyn
 // ── Cron: User-drawn trendline break sweep — hourly during US market hours
 // (10am-4pm ET, Mon-Fri). Detects when a user's custom trendline is broken
 // by >1% and posts an alert to the user's PNTHR Assistant feed.
+let trendlineSweepRunning = false;
 cron.schedule('0 10-16 * * 1-5', async () => {
+  if (trendlineSweepRunning) return;
+  trendlineSweepRunning = true;
   try {
     const r = await runTrendlineBreakSweep();
     if (r.broken > 0) console.log(`[tl-cron] ${r.broken} new break alerts (${r.checked} lines checked)`);
   } catch (err) {
     console.error('[tl-cron] sweep failed:', err.message);
+  } finally {
+    trendlineSweepRunning = false;
   }
 }, { timezone: 'America/New_York' });
 
@@ -6956,7 +7019,10 @@ registerReconciliationCron(cron);
 // Uses perchService (single source of truth — same generator the admin UI's
 // Generate button hits). The older newsletterService.generateIssue path is
 // retired; it now forwards here so anything still importing it keeps working.
+let perchCronRunning = false;
 cron.schedule('0 17 * * 5', async () => {
+  if (perchCronRunning) return;
+  perchCronRunning = true;
   try {
     const weekOf = getMostRecentFriday();
     console.log(`[Cron] Generating PNTHR's Perch for week of ${weekOf}...`);
@@ -6964,12 +7030,17 @@ cron.schedule('0 17 * * 5', async () => {
     console.log(`[Cron] PNTHR's Perch generated successfully.`);
   } catch (err) {
     console.error('[Cron] Newsletter generation failed:', err.message);
+  } finally {
+    perchCronRunning = false;
   }
 }, { timezone: 'America/New_York' });
 
 // ── Cron: archive weekly signal snapshot every Friday at 8pm ET ─────────────
 // Runs 3 hours after newsletter generation so signal cache is fully warm.
+let signalArchiveRunning = false;
 cron.schedule('0 20 * * 5', async () => {
+  if (signalArchiveRunning) return;
+  signalArchiveRunning = true;
   try {
     console.log('[Signal Archive] Saving weekly snapshot...');
     const jungleData = await getJungleStocks();
@@ -6979,6 +7050,8 @@ cron.schedule('0 20 * * 5', async () => {
     console.log(`[Signal Archive] Saved ${count} signal records for week of ${getCurrentWeekOf()}.`);
   } catch (err) {
     console.error('[Signal Archive] Snapshot failed:', err.message);
+  } finally {
+    signalArchiveRunning = false;
   }
 }, { timezone: 'America/New_York' });
 
@@ -7641,7 +7714,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     }
     if (fmpFetches.length > 0) {
       try {
-        const results = await Promise.all(fmpFetches.map(([, url]) => fetch(url)));
+        const results = await Promise.all(fmpFetches.map(([, url]) => fetch(url, { signal: AbortSignal.timeout(15000) })));
         for (let i = 0; i < fmpFetches.length; i++) {
           if (!results[i].ok) continue;
           const data = await results[i].json();
@@ -7659,7 +7732,8 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     let marketGauges = { nyse: null, nasdaq: null, iwm: null, gld: null, dji: null, crude: null, usd: null, btc: null };
     try {
       const mgRes = await fetch(
-        `https://financialmodelingprep.com/api/v3/quote/%5ENYA,%5EIXIC,IWM,GLD,%5EDJI,USOIL,DX-Y.NYB,BTCUSD?apikey=${FMP_KEY}`
+        `https://financialmodelingprep.com/api/v3/quote/%5ENYA,%5EIXIC,IWM,GLD,%5EDJI,USOIL,DX-Y.NYB,BTCUSD?apikey=${FMP_KEY}`,
+        { signal: AbortSignal.timeout(15000) }
       );
       if (mgRes.ok) {
         const mgData = await mgRes.json();
@@ -7695,7 +7769,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     // WTI crude fallback — USOIL may not return in batch; try USOIL then USO ETF as proxy
     if (!marketGauges.crude) {
       try {
-        const wtiRes = await fetch(`https://financialmodelingprep.com/api/v3/quote/USOIL,USO?apikey=${FMP_KEY}`);
+        const wtiRes = await fetch(`https://financialmodelingprep.com/api/v3/quote/USOIL,USO?apikey=${FMP_KEY}`, { signal: AbortSignal.timeout(15000) });
         if (wtiRes.ok) {
           const wtiData = await wtiRes.json();
           if (Array.isArray(wtiData)) {
@@ -7732,7 +7806,8 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       const toDate  = new Date().toISOString().slice(0, 10);
       const fromDate = new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10);
       const tRes = await fetch(
-        `https://financialmodelingprep.com/api/v4/treasury?from=${fromDate}&to=${toDate}&apikey=${FMP_KEY}`
+        `https://financialmodelingprep.com/api/v4/treasury?from=${fromDate}&to=${toDate}&apikey=${FMP_KEY}`,
+        { signal: AbortSignal.timeout(15000) }
       );
       if (tRes.ok) {
         const tData = await tRes.json();
@@ -8105,8 +8180,8 @@ app.get('/api/pulse/developing-signals', authenticateJWT, async (req, res) => {
       const chunk = tickersToQuote.slice(i, i + CHUNK_SIZE);
       try {
         const [quoteR, profileR] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_API_KEY}`),
-          fetch(`https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`),
+          fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) }),
+          fetch(`https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) }),
         ]);
         if (quoteR.ok) {
           const data = await quoteR.json();
@@ -8594,7 +8669,7 @@ app.get('/api/pulse/ai300/movers', authenticateJWT, async (req, res) => {
     for (let i = 0; i < tickers.length; i += BATCH) {
       const chunk = tickers.slice(i, i + BATCH);
       try {
-        const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_KEY}`);
+        const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_KEY}`, { signal: AbortSignal.timeout(15000) });
         if (r.ok) {
           const data = await r.json();
           if (Array.isArray(data)) for (const q of data) quoteMap[q.symbol] = q;
@@ -8776,7 +8851,7 @@ app.get('/api/market-data/vix', authenticateJWT, async (req, res) => {
   try {
     const FMP_API_KEY = process.env.FMP_API_KEY;
     const url = `https://financialmodelingprep.com/api/v3/quote/%5EVIX?apikey=${FMP_API_KEY}`;
-    const fmpRes = await fetch(url);
+    const fmpRes = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!fmpRes.ok) throw new Error(`FMP error ${fmpRes.status}`);
     const data = await fmpRes.json();
     res.json({ close: data[0]?.price || null, change: data[0]?.change || null });
@@ -9102,8 +9177,8 @@ async function fetchDevelopingSignalsCached() {
       try {
         const chunk = allTickers.slice(i, i + 100);
         const [quoteR, profileR] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_API_KEY}`),
-          fetch(`https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`),
+          fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) }),
+          fetch(`https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) }),
         ]);
         if (quoteR.ok) { const data = await quoteR.json(); if (Array.isArray(data)) for (const q of data) quoteMap[q.symbol] = q; }
         if (profileR.ok) {
@@ -9163,7 +9238,7 @@ async function fetchDevelopingSignalsCached() {
           try {
             for (let i = 0; i < missingTickers.length; i += 100) {
               const chunk = missingTickers.slice(i, i + 100);
-              const pr = await fetch(`https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`);
+              const pr = await fetch(`https://financialmodelingprep.com/api/v3/profile/${chunk.join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) });
               if (pr.ok) {
                 const pd = await pr.json();
                 if (Array.isArray(pd)) for (const p of pd) {
@@ -9192,7 +9267,7 @@ async function fetchDevelopingSignalsCached() {
       const etfEntries = Object.entries(SECTOR_ETFS);
       const etfTickers = etfEntries.map(([, etf]) => etf);
       const [quotesRaw, emaEntries] = await Promise.all([
-        fetch(`https://financialmodelingprep.com/api/v3/quote/${etfTickers.join(',')}?apikey=${FMP_API_KEY}`)
+        fetch(`https://financialmodelingprep.com/api/v3/quote/${etfTickers.join(',')}?apikey=${FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) })
           .then(r => r.ok ? r.json() : []).catch(() => []),
         Promise.all(etfEntries.map(async ([sector, etf]) => {
           try {
@@ -9797,7 +9872,7 @@ async function runTrendlineBreakSweep() {
   for (let i = 0; i < tickers.length; i += 50) {
     const chunk = tickers.slice(i, i + 50);
     try {
-      const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${process.env.FMP_API_KEY}`);
+      const r = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk.join(',')}?apikey=${process.env.FMP_API_KEY}`, { signal: AbortSignal.timeout(15000) });
       const arr = await r.json();
       for (const q of (arr || [])) quotes[q.symbol] = q.price;
     } catch (e) { console.warn('[tl-sweep] quote chunk failed:', e.message); }
@@ -9898,3 +9973,12 @@ setInterval(async () => {
     console.error('Friday scheduler error:', err.message);
   }
 }, 30 * 60 * 1000);
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught Exception:', err);
+  process.exit(1);
+});

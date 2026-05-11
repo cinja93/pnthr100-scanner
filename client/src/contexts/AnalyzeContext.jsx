@@ -9,7 +9,7 @@
  */
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import { API_BASE, authHeaders } from '../services/api';
+import { API_BASE, authHeaders, apiFetch } from '../services/api';
 import { useAuth } from '../AuthContext';
 
 const AnalyzeContext = createContext(null);
@@ -23,19 +23,19 @@ export function AnalyzeProvider({ children }) {
     async function loadContext() {
       try {
         const [sectorRes, washRes, navRes, regimeRes, sectorEmaRes] = await Promise.all([
-          fetch(`${API_BASE}/api/sector-exposure`, { headers: authHeaders() })
+          apiFetch(`${API_BASE}/api/sector-exposure`, { headers: authHeaders() })
             .then(r => r.ok ? r.json() : null)
             .catch(() => null),
-          fetch(`${API_BASE}/api/wash-rules`, { headers: authHeaders() })
+          apiFetch(`${API_BASE}/api/wash-rules`, { headers: authHeaders() })
             .then(r => r.ok ? r.json() : [])
             .catch(() => []),
-          fetch(`${API_BASE}/api/settings/nav`, { headers: authHeaders() })
+          apiFetch(`${API_BASE}/api/settings/nav`, { headers: authHeaders() })
             .then(r => r.ok ? r.json() : null)
             .catch(() => null),
-          fetch(`${API_BASE}/api/regime`, { headers: authHeaders() })
+          apiFetch(`${API_BASE}/api/regime`, { headers: authHeaders() })
             .then(r => r.ok ? r.json() : null)
             .catch(() => null),
-          fetch(`${API_BASE}/api/sector-ema`, { headers: authHeaders() })
+          apiFetch(`${API_BASE}/api/sector-ema`, { headers: authHeaders() })
             .then(r => r.ok ? r.json() : {})
             .catch(() => ({})),
         ]);

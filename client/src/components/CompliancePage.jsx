@@ -184,8 +184,14 @@ export default function CompliancePage() {
     } catch (err) { alert(err.message); }
   };
 
-  const handleView = (doc) => {
-    window.open(`${API_BASE}/api/compliance/documents/${doc._id}/view?token=${encodeURIComponent(localStorage.getItem('pnthr_token') || '')}`, '_blank');
+  const handleView = async (doc) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/compliance/documents/${doc._id}/view`, { headers: authHeaders() });
+      if (!res.ok) throw new Error('View failed');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch (err) { alert(err.message); }
   };
 
   const handleDownload = async (doc) => {

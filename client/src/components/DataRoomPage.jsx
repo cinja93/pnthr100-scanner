@@ -120,9 +120,15 @@ export default function DataRoomPage() {
     }
   };
 
-  const handleView = (doc) => {
+  const handleView = async (doc) => {
     // Open document inline in a new browser tab (all users)
-    window.open(`${API_BASE}/api/dataroom/${doc._id}/view?token=${encodeURIComponent(localStorage.getItem('pnthr_token') || '')}`, '_blank');
+    try {
+      const res = await fetch(`${API_BASE}/api/dataroom/${doc._id}/view`, { headers: authHeaders() });
+      if (!res.ok) throw new Error('View failed');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch (err) { alert(err.message); }
   };
 
   const handleDownload = async (doc) => {

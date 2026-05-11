@@ -134,7 +134,7 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 async function fetchJson(path) {
   const sep = path.includes('?') ? '&' : '?';
   const url = `${FMP_BASE_URL}${path}${sep}apikey=${FMP_API_KEY}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`FMP ${res.status} for ${path}`);
   return res.json();
 }

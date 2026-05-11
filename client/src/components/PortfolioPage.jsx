@@ -1,21 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import styles from './PortfolioPage.module.css';
-import { updateUserProfile } from '../services/api';
-
-const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : 'http://localhost:3000');
-function authHeaders(extra = {}) {
-  const token = localStorage.getItem('pnthr_token');
-  return { ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...extra };
-}
+import { updateUserProfile, API_BASE, authHeaders, apiFetch } from '../services/api';
 
 async function apiFetchPortfolio() {
-  const res = await fetch(`${API_BASE}/api/portfolio`, { headers: authHeaders() });
+  const res = await apiFetch(`${API_BASE}/api/portfolio`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
 async function apiFetchTicker(ticker) {
-  const res = await fetch(`${API_BASE}/api/portfolio/ticker/${ticker}`, { headers: authHeaders() });
+  const res = await apiFetch(`${API_BASE}/api/portfolio/ticker/${ticker}`, { headers: authHeaders() });
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
     throw new Error(d.error || `Ticker ${ticker} not found`);
@@ -24,7 +18,7 @@ async function apiFetchTicker(ticker) {
 }
 
 async function apiOptimize(accountSize, riskPct, tickers) {
-  const res = await fetch(`${API_BASE}/api/portfolio/optimize`, {
+  const res = await apiFetch(`${API_BASE}/api/portfolio/optimize`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ accountSize, riskPct, tickers }),

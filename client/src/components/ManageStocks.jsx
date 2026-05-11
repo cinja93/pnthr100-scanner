@@ -1,3 +1,4 @@
+// DEPRECATED — not used in production. Hardcoded to localhost.
 import { useState, useEffect } from 'react';
 import styles from './ManageStocks.module.css';
 

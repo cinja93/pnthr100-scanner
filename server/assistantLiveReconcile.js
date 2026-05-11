@@ -7,6 +7,7 @@
 import { connectToDatabase, getUserProfile } from './database.js';
 import { computeTargetAvg } from './lotMath.js';
 import { ALL_ETF_TICKER_SET } from './etfService.js';
+import { runLotTriggerSync } from './lotTriggerCron.js';
 
 // ── Tolerance thresholds ──────────────────────────────────────────────────────
 // Centralized so tuning doesn't require chasing through the file.
@@ -580,13 +581,32 @@ export async function assistantLiveReconcile(req, res) {
     // Live prices
     const prices = await fetchLivePrices(tickers);
 
+    // Query outbox for pending/executing lot-trigger commands so each lot
+    // trigger can show "STAGING" instead of a plain red dot.
+    const outboxLotCmds = await db.collection('pnthr_ibkr_outbox').find({
+      ownerId: userId,
+      command: { $in: ['PLACE_LOT_TRIGGER', 'MODIFY_LOT_TRIGGER'] },
+      status:  { $in: ['PENDING', 'EXECUTING'] },
+    }).toArray();
+    const outboxByTickerLot = new Map();
+    for (const o of outboxLotCmds) {
+      const key = `${(o.request?.ticker || '').toUpperCase()}:${o.request?.lot}`;
+      outboxByTickerLot.set(key, o.status);
+    }
+
     // Build rows
     const rows = tickers.map(ticker => {
       const cmd     = cmdPositions.find(p => p.ticker?.toUpperCase() === ticker) || null;
       const ibkrPos = ibkrPositions.find(p => p.symbol?.toUpperCase() === ticker) || null;
       const stops   = ibkrStops.filter(s => s.symbol?.toUpperCase() === ticker);
       const last    = prices[ticker] ?? ibkrPos?.marketPrice ?? cmd?.currentPrice ?? null;
-      return buildRow(ticker, cmd, ibkrPos, stops, last, netLiquidity);
+      const row = buildRow(ticker, cmd, ibkrPos, stops, last, netLiquidity);
+      // Enrich lot triggers with outbox staging status
+      for (const lt of row.lotTriggers) {
+        const key = `${ticker}:${lt.lot}`;
+        lt.outboxStatus = outboxByTickerLot.get(key) || null;
+      }
+      return row;
     });
 
     // Enrich rows with daily RSI(14) for the stock + the relevant market
@@ -651,11 +671,20 @@ export async function assistantLiveReconcile(req, res) {
     const longCount = rows.filter(r => (r.command.direction || r.ibkr.direction) === 'LONG').length;
     const shortCount = rows.filter(r => (r.command.direction || r.ibkr.direction) === 'SHORT').length;
 
+    // Self-healing: if ANY lot trigger is unstaged and no outbox command is
+    // already pending, fire runLotTriggerSync in the background. This means
+    // every page load auto-heals missing lot triggers — no waiting for the
+    // once-per-minute cron. Non-blocking: response goes out immediately.
+    const hasUnstagedWithNoOutbox = rows.some(r =>
+      r.lotTriggers.some(lt => !lt.filled && !lt.complete && !lt.staged && !lt.outboxStatus && lt.targetShares > 0)
+    );
+
     res.json({
       lastSyncedAt: ibkrSyncedAt,
       generatedAt:  new Date().toISOString(),
       summary,
       rows,
+      lotSyncTriggered: hasUnstagedWithNoOutbox,
       positions: {
         total: totalPositions,
         long: longCount,
@@ -672,6 +701,12 @@ export async function assistantLiveReconcile(req, res) {
         nav: netLiquidity,
       },
     });
+
+    if (hasUnstagedWithNoOutbox) {
+      runLotTriggerSync({ db }).catch(err =>
+        console.error('[live-reconcile] background lot-trigger sync failed:', err.message)
+      );
+    }
   } catch (err) {
     console.error('[assistant/live-reconcile]', err);
     res.status(500).json({ error: err.message });

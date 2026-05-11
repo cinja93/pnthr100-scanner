@@ -21,6 +21,13 @@ import { sizePosition, isEtfTicker } from '../utils/sizingUtils.js';
 
 const REFRESH_MS = 60_000;
 
+if (typeof document !== 'undefined' && !document.getElementById('pnthr-pulse-anim')) {
+  const style = document.createElement('style');
+  style.id = 'pnthr-pulse-anim';
+  style.textContent = '@keyframes pnthrPulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }';
+  document.head.appendChild(style);
+}
+
 const DOT_COLOR = {
   green:  '#28a745',
   yellow: '#ffc107',
@@ -1423,39 +1430,59 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                             const isComplete  = t.complete === true;
                             const noAction    = isComplete || !t.targetShares || t.targetShares <= 0;
                             const sharesMatch = (t.stagedShares || 0) === t.targetShares;
+                            const isStaging   = !t.staged && !!t.outboxStatus;
                             const dotStatus  = noAction                   ? 'gray'
                                              : t.staged && sharesMatch    ? 'green'
                                              : t.staged && !sharesMatch   ? 'yellow'
+                                             : isStaging                  ? 'yellow'
                                              :                              'red';
                             const dotTitle = isComplete
                               ? `Lot ${t.lot}: position already covers this lot's cumulative target — no action needed`
                               : noAction
                                 ? `Lot ${t.lot}: no shares to add (position at size cap — click PYRAMID to override total size)`
-                                : t.staged && sharesMatch
-                                  ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR (${t.targetShares} sh ✓)`
-                                  : t.staged && !sharesMatch
-                                    ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR but SHARE COUNT MISMATCH — plan ${t.targetShares} sh, TWS ${t.stagedShares || 0} sh`
-                                    : `Lot ${t.lot}: NO pending ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)}`;
+                                : isStaging
+                                  ? `Lot ${t.lot}: STAGING — auto-placing ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} in TWS (${t.outboxStatus})`
+                                  : t.staged && sharesMatch
+                                    ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR (${t.targetShares} sh ✓)`
+                                    : t.staged && !sharesMatch
+                                      ? `Lot ${t.lot}: ${t.expectedSide} STP @ $${t.triggerPrice.toFixed(2)} staged in IBKR but SHARE COUNT MISMATCH — plan ${t.targetShares} sh, TWS ${t.stagedShares || 0} sh`
+                                      : `Lot ${t.lot}: NOT staged — auto-fix triggered`;
                             return (
                               <div key={t.lot} style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
                                 gap: 2, lineHeight: '14px',
                               }}>
-                                <Dot status={dotStatus} title={dotTitle} />
+                                {isStaging ? (
+                                  <span title={dotTitle} style={{
+                                    display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
+                                    background: '#ffc107',
+                                    animation: 'pnthrPulse 1.2s ease-in-out infinite',
+                                    flexShrink: 0,
+                                  }} />
+                                ) : (
+                                  <Dot status={dotStatus} title={dotTitle} />
+                                )}
                                 <span style={{ opacity: 0.5, fontSize: 9, marginRight: 2 }}>L{t.lot}</span>
                                 <span>{fmtMoney(t.triggerPrice)}</span>
-                                <span
-                                  title={noAction
-                                    ? '0 sh — position already at vitality/ticker-cap ceiling; no more shares to distribute'
-                                    : `Plan calls for ${t.targetShares} sh at Lot ${t.lot}`}
-                                  style={{
-                                    marginLeft: 5, fontSize: 9,
-                                    color: noAction
-                                      ? 'rgba(255,255,255,0.28)'
-                                      : 'rgba(255,255,255,0.45)',
-                                    fontWeight: 500,
-                                  }}
-                                >{t.targetShares} sh</span>
+                                {isStaging ? (
+                                  <span style={{
+                                    marginLeft: 5, fontSize: 8, fontWeight: 800,
+                                    color: '#ffc107', letterSpacing: '0.06em',
+                                  }}>STAGING</span>
+                                ) : (
+                                  <span
+                                    title={noAction
+                                      ? '0 sh — position already at vitality/ticker-cap ceiling; no more shares to distribute'
+                                      : `Plan calls for ${t.targetShares} sh at Lot ${t.lot}`}
+                                    style={{
+                                      marginLeft: 5, fontSize: 9,
+                                      color: noAction
+                                        ? 'rgba(255,255,255,0.28)'
+                                        : 'rgba(255,255,255,0.45)',
+                                      fontWeight: 500,
+                                    }}
+                                  >{t.targetShares} sh</span>
+                                )}
                               </div>
                             );
                           })}

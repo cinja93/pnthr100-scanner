@@ -364,14 +364,14 @@
   background: rgba(220, 38, 38, 0.1);
 }
 
-/* Earnings within 14 days — amber row highlight */
+/* Earnings within 14 days — yellow row highlight */
 .earningsHighlight {
-  background: rgba(245, 158, 11, 0.12) !important;
-  box-shadow: inset 3px 0 0 #f59e0b;
+  background: rgba(252, 240, 0, 0.18) !important;
+  box-shadow: inset 3px 0 0 #fcf000;
 }
 
 .earningsHighlight:hover {
-  background: rgba(245, 158, 11, 0.2) !important;
+  background: rgba(252, 240, 0, 0.28) !important;
 }
 
 .earningsSoonBadge {

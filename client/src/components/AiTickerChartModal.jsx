@@ -42,7 +42,7 @@ function fmtPct(n) {
 // ── Single chart panel (daily or weekly) ───────────────────────────────────
 function ChartPanel({
   title, period, fallback, bars, signals, chartType,
-  currentSignal, pnthrStop,
+  currentSignal, pnthrStop, weeklyStop,
   ticker, entryPrice,
 }) {
   const containerRef    = useRef(null);
@@ -82,7 +82,7 @@ function ChartPanel({
     if (entryPrice == null) return;
     handleSizeIt();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker, entryPrice, pnthrStop, currentSignal]);
+  }, [ticker, entryPrice, pnthrStop, weeklyStop, currentSignal]);
 
   // ── Chart render ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -229,9 +229,11 @@ function ChartPanel({
       if (currentSignal === 'BL') direction = 'LONG';
       else if (currentSignal === 'SS') direction = 'SHORT';
 
-      // Stop from THIS panel's pnthrStop, fall back to ±2% of entry
-      const stopDefault = pnthrStop != null
-        ? pnthrStop
+      // Always size from the WEEKLY stop — weekly is the trading timeframe.
+      // Daily stop is shown as reference only.
+      const sizingStop = weeklyStop ?? pnthrStop;
+      const stopDefault = sizingStop != null
+        ? sizingStop
         : (direction === 'SHORT'
             ? +(entryPrice * 1.02).toFixed(2)
             : +(entryPrice * 0.98).toFixed(2));
@@ -348,6 +350,11 @@ function ChartPanel({
         {pnthrStop != null && !sizePanel && (
           <span style={{ color: '#fcf000', fontSize: 10, fontFamily: 'monospace' }}>
             Stop ${fmtNum(pnthrStop)}
+          </span>
+        )}
+        {title === 'Daily' && pnthrStop != null && weeklyStop != null && pnthrStop !== weeklyStop && !sizePanel && (
+          <span style={{ color: '#888', fontSize: 9, fontFamily: 'monospace' }}>
+            Wkly ${fmtNum(weeklyStop)}
           </span>
         )}
 
@@ -676,6 +683,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
                 chartType={chartType}
                 currentSignal={data.daily.currentSignal}
                 pnthrStop={data.daily.pnthrStop}
+                weeklyStop={data.weekly.pnthrStop}
                 ticker={activeTicker}
                 entryPrice={data.currentPrice}
               />
@@ -688,6 +696,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
                 chartType={chartType}
                 currentSignal={data.weekly.currentSignal}
                 pnthrStop={data.weekly.pnthrStop}
+                weeklyStop={data.weekly.pnthrStop}
                 ticker={activeTicker}
                 entryPrice={data.currentPrice}
               />

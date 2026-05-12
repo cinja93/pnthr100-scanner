@@ -323,6 +323,95 @@ export function computeCatchUpRebalance({ position, netLiquidity, missedLot, cur
   };
 }
 
+// ── Slippage rebalance (L1 fill price ≠ planned entry) ─────────────────────
+// When auto-execute places a MKT order and the L1 fill comes back at a
+// different price than planned, adjust L2-L5 share counts so the final
+// weighted-average cost (if all lots fill) equals the ideal targetAvg
+// that was computed from the planned entry price.
+//
+// Trigger prices stay at canonical LOT_OFFSETS from the ACTUAL L1 fill
+// (anchor = real fill price), keeping triggers at natural market levels.
+// Only share counts change.
+//
+// Math: scale L2-L5 shares by factor k such that:
+//   S1*P1 + k*(S2*P2 + S3*P3 + S4*P4 + S5*P5) = T * (S1 + k*(S2+S3+S4+S5))
+//
+// Solving: k = (T*S1 - S1*P1) / (S2*P2 + S3*P3 + S4*P4 + S5*P5 - T*(S2+S3+S4+S5))
+//
+// Returns { ok, k, newLotShares: [{lot, shares, triggerPrice}], finalAvg, idealAvg }
+// Returns ok=false with reason when no solution exists (e.g., L1 filled so
+// high that even k=0 can't recover the avg, or planned and actual are equal).
+export function computeSlippageRebalance({ position, netLiquidity, actualL1Price, idealTargetAvg }) {
+  if (!position || !actualL1Price || !idealTargetAvg || !netLiquidity) {
+    return { ok: false, reason: 'MISSING_INPUT' };
+  }
+  const T = +idealTargetAvg;
+  const P1 = +actualL1Price;
+  if (Math.abs(P1 - +(position.entryPrice || 0)) < 0.005) {
+    return { ok: false, reason: 'NO_SLIPPAGE' };
+  }
+
+  // Build a plan anchored at the actual L1 fill price.
+  const posWithFill = {
+    ...position,
+    fills: { ...position.fills, 1: { filled: true, price: P1, shares: position.fills?.[1]?.shares || 0 } },
+  };
+  const plan = computeLotPlan(posWithFill, netLiquidity);
+  if (!plan || plan.length < 5) return { ok: false, reason: 'PLAN_INCOMPLETE' };
+
+  const S1 = +plan[0].targetShares || 0;
+  if (S1 <= 0) return { ok: false, reason: 'ZERO_L1_SHARES' };
+
+  // Sum of upper lots' cost and shares at their canonical trigger prices.
+  let upperCost = 0;
+  let upperShares = 0;
+  for (let i = 1; i < plan.length; i++) {
+    const s = +plan[i].targetShares || 0;
+    const p = +plan[i].triggerPrice || 0;
+    upperCost += s * p;
+    upperShares += s;
+  }
+  if (upperShares <= 0) return { ok: false, reason: 'NO_UPPER_LOTS' };
+
+  // k = (T*S1 - S1*P1) / (upperCost - T*upperShares)
+  //   = S1*(T - P1) / (upperCost - T*upperShares)
+  const numer = S1 * (T - P1);
+  const denom = upperCost - T * upperShares;
+  if (Math.abs(denom) < 1e-9) {
+    return { ok: false, reason: 'DEGENERATE_DENOM' };
+  }
+  const k = numer / denom;
+  if (!Number.isFinite(k)) return { ok: false, reason: 'MATH_NONFINITE' };
+  if (k <= 0) return { ok: false, reason: 'NEGATIVE_SCALE_SLIPPAGE_TOO_LARGE' };
+
+  // Apply k to each upper lot, round to nearest integer (min 1).
+  const newLotShares = [];
+  let totalCost = S1 * P1;
+  let totalShr = S1;
+  for (let i = 1; i < plan.length; i++) {
+    const origShares = +plan[i].targetShares || 0;
+    const adjusted = Math.max(1, Math.round(origShares * k));
+    const trig = +plan[i].triggerPrice;
+    newLotShares.push({ lot: plan[i].lot, shares: adjusted, triggerPrice: trig });
+    totalCost += adjusted * trig;
+    totalShr += adjusted;
+  }
+
+  const finalAvg = totalShr > 0 ? +(totalCost / totalShr).toFixed(4) : null;
+  return {
+    ok: true,
+    k: +k.toFixed(4),
+    l1Shares: S1,
+    l1Price: P1,
+    plannedEntry: +(position.entryPrice || 0),
+    slippage: +(P1 - (position.entryPrice || 0)).toFixed(4),
+    newLotShares,
+    finalAvg,
+    idealAvg: T,
+    avgDeviation: finalAvg != null ? +(finalAvg - T).toFixed(4) : null,
+  };
+}
+
 // ── Lot completion classifier ────────────────────────────────────────────────
 // A lot N is "complete" when the position holds at least the cumulative target
 // shares through L_N. The cron's cleanup pass uses this to decide whether a

@@ -19,6 +19,7 @@ import { recordExit } from './exitService.js';
 import { enqueue as enqueueOutbox, sanityCheckPlaceStop, buildStopOrderShape } from './ibkrOutbox.js';
 import { recordLotFill } from './lotFillRecorder.js';
 import { getStrategyMode } from './data/strategyMode.js';
+import { computeSlippageRebalance, computeLotPlan } from './lotMath.js';
 
 const DEFAULT_NAV = 100_000;
 
@@ -122,6 +123,91 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
 
     const symbol = exec.symbol?.toUpperCase();
     const execAt = parseExecTime(exec.time);
+
+    // ── Auto-execute L1 fill recording ──────────────────────────────────────
+    // When aiAutoExecute creates a position (autoExecuted=true) and sends a
+    // MKT order, L1 starts unfilled. When the fill execution comes back,
+    // record the actual fill price, compute slippage rebalance to preserve
+    // the ideal targetAvg, and persist adjusted L2-L5 share counts. The
+    // lotTriggerCron will then MODIFY the TWS BUY STPs to match.
+    {
+      const l1Dir = exec.side === 'BOT' ? 'LONG' : exec.side === 'SLD' ? 'SHORT' : null;
+      if (l1Dir) {
+        const l1Pos = positionByTickerDir[`${symbol}_${l1Dir}`];
+        if (l1Pos && l1Pos.autoExecuted && l1Pos.status !== 'CLOSED' && !l1Pos.fills?.[1]?.filled) {
+          const dryRun = process.env.IBKR_AUTO_RECORD_ADD_FILL !== 'true';
+          const nav = await getNav();
+          const fillPrice = +exec.price;
+          const fillShares = +exec.shares;
+          const fillDate = (syncedAt instanceof Date ? syncedAt : new Date(syncedAt)).toISOString().split('T')[0];
+
+          // Compute slippage rebalance (adjusts L2-L5 shares to preserve idealAvg)
+          const idealAvg = l1Pos.targetAvg;
+          const rebal = idealAvg ? computeSlippageRebalance({
+            position: l1Pos, netLiquidity: nav, actualL1Price: fillPrice, idealTargetAvg: idealAvg,
+          }) : null;
+
+          console.log(`[AutoExec L1] ${dryRun ? 'DRY-RUN' : 'LIVE'} ${symbol} L1 filled ${fillShares}sh @ $${fillPrice} (planned $${l1Pos.entryPrice})` +
+            (rebal?.ok ? ` — slippage rebalance k=${rebal.k}, avgDev=${rebal.avgDeviation}` : ` — no rebalance (${rebal?.reason || 'no idealAvg'})`));
+
+          if (!dryRun) {
+            const setOps = {
+              'fills.1.filled': true,
+              'fills.1.shares': fillShares,
+              'fills.1.price':  fillPrice,
+              'fills.1.date':   fillDate,
+              'fills.1.execId': exec.execId,
+              'fills.1.source': 'IBKR_AUTO_EXEC_L1',
+              entryPrice:       fillPrice,
+              currentPrice:     fillPrice,
+              totalFilledShares: fillShares,
+              remainingShares:   fillShares,
+              updatedAt:        new Date(),
+            };
+            // Apply slippage rebalance: update L2-L5 target shares on unfilled lots
+            if (rebal?.ok && Array.isArray(rebal.newLotShares)) {
+              for (const ls of rebal.newLotShares) {
+                if (l1Pos.fills?.[ls.lot]?.filled) continue;
+                setOps[`fills.${ls.lot}.shares`]       = ls.shares;
+                setOps[`fills.${ls.lot}.targetShares`]  = ls.shares;
+                setOps[`fills.${ls.lot}.rebalancedFromSlippage`] = true;
+              }
+              setOps.slippageRebalance = {
+                k: rebal.k,
+                plannedEntry: rebal.plannedEntry,
+                actualEntry: rebal.l1Price,
+                slippage: rebal.slippage,
+                idealAvg: rebal.idealAvg,
+                finalAvg: rebal.finalAvg,
+                avgDeviation: rebal.avgDeviation,
+                appliedAt: new Date(),
+              };
+            }
+            // Recompute targetAvg from ACTUAL fill for the anchor-based plan.
+            // The idealAvg is preserved as the GOAL; the new lot shares are
+            // sized to hit it. Store both.
+            setOps.idealTargetAvg = idealAvg;
+
+            await db.collection('pnthr_portfolio').updateOne(
+              { id: l1Pos.id, ownerId: userId },
+              { $set: setOps },
+            );
+          }
+          // Mark execution as processed
+          await db.collection('pnthr_ibkr_executions').updateOne(
+            { ownerId: userId, execId: exec.execId },
+            { $set: {
+              ownerId: userId, execId: exec.execId, symbol,
+              side: exec.side, shares: exec.shares, price: exec.price,
+              type: dryRun ? 'AUTO_EXEC_L1_FILL_DRY_RUN' : 'AUTO_EXEC_L1_FILL',
+              processedAt: syncedAt,
+            } },
+            { upsert: true },
+          );
+          continue;
+        }
+      }
+    }
 
     // ── Phase 4h: auto-record pyramid lot fills ────────────────────────────
     // BOT for an ACTIVE LONG (or SLD for an ACTIVE SHORT) that already has

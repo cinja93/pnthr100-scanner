@@ -44,7 +44,9 @@ function buildAlerts(movers) {
   return out;
 }
 
-export default function MoversAlertBanner({ onTickerClick }) {
+export const MOVERS_BANNER_HEIGHT = 44;
+
+export default function MoversAlertBanner({ onTickerClick, onVisibleChange, topOffset = 0 }) {
   const { currentUser } = useAuth() || {};
   const [alerts, setAlerts] = useState([]);
   const [hidden, setHidden] = useState(() => loadDismissed());
@@ -60,11 +62,14 @@ export default function MoversAlertBanner({ onTickerClick }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [currentUser]);
 
-  if (!currentUser || hidden || alerts.length === 0) return null;
+  const visible = !!(currentUser && !hidden && alerts.length > 0);
+  useEffect(() => { onVisibleChange?.(visible); }, [visible]);
+
+  if (!visible) return null;
 
   return (
     <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998,
+      position: 'fixed', top: topOffset, left: 0, right: 0, zIndex: 9998,
       background: '#fcf000', color: '#000',
       padding: '10px 16px',
       borderBottom: '2px solid #000',

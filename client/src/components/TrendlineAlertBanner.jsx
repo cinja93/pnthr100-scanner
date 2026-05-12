@@ -13,10 +13,12 @@ import { fetchTrendlineAlerts, dismissTrendlineAlert } from '../services/api';
 
 const POLL_MS = 30 * 1000;
 
-export default function TrendlineAlertBanner({ onNavigateToAssistant }) {
+export const TRENDLINE_BANNER_HEIGHT = 44;
+
+export default function TrendlineAlertBanner({ onNavigateToAssistant, onVisibleChange }) {
   const { isAdmin } = useAuth() || {};
   const [alerts, setAlerts] = useState([]);
-  const [hidden, setHidden] = useState(false);   // collapse banner manually
+  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -29,7 +31,10 @@ export default function TrendlineAlertBanner({ onNavigateToAssistant }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [isAdmin]);
 
-  if (!isAdmin || hidden || alerts.length === 0) return null;
+  const visible = !!(isAdmin && !hidden && alerts.length > 0);
+  useEffect(() => { onVisibleChange?.(visible); }, [visible]);
+
+  if (!visible) return null;
 
   const newest = alerts[0];
   const restCount = alerts.length - 1;

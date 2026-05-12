@@ -238,7 +238,7 @@ export default function AiOrdersPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
             <thead>
               <tr style={{ background: '#1a1a1a', color: '#fcf000', textAlign: 'left' }}>
-                <th style={{ padding: '8px 10px' }}>Grade</th>
+                <th style={{ padding: '8px 10px' }}>Action</th>
                 <th style={{ padding: '8px 10px' }}>Signal</th>
                 <th style={{ padding: '8px 10px' }}>Ticker</th>
                 <th style={{ padding: '8px 10px' }}>Sector</th>
@@ -255,10 +255,24 @@ export default function AiOrdersPage() {
               </tr>
             </thead>
             <tbody>
-              {orders.map(o => (
+              {orders.map(o => {
+                const isBuy = o.qualityGrade === 'BEST' || o.qualityGrade === 'GOOD';
+                const isWait = !isBuy && o.signal === 'BL';
+                const isNoGo = !isBuy && o.signal === 'SS';
+                const rowBg = isBuy ? 'rgba(22,163,74,0.12)'
+                  : isWait ? 'rgba(252,240,0,0.06)'
+                  : isNoGo ? 'rgba(220,38,38,0.08)'
+                  : 'transparent';
+                const rowBorder = isBuy ? '1px solid rgba(22,163,74,0.30)'
+                  : isWait ? '1px solid rgba(252,240,0,0.20)'
+                  : isNoGo ? '1px solid rgba(220,38,38,0.20)'
+                  : '1px solid #1a1a1a';
+                const leftAccent = isBuy ? '3px solid #16a34a' : isWait ? '3px solid #fcf000' : isNoGo ? '3px solid #dc2626' : 'none';
+                return (
                 <tr key={`${o.signal}-${o.ticker}`} style={{
-                  borderBottom: '1px solid #1a1a1a',
-                  background: o.isNewSignal ? 'rgba(252,240,0,0.04)' : 'transparent',
+                  borderBottom: rowBorder,
+                  borderLeft: leftAccent,
+                  background: rowBg,
                   cursor: 'pointer',
                 }}
                 onClick={() => {
@@ -267,12 +281,20 @@ export default function AiOrdersPage() {
                   setChartIndex(tickers.indexOf(o.ticker));
                 }}
                 onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
-                onMouseLeave={e => e.currentTarget.style.background = o.isNewSignal ? 'rgba(252,240,0,0.04)' : 'transparent'}
+                onMouseLeave={e => e.currentTarget.style.background = rowBg}
                 >
-                  <td style={{ padding: '6px 10px', textAlign: 'center', fontSize: 14 }}>
-                    {o.qualityGrade === 'BEST' ? <span style={{ color: '#fcf000' }} title="Gap>15%, Slope<20%">★</span>
-                     : o.qualityGrade === 'GOOD' ? <span style={{ color: '#16a34a' }} title="Gap>12%, Slope<20%">✓</span>
-                     : <span style={{ color: '#666' }} title="Does not meet scout criteria">✗</span>}
+                  <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                    {isBuy ? (
+                      <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#16a34a', color: '#fff' }}>
+                        {o.qualityGrade === 'BEST' ? '★ BUY' : 'BUY'}
+                      </span>
+                    ) : isWait ? (
+                      <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#fcf000', color: '#000' }}>WAIT</span>
+                    ) : (
+                      <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#dc2626', color: '#fff' }}>
+                        {o.signal === 'SS' ? 'SS' : 'NO GO'}
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: '6px 10px', fontWeight: 700, color: o.signal === 'BL' ? '#16a34a' : '#dc2626' }}>
                     {o.signal}
@@ -301,7 +323,7 @@ export default function AiOrdersPage() {
                       : <span style={{ color: '#666', fontSize: 10 }}>RUNNING</span>}
                   </td>
                 </tr>
-              ))}
+              ); })}
             </tbody>
           </table>
         </div>

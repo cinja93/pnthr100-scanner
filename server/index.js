@@ -2037,7 +2037,7 @@ app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, 
     const doc = await runAiOrdersPipeline(req.body || {});
     // Auto-execute qualified orders (respects AI_AUTO_EXECUTE kill switch + dry-run)
     let execResult = null;
-    try { execResult = await autoExecuteAiOrders(); }
+    try { execResult = await autoExecuteAiOrders({ ownerId: req.user.userId }); }
     catch (e) { console.error('[AI AutoExec] failed after manual pipeline run:', e.message); }
     res.json({ ok: true, weekOf: doc.weekOf, totalOrders: doc.stats.totalOrders, stats: doc.stats, autoExec: execResult });
   } catch (err) {
@@ -2049,7 +2049,7 @@ app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, 
 // Standalone auto-execute trigger (runs against latest existing orders doc)
 app.post('/api/admin/run-ai-auto-execute', authenticateJWT, requireAdmin, async (req, res) => {
   try {
-    const result = await autoExecuteAiOrders(req.body || {});
+    const result = await autoExecuteAiOrders({ ownerId: req.user.userId, ...req.body });
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('[AI AutoExec] manual run failed:', err.message);

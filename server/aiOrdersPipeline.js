@@ -24,6 +24,8 @@ import { calculateEMA } from './signalDetection.js';
 import { fetchAiQuotesBatch } from './aiIntradayOverlay.js';
 import { getPai300Regime } from './pai300Regime.js';
 import { getActiveScouts } from './aiScoutService.js';
+import { isCarnivoreMode, getCarnivoreEmaPeriod } from './data/strategyMode.js';
+import { fetchIndexData } from './apexService.js';
 
 const COLL_AI_ORDERS = 'pnthr_ai_orders';
 
@@ -87,9 +89,21 @@ export async function runAiOrdersPipeline(opts = {}) {
 
   console.log(`[AI Orders] starting pipeline (type=${type}, weekOf=${weekOf})…`);
 
-  // 0. PAI300 36W EMA hard gate — BL blocked when PAI300 below EMA (matches backtest)
+  // 0. Regime gates — PAI300 for AI 300-mode tickers, SPY/QQQ for carnivore-mode
   const pai300Bull = await getPai300Regime();
   console.log(`[AI Orders] PAI300 regime: ${pai300Bull === true ? 'BULL (BL allowed)' : pai300Bull === false ? 'BEAR (BL blocked)' : 'UNKNOWN (BL allowed)'}`);
+
+  // SPY/QQQ regime for carnivore-mode tickers (679 rules: both must be above 21W EMA)
+  let spyQqqBull = true;
+  try {
+    const indexData = await fetchIndexData();
+    const spy = indexData.SPY || {};
+    const qqq = indexData.QQQ || {};
+    spyQqqBull = spy.aboveEma !== false && qqq.aboveEma !== false;
+    console.log(`[AI Orders] SPY/QQQ regime: SPY ${spy.aboveEma ? 'BULL' : 'BEAR'}, QQQ ${qqq.aboveEma ? 'BULL' : 'BEAR'} → carnivore BL ${spyQqqBull ? 'allowed' : 'blocked'}`);
+  } catch (err) {
+    console.warn('[AI Orders] SPY/QQQ regime fetch failed; carnivore BL allowed by default:', err.message);
+  }
 
   // 1. Pull live signals (force refresh so sector tiers reflect today's rank)
   const { signals } = await getAiUniverseSignals({ refresh: true });
@@ -116,7 +130,7 @@ export async function runAiOrdersPipeline(opts = {}) {
   function computeGapAndSlope(ticker, livePrice) {
     const meta = TICKER_META[ticker];
     if (!meta) return null;
-    const period = SECTOR_EMA_PERIODS[meta.sectorId] || 30;
+    const period = getCarnivoreEmaPeriod(ticker) || SECTOR_EMA_PERIODS[meta.sectorId] || 30;
     const wRaw = weeklyByTicker[ticker] || [];
     if (wRaw.length < period * 3) return null;
     const wAsc = [...wRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
@@ -149,8 +163,9 @@ export async function runAiOrdersPipeline(opts = {}) {
     const tier = sig.sectorTier;
     const isLong = sig.signal === 'BL';
 
-    // PAI300 hard gate: BL blocked when PAI300 below 36W EMA (matches backtest exactly)
-    if (isLong && pai300Bull === false) { skipLog.blRegimeBlocked++; continue; }
+    // Regime hard gate: carnivore tickers use SPY/QQQ, AI 300 tickers use PAI300
+    const regimeBull = isCarnivoreMode(ticker) ? spyQqqBull : (pai300Bull !== false);
+    if (isLong && !regimeBull) { skipLog.blRegimeBlocked++; continue; }
 
     const mult = isLong ? blMult(tier) : ssMult(tier);
 

@@ -2040,6 +2040,20 @@ app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, 
   }
 });
 
+app.post('/api/admin/set-user-nav', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { userId, nav } = req.body;
+    if (!userId || typeof nav !== 'number' || nav <= 0) {
+      return res.status(400).json({ error: 'userId and positive nav required' });
+    }
+    await upsertUserProfile(userId, { accountSize: nav });
+    res.json({ ok: true, userId, nav });
+  } catch (err) {
+    console.error('[Admin] set-user-nav failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── PNTHR AI Kill (v1) ──────────────────────────────────────────────────────
 app.get('/api/ai-kill/latest', async (req, res) => {
   try {

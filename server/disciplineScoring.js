@@ -121,11 +121,12 @@ function scoreSizing(actualShares, expectedShares, userConfirmed) {
 }
 
 // ── T2-B: Risk Cap Compliance (0-5 pts) ──────────────────────────────────────
-function scoreRiskCap(riskDollars, nav, isEtf) {
+function scoreRiskCap(riskDollars, nav, isEtf, sectorMult) {
   if (!nav || nav <= 0) {
     return { score: 0, label: 'ERROR', detail: 'NAV missing at entry — data pipeline failure' };
   }
-  const cap     = isEtf ? nav * 0.005 : nav * 0.01;
+  const sMult   = +(sectorMult) || 1.0;
+  const cap     = (isEtf ? nav * 0.005 : nav * 0.01) * sMult;
   const within  = riskDollars <= cap;
   if (within) {
     return { score: 5, label: 'COMPLIANT', detail: `Risk $${riskDollars.toFixed(2)} within ${isEtf ? '0.5%' : '1%'} Vitality ($${cap.toFixed(2)})` };
@@ -266,7 +267,7 @@ export function computeDisciplineScore(journal) {
 
   // Sizing — mirrors sizePosition() + buildLots() with ticker cap
   const stopDist    = stopPrice != null ? Math.abs(entryPrice - stopPrice) : 0;
-  const vitality    = nav * (isETF ? 0.005 : 0.01);
+  const vitality    = nav * (isETF ? 0.005 : 0.01) * (+(journal.sectorMult) || 1.0);
   const byVitality  = stopDist > 0 ? Math.floor(vitality / stopDist) : 0;
   const byTickerCap = entryPrice > 0 ? Math.floor((nav * 0.10) / entryPrice) : 0;
   const totalShares = Math.min(byVitality, byTickerCap);
@@ -292,7 +293,7 @@ export function computeDisciplineScore(journal) {
 
   // === TIER 2: EXECUTION (35 pts) ===
   const t2a = scoreSizing(actualLot1, expectedLot1, userConfirmed);
-  const t2b = scoreRiskCap(riskDollars, nav, isETF);
+  const t2b = scoreRiskCap(riskDollars, nav, isETF, journal.sectorMult);
   const t2c = scoreSlippage(slippagePct, hasSignal);
   const t2d = scorePyramiding(lots, mfe, entryPrice, direction);
   const t2e = scoreHeldDrawdown(exits, entryPrice, direction);

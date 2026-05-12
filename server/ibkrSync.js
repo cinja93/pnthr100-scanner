@@ -18,6 +18,7 @@ import { validatePortfolioUpdate } from './portfolioGuard.js';
 import { recordExit } from './exitService.js';
 import { enqueue as enqueueOutbox, sanityCheckPlaceStop, buildStopOrderShape } from './ibkrOutbox.js';
 import { recordLotFill } from './lotFillRecorder.js';
+import { getStrategyMode } from './data/strategyMode.js';
 
 const DEFAULT_NAV = 100_000;
 
@@ -601,6 +602,8 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
       // for UI consistency (every active position has a targetAvg).
       targetAvg:              +(+pos.avgCost).toFixed(4),
       status:                 'ACTIVE',
+      strategyMode:           getStrategyMode(ticker),
+      sectorMult:             1.0,
       autoOpenedByIBKR:       true,
       stopSourceTwsFallback:  stopSourceTwsFallback || undefined,
       createdAt:              syncedAt,

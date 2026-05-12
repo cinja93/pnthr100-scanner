@@ -22,7 +22,7 @@ import { detectAllSignals, calculateEMA, blInitStop, computeWilderATR } from './
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
 import { getPai300Regime } from './pai300Regime.js';
-import { getLatestAiSectorRanks } from './aiSectorRotationService.js';
+import { getLatestAiSectorRanks, AI_SECTOR_TIER_MULT } from './aiSectorRotationService.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { STRIKE_PCT } from './lotMath.js';
 import { isCarnivoreMode } from './data/strategyMode.js';
@@ -54,9 +54,9 @@ function getMondayOf(dateStr) {
   return m.toISOString().split('T')[0];
 }
 
-function sizePosition(nav, entryPrice, stopPrice) {
+function sizePosition(nav, entryPrice, stopPrice, sectorMult = 1.0) {
   const tickerCap = nav * TICKER_CAP_PCT;
-  const vitality  = nav * NAV_VITALITY_PCT;
+  const vitality  = nav * NAV_VITALITY_PCT * (+(sectorMult) || 1.0);
   const rps = Math.abs(entryPrice - stopPrice);
   if (rps <= 0 || entryPrice <= 0) return 0;
   return Math.floor(Math.min(vitality / rps, tickerCap / entryPrice));
@@ -185,7 +185,8 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
     const dailyStop = blInitStop(twoBarLow, closeD, dAtr[barIdx]);
 
     // Size: scout = 50% of Lot 1
-    const totalShares = sizePosition(nav, closeD, dailyStop);
+    const sMult = AI_SECTOR_TIER_MULT[tier] ?? 1.0;
+    const totalShares = sizePosition(nav, closeD, dailyStop, sMult);
     if (totalShares <= 0) { skipLog.noSize++; continue; }
     const fullLot1 = Math.max(1, Math.round(totalShares * STRIKE_PCT[0]));
     const scoutShares = Math.max(1, Math.round(fullLot1 * SCOUT_SIZE_FRAC));
@@ -206,6 +207,7 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
       sectorId: sectorId,
       sectorName: meta.sectorName,
       sectorTier: tier || 'NEUTRAL',
+      sectorMult: sMult,
       gapPct: +gapPct.toFixed(2),
       wEmaSlope: +wEmaSlope.toFixed(2),
       qualityGrade,

@@ -19,6 +19,7 @@ import { getDevelopingSignalTickers } from './signalService.js';
 import { calculateSectorExposure } from './sectorExposure.js';
 import { getCachedSignalStocks } from './apexService.js';
 import { computeTargetAvg } from './lotMath.js';
+import { getStrategyMode } from './data/strategyMode.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE    = 'https://financialmodelingprep.com';
@@ -98,6 +99,7 @@ export async function pendingEntriesPost(req, res) {
       'adjustedStop', 'gapPct', 'shares', 'sector', 'exchange', 'isETF',
       'killScore', 'killRank', 'killTier', 'analyzeScore', 'queuedAt',
       'entryContext', 'lotPrices', 'lotShares', 'isManualOverride',
+      'sectorMult',
     ];
 
     const now = new Date();
@@ -423,6 +425,7 @@ export async function pendingEntryConfirm(req, res) {
       originalStop: entry.adjustedStop || entry.suggestedStop || null,
       maxGapPct: entry.gapPct || 0,
       isETF: entry.isETF || false,
+      sectorMult: +(entry.sectorMult) || 1.0,
       fills,
     };
     const navForTargetAvg = +(await getUserProfile(req.user.userId).catch(() => null))?.accountSize || 100000;
@@ -454,6 +457,8 @@ export async function pendingEntryConfirm(req, res) {
       signal,
       signalAge,
       fromQueue:    true,
+      strategyMode: getStrategyMode(entry.ticker),
+      sectorMult:   +(entry.sectorMult) || 1.0,
     };
 
     await db.collection('pnthr_portfolio').insertOne(position);

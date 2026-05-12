@@ -83,7 +83,7 @@ export default function PyramidPlanModal({ ticker, positionId, onClose, onApplie
         // Total risk budget = 1% × NAV. Subtract L1 actual risk (already
         // filled, fixed). Distribute remaining budget across L2-L5 by
         // 30/25/20/10 weights. shares = budgetForLot / lotRiskPerShare.
-        const budgetTotal     = nav * 0.01;
+        const budgetTotal     = nav * 0.01 * (+(data.sectorMult) || 1.0);
         const budgetRemaining = Math.max(0, budgetTotal - l1Risk);
 
         const weights = { 2: 30, 3: 25, 4: 20, 5: 10 };

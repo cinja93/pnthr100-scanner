@@ -288,7 +288,7 @@ export function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, on
   const [avgCostInput,   setAvgCostInput]   = useState('');
 
   const sizingStop = position.originalStop || position.stopPrice;
-  const pc   = sizePosition({ netLiquidity, entryPrice: position.entryPrice, stopPrice: sizingStop, maxGapPct: position.maxGapPct || 0, direction: position.direction });
+  const pc   = sizePosition({ netLiquidity, entryPrice: position.entryPrice, stopPrice: sizingStop, maxGapPct: position.maxGapPct || 0, direction: position.direction, sectorMult: position.sectorMult || 1.0 });
 
   // ── Lot 1 fill recalculation ─────────────────────────────────────────────
   // If user filled Lot 1 with more/fewer shares than recommended, scale the
@@ -305,7 +305,7 @@ export function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, on
   if (lot1Actual !== null && lot1Actual !== lot1Recommended) {
     const impliedTotal    = Math.round(lot1Actual / STRIKE_PCT[0]);
     const maxByTickerCap  = lot1FillPrice > 0 ? Math.floor(netLiquidity * 0.10 / lot1FillPrice) : impliedTotal;
-    const maxByVitality   = lot1RPS > 0 ? Math.floor(netLiquidity * 0.01 / lot1RPS) : impliedTotal;
+    const maxByVitality   = lot1RPS > 0 ? Math.floor(pc.vitality / lot1RPS) : impliedTotal;
     const cappedTotal     = Math.min(impliedTotal, maxByTickerCap, maxByVitality);
     effectiveTotal        = Math.max(lot1Actual, cappedTotal); // never less than what was actually bought
 

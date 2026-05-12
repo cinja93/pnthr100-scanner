@@ -58,7 +58,8 @@ export function computeLotTargetShares(position, netLiquidity) {
   if (!entry || !sizingStop || !netLiquidity) return [0, 0, 0, 0, 0];
 
   const tickerCap  = netLiquidity * 0.10;
-  const vitality   = netLiquidity * (isETF ? 0.005 : 0.01);
+  const sMult      = +(position?.sectorMult) || 1.0;
+  const vitality   = netLiquidity * (isETF ? 0.005 : 0.01) * sMult;
   const maxGapPct  = +position?.maxGapPct || 0;
   const structRisk = Math.abs((entry - sizingStop) / entry);
   const gapMult    = maxGapPct > structRisk * 100 ? Math.max(0.3, structRisk * 100 / maxGapPct) : 1.0;
@@ -79,7 +80,7 @@ export function computeLotTargetShares(position, netLiquidity) {
   if (lot1Actual !== null && lot1Actual !== lot1Recommended) {
     const impliedTotal   = Math.round(lot1Actual / STRIKE_PCT[0]);
     const maxByTickerCap = lot1FillPrice > 0 ? Math.floor(netLiquidity * 0.10 / lot1FillPrice) : impliedTotal;
-    const maxByVitality  = lot1RPS > 0 ? Math.floor(netLiquidity * (isETF ? 0.005 : 0.01) / lot1RPS) : impliedTotal;
+    const maxByVitality  = lot1RPS > 0 ? Math.floor(vitality / lot1RPS) : impliedTotal;
     const cappedTotal    = Math.min(impliedTotal, maxByTickerCap, maxByVitality);
     effectiveTotal       = Math.max(lot1Actual, cappedTotal);
 

@@ -1035,6 +1035,7 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
               maxGapPct:  +pos.maxGapPct || 0,
               direction:  (pos.direction || 'LONG').toUpperCase(),
               isETF:      isEtfTicker(row.ticker, pos.isEtf),
+              sectorMult: pos.sectorMult || 1.0,
             });
             if (sizing && sizing.totalShares > 0) targetShares = sizing.totalShares;
           }

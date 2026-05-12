@@ -70,9 +70,10 @@ export function enrichLots(lots, entryPrice, stopPrice, direction) {
 }
 
 // isETF=true → 0.5% vitality cap; false → 1% vitality cap
-export function sizePosition({ netLiquidity, entryPrice, stopPrice, maxGapPct, direction, isETF = false }) {
+export function sizePosition({ netLiquidity, entryPrice, stopPrice, maxGapPct, direction, isETF = false, sectorMult = 1.0 }) {
   const tickerCap  = netLiquidity * 0.10;
-  const vitality   = netLiquidity * (isETF ? 0.005 : 0.01);
+  const sMult      = +(sectorMult) || 1.0;
+  const vitality   = netLiquidity * (isETF ? 0.005 : 0.01) * sMult;
   const structRisk = Math.abs((entryPrice - stopPrice) / entryPrice);
   const gapMult    = maxGapPct > structRisk * 100 ? Math.max(0.3, structRisk * 100 / maxGapPct) : 1.0;
   const rps        = Math.abs(entryPrice - stopPrice);

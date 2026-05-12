@@ -164,7 +164,7 @@ function runRiskAdvisor(positions, nav) {
         // not the current ratcheted stop. Otherwise, ratcheted positions get
         // a falsely-inflated target and Lot 2 recommendations push past the
         // original 1% risk discipline. Mirrors AssistantLiveTable badge fix.
-        const sizing = sizePosition({ netLiquidity: nav, entryPrice: p.entryPrice, stopPrice: (p.originalStop || p.stopPrice), maxGapPct: p.maxGapPct || 0, direction: p.direction });
+        const sizing = sizePosition({ netLiquidity: nav, entryPrice: p.entryPrice, stopPrice: (p.originalStop || p.stopPrice), maxGapPct: p.maxGapPct || 0, direction: p.direction, sectorMult: p.sectorMult || 1.0 });
         const lot2Shares = Math.round(sizing.totalShares * 0.25);
         recs.push({
           priority: 'ACTION', type: 'LOT2_READY',

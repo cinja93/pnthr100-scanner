@@ -66,7 +66,7 @@ export default function AiOrdersPage() {
   const [doc, setDoc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState('all'); // all | bl | ss | new
+  const [filter, setFilter] = useState('new'); // new | all | bl | ss
   const [chartTickers, setChartTickers] = useState([]);
   const [chartIndex, setChartIndex] = useState(0);
   const [running, setRunning] = useState(false);
@@ -92,6 +92,12 @@ export default function AiOrdersPage() {
     const actual  = userNav || 100000;
     return actual / assumed;
   }, [doc, userNav]);
+
+  // Set of tickers with active weekly BL — used to highlight confirmed scouts
+  const weeklyBLTickers = useMemo(() => {
+    if (!doc?.orders) return new Set();
+    return new Set(doc.orders.filter(o => o.signal === 'BL').map(o => o.ticker));
+  }, [doc]);
 
   const orders = useMemo(() => {
     if (!doc?.orders) return [];
@@ -169,10 +175,10 @@ export default function AiOrdersPage() {
 
           <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
             {[
+              { k: 'new', label: 'BL+1 / SS+1' },
               { k: 'all', label: 'All' },
               { k: 'bl',  label: 'BL only' },
               { k: 'ss',  label: 'SS only' },
-              { k: 'new', label: 'New this week' },
             ].map(opt => (
               <button key={opt.k} onClick={() => setFilter(opt.k)} style={{
                 padding: '4px 10px', fontSize: 11, fontWeight: 600,
@@ -223,11 +229,13 @@ export default function AiOrdersPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
             <thead>
               <tr style={{ background: '#1a1a1a', color: '#fcf000', textAlign: 'left' }}>
+                <th style={{ padding: '8px 10px' }}>Grade</th>
                 <th style={{ padding: '8px 10px' }}>Signal</th>
                 <th style={{ padding: '8px 10px' }}>Ticker</th>
                 <th style={{ padding: '8px 10px' }}>Sector</th>
                 <th style={{ padding: '8px 10px' }}>Tier</th>
-                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Mult</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Gap %</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Slope %</th>
                 <th style={{ padding: '8px 10px', textAlign: 'right' }}>Price</th>
                 <th style={{ padding: '8px 10px', textAlign: 'right' }}>Stop</th>
                 <th style={{ padding: '8px 10px', textAlign: 'right' }}>Risk %</th>
@@ -252,6 +260,11 @@ export default function AiOrdersPage() {
                 onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
                 onMouseLeave={e => e.currentTarget.style.background = o.isNewSignal ? 'rgba(252,240,0,0.04)' : 'transparent'}
                 >
+                  <td style={{ padding: '6px 10px', textAlign: 'center', fontSize: 14 }}>
+                    {o.qualityGrade === 'BEST' ? <span style={{ color: '#fcf000' }} title="Gap>15%, Slope<20%">★</span>
+                     : o.qualityGrade === 'GOOD' ? <span style={{ color: '#16a34a' }} title="Gap>12%, Slope<20%">✓</span>
+                     : <span style={{ color: '#666' }} title="Does not meet scout criteria">✗</span>}
+                  </td>
                   <td style={{ padding: '6px 10px', fontWeight: 700, color: o.signal === 'BL' ? '#16a34a' : '#dc2626' }}>
                     {o.signal}
                     {(() => {
@@ -262,7 +275,8 @@ export default function AiOrdersPage() {
                   <td style={{ padding: '6px 10px', fontWeight: 700, color: '#fff' }}>{o.ticker}</td>
                   <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{o.sectorId} {o.sectorName?.split(' ').slice(0, 2).join(' ')}</td>
                   <td style={{ padding: '6px 10px' }}><TierPill tier={o.sectorTier} /></td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', color: o.sectorMult >= 1.25 ? '#fcf000' : '#aaa' }}>{o.sectorMult?.toFixed(2)}×</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right', color: o.gapPct >= 15 ? '#fcf000' : o.gapPct >= 12 ? '#16a34a' : '#aaa' }}>{o.gapPct != null ? `${o.gapPct.toFixed(1)}%` : '—'}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right', color: o.wEmaSlope != null && o.wEmaSlope < 20 ? '#16a34a' : '#aaa' }}>{o.wEmaSlope != null ? `${o.wEmaSlope.toFixed(1)}%` : '—'}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(o.currentPrice)}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.stopPrice)}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: o.riskPct > 20 ? '#fcf000' : '#aaa' }}>{o.riskPct?.toFixed(1)}%</td>
@@ -298,6 +312,7 @@ export default function AiOrdersPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
               <thead>
                 <tr style={{ background: '#1a1a1a', color: '#00e5ff', textAlign: 'left' }}>
+                  <th style={{ padding: '8px 10px' }}>Grade</th>
                   <th style={{ padding: '8px 10px' }}>Status</th>
                   <th style={{ padding: '8px 10px' }}>Ticker</th>
                   <th style={{ padding: '8px 10px' }}>Sector</th>
@@ -307,43 +322,71 @@ export default function AiOrdersPage() {
                   <th style={{ padding: '8px 10px', textAlign: 'right' }}>Scout sh</th>
                   <th style={{ padding: '8px 10px', textAlign: 'right' }}>Full L1</th>
                   <th style={{ padding: '8px 10px', textAlign: 'right' }}>Gap %</th>
-                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>EMA Slope</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Slope %</th>
                   <th style={{ padding: '8px 10px' }}>Entry Date</th>
                   <th style={{ padding: '8px 10px', textAlign: 'right' }}>Days Open</th>
                 </tr>
               </thead>
               <tbody>
-                {doc.scouts.map(s => {
+                {[...doc.scouts]
+                  .sort((a, b) => {
+                    // Converted first, then weekly-confirmed, then active
+                    const aRank = a.status === 'CONVERTED' ? 0 : weeklyBLTickers.has(a.ticker) ? 1 : 2;
+                    const bRank = b.status === 'CONVERTED' ? 0 : weeklyBLTickers.has(b.ticker) ? 1 : 2;
+                    return aRank - bRank;
+                  })
+                  .map(s => {
                   const isConverted = s.status === 'CONVERTED';
+                  const hasWeeklyBL = weeklyBLTickers.has(s.ticker);
+                  const isConfirmed = isConverted || hasWeeklyBL;
                   const scaledShares = Math.max(1, Math.round(s.shares * navScale));
                   const scaledFullL1 = Math.max(1, Math.round(s.fullLot1Shares * navScale));
+                  const rowBg = isConfirmed ? 'rgba(252,240,0,0.08)' : 'transparent';
                   return (
                     <tr key={`scout-${s.ticker}`} style={{
-                      borderBottom: '1px solid #1a1a1a',
-                      background: isConverted ? 'rgba(0,229,255,0.06)' : 'transparent',
+                      borderBottom: isConfirmed ? '1px solid rgba(252,240,0,0.3)' : '1px solid #1a1a1a',
+                      borderTop: isConfirmed ? '1px solid rgba(252,240,0,0.3)' : 'none',
+                      background: rowBg,
                       cursor: 'pointer',
+                      boxShadow: isConfirmed ? 'inset 3px 0 0 #fcf000' : 'none',
                     }}
                     onClick={() => {
                       setChartTickers([s.ticker]);
                       setChartIndex(0);
                     }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
-                    onMouseLeave={e => e.currentTarget.style.background = isConverted ? 'rgba(0,229,255,0.06)' : 'transparent'}
+                    onMouseEnter={e => e.currentTarget.style.background = isConfirmed ? 'rgba(252,240,0,0.14)' : '#1a1a1a'}
+                    onMouseLeave={e => e.currentTarget.style.background = rowBg}
                     >
-                      <td style={{ padding: '6px 10px' }}>
-                        <span style={{
-                          padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
-                          background: isConverted ? '#00e5ff' : '#fcf000',
-                          color: '#000',
-                        }}>{isConverted ? 'CONVERTED' : 'SCOUT'}</span>
+                      <td style={{ padding: '6px 10px', textAlign: 'center', fontSize: 14 }}>
+                        {s.qualityGrade === 'BEST' ? <span style={{ color: '#fcf000' }} title="Gap>15%, Slope<20%">★</span>
+                         : s.qualityGrade === 'GOOD' ? <span style={{ color: '#16a34a' }} title="Gap>12%, Slope<20%">✓</span>
+                         : <span style={{ color: '#666' }}>—</span>}
                       </td>
-                      <td style={{ padding: '6px 10px', fontWeight: 700, color: '#fff' }}>{s.ticker}</td>
+                      <td style={{ padding: '6px 10px' }}>
+                        {isConverted ? (
+                          <span style={{
+                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+                            background: '#fcf000', color: '#000',
+                          }}>CONVERTED</span>
+                        ) : hasWeeklyBL ? (
+                          <span style={{
+                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+                            background: '#fcf000', color: '#000',
+                          }}>WEEKLY BL ✓</span>
+                        ) : (
+                          <span style={{
+                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+                            background: '#00e5ff', color: '#000',
+                          }}>SCOUT</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '6px 10px', fontWeight: 700, color: isConfirmed ? '#fcf000' : '#fff' }}>{s.ticker}</td>
                       <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{s.sectorId} {s.sectorName?.split(' ').slice(0, 2).join(' ')}</td>
                       <td style={{ padding: '6px 10px' }}><TierPill tier={s.sectorTier} /></td>
                       <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(s.entryPrice)}</td>
                       <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(s.stopPrice)}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#00e5ff' }}>{scaledShares}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{scaledFullL1}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: isConfirmed ? '#fcf000' : '#00e5ff' }}>{scaledShares}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: isConfirmed ? '#fcf000' : '#aaa' }}>{scaledFullL1}</td>
                       <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{s.gapPct?.toFixed(1)}%</td>
                       <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{s.wEmaSlope?.toFixed(1)}%</td>
                       <td style={{ padding: '6px 10px', color: '#888' }}>{s.entryDate || '—'}</td>
@@ -362,10 +405,10 @@ export default function AiOrdersPage() {
       {/* Footer note */}
       <div style={{ marginTop: 16, fontSize: 11, color: '#666', lineHeight: 1.6 }}>
         Sized at 1% NAV vitality × sector multiplier on your ${(userNav || 100000).toLocaleString()} NAV. Lot 1 = 35% of full target.
-        BL skipped if sector NO_GO (cooling) · SS skipped if sector GO (heating).
-        PAI300 36W EMA hard gate blocks all BL entries in bear regime.
-        Daily Cascade scouts enter at 50% of Lot 1 — convert on subsequent-week weekly BL+1.
-        Sector rank refreshes daily ~5:30pm ET after constituent close.
+        BL skipped if sector NO_GO · SS skipped if sector GO · PAI300 36W EMA hard gate blocks all BL in bear regime.
+        Quality grades: ★ BEST (Gap{'>'}15%, Slope{'<'}20%) · ✓ GOOD (Gap{'>'}12%, Slope{'<'}20%) · ✗ SKIP.
+        Daily Cascade scouts enter at 50% of Lot 1 — gold = weekly BL confirmed → enter remaining 50% for full Lot 1 → pyramid continues.
+        Realized DD -5.4% (backtest). 10% portfolio heat cap enforced.
       </div>
 
       {/* Chart modal — clicking a row opens the AI ticker chart with prev/next */}

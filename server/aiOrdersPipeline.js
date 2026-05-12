@@ -19,6 +19,8 @@ import { connectToDatabase } from './database.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { getLatestAiSectorRanks } from './aiSectorRotationService.js';
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
+import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
+import { calculateEMA } from './signalDetection.js';
 import { fetchAiQuotesBatch } from './aiIntradayOverlay.js';
 import { getPai300Regime } from './pai300Regime.js';
 import { getActiveScouts } from './aiScoutService.js';
@@ -105,6 +107,34 @@ export async function runAiOrdersPipeline(opts = {}) {
   // 3. Pull the sector rank doc so we can attach sector context to the order sheet
   const sectorRanks = await getLatestAiSectorRanks();
 
+  // 3b. Load weekly candles for gap% + EMA slope computation (quality grades)
+  const allUniverseTickers = Object.keys(TICKER_META);
+  const weeklyDocs = await db.collection('pnthr_ai_bt_candles_weekly')
+    .find({ ticker: { $in: allUniverseTickers } }, { projection: { ticker: 1, weekly: 1 } }).toArray();
+  const weeklyByTicker = Object.fromEntries(weeklyDocs.map(d => [d.ticker, d.weekly || []]));
+
+  function computeGapAndSlope(ticker, livePrice) {
+    const meta = TICKER_META[ticker];
+    if (!meta) return null;
+    const period = SECTOR_EMA_PERIODS[meta.sectorId] || 30;
+    const wRaw = weeklyByTicker[ticker] || [];
+    if (wRaw.length < period * 3) return null;
+    const wAsc = [...wRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
+    const wBars = wAsc.map(b => ({ time: b.weekOf, open: b.open, high: b.high, low: b.low, close: b.close }));
+    const wEmaData = calculateEMA(wBars, period);
+    if (!wEmaData.length) return null;
+    const lastEma = wEmaData[wEmaData.length - 1];
+    if (!lastEma?.value) return null;
+    const gapPct = ((livePrice - lastEma.value) / lastEma.value) * 100;
+    const idx = wEmaData.length - 1;
+    let slope = null;
+    if (idx >= 8) {
+      const ema8ago = wEmaData[idx - 8]?.value;
+      if (ema8ago) slope = ((lastEma.value - ema8ago) / ema8ago) * (52 / 8) * 100;
+    }
+    return { gapPct: +gapPct.toFixed(2), wEmaSlope: slope != null ? +slope.toFixed(2) : null };
+  }
+
   // 4. Build candidate orders
   const orders = [];
   const skipLog = { blNoGo: 0, ssGo: 0, notEntry: 0, noStop: 0, noPrice: 0, blRegimeBlocked: 0 };
@@ -157,6 +187,15 @@ export async function runAiOrdersPipeline(opts = {}) {
     const lot1Shares = Math.min(Math.max(1, Math.round(targetShares * STRIKE_PCT[0])), lot1Cap);
     const lot1Dollar = lot1Shares * livePrice;
 
+    const gs = computeGapAndSlope(ticker, livePrice);
+    const gapPct = gs?.gapPct ?? null;
+    const wEmaSlope = gs?.wEmaSlope ?? null;
+    let qualityGrade = 'SKIP';
+    if (isLong && gapPct != null && wEmaSlope != null) {
+      if (gapPct >= 15 && wEmaSlope < 20) qualityGrade = 'BEST';
+      else if (gapPct >= 12 && wEmaSlope < 20) qualityGrade = 'GOOD';
+    }
+
     orders.push({
       ticker,
       companyName: meta.companyName || null,
@@ -177,6 +216,9 @@ export async function runAiOrdersPipeline(opts = {}) {
       signalDate: sig.signalDate,
       lastBarDate: sig.lastBarDate,
       isNewSignal: !!sig.isNewSignal,
+      gapPct,
+      wEmaSlope,
+      qualityGrade,
     });
   }
 
@@ -240,6 +282,7 @@ export async function runAiOrdersPipeline(opts = {}) {
       conversionDeadlineDays: s.conversionDeadlineDays,
       gapPct: s.gapPct,
       wEmaSlope: s.wEmaSlope,
+      qualityGrade: s.qualityGrade || null,
       conversionDate: s.conversionDate || null,
     }));
   } catch (err) {

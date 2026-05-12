@@ -23,6 +23,7 @@ import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
 import { getPai300Regime } from './pai300Regime.js';
 import { getLatestAiSectorRanks } from './aiSectorRotationService.js';
+import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { STRIKE_PCT } from './lotMath.js';
 
 const COLL_SCOUTS = 'pnthr_ai_scouts';
@@ -32,6 +33,9 @@ const SCOUT_SIZE_FRAC  = 0.50;
 const CONVERSION_DAYS  = 28;
 const NAV_VITALITY_PCT = 0.01;
 const TICKER_CAP_PCT   = 0.10;
+const SCOUT_GAP_MIN    = 12;   // Gap > 12% above weekly EMA (refined filter)
+const SCOUT_SLOPE_MAX  = 20;   // EMA slope < 20% annualized (early trend sweet spot)
+const BEST_GAP_MIN     = 15;   // Gap > 15% = ★ BEST grade
 
 const TICKER_META = {};
 for (const sec of SECTORS) {
@@ -87,6 +91,15 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
   const activeScouts = await col.find({ status: 'ACTIVE' }).toArray();
   const activeTickers = new Set(activeScouts.map(s => s.ticker));
 
+  // Skip tickers that already have an active weekly BL — no point scouting what's confirmed
+  const weeklyBLTickers = new Set();
+  try {
+    const { signals } = await getAiUniverseSignals();
+    for (const [t, sig] of Object.entries(signals)) {
+      if (sig?.signal === 'BL') weeklyBLTickers.add(t);
+    }
+  } catch (_) {}
+
   // Load daily + weekly candles
   const [dailyDocs, weeklyDocs] = await Promise.all([
     db.collection('pnthr_ai_bt_candles')
@@ -98,10 +111,11 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
   const weeklyByTicker = Object.fromEntries(weeklyDocs.map(d => [d.ticker, d.weekly || []]));
 
   const newScouts = [];
-  const skipLog = { noData: 0, noSignal: 0, alreadyActive: 0, sectorBlocked: 0, comboFailed: 0, noSize: 0 };
+  const skipLog = { noData: 0, noSignal: 0, alreadyActive: 0, weeklyBLExists: 0, sectorBlocked: 0, comboFailed: 0, noSize: 0 };
 
   for (const ticker of tickers) {
     if (activeTickers.has(ticker)) { skipLog.alreadyActive++; continue; }
+    if (weeklyBLTickers.has(ticker)) { skipLog.weeklyBLExists++; continue; }
 
     const meta = TICKER_META[ticker];
     const sectorId = meta.sectorId;
@@ -127,7 +141,7 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
     const lastBL = [...events].reverse().find(e => e.signal === 'BL');
     if (!lastBL) { skipLog.noSignal++; continue; }
 
-    // Combo [6] filter — same as backtest
+    // Refined scout filter: Gap > 12% above weekly EMA + Slope < 20% annualized
     const weeklyRaw = weeklyByTicker[ticker] || [];
     if (weeklyRaw.length < period * 3) { skipLog.comboFailed++; continue; }
     const weeklyAsc = [...weeklyRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
@@ -137,12 +151,10 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
     const wEmaData = calculateEMA(wBars, period);
     if (!wEmaData.length) { skipLog.comboFailed++; continue; }
 
-    // Find the latest weekly EMA value
     const lastBar = dBars[dBars.length - 1];
     const closeD = lastBar.close;
     const entryDate = lastBar.time;
 
-    // Find weekly EMA on or before this date's Monday
     const monday = getMondayOf(entryDate);
     let wEmaVal = null, wEmaIdx = -1;
     for (let i = wEmaData.length - 1; i >= 0; i--) {
@@ -150,19 +162,18 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
     }
     if (wEmaVal == null) { skipLog.comboFailed++; continue; }
 
-    // 1. Above weekly EMA
     if (closeD < wEmaVal) { skipLog.comboFailed++; continue; }
 
-    // 2. Gap 3-20% above EMA
+    // Gap > 12% above weekly EMA (refined: backtest proved >12% = best scout trades)
     const gapPct = ((closeD - wEmaVal) / wEmaVal) * 100;
-    if (gapPct < 3 || gapPct > 20) { skipLog.comboFailed++; continue; }
+    if (gapPct < SCOUT_GAP_MIN) { skipLog.comboFailed++; continue; }
 
-    // 3. Weekly EMA slope 0-50% annualized (8-week lookback)
+    // Weekly EMA slope < 20% annualized (early trend = sweet spot, not late-stage)
     if (wEmaIdx < 8) { skipLog.comboFailed++; continue; }
     const ema8ago = wEmaData[wEmaIdx - 8]?.value;
     if (ema8ago == null) { skipLog.comboFailed++; continue; }
     const wEmaSlope = ((wEmaVal - ema8ago) / ema8ago) * (52 / 8) * 100;
-    if (wEmaSlope < 0 || wEmaSlope >= 50) { skipLog.comboFailed++; continue; }
+    if (wEmaSlope >= SCOUT_SLOPE_MAX) { skipLog.comboFailed++; continue; }
 
     // Compute daily stop
     const dAtr = computeWilderATR(dBars);
@@ -177,6 +188,8 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
     if (totalShares <= 0) { skipLog.noSize++; continue; }
     const fullLot1 = Math.max(1, Math.round(totalShares * STRIKE_PCT[0]));
     const scoutShares = Math.max(1, Math.round(fullLot1 * SCOUT_SIZE_FRAC));
+
+    const qualityGrade = gapPct >= BEST_GAP_MIN && wEmaSlope < SCOUT_SLOPE_MAX ? 'BEST' : 'GOOD';
 
     const scoutDoc = {
       ticker,
@@ -194,6 +207,7 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
       sectorTier: tier || 'NEUTRAL',
       gapPct: +gapPct.toFixed(2),
       wEmaSlope: +wEmaSlope.toFixed(2),
+      qualityGrade,
       conversionDeadlineDays: CONVERSION_DAYS,
       tradingDaysOpen: 0,
       entryMonday: monday,
@@ -269,9 +283,9 @@ export async function manageActiveScouts() {
   return { stopped, timedOut, active: remaining };
 }
 
-// ── Check for Friday conversions ─────────────────────────────────────────────
-// On Fridays, check if any active scout's ticker fired a weekly BL in a
-// SUBSEQUENT week (not the entry week). If so, flag for conversion.
+// ── Check for conversions (runs daily) ───────────────────────────────────────
+// Check if any active scout's ticker has a current weekly BL signal that fired
+// AFTER the scout was created. If so, the scout is confirmed — flag for conversion.
 export async function checkConversions() {
   const db = await connectToDatabase();
   if (!db) return { converted: [], noConversion: 0 };
@@ -280,52 +294,37 @@ export async function checkConversions() {
   const activeScouts = await col.find({ status: 'ACTIVE' }).toArray();
   if (activeScouts.length === 0) return { converted: [], noConversion: 0 };
 
-  // Load weekly candles for conversion check
-  const tickers = activeScouts.map(s => s.ticker);
-  const weeklyDocs = await db.collection('pnthr_ai_bt_candles_weekly')
-    .find({ ticker: { $in: tickers } }, { projection: { ticker: 1, weekly: 1 } }).toArray();
-  const weeklyByTicker = Object.fromEntries(weeklyDocs.map(d => [d.ticker, d.weekly || []]));
+  // Use live weekly signals — same source as the orders pipeline
+  let weeklyBLByTicker = {};
+  try {
+    const { signals } = await getAiUniverseSignals();
+    for (const [t, sig] of Object.entries(signals)) {
+      if (sig?.signal === 'BL') weeklyBLByTicker[t] = sig;
+    }
+  } catch (_) {}
 
   const converted = [];
   let noConversion = 0;
 
-  // Today's Monday (the current week)
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
-  const currentMonday = getMondayOf(todayStr);
 
   for (const scout of activeScouts) {
-    const meta = TICKER_META[scout.ticker];
-    const period = SECTOR_EMA_PERIODS[meta?.sectorId] || 30;
-    const weeklyRaw = weeklyByTicker[scout.ticker] || [];
-    if (weeklyRaw.length < period + 2) { noConversion++; continue; }
+    const sig = weeklyBLByTicker[scout.ticker];
+    if (!sig) { noConversion++; continue; }
 
-    const weeklyAsc = [...weeklyRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
-    const wBars = weeklyAsc.map(b => ({
-      time: b.weekOf, open: b.open, high: b.high, low: b.low, close: b.close,
-    }));
-
-    const { events } = detectAllSignals(wBars, period, false, null, AI_GATE_OFFSET);
-
-    // Find the most recent weekly BL event
-    const lastWeeklyBL = [...events].reverse().find(e => e.signal === 'BL');
-    if (!lastWeeklyBL) { noConversion++; continue; }
-
-    // Must be in a SUBSEQUENT week — not the entry week
+    // Weekly BL must have fired AFTER the scout's entry week
     const scoutEntryMonday = scout.entryMonday || getMondayOf(scout.entryDate);
-    const blMonday = lastWeeklyBL.time; // weekOf field = Monday
+    const blMonday = sig.signalDate ? getMondayOf(sig.signalDate) : null;
 
-    if (blMonday <= scoutEntryMonday) { noConversion++; continue; }
+    if (blMonday && blMonday <= scoutEntryMonday) { noConversion++; continue; }
 
-    // Must be the CURRENT week's BL (within the last week)
-    if (blMonday !== currentMonday) { noConversion++; continue; }
-
-    // Conversion! Flag the scout
+    // Conversion confirmed — weekly BL backs up the daily scout
     await col.updateOne({ _id: scout._id }, { $set: {
       status: 'CONVERTED',
       mode: 'CONVERTED',
       conversionDate: todayStr,
-      conversionWeeklyBLDate: blMonday,
+      conversionWeeklyBLDate: blMonday || todayStr,
       updatedAt: new Date(),
     }});
 

@@ -5545,13 +5545,10 @@ cron.schedule('30 17 * * 1-5', async () => {
       console.log('[AI Scouts] scanning for new scouts...');
       const scan = await scanForNewScouts({ nav: 100000 });
       console.log(`[AI Scouts] scan done: ${scan.newScouts.length} new scouts`);
-      // Friday conversion check
-      const dow = new Date().getDay();
-      if (dow === 5) {
-        console.log('[AI Scouts] Friday — checking conversions...');
-        const conv = await checkConversions();
-        console.log(`[AI Scouts] conversions: ${conv.converted.length} converted`);
-      }
+      // Check conversions daily (weekly BL can be detected any day after bars update)
+      console.log('[AI Scouts] checking conversions...');
+      const conv = await checkConversions();
+      console.log(`[AI Scouts] conversions: ${conv.converted.length} converted`);
     } catch (e) { console.error('[CRON] AI Scouts pipeline failed:', e.message); }
     // Final step: regenerate the AI Orders sheet (consumes fresh sector tiers).
     try {

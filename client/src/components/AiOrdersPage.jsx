@@ -372,13 +372,111 @@ export default function AiOrdersPage() {
         </div>
       )}
 
-      {/* Section 1: Weekly Signal Orders */}
+      {/* Section 1: Daily Cascade Scouts — rendered first, pipeline starts here */}
+      {scouts.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{
+            display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8,
+            borderBottom: '2px solid #00e5ff', paddingBottom: 6,
+          }}>
+            <h2 style={{ color: '#00e5ff', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>1 · Daily Cascade Scouts</h2>
+            <span style={{ color: '#888', fontSize: 11 }}>50% of Lot 1 — 28-day conversion window</span>
+            <span style={{
+              padding: '3px 8px', background: '#00e5ff', color: '#000', borderRadius: 3,
+              fontSize: 10, fontWeight: 700,
+            }}>
+              {doc.stats?.activeScouts || 0} ACTIVE · {doc.stats?.convertedScouts || 0} CONVERTED
+            </span>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
+              <thead>
+                <tr style={{ background: '#1a1a1a', color: '#00e5ff', textAlign: 'left' }}>
+                  <SortHeader label="Grade"      sortKey="grade"     currentSort={scoutSort} onSort={toggleScoutSort} />
+                  <SortHeader label="Status"     sortKey="status"    currentSort={scoutSort} onSort={toggleScoutSort} />
+                  <SortHeader label="Ticker"     sortKey="ticker"    currentSort={scoutSort} onSort={toggleScoutSort} />
+                  <SortHeader label="Sector"     sortKey="sector"    currentSort={scoutSort} onSort={toggleScoutSort} />
+                  <SortHeader label="Tier"       sortKey="tier"      currentSort={scoutSort} onSort={toggleScoutSort} />
+                  <SortHeader label="Entry"      sortKey="entry"     currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
+                  <SortHeader label="Stop"       sortKey="stop"      currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
+                  <SortHeader label="Scout sh"   sortKey="scoutSh"   currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
+                  <SortHeader label="Full L1"    sortKey="fullL1"    currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
+                  <SortHeader label="Gap %"      sortKey="gapPct"    currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
+                  <SortHeader label="Slope %"    sortKey="slope"     currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
+                  <SortHeader label="Entry Date" sortKey="entryDate" currentSort={scoutSort} onSort={toggleScoutSort} />
+                  <SortHeader label="Days Open"  sortKey="daysOpen"  currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
+                </tr>
+              </thead>
+              <tbody>
+                {scouts.map(s => {
+                  const rowBg = s._isConfirmed ? 'rgba(252,240,0,0.08)' : 'transparent';
+                  return (
+                    <tr key={`scout-${s.ticker}`} style={{
+                      borderBottom: s._isConfirmed ? '1px solid rgba(252,240,0,0.3)' : '1px solid #1a1a1a',
+                      borderTop: s._isConfirmed ? '1px solid rgba(252,240,0,0.3)' : 'none',
+                      background: rowBg,
+                      cursor: 'pointer',
+                      boxShadow: s._isConfirmed ? 'inset 3px 0 0 #fcf000' : 'none',
+                    }}
+                    onClick={() => {
+                      setChartTickers([s.ticker]);
+                      setChartIndex(0);
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = s._isConfirmed ? 'rgba(252,240,0,0.14)' : '#1a1a1a'}
+                    onMouseLeave={e => e.currentTarget.style.background = rowBg}
+                    >
+                      <td style={{ padding: '6px 10px', textAlign: 'center', fontSize: 14 }}>
+                        {s.qualityGrade === 'BEST' ? <span style={{ color: '#fcf000' }} title="Gap>15%, Slope<20%">★</span>
+                         : s.qualityGrade === 'GOOD' ? <span style={{ color: '#16a34a' }} title="Gap>12%, Slope<20%">✓</span>
+                         : <span style={{ color: '#666' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '6px 10px' }}>
+                        {s.status === 'CONVERTED' ? (
+                          <span style={{
+                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+                            background: '#fcf000', color: '#000',
+                          }}>CONVERTED</span>
+                        ) : weeklyBLTickers.has(s.ticker) ? (
+                          <span style={{
+                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+                            background: '#fcf000', color: '#000',
+                          }}>WEEKLY BL ✓</span>
+                        ) : (
+                          <span style={{
+                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+                            background: '#00e5ff', color: '#000',
+                          }}>SCOUT</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '6px 10px', fontWeight: 700, color: s._isConfirmed ? '#fcf000' : '#fff' }}>{s.ticker}</td>
+                      <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{s.sectorId} {s.sectorName?.split(' ').slice(0, 2).join(' ')}</td>
+                      <td style={{ padding: '6px 10px' }}><TierPill tier={s.sectorTier} /></td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(s.entryPrice)}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(s.stopPrice)}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: s._isConfirmed ? '#fcf000' : '#00e5ff' }}>{s._scaledShares}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: s._isConfirmed ? '#fcf000' : '#aaa' }}>{s._scaledFullL1}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{s.gapPct?.toFixed(1)}%</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{s.wEmaSlope?.toFixed(1)}%</td>
+                      <td style={{ padding: '6px 10px', color: '#888' }}>{s.entryDate || '—'}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: s.tradingDaysOpen >= 20 ? '#dc2626' : s.tradingDaysOpen >= 14 ? '#fcf000' : '#aaa' }}>
+                        {s.tradingDaysOpen || 0}/{s.conversionDeadlineDays || 28}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Section 2: Weekly Signal Orders — confirmed scouts graduate here */}
       {orders.length > 0 && (
         <div style={{
-          display: 'flex', alignItems: 'baseline', gap: 10, margin: '16px 0 8px',
+          display: 'flex', alignItems: 'baseline', gap: 10, margin: '24px 0 8px',
           borderBottom: '2px solid #fcf000', paddingBottom: 6,
         }}>
-          <h2 style={{ color: '#fcf000', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>1 · Weekly Signal Orders</h2>
+          <h2 style={{ color: '#fcf000', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>2 · Weekly Signal Orders</h2>
           <span style={{ color: '#888', fontSize: 11 }}>Confirmed weekly BL/SS signals — full position sizing</span>
         </div>
       )}
@@ -478,104 +576,6 @@ export default function AiOrdersPage() {
               ); })}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {/* Section 2: Daily Cascade Scouts */}
-      {scouts.length > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <div style={{
-            display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8,
-            borderBottom: '2px solid #00e5ff', paddingBottom: 6,
-          }}>
-            <h2 style={{ color: '#00e5ff', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>2 · Daily Cascade Scouts</h2>
-            <span style={{ color: '#888', fontSize: 11 }}>50% of Lot 1 — 28-day conversion window</span>
-            <span style={{
-              padding: '3px 8px', background: '#00e5ff', color: '#000', borderRadius: 3,
-              fontSize: 10, fontWeight: 700,
-            }}>
-              {doc.stats?.activeScouts || 0} ACTIVE · {doc.stats?.convertedScouts || 0} CONVERTED
-            </span>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
-              <thead>
-                <tr style={{ background: '#1a1a1a', color: '#00e5ff', textAlign: 'left' }}>
-                  <SortHeader label="Grade"      sortKey="grade"     currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Status"     sortKey="status"    currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Ticker"     sortKey="ticker"    currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Sector"     sortKey="sector"    currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Tier"       sortKey="tier"      currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Entry"      sortKey="entry"     currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Stop"       sortKey="stop"      currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Scout sh"   sortKey="scoutSh"   currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Full L1"    sortKey="fullL1"    currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Gap %"      sortKey="gapPct"    currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Slope %"    sortKey="slope"     currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Entry Date" sortKey="entryDate" currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Days Open"  sortKey="daysOpen"  currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                </tr>
-              </thead>
-              <tbody>
-                {scouts.map(s => {
-                  const rowBg = s._isConfirmed ? 'rgba(252,240,0,0.08)' : 'transparent';
-                  return (
-                    <tr key={`scout-${s.ticker}`} style={{
-                      borderBottom: s._isConfirmed ? '1px solid rgba(252,240,0,0.3)' : '1px solid #1a1a1a',
-                      borderTop: s._isConfirmed ? '1px solid rgba(252,240,0,0.3)' : 'none',
-                      background: rowBg,
-                      cursor: 'pointer',
-                      boxShadow: s._isConfirmed ? 'inset 3px 0 0 #fcf000' : 'none',
-                    }}
-                    onClick={() => {
-                      setChartTickers([s.ticker]);
-                      setChartIndex(0);
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = s._isConfirmed ? 'rgba(252,240,0,0.14)' : '#1a1a1a'}
-                    onMouseLeave={e => e.currentTarget.style.background = rowBg}
-                    >
-                      <td style={{ padding: '6px 10px', textAlign: 'center', fontSize: 14 }}>
-                        {s.qualityGrade === 'BEST' ? <span style={{ color: '#fcf000' }} title="Gap>15%, Slope<20%">★</span>
-                         : s.qualityGrade === 'GOOD' ? <span style={{ color: '#16a34a' }} title="Gap>12%, Slope<20%">✓</span>
-                         : <span style={{ color: '#666' }}>—</span>}
-                      </td>
-                      <td style={{ padding: '6px 10px' }}>
-                        {s.status === 'CONVERTED' ? (
-                          <span style={{
-                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
-                            background: '#fcf000', color: '#000',
-                          }}>CONVERTED</span>
-                        ) : weeklyBLTickers.has(s.ticker) ? (
-                          <span style={{
-                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
-                            background: '#fcf000', color: '#000',
-                          }}>WEEKLY BL ✓</span>
-                        ) : (
-                          <span style={{
-                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
-                            background: '#00e5ff', color: '#000',
-                          }}>SCOUT</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '6px 10px', fontWeight: 700, color: s._isConfirmed ? '#fcf000' : '#fff' }}>{s.ticker}</td>
-                      <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{s.sectorId} {s.sectorName?.split(' ').slice(0, 2).join(' ')}</td>
-                      <td style={{ padding: '6px 10px' }}><TierPill tier={s.sectorTier} /></td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(s.entryPrice)}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(s.stopPrice)}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: s._isConfirmed ? '#fcf000' : '#00e5ff' }}>{s._scaledShares}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: s._isConfirmed ? '#fcf000' : '#aaa' }}>{s._scaledFullL1}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{s.gapPct?.toFixed(1)}%</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{s.wEmaSlope?.toFixed(1)}%</td>
-                      <td style={{ padding: '6px 10px', color: '#888' }}>{s.entryDate || '—'}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: s.tradingDaysOpen >= 20 ? '#dc2626' : s.tradingDaysOpen >= 14 ? '#fcf000' : '#aaa' }}>
-                        {s.tradingDaysOpen || 0}/{s.conversionDeadlineDays || 28}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
         </div>
       )}
 

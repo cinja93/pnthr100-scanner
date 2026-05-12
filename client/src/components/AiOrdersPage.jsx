@@ -32,7 +32,7 @@ function fmtUsd(n, opts = {}) {
 }
 
 function getActionLabel(o) {
-  const isBuy = o.qualityGrade === 'BEST' || o.qualityGrade === 'GOOD';
+  const isBuy = o.qualityGrade === 'BEST' || o.qualityGrade === 'BETTER';
   if (isBuy) return o.qualityGrade === 'BEST' ? '★ BUY' : 'BUY';
   if (o.signal === 'BL') return 'WAIT';
   return o.signal === 'SS' ? 'SS' : 'NO GO';
@@ -142,7 +142,7 @@ const ORDER_ACCESSORS = {
 };
 
 const SCOUT_ACCESSORS = {
-  grade:      s => s.qualityGrade === 'BEST' ? 0 : s.qualityGrade === 'GOOD' ? 1 : 2,
+  grade:      s => s.qualityGrade === 'BEST' ? 0 : s.qualityGrade === 'BETTER' ? 1 : 2,
   mode:       s => getStrategyMode(s.ticker),
   status:     s => s._statusRank,
   ticker:     s => s.ticker,
@@ -445,9 +445,9 @@ export default function AiOrdersPage() {
                     onMouseLeave={e => e.currentTarget.style.background = rowBg}
                     >
                       <td style={{ padding: '6px 10px', textAlign: 'center', fontSize: 14 }}>
-                        {s.qualityGrade === 'BEST' ? <span style={{ color: '#fcf000' }} title="Gap>15%, Slope<20%">★</span>
-                         : s.qualityGrade === 'GOOD' ? <span style={{ color: '#16a34a' }} title="Gap>12%, Slope<20%">✓</span>
-                         : <span style={{ color: '#666' }}>—</span>}
+                        {s.qualityGrade === 'BEST' ? <span style={{ color: '#fcf000', fontWeight: 700, fontSize: 11 }} title="Gap≥15%">BEST</span>
+                         : s.qualityGrade === 'BETTER' ? <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 11 }} title="Gap≥12%">BETTER</span>
+                         : <span style={{ color: '#999', fontWeight: 600, fontSize: 11 }}>GOOD</span>}
                       </td>
                       <td style={{ padding: '6px 10px', textAlign: 'center' }}><ModeBadge ticker={s.ticker} /></td>
                       <td style={{ padding: '6px 10px' }}>
@@ -640,7 +640,7 @@ export default function AiOrdersPage() {
       <div style={{ marginTop: 16, fontSize: 11, color: '#666', lineHeight: 1.6 }}>
         Sized at 1% NAV vitality × sector multiplier on your ${(userNav || 100000).toLocaleString()} NAV. Lot 1 = 35% of full target.
         BL skipped if sector NO_GO · SS skipped if sector GO · PAI300 36W EMA hard gate blocks all BL in bear regime.
-        Quality grades: ★ BEST (Gap{'>'}15%, Slope{'<'}20%) · ✓ GOOD (Gap{'>'}12%, Slope{'<'}20%) · ✗ SKIP.
+        Quality grades: BEST (Gap{'>'}15%) · BETTER (Gap{'>'}12%) · GOOD (meets combo minimum).
         Daily Cascade scouts enter at 50% of Lot 1 (BL + SS) — gold = weekly signal confirmed → enter remaining 50% for full Lot 1 → pyramid continues.
         Realized DD -5.4% (backtest). 10% portfolio heat cap enforced.
       </div>

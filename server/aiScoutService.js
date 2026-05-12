@@ -236,7 +236,7 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
     const absGap = Math.abs(gapPct);
     const absSlope = Math.abs(wEmaSlope);
     const qualityGrade = absGap >= BEST_GAP_MIN && absSlope < COMBO6_SLOPE_MAX ? 'BEST'
-      : absGap >= GOOD_GAP_MIN && absSlope < COMBO6_SLOPE_MAX ? 'GOOD' : 'OK';
+      : absGap >= GOOD_GAP_MIN && absSlope < COMBO6_SLOPE_MAX ? 'BETTER' : 'GOOD';
 
     const scoutDoc = {
       ticker,

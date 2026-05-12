@@ -766,7 +766,7 @@ function buildSubRows(row) {
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
-export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart, onAddPosition, collapsed: extCollapsed, onToggleCollapsed, headerExtra, onExitConfirmed, onPositionsSummary }) {
+export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenChart, onAddPosition, collapsed: extCollapsed, onToggleCollapsed, headerExtra, onExitConfirmed, onPositionsSummary, hideHeader }) {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1570,6 +1570,7 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
 
   return (
     <div style={s.container}>
+      {!hideHeader && (
       <div
         style={{ ...s.headerBar, cursor: 'pointer' }}
         onClick={() => setCollapsed(v => !v)}
@@ -1609,6 +1610,7 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
         >{refreshing ? '… REFRESHING' : '↺ REFRESH'}</button>
         {headerExtra}
       </div>
+      )}
       {!collapsed && body()}
       <ActionModal row={modalRow} onClose={() => setModalRow(null)} />
       {pyramidModal && (

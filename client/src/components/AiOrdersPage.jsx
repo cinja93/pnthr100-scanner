@@ -585,10 +585,11 @@ export default function AiOrdersPage() {
           display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8,
           borderBottom: '2px solid #f97316', paddingBottom: 6,
         }}>
-          <h2 style={{ color: '#f97316', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>3 · Live Positions</h2>
+          <h2 style={{ color: '#f97316', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>3 · PNTHR Live Positions</h2>
           <span style={{ color: '#888', fontSize: 11 }}>IBKR ↔ PNTHR source-of-truth reconciliation</span>
         </div>
         <AssistantLiveTable
+          hideHeader
           netLiquidity={userNav}
           onOpenChart={(stocks, idx) => {
             if (Array.isArray(stocks) && stocks.length > 0) {

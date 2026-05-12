@@ -4,7 +4,7 @@ import { fetchLatestAiOrders, runAiOrders, runAiScouts, fetchNav } from '../serv
 import AiTickerChartModal from './AiTickerChartModal';
 import AssistantLiveTable from './AssistantLiveTable';
 import { computeWeeksAgo } from '../utils/dateUtils';
-import { getStrategyMode } from '../utils/strategyMode';
+import { getStrategyMode, isCarnivoreMode } from '../utils/strategyMode';
 
 const TIER_COLORS = {
   GO:      { bg: '#16a34a', fg: '#000', label: 'GO' },
@@ -228,7 +228,7 @@ export default function AiOrdersPage() {
 
   const scouts = useMemo(() => {
     if (!doc?.scouts?.length) return [];
-    const enriched = doc.scouts.map(s => {
+    const enriched = doc.scouts.filter(s => !isCarnivoreMode(s.ticker)).map(s => {
       const isConverted = s.status === 'CONVERTED';
       const hasWeeklyBL = weeklyBLTickers.has(s.ticker);
       return {

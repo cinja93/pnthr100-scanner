@@ -25,6 +25,7 @@ import { getPai300Regime } from './pai300Regime.js';
 import { getLatestAiSectorRanks } from './aiSectorRotationService.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { STRIKE_PCT } from './lotMath.js';
+import { isCarnivoreMode } from './data/strategyMode.js';
 
 const COLL_SCOUTS = 'pnthr_ai_scouts';
 
@@ -82,7 +83,7 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
     }
   } catch (_) {}
 
-  const tickers = Object.keys(TICKER_META);
+  const tickers = Object.keys(TICKER_META).filter(t => !isCarnivoreMode(t));
   const col = db.collection(COLL_SCOUTS);
   await col.createIndex({ ticker: 1, status: 1 });
   await col.createIndex({ status: 1 });

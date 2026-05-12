@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchLatestAiOrders, runAiOrders, fetchNav } from '../services/api';
+import { fetchLatestAiOrders, runAiOrders, runAiScouts, fetchNav } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import { computeWeeksAgo } from '../utils/dateUtils';
 
@@ -153,8 +153,18 @@ export default function AiOrdersPage() {
             <strong style={{ color: '#fcf000' }}> {doc.stats.newThisWeek}</strong> NEW
           </div>
           <div style={{ fontSize: 11, color: '#666' }}>
+            {doc.stats.pai300Regime && (
+              <span style={{
+                padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700, marginRight: 8,
+                background: doc.stats.pai300Regime === 'BULL' ? '#16a34a' : doc.stats.pai300Regime === 'BEAR' ? '#dc2626' : '#444',
+                color: '#fff',
+              }}>PAI300 {doc.stats.pai300Regime}</span>
+            )}
             skipped: BL/NO_GO <strong style={{ color: '#dc2626' }}>{doc.stats.skippedNoGoBL}</strong> ·
             SS/GO <strong style={{ color: '#dc2626' }}>{doc.stats.skippedGoSS}</strong>
+            {doc.stats.blRegimeBlocked > 0 && (
+              <span> · BL/BEAR <strong style={{ color: '#dc2626' }}>{doc.stats.blRegimeBlocked}</strong></span>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
@@ -174,11 +184,26 @@ export default function AiOrdersPage() {
           </div>
 
           {isAdmin && (
-            <button onClick={onRun} disabled={running} style={{
-              padding: '4px 10px', fontSize: 11, fontWeight: 700,
-              background: '#fcf000', color: '#000', border: 'none', borderRadius: 3,
-              cursor: running ? 'wait' : 'pointer',
-            }}>{running ? 'RUNNING…' : 'REGENERATE'}</button>
+            <>
+              <button onClick={onRun} disabled={running} style={{
+                padding: '4px 10px', fontSize: 11, fontWeight: 700,
+                background: '#fcf000', color: '#000', border: 'none', borderRadius: 3,
+                cursor: running ? 'wait' : 'pointer',
+              }}>{running ? 'RUNNING…' : 'REGENERATE'}</button>
+              <button onClick={async () => {
+                setRunning(true);
+                try {
+                  const r = await runAiScouts({ nav: userNav || 100000 });
+                  setRunMsg(`Scouts: ${r.scan?.newScouts ?? 0} new, ${r.manage?.stopped ?? 0} stopped, ${r.manage?.active ?? 0} active`);
+                  load();
+                } catch (e) { setRunMsg(`Scout scan failed: ${e.message}`); }
+                finally { setRunning(false); }
+              }} disabled={running} style={{
+                padding: '4px 10px', fontSize: 11, fontWeight: 700,
+                background: '#00e5ff', color: '#000', border: 'none', borderRadius: 3,
+                cursor: running ? 'wait' : 'pointer',
+              }}>{running ? 'SCANNING…' : 'SCAN SCOUTS'}</button>
+            </>
           )}
         </div>
       )}
@@ -256,10 +281,90 @@ export default function AiOrdersPage() {
         </div>
       )}
 
+      {/* Daily Cascade Scouts */}
+      {doc?.scouts?.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+            <h2 style={{ color: '#00e5ff', margin: 0, fontSize: 18, letterSpacing: '0.04em' }}>Daily Cascade Scouts</h2>
+            <span style={{ color: '#888', fontSize: 12 }}>50% of Lot 1 — 28-day conversion window</span>
+            <span style={{
+              padding: '3px 8px', background: '#00e5ff', color: '#000', borderRadius: 3,
+              fontSize: 10, fontWeight: 700,
+            }}>
+              {doc.stats?.activeScouts || 0} ACTIVE · {doc.stats?.convertedScouts || 0} CONVERTED
+            </span>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
+              <thead>
+                <tr style={{ background: '#1a1a1a', color: '#00e5ff', textAlign: 'left' }}>
+                  <th style={{ padding: '8px 10px' }}>Status</th>
+                  <th style={{ padding: '8px 10px' }}>Ticker</th>
+                  <th style={{ padding: '8px 10px' }}>Sector</th>
+                  <th style={{ padding: '8px 10px' }}>Tier</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Entry</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Stop</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Scout sh</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Full L1</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Gap %</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>EMA Slope</th>
+                  <th style={{ padding: '8px 10px' }}>Entry Date</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Days Open</th>
+                </tr>
+              </thead>
+              <tbody>
+                {doc.scouts.map(s => {
+                  const isConverted = s.status === 'CONVERTED';
+                  const scaledShares = Math.max(1, Math.round(s.shares * navScale));
+                  const scaledFullL1 = Math.max(1, Math.round(s.fullLot1Shares * navScale));
+                  return (
+                    <tr key={`scout-${s.ticker}`} style={{
+                      borderBottom: '1px solid #1a1a1a',
+                      background: isConverted ? 'rgba(0,229,255,0.06)' : 'transparent',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => {
+                      setChartTickers([s.ticker]);
+                      setChartIndex(0);
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
+                    onMouseLeave={e => e.currentTarget.style.background = isConverted ? 'rgba(0,229,255,0.06)' : 'transparent'}
+                    >
+                      <td style={{ padding: '6px 10px' }}>
+                        <span style={{
+                          padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+                          background: isConverted ? '#00e5ff' : '#fcf000',
+                          color: '#000',
+                        }}>{isConverted ? 'CONVERTED' : 'SCOUT'}</span>
+                      </td>
+                      <td style={{ padding: '6px 10px', fontWeight: 700, color: '#fff' }}>{s.ticker}</td>
+                      <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{s.sectorId} {s.sectorName?.split(' ').slice(0, 2).join(' ')}</td>
+                      <td style={{ padding: '6px 10px' }}><TierPill tier={s.sectorTier} /></td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(s.entryPrice)}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(s.stopPrice)}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#00e5ff' }}>{scaledShares}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{scaledFullL1}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{s.gapPct?.toFixed(1)}%</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{s.wEmaSlope?.toFixed(1)}%</td>
+                      <td style={{ padding: '6px 10px', color: '#888' }}>{s.entryDate || '—'}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', color: s.tradingDaysOpen >= 20 ? '#dc2626' : s.tradingDaysOpen >= 14 ? '#fcf000' : '#aaa' }}>
+                        {s.tradingDaysOpen || 0}/{s.conversionDeadlineDays || 28}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Footer note */}
       <div style={{ marginTop: 16, fontSize: 11, color: '#666', lineHeight: 1.6 }}>
         Sized at 1% NAV vitality × sector multiplier on your ${(userNav || 100000).toLocaleString()} NAV. Lot 1 = 35% of full target.
         BL skipped if sector NO_GO (cooling) · SS skipped if sector GO (heating).
+        PAI300 36W EMA hard gate blocks all BL entries in bear regime.
+        Daily Cascade scouts enter at 50% of Lot 1 — convert on subsequent-week weekly BL+1.
         Sector rank refreshes daily ~5:30pm ET after constituent close.
       </div>
 

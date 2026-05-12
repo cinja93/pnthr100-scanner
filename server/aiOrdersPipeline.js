@@ -20,6 +20,8 @@ import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { getLatestAiSectorRanks } from './aiSectorRotationService.js';
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { fetchAiQuotesBatch } from './aiIntradayOverlay.js';
+import { getPai300Regime } from './pai300Regime.js';
+import { getActiveScouts } from './aiScoutService.js';
 
 const COLL_AI_ORDERS = 'pnthr_ai_orders';
 
@@ -83,6 +85,10 @@ export async function runAiOrdersPipeline(opts = {}) {
 
   console.log(`[AI Orders] starting pipeline (type=${type}, weekOf=${weekOf})…`);
 
+  // 0. PAI300 36W EMA hard gate — BL blocked when PAI300 below EMA (matches backtest)
+  const pai300Bull = await getPai300Regime();
+  console.log(`[AI Orders] PAI300 regime: ${pai300Bull === true ? 'BULL (BL allowed)' : pai300Bull === false ? 'BEAR (BL blocked)' : 'UNKNOWN (BL allowed)'}`);
+
   // 1. Pull live signals (force refresh so sector tiers reflect today's rank)
   const { signals } = await getAiUniverseSignals({ refresh: true });
   const allTickers = Object.keys(signals);
@@ -101,7 +107,7 @@ export async function runAiOrdersPipeline(opts = {}) {
 
   // 4. Build candidate orders
   const orders = [];
-  const skipLog = { blNoGo: 0, ssGo: 0, notEntry: 0, noStop: 0, noPrice: 0 };
+  const skipLog = { blNoGo: 0, ssGo: 0, notEntry: 0, noStop: 0, noPrice: 0, blRegimeBlocked: 0 };
 
   for (const ticker of allTickers) {
     const sig = signals[ticker];
@@ -112,6 +118,10 @@ export async function runAiOrdersPipeline(opts = {}) {
 
     const tier = sig.sectorTier;
     const isLong = sig.signal === 'BL';
+
+    // PAI300 hard gate: BL blocked when PAI300 below 36W EMA (matches backtest exactly)
+    if (isLong && pai300Bull === false) { skipLog.blRegimeBlocked++; continue; }
+
     const mult = isLong ? blMult(tier) : ssMult(tier);
 
     if (mult === 0) {
@@ -193,6 +203,8 @@ export async function runAiOrdersPipeline(opts = {}) {
     skippedNoEntry: skipLog.notEntry,
     skippedNoStop: skipLog.noStop,
     skippedNoPrice: skipLog.noPrice,
+    blRegimeBlocked: skipLog.blRegimeBlocked,
+    pai300Regime: pai300Bull === true ? 'BULL' : pai300Bull === false ? 'BEAR' : 'UNKNOWN',
   };
 
   // 7. Sector summary (top 6 GO + bottom 4 NO_GO with 5D returns)
@@ -207,11 +219,41 @@ export async function runAiOrdersPipeline(opts = {}) {
     })),
   };
 
-  // 8. Persist
+  // 8. Pull active scouts for display alongside weekly orders
+  let scouts = [];
+  try {
+    scouts = (await getActiveScouts()).map(s => ({
+      ticker: s.ticker,
+      mode: s.mode,
+      status: s.status,
+      direction: s.direction,
+      entryDate: s.entryDate,
+      entryPrice: s.entryPrice,
+      shares: s.shares,
+      stopPrice: s.stopPrice,
+      fullLot1Shares: s.fullLot1Shares,
+      totalTargetShares: s.totalTargetShares,
+      sectorId: s.sectorId,
+      sectorName: s.sectorName,
+      sectorTier: s.sectorTier,
+      tradingDaysOpen: s.tradingDaysOpen,
+      conversionDeadlineDays: s.conversionDeadlineDays,
+      gapPct: s.gapPct,
+      wEmaSlope: s.wEmaSlope,
+      conversionDate: s.conversionDate || null,
+    }));
+  } catch (err) {
+    console.warn('[AI Orders] scout fetch failed:', err.message);
+  }
+
+  stats.activeScouts = scouts.filter(s => s.status === 'ACTIVE').length;
+  stats.convertedScouts = scouts.filter(s => s.status === 'CONVERTED').length;
+
+  // 9. Persist
   const doc = {
     weekOf, type, generatedAt: new Date(),
     sectorSummary,
-    orders, stats,
+    orders, scouts, stats,
     assumedNav: ASSUMED_NAV,
     vitalityPct: NAV_VITALITY_PCT,
     tickerCapPct: TICKER_CAP_PCT,

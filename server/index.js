@@ -36,6 +36,7 @@ import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrA
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './aiOrdersPipeline.js';
+import { scanForNewScouts, manageActiveScouts, checkConversions, getActiveScouts, getScoutHistory } from './aiScoutService.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
@@ -2036,6 +2037,50 @@ app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, 
     res.json({ ok: true, weekOf: doc.weekOf, totalOrders: doc.stats.totalOrders, stats: doc.stats });
   } catch (err) {
     console.error('[AI Orders] manual run failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── AI Scouts (Daily Cascade) ──────────────────────────────────────────────
+app.get('/api/ai-scouts/active', async (req, res) => {
+  try {
+    const scouts = await getActiveScouts();
+    res.json(scouts);
+  } catch (err) {
+    console.error('[AI Scouts] active fetch failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/ai-scouts/history', async (req, res) => {
+  try {
+    const scouts = await getScoutHistory({ limit: parseInt(req.query.limit) || 50 });
+    res.json(scouts);
+  } catch (err) {
+    console.error('[AI Scouts] history fetch failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/run-ai-scouts', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const nav = req.body?.nav || 100000;
+    const dryRun = !!req.body?.dryRun;
+    const scanResult = await scanForNewScouts({ nav, dryRun });
+    const manageResult = await manageActiveScouts();
+    res.json({ ok: true, scan: { newScouts: scanResult.newScouts.length, skipLog: scanResult.skipLog }, manage: manageResult });
+  } catch (err) {
+    console.error('[AI Scouts] manual run failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/run-ai-scout-conversions', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await checkConversions();
+    res.json({ ok: true, converted: result.converted.length, details: result.converted });
+  } catch (err) {
+    console.error('[AI Scouts] conversion check failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -5492,6 +5537,22 @@ cron.schedule('30 17 * * 1-5', async () => {
       const killDoc = await runAiKillPipeline();
       console.log(`[AI Kill] done: ${killDoc.scoredCount} scored, top=${killDoc.scores[0]?.ticker}`);
     } catch (e) { console.error('[CRON] AI Kill pipeline failed:', e.message); }
+    // Daily Cascade scouts: manage existing (stop/timeout) then scan for new
+    try {
+      console.log('[AI Scouts] managing active scouts...');
+      const mgr = await manageActiveScouts();
+      console.log(`[AI Scouts] manage done: ${mgr.stopped} stopped, ${mgr.timedOut} timed out, ${mgr.active} active`);
+      console.log('[AI Scouts] scanning for new scouts...');
+      const scan = await scanForNewScouts({ nav: 100000 });
+      console.log(`[AI Scouts] scan done: ${scan.newScouts.length} new scouts`);
+      // Friday conversion check
+      const dow = new Date().getDay();
+      if (dow === 5) {
+        console.log('[AI Scouts] Friday — checking conversions...');
+        const conv = await checkConversions();
+        console.log(`[AI Scouts] conversions: ${conv.converted.length} converted`);
+      }
+    } catch (e) { console.error('[CRON] AI Scouts pipeline failed:', e.message); }
     // Final step: regenerate the AI Orders sheet (consumes fresh sector tiers).
     try {
       console.log('[AI Orders] regenerating order sheet...');

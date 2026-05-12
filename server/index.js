@@ -2119,7 +2119,9 @@ app.post('/api/admin/fix-scout-grades', authenticateJWT, requireAdmin, async (re
     const col = db.collection('pnthr_ai_scouts');
     const r1 = await col.updateMany({ qualityGrade: 'GOOD' }, { $set: { qualityGrade: 'BETTER' } });
     const r2 = await col.updateMany({ qualityGrade: 'OK' }, { $set: { qualityGrade: 'GOOD' } });
-    res.json({ ok: true, goodToBetter: r1.modifiedCount, okToGood: r2.modifiedCount });
+    const r3 = await col.updateMany({ qualityGrade: { $exists: false } }, { $set: { qualityGrade: 'GOOD' } });
+    const r4 = await col.updateMany({ qualityGrade: null }, { $set: { qualityGrade: 'GOOD' } });
+    res.json({ ok: true, goodToBetter: r1.modifiedCount, okToGood: r2.modifiedCount, missingFixed: r3.modifiedCount + r4.modifiedCount });
   } catch (err) {
     console.error('[Admin] fix-scout-grades failed:', err.message);
     res.status(500).json({ error: err.message });

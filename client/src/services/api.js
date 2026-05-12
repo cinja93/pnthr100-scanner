@@ -463,8 +463,9 @@ export async function fetchPnthrAiSectorsLatest(forceRefresh = false) {
 }
 
 // PNTHR AI Sectors — bars + EMA series for one sector chart
-export async function fetchPnthrAiSectorBars(sectorId, timeframe = 'weekly') {
-  const url = `${API_BASE}/api/pnthr-ai-sectors/${sectorId}/bars?timeframe=${timeframe}`;
+export async function fetchPnthrAiSectorBars(sectorId, timeframe = 'weekly', limit = null) {
+  let url = `${API_BASE}/api/pnthr-ai-sectors/${sectorId}/bars?timeframe=${timeframe}`;
+  if (limit) url += `&limit=${limit}`;
   const response = await apiFetch(url, { headers: authHeaders() });
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   return response.json();

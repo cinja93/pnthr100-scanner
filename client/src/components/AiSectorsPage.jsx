@@ -5,10 +5,6 @@ import AiSectorChartModal from './AiSectorChartModal';
 import pantherHead from '../assets/panther head.png';
 import junglePageStyles from './JunglePage.module.css';
 
-// PNTHR AI Sectors — 16-card grid showing each AI sector's synthetic index
-// (capped market-cap weighted, monthly rebalance, base 2022-11-30 = 1000).
-// Click a card → expand into AiSectorChartModal with full OHLC + EMA.
-
 function fmtNum(n) {
   if (n == null) return '—';
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -19,15 +15,24 @@ function fmtPct(n) {
   return `${s}${n.toFixed(2)}%`;
 }
 
+const TIME_RANGES = [
+  { key: '5d',  label: '5 Days',  days: 5,   timeframe: 'daily' },
+  { key: '30d', label: '30 Days', days: 30,  timeframe: 'daily' },
+  { key: '90d', label: '90 Days', days: 90,  timeframe: 'daily' },
+  { key: '1y',  label: '1 Year',  days: 252, timeframe: 'weekly' },
+  { key: 'all', label: 'All',     days: null, timeframe: 'weekly' },
+];
+
 // ── Mini-chart (one per card): close + EMA, no axes, no decoration ──────────
-function SectorMiniChart({ sectorId }) {
+function SectorMiniChart({ sectorId, timeRange, onPeriodReturn }) {
   const ref = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
     let chart;
+    const range = TIME_RANGES.find(r => r.key === timeRange) || TIME_RANGES[4];
 
-    fetchPnthrAiSectorBars(sectorId, 'weekly')
+    fetchPnthrAiSectorBars(sectorId, range.timeframe, range.days)
       .then(d => {
         if (cancelled || !ref.current || !d.ok || !d.bars?.length) return;
         chart = createChart(ref.current, {
@@ -48,7 +53,6 @@ function SectorMiniChart({ sectorId }) {
           color: '#fcf000', lineWidth: 1.5,
           priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
         });
-        // Color the close line by current regime
         const last = d.bars[d.bars.length - 1];
         const lastEma = [...d.bars].reverse().find(b => b.ema != null)?.ema;
         if (last?.close && lastEma != null) {
@@ -57,17 +61,29 @@ function SectorMiniChart({ sectorId }) {
         closeSeries.setData(d.bars.map(b => ({ time: b.date, value: b.close })));
         emaSeries.setData(d.bars.filter(b => b.ema != null).map(b => ({ time: b.date, value: b.ema })));
         chart.timeScale().fitContent();
+
+        // Compute period return from first to last bar in the fetched range
+        if (onPeriodReturn && d.bars.length >= 2) {
+          const first = d.bars[0];
+          const pctChange = ((last.close - first.close) / first.close) * 100;
+          onPeriodReturn(pctChange);
+        }
       })
       .catch(() => {});
 
     return () => { cancelled = true; if (chart) chart.remove(); };
-  }, [sectorId]);
+  }, [sectorId, timeRange]);
 
   return <div ref={ref} style={{ width: '100%', height: 80 }} />;
 }
 
 // ── Sector card ─────────────────────────────────────────────────────────────
-function SectorCard({ sector, rank, onClick }) {
+function SectorCard({ sector, rank, timeRange, onClick }) {
+  const [periodReturn, setPeriodReturn] = useState(null);
+
+  // Reset period return when timeRange changes
+  useEffect(() => { setPeriodReturn(null); }, [timeRange]);
+
   if (!sector.ok) {
     return (
       <div style={{ padding: 12, background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: 6 }}>
@@ -77,9 +93,10 @@ function SectorCard({ sector, rank, onClick }) {
     );
   }
   const dayChangeColor = sector.dayChangePct >= 0 ? '#16a34a' : '#dc2626';
-  const ytdColor       = (sector.ytdPct ?? 0) >= 0 ? '#16a34a' : '#dc2626';
-  const inceptionColor = sector.inceptionPct >= 0 ? '#16a34a' : '#dc2626';
   const regimeColor    = sector.regime === 'bull' ? '#16a34a' : '#dc2626';
+  const isAll = timeRange === 'all';
+  const rangeLabel = TIME_RANGES.find(r => r.key === timeRange)?.label || 'All';
+  const periodColor = periodReturn != null ? (periodReturn >= 0 ? '#16a34a' : '#dc2626') : '#888';
 
   return (
     <button
@@ -113,11 +130,20 @@ function SectorCard({ sector, rank, onClick }) {
         <span style={{ color: dayChangeColor, fontSize: 11, fontWeight: 600 }}>{fmtPct(sector.dayChangePct)}</span>
       </div>
 
-      <SectorMiniChart sectorId={sector.id} />
+      <SectorMiniChart sectorId={sector.id} timeRange={timeRange} onPeriodReturn={setPeriodReturn} />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontFamily: 'monospace' }}>
-        <span style={{ color: '#888' }}>YTD <strong style={{ color: ytdColor }}>{fmtPct(sector.ytdPct)}</strong></span>
-        <span style={{ color: '#888' }}>Since launch <strong style={{ color: inceptionColor }}>{fmtPct(sector.inceptionPct)}</strong></span>
+        {isAll ? (
+          <>
+            <span style={{ color: '#888' }}>YTD <strong style={{ color: (sector.ytdPct ?? 0) >= 0 ? '#16a34a' : '#dc2626' }}>{fmtPct(sector.ytdPct)}</strong></span>
+            <span style={{ color: '#888' }}>Since launch <strong style={{ color: sector.inceptionPct >= 0 ? '#16a34a' : '#dc2626' }}>{fmtPct(sector.inceptionPct)}</strong></span>
+          </>
+        ) : (
+          <>
+            <span style={{ color: '#888' }}>{rangeLabel} <strong style={{ color: periodColor }}>{periodReturn != null ? fmtPct(periodReturn) : '…'}</strong></span>
+            <span style={{ color: '#888' }}>Day <strong style={{ color: dayChangeColor }}>{fmtPct(sector.dayChangePct)}</strong></span>
+          </>
+        )}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#666', fontFamily: 'monospace', marginTop: -2 }}>
@@ -130,10 +156,11 @@ function SectorCard({ sector, rank, onClick }) {
 
 // ── Page ────────────────────────────────────────────────────────────────────
 export default function AiSectorsPage() {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
-  const [sortBy, setSortBy]   = useState('inception'); // 'inception' | 'ytd' | 'day' | 'name' | 'target'
+  const [data, setData]           = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
+  const [sortBy, setSortBy]       = useState('inception');
+  const [timeRange, setTimeRange] = useState('all');
   const [openSector, setOpenSector] = useState(null);
 
   function load(forceRefresh = false, { silent = false } = {}) {
@@ -144,9 +171,6 @@ export default function AiSectorsPage() {
       .finally(() => { if (!silent) setLoading(false); });
   }
 
-  // Initial load + 30s silent auto-refresh — server cache for the 16-card
-  // grid is also 30s, so each tick rolls live constituent quotes through
-  // the per-sector overlay and updates every card.
   useEffect(() => {
     load();
     const id = setInterval(() => load(false, { silent: true }), 30000);
@@ -203,6 +227,29 @@ export default function AiSectorsPage() {
         </div>
       </div>
 
+      {/* ── Time range selector ──────────────────────────────────────── */}
+      <div style={{
+        display: 'flex', gap: 4, padding: '8px 0',
+        borderBottom: '1px solid #1a1a1a',
+      }}>
+        {TIME_RANGES.map(r => (
+          <button
+            key={r.key}
+            onClick={() => setTimeRange(r.key)}
+            style={{
+              padding: '6px 14px', fontSize: 12, fontWeight: 700,
+              fontFamily: 'inherit', cursor: 'pointer',
+              borderRadius: 4, border: 'none',
+              background: timeRange === r.key ? '#fcf000' : '#1a1a1a',
+              color: timeRange === r.key ? '#000' : '#888',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
       {loading && (
         <div className={junglePageStyles.loadingState}>
           <div className={junglePageStyles.spinner} />
@@ -220,7 +267,7 @@ export default function AiSectorsPage() {
           padding: '12px 0',
         }}>
           {sortedSectors.map((s, i) => (
-            <SectorCard key={s.id} sector={s} rank={i + 1} onClick={() => setOpenSector(s)} />
+            <SectorCard key={s.id} sector={s} rank={i + 1} timeRange={timeRange} onClick={() => setOpenSector(s)} />
           ))}
         </div>
       )}

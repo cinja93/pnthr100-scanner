@@ -36,7 +36,7 @@ import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrA
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './aiOrdersPipeline.js';
-import { autoExecuteAiOrders } from './aiAutoExecute.js';
+import { autoExecuteAiOrders, autoExecuteScoutEntries, autoExecuteScoutConversions, autoExecuteWeeklyOrders } from './aiAutoExecute.js';
 import { scanForNewScouts, manageActiveScouts, checkConversions, getActiveScouts, getScoutHistory } from './aiScoutService.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
@@ -2035,9 +2035,9 @@ app.get('/api/ai-orders/history', async (req, res) => {
 app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const doc = await runAiOrdersPipeline(req.body || {});
-    // Auto-execute qualified orders (respects AI_AUTO_EXECUTE kill switch + dry-run)
+    // Path 3: auto-execute weekly direct orders (respects AI_AUTO_EXECUTE kill switch + dry-run)
     let execResult = null;
-    try { execResult = await autoExecuteAiOrders({ ownerId: req.user.userId }); }
+    try { execResult = await autoExecuteWeeklyOrders({ ownerId: req.user.userId }); }
     catch (e) { console.error('[AI AutoExec] failed after manual pipeline run:', e.message); }
     res.json({ ok: true, weekOf: doc.weekOf, totalOrders: doc.stats.totalOrders, stats: doc.stats, autoExec: execResult });
   } catch (err) {
@@ -2082,9 +2082,15 @@ app.post('/api/admin/run-ai-scouts', authenticateJWT, requireAdmin, async (req, 
   try {
     const nav = req.body?.nav || 100000;
     const dryRun = !!req.body?.dryRun;
-    const scanResult = await scanForNewScouts({ nav, dryRun });
     const manageResult = await manageActiveScouts();
-    res.json({ ok: true, scan: { newScouts: scanResult.newScouts.length, skipLog: scanResult.skipLog }, manage: manageResult });
+    const scanResult = await scanForNewScouts({ nav, dryRun });
+    // Path 1: auto-execute new scout entries
+    let scoutExec = null;
+    if (scanResult.newScouts.length > 0) {
+      try { scoutExec = await autoExecuteScoutEntries(scanResult.newScouts, { ownerId: req.user.userId, nav }); }
+      catch (e) { console.error('[AI AutoExec] scout entries failed:', e.message); }
+    }
+    res.json({ ok: true, scan: { newScouts: scanResult.newScouts.length, skipLog: scanResult.skipLog }, manage: manageResult, autoExec: scoutExec });
   } catch (err) {
     console.error('[AI Scouts] manual run failed:', err.message);
     res.status(500).json({ error: err.message });
@@ -2094,7 +2100,13 @@ app.post('/api/admin/run-ai-scouts', authenticateJWT, requireAdmin, async (req, 
 app.post('/api/admin/run-ai-scout-conversions', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const result = await checkConversions();
-    res.json({ ok: true, converted: result.converted.length, details: result.converted });
+    // Path 2: auto-execute conversions
+    let convExec = null;
+    if (result.converted.length > 0) {
+      try { convExec = await autoExecuteScoutConversions(result.converted, { ownerId: req.user.userId }); }
+      catch (e) { console.error('[AI AutoExec] conversions failed:', e.message); }
+    }
+    res.json({ ok: true, converted: result.converted.length, details: result.converted, autoExec: convExec });
   } catch (err) {
     console.error('[AI Scouts] conversion check failed:', err.message);
     res.status(500).json({ error: err.message });
@@ -5558,13 +5570,31 @@ cron.schedule('30 17 * * 1-5', async () => {
       console.log('[AI Scouts] managing active scouts...');
       const mgr = await manageActiveScouts();
       console.log(`[AI Scouts] manage done: ${mgr.stopped} stopped, ${mgr.timedOut} timed out, ${mgr.active} active`);
-      console.log('[AI Scouts] scanning for new scouts...');
+      console.log('[AI Scouts] scanning for new scouts (BL + SS)...');
       const scan = await scanForNewScouts({ nav: 100000 });
       console.log(`[AI Scouts] scan done: ${scan.newScouts.length} new scouts`);
-      // Check conversions daily (weekly BL can be detected any day after bars update)
+      // Path 1: Auto-execute new scout entries (50% L1 + daily stop)
+      if (scan.newScouts.length > 0) {
+        try {
+          const scoutExec = await autoExecuteScoutEntries(scan.newScouts);
+          if (scoutExec.skipped !== 'DISABLED') {
+            console.log(`[AI AutoExec] Scout entries ${scoutExec.dryRun ? 'DRY-RUN' : 'LIVE'}: ${scoutExec.positions.length} positions, ${scoutExec.outbox.length} outbox`);
+          }
+        } catch (e) { console.error('[CRON] AI AutoExec scout entries failed:', e.message); }
+      }
+      // Check conversions daily (weekly BL/SS can be detected any day after bars update)
       console.log('[AI Scouts] checking conversions...');
       const conv = await checkConversions();
       console.log(`[AI Scouts] conversions: ${conv.converted.length} converted`);
+      // Path 2: Auto-execute scout conversions (topup + weekly stop + L2-L5)
+      if (conv.converted.length > 0) {
+        try {
+          const convExec = await autoExecuteScoutConversions(conv.converted);
+          if (convExec.skipped !== 'DISABLED') {
+            console.log(`[AI AutoExec] Conversions ${convExec.dryRun ? 'DRY-RUN' : 'LIVE'}: ${convExec.conversions.length} converted, ${convExec.outbox.length} outbox`);
+          }
+        } catch (e) { console.error('[CRON] AI AutoExec conversions failed:', e.message); }
+      }
     } catch (e) { console.error('[CRON] AI Scouts pipeline failed:', e.message); }
     // Final step: regenerate the AI Orders sheet (consumes fresh sector tiers).
     try {
@@ -5572,13 +5602,13 @@ cron.schedule('30 17 * * 1-5', async () => {
       const ordersDoc = await runAiOrdersPipeline({ type: 'DAILY' });
       console.log(`[AI Orders] done: ${ordersDoc.stats.totalOrders} orders this week`);
     } catch (e) { console.error('[CRON] AI Orders pipeline failed:', e.message); }
-    // Auto-execute qualified new orders (respects AI_AUTO_EXECUTE kill switch + dry-run)
+    // Path 3: Auto-execute weekly direct orders (carnivore + AI 300 without scout)
     try {
-      const execResult = await autoExecuteAiOrders();
+      const execResult = await autoExecuteWeeklyOrders();
       if (execResult.skipped !== 'DISABLED') {
-        console.log(`[AI AutoExec] ${execResult.dryRun ? 'DRY-RUN' : 'LIVE'}: ${execResult.positions.length} positions, ${execResult.outbox.length} outbox, ${execResult.skipped.length} skipped`);
+        console.log(`[AI AutoExec] Weekly direct ${execResult.dryRun ? 'DRY-RUN' : 'LIVE'}: ${execResult.positions.length} positions, ${execResult.outbox.length} outbox, ${execResult.skipped.length} skipped`);
       }
-    } catch (e) { console.error('[CRON] AI AutoExec failed:', e.message); }
+    } catch (e) { console.error('[CRON] AI AutoExec weekly failed:', e.message); }
   } finally {
     aiUniverseDailyRunning = false;
   }

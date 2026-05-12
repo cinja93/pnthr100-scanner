@@ -1,24 +1,26 @@
 // server/aiScoutService.js
-// ── PNTHR AI Elite Fund — Daily Cascade Scout Pipeline ──────────────────────
+// ── PNTHR AI Elite Fund — Daily Cascade Scout Pipeline (APEX v6) ────────────
 //
-// Replicates the backtest's Daily Cascade exactly:
-//   1. Daily BL signals passing combo [6] filter → enter as SCOUT (50% of Lot 1)
+// Replicates the APEX v6 backtest's Daily Cascade for BOTH BL and SS:
+//   1. Daily BL/SS signals passing combo [6] filter → enter as SCOUT (50% of Lot 1)
+//      BL combo [6]: price above weekly EMA, slope 0–50%, gap 5–15%
+//      SS combo [6]: price below weekly EMA, slope -50–0%, gap 5–15% below
 //   2. Daily ATR-based stop (fixed at entry, no ratchet for scouts)
 //   3. 28 trading-day conversion window
-//   4. Friday check: subsequent-week weekly BL+1 → convert to full Lot 1 + pyramid
-//   5. Timeout / stop hit → close scout
+//   4. Daily check: subsequent-week weekly BL+1/SS+1 → convert to full Lot 1 + pyramid
+//   5. Timeout / stop hit / daily BE/SE → close scout
 //
 // Collections:
 //   pnthr_ai_scouts — active + recently closed scouts
 //
 // Called by:
 //   - Daily cron (after market close): scanForNewScouts() + manageActiveScouts()
-//   - Friday cron (after weekly bars finalize): checkConversions()
+//   - Daily cron: checkConversions()
 //   - AI Orders pipeline: getActiveScouts() for display
 // ────────────────────────────────────────────────────────────────────────────
 
 import { connectToDatabase } from './database.js';
-import { detectAllSignals, calculateEMA, blInitStop, computeWilderATR } from './signalDetection.js';
+import { detectAllSignals, calculateEMA, blInitStop, ssInitStop, computeWilderATR } from './signalDetection.js';
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
 import { getPai300Regime } from './pai300Regime.js';
@@ -34,9 +36,13 @@ const SCOUT_SIZE_FRAC  = 0.50;
 const CONVERSION_DAYS  = 28;
 const NAV_VITALITY_PCT = 0.01;
 const TICKER_CAP_PCT   = 0.10;
-const SCOUT_GAP_MIN    = 12;   // Gap > 12% above weekly EMA (refined filter)
-const SCOUT_SLOPE_MAX  = 20;   // EMA slope < 20% annualized (early trend sweet spot)
-const BEST_GAP_MIN     = 15;   // Gap > 15% = ★ BEST grade
+// Combo [6] filter thresholds (from APEX v6 backtest)
+const COMBO6_GAP_MIN   = 5;    // Gap 5–15% from weekly EMA
+const COMBO6_GAP_MAX   = 15;
+const COMBO6_SLOPE_MAX = 50;   // EMA slope 0–50% annualized (BL) / -50–0% (SS)
+// Quality grades for display
+const BEST_GAP_MIN     = 15;   // Gap ≥ 15% = ★ BEST grade
+const GOOD_GAP_MIN     = 12;   // Gap ≥ 12% = ✓ GOOD grade
 
 const TICKER_META = {};
 for (const sec of SECTORS) {
@@ -62,16 +68,32 @@ function sizePosition(nav, entryPrice, stopPrice, sectorMult = 1.0) {
   return Math.floor(Math.min(vitality / rps, tickerCap / entryPrice));
 }
 
+// APEX v6 sector rotation: BL uses GO=1.25/NEUTRAL=1.0/NO_GO=skip;
+// SS mirrors: NO_GO=1.25/NEUTRAL=1.0/GO=skip
+function blSectorMult(tier) {
+  if (tier === 'GO')      return 1.25;
+  if (tier === 'NEUTRAL') return 1.0;
+  return 0; // NO_GO → skip BL
+}
+function ssSectorMult(tier) {
+  if (tier === 'NO_GO')   return 1.25;
+  if (tier === 'NEUTRAL') return 1.0;
+  return 0; // GO → skip SS
+}
+
 // ── Scan for new scouts ──────────────────────────────────────────────────────
-// Runs daily after close. Finds daily BL signals passing combo [6], enters scouts.
+// Runs daily after close. Finds daily BL+SS signals passing combo [6], enters scouts.
+// APEX v6: both directions, sector rotation gates + multipliers, regime gate.
 export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
   const db = await connectToDatabase();
   if (!db) return { newScouts: [], blocked: {} };
 
   const pai300Bull = await getPai300Regime();
-  if (pai300Bull === false) {
-    console.log('[AI Scouts] PAI300 BEAR — no new BL scouts');
-    return { newScouts: [], blocked: { regime: 'BEAR' } };
+  // Regime gate: BL only when PAI300 BULL, SS only when PAI300 BEAR
+  const blAllowed = pai300Bull !== false;
+  const ssAllowed = pai300Bull === false;
+  if (!blAllowed && !ssAllowed) {
+    console.log('[AI Scouts] PAI300 regime unknown — allowing BL scouts only');
   }
 
   // Sector gate
@@ -88,16 +110,16 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
   await col.createIndex({ ticker: 1, status: 1 });
   await col.createIndex({ status: 1 });
 
-  // Get already-active scouts + any AI Orders positions to avoid doubling
+  // Get already-active scouts to avoid doubling
   const activeScouts = await col.find({ status: 'ACTIVE' }).toArray();
   const activeTickers = new Set(activeScouts.map(s => s.ticker));
 
-  // Skip tickers that already have an active weekly BL — no point scouting what's confirmed
-  const weeklyBLTickers = new Set();
+  // Skip tickers that already have a weekly signal in the same direction — no point scouting
+  const weeklySignalTickers = {};
   try {
     const { signals } = await getAiUniverseSignals();
     for (const [t, sig] of Object.entries(signals)) {
-      if (sig?.signal === 'BL') weeklyBLTickers.add(t);
+      if (sig?.signal === 'BL' || sig?.signal === 'SS') weeklySignalTickers[t] = sig.signal;
     }
   } catch (_) {}
 
@@ -112,19 +134,14 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
   const weeklyByTicker = Object.fromEntries(weeklyDocs.map(d => [d.ticker, d.weekly || []]));
 
   const newScouts = [];
-  const skipLog = { noData: 0, noSignal: 0, alreadyActive: 0, weeklyBLExists: 0, sectorBlocked: 0, comboFailed: 0, noSize: 0 };
+  const skipLog = { noData: 0, noSignal: 0, alreadyActive: 0, weeklyExists: 0, sectorBlocked: 0, regimeBlocked: 0, comboFailed: 0, noSize: 0 };
 
   for (const ticker of tickers) {
     if (activeTickers.has(ticker)) { skipLog.alreadyActive++; continue; }
-    if (weeklyBLTickers.has(ticker)) { skipLog.weeklyBLExists++; continue; }
 
     const meta = TICKER_META[ticker];
     const sectorId = meta.sectorId;
     const period = SECTOR_EMA_PERIODS[sectorId] || 30;
-
-    // Sector gate — skip BL in NO_GO sectors
-    const tier = sectorTierBySid[sectorId];
-    if (tier === 'NO_GO') { skipLog.sectorBlocked++; continue; }
 
     const dailyRaw = dailyByTicker[ticker] || [];
     if (dailyRaw.length < period * 3) { skipLog.noData++; continue; }
@@ -136,13 +153,28 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
 
     // Run daily signal detection
     const { events, activeType } = detectAllSignals(dBars, period, false, 0.003, AI_GATE_OFFSET);
-    if (activeType !== 'BL') { skipLog.noSignal++; continue; }
+    if (activeType !== 'BL' && activeType !== 'SS') { skipLog.noSignal++; continue; }
 
-    // Find the last BL event
-    const lastBL = [...events].reverse().find(e => e.signal === 'BL');
-    if (!lastBL) { skipLog.noSignal++; continue; }
+    const isLong = activeType === 'BL';
+    const direction = isLong ? 'LONG' : 'SHORT';
 
-    // Refined scout filter: Gap > 12% above weekly EMA + Slope < 20% annualized
+    // Regime gate: BL when PAI300 bull, SS when PAI300 bear
+    if (isLong && !blAllowed) { skipLog.regimeBlocked++; continue; }
+    if (!isLong && !ssAllowed) { skipLog.regimeBlocked++; continue; }
+
+    // Skip if weekly signal in same direction already exists
+    if (weeklySignalTickers[ticker] === activeType) { skipLog.weeklyExists++; continue; }
+
+    // Sector rotation gate
+    const tier = sectorTierBySid[sectorId];
+    const sMult = isLong ? blSectorMult(tier) : ssSectorMult(tier);
+    if (sMult === 0) { skipLog.sectorBlocked++; continue; }
+
+    // Find the last matching event
+    const lastEvent = [...events].reverse().find(e => e.signal === activeType);
+    if (!lastEvent) { skipLog.noSignal++; continue; }
+
+    // ── Combo [6] filter (from APEX v6 backtest) ────────────────────────────
     const weeklyRaw = weeklyByTicker[ticker] || [];
     if (weeklyRaw.length < period * 3) { skipLog.comboFailed++; continue; }
     const weeklyAsc = [...weeklyRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
@@ -163,41 +195,55 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
     }
     if (wEmaVal == null) { skipLog.comboFailed++; continue; }
 
-    if (closeD < wEmaVal) { skipLog.comboFailed++; continue; }
+    // BL: price above EMA; SS: price below EMA
+    if (isLong && closeD < wEmaVal) { skipLog.comboFailed++; continue; }
+    if (!isLong && closeD > wEmaVal) { skipLog.comboFailed++; continue; }
 
-    // Gap > 12% above weekly EMA (refined: backtest proved >12% = best scout trades)
-    const gapPct = ((closeD - wEmaVal) / wEmaVal) * 100;
-    if (gapPct < SCOUT_GAP_MIN) { skipLog.comboFailed++; continue; }
+    // Gap 5–15% from weekly EMA (absolute distance)
+    const gapPct = isLong
+      ? ((closeD - wEmaVal) / wEmaVal) * 100
+      : ((wEmaVal - closeD) / wEmaVal) * 100;
+    if (gapPct < COMBO6_GAP_MIN || gapPct > COMBO6_GAP_MAX) { skipLog.comboFailed++; continue; }
 
-    // Weekly EMA slope < 20% annualized (early trend = sweet spot, not late-stage)
+    // Weekly EMA slope: BL → 0–50% annualized; SS → -50–0% annualized
     if (wEmaIdx < 8) { skipLog.comboFailed++; continue; }
     const ema8ago = wEmaData[wEmaIdx - 8]?.value;
     if (ema8ago == null) { skipLog.comboFailed++; continue; }
     const wEmaSlope = ((wEmaVal - ema8ago) / ema8ago) * (52 / 8) * 100;
-    if (wEmaSlope >= SCOUT_SLOPE_MAX) { skipLog.comboFailed++; continue; }
+    if (isLong  && (wEmaSlope < 0 || wEmaSlope > COMBO6_SLOPE_MAX)) { skipLog.comboFailed++; continue; }
+    if (!isLong && (wEmaSlope > 0 || wEmaSlope < -COMBO6_SLOPE_MAX)) { skipLog.comboFailed++; continue; }
 
-    // Compute daily stop
+    // ── Compute daily stop ──────────────────────────────────────────────────
     const dAtr = computeWilderATR(dBars);
     const barIdx = dBars.length - 1;
     if (barIdx < 3 || !dAtr[barIdx]) { skipLog.noSize++; continue; }
     const prev1 = dBars[barIdx - 1], prev2 = dBars[barIdx - 2];
-    const twoBarLow = Math.min(prev1.low, prev2.low);
-    const dailyStop = blInitStop(twoBarLow, closeD, dAtr[barIdx]);
+    let dailyStop;
+    if (isLong) {
+      const twoBarLow = Math.min(prev1.low, prev2.low);
+      dailyStop = blInitStop(twoBarLow, closeD, dAtr[barIdx]);
+    } else {
+      const twoBarHigh = Math.max(prev1.high, prev2.high);
+      dailyStop = ssInitStop(twoBarHigh, closeD, dAtr[barIdx]);
+    }
 
-    // Size: scout = 50% of Lot 1
-    const sMult = AI_SECTOR_TIER_MULT[tier] ?? 1.0;
+    // ── Size: scout = 50% of Lot 1 ─────────────────────────────────────────
     const totalShares = sizePosition(nav, closeD, dailyStop, sMult);
     if (totalShares <= 0) { skipLog.noSize++; continue; }
     const fullLot1 = Math.max(1, Math.round(totalShares * STRIKE_PCT[0]));
     const scoutShares = Math.max(1, Math.round(fullLot1 * SCOUT_SIZE_FRAC));
 
-    const qualityGrade = gapPct >= BEST_GAP_MIN && wEmaSlope < SCOUT_SLOPE_MAX ? 'BEST' : 'GOOD';
+    const absGap = Math.abs(gapPct);
+    const absSlope = Math.abs(wEmaSlope);
+    const qualityGrade = absGap >= BEST_GAP_MIN && absSlope < COMBO6_SLOPE_MAX ? 'BEST'
+      : absGap >= GOOD_GAP_MIN && absSlope < COMBO6_SLOPE_MAX ? 'GOOD' : 'OK';
 
     const scoutDoc = {
       ticker,
       status: 'ACTIVE',
       mode: 'SCOUT',
-      direction: 'LONG',
+      direction,
+      signal: activeType,
       entryDate,
       entryPrice: +closeD.toFixed(2),
       shares: scoutShares,
@@ -225,7 +271,9 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
     await col.insertMany(newScouts);
   }
 
-  console.log(`[AI Scouts] scan: ${newScouts.length} new scouts, skip: ${JSON.stringify(skipLog)}`);
+  const blScouts = newScouts.filter(s => s.signal === 'BL').length;
+  const ssScouts = newScouts.filter(s => s.signal === 'SS').length;
+  console.log(`[AI Scouts] scan: ${newScouts.length} new scouts (BL=${blScouts} SS=${ssScouts}), skip: ${JSON.stringify(skipLog)}`);
   return { newScouts, skipLog };
 }
 
@@ -255,8 +303,11 @@ export async function manageActiveScouts() {
     // Count trading days since entry
     const daysAfterEntry = sorted.filter(b => b.date > scout.entryDate).length;
 
-    // Stop hit check
-    if (lastBar.low <= scout.stopPrice) {
+    // Stop hit check (direction-aware)
+    const stopHit = scout.direction === 'SHORT'
+      ? lastBar.high >= scout.stopPrice
+      : lastBar.low <= scout.stopPrice;
+    if (stopHit) {
       await col.updateOne({ _id: scout._id }, { $set: {
         status: 'CLOSED', closeReason: 'SCOUT_STOPPED', closeDate: lastBar.date,
         closePrice: +scout.stopPrice.toFixed(2), tradingDaysOpen: daysAfterEntry, updatedAt: new Date(),
@@ -297,12 +348,12 @@ export async function checkConversions() {
   const activeScouts = await col.find({ status: 'ACTIVE' }).toArray();
   if (activeScouts.length === 0) return { converted: [], noConversion: 0 };
 
-  // Use live weekly signals — same source as the orders pipeline
-  let weeklyBLByTicker = {};
+  // Use live weekly signals — BL confirms BL scouts, SS confirms SS scouts
+  let weeklySignalByTicker = {};
   try {
     const { signals } = await getAiUniverseSignals();
     for (const [t, sig] of Object.entries(signals)) {
-      if (sig?.signal === 'BL') weeklyBLByTicker[t] = sig;
+      if (sig?.signal === 'BL' || sig?.signal === 'SS') weeklySignalByTicker[t] = sig;
     }
   } catch (_) {}
 
@@ -313,32 +364,42 @@ export async function checkConversions() {
   const todayStr = today.toISOString().slice(0, 10);
 
   for (const scout of activeScouts) {
-    const sig = weeklyBLByTicker[scout.ticker];
+    const sig = weeklySignalByTicker[scout.ticker];
     if (!sig) { noConversion++; continue; }
 
-    // Weekly BL must have fired AFTER the scout's entry week
+    // Signal must match scout direction: BL scout needs weekly BL, SS scout needs weekly SS
+    const expectedSignal = scout.direction === 'SHORT' ? 'SS' : 'BL';
+    if (sig.signal !== expectedSignal) { noConversion++; continue; }
+
+    // Weekly signal must have fired AFTER the scout's entry week
     const scoutEntryMonday = scout.entryMonday || getMondayOf(scout.entryDate);
-    const blMonday = sig.signalDate ? getMondayOf(sig.signalDate) : null;
+    const sigMonday = sig.signalDate ? getMondayOf(sig.signalDate) : null;
 
-    if (blMonday && blMonday <= scoutEntryMonday) { noConversion++; continue; }
+    if (sigMonday && sigMonday <= scoutEntryMonday) { noConversion++; continue; }
 
-    // Conversion confirmed — weekly BL backs up the daily scout
+    // Conversion confirmed — weekly signal backs up the daily scout
     await col.updateOne({ _id: scout._id }, { $set: {
       status: 'CONVERTED',
       mode: 'CONVERTED',
       conversionDate: todayStr,
-      conversionWeeklyBLDate: blMonday || todayStr,
+      conversionWeeklySignalDate: sigMonday || todayStr,
       updatedAt: new Date(),
     }});
 
     converted.push({
       ticker: scout.ticker,
+      direction: scout.direction,
+      signal: scout.signal || expectedSignal,
       scoutEntryDate: scout.entryDate,
       scoutShares: scout.shares,
       fullLot1Shares: scout.fullLot1Shares,
       totalTargetShares: scout.totalTargetShares,
       entryPrice: scout.entryPrice,
       stopPrice: scout.stopPrice,
+      sectorId: scout.sectorId,
+      sectorName: scout.sectorName,
+      sectorTier: scout.sectorTier,
+      sectorMult: scout.sectorMult,
       conversionDate: todayStr,
     });
   }

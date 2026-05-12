@@ -207,8 +207,8 @@ export default function AiOrdersPage() {
       return true;
     }).map(o => {
       const fullL1 = Math.max(1, Math.round(o.lot1Shares * navScale));
-      const isScoutEntry = o.signal === 'BL';
-      const scoutShares = isScoutEntry ? Math.max(1, Math.round(fullL1 * 0.50)) : fullL1;
+      const isScoutEntry = true;
+      const scoutShares = Math.max(1, Math.round(fullL1 * 0.50));
       const scoutDollar = +(scoutShares * (o.currentPrice || 0)).toFixed(2);
       const riskPerShare = o.riskPerShare || 0;
       const _heatDollar = +(scoutShares * riskPerShare).toFixed(2);
@@ -398,7 +398,7 @@ export default function AiOrdersPage() {
             borderBottom: '2px solid #00e5ff', paddingBottom: 6,
           }}>
             <h2 style={{ color: '#00e5ff', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>1 · Daily Cascade Scouts</h2>
-            <span style={{ color: '#888', fontSize: 11 }}>50% of Lot 1 — 28-day conversion window</span>
+            <span style={{ color: '#888', fontSize: 11 }}>50% of Lot 1 (BL + SS) — 28-day conversion window</span>
             <span style={{
               padding: '3px 8px', background: '#00e5ff', color: '#000', borderRadius: 3,
               fontSize: 10, fontWeight: 700,
@@ -641,7 +641,7 @@ export default function AiOrdersPage() {
         Sized at 1% NAV vitality × sector multiplier on your ${(userNav || 100000).toLocaleString()} NAV. Lot 1 = 35% of full target.
         BL skipped if sector NO_GO · SS skipped if sector GO · PAI300 36W EMA hard gate blocks all BL in bear regime.
         Quality grades: ★ BEST (Gap{'>'}15%, Slope{'<'}20%) · ✓ GOOD (Gap{'>'}12%, Slope{'<'}20%) · ✗ SKIP.
-        Daily Cascade scouts enter at 50% of Lot 1 — gold = weekly BL confirmed → enter remaining 50% for full Lot 1 → pyramid continues.
+        Daily Cascade scouts enter at 50% of Lot 1 (BL + SS) — gold = weekly signal confirmed → enter remaining 50% for full Lot 1 → pyramid continues.
         Realized DD -5.4% (backtest). 10% portfolio heat cap enforced.
       </div>
 

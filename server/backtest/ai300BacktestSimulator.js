@@ -4,24 +4,23 @@
 // Full NAV-scaled pyramid backtest for the AI 300 universe (297 names)
 // from 2022-11-30 through the latest available bar.
 //
-// TWO signal tiers (Daily Cascade architecture):
-//   Phase 1 — Daily scouts: daily BL with combo [6] filter → 50% Lot 1
-//     Combo [6]: above weekly EMA + slope 0–50% + gap 5–15%
-//     Exit: daily BE / daily stop / 28-day timeout
-//   Phase 2 — Weekly conversion: weekly BL+1 fires → top up to full Lot 1
+// Daily Cascade architecture (BL + SS):
+//   Daily scouts: daily BL/SS + combo [6] filter → 50% Lot 1
+//     BL combo [6]: above weekly EMA + slope 0–50% + gap 5–15%
+//     SS combo [6]: below weekly EMA + slope -50–0% + gap 5–15% below
+//     Exit: daily BE/SE / daily stop / 28-day timeout
+//   Weekly conversion: weekly BL+1/SS+1 fires → top up to full Lot 1
 //     Then standard pyramid (Lots 2-5) + weekly stops/exits
 //   Weekly-only path: if no scout exists, weekly signal opens full Lot 1
 //
-// APEX v6 layer:
+// APEX v6:
 //   • Regime gate: PAI300 36W EMA (above = BL allowed, below = SS allowed)
 //   • Sector rotation: 5D rank → GO/NEUTRAL/NO_GO
 //     - BL: GO (1.25×) / NEUTRAL (1.0×) / NO_GO → SKIP
 //     - SS: NO_GO (1.25×) / NEUTRAL (1.0×) / GO → SKIP
 //   • 1.25× AI gate offset (vs 679's 1.10×)
 //
-// Target numbers (Phase 4 cascade):
-//   +356.49% / 55.57% CAGR / 1,588 trades (599 weekly + 989 scouts, 75 converted)
-// Target numbers (APEX v6):
+// Canonical results:
 //   +481.13% / 66.89% CAGR / Sharpe 2.06 / -18.81% MaxDD / PF 2.57
 //
 // Usage: cd server && node backtest/ai300BacktestSimulator.js [--nav 1000000]

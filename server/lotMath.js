@@ -127,7 +127,7 @@ export function computeLotPlan(position, netLiquidity) {
     // pass would compute the algorithmic count and overwrite the rebalance
     // every tick. Locked-in by computeCatchUpRebalance + lotFillRecorder
     // step-6 logic.
-    const effectiveTarget = fill.rebalancedFromCatchUp && Number.isFinite(+fill.targetShares)
+    const effectiveTarget = (fill.rebalancedFromCatchUp || fill.rebalancedFromSlippage) && Number.isFinite(+fill.targetShares)
       ? +fill.targetShares
       : tgt;
     cumulative        += effectiveTarget;

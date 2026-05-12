@@ -5931,6 +5931,24 @@ app.post('/api/admin/outbox-purge-pending', authenticateJWT, requireAdmin, async
   }
 });
 
+app.post('/api/admin/outbox-clear-stale', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const ticker = (req.body?.ticker || '').toUpperCase();
+    const filter = { ownerId: userId, status: { $in: ['EXECUTING', 'FAILED', 'STUCK'] } };
+    if (ticker) filter['request.ticker'] = ticker;
+    const count = await db.collection('pnthr_ibkr_outbox').countDocuments(filter);
+    const r = await db.collection('pnthr_ibkr_outbox').updateMany(filter, {
+      $set: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: 'ADMIN_CLEAR_STALE' },
+    });
+    res.json({ ticker: ticker || 'ALL', cleared: r.modifiedCount, matched: count });
+  } catch (err) {
+    console.error('[admin/outbox-clear-stale]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4 — outbox processing health snapshot. Returns most-recent DONE/FAILED
 // timestamps + status counts so we can tell at a glance whether the bridge is
 // draining the queue. If "minutesSinceLastDone" > 5 during market hours, the

@@ -474,9 +474,9 @@ export default function AiOrdersPage() {
       {orders.length > 0 && (
         <div style={{
           display: 'flex', alignItems: 'baseline', gap: 10, margin: '24px 0 8px',
-          borderBottom: '2px solid #fcf000', paddingBottom: 6,
+          borderBottom: '2px solid #f97316', paddingBottom: 6,
         }}>
-          <h2 style={{ color: '#fcf000', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>2 · Weekly Signal Orders</h2>
+          <h2 style={{ color: '#f97316', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>2 · Weekly Signal Orders</h2>
           <span style={{ color: '#888', fontSize: 11 }}>Confirmed weekly BL/SS signals — full position sizing</span>
         </div>
       )}
@@ -583,9 +583,9 @@ export default function AiOrdersPage() {
       <div style={{ marginTop: 24 }}>
         <div style={{
           display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8,
-          borderBottom: '2px solid #f97316', paddingBottom: 6,
+          borderBottom: '2px solid #fcf000', paddingBottom: 6,
         }}>
-          <h2 style={{ color: '#f97316', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>3 · PNTHR Live Positions</h2>
+          <h2 style={{ color: '#fcf000', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>3 · PNTHR Live Positions</h2>
           <span style={{ color: '#888', fontSize: 11 }}>IBKR ↔ PNTHR source-of-truth reconciliation</span>
         </div>
         <AssistantLiveTable

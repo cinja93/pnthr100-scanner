@@ -2113,6 +2113,21 @@ app.post('/api/admin/run-ai-scout-conversions', authenticateJWT, requireAdmin, a
   }
 });
 
+app.post('/api/admin/cleanup-carnivore-scouts', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const col = db.collection('pnthr_ai_scouts');
+    const result = await col.updateMany(
+      { status: 'ACTIVE', ticker: { $in: ['NVDA', 'ROK', 'CDNS', 'SNPS', 'PANW'] } },
+      { $set: { status: 'CLOSED', closeReason: 'CARNIVORE_CLEANUP', closeDate: new Date().toISOString().slice(0, 10) } }
+    );
+    res.json({ ok: true, modifiedCount: result.modifiedCount });
+  } catch (err) {
+    console.error('[Admin] cleanup-carnivore-scouts failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/admin/set-user-nav', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { userId, nav } = req.body;

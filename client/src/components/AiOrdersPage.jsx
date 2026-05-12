@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchLatestAiOrders, runAiOrders } from '../services/api';
+import { fetchLatestAiOrders, runAiOrders, fetchNav } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import { computeWeeksAgo } from '../utils/dateUtils';
 
@@ -71,6 +71,7 @@ export default function AiOrdersPage() {
   const [chartIndex, setChartIndex] = useState(0);
   const [running, setRunning] = useState(false);
   const [runMsg, setRunMsg] = useState(null);
+  const [userNav, setUserNav] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -81,9 +82,16 @@ export default function AiOrdersPage() {
   };
   useEffect(() => {
     load();
-    const id = setInterval(load, 60_000); // 60s refresh
+    fetchNav().then(d => setUserNav(d?.nav || 100000)).catch(() => {});
+    const id = setInterval(load, 60_000);
     return () => clearInterval(id);
   }, []);
+
+  const navScale = useMemo(() => {
+    const assumed = doc?.assumedNav || 100000;
+    const actual  = userNav || 100000;
+    return actual / assumed;
+  }, [doc, userNav]);
 
   const orders = useMemo(() => {
     if (!doc?.orders) return [];
@@ -92,8 +100,13 @@ export default function AiOrdersPage() {
       if (filter === 'ss')  return o.signal === 'SS';
       if (filter === 'new') return o.isNewSignal;
       return true;
-    });
-  }, [doc, filter]);
+    }).map(o => ({
+      ...o,
+      lot1Shares: Math.max(1, Math.round(o.lot1Shares * navScale)),
+      lot1Dollar: +(o.lot1Dollar * navScale).toFixed(2),
+      targetShares: Math.max(1, Math.round(o.targetShares * navScale)),
+    }));
+  }, [doc, filter, navScale]);
 
   const onRun = async () => {
     setRunning(true);
@@ -245,7 +258,7 @@ export default function AiOrdersPage() {
 
       {/* Footer note */}
       <div style={{ marginTop: 16, fontSize: 11, color: '#666', lineHeight: 1.6 }}>
-        Sized at 1% NAV vitality × sector multiplier on a $1M reference NAV. Lot 1 = 35% of full target.
+        Sized at 1% NAV vitality × sector multiplier on your ${(userNav || 100000).toLocaleString()} NAV. Lot 1 = 35% of full target.
         BL skipped if sector NO_GO (cooling) · SS skipped if sector GO (heating).
         Sector rank refreshes daily ~5:30pm ET after constituent close.
       </div>

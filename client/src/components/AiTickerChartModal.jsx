@@ -442,7 +442,7 @@ function ChartPanel({
             />
           </span>
           <span style={{ color: '#888' }}>Sh <strong style={{ color: '#fff' }}>{sizePanel.totalShares.toLocaleString()}</strong></span>
-          <span style={{ color: '#888' }}>L1 <strong style={{ color: '#fcf000' }}>{sizePanel.lot1Shares.toLocaleString()}</strong></span>
+          <span style={{ color: '#888', border: '1px solid #fcf000', borderRadius: 3, padding: '1px 6px' }}>L1 <strong style={{ color: '#fcf000' }}>{sizePanel.lot1Shares.toLocaleString()}</strong></span>
           <span style={{ color: '#888' }}>Risk <strong style={{ color: '#dc2626' }}>${sizePanel.risk$.toLocaleString()}</strong></span>
           <span style={{ color: '#888' }}>Vit <strong style={{ color: '#fff' }}>{(sizePanel.vitalityPct * 100).toFixed(1)}%</strong></span>
           {sizePanel.gapPct > 0 && (

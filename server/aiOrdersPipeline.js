@@ -26,7 +26,7 @@ const COLL_AI_ORDERS = 'pnthr_ai_orders';
 // Vitality: 1% NAV per trade (× sector multiplier)
 const NAV_VITALITY_PCT  = 0.01;
 const TICKER_CAP_PCT    = 0.10;
-const ASSUMED_NAV       = 60_000; // Brennan's VIP account size
+const ASSUMED_NAV       = 100_000; // reference NAV; frontend scales to user's actual NAV
 
 // Build ticker → metadata once
 const TICKER_META = {};

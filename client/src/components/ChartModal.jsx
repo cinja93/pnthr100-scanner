@@ -1307,7 +1307,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
                 <div style={{ display: 'flex', gap: 28, alignItems: 'baseline' }}>
                   <div>
                     <span style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em' }}>LOT 1</span>
-                    <span style={{ fontSize: 16, fontWeight: 800, color: '#e8e6e3', fontFamily: 'monospace', marginLeft: 8 }}>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: '#e8e6e3', fontFamily: 'monospace', marginLeft: 8, border: '1px solid #fcf000', borderRadius: 3, padding: '1px 6px' }}>
                       {sizePanel.lot1Shares} shr
                     </span>
                     <span style={{ fontSize: 13, color: '#888', fontFamily: 'monospace', marginLeft: 6 }}>

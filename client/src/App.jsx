@@ -1101,10 +1101,10 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
     <div className="app" style={isImpersonating ? { paddingTop: IMPERSONATION_BANNER_HEIGHT } : undefined}>
       {/* Top-of-app trendline-break banner. Polls every 30s; admin-only.
           Click "View on Assistant" to jump to the full alerts list. */}
-      {isAuthenticated && (
+      {isAuthenticated && !isImpersonating && (
         <TrendlineAlertBanner onNavigateToAssistant={() => navigate('assistant')} />
       )}
-      {isAuthenticated && <MoversAlertBanner onTickerClick={(ticker) => {
+      {isAuthenticated && !isImpersonating && <MoversAlertBanner onTickerClick={(ticker) => {
         setChartStocks([{ ticker }]);
         setChartIndex(0);
       }} />}
@@ -1112,7 +1112,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
       <div className="content-wrapper">
         {/* Lot Ready banner — visible on all pages when a pyramid lot is triggered */}
-        {isAuthenticated && visibleLotAlerts.length > 0 && (
+        {isAuthenticated && !isImpersonating && visibleLotAlerts.length > 0 && (
           <div style={{
             background: 'linear-gradient(90deg, rgba(40,167,69,0.15), rgba(40,167,69,0.05))',
             borderBottom: '1px solid rgba(40,167,69,0.3)',
@@ -1171,7 +1171,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         )}
 
         {/* ── 21H EMA Crossover Alerts — fires when price crosses 21H EMA on active positions ── */}
-        {isAuthenticated && visibleEmaAlerts.length > 0 && (
+        {isAuthenticated && !isImpersonating && visibleEmaAlerts.length > 0 && (
           <>
             <div style={{
               background: 'rgba(30,30,30,0.95)',
@@ -1210,7 +1210,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         )}
 
         {/* ── IBKR Discrepancy Banners — admin-only (broker reconciliation tooling) ── */}
-        {isAdmin && visibleDiscrepancies.length > 0 && (
+        {isAdmin && !isImpersonating && visibleDiscrepancies.length > 0 && (
           <>
             {/* Header bar when 3+ issues — shows count + dismiss all */}
             {visibleDiscrepancies.length >= 3 && (

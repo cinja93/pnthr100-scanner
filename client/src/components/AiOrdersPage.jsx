@@ -119,6 +119,7 @@ const ORDER_ACCESSORS = {
   riskPct:    o => o.riskPct,
   entrySh:    o => o.scoutShares,
   entryDol:   o => o.isScoutEntry ? o.scoutDollar : o.lot1Dollar,
+  heat:       o => o._heatDollar ?? 0,
   signalDate: o => o.signalDate || '',
   status:     o => o.isNewSignal ? 0 : 1,
 };
@@ -152,6 +153,7 @@ export default function AiOrdersPage() {
   const [userNav, setUserNav] = useState(null);
   const [orderSort, toggleOrderSort] = useSort('action', 'asc');
   const [scoutSort, toggleScoutSort] = useSort('status', 'asc');
+  const [heatData, setHeatData] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -190,6 +192,8 @@ export default function AiOrdersPage() {
       const isScoutEntry = o.signal === 'BL';
       const scoutShares = isScoutEntry ? Math.max(1, Math.round(fullL1 * 0.50)) : fullL1;
       const scoutDollar = +(scoutShares * (o.currentPrice || 0)).toFixed(2);
+      const riskPerShare = o.riskPerShare || 0;
+      const _heatDollar = +(scoutShares * riskPerShare).toFixed(2);
       return {
         ...o,
         lot1Shares: fullL1,
@@ -198,6 +202,7 @@ export default function AiOrdersPage() {
         lot1Dollar: +(o.lot1Dollar * navScale).toFixed(2),
         targetShares: Math.max(1, Math.round(o.targetShares * navScale)),
         isScoutEntry,
+        _heatDollar,
       };
     });
     return sortRows(filtered, orderSort, ORDER_ACCESSORS);
@@ -318,6 +323,47 @@ export default function AiOrdersPage() {
       )}
       {runMsg && <div style={{ fontSize: 11, color: '#fcf000' }}>{runMsg}</div>}
 
+      {/* Heat Budget Bar */}
+      {heatData && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', margin: '12px 0',
+          background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 6,
+          fontSize: 12, fontFamily: 'monospace',
+        }}>
+          <span style={{ color: '#f97316', fontWeight: 700, fontSize: 11, letterSpacing: '0.06em' }}>PORTFOLIO HEAT</span>
+          <div style={{ flex: 1, height: 14, background: '#0a0a0a', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
+            <div style={{
+              height: '100%', borderRadius: 3, transition: 'width 0.3s',
+              width: `${Math.min(100, heatData.totalRiskPct)}%`,
+              background: heatData.totalRiskPct >= 10 ? '#dc2626'
+                : heatData.totalRiskPct >= 8 ? '#f97316'
+                : heatData.totalRiskPct >= 5 ? '#fcf000'
+                : '#16a34a',
+            }} />
+            <div style={{
+              position: 'absolute', left: '100%', top: 0, bottom: 0, width: 2,
+              background: '#dc2626', marginLeft: -2,
+            }} title="10% cap" />
+          </div>
+          <span style={{
+            color: heatData.totalRiskPct >= 10 ? '#dc2626' : heatData.totalRiskPct >= 8 ? '#f97316' : '#aaa',
+            fontWeight: 700, minWidth: 60, textAlign: 'right',
+          }}>
+            {heatData.totalRiskPct.toFixed(1)}% / 10%
+          </span>
+          <span style={{ color: '#666', fontSize: 11 }}>
+            {fmtUsd(heatData.totalRisk)} risk · {fmtUsd(heatData.nav)} NAV
+            {heatData.recycled > 0 && <span style={{ color: '#16a34a' }}> · {heatData.recycled} recycled</span>}
+          </span>
+          {heatData.totalRiskPct >= 10 && (
+            <span style={{
+              padding: '2px 8px', background: '#dc2626', color: '#fff', borderRadius: 3,
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+            }}>CAP REACHED — NO NEW ENTRIES</span>
+          )}
+        </div>
+      )}
+
       {loading && !doc && <div style={{ color: '#666', padding: 20 }}>Loading orders…</div>}
       {error && <div style={{ color: '#dc2626', padding: 20 }}>{error}</div>}
       {doc && doc.orders?.length === 0 && (
@@ -353,6 +399,7 @@ export default function AiOrdersPage() {
                 <SortHeader label="Risk %"      sortKey="riskPct"    currentSort={orderSort} onSort={toggleOrderSort} align="right" />
                 <SortHeader label="Entry sh"    sortKey="entrySh"    currentSort={orderSort} onSort={toggleOrderSort} align="right" />
                 <SortHeader label="Entry $"     sortKey="entryDol"   currentSort={orderSort} onSort={toggleOrderSort} align="right" />
+                <SortHeader label="Heat $"      sortKey="heat"       currentSort={orderSort} onSort={toggleOrderSort} align="right" />
                 <SortHeader label="Signal Date" sortKey="signalDate" currentSort={orderSort} onSort={toggleOrderSort} />
                 <SortHeader label="Status"      sortKey="status"     currentSort={orderSort} onSort={toggleOrderSort} />
               </tr>
@@ -420,6 +467,7 @@ export default function AiOrdersPage() {
                     {o.isScoutEntry && <span style={{ color: '#00e5ff', fontSize: 9, marginLeft: 3 }} title={`Full L1: ${o.lot1Shares}`}>50%</span>}
                   </td>
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.isScoutEntry ? o.scoutDollar : o.lot1Dollar, { k: true })}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right', color: '#f97316', fontWeight: 600 }}>{fmtUsd(o._heatDollar)}</td>
                   <td style={{ padding: '6px 10px', color: '#888' }}>{o.signalDate || '—'}</td>
                   <td style={{ padding: '6px 10px' }}>
                     {o.isNewSignal
@@ -549,6 +597,17 @@ export default function AiOrdersPage() {
             } else if (stocks?.ticker) {
               setChartTickers([stocks.ticker]);
               setChartIndex(0);
+            }
+          }}
+          onPositionsSummary={(pos) => {
+            if (pos?.heat) {
+              setHeatData({
+                totalRisk: pos.heat.totalRisk || 0,
+                totalRiskPct: pos.heat.totalRiskPct || 0,
+                nav: pos.nav || userNav || 100000,
+                recycled: pos.recycled || 0,
+                total: pos.total || 0,
+              });
             }
           }}
         />

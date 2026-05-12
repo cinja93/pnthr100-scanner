@@ -196,6 +196,10 @@ export async function runAiOrdersPipeline(opts = {}) {
       else if (gapPct >= 12 && wEmaSlope < 20) qualityGrade = 'GOOD';
     }
 
+    const scoutShares = isLong ? Math.max(1, Math.round(lot1Shares * 0.50)) : lot1Shares;
+    const heatDollar = +(scoutShares * riskPerShare).toFixed(2);
+    const heatPctNav = +((heatDollar / ASSUMED_NAV) * 100).toFixed(3);
+
     orders.push({
       ticker,
       companyName: meta.companyName || null,
@@ -219,6 +223,8 @@ export async function runAiOrdersPipeline(opts = {}) {
       gapPct,
       wEmaSlope,
       qualityGrade,
+      heatDollar,
+      heatPctNav,
     });
   }
 

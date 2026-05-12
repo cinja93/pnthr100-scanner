@@ -6007,6 +6007,104 @@ app.post('/api/admin/outbox-clear-stale', authenticateJWT, requireAdmin, async (
   }
 });
 
+// Close ghost positions — tickers that are ACTIVE in PNTHR but user has zero
+// shares in TWS. Marks positions CLOSED with GHOST_RECONCILE exit reason,
+// cancels all PENDING outbox records for those tickers, and syncs journal.
+// Body: { tickers: ["QTUM","RSPT"], dryRun?: bool }
+app.post('/api/admin/close-ghost-positions', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const tickers = (req.body?.tickers || []).map(t => t.toUpperCase());
+    const dryRun = req.body?.dryRun === true;
+    if (!tickers.length) return res.status(400).json({ error: 'tickers array required' });
+
+    const results = [];
+    for (const ticker of tickers) {
+      const positions = await db.collection('pnthr_portfolio').find({
+        ownerId: userId,
+        ticker,
+        status: { $in: ['ACTIVE', 'PARTIAL'] },
+      }).toArray();
+
+      const pendingCount = await db.collection('pnthr_ibkr_outbox').countDocuments({
+        ownerId: userId,
+        'request.ticker': ticker,
+        status: 'PENDING',
+      });
+
+      if (!dryRun) {
+        for (const pos of positions) {
+          const fills = pos.fills || {};
+          const filledShr = Object.values(fills).reduce((s, f) => s + (f.filled ? (+f.shares || 0) : 0), 0);
+          const totalCost = Object.values(fills).reduce((s, f) => s + (f.filled ? (+f.shares || 0) * (+f.price || 0) : 0), 0);
+          const avgCost = filledShr > 0 ? totalCost / filledShr : pos.entryPrice;
+          const exitPrice = pos.stopPrice || avgCost;
+          const isLong = pos.direction === 'LONG';
+          const profitDollar = isLong ? (exitPrice - avgCost) * filledShr : (avgCost - exitPrice) * filledShr;
+          const profitPct = avgCost > 0 ? (isLong ? (exitPrice - avgCost) / avgCost * 100 : (avgCost - exitPrice) / avgCost * 100) : 0;
+          const holdingDays = Math.floor((Date.now() - new Date(pos.createdAt).getTime()) / 86400000);
+
+          await db.collection('pnthr_portfolio').updateOne({ _id: pos._id }, {
+            $set: {
+              status: 'CLOSED', closedAt: new Date(), updatedAt: new Date(),
+              outcome: {
+                exitPrice: +exitPrice.toFixed(2),
+                profitPct: +profitPct.toFixed(2),
+                profitDollar: +profitDollar.toFixed(2),
+                holdingDays,
+                exitReason: 'GHOST_RECONCILE',
+              },
+            },
+          });
+
+          try {
+            const { createJournalEntry } = await import('./journalService.js');
+            const closedPos = await db.collection('pnthr_portfolio').findOne({ _id: pos._id });
+            await createJournalEntry(db, closedPos, userId);
+            await db.collection('pnthr_journal').updateOne(
+              { positionId: pos.id.toString(), ownerId: userId },
+              {
+                $set: {
+                  'performance.status': 'CLOSED',
+                  'performance.remainingShares': 0,
+                  'performance.avgExitPrice': +exitPrice.toFixed(2),
+                  'performance.realizedPnlDollar': +profitDollar.toFixed(2),
+                  'performance.realizedPnlPct': +profitPct.toFixed(2),
+                  closedAt: new Date(),
+                  updatedAt: new Date(),
+                },
+              }
+            );
+          } catch (journalErr) {
+            console.error(`[close-ghost] journal sync failed for ${ticker}:`, journalErr.message);
+          }
+        }
+
+        if (pendingCount > 0) {
+          await db.collection('pnthr_ibkr_outbox').updateMany(
+            { ownerId: userId, 'request.ticker': ticker, status: 'PENDING' },
+            { $set: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: 'GHOST_POSITION_CLOSED' } },
+          );
+        }
+      }
+
+      results.push({
+        ticker,
+        positionsClosed: positions.length,
+        positionIds: positions.map(p => p.id),
+        pendingOutboxCancelled: pendingCount,
+      });
+      console.log(`[close-ghost] ${dryRun ? 'DRY RUN' : 'EXECUTED'} ${ticker}: ${positions.length} positions, ${pendingCount} pending outbox`);
+    }
+
+    res.json({ dryRun, results });
+  } catch (err) {
+    console.error('[admin/close-ghost-positions]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4 — outbox processing health snapshot. Returns most-recent DONE/FAILED
 // timestamps + status counts so we can tell at a glance whether the bridge is
 // draining the queue. If "minutesSinceLastDone" > 5 during market hours, the

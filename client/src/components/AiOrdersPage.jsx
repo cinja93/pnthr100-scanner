@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
 import { fetchLatestAiOrders, runAiOrders, runAiScouts, fetchNav } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
+import AssistantLiveTable from './AssistantLiveTable';
 import { computeWeeksAgo } from '../utils/dateUtils';
 
 const TIER_COLORS = {
@@ -325,7 +326,16 @@ export default function AiOrdersPage() {
         </div>
       )}
 
-      {/* Orders table */}
+      {/* Section 1: Weekly Signal Orders */}
+      {orders.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'baseline', gap: 10, margin: '16px 0 8px',
+          borderBottom: '2px solid #fcf000', paddingBottom: 6,
+        }}>
+          <h2 style={{ color: '#fcf000', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>1 · Weekly Signal Orders</h2>
+          <span style={{ color: '#888', fontSize: 11 }}>Confirmed weekly BL/SS signals — full position sizing</span>
+        </div>
+      )}
       {orders.length > 0 && (
         <div style={{ overflowX: 'auto', margin: '8px 0' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
@@ -423,12 +433,15 @@ export default function AiOrdersPage() {
         </div>
       )}
 
-      {/* Daily Cascade Scouts */}
+      {/* Section 2: Daily Cascade Scouts */}
       {scouts.length > 0 && (
         <div style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
-            <h2 style={{ color: '#00e5ff', margin: 0, fontSize: 18, letterSpacing: '0.04em' }}>Daily Cascade Scouts</h2>
-            <span style={{ color: '#888', fontSize: 12 }}>50% of Lot 1 — 28-day conversion window</span>
+          <div style={{
+            display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8,
+            borderBottom: '2px solid #00e5ff', paddingBottom: 6,
+          }}>
+            <h2 style={{ color: '#00e5ff', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>2 · Daily Cascade Scouts</h2>
+            <span style={{ color: '#888', fontSize: 11 }}>50% of Lot 1 — 28-day conversion window</span>
             <span style={{
               padding: '3px 8px', background: '#00e5ff', color: '#000', borderRadius: 3,
               fontSize: 10, fontWeight: 700,
@@ -517,6 +530,29 @@ export default function AiOrdersPage() {
           </div>
         </div>
       )}
+
+      {/* Section 3: Live Positions */}
+      <div style={{ marginTop: 24 }}>
+        <div style={{
+          display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8,
+          borderBottom: '2px solid #f97316', paddingBottom: 6,
+        }}>
+          <h2 style={{ color: '#f97316', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>3 · Live Positions</h2>
+          <span style={{ color: '#888', fontSize: 11 }}>IBKR ↔ PNTHR source-of-truth reconciliation</span>
+        </div>
+        <AssistantLiveTable
+          netLiquidity={userNav}
+          onOpenChart={(stocks, idx) => {
+            if (Array.isArray(stocks) && stocks.length > 0) {
+              setChartTickers(stocks.map(s => s.ticker || s));
+              setChartIndex(idx || 0);
+            } else if (stocks?.ticker) {
+              setChartTickers([stocks.ticker]);
+              setChartIndex(0);
+            }
+          }}
+        />
+      </div>
 
       {/* Footer note */}
       <div style={{ marginTop: 16, fontSize: 11, color: '#666', lineHeight: 1.6 }}>

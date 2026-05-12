@@ -160,7 +160,7 @@ export default function AiSectorsPage() {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const [sortBy, setSortBy]       = useState('inception');
-  const [timeRange, setTimeRange] = useState('all');
+  const [timeRange, setTimeRange] = useState('5d');
   const [openSector, setOpenSector] = useState(null);
 
   function load(forceRefresh = false, { silent = false } = {}) {

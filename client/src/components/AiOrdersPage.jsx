@@ -4,6 +4,7 @@ import { fetchLatestAiOrders, runAiOrders, runAiScouts, fetchNav } from '../serv
 import AiTickerChartModal from './AiTickerChartModal';
 import AssistantLiveTable from './AssistantLiveTable';
 import { computeWeeksAgo } from '../utils/dateUtils';
+import { getStrategyMode } from '../utils/strategyMode';
 
 const TIER_COLORS = {
   GO:      { bg: '#16a34a', fg: '#000', label: 'GO' },
@@ -80,6 +81,21 @@ function sortRows(rows, sort, accessors) {
   });
 }
 
+function ModeBadge({ ticker }) {
+  const mode = getStrategyMode(ticker);
+  return mode === 'carnivore' ? (
+    <span style={{
+      padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700,
+      letterSpacing: '0.04em', background: '#fcf000', color: '#000',
+    }}>679</span>
+  ) : (
+    <span style={{
+      padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700,
+      letterSpacing: '0.04em', background: '#00e5ff', color: '#000',
+    }}>AI</span>
+  );
+}
+
 function SectorSummaryStrip({ summary }) {
   if (!summary || (!summary.go?.length && !summary.nogo?.length)) return null;
   return (
@@ -108,6 +124,7 @@ function SectorSummaryStrip({ summary }) {
 
 const ORDER_ACCESSORS = {
   action:     o => ACTION_RANK[getActionLabel(o)] ?? 99,
+  mode:       o => getStrategyMode(o.ticker),
   signal:     o => o.signal,
   ticker:     o => o.ticker,
   sector:     o => o.sectorId,
@@ -126,6 +143,7 @@ const ORDER_ACCESSORS = {
 
 const SCOUT_ACCESSORS = {
   grade:      s => s.qualityGrade === 'BEST' ? 0 : s.qualityGrade === 'GOOD' ? 1 : 2,
+  mode:       s => getStrategyMode(s.ticker),
   status:     s => s._statusRank,
   ticker:     s => s.ticker,
   sector:     s => s.sectorId,
@@ -393,6 +411,7 @@ export default function AiOrdersPage() {
               <thead>
                 <tr style={{ background: '#1a1a1a', color: '#00e5ff', textAlign: 'left' }}>
                   <SortHeader label="Grade"      sortKey="grade"     currentSort={scoutSort} onSort={toggleScoutSort} />
+                  <SortHeader label="Mode"       sortKey="mode"      currentSort={scoutSort} onSort={toggleScoutSort} />
                   <SortHeader label="Status"     sortKey="status"    currentSort={scoutSort} onSort={toggleScoutSort} />
                   <SortHeader label="Ticker"     sortKey="ticker"    currentSort={scoutSort} onSort={toggleScoutSort} />
                   <SortHeader label="Sector"     sortKey="sector"    currentSort={scoutSort} onSort={toggleScoutSort} />
@@ -430,6 +449,7 @@ export default function AiOrdersPage() {
                          : s.qualityGrade === 'GOOD' ? <span style={{ color: '#16a34a' }} title="Gap>12%, Slope<20%">✓</span>
                          : <span style={{ color: '#666' }}>—</span>}
                       </td>
+                      <td style={{ padding: '6px 10px', textAlign: 'center' }}><ModeBadge ticker={s.ticker} /></td>
                       <td style={{ padding: '6px 10px' }}>
                         {s.status === 'CONVERTED' ? (
                           <span style={{
@@ -486,6 +506,7 @@ export default function AiOrdersPage() {
             <thead>
               <tr style={{ background: '#1a1a1a', color: '#fcf000', textAlign: 'left' }}>
                 <SortHeader label="Action"      sortKey="action"     currentSort={orderSort} onSort={toggleOrderSort} />
+                <SortHeader label="Mode"        sortKey="mode"       currentSort={orderSort} onSort={toggleOrderSort} />
                 <SortHeader label="Signal"      sortKey="signal"     currentSort={orderSort} onSort={toggleOrderSort} />
                 <SortHeader label="Ticker"      sortKey="ticker"     currentSort={orderSort} onSort={toggleOrderSort} />
                 <SortHeader label="Sector"      sortKey="sector"     currentSort={orderSort} onSort={toggleOrderSort} />
@@ -545,6 +566,7 @@ export default function AiOrdersPage() {
                       </span>
                     )}
                   </td>
+                  <td style={{ padding: '6px 10px', textAlign: 'center' }}><ModeBadge ticker={o.ticker} /></td>
                   <td style={{ padding: '6px 10px', fontWeight: 700, color: o.signal === 'BL' ? '#16a34a' : '#dc2626' }}>
                     {o.signal}
                     {(() => {

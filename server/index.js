@@ -6087,6 +6087,17 @@ app.post('/api/admin/close-ghost-positions', authenticateJWT, requireAdmin, asyn
             { $set: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: 'GHOST_POSITION_CLOSED' } },
           );
         }
+
+        // Remove stale IBKR position + stop order records for this ticker
+        await db.collection('pnthr_ibkr_positions').updateOne(
+          { ownerId: userId },
+          {
+            $pull: {
+              positions: { symbol: { $regex: new RegExp(`^${ticker}$`, 'i') } },
+              stopOrders: { symbol: { $regex: new RegExp(`^${ticker}$`, 'i') } },
+            },
+          },
+        );
       }
 
       results.push({
@@ -6094,6 +6105,7 @@ app.post('/api/admin/close-ghost-positions', authenticateJWT, requireAdmin, asyn
         positionsClosed: positions.length,
         positionIds: positions.map(p => p.id),
         pendingOutboxCancelled: pendingCount,
+        ibkrSnapshotCleaned: true,
       });
       console.log(`[close-ghost] ${dryRun ? 'DRY RUN' : 'EXECUTED'} ${ticker}: ${positions.length} positions, ${pendingCount} pending outbox`);
     }

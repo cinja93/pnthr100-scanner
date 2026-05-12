@@ -106,12 +106,21 @@ export default function AiOrdersPage() {
       if (filter === 'ss')  return o.signal === 'SS';
       if (filter === 'new') return o.isNewSignal;
       return true;
-    }).map(o => ({
-      ...o,
-      lot1Shares: Math.max(1, Math.round(o.lot1Shares * navScale)),
-      lot1Dollar: +(o.lot1Dollar * navScale).toFixed(2),
-      targetShares: Math.max(1, Math.round(o.targetShares * navScale)),
-    }));
+    }).map(o => {
+      const fullL1 = Math.max(1, Math.round(o.lot1Shares * navScale));
+      const isScoutEntry = o.signal === 'BL';
+      const scoutShares = isScoutEntry ? Math.max(1, Math.round(fullL1 * 0.50)) : fullL1;
+      const scoutDollar = +(scoutShares * (o.currentPrice || 0)).toFixed(2);
+      return {
+        ...o,
+        lot1Shares: fullL1,
+        scoutShares,
+        scoutDollar,
+        lot1Dollar: +(o.lot1Dollar * navScale).toFixed(2),
+        targetShares: Math.max(1, Math.round(o.targetShares * navScale)),
+        isScoutEntry,
+      };
+    });
   }, [doc, filter, navScale]);
 
   const onRun = async () => {
@@ -239,8 +248,8 @@ export default function AiOrdersPage() {
                 <th style={{ padding: '8px 10px', textAlign: 'right' }}>Price</th>
                 <th style={{ padding: '8px 10px', textAlign: 'right' }}>Stop</th>
                 <th style={{ padding: '8px 10px', textAlign: 'right' }}>Risk %</th>
-                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Lot 1 sh</th>
-                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Lot 1 $</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Entry sh</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Entry $</th>
                 <th style={{ padding: '8px 10px' }}>Signal Date</th>
                 <th style={{ padding: '8px 10px' }}>Status</th>
               </tr>
@@ -280,8 +289,11 @@ export default function AiOrdersPage() {
                   <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(o.currentPrice)}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.stopPrice)}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: o.riskPct > 20 ? '#fcf000' : '#aaa' }}>{o.riskPct?.toFixed(1)}%</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>{o.lot1Shares?.toLocaleString()}</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.lot1Dollar, { k: true })}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>
+                    {o.scoutShares?.toLocaleString()}
+                    {o.isScoutEntry && <span style={{ color: '#00e5ff', fontSize: 9, marginLeft: 3 }} title={`Full L1: ${o.lot1Shares}`}>50%</span>}
+                  </td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.isScoutEntry ? o.scoutDollar : o.lot1Dollar, { k: true })}</td>
                   <td style={{ padding: '6px 10px', color: '#888' }}>{o.signalDate || '—'}</td>
                   <td style={{ padding: '6px 10px' }}>
                     {o.isNewSignal

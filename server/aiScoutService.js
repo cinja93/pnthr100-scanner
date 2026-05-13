@@ -36,6 +36,7 @@ const SCOUT_SIZE_FRAC  = 0.50;
 const CONVERSION_DAYS  = 28;
 const NAV_VITALITY_PCT = 0.01;
 const TICKER_CAP_PCT   = 0.10;
+const MAX_SCOUTS_PER_DAY = 3;
 // Combo [6] filter thresholds (from APEX v6 backtest)
 const COMBO6_GAP_MIN   = 5;    // Gap 5–15% from weekly EMA
 const COMBO6_GAP_MAX   = 15;
@@ -205,11 +206,11 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
       : ((wEmaVal - closeD) / wEmaVal) * 100;
     if (gapPct < COMBO6_GAP_MIN || gapPct > COMBO6_GAP_MAX) { skipLog.comboFailed++; continue; }
 
-    // Weekly EMA slope: BL → 0–50% annualized; SS → -50–0% annualized
-    if (wEmaIdx < 8) { skipLog.comboFailed++; continue; }
-    const ema8ago = wEmaData[wEmaIdx - 8]?.value;
-    if (ema8ago == null) { skipLog.comboFailed++; continue; }
-    const wEmaSlope = ((wEmaVal - ema8ago) / ema8ago) * (52 / 8) * 100;
+    // Weekly EMA slope: 1-week delta annualized (matches APEX v6 backtest)
+    if (wEmaIdx < 1) { skipLog.comboFailed++; continue; }
+    const emaPrev = wEmaData[wEmaIdx - 1]?.value;
+    if (emaPrev == null || emaPrev <= 0) { skipLog.comboFailed++; continue; }
+    const wEmaSlope = ((wEmaVal - emaPrev) / emaPrev) * 52 * 100;
     if (isLong  && (wEmaSlope < 0 || wEmaSlope > COMBO6_SLOPE_MAX)) { skipLog.comboFailed++; continue; }
     if (!isLong && (wEmaSlope > 0 || wEmaSlope < -COMBO6_SLOPE_MAX)) { skipLog.comboFailed++; continue; }
 
@@ -264,6 +265,10 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
       updatedAt: new Date(),
     };
 
+    if (newScouts.length >= MAX_SCOUTS_PER_DAY) {
+      skipLog.maxPerDay = (skipLog.maxPerDay || 0) + 1;
+      continue;
+    }
     newScouts.push(scoutDoc);
   }
 
@@ -292,7 +297,7 @@ export async function manageActiveScouts() {
     .find({ ticker: { $in: tickers } }, { projection: { ticker: 1, daily: 1 } }).toArray();
   const dailyByTicker = Object.fromEntries(dailyDocs.map(d => [d.ticker, d.daily || []]));
 
-  let stopped = 0, timedOut = 0;
+  let stopped = 0, timedOut = 0, exited = 0;
 
   for (const scout of activeScouts) {
     const dailyRaw = dailyByTicker[scout.ticker] || [];
@@ -316,6 +321,26 @@ export async function manageActiveScouts() {
       continue;
     }
 
+    // Daily BE/SE exit check (matches APEX v6 backtest)
+    const meta = TICKER_META[scout.ticker];
+    if (meta) {
+      const period = SECTOR_EMA_PERIODS[meta.sectorId] || 30;
+      if (sorted.length >= period * 2) {
+        const dBars = sorted.map(b => ({ time: b.date, open: b.open, high: b.high, low: b.low, close: b.close }));
+        const { activeType } = detectAllSignals(dBars, period, false, 0.003, AI_GATE_OFFSET);
+        const exitSignal = scout.direction === 'LONG' ? 'BE' : 'SE';
+        if (activeType === exitSignal || activeType === (scout.direction === 'LONG' ? 'SE' : 'BE')) {
+          await col.updateOne({ _id: scout._id }, { $set: {
+            status: 'CLOSED', closeReason: scout.direction === 'LONG' ? 'DAILY_BE' : 'DAILY_SE',
+            closeDate: lastBar.date, closePrice: +lastBar.close.toFixed(2),
+            tradingDaysOpen: daysAfterEntry, updatedAt: new Date(),
+          }});
+          exited++;
+          continue;
+        }
+      }
+    }
+
     // Timeout check
     if (daysAfterEntry >= CONVERSION_DAYS) {
       await col.updateOne({ _id: scout._id }, { $set: {
@@ -332,9 +357,9 @@ export async function manageActiveScouts() {
     }});
   }
 
-  const remaining = activeScouts.length - stopped - timedOut;
-  console.log(`[AI Scouts] manage: ${stopped} stopped, ${timedOut} timed out, ${remaining} active`);
-  return { stopped, timedOut, active: remaining };
+  const remaining = activeScouts.length - stopped - timedOut - exited;
+  console.log(`[AI Scouts] manage: ${stopped} stopped, ${exited} exited (BE/SE), ${timedOut} timed out, ${remaining} active`);
+  return { stopped, exited, timedOut, active: remaining };
 }
 
 // ── Check for conversions (runs daily) ───────────────────────────────────────
@@ -379,7 +404,7 @@ export async function checkConversions() {
       status: 'CONVERTED',
       mode: 'CONVERTED',
       conversionDate: todayStr,
-      conversionWeeklySignalDate: sigMonday || todayStr,
+      conversionWeeklySignalDate: sig.signalDate || todayStr,
       updatedAt: new Date(),
     }});
 

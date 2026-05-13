@@ -387,11 +387,6 @@ export async function autoExecuteWeeklyOrders(opts = {}) {
   const qualifiedOrders = (orderDoc.orders || []).filter(o => {
     if (!o.isNewSignal) return false;
     if (o.signal !== 'BL' && o.signal !== 'SS') return false;
-    // Quality gate: BL needs BEST or GOOD; SS enters regardless (regime-gated upstream)
-    if (o.signal === 'BL') {
-      const label = o.qualityGrade;
-      if (label !== 'BEST' && label !== 'GOOD') return false;
-    }
     return true;
   });
 

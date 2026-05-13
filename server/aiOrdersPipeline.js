@@ -142,9 +142,9 @@ export async function runAiOrdersPipeline(opts = {}) {
     const gapPct = ((livePrice - lastEma.value) / lastEma.value) * 100;
     const idx = wEmaData.length - 1;
     let slope = null;
-    if (idx >= 8) {
-      const ema8ago = wEmaData[idx - 8]?.value;
-      if (ema8ago) slope = ((lastEma.value - ema8ago) / ema8ago) * (52 / 8) * 100;
+    if (idx >= 1) {
+      const emaPrev = wEmaData[idx - 1]?.value;
+      if (emaPrev && emaPrev > 0) slope = ((lastEma.value - emaPrev) / emaPrev) * 52 * 100;
     }
     return { gapPct: +gapPct.toFixed(2), wEmaSlope: slope != null ? +slope.toFixed(2) : null };
   }
@@ -166,6 +166,7 @@ export async function runAiOrdersPipeline(opts = {}) {
     // Regime hard gate: carnivore tickers use SPY/QQQ, AI 300 tickers use PAI300
     const regimeBull = isCarnivoreMode(ticker) ? spyQqqBull : (pai300Bull !== false);
     if (isLong && !regimeBull) { skipLog.blRegimeBlocked++; continue; }
+    if (!isLong && regimeBull) { skipLog.ssRegimeBlocked = (skipLog.ssRegimeBlocked || 0) + 1; continue; }
 
     const mult = isLong ? blMult(tier) : ssMult(tier);
 
@@ -213,8 +214,7 @@ export async function runAiOrdersPipeline(opts = {}) {
       else if (absGap >= 12 && absSlope < 50) qualityGrade = 'BETTER';
     }
 
-    const scoutShares = Math.max(1, Math.round(lot1Shares * 0.50));
-    const heatDollar = +(scoutShares * riskPerShare).toFixed(2);
+    const heatDollar = +(lot1Shares * riskPerShare).toFixed(2);
     const heatPctNav = +((heatDollar / ASSUMED_NAV) * 100).toFixed(3);
 
     orders.push({

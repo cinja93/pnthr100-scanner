@@ -141,8 +141,8 @@ const ORDER_ACCESSORS = {
   price:      o => o.currentPrice,
   stop:       o => o.stopPrice,
   riskPct:    o => o.riskPct,
-  entrySh:    o => o.scoutShares,
-  entryDol:   o => o.isScoutEntry ? o.scoutDollar : o.lot1Dollar,
+  entrySh:    o => o.lot1Shares,
+  entryDol:   o => o.lot1Dollar,
   heat:       o => o._heatDollar ?? 0,
   signalDate: o => o.signalDate || '',
   status:     o => o.isNewSignal ? 0 : 1,
@@ -214,19 +214,13 @@ export default function AiOrdersPage() {
       return true;
     }).map(o => {
       const fullL1 = Math.max(1, Math.round(o.lot1Shares * navScale));
-      const isScoutEntry = true;
-      const scoutShares = Math.max(1, Math.round(fullL1 * 0.50));
-      const scoutDollar = +(scoutShares * (o.currentPrice || 0)).toFixed(2);
       const riskPerShare = o.riskPerShare || 0;
-      const _heatDollar = +(scoutShares * riskPerShare).toFixed(2);
+      const _heatDollar = +(fullL1 * riskPerShare).toFixed(2);
       return {
         ...o,
         lot1Shares: fullL1,
-        scoutShares,
-        scoutDollar,
         lot1Dollar: +(o.lot1Dollar * navScale).toFixed(2),
         targetShares: Math.max(1, Math.round(o.targetShares * navScale)),
-        isScoutEntry,
         _heatDollar,
       };
     });
@@ -603,10 +597,9 @@ export default function AiOrdersPage() {
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.stopPrice)}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: o.riskPct > 20 ? '#fcf000' : '#aaa' }}>{o.riskPct?.toFixed(1)}%</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right' }}>
-                    {o.scoutShares?.toLocaleString()}
-                    {o.isScoutEntry && <span style={{ color: '#00e5ff', fontSize: 9, marginLeft: 3 }} title={`Full L1: ${o.lot1Shares}`}>50%</span>}
+                    {o.lot1Shares?.toLocaleString()}
                   </td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.isScoutEntry ? o.scoutDollar : o.lot1Dollar, { k: true })}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.lot1Dollar, { k: true })}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: '#f97316', fontWeight: 600 }}>{fmtUsd(o._heatDollar)}</td>
                   <td style={{ padding: '6px 10px', color: '#888' }}>{o.signalDate || '—'}</td>
                   <td style={{ padding: '6px 10px' }}>

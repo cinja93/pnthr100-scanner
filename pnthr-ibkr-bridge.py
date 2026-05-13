@@ -65,6 +65,7 @@ IBKR_WRITES_ENABLED = os.getenv('IBKR_WRITES_ENABLED', 'false').lower() == 'true
 # Useful to verify the wire format before flipping IBKR_WRITES_ENABLED.
 IBKR_WRITES_DRY_RUN = os.getenv('IBKR_WRITES_DRY_RUN', 'true').lower() == 'true'
 OUTBOX_POLL_SEC     = int(os.getenv('OUTBOX_POLL_SEC', '30'))
+OUTBOX_STALE_SEC    = int(os.getenv('OUTBOX_STALE_SEC', '600'))  # 10 min
 
 # Rate limits — hard-coded per the locked design (PLAN_2026-04-29.md universal
 # guardrails). Bridge enforces these even if server-side enqueue ever bypasses
@@ -900,7 +901,8 @@ def outbox_poller_loop(app, rate_limiter, stop_event):
     """Background thread: polls outbox and dispatches write commands."""
     print(f"[OUTBOX] Poller starting — every {OUTBOX_POLL_SEC}s | "
           f"writes={'ENABLED' if IBKR_WRITES_ENABLED else 'DISABLED'} | "
-          f"dryRun={'ON' if IBKR_WRITES_DRY_RUN else 'OFF'}")
+          f"dryRun={'ON' if IBKR_WRITES_DRY_RUN else 'OFF'} | "
+          f"staleGuard={OUTBOX_STALE_SEC}s")
     while not stop_event.is_set():
         try:
             if not IBKR_WRITES_ENABLED:
@@ -921,6 +923,26 @@ def outbox_poller_loop(app, rate_limiter, stop_event):
                 cmd_id = cmd.get('id')
                 if not cmd_id:
                     continue
+                # Staleness guard — refuse to execute commands that have been
+                # sitting in the queue too long. The crons re-enqueue fresh
+                # commands every minute, so anything stale is outdated.
+                created_at = cmd.get('createdAt')
+                if created_at and OUTBOX_STALE_SEC > 0:
+                    try:
+                        if isinstance(created_at, str):
+                            created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                        else:
+                            created_dt = created_at
+                        age_sec = (datetime.now(timezone.utc) - created_dt).total_seconds()
+                        if age_sec > OUTBOX_STALE_SEC:
+                            ticker = cmd.get('request', {}).get('ticker', '?')
+                            _outbox_post(f"/api/admin/ibkr-outbox/{cmd_id}/failed",
+                                         body={'error': f'STALE:{int(age_sec)}s > {OUTBOX_STALE_SEC}s limit'})
+                            print(f"[OUTBOX] ⏰ STALE {cmd['command']} {ticker} — {int(age_sec)}s old, skipped")
+                            continue
+                    except Exception as e:
+                        print(f"[OUTBOX] ⚠ staleness check failed for {cmd_id}: {e} — proceeding")
+
                 # Lock the row before executing — prevents double-execution
                 # if multiple bridges (paper + live, future) ever poll at once.
                 if not _outbox_post(f"/api/admin/ibkr-outbox/{cmd_id}/executing"):
@@ -953,6 +975,7 @@ def main():
     print(f"  Sync:   every {SYNC_INTERVAL}s  |  Outbox poll: every {OUTBOX_POLL_SEC}s")
     print(f"  Phase 4 writes: {'ENABLED' if IBKR_WRITES_ENABLED else 'DISABLED'}"
           f"{'  (DRY-RUN)' if IBKR_WRITES_ENABLED and IBKR_WRITES_DRY_RUN else ''}")
+    print(f"  Staleness guard: {OUTBOX_STALE_SEC}s (commands older than {OUTBOX_STALE_SEC // 60}min auto-rejected)")
     print("=" * 60)
 
     if not PNTHR_TOKEN:

@@ -36,7 +36,7 @@ import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrA
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './aiOrdersPipeline.js';
-import { autoExecuteAiOrders, autoExecuteWeeklyOrders } from './aiAutoExecute.js';
+import { autoExecuteAiOrders, autoExecuteWeeklyOrders, stageWeeklyOrders, executeWeeklyOrders } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { runAiWeeklyRatchet, runAiStaleHuntCheck } from './aiPositionManager.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
@@ -5531,13 +5531,17 @@ cron.schedule('15 16 * * 1-5', async () => {
       const ordersDoc = await runAiOrdersPipeline({ type: 'DAILY' });
       console.log(`[AI Orders] done: ${ordersDoc.stats.totalOrders} orders this week`);
     } catch (e) { console.error('[CRON] AI Orders pipeline failed:', e.message); }
-    // Auto-execute weekly orders (sector rotation gated, APEX v7)
-    try {
-      const execResult = await autoExecuteWeeklyOrders();
-      if (execResult.skipped !== 'DISABLED') {
-        console.log(`[AI AutoExec] Weekly direct ${execResult.dryRun ? 'DRY-RUN' : 'LIVE'}: ${execResult.positions.length} positions, ${execResult.outbox.length} outbox, ${execResult.skipped.length} skipped`);
-      }
-    } catch (e) { console.error('[CRON] AI AutoExec weekly failed:', e.message); }
+    // Stage weekly orders on FRIDAY ONLY — creates STAGED positions from order sheet.
+    // Execution happens Monday 9:35 AM via separate cron (executeWeeklyOrders).
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
+    if (today === 'Friday') {
+      try {
+        const stageResult = await stageWeeklyOrders();
+        if (stageResult.skipped !== 'DISABLED') {
+          console.log(`[AI AutoExec] STAGED ${stageResult.dryRun ? '(DRY-RUN)' : ''}: ${stageResult.staged.length} positions staged for Monday, ${stageResult.skippedOrders.length} skipped`);
+        }
+      } catch (e) { console.error('[CRON] AI AutoExec staging failed:', e.message); }
+    }
   } finally {
     aiUniverseDailyRunning = false;
   }
@@ -5550,6 +5554,17 @@ cron.schedule('32 16 * * 1-5', async () => {
     const result = await runAiStaleHuntCheck();
     console.log(`[AI PosManager] stale hunt: ${result.staleExits || 0} exits`);
   } catch (e) { console.error('[CRON] AI stale hunt failed:', e.message); }
+}, { timezone: 'America/New_York' });
+
+// ── Cron: AI 300 Monday execution — promotes STAGED → ACTIVE, enqueues orders
+cron.schedule('35 9 * * 1', async () => {
+  try {
+    console.log('[AI AutoExec] Monday execution — promoting STAGED positions...');
+    const result = await executeWeeklyOrders();
+    if (result.skipped !== 'DISABLED') {
+      console.log(`[AI AutoExec] Monday exec ${result.dryRun ? 'DRY-RUN' : 'LIVE'}: ${result.executed?.length || 0} executed, ${result.skippedPositions?.length || 0} skipped`);
+    }
+  } catch (e) { console.error('[CRON] AI Monday execution failed:', e.message); }
 }, { timezone: 'America/New_York' });
 
 // ── Cron: AI 300 weekly stop ratchet + structural exit — Friday 4:35pm ET

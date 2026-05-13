@@ -415,7 +415,7 @@ export default function AiOrdersPage() {
                   <SortHeader label="Status"     sortKey="status"    currentSort={scoutSort} onSort={toggleScoutSort} />
                   <SortHeader label="Ticker"     sortKey="ticker"    currentSort={scoutSort} onSort={toggleScoutSort} />
                   <SortHeader label="Sector"     sortKey="sector"    currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Tier"       sortKey="tier"      currentSort={scoutSort} onSort={toggleScoutSort} />
+                  <SortHeader label="Sector 💪"  sortKey="tier"      currentSort={scoutSort} onSort={toggleScoutSort} />
                   <SortHeader label="Entry"      sortKey="entry"     currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
                   <SortHeader label="Stop"       sortKey="stop"      currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
                   <SortHeader label="Scout sh"   sortKey="scoutSh"   currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
@@ -510,7 +510,7 @@ export default function AiOrdersPage() {
                 <SortHeader label="Signal"      sortKey="signal"     currentSort={orderSort} onSort={toggleOrderSort} />
                 <SortHeader label="Ticker"      sortKey="ticker"     currentSort={orderSort} onSort={toggleOrderSort} />
                 <SortHeader label="Sector"      sortKey="sector"     currentSort={orderSort} onSort={toggleOrderSort} />
-                <SortHeader label="Tier"        sortKey="tier"       currentSort={orderSort} onSort={toggleOrderSort} />
+                <SortHeader label="Sector 💪"   sortKey="tier"       currentSort={orderSort} onSort={toggleOrderSort} />
                 <SortHeader label="Gap %"       sortKey="gapPct"     currentSort={orderSort} onSort={toggleOrderSort} align="right" />
                 <SortHeader label="Slope %"     sortKey="slope"      currentSort={orderSort} onSort={toggleOrderSort} align="right" />
                 <SortHeader label="Price"       sortKey="price"      currentSort={orderSort} onSort={toggleOrderSort} align="right" />

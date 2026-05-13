@@ -2035,10 +2035,11 @@ app.get('/api/ai-orders/history', async (req, res) => {
 app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const doc = await runAiOrdersPipeline(req.body || {});
-    // Path 3: auto-execute weekly direct orders (respects AI_AUTO_EXECUTE kill switch + dry-run)
     let execResult = null;
-    try { execResult = await autoExecuteWeeklyOrders({ ownerId: req.user.userId }); }
-    catch (e) { console.error('[AI AutoExec] failed after manual pipeline run:', e.message); }
+    if (req.body?.autoExec) {
+      try { execResult = await autoExecuteWeeklyOrders({ ownerId: req.user.userId }); }
+      catch (e) { console.error('[AI AutoExec] failed after manual pipeline run:', e.message); }
+    }
     res.json({ ok: true, weekOf: doc.weekOf, totalOrders: doc.stats.totalOrders, stats: doc.stats, autoExec: execResult });
   } catch (err) {
     console.error('[AI Orders] manual run failed:', err.message);
@@ -2109,6 +2110,26 @@ app.post('/api/admin/run-ai-scout-conversions', authenticateJWT, requireAdmin, a
     res.json({ ok: true, converted: result.converted.length, details: result.converted, autoExec: convExec });
   } catch (err) {
     console.error('[AI Scouts] conversion check failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/cleanup-bogus-positions', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const col = db.collection('pnthr_portfolio');
+    const cutoff = '2026-05-13T01:09:00.000Z';
+    const cutoffEnd = '2026-05-13T01:11:00.000Z';
+    const filter = { autoExecuteMode: 'WEEKLY', createdAt: { $gte: new Date(cutoff), $lte: new Date(cutoffEnd) } };
+    const found = await col.find(filter).toArray();
+    if (found.length === 0) return res.json({ ok: true, deleted: 0, message: 'No bogus positions found' });
+    const result = await col.deleteMany(filter);
+    const outbox = db.collection('pnthr_ibkr_outbox');
+    const posIds = found.map(p => p._id.toString());
+    const outboxResult = await outbox.deleteMany({ positionId: { $in: posIds } });
+    res.json({ ok: true, deleted: result.deletedCount, tickers: found.map(p => p.ticker), outboxCleaned: outboxResult.deletedCount });
+  } catch (err) {
+    console.error('[Admin] cleanup-bogus-positions failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

@@ -6132,6 +6132,61 @@ app.post('/api/admin/close-ghost-positions', authenticateJWT, requireAdmin, asyn
   }
 });
 
+// One-time cleanup: close all auto-executed positions except specified keepers.
+// Finds positions with autoExecuted=true, closes them, cancels their pending outbox.
+// Body: { keepTickers?: ["CCI"], dryRun?: bool }
+app.post('/api/admin/cleanup-auto-positions', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const dryRun = req.body?.dryRun !== false;
+    const keepTickers = (req.body?.keepTickers || []).map(t => t.toUpperCase());
+
+    const filter = {
+      ownerId: userId,
+      status: { $in: ['ACTIVE', 'PARTIAL'] },
+      autoExecuted: true,
+    };
+    if (keepTickers.length) {
+      filter.ticker = { $nin: keepTickers };
+    }
+
+    const positions = await db.collection('pnthr_portfolio').find(filter).toArray();
+    const tickers = [...new Set(positions.map(p => p.ticker))];
+
+    const results = [];
+    for (const pos of positions) {
+      if (!dryRun) {
+        await db.collection('pnthr_portfolio').updateOne({ _id: pos._id }, {
+          $set: {
+            status: 'CLOSED', closedAt: new Date(), updatedAt: new Date(),
+            outcome: {
+              exitPrice: 0, profitPct: 0, profitDollar: 0,
+              holdingDays: 0, exitReason: 'CLEANUP_AUTO_EXECUTE_INCIDENT',
+            },
+          },
+        });
+      }
+      results.push({ ticker: pos.ticker, positionId: pos.id, direction: pos.direction });
+    }
+
+    let outboxCancelled = 0;
+    if (!dryRun && tickers.length) {
+      const outboxResult = await db.collection('pnthr_ibkr_outbox').updateMany(
+        { ownerId: userId, 'request.ticker': { $in: tickers }, status: 'PENDING' },
+        { $set: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: 'CLEANUP_AUTO_EXECUTE_INCIDENT' } },
+      );
+      outboxCancelled = outboxResult.modifiedCount;
+    }
+
+    console.log(`[cleanup-auto] ${dryRun ? 'DRY RUN' : 'EXECUTED'}: ${positions.length} positions closed, ${outboxCancelled} outbox cancelled, kept: ${keepTickers.join(',') || 'none'}`);
+    res.json({ dryRun, positionsClosed: positions.length, outboxCancelled, keepTickers, positions: results });
+  } catch (err) {
+    console.error('[admin/cleanup-auto-positions]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Phase 4 — outbox processing health snapshot. Returns most-recent DONE/FAILED
 // timestamps + status counts so we can tell at a glance whether the bridge is
 // draining the queue. If "minutesSinceLastDone" > 5 during market hours, the

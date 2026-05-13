@@ -1865,7 +1865,7 @@ app.get('/api/ai-universe', async (req, res) => {
 // Capped market-cap weighted, monthly rebalance, 304 holdings, base 2022-11-30=1000.
 // See server/data/pnthrAiIndexConfig.js + scripts/aiUniverse/buildPnthrAi300Index.js
 // for full methodology. Storage: pnthr_ai_index_candles (+ _weekly + _meta).
-// Refreshed daily by the 5:30pm AI Universe cron after constituent candles update.
+// Refreshed daily by the 4:15pm AI Universe cron after constituent candles update.
 
 // Latest snapshot — value, day-change, 21D/21W EMA, regime gate
 app.get('/api/pnthr-ai-300', async (req, res) => {
@@ -5539,14 +5539,9 @@ cron.schedule('5 17 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
-// ── Cron: AI Universe daily candle update Mon–Fri at 5:30pm ET ──────────────
-// Appends yesterday's daily bar to pnthr_ai_bt_candles and re-aggregates the
-// developing weekly bar in pnthr_ai_bt_candles_weekly. Runs after the 5:05pm
-// 679 daily signal job to spread FMP load. Idempotent — safe to re-run.
-// System of record for AI Universe historical bars; powers eventual Pulse
-// Score / weekly+daily signals / backtests once methodology locks.
+// ── Cron: AI Universe daily pipeline Mon–Fri at 4:15pm ET ───────────────────
 let aiUniverseDailyRunning = false;
-cron.schedule('30 17 * * 1-5', async () => {
+cron.schedule('15 16 * * 1-5', async () => {
   if (aiUniverseDailyRunning) return;
   aiUniverseDailyRunning = true;
   try {
@@ -5630,7 +5625,7 @@ cron.schedule('30 17 * * 1-5', async () => {
 }, { timezone: 'America/New_York' });
 
 // POST /api/admin/run-ai-universe-daily — manual trigger for ops.
-// Useful after deploys (catch up missing bars without waiting for 5:30pm).
+// Useful after deploys (catch up missing bars without waiting for 4:15pm).
 app.post('/api/admin/run-ai-universe-daily', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     runAiUniverseDailyUpdate().catch(err => console.error('[AI Universe Daily] Manual run failed:', err.message));

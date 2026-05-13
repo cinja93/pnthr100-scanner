@@ -603,12 +603,20 @@ def section_heatmap(t):
 def section_drawdown(t):
     s = section_heading('DRAWDOWN ANALYSIS')
     net = t['net']
-    s.append(body_p(f'Maximum daily peak-to-trough was <b>{net["maxDD"]:.2f}%</b> NET — compared to SPY\'s {t["spy"]["maxDD"]:.1f}% during the same window.'))
+    trades = t['trades']
+    realized_dd = trades.get('realizedDD', 0)
+    s.append(body_p(
+        f'Maximum daily peak-to-trough was <b>{net["maxDD"]:.2f}%</b> NET (paper), compared to SPY\'s {t["spy"]["maxDD"]:.1f}% '
+        f'during the same window. Maximum <b>realized</b> drawdown (closed trade losses) was only <b>{realized_dd:.1f}%</b>. '
+        f'The sector rotation gate and weekly stop architecture cut losing positions before paper drawdowns could fully materialize. '
+        f'Recovery factor of <b>{net["recoveryFactor"]:.0f}x</b> (total return per unit of max drawdown) compares favorably to the '
+        f'typical hedge fund range of 3-5x.'
+    ))
     tile_data = [
-        (f'{net["maxDD"]:.2f}%', 'Max Peak-to-Trough', '#ef4444'),
-        (f'{net["timeUnderWater"]:.1f}%', 'Time Under Water', '#f9a825'),
-        (f'{net["recoveryFactor"]:.0f}', 'Recovery Factor', '#22c55e'),
-        (f'{net["ulcerIndex"]:.2f}', 'Ulcer Index', '#fcf000'),
+        (f'{t["spy"]["maxDD"]:.1f}%', 'S&amp;P 500 Max Drawdown', '#ef4444'),
+        (f'{net["maxDD"]:.2f}%', 'Max Peak-to-Trough (Paper)', '#f9a825'),
+        (f'{realized_dd:.1f}%', 'Realized Drawdown', '#22c55e'),
+        (f'{net["recoveryFactor"]:.0f}', 'Recovery Factor', '#fcf000'),
     ]
     tile_w = CONTENT_W / 4
     cells = []

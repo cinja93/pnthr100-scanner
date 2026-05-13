@@ -371,11 +371,8 @@ export async function checkConversions() {
     const expectedSignal = scout.direction === 'SHORT' ? 'SS' : 'BL';
     if (sig.signal !== expectedSignal) { noConversion++; continue; }
 
-    // Weekly signal must have fired AFTER the scout's entry week
-    const scoutEntryMonday = scout.entryMonday || getMondayOf(scout.entryDate);
-    const sigMonday = sig.signalDate ? getMondayOf(sig.signalDate) : null;
-
-    if (sigMonday && sigMonday <= scoutEntryMonday) { noConversion++; continue; }
+    // Weekly signal must have fired AFTER the scout's entry date (same week OK)
+    if (sig.signalDate && sig.signalDate <= scout.entryDate) { noConversion++; continue; }
 
     // Conversion confirmed — weekly signal backs up the daily scout
     await col.updateOne({ _id: scout._id }, { $set: {

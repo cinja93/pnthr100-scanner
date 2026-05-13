@@ -205,10 +205,12 @@ export async function runAiOrdersPipeline(opts = {}) {
     const gs = computeGapAndSlope(ticker, livePrice);
     const gapPct = gs?.gapPct ?? null;
     const wEmaSlope = gs?.wEmaSlope ?? null;
-    let qualityGrade = 'SKIP';
-    if (isLong && gapPct != null && wEmaSlope != null) {
-      if (gapPct >= 15 && wEmaSlope < 20) qualityGrade = 'BEST';
-      else if (gapPct >= 12 && wEmaSlope < 20) qualityGrade = 'GOOD';
+    let qualityGrade = 'GOOD';
+    if (gapPct != null && wEmaSlope != null) {
+      const absGap = Math.abs(gapPct);
+      const absSlope = Math.abs(wEmaSlope);
+      if (absGap >= 15 && absSlope < 50) qualityGrade = 'BEST';
+      else if (absGap >= 12 && absSlope < 50) qualityGrade = 'BETTER';
     }
 
     const scoutShares = Math.max(1, Math.round(lot1Shares * 0.50));

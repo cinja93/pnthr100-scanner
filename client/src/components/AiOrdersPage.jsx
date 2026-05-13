@@ -12,7 +12,7 @@ const TIER_COLORS = {
   NO_GO:   { bg: '#dc2626', fg: '#fff', label: 'NO GO' },
 };
 const TIER_RANK = { GO: 0, NEUTRAL: 1, NO_GO: 2 };
-const ACTION_RANK = { '★ BUY': 0, 'BUY': 1, 'WAIT': 2, 'SS': 3, 'NO GO': 4 };
+const ACTION_RANK = { '★ BUY LONG': 0, 'LONG': 1, 'WAIT LONG': 2, '★ SELL SHORT': 3, 'SHORT': 4, 'WAIT SHORT': 5, 'NO GO': 6 };
 
 function TierPill({ tier }) {
   const c = TIER_COLORS[tier] || { bg: '#444', fg: '#fff', label: tier || '—' };
@@ -32,10 +32,17 @@ function fmtUsd(n, opts = {}) {
 }
 
 function getActionLabel(o) {
-  const isBuy = o.qualityGrade === 'BEST' || o.qualityGrade === 'BETTER';
-  if (isBuy) return o.qualityGrade === 'BEST' ? '★ BUY' : 'BUY';
-  if (o.signal === 'BL') return 'WAIT';
-  return o.signal === 'SS' ? 'SS' : 'NO GO';
+  if (o.signal === 'BL') {
+    if (o.qualityGrade === 'BEST') return '★ BUY LONG';
+    if (o.qualityGrade === 'BETTER') return 'LONG';
+    return 'WAIT LONG';
+  }
+  if (o.signal === 'SS') {
+    if (o.qualityGrade === 'BEST') return '★ SELL SHORT';
+    if (o.qualityGrade === 'BETTER') return 'SHORT';
+    return 'WAIT SHORT';
+  }
+  return 'NO GO';
 }
 
 function SortHeader({ label, sortKey, currentSort, onSort, align }) {
@@ -530,18 +537,21 @@ export default function AiOrdersPage() {
             <tbody>
               {orders.map(o => {
                 const actionLabel = getActionLabel(o);
-                const isBuy = actionLabel === '★ BUY' || actionLabel === 'BUY';
-                const isWait = actionLabel === 'WAIT';
-                const isNoGo = !isBuy && !isWait;
-                const rowBg = isBuy ? 'rgba(22,163,74,0.12)'
+                const isBuyActive = actionLabel === '★ BUY LONG' || actionLabel === 'LONG';
+                const isSSActive = actionLabel === '★ SELL SHORT' || actionLabel === 'SHORT';
+                const isWait = actionLabel === 'WAIT LONG' || actionLabel === 'WAIT SHORT';
+                const isNoGo = actionLabel === 'NO GO';
+                const rowBg = isBuyActive ? 'rgba(22,163,74,0.12)'
+                  : isSSActive ? 'rgba(220,38,38,0.08)'
                   : isWait ? 'rgba(252,240,0,0.06)'
-                  : isNoGo ? 'rgba(220,38,38,0.08)'
+                  : isNoGo ? 'rgba(100,100,100,0.08)'
                   : 'transparent';
-                const rowBorder = isBuy ? '1px solid rgba(22,163,74,0.30)'
+                const rowBorder = isBuyActive ? '1px solid rgba(22,163,74,0.30)'
+                  : isSSActive ? '1px solid rgba(220,38,38,0.20)'
                   : isWait ? '1px solid rgba(252,240,0,0.20)'
-                  : isNoGo ? '1px solid rgba(220,38,38,0.20)'
+                  : isNoGo ? '1px solid rgba(100,100,100,0.20)'
                   : '1px solid #1a1a1a';
-                const leftAccent = isBuy ? '3px solid #16a34a' : isWait ? '3px solid #fcf000' : isNoGo ? '3px solid #dc2626' : 'none';
+                const leftAccent = isBuyActive ? '3px solid #16a34a' : isSSActive ? '3px solid #dc2626' : isWait ? '3px solid #fcf000' : isNoGo ? '3px solid #666' : 'none';
                 return (
                 <tr key={`${o.signal}-${o.ticker}`} style={{
                   borderBottom: rowBorder,
@@ -558,15 +568,21 @@ export default function AiOrdersPage() {
                 onMouseLeave={e => e.currentTarget.style.background = rowBg}
                 >
                   <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-                    {isBuy ? (
+                    {isBuyActive ? (
                       <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#16a34a', color: '#fff' }}>
                         {actionLabel}
                       </span>
-                    ) : isWait ? (
-                      <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#fcf000', color: '#000' }}>WAIT</span>
-                    ) : (
+                    ) : isSSActive ? (
                       <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#dc2626', color: '#fff' }}>
-                        {o.signal === 'SS' ? 'SS' : 'NO GO'}
+                        {actionLabel}
+                      </span>
+                    ) : isWait ? (
+                      <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#fcf000', color: '#000' }}>
+                        {actionLabel}
+                      </span>
+                    ) : (
+                      <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#666', color: '#fff' }}>
+                        NO GO
                       </span>
                     )}
                   </td>

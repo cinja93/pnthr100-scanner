@@ -7,7 +7,7 @@ import { computeWeeksAgo } from '../utils/dateUtils';
 import ChartModal from './ChartModal';
 import KillBadge from './KillBadge';
 import { KillPipelineModal } from './pyramid';
-import { fetchApexStocks, API_BASE, authHeaders } from '../services/api';
+import { fetchApexStocks, fetchAi300OverlapTickers, API_BASE, authHeaders } from '../services/api';
 import styles from './ApexPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -271,6 +271,7 @@ export default function ApexPage() {
   const [killSearch, setKillSearch] = useState('');
   const sortedRef = useRef([]);
   const searchRowRef = useRef(null);
+  const [ai300Overlap, setAi300Overlap] = useState(new Set());
 
   // Auto-scroll to exact match when search has exactly one result
   useEffect(() => {
@@ -340,7 +341,10 @@ export default function ApexPage() {
     return () => document.removeEventListener('keydown', onKey);
   }, [selectedTicker]);
 
-  useEffect(() => { load(false); }, []);
+  useEffect(() => {
+    load(false);
+    fetchAi300OverlapTickers().then(s => setAi300Overlap(s)).catch(() => {});
+  }, []);
 
   async function load(forceRefresh) {
     setLoading(true);
@@ -720,6 +724,10 @@ export default function ApexPage() {
                             {!isInvestor && queuedTickers.has(stock.ticker) && (
                               <span style={{ fontSize: 9, fontWeight: 800, background: '#FFD700', color: '#000',
                                 padding: '1px 5px', borderRadius: 3, letterSpacing: '0.04em' }}>QUEUED</span>
+                            )}
+                            {ai300Overlap.has(stock.ticker) && (
+                              <span style={{ fontSize: 8, fontWeight: 800, background: '#fcf000', color: '#000',
+                                padding: '1px 4px', borderRadius: 3, letterSpacing: '0.04em' }}>AI 300</span>
                             )}
                             {(() => {
                               const tags = [];

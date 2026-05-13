@@ -498,6 +498,57 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
     }
   }
 
+  // Rule 6 — 20-position hard cap. Only blocks commands that create NEW
+  // positions (L1 entries). Lot triggers for existing positions (L2-L5 adds)
+  // are allowed — the position already exists.
+  const ENTRY_COMMANDS = new Set(['BUY_MARKET_TO_CATCH_UP']);
+  const isNewEntry = ENTRY_COMMANDS.has(command) && (+request.lot === 1 || !request.lot);
+  if (isNewEntry) {
+    const activeCount = await db.collection('pnthr_portfolio').countDocuments({
+      ownerId, status: { $in: ['ACTIVE', 'PARTIAL'] },
+    });
+    if (activeCount >= 20) {
+      return { skipped: `POSITION_CAP_${activeCount}_GTE_20` };
+    }
+  }
+
+  // Rule 7 — 10% total heat hard gate. Sum of all position risk (risk per
+  // share × shares held) cannot exceed 10% NAV. Blocks all entry/add commands
+  // that would increase exposure.
+  const RISK_INCREASING_COMMANDS = new Set([
+    'BUY_MARKET_TO_CATCH_UP', 'PLACE_LOT_TRIGGER', 'MODIFY_LOT_TRIGGER',
+  ]);
+  if (RISK_INCREASING_COMMANDS.has(command)) {
+    const profile = await getUserProfile(ownerId);
+    const nav = +profile?.accountSize || DEFAULT_NAV_FOR_CAP;
+    const positions = await db.collection('pnthr_portfolio')
+      .find({ ownerId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
+      .project({ entryPrice: 1, stopPrice: 1, direction: 1, fills: 1, remainingShares: 1, totalFilledShares: 1, totalExitedShares: 1 })
+      .toArray();
+    let totalRisk = 0;
+    for (const p of positions) {
+      const entry = +p.entryPrice || 0;
+      const stop = +p.stopPrice || 0;
+      if (!entry || !stop) continue;
+      const riskPerShare = p.direction === 'LONG' ? (entry - stop) : (stop - entry);
+      if (riskPerShare <= 0) continue;
+      let shares = +p.remainingShares;
+      if (!Number.isFinite(shares) || shares <= 0) {
+        shares = (+p.totalFilledShares || 0) - (+p.totalExitedShares || 0);
+      }
+      if (!Number.isFinite(shares) || shares <= 0) {
+        shares = Object.values(p.fills || {}).reduce(
+          (s, f) => s + (f?.filled ? +f.shares || 0 : 0), 0,
+        );
+      }
+      if (shares > 0) totalRisk += riskPerShare * shares;
+    }
+    const heatPct = nav > 0 ? totalRisk / nav : 0;
+    if (heatPct >= 0.10) {
+      return { skipped: `HEAT_CAP_${(heatPct * 100).toFixed(1)}PCT_GTE_10PCT` };
+    }
+  }
+
   const doc = {
     id:         randomUUID(),
     ownerId,

@@ -10,7 +10,7 @@ import { getLastFridayDate, saveRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
 import { getEtfStocks, getAiEtfStocks, ALL_ETF_TICKER_SET, AI_TICKER_CATEGORY, getCachedEtfResults } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
-import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers } from './constituents.js';
+import { getSp500Tickers, getDow30Tickers, getNasdaq100Tickers, getAllTickers } from './constituents.js';
 import { getPreyResults, clearPreyCache } from './preyService.js';
 import { getApexResults, clearApexCache, getCachedTickerKillData, getCachedSignalStocks, triggerApexWarmup } from './apexService.js';
 import { impersonationListTargets, impersonationStart, impersonationStop } from './impersonationService.js';
@@ -30,7 +30,7 @@ import { runOrdersPipeline, runOrdersDailyUpdate, ordersGetLatest, ordersGetGate
 import { getKillTestSettings, saveKillTestSettings } from './killTestSettings.js';
 import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import { runDailySignalJob } from './dailySignalJob.js';
-import { getAiUniverse, clearAiUniverseCache } from './aiUniverseService.js';
+import { getAiUniverse, clearAiUniverseCache, getAiUniverseHoldings } from './aiUniverseService.js';
 import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
 import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
@@ -1858,6 +1858,19 @@ app.get('/api/ai-universe', async (req, res) => {
   } catch (err) {
     console.error('Error in /api/ai-universe:', err);
     res.status(500).json({ error: 'Failed to load AI Universe' });
+  }
+});
+
+app.get('/api/ai-universe/overlap', async (req, res) => {
+  try {
+    const aiHoldings = getAiUniverseHoldings();
+    const aiTickers = new Set(aiHoldings.map(h => h.ticker));
+    const allTickers679 = await getAllTickers();
+    const overlap = allTickers679.filter(t => aiTickers.has(t));
+    res.json({ count: overlap.length, tickers: overlap });
+  } catch (err) {
+    console.error('Error in /api/ai-universe/overlap:', err);
+    res.status(500).json({ error: 'Failed to compute overlap' });
   }
 });
 
@@ -6015,6 +6028,23 @@ app.post('/api/admin/outbox-purge-pending', authenticateJWT, requireAdmin, async
     });
   } catch (err) {
     console.error('[admin/outbox-purge-pending]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/outbox-cancel-one', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const userId = req.user.userId;
+    const commandId = req.body?.id;
+    if (!commandId) return res.status(400).json({ error: 'id required' });
+    const r = await db.collection('pnthr_ibkr_outbox').updateOne(
+      { id: commandId, ownerId: userId, status: 'PENDING' },
+      { $set: { status: 'CANCELLED', cancelledAt: new Date(), cancelledBy: req.user.email || userId, cancelReason: 'ADMIN_CANCEL_ONE' } },
+    );
+    res.json({ cancelled: r.modifiedCount > 0, id: commandId });
+  } catch (err) {
+    console.error('[admin/outbox-cancel-one]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

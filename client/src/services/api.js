@@ -1159,3 +1159,13 @@ export async function dismissTrendlineAlert(id) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+let _overlapCache = null;
+export async function fetchAi300OverlapTickers() {
+  if (_overlapCache) return _overlapCache;
+  const res = await apiFetch(`${API_BASE}/api/ai-universe/overlap`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  _overlapCache = new Set(data.tickers || []);
+  return _overlapCache;
+}

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchLatestOrders, fetchOrdersHistory, fetchOrdersGateLog, runOrdersManual, fetchBacktestTrades, fetchNav, API_BASE, authHeaders } from '../services/api';
+import { fetchLatestOrders, fetchOrdersHistory, fetchOrdersGateLog, runOrdersManual, fetchBacktestTrades, fetchNav, fetchAi300OverlapTickers, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, isEtfTicker, calcHeat, STRIKE_PCT } from '../utils/sizingUtils.js';
 import ThTipShared from './HeaderTooltip';
 import ChartModal from './ChartModal';
+import PendingBridgeOrdersPanel from './PendingBridgeOrdersPanel';
 import styles from './OrdersPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -959,9 +960,14 @@ export default function OrdersPage() {
   const [nav, setNav] = useState(100000);
   const [chartIndex, setChartIndex] = useState(null);
   const [openPositions, setOpenPositions] = useState([]); // currently-open portfolio — drives stock-cap clamp
+  const [bridgeOpen, setBridgeOpen] = useState(() => {
+    try { return localStorage.getItem('orders.bridgeOpen') !== 'false'; } catch { return true; }
+  });
+  const [ai300Overlap, setAi300Overlap] = useState(new Set());
 
   useEffect(() => {
     fetchNav().then(r => { if (r?.nav) setNav(r.nav); }).catch(() => {});
+    fetchAi300OverlapTickers().then(s => setAi300Overlap(s)).catch(() => {});
     // Open positions feed the stock-heat cap calculation. Ignore failure —
     // worst case the cap reads as "full budget" and nothing gets clamped.
     // /api/positions returns this user's currently-open Command Center
@@ -1256,7 +1262,7 @@ export default function OrdersPage() {
               {blOrders.length > 0 && (
                 <div className={styles.gateSection}>
                   <h3 className={styles.gateSectionTitle}>BUY LONG ({blOrders.length})</h3>
-                  <OrderTable orders={blOrders} gtdExp={gtdExp} nav={nav}
+                  <OrderTable orders={blOrders} gtdExp={gtdExp} nav={nav} ai300Overlap={ai300Overlap}
                     onTickerClick={(t) => setChartIndex(orders.findIndex(o => o.ticker === t))} />
                 </div>
               )}
@@ -1265,7 +1271,7 @@ export default function OrdersPage() {
               {ssOrders.length > 0 && (
                 <div className={styles.gateSection}>
                   <h3 className={styles.gateSectionTitle}>SELL SHORT ({ssOrders.length})</h3>
-                  <OrderTable orders={ssOrders} gtdExp={gtdExp} nav={nav}
+                  <OrderTable orders={ssOrders} gtdExp={gtdExp} nav={nav} ai300Overlap={ai300Overlap}
                     onTickerClick={(t) => setChartIndex(orders.findIndex(o => o.ticker === t))} />
                 </div>
               )}
@@ -1390,6 +1396,20 @@ export default function OrdersPage() {
             <div className={styles.loading}>Loading history...</div>
           )}
         </div>
+      )}
+
+      {/* Pending Bridge Orders */}
+      {isAdmin && (
+        <PendingBridgeOrdersPanel
+          collapsed={!bridgeOpen}
+          onToggle={() => {
+            setBridgeOpen(v => {
+              localStorage.setItem('orders.bridgeOpen', !v ? 'true' : 'false');
+              return !v;
+            });
+          }}
+          style={{ marginTop: 24 }}
+        />
       )}
 
       {/* Chart modal — opens on ticker click */}
@@ -1524,7 +1544,7 @@ function ThTip({ children }) {
   return <ThTipShared label={key} tooltip={tip}>{children}</ThTipShared>;
 }
 
-function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
+function OrderTable({ orders, gtdExp, nav, onTickerClick, ai300Overlap }) {
   return (
     <table className={styles.ordersTable}>
       <thead>
@@ -1580,6 +1600,10 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick }) {
                   >
                     {o.ticker}
                   </strong>
+                  {ai300Overlap?.has(o.ticker) && (
+                    <span style={{ fontSize: 8, fontWeight: 800, background: '#fcf000', color: '#000',
+                      padding: '1px 4px', borderRadius: 3, letterSpacing: '0.04em' }}>AI 300</span>
+                  )}
                   {o.washBlocked && (
                     <span
                       title={`Wash sale window open until ${o.washExpiryDate ? new Date(o.washExpiryDate).toLocaleDateString() : 'unknown'} — trading this will disallow the loss`}

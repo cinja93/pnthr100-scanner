@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
-import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchKillPipeline, fetchNav, API_BASE, authHeaders } from '../services/api';
+import { fetchChartData, fetchEntryDates, fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchKillPipeline, fetchNav, fetchAi300OverlapTickers, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, calcHeat, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils.js';
 import { useQueue } from '../contexts/QueueContext';
 import { useAuth } from '../AuthContext';
@@ -338,6 +338,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
   // ── ANALYZE panel state ──────────────────────────────────────────────────────
   const [analyzeOpen, setAnalyzeOpen] = useState(false);
   const analyzeResultRef = useRef(null);
+  const [ai300Overlap, setAi300Overlap] = useState(new Set());
   // ── Wash rule warning ────────────────────────────────────────────────────────
   const [washWarning, setWashWarning] = useState(null);
   const positionsCache = useRef(null);
@@ -435,6 +436,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
 
   // Reset SIZE IT + ANALYZE + OVERRIDE panels when navigating to a new stock
   useEffect(() => { setSizePanel(null); setAnalyzeOpen(false); analyzeResultRef.current = null; setFetchedKillData(null); setChartSignalAge(null); setOverrideModal(false); }, [currentIndex]);
+  useEffect(() => { fetchAi300OverlapTickers().then(s => setAi300Overlap(s)).catch(() => {}); }, []);
 
   // Lock SIZE IT direction to chart's currentSignal — single source of truth.
   // The user cannot desync direction from the system signal; to go against the
@@ -953,6 +955,10 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
           <div className={styles.stockInfo}>
             <div className={styles.tickerRow}>
               <span className={styles.ticker}>{stock.ticker}</span>
+              {ai300Overlap.has(stock.ticker) && (
+                <span style={{ fontSize: 9, fontWeight: 800, background: '#fcf000', color: '#000',
+                  padding: '1px 5px', borderRadius: 3, letterSpacing: '0.04em', marginLeft: 4 }}>AI 300</span>
+              )}
               <span className={styles.company}>{stock.companyName}</span>
             </div>
             <div className={styles.badges}>

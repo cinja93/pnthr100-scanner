@@ -3,6 +3,7 @@ import { useAuth } from '../AuthContext';
 import { fetchLatestAiOrders, runAiOrders, fetchNav } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import AssistantLiveTable from './AssistantLiveTable';
+import PendingBridgeOrdersPanel from './PendingBridgeOrdersPanel';
 import { computeWeeksAgo } from '../utils/dateUtils';
 import { getStrategyMode } from '../utils/strategyMode';
 
@@ -162,6 +163,9 @@ export default function AiOrdersPage() {
   const [userNav, setUserNav] = useState(null);
   const [orderSort, toggleOrderSort] = useSort('action', 'asc');
   const [heatData, setHeatData] = useState(null);
+  const [bridgeOpen, setBridgeOpen] = useState(() => {
+    try { return localStorage.getItem('aiOrders.bridgeOpen') !== 'false'; } catch { return true; }
+  });
 
   const load = () => {
     setLoading(true);
@@ -495,6 +499,21 @@ export default function AiOrdersPage() {
           }}
         />
       </div>
+
+      {/* Pending Bridge Orders */}
+      {isAdmin && (
+        <div style={{ marginTop: 24 }}>
+          <PendingBridgeOrdersPanel
+            collapsed={!bridgeOpen}
+            onToggle={() => {
+              setBridgeOpen(v => {
+                localStorage.setItem('aiOrders.bridgeOpen', !v ? 'true' : 'false');
+                return !v;
+              });
+            }}
+          />
+        </div>
+      )}
 
       {/* Footer note */}
       <div style={{ marginTop: 16, fontSize: 11, color: '#666', lineHeight: 1.6 }}>

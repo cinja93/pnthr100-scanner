@@ -10,7 +10,7 @@ Black-background PDF with yellow headings, 4-act structure:
   Act IV:  Close (growth chart, recap, summary, methodology & assumptions, disclosures)
 
 Data: ~/Downloads/pnthr_ai_elite_ir_metrics_{100k,500k,1m}.json
-Output: ~/Downloads/PNTHR_AI_Elite_IR_{Filet,Porterhouse,Wagyu}_{tier}_v1.pdf
+Output: ~/Downloads/PNTHR_AI_Elite_IR_{Filet,Porterhouse,Wagyu}_{tier}_v2.pdf
 """
 
 import os, json, sys
@@ -636,17 +636,25 @@ def section_risk(t):
     s.append(body_p('The AI Elite Fund is engineered for capital preservation first, alpha generation second.'))
     s += subsection_heading('Daily Cascade Risk Control')
     s.append(bullet_p('<b>Scout Entry:</b> 50% of Lot 1 = 0.175% NAV risk per scout. Minimal capital at risk until weekly confirmation.'))
+    s.append(bullet_p('<b>Max 3 Scouts Per Day:</b> No more than 3 new scouts can fire on any single trading day.'))
     s.append(bullet_p('<b>28-Day Timeout:</b> Scouts that fail to convert within 28 trading days are automatically closed.'))
-    s.append(bullet_p('<b>Subsequent-Week Conversion:</b> Scouts cannot convert to full positions in the same week — must prove over multiple weeks.'))
+    s.append(bullet_p('<b>Same-Week Conversion:</b> Scouts can convert to full positions as soon as a weekly signal confirms — no forced waiting period beyond the signal date.'))
+    s.append(bullet_p('<b>Daily Exit Monitoring:</b> Active scouts are closed immediately if a daily reversal signal (BE for longs, SE for shorts) fires.'))
     s += subsection_heading('Position-Level Risk Controls')
     s.append(bullet_p('<b>1% Vitality Cap:</b> Maximum 1% NAV risk per stock position.'))
     s.append(bullet_p('<b>5-Lot Pyramid:</b> Initial entry deploys only 35% of full position. Subsequent lots earned through sequential confirmation.'))
     s.append(bullet_p('<b>10% Position Cap:</b> No single ticker can exceed 10% of NAV.'))
+    s.append(bullet_p('<b>Weekly Order Cap:</b> Maximum 10 long entries + 5 short entries per week, ranked by sector strength.'))
     s.append(bullet_p('<b>No-Margin Constraint:</b> Total deployed notional must stay at or below NAV.'))
     s += subsection_heading('Stop Loss Architecture')
     s.append(bullet_p('<b>Scout Stop:</b> Daily PNTHR stop (fixed, no trailing ratchet) — tight risk on unconfirmed positions.'))
     s.append(bullet_p('<b>Weekly Stop:</b> After conversion, switches to weekly PNTHR stop with trailing ratchet.'))
+    s.append(bullet_p('<b>Weekly Stop Ratchet:</b> Every Friday, stops are tightened using the higher of the 2-week structural low and the ATR floor. Stops only tighten — they never move against the trade.'))
     s.append(bullet_p('<b>Lot Fill Ratchet:</b> Lot 3 → breakeven, Lot 4 → Lot 2 fill, Lot 5 → Lot 3 fill. Stops never move backwards.'))
+    s += subsection_heading('Position Exit Rules')
+    s.append(bullet_p('<b>20-Day Stale Hunt:</b> Full positions open 20+ trading days that are underwater are closed at market. Cuts losers that haven\'t worked.'))
+    s.append(bullet_p('<b>Weekly Structural Exit:</b> If a long position\'s current weekly bar breaks below the prior 2-week low, or a short breaks above the prior 2-week high, the position exits at its stop price.'))
+    s.append(bullet_p('<b>Stop Hit:</b> Standard protective stop — position closes when price touches the stop level.'))
 
     s += section_heading('ROLLING 12-MONTH RETURNS')
     r12m = t['net']['rolling12m']
@@ -748,15 +756,21 @@ def section_methodology(t):
     ))
     s += subsection_heading('Phase 1: Daily Scout')
     s.append(bullet_p('<b>Size:</b> 50% of Lot 1 = 17.5% of full position = 0.175% NAV risk.'))
-    s.append(bullet_p('<b>Entry:</b> Daily BL signal fires (close above daily EMA, structural breakout, daylight zone).'))
+    s.append(bullet_p('<b>Entry:</b> Daily BL/SS signal fires (structural breakout/breakdown, daylight zone, combo filter: 5-15% gap from weekly EMA + 0-50% annualized slope).'))
     s.append(bullet_p('<b>Stop:</b> Daily PNTHR stop (fixed at entry, no trailing ratchet). Tight risk.'))
-    s.append(bullet_p('<b>Timeout:</b> If no weekly BL fires within 28 trading days, scout is closed automatically.'))
-    s.append(bullet_p('<b>Conversion Requirement:</b> Weekly BL must fire in a SUBSEQUENT week (not the same week as scout entry).'))
+    s.append(bullet_p('<b>Max Per Day:</b> No more than 3 new scouts per trading day.'))
+    s.append(bullet_p('<b>Daily Exit:</b> Active scouts are closed immediately on a daily reversal signal (BE for longs, SE for shorts).'))
+    s.append(bullet_p('<b>Timeout:</b> If no weekly signal fires within 28 trading days, scout is closed automatically.'))
+    s.append(bullet_p('<b>Conversion:</b> Weekly signal can confirm the scout as early as the same week, as long as the signal date is after the scout entry date.'))
     s += subsection_heading('Phase 2: Weekly Confirmation & Pyramid')
-    s.append(bullet_p('<b>Conversion:</b> When weekly BL+1 fires in a later week, scout tops up to full Lot 1 (35% of position).'))
+    s.append(bullet_p('<b>Conversion:</b> When weekly BL/SS confirms, scout tops up to full Lot 1 (35% of position).'))
     s.append(bullet_p('<b>Stop Switch:</b> Daily stop replaced by weekly PNTHR stop with trailing ratchet.'))
     s.append(bullet_p('<b>Pyramid:</b> Lots 2-5 can now fire via standard weekly pyramid triggers.'))
     s.append(bullet_p('<b>Entry Price:</b> Weighted average of scout fill + conversion fill. Lot triggers based on original Lot 1 fill.'))
+    s += subsection_heading('Phase 3: Position Management')
+    s.append(bullet_p('<b>Weekly Stop Ratchet:</b> Every Friday, stops tighten using the higher of 2-week structural low and ATR floor. Only tightens.'))
+    s.append(bullet_p('<b>Structural Exit:</b> If the current week breaks the prior 2-week range (low for longs, high for shorts), position exits at stop.'))
+    s.append(bullet_p('<b>20-Day Stale Hunt:</b> Positions open 20+ trading days that are underwater close at market.'))
     s += subsection_heading('Why 25% Win Rate with 3.15x Profit Factor')
     s.append(body_p(
         'The Daily Cascade deliberately sacrifices win rate for payoff ratio. Most scouts (75%) are stopped out quickly '
@@ -1117,8 +1131,8 @@ def build_per_tier_ir(tier_key):
     story += section_methodology_assumptions(t)
     story += section_disclosures(t)
 
-    filename = f'PNTHR_AI_Elite_IR_{t["label"]}_{tier_key}_v1.pdf'
-    title_meta = f'PNTHR Funds - AI Elite Fund - {t["classLabel"]} Intelligence Report v1'
+    filename = f'PNTHR_AI_Elite_IR_{t["label"]}_{tier_key}_v2.pdf'
+    title_meta = f'PNTHR Funds - AI Elite Fund - {t["classLabel"]} Intelligence Report v2'
     return build_doc(filename, title_meta, story)
 
 

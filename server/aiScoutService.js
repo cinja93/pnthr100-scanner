@@ -66,7 +66,7 @@ function sizePosition(nav, entryPrice, stopPrice, sectorMult = 1.0) {
   const vitality  = nav * NAV_VITALITY_PCT * (+(sectorMult) || 1.0);
   const rps = Math.abs(entryPrice - stopPrice);
   if (rps <= 0 || entryPrice <= 0) return 0;
-  return Math.floor(Math.min(vitality / rps, tickerCap / entryPrice));
+  return Math.floor(Math.min(Math.floor(vitality / rps), Math.floor(tickerCap / entryPrice)));
 }
 
 // APEX v6 sector rotation: BL uses GO=1.25/NEUTRAL=1.0/NO_GO=skip;

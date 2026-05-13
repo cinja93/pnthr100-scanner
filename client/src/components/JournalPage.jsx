@@ -59,7 +59,6 @@ const tierBorder = (total, max) => {
 
 const REASON_COLORS = {
   SIGNAL: '#6bcb77',
-  FEAST: '#FFD700',
   STOP_HIT: '#ff8c00',
   STALE_HUNT: '#ff8c00',
   MANUAL: '#dc3545',
@@ -101,7 +100,6 @@ function TradeDetail({ entry, noteInputs, setNoteInputs, addNote, deleteNote, ad
     pyramiding:      hb.pyramidingFollowed  != null ? { passed: hb.pyramidingFollowed >= 10,  detail: `${(entry.lots || []).length} lot${(entry.lots || []).length !== 1 ? 's' : ''} filled` } : null,
     stopMaintained:  hb.stopMaintained      != null ? { passed: hb.stopMaintained >= 10,      detail: `Stop $${entry.entry?.stopPrice?.toFixed(2) || '—'}` }                          : null,
     followedSignal:  xb.followedSignal  != null ? { passed: xb.followedSignal >= 16,  detail: exits.map(e => e.reason).join(', ') || '—' }                                             : null,
-    feastFollowed:   xb.feastFollowed   != null ? { passed: xb.feastFollowed >= 10,   na: !exits.some(e => e.reason === 'FEAST'), detail: exits.some(e => e.reason === 'FEAST') ? 'FEAST rule executed' : 'N/A — RSI never triggered' } : null,
     staleHunt:       xb.staleHuntFollowed != null ? { na: true, detail: (entry.performance?.holdingDays || 0) < 20 ? 'N/A — closed before day 20' : 'Timer respected' }               : null,
     exitSlippage:    xb.exitSlippage    != null ? { passed: xb.exitSlippage >= 3,     detail: 'Exit price vs stop/signal' }                                                             : null,
   };
@@ -1839,7 +1837,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
                                     </td>
                                     <td style={tdStyle}>{t.tradingDays ?? t.days ?? t.holdingDays ?? '—'}</td>
                                     <td style={tdStyle}>
-                                      <span style={{ color: t.exitReason === 'SIGNAL' ? '#6bcb77' : t.exitReason === 'FEAST' ? '#fcf000' : t.exitReason === 'STOP_HIT' ? '#ff8c00' : '#888', fontWeight: 700, fontSize: 10 }}>
+                                      <span style={{ color: t.exitReason === 'SIGNAL' ? '#6bcb77' : t.exitReason === 'STOP_HIT' ? '#ff8c00' : '#888', fontWeight: 700, fontSize: 10 }}>
                                         {t.exitReason || '—'}
                                       </span>
                                     </td>

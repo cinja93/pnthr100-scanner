@@ -247,14 +247,6 @@ export async function positionsGetAll(req, res) {
     let live = {};
     try { if (tickers.length) live = await fetchQuotes(tickers); } catch { /* ok */ }
 
-    // ── FEAST alert: weekly RSI > 85 = overextended; SELL 50% immediately ──────
-    // Fetch in parallel; non-fatal if any call fails
-    const rsiMap = {};
-    if (tickers.length) {
-      const rsiResults = await Promise.allSettled(tickers.map(t => fetchRSI(t)));
-      tickers.forEach((t, i) => { rsiMap[t] = rsiResults[i].value ?? null; });
-    }
-
     // ── Sector concentration summary ─────────────────────────────────────────
     const sectorCounts = {};
     for (const p of positions) {
@@ -267,7 +259,6 @@ export async function positionsGetAll(req, res) {
 
     const IBKR_FRESH_MS = 5 * 60 * 1000; // 5 minutes
     const enriched = positions.map(p => {
-      const rsi       = rsiMap[p.ticker] ?? null;
       const ibkrFresh = p.ibkrSyncedAt &&
         (Date.now() - new Date(p.ibkrSyncedAt).getTime()) < IBKR_FRESH_MS;
       // FMP is the real-time price source. IBKR updatePortfolio prices update only
@@ -282,8 +273,6 @@ export async function positionsGetAll(req, res) {
         dayHigh:           live[p.ticker]?.dayHigh  || null,
         dayLow:            live[p.ticker]?.dayLow   || null,
         tradingDaysActive: tradingDaysSince(p.createdAt),
-        feastAlert:        rsi !== null && rsi > 85,
-        feastRSI:          rsi,
       };
     });
 
@@ -311,14 +300,13 @@ export async function positionsGetAll(req, res) {
 // TRANSIENT DISPLAY FIELDS — computed server-side, must NOT be persisted from
 // the client payload (they would overwrite values written by IBKR sync or
 // the price-refresh endpoint):
-//   priceSource, dayHigh, dayLow, tradingDaysActive, feastAlert, feastRSI
+//   priceSource, dayHigh, dayLow, tradingDaysActive
 //   (ibkrAvgCost, ibkrShares, ibkrSyncedAt are excluded below for same reason)
 
 // Fields that are computed/transient on the server and must never be saved back
 // from the client payload into MongoDB.
 const TRANSIENT_FIELDS = new Set([
   'priceSource', 'dayHigh', 'dayLow', 'tradingDaysActive',
-  'feastAlert', 'feastRSI',
   // IBKR fields are written exclusively by ibkrSync.js — reject any client values
   'ibkrAvgCost', 'ibkrShares', 'ibkrSyncedAt', 'ibkrUnrealizedPNL', 'ibkrMarketValue',
   // Server-controlled close + audit fields. Client snapshots can be stale

@@ -396,35 +396,6 @@ export async function generateAssistantTasks(userId, positions, nav) {
       }
     }
 
-    // ── P1: FEAST_ALERT ───────────────────────────────────────────────────────
-    if (pos.feastAlert && pos.feastRSI != null) {
-      const rsi = Math.round(pos.feastRSI);
-      const filledShares = Object.values(fills)
-        .filter(f => f.filled)
-        .reduce((s, f) => s + (+f.shares || 0), 0);
-      const halfShares = Math.max(1, Math.floor(filledShares / 2));
-
-      tasks.push({
-        id:              `feast_${ticker}`,
-        priority:        1,
-        type:            'FEAST_ALERT',
-        ticker,
-        badge:           'FEAST',
-        headline:        `${ticker} ${direction}: RSI ${rsi}. FEAST RULE — Sell 50% immediately.`,
-        instructions:    [
-          `1. FEAST rule triggered: weekly RSI above 85 signals extreme overbought condition`,
-          `2. In IBKR, sell 50% of your ${ticker} shares (${halfShares} shares at market)`,
-          '3. Note the fill price and time',
-          `4. In Command → ${ticker} → record a partial exit for ${halfShares} shares`,
-          '5. Keep remaining shares — let the stop manage the rest',
-        ],
-        confirmQuestion: `Did you sell 50% of ${ticker} shares in IBKR and record the partial exit?`,
-        data:            { rsi, halfShares, direction },
-        dayOfWeek:       null,
-        autoClears:      false,
-      });
-    }
-
     // ── P1: STALE_HUNT_20 ─────────────────────────────────────────────────────
     if (days >= 20) {
       tasks.push({
@@ -1296,7 +1267,7 @@ export async function buildRoutineContext(activePosns, killSignals = []) {
 // ── Position Health — Daily RSI Alerts ────────────────────────────────────────
 //
 // Checks daily RSI-14 for every active Command position.
-//   BL (LONG) position: alert when daily RSI > 75  → overbought, feast zone
+//   BL (LONG) position: alert when daily RSI > 75  → overbought
 //   SS (SHORT) position: alert when daily RSI < 25  → oversold, short squeeze risk
 //
 // Returns array of alert objects with today's RSI, yesterday's RSI, and delta.

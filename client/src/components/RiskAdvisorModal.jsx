@@ -192,19 +192,6 @@ function runRiskAdvisor(positions, nav) {
     }
   }
 
-  // Rule 6: FEAST Alert (RSI > 85)
-  for (const p of positions) {
-    if (p.feastAlert || (p.feastRSI && p.feastRSI > 85)) {
-      const rsi = p.feastRSI;
-      const sellShares = Math.floor(filledSharesOf(p) / 2);
-      recs.push({
-        priority: 'CRITICAL', type: 'FEAST',
-        message: `${p.ticker}: Weekly RSI at ${rsi ? rsi.toFixed(0) : '85+'}. FEAST RULE — sell 50% immediately.`,
-        actions: [{ ticker: p.ticker, action: 'SELL', shares: sellShares, reason: `RSI ${rsi ? rsi.toFixed(0) : '85+'} > 85 — lock in parabolic gains` }],
-      });
-    }
-  }
-
   // Rule 7: Position Oversized
   for (const p of positions) {
     const shares = filledSharesOf(p);

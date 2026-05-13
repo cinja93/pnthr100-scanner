@@ -9211,28 +9211,10 @@ app.get('/api/assistant/tasks', async (req, res) => {
       } catch { /* non-fatal */ }
     }
 
-    // Fetch RSI for feast detection
-    const rsiMap = {};
-    if (tickers.length) {
-      const FMP_KEY = process.env.FMP_API_KEY;
-      await Promise.allSettled(tickers.map(async t => {
-        try {
-          const url = `https://financialmodelingprep.com/stable/technical-indicators/rsi?symbol=${t}&periodLength=14&timeframe=1week&apikey=${FMP_KEY}`;
-          const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
-          if (r.ok) {
-            const d = await r.json();
-            if (Array.isArray(d) && d[0]) rsiMap[t] = d[0].rsi ?? null;
-          }
-        } catch { /* ignore */ }
-      }));
-    }
-
     // Enrich positions with live data
     const positions = positionsRaw.map(p => ({
       ...p,
       currentPrice: live[p.ticker] ?? p.currentPrice,
-      feastAlert:   rsiMap[p.ticker] != null && rsiMap[p.ticker] > 85,
-      feastRSI:     rsiMap[p.ticker] ?? null,
     }));
 
     // Fetch NAV from user profile
@@ -9655,11 +9637,6 @@ app.get('/api/assistant/headlines', async (req, res) => {
       const dir   = p.direction || 'LONG';
       const isLong = dir === 'LONG';
       if (!price || !t) continue;
-
-      // FEAST alert (RSI > 85 for longs)
-      if (p.feastAlert || p.feastRSI > 85) {
-        add(nowISO, '🔥', 'CRITICAL', t, `FEAST ALERT — Weekly RSI ${p.feastRSI?.toFixed(0) || '>85'} — SELL 50% IMMEDIATELY`, 'FEAST');
-      }
 
       // Stop crossed
       if (p.stopPrice) {

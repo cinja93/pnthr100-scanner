@@ -9,9 +9,6 @@
 //   4. Saves a daily snapshot to the appearance record
 //   5. Marks exit if stop is hit (exitReason: 'STOP')
 //
-// NOTE: Feast Alert (RSI check) runs inside the Friday pipeline, not here,
-// because PNTHR uses WEEKLY RSI which is computed during Kill scoring.
-//
 // Collections updated: pnthr_kill_appearances
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -323,73 +320,3 @@ export async function runKillTestDailyUpdate() {
   console.log(`[KillTest Daily] Done — ${processed} processed, ${lotsFilled} lot triggers, ${stopped} stopped out`);
 }
 
-// ── Feast Alert Check (called from Friday pipeline after scoring) ──────────────
-// Weekly RSI is available from the scored Kill data on Fridays
-export async function checkFeastAlerts(db, scored, weekOf) {
-  const appearances = await db.collection('pnthr_kill_appearances')
-    .find({ exitDate: null })
-    .toArray();
-  if (!appearances.length) return;
-
-  const scoredMap = {};
-  for (const s of scored) scoredMap[s.ticker] = s;
-
-  let feastCount = 0;
-  for (const appr of appearances) {
-    const s = scoredMap[appr.ticker];
-    if (!s) continue;
-
-    // Get RSI from D6 dimension data
-    const rsi = s.scoreDetail?.d6?.rsi ?? s.dimensions?.d6?.rsi ?? null;
-    if (rsi == null) continue;
-
-    const isShort = appr.signal === 'SS';
-    const feastTriggered = isShort ? rsi <= 15 : rsi >= 85;
-
-    if (!feastTriggered) continue;
-    if (appr.feastFired) continue; // already fired
-
-    // Feast: exit 50% of position at Friday close
-    const exitPrice = s.currentPrice ?? appr.lastSeenPrice;
-    const sharesOut = appr.currentShares ? Math.floor(appr.currentShares * 0.5) : 0;
-    const { pnlPct } = computePnl(
-      appr.currentAvgCost || appr.firstAppearancePrice,
-      exitPrice,
-      sharesOut,
-      appr.signal
-    );
-
-    await db.collection('pnthr_kill_appearances').updateOne(
-      { _id: appr._id },
-      {
-        $set: {
-          feastFired:       true,
-          feastDate:        weekOf,
-          feastRsi:         rsi,
-          feastExitPrice:   exitPrice,
-          feastExitShares:  sharesOut,
-          feastPnlPct:      +pnlPct.toFixed(2),
-          // Remaining 50% stays open — not closing full position
-          currentShares: appr.currentShares
-            ? appr.currentShares - sharesOut
-            : null,
-          updatedAt: new Date(),
-        },
-        $push: {
-          dailySnapshots: {
-            date:         weekOf,
-            close:        exitPrice,
-            rsi,
-            feastTrigger: true,
-            feastShares:  sharesOut,
-            pnlPct:       +pnlPct.toFixed(2),
-          },
-        },
-      }
-    );
-    feastCount++;
-    console.log(`[KillTest Feast] ${appr.ticker} RSI ${rsi} — exiting 50% (${sharesOut} shr) @ $${exitPrice}`);
-  }
-
-  if (feastCount > 0) console.log(`[KillTest Feast] ${feastCount} feast alerts fired`);
-}

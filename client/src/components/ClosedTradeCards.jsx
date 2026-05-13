@@ -124,7 +124,7 @@ function computeChecks(entry) {
   else if ((dir === 'LONG' && sig === 'BL' && sigAge <= 1) || (dir === 'SHORT' && sig === 'SS' && sigAge <= 1)) signalCheck = true;
   else signalCheck = false;
 
-  const systemExits   = ['SIGNAL', 'STOP_HIT', 'FEAST', 'STALE_HUNT', 'RISK_ADVISOR'];
+  const systemExits   = ['SIGNAL', 'STOP_HIT', 'STALE_HUNT', 'RISK_ADVISOR'];
   const exitCheck     = exitReason ? systemExits.includes(exitReason) : null;
   const notEarlyCheck = exitReason === 'MANUAL' ? false : (exitReason ? true : null);
   const onSignalCheck = exitReason === 'SIGNAL';
@@ -600,7 +600,7 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
     IDX:    'Index trend alignment. ✓ = traded with S&P 500 or Nasdaq 100 direction. Scored T1-C (0-8 pts).',
     SECT:   'Sector trend alignment. ✓ = traded with sector ETF OpEMA direction. Scored T1-D (0-7 pts).',
     SIG:    'Signal quality. ✓ = fresh BL+1/SS+1. ✗ = stale signal. ⚠ = no PNTHR signal. Scored T1-A (0-15 pts).',
-    EXIT:   'Exit discipline. ✓ = system rule (signal/stop/feast/stale). ✗ = manual override. Scored T3-A (0-12 pts).',
+    EXIT:   'Exit discipline. ✓ = system rule (signal/stop/stale). ✗ = manual override. Scored T3-A (0-12 pts).',
     '~EARLY': '✓ = ran to system exit. ✗ = manually closed before signal. Part of T3-B scoring.',
     'ON SIG': '✓ = exited on BE/SE signal specifically. ✗ = any other exit reason. Part of T3-B scoring.',
     WASH:   'Wash sale compliance. ✓ = no active wash window. ✗ = entered during 30-day wash window. Scored T3-C (0-5 pts).',

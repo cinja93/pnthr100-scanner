@@ -41,7 +41,6 @@ function mapExitReason(btReason) {
     'SIGNAL_SE':   'SIGNAL',
     'STOP_HIT':    'STOP_HIT',
     'STALE_HUNT':  'STALE_HUNT',
-    'FEAST':       'FEAST',
   };
   return map[btReason] || btReason;
 }
@@ -74,9 +73,9 @@ function scoreDiscipline(trade, exitReason) {
 
   // T3: Exit Quality (25 pts)
   const reason = mapExitReason(trade.exitReason);
-  const exitScores = { SIGNAL: 12, FEAST: 12, STOP_HIT: 10, STALE_HUNT: 10, RISK_ADVISOR: 10, MANUAL: 4 };
+  const exitScores = { SIGNAL: 12, STOP_HIT: 10, STALE_HUNT: 10, RISK_ADVISOR: 10, MANUAL: 4 };
   const exitScore = exitScores[reason] || 4;
-  const timingScores = { SIGNAL: 8, FEAST: 8, STOP_HIT: 6, STALE_HUNT: 6, RISK_ADVISOR: 6, MANUAL: 4 };
+  const timingScores = { SIGNAL: 8, STOP_HIT: 6, STALE_HUNT: 6, RISK_ADVISOR: 6, MANUAL: 4 };
   const timingScore = timingScores[reason] || 4;
   const t3 = {
     exitMethod:     { score: exitScore, max: 12, label: reason, detail: reason },

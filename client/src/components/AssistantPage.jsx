@@ -74,7 +74,6 @@ const TYPE_COLOR = {
   STOP_CROSSED:          '#EF4444',
   RATCHET_DUE:           '#60A5FA',
   // Critical exits
-  FEAST_ALERT:           '#F472B6',
   LIQUIDATE:             '#DC2626',
   STALE:                 '#9CA3AF',
   EXIT_UNRECORDED:       '#64748B',
@@ -1211,7 +1210,7 @@ function TradesTodaySection({ trades, loading, ibkrConnected, onNavigate }) {
 
 // ── Command Health Section ────────────────────────────────────────────────────
 // Shows daily RSI alerts for every active Command position.
-// BL > 75 = overbought / FEAST zone. SS < 25 = oversold / short squeeze risk.
+// BL > 75 = overbought. SS < 25 = oversold / short squeeze risk.
 
 // ── RsiGauge — compact horizontal bar showing RSI position relative to 25/75 zone ──
 // Bar spans 0–100. Green zone: 25–75. Tick marks actual RSI value.
@@ -1281,7 +1280,7 @@ function RsiGaugeRow({ pos }) {
 
   // Daily
   const dailyColor = rsiTickColor(pos.rsi, pos.direction);
-  const dailyAlert = pos.alertType === 'BL_OVERBOUGHT' ? '⚠ FEAST'
+  const dailyAlert = pos.alertType === 'BL_OVERBOUGHT' ? '⚠ OVERBOUGHT'
                    : pos.alertType === 'SS_OVERSOLD'    ? '⚠ SQUEEZE'
                    : null;
   const dailyDelta = pos.delta != null ? `${pos.delta > 0 ? '+' : ''}${pos.delta}` : null;
@@ -1289,7 +1288,7 @@ function RsiGaugeRow({ pos }) {
   // Weekly
   const hasWeekly   = pos.weeklyRsi != null;
   const weeklyColor = hasWeekly ? rsiTickColor(pos.weeklyRsi, pos.direction) : '#333';
-  const weeklyAlert = pos.weeklyAlertType === 'BL_OVERBOUGHT' ? '⚠ FEAST'
+  const weeklyAlert = pos.weeklyAlertType === 'BL_OVERBOUGHT' ? '⚠ OVERBOUGHT'
                     : pos.weeklyAlertType === 'SS_OVERSOLD'    ? '⚠ SQUEEZE'
                     : null;
   const weeklyDelta = pos.weeklyDelta != null ? `${pos.weeklyDelta > 0 ? '+' : ''}${pos.weeklyDelta}` : null;

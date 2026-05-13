@@ -194,7 +194,6 @@ function scoreExitMethod(exitReason, pnlDollars) {
   const reason = (exitReason || '').toUpperCase().trim();
   switch (reason) {
     case 'SIGNAL':     return { score: 12, label: 'SIGNAL EXIT', detail: 'Exited on system BE/SE signal — maximum discipline' };
-    case 'FEAST':      return { score: 12, label: 'FEAST RULE',  detail: 'FEAST triggered (RSI > 85) — system rule followed' };
     case 'STALE_HUNT': return { score: 10, label: 'STALE HUNT',  detail: '20-day stale hunt liquidation — trade never confirmed' };
     case 'STOP_HIT':     return { score: 10, label: 'STOP HIT',     detail: 'Stop hit — system protected capital as designed' };
     case 'RISK_ADVISOR': return { score: 10, label: 'RISK ADVISOR', detail: 'Closed per Risk Advisor recommendation — sector/heat risk management' };
@@ -216,7 +215,7 @@ function scoreSignalTiming(exitReason) {
   if (reason === 'SIGNAL') {
     return { score: 8, label: 'ON SIGNAL',   detail: 'Exited on the system exit signal — perfect timing' };
   }
-  if (['STOP_HIT', 'FEAST', 'STALE_HUNT', 'RISK_ADVISOR', 'AUTO_RECONCILE_FROM_EXEC', 'AUTO_RECONCILE_NO_EXEC'].includes(reason)) {
+  if (['STOP_HIT', 'STALE_HUNT', 'RISK_ADVISOR', 'AUTO_RECONCILE_FROM_EXEC', 'AUTO_RECONCILE_NO_EXEC'].includes(reason)) {
     return { score: 6, label: 'SYSTEM RULE', detail: 'Exited via system rule (not primary signal, but disciplined)' };
   }
   if (reason === 'MANUAL') {

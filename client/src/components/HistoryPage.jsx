@@ -337,7 +337,6 @@ export default function HistoryPage() {
         return { ...l, shares: shr, cost };
       });
 
-      // FEAST: 50% of filled shares exit at feast price, rest at final exit
       let pnlDollar = 0;
       let exitPrice = null;
       let exitDate  = null;
@@ -347,46 +346,17 @@ export default function HistoryPage() {
         exitPrice  = t.finalExit.price;
         exitDate   = t.finalExit.date;
         exitReason = t.finalExit.reason;
-
-        if (t.feastExit) {
-          // Split: 50% at FEAST, 50% at final
-          const feastShr = Math.floor(totalShr * 0.5);
-          const restShr  = totalShr - feastShr;
-          const avgCost  = totalShr > 0 ? totalCost / totalShr : t.entryPrice;
-
-          const feastPnl = isLong
-            ? (t.feastExit.price - avgCost) * feastShr
-            : (avgCost - t.feastExit.price) * feastShr;
-          const restPnl = isLong
-            ? (t.finalExit.price - avgCost) * restShr
-            : (avgCost - t.finalExit.price) * restShr;
-          pnlDollar = feastPnl + restPnl;
-          exitReason = `FEAST+${t.finalExit.reason}`;
-        } else {
-          const avgCost = totalShr > 0 ? totalCost / totalShr : t.entryPrice;
-          pnlDollar = isLong
-            ? (t.finalExit.price - avgCost) * totalShr
-            : (avgCost - t.finalExit.price) * totalShr;
-        }
+        const avgCost = totalShr > 0 ? totalCost / totalShr : t.entryPrice;
+        pnlDollar = isLong
+          ? (t.finalExit.price - avgCost) * totalShr
+          : (avgCost - t.finalExit.price) * totalShr;
       } else {
         // Active — use latest price for unrealized P&L
         const avgCost = totalShr > 0 ? totalCost / totalShr : t.entryPrice;
         const curPrice = t.latestPrice;
-        if (t.feastExit) {
-          const feastShr = Math.floor(totalShr * 0.5);
-          const restShr  = totalShr - feastShr;
-          const feastPnl = isLong
-            ? (t.feastExit.price - avgCost) * feastShr
-            : (avgCost - t.feastExit.price) * feastShr;
-          const restPnl = isLong
-            ? (curPrice - avgCost) * restShr
-            : (avgCost - curPrice) * restShr;
-          pnlDollar = feastPnl + restPnl;
-        } else {
-          pnlDollar = isLong
-            ? (curPrice - avgCost) * totalShr
-            : (avgCost - curPrice) * totalShr;
-        }
+        pnlDollar = isLong
+          ? (curPrice - avgCost) * totalShr
+          : (avgCost - curPrice) * totalShr;
         exitDate = t.latestDate;
       }
 
@@ -825,10 +795,9 @@ export default function HistoryPage() {
                           <span style={{
                             fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3,
                             background: reason.includes('OVEREXTENDED')
-                              ? 'rgba(255,165,0,0.15)' : reason.includes('FEAST')
-                              ? 'rgba(252,240,0,0.12)' : isPos ? 'rgba(40,167,69,0.15)' : 'rgba(220,53,69,0.15)',
+                              ? 'rgba(255,165,0,0.15)' : isPos ? 'rgba(40,167,69,0.15)' : 'rgba(220,53,69,0.15)',
                             color: reason.includes('OVEREXTENDED') ? '#ffa500'
-                              : reason.includes('FEAST') ? YELLOW : isPos ? GREEN : RED,
+                              : isPos ? GREEN : RED,
                           }}>
                             {reason}
                           </span>

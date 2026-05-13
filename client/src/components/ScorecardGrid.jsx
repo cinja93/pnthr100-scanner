@@ -112,7 +112,7 @@ function computeChecks(entry) {
   }
 
   // ── Exit checks ──
-  const systemExits = ['SIGNAL', 'STOP_HIT', 'FEAST', 'STALE_HUNT'];
+  const systemExits = ['SIGNAL', 'STOP_HIT', 'STALE_HUNT'];
   const exitCheck     = exitReason ? systemExits.includes(exitReason) : null;
   const notEarlyCheck = exitReason === 'MANUAL' ? false : (exitReason ? true : null);
   const onSignalCheck = exitReason === 'SIGNAL';
@@ -237,8 +237,8 @@ const TIP = {
   sectorTrend:  'Sector trend alignment. ✓ = traded with sector ETF OpEMA direction. ✗ = traded against sector trend',
   entrySignal:  'Entry signal at time of trade. BL+1 = fresh buy long, SS+1 = fresh sell short, NO SIGNAL = no PNTHR signal existed',
   signalCheck:  'Signal quality check. ✓ = entered on fresh signal (BL+1 or SS+1). ✗ = stale signal (BL+2 or later). ⚠ = no signal (PAUSE)',
-  exitSignal:   'Exit reason. SIGNAL = system BE/SE exit. STOP_HIT = stopped out. MANUAL = manual override. FEAST = RSI > 85. STALE_HUNT = 20-day expiry',
-  exitCheck:    'Exit discipline. ✓ = exited via system rule (signal, stop, FEAST, stale hunt). ✗ = manual override',
+  exitSignal:   'Exit reason. SIGNAL = system BE/SE exit. STOP_HIT = stopped out. MANUAL = manual override. STALE_HUNT = 20-day expiry',
+  exitCheck:    'Exit discipline. ✓ = exited via system rule (signal, stop, stale hunt). ✗ = manual override',
   notEarly:     'Closed early check. ✓ = trade ran to system exit. ✗ = manually closed before system signaled exit',
   onSignal:     'Closed on signal. ✓ = exited on BE/SE signal specifically. ✗ = any other exit reason',
   washRule:     'Wash sale rule. ✓ = no active wash window when entered. ✗ = entered during a 30-day wash window from a prior loss',

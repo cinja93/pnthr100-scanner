@@ -1516,9 +1516,7 @@ const COLUMN_TOOLTIPS = {
   'RSI':
     'Weekly RSI(14) at the signal bar. Context only — does NOT affect ' +
     'selection. For LONG: low RSI means oversold entering strength (early ' +
-    'in the move); high RSI means extended (late in the move, FEAST risk ' +
-    'above 85). For SHORT: inverse. Weekly RSI > 85 triggers FEAST alerts on ' +
-    'open positions.',
+    'in the move); high RSI means extended (late in the move). For SHORT: inverse.',
   '#':
     'Filtered rank — this row\'s position in the current week\'s gate-filtered ' +
     'pool, ranked by Kill score. Rank 1 = strongest BL (or SS) that passed ' +

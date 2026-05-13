@@ -163,8 +163,7 @@ export default function BacktestTradeCard({ trade, allTrades, onClose }) {
               {t.exitReason && (
                 <span style={{
                   color: t.exitReason === 'SIGNAL' || t.exitReason === 'SIGNAL_BE' || t.exitReason === 'SIGNAL_SE'
-                    ? '#6bcb77' : t.exitReason === 'FEAST' ? '#fcf000'
-                    : t.exitReason === 'STOP_HIT' ? '#ff8c00' : '#888',
+                    ? '#6bcb77' : t.exitReason === 'STOP_HIT' ? '#ff8c00' : '#888',
                   fontWeight: 700, fontSize: 10, letterSpacing: '0.05em',
                   background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: 4,
                 }}>{t.exitReason}</span>

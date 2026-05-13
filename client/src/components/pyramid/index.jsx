@@ -147,7 +147,6 @@ export function ExitPanel({ position, onClose, onConfirm }) {
 
   const REASONS = [
     { value: 'SIGNAL',       label: 'SIGNAL — PNTHR exit signal (BE/SE) fired' },
-    { value: 'FEAST',        label: 'FEAST — RSI extreme, selling per FEAST rule' },
     { value: 'STOP_HIT',     label: 'STOP_HIT — Stop price was hit' },
     { value: 'STALE_HUNT',   label: 'STALE_HUNT — 20-day timer expired' },
     { value: 'RISK_ADVISOR', label: 'RISK ADVISOR — Sector/heat risk management' },
@@ -477,21 +476,6 @@ export function PyramidCard({ position, netLiquidity, onUpdate, onUpdateStop, on
       border: `1px solid ${flashBorder}`,
       boxShadow: flashShadow,
       transition: 'border-color 0.6s ease, box-shadow 0.6s ease' }}>
-      {/* FEAST Alert — RSI > 85: overextended, sell 50% immediately */}
-      {position.feastAlert && (
-        <div style={{ background: 'rgba(220,53,69,0.2)', borderBottom: '1px solid rgba(220,53,69,0.4)',
-          padding: '9px 18px', display: 'flex', alignItems: 'center', gap: 10,
-          fontSize: 12, fontWeight: 700, letterSpacing: '0.03em' }}>
-          <span style={{ fontSize: 16, lineHeight: 1 }}>⚠</span>
-          <span style={{ color: '#FFD700' }}>FEAST ALERT</span>
-          <span style={{ color: '#e8e6e3' }}>—</span>
-          <span style={{ color: '#ff6b6b' }}>
-            Weekly RSI {position.feastRSI != null ? position.feastRSI.toFixed(0) : '>85'}
-          </span>
-          <span style={{ color: '#e8e6e3' }}>—</span>
-          <span style={{ color: '#FFD700' }}>SELL 50% IMMEDIATELY</span>
-        </div>
-      )}
       {/* Header */}
       <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         background: staleHeaderBg }}>

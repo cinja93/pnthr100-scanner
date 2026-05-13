@@ -407,18 +407,12 @@ function ActiveTable({ rows, settings }) {
             const pnlDollar = r.currentPnlDollar ?? null;
             const rowBg     = i % 2 === 1 ? ROW_ALT : 'transparent';
             const days      = daysSince(r.firstAppearanceDate);
-            const feast     = r.feastFired;
             return (
               <tr key={r._id} style={{ background: rowBg }}>
                 <TD style={{ color: Y, fontWeight: 700 }}>#{r.firstKillRank ?? '—'}</TD>
                 <TD>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontWeight: 800, color: '#fff', fontSize: 14 }}>{r.ticker}</span>
-                    {feast && (
-                      <span title="Feast Alert fired — 50% exited" style={{ fontSize: 10, color: ORANGE, fontWeight: 700, border: `1px solid ${ORANGE}`, borderRadius: 3, padding: '1px 4px' }}>
-                        FEAST
-                      </span>
-                    )}
                   </div>
                   {r.sector && <div style={{ fontSize: 10, color: DIM, marginTop: 2 }}>{r.sector}</div>}
                 </TD>
@@ -494,7 +488,7 @@ function ActiveTable({ rows, settings }) {
 function ClosedTable({ rows }) {
   if (!rows.length) return (
     <div style={{ padding: '48px 0', textAlign: 'center', color: SUBDIM, fontSize: 13 }}>
-      No closed trades yet — results appear here when stop hit, signal closes, or Feast exit.
+      No closed trades yet — results appear here when stop hit or signal closes.
     </div>
   );
 
@@ -521,7 +515,7 @@ function ClosedTable({ rows }) {
         <tbody>
           {rows.map((r, i) => {
             const rowBg = i % 2 === 1 ? ROW_ALT : 'transparent';
-            const reasonColor = { STOP: RED, FEAST: ORANGE, SIGNAL_CLOSE: '#4fc870' }[r.exitReason] ?? DIM;
+            const reasonColor = { STOP: RED, SIGNAL_CLOSE: '#4fc870' }[r.exitReason] ?? DIM;
             return (
               <tr key={r._id} style={{ background: rowBg }}>
                 <TD>
@@ -1170,9 +1164,8 @@ export default function KillTestPage() {
     const lotsStats = active.reduce((acc, r) => {
       acc.total++;
       acc.lotsFilledTotal += r.lotsFilledCount || 1;
-      if (r.feastFired) acc.feast++;
       return acc;
-    }, { total: 0, lotsFilledTotal: 0, feast: 0 });
+    }, { total: 0, lotsFilledTotal: 0 });
 
     return { winRate, avgProfitPct, totalPnlDollar, avgRisk, avgActivePnl, activeDollarPnl, lotsStats };
   }, [active, closed]);
@@ -1411,7 +1404,7 @@ export default function KillTestPage() {
           label="Avg Lots"
           value={lotsAvg ?? '—'}
           color="#48b0ff"
-          sub={`${stats.lotsStats.feast} feast alerts`}
+          sub="per active position"
         />
       </div>
 
@@ -1455,7 +1448,7 @@ export default function KillTestPage() {
       {/* ── Footer note ────────────────────────────────────────────────── */}
       <div style={{ marginTop: 14, fontSize: 11, color: SUBDIM, display: 'flex', justifyContent: 'space-between' }}>
         <span>
-          Lot fills detected from daily OHLC range (4:30 PM ET). Feast: RSI &gt; 85 (BL) / &lt; 15 (SS) → 50% exit Friday.
+          Lot fills detected from daily OHLC range (4:30 PM ET).
         </span>
         <span>
           Lot 2+ fill → stop ratchets to avg cost of all filled lots (true breakeven)

@@ -6,7 +6,6 @@
 //   sizingUtils.js       → STRIKE_PCT, LOT_OFFSETS, LOT_TIME_GATES
 //   stopCalculation.js   → computeWilderATR, blInitStop, ssInitStop
 //   signalService.js     → BE/SE detection, weekly stop ratchet
-//   commandCenter.js     → FEAST RSI > 85 / < 15 → sell 50%
 //   apexService.js       → OVEREXTENDED (closeSepPct > 20, killScore = -99)
 //
 // The simulation timeline (lot fills, exits) is price-driven and NAV-independent.
@@ -25,37 +24,6 @@ const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 const STRIKE_PCT     = [0.35, 0.25, 0.20, 0.12, 0.08];
 const LOT_OFFSETS    = [0, 0.03, 0.06, 0.10, 0.14];
 const LOT_TIME_GATES = [0, 5, 0, 0, 0]; // 5-day gate for Lot 2 only
-
-// ── RSI (standard 14-period Wilder smoothing) ────────────────────────────────
-
-function computeRSI(closes) {
-  const period = 14;
-  if (closes.length < period + 1) return null;
-
-  const changes = [];
-  for (let i = 1; i < closes.length; i++) changes.push(closes[i] - closes[i - 1]);
-
-  // Seed: simple average of first `period` gains/losses
-  let avgGain = 0, avgLoss = 0;
-  for (let i = 0; i < period; i++) {
-    if (changes[i] > 0) avgGain += changes[i];
-    else avgLoss += Math.abs(changes[i]);
-  }
-  avgGain /= period;
-  avgLoss /= period;
-
-  // Wilder smoothing through remaining changes
-  for (let i = period; i < changes.length; i++) {
-    const gain = changes[i] > 0 ? changes[i] : 0;
-    const loss = changes[i] < 0 ? Math.abs(changes[i]) : 0;
-    avgGain = (avgGain * (period - 1) + gain) / period;
-    avgLoss = (avgLoss * (period - 1) + loss) / period;
-  }
-
-  if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return parseFloat((100 - 100 / (1 + rs)).toFixed(2));
-}
 
 // ── Get Monday of a date's week ──────────────────────────────────────────────
 
@@ -118,11 +86,10 @@ function simulateTrade(trade, allDaily, weeklySnapshots) {
   const isLong  = trade.direction === 'LONG';
   const isShort = !isLong;
 
-  // Filter daily bars: need ~60 days before entry for RSI warmup, through latest
   const entryIdx = allDaily.findIndex(b => b.date >= trade.entryDate);
   if (entryIdx < 0) return null;
 
-  // Start 60 bars before entry for RSI warmup
+  // Start 60 bars before entry for ATR warmup
   const warmupStart = Math.max(0, entryIdx - 60);
   const daily = allDaily.slice(warmupStart);
   const entryBarIdx = daily.findIndex(b => b.date >= trade.entryDate);
@@ -151,10 +118,6 @@ function simulateTrade(trade, allDaily, weeklySnapshots) {
 
   // Lot 1 fills at entry
   lots.push({ lot: 1, fillDate: trade.entryDate, fillPrice: trade.entryPrice, pctOfTotal: STRIKE_PCT[0] });
-
-  // FEAST tracking
-  let feastExit = null;
-  let feastTriggered = false;
 
   // Final exit
   let finalExit = null;
@@ -287,31 +250,14 @@ function simulateTrade(trade, allDaily, weeklySnapshots) {
       break;
     }
 
-    // ── 2. Check FEAST (RSI > 85 for longs, RSI < 15 for shorts) ───────
-    if (!feastTriggered) {
-      // Collect last 15+ closes for RSI computation (need 14 changes + seed)
-      const closesForRSI = [];
-      for (let j = Math.max(0, i - 30); j <= i; j++) {
-        closesForRSI.push(daily[j].close);
-      }
-      const rsi = computeRSI(closesForRSI);
-      if (rsi !== null) {
-        const feastFired = isLong ? rsi >= 85 : rsi <= 15;
-        if (feastFired) {
-          feastTriggered = true;
-          feastExit = { date: bar.date, price: bar.close, rsi, sharePct: 0.50 };
-        }
-      }
-    }
-
-    // ── 3. Check OVEREXTENDED (from case study weekly snapshots) ────────
+    // ── 2. Check OVEREXTENDED (from case study weekly snapshots) ────────
     const snapForDate = weeklySnapshots?.find(s => s.date === bar.date);
     if (snapForDate && snapForDate.killScore === -99) {
       finalExit = { date: bar.date, price: bar.close, reason: 'OVEREXTENDED' };
       break;
     }
 
-    // ── 4. Check lot triggers ──────────────────────────────────────────
+    // ── 3. Check lot triggers ──────────────────────────────────────────
     const nextLotIdx = lots.length; // 0-based: lots.length = number filled
     if (nextLotIdx < 5) {
       // Time gate check: trading days since last lot fill
@@ -376,7 +322,6 @@ function simulateTrade(trade, allDaily, weeklySnapshots) {
     entryTier:   trade.entryTier,
     status,
     lots,
-    feastExit,
     finalExit,
     latestPrice: finalExit ? finalExit.price : lastBar?.close ?? trade.entryPrice,
     latestDate:  finalExit ? finalExit.date  : lastBar?.date  ?? trade.entryDate,

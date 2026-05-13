@@ -22,7 +22,6 @@ import { connectToDatabase }      from './database.js';
 import { checkCaseStudyEntries }  from './killHistory.js';
 import { saveWeeklySnapshot, getCurrentWeekOf } from './signalHistoryService.js';
 import { getKillTestSettings, serverSizePosition, buildServerLotConfig } from './killTestSettings.js';
-import { checkFeastAlerts } from './killTestDailyUpdate.js';
 import { updateDemoPortfolio } from './demoEngine.js';
 import { getLastFriday } from './technicalUtils.js';
 import { runOrdersPipeline } from './ordersPipeline.js';
@@ -244,12 +243,6 @@ async function updateKillAppearances(db, scored, weekOf, regime, jungleSignals =
         currentAvgCost:  price,
         currentShares:   lotConfig ? lotConfig.lots[0].targetShares : null,
         lotsFilledCount: 1,
-        // Feast alert tracking
-        feastFired:     false,
-        feastDate:      null,
-        feastRsi:       null,
-        feastExitPrice: null,
-        feastExitShares: 0,
         // P&L tracking
         currentPnlPct:    0,
         currentPnlDollar: 0,
@@ -647,13 +640,6 @@ export async function runFridayKillPipeline() {
       await updateKillAppearances(db, scored, weekOf, contextSummary, jungleSignals, ktSettings);
     } catch (err) {
       console.error('[Kill Pipeline] Appearances update failed (non-fatal):', err.message);
-    }
-
-    // ── 5e. Kill Test Feast Alert check (weekly RSI from scored data) ─────────
-    try {
-      await checkFeastAlerts(db, scored, weekOf);
-    } catch (err) {
-      console.error('[Kill Pipeline] Feast alert check failed (non-fatal):', err.message);
     }
 
     // ── 6. Case Study Entries ──────────────────────────────────────────────

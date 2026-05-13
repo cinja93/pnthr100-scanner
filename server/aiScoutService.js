@@ -42,8 +42,8 @@ const COMBO6_GAP_MIN   = 5;    // Gap 5–15% from weekly EMA
 const COMBO6_GAP_MAX   = 15;
 const COMBO6_SLOPE_MAX = 50;   // EMA slope 0–50% annualized (BL) / -50–0% (SS)
 // Quality grades for display
-const BEST_GAP_MIN     = 15;   // Gap ≥ 15% = ★ BEST grade
-const GOOD_GAP_MIN     = 12;   // Gap ≥ 12% = ✓ GOOD grade
+const BEST_GAP_MIN     = 12;   // Gap ≥ 12% = ★ BEST grade
+const BETTER_GAP_MIN   = 9;    // Gap ≥ 9%  = ✓ BETTER grade
 
 const TICKER_META = {};
 for (const sec of SECTORS) {
@@ -237,7 +237,7 @@ export async function scanForNewScouts({ nav = 100000, dryRun = false } = {}) {
     const absGap = Math.abs(gapPct);
     const absSlope = Math.abs(wEmaSlope);
     const qualityGrade = absGap >= BEST_GAP_MIN && absSlope < COMBO6_SLOPE_MAX ? 'BEST'
-      : absGap >= GOOD_GAP_MIN && absSlope < COMBO6_SLOPE_MAX ? 'BETTER' : 'GOOD';
+      : absGap >= BETTER_GAP_MIN && absSlope < COMBO6_SLOPE_MAX ? 'BETTER' : 'GOOD';
 
     const scoutDoc = {
       ticker,

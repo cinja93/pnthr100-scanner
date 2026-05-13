@@ -39,6 +39,7 @@ import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './ai
 import { autoExecuteAiOrders, autoExecuteScoutEntries, autoExecuteScoutConversions, autoExecuteWeeklyOrders } from './aiAutoExecute.js';
 import { scanForNewScouts, manageActiveScouts, checkConversions, getActiveScouts, getScoutHistory } from './aiScoutService.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
+import { runAiWeeklyRatchet, runAiStaleHuntCheck } from './aiPositionManager.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS as AI_SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
@@ -5644,6 +5645,39 @@ cron.schedule('15 16 * * 1-5', async () => {
     aiUniverseDailyRunning = false;
   }
 }, { timezone: 'America/New_York' });
+
+// ── Cron: AI 300 stale hunt check — daily at 4:32pm ET (after 4:15 pipeline)
+cron.schedule('32 16 * * 1-5', async () => {
+  try {
+    console.log('[AI PosManager] running daily stale hunt check...');
+    const result = await runAiStaleHuntCheck();
+    console.log(`[AI PosManager] stale hunt: ${result.staleExits || 0} exits`);
+  } catch (e) { console.error('[CRON] AI stale hunt failed:', e.message); }
+}, { timezone: 'America/New_York' });
+
+// ── Cron: AI 300 weekly stop ratchet + structural exit — Friday 4:35pm ET
+cron.schedule('35 16 * * 5', async () => {
+  try {
+    console.log('[AI PosManager] running weekly stop ratchet + structural exit...');
+    const result = await runAiWeeklyRatchet();
+    console.log(`[AI PosManager] weekly ratchet: ${result.ratcheted || 0} ratcheted, ${result.structuralExits || 0} structural exits`);
+  } catch (e) { console.error('[CRON] AI weekly ratchet failed:', e.message); }
+}, { timezone: 'America/New_York' });
+
+// Admin endpoints for manual AI position management
+app.post('/api/admin/run-ai-weekly-ratchet', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await runAiWeeklyRatchet();
+    res.json({ ok: true, ...result });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/admin/run-ai-stale-hunt', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await runAiStaleHuntCheck();
+    res.json({ ok: true, ...result });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 // POST /api/admin/run-ai-universe-daily — manual trigger for ops.
 // Useful after deploys (catch up missing bars without waiting for 4:15pm).

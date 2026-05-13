@@ -150,7 +150,7 @@ export async function runAiOrdersPipeline(opts = {}) {
   }
 
   // 4. Build candidate orders
-  const orders = [];
+  let orders = [];
   const skipLog = { blNoGo: 0, ssGo: 0, notEntry: 0, noStop: 0, noPrice: 0, blRegimeBlocked: 0 };
 
   for (const ticker of allTickers) {
@@ -210,8 +210,8 @@ export async function runAiOrdersPipeline(opts = {}) {
     if (gapPct != null && wEmaSlope != null) {
       const absGap = Math.abs(gapPct);
       const absSlope = Math.abs(wEmaSlope);
-      if (absGap >= 15 && absSlope < 50) qualityGrade = 'BEST';
-      else if (absGap >= 12 && absSlope < 50) qualityGrade = 'BETTER';
+      if (absGap >= 12 && absSlope < 50) qualityGrade = 'BEST';
+      else if (absGap >= 9 && absSlope < 50) qualityGrade = 'BETTER';
     }
 
     const heatDollar = +(lot1Shares * riskPerShare).toFixed(2);
@@ -249,9 +249,19 @@ export async function runAiOrdersPipeline(opts = {}) {
   orders.sort((a, b) => {
     const t = tierRankForSort(a.sectorTier) - tierRankForSort(b.sectorTier);
     if (t !== 0) return t;
-    // newer signal first
     return (b.signalDate || '').localeCompare(a.signalDate || '');
   });
+
+  // 5b. Cap: top 10 BL + top 5 SS per week (matching APEX v6 backtest)
+  const MAX_BL = 10, MAX_SS = 5;
+  const blAll = orders.filter(o => o.signal === 'BL');
+  const ssAll = orders.filter(o => o.signal === 'SS');
+  const cappedBL = blAll.slice(0, MAX_BL);
+  const cappedSS = ssAll.slice(0, MAX_SS);
+  const cappedSet = new Set([...cappedBL, ...cappedSS]);
+  const droppedCount = orders.length - cappedSet.size;
+  orders = orders.filter(o => cappedSet.has(o));
+  if (droppedCount > 0) console.log(`[AI Orders] capped: dropped ${droppedCount} orders (BL ${blAll.length}→${cappedBL.length}, SS ${ssAll.length}→${cappedSS.length})`);
 
   // 6. Aggregate stats for header display
   const blOrders = orders.filter(o => o.signal === 'BL');

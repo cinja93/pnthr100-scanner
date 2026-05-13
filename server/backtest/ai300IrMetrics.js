@@ -439,6 +439,17 @@ async function main() {
     gross.dailySeries = dailySeries;
     gross.monthlyActivitySummary = monthlyActivitySummary;
 
+    // SPY annual returns (aligned to PNTHR trading dates)
+    const spyAnnualYears = new Map();
+    for (const d of dailySeries) {
+      const y = d.date.slice(0, 4);
+      if (!spyAnnualYears.has(y)) spyAnnualYears.set(y, { first: d.spyEquity, last: d.spyEquity });
+      spyAnnualYears.get(y).last = d.spyEquity;
+    }
+    const spyAnnualReturns = [...spyAnnualYears.entries()].map(([y, { first, last }]) => ({
+      year: y, ret: +(((last - first) / first) * 100).toFixed(2),
+    }));
+
     const tradeStats = computeTradeStats(allTrades);
     const spy = spyMetrics(spyDaily, gross.startDate, gross.endDate, tier.seedNav);
 
@@ -457,7 +468,7 @@ async function main() {
       tier: tier.key, label: tier.label, classLabel: tier.classLabel,
       seedNav: tier.seedNav, fundName: 'AI Elite Fund',
       feeSchedule: { yearsOneToThree: tier.feeYr1to3, yearsFourPlus: tier.feeYr4plus },
-      gross, net, trades: tradeStats, spy,
+      gross, net, trades: tradeStats, spy, spyAnnualReturns,
       crisisAlphaGross: crisisGross, crisisAlphaNet: crisisNet,
       alphaVsSpy: {
         totalReturnPts: +alphaTR.toFixed(2), cagrPts: +alphaCAGR.toFixed(2),

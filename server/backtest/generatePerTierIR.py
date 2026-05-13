@@ -2042,19 +2042,23 @@ def section_crisis_annual_direction(t):
     ))
 
     s += section_heading('ANNUAL PERFORMANCE: PNTHR vs S&P 500')
+    spy_by_year = {r['year']: r['ret'] for r in t.get('spyAnnualReturns', [])}
     a_rows = []
     for ar in t['net']['annualReturns']:
+        spy_ret = spy_by_year.get(ar['year'], 0)
+        spy_c = '#22c55e' if spy_ret > 0 else ('#ef4444' if spy_ret < 0 else '#cccccc')
         r_c = '#22c55e' if ar['ret'] > 0 else ('#ef4444' if ar['ret'] < 0 else '#cccccc')
         a_rows.append([
             Paragraph(f'<font color="#ffffff">{ar["year"]}</font>', S('an0', fontSize=9)),
             Paragraph(f'<font color="#cccccc">{fmt_usd(ar["startEquity"], compact=True)}</font>', S('an1', fontSize=9, alignment=TA_RIGHT)),
             Paragraph(f'<font color="#fcf000">{fmt_usd(ar["endEquity"], compact=True)}</font>',   S('an2', fontSize=9, alignment=TA_RIGHT)),
+            Paragraph(f'<font color="{spy_c}">{spy_ret:+.2f}%</font>', S('an4', fontSize=9, alignment=TA_RIGHT)),
             Paragraph(f'<font color="{r_c}">{ar["ret"]:+.2f}%</font>', S('an3', fontSize=9, alignment=TA_RIGHT)),
         ])
     s.append(_dark_table(
-        ['YEAR', 'START EQUITY', 'END EQUITY', 'RETURN'],
+        ['YEAR', 'START EQUITY', 'END EQUITY', 'S&P 500', 'PNTHR AI RETURNS'],
         a_rows,
-        col_widths=[0.9*inch, 1.4*inch, 1.4*inch, CONTENT_W - 3.7*inch],
+        col_widths=[0.9*inch, 1.3*inch, 1.3*inch, 0.9*inch, CONTENT_W - 4.4*inch],
     ))
 
     s += section_heading('STRATEGY METRICS BY DIRECTION (Pre-Fund-Fees)')

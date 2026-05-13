@@ -1,7 +1,7 @@
 // 81 AI 300 tickers that run under Carnivore (679) strategy rules:
 // weekly-only pyramid, SPY/QQQ regime gate, sector OpEMAs (18-26W).
 // All other AI 300 tickers run under AI 300 rules:
-// scouts + weekly, PAI300 regime gate, AI-tuned EMAs (30-40W).
+// weekly + sector rotation, PAI300 regime gate, AI-tuned EMAs (30-40W).
 // Source: overlap P&L analysis (Nov 2022 – May 2026), locked 2026-05-12.
 
 // GICS sector → OpEMA period (from server/sectorEmaConfig.js)

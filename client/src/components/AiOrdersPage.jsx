@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchLatestAiOrders, runAiOrders, runAiScouts, fetchNav } from '../services/api';
+import { fetchLatestAiOrders, runAiOrders, fetchNav } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import AssistantLiveTable from './AssistantLiveTable';
 import { computeWeeksAgo } from '../utils/dateUtils';
-import { getStrategyMode, isCarnivoreMode } from '../utils/strategyMode';
+import { getStrategyMode } from '../utils/strategyMode';
 
 const TIER_COLORS = {
   GO:      { bg: '#16a34a', fg: '#000', label: 'GO' },
@@ -149,23 +149,6 @@ const ORDER_ACCESSORS = {
   status:     o => o.isNewSignal ? 0 : 1,
 };
 
-const SCOUT_ACCESSORS = {
-  grade:      s => s.qualityGrade === 'BEST' ? 0 : s.qualityGrade === 'BETTER' ? 1 : 2,
-  mode:       s => getStrategyMode(s.ticker),
-  status:     s => s._statusRank,
-  ticker:     s => s.ticker,
-  sector:     s => s.sectorId,
-  tier:       s => TIER_RANK[s.sectorTier] ?? 99,
-  entry:      s => s.entryPrice,
-  stop:       s => s.stopPrice,
-  scoutSh:    s => s._scaledShares,
-  fullL1:     s => s._scaledFullL1,
-  gapPct:     s => s.gapPct,
-  slope:      s => s.wEmaSlope,
-  entryDate:  s => s.entryDate || '',
-  daysOpen:   s => s.tradingDaysOpen || 0,
-};
-
 export default function AiOrdersPage() {
   const { isAdmin } = useAuth();
   const [doc, setDoc] = useState(null);
@@ -178,7 +161,6 @@ export default function AiOrdersPage() {
   const [runMsg, setRunMsg] = useState(null);
   const [userNav, setUserNav] = useState(null);
   const [orderSort, toggleOrderSort] = useSort('action', 'asc');
-  const [scoutSort, toggleScoutSort] = useSort('status', 'asc');
   const [heatData, setHeatData] = useState(null);
 
   const load = () => {
@@ -201,11 +183,6 @@ export default function AiOrdersPage() {
     return actual / assumed;
   }, [doc, userNav]);
 
-  const weeklyBLTickers = useMemo(() => {
-    if (!doc?.orders) return new Set();
-    return new Set(doc.orders.filter(o => o.signal === 'BL').map(o => o.ticker));
-  }, [doc]);
-
   const orders = useMemo(() => {
     if (!doc?.orders) return [];
     const filtered = doc.orders.filter(o => {
@@ -227,22 +204,6 @@ export default function AiOrdersPage() {
     });
     return sortRows(filtered, orderSort, ORDER_ACCESSORS);
   }, [doc, filter, navScale, orderSort]);
-
-  const scouts = useMemo(() => {
-    if (!doc?.scouts?.length) return [];
-    const enriched = doc.scouts.filter(s => !isCarnivoreMode(s.ticker)).map(s => {
-      const isConverted = s.status === 'CONVERTED';
-      const hasWeeklyBL = weeklyBLTickers.has(s.ticker);
-      return {
-        ...s,
-        _statusRank: isConverted ? 0 : hasWeeklyBL ? 1 : 2,
-        _isConfirmed: isConverted || hasWeeklyBL,
-        _scaledShares: Math.max(1, Math.round(s.shares * navScale)),
-        _scaledFullL1: Math.max(1, Math.round(s.fullLot1Shares * navScale)),
-      };
-    });
-    return sortRows(enriched, scoutSort, SCOUT_ACCESSORS);
-  }, [doc, weeklyBLTickers, navScale, scoutSort]);
 
   const onRun = async () => {
     setRunning(true);
@@ -318,26 +279,11 @@ export default function AiOrdersPage() {
           </div>
 
           {isAdmin && (
-            <>
-              <button onClick={onRun} disabled={running} style={{
-                padding: '4px 10px', fontSize: 11, fontWeight: 700,
-                background: '#fcf000', color: '#000', border: 'none', borderRadius: 3,
-                cursor: running ? 'wait' : 'pointer',
-              }}>{running ? 'RUNNING…' : 'REGENERATE'}</button>
-              <button onClick={async () => {
-                setRunning(true);
-                try {
-                  const r = await runAiScouts({ nav: userNav || 100000 });
-                  setRunMsg(`Scouts: ${r.scan?.newScouts ?? 0} new, ${r.manage?.stopped ?? 0} stopped, ${r.manage?.active ?? 0} active`);
-                  load();
-                } catch (e) { setRunMsg(`Scout scan failed: ${e.message}`); }
-                finally { setRunning(false); }
-              }} disabled={running} style={{
-                padding: '4px 10px', fontSize: 11, fontWeight: 700,
-                background: '#00e5ff', color: '#000', border: 'none', borderRadius: 3,
-                cursor: running ? 'wait' : 'pointer',
-              }}>{running ? 'SCANNING…' : 'SCAN SCOUTS'}</button>
-            </>
+            <button onClick={onRun} disabled={running} style={{
+              padding: '4px 10px', fontSize: 11, fontWeight: 700,
+              background: '#fcf000', color: '#000', border: 'none', borderRadius: 3,
+              cursor: running ? 'wait' : 'pointer',
+            }}>{running ? 'RUNNING…' : 'REGENERATE'}</button>
           )}
         </div>
       )}
@@ -392,118 +338,14 @@ export default function AiOrdersPage() {
         </div>
       )}
 
-      {/* Section 1: Daily Cascade Scouts — rendered first, pipeline starts here */}
-      {scouts.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <div style={{
-            display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8,
-            borderBottom: '2px solid #00e5ff', paddingBottom: 6,
-          }}>
-            <h2 style={{ color: '#00e5ff', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>1 · PNTHR Daily Scouts</h2>
-            <span style={{ color: '#888', fontSize: 11 }}>50% of Lot 1 (BL + SS) — 28-day conversion window</span>
-            <span style={{
-              padding: '3px 8px', background: '#00e5ff', color: '#000', borderRadius: 3,
-              fontSize: 10, fontWeight: 700,
-            }}>
-              {doc.stats?.activeScouts || 0} ACTIVE · {doc.stats?.convertedScouts || 0} CONVERTED
-            </span>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
-              <thead>
-                <tr style={{ background: '#1a1a1a', color: '#00e5ff', textAlign: 'left' }}>
-                  <SortHeader label="Grade"      sortKey="grade"     currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Mode"       sortKey="mode"      currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Status"     sortKey="status"    currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <th style={{ padding: '6px 4px', width: 16 }} />
-                  <SortHeader label="Ticker"     sortKey="ticker"    currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Sector"     sortKey="sector"    currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Sector 💪"  sortKey="tier"      currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Entry"      sortKey="entry"     currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Stop"       sortKey="stop"      currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Scout sh"   sortKey="scoutSh"   currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Full L1"    sortKey="fullL1"    currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Gap %"      sortKey="gapPct"    currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Slope %"    sortKey="slope"     currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                  <SortHeader label="Entry Date" sortKey="entryDate" currentSort={scoutSort} onSort={toggleScoutSort} />
-                  <SortHeader label="Days Open"  sortKey="daysOpen"  currentSort={scoutSort} onSort={toggleScoutSort} align="right" />
-                </tr>
-              </thead>
-              <tbody>
-                {scouts.map(s => {
-                  const rowBg = s._isConfirmed ? 'rgba(252,240,0,0.08)' : 'transparent';
-                  return (
-                    <tr key={`scout-${s.ticker}`} style={{
-                      borderBottom: s._isConfirmed ? '1px solid rgba(252,240,0,0.3)' : '1px solid #1a1a1a',
-                      borderTop: s._isConfirmed ? '1px solid rgba(252,240,0,0.3)' : 'none',
-                      background: rowBg,
-                      cursor: 'pointer',
-                      boxShadow: s._isConfirmed ? 'inset 3px 0 0 #fcf000' : 'none',
-                    }}
-                    onClick={() => {
-                      setChartTickers([s.ticker]);
-                      setChartIndex(0);
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = s._isConfirmed ? 'rgba(252,240,0,0.14)' : '#1a1a1a'}
-                    onMouseLeave={e => e.currentTarget.style.background = rowBg}
-                    >
-                      <td style={{ padding: '6px 10px', textAlign: 'center', fontSize: 14 }}>
-                        {s.qualityGrade === 'BEST' ? <span style={{ color: '#fcf000', fontWeight: 700, fontSize: 11 }} title="Gap≥15%">BEST</span>
-                         : s.qualityGrade === 'BETTER' ? <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 11 }} title="Gap≥12%">BETTER</span>
-                         : <span style={{ color: '#999', fontWeight: 600, fontSize: 11 }}>GOOD</span>}
-                      </td>
-                      <td style={{ padding: '6px 10px', textAlign: 'center' }}><ModeBadge ticker={s.ticker} /></td>
-                      <td style={{ padding: '6px 10px' }}>
-                        {s.status === 'CONVERTED' ? (
-                          <span style={{
-                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
-                            background: '#fcf000', color: '#000',
-                          }}>CONVERTED</span>
-                        ) : weeklyBLTickers.has(s.ticker) ? (
-                          <span style={{
-                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
-                            background: '#fcf000', color: '#000',
-                          }}>WEEKLY BL ✓</span>
-                        ) : (
-                          <span style={{
-                            padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
-                            background: '#00e5ff', color: '#000',
-                          }}>SCOUT</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '2px 4px', textAlign: 'center', width: 16 }}>
-                        {s._isConfirmed && <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#16a34a', boxShadow: '0 0 4px #16a34a' }} title="Fires at next open" />}
-                      </td>
-                      <td style={{ padding: '6px 10px', fontWeight: 700, color: s._isConfirmed ? '#fcf000' : '#fff' }}>{s.ticker}</td>
-                      <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{s.sectorId} {s.sectorName?.split(' ').slice(0, 2).join(' ')}</td>
-                      <td style={{ padding: '6px 10px' }}><TierPill tier={s.sectorTier} /></td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(s.entryPrice)}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(s.stopPrice)}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: s._isConfirmed ? '#fcf000' : '#00e5ff' }}>{s._scaledShares}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: s._isConfirmed ? '#fcf000' : '#aaa' }}>{s._scaledFullL1}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{s.gapPct?.toFixed(1)}%</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{s.wEmaSlope?.toFixed(1)}%</td>
-                      <td style={{ padding: '6px 10px', color: '#888' }}>{s.entryDate || '—'}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', color: s.tradingDaysOpen >= 20 ? '#dc2626' : s.tradingDaysOpen >= 14 ? '#fcf000' : '#aaa' }}>
-                        {s.tradingDaysOpen || 0}/{s.conversionDeadlineDays || 28}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Section 2: Weekly Signal Orders — confirmed scouts graduate here */}
+      {/* Weekly Signal Orders — sector rotation gated (APEX v7) */}
       {orders.length > 0 && (
         <div style={{
           display: 'flex', alignItems: 'baseline', gap: 10, margin: '24px 0 8px',
           borderBottom: '2px solid #f97316', paddingBottom: 6,
         }}>
-          <h2 style={{ color: '#f97316', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>2 · PNTHR Weekly Orders</h2>
-          <span style={{ color: '#888', fontSize: 11 }}>Confirmed weekly BL/SS signals — full position sizing</span>
+          <h2 style={{ color: '#f97316', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>PNTHR Weekly Orders</h2>
+          <span style={{ color: '#888', fontSize: 11 }}>Weekly BL/SS signals — sector rotation gated, full position sizing</span>
         </div>
       )}
       {orders.length > 0 && (
@@ -619,13 +461,13 @@ export default function AiOrdersPage() {
         </div>
       )}
 
-      {/* Section 3: Live Positions */}
+      {/* Live Positions */}
       <div style={{ marginTop: 24 }}>
         <div style={{
           display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8,
           borderBottom: '2px solid #fcf000', paddingBottom: 6,
         }}>
-          <h2 style={{ color: '#fcf000', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>3 · PNTHR Live Positions</h2>
+          <h2 style={{ color: '#fcf000', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>PNTHR Live Positions</h2>
           <span style={{ color: '#888', fontSize: 11 }}>IBKR ↔ PNTHR source-of-truth reconciliation</span>
         </div>
         <AssistantLiveTable
@@ -659,8 +501,7 @@ export default function AiOrdersPage() {
         Sized at 1% NAV vitality × sector multiplier on your ${(userNav || 100000).toLocaleString()} NAV. Lot 1 = 35% of full target.
         BL skipped if sector NO_GO · SS skipped if sector GO · PAI300 36W EMA hard gate blocks all BL in bear regime.
         Quality grades: BEST (Gap{'>'}15%) · BETTER (Gap{'>'}12%) · GOOD (meets combo minimum).
-        Daily Cascade scouts enter at 50% of Lot 1 (BL + SS) — gold = weekly signal confirmed → enter remaining 50% for full Lot 1 → pyramid continues.
-        Realized DD -5.4% (backtest). 10% portfolio heat cap enforced.
+        Sector rotation gates all entries (APEX v7). 10% portfolio heat cap enforced.
       </div>
 
       {chartTickers.length > 0 && (

@@ -23,7 +23,6 @@ import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
 import { calculateEMA } from './signalDetection.js';
 import { fetchAiQuotesBatch } from './aiIntradayOverlay.js';
 import { getPai300Regime } from './pai300Regime.js';
-import { getActiveScouts } from './aiScoutService.js';
 import { isCarnivoreMode, getCarnivoreEmaPeriod } from './data/strategyMode.js';
 import { fetchIndexData } from './apexService.js';
 
@@ -294,42 +293,11 @@ export async function runAiOrdersPipeline(opts = {}) {
     })),
   };
 
-  // 8. Pull active scouts for display alongside weekly orders
-  let scouts = [];
-  try {
-    scouts = (await getActiveScouts()).map(s => ({
-      ticker: s.ticker,
-      mode: s.mode,
-      status: s.status,
-      direction: s.direction,
-      entryDate: s.entryDate,
-      entryPrice: s.entryPrice,
-      shares: s.shares,
-      stopPrice: s.stopPrice,
-      fullLot1Shares: s.fullLot1Shares,
-      totalTargetShares: s.totalTargetShares,
-      sectorId: s.sectorId,
-      sectorName: s.sectorName,
-      sectorTier: s.sectorTier,
-      tradingDaysOpen: s.tradingDaysOpen,
-      conversionDeadlineDays: s.conversionDeadlineDays,
-      gapPct: s.gapPct,
-      wEmaSlope: s.wEmaSlope,
-      qualityGrade: s.qualityGrade || null,
-      conversionDate: s.conversionDate || null,
-    }));
-  } catch (err) {
-    console.warn('[AI Orders] scout fetch failed:', err.message);
-  }
-
-  stats.activeScouts = scouts.filter(s => s.status === 'ACTIVE').length;
-  stats.convertedScouts = scouts.filter(s => s.status === 'CONVERTED').length;
-
-  // 9. Persist
+  // 8. Persist
   const doc = {
     weekOf, type, generatedAt: new Date(),
     sectorSummary,
-    orders, scouts, stats,
+    orders, stats,
     assumedNav: ASSUMED_NAV,
     vitalityPct: NAV_VITALITY_PCT,
     tickerCapPct: TICKER_CAP_PCT,

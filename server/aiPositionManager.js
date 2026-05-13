@@ -10,7 +10,7 @@
 //      (BL) or high > 2-week-high (SS), exit at stop price.
 //
 //   3. 20-day stale hunt — if position open ≥ 20 trading days AND underwater,
-//      close at market. Full positions only (scouts use their own 28-day timeout).
+//      close at market.
 //
 // Called by cron in index.js:
 //   - runAiWeeklyRatchet()   → Friday 4:30 PM ET (after bars settle)

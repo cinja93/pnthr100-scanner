@@ -510,17 +510,6 @@ export async function runAiOrders(opts = {}) {
   return response.json();
 }
 
-// PNTHR AI Scouts — Daily Cascade
-export async function runAiScouts(opts = {}) {
-  const response = await apiFetch(`${API_BASE}/api/admin/run-ai-scouts`, {
-    method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify(opts),
-  });
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-  return response.json();
-}
-
 // PNTHR AI Kill — v1 ranked scores
 export async function fetchLatestAiKill() {
   const response = await apiFetch(`${API_BASE}/api/ai-kill/latest`, { headers: authHeaders() });

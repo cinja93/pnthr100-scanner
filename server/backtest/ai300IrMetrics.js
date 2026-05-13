@@ -172,13 +172,12 @@ function topNDailyReturns(equity, dates, n, worst = false) {
   return items.slice(0, n);
 }
 
-function computeTradeStats(trades) {
-  const closed = trades.filter(t => t.exitDate && t.exitReason);
-  function tradePnl(t) { return t.dollarPnl || 0; }
-  function statsOf(arr) {
+function computeTradeStats(trades, seedNav = 1000000, pnlScale = 1) {
+  const closed = trades.filter(t => t.exitDate && t.exitReason && t.exitReason !== 'STILL_OPEN');
+  function statsOf(arr, pnlField) {
     let wins = 0, losses = 0, grossWin = 0, grossLoss = 0;
     for (const t of arr) {
-      const pnl = tradePnl(t);
+      const pnl = t[pnlField] || 0;
       if (pnl > 0) { wins++; grossWin += pnl; }
       else if (pnl < 0) { losses++; grossLoss += -pnl; }
     }
@@ -191,12 +190,25 @@ function computeTradeStats(trades) {
   }
   const bl = closed.filter(t => t.signal === 'BL');
   const ss = closed.filter(t => t.signal === 'SS');
-  const combined = statsOf(closed);
+  const combined = statsOf(closed, 'grossDollarPnl');
+  const combinedNet = statsOf(closed, 'netDollarPnl');
+
+  const sortedByExit = [...closed].sort((a, b) => (a.exitDate || '').localeCompare(b.exitDate || ''));
+  let cumPnl = 0, cumPeak = 0, realizedDD = 0;
+  for (const t of sortedByExit) {
+    cumPnl += (t.netDollarPnl || 0) * pnlScale;
+    if (cumPnl > cumPeak) cumPeak = cumPnl;
+    const dd = cumPeak > 0 ? (cumPnl - cumPeak) / (seedNav + cumPeak) * 100 : cumPnl / seedNav * 100;
+    if (dd < realizedDD) realizedDD = dd;
+  }
+
   return {
     total: trades.length, closed: closed.length, open: trades.length - closed.length,
-    bl: { count: bl.length, ...statsOf(bl) },
-    ss: { count: ss.length, ...statsOf(ss) },
+    bl: { count: bl.length, ...statsOf(bl, 'grossDollarPnl') },
+    ss: { count: ss.length, ...statsOf(ss, 'grossDollarPnl') },
     combined: { ...combined },
+    combinedNet: { ...combinedNet },
+    realizedDD: +realizedDD.toFixed(2),
   };
 }
 
@@ -350,7 +362,7 @@ async function main() {
       opensByDate.get(ed)[t.signal || 'BL'].push(t.ticker);
       if (t.exitDate && t.exitReason) {
         const xd = String(t.exitDate).slice(0, 10);
-        const pnl = Math.round((t.dollarPnl || 0) * scale);
+        const pnl = Math.round((t.grossDollarPnl || t.dollarPnl || 0) * scale);
         if (!closesByDate.has(xd)) closesByDate.set(xd, []);
         closesByDate.get(xd).push({ ticker: t.ticker, netPnl: pnl });
         openStartByTicker.set(t.ticker + '|' + ed, { entry: ed, exit: xd });
@@ -450,7 +462,7 @@ async function main() {
       year: y, ret: +(((last - first) / first) * 100).toFixed(2),
     }));
 
-    const tradeStats = computeTradeStats(allTrades);
+    const tradeStats = computeTradeStats(allTrades, tier.seedNav, tier.seedNav / 1_000_000);
     const spy = spyMetrics(spyDaily, gross.startDate, gross.endDate, tier.seedNav);
 
     const crisisGrossEq = grossDocs.map(d => +d.equity);

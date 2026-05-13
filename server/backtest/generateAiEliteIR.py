@@ -258,7 +258,7 @@ def section_cover(t):
         [(f'25.0%', 'Win Rate (9.5x Payoff)', YELLOW),
          (f'{trades["closed"]:,}', 'Total Closed Trades', YELLOW),
          (fmt_usd(net['endNav'], compact=True), f'Ending Equity ({fmt_usd(t["seedNav"])} start)', GREEN),
-         (f'+{fmt_usd(net["endNav"] - t["spy"]["endingEquity"], compact=True)}', 'Alpha vs S&P 500', GREEN)],
+         (f'+{fmt_usd(net["endNav"] - t["spy"]["endingEquity"], compact=True)}', 'Alpha vs S&amp;P 500', GREEN)],
     ]
     tile_w = CONTENT_W / 4
     for row in tiles:
@@ -404,7 +404,7 @@ def section_executive_summary(t):
     ))
 
     # Performance Comparison
-    s += section_heading('PERFORMANCE COMPARISON: AI ELITE FUND vs. S&P 500')
+    s += section_heading('PERFORMANCE COMPARISON: AI ELITE FUND vs. S&amp;P 500')
     pc_rows = [
         ['Total Return',
          Paragraph(f'<font color="#22c55e">+{net["totalReturn"]:.1f}%</font>', S('p1', fontSize=9, alignment=TA_RIGHT)),
@@ -441,7 +441,7 @@ def section_executive_summary(t):
     ]
     for row in pc_rows:
         row[0] = Paragraph(f'<font color="#cccccc">{row[0]}</font>', S('pc_l', fontSize=9))
-    pc_tbl = _dark_table(['METRIC', 'AI ELITE (NET)', 'S&P 500', 'ALPHA'],
+    pc_tbl = _dark_table(['METRIC', 'AI ELITE (NET)', 'S&amp;P 500', 'ALPHA'],
         pc_rows, col_widths=[2.2*inch, (CONTENT_W-2.2*inch)/3]*2 + [(CONTENT_W-2.2*inch)/3])
     s.append(pc_tbl)
 
@@ -532,7 +532,7 @@ def section_crisis_annual(t):
                 Paragraph(f'<font color="{spy_c}">{ev["spyReturn"]:+.1f}%</font>', S('ca2', fontSize=9, alignment=TA_RIGHT)),
                 Paragraph(f'<font color="{pn_c}">{ev["pnthrReturn"]:+.1f}%</font>', S('ca3', fontSize=9, alignment=TA_RIGHT)),
                 Paragraph(f'<font color="{al_c}">{ev["alpha"]:+.1f}%</font>', S('ca4', fontSize=9, alignment=TA_RIGHT))])
-    s.append(_dark_table(['MARKET EVENT', 'PERIOD', 'S&P 500', 'AI ELITE', 'ALPHA'], ca_rows,
+    s.append(_dark_table(['MARKET EVENT', 'PERIOD', 'S&amp;P 500', 'AI ELITE', 'ALPHA'], ca_rows,
         col_widths=[2.0*inch, 1.6*inch, 0.95*inch, 1.0*inch, CONTENT_W - 5.55*inch]))
 
     s += section_heading('ANNUAL PERFORMANCE')
@@ -542,13 +542,16 @@ def section_crisis_annual(t):
         spy_ret = spy_by_year.get(ar['year'], 0)
         spy_c = '#22c55e' if spy_ret > 0 else ('#ef4444' if spy_ret < 0 else '#cccccc')
         r_c = '#22c55e' if ar['ret'] > 0 else ('#ef4444' if ar['ret'] < 0 else '#cccccc')
+        alpha = ar['ret'] - spy_ret
+        al_c = '#22c55e' if alpha > 0 else ('#ef4444' if alpha < 0 else '#cccccc')
         a_rows.append([Paragraph(f'<font color="#ffffff">{ar["year"]}</font>', S('an0', fontSize=9)),
             Paragraph(f'<font color="#cccccc">{fmt_usd(ar["startEquity"], compact=True)}</font>', S('an1', fontSize=9, alignment=TA_RIGHT)),
             Paragraph(f'<font color="#fcf000">{fmt_usd(ar["endEquity"], compact=True)}</font>', S('an2', fontSize=9, alignment=TA_RIGHT)),
             Paragraph(f'<font color="{spy_c}">{spy_ret:+.2f}%</font>', S('an4', fontSize=9, alignment=TA_RIGHT)),
-            Paragraph(f'<font color="{r_c}">{ar["ret"]:+.2f}%</font>', S('an3', fontSize=9, alignment=TA_RIGHT))])
-    s.append(_dark_table(['YEAR', 'START EQUITY', 'END EQUITY', 'S&P 500', 'PNTHR AI RETURNS'], a_rows,
-        col_widths=[0.9*inch, 1.3*inch, 1.3*inch, 0.9*inch, CONTENT_W - 4.4*inch]))
+            Paragraph(f'<font color="{r_c}">{ar["ret"]:+.2f}%</font>', S('an3', fontSize=9, alignment=TA_RIGHT)),
+            Paragraph(f'<font color="{al_c}">{alpha:+.2f}%</font>', S('an5', fontSize=9, alignment=TA_RIGHT))])
+    s.append(_dark_table(['YEAR', 'START EQUITY', 'END EQUITY', 'S&amp;P 500', 'PNTHR AI RETURNS', 'PNTHR ALPHA'], a_rows,
+        col_widths=[0.7*inch, 1.1*inch, 1.1*inch, 0.85*inch, 1.4*inch, CONTENT_W - 5.15*inch]))
     s.append(PageBreak())
     return s
 
@@ -994,7 +997,7 @@ def section_recap(t):
         ['Max Drawdown', f'{net["maxDD"]:.2f}%', '#ef4444'],
         ['Positive Months', f'{net["positiveMonths"]} of {net["totalMonths"]} ({net["positivePct"]:.0f}%)', '#22c55e'],
         [f'Total Return ({fmt_usd(t["seedNav"])} start)', fmt_usd(net["endNav"], compact=True), '#fcf000'],
-        ['Alpha vs S&P 500', fmt_usd(net["endNav"] - spy["endingEquity"], compact=True), '#22c55e'],
+        ['Alpha vs S&amp;P 500', fmt_usd(net["endNav"] - spy["endingEquity"], compact=True), '#22c55e'],
     ]
     r_r = [[Paragraph(f'<font color="#cccccc">{r[0]}</font>', S(f'rc{i}0', fontSize=10)),
             Paragraph(f'<font color="{r[2]}"><b>{r[1]}</b></font>', S(f'rc{i}1', fontSize=10, alignment=TA_RIGHT, fontName='Helvetica-Bold'))]

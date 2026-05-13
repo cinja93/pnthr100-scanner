@@ -334,7 +334,7 @@ def section_cover(t):
         ['Position Sizing', '1% max risk per trade, 10% max portfolio risk exposure'],
         ['Pyramiding',      '5-lot entry system (35/25/20/12/8%)'],
         ['Backtest Capital', f'{fmt_usd(t["seedNav"])} starting NAV (Pyramid sizing)'],
-        ['Benchmark',       'S&P 500 (SPY)'],
+        ['Benchmark',       'S&amp;P 500 (SPY)'],
     ]
     ov_tbl = Table(ov_rows, colWidths=[1.5*inch, CONTENT_W - 1.5*inch])
     ov_tbl.setStyle(TableStyle([
@@ -369,7 +369,7 @@ def section_cover(t):
         [(f'+{net["bestMonth"]["ret"]:.1f}%', 'Best Month', GREEN),
          (f'{trades["closed"]:,}', 'Total Closed Trades', YELLOW),
          (fmt_usd(net['endNav'], compact=True), f'Ending Equity ({fmt_usd(t["seedNav"])} start)', GREEN),
-         (f'+{fmt_usd(net["endNav"] - t["spy"]["endingEquity"], compact=True)}', 'PNTHR Alpha vs S&P 500', GREEN)],
+         (f'+{fmt_usd(net["endNav"] - t["spy"]["endingEquity"], compact=True)}', 'PNTHR Alpha vs S&amp;P 500', GREEN)],
     ]
     tile_w = CONTENT_W / 4
     for row in tiles:
@@ -394,7 +394,7 @@ def section_cover(t):
 
     s.append(Spacer(1, 8))
 
-    # PNTHR vs S&P 500 AT A GLANCE
+    # PNTHR vs S&amp;P 500 AT A GLANCE
     s.append(Paragraph('<b>PNTHR vs S&amp;P 500 AT A GLANCE</b>',
                        S('gl_h', fontSize=10, leading=13, textColor=YELLOW, fontName='Helvetica-Bold')))
     s.append(Spacer(1, 3))
@@ -610,7 +610,7 @@ def section_methodology(t):
     ))
     s += subsection_heading('The PNTHR 679 Universe')
     s.append(body_p(
-        'Every week the system scans 679 premier U.S. equities: the S&P 500, Nasdaq 100, Dow 30, plus select large-cap '
+        'Every week the system scans 679 premier U.S. equities: the S&amp;P 500, Nasdaq 100, Dow 30, plus select large-cap '
         'and mid-cap securities. The universe was selected for liquidity, coverage across all 11 GICS sectors, and '
         'representation across all market caps from $2B to $3T+.'
     ))
@@ -945,7 +945,7 @@ def section_methodology(t):
              Paragraph(f'<font color="#cccccc">{r[2]}</font>', S(f'co{i}2', fontSize=9, alignment=TA_RIGHT))]
             for i, r in enumerate(combo)]
     s.append(_dark_table(
-        ['METRIC', 'PNTHR PYRAMID', 'S&P 500'],
+        ['METRIC', 'PNTHR PYRAMID', 'S&amp;P 500'],
         cb_r,
         col_widths=[2.5*inch, (CONTENT_W-2.5*inch)/2, (CONTENT_W-2.5*inch)/2],
     ))
@@ -967,7 +967,7 @@ def section_methodology(t):
              Paragraph(f'<font color="#cccccc">{r[3]}</font>', S(f'cv{i}3', fontSize=9, alignment=TA_RIGHT))]
             for i, r in enumerate(covid_rows)]
     s.append(_dark_table(
-        ['MONTH', 'PNTHR', 'S&P 500', 'NOTES'],
+        ['MONTH', 'PNTHR', 'S&amp;P 500', 'NOTES'],
         cv_r,
         col_widths=[1.3*inch, 1.3*inch, 1.1*inch, CONTENT_W - 3.7*inch],
     ))
@@ -1277,7 +1277,7 @@ def section_executive_recap(t):
         ['Max Monthly Drawdown',                    f'{net["maxDD"]:.2f}%',                '#ef4444'],
         ['Positive Months',                         f'{net["positiveMonths"]} of {net["totalMonths"]} ({net["positivePct"]:.0f}%)', '#22c55e'],
         [f'Total Return ({fmt_usd(t["seedNav"])} start)', fmt_usd(net["endNav"], compact=True), '#fcf000'],
-        ['Alpha vs S&P 500',                        fmt_usd(net["endNav"] - spy["endingEquity"], compact=True), '#22c55e'],
+        ['Alpha vs S&amp;P 500',                        fmt_usd(net["endNav"] - spy["endingEquity"], compact=True), '#22c55e'],
     ]
     r_rendered = [[Paragraph(f'<font color="#cccccc">{r[0]}</font>', S(f'rc{i}0', fontSize=10)),
                    Paragraph(f'<font color="{r[2]}"><b>{r[1]}</b></font>', S(f'rc{i}1', fontSize=10, alignment=TA_RIGHT, fontName='Helvetica-Bold'))]
@@ -2036,29 +2036,32 @@ def section_crisis_annual_direction(t):
                 Paragraph(f'<font color="{al_c}">{ev["alpha"]:+.1f}%</font>',       S('ca4', fontSize=9, alignment=TA_RIGHT)),
             ])
     s.append(_dark_table(
-        ['MARKET EVENT', 'PERIOD', 'S&P 500', 'PNTHR FUND', 'PNTHR ALPHA'],
+        ['MARKET EVENT', 'PERIOD', 'S&amp;P 500', 'PNTHR FUND', 'PNTHR ALPHA'],
         ca_rows,
         col_widths=[2.0*inch, 1.6*inch, 0.95*inch, 1.0*inch, CONTENT_W - 5.55*inch],
     ))
 
-    s += section_heading('ANNUAL PERFORMANCE: PNTHR vs S&P 500')
+    s += section_heading('ANNUAL PERFORMANCE: PNTHR vs S&amp;P 500')
     spy_by_year = {r['year']: r['ret'] for r in t.get('spyAnnualReturns', [])}
     a_rows = []
     for ar in t['net']['annualReturns']:
         spy_ret = spy_by_year.get(ar['year'], 0)
         spy_c = '#22c55e' if spy_ret > 0 else ('#ef4444' if spy_ret < 0 else '#cccccc')
         r_c = '#22c55e' if ar['ret'] > 0 else ('#ef4444' if ar['ret'] < 0 else '#cccccc')
+        alpha = ar['ret'] - spy_ret
+        al_c = '#22c55e' if alpha > 0 else ('#ef4444' if alpha < 0 else '#cccccc')
         a_rows.append([
             Paragraph(f'<font color="#ffffff">{ar["year"]}</font>', S('an0', fontSize=9)),
             Paragraph(f'<font color="#cccccc">{fmt_usd(ar["startEquity"], compact=True)}</font>', S('an1', fontSize=9, alignment=TA_RIGHT)),
             Paragraph(f'<font color="#fcf000">{fmt_usd(ar["endEquity"], compact=True)}</font>',   S('an2', fontSize=9, alignment=TA_RIGHT)),
             Paragraph(f'<font color="{spy_c}">{spy_ret:+.2f}%</font>', S('an4', fontSize=9, alignment=TA_RIGHT)),
             Paragraph(f'<font color="{r_c}">{ar["ret"]:+.2f}%</font>', S('an3', fontSize=9, alignment=TA_RIGHT)),
+            Paragraph(f'<font color="{al_c}">{alpha:+.2f}%</font>', S('an5', fontSize=9, alignment=TA_RIGHT)),
         ])
     s.append(_dark_table(
-        ['YEAR', 'START EQUITY', 'END EQUITY', 'S&P 500', 'PNTHR AI RETURNS'],
+        ['YEAR', 'START EQUITY', 'END EQUITY', 'S&amp;P 500', 'PNTHR AI RETURNS', 'PNTHR ALPHA'],
         a_rows,
-        col_widths=[0.9*inch, 1.3*inch, 1.3*inch, 0.9*inch, CONTENT_W - 4.4*inch],
+        col_widths=[0.7*inch, 1.1*inch, 1.1*inch, 0.85*inch, 1.4*inch, CONTENT_W - 5.15*inch],
     ))
 
     s += section_heading('STRATEGY METRICS BY DIRECTION (Pre-Fund-Fees)')
@@ -2114,11 +2117,11 @@ def section_toc(t):
     toc = [
         ('ACT I - THE RESULTS', None),
         ('Executive Summary', 3),
-        ('Performance Comparison: PNTHR vs. S&P 500', 3),
+        ('Performance Comparison: PNTHR vs. S&amp;P 500', 3),
         ('Gross vs Net: Impact of the Fee Schedule', 3),
         ('Fees & Expenses Schedule (PPM Reconciliation)', 4),
         ('Crisis Alpha: Performance During Market Drawdowns', 6),
-        ('Annual Performance: PNTHR vs S&P 500', 6),
+        ('Annual Performance: PNTHR vs S&amp;P 500', 6),
         ('Strategy Metrics by Direction', 6),
         ('Monthly Returns Heatmap', 7),
         ('Drawdown Analysis', 8),
@@ -2232,7 +2235,7 @@ def section_executive_summary(t):
     ))
 
     # Performance Comparison
-    s += section_heading('PERFORMANCE COMPARISON: PNTHR vs. S&P 500')
+    s += section_heading('PERFORMANCE COMPARISON: PNTHR vs. S&amp;P 500')
     pc_rows = [
         ['Total Return (7yr)',
          Paragraph(f'<font color="#22c55e">+{net["totalReturn"]:.1f}%</font>',    S('p1', fontSize=9, alignment=TA_RIGHT)),
@@ -2276,7 +2279,7 @@ def section_executive_summary(t):
          Paragraph(f'<font color="#22c55e">{fmt_usd(net["endNav"] - t["spy"]["endingEquity"], compact=True)}</font>', S('p30', fontSize=9, alignment=TA_RIGHT))],
     ]
     pc_tbl = _dark_table(
-        ['METRIC', 'CARNIVORE QUANT FUND', 'S&P 500 (SPY)', 'ALPHA'],
+        ['METRIC', 'CARNIVORE QUANT FUND', 'S&amp;P 500 (SPY)', 'ALPHA'],
         pc_rows,
         col_widths=[2.2*inch, (CONTENT_W - 2.2*inch)/3, (CONTENT_W - 2.2*inch)/3, (CONTENT_W - 2.2*inch)/3],
     )

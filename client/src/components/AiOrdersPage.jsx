@@ -397,7 +397,7 @@ export default function AiOrdersPage() {
             display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8,
             borderBottom: '2px solid #00e5ff', paddingBottom: 6,
           }}>
-            <h2 style={{ color: '#00e5ff', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>1 · Daily Cascade Scouts</h2>
+            <h2 style={{ color: '#00e5ff', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>1 · PNTHR Daily Scouts</h2>
             <span style={{ color: '#888', fontSize: 11 }}>50% of Lot 1 (BL + SS) — 28-day conversion window</span>
             <span style={{
               padding: '3px 8px', background: '#00e5ff', color: '#000', borderRadius: 3,
@@ -500,7 +500,7 @@ export default function AiOrdersPage() {
           display: 'flex', alignItems: 'baseline', gap: 10, margin: '24px 0 8px',
           borderBottom: '2px solid #f97316', paddingBottom: 6,
         }}>
-          <h2 style={{ color: '#f97316', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>2 · Weekly Signal Orders</h2>
+          <h2 style={{ color: '#f97316', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>2 · PNTHR Weekly Orders</h2>
           <span style={{ color: '#888', fontSize: 11 }}>Confirmed weekly BL/SS signals — full position sizing</span>
         </div>
       )}

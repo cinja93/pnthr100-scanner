@@ -142,6 +142,7 @@ const ORDER_ACCESSORS = {
   stop:       o => o.stopPrice,
   riskPct:    o => o.riskPct,
   entrySh:    o => o.lot1Shares,
+  fullPos:    o => o.targetShares,
   entryDol:   o => o.lot1Dollar,
   heat:       o => o._heatDollar ?? 0,
   signalDate: o => o.signalDate || '',
@@ -521,7 +522,8 @@ export default function AiOrdersPage() {
                 <SortHeader label="Price"       sortKey="price"      currentSort={orderSort} onSort={toggleOrderSort} align="right" />
                 <SortHeader label="Stop"        sortKey="stop"       currentSort={orderSort} onSort={toggleOrderSort} align="right" />
                 <SortHeader label="Risk %"      sortKey="riskPct"    currentSort={orderSort} onSort={toggleOrderSort} align="right" />
-                <SortHeader label="Entry sh"    sortKey="entrySh"    currentSort={orderSort} onSort={toggleOrderSort} align="right" />
+                <SortHeader label="L1 sh"      sortKey="entrySh"    currentSort={orderSort} onSort={toggleOrderSort} align="right" />
+                <SortHeader label="Full Pos"   sortKey="fullPos"    currentSort={orderSort} onSort={toggleOrderSort} align="right" />
                 <SortHeader label="Entry $"     sortKey="entryDol"   currentSort={orderSort} onSort={toggleOrderSort} align="right" />
                 <SortHeader label="Heat $"      sortKey="heat"       currentSort={orderSort} onSort={toggleOrderSort} align="right" />
                 <SortHeader label="Signal Date" sortKey="signalDate" currentSort={orderSort} onSort={toggleOrderSort} />
@@ -598,6 +600,9 @@ export default function AiOrdersPage() {
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: o.riskPct > 20 ? '#fcf000' : '#aaa' }}>{o.riskPct?.toFixed(1)}%</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right' }}>
                     {o.lot1Shares?.toLocaleString()}
+                  </td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right', color: '#888' }}>
+                    {o.targetShares?.toLocaleString()}
                   </td>
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.lot1Dollar, { k: true })}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right', color: '#f97316', fontWeight: 600 }}>{fmtUsd(o._heatDollar)}</td>

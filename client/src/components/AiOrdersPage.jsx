@@ -413,6 +413,7 @@ export default function AiOrdersPage() {
                   <SortHeader label="Grade"      sortKey="grade"     currentSort={scoutSort} onSort={toggleScoutSort} />
                   <SortHeader label="Mode"       sortKey="mode"      currentSort={scoutSort} onSort={toggleScoutSort} />
                   <SortHeader label="Status"     sortKey="status"    currentSort={scoutSort} onSort={toggleScoutSort} />
+                  <th style={{ padding: '6px 4px', width: 16 }} />
                   <SortHeader label="Ticker"     sortKey="ticker"    currentSort={scoutSort} onSort={toggleScoutSort} />
                   <SortHeader label="Sector"     sortKey="sector"    currentSort={scoutSort} onSort={toggleScoutSort} />
                   <SortHeader label="Sector 💪"  sortKey="tier"      currentSort={scoutSort} onSort={toggleScoutSort} />
@@ -467,6 +468,9 @@ export default function AiOrdersPage() {
                             background: '#00e5ff', color: '#000',
                           }}>SCOUT</span>
                         )}
+                      </td>
+                      <td style={{ padding: '2px 4px', textAlign: 'center', width: 16 }}>
+                        {s._isConfirmed && <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#16a34a', boxShadow: '0 0 4px #16a34a' }} title="Fires at next open" />}
                       </td>
                       <td style={{ padding: '6px 10px', fontWeight: 700, color: s._isConfirmed ? '#fcf000' : '#fff' }}>{s.ticker}</td>
                       <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{s.sectorId} {s.sectorName?.split(' ').slice(0, 2).join(' ')}</td>

@@ -8,6 +8,7 @@ import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeAnalyzeScore, computeETFAnalyzeScore } from '../utils/analyzeScore';
 import { isClassifiedETF } from '../utils/etfClassification';
 import { getSectorEmaPeriod } from '../utils/sectorEmaConfig';
+import { getAiAwareEmaPeriod, getAiAwareGateOffset, isAiUniverseTicker } from '../utils/aiUniverseEma';
 import styles from './ChartModal.module.css';
 import pantherHeadIcon from '../assets/panther head.png';
 import KillBadge from './KillBadge';
@@ -156,7 +157,7 @@ function ssInitStop(twoWeekHigh, entryClose, atr) {
 // Phase 5 exit: structural 2-week low/high + 0.1% predatory buffer, trigger on weekly close.
 // Returns { events, pnthrStop, currentWeekStop, activeType } where stop fields are
 // non-null only when the most recent BL/SS signal is still open (no following BE/SE).
-function detectAllSignals(weeklyData, period = 21, isETF = false) {
+function detectAllSignals(weeklyData, period = 21, isETF = false, gateOffset = 0.10) {
   if (weeklyData.length < period + 2) return { events: [], pnthrStop: null, currentWeekStop: null, activeType: null };
   const emaData = calculateEMA(weeklyData, period);
   const atrArr  = computeWilderATR(weeklyData);
@@ -228,11 +229,11 @@ function detectAllSignals(weeklyData, period = 21, isETF = false) {
       const ssPhase1 = current.close < emaCurrent && emaCurrent < emaPrev && current.low  <= twoWeekLow  - 0.01;
       // ETFs use a tighter 0.3% daylight zone (vs 1% for stocks) so signals fire sooner
       const dPct = isETF ? 0.003 : 0.01;
-      const blZone   = current.low  >= emaCurrent * (1 + dPct) && current.low  <= emaCurrent * 1.10;
-      const ssZone   = current.high <= emaCurrent * (1 - dPct) && current.high >= emaCurrent * 0.90;
+      const blZone   = current.low  >= emaCurrent * (1 + dPct) && current.low  <= emaCurrent * (1 + gateOffset);
+      const ssZone   = current.high <= emaCurrent * (1 - dPct) && current.high >= emaCurrent * (1 - gateOffset);
 
-      const blReentry    = longTrendActive  && current.low  >= emaCurrent * (1 + dPct) && (!longTrendCapped  || current.low  <= emaCurrent * 1.25);
-      const ssReentry    = shortTrendActive && current.high <= emaCurrent * (1 - dPct) && (!shortTrendCapped || current.high >= emaCurrent * 0.75);
+      const blReentry    = longTrendActive  && current.low  >= emaCurrent * (1 + dPct) && (!longTrendCapped  || current.low  <= emaCurrent * (1 + gateOffset + 0.15));
+      const ssReentry    = shortTrendActive && current.high <= emaCurrent * (1 - dPct) && (!shortTrendCapped || current.high >= emaCurrent * (1 - gateOffset - 0.15));
       const blDaylightOk = blReentry || (blZone && longDaylight  >= 1 && longDaylight  <= 3);
       const ssDaylightOk = ssReentry || (ssZone && shortDaylight >= 1 && shortDaylight <= 3);
 
@@ -379,7 +380,8 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
       base.signalAge = chartSignalAge;
     }
 
-    const emaPeriod = getSectorEmaPeriod(stock?.sector);
+    const aiEmaPeriod = getAiAwareEmaPeriod(stock?.ticker);
+    const emaPeriod = aiEmaPeriod || getSectorEmaPeriod(stock?.sector);
     if (allWeeklyData.length >= emaPeriod + 1) {
       // OpEMA — sector-optimized period, same series drawn on chart;
       // last two values give current value + slope
@@ -594,11 +596,14 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
       });
     });
 
-    // Sector-specific EMA period for signal detection + chart drawing
-    const emaPeriod = getSectorEmaPeriod(stock?.sector);
+    // Strategy-aware EMA period: AI universe tickers use AI sector EMA (30-40W),
+    // carnivore tickers use GICS OpEMA (18-26W), 679-only tickers use GICS OpEMA.
+    const aiEmaPeriod2 = getAiAwareEmaPeriod(stock?.ticker);
+    const emaPeriod = aiEmaPeriod2 || getSectorEmaPeriod(stock?.sector);
+    const gateOffset = getAiAwareGateOffset(stock?.ticker) ?? 0.10;
 
     // Compute signals and live stops from full history
-    const { events: allDetected, pnthrStop: ps, currentWeekStop: cws, currentSignal: cs } = detectAllSignals(allWeeklyData, emaPeriod, isEtfTicker(stock?.ticker));
+    const { events: allDetected, pnthrStop: ps, currentWeekStop: cws, currentSignal: cs } = detectAllSignals(allWeeklyData, emaPeriod, isEtfTicker(stock?.ticker), gateOffset);
 
     // Compute signal age (weeks since last BL/SS event) from chart data
     if (cs === 'BL' || cs === 'SS') {
@@ -967,9 +972,9 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
               <span
                 className={styles.badge}
                 style={{ background: 'rgba(37,99,235,0.15)', color: '#2563eb', borderColor: 'rgba(37,99,235,0.35)' }}
-                title={`OpEMA = sector-optimized weekly EMA. ${stock.sector || 'Default'} sector uses ${getSectorEmaPeriod(stock.sector)}-week period. Blue line on chart.`}
+                title={`OpEMA = sector-optimized weekly EMA. ${isAiUniverseTicker(stock.ticker) ? 'AI sector' : (stock.sector || 'Default') + ' sector'} uses ${getAiAwareEmaPeriod(stock.ticker) || getSectorEmaPeriod(stock.sector)}-week period. Blue line on chart.`}
               >
-                OpEMA {getSectorEmaPeriod(stock.sector)}W
+                OpEMA {getAiAwareEmaPeriod(stock.ticker) || getSectorEmaPeriod(stock.sector)}W
               </span>
             </div>
           </div>

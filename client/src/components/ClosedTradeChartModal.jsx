@@ -9,6 +9,7 @@ import { createChart, BarSeries, LineSeries } from 'lightweight-charts';
 import { fetchChartData } from '../services/api';
 import { LOT_NAMES, LOT_OFFSETS } from '../utils/sizingUtils';
 import { getSectorEmaPeriod } from '../utils/sectorEmaConfig';
+import { getAiAwareEmaPeriod, isAiUniverseTicker } from '../utils/aiUniverseEma';
 import pantherHeadIcon from '../assets/panther head.png';
 
 // ── Weekly aggregation (same as ChartModal) ───────────────────────────────────
@@ -456,7 +457,7 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
 
     // OpEMA — sector-optimized weekly EMA (blue line). Period varies 18-26W
     // by entry.sector per sectorEmaConfig.js.
-    const emaPeriod = getSectorEmaPeriod(entry?.sector);
+    const emaPeriod = getAiAwareEmaPeriod(entry?.ticker) || getSectorEmaPeriod(entry?.sector);
     const opEmaFull = calculateEMA(allWeeklyData, emaPeriod);
     if (opEmaFull.length > 0) {
       const opEmaWindow = opEmaFull.filter(d => filteredTimes.has(d.time));
@@ -735,9 +736,9 @@ export default function ClosedTradeChartModal({ entry: initialEntry, allEntries,
             )}
             <span
               style={{ background: 'rgba(37,99,235,0.12)', border: '1px solid rgba(37,99,235,0.35)', color: '#2563eb', padding: '1px 7px', borderRadius: 4, fontSize: '0.7rem', fontWeight: 600 }}
-              title={`OpEMA = sector-optimized weekly EMA. ${entry?.sector || 'Default'} sector uses ${getSectorEmaPeriod(entry?.sector)}-week period. Blue line on chart.`}
+              title={`OpEMA = sector-optimized weekly EMA. ${isAiUniverseTicker(entry?.ticker) ? 'AI sector' : (entry?.sector || 'Default') + ' sector'} uses ${getAiAwareEmaPeriod(entry?.ticker) || getSectorEmaPeriod(entry?.sector)}-week period. Blue line on chart.`}
             >
-              OpEMA {getSectorEmaPeriod(entry?.sector)}W
+              OpEMA {getAiAwareEmaPeriod(entry?.ticker) || getSectorEmaPeriod(entry?.sector)}W
             </span>
             {currentPrice != null && (
               <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#111' }}>

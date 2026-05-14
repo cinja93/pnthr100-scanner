@@ -38,6 +38,7 @@ import NewsPage from './components/NewsPage';
 import PulsePage from './components/PulsePage';
 import SignalHistoryPage from './components/SignalHistoryPage';
 import { getSectorEmaPeriod } from './utils/sectorEmaConfig';
+import { getAiAwareEmaPeriod } from './utils/aiUniverseEma';
 import HistoryPage from './components/HistoryPage';
 import KillTestPage from './components/KillTestPage';
 import TestPage from './components/TestPage';
@@ -703,7 +704,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       const price   = +p.currentPrice;
       const rawEma  = +emaData.ema21h;
       // Project EMA forward using current price (what EMA would be if this bar closed now)
-      const emaPeriod = getSectorEmaPeriod(p.sector);
+      const emaPeriod = getAiAwareEmaPeriod(ticker) || getSectorEmaPeriod(p.sector);
       const k       = 2 / (emaPeriod + 1); // EMA multiplier
       const ema21h  = +(price * k + rawEma * (1 - k)).toFixed(4);
       const emaSide = price > ema21h ? 'ABOVE' : 'BELOW';

@@ -331,6 +331,7 @@ def _header_style(ncols):
         ("TOPPADDING", (0, 0), (ncols - 1, 0), 5),
         ("BOTTOMPADDING", (0, 0), (ncols - 1, 0), 5),
         ("VALIGN", (0, 0), (ncols - 1, 0), "MIDDLE"),
+        ("ALIGN", (0, 0), (ncols - 1, 0), "CENTER"),
     ]
 
 

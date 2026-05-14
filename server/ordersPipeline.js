@@ -27,6 +27,12 @@ import { DEMO_OWNER_ID }                  from './demoEngine.js';
 import { getDirectionIndexFromFlags }     from './gateLogic.js';
 import { getEtfEmaPeriod }                 from './sectorEmaConfig.js';
 import { fetchEarningsMap }                from './assistantService.js';
+import { getAiUniverseHoldings }           from './aiUniverseService.js';
+
+// AI 300 universe ticker set — overlap tickers are handled exclusively by the
+// AI 300 pipeline (with strategy-mode-aware rules). Filtering them out of the
+// 679 pipeline prevents duplicate orders for the same ticker.
+const AI_UNIVERSE_TICKERS = new Set(getAiUniverseHoldings().map(h => h.ticker));
 
 // NEW_ASYM_SS selection parameters, as run by the canonical Wagyu backtest
 // (server/backtest/exportPyramidNav.js:391-435). These numbers produced the
@@ -173,11 +179,15 @@ export async function runOrdersPipeline({ type = 'WEEKLY' } = {}) {
 
   console.log(`[Orders] Starting with ${allStocks.length} scored stocks`);
 
-  // Step 2: Filter to stocks with active signals
+  // Step 2: Filter to stocks with active signals, excluding AI 300 universe
+  // tickers. Overlap tickers are handled exclusively by the AI 300 orders
+  // pipeline (aiOrdersPipeline.js) with strategy-mode-aware rules (679 or AI
+  // depending on per-ticker backtest results). This prevents duplicate orders.
   const withSignals = allStocks.filter(s =>
     (s.signal === 'BL' || s.signal === 'SS') && !s.overextended && s.apexScore > 0
+    && !AI_UNIVERSE_TICKERS.has(s.ticker)
   );
-  console.log(`[Orders] ${withSignals.length} stocks with active BL/SS signals`);
+  console.log(`[Orders] ${withSignals.length} stocks with active BL/SS signals (AI 300 overlap excluded)`);
 
   // Step 3: Apply gates
   const gateLog = [];

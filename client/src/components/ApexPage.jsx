@@ -8,6 +8,7 @@ import ChartModal from './ChartModal';
 import KillBadge from './KillBadge';
 import { KillPipelineModal } from './pyramid';
 import { fetchApexStocks, fetchAi300OverlapTickers, API_BASE, authHeaders } from '../services/api';
+import { isCarnivoreMode } from '../utils/strategyMode';
 import styles from './ApexPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -728,6 +729,10 @@ export default function ApexPage() {
                             {ai300Overlap.has(stock.ticker) && (
                               <span style={{ fontSize: 8, fontWeight: 800, background: '#fcf000', color: '#000',
                                 padding: '1px 4px', borderRadius: 3, letterSpacing: '0.04em' }}>AI 300</span>
+                            )}
+                            {isCarnivoreMode(stock.ticker) && (
+                              <span style={{ fontSize: 8, fontWeight: 800, background: '#7c3aed', color: '#fff',
+                                padding: '1px 4px', borderRadius: 3, letterSpacing: '0.04em' }}>26</span>
                             )}
                             {(() => {
                               const tags = [];

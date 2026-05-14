@@ -266,6 +266,60 @@ function crisisAlpha(pnthrEquity, pnthrDates, spyDaily, events, seedNav) {
   return results;
 }
 
+function computeMarketCorrelation(grossDocs, benchDaily, fromDate) {
+  // Build date-keyed maps
+  const benchByDate = new Map();
+  for (const b of benchDaily) benchByDate.set(b.date, b.close);
+
+  // Filter gross NAV from fromDate, build aligned daily returns
+  const grossSorted = grossDocs
+    .map(d => ({ date: String(d.date).slice(0, 10), equity: +d.equity }))
+    .filter(d => d.date >= fromDate)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const pRet = [], bRet = [];
+  for (let i = 1; i < grossSorted.length; i++) {
+    const date = grossSorted[i].date;
+    const prevDate = grossSorted[i - 1].date;
+    const benchClose = benchByDate.get(date);
+    const benchPrev = benchByDate.get(prevDate);
+    if (benchClose == null || benchPrev == null || benchPrev === 0) continue;
+    pRet.push((grossSorted[i].equity - grossSorted[i - 1].equity) / grossSorted[i - 1].equity);
+    bRet.push((benchClose - benchPrev) / benchPrev);
+  }
+
+  if (pRet.length < 30) return null;
+
+  const n = pRet.length;
+  const pMean = pRet.reduce((s, x) => s + x, 0) / n;
+  const bMean = bRet.reduce((s, x) => s + x, 0) / n;
+
+  let cov = 0, pVar = 0, bVar = 0;
+  for (let i = 0; i < n; i++) {
+    const dp = pRet[i] - pMean;
+    const db = bRet[i] - bMean;
+    cov += dp * db;
+    pVar += dp * dp;
+    bVar += db * db;
+  }
+  cov /= n;
+  pVar /= n;
+  bVar /= n;
+
+  const beta = bVar > 0 ? cov / bVar : 0;
+  const correlation = (pVar > 0 && bVar > 0) ? cov / Math.sqrt(pVar * bVar) : 0;
+  const rSquared = correlation * correlation;
+  const capmAlpha = (pMean - beta * bMean) * 252 * 100;
+
+  return {
+    beta: +beta.toFixed(4),
+    correlation: +correlation.toFixed(4),
+    rSquared: +rSquared.toFixed(4),
+    capmAlpha: +capmAlpha.toFixed(2),
+    observations: n,
+  };
+}
+
 async function main() {
   console.log('═'.repeat(70));
   console.log('  PNTHR AI ELITE FUND — IR METRICS COMPUTATION');
@@ -277,6 +331,9 @@ async function main() {
 
   const spyDoc = await db.collection('pnthr_bt_candles').findOne({ ticker: 'SPY' });
   const spyDaily = spyDoc?.daily || [];
+  const qqqDoc = await db.collection('pnthr_bt_candles').findOne({ ticker: 'QQQ' });
+  const qqqDaily = qqqDoc?.daily || [];
+  console.log(`Benchmark candles: SPY ${spyDaily.length}, QQQ ${qqqDaily.length}`);
 
   const CRISIS_EVENTS = [
     { label: '2025 Liberation Day Correction', start: '2025-02-19', end: '2025-04-08' },
@@ -476,6 +533,26 @@ async function main() {
     const alphaCAGR = net.cagr - spy.cagr;
     const alphaEndingEq = net.endNav - spy.endingEquity;
 
+    // Market correlation: beta, correlation, R², CAPM alpha vs SPY and QQQ
+    const CORR_FROM = '2023-06-01';
+    const spyCorr = computeMarketCorrelation(grossDocs, spyDaily, CORR_FROM);
+    const qqqCorr = computeMarketCorrelation(grossDocs, qqqDaily, CORR_FROM);
+    const marketCorrelation = {
+      spy: spyCorr ? { beta: spyCorr.beta, correlation: spyCorr.correlation, rSquared: spyCorr.rSquared, capmAlpha: spyCorr.capmAlpha } : null,
+      qqq: qqqCorr ? { beta: qqqCorr.beta, correlation: qqqCorr.correlation, rSquared: qqqCorr.rSquared, capmAlpha: qqqCorr.capmAlpha } : null,
+      observations: spyCorr?.observations || qqqCorr?.observations || 0,
+      fromDate: CORR_FROM,
+    };
+    console.log(`  Beta: SPY ${spyCorr?.beta ?? 'N/A'}  QQQ ${qqqCorr?.beta ?? 'N/A'}  |  R²: SPY ${spyCorr?.rSquared ?? 'N/A'}  QQQ ${qqqCorr?.rSquared ?? 'N/A'}`);
+    console.log(`  CAPM α: SPY ${spyCorr?.capmAlpha ?? 'N/A'}%  QQQ ${qqqCorr?.capmAlpha ?? 'N/A'}%  (${marketCorrelation.observations} obs from ${CORR_FROM})`);
+
+    const executionModel = {
+      advCapPct: 0.02,
+      entryTiming: 'Monday open',
+      stopFills: 'Gap-through at open',
+      positionSizing: 'Dynamic (current NAV)',
+    };
+
     const tierOutput = {
       tier: tier.key, label: tier.label, classLabel: tier.classLabel,
       seedNav: tier.seedNav, fundName: 'AI Elite Fund',
@@ -486,6 +563,8 @@ async function main() {
         totalReturnPts: +alphaTR.toFixed(2), cagrPts: +alphaCAGR.toFixed(2),
         endingEquityDelta: +alphaEndingEq.toFixed(2),
       },
+      marketCorrelation,
+      executionModel,
       generatedAt: new Date().toISOString(),
     };
 

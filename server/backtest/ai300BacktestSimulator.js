@@ -1,27 +1,19 @@
 // server/backtest/ai300BacktestSimulator.js
-// ── PNTHR AI Elite Fund — APEX v6 Backtest Simulator (Daily Cascade) ──────
+// ── PNTHR AI Elite Fund — APEX v7 Backtest Simulator (Sector Rotation) ────
 //
 // Full NAV-scaled pyramid backtest for the AI 300 universe (297 names)
-// from 2022-11-30 through the latest available bar.
+// from 2022-01-03 (EMA warmup) through the latest available bar.
+// First tradeable signals fire mid-2023 once all EMAs are fully seeded.
 //
-// Daily Cascade architecture (BL + SS):
-//   Daily scouts: daily BL/SS + combo [6] filter → 50% Lot 1
-//     BL combo [6]: above weekly EMA + slope 0–50% + gap 5–15%
-//     SS combo [6]: below weekly EMA + slope -50–0% + gap 5–15% below
-//     Exit: daily BE/SE / daily stop / 28-day timeout
-//   Weekly conversion: weekly BL+1/SS+1 fires → top up to full Lot 1
-//     Then standard pyramid (Lots 2-5) + weekly stops/exits
-//   Weekly-only path: if no scout exists, weekly signal opens full Lot 1
+// APEX v7 — Sector Rotation (scouts DISABLED):
+//   Weekly signals only → full Lot 1 (35%) direct entry → 5-lot pyramid
+//   No daily scouts, no conversion window, no daily cascade
 //
-// APEX v6:
 //   • Regime gate: PAI300 36W EMA (above = BL allowed, below = SS allowed)
 //   • Sector rotation: 5D rank → GO/NEUTRAL/NO_GO
 //     - BL: GO (1.25×) / NEUTRAL (1.0×) / NO_GO → SKIP
 //     - SS: NO_GO (1.25×) / NEUTRAL (1.0×) / GO → SKIP
 //   • 1.25× AI gate offset (vs 679's 1.10×)
-//
-// Canonical results:
-//   +481.13% / 66.89% CAGR / Sharpe 2.06 / -18.81% MaxDD / PF 2.57
 //
 // Usage: cd server && node backtest/ai300BacktestSimulator.js [--nav 1000000]
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,15 +35,15 @@ const navLabel = STARTING_NAV >= 1000000 ? `${STARTING_NAV / 1000000}m` : `${STA
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const AI_GATE_OFFSET    = 0.25;
-const BACKTEST_START    = '2022-11-30';
+const BACKTEST_START    = '2022-01-03';
+const ADV_ARG = process.argv.find(a => a.startsWith('--adv='));
+const ADV_CAP_PCT       = ADV_ARG ? parseFloat(ADV_ARG.split('=')[1]) : 0.02;  // default 2% of 20-day ADV
 const LOT_PCT           = [0.35, 0.25, 0.20, 0.12, 0.08];
 const LOT_NAMES         = ['The Scent', 'The Stalk', 'The Strike', 'The Jugular', 'The Kill'];
 const LOT_OFFSET_PCT    = [0, 0.03, 0.06, 0.10, 0.14];
 const TIME_GATE_DAYS    = 5;
 const PAI300_EMA_PERIOD = 36;
-const SCOUT_PCT         = 0.50;         // scout = 50% of Lot 1
-const CONVERSION_WINDOW = 28;           // 28 trading days to convert
-const MAX_SCOUTS_PER_DAY = 3;           // limit daily scout entries
+// APEX v7: scouts disabled — weekly-only entry
 const GO_TOP            = 6;
 const NEUT_TOP          = 12;
 
@@ -129,12 +121,14 @@ async function main() {
   if (!db) { console.error('Cannot connect to MongoDB'); process.exit(1); }
 
   console.log('═'.repeat(80));
-  console.log('  PNTHR AI ELITE FUND — APEX v6 BACKTEST (Daily Cascade)');
+  console.log('  PNTHR AI ELITE FUND — APEX v7 BACKTEST (Sector Rotation)');
   console.log(`  Starting NAV:   $${STARTING_NAV.toLocaleString()}`);
   console.log(`  Universe:       ${ALL_TICKERS.length} AI 300 names`);
-  console.log(`  Period:         ${BACKTEST_START} → latest bar`);
-  console.log(`  Cascade:        50% scout → 28d conversion → full pyramid`);
+  console.log(`  Period:         ${BACKTEST_START} → latest bar (EMA warmup → first trades mid-2023)`);
+  console.log(`  Entry:          Friday signal → Monday open fill → 5-lot pyramid`);
   console.log(`  Sector rotation: GO (1.25×) / NEUTRAL (1.0×) / NO_GO (skip)`);
+  console.log(`  Volume cap:     ${(ADV_CAP_PCT * 100)}% of 20-day ADV per lot fill`);
+  console.log(`  Stop fills:     Gap-through → fill at open (realistic slippage)`);
   console.log('═'.repeat(80));
 
   // ── 1. Load PAI300 index for regime gate ─────────────────────────────────
@@ -258,7 +252,7 @@ async function main() {
       dailySignalEvents[ticker] = result.events || [];
       totalDailyEvents += dailySignalEvents[ticker].length;
 
-      // Daily ATR for scout stops
+      // Daily ATR (retained for potential future use)
       dailyAtrByTicker[ticker] = computeWilderATR(dBars);
     }
   }
@@ -283,7 +277,7 @@ async function main() {
   }
 
   // ── 5. Build trading calendar ────────────────────────────────────────────
-  console.log('[5/5] Running APEX v6 + Daily Cascade simulation...\n');
+  console.log('[5/5] Running APEX v7 + Sector Rotation simulation...\n');
   const allDailyDates = new Set();
   for (const ticker of ALL_TICKERS) {
     const daily = dailyCandleMap[ticker];
@@ -297,10 +291,9 @@ async function main() {
 
   // ── Simulation state ─────────────────────────────────────────────────────
   const fullPositions = new Map();    // ticker → full weekly position
-  const scoutPositions = new Map();   // ticker → daily cascade scout
   const closedTrades = [];
-  let totalScoutsOpened = 0, totalScoutsConverted = 0, totalScoutsClosed = 0;
   let totalWeeklyOpened = 0;
+  let pendingEntries = [];            // staged Friday → execute Monday at open
 
   // Combo [6] filter: above weekly EMA + slope 0–50% annualized + gap 5–15%
   function passesCombo6(ticker, date, dailyClose, signal) {
@@ -352,6 +345,18 @@ async function main() {
 
       return true;
     }
+  }
+
+  // Helper: 20-day average daily volume for a ticker on a given date
+  function getAdv20(ticker, date) {
+    const daily = dailyCandleMap[ticker];
+    if (!daily) return Infinity;
+    const idx = daily.findIndex(b => b.date >= date);
+    if (idx < 0) return Infinity;
+    const start = Math.max(0, idx - 20);
+    const slice = daily.slice(start, idx + 1).filter(c => c.volume > 0);
+    if (slice.length === 0) return Infinity;
+    return slice.reduce((s, c) => s + c.volume, 0) / slice.length;
   }
 
   // Helper: close a position and compute P&L
@@ -423,6 +428,25 @@ async function main() {
   // ── Day-by-day simulation ────────────────────────────────────────────────
   let dayCount = 0;
   let lastFriday = null;
+  let cumulativeRealizedPnl = 0;
+
+  function getCurrentNav(date) {
+    let unrealizedPnl = 0;
+    for (const [ticker, pos] of fullPositions) {
+      if (pos.closed) continue;
+      const daily = dailyCandleMap[ticker];
+      if (!daily) continue;
+      let closePrice = pos.entryPrice;
+      for (let i = daily.length - 1; i >= 0; i--) {
+        if (daily[i].date <= date) { closePrice = daily[i].close; break; }
+      }
+      for (const lot of pos.lots) {
+        if (pos.signal === 'BL') unrealizedPnl += (closePrice - lot.fillPrice) * lot.shares;
+        else unrealizedPnl += (lot.fillPrice - closePrice) * lot.shares;
+      }
+    }
+    return STARTING_NAV + cumulativeRealizedPnl + unrealizedPnl;
+  }
 
   for (const date of tradingDays) {
     dayCount++;
@@ -436,6 +460,64 @@ async function main() {
         pai300Bull = pai300RegimeByWeek[pai300Weekly[i].weekOf]?.aboveEma ?? true;
         break;
       }
+    }
+
+    // ── A0. Execute pending Monday entries at today's open ──────────────
+    if (pendingEntries.length > 0) {
+      const executed = [];
+      for (const cand of pendingEntries) {
+        const { ticker, signal, meta, sectorTier, sectorMult, weekIdx, stopPrice, fullShares, weekOf } = cand;
+        if (fullPositions.has(ticker)) continue;
+
+        const daily = dailyCandleMap[ticker];
+        if (!daily) continue;
+        const bar = daily.find(b => b.date === date);
+        if (!bar) continue;
+
+        const entryPrice = bar.open;
+        if (entryPrice <= 0) continue;
+
+        // Re-size based on Monday open price (stop unchanged from Friday calc)
+        const currentNav = getCurrentNav(date);
+        const resizedShares = sizePositionNav(currentNav, entryPrice, stopPrice, sectorMult);
+        if (resizedShares <= 0) continue;
+
+        const lotShares = LOT_PCT.map(pct => Math.max(1, Math.round(resizedShares * pct)));
+        const lotTriggers = LOT_OFFSET_PCT.map((off) =>
+          signal === 'BL'
+            ? parseFloat((entryPrice * (1 + off)).toFixed(2))
+            : parseFloat((entryPrice * (1 - off)).toFixed(2))
+        );
+
+        // ADV cap on Lot 1
+        const advMax = Math.floor(getAdv20(ticker, date) * ADV_CAP_PCT);
+        const lot1Shares = Math.min(lotShares[0], advMax > 0 ? advMax : lotShares[0]);
+        if (lot1Shares <= 0) continue;
+
+        const l1Comm = calcCommission(lot1Shares, entryPrice);
+        const l1Slip = calcSlippage(lot1Shares, entryPrice);
+
+        fullPositions.set(ticker, {
+          ticker, signal, sectorId: meta.sectorId, sectorName: meta.sectorName,
+          sectorTier, sectorMult, weekOf, entryDate: date,
+          navTier: currentNav, entryPrice, initialStop: stopPrice, stop: stopPrice,
+          lots: [{
+            lot: 1, name: LOT_NAMES[0], pct: LOT_PCT[0],
+            fillDate: date, fillPrice: entryPrice,
+            shares: lot1Shares, lotValue: parseFloat((lot1Shares * entryPrice).toFixed(2)),
+            tradingDayAtFill: 0, entryComm: l1Comm, entrySlip: l1Slip,
+          }],
+          lotShares, lotTriggers,
+          totalShares: lot1Shares, totalCost: lot1Shares * entryPrice, avgCost: entryPrice,
+          tradingDays: 0, lastCheckedDate: date,
+          currentWeekIdx: weekIdx, mfe: 0, mae: 0,
+          closed: false, exitDate: null, exitPrice: null, exitReason: null,
+          tradeType: 'WEEKLY_DIRECT',
+        });
+        totalWeeklyOpened++;
+        executed.push(ticker);
+      }
+      pendingEntries = [];
     }
 
     // ── A. Update open FULL positions (daily bar check) ───────────────────
@@ -492,13 +574,15 @@ async function main() {
         pos.mae = Math.min(pos.mae || 0, (pos.avgCost - bar.high) / pos.avgCost * 100);
       }
 
-      // Stop hit
+      // Stop hit — fill at open if bar gaps through stop
       if (pos.signal === 'BL' && bar.low <= pos.stop) {
-        closePosition(pos, bar.date, pos.stop, 'STOP_HIT');
+        const fillPrice = bar.open < pos.stop ? bar.open : pos.stop;
+        closePosition(pos, bar.date, fillPrice, 'STOP_HIT');
         continue;
       }
       if (pos.signal === 'SS' && bar.high >= pos.stop) {
-        closePosition(pos, bar.date, pos.stop, 'STOP_HIT');
+        const fillPrice = bar.open > pos.stop ? bar.open : pos.stop;
+        closePosition(pos, bar.date, fillPrice, 'STOP_HIT');
         continue;
       }
 
@@ -523,7 +607,8 @@ async function main() {
 
           if (triggerHit) {
             const fillPrice = trigger;
-            const shares = pos.lotShares[nextLotIdx];
+            const advMax = Math.floor(getAdv20(ticker, bar.date) * ADV_CAP_PCT);
+            const shares = Math.min(pos.lotShares[nextLotIdx], advMax > 0 ? advMax : pos.lotShares[nextLotIdx]);
             const lotNum = nextLotIdx + 1;
             const entryComm = calcCommission(shares, fillPrice);
             const entrySlip = calcSlippage(shares, fillPrice);
@@ -553,83 +638,29 @@ async function main() {
               pos.stop = parseFloat(ratchetPrice.toFixed(2));
             }
 
-            // Check if stop immediately hit
+            // Check if stop immediately hit after ratchet
             if (pos.signal === 'BL' && bar.low <= pos.stop) {
-              closePosition(pos, bar.date, pos.stop, 'STOP_HIT');
+              const fp = bar.open < pos.stop ? bar.open : pos.stop;
+              closePosition(pos, bar.date, fp, 'STOP_HIT');
             }
             if (pos.signal === 'SS' && bar.high >= pos.stop) {
-              closePosition(pos, bar.date, pos.stop, 'STOP_HIT');
+              const fp = bar.open > pos.stop ? bar.open : pos.stop;
+              closePosition(pos, bar.date, fp, 'STOP_HIT');
             }
           }
         }
       }
     }
 
-    // ── B. Update scout positions (daily bar check) ───────────────────────
-    for (const [ticker, scout] of scoutPositions) {
-      if (scout.closed) continue;
-      const daily = dailyCandleMap[ticker];
-      if (!daily) continue;
+    // ── B. (APEX v7: scouts disabled — skipped) ────────────────────────
 
-      const bar = daily.find(b => b.date === date);
-      if (!bar) continue;
-      if (bar.date <= scout.lastCheckedDate) continue;
-
-      scout.tradingDays++;
-      scout.lastCheckedDate = bar.date;
-
-      // Check for daily BE (exit signal)
-      const dailyEvents = dailyEventsByDate[date];
-      if (dailyEvents && dailyEvents[ticker]) {
-        const ev = dailyEvents[ticker];
-        if ((scout.signal === 'BL' && ev.signal === 'BE') ||
-            (scout.signal === 'SS' && ev.signal === 'SE')) {
-          closePosition(scout, date, bar.close, 'DAILY_BE');
-          continue;
-        }
-      }
-
-      // Stop hit
-      if (scout.signal === 'BL' && bar.low <= scout.stop) {
-        closePosition(scout, date, scout.stop, 'SCOUT_STOP');
-        continue;
-      }
-      if (scout.signal === 'SS' && bar.high >= scout.stop) {
-        closePosition(scout, date, scout.stop, 'SCOUT_STOP');
-        continue;
-      }
-
-      // Timeout (28 trading days without conversion)
-      if (scout.tradingDays >= CONVERSION_WINDOW) {
-        closePosition(scout, date, bar.close, 'SCOUT_TIMEOUT');
-        continue;
-      }
-
-      // MFE / MAE
-      if (scout.signal === 'BL') {
-        scout.mfe = Math.max(scout.mfe || 0, (bar.high - scout.avgCost) / scout.avgCost * 100);
-        scout.mae = Math.min(scout.mae || 0, (bar.low - scout.avgCost) / scout.avgCost * 100);
-      } else {
-        scout.mfe = Math.max(scout.mfe || 0, (scout.avgCost - bar.low) / scout.avgCost * 100);
-        scout.mae = Math.min(scout.mae || 0, (scout.avgCost - bar.high) / scout.avgCost * 100);
-      }
-    }
-
-    // Clean up closed positions
+    // Clean up closed positions and track realized P&L
     for (const [ticker, pos] of fullPositions) {
       if (pos.closed) {
         applyExitCosts(pos);
+        cumulativeRealizedPnl += (pos.netDollarPnl || pos.grossDollarPnl || 0);
         closedTrades.push(pos);
         fullPositions.delete(ticker);
-      }
-    }
-    for (const [ticker, scout] of scoutPositions) {
-      if (scout.closed) {
-        applyExitCosts(scout);
-        scout.tradeType = 'SCOUT';
-        closedTrades.push(scout);
-        scoutPositions.delete(ticker);
-        totalScoutsClosed++;
       }
     }
 
@@ -639,147 +670,11 @@ async function main() {
 
       const weeklyEvents = weeklyEventsByDate[mondayStr] || {};
 
-      // Check for scout conversions: weekly BL+1 or SS+1 fires for a ticker with an active scout
-      for (const [ticker, scout] of scoutPositions) {
-        if (scout.closed) continue;
-        const wev = weeklyEvents[ticker];
-        if (!wev) continue;
-
-        // Weekly BL fires while we have a BL scout → CONVERT
-        if (scout.signal === 'BL' && (wev.signal === 'BL')) {
-          // Convert: close scout, open full position with credit for scout shares
-          const daily = dailyCandleMap[ticker];
-          const bar = daily?.find(b => b.date === date);
-          if (!bar) continue;
-
-          const meta = TICKER_META[ticker];
-          const sectorTier = getSectorTierOnDate(meta.sectorId, date);
-          const sectorMult = getSectorMult(sectorTier, 'BL');
-          if (sectorMult === 0) continue;
-
-          // Size full position
-          const weekly = weeklyCandleMap[ticker];
-          if (!weekly) continue;
-          const weekIdx = weekly.findIndex(b => b.weekOf === mondayStr);
-          if (weekIdx < 3) continue;
-
-          const prev1 = weekly[weekIdx - 1];
-          const prev2 = weekly[weekIdx - 2];
-          const twoBarHigh = Math.max(prev1.high, prev2.high);
-          const twoBarLow = Math.min(prev1.low, prev2.low);
-          const entryPrice = parseFloat((twoBarHigh + 0.01).toFixed(2));
-          const atrArr = weeklyAtrMap[ticker];
-          const stopPrice = blInitStop(twoBarLow, bar.close, atrArr?.[weekIdx] ?? null);
-
-          const fullShares = sizePositionNav(STARTING_NAV, entryPrice, stopPrice, sectorMult);
-          if (fullShares <= 0) continue;
-
-          // Close scout as CONVERTED (not a loss — shares roll into full position)
-          closePosition(scout, date, bar.close, 'CONVERTED');
-          applyExitCosts(scout);
-          scout.tradeType = 'SCOUT_CONVERTED';
-          closedTrades.push(scout);
-          scoutPositions.delete(ticker);
-          totalScoutsConverted++;
-
-          // Open full position
-          const lotShares = LOT_PCT.map(pct => Math.max(1, Math.round(fullShares * pct)));
-          const lotTriggers = LOT_OFFSET_PCT.map((off) =>
-            parseFloat((entryPrice * (1 + off)).toFixed(2))
-          );
-
-          const lot1Shares = lotShares[0];
-          const l1Comm = calcCommission(lot1Shares, entryPrice);
-          const l1Slip = calcSlippage(lot1Shares, entryPrice);
-
-          fullPositions.set(ticker, {
-            ticker, signal: 'BL', sectorId: meta.sectorId, sectorName: meta.sectorName,
-            sectorTier, sectorMult, weekOf: currentFriday, entryDate: currentFriday,
-            navTier: STARTING_NAV, entryPrice, initialStop: stopPrice, stop: stopPrice,
-            lots: [{
-              lot: 1, name: LOT_NAMES[0], pct: LOT_PCT[0],
-              fillDate: currentFriday, fillPrice: entryPrice,
-              shares: lot1Shares, lotValue: parseFloat((lot1Shares * entryPrice).toFixed(2)),
-              tradingDayAtFill: 0, entryComm: l1Comm, entrySlip: l1Slip,
-            }],
-            lotShares, lotTriggers,
-            totalShares: lot1Shares, totalCost: lot1Shares * entryPrice, avgCost: entryPrice,
-            tradingDays: 0, lastCheckedDate: currentFriday,
-            currentWeekIdx: weekIdx, mfe: 0, mae: 0,
-            closed: false, exitDate: null, exitPrice: null, exitReason: null,
-            tradeType: 'WEEKLY_CONVERTED',
-          });
-          totalWeeklyOpened++;
-        }
-
-        // SS mirror
-        if (scout.signal === 'SS' && (wev.signal === 'SS')) {
-          const daily = dailyCandleMap[ticker];
-          const bar = daily?.find(b => b.date === date);
-          if (!bar) continue;
-
-          const meta = TICKER_META[ticker];
-          const sectorTier = getSectorTierOnDate(meta.sectorId, date);
-          const sectorMult = getSectorMult(sectorTier, 'SS');
-          if (sectorMult === 0) continue;
-
-          const weekly = weeklyCandleMap[ticker];
-          if (!weekly) continue;
-          const weekIdx = weekly.findIndex(b => b.weekOf === mondayStr);
-          if (weekIdx < 3) continue;
-
-          const prev1 = weekly[weekIdx - 1];
-          const prev2 = weekly[weekIdx - 2];
-          const twoBarHigh = Math.max(prev1.high, prev2.high);
-          const twoBarLow = Math.min(prev1.low, prev2.low);
-          const entryPrice = parseFloat((twoBarLow - 0.01).toFixed(2));
-          const atrArr = weeklyAtrMap[ticker];
-          const stopPrice = ssInitStop(twoBarHigh, bar.close, atrArr?.[weekIdx] ?? null);
-
-          const fullShares = sizePositionNav(STARTING_NAV, entryPrice, stopPrice, sectorMult);
-          if (fullShares <= 0) continue;
-
-          closePosition(scout, date, bar.close, 'CONVERTED');
-          applyExitCosts(scout);
-          scout.tradeType = 'SCOUT_CONVERTED';
-          closedTrades.push(scout);
-          scoutPositions.delete(ticker);
-          totalScoutsConverted++;
-
-          const lotShares = LOT_PCT.map(pct => Math.max(1, Math.round(fullShares * pct)));
-          const lotTriggers = LOT_OFFSET_PCT.map((off) =>
-            parseFloat((entryPrice * (1 - off)).toFixed(2))
-          );
-
-          const lot1Shares = lotShares[0];
-          const l1Comm = calcCommission(lot1Shares, entryPrice);
-          const l1Slip = calcSlippage(lot1Shares, entryPrice);
-
-          fullPositions.set(ticker, {
-            ticker, signal: 'SS', sectorId: meta.sectorId, sectorName: meta.sectorName,
-            sectorTier, sectorMult, weekOf: currentFriday, entryDate: currentFriday,
-            navTier: STARTING_NAV, entryPrice, initialStop: stopPrice, stop: stopPrice,
-            lots: [{
-              lot: 1, name: LOT_NAMES[0], pct: LOT_PCT[0],
-              fillDate: currentFriday, fillPrice: entryPrice,
-              shares: lot1Shares, lotValue: parseFloat((lot1Shares * entryPrice).toFixed(2)),
-              tradingDayAtFill: 0, entryComm: l1Comm, entrySlip: l1Slip,
-            }],
-            lotShares, lotTriggers,
-            totalShares: lot1Shares, totalCost: lot1Shares * entryPrice, avgCost: entryPrice,
-            tradingDays: 0, lastCheckedDate: currentFriday,
-            currentWeekIdx: weekly.findIndex(b => b.weekOf === mondayStr), mfe: 0, mae: 0,
-            closed: false, exitDate: null, exitPrice: null, exitReason: null,
-            tradeType: 'WEEKLY_CONVERTED',
-          });
-          totalWeeklyOpened++;
-        }
-      }
-
-      // New weekly-only entries — collect candidates, rank, cap at top 10 BL + top 5 SS
+      // APEX v7: weekly-only entries — collect candidates, rank, cap at top 10 BL + top 5 SS
+      const currentNav = getCurrentNav(date);
       const weeklyCandidates = [];
       for (const [ticker, wev] of Object.entries(weeklyEvents)) {
-        if (fullPositions.has(ticker) || scoutPositions.has(ticker)) continue;
+        if (fullPositions.has(ticker)) continue;
         if (wev.signal !== 'BL' && wev.signal !== 'SS') continue;
 
         const meta = TICKER_META[ticker];
@@ -816,7 +711,7 @@ async function main() {
 
         if (entryPrice <= 0 || !stopPrice) continue;
 
-        const fullShares = sizePositionNav(STARTING_NAV, entryPrice, stopPrice, sectorMult);
+        const fullShares = sizePositionNav(currentNav, entryPrice, stopPrice, sectorMult);
         if (fullShares <= 0) continue;
 
         weeklyCandidates.push({
@@ -833,119 +728,20 @@ async function main() {
       const ssCands = weeklyCandidates.filter(c => c.signal === 'SS').slice(0, 5);
       const selectedWeekly = [...blCands, ...ssCands];
 
-      for (const cand of selectedWeekly) {
-        const { ticker, signal, meta, sectorTier, sectorMult, weekIdx, entryPrice, stopPrice, fullShares } = cand;
-
-        const lotShares = LOT_PCT.map(pct => Math.max(1, Math.round(fullShares * pct)));
-        const lotTriggers = LOT_OFFSET_PCT.map((off) =>
-          signal === 'BL'
-            ? parseFloat((entryPrice * (1 + off)).toFixed(2))
-            : parseFloat((entryPrice * (1 - off)).toFixed(2))
-        );
-
-        const lot1Shares = lotShares[0];
-        const l1Comm = calcCommission(lot1Shares, entryPrice);
-        const l1Slip = calcSlippage(lot1Shares, entryPrice);
-
-        fullPositions.set(ticker, {
-          ticker, signal, sectorId: meta.sectorId, sectorName: meta.sectorName,
-          sectorTier, sectorMult, weekOf: currentFriday, entryDate: currentFriday,
-          navTier: STARTING_NAV, entryPrice, initialStop: stopPrice, stop: stopPrice,
-          lots: [{
-            lot: 1, name: LOT_NAMES[0], pct: LOT_PCT[0],
-            fillDate: currentFriday, fillPrice: entryPrice,
-            shares: lot1Shares, lotValue: parseFloat((lot1Shares * entryPrice).toFixed(2)),
-            tradingDayAtFill: 0, entryComm: l1Comm, entrySlip: l1Slip,
-          }],
-          lotShares, lotTriggers,
-          totalShares: lot1Shares, totalCost: lot1Shares * entryPrice, avgCost: entryPrice,
-          tradingDays: 0, lastCheckedDate: currentFriday,
-          currentWeekIdx: weekIdx, mfe: 0, mae: 0,
-          closed: false, exitDate: null, exitPrice: null, exitReason: null,
-          tradeType: 'WEEKLY_DIRECT',
-        });
-        totalWeeklyOpened++;
-      }
+      // Stage for Monday open execution (not entered on Friday)
+      pendingEntries = selectedWeekly.map(cand => ({
+        ...cand,
+        weekOf: currentFriday,
+      }));
     }
 
-    // ── D. Daily cascade: open new scouts (capped per day) ──────────────
-    let scoutsOpenedToday = 0;
-    const todayDailyEvents = dailyEventsByDate[date] || {};
-    for (const [ticker, dev] of Object.entries(todayDailyEvents)) {
-      if (scoutsOpenedToday >= MAX_SCOUTS_PER_DAY) break;
-      if (dev.signal !== 'BL' && dev.signal !== 'SS') continue;
-      if (fullPositions.has(ticker) || scoutPositions.has(ticker)) continue;
-
-      const meta = TICKER_META[ticker];
-      if (!meta) continue;
-
-      // Regime gate
-      if (dev.signal === 'BL' && !pai300Bull) continue;
-      if (dev.signal === 'SS' && pai300Bull) continue;
-
-      // Sector rotation
-      const sectorTier = getSectorTierOnDate(meta.sectorId, date);
-      const sectorMult = getSectorMult(sectorTier, dev.signal);
-      if (sectorMult === 0) continue;
-
-      // Find today's daily bar for close price
-      const daily = dailyCandleMap[ticker];
-      if (!daily) continue;
-      const bar = daily.find(b => b.date === date);
-      if (!bar) continue;
-
-      // Combo [6] filter
-      if (!passesCombo6(ticker, date, bar.close, dev.signal)) continue;
-
-      // Size scout at 50% of Lot 1
-      const dailyAtr = dailyAtrByTicker[ticker];
-      const barIdx = daily.findIndex(b => b.date === date);
-      let scoutStop;
-      if (dev.signal === 'BL') {
-        const prev1 = barIdx >= 1 ? daily[barIdx - 1] : bar;
-        const prev2 = barIdx >= 2 ? daily[barIdx - 2] : prev1;
-        const twoBarLow = Math.min(prev1.low, prev2.low);
-        scoutStop = blInitStop(twoBarLow, bar.close, dailyAtr?.[barIdx] ?? null);
-      } else {
-        const prev1 = barIdx >= 1 ? daily[barIdx - 1] : bar;
-        const prev2 = barIdx >= 2 ? daily[barIdx - 2] : prev1;
-        const twoBarHigh = Math.max(prev1.high, prev2.high);
-        scoutStop = ssInitStop(twoBarHigh, bar.close, dailyAtr?.[barIdx] ?? null);
-      }
-
-      const fullShares = sizePositionNav(STARTING_NAV, bar.close, scoutStop, sectorMult);
-      const scoutShares = Math.max(1, Math.round(fullShares * LOT_PCT[0] * SCOUT_PCT));
-      if (scoutShares <= 0) continue;
-
-      const entryComm = calcCommission(scoutShares, bar.close);
-      const entrySlip = calcSlippage(scoutShares, bar.close);
-
-      scoutPositions.set(ticker, {
-        ticker, signal: dev.signal, sectorId: meta.sectorId, sectorName: meta.sectorName,
-        sectorTier, sectorMult, weekOf: lastFriday || date, entryDate: date,
-        navTier: STARTING_NAV, entryPrice: bar.close, initialStop: scoutStop, stop: scoutStop,
-        lots: [{
-          lot: 1, name: 'Scout', pct: LOT_PCT[0] * SCOUT_PCT,
-          fillDate: date, fillPrice: bar.close,
-          shares: scoutShares, lotValue: parseFloat((scoutShares * bar.close).toFixed(2)),
-          tradingDayAtFill: 0, entryComm, entrySlip,
-        }],
-        lotShares: [scoutShares], lotTriggers: [bar.close],
-        totalShares: scoutShares, totalCost: scoutShares * bar.close, avgCost: bar.close,
-        tradingDays: 0, lastCheckedDate: date,
-        currentWeekIdx: -1, mfe: 0, mae: 0,
-        closed: false, exitDate: null, exitPrice: null, exitReason: null,
-        tradeType: 'SCOUT',
-      });
-      totalScoutsOpened++;
-      scoutsOpenedToday++;
-    }
+    // ── D. (APEX v7: scouts disabled — skipped) ────────────────────────
 
     // Progress
     if (dayCount % 50 === 0 || dayCount === tradingDays.length) {
       process.stdout.write(
         `\r  Day ${String(dayCount).padStart(4)}/${tradingDays.length} — ` +
-        `${date} — full: ${fullPositions.size}, scouts: ${scoutPositions.size}, closed: ${closedTrades.length}  `
+        `${date} — open: ${fullPositions.size}, closed: ${closedTrades.length}  `
       );
     }
   }
@@ -961,18 +757,6 @@ async function main() {
     closedTrades.push(pos);
   }
   fullPositions.clear();
-
-  for (const [ticker, scout] of scoutPositions) {
-    const daily = dailyCandleMap[ticker];
-    if (daily?.length > 0) {
-      const last = daily[daily.length - 1];
-      closePosition(scout, last.date, last.close, 'STILL_OPEN');
-      applyExitCosts(scout);
-    }
-    scout.tradeType = 'SCOUT';
-    closedTrades.push(scout);
-  }
-  scoutPositions.clear();
 
   console.log('\n');
 
@@ -993,27 +777,24 @@ async function main() {
     }
   }
 
-  let cumulativeRealizedPnl = 0;
-  const openTradesForNav = new Map(); // ticker+entryDate → trade
+  let navRealizedPnl = 0;
+  const openTradesForNav = new Map();
 
   for (const date of tradingDays) {
-    // Add newly opened trades
     const entering = tradesByEntry[date] || [];
     for (const t of entering) {
       openTradesForNav.set(`${t.ticker}_${t.entryDate}`, t);
     }
 
-    // Close trades that exit today → realize their P&L
     const exiting = tradesByExit[date] || [];
     for (const t of exiting) {
       const key = `${t.ticker}_${t.entryDate}`;
       if (openTradesForNav.has(key)) {
-        cumulativeRealizedPnl += (t.netDollarPnl || 0);
+        navRealizedPnl += (t.netDollarPnl || 0);
         openTradesForNav.delete(key);
       }
     }
 
-    // Compute unrealized MTM for remaining open positions
     let unrealizedMtm = 0;
     for (const [key, trade] of openTradesForNav) {
       const daily = dailyCandleMap[trade.ticker];
@@ -1039,14 +820,16 @@ async function main() {
       unrealizedMtm += lotPnl - entryCosts;
     }
 
-    const equity = STARTING_NAV + cumulativeRealizedPnl + unrealizedMtm;
+    const equity = STARTING_NAV + navRealizedPnl + unrealizedMtm;
     dailyGrossNav.push({ date, equity: parseFloat(equity.toFixed(2)) });
   }
   console.log(`  ${dailyGrossNav.length} daily NAV points`);
 
   // ── Persist to MongoDB ───────────────────────────────────────────────────
-  const tradeCol = db.collection(`pnthr_ai_bt_pyramid_nav_${navLabel}_trade_log`);
-  const navCol = db.collection(`pnthr_ai_bt_pyramid_nav_${navLabel}_daily_nav_gross`);
+  const SUFFIX_ARG = process.argv.find(a => a.startsWith('--suffix='));
+  const colSuffix = SUFFIX_ARG ? SUFFIX_ARG.split('=')[1] : '';
+  const tradeCol = db.collection(`pnthr_ai_bt_pyramid_nav_${navLabel}_trade_log${colSuffix}`);
+  const navCol = db.collection(`pnthr_ai_bt_pyramid_nav_${navLabel}_daily_nav_gross${colSuffix}`);
 
   console.log(`\nPersisting ${closedTrades.length} trades...`);
   await tradeCol.deleteMany({});
@@ -1066,24 +849,18 @@ async function main() {
 
   // ── Analysis ─────────────────────────────────────────────────────────────
   const closed = closedTrades.filter(t => t.exitReason !== 'STILL_OPEN');
-  const scoutTrades = closed.filter(t => t.tradeType === 'SCOUT');
-  const weeklyTrades = closed.filter(t => t.tradeType !== 'SCOUT' && t.tradeType !== 'SCOUT_CONVERTED');
-  const convertedTrades = closed.filter(t => t.tradeType === 'SCOUT_CONVERTED');
   const blTrades = closed.filter(t => t.signal === 'BL');
   const ssTrades = closed.filter(t => t.signal === 'SS');
 
   console.log('\n' + '═'.repeat(80));
-  console.log('  PNTHR AI ELITE FUND — APEX v6 + DAILY CASCADE RESULTS');
+  console.log('  PNTHR AI ELITE FUND — APEX v7 SECTOR ROTATION RESULTS');
   console.log(`  Period:         ${tradingDays[0]} → ${tradingDays[tradingDays.length - 1]}`);
   console.log(`  Starting NAV:   $${STARTING_NAV.toLocaleString()}`);
   console.log('═'.repeat(80));
 
   console.log('\n── Trade Breakdown ──');
   console.log(`  Total closed:      ${closed.length}`);
-  console.log(`  Weekly direct:     ${weeklyTrades.length}`);
-  console.log(`  Scouts opened:     ${totalScoutsOpened}`);
-  console.log(`  Scouts converted:  ${totalScoutsConverted}`);
-  console.log(`  Scouts closed:     ${totalScoutsClosed} (stop/BE/timeout)`);
+  console.log(`  Weekly entries:    ${totalWeeklyOpened}`);
   console.log(`  BL trades:         ${blTrades.length}`);
   console.log(`  SS trades:         ${ssTrades.length}`);
 
@@ -1161,7 +938,7 @@ async function main() {
   const profitFactor = totalLost > 0 ? totalWon / totalLost : Infinity;
 
   console.log('\n' + '═'.repeat(80));
-  console.log(`  INSTITUTIONAL METRICS — APEX v6 + CASCADE (NAV $${STARTING_NAV.toLocaleString()})`);
+  console.log(`  INSTITUTIONAL METRICS — APEX v7 SECTOR ROTATION (NAV $${STARTING_NAV.toLocaleString()})`);
   console.log('═'.repeat(80));
   console.log(`  Final equity:      $${equity.toFixed(0)}`);
   console.log(`  Total return:      +${totalReturn.toFixed(1)}%`);

@@ -23,7 +23,7 @@
 export const INDEX_NAME    = 'PNTHR AI 300';
 export const INDEX_TICKER  = 'PAI300';
 
-export const BASE_DATE     = '2022-11-30';
+export const BASE_DATE     = '2022-01-03';
 export const BASE_VALUE    = 1000.00;
 
 export const SINGLE_NAME_CAP = 0.04;   // 4.00% — any non-hyperscaler

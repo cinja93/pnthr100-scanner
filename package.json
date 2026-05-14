@@ -10,10 +10,17 @@
     "client": "cd client && npm run dev",
     "build": "cd client && npm run build"
   },
-  "keywords": ["stock", "scanner", "finance"],
+  "keywords": [
+    "stock",
+    "scanner",
+    "finance"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "mongodb": "^7.2.0"
   }
 }

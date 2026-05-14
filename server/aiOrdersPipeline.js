@@ -251,16 +251,10 @@ export async function runAiOrdersPipeline(opts = {}) {
     return (b.signalDate || '').localeCompare(a.signalDate || '');
   });
 
-  // 5b. Cap: top 10 BL + top 5 SS per week (matching APEX v6 backtest)
-  const MAX_BL = 10, MAX_SS = 5;
-  const blAll = orders.filter(o => o.signal === 'BL');
-  const ssAll = orders.filter(o => o.signal === 'SS');
-  const cappedBL = blAll.slice(0, MAX_BL);
-  const cappedSS = ssAll.slice(0, MAX_SS);
-  const cappedSet = new Set([...cappedBL, ...cappedSS]);
-  const droppedCount = orders.length - cappedSet.size;
-  orders = orders.filter(o => cappedSet.has(o));
-  if (droppedCount > 0) console.log(`[AI Orders] capped: dropped ${droppedCount} orders (BL ${blAll.length}→${cappedBL.length}, SS ${ssAll.length}→${cappedSS.length})`);
+  // 5b. No weekly cap — APEX v7 backtesting proved capping entries was too
+  //     restrictive and reduced returns without improving risk metrics.
+  //     All qualifying signals that pass the sector rotation gate enter.
+  //     (Previously capped at 10 BL + 5 SS per week in APEX v6.)
 
   // 6. Aggregate stats for header display
   const blOrders = orders.filter(o => o.signal === 'BL');

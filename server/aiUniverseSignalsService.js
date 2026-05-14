@@ -22,8 +22,6 @@ import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
 import { fetchAiQuotesBatch, ymdET, mondayOfET } from './aiIntradayOverlay.js';
 import { getLatestAiSectorRanks, AI_SECTOR_TIER_MULT } from './aiSectorRotationService.js';
 
-import { isCarnivoreMode, getCarnivoreEmaPeriod, CARNIVORE_GATE_OFFSET } from './data/strategyMode.js';
-
 // AI mode first-BL gate — locked 2026-05-08, validated +$484k aggregate alpha
 // vs strict 1.10× (679 stays at 1.10×). Used by every detectAllSignals call here.
 const AI_GATE_OFFSET = 0.25;
@@ -137,9 +135,7 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
 
   for (const ticker of tickers) {
     const sectorId = TICKER_TO_SECTOR_ID[ticker];
-    const carnivore = isCarnivoreMode(ticker);
-    const period    = carnivore ? getCarnivoreEmaPeriod(ticker) : (SECTOR_EMA_PERIODS[sectorId] || 30);
-    const gateOff   = carnivore ? CARNIVORE_GATE_OFFSET : AI_GATE_OFFSET;
+    const period   = SECTOR_EMA_PERIODS[sectorId] || 30;  // sector-tuned period (number)
 
     // ── Weekly signal + PNTHR Stop ─────────────────────────────────────────
     const weeklyRaw = weeklyByTicker[ticker] || [];
@@ -155,7 +151,7 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
       const wBars = weeklyAsc.map(b => ({
         time: b.weekOf, open: b.open, high: b.high, low: b.low, close: b.close,
       }));
-      const { events, pnthrStop, currentSignal, activeType } = detectAllSignals(wBars, wPeriod, false, null, gateOff);
+      const { events, pnthrStop, currentSignal, activeType } = detectAllSignals(wBars, wPeriod, false, null, AI_GATE_OFFSET);
       const lastBarTime = wBars[wBars.length - 1].time;
       const lastEvent   = events[events.length - 1];
       const isNewSignal = lastEvent && lastEvent.time === lastBarTime;
@@ -203,7 +199,7 @@ export async function getAiUniverseSignals({ refresh = false } = {}) {
       }));
       // Daily uses 0.3% daylight zone (vs 1% weekly default) — daily bar ranges
       // are tight enough that 1% locks out signals on chop-zone names.
-      const { events, currentSignal, activeType } = detectAllSignals(dBars, dPeriod, false, 0.003, gateOff);
+      const { events, currentSignal, activeType } = detectAllSignals(dBars, dPeriod, false, 0.003, AI_GATE_OFFSET);
       const lastBarTime = dBars[dBars.length - 1].time;
       const lastEvent   = events[events.length - 1];
       const isNewSignal = lastEvent && lastEvent.time === lastBarTime;

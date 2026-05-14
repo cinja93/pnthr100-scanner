@@ -715,7 +715,14 @@ def section_heatmap(t):
     tbl.setStyle(TableStyle(style))
     s.append(tbl)
     s.append(Spacer(1, 4))
-    s.append(note_p('W = EMA Warm-Up Period (no trading). Returns begin August 2022 when signals first generated.'))
+    # Dynamic warmup label based on actual first trade month
+    if first_trade_month:
+        import calendar
+        ft_year, ft_mo = first_trade_month.split('-')
+        ft_label = f'{calendar.month_name[int(ft_mo)]} {ft_year}'
+    else:
+        ft_label = 'mid-2022'
+    s.append(note_p(f'W = EMA Warm-Up Period (no trading). Returns begin {ft_label} when signals first generated.'))
     s.append(PageBreak())
     return s
 

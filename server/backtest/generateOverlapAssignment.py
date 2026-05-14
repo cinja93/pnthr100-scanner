@@ -49,7 +49,7 @@ BLACK = colors.black
 # Step 1: Export universe data via Node.js
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _run_node(script: str, label: str, timeout: int = 30):
+def _run_node(script: str, label: str, timeout: int = 60):
     """Run a Node.js one-liner from the repo root."""
     result = subprocess.run(
         ["node", "-e", script],
@@ -339,6 +339,12 @@ def _section_title(text, styles):
     return Paragraph(text, styles["SectionTitle"])
 
 
+def _hdr(labels, style):
+    """Convert a list of header strings into centered Paragraph objects.
+    Use <br/> for line breaks instead of \\n."""
+    return [Paragraph(l.replace("&", "&amp;").replace("\n", "<br/>"), style) for l in labels]
+
+
 def _yellow_rule():
     """A thin yellow horizontal rule via a 1-row table."""
     t = Table([[""]],
@@ -480,8 +486,8 @@ def _build_section1(elements, overlap_rows, ai_map, c679_map, styles):
     ))
     elements.append(Spacer(1, 8))
 
-    header = ["Ticker", "Company", "Assigned\nTo", "AI 300\nP&L", "AI 300\nTrades", "AI 300\nWin %",
-              "679\nP&L", "679\nTrades", "679\nWin %", "Edge"]
+    header_labels = ["Ticker", "Company", "Assigned\nTo", "AI 300\nP&L", "AI 300\nTrades", "AI 300\nWin %",
+                     "679\nP&L", "679\nTrades", "679\nWin %", "Edge"]
     col_widths = [0.55*inch, 1.35*inch, 0.65*inch, 0.7*inch, 0.5*inch, 0.5*inch,
                   0.7*inch, 0.5*inch, 0.5*inch, 0.7*inch]
 
@@ -491,6 +497,7 @@ def _build_section1(elements, overlap_rows, ai_map, c679_map, styles):
     for page_idx, page_rows in enumerate(pages):
         if page_idx > 0:
             elements.append(PageBreak())
+        header = _hdr(header_labels, styles["TableHeader"])
         data = [header]
         row_colors = []
         for r in page_rows:
@@ -508,12 +515,12 @@ def _build_section1(elements, overlap_rows, ai_map, c679_map, styles):
             row_colors.append(AI_GREEN if r["winner"] == "AI" else C679_BLUE)
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
-        style = _base_table_style() + _header_style(len(header))
+        style = _base_table_style() + _header_style(len(header_labels))
         for i, c in enumerate(row_colors):
             style.append(("BACKGROUND", (0, i + 1), (-1, i + 1), c))
-        # Right-align numeric columns
+        # Right-align numeric columns (data rows only, not header)
         for col in [3, 4, 5, 6, 7, 8, 9]:
-            style.append(("ALIGN", (col, 0), (col, -1), "RIGHT"))
+            style.append(("ALIGN", (col, 1), (col, -1), "RIGHT"))
         table.setStyle(TableStyle(style))
         elements.append(table)
 
@@ -533,7 +540,7 @@ def _build_section2(elements, master, styles):
     ))
     elements.append(Spacer(1, 8))
 
-    header = ["#", "Ticker", "Fund", "Source", "Gross P&L", "Trades", "WR%", "Sector"]
+    header_labels = ["#", "Ticker", "Fund", "Source", "Gross P&L", "Trades", "WR%", "Sector"]
     col_widths = [0.3*inch, 0.5*inch, 0.55*inch, 0.75*inch, 0.7*inch, 0.45*inch, 0.45*inch, 2.4*inch]
 
     ROWS_PER_PAGE = 55
@@ -542,7 +549,7 @@ def _build_section2(elements, master, styles):
     for page_idx, page_rows in enumerate(pages):
         if page_idx > 0:
             elements.append(PageBreak())
-        data = [header]
+        data = [_hdr(header_labels, styles["TableHeader"])]
         row_colors = []
         base_num = page_idx * ROWS_PER_PAGE + 1
         for i, m in enumerate(page_rows):
@@ -564,11 +571,11 @@ def _build_section2(elements, master, styles):
                 row_colors.append(C679_BLUE)
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
-        style = _base_table_style() + _header_style(len(header))
+        style = _base_table_style() + _header_style(len(header_labels))
         for i, c in enumerate(row_colors):
             style.append(("BACKGROUND", (0, i + 1), (-1, i + 1), c))
         for col in [0, 4, 5, 6]:
-            style.append(("ALIGN", (col, 0), (col, -1), "RIGHT"))
+            style.append(("ALIGN", (col, 1), (col, -1), "RIGHT"))
         table.setStyle(TableStyle(style))
         elements.append(table)
 
@@ -591,7 +598,7 @@ def _build_section3(elements, master, styles):
     ))
     elements.append(Spacer(1, 8))
 
-    header = ["#", "Ticker", "Company", "Source", "Gross P&L", "Trades", "WR%"]
+    header_labels = ["#", "Ticker", "Company", "Source", "Gross P&L", "Trades", "WR%"]
     col_widths = [0.35*inch, 0.55*inch, 2.2*inch, 0.8*inch, 0.75*inch, 0.5*inch, 0.5*inch]
 
     ROWS_PER_PAGE = 55
@@ -600,7 +607,7 @@ def _build_section3(elements, master, styles):
     for page_idx, page_rows in enumerate(pages):
         if page_idx > 0:
             elements.append(PageBreak())
-        data = [header]
+        data = [_hdr(header_labels, styles["TableHeader"])]
         row_colors = []
         base_num = page_idx * ROWS_PER_PAGE + 1
         for i, m in enumerate(page_rows):
@@ -616,11 +623,11 @@ def _build_section3(elements, master, styles):
             row_colors.append(OVERLAP_GOLD if m["is_overlap"] else AI_GREEN)
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
-        style = _base_table_style() + _header_style(len(header))
+        style = _base_table_style() + _header_style(len(header_labels))
         for i, c in enumerate(row_colors):
             style.append(("BACKGROUND", (0, i + 1), (-1, i + 1), c))
         for col in [0, 4, 5, 6]:
-            style.append(("ALIGN", (col, 0), (col, -1), "RIGHT"))
+            style.append(("ALIGN", (col, 1), (col, -1), "RIGHT"))
         table.setStyle(TableStyle(style))
         elements.append(table)
 
@@ -643,7 +650,7 @@ def _build_section4(elements, master, styles):
     ))
     elements.append(Spacer(1, 8))
 
-    header = ["#", "Ticker", "Source", "Sector", "Gross P&L", "Trades", "WR%"]
+    header_labels = ["#", "Ticker", "Source", "Sector", "Gross P&L", "Trades", "WR%"]
     col_widths = [0.35*inch, 0.55*inch, 0.8*inch, 2.0*inch, 0.75*inch, 0.5*inch, 0.5*inch]
 
     ROWS_PER_PAGE = 55
@@ -652,7 +659,7 @@ def _build_section4(elements, master, styles):
     for page_idx, page_rows in enumerate(pages):
         if page_idx > 0:
             elements.append(PageBreak())
-        data = [header]
+        data = [_hdr(header_labels, styles["TableHeader"])]
         row_colors = []
         base_num = page_idx * ROWS_PER_PAGE + 1
         for i, m in enumerate(page_rows):
@@ -668,11 +675,11 @@ def _build_section4(elements, master, styles):
             row_colors.append(OVERLAP_GOLD if m["is_overlap"] else C679_BLUE)
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
-        style = _base_table_style() + _header_style(len(header))
+        style = _base_table_style() + _header_style(len(header_labels))
         for i, c in enumerate(row_colors):
             style.append(("BACKGROUND", (0, i + 1), (-1, i + 1), c))
         for col in [0, 4, 5, 6]:
-            style.append(("ALIGN", (col, 0), (col, -1), "RIGHT"))
+            style.append(("ALIGN", (col, 1), (col, -1), "RIGHT"))
         table.setStyle(TableStyle(style))
         elements.append(table)
 
@@ -710,6 +717,11 @@ def generate_pdf(overlap_rows, master, stats, ai_map, c679_map):
         "Body": ParagraphStyle(
             "CustomBody", parent=base_styles["Normal"],
             fontName="Helvetica", fontSize=9, leading=13,
+        ),
+        "TableHeader": ParagraphStyle(
+            "TableHeader", parent=base_styles["Normal"],
+            fontName="Helvetica-Bold", fontSize=8, leading=10,
+            textColor=PNTHR_YELLOW, alignment=1,  # 1 = CENTER
         ),
     }
 

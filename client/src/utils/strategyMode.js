@@ -1,19 +1,13 @@
 // Client mirror of server/data/strategyMode.js
-// 81 AI 300 tickers that run under Carnivore (679) strategy rules.
-// Source: overlap P&L analysis (Nov 2022 – May 2026), locked 2026-05-12.
+// 26 AI 300 tickers that run under Carnivore (679) strategy rules.
+// Source: head-to-head backtest comparison (Nov 2022 – May 2026),
+// overlapComparison.js. Updated 2026-05-13 (was 81, now 26 after APEX v7 retest).
 
 const CARNIVORE_MODE_TICKERS = new Set([
-  'ADBE', 'AKAM', 'ALB', 'AMAT', 'AMT', 'AMZN', 'ANET', 'APP',
-  'APTV', 'ARM', 'AVGO', 'CARR', 'CCI', 'CDNS', 'CDW', 'CEG',
-  'CIEN', 'COHR', 'CRM', 'CRWD', 'CSCO', 'CSGP', 'D', 'DDOG',
-  'DLR', 'EMR', 'EQIX', 'EQT', 'ETN', 'FFIV', 'FICO', 'FTNT',
-  'GD', 'GEV', 'GLW', 'GNRC', 'GOOGL', 'HON', 'HOOD', 'HUBB',
-  'IBM', 'INTU', 'IRM', 'JCI', 'KMI', 'KTOS', 'LDOS', 'LMT',
-  'LRCX', 'META', 'MRVL', 'MSFT', 'NEE', 'NOW', 'NVDA', 'NXPI',
-  'OKE', 'ORCL', 'PANW', 'PTC', 'QCOM', 'ROK', 'RTX', 'SATS',
-  'SMCI', 'SNDK', 'SNPS', 'SRE', 'TDG', 'TEL', 'TRGP', 'TRMB',
-  'TSLA', 'TT', 'TXT', 'TYL', 'VRSK', 'WDAY', 'WDC', 'WMB',
-  'ZBRA',
+  'AKAM', 'ANET', 'APH', 'ARM', 'CDW', 'CEG', 'CMI', 'COHR',
+  'CSGP', 'EMR', 'EQT', 'ETN', 'GEV', 'HUBB', 'IBM', 'INTC',
+  'KLAC', 'LDOS', 'LITE', 'META', 'ORCL', 'SNDK', 'TDG', 'TRGP',
+  'TRMB', 'TSLA', 'TTD', 'VST',
 ]);
 
 export function getStrategyMode(ticker) {

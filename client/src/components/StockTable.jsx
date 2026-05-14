@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { computeWeeksAgo, computeTradingDaysAgo } from '../utils/dateUtils';
+import { getStrategyMode } from '../utils/strategyMode';
 import styles from './StockTable.module.css';
 
 import confirmedBuyIcon from './Confirmed Buy Signal.png';
@@ -69,7 +70,7 @@ function matchesPinSignal(sigData, pinSignal) {
   return sigData.signal === pinSignal;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, showMode = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null }) {
   const [sortConfig, setSortConfig] = useState({ key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
   const listRef = useRef([]);
@@ -221,6 +222,13 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
       return (aVal - bVal) * dir;
     }
 
+    // Mode sort: 679 (carnivore) first, then AI
+    if (sortConfig.key === 'mode') {
+      const aMode = getStrategyMode(a.ticker) === 'carnivore' ? 0 : 1;
+      const bMode = getStrategyMode(b.ticker) === 'carnivore' ? 0 : 1;
+      return (aMode - bMode) * dir;
+    }
+
     const aValue = a[sortConfig.key];
     const bValue = b[sortConfig.key];
 
@@ -303,7 +311,8 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
     (hideExchange ? -1 : 0) +
     (showDailySignal ? 2 : 0) +
     (showKillScore ? 1 : 0) +
-    (analyzeScores ? 1 : 0);
+    (analyzeScores ? 1 : 0) +
+    (showMode ? 1 : 0);
 
   return (
     <div className={styles.tableContainer} style={compact ? { minHeight: 0 } : undefined}>
@@ -315,6 +324,9 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             </th>}
             {!onRemove && <th onClick={() => handleSort('rankChange')} className={styles.sortable}>
               Rank Change {getSortIndicator('rankChange')}
+            </th>}
+            {showMode && <th onClick={() => handleSort('mode')} className={styles.sortable} style={{ textAlign: 'center' }}>
+              Mode {getSortIndicator('mode')}
             </th>}
             <th onClick={() => handleSort('ticker')} className={styles.sortable}>
               Ticker {getSortIndicator('ticker')}
@@ -431,6 +443,24 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                     return <td className={styles.rankNew}>— —</td>;
                   }
                   return <td className={rankDisplay.className} title={stock.previousRank ? `Previous rank: #${stock.previousRank}` : 'New entry'}>{rankDisplay.text}</td>;
+                })()}
+                {showMode && (() => {
+                  const mode = getStrategyMode(stock.ticker);
+                  return mode === 'carnivore' ? (
+                    <td style={{ textAlign: 'center' }}>
+                      <span style={{
+                        padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700,
+                        letterSpacing: '0.04em', background: '#fcf000', color: '#000',
+                      }}>679</span>
+                    </td>
+                  ) : (
+                    <td style={{ textAlign: 'center' }}>
+                      <span style={{
+                        padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700,
+                        letterSpacing: '0.04em', background: '#00e5ff', color: '#000',
+                      }}>AI</span>
+                    </td>
+                  );
                 })()}
                 <td
                   className={`${styles.ticker} ${styles.tickerClickable}`}

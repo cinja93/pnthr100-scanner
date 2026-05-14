@@ -398,6 +398,7 @@ export default function AiJunglePage() {
           weeklySignalLabel="PNTHR Weekly Signal"
           showDailySignal
           showKillScore
+          showMode
           onTickerClick={handleTickerClick}
           scanType="long"
         />

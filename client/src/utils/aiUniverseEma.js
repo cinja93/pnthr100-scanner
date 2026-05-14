@@ -32,7 +32,7 @@ const ALL_AI = new Set([
   'ACLS','MKSI','CDNS','SNPS','IPGP','LASR','DELL','HPE','CLS','FLEX',
   'JBL','OLED','WDC','SNDK','PSTG','STX','NTAP','MPWR','ENTG','WOLF',
   'NVTS','AMBA','LSCC','ONTO','KLIC','FORM','KEYS','AEHR','SITM','PI',
-  'MXL','CRBS','GEV','CEG','VST','TLN','NEE','SRE','CWEN','AES','CCJ',
+  'MXL','CBRS','GEV','CEG','VST','TLN','NEE','SRE','CWEN','AES','CCJ',
   'OKLO','BE','SMR','NNE','ETN','PWR','D','HUBB','GNRC','POWL',
   'STRL','MTZ','PRIM','CMI','WCC','ENPH','FLNC','STEM','PLUG','EVGO',
   'CHPT','BLNK','EQT','KMI','WMB','TRGP','OKE','LNG','ANET','CSCO',

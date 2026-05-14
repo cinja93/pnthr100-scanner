@@ -10,7 +10,7 @@ Black-background PDF with yellow headings, 4-act structure:
   Act IV:  Close (growth chart, recap, summary, methodology & assumptions, disclosures)
 
 Data: ~/Downloads/pnthr_ai_elite_ir_metrics_{100k,500k,1m}.json
-Output: ~/Downloads/PNTHR_AI_Elite_IR_{Filet,Porterhouse,Wagyu}_{tier}_v9.pdf
+Output: ~/Downloads/PNTHR_AI_Elite_IR_{Filet,Porterhouse,Wagyu}_{tier}_v9.1.pdf
 """
 
 import os, json, sys
@@ -254,7 +254,7 @@ def section_cover(t):
     s.append(Spacer(1, 4))
     s.append(Paragraph(f'<font color="#cccccc">Backtest Performance Report  |  Jan 2022 - May 2026</font>',
         S('cov_s1', fontSize=10.5, leading=13, alignment=TA_CENTER, textColor=OFFWHT)))
-    s.append(Paragraph(f'<font color="#cccccc">Multi-Strategy Pyramiding  |  PNTHR AI Universe (~300 Names)  |  v9</font>',
+    s.append(Paragraph(f'<font color="#cccccc">Multi-Strategy Pyramiding  |  PNTHR AI Universe (~300 Names)  |  v9.1</font>',
         S('cov_s2', fontSize=10.5, leading=13, alignment=TA_CENTER, textColor=OFFWHT)))
     s.append(HRFlowable(width='40%', thickness=0.6, color=DGRAY, spaceBefore=6, spaceAfter=10, hAlign='CENTER'))
 
@@ -294,7 +294,7 @@ def section_cover(t):
          (f'{net["sortino"]:.2f}', 'Sortino Ratio', YELLOW)],
         [(f'{net_pf:.1f}x', 'Profit Factor (Net)', GREEN),
          (f'{net["calmar"]:.1f}', 'Calmar Ratio', YELLOW),
-         (f'{net["maxDD"]:.2f}%', 'Max Peak-to-Trough', RED),
+         (f'{net["recoveryFactor"]:.0f}x', 'Recovery Factor', GREEN),
          (f'{net["positivePct"]:.1f}%', 'Positive Months', GREEN)],
         [(f'{net_wr:.1f}%', f'Win Rate ({net_payoff:.1f}x Payoff)', YELLOW),
          (f'{trades["closed"]:,}', 'Total Closed Trades', YELLOW),
@@ -1483,8 +1483,8 @@ def build_per_tier_ir(tier_key):
     story += section_methodology_assumptions(t)
     story += section_disclosures(t)
 
-    filename = f'PNTHR_AI_Elite_IR_{t["label"]}_{tier_key}_v9.pdf'
-    title_meta = f'PNTHR Funds - AI Elite Fund - {t["classLabel"]} Intelligence Report v9'
+    filename = f'PNTHR_AI_Elite_IR_{t["label"]}_{tier_key}_v9.1.pdf'
+    title_meta = f'PNTHR Funds - AI Elite Fund - {t["classLabel"]} Intelligence Report v9.1'
     return build_doc(filename, title_meta, story)
 
 

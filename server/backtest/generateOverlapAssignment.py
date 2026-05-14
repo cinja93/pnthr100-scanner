@@ -30,6 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CSV_PATH = Path.home() / "Downloads" / "PNTHR_Overlap_Comparison.csv"
 AI_JSON = Path("/tmp/ai300_tickers.json")
 C679_JSON = Path("/tmp/c679_tickers.json")
+AI_BT_JSON = Path("/tmp/ai300_bt_agg.json")
+C679_BT_JSON = Path("/tmp/c679_bt_agg.json")
 OUTPUT_PDF = Path.home() / "Downloads" / "PNTHR_Overlap_Ticker_Assignment.pdf"
 
 # ── Colours ──────────────────────────────────────────────────────────────────
@@ -47,12 +49,12 @@ BLACK = colors.black
 # Step 1: Export universe data via Node.js
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _run_node(script: str, label: str):
+def _run_node(script: str, label: str, timeout: int = 30):
     """Run a Node.js one-liner from the repo root."""
     result = subprocess.run(
         ["node", "-e", script],
         cwd=str(REPO_ROOT),
-        capture_output=True, text=True, timeout=30,
+        capture_output=True, text=True, timeout=timeout,
     )
     if result.returncode != 0:
         print(f"[ERROR] {label} failed:\n{result.stderr}", file=sys.stderr)
@@ -91,6 +93,57 @@ const { MongoClient } = require('mongodb');
   await c.close();
 })();
 """, "679 Carnivore")
+
+
+def export_backtest_aggregates():
+    """Aggregate per-ticker P&L, trades, win rate from trade log collections."""
+    print("Exporting backtest aggregates …")
+
+    agg_script = """
+    const agg = [
+      { $group: {
+        _id: '$ticker',
+        grossPnl: { $sum: '$grossDollarPnl' },
+        trades:   { $sum: 1 },
+        wins:     { $sum: { $cond: ['$isWinner', 1, 0] } }
+      }},
+      { $sort: { _id: 1 } }
+    ];
+    """
+
+    _run_node(f"""
+require('dotenv').config({{ path: 'server/.env' }});
+const {{ MongoClient }} = require('mongodb');
+(async () => {{
+  const c = new MongoClient(process.env.MONGODB_URI);
+  await c.connect();
+  const db = c.db('pnthr_den');
+  {agg_script}
+  const docs = await db.collection('pnthr_ai_bt_pyramid_nav_1m_trade_log').aggregate(agg).toArray();
+  const result = {{}};
+  for (const d of docs) result[d._id] = {{ pnl: Math.round(d.grossPnl), trades: d.trades, wr: d.trades ? +(d.wins/d.trades*100).toFixed(1) : 0 }};
+  require('fs').writeFileSync('/tmp/ai300_bt_agg.json', JSON.stringify(result));
+  console.log('AI 300 backtest tickers: ' + Object.keys(result).length);
+  await c.close();
+}})();
+""", "AI 300 backtest", timeout=120)
+
+    _run_node(f"""
+require('dotenv').config({{ path: 'server/.env' }});
+const {{ MongoClient }} = require('mongodb');
+(async () => {{
+  const c = new MongoClient(process.env.MONGODB_URI);
+  await c.connect();
+  const db = c.db('pnthr_den');
+  {agg_script}
+  const docs = await db.collection('pnthr_bt_pyramid_nav_1m_trade_log').aggregate(agg).toArray();
+  const result = {{}};
+  for (const d of docs) result[d._id] = {{ pnl: Math.round(d.grossPnl), trades: d.trades, wr: d.trades ? +(d.wins/d.trades*100).toFixed(1) : 0 }};
+  require('fs').writeFileSync('/tmp/c679_bt_agg.json', JSON.stringify(result));
+  console.log('679 backtest tickers: ' + Object.keys(result).length);
+  await c.close();
+}})();
+""", "679 backtest", timeout=120)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -137,17 +190,23 @@ def load_csv():
 
 
 def load_universes():
-    """Load AI 300 and 679 universe JSON files."""
+    """Load AI 300 and 679 universe JSON files + backtest aggregates."""
     with open(AI_JSON) as f:
         ai_list = json.load(f)
     with open(C679_JSON) as f:
         c679_list = json.load(f)
     ai_map = {t["ticker"]: t for t in ai_list}
     c679_map = {t["ticker"]: t for t in c679_list}
-    return ai_map, c679_map
+
+    with open(AI_BT_JSON) as f:
+        ai_bt = json.load(f)       # { ticker: { pnl, trades, wr } }
+    with open(C679_BT_JSON) as f:
+        c679_bt = json.load(f)
+
+    return ai_map, c679_map, ai_bt, c679_bt
 
 
-def build_master(overlap_rows, ai_map, c679_map):
+def build_master(overlap_rows, ai_map, c679_map, ai_bt, c679_bt):
     """
     Build the complete master ticker list with assignments.
     Returns (master_list, stats_dict).
@@ -180,27 +239,29 @@ def build_master(overlap_rows, ai_map, c679_map):
             "is_overlap": True,
         })
 
-    # 2. AI 300 exclusive
+    # 2. AI 300 exclusive — pull backtest data from trade log aggregates
     for t, info in ai_map.items():
         if t in seen:
             continue
         seen.add(t)
+        bt = ai_bt.get(t, {})
         master.append({
             "ticker": t, "name": info["name"], "sector": info["sector"],
             "fund": "AI 300", "source": "AI 300 ONLY",
-            "pnl": 0, "trades": 0, "wr": 0,
+            "pnl": bt.get("pnl", 0), "trades": bt.get("trades", 0), "wr": bt.get("wr", 0),
             "is_overlap": False,
         })
 
-    # 3. 679 exclusive
+    # 3. 679 exclusive — pull backtest data from trade log aggregates
     for t, info in c679_map.items():
         if t in seen:
             continue
         seen.add(t)
+        bt = c679_bt.get(t, {})
         master.append({
             "ticker": t, "name": info["name"], "sector": info["sector"],
             "fund": "679", "source": "679 ONLY",
-            "pnl": 0, "trades": 0, "wr": 0,
+            "pnl": bt.get("pnl", 0), "trades": bt.get("trades", 0), "wr": bt.get("wr", 0),
             "is_overlap": False,
         })
 
@@ -667,9 +728,10 @@ def generate_pdf(overlap_rows, master, stats, ai_map, c679_map):
 
 def main():
     export_universes()
+    export_backtest_aggregates()
     overlap_rows = load_csv()
-    ai_map, c679_map = load_universes()
-    master, stats = build_master(overlap_rows, ai_map, c679_map)
+    ai_map, c679_map, ai_bt, c679_bt = load_universes()
+    master, stats = build_master(overlap_rows, ai_map, c679_map, ai_bt, c679_bt)
 
     print(f"\nStats:")
     print(f"  Overlap tickers: {stats['overlap_count']}")

@@ -330,6 +330,7 @@ def _header_style(ncols):
         ("FONTSIZE", (0, 0), (ncols - 1, 0), 8),
         ("TOPPADDING", (0, 0), (ncols - 1, 0), 5),
         ("BOTTOMPADDING", (0, 0), (ncols - 1, 0), 5),
+        ("VALIGN", (0, 0), (ncols - 1, 0), "MIDDLE"),
     ]
 
 
@@ -478,10 +479,10 @@ def _build_section1(elements, overlap_rows, ai_map, c679_map, styles):
     ))
     elements.append(Spacer(1, 8))
 
-    header = ["Ticker", "Company", "Assigned To", "AI P&L", "AI Tr", "AI WR",
-              "679 P&L", "679 Tr", "679 WR", "Edge"]
-    col_widths = [0.55*inch, 1.45*inch, 0.75*inch, 0.7*inch, 0.4*inch, 0.5*inch,
-                  0.7*inch, 0.45*inch, 0.5*inch, 0.7*inch]
+    header = ["Ticker", "Company", "Assigned\nTo", "AI 300\nP&L", "AI 300\nTrades", "AI 300\nWin %",
+              "679\nP&L", "679\nTrades", "679\nWin %", "Edge"]
+    col_widths = [0.55*inch, 1.35*inch, 0.65*inch, 0.7*inch, 0.5*inch, 0.5*inch,
+                  0.7*inch, 0.5*inch, 0.5*inch, 0.7*inch]
 
     ROWS_PER_PAGE = 50
     pages = [overlap_rows[i:i+ROWS_PER_PAGE] for i in range(0, len(overlap_rows), ROWS_PER_PAGE)]

@@ -817,6 +817,12 @@ export async function fetchMovers() {
   return res.json();
 }
 
+export async function fetchMoversLog() {
+  const res = await apiFetch(`${API_BASE}/api/movers-log`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`Movers Log API error ${res.status}`);
+  return res.json();
+}
+
 export async function fetchDevelopingSignals() {
   const res = await apiFetch(`${API_BASE}/api/pulse/developing-signals`, { headers: authHeaders() });
   if (!res.ok) return { status: 'ERROR', bl: [], ss: [] };

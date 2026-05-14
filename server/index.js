@@ -5633,6 +5633,30 @@ cron.schedule('0 10-16 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
+// ── Movers Log Crons ─────────────────────────────────────────────────────────
+// Auto-log: every hour during market hours, capture BL+1/SS+1 movers into the log.
+// Idempotent — same ticker+date won't be logged twice.
+cron.schedule('30 10-16 * * 1-5', async () => {
+  try {
+    const { autoLogFromMovers } = await import('./moversLogService.js');
+    const r = await autoLogFromMovers();
+    if (r.logged > 0) console.log(`[MoversLog cron] auto-logged ${r.logged} movers`);
+  } catch (err) {
+    console.error('[MoversLog cron] auto-log failed:', err.message);
+  }
+}, { timezone: 'America/New_York' });
+
+// Daily EOD update: refresh prices + check exit conditions for open movers.
+cron.schedule('45 16 * * 1-5', async () => {
+  try {
+    const { updateOpenMovers } = await import('./moversLogService.js');
+    const r = await updateOpenMovers();
+    console.log(`[MoversLog cron] EOD update: ${r.updated} refreshed, ${r.closed} closed`);
+  } catch (err) {
+    console.error('[MoversLog cron] EOD update failed:', err.message);
+  }
+}, { timezone: 'America/New_York' });
+
 // POST /api/admin/run-daily-signal-job — manual trigger (per dailySignalJob.js header).
 // Useful for backfilling immediately after deploy without waiting for the 5:05pm cron.
 app.post('/api/admin/run-daily-signal-job', authenticateJWT, requireAdmin, async (req, res) => {
@@ -8438,6 +8462,21 @@ app.get('/api/pulse/movers', authenticateJWT, async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('[movers]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Movers Log — track banner BL+1/SS+1 signals for research ──────────────────
+app.get('/api/movers-log', authenticateJWT, async (req, res) => {
+  try {
+    const { getMoversLog, getMoversLogStats } = await import('./moversLogService.js');
+    const [entries, stats] = await Promise.all([
+      getMoversLog({ status: req.query.status, limit: parseInt(req.query.limit) || 200 }),
+      getMoversLogStats(),
+    ]);
+    res.json({ entries, stats });
+  } catch (err) {
+    console.error('[movers-log]', err);
     res.status(500).json({ error: err.message });
   }
 });

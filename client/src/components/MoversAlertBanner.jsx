@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { fetchMovers } from '../services/api';
+import MoversLogModal from './MoversLogModal';
 
 const POLL_MS = 60 * 1000;
 
@@ -50,6 +51,7 @@ export default function MoversAlertBanner({ onTickerClick, onVisibleChange, topO
   const { currentUser } = useAuth() || {};
   const [alerts, setAlerts] = useState([]);
   const [hidden, setHidden] = useState(() => loadDismissed());
+  const [showLog, setShowLog] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -107,18 +109,36 @@ export default function MoversAlertBanner({ onTickerClick, onVisibleChange, topO
           })}
         </div>
       </div>
-      <button
-        onClick={() => { setHidden(true); saveDismissed(true); }}
-        title="Dismiss movers banner for today"
-        style={{
-          background: '#000', color: '#fcf000',
-          border: 'none', borderRadius: 4,
-          padding: '4px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-          marginLeft: 8,
-        }}
-      >
-        Dismiss
-      </button>
+      <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+        <button
+          onClick={() => setShowLog(true)}
+          title="Open Movers Log — track returns of all banner signals"
+          style={{
+            background: '#000', color: '#fcf000',
+            border: 'none', borderRadius: 4,
+            padding: '4px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          Movers Log
+        </button>
+        <button
+          onClick={() => { setHidden(true); saveDismissed(true); }}
+          title="Dismiss movers banner for today"
+          style={{
+            background: '#000', color: '#fcf000',
+            border: 'none', borderRadius: 4,
+            padding: '4px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          Dismiss
+        </button>
+      </div>
+      {showLog && (
+        <MoversLogModal
+          onClose={() => setShowLog(false)}
+          onTickerClick={(t) => { setShowLog(false); onTickerClick?.(t); }}
+        />
+      )}
     </div>
   );
 }

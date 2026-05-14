@@ -1,8 +1,15 @@
-// 81 AI 300 tickers that run under Carnivore (679) strategy rules:
-// weekly-only pyramid, SPY/QQQ regime gate, sector OpEMAs (18-26W).
+// Overlap tickers that run under Carnivore (679) strategy rules:
+// weekly-only pyramid, SPY/QQQ regime gate, GICS OpEMAs (18-26W).
 // All other AI 300 tickers run under AI 300 rules:
 // weekly + sector rotation, PAI300 regime gate, AI-tuned EMAs (30-40W).
-// Source: overlap P&L analysis (Nov 2022 – May 2026), locked 2026-05-12.
+//
+// Source: head-to-head backtest comparison (Nov 2022 - May 2026),
+// overlapComparison.js. Each ticker tested individually under both
+// strategy rule sets. These 26 tickers produced higher P&L under
+// 679 rules. The other 81 former carnivore tickers moved to AI 300
+// because AI 300 rules produced better results for them.
+//
+// Updated 2026-05-13 (was 81 tickers, now 26 after APEX v7 retest).
 
 // GICS sector → OpEMA period (from server/sectorEmaConfig.js)
 const GICS_EMA = {
@@ -20,40 +27,34 @@ const GICS_EMA = {
 };
 
 // Carnivore tickers with their GICS sector for OpEMA lookup.
-// GICS classifications verified against S&P GICS standard.
+// Only tickers where 679 rules outperformed AI 300 rules in the
+// Nov 2022 - May 2026 head-to-head backtest (overlapComparison.js).
 const CARNIVORE_TICKERS = {
   // Technology (21W)
-  ADBE: 'Technology', AKAM: 'Technology', AMAT: 'Technology', ANET: 'Technology',
-  APP: 'Technology', ARM: 'Technology', AVGO: 'Technology', CDNS: 'Technology',
-  CDW: 'Technology', CIEN: 'Technology', COHR: 'Technology', CRM: 'Technology',
-  CRWD: 'Technology', CSCO: 'Technology', DDOG: 'Technology', FFIV: 'Technology',
-  FICO: 'Technology', FTNT: 'Technology', GLW: 'Technology', IBM: 'Technology',
-  INTU: 'Technology', LRCX: 'Technology', MRVL: 'Technology', MSFT: 'Technology',
-  NOW: 'Technology', NVDA: 'Technology', NXPI: 'Technology', ORCL: 'Technology',
-  PANW: 'Technology', PTC: 'Technology', QCOM: 'Technology', SMCI: 'Technology',
-  SNDK: 'Technology', SNPS: 'Technology', TEL: 'Technology', TYL: 'Technology',
-  VRSK: 'Technology', WDAY: 'Technology', WDC: 'Technology', ZBRA: 'Technology',
+  AKAM: 'Technology', ANET: 'Technology', CDW: 'Technology',
+  COHR: 'Technology', INTC: 'Technology', KLAC: 'Technology',
+  SNDK: 'Technology',
   // Communication Services (21W)
-  GOOGL: 'Communication Services', META: 'Communication Services',
+  META: 'Communication Services',
   // Consumer Discretionary (19W)
-  AMZN: 'Consumer Discretionary', TSLA: 'Consumer Discretionary', APTV: 'Consumer Discretionary',
+  TSLA: 'Consumer Discretionary',
   // Real Estate (26W)
-  AMT: 'Real Estate', CCI: 'Real Estate', CSGP: 'Real Estate',
-  DLR: 'Real Estate', EQIX: 'Real Estate', IRM: 'Real Estate',
+  CSGP: 'Real Estate',
   // Utilities (21W)
-  CEG: 'Utilities', D: 'Utilities', NEE: 'Utilities', SRE: 'Utilities',
+  CEG: 'Utilities',
   // Energy (26W)
-  EQT: 'Energy', KMI: 'Energy', OKE: 'Energy', TRGP: 'Energy', WMB: 'Energy',
+  EQT: 'Energy', TRGP: 'Energy',
   // Industrials (24W)
-  CARR: 'Industrials', EMR: 'Industrials', ETN: 'Industrials', GD: 'Industrials',
-  GEV: 'Industrials', GNRC: 'Industrials', HON: 'Industrials', HUBB: 'Industrials',
-  JCI: 'Industrials', KTOS: 'Industrials', LDOS: 'Industrials', LMT: 'Industrials',
-  ROK: 'Industrials', RTX: 'Industrials', SATS: 'Industrials', TDG: 'Industrials',
-  TRMB: 'Industrials', TT: 'Industrials', TXT: 'Industrials',
+  APH: 'Industrials', ARM: 'Industrials', EMR: 'Industrials',
+  ETN: 'Industrials', GEV: 'Industrials', HUBB: 'Industrials',
+  LDOS: 'Industrials', TDG: 'Industrials', TRMB: 'Industrials',
   // Financial Services (25W)
-  HOOD: 'Financial Services',
+  // (none)
   // Basic Materials (19W)
-  ALB: 'Basic Materials',
+  CMI: 'Basic Materials',
+  // Other
+  IBM: 'Technology', ORCL: 'Technology', TTD: 'Technology',
+  VST: 'Utilities', LITE: 'Technology',
 };
 
 export const CARNIVORE_MODE_TICKERS = new Set(Object.keys(CARNIVORE_TICKERS));

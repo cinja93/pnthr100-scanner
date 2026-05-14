@@ -10,7 +10,7 @@ Black-background PDF with yellow headings, 4-act structure:
   Act IV:  Close (growth chart, recap, summary, methodology & assumptions, disclosures)
 
 Data: ~/Downloads/pnthr_ai_elite_ir_metrics_{100k,500k,1m}.json
-Output: ~/Downloads/PNTHR_AI_Elite_IR_{Filet,Porterhouse,Wagyu}_{tier}_v8.pdf
+Output: ~/Downloads/PNTHR_AI_Elite_IR_{Filet,Porterhouse,Wagyu}_{tier}_v9.pdf
 """
 
 import os, json, sys
@@ -254,7 +254,7 @@ def section_cover(t):
     s.append(Spacer(1, 4))
     s.append(Paragraph(f'<font color="#cccccc">Backtest Performance Report  |  Jan 2022 - May 2026</font>',
         S('cov_s1', fontSize=10.5, leading=13, alignment=TA_CENTER, textColor=OFFWHT)))
-    s.append(Paragraph(f'<font color="#cccccc">Sector-Rotated Pyramiding Strategy  |  PNTHR AI Universe (~300 Names)  |  v8</font>',
+    s.append(Paragraph(f'<font color="#cccccc">Multi-Strategy Pyramiding  |  PNTHR AI Universe (~300 Names)  |  v9</font>',
         S('cov_s2', fontSize=10.5, leading=13, alignment=TA_CENTER, textColor=OFFWHT)))
     s.append(HRFlowable(width='40%', thickness=0.6, color=DGRAY, spaceBefore=6, spaceAfter=10, hAlign='CENTER'))
 
@@ -967,14 +967,34 @@ def section_methodology(t):
     s.append(bullet_p('<b>Base:</b> November 30, 2022 = 1000.00 (ChatGPT launch date).'))
     s += subsection_heading('Regime Gate')
     s.append(body_p(
-        'BL (Buy Long) signals require the PAI300 index to be above its 36-week EMA. This ensures longs are only '
-        'initiated when the AI sector is in a confirmed uptrend. SS (Sell Short) signals have NO macro gate in the '
-        'AI Elite Fund. The PAI300 was below its 36W EMA only 5.5% of the time (8 out of 145 weeks), making any '
-        'SS gate based on it too restrictive.'
+        'The AI Elite Fund employs a multi-strategy regime architecture. The majority of tickers (~272) use the PAI300 '
+        'index above its 36-week EMA as their regime gate, ensuring longs are initiated only when the AI sector is in a '
+        'confirmed uptrend. A subset of 26 tickers that backtested stronger under traditional rules use the SPY + QQQ '
+        'dual-index gate (both must be above their 21-week EMA). This per-ticker strategy assignment was determined by '
+        'a head-to-head comparison backtest of all overlap tickers under both rule sets.'
     ))
     s.append(PageBreak())
 
-    s += section_heading('3. SECTOR ROTATION SIGNAL ARCHITECTURE')
+    s += section_heading('3. MULTI-STRATEGY ARCHITECTURE')
+    s.append(body_p(
+        'The AI Elite Fund runs a multi-strategy approach where each ticker is assigned to the rule set that '
+        'produced the best risk-adjusted returns in head-to-head backtesting (November 2022 - May 2026). '
+        '26 tickers run under Carnivore (679) rules; the remaining ~272 run under AI 300 rules.'
+    ))
+    s += subsection_heading('Strategy Differences')
+    s.append(bullet_p('<b>AI 300 Rules (~272 tickers):</b> AI sector-optimized EMA (30-40W), 1.25x first-entry gate, PAI300 regime gate, full sector rotation with GO/NEUTRAL/NO_GO sizing.'))
+    s.append(bullet_p('<b>Carnivore Rules (26 tickers):</b> GICS sector-optimized OpEMA (18-26W), 1.10x first-entry gate, SPY+QQQ dual regime gate, no sector rotation (flat 1.0x sizing).'))
+    s.append(bullet_p('<b>Shared:</b> Same 5-lot pyramid, same stop ratchet, same stale hunt (20 days), same structural exit, same position sizing (1% vitality, 10% single-name cap).'))
+    s += subsection_heading('Why Multi-Strategy Outperforms')
+    s.append(body_p(
+        'The 26 carnivore tickers are names where the faster GICS OpEMA (18-26 weeks) catches trends earlier than the '
+        'slower AI sector EMA (30-40 weeks). The stricter 1.10x gate filters noise more aggressively, and the SPY+QQQ '
+        'regime gate provides a different macro lens that better suits these names. Head-to-head testing showed the '
+        'multi-strategy approach adds significant alpha over applying a single rule set to all tickers.'
+    ))
+    s.append(PageBreak())
+
+    s += section_heading('4. SECTOR ROTATION SIGNAL ARCHITECTURE')
     s.append(body_p(
         'The Sector Rotation engine is the AI Elite Fund\'s proprietary entry system. Each week, all 16 AI sectors are '
         'ranked by momentum. Buy Long entries are sourced from the strongest sectors; Sell Short entries from the weakest. '
@@ -1005,7 +1025,7 @@ def section_methodology(t):
     ))
     s.append(PageBreak())
 
-    s += section_heading('4. POSITION SIZING & PYRAMIDING')
+    s += section_heading('5. POSITION SIZING & PYRAMIDING')
     s.append(body_p(
         'The AI Elite Fund uses the same 5-lot pyramid system as the Carnivore Quant Fund. Lot 1 deploys 35% of the '
         'full position when a weekly signal fires in a top-ranked sector. Subsequent lots require prior lot filled + '
@@ -1029,7 +1049,7 @@ def section_methodology(t):
         col_widths=[0.55*inch, 0.85*inch, 0.55*inch, 1.35*inch, 1.15*inch, CONTENT_W - 4.45*inch]))
     s.append(PageBreak())
 
-    s += section_heading('5. INSTITUTIONAL BACKTEST RESULTS')
+    s += section_heading('6. INSTITUTIONAL BACKTEST RESULTS')
     em = t.get('executionModel', {})
     mc = t.get('marketCorrelation', {})
     spy_mc = mc.get('spy', {})
@@ -1456,8 +1476,8 @@ def build_per_tier_ir(tier_key):
     story += section_methodology_assumptions(t)
     story += section_disclosures(t)
 
-    filename = f'PNTHR_AI_Elite_IR_{t["label"]}_{tier_key}_v8.pdf'
-    title_meta = f'PNTHR Funds - AI Elite Fund - {t["classLabel"]} Intelligence Report v8'
+    filename = f'PNTHR_AI_Elite_IR_{t["label"]}_{tier_key}_v9.pdf'
+    title_meta = f'PNTHR Funds - AI Elite Fund - {t["classLabel"]} Intelligence Report v9'
     return build_doc(filename, title_meta, story)
 
 

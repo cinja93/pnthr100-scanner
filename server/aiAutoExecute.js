@@ -7,9 +7,11 @@
 //                   BUY_MARKET + PLACE_STOP + L2-L5 lot triggers
 //
 // Risk gates (checked at staging AND execution):
-//   1. 20-position cap — total ACTIVE + STAGED + new entries ≤ 20
-//   2. 10% total heat budget — sum of all position risk ≤ 10% NAV
-//   3. 10% per-ticker concentration cap — in enqueueOutbox
+//   1. 10% total heat budget — sum of all position risk ≤ 10% NAV
+//   2. 10% per-ticker concentration cap — in enqueueOutbox
+//   3. Buying power check — NAV minus deployed capital minus 20% reserve
+//      must cover the new Lot 1 dollar cost. Prevents over-leveraging
+//      at small NAV sizes without artificially capping position count.
 //
 // Kill switch: AI_AUTO_EXECUTE env var (default OFF)
 // Dry-run: AI_AUTO_EXECUTE_DRY_RUN env var (default ON)
@@ -30,10 +32,8 @@ import { computeWilderATR, blInitStop, ssInitStop } from './signalDetection.js';
 const COLL_PORTFOLIO = 'pnthr_portfolio';
 const COLL_AI_ORDERS = 'pnthr_ai_orders';
 
-const MAX_POSITIONS     = 20;
-const MAX_BL_PER_WEEK   = 10;
-const MAX_SS_PER_WEEK   = 10;
 const HEAT_CAP_PCT      = 0.10;  // 10% NAV max total risk
+const CAPITAL_RESERVE   = 0.20;  // 20% NAV kept as buying power reserve
 
 function isEnabled() {
   return process.env.AI_AUTO_EXECUTE === 'true';
@@ -104,6 +104,47 @@ function computePortfolioHeat(positions, nav) {
   };
 }
 
+// ── Buying power: deployed capital + 20% reserve ────────────────────────────
+function computeDeployedCapital(positions) {
+  let deployed = 0;
+  for (const p of positions) {
+    const fills = p.fills || {};
+    const filledShr = Object.values(fills).reduce(
+      (s, f) => s + (f && f.filled ? (+f.shares || 0) : 0), 0
+    );
+    if (filledShr > 0) {
+      const totalCost = Object.values(fills).filter(f => f.filled).reduce(
+        (s, f) => s + (+f.shares || 0) * (+f.price || 0), 0
+      );
+      deployed += totalCost;
+    } else if (p.status === 'STAGED') {
+      // STAGED but not yet filled — estimate L1 cost from entry price × L1 shares
+      const l1Shares = fills[1]?.shares || 0;
+      deployed += l1Shares * (+p.entryPrice || 0);
+    }
+  }
+  return +deployed.toFixed(2);
+}
+
+function computeAvailableBuyingPower(nav, deployedCapital) {
+  // Available = NAV - deployed - 20% reserve
+  const reserve = nav * CAPITAL_RESERVE;
+  return Math.max(0, nav - deployedCapital - reserve);
+}
+
+// ── Estimate L1 dollar cost (what it costs to open the position) ────────────
+function estimateL1Cost(entryPrice, stopPrice, nav, isETF, sectorMult) {
+  const vitality = nav * (isETF ? 0.005 : 0.01) * (sectorMult || 1.0);
+  const rps = Math.abs(entryPrice - stopPrice);
+  if (rps <= 0 || entryPrice <= 0) return 0;
+  const totalShares = Math.floor(Math.min(
+    Math.floor(vitality / rps),
+    Math.floor(nav * 0.10 / entryPrice)
+  ));
+  const l1Shares = Math.max(1, Math.round(totalShares * STRIKE_PCT[0]));
+  return l1Shares * entryPrice;
+}
+
 // ── Estimate risk for a single new entry (L1 only) ──────────────────────────
 function estimateL1Risk(entryPrice, stopPrice, nav, isETF, sectorMult) {
   const vitality = nav * (isETF ? 0.005 : 0.01) * (sectorMult || 1.0);
@@ -141,31 +182,31 @@ export async function stageWeeklyOrders(opts = {}) {
   if (!latestOrder.length) return { skipped: 'NO_ORDERS', staged: [], skippedOrders: [] };
   const orderDoc = latestOrder[0];
 
-  // Check existing positions (ACTIVE + PARTIAL + STAGED all count toward cap)
+  // Check existing positions (ACTIVE + PARTIAL + STAGED)
   const existingPositions = await db.collection(COLL_PORTFOLIO)
     .find({ ownerId, status: { $in: ['ACTIVE', 'PARTIAL', 'STAGED'] } }).toArray();
   const activeTickers = new Set(existingPositions.map(p => p.ticker));
-  let currentPosCount = existingPositions.length;
 
-  // Compute current portfolio heat
+  // Compute current portfolio heat + buying power
   const currentHeat = computePortfolioHeat(existingPositions, nav);
   let runningRisk = currentHeat.totalRisk;
+  const deployedCapital = computeDeployedCapital(existingPositions);
+  let availableBP = computeAvailableBuyingPower(nav, deployedCapital);
 
   const results = { staged: [], skippedOrders: [], dryRun, weekOf: orderDoc.weekOf };
 
-  const qualifiedOrders = (orderDoc.orders || []).filter(o => {
+  // All qualifying new signals — no artificial weekly caps (APEX v7)
+  const allOrders = (orderDoc.orders || []).filter(o => {
     if (!o.isNewSignal) return false;
     if (o.signal !== 'BL' && o.signal !== 'SS') return false;
     return true;
   });
 
-  // Separate BL and SS, apply per-direction caps
-  const blOrders = qualifiedOrders.filter(o => o.signal === 'BL').slice(0, MAX_BL_PER_WEEK);
-  const ssOrders = qualifiedOrders.filter(o => o.signal === 'SS').slice(0, MAX_SS_PER_WEEK);
-  const allOrders = [...blOrders, ...ssOrders];
+  const blCount = allOrders.filter(o => o.signal === 'BL').length;
+  const ssCount = allOrders.filter(o => o.signal === 'SS').length;
 
-  console.log(`[AI AutoExec] STAGING ${allOrders.length} orders from ${orderDoc.weekOf} (${blOrders.length} BL + ${ssOrders.length} SS, dryRun=${dryRun})`);
-  console.log(`[AI AutoExec] Current: ${currentPosCount} positions, heat=${currentHeat.totalRiskPct}% of ${nav} NAV`);
+  console.log(`[AI AutoExec] STAGING ${allOrders.length} orders from ${orderDoc.weekOf} (${blCount} BL + ${ssCount} SS, dryRun=${dryRun})`);
+  console.log(`[AI AutoExec] Current: ${existingPositions.length} positions, heat=${currentHeat.totalRiskPct}%, deployed=$${deployedCapital.toLocaleString()}, available BP=$${availableBP.toLocaleString()} (${(availableBP/nav*100).toFixed(1)}% NAV), reserve=${CAPITAL_RESERVE*100}%`);
 
   for (const order of allOrders) {
     const { ticker } = order;
@@ -173,12 +214,6 @@ export async function stageWeeklyOrders(opts = {}) {
     // Gate: already active/staged
     if (activeTickers.has(ticker)) {
       results.skippedOrders.push({ ticker, reason: 'ALREADY_ACTIVE' });
-      continue;
-    }
-
-    // Gate: 20-position cap
-    if (currentPosCount >= MAX_POSITIONS) {
-      results.skippedOrders.push({ ticker, reason: `POSITION_CAP_${MAX_POSITIONS}` });
       continue;
     }
 
@@ -198,11 +233,19 @@ export async function stageWeeklyOrders(opts = {}) {
       continue;
     }
 
-    // Gate: 10% heat budget
     const sMult = isCarnivoreMode(ticker) ? 1.0 : (+(order.sectorMult) || 1.0);
+
+    // Gate: 10% heat budget
     const newEntryRisk = estimateL1Risk(entryPrice, stopPrice, nav, false, sMult);
     if ((runningRisk + newEntryRisk) / nav > HEAT_CAP_PCT) {
       results.skippedOrders.push({ ticker, reason: `HEAT_CAP_${((runningRisk + newEntryRisk) / nav * 100).toFixed(1)}PCT` });
+      continue;
+    }
+
+    // Gate: buying power (NAV - deployed - 20% reserve must cover L1 cost)
+    const l1Cost = estimateL1Cost(entryPrice, stopPrice, nav, false, sMult);
+    if (l1Cost > availableBP) {
+      results.skippedOrders.push({ ticker, reason: `BUYING_POWER_$${availableBP.toFixed(0)}_NEED_$${l1Cost.toFixed(0)}` });
       continue;
     }
 
@@ -263,8 +306,8 @@ export async function stageWeeklyOrders(opts = {}) {
       activeTickers.add(ticker);
     }
 
-    currentPosCount++;
     runningRisk += newEntryRisk;
+    availableBP -= l1Cost;
     results.staged.push({
       ticker, direction, lot1Shares: lotShares[0], entryPrice, stopPrice,
       strategyMode: position.strategyMode, estimatedRiskPct: +(newEntryRisk / nav * 100).toFixed(2),
@@ -302,13 +345,15 @@ export async function executeWeeklyOrders(opts = {}) {
     return { skipped: 'NO_STAGED', executed: [], outbox: [] };
   }
 
-  // Re-check portfolio heat at execution time (prices may have changed over weekend)
+  // Re-check portfolio heat + buying power at execution time (prices may have changed over weekend)
   const allPositions = await db.collection(COLL_PORTFOLIO)
     .find({ ownerId, status: { $in: ['ACTIVE', 'PARTIAL'] } }).toArray();
   const currentHeat = computePortfolioHeat(allPositions, nav);
   let runningRisk = currentHeat.totalRisk;
+  const deployedCapital = computeDeployedCapital([...allPositions, ...stagedPositions]);
+  let availableBP = computeAvailableBuyingPower(nav, deployedCapital);
 
-  console.log(`[AI AutoExec] EXECUTING ${stagedPositions.length} staged positions (dryRun=${dryRun}), current heat=${currentHeat.totalRiskPct}%`);
+  console.log(`[AI AutoExec] EXECUTING ${stagedPositions.length} staged positions (dryRun=${dryRun}), heat=${currentHeat.totalRiskPct}%, available BP=$${availableBP.toLocaleString()}`);
 
   const results = { executed: [], outbox: [], skippedOrders: [], dryRun };
 
@@ -326,6 +371,20 @@ export async function executeWeeklyOrders(opts = {}) {
         await db.collection(COLL_PORTFOLIO).updateOne({ _id: position._id }, {
           $set: { status: 'CLOSED', closedAt: new Date(), updatedAt: new Date(),
             outcome: { exitPrice: 0, profitPct: 0, profitDollar: 0, holdingDays: 0, exitReason: 'HEAT_CAP_REJECTED' } },
+        });
+      }
+      continue;
+    }
+
+    // Re-check buying power at execution time
+    const l1Cost = estimateL1Cost(entryPrice, stopPrice, nav, false, sMult);
+    if (l1Cost > availableBP) {
+      console.log(`[AI AutoExec] BUYING POWER — skipping ${ticker} (need $${l1Cost.toFixed(0)}, available $${availableBP.toFixed(0)})`);
+      results.skippedOrders.push({ ticker, reason: 'BUYING_POWER_AT_EXECUTION' });
+      if (!dryRun) {
+        await db.collection(COLL_PORTFOLIO).updateOne({ _id: position._id }, {
+          $set: { status: 'CLOSED', closedAt: new Date(), updatedAt: new Date(),
+            outcome: { exitPrice: 0, profitPct: 0, profitDollar: 0, holdingDays: 0, exitReason: 'BUYING_POWER_REJECTED' } },
         });
       }
       continue;
@@ -383,9 +442,10 @@ export async function executeWeeklyOrders(opts = {}) {
     }
 
     runningRisk += newEntryRisk;
+    availableBP -= l1Cost;
   }
 
-  console.log(`[AI AutoExec] Execution complete: ${results.executed.length} executed, ${results.outbox.length} outbox, ${results.skippedOrders.length} skipped`);
+  console.log(`[AI AutoExec] Execution complete: ${results.executed.length} executed, ${results.outbox.length} outbox, ${results.skippedOrders.length} skipped, remaining BP=$${availableBP.toFixed(0)}`);
   return results;
 }
 

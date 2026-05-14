@@ -18,6 +18,7 @@ import { detectAllSignals, calculateEMA } from './signalDetection.js';
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
 import { fetchFMP } from './stockService.js';
+import { isCarnivoreMode, getCarnivoreEmaPeriod, CARNIVORE_GATE_OFFSET } from './data/strategyMode.js';
 
 // Build ticker → { sectorId, sectorName, name } lookup once
 const TICKER_META = {};
@@ -66,7 +67,9 @@ export async function getAiStockChartData(ticker) {
   const db = await connectToDatabase();
   if (!db) return { ok: false, error: 'Mongo connect failed' };
 
-  const sectorPeriod = SECTOR_EMA_PERIODS[meta.sectorId] || 30;
+  const carnivore    = isCarnivoreMode(ticker);
+  const sectorPeriod = carnivore ? getCarnivoreEmaPeriod(ticker) : (SECTOR_EMA_PERIODS[meta.sectorId] || 30);
+  const gateOff      = carnivore ? CARNIVORE_GATE_OFFSET : 0.25;
 
   // Pull both bar series + live quote in parallel.
   // Bars are end-of-day historical (Mongo) — used for chart rendering and
@@ -224,10 +227,10 @@ export async function getAiStockChartData(ticker) {
 
   // Daily uses 0.3% daylight zone (vs 1% weekly) — daily ranges are tighter
   // than weekly so the 1% threshold starves daily signals on chop-zone names.
-  // AI mode: 1.25× first-BL gate (gateOffset 0.25) per locked AI Universe spec.
-  const AI_GATE_OFFSET = 0.25;
-  const dailyDetect  = dailyPeriod  ? detectAllSignals(dailySigBars,  dailyPeriod,  false, 0.003, AI_GATE_OFFSET) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
-  const weeklyDetect = weeklyPeriod ? detectAllSignals(weeklySigBars, weeklyPeriod, false, null,  AI_GATE_OFFSET) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
+  // Gate offset: carnivore tickers use 1.10× (CARNIVORE_GATE_OFFSET = 0.10),
+  // AI tickers use 1.25× (0.25) per locked AI Universe spec.
+  const dailyDetect  = dailyPeriod  ? detectAllSignals(dailySigBars,  dailyPeriod,  false, 0.003, gateOff) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
+  const weeklyDetect = weeklyPeriod ? detectAllSignals(weeklySigBars, weeklyPeriod, false, null,  gateOff) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
 
   // Last bar info per timeframe
   const lastDaily  = dailyAsc[dailyAsc.length - 1] || null;

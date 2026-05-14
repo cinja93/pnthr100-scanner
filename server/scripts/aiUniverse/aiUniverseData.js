@@ -1,7 +1,8 @@
 // PNTHR AI Universe, Master holdings data with PNTHR investment-thesis paragraphs
 // Each paragraph reads as: "Why PNTHR believes this name belongs in the AI Elite Universe"
-// 297 holdings across 16 sectors. Last updated: 2026-05-08.
+// 302 holdings across 16 sectors. Last updated: 2026-05-14.
 //
+// v3.2 (2026-05-14): added FIX, MOD, MLI to S16 (thermal/copper), IESC to S2 (electrical infra). 298 → 302.
 // v3.1 (2026-05-11): added HAWK (AI satellite intelligence) to S13 Drones, Space & Defense AI. 297 → 298.
 // v3.0 (2026-05-08): removed 7 delisted/acquired tickers — ABB (delisted 2023),
 //   OLO (acquired Thoma Bravo Sept 2025), ZK (acquired late 2025), IAS
@@ -16,9 +17,9 @@
 export const FUND_META = {
   fundName: 'PNTHR AI Universe',
   fullName: 'PNTHR AI Elite Universe Fund',
-  version: 'v3.1',
+  version: 'v3.2',
   date: 'May 2026',
-  totalHoldings: 298,
+  totalHoldings: 302,
   totalSectors: 16,
 };
 
@@ -125,6 +126,7 @@ export const SECTORS = [
       { ticker: 'TRGP', name: 'Targa Resources', thesis: 'Targa is the leading Permian midstream gas processor, moving the gas that powers Texas AI data centers and LNG exports. PNTHR holds TRGP as a focused Permian midstream AI-gas play.' },
       { ticker: 'OKE', name: 'ONEOK Inc.', thesis: 'ONEOK operates major gas gathering and pipeline assets across the Mid-Continent and Permian, increasingly supplying AI data center demand. PNTHR holds OKE as a diversified midstream AI-gas play.' },
       { ticker: 'LNG', name: 'Cheniere Energy', thesis: 'Cheniere is the largest US LNG exporter, energy security and AI-driven gas demand both flow through their terminals. PNTHR holds LNG as the LNG-export leg of our AI energy security thesis.' },
+      { ticker: 'IESC', name: 'IES Holdings', thesis: 'IES Holdings is a leading electrical and technology systems contractor building critical power infrastructure for AI data centers. Their communications and infrastructure segments directly serve hyperscaler electrical buildouts. PNTHR holds IESC as a focused electrical contracting pure play on AI data center construction.' },
     ],
   },
   {
@@ -447,6 +449,9 @@ export const SECTORS = [
       { ticker: 'MP', name: 'MP Materials', thesis: 'MP Materials operates the only US rare earths mine and is building permanent magnet capacity, critical for AI data center motors, EVs, and defense. PNTHR holds MP as a strategic AI materials play.' },
       { ticker: 'ALB', name: 'Albemarle Corporation', thesis: 'Albemarle is the largest US-listed lithium producer, battery materials for AI grid storage and EVs. PNTHR holds ALB as a strategic AI battery materials play.' },
       { ticker: 'FCX', name: 'Freeport-McMoRan', thesis: 'Freeport-McMoRan is the largest US copper producer, AI data centers consume 6x more copper per square foot than traditional facilities. PNTHR holds FCX as a strategic AI-copper play.' },
+      { ticker: 'FIX', name: 'Comfort Systems USA', thesis: 'Comfort Systems is a leading mechanical and HVAC contractor specializing in data center cooling infrastructure. Their modular cooling systems serve hyperscaler buildouts nationwide. PNTHR holds FIX as a focused HVAC contracting pure play on AI data center thermal management.' },
+      { ticker: 'MOD', name: 'Modine Manufacturing', thesis: 'Modine manufactures precision thermal management solutions including liquid cooling systems purpose-built for AI data centers. Their data center cooling segment is the fastest-growing business line. PNTHR holds MOD as a focused thermal management pure play on AI compute cooling.' },
+      { ticker: 'MLI', name: 'Mueller Industries', thesis: 'Mueller Industries is a leading copper and brass manufacturer supplying the tubing, fittings, and components critical to AI data center cooling and electrical systems. AI facilities consume multiples more copper than traditional buildings. PNTHR holds MLI as a strategic copper-products play on AI infrastructure buildout.' },
     ],
   },
 ];

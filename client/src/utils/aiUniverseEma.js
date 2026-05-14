@@ -24,7 +24,7 @@ const EMA_40 = new Set([
   'TXG','ARCT','MASS','NRIX',
 ]);
 
-// All AI Universe tickers (298 total)
+// All AI Universe tickers (302 total)
 const ALL_AI = new Set([
   // 30W tickers
   'NVDA','AMD','AVGO','TSM','ARM','INTC','QCOM','MRVL','SMCI','MU',
@@ -53,7 +53,7 @@ const ALL_AI = new Set([
   'BABA','BIDU','MELI','CPNG','GRAB','NU','SE',
   'IONQ','RGTI','QBTS','QUBT','ARQQ','LAES',
   'VRT','TT','JCI','AMKR','ASX','NVT','ROK','EMR','CARR','NNDM',
-  'MTLS','SSYS','DDD','MP','ALB','FCX',
+  'MTLS','SSYS','DDD','MP','ALB','FCX','FIX','MOD','MLI','IESC',
   // 36W tickers
   ...EMA_36,
   // 40W tickers

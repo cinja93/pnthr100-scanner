@@ -261,12 +261,14 @@ def _base_table_style():
 
 
 def _header_style(ncols):
-    """Dark header row."""
+    """Dark header row with readable sizing."""
     return [
         ("BACKGROUND", (0, 0), (ncols - 1, 0), HDR_BG),
         ("TEXTCOLOR", (0, 0), (ncols - 1, 0), PNTHR_YELLOW),
         ("FONTNAME", (0, 0), (ncols - 1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (ncols - 1, 0), 7),
+        ("FONTSIZE", (0, 0), (ncols - 1, 0), 8),
+        ("TOPPADDING", (0, 0), (ncols - 1, 0), 5),
+        ("BOTTOMPADDING", (0, 0), (ncols - 1, 0), 5),
     ]
 
 
@@ -417,8 +419,8 @@ def _build_section1(elements, overlap_rows, ai_map, c679_map, styles):
 
     header = ["Ticker", "Company", "Assigned To", "AI P&L", "AI Tr", "AI WR",
               "679 P&L", "679 Tr", "679 WR", "Edge"]
-    col_widths = [0.5*inch, 1.6*inch, 0.7*inch, 0.7*inch, 0.4*inch, 0.45*inch,
-                  0.7*inch, 0.4*inch, 0.45*inch, 0.7*inch]
+    col_widths = [0.55*inch, 1.45*inch, 0.75*inch, 0.7*inch, 0.4*inch, 0.5*inch,
+                  0.7*inch, 0.45*inch, 0.5*inch, 0.7*inch]
 
     ROWS_PER_PAGE = 50
     pages = [overlap_rows[i:i+ROWS_PER_PAGE] for i in range(0, len(overlap_rows), ROWS_PER_PAGE)]

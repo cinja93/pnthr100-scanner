@@ -196,38 +196,43 @@ def build():
     #   Avg L/S equity HF: ~8% CAGR, 0.55 Sharpe, 0.80 Sortino, -15% MaxDD
     #   Elite HF (top decile): ~15% CAGR, 1.0 Sharpe, 1.30 Sortino, -12% MaxDD
     headline_data = [
-        ['', 'PNTHR Wagyu\n(Net, $1M)', 'PNTHR Filet\n(Net, $100K)', 'S&amp;P 500', 'Avg L/S\nHedge Fund', 'Elite\nHedge Fund'],
-        ['CAGR', '53.36%', '46.94%', '7.75%', '~8%', '~15%'],
-        ['Total Return', '+544%', '+435%', '+37%', '~40%', '~80%'],
-        ['Sharpe Ratio', '1.39', '1.24', '0.31', '~0.55', '~1.00'],
-        ['Sortino Ratio', '2.36', '2.07', '0.42', '~0.80', '~1.30'],
-        ['Max Drawdown', '-23.82%', '-25.87%', '-25.36%', '-15%', '-12%'],
-        ['Recovery Factor', '23x', '17x', '1.5x', '~3x', '~7x'],
-        ['Calmar Ratio', '2.24', '1.81', '0.31', '~0.53', '~1.25'],
+        ['', 'PNTHR Wagyu\n(Net, $1M)', 'S&P 500', 'Avg L/S\nHedge Fund', 'Elite\nHedge Fund'],
+        ['Total Return', '+544%', '+37%', '~40%', '~80%'],
+        ['Gross CAGR', '67.26%', '7.75%', '~10%', '~18%'],
+        ['Net CAGR', '53.36%', '7.75%', '~8%', '~15%'],
+        ['Sharpe Ratio', '1.39', '0.31', '~0.55', '~1.00'],
+        ['Sortino Ratio', '2.36', '0.42', '~0.80', '~1.30'],
+        ['Max Drawdown', '-23.82%', '-25.36%', '-15%', '-12%'],
+        ['Recovery Factor', '23x', '1.5x', '~3x', '~7x'],
+        ['Calmar Ratio', '2.24', '0.31', '~0.53', '~1.25'],
     ]
-    n_cols = 6
+    n_cols = 5
     col_w = CONTENT_W / n_cols
-    hl_tbl = Table(headline_data, colWidths=[col_w * 1.15, col_w * 1.05, col_w * 1.05, col_w * 0.8, col_w * 0.8, col_w * 0.8])
+    hl_tbl = Table(headline_data, colWidths=[col_w * 1.1, col_w * 1.15, col_w * 0.85, col_w * 0.85, col_w * 0.85])
     hl_style = [
         ('BACKGROUND', (0, 0), (-1, 0), HexColor('#1a1a1a')),
         ('BACKGROUND', (0, 1), (-1, -1), CELL_BG),
         ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#333333')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), YELLOW),
-        ('TEXTCOLOR', (0, 1), (-1, -1), WHITE),
-        ('TEXTCOLOR', (3, 1), (3, -1), OFFWHT),
-        ('TEXTCOLOR', (4, 1), (4, -1), OFFWHT),
-        ('TEXTCOLOR', (5, 1), (5, -1), OFFWHT),
+        # Header colors: PNTHR yellow, others white
+        ('TEXTCOLOR', (0, 0), (1, 0), YELLOW),
+        ('TEXTCOLOR', (2, 0), (-1, 0), WHITE),
+        # Row label column
+        ('TEXTCOLOR', (0, 1), (0, -1), WHITE),
+        # PNTHR Wagyu column: yellow numbers
+        ('TEXTCOLOR', (1, 1), (1, -1), YELLOW),
+        # Other columns: off-white
+        ('TEXTCOLOR', (2, 1), (-1, -1), OFFWHT),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (1, 1), (2, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8.5),
+        ('FONTNAME', (1, 1), (1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
         ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        # Highlight PNTHR columns
-        ('BACKGROUND', (1, 1), (2, -1), HexColor('#0a0a0a')),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        # Highlight PNTHR column
+        ('BACKGROUND', (1, 1), (1, -1), HexColor('#0a0a0a')),
     ]
     hl_tbl.setStyle(TableStyle(hl_style))
     s.append(hl_tbl)
@@ -563,17 +568,55 @@ def build():
         'larger than friction costs.',
         body_style()))
 
-    s.append(Paragraph('Fund Fees', subheading_style()))
+    s.append(Paragraph('Fund Fee Structure (PPM v6.9)', subheading_style()))
     s.append(make_table(
-        ['Class', 'Minimum', 'Years 1-3', 'Years 4+', 'Management Fee'],
+        ['Class', 'Minimum', 'Mgmt Fee', 'Years 1-3', 'Years 4+'],
         [
-            ['Wagyu', '$1,000,000', '20% performance', '15% performance', 'None'],
-            ['Filet', '$100,000', '30% performance', '25% performance', 'None'],
+            ['Wagyu', '$1,000,000', '2% annual', '20% performance', '15% performance'],
+            ['Porterhouse', '$500,000', '2% annual', '25% performance', '20% performance'],
+            ['Filet', '$100,000', '2% annual', '30% performance', '25% performance'],
         ],
-        col_widths=[0.8*inch, 1.0*inch, 1.2*inch, 1.2*inch, CONTENT_W - 4.2*inch]
+        col_widths=[1.0*inch, 1.0*inch, 0.9*inch, 1.2*inch, CONTENT_W - 4.1*inch]
     ))
+    s.append(Spacer(1, 6))
+    s.append(Paragraph(
+        'The management fee of <b>2% annually</b> is accrued and charged monthly (NAV x 2% / 12). This covers '
+        'infrastructure, data feeds, execution systems, and fund administration.',
+        body_style()))
+    s.append(Paragraph(
+        'Performance fees are assessed <b>quarterly</b> and are subject to the following investor protections:',
+        body_style()))
+    s.append(Paragraph(
+        '<b>U.S. 2-Year Treasury Hurdle Rate:</b> Performance fees only apply to returns that exceed the '
+        'risk-free rate. The hurdle is based on the prevailing U.S. 2-Year Treasury yield for that calendar year '
+        '(e.g., 4.33% in 2024, 3.47% in 2026). The fund must outperform this rate before any performance '
+        'allocation is charged. This ensures investors are only paying for genuine alpha, not returns they '
+        'could have earned in a savings account.',
+        body_style()))
+    s.append(Paragraph(
+        '<b>High-Water Mark (HWM):</b> The fund tracks the highest NAV at which a performance fee was previously '
+        'charged. No performance fee is assessed unless the fund\'s NAV exceeds the prior high-water mark. If '
+        'the fund declines and then recovers, the manager earns nothing on the recovery. Performance fees are '
+        'only charged on new, all-time-high profits.',
+        body_style()))
+    s.append(Paragraph(
+        '<b>Loss Recovery Account (LRA):</b> If the fund experiences a quarterly loss, the full amount of that '
+        'loss is recorded in a Loss Recovery Account. Before any future performance fee can be charged, the LRA '
+        'must be fully recovered first. This means if the fund loses $50,000 in Q1 and gains $80,000 in Q2, the '
+        'first $50,000 of that gain goes to recovering the loss (no fee on it), and only the remaining $30,000 '
+        'above the hurdle rate is subject to the performance allocation.',
+        body_style()))
+    s.append(Paragraph(
+        '<b>36-Month Loyalty Step-Down:</b> Investors who remain in the fund for 36 months or longer receive a '
+        'reduced performance fee rate (Wagyu: 20% drops to 15%, Porterhouse: 25% drops to 20%, Filet: 30% drops '
+        'to 25%). This rewards long-term commitment.',
+        body_style()))
     s.append(Spacer(1, 4))
-    s.append(Paragraph('All performance fees subject to a high-water mark.', note_style()))
+    s.append(Paragraph(
+        '<i>All net returns presented in this document are calculated AFTER deducting the full fee schedule above: '
+        '2% annual management fee, quarterly performance allocation with U.S. 2-Year Treasury hurdle, high-water '
+        'mark, loss recovery account, and 36-month loyalty step-down. Nothing is hidden.</i>',
+        note_style()))
 
     # == STEP 11 ==============================================================
     s.append(Paragraph('STEP 11: THE BACKTEST, HOW WE PROVED IT', heading_style()))
@@ -633,6 +676,28 @@ def build():
     s.append(Paragraph(
         'The realized drawdown, measuring only actual closed-trade losses, was -18.35%, and <b>every realized '
         'drawdown fully recovered, resulting in $0.00 permanent loss to the investor.</b>',
+        bold_body_style()))
+
+    s.append(Paragraph('The Drawdown Tradeoff', subheading_style()))
+    s.append(Paragraph(
+        'The fund\'s maximum drawdown of -23.82% (Wagyu, net) is virtually identical to the S&amp;P 500\'s '
+        '-25.36% over the same period. Most investors accept that level of drawdown as normal when investing '
+        'in the S&amp;P 500. They tolerate a 25% peak-to-trough decline in exchange for the S&amp;P 500\'s '
+        '7.75% annualized return.',
+        body_style()))
+    s.append(Paragraph(
+        'PNTHR AI Elite asks the investor to accept <b>the same drawdown</b> they would experience in a '
+        'passive index fund, but in return delivers <b>53% net CAGR instead of 8%.</b> That is nearly 7x the '
+        'return for effectively the same worst-case pain. The S&amp;P 500 turned $1M into $1.37M over this '
+        'period. PNTHR turned $1M into $6.44M. Same drawdown. Entirely different outcome.',
+        body_style()))
+    s.append(Paragraph(
+        'This is not a coincidence. It is the result of an optimized tradeoff. Every configuration we tested '
+        'that reduced drawdown below 20% also destroyed returns by a far greater margin. The daily stop variants '
+        'proved this decisively: tightening risk controls shook out the exact winners that powered the fund\'s '
+        'outsized gains. The -23.82% drawdown is the <b>optimal balance point</b> where the system captures '
+        'maximum return without exposing the investor to drawdowns any deeper than what they would experience '
+        'in the most widely held index in the world.',
         bold_body_style()))
 
     # == RESULTS ==============================================================

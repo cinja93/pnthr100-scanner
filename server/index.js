@@ -42,6 +42,7 @@ import { runAiWeeklyRatchet, runAiStaleHuntCheck } from './aiPositionManager.js'
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS as AI_SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
+import { isCarnivoreMode, getCarnivoreEmaPeriod } from './data/strategyMode.js';
 import { fetchAiQuotesBatch } from './aiIntradayOverlay.js';
 import { getAiStockChartData } from './aiUniverseStockChartService.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
@@ -9070,7 +9071,7 @@ app.get('/api/pulse/ai300/developing-signals', authenticateJWT, async (req, res)
       if (rawBars.length < 5) continue;
       const bars = [...rawBars].sort((a, b) => (a.weekOf || a.date || '').localeCompare(b.weekOf || b.date || ''));
       const meta = aiTickerMeta[ticker];
-      const period = AI_SECTOR_EMA_PERIODS[meta.sectorId] || 30;
+      const period = isCarnivoreMode(ticker) ? (getCarnivoreEmaPeriod(ticker) || 21) : (AI_SECTOR_EMA_PERIODS[meta.sectorId] || 30);
       if (bars.length < period + 2) continue;
 
       // Compute EMA

@@ -1,21 +1,21 @@
 // server/backtest/ai300BacktestSimulator.js
-// ── PNTHR AI Elite Fund — APEX v7 Backtest Simulator (Sector Rotation) ────
+// ── ⚠️  DEPRECATED — use ai300MultiStrategySimulator.js instead ──────────────
 //
+// This simulator applies AI 300 rules uniformly to ALL tickers, including
+// the 26 carnivore tickers that should use 679 rules (GICS OpEMA 18-26W,
+// 1.10× gate, SPY+QQQ regime). Results will be WRONG for those tickers.
+//
+// The multi-strategy simulator (ai300MultiStrategySimulator.js) branches
+// correctly per ticker and should be used for all future backtests.
+//
+// Kept for historical reference only. DO NOT re-run for production metrics.
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// ORIGINAL DESCRIPTION (pre-deprecation):
 // Full NAV-scaled pyramid backtest for the AI 300 universe (297 names)
 // from 2022-01-03 (EMA warmup) through the latest available bar.
-// First tradeable signals fire mid-2023 once all EMAs are fully seeded.
 //
-// APEX v7 — Sector Rotation (scouts DISABLED):
-//   Weekly signals only → full Lot 1 (35%) direct entry → 5-lot pyramid
-//   No daily scouts, no conversion window, no daily cascade
-//
-//   • Regime gate: PAI300 36W EMA (above = BL allowed, below = SS allowed)
-//   • Sector rotation: 5D rank → GO/NEUTRAL/NO_GO
-//     - BL: GO (1.25×) / NEUTRAL (1.0×) / NO_GO → SKIP
-//     - SS: NO_GO (1.25×) / NEUTRAL (1.0×) / GO → SKIP
-//   • 1.25× AI gate offset (vs 679's 1.10×)
-//
-// Usage: cd server && node backtest/ai300BacktestSimulator.js [--nav 1000000]
+// Usage: cd server && node backtest/ai300MultiStrategySimulator.js [--nav 1000000]
 // ─────────────────────────────────────────────────────────────────────────────
 
 import dotenv from 'dotenv';

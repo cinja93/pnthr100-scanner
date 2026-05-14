@@ -1,18 +1,23 @@
 // server/aiOrdersPipeline.js
-// ── PNTHR AI 300 — Weekly Orders Pipeline (APEX v6) ────────────────────────
+// ── PNTHR AI 300 — Weekly Orders Pipeline (Multi-Strategy) ─────────────────
 //
 // Each run produces a single doc in pnthr_ai_orders keyed by weekOf, holding
-// every BL/SS signal in the AI 300 universe that passes the sector gate, with
-// v6-sized lot 1 share counts ready for Monday-open execution.
+// all qualifying BL/SS orders ready for Monday-open execution.
 //
-// Sector gate rules (mirroring the v6 backtest):
-//   BL: sectorTier ∈ {GO, NEUTRAL}      (skip NO_GO — sector cooling, don't fight)
-//        size mult: GO 1.25 / NEUTRAL 1.0
-//   SS: sectorTier ∈ {NO_GO, NEUTRAL}   (skip GO — short into strength = bad)
-//        size mult: NO_GO 1.25 / NEUTRAL 1.0   (mirrored — short into weakness)
+// Two strategy pipelines merge into one order sheet:
 //
-// Source of truth for signals: getAiUniverseSignals() — already carries
-// sectorTier + sectorMult (Phase B). We re-derive the SS-mirrored mult here.
+//   AI 300 tickers (~272): scored by AI signals + AI sector rotation gate
+//     BL: sectorTier ∈ {GO, NEUTRAL}  (size mult: GO 1.25 / NEUTRAL 1.0)
+//     SS: sectorTier ∈ {NO_GO, NEUTRAL} (size mult: NO_GO 1.25 / NEUTRAL 1.0)
+//     Regime: PAI300 (not SPY/QQQ)
+//
+//   Carnivore tickers (26): scored by 679 Kill with native 679 rules
+//     Pull from 679 Kill if tier ∈ {ALPHA, STRIKING, HUNTING}
+//     Pre-qualified — no AI regime gate, no sector rotation re-check
+//     Tagged with strategyMode='679', killTier679, killScore679
+//
+// Source of truth: AI signals from getAiUniverseSignals(), 679 Kill from
+// triggerApexWarmup() + getCachedApexResults().
 // ────────────────────────────────────────────────────────────────────────────
 
 import { connectToDatabase } from './database.js';
@@ -23,8 +28,8 @@ import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
 import { calculateEMA } from './signalDetection.js';
 import { fetchAiQuotesBatch } from './aiIntradayOverlay.js';
 import { getPai300Regime } from './pai300Regime.js';
-import { isCarnivoreMode, getCarnivoreEmaPeriod } from './data/strategyMode.js';
-import { fetchIndexData } from './apexService.js';
+import { isCarnivoreMode, getCarnivoreEmaPeriod, CARNIVORE_MODE_TICKERS } from './data/strategyMode.js';
+import { fetchIndexData, triggerApexWarmup, getCachedApexResults } from './apexService.js';
 
 const COLL_AI_ORDERS = 'pnthr_ai_orders';
 
@@ -88,20 +93,35 @@ export async function runAiOrdersPipeline(opts = {}) {
 
   console.log(`[AI Orders] starting pipeline (type=${type}, weekOf=${weekOf})…`);
 
-  // 0. Regime gates — PAI300 for AI 300-mode tickers, SPY/QQQ for carnivore-mode
+  // 0. Regime gate — PAI300 for AI 300-mode tickers only.
+  //    Carnivore tickers are pre-screened by the 679 Kill (Alpha/Striking/Hunting)
+  //    and enter AI 300 Orders pre-qualified — no second gate.
   const pai300Bull = await getPai300Regime();
   console.log(`[AI Orders] PAI300 regime: ${pai300Bull === true ? 'BULL (BL allowed)' : pai300Bull === false ? 'BEAR (BL blocked)' : 'UNKNOWN (BL allowed)'}`);
 
-  // SPY/QQQ regime for carnivore-mode tickers (679 rules: both must be above 21W EMA)
-  let spyQqqBull = true;
+  // 0b. Pull 679 Kill results for carnivore tickers.
+  //     These 26 tickers are scored by the 679 Kill engine with native 679 rules
+  //     (GICS OpEMA, SPY+QQQ regime, no sector rotation). If they earned
+  //     Alpha / Striking / Hunting tier, they enter AI 300 Orders pre-qualified.
+  const QUALIFYING_679_TIERS = new Set(['ALPHA PNTHR KILL', 'STRIKING', 'HUNTING']);
+  let carnivoreOrders = [];
   try {
-    const indexData = await fetchIndexData();
-    const spy = indexData.SPY || {};
-    const qqq = indexData.QQQ || {};
-    spyQqqBull = spy.aboveEma !== false && qqq.aboveEma !== false;
-    console.log(`[AI Orders] SPY/QQQ regime: SPY ${spy.aboveEma ? 'BULL' : 'BEAR'}, QQQ ${qqq.aboveEma ? 'BULL' : 'BEAR'} → carnivore BL ${spyQqqBull ? 'allowed' : 'blocked'}`);
+    await triggerApexWarmup(); // ensure 679 Kill cache is warm
+    const apexResults = getCachedApexResults();
+    if (apexResults?.stocks) {
+      const qualified = apexResults.stocks.filter(s =>
+        CARNIVORE_MODE_TICKERS.has(s.ticker) &&
+        QUALIFYING_679_TIERS.has(s.tier) &&
+        (s.signal === 'BL' || s.signal === 'SS') &&
+        !s.overextended
+      );
+      console.log(`[AI Orders] 679 Kill carnivore: ${qualified.length} qualified out of ${CARNIVORE_MODE_TICKERS.size} (tiers: ${qualified.map(s => `${s.ticker}=${s.tier}`).join(', ') || 'none'})`);
+      carnivoreOrders = qualified; // will be converted to order format below
+    } else {
+      console.warn('[AI Orders] 679 Kill cache empty — carnivore tickers skipped this run');
+    }
   } catch (err) {
-    console.warn('[AI Orders] SPY/QQQ regime fetch failed; carnivore BL allowed by default:', err.message);
+    console.warn('[AI Orders] 679 Kill warmup failed — carnivore tickers skipped:', err.message);
   }
 
   // 1. Pull live signals (force refresh so sector tiers reflect today's rank)
@@ -153,6 +173,9 @@ export async function runAiOrdersPipeline(opts = {}) {
   const skipLog = { blNoGo: 0, ssGo: 0, notEntry: 0, noStop: 0, noPrice: 0, blRegimeBlocked: 0 };
 
   for (const ticker of allTickers) {
+    // Carnivore tickers are handled by the 679 Kill pull above — skip here
+    if (isCarnivoreMode(ticker)) continue;
+
     const sig = signals[ticker];
     if (!sig) continue;
 
@@ -162,8 +185,8 @@ export async function runAiOrdersPipeline(opts = {}) {
     const tier = sig.sectorTier;
     const isLong = sig.signal === 'BL';
 
-    // Regime hard gate: carnivore tickers use SPY/QQQ, AI 300 tickers use PAI300
-    const regimeBull = isCarnivoreMode(ticker) ? spyQqqBull : (pai300Bull !== false);
+    // Regime hard gate: AI 300 tickers use PAI300
+    const regimeBull = pai300Bull !== false;
     if (isLong && !regimeBull) { skipLog.blRegimeBlocked++; continue; }
     if (!isLong && regimeBull) { skipLog.ssRegimeBlocked = (skipLog.ssRegimeBlocked || 0) + 1; continue; }
 
@@ -244,6 +267,85 @@ export async function runAiOrdersPipeline(opts = {}) {
     });
   }
 
+  // 4b. Convert qualified carnivore tickers from 679 Kill into order format.
+  //     These are pre-screened (Alpha/Striking/Hunting in 679 Kill) — no sector
+  //     rotation gate, no regime re-check. They enter as-is.
+  for (const killStock of carnivoreOrders) {
+    const ticker = killStock.ticker;
+    const isLong = killStock.signal === 'BL';
+    const meta = TICKER_META[ticker] || {};
+
+    // Use live quote for current price (same source as AI orders above)
+    const quote = quoteMap[ticker] || null;
+    const livePrice = (quote && typeof quote.price === 'number') ? quote.price : killStock.currentPrice;
+    if (livePrice == null) continue;
+
+    const stopPrice = killStock.stopPrice ?? killStock.pnthrStop ?? null;
+    if (stopPrice == null) continue;
+
+    const riskPerShare = isLong ? (livePrice - stopPrice) : (stopPrice - livePrice);
+    if (!(riskPerShare > 0)) continue;
+    const riskPct = (riskPerShare / livePrice) * 100;
+
+    // Size using same vitality model as AI orders (1% NAV × 1.0 mult — no sector boost)
+    const mult = 1.0;
+    const vitalityDollar = ASSUMED_NAV * NAV_VITALITY_PCT * mult;
+    const tickerCapDollar = ASSUMED_NAV * TICKER_CAP_PCT;
+    const sharesByRisk = Math.floor(vitalityDollar / riskPerShare);
+    const sharesByCap  = Math.floor(tickerCapDollar / livePrice);
+    const targetShares = Math.max(0, Math.min(sharesByRisk, sharesByCap));
+
+    const STRIKE_PCT = [0.35, 0.25, 0.20, 0.12, 0.08];
+    const lot1Cap    = riskPerShare > 0 ? Math.floor(vitalityDollar / riskPerShare) : targetShares;
+    const lot1Shares = Math.min(Math.max(1, Math.round(targetShares * STRIKE_PCT[0])), lot1Cap);
+    const lot1Dollar = lot1Shares * livePrice;
+
+    const gs = computeGapAndSlope(ticker, livePrice);
+    const gapPct = gs?.gapPct ?? null;
+    const wEmaSlope = gs?.wEmaSlope ?? null;
+    let qualityGrade = 'GOOD';
+    if (gapPct != null && wEmaSlope != null) {
+      const absGap = Math.abs(gapPct);
+      const absSlope = Math.abs(wEmaSlope);
+      if (absGap >= 12 && absSlope < 50) qualityGrade = 'BEST';
+      else if (absGap >= 9 && absSlope < 50) qualityGrade = 'BETTER';
+    }
+
+    const heatDollar = +(lot1Shares * riskPerShare).toFixed(2);
+    const heatPctNav = +((heatDollar / ASSUMED_NAV) * 100).toFixed(3);
+
+    orders.push({
+      ticker,
+      companyName: meta.companyName || killStock.companyName || null,
+      sectorId: meta.sectorId || null,
+      sectorName: meta.sectorName || killStock.sector || null,
+      signal: killStock.signal,
+      direction: isLong ? 'LONG' : 'SHORT',
+      sectorTier: null,           // carnivore bypasses AI sector rotation
+      sectorMult: mult,
+      currentPrice: livePrice,
+      stopPrice,
+      riskPerShare: +riskPerShare.toFixed(4),
+      riskPct: +riskPct.toFixed(2),
+      vitalityDollar: +vitalityDollar.toFixed(2),
+      targetShares,
+      lot1Shares,
+      lot1Dollar: +lot1Dollar.toFixed(2),
+      signalDate: killStock.signalDate,
+      lastBarDate: null,
+      isNewSignal: !!killStock.isNewSignal,
+      gapPct,
+      wEmaSlope,
+      qualityGrade,
+      heatDollar,
+      heatPctNav,
+      // Tag so downstream (UI, auto-execute) knows the source
+      strategyMode: '679',
+      killTier679: killStock.tier,
+      killScore679: killStock.apexScore,
+    });
+  }
+
   // 5. Sort: GO/NO_GO tier first (1.25× mult), then NEUTRAL, then by signal date desc
   orders.sort((a, b) => {
     const t = tierRankForSort(a.sectorTier) - tierRankForSort(b.sectorTier);
@@ -273,6 +375,8 @@ export async function runAiOrdersPipeline(opts = {}) {
     skippedNoPrice: skipLog.noPrice,
     blRegimeBlocked: skipLog.blRegimeBlocked,
     pai300Regime: pai300Bull === true ? 'BULL' : pai300Bull === false ? 'BEAR' : 'UNKNOWN',
+    carnivoreQualified: carnivoreOrders.length,
+    carnivoreTotal: CARNIVORE_MODE_TICKERS.size,
   };
 
   // 7. Sector summary (top 6 GO + bottom 4 NO_GO with 5D returns)

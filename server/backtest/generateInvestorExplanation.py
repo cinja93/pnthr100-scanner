@@ -196,7 +196,7 @@ def build():
     #   Avg L/S equity HF: ~8% CAGR, 0.55 Sharpe, 0.80 Sortino, -15% MaxDD
     #   Elite HF (top decile): ~15% CAGR, 1.0 Sharpe, 1.30 Sortino, -12% MaxDD
     headline_data = [
-        ['', 'PNTHR Wagyu\n(Net, $1M)', 'S&P 500', 'Avg L/S\nHedge Fund', 'Elite\nHedge Fund'],
+        ['', 'PNTHR Wagyu\n(Net, $1M)', 'S&P 500', 'Avg L/S\nHedge Fund', 'Top Rated\nHedge Fund'],
         ['Total Return', '+544%', '+37%', '~40%', '~80%'],
         ['Gross CAGR', '67.26%', '7.75%', '~10%', '~18%'],
         ['Net CAGR', '53.36%', '7.75%', '~8%', '~15%'],
@@ -242,7 +242,7 @@ def build():
     s.append(Paragraph(
         'The numbers speak for themselves. PNTHR AI Elite delivers a Sharpe ratio <b>2.5x higher</b> than the average '
         'long/short hedge fund and <b>nearly 4.5x</b> the S&amp;P 500. Our Sortino ratio of 2.36 is <b>nearly 3x</b> the '
-        'elite hedge fund benchmark, demonstrating exceptional downside risk management. At a 53% net CAGR, the fund '
+        'top rated hedge fund benchmark, demonstrating exceptional downside risk management. At a 53% net CAGR, the fund '
         'compounds at <b>more than 6x the rate</b> of the top-performing hedge funds in the industry and <b>nearly 7x</b> '
         'the S&amp;P 500. The recovery factor of 23x means for every dollar of peak-to-trough drawdown, the fund '
         'generated $23 in total return. This is not incremental improvement over the competition. It is a different category.',
@@ -251,7 +251,7 @@ def build():
     s.append(Spacer(1, 4))
     s.append(Paragraph('<i>Backtest period: January 3, 2022 through May 13, 2026 (4.36 years). '
         'Net returns include IBKR commissions, 5 bps slippage, sector-tiered borrow costs, and performance fees. '
-        '1,619 closed trades. "Avg L/S Hedge Fund" and "Elite Hedge Fund" benchmarks sourced from BarclayHedge, '
+        '1,619 closed trades. "Avg L/S Hedge Fund" and "Top Rated Hedge Fund" benchmarks sourced from BarclayHedge, '
         'HFR, and Preqin industry composites.</i>', note_style()))
 
     # Growth chart at bottom of page 1
@@ -796,7 +796,7 @@ def build():
 
     s.append(Paragraph(
         'The fund\'s <b>23x recovery factor</b> means it has generated 23 dollars of total return for every single '
-        'dollar of peak-to-trough drawdown. The elite hedge fund benchmark is 7x. The S&amp;P 500 sits at 1.5x. '
+        'dollar of peak-to-trough drawdown. The top rated hedge fund benchmark is 7x. The S&amp;P 500 sits at 1.5x. '
         'PNTHR is producing more than 3x the return-per-unit-of-risk of the best hedge funds in the world, and it '
         'is doing so in the most consequential sector rotation of the modern era.',
         body_style()))

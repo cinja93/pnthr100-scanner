@@ -140,7 +140,7 @@ function EquityCurveChart({ data, spyData, label, color }) {
             <text x={PAD.l - 6} y={t.y + 4} textAnchor="end" fill="#555" fontSize={10}>{t.label}</text>
           </g>
         ))}
-        {spyPath && <path d={spyPath} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth={1.5} strokeDasharray="4,3" />}
+        {spyPath && <path d={spyPath} fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={1.5} strokeDasharray="4,3" />}
         <path d={fundPath} fill="none" stroke={color} strokeWidth={2} />
         {xTicks.map((p) => {
           const idx = ec.indexOf(p);
@@ -149,7 +149,7 @@ function EquityCurveChart({ data, spyData, label, color }) {
       </svg>
       <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 10, color: '#666' }}>
         <span><span style={{ display: 'inline-block', width: 16, height: 2, background: color, marginRight: 4, verticalAlign: 'middle' }} /> AI Elite Fund</span>
-        <span><span style={{ display: 'inline-block', width: 16, height: 2, background: 'rgba(255,255,255,0.25)', marginRight: 4, verticalAlign: 'middle', borderTop: '1px dashed rgba(255,255,255,0.4)' }} /> S&P 500</span>
+        <span><span style={{ display: 'inline-block', width: 16, height: 2, background: 'rgba(255,255,255,0.55)', marginRight: 4, verticalAlign: 'middle', borderTop: '1px dashed rgba(255,255,255,0.65)' }} /> S&P 500</span>
       </div>
     </div>
   );

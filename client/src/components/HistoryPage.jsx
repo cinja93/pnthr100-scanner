@@ -389,15 +389,23 @@ export default function HistoryPage() {
     const grossWin  = winners.reduce((s, t) => s + t.pnlDollar, 0);
     const grossLoss = Math.abs(losers.reduce((s, t) => s + t.pnlDollar, 0));
     const totalPnl  = cl.reduce((s, t) => s + t.pnlDollar, 0);
+    const avgWin = winners.length > 0 ? +(grossWin / winners.length).toFixed(0) : 0;
+    const avgLoss = losers.length > 0 ? +(grossLoss / losers.length).toFixed(0) : 0;
+    const winLossRatio = avgLoss > 0 ? +(avgWin / avgLoss).toFixed(1) : (avgWin > 0 ? 999 : 0);
+    const winRateFrac = winners.length / cl.length;
+    const expectancy = +((winRateFrac * avgWin) - ((1 - winRateFrac) * avgLoss)).toFixed(0);
+
     return {
       totalTrades: pyramidTrades.length,
       closedTrades: cl.length,
       activeTrades: pyramidActive.length,
       winRate: +(winners.length / cl.length * 100).toFixed(1),
       totalPnl: +totalPnl.toFixed(0),
-      avgWinDollar: winners.length > 0 ? +(grossWin / winners.length).toFixed(0) : 0,
+      avgWinDollar: avgWin,
       avgLossDollar: losers.length > 0 ? +(-grossLoss / losers.length).toFixed(0) : 0,
       profitFactor: grossLoss > 0 ? +(grossWin / grossLoss).toFixed(2) : (grossWin > 0 ? 999 : 0),
+      winLossRatio,
+      expectancy,
       avgLotsPerTrade: cl.length > 0 ? +(cl.reduce((s, t) => s + t.lotsFilledCount, 0) / cl.length).toFixed(1) : 0,
     };
   }, [pyramidClosed, pyramidActive, pyramidTrades]);
@@ -498,6 +506,17 @@ export default function HistoryPage() {
       avgWinDollar: winners.length > 0 ? +(grossWin / winners.length).toFixed(0) : 0,
       avgLossDollar: losers.length > 0 ? +(-grossLoss / losers.length).toFixed(0) : 0,
       profitFactor: grossLoss > 0 ? +(grossWin / grossLoss).toFixed(2) : (grossWin > 0 ? 999 : 0),
+      winLossRatio: (() => {
+        const aw = winners.length > 0 ? grossWin / winners.length : 0;
+        const al = losers.length > 0 ? grossLoss / losers.length : 0;
+        return al > 0 ? +(aw / al).toFixed(1) : (aw > 0 ? 999 : 0);
+      })(),
+      expectancy: (() => {
+        const aw = winners.length > 0 ? grossWin / winners.length : 0;
+        const al = losers.length > 0 ? grossLoss / losers.length : 0;
+        const wr = winners.length / cl.length;
+        return +((wr * aw) - ((1 - wr) * al)).toFixed(0);
+      })(),
       avgLotsPerTrade: cl.length > 0 ? +(cl.reduce((s, t) => s + t.lotsFilledCount, 0) / cl.length).toFixed(1) : 0,
     };
   }, [ordersClosed, ordersActive, ordersTrades]);
@@ -664,17 +683,25 @@ export default function HistoryPage() {
           if (stats) return (<>
             <MetricCard label="Total Trades"   value={stats.totalTrades} sub={stats.activeTrades > 0 ? `${stats.activeTrades} active` : 'all closed'} />
             <MetricCard label="Win Rate"       value={`${stats.winRate}%`}
-              color={stats.winRate >= 60 ? GREEN : stats.winRate >= 40 ? '#ffa500' : RED} />
+              color={stats.winRate >= 60 ? GREEN : stats.winRate >= 40 ? YELLOW : '#fff'}
+              sub={`${stats.closedTrades} closed`} />
+            <MetricCard label="Win/Loss Ratio"
+              value={stats.winLossRatio === 999 ? '∞' : stats.winLossRatio > 0 ? `${stats.winLossRatio}x` : '—'}
+              sub="avg win ÷ avg loss"
+              color={stats.winLossRatio >= 3 ? GREEN : stats.winLossRatio >= 1.5 ? YELLOW : '#fff'} />
+            <MetricCard label="Expectancy"
+              value={stats.expectancy != null ? `${stats.expectancy >= 0 ? '+' : ''}$${Math.abs(stats.expectancy).toLocaleString()}` : '—'}
+              sub="avg $/trade"
+              color={stats.expectancy > 0 ? GREEN : stats.expectancy < 0 ? RED : '#fff'} />
             <MetricCard label="Total P&L"      value={fmtP(stats.totalPnl)}
               sub={dataSource === 'orders' ? '$10K/position pyramid' : `at ${fmtNav(nav)} NAV`}
               color={stats.totalPnl >= 0 ? GREEN : RED} />
-            <MetricCard label="Avg Win"        value={fmtP(stats.avgWinDollar)} color={GREEN} />
-            <MetricCard label="Avg Loss"       value={fmtP(stats.avgLossDollar)} color={RED} />
             <MetricCard label="Profit Factor"
               value={stats.profitFactor === 999 ? '∞' : stats.profitFactor > 0 ? `${stats.profitFactor}x` : '—'}
               sub={stats.profitFactor === 999 ? 'No losses yet' : undefined}
               color={stats.profitFactor >= 2 || stats.profitFactor === 999 ? GREEN : stats.profitFactor >= 1 ? '#ffa500' : RED} />
-            <MetricCard label="Avg Lots/Trade" value={stats.avgLotsPerTrade} sub="of 5 max" color={YELLOW} />
+            <MetricCard label="Avg Win"        value={fmtP(stats.avgWinDollar)} color={GREEN} />
+            <MetricCard label="Avg Loss"       value={fmtP(stats.avgLossDollar)} color={RED} />
             {stats.activeTrades > 0 && <MetricCard label="Active Now" value={stats.activeTrades} color={YELLOW} />}
           </>);
           // Fallback for Kill 10 when no pyramid sim data

@@ -1140,26 +1140,33 @@ export default function KillTestPage() {
   // Summary stats
   const stats = useMemo(() => {
     const winners = closed.filter(r => r.isWinner === true);
-    const winRate = closed.length ? Math.round((winners.length / closed.length) * 100) : null;
+    const losers  = closed.filter(r => !r.isWinner);
 
-    const avgProfitPct = closed.length
-      ? +(closed.reduce((s, r) => s + (r.profitPct || 0), 0) / closed.length).toFixed(2)
-      : null;
+    const totalPnlDollar = closed.reduce((s, r) => s + (r.profitDollar || 0), 0);
 
-    const totalPnlDollar = closed.length
-      ? closed.reduce((s, r) => s + (r.profitDollar || 0), 0)
+    const activePnls = active.map(r => r.currentPnlPct ?? calcCurrentPnl(r)).filter(n => n != null);
+    const activeDollarPnl = active.reduce((s, r) => s + (r.currentPnlDollar || 0), 0);
+
+    const openWinners = active.filter(r => {
+      const pnl = r.currentPnlPct ?? calcCurrentPnl(r);
+      return pnl != null && pnl > 0;
+    });
+    const openWinRate = active.length ? Math.round((openWinners.length / active.length) * 100) : null;
+
+    const netPnl = totalPnlDollar + activeDollarPnl;
+
+    const avgWinDollar = winners.length > 0
+      ? +(winners.reduce((s, r) => s + (r.profitDollar || 0), 0) / winners.length).toFixed(2) : 0;
+    const avgLossDollar = losers.length > 0
+      ? Math.abs(losers.reduce((s, r) => s + (r.profitDollar || 0), 0) / losers.length) : 0;
+    const winRateFrac = closed.length > 0 ? winners.length / closed.length : 0;
+    const expectancy = closed.length > 0
+      ? +((winRateFrac * avgWinDollar) - ((1 - winRateFrac) * avgLossDollar)).toFixed(0)
       : null;
 
     const avgRisk = active.filter(r => r.firstRiskPct).length
       ? +(active.reduce((s, r) => s + (r.firstRiskPct || 0), 0) / active.filter(r => r.firstRiskPct).length).toFixed(2)
       : null;
-
-    const activePnls = active.map(r => r.currentPnlPct ?? calcCurrentPnl(r)).filter(n => n != null);
-    const avgActivePnl = activePnls.length
-      ? +(activePnls.reduce((s, n) => s + n, 0) / activePnls.length).toFixed(2)
-      : null;
-
-    const activeDollarPnl = active.reduce((s, r) => s + (r.currentPnlDollar || 0), 0);
 
     const lotsStats = active.reduce((acc, r) => {
       acc.total++;
@@ -1167,7 +1174,7 @@ export default function KillTestPage() {
       return acc;
     }, { total: 0, lotsFilledTotal: 0 });
 
-    return { winRate, avgProfitPct, totalPnlDollar, avgRisk, avgActivePnl, activeDollarPnl, lotsStats };
+    return { openWinRate, totalPnlDollar, netPnl, activeDollarPnl, expectancy, avgRisk, lotsStats };
   }, [active, closed]);
 
   // Portfolio heat — actual $ at risk based on current lot fills + current NAV
@@ -1205,9 +1212,6 @@ export default function KillTestPage() {
   );
 
   const nav = settings?.nav ?? 100000;
-  const lotsAvg = stats.lotsStats.total > 0
-    ? (stats.lotsStats.lotsFilledTotal / stats.lotsStats.total).toFixed(1)
-    : null;
 
   return (
     <div style={{ background: BG, minHeight: '100vh', padding: '28px 32px', maxWidth: 1440, margin: '0 auto', fontFamily: 'system-ui, sans-serif', color: TEXT, boxSizing: 'border-box' }}>
@@ -1350,27 +1354,26 @@ export default function KillTestPage() {
 
       {/* ── Stats row ──────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 28 }}>
+        <StatCard
+          label="Portfolio Return"
+          value={nav > 0 ? `${stats.netPnl >= 0 ? '+' : ''}${(stats.netPnl / nav * 100).toFixed(2)}%` : '—'}
+          color={stats.netPnl > 0 ? GREEN : stats.netPnl < 0 ? RED : '#fff'}
+          sub="realized + unrealized"
+        />
+        <StatCard
+          label="Net P&L"
+          value={`${stats.netPnl >= 0 ? '+' : ''}$${Math.abs(stats.netPnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+          color={stats.netPnl > 0 ? GREEN : stats.netPnl < 0 ? RED : '#fff'}
+          sub={`realized $${Math.abs(stats.totalPnlDollar).toFixed(0)} · open $${Math.abs(stats.activeDollarPnl).toFixed(0)}`}
+        />
+        <StatCard
+          label="Open Win Rate"
+          value={stats.openWinRate != null ? `${stats.openWinRate}%` : '—'}
+          color={stats.openWinRate >= 60 ? GREEN : stats.openWinRate >= 40 ? ORANGE : stats.openWinRate != null ? '#fff' : '#aaa'}
+          sub={`${active.length} open positions`}
+        />
         <StatCard label="Active"      value={active.length}  sub="open appearances" />
-        <StatCard label="Closed"      value={closed.length}  sub="completed" />
-        <StatCard
-          label="Win Rate"
-          value={stats.winRate != null ? `${stats.winRate}%` : '—'}
-          color={stats.winRate >= 70 ? GREEN : stats.winRate >= 50 ? ORANGE : stats.winRate != null ? RED : '#aaa'}
-          sub={`${closed.length} closed`}
-        />
-        <StatCard
-          label="Avg Profit"
-          value={stats.avgProfitPct != null ? fmtPct(stats.avgProfitPct) : '—'}
-          dollar={stats.totalPnlDollar}
-          color={stats.avgProfitPct > 0 ? GREEN : stats.avgProfitPct < 0 ? RED : '#fff'}
-          sub="closed trades"
-        />
-        <StatCard
-          label="Avg Stop Dist."
-          value={stats.avgRisk != null ? `${stats.avgRisk}%` : '—'}
-          color={ORANGE}
-          sub="entry→stop distance"
-        />
+        <StatCard label="Stopped Out"  value={closed.length}  sub="closed at stop" color={ORANGE} />
         <StatCard
           label="Portfolio Heat"
           value={portfolioHeat != null ? `${portfolioHeat.pct}%` : '—'}
@@ -1394,17 +1397,16 @@ export default function KillTestPage() {
           }
         />
         <StatCard
-          label="Active P&L"
-          value={stats.avgActivePnl != null ? fmtPct(stats.avgActivePnl) : '—'}
-          dollar={stats.activeDollarPnl || null}
-          color={stats.avgActivePnl > 0 ? GREEN : stats.avgActivePnl < 0 ? RED : '#fff'}
-          sub="avg estimated"
+          label="Expectancy"
+          value={stats.expectancy != null ? `${stats.expectancy >= 0 ? '+' : ''}$${Math.abs(stats.expectancy)}` : '—'}
+          color={stats.expectancy > 0 ? GREEN : stats.expectancy < 0 ? RED : '#fff'}
+          sub="avg $/trade (closed)"
         />
         <StatCard
-          label="Avg Lots"
-          value={lotsAvg ?? '—'}
-          color="#48b0ff"
-          sub="per active position"
+          label="Avg Risk/Trade"
+          value={stats.avgRisk != null ? `${stats.avgRisk}%` : '—'}
+          color={ORANGE}
+          sub="entry→stop distance"
         />
       </div>
 

@@ -170,7 +170,7 @@ function MonthlyHeatmap({ monthlyReturns, firstTradeDate }) {
   let ftMonth = firstTradeDate ? +firstTradeDate.slice(5, 7) : null;
   if (!ftYear) {
     const sorted = [...monthlyReturns].sort((a, b) => a.m.localeCompare(b.m));
-    const first = sorted.find(r => Math.abs(r.ret) > 1.0);
+    const first = sorted.find(r => Math.abs(r.ret) > 1.5);
     if (first) { ftYear = first.m.slice(0, 4); ftMonth = +first.m.slice(5, 7); }
   }
 

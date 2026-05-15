@@ -625,7 +625,7 @@ export default function IrLivePage() {
                 <MetricCard label="Win Rate" value={`${trades?.combined?.winRate}%`} sub={`${fmt(trades?.combined?.payoffRatio, 1)}x payoff`} />
                 <MetricCard label="Total Closed" value={trades?.closed?.toLocaleString()} sub={`${trades?.open || 0} active`} />
                 <MetricCard label="Ending Equity" value={fmtNav(net?.endNav)} color={GREEN} />
-                <MetricCard label="Alpha vs S&P" value={d.alphaVsSpy ? fmtDollar(d.alphaVsSpy.endingEquityDelta) : '—'} color={GOLD} />
+                <MetricCard label="Alpha vs S&P" value={d.alphaVsSpy ? fmtDollar(d.alphaVsSpy.endingEquityDelta) : '—'} color={GREEN} />
               </div>
 
               {/* Equity curve */}

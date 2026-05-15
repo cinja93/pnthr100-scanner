@@ -218,6 +218,45 @@ router.get('/view-log', async (req, res) => {
   }
 });
 
+// PATCH /api/dataroom/sections/rename — rename a section (admin only)
+router.patch('/sections/rename', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    const { oldName, newName } = req.body;
+    if (!oldName || !newName?.trim()) return res.status(400).json({ error: 'oldName and newName required' });
+    const trimmed = newName.trim();
+    const db = await connectToDatabase();
+    await db.collection(COLLECTION).updateMany({ section: oldName }, { $set: { section: trimmed } });
+    await db.collection('dataroom_sections').deleteOne({ name: oldName });
+    await db.collection('dataroom_sections').updateOne(
+      { name: trimmed },
+      { $set: { name: trimmed, createdAt: new Date() } },
+      { upsert: true }
+    );
+    res.json({ success: true, oldName, newName: trimmed });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/dataroom/:id/label — rename a document label (admin only)
+router.patch('/:id/label', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    const { label } = req.body;
+    if (!label?.trim()) return res.status(400).json({ error: 'label required' });
+    const db = await connectToDatabase();
+    const result = await db.collection(COLLECTION).updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: { label: label.trim() } }
+    );
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Document not found' });
+    res.json({ success: true, label: label.trim() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /api/dataroom/:id — delete a document (admin only)
 router.delete('/:id', async (req, res) => {
   try {

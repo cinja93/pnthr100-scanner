@@ -29,6 +29,10 @@ export default function DataRoomPage() {
   const [showViewLog, setShowViewLog] = useState(false);
   const [viewLog, setViewLog] = useState([]);
   const [viewLogLoading, setViewLogLoading] = useState(false);
+  const [editingSection, setEditingSection] = useState(null);
+  const [editingSectionValue, setEditingSectionValue] = useState('');
+  const [editingLabel, setEditingLabel] = useState(null);
+  const [editingLabelValue, setEditingLabelValue] = useState('');
 
   const loadDocs = useCallback(() => {
     setLoading(true);
@@ -171,6 +175,37 @@ export default function DataRoomPage() {
     } finally {
       setDownloading(null);
     }
+  };
+
+  const handleRenameSection = async (oldName) => {
+    const newName = editingSectionValue.trim();
+    if (!newName || newName === oldName) { setEditingSection(null); return; }
+    try {
+      const res = await fetch(`${API_BASE}/api/dataroom/sections/rename`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldName, newName }),
+      });
+      if (!res.ok) throw new Error('Rename failed');
+      setEditingSection(null);
+      loadDocs();
+      loadSections();
+    } catch (err) { alert(err.message); }
+  };
+
+  const handleRenameLabel = async (docId) => {
+    const newLabel = editingLabelValue.trim();
+    if (!newLabel) { setEditingLabel(null); return; }
+    try {
+      const res = await fetch(`${API_BASE}/api/dataroom/${docId}/label`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: newLabel }),
+      });
+      if (!res.ok) throw new Error('Rename failed');
+      setEditingLabel(null);
+      loadDocs();
+    } catch (err) { alert(err.message); }
   };
 
   const formatSize = (bytes) => {
@@ -340,11 +375,26 @@ export default function DataRoomPage() {
                 borderBottom: isCollapsed ? 'none' : '1px solid #222'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
                 <span style={{ color: '#fcf000', fontSize: 14, fontWeight: 700, transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
                   ▼
                 </span>
-                <span style={{ color: '#fcf000', fontWeight: 700, fontSize: 15 }}>{sec}</span>
+                {isAdmin && editingSection === sec ? (
+                  <input
+                    value={editingSectionValue}
+                    onChange={e => setEditingSectionValue(e.target.value)}
+                    onBlur={() => handleRenameSection(sec)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleRenameSection(sec); if (e.key === 'Escape') setEditingSection(null); }}
+                    onClick={e => e.stopPropagation()}
+                    autoFocus
+                    style={{ background: '#0a0a0a', border: '1px solid #fcf000', borderRadius: 4, color: '#fcf000', fontWeight: 700, fontSize: 15, padding: '2px 8px', flex: 1, outline: 'none' }}
+                  />
+                ) : (
+                  <span
+                    style={{ color: '#fcf000', fontWeight: 700, fontSize: 15, cursor: isAdmin ? 'text' : 'default' }}
+                    onDoubleClick={isAdmin ? (e) => { e.stopPropagation(); setEditingSection(sec); setEditingSectionValue(sec); } : undefined}
+                  >{sec}</span>
+                )}
                 <span style={{ color: '#666', fontSize: 12, marginLeft: 4 }}>({secDocs.length} {secDocs.length === 1 ? 'document' : 'documents'})</span>
               </div>
               {isAdmin && secDocs.length > 0 && (
@@ -394,15 +444,28 @@ export default function DataRoomPage() {
                     <span style={{ color: '#555', marginRight: 12, fontSize: 16 }}>
                       {doc.contentType?.includes('pdf') ? '📄' : doc.contentType?.includes('image') ? '🖼️' : '📎'}
                     </span>
-                    {/* Label — clickable to view for all users */}
-                    <span
-                      onClick={() => handleView(doc)}
-                      style={{ color: '#ddd', cursor: 'pointer', flex: 1, fontSize: 14 }}
-                      onMouseEnter={e => e.target.style.color = '#fcf000'}
-                      onMouseLeave={e => e.target.style.color = '#ddd'}
-                    >
-                      {doc.label || doc.filename}
-                    </span>
+                    {/* Label — click to view, double-click to edit (admin) */}
+                    {isAdmin && editingLabel === doc._id ? (
+                      <input
+                        value={editingLabelValue}
+                        onChange={e => setEditingLabelValue(e.target.value)}
+                        onBlur={() => handleRenameLabel(doc._id)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleRenameLabel(doc._id); if (e.key === 'Escape') setEditingLabel(null); }}
+                        onClick={e => e.stopPropagation()}
+                        autoFocus
+                        style={{ background: '#0a0a0a', border: '1px solid #fcf000', borderRadius: 4, color: '#ddd', fontSize: 14, padding: '2px 8px', flex: 1, outline: 'none' }}
+                      />
+                    ) : (
+                      <span
+                        onClick={() => handleView(doc)}
+                        onDoubleClick={isAdmin ? (e) => { e.stopPropagation(); e.preventDefault(); setEditingLabel(doc._id); setEditingLabelValue(doc.label || doc.filename); } : undefined}
+                        style={{ color: '#ddd', cursor: 'pointer', flex: 1, fontSize: 14 }}
+                        onMouseEnter={e => e.target.style.color = '#fcf000'}
+                        onMouseLeave={e => e.target.style.color = '#ddd'}
+                      >
+                        {doc.label || doc.filename}
+                      </span>
+                    )}
                     <span style={{ color: '#555', fontSize: 12, marginRight: 16, whiteSpace: 'nowrap' }}>{formatSize(doc.size)}</span>
                     <span style={{ color: '#555', fontSize: 12, marginRight: 16, whiteSpace: 'nowrap' }}>{new Date(doc.uploadedAt).toLocaleDateString()}</span>
                     <div style={{ display: 'flex', gap: 6 }}>

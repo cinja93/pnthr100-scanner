@@ -652,7 +652,7 @@ export default function HistoryPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: isAi300 ? '#0096ff' : YELLOW, margin: 0, letterSpacing: '-0.02em' }}>
-            {dataSource === 'orders' ? 'PNTHR Orders — 2026' : isAi300 ? 'AI 300 Kill 10' : 'PNTHR Kill 10'}
+            {dataSource === 'orders' ? 'PNTHR Orders — 2026' : isAi300 ? 'PNTHR AI 300 Kill 10 History' : 'PNTHR Kill 10'}
           </h1>
           <p style={{ fontSize: 13, color: '#666', marginTop: 4 }}>
             {dataSource === 'orders'

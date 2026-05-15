@@ -43,6 +43,7 @@ const BORDER  = 'rgba(255,255,255,0.08)';
 
 const TIER_COLORS = {
   'ALPHA PNTHR KILL': { bg: 'rgba(252,240,0,0.15)', color: YELLOW },
+  'ALPHA AI KILL':    { bg: 'rgba(252,240,0,0.15)', color: YELLOW },
   'STRIKING':         { bg: 'rgba(0,200,100,0.12)', color: '#00c864' },
   'HUNTING':          { bg: 'rgba(0,150,255,0.12)', color: '#0096ff' },
   'POUNCING':         { bg: 'rgba(150,80,255,0.12)', color: '#9650ff' },
@@ -294,21 +295,25 @@ export default function HistoryPage() {
   const [error,       setError]       = useState(null);
   const [sortClosed,  setSortClosed]  = useState({ col: 'exitDate', dir: -1 });
   const [sortActive,  setSortActive]  = useState({ col: 'entryRank', dir: 1 });
+  const [fund,        setFund]        = useState('679'); // '679' | 'ai300'
   const [dataSource,  setDataSource]  = useState('kill10'); // 'kill10' | 'orders'
   const [ordersData,  setOrdersData]  = useState(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
 
+  const isAi300 = fund === 'ai300';
+  const historyBase = isAi300 ? 'ai300-kill-history' : 'kill-history';
+
   async function load(isManual = false) {
     try {
       if (isManual) setRefreshing(true); else setLoading(true);
       setError(null);
       const [trRes, acRes, allRes, simRes] = await Promise.all([
-        fetch(`${API_BASE}/api/kill-history/track-record`, { headers: authHeaders() }),
-        fetch(`${API_BASE}/api/kill-history/active`,       { headers: authHeaders() }),
-        fetch(`${API_BASE}/api/kill-history`,              { headers: authHeaders() }),
-        fetch(`${API_BASE}/api/kill-history/simulation`,   { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/${historyBase}/track-record`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/${historyBase}/active`,       { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/${historyBase}`,              { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/${historyBase}/simulation`,   { headers: authHeaders() }),
       ]);
       if (!trRes.ok || !acRes.ok || !allRes.ok) throw new Error('Failed to load history');
       const [tr, ac, al] = await Promise.all([trRes.json(), acRes.json(), allRes.json()]);
@@ -327,7 +332,7 @@ export default function HistoryPage() {
     }
   }
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [fund]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch Orders 2026 backtest data on demand
   async function loadOrders() {
@@ -646,18 +651,36 @@ export default function HistoryPage() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: YELLOW, margin: 0, letterSpacing: '-0.02em' }}>
-            {dataSource === 'orders' ? 'PNTHR Orders — 2026' : 'PNTHR Kill History'}
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: isAi300 ? '#0096ff' : YELLOW, margin: 0, letterSpacing: '-0.02em' }}>
+            {dataSource === 'orders' ? 'PNTHR Orders — 2026' : isAi300 ? 'AI 300 Kill History' : 'PNTHR Kill History'}
           </h1>
           <p style={{ fontSize: 13, color: '#666', marginTop: 4 }}>
             {dataSource === 'orders'
               ? 'Fund Intelligence Report — 2026 pyramid backtest (5-lot pyramid, net of costs).'
-              : <>Forward-tested track record — full 5-lot PNTHR Command pyramid strategy.
+              : <>Forward-tested track record — full 5-lot {isAi300 ? 'AI 300' : 'PNTHR Command'} pyramid strategy.
                   {tr.asOf && <span> Last updated: {fmtD(tr.asOf)}</span>}</>
             }
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Fund toggle pill */}
+          <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #444' }}>
+            {[{ key: '679', label: '679' }, { key: 'ai300', label: 'AI 300' }].map(f => (
+              <button
+                key={f.key}
+                onClick={() => setFund(f.key)}
+                style={{
+                  padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                  border: 'none', letterSpacing: '0.04em',
+                  background: fund === f.key ? (f.key === 'ai300' ? '#0096ff' : YELLOW) : '#111',
+                  color: fund === f.key ? '#000' : '#888',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
           <select
             value={dataSource}
             onChange={e => setDataSource(e.target.value)}

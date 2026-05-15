@@ -60,6 +60,18 @@ import {
   killHistoryGetTrackRecord,
 } from './killHistory.js';
 import { killSimulationHandler } from './killSimulation.js';
+import { getAi300KillTestSettings, saveAi300KillTestSettings } from './ai300KillTestSettings.js';
+import {
+  checkAi300CaseStudyEntries,
+  createAi300KillHistoryIndexes,
+  ai300KillHistoryGetAll,
+  ai300KillHistoryGetActive,
+  ai300KillHistoryGetTrackRecord,
+  updateAi300KillAppearances,
+} from './ai300KillHistory.js';
+import { ai300KillSimulationHandler } from './ai300KillSimulation.js';
+import { runAi300KillTestDailyUpdate } from './ai300KillTestDailyUpdate.js';
+import { ai300KillTestMonthlyGet, ai300KillTestMetricsGet, ai300KillTestMonthlyGenerate, generateAi300MonthlySnapshots } from './ai300KillTestMonthly.js';
 import {
   navGet,
   navPost,
@@ -2432,6 +2444,166 @@ app.post('/api/kill-test/refresh-prices', authenticateJWT, requireAdmin, async (
 app.get('/api/kill-test/monthly',          authenticateJWT, requireAdmin, killTestMonthlyGet);
 app.get('/api/kill-test/metrics',          authenticateJWT, requireAdmin, killTestMetricsGet);
 app.post('/api/kill-test/monthly/generate', authenticateJWT, requireAdmin, killTestMonthlyGenerate);
+
+// ── AI 300 Kill History & Simulation ─────────────────────────────────────────
+app.get('/api/ai300-kill-history',              authenticateJWT, ai300KillHistoryGetAll);
+app.get('/api/ai300-kill-history/active',       authenticateJWT, ai300KillHistoryGetActive);
+app.get('/api/ai300-kill-history/track-record', authenticateJWT, ai300KillHistoryGetTrackRecord);
+app.get('/api/ai300-kill-history/simulation',   authenticateJWT, ai300KillSimulationHandler);
+
+// ── AI 300 Kill Test — Appearance Tracking ───────────────────────────────────
+app.get('/api/ai300-kill-appearances', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db   = await connectToDatabase();
+    const col  = db.collection('pnthr_ai300_kill_appearances');
+    const docs = await col
+      .find({})
+      .sort({ firstAppearanceDate: -1, firstKillRank: 1 })
+      .toArray();
+
+    const needsFill = docs.filter(d => !d.lotFills);
+    if (needsFill.length) {
+      const bulkOps = needsFill.map(d => ({
+        updateOne: {
+          filter: { _id: d._id },
+          update: {
+            $set: {
+              lotFills: {
+                lot1: { filled: true,  fillDate: d.firstAppearanceDate, fillPrice: d.firstAppearancePrice },
+                lot2: { filled: false, fillDate: null, fillPrice: null },
+                lot3: { filled: false, fillDate: null, fillPrice: null },
+                lot4: { filled: false, fillDate: null, fillPrice: null },
+                lot5: { filled: false, fillDate: null, fillPrice: null },
+              },
+              lotsFilledCount: 1,
+            },
+          },
+        },
+      }));
+      await col.bulkWrite(bulkOps);
+      console.log(`[ai300-kill-appearances] Backfilled lotFills for ${needsFill.length} appearances`);
+      needsFill.forEach(d => {
+        d.lotFills = {
+          lot1: { filled: true,  fillDate: d.firstAppearanceDate, fillPrice: d.firstAppearancePrice },
+          lot2: { filled: false, fillDate: null, fillPrice: null },
+          lot3: { filled: false, fillDate: null, fillPrice: null },
+          lot4: { filled: false, fillDate: null, fillPrice: null },
+          lot5: { filled: false, fillDate: null, fillPrice: null },
+        };
+        d.lotsFilledCount = d.lotsFilledCount ?? 1;
+      });
+    }
+
+    res.json(docs);
+  } catch (err) {
+    console.error('[ai300-kill-appearances]', err);
+    res.status(500).json({ error: 'Failed to load AI 300 kill appearances' });
+  }
+});
+
+// ── AI 300 Kill Test Settings ────────────────────────────────────────────────
+app.get('/api/ai300-kill-test/settings', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const settings = await getAi300KillTestSettings();
+    res.json(settings);
+  } catch (err) {
+    console.error('[ai300-kill-test/settings GET]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/ai300-kill-test/settings', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const settings = await saveAi300KillTestSettings(req.body);
+    res.json(settings);
+  } catch (err) {
+    console.error('[ai300-kill-test/settings PATCH]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── AI 300 Kill Test: Live Price Refresh ─────────────────────────────────────
+app.post('/api/ai300-kill-test/refresh-prices', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db  = await connectToDatabase();
+    const col = db.collection('pnthr_ai300_kill_appearances');
+
+    const active = await col.find({ exitDate: null }).toArray();
+    if (!active.length) return res.json({ prices: {}, updated: 0 });
+
+    const tickers = [...new Set(active.map(a => a.ticker))];
+    const key     = process.env.FMP_API_KEY;
+    if (!key) return res.status(500).json({ error: 'FMP_API_KEY not configured' });
+
+    const priceMap = {};
+    for (let i = 0; i < tickers.length; i += 200) {
+      const chunk = tickers.slice(i, i + 200).join(',');
+      try {
+        const r    = await fetch(`https://financialmodelingprep.com/api/v3/quote/${chunk}?apikey=${key}`, { signal: AbortSignal.timeout(15000) });
+        const data = await r.json();
+        if (Array.isArray(data)) {
+          for (const q of data) {
+            if (q.symbol && q.price != null) priceMap[q.symbol] = q.price;
+          }
+        }
+      } catch (err) {
+        console.error('[ai300-refresh-prices] FMP batch error:', err.message);
+      }
+    }
+
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    let updated = 0;
+    const bulkOps = [];
+
+    for (const appr of active) {
+      const price = priceMap[appr.ticker];
+      if (price == null) continue;
+
+      const isShort    = appr.signal === 'SS';
+      const avgCost    = appr.currentAvgCost ?? appr.firstAppearancePrice;
+      const shares     = appr.currentShares  ?? 0;
+      const pnlPct     = avgCost
+        ? isShort
+          ? ((avgCost - price) / avgCost) * 100
+          : ((price - avgCost) / avgCost) * 100
+        : 0;
+      const pnlDollar  = isShort
+        ? (avgCost - price) * shares
+        : (price - avgCost) * shares;
+
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: appr._id },
+          update: {
+            $set: {
+              lastSeenPrice:    price,
+              lastSeenDate:     today,
+              currentPnlPct:    +pnlPct.toFixed(2),
+              currentPnlDollar: +pnlDollar.toFixed(2),
+              updatedAt:        new Date(),
+            },
+          },
+        },
+      });
+      updated++;
+    }
+
+    if (bulkOps.length) await col.bulkWrite(bulkOps);
+
+    console.log(`[ai300-kill-test/refresh-prices] Updated ${updated} prices`);
+    res.json({ prices: priceMap, updated, refreshedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('[ai300-kill-test/refresh-prices]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── AI 300 Kill Test Monthly Snapshots & Analytics Metrics ───────────────────
+app.get('/api/ai300-kill-test/monthly',           authenticateJWT, requireAdmin, ai300KillTestMonthlyGet);
+app.get('/api/ai300-kill-test/metrics',           authenticateJWT, requireAdmin, ai300KillTestMetricsGet);
+app.post('/api/ai300-kill-test/monthly/generate', authenticateJWT, requireAdmin, ai300KillTestMonthlyGenerate);
 
 // ── PNTHR Orders Pipeline ─────────────────────────────────────────────────────
 app.get('/api/orders/latest',    authenticateJWT, ordersGetLatest);
@@ -5484,6 +5656,39 @@ cron.schedule('30 16 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
+// ── Cron: AI 300 Kill Test daily price tracking Mon–Fri at 4:31pm ET ────────
+let ai300KillTestDailyRunning = false;
+cron.schedule('31 16 * * 1-5', async () => {
+  if (ai300KillTestDailyRunning) return;
+  ai300KillTestDailyRunning = true;
+  try {
+    console.log('[AI300 KillTest Daily] Starting daily price tracking...');
+    await runAi300KillTestDailyUpdate();
+  } catch (err) {
+    console.error('[AI300 KillTest Daily] Failed:', err.message);
+  } finally {
+    ai300KillTestDailyRunning = false;
+  }
+}, { timezone: 'America/New_York' });
+
+// ── Cron: AI 300 Kill Test monthly snapshot — first Friday of month, 6:15 PM ET
+let ai300KillTestMonthlyRunning = false;
+cron.schedule('15 18 1-7 * 5', async () => {
+  if (ai300KillTestMonthlyRunning) return;
+  ai300KillTestMonthlyRunning = true;
+  try {
+    console.log('[AI300 KillTest Monthly] Generating monthly snapshot...');
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    await generateAi300MonthlySnapshots(db);
+    console.log('[AI300 KillTest Monthly] Done.');
+  } catch (err) {
+    console.error('[AI300 KillTest Monthly] Failed:', err.message);
+  } finally {
+    ai300KillTestMonthlyRunning = false;
+  }
+}, { timezone: 'America/New_York' });
+
 // ── Cron: daily signal snapshot Mon–Fri at 5:05pm ET ────────────────────────
 // Recomputes BL/SS state for the full 679-stock universe against today's
 // developing weekly bar and writes pnthr_daily_signals + pnthr_daily_pulse_snapshot.
@@ -5539,6 +5744,19 @@ cron.schedule('15 16 * * 1-5', async () => {
       const killDoc = await runAiKillPipeline();
       console.log(`[AI Kill] done: ${killDoc.scoredCount} scored, top=${killDoc.scores[0]?.ticker}`);
     } catch (e) { console.error('[CRON] AI Kill pipeline failed:', e.message); }
+    // AI 300 Kill case studies + appearance tracking — consumes AI Kill scores.
+    try {
+      const { connectToDatabase } = await import('./database.js');
+      const db = await connectToDatabase();
+      const killDoc = await db.collection('pnthr_ai_kill_scores').findOne({}, { sort: { scoredAt: -1 } });
+      if (killDoc?.scores?.length) {
+        const signalData = getCachedSignalStocks?.() ?? [];
+        await checkAi300CaseStudyEntries(db, killDoc.scores, signalData, 'DAILY_PIPELINE');
+        const ai300Settings = await getAi300KillTestSettings();
+        await updateAi300KillAppearances(db, killDoc, signalData, ai300Settings);
+        console.log('[AI300 Kill History] case studies + appearances updated');
+      }
+    } catch (e) { console.error('[CRON] AI300 Kill History failed:', e.message); }
     // Regenerate the AI Orders sheet (consumes fresh sector tiers + sector rotation).
     try {
       console.log('[AI Orders] regenerating order sheet...');
@@ -10277,6 +10495,7 @@ app.listen(PORT, () => {
   ensureCommandCenterIndexes().catch(() => {});
   createPendingEntriesIndexes().catch(() => {});
   createKillHistoryIndexes().catch(() => {});
+  createAi300KillHistoryIndexes().catch(() => {});
   ensureAssistantIndexes().catch(() => {});
   ensureInvestorIndexes().catch(() => {});
   // Phase 4 outbox indexes (idempotent — safe to run on every boot).

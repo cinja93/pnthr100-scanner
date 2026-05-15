@@ -1012,6 +1012,7 @@ function MonthlyTable({ rows, settings }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function KillTestPage() {
+  const [fund,          setFund]          = useState('679'); // '679' | 'ai300'
   const [data,          setData]          = useState([]);
   const [settings,      setSettings]      = useState(null);
   const [monthly,       setMonthly]       = useState([]);
@@ -1030,14 +1031,29 @@ export default function KillTestPage() {
   const [filtersApplied, setFiltersApplied] = useState(false);
   const [activeFilters,  setActiveFilters]  = useState({ killMin: '', killMax: '', analyzeMin: '', analyzeMax: '', compositeMin: '', compositeMax: '' });
 
-  // Load appearances + settings on mount
+  const isAi300 = fund === 'ai300';
+  const apiAppearances = isAi300 ? 'ai300-kill-appearances' : 'kill-appearances';
+  const apiSettings    = isAi300 ? 'ai300-kill-test/settings' : 'kill-test/settings';
+  const apiRefresh     = isAi300 ? 'ai300-kill-test/refresh-prices' : 'kill-test/refresh-prices';
+  const apiMonthly     = isAi300 ? 'ai300-kill-test/monthly' : 'kill-test/monthly';
+  const apiMetrics     = isAi300 ? 'ai300-kill-test/metrics' : 'kill-test/metrics';
+  const apiGenerate    = isAi300 ? 'ai300-kill-test/monthly/generate' : 'kill-test/monthly/generate';
+
+  // Load appearances + settings on mount or fund change
   useEffect(() => {
     async function load() {
       try {
         setLoading(true);
+        setData([]);
+        setSettings(null);
+        setMonthly([]);
+        setMetrics(null);
+        setFiltersApplied(false);
+        setFilterVals({ killMin: '', killMax: '', analyzeMin: '', analyzeMax: '', compositeMin: '', compositeMax: '' });
+        setActiveFilters({ killMin: '', killMax: '', analyzeMin: '', analyzeMax: '', compositeMin: '', compositeMax: '' });
         const [dataRes, settingsRes] = await Promise.all([
-          fetch(`${API_BASE}/api/kill-appearances`,   { headers: authHeaders() }),
-          fetch(`${API_BASE}/api/kill-test/settings`, { headers: authHeaders() }),
+          fetch(`${API_BASE}/api/${apiAppearances}`,   { headers: authHeaders() }),
+          fetch(`${API_BASE}/api/${apiSettings}`, { headers: authHeaders() }),
         ]);
         if (!dataRes.ok)     throw new Error(`Data HTTP ${dataRes.status}`);
         if (!settingsRes.ok) throw new Error(`Settings HTTP ${settingsRes.status}`);
@@ -1051,16 +1067,21 @@ export default function KillTestPage() {
       }
     }
     load();
-  }, []);
+  }, [fund]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // scenarioKey derived from activeFilters
   const scenarioKey = useMemo(() => {
     if (!filtersApplied) return 'all';
     const { killMin, killMax, analyzeMin, analyzeMax, compositeMin, compositeMax } = activeFilters;
+    if (isAi300) {
+      const hasAny = [killMin, killMax].some(v => v !== '');
+      if (!hasAny) return 'all';
+      return `k${killMin||'*'}-${killMax||'*'}`;
+    }
     const hasAny = [killMin, killMax, analyzeMin, analyzeMax, compositeMin, compositeMax].some(v => v !== '');
     if (!hasAny) return 'all';
     return `k${killMin||'*'}-${killMax||'*'}_a${analyzeMin||'*'}-${analyzeMax||'*'}_c${compositeMin||'*'}-${compositeMax||'*'}`;
-  }, [filtersApplied, activeFilters]);
+  }, [filtersApplied, activeFilters, isAi300]);
 
   // Lazy-load analytics when tab is opened or scenarioKey changes
   useEffect(() => {
@@ -1072,8 +1093,8 @@ export default function KillTestPage() {
       try {
         setAnalyticsLoading(true);
         const [mRes, meRes] = await Promise.all([
-          fetch(`${API_BASE}/api/kill-test/monthly?scenarioKey=${encodeURIComponent(scenarioKey)}`, { headers: authHeaders() }),
-          fetch(`${API_BASE}/api/kill-test/metrics?scenarioKey=${encodeURIComponent(scenarioKey)}`, { headers: authHeaders() }),
+          fetch(`${API_BASE}/api/${apiMonthly}?scenarioKey=${encodeURIComponent(scenarioKey)}`, { headers: authHeaders() }),
+          fetch(`${API_BASE}/api/${apiMetrics}?scenarioKey=${encodeURIComponent(scenarioKey)}`, { headers: authHeaders() }),
         ]);
         if (mRes.ok)  setMonthly(await mRes.json());
         if (meRes.ok) setMetrics(await meRes.json());
@@ -1086,10 +1107,10 @@ export default function KillTestPage() {
   const handleGenerate = useCallback(async () => {
     setGenerating(true);
     try {
-      const res = await fetch(`${API_BASE}/api/kill-test/monthly/generate`, {
+      const res = await fetch(`${API_BASE}/api/${apiGenerate}`, {
         method: 'POST',
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify(filtersApplied ? activeFilters : {}),
+        body: JSON.stringify(filtersApplied ? (isAi300 ? { killMin: activeFilters.killMin, killMax: activeFilters.killMax } : activeFilters) : {}),
       });
       if (res.ok) {
         const { monthly: m, metrics: me } = await res.json();
@@ -1101,7 +1122,7 @@ export default function KillTestPage() {
   }, [filtersApplied, activeFilters]);
 
   const handleSaveSettings = async (vals) => {
-    const res = await fetch(`${API_BASE}/api/kill-test/settings`, {
+    const res = await fetch(`${API_BASE}/api/${apiSettings}`, {
       method:  'PATCH',
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body:    JSON.stringify(vals),
@@ -1121,7 +1142,7 @@ export default function KillTestPage() {
   const handleRefreshPrices = useCallback(async () => {
     setRefreshing(true);
     try {
-      const res = await fetch(`${API_BASE}/api/kill-test/refresh-prices`, {
+      const res = await fetch(`${API_BASE}/api/${apiRefresh}`, {
         method: 'POST', headers: authHeaders(),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1253,12 +1274,33 @@ export default function KillTestPage() {
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <h1 style={{ color: Y, fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: '0.03em' }}>
-            PNTHR Kill Test
-          </h1>
-          <p style={{ color: DIM, fontSize: 12, margin: '6px 0 0', maxWidth: 640, lineHeight: 1.5 }}>
-            Forward performance tracker — Kill &gt; 100, Analyze &gt; 80%, Composite &gt; 75.
-            Simulates full lot 1–5 pyramid. Appearance price captured at exact moment of first qualification.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 4 }}>
+            <h1 style={{ color: isAi300 ? '#0096ff' : Y, fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: '0.03em' }}>
+              {isAi300 ? 'AI 300 Kill Test' : 'PNTHR Kill Test'}
+            </h1>
+            <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #444' }}>
+              {[{ key: '679', label: '679' }, { key: 'ai300', label: 'AI 300' }].map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setFund(f.key)}
+                  style={{
+                    padding: '4px 11px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    border: 'none', letterSpacing: '0.04em',
+                    background: fund === f.key ? (f.key === 'ai300' ? '#0096ff' : Y) : '#111',
+                    color: fund === f.key ? '#000' : '#888',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p style={{ color: DIM, fontSize: 12, margin: '2px 0 0', maxWidth: 640, lineHeight: 1.5 }}>
+            {isAi300
+              ? <>Forward performance tracker — AI Kill score ≥ {settings?.killThreshold ?? 80} (HUNTING+). Simulates full lot 1–5 pyramid on AI 300 universe.</>
+              : <>Forward performance tracker — Kill &gt; 100, Analyze &gt; 80%, Composite &gt; 75. Simulates full lot 1–5 pyramid. Appearance price captured at exact moment of first qualification.</>
+            }
           </p>
         </div>
 
@@ -1410,7 +1452,10 @@ export default function KillTestPage() {
           info="Percentage of currently open positions that are in profit right now. This is far more meaningful than closed-trade win rate for a trend-following pyramid strategy, because winners stay open and keep running while losers get stopped out quickly. A high open win rate means the strategy is successfully holding onto its winners."
         />
         <StatCard label="Active" value={active.length} sub="open appearances"
-          info="Number of stocks currently being tracked in the Kill Test. These are positions that qualified (Kill > 100, Analyze > 80%, Composite > 75) and have not yet been stopped out. Each active appearance is simulating the full 5-lot pyramid with lot fills checked daily."
+          info={isAi300
+            ? `Number of AI 300 stocks currently being tracked. These qualified with an AI Kill score ≥ ${settings?.killThreshold ?? 80} and have not yet been stopped out. Each active appearance simulates the full 5-lot pyramid with lot fills checked daily.`
+            : "Number of stocks currently being tracked in the Kill Test. These are positions that qualified (Kill > 100, Analyze > 80%, Composite > 75) and have not yet been stopped out. Each active appearance is simulating the full 5-lot pyramid with lot fills checked daily."
+          }
         />
         <StatCard label="Stopped Out" value={closed.length} sub="closed at stop" color={ORANGE}
           info="Number of trades that have been closed by hitting their stop loss. In a trend-following system, most individual trades will be stopped out — that is by design. The strategy wins by making more on its winners than it loses on its losers, not by having a high win rate. Think of stopped-out trades as the cost of finding the big winners."

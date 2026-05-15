@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
+import pnthrLogo from '../assets/panther head.png';
 
 const BG     = '#0a0a0a';
 const CARD   = '#111';
@@ -96,7 +97,7 @@ function ComparisonTable({ data, spy, alpha, label }) {
   );
 }
 
-function EquityCurveChart({ data, spyData, label, color }) {
+function EquityCurveChart({ data, spyData, spyReturn, label, color }) {
   if (!data?.equityCurve || data.equityCurve.length < 2) return null;
   const ec = data.equityCurve;
   const spyEc = spyData?.equityCurve || [];
@@ -130,7 +131,16 @@ function EquityCurveChart({ data, spyData, label, color }) {
           <span style={{ color: '#666', fontSize: 11, marginLeft: 8 }}>vs S&P 500</span>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <span style={{ fontSize: 16, fontWeight: 800, color: retColor(data.totalReturn) }}>{fmtPct(data.totalReturn)}</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+            <img src={pnthrLogo} alt="" style={{ width: 18, height: 18 }} />
+            <span style={{ fontSize: 16, fontWeight: 800, color: retColor(data.totalReturn) }}>{fmtPct(data.totalReturn)}</span>
+          </div>
+          {spyReturn != null && (
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 2, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+              <span style={{ display: 'inline-block', width: 14, borderTop: '2px dashed rgba(255,255,255,0.55)' }} />
+              <span>{fmtPct(spyReturn)}</span>
+            </div>
+          )}
         </div>
       </div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
@@ -629,7 +639,7 @@ export default function IrLivePage() {
               </div>
 
               {/* Equity curve */}
-              <EquityCurveChart data={net} spyData={spy} label="NET EQUITY CURVE" color={BLUE} />
+              <EquityCurveChart data={net} spyData={spy} spyReturn={spy?.totalReturn} label="NET EQUITY CURVE" color={BLUE} />
 
               {/* Performance comparison */}
               <ComparisonTable data={net} spy={spy} alpha={d.alphaVsSpy} label="PERFORMANCE COMPARISON: AI ELITE FUND vs. S&P 500" />

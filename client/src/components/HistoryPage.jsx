@@ -8,7 +8,7 @@
 //   GET /api/kill-history              — all trades (for closed table + equity curve)
 //   GET /api/kill-history/simulation   — pyramid simulation results (NAV-independent)
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { authHeaders, API_BASE } from '../services/api';
 
 // ── Constants (match sizingUtils.js) ─────────────────────────────────────────
@@ -301,9 +301,17 @@ export default function HistoryPage() {
   const [ordersLoading, setOrdersLoading] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [analyticsMonthly,  setAnalyticsMonthly]  = useState([]);
+  const [analyticsMetrics,  setAnalyticsMetrics]  = useState(null);
+  const [analyticsLoading,  setAnalyticsLoading]  = useState(false);
+  const [analyticsGenerating, setAnalyticsGenerating] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const isAi300 = fund === 'ai300';
   const historyBase = isAi300 ? 'ai300-kill-history' : 'kill-history';
+  const analyticsMonthlyUrl = isAi300 ? 'ai300-kill-test/monthly' : 'kill-test/monthly';
+  const analyticsMetricsUrl = isAi300 ? 'ai300-kill-test/metrics' : 'kill-test/metrics';
+  const analyticsGenerateUrl = isAi300 ? 'ai300-kill-test/monthly/generate' : 'kill-test/monthly/generate';
 
   async function load(isManual = false) {
     try {
@@ -354,6 +362,43 @@ export default function HistoryPage() {
   useEffect(() => {
     if (dataSource === 'orders') loadOrders();
   }, [dataSource]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lazy-load analytics when section is opened or fund changes
+  useEffect(() => {
+    if (!showAnalytics) return;
+    setAnalyticsMonthly([]);
+    setAnalyticsMetrics(null);
+    async function fetchAnalytics() {
+      try {
+        setAnalyticsLoading(true);
+        const [mRes, meRes] = await Promise.all([
+          fetch(`${API_BASE}/api/${analyticsMonthlyUrl}?scenarioKey=all`, { headers: authHeaders() }),
+          fetch(`${API_BASE}/api/${analyticsMetricsUrl}?scenarioKey=all`, { headers: authHeaders() }),
+        ]);
+        if (mRes.ok) setAnalyticsMonthly(await mRes.json());
+        if (meRes.ok) setAnalyticsMetrics(await meRes.json());
+      } catch { /* non-fatal */ }
+      finally { setAnalyticsLoading(false); }
+    }
+    fetchAnalytics();
+  }, [showAnalytics, fund]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleGenerateAnalytics() {
+    setAnalyticsGenerating(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/${analyticsGenerateUrl}`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (res.ok) {
+        const { monthly: m, metrics: me } = await res.json();
+        if (m) setAnalyticsMonthly(m);
+        if (me) setAnalyticsMetrics(me);
+      }
+    } catch { /* non-fatal */ }
+    finally { setAnalyticsGenerating(false); }
+  }
 
   const closed = useMemo(() => all.filter(s => s.status === 'CLOSED'), [all]);
 
@@ -1069,6 +1114,296 @@ export default function HistoryPage() {
               )}
             </>);
           })()}
+        </div>
+      )}
+
+      {/* ── Portfolio Analytics ─────────────────────────────────────────── */}
+      {dataSource !== 'orders' && (
+        <div style={{ marginBottom: 32 }}>
+          <button
+            onClick={() => setShowAnalytics(v => !v)}
+            style={{
+              width: '100%', textAlign: 'left', background: CARD_BG,
+              border: `1px solid ${BORDER}`, borderRadius: showAnalytics ? '8px 8px 0 0' : 8,
+              color: '#ccc', padding: '14px 18px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              fontSize: 16, fontWeight: 700,
+            }}
+          >
+            <span>Portfolio Analytics</span>
+            <span style={{ color: '#555' }}>{showAnalytics ? '▲' : '▼'}</span>
+          </button>
+
+          {showAnalytics && (
+            <div style={{ border: `1px solid ${BORDER}`, borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '24px 20px' }}>
+              {analyticsLoading ? (
+                <div style={{ padding: 32, textAlign: 'center', color: '#888' }}>Loading analytics...</div>
+              ) : (() => {
+                const m = analyticsMetrics;
+                const hasData = m?.status === 'OK' && m.monthsAvailable >= 2;
+                const n = m?.monthsAvailable ?? 0;
+
+                const retColor = (v) => v == null ? '#fff' : v > 0 ? GREEN : v < 0 ? RED : '#fff';
+                const ratioColor = (v) => v == null ? '#fff' : v >= 2 ? GREEN : v >= 1 ? '#4fc870' : v >= 0 ? '#ffa500' : RED;
+                const ddColor = (v) => v == null ? '#fff' : v < -15 ? RED : v < -5 ? '#ffa500' : v < 0 ? '#ffcc44' : GREEN;
+
+                if (!hasData) {
+                  return (
+                    <div>
+                      <div style={{ background: '#1a1100', border: `1px solid rgba(252,240,0,0.2)`, borderRadius: 8, padding: '16px 20px', marginBottom: 16 }}>
+                        <div style={{ color: YELLOW, fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
+                          {n === 0 ? 'No monthly data yet' : `${n} month of data — need at least 2 for metrics`}
+                        </div>
+                        <div style={{ color: '#888', fontSize: 12, lineHeight: 1.6 }}>
+                          Generate the first monthly snapshot to start tracking Sharpe, Sortino, Calmar, and drawdown metrics.
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleGenerateAnalytics}
+                        disabled={analyticsGenerating}
+                        style={{
+                          background: YELLOW, color: '#000', fontWeight: 800, fontSize: 12,
+                          border: 'none', borderRadius: 6, padding: '10px 24px',
+                          cursor: analyticsGenerating ? 'default' : 'pointer', letterSpacing: '0.05em',
+                        }}
+                      >
+                        {analyticsGenerating ? 'Generating…' : '⚡ GENERATE SNAPSHOT NOW'}
+                      </button>
+                    </div>
+                  );
+                }
+
+                const ec = m.equityCurve ?? [];
+
+                return (
+                  <div>
+                    {/* Equity curve */}
+                    <div style={{ background: '#111', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '16px 20px', marginBottom: 20 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+                        <div>
+                          <span style={{ color: isAi300 ? '#0096ff' : YELLOW, fontWeight: 800, fontSize: 14, letterSpacing: '0.03em' }}>PORTFOLIO EQUITY CURVE</span>
+                          <span style={{ color: '#888', fontSize: 11, marginLeft: 10 }}>{n} months</span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: retColor(m.totalReturnPct) }}>
+                            {m.totalReturnPct != null ? `${m.totalReturnPct >= 0 ? '+' : ''}${m.totalReturnPct.toFixed(2)}%` : '—'}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#888' }}>cumulative return</div>
+                        </div>
+                      </div>
+                      {ec.length > 1 && (() => {
+                        const W = 700, H = 160, PAD = { t: 12, r: 12, b: 28, l: 52 };
+                        const iW = W - PAD.l - PAD.r, iH = H - PAD.t - PAD.b;
+                        const vals = ec.map(p => p.value);
+                        const dds  = ec.map(p => p.drawdown);
+                        const minV = Math.min(...vals), maxV = Math.max(...vals);
+                        const range = maxV - minV || 1;
+                        const px = (i) => PAD.l + (i / (vals.length - 1 || 1)) * iW;
+                        const py = (v) => PAD.t + (1 - (v - minV) / range) * iH;
+                        const linePath = vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+                        const peakY = py(maxV);
+                        const ddPath = vals.map((v, i) => {
+                          const isDD = dds[i] < 0;
+                          return `${i === 0 ? 'M' : 'L'}${px(i).toFixed(1)},${isDD ? py(v).toFixed(1) : peakY.toFixed(1)}`;
+                        }).join(' ') + ` L${px(vals.length - 1).toFixed(1)},${peakY.toFixed(1)} Z`;
+                        const yTicks = [minV, (minV + maxV) / 2, maxV].map(v => ({
+                          y: py(v), label: v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${(v / 1000).toFixed(0)}k`,
+                        }));
+                        const step = Math.ceil(ec.length / 8);
+                        const xTicks = ec.filter((_, i) => i % step === 0 || i === ec.length - 1);
+                        return (
+                          <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+                            <path d={ddPath} fill="rgba(220,53,69,0.15)" />
+                            {yTicks.map((t, i) => (
+                              <g key={i}>
+                                <line x1={PAD.l} y1={t.y} x2={W - PAD.r} y2={t.y} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+                                <text x={PAD.l - 4} y={t.y + 4} textAnchor="end" fill="#555" fontSize={10}>{t.label}</text>
+                              </g>
+                            ))}
+                            <line x1={PAD.l} y1={peakY} x2={W - PAD.r} y2={peakY} stroke="rgba(255,255,255,0.15)" strokeWidth={1} strokeDasharray="4,3" />
+                            <path d={linePath} fill="none" stroke={isAi300 ? '#0096ff' : YELLOW} strokeWidth={2} />
+                            {xTicks.map((p, i) => (
+                              <text key={i} x={px(ec.indexOf(p))} y={H - 6} textAnchor="middle" fill="#555" fontSize={9}>{p.month}</text>
+                            ))}
+                          </svg>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Top metric cards */}
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+                      <MetricCard label="Sharpe Ratio" value={m.sharpe != null ? m.sharpe.toFixed(2) : '—'}
+                        sub={m.sharpe6M != null ? `6M: ${m.sharpe6M.toFixed(2)}` : n < 6 ? `(need 6M, have ${n})` : '—'}
+                        color={ratioColor(m.sharpe)}
+                        info="Annualized excess return above risk-free rate divided by return volatility. Measures return per unit of total risk. Above 1.0 is good, above 2.0 is excellent."
+                      />
+                      <MetricCard label="Sortino Ratio" value={m.sortino != null ? m.sortino.toFixed(2) : '—'}
+                        sub={m.sortino6M != null ? `6M: ${m.sortino6M.toFixed(2)}` : n < 6 ? `(need 6M, have ${n})` : '—'}
+                        color={ratioColor(m.sortino)}
+                        info="Like Sharpe but only penalizes downside volatility — ignores upside swings. Better for trend-following strategies that have large positive outliers."
+                      />
+                      <MetricCard label="Calmar Ratio" value={m.calmarAnnual != null ? m.calmarAnnual.toFixed(2) : '—'}
+                        sub={m.calmar6M != null ? `6M: ${m.calmar6M.toFixed(2)}` : '—'}
+                        color={ratioColor(m.calmarAnnual)}
+                        info="Annualized return divided by maximum drawdown. Measures how much return you get per unit of worst-case pain. Above 1.0 is good."
+                      />
+                      <MetricCard label="Annualized Return" value={m.annualizedReturn != null ? `${m.annualizedReturn >= 0 ? '+' : ''}${m.annualizedReturn.toFixed(2)}%` : '—'}
+                        sub={m.return6M != null ? `6M: ${m.return6M >= 0 ? '+' : ''}${m.return6M.toFixed(2)}%` : '—'}
+                        color={retColor(m.annualizedReturn)}
+                        info="Compound annual growth rate from inception. The rate at which the portfolio would have grown if returns were perfectly smooth."
+                      />
+                      <MetricCard label="Current Drawdown" value={m.currentDrawdown != null ? `${m.currentDrawdown.toFixed(2)}%` : '—'}
+                        sub={m.currentDrawdown === 0 ? 'At all-time high' : 'Below ATH'}
+                        color={ddColor(m.currentDrawdown)}
+                        info="How far below the all-time portfolio high you are right now. 0% means at peak."
+                      />
+                      <MetricCard label="Pain Index" value={m.painIndex != null ? `${m.painIndex.toFixed(2)}%` : '—'}
+                        sub="avg abs drawdown" color={m.painIndex > 10 ? RED : m.painIndex > 5 ? '#ffa500' : GREEN}
+                        info="Average of absolute drawdown values across all months. Measures persistent portfolio pain vs isolated spikes. Lower is better."
+                      />
+                    </div>
+
+                    {/* Two-column: Drawdown + Rolling */}
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+                      {/* Left: drawdown breakdown */}
+                      <div style={{ flex: '1 1 280px', background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '16px 20px' }}>
+                        <div style={{ fontSize: 11, color: isAi300 ? '#0096ff' : YELLOW, fontWeight: 700, marginBottom: 14, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                          Drawdown Analysis
+                        </div>
+                        {[
+                          { label: 'Max Monthly Drawdown', val: m.maxMonthlyDrawdown, tip: 'Largest single peak-to-trough decline in any one month.' },
+                          { label: 'Average Drawdown', val: m.avgDrawdown, tip: 'Mean drawdown in months where portfolio was below prior peak.' },
+                          { label: 'Current Drawdown', val: m.currentDrawdown, tip: 'How far below the all-time high right now.' },
+                          { label: 'CDaR 95%', val: m.cdar95, tip: 'Conditional Drawdown at Risk — average of the worst 5% of monthly drawdowns. Tail risk measure.' },
+                        ].map(({ label, val, tip }) => (
+                          <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid rgba(255,255,255,0.08)` }} title={tip}>
+                            <span style={{ fontSize: 13, color: '#ddd' }}>{label}</span>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: val == null ? '#888' : val < -10 ? RED : val < -5 ? '#ffa500' : val < 0 ? '#ffcc44' : GREEN }}>
+                              {val != null ? `${val.toFixed(2)}%` : '—'}
+                            </span>
+                          </div>
+                        ))}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid rgba(255,255,255,0.08)` }}>
+                          <span style={{ fontSize: 13, color: '#ddd' }}>Drawdown Frequency</span>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: m.drawdownFrequency > 50 ? '#ffa500' : '#aaa' }}>
+                            {m.drawdownFrequency != null ? `${m.drawdownFrequency.toFixed(0)}%` : '—'} <span style={{ fontSize: 11, color: '#888' }}>of months</span>
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                          <span style={{ fontSize: 13, color: '#ddd' }}>Avg DD Duration</span>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: m.avgDrawdownDurationMonths > 3 ? '#ffa500' : '#aaa' }}>
+                            {m.avgDrawdownDurationMonths != null ? `${m.avgDrawdownDurationMonths} mo` : '—'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Right: rolling drawdowns */}
+                      <div style={{ flex: '1 1 280px', background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '16px 20px' }}>
+                        <div style={{ fontSize: 11, color: isAi300 ? '#0096ff' : YELLOW, fontWeight: 700, marginBottom: 14, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                          Rolling Drawdowns
+                        </div>
+                        {[
+                          { label: '1-Month',  val: m.rolling1M,  min: 1 },
+                          { label: '3-Month',  val: m.rolling3M,  min: 3 },
+                          { label: '6-Month',  val: m.rolling6M,  min: 6 },
+                          { label: '12-Month', val: m.rolling12M, min: 12 },
+                        ].map(({ label, val, min }) => (
+                          <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid rgba(255,255,255,0.08)` }}>
+                            <span style={{ fontSize: 13, color: '#ddd' }}>{label}</span>
+                            {n < min
+                              ? <span style={{ fontSize: 11, color: '#555' }}>need {min}M data</span>
+                              : <span style={{ fontSize: 14, fontWeight: 700, color: ddColor(val) }}>{val != null ? `${val.toFixed(2)}%` : '—'}</span>
+                            }
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Peak-to-Valley Attribution */}
+                    {m.peakToValley && (
+                      <div style={{ background: CARD_BG, border: `1px solid rgba(220,53,69,0.2)`, borderRadius: 8, padding: '16px 20px', marginBottom: 20 }}>
+                        <div style={{ fontSize: 11, color: RED, fontWeight: 700, marginBottom: 10, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                          Worst Drawdown — Peak to Valley Attribution
+                        </div>
+                        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 12 }}>
+                          <div><div style={{ fontSize: 10, color: '#888' }}>Peak Month</div><div style={{ fontWeight: 700, color: '#ddd' }}>{m.peakToValley.peakMonth}</div></div>
+                          <div><div style={{ fontSize: 10, color: '#888' }}>Trough Month</div><div style={{ fontWeight: 700, color: '#ddd' }}>{m.peakToValley.troughMonth}</div></div>
+                          <div><div style={{ fontSize: 10, color: '#888' }}>Peak Value</div><div style={{ fontWeight: 700, color: '#ddd' }}>${m.peakToValley.peakValue?.toLocaleString()}</div></div>
+                          <div><div style={{ fontSize: 10, color: '#888' }}>Trough Value</div><div style={{ fontWeight: 700, color: RED }}>${m.peakToValley.troughValue?.toLocaleString()}</div></div>
+                          <div><div style={{ fontSize: 10, color: '#888' }}>Drawdown</div><div style={{ fontWeight: 800, color: RED }}>{m.peakToValley.drawdownPct?.toFixed(2)}%</div></div>
+                          <div><div style={{ fontSize: 10, color: '#888' }}>Duration</div><div style={{ fontWeight: 700, color: '#ffa500' }}>{m.peakToValley.durationMonths} mo</div></div>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>Stocks open during this period:</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {(m.peakToValley.tickersOpen || []).map(t => (
+                            <span key={t} style={{ background: 'rgba(220,53,69,0.1)', color: '#e06060', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4 }}>{t}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Monthly Performance History table */}
+                    {analyticsMonthly.length > 0 && (
+                      <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+                        <div style={{ fontSize: 11, color: isAi300 ? '#0096ff' : YELLOW, fontWeight: 700, padding: '14px 18px 10px', letterSpacing: '0.05em', textTransform: 'uppercase', borderBottom: `1px solid ${BORDER}` }}>
+                          Monthly Performance History
+                        </div>
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                            <thead>
+                              <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                {['Month', 'Portfolio Value', 'Monthly Return', 'Cumulative', 'Unrealized P&L', 'Realized P&L', 'Idle Cash', 'Sweep', 'Open'].map(h => (
+                                  <th key={h} style={{ padding: '7px 12px', fontSize: 10, fontWeight: 700, color: '#888', textAlign: h === 'Month' ? 'left' : 'right', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[...analyticsMonthly].reverse().map((r, i) => (
+                                <tr key={r.month} style={{ background: i % 2 === 1 ? 'rgba(255,255,255,0.025)' : 'transparent' }}>
+                                  <td style={{ padding: '7px 12px', fontWeight: 700, color: isAi300 ? '#0096ff' : YELLOW }}>{r.month}</td>
+                                  <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, color: '#fff' }}>${r.portfolioValue?.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                                  <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, color: r.monthlyReturn > 0 ? GREEN : r.monthlyReturn < 0 ? RED : '#aaa' }}>
+                                    {r.monthlyReturn >= 0 ? '+' : ''}{r.monthlyReturn?.toFixed(2)}%
+                                  </td>
+                                  <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 600, color: r.cumulativeReturn > 0 ? GREEN : r.cumulativeReturn < 0 ? RED : '#aaa' }}>
+                                    {r.cumulativeReturn >= 0 ? '+' : ''}{r.cumulativeReturn?.toFixed(2)}%
+                                  </td>
+                                  <td style={{ padding: '7px 12px', textAlign: 'right', color: r.unrealizedPnl >= 0 ? '#4fc870' : '#e06060' }}>
+                                    {r.unrealizedPnl != null ? `${r.unrealizedPnl >= 0 ? '+' : ''}$${Math.abs(r.unrealizedPnl).toFixed(0)}` : '—'}
+                                  </td>
+                                  <td style={{ padding: '7px 12px', textAlign: 'right', color: r.realizedThisMonth >= 0 ? '#4fc870' : '#e06060' }}>
+                                    {r.realizedThisMonth != null ? `${r.realizedThisMonth >= 0 ? '+' : ''}$${Math.abs(r.realizedThisMonth).toFixed(0)}` : '—'}
+                                  </td>
+                                  <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>${r.idleCash?.toFixed(0) ?? '—'}</td>
+                                  <td style={{ padding: '7px 12px', textAlign: 'right', color: '#4fc870', fontSize: 11 }}>+${r.sweepInterest?.toFixed(2) ?? '—'}</td>
+                                  <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{r.openPositions ?? '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Regenerate button */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={handleGenerateAnalytics}
+                        disabled={analyticsGenerating}
+                        style={{
+                          background: 'transparent', color: '#888', fontWeight: 600, fontSize: 11,
+                          border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 16px',
+                          cursor: analyticsGenerating ? 'default' : 'pointer',
+                        }}
+                      >
+                        {analyticsGenerating ? 'Regenerating…' : '↻ Regenerate Snapshot'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
         </div>
       )}
 

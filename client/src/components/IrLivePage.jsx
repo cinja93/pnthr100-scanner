@@ -165,8 +165,14 @@ function MonthlyHeatmap({ monthlyReturns, firstTradeDate }) {
   }
   const years = Object.keys(byYear).sort();
   const monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const ftYear = firstTradeDate ? firstTradeDate.slice(0, 4) : null;
-  const ftMonth = firstTradeDate ? +firstTradeDate.slice(5, 7) : null;
+  // Use server-provided firstTradeDate, or detect from data: first month with |return| > 1%
+  let ftYear = firstTradeDate ? firstTradeDate.slice(0, 4) : null;
+  let ftMonth = firstTradeDate ? +firstTradeDate.slice(5, 7) : null;
+  if (!ftYear) {
+    const sorted = [...monthlyReturns].sort((a, b) => a.m.localeCompare(b.m));
+    const first = sorted.find(r => Math.abs(r.ret) > 1.0);
+    if (first) { ftYear = first.m.slice(0, 4); ftMonth = +first.m.slice(5, 7); }
+  }
 
   function heatColor(v) {
     if (v == null) return 'transparent';

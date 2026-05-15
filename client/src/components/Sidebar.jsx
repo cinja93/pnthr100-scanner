@@ -223,6 +223,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   const { allowedPages, isDenPortal, isInvestorPortal, isVipPortal } = usePortal();
   const [tooltipKey, setTooltipKey] = useState(null);
   const [tooltipTop, setTooltipTop] = useState(0);
+  const [infoModal, setInfoModal] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const btnRefs = useRef({});
 
@@ -253,8 +254,8 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
     { key: 'journal',  label: 'PNTHR Journal',  iconImg: true },
   ];
   if (effectiveAdmin) {
-    dataItems.push({ key: 'history',        label: 'PNTHR Kill 10',   iconImg: true });
-    dataItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test', iconImg: true });
+    dataItems.push({ key: 'history',        label: 'PNTHR Kill 10',   iconImg: true, info: 'kill10' });
+    dataItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test', iconImg: true, info: 'killTest' });
     dataItems.push({ key: 'signal-history', label: 'PNTHR History',   iconImg: true });
     dataItems.push({ key: 'test',           label: 'TEST',            icon: '🧪' });
   }
@@ -362,6 +363,13 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                     </span>
                     <span className={styles.navLabel}>{item.label}</span>
                     {item.soon && <span className={styles.soonBadge}>Soon</span>}
+                    {item.info && (
+                      <span
+                        className={styles.navInfoBtn}
+                        onClick={(e) => { e.stopPropagation(); setInfoModal(item.info); }}
+                        title="What does this measure?"
+                      >ⓘ</span>
+                    )}
                   </button>
                 );
               })}
@@ -442,6 +450,51 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         activeTooltipStats
           ? <BatchStatsTooltip stats={activeTooltipStats} top={tooltipTop} />
           : <div className={styles.statsTooltip} style={{ top: tooltipTop }}><div className={styles.statsTooltipTitle}>No closed trades yet</div></div>
+      )}
+
+      {/* Info modal for Kill 10 / Kill Test */}
+      {infoModal && (
+        <div className={styles.infoModalOverlay} onClick={() => setInfoModal(null)}>
+          <div className={styles.infoModalBox} onClick={(e) => e.stopPropagation()}>
+            <button className={styles.infoModalClose} onClick={() => setInfoModal(null)}>✕</button>
+            {infoModal === 'kill10' && (
+              <>
+                <h3 className={styles.infoModalTitle}>PNTHR Kill 10</h3>
+                <p className={styles.infoModalDesc}>Forward-tested track record of the Kill scoring engine's top-10 stock picks.</p>
+                <div className={styles.infoModalSection}>
+                  <strong>What it measures:</strong> Every time a stock enters the Kill top 10 ranking, the system automatically opens a simulated trade using the full 5-lot PNTHR pyramid strategy. It tracks entries, weekly P&L snapshots, and exits (STOP_HIT, OVEREXTENDED, or BE/SE structural break).
+                </div>
+                <div className={styles.infoModalSection}>
+                  <strong>The question it answers:</strong> "If you traded every top-10 Kill stock mechanically using the PNTHR pyramid, what would the results be?"
+                </div>
+                <div className={styles.infoModalSection}>
+                  <strong>Key metrics:</strong> Win rate, profit factor, avg win vs avg loss, total P&L, equity curve — broken down by tier, direction, sector, and month. Configurable NAV ($100K–$5M) scales the pyramid P&L accordingly.
+                </div>
+                <div className={styles.infoModalSection}>
+                  <strong>Data source:</strong> Friday pipeline scores all 679 stocks, ranks top 10, opens new case studies, updates active ones, and rebuilds the aggregate track record weekly.
+                </div>
+              </>
+            )}
+            {infoModal === 'killTest' && (
+              <>
+                <h3 className={styles.infoModalTitle}>PNTHR Kill Test</h3>
+                <p className={styles.infoModalDesc}>Broader forward performance tracker — every qualifying Kill stock, not just the top 10.</p>
+                <div className={styles.infoModalSection}>
+                  <strong>What it measures:</strong> Every stock that qualifies on the Kill list (Kill &gt; 100, Analyze &gt; 80%, Composite &gt; 75) is tracked with the full 5-lot pyramid simulation using your actual NAV, risk %, and portfolio cap settings.
+                </div>
+                <div className={styles.infoModalSection}>
+                  <strong>The question it answers:</strong> "What happens if you mechanically take every qualifying Kill signal at your real account size?" This is a stress test of the entire Kill pipeline at scale.
+                </div>
+                <div className={styles.infoModalSection}>
+                  <strong>Key metrics:</strong> Active/closed appearances, portfolio heat, lot fill tracking, estimated P&L per position. Portfolio Analytics tab shows Sharpe, Sortino, Calmar ratios, drawdown analysis, monthly equity curve, and peak-to-valley attribution.
+                </div>
+                <div className={styles.infoModalSection}>
+                  <strong>Data source:</strong> Daily cron (4:30 PM ET) fetches OHLC, checks lot trigger fills, ratchets stops, and records exits. Monthly cron computes portfolio snapshots and risk metrics.
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Footer */}

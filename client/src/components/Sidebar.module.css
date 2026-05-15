@@ -196,6 +196,79 @@
 .statsPos { color: #4ade80; }
 .statsNeg { color: #f87171; }
 
+/* ── Nav item info button (ⓘ) ──────────────────────────────────────── */
+.navInfoBtn {
+  margin-left: auto;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 50%;
+  transition: color 0.15s, background 0.15s;
+}
+.navInfoBtn:hover {
+  color: #fcf000;
+  background: rgba(252, 240, 0, 0.12);
+}
+
+/* ── Info modal overlay ────────────────────────────────────────────── */
+.infoModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.infoModalBox {
+  background: #1a1a1a;
+  border: 1px solid #fcf000;
+  border-radius: 12px;
+  padding: 28px 32px 24px;
+  max-width: 520px;
+  width: 90vw;
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+.infoModalClose {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.infoModalClose:hover {
+  color: #fff;
+}
+.infoModalTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fcf000;
+  margin: 0 0 6px;
+}
+.infoModalDesc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0 0 16px;
+  font-style: italic;
+}
+.infoModalSection {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.55;
+  margin-bottom: 12px;
+}
+.infoModalSection strong {
+  color: #fcf000;
+  font-weight: 600;
+}
+
 /* ── System Architecture button ─────────────────────────────────────── */
 .archBtn,
 .dataRoomBtn {

@@ -793,6 +793,79 @@ export async function addChangelogEntry(entry) {
   return res.json();
 }
 
+// ── AI 300 Signal History (admin only) ────────────────────────────────────────
+
+export async function fetchAiSignalHistoryWeeks() {
+  const res = await apiFetch(`${API_BASE}/api/admin/ai-signal-history/weeks`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAiSignalHistoryWeek(weekOf) {
+  const res = await apiFetch(`${API_BASE}/api/admin/ai-signal-history/week/${weekOf}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAiSignalHistoryTicker(ticker) {
+  const res = await apiFetch(`${API_BASE}/api/admin/ai-signal-history/ticker/${ticker}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function saveAiSignalHistorySnapshot() {
+  const res = await apiFetch(`${API_BASE}/api/admin/ai-signal-history/snapshot`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAiMarketSnapshots(from, to) {
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to)   params.set('to', to);
+  const query = params.toString() ? `?${params}` : '';
+  const res = await apiFetch(`${API_BASE}/api/ai-signal-history/market-snapshots${query}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAiEnrichedSignals(weekOf) {
+  const query = weekOf ? `?weekOf=${weekOf}` : '';
+  const res = await apiFetch(`${API_BASE}/api/ai-signal-history/enriched-signals${query}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAiClosedTrades(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.tier)      params.set('tier', filters.tier);
+  if (filters.direction) params.set('direction', filters.direction);
+  if (filters.sector)    params.set('sector', filters.sector);
+  const query = params.toString() ? `?${params}` : '';
+  const res = await apiFetch(`${API_BASE}/api/ai-signal-history/closed-trades${query}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAiChangelog() {
+  const res = await apiFetch(`${API_BASE}/api/ai-signal-history/changelog`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function addAiChangelogEntry(entry) {
+  const res = await apiFetch(`${API_BASE}/api/ai-signal-history/changelog`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(entry),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 // ── PNTHR's Pulse — Mission Control ───────────────────────────────────────────
 
 export async function fetchPulse() {

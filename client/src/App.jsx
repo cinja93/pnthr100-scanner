@@ -37,6 +37,7 @@ import JournalPage from './components/JournalPage';
 import NewsPage from './components/NewsPage';
 import PulsePage from './components/PulsePage';
 import SignalHistoryPage from './components/SignalHistoryPage';
+import AiSignalHistoryPage from './components/AiSignalHistoryPage';
 import { getSectorEmaPeriod } from './utils/sectorEmaConfig';
 import { getAiAwareEmaPeriod } from './utils/aiUniverseEma';
 import HistoryPage from './components/HistoryPage';
@@ -1539,6 +1540,12 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* Signal History — admin only */}
           {activePage === 'signal-history' && (isAdmin
             ? <SignalHistoryPage />
+            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
+          )}
+
+          {/* AI 300 Signal History — admin only */}
+          {activePage === 'ai-signal-history' && (isAdmin
+            ? <AiSignalHistoryPage />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 

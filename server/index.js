@@ -95,6 +95,7 @@ import cron from 'node-cron';
 import { getMostRecentFriday } from './newsletterService.js';
 import { generateAndSavePerch } from './perchService.js';
 import { saveWeeklySnapshot, getTickerHistory, getWeekSnapshot, listArchivedWeeks, getCurrentWeekOf } from './signalHistoryService.js';
+import { saveAiWeeklySnapshot, getAiTickerHistory, getAiWeekSnapshot, listAiArchivedWeeks, getCurrentWeekOf as getAiCurrentWeekOf } from './aiSignalHistoryService.js';
 import { authenticateJWT, requireAdmin, hashPassword, verifyPassword, generateToken, resolveRole, generateApprovalToken, verifyApprovalToken } from './auth.js';
 import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
 import { calculateSectorExposure, generateSectorRecommendations, buildSectorCandidates } from './sectorExposure.js';
@@ -7831,6 +7832,164 @@ app.post('/api/signal-history/changelog', authenticateJWT, requireAdmin, async (
       createdAt:  new Date(),
     };
     const result = await db.collection('pnthr_system_changelog').insertOne(doc);
+    res.json({ _id: result.insertedId, ...doc });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin: AI 300 signal history endpoints ──────────────────────────────────────
+
+// POST /api/admin/ai-signal-history/snapshot — manually save this week's AI 300 snapshot
+app.post('/api/admin/ai-signal-history/snapshot', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { getAiUniverseSignals } = await import('./aiUniverseSignalsService.js');
+    let signals;
+    try {
+      signals = await getAiUniverseSignals();
+    } catch (err) {
+      console.log('[AI Signal Archive] Signal fetch failed:', err.message);
+      return res.status(500).json({ error: 'Could not fetch AI Universe signals. Load the AI 300 Index page first.' });
+    }
+    const count = await saveAiWeeklySnapshot(signals);
+    res.json({ ok: true, count, weekOf: getAiCurrentWeekOf() });
+  } catch (err) {
+    console.error('[AI Signal Archive] Manual snapshot failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/ai-signal-history/weeks — list all AI 300 archived weeks
+app.get('/api/admin/ai-signal-history/weeks', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const weeks = await listAiArchivedWeeks();
+    res.json(weeks);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/ai-signal-history/week/:weekOf — get all active AI 300 signals for a week
+app.get('/api/admin/ai-signal-history/week/:weekOf', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const records = await getAiWeekSnapshot(req.params.weekOf);
+    res.json(records);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/ai-signal-history/ticker/:ticker — full AI 300 history for one stock
+app.get('/api/admin/ai-signal-history/ticker/:ticker', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const records = await getAiTickerHistory(req.params.ticker);
+    res.json(records);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── AI 300 Signal History Enhancement endpoints ─────────────────────────────────
+
+// GET /api/ai-signal-history/market-snapshots?from=&to=
+app.get('/api/ai-signal-history/market-snapshots', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const query = {};
+    if (req.query.from || req.query.to) {
+      query.weekOf = {};
+      if (req.query.from) query.weekOf.$gte = req.query.from;
+      if (req.query.to)   query.weekOf.$lte = req.query.to;
+    }
+    const docs = await db.collection('pnthr_ai_weekly_market_snapshot')
+      .find(query)
+      .sort({ weekOf: 1 })
+      .toArray();
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/ai-signal-history/enriched-signals?weekOf=
+app.get('/api/ai-signal-history/enriched-signals', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const weekOf = req.query.weekOf;
+    const query = weekOf ? { weekOf } : {};
+    if (!weekOf) {
+      const latest = await db.collection('pnthr_ai_enriched_signals')
+        .findOne({}, { sort: { weekOf: -1 } });
+      if (latest) query.weekOf = latest.weekOf;
+    }
+    const docs = await db.collection('pnthr_ai_enriched_signals')
+      .find(query)
+      .sort({ killRank: 1 })
+      .toArray();
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/ai-signal-history/closed-trades?tier=&direction=&sector=
+app.get('/api/ai-signal-history/closed-trades', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const query = {};
+    if (req.query.tier)      query.entryTier  = req.query.tier;
+    if (req.query.direction) query.direction  = req.query.direction;
+    if (req.query.sector)    query.sector     = req.query.sector;
+    const docs = await db.collection('pnthr_ai_closed_trades')
+      .find(query)
+      .sort({ exitDate: -1 })
+      .limit(500)
+      .toArray();
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/ai-signal-history/changelog
+app.get('/api/ai-signal-history/changelog', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const docs = await db.collection('pnthr_ai_system_changelog')
+      .find({})
+      .sort({ date: -1, createdAt: -1 })
+      .limit(500)
+      .toArray();
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/ai-signal-history/changelog
+app.post('/api/ai-signal-history/changelog', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase } = await import('./database.js');
+    const db = await connectToDatabase();
+    const { date, version, category, impact, description, details } = req.body;
+    if (!date || !category || !description) {
+      return res.status(400).json({ error: 'date, category, and description are required' });
+    }
+    const doc = {
+      date,
+      version:    version || null,
+      category:   category || 'OTHER',
+      impact:     impact || 'LOW',
+      description,
+      details:    details || '',
+      changedBy:  req.user?.email || 'admin',
+      createdAt:  new Date(),
+    };
+    const result = await db.collection('pnthr_ai_system_changelog').insertOne(doc);
     res.json({ _id: result.insertedId, ...doc });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -70,6 +70,7 @@ import {
   updateAi300KillAppearances,
 } from './ai300KillHistory.js';
 import { ai300KillSimulationHandler } from './ai300KillSimulation.js';
+import { irLiveMetricsHandler, irLiveTradesHandler } from './irLiveService.js';
 import { runAi300KillTestDailyUpdate } from './ai300KillTestDailyUpdate.js';
 import { ai300KillTestMonthlyGet, ai300KillTestMetricsGet, ai300KillTestMonthlyGenerate, generateAi300MonthlySnapshots } from './ai300KillTestMonthly.js';
 import {
@@ -2450,6 +2451,10 @@ app.get('/api/ai300-kill-history',              authenticateJWT, ai300KillHistor
 app.get('/api/ai300-kill-history/active',       authenticateJWT, ai300KillHistoryGetActive);
 app.get('/api/ai300-kill-history/track-record', authenticateJWT, ai300KillHistoryGetTrackRecord);
 app.get('/api/ai300-kill-history/simulation',   authenticateJWT, ai300KillSimulationHandler);
+
+// ── AI Elite Fund — Live Intelligence Report ─────────────────────────────────
+app.get('/api/ir-live/:tier/metrics', authenticateJWT, requireAdmin, irLiveMetricsHandler);
+app.get('/api/ir-live/:tier/trades',  authenticateJWT, requireAdmin, irLiveTradesHandler);
 
 // ── AI 300 Kill Test — Appearance Tracking ───────────────────────────────────
 app.get('/api/ai300-kill-appearances', authenticateJWT, requireAdmin, async (req, res) => {

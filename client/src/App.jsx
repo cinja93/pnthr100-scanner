@@ -41,6 +41,7 @@ import { getSectorEmaPeriod } from './utils/sectorEmaConfig';
 import { getAiAwareEmaPeriod } from './utils/aiUniverseEma';
 import HistoryPage from './components/HistoryPage';
 import KillTestPage from './components/KillTestPage';
+import IrLivePage from './components/IrLivePage';
 import TestPage from './components/TestPage';
 import TrendlineAlertBanner, { TRENDLINE_BANNER_HEIGHT } from './components/TrendlineAlertBanner';
 import MoversAlertBanner, { MOVERS_BANNER_HEIGHT } from './components/MoversAlertBanner';
@@ -1520,6 +1521,12 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR Kill Test — admin only */}
           {activePage === 'kill-test' && (isAdmin
             ? <KillTestPage />
+            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
+          )}
+
+          {/* AI Intelligence Report Live — admin only */}
+          {activePage === 'ir-live' && (isAdmin
+            ? <IrLivePage />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 

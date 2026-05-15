@@ -340,10 +340,10 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                 // treatment to visually separate the proprietary PAI300 / AI
                 // Sectors family from the existing 679-stock pages.
                 const aiStyle = item.aiHighlight ? {
-                  background: isActive ? '#000' : '#fcf000',
-                  color:      isActive ? '#fcf000' : '#000',
+                  background: '#fcf000',
+                  color:      '#000',
                   fontWeight: 700,
-                  border:     isActive ? '1px solid #fcf000' : '1px solid #fcf000',
+                  border:     '1px solid #fcf000',
                 } : item.splitHighlight ? {
                   background: 'transparent',
                   fontWeight: 700,

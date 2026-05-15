@@ -10,7 +10,7 @@
 import { MongoClient } from 'mongodb';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const START_DATE = '2023-07-07';    // first Friday with enough EMA warmup
+const START_DATE = '2022-12-02';    // first Friday after AI Universe inception (2022-11-30); EMA warmup from Jan 2022 bars is already complete
 const TOP_N      = 10;              // top N ranked stocks enter as case studies
 const COOLDOWN_WEEKS = 2;           // weeks after close before re-entry
 

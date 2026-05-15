@@ -385,7 +385,8 @@ def build_cover_header(
 
     # Title block
     story.append(Spacer(1, pre_title_spacer_inches * inch))
-    story.append(Paragraph(title_line_1, COVER_TITLE_WHITE))
+    if title_line_1:
+        story.append(Paragraph(title_line_1, COVER_TITLE_WHITE))
     if title_line_2:
         story.append(Paragraph(title_line_2, COVER_TITLE_WHITE))
     story.append(Spacer(1, 0.14 * inch))

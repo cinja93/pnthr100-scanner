@@ -544,6 +544,147 @@ export default function HistoryPage() {
     };
   }, [pyramidClosed]);
 
+  // ── Pyramid-based analytics (replaces Kill Test monthly for Kill 10) ─────
+  const pyramidAnalytics = useMemo(() => {
+    const cl = pyramidClosed;
+    if (cl.length < 2) return null;
+
+    // Group closed trades by exit month → monthly P&L dollar totals
+    const byMonth = {};
+    for (const t of cl) {
+      const m = t.exitDate?.substring(0, 7);
+      if (!m) continue;
+      if (!byMonth[m]) byMonth[m] = 0;
+      byMonth[m] += t.pnlDollar;
+    }
+    const months = Object.keys(byMonth).sort();
+    if (months.length < 2) return null;
+
+    const startingNav = nav;
+    const monthlyPnl = months.map(m => byMonth[m]);
+
+    // Build equity curve
+    let cumValue = startingNav;
+    let peak = startingNav;
+    const equityCurve = [{ month: months[0].substring(0, 7), value: startingNav, drawdown: 0 }];
+    const monthlyReturns = [];
+    const drawdowns = [];
+
+    for (let i = 0; i < monthlyPnl.length; i++) {
+      cumValue += monthlyPnl[i];
+      if (cumValue > peak) peak = cumValue;
+      const dd = peak > 0 ? ((cumValue - peak) / peak) * 100 : 0;
+      drawdowns.push(dd);
+      monthlyReturns.push(monthlyPnl[i] / (cumValue - monthlyPnl[i]) * 100);
+      equityCurve.push({ month: months[i], value: Math.round(cumValue), drawdown: +dd.toFixed(2) });
+    }
+
+    const n = months.length;
+    const totalReturnPct = ((cumValue - startingNav) / startingNav) * 100;
+    const yearsElapsed = n / 12;
+    const annualizedReturn = yearsElapsed > 0 ? ((Math.pow(cumValue / startingNav, 1 / yearsElapsed) - 1) * 100) : 0;
+
+    // Sharpe & Sortino (annualized, rf=5%)
+    const rf = 5;
+    const rfMonthly = rf / 12;
+    const excessReturns = monthlyReturns.map(r => r - rfMonthly);
+    const avgExcess = excessReturns.reduce((s, r) => s + r, 0) / n;
+    const variance = excessReturns.reduce((s, r) => s + (r - avgExcess) ** 2, 0) / n;
+    const stdDev = Math.sqrt(variance);
+    const sharpe = stdDev > 0 ? (avgExcess / stdDev) * Math.sqrt(12) : 0;
+
+    const downside = excessReturns.filter(r => r < 0);
+    const downsideVar = downside.length > 0 ? downside.reduce((s, r) => s + r ** 2, 0) / n : 0;
+    const downsideDev = Math.sqrt(downsideVar);
+    const sortino = downsideDev > 0 ? (avgExcess / downsideDev) * Math.sqrt(12) : 0;
+
+    // Drawdown metrics
+    const maxDD = Math.min(...drawdowns, 0);
+    const currentDD = drawdowns.length > 0 ? drawdowns[drawdowns.length - 1] : 0;
+    const avgDD = drawdowns.length > 0 ? drawdowns.reduce((s, d) => s + d, 0) / drawdowns.length : 0;
+    const ddMonths = drawdowns.filter(d => d < -0.01).length;
+    const ddFreq = (ddMonths / n) * 100;
+    const painIndex = drawdowns.length > 0 ? drawdowns.reduce((s, d) => s + Math.abs(d), 0) / drawdowns.length : 0;
+    const calmarAnnual = maxDD < 0 ? annualizedReturn / Math.abs(maxDD) : 0;
+    const maxMonthlyDD = Math.min(...monthlyReturns, 0);
+
+    // 6M metrics
+    const last6 = monthlyReturns.slice(-6);
+    const return6M = n >= 6 ? last6.reduce((s, r) => s + r, 0) : null;
+    const excess6M = last6.map(r => r - rfMonthly);
+    const avg6 = excess6M.length > 0 ? excess6M.reduce((s, r) => s + r, 0) / excess6M.length : 0;
+    const std6 = excess6M.length > 0 ? Math.sqrt(excess6M.reduce((s, r) => s + (r - avg6) ** 2, 0) / excess6M.length) : 0;
+    const sharpe6M = n >= 6 && std6 > 0 ? (avg6 / std6) * Math.sqrt(12) : null;
+    const down6 = excess6M.filter(r => r < 0);
+    const dsDev6 = down6.length > 0 ? Math.sqrt(down6.reduce((s, r) => s + r ** 2, 0) / excess6M.length) : 0;
+    const sortino6M = n >= 6 && dsDev6 > 0 ? (avg6 / dsDev6) * Math.sqrt(12) : null;
+    const maxDD6 = n >= 6 ? Math.min(...drawdowns.slice(-6), 0) : null;
+    const calmar6M = maxDD6 != null && maxDD6 < 0 && return6M != null ? (return6M * 2) / Math.abs(maxDD6) : null;
+
+    // Rolling worst drawdowns
+    function worstRolling(windowSize) {
+      if (n < windowSize) return null;
+      let worst = 0;
+      for (let i = 0; i <= n - windowSize; i++) {
+        const slice = monthlyReturns.slice(i, i + windowSize);
+        const ret = slice.reduce((s, r) => s + r, 0);
+        if (ret < worst) worst = ret;
+      }
+      return +worst.toFixed(2);
+    }
+
+    // Peak to valley
+    let peakIdx = 0, troughIdx = 0, worstPeak = 0, worstTrough = 0, worstDD = 0;
+    const cumValues = equityCurve.map(p => p.value);
+    let runPeak = cumValues[0], runPeakIdx = 0;
+    for (let i = 1; i < cumValues.length; i++) {
+      if (cumValues[i] > runPeak) { runPeak = cumValues[i]; runPeakIdx = i; }
+      const dd = (cumValues[i] - runPeak) / runPeak * 100;
+      if (dd < worstDD) { worstDD = dd; peakIdx = runPeakIdx; troughIdx = i; worstPeak = runPeak; worstTrough = cumValues[i]; }
+    }
+
+    // CDaR 95%
+    const sortedDD = [...drawdowns].sort((a, b) => a - b);
+    const idx95 = Math.floor(sortedDD.length * 0.05);
+    const cdar95 = sortedDD.length > 0 ? sortedDD[idx95] : 0;
+
+    // DD duration
+    let ddRuns = 0, ddRunLen = 0;
+    for (const d of drawdowns) {
+      if (d < -0.01) { ddRunLen++; }
+      else if (ddRunLen > 0) { ddRuns++; ddRunLen = 0; }
+    }
+    if (ddRunLen > 0) ddRuns++;
+    const avgDDDur = ddRuns > 0 ? Math.round(ddMonths / ddRuns) : 0;
+
+    return {
+      status: 'OK',
+      monthsAvailable: n,
+      equityCurve,
+      totalReturnPct: +totalReturnPct.toFixed(2),
+      annualizedReturn: +annualizedReturn.toFixed(2),
+      sharpe: +sharpe.toFixed(2), sharpe6M: sharpe6M != null ? +sharpe6M.toFixed(2) : null,
+      sortino: +sortino.toFixed(2), sortino6M: sortino6M != null ? +sortino6M.toFixed(2) : null,
+      calmarAnnual: +calmarAnnual.toFixed(2), calmar6M: calmar6M != null ? +calmar6M.toFixed(2) : null,
+      return6M: return6M != null ? +return6M.toFixed(2) : null,
+      currentDrawdown: +currentDD.toFixed(2),
+      maxMonthlyDrawdown: +maxMonthlyDD.toFixed(2),
+      avgDrawdown: +avgDD.toFixed(2),
+      drawdownFrequency: +ddFreq.toFixed(0),
+      avgDrawdownDurationMonths: avgDDDur,
+      painIndex: +painIndex.toFixed(2),
+      cdar95: +cdar95.toFixed(2),
+      rolling1M: worstRolling(1), rolling3M: worstRolling(3),
+      rolling6M: worstRolling(6), rolling12M: worstRolling(12),
+      peakToValley: worstDD < -1 ? {
+        peakMonth: equityCurve[peakIdx]?.month, troughMonth: equityCurve[troughIdx]?.month,
+        peakValue: Math.round(worstPeak), troughValue: Math.round(worstTrough),
+        drawdownPct: +worstDD.toFixed(2), durationMonths: troughIdx - peakIdx,
+        tickersOpen: [],
+      } : null,
+    };
+  }, [pyramidClosed, nav]);
+
   // ── Orders 2026 mapped trades (backtest data, fixed $10K sizing) ─────────
   const ordersTrades = useMemo(() => {
     if (!ordersData?.trades) return [];
@@ -1143,7 +1284,7 @@ export default function HistoryPage() {
             <div style={{ padding: 48, textAlign: 'center', color: '#888', fontSize: 13 }}>Loading analytics…</div>
           );
 
-          const m = analyticsMetrics;
+          const m = (dataSource !== 'orders' && pyramidAnalytics) ? pyramidAnalytics : analyticsMetrics;
           const hasData = m?.status === 'OK' && m.monthsAvailable >= 2;
           const n = m?.monthsAvailable ?? 0;
           const retColor = (v) => v == null ? '#fff' : v > 0 ? GREEN : v < 0 ? RED : '#fff';

@@ -637,7 +637,7 @@ export default function IrLivePage() {
           PNTHR AI Elite 300 Fund — Intelligence Report
         </div>
         <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-          Backtest Performance Report | Jan 2022 - May 2026 | Multi-Strategy Pyramiding | PNTHR AI Universe (~300 Names)
+          Backtest Performance Report | Jan 2022 – {d?.net?.endDate ? new Date(d.net.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '...'} | Multi-Strategy Pyramiding | PNTHR AI Universe (~300 Names)
           {d?.generatedAt && <span style={{ marginLeft: 12, color: '#555' }}>Last computed: {new Date(d.generatedAt).toLocaleString()}</span>}
         </div>
       </div>

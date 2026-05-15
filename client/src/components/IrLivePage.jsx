@@ -263,11 +263,15 @@ function CrisisAlphaTable({ crisisNet }) {
   );
 }
 
+const MONTH_LABELS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
 function TradeLogSection({ tier }) {
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sortCol, setSortCol] = useState('exitDate');
   const [sortDir, setSortDir] = useState('desc');
+  const [selectedYear, setSelectedYear] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -278,15 +282,50 @@ function TradeLogSection({ tier }) {
       .finally(() => setLoading(false));
   }, [tier]);
 
+  const availableYears = useMemo(() => {
+    const yrs = new Set();
+    for (const t of trades) {
+      const d = t.exitDate || t.entryDate || '';
+      if (d.length >= 4) yrs.add(d.slice(0, 4));
+    }
+    return [...yrs].sort((a, b) => b.localeCompare(a));
+  }, [trades]);
+
+  const availableMonths = useMemo(() => {
+    if (!selectedYear) return [];
+    const mos = new Set();
+    for (const t of trades) {
+      const d = t.exitDate || t.entryDate || '';
+      if (d.startsWith(selectedYear) && d.length >= 7) mos.add(+d.slice(5, 7));
+    }
+    return [...mos].sort((a, b) => a - b);
+  }, [trades, selectedYear]);
+
+  const filtered = useMemo(() => {
+    if (!selectedYear) return trades;
+    return trades.filter(t => {
+      const d = t.exitDate || t.entryDate || '';
+      if (!d.startsWith(selectedYear)) return false;
+      if (selectedMonth != null) {
+        const mo = +d.slice(5, 7);
+        if (mo !== selectedMonth) return false;
+      }
+      return true;
+    });
+  }, [trades, selectedYear, selectedMonth]);
+
   const sorted = useMemo(() => {
-    const arr = [...trades];
+    const arr = [...filtered];
     arr.sort((a, b) => {
       let av = a[sortCol], bv = b[sortCol];
-      if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv || '') : (bv || '').localeCompare(av);
-      return sortDir === 'asc' ? (av || 0) - (bv || 0) : (bv || 0) - (av || 0);
+      if (av == null && bv == null) return 0;
+      if (av == null) return sortDir === 'asc' ? -1 : 1;
+      if (bv == null) return sortDir === 'asc' ? 1 : -1;
+      if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir === 'asc' ? av - bv : bv - av;
     });
     return arr;
-  }, [trades, sortCol, sortDir]);
+  }, [filtered, sortCol, sortDir]);
 
   const grouped = useMemo(() => {
     const groups = {};
@@ -303,7 +342,20 @@ function TradeLogSection({ tier }) {
     else { setSortCol(col); setSortDir('desc'); }
   }
 
+  function handleYearClick(yr) {
+    if (selectedYear === yr) { setSelectedYear(null); setSelectedMonth(null); }
+    else { setSelectedYear(yr); setSelectedMonth(null); }
+  }
+
+  function handleMonthClick(mo) {
+    setSelectedMonth(selectedMonth === mo ? null : mo);
+  }
+
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading trade log...</div>;
+
+  const closedCount = trades.filter(t => t.exitDate).length;
+  const activeCount = trades.filter(t => !t.exitDate).length;
+  const filteredClosedCount = filtered.filter(t => t.exitDate).length;
 
   const cols = [
     { key: 'ticker', label: 'Ticker', w: 70 },
@@ -322,20 +374,70 @@ function TradeLogSection({ tier }) {
 
   return (
     <div>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>{trades.length} trades total ({trades.filter(t => t.exitDate).length} closed, {trades.filter(t => !t.exitDate).length} active)</div>
+      <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>
+        {trades.length} trades total ({closedCount} closed, {activeCount} active)
+        {selectedYear && <span style={{ color: BLUE, marginLeft: 8 }}>| Showing: {selectedYear}{selectedMonth != null ? `-${String(selectedMonth).padStart(2, '0')}` : ''} ({filtered.length} trades)</span>}
+      </div>
+
+      {/* Year navigation */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+        <button onClick={() => { setSelectedYear(null); setSelectedMonth(null); }}
+          style={{
+            padding: '6px 14px', border: `1px solid ${!selectedYear ? GOLD : BORDER}`, borderRadius: 5,
+            background: !selectedYear ? 'rgba(255,215,0,0.1)' : 'transparent',
+            color: !selectedYear ? GOLD : '#888', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+          }}>ALL</button>
+        {availableYears.map(yr => (
+          <button key={yr} onClick={() => handleYearClick(yr)}
+            style={{
+              padding: '6px 14px', border: `1px solid ${selectedYear === yr ? BLUE : BORDER}`, borderRadius: 5,
+              background: selectedYear === yr ? 'rgba(0,150,255,0.1)' : 'transparent',
+              color: selectedYear === yr ? BLUE : '#888', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+            }}>{yr}</button>
+        ))}
+      </div>
+
+      {/* Month navigation (visible when year selected) */}
+      {selectedYear && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 14, flexWrap: 'wrap' }}>
+          {MONTH_LABELS.map((label, idx) => {
+            const mo = idx + 1;
+            const hasData = availableMonths.includes(mo);
+            const isActive = selectedMonth === mo;
+            return (
+              <button key={mo} onClick={() => hasData && handleMonthClick(mo)} disabled={!hasData}
+                style={{
+                  padding: '5px 10px', border: `1px solid ${isActive ? GOLD : hasData ? BORDER : 'rgba(255,255,255,0.04)'}`,
+                  borderRadius: 4, fontFamily: 'inherit',
+                  background: isActive ? 'rgba(255,215,0,0.1)' : 'transparent',
+                  color: isActive ? GOLD : hasData ? '#aaa' : '#333',
+                  fontWeight: isActive ? 700 : 600, fontSize: 11, cursor: hasData ? 'pointer' : 'default',
+                  letterSpacing: '0.03em', opacity: hasData ? 1 : 0.4,
+                }}>{label}</button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Trade table */}
       {grouped.map(([month, monthTrades]) => (
         <div key={month} style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, padding: '8px 0', borderBottom: `1px solid ${BORDER}`, marginBottom: 4, letterSpacing: '0.05em' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, padding: '8px 0', borderBottom: `1px solid ${BORDER}`, marginBottom: 0, letterSpacing: '0.05em' }}>
             {month === 'Active' ? 'ACTIVE POSITIONS' : month}
             <span style={{ color: '#555', fontWeight: 400, marginLeft: 8 }}>{monthTrades.length} trade{monthTrades.length !== 1 ? 's' : ''}</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
-                <tr>
+                <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
                   {cols.map(c => (
                     <th key={c.key} onClick={() => handleSort(c.key)}
-                      style={{ padding: '6px 8px', color: sortCol === c.key ? BLUE : '#888', cursor: 'pointer', textAlign: c.align || 'left', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap', minWidth: c.w }}>
+                      style={{
+                        padding: '7px 8px', color: sortCol === c.key ? BLUE : '#888', cursor: 'pointer',
+                        textAlign: c.align || 'left', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', minWidth: c.w,
+                        background: sortCol === c.key ? 'rgba(0,150,255,0.05)' : 'transparent',
+                        userSelect: 'none', position: 'sticky', top: 0,
+                      }}>
                       {c.label} {sortCol === c.key ? (sortDir === 'desc' ? '▼' : '▲') : ''}
                     </th>
                   ))}
@@ -373,6 +475,12 @@ function TradeLogSection({ tier }) {
           </div>
         </div>
       ))}
+
+      {filtered.length === 0 && (
+        <div style={{ padding: 40, textAlign: 'center', color: '#555', fontSize: 13 }}>
+          No trades found for {selectedYear}{selectedMonth != null ? `-${String(selectedMonth).padStart(2, '0')}` : ''}.
+        </div>
+      )}
     </div>
   );
 }
@@ -441,7 +549,7 @@ export default function IrLivePage() {
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 26, fontWeight: 900, color: '#fff', letterSpacing: '0.03em' }}>
-          PNTHR AI Elite Fund — Intelligence Report
+          PNTHR AI Elite 300 Fund — Intelligence Report
         </div>
         <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
           Backtest Performance Report | Jan 2022 - May 2026 | Multi-Strategy Pyramiding | PNTHR AI Universe (~300 Names)

@@ -155,7 +155,7 @@ function EquityCurveChart({ data, spyData, label, color }) {
   );
 }
 
-function MonthlyHeatmap({ monthlyReturns }) {
+function MonthlyHeatmap({ monthlyReturns, firstTradeDate }) {
   if (!monthlyReturns || monthlyReturns.length === 0) return null;
   const byYear = {};
   for (const { m, ret } of monthlyReturns) {
@@ -165,6 +165,8 @@ function MonthlyHeatmap({ monthlyReturns }) {
   }
   const years = Object.keys(byYear).sort();
   const monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const ftYear = firstTradeDate ? firstTradeDate.slice(0, 4) : null;
+  const ftMonth = firstTradeDate ? +firstTradeDate.slice(5, 7) : null;
 
   function heatColor(v) {
     if (v == null) return 'transparent';
@@ -188,12 +190,23 @@ function MonthlyHeatmap({ monthlyReturns }) {
         </thead>
         <tbody>
           {years.map(y => {
-            const ytd = Object.values(byYear[y]).reduce((s, v) => s + v, 0);
+            function isWarmup(yr, mo) {
+              if (!ftYear) return false;
+              if (yr < ftYear) return true;
+              if (yr === ftYear && mo < ftMonth) return true;
+              return false;
+            }
+            let ytd = 0;
+            for (const [moStr, v] of Object.entries(byYear[y])) {
+              if (!isWarmup(y, +moStr)) ytd += v;
+            }
             return (
               <tr key={y} style={{ borderTop: `1px solid rgba(255,255,255,0.05)` }}>
                 <td style={{ padding: '6px 10px', color: '#ddd', fontWeight: 700 }}>{y}</td>
                 {[1,2,3,4,5,6,7,8,9,10,11,12].map(mo => {
+                  const warmup = isWarmup(y, mo);
                   const v = byYear[y][mo];
+                  if (warmup) return <td key={mo} style={{ padding: '6px 8px', background: '#0a0a0a' }} />;
                   return (
                     <td key={mo} style={{ padding: '6px 8px', textAlign: 'center', background: heatColor(v), color: v != null ? (v >= 0 ? GREEN : RED) : '#333', fontWeight: 600 }}>
                       {v != null ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}` : ''}
@@ -696,7 +709,7 @@ export default function IrLivePage() {
 
               {/* Monthly returns heatmap */}
               <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MONTHLY RETURNS HEATMAP (NET)</div>
-              <MonthlyHeatmap monthlyReturns={net?.monthlyReturns} />
+              <MonthlyHeatmap monthlyReturns={net?.monthlyReturns} firstTradeDate={data?.firstTradeDate} />
 
               {/* Crisis Alpha */}
               <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>CRISIS ALPHA</div>

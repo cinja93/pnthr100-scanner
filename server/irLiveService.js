@@ -313,6 +313,8 @@ async function getIrData(tierKey) {
   const net = computeSide(netDocs, 'netEquity');
   const scale = tier.seedNav / 1_000_000;
   const tradeStats = computeTradeStats(allTrades, tier.seedNav, scale);
+  const closedTrades = allTrades.filter(t => t.entryDate).sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
+  const firstTradeDate = closedTrades.length > 0 ? String(closedTrades[0].entryDate).slice(0, 10) : null;
   const spy = spyMetrics(spyDaily, gross.startDate, gross.endDate, tier.seedNav);
 
   const crisisGrossEq = grossDocs.map(d => +d.equity);
@@ -327,7 +329,7 @@ async function getIrData(tierKey) {
   const result = {
     tier: tier.key, label: tier.label, seedNav: tier.seedNav,
     feeSchedule: { yearsOneToThree: tier.feeYr1to3, yearsFourPlus: tier.feeYr4plus },
-    gross, net, trades: tradeStats, spy,
+    gross, net, trades: tradeStats, spy, firstTradeDate,
     spyAnnualReturns: buildSpyAnnualReturns(grossDocs, spyDaily, tier.seedNav),
     crisisAlphaGross: crisisAlpha(crisisGrossEq, crisisGrossDates, spyDaily, CRISIS_EVENTS),
     crisisAlphaNet: crisisAlpha(crisisNetEq, crisisNetDates, spyDaily, CRISIS_EVENTS),

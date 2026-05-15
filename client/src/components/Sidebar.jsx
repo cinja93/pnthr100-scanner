@@ -254,8 +254,8 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
     { key: 'journal',  label: 'PNTHR Journal',  iconImg: true },
   ];
   if (effectiveAdmin) {
-    dataItems.push({ key: 'history',        label: 'PNTHR Kill 10',   iconImg: true, info: 'kill10' });
-    dataItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test', iconImg: true, info: 'killTest' });
+    dataItems.push({ key: 'history',        label: 'PNTHR Kill 10',   iconImg: true, info: 'kill10', splitHighlight: true });
+    dataItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test', iconImg: true, info: 'killTest', splitHighlight: true });
     dataItems.push({ key: 'signal-history', label: 'PNTHR History',   iconImg: true });
     dataItems.push({ key: 'ir-live',        label: 'AI Intelligence Report Live', iconImg: true, aiHighlight: true });
     dataItems.push({ key: 'test',           label: 'TEST',            icon: '🧪' });
@@ -344,6 +344,13 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                   color:      isActive ? '#fcf000' : '#000',
                   fontWeight: 700,
                   border:     isActive ? '1px solid #fcf000' : '1px solid #fcf000',
+                } : item.splitHighlight ? {
+                  background: 'transparent',
+                  fontWeight: 700,
+                  border: '1px solid #fcf000',
+                  overflow: 'hidden',
+                  padding: 0,
+                  display: 'flex',
                 } : undefined;
                 return (
                   <button
@@ -357,12 +364,26 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                     onMouseEnter={() => handleMouseEnter(item.key)}
                     onMouseLeave={() => setTooltipKey(null)}
                   >
-                    <span className={styles.navIcon}>
-                      {item.iconImg
-                        ? <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
-                        : item.icon}
-                    </span>
-                    <span className={styles.navLabel}>{item.label}</span>
+                    {item.splitHighlight ? (
+                      <>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fcf000', color: '#000', padding: '6px 4px 6px 8px', flexShrink: 0 }}>
+                          <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
+                          <span style={{ fontWeight: 700, fontSize: 11 }}>PNTHR</span>
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', background: '#000', color: '#fcf000', padding: '6px 8px 6px 4px', flex: 1, fontWeight: 700, fontSize: 11 }}>
+                          {item.label.replace('PNTHR ', '')}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className={styles.navIcon}>
+                          {item.iconImg
+                            ? <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
+                            : item.icon}
+                        </span>
+                        <span className={styles.navLabel}>{item.label}</span>
+                      </>
+                    )}
                     {item.soon && <span className={styles.soonBadge}>Soon</span>}
                     {item.info && (
                       <span

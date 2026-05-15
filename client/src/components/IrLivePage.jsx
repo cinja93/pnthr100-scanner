@@ -288,6 +288,68 @@ function CrisisAlphaTable({ crisisNet }) {
 
 const MONTH_LABELS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
+const CORR_INFO = {
+  Beta: {
+    what: 'Beta measures how much the fund moves relative to the market. A beta of 1.0 means it moves in lockstep; below 1.0 means less volatile than the market.',
+    edge: 'A low beta means you get outsized returns without taking on full market risk. The fund delivers multiples of the market\'s return at a fraction of the volatility.',
+  },
+  Correlation: {
+    what: 'Correlation measures how closely the fund\'s daily returns track the benchmark. Ranges from -1 (perfectly inverse) to +1 (perfectly in sync).',
+    edge: 'Low correlation means the fund\'s returns come from independent stock selection, not from riding the same wave as the S&P. This is valuable for portfolio diversification.',
+  },
+  'R-Squared': {
+    what: 'R-Squared shows what percentage of the fund\'s returns are explained by market movements. Lower R² means more return comes from the manager\'s skill.',
+    edge: 'A low R² proves the fund isn\'t just a leveraged index. The vast majority of returns are generated through active stock picking and sector rotation — pure alpha.',
+  },
+  'CAPM Alpha (ann.)': {
+    what: 'CAPM Alpha is the fund\'s annualized excess return above what the market model predicts, given the fund\'s beta. It isolates skill from market exposure.',
+    edge: 'A large positive CAPM Alpha is the gold standard for proving manager skill. It means the fund earns far more than its risk level would suggest — this is return you can\'t get from an index fund.',
+  },
+};
+
+function CorrelationCards({ marketCorrelation }) {
+  const [openInfo, setOpenInfo] = useState(null);
+
+  return (
+    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
+      {['spy', 'qqq'].map(bench => {
+        const c = marketCorrelation[bench];
+        if (!c) return null;
+        return (
+          <div key={bench} style={{ flex: '1 1 250px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '16px 20px' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: BLUE, marginBottom: 12 }}>vs {bench.toUpperCase()}</div>
+            {[
+              { l: 'Beta', v: c.beta?.toFixed(2) },
+              { l: 'Correlation', v: c.correlation?.toFixed(2) },
+              { l: 'R-Squared', v: `${(c.rSquared * 100).toFixed(1)}%` },
+              { l: 'CAPM Alpha (ann.)', v: `${c.capmAlpha >= 0 ? '+' : ''}${c.capmAlpha?.toFixed(1)}%`, color: retColor(c.capmAlpha) },
+            ].map(r => (
+              <div key={r.l} style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid rgba(255,255,255,0.05)` }}>
+                  <span style={{ fontSize: 12, color: '#aaa', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {r.l}
+                    <span
+                      onClick={() => setOpenInfo(openInfo === `${bench}-${r.l}` ? null : `${bench}-${r.l}`)}
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', color: '#888', fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
+                    >i</span>
+                  </span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: r.color || '#ddd' }}>{r.v}</span>
+                </div>
+                {openInfo === `${bench}-${r.l}` && CORR_INFO[r.l] && (
+                  <div style={{ background: '#1a1a1a', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '12px 14px', marginTop: 4, marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.6, marginBottom: 8 }}>{CORR_INFO[r.l].what}</div>
+                    <div style={{ fontSize: 11, color: GREEN, lineHeight: 1.6, fontWeight: 600 }}>{CORR_INFO[r.l].edge}</div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function TradeLogSection({ tier }) {
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -854,28 +916,7 @@ export default function IrLivePage() {
                   <div style={{ fontSize: 11, color: '#888', marginBottom: 16 }}>
                     Computed from {d.marketCorrelation.observations} daily observations since {d.marketCorrelation.fromDate}
                   </div>
-                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
-                    {['spy', 'qqq'].map(bench => {
-                      const c = d.marketCorrelation[bench];
-                      if (!c) return null;
-                      return (
-                        <div key={bench} style={{ flex: '1 1 250px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '16px 20px' }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: BLUE, marginBottom: 12 }}>vs {bench.toUpperCase()}</div>
-                          {[
-                            { l: 'Beta', v: c.beta?.toFixed(2), info: 'Market sensitivity' },
-                            { l: 'Correlation', v: c.correlation?.toFixed(2) },
-                            { l: 'R-Squared', v: `${(c.rSquared * 100).toFixed(1)}%`, info: 'Return explained by market' },
-                            { l: 'CAPM Alpha (ann.)', v: `${c.capmAlpha >= 0 ? '+' : ''}${c.capmAlpha?.toFixed(1)}%`, color: retColor(c.capmAlpha) },
-                          ].map(r => (
-                            <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid rgba(255,255,255,0.05)` }}>
-                              <span style={{ fontSize: 12, color: '#aaa' }}>{r.l}</span>
-                              <span style={{ fontSize: 14, fontWeight: 700, color: r.color || '#ddd' }}>{r.v}</span>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <CorrelationCards marketCorrelation={d.marketCorrelation} />
                   <div style={{ background: 'rgba(255,215,0,0.05)', border: `1px solid rgba(255,215,0,0.15)`, borderRadius: 8, padding: '14px 18px', marginBottom: 24 }}>
                     <div style={{ fontSize: 12, color: GOLD, fontWeight: 700, marginBottom: 6 }}>INTERPRETATION</div>
                     <div style={{ fontSize: 12, color: '#bbb', lineHeight: 1.7 }}>

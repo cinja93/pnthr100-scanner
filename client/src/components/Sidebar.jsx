@@ -257,7 +257,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
     dataItems.push({ key: 'history',        label: 'PNTHR Kill 10',   iconImg: true, info: 'kill10' });
     dataItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test', iconImg: true, info: 'killTest' });
     dataItems.push({ key: 'signal-history', label: 'PNTHR History',   iconImg: true });
-    dataItems.push({ key: 'ir-live',        label: 'AI Intelligence Report Live', iconImg: true });
+    dataItems.push({ key: 'ir-live',        label: 'AI Intelligence Report Live', iconImg: true, aiHighlight: true });
     dataItems.push({ key: 'test',           label: 'TEST',            icon: '🧪' });
   }
   dataItems.push({ key: 'watchlist', label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' });

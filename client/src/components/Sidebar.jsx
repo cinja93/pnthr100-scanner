@@ -19,7 +19,7 @@ const NAV_GROUPS = [
   {
     groupLabel: 'PNTHR Live',
     items: [
-      { key: 'pulse',     label: 'PNTHR Pulse',     iconImg: true },
+      { key: 'pulse',     label: 'PNTHR Pulse',     iconImg: true, splitHighlight: true },
       { key: 'assistant', label: 'PNTHR Assistant',  iconImg: true },
       { key: 'orders',    label: 'PNTHR Orders',    iconImg: true },
       { key: 'aiOrders',  label: 'PNTHR AI Orders', iconImg: true, aiHighlight: true },
@@ -239,7 +239,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
     ? {
         groupLabel: 'PNTHR Live',
         items: [
-          { key: 'pulse',     label: 'PNTHR Pulse',     iconImg: true },
+          { key: 'pulse',     label: 'PNTHR Pulse',     iconImg: true, splitHighlight: true },
           { key: 'portfolio', label: 'PNTHR Portfolio', iconImg: true },
           { key: 'assistant', label: 'PNTHR Assistant', iconImg: true },
           { key: 'orders',    label: 'PNTHR Orders',    iconImg: true },

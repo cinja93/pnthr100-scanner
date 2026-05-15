@@ -188,9 +188,9 @@ function MetricCard({ label, value, sub, color, info }) {
   return (
     <div style={{
       background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
-      padding: '14px 18px', minWidth: 110, flex: '1 1 100px', position: 'relative',
+      padding: '14px 16px', minWidth: 0, position: 'relative',
     }}>
-      <div style={{ fontSize: 11, color: '#888', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 5 }}>
+      <div style={{ fontSize: 10, color: '#888', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
         {label}
         {info && (
           <span
@@ -201,8 +201,8 @@ function MetricCard({ label, value, sub, color, info }) {
           >ⓘ</span>
         )}
       </div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: color || '#fff', lineHeight: 1.1 }}>{value ?? '—'}</div>
-      {sub && <div style={{ fontSize: 11, color: '#666', marginTop: 3 }}>{sub}</div>}
+      <div style={{ fontSize: 20, fontWeight: 800, color: color || '#fff', lineHeight: 1.1, whiteSpace: 'nowrap' }}>{value ?? '—'}</div>
+      {sub && <div style={{ fontSize: 10, color: '#666', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
       {showInfo && (
         <div
           onClick={() => setShowInfo(false)}
@@ -782,7 +782,7 @@ export default function HistoryPage() {
       {dataSource === 'orders' && ordersLoading ? (
         <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Loading Orders data...</div>
       ) : (
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 24 }}>
         {(() => {
           const stats = dataSource === 'orders' ? ordersStats : pyramidStats;
           if (stats) return (<>

@@ -265,7 +265,7 @@ function BreakdownTable({ title, data, defaultOpen = false }) {
                   <td style={{ padding: '7px 12px', color: '#ddd' }}>{name}</td>
                   <td style={{ textAlign: 'center', padding: '7px 12px', color: '#aaa' }}>{v.count}</td>
                   <td style={{ textAlign: 'center', padding: '7px 12px',
-                    color: v.winRate >= 60 ? GREEN : v.winRate >= 40 ? '#ffa500' : RED,
+                    color: v.winRate > 0 ? GREEN : RED,
                     fontWeight: 700 }}>
                     {v.winRate}%
                   </td>

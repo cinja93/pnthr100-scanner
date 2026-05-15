@@ -356,7 +356,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                   <button
                     key={item.key}
                     ref={el => { if (el) btnRefs.current[item.key] = el; }}
-                    className={`${styles.navItem} ${isActive ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
+                    className={`${styles.navItem} ${isActive && !item.aiHighlight && !item.splitHighlight ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
                     style={aiStyle}
                     onClick={() => !item.soon && handleNav(item.key)}
                     disabled={item.soon}

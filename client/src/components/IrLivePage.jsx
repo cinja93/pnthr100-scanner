@@ -130,17 +130,9 @@ function EquityCurveChart({ data, spyData, spyReturn, label, color }) {
           <span style={{ color, fontWeight: 800, fontSize: 13, letterSpacing: '0.03em' }}>{label}</span>
           <span style={{ color: '#666', fontSize: 11, marginLeft: 8 }}>vs S&P 500</span>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-            <img src={pnthrLogo} alt="" style={{ width: 18, height: 18 }} />
-            <span style={{ fontSize: 16, fontWeight: 800, color: retColor(data.totalReturn) }}>{fmtPct(data.totalReturn)}</span>
-          </div>
-          {spyReturn != null && (
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 2, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-              <span style={{ display: 'inline-block', width: 14, borderTop: '2px dashed rgba(255,255,255,0.55)' }} />
-              <span>{fmtPct(spyReturn)}</span>
-            </div>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <img src={pnthrLogo} alt="" style={{ width: 20, height: 20, filter: 'brightness(1.5)' }} />
+          <span style={{ fontSize: 18, fontWeight: 800, color: retColor(data.totalReturn) }}>{fmtPct(data.totalReturn)}</span>
         </div>
       </div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
@@ -150,7 +142,12 @@ function EquityCurveChart({ data, spyData, spyReturn, label, color }) {
             <text x={PAD.l - 6} y={t.y + 4} textAnchor="end" fill="#555" fontSize={10}>{t.label}</text>
           </g>
         ))}
-        {spyPath && <path d={spyPath} fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={1.5} strokeDasharray="4,3" />}
+        {spyPath && <>
+          <path d={spyPath} fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={1.5} strokeDasharray="4,3" />
+          {spyReturn != null && spyEc.length > 1 && (
+            <text x={px(spyEc.length - 1, spyEc.length)} y={py(spyEc[spyEc.length - 1].value) - 8} textAnchor="end" fill="rgba(255,255,255,0.6)" fontSize={10} fontWeight={700}>{fmtPct(spyReturn)}</text>
+          )}
+        </>}
         <path d={fundPath} fill="none" stroke={color} strokeWidth={2} />
         {xTicks.map((p) => {
           const idx = ec.indexOf(p);

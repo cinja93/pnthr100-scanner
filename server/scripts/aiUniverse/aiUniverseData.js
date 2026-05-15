@@ -16,10 +16,10 @@
 
 export const FUND_META = {
   fundName: 'PNTHR AI Universe',
-  fullName: 'PNTHR AI Elite Universe Fund',
-  version: 'v3.2',
+  fullName: 'PNTHR AI Elite 300 Fund',
+  version: 'v3.3',
   date: 'May 2026',
-  totalHoldings: 302,
+  totalHoldings: 303,
   totalSectors: 16,
 };
 

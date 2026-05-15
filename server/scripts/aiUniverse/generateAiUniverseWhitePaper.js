@@ -1,9 +1,9 @@
-// PNTHR AI Universe, White Paper PDF Generator
-// Generates a comprehensive PDF white paper for the PNTHR AI Elite Universe Fund.
+// PNTHR AI Elite 300 Index Members PDF Generator
+// Generates a comprehensive index members PDF for the PNTHR AI Elite 300 Fund.
 // Matches PNTHR Data Room design language (black background, yellow accents, panther logo).
 //
 // Usage: cd server && node scripts/aiUniverse/generateAiUniverseWhitePaper.js
-// Output: ~/Downloads/PNTHR_AI_Universe_White_Paper_v1.0.pdf
+// Output: ~/Downloads/PNTHR_AI_Elite_300_Index_Members_v3.3.pdf
 
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
@@ -17,8 +17,8 @@ const REPO_ROOT = path.resolve(__dirname, '../../../');
 const LOGO_PATH       = path.resolve(REPO_ROOT, 'client/public/pnthr-funds-logo-white-bg.png');
 const PNTHR_HEAD_PATH = path.resolve(REPO_ROOT, 'client/src/assets/panther head.png');
 
-const OUTPUT_DOWNLOADS = path.join(os.homedir(), 'Downloads', `PNTHR_AI_Universe_White_Paper_${FUND_META.version}.pdf`);
-const OUTPUT_REPO      = path.resolve(REPO_ROOT, `PNTHR_AI_Universe_White_Paper_${FUND_META.version}.pdf`);
+const OUTPUT_DOWNLOADS = path.join(os.homedir(), 'Downloads', `PNTHR_AI_Elite_300_Index_Members_${FUND_META.version}.pdf`);
+const OUTPUT_REPO      = path.resolve(REPO_ROOT, `PNTHR_AI_Elite_300_Index_Members_${FUND_META.version}.pdf`);
 
 // ── Brand Colors (match generatePyramidPDF.js) ───────────────────────────────
 const YELLOW  = [252, 240, 0];
@@ -44,9 +44,9 @@ function build() {
     autoFirstPage: false,
     bufferPages: true,
     info: {
-      Title: 'PNTHR AI Universe White Paper',
+      Title: 'PNTHR AI Elite 300 Index Members',
       Author: 'PNTHR Funds',
-      Subject: 'PNTHR AI Elite Universe Fund, Investment Thesis White Paper',
+      Subject: 'PNTHR AI Elite 300 Fund, Index Members',
     }
   });
 
@@ -76,7 +76,7 @@ function build() {
       doc.fontSize(7).font('Helvetica-Bold').fillColor(YELLOW)
          .text('PNTHR FUNDS', LM, 10, { continued: true, lineBreak: false });
       doc.fillColor(LTGRAY).font('Helvetica')
-         .text('  |  PNTHR AI Elite Universe Fund  |  White Paper ' + FUND_META.version, { lineBreak: false });
+         .text('  |  PNTHR AI Elite 300  |  Index Members ' + FUND_META.version, { lineBreak: false });
       doc.fillColor(LTGRAY).fontSize(7).font('Helvetica')
          .text('Page ' + pageNum, LM, 10, { width: CW, align: 'right', lineBreak: false });
     }
@@ -87,7 +87,7 @@ function build() {
     doc.page.margins.bottom = 0;
     doc.moveTo(LM, H - 40).lineTo(RM, H - 40).strokeColor(MDGRAY).lineWidth(0.3).stroke();
     doc.fontSize(6.5).fillColor(LTGRAY);
-    doc.text(`PNTHR FUNDS  -  AI ELITE UNIVERSE FUND  -  CONFIDENTIAL  -  ${FUND_META.date}  -  pnthrfunds.com`,
+    doc.text(`PNTHR FUNDS  -  AI ELITE 300  -  CONFIDENTIAL  -  ${FUND_META.date}  -  pnthrfunds.com`,
              LM, H - 30, { align: 'center', width: CW, lineBreak: false });
     doc.page.margins.bottom = saved;
   }
@@ -133,9 +133,9 @@ function build() {
 
   // Cover title
   doc.fontSize(24).fillColor(YELLOW).font('Helvetica-Bold')
-     .text('The PNTHR AI Elite Universe', LM, COVER_HEADER_H + 30, { width: CW, align: 'center', lineBreak: false });
+     .text('PNTHR AI Elite 300', LM, COVER_HEADER_H + 30, { width: CW, align: 'center', lineBreak: false });
   doc.fontSize(14).fillColor(WHITE).font('Helvetica')
-     .text('Investment Thesis White Paper', LM, COVER_HEADER_H + 64, { width: CW, align: 'center', lineBreak: false });
+     .text('Index Members', LM, COVER_HEADER_H + 64, { width: CW, align: 'center', lineBreak: false });
   doc.fontSize(10).fillColor(LTGRAY).font('Helvetica')
      .text(`${FUND_META.totalHoldings} Holdings  |  ${FUND_META.totalSectors} AI Sub-Sectors  |  ${FUND_META.version}  |  ${FUND_META.date}`,
            LM, COVER_HEADER_H + 86, { width: CW, align: 'center', lineBreak: false });
@@ -149,7 +149,7 @@ function build() {
   fy += 14;
   doc.fontSize(8).fillColor(LTGRAY).font('Helvetica');
   const fundInfo = [
-    ['Fund Name',       'PNTHR AI Elite Universe Fund'],
+    ['Fund Name',       'PNTHR AI Elite 300 Fund'],
     ['Strategy',        'Systematic Long/Short AI-Themed U.S. Equity'],
     ['Universe Size',   `${FUND_META.totalHoldings} curated AI-pure-play U.S.-listed equities`],
     ['Sub-Sectors',     `${FUND_META.totalSectors} thematic AI sub-sectors with target allocations`],
@@ -208,7 +208,7 @@ function build() {
      .text('Past performance is not indicative of future results. See full disclaimers on final page.',
             LM, H - 49, { align: 'center', width: CW, lineBreak: false });
   doc.fontSize(6.5).fillColor(LTGRAY)
-     .text(`PNTHR FUNDS  -  AI ELITE UNIVERSE FUND  -  CONFIDENTIAL  -  ${FUND_META.date}  -  pnthrfunds.com`,
+     .text(`PNTHR FUNDS  -  AI ELITE 300  -  CONFIDENTIAL  -  ${FUND_META.date}  -  pnthrfunds.com`,
             LM, H - 30, { align: 'center', width: CW, lineBreak: false });
   doc.page.margins.bottom = coverSavedBottom;
 
@@ -233,9 +233,9 @@ function build() {
     '',
     'Artificial Intelligence is the single largest capital reallocation event of our lifetimes. Trillions of dollars are being spent on chips, power, networking, data centers, robotics, drugs, drones, and software, and yet most public AI funds capture only the surface layer: the 6 hyperscalers and a handful of semiconductor names.',
     '',
-    'We built the PNTHR AI Elite Universe to fix that.',
+    'We built the PNTHR AI Elite 300 to fix that.',
     '',
-    'This is not an index. It is not equal-weighted. It is not cap-weighted. It is a hand-curated universe of 305 U.S.-listed AI-pure-play and AI-leverage names, organized into 16 sub-sectors that map cleanly to the AI value chain, from sand and silicon, through power and networking, to robots, drugs, and quantum computing.',
+    `This is not an index. It is not equal-weighted. It is not cap-weighted. It is a hand-curated universe of ${FUND_META.totalHoldings} U.S.-listed AI-pure-play and AI-leverage names, organized into 16 sub-sectors that map cleanly to the AI value chain, from sand and silicon, through power and networking, to robots, drugs, and quantum computing.`,
     '',
     'Every name in this universe earned its spot. Every name has a clear AI thesis. Every name is hunted weekly by PNTHR\'s proprietary signal engine, the same multi-timeframe EMA crossover and conviction-scoring system that has powered our flagship Carnivore Quant Fund.',
     '',
@@ -243,7 +243,7 @@ function build() {
     '',
     'We don\'t guess where AI dollars are flowing. We measure it.',
     '',
-    'This white paper documents the universe. The methodology. The thesis behind every holding. It is the most comprehensive AI investment thesis assembled publicly anywhere, three to seven times broader than AIQ, BOTZ, ROBO, IRBO, or ARTY. It is the hunting ground.',
+    'This document maps the universe. The methodology. The thesis behind every holding. It is the most comprehensive AI investment thesis assembled publicly anywhere, three to seven times broader than AIQ, BOTZ, ROBO, IRBO, or ARTY. It is the hunting ground.',
     '',
     'If you\'re going to step into this jungle, get behind the PNTHR. He\'s a killing machine. We got you. Welcome to the hunt.',
     '',
@@ -441,7 +441,7 @@ function build() {
   const methodologyText = [
     'Cap-weighted ETFs let mega-caps dominate at the expense of small-cap conviction. Equal-weighted ETFs reward stagnant names equally with leaders. Fundamentals-weighted indices fail when many AI pure-plays have no earnings to weight against.',
     '',
-    'The PNTHR AI Elite Universe uses a proprietary scoring methodology, the PNTHR Pulse Score, that allocates capital based on technical strength and capital flow, not market capitalization. The result: NVIDIA at score 50 receives less weight than a small-cap optical name at score 95. Strength wins. Size is irrelevant.',
+    'The PNTHR AI Elite 300 uses a proprietary scoring methodology, the PNTHR Pulse Score, that allocates capital based on technical strength and capital flow, not market capitalization. The result: NVIDIA at score 50 receives less weight than a small-cap optical name at score 95. Strength wins. Size is irrelevant.',
     '',
     'The Pulse Score is computed weekly from three components:',
   ];
@@ -510,7 +510,7 @@ function build() {
   const flowText = [
     'PNTHR\'s sector weights are not static. Each weekly rebalance evaluates which AI sub-sectors are RECEIVING capital flow versus stagnating. Heat-mapped sectors get over-weighted within the framework; cold sectors stay at radar levels.',
     '',
-    'As of the publication of this white paper, PNTHR\'s capital flow analysis identifies the following regime:',
+    'As of the publication of this document, PNTHR\'s capital flow analysis identifies the following regime:',
     '',
   ];
   for (const para of flowText) {
@@ -573,7 +573,7 @@ function build() {
     '',
     'NOT INVESTMENT ADVICE. This document does not constitute investment, legal, tax, or accounting advice. Recipients should consult their own advisors regarding any matters discussed herein.',
     '',
-    'AI-THEMATIC CONCENTRATION RISK. The PNTHR AI Elite Universe Fund concentrates investments in companies with material exposure to artificial intelligence. As a thematic concentrated strategy, the Fund will exhibit higher volatility than diversified benchmarks and is subject to AI-specific cyclical risk including: hyperscaler capex deceleration, foundation model commoditization, regulatory restrictions on AI deployment, and geopolitical disruption to AI supply chains (particularly U.S.-China semiconductor relations).',
+    'AI-THEMATIC CONCENTRATION RISK. The PNTHR AI Elite 300 Fund concentrates investments in companies with material exposure to artificial intelligence. As a thematic concentrated strategy, the Fund will exhibit higher volatility than diversified benchmarks and is subject to AI-specific cyclical risk including: hyperscaler capex deceleration, foundation model commoditization, regulatory restrictions on AI deployment, and geopolitical disruption to AI supply chains (particularly U.S.-China semiconductor relations).',
     '',
     'SMALL-CAP & EMERGING TECHNOLOGY RISK. The Universe includes small-capitalization, micro-cap, and emerging-technology companies (including quantum computing, eVTOL aviation, gene editing, and space-based AI). These positions carry elevated volatility, liquidity risk, and potential for significant loss.',
     '',
@@ -581,13 +581,13 @@ function build() {
     '',
     'METHODOLOGY DISCLAIMER. The PNTHR Pulse Score weighting methodology is proprietary and subject to refinement. Target sector allocations represent baseline weights subject to capital-flow tilts. Actual portfolio weights may deviate from documented targets based on real-time signal output and risk management overlays.',
     '',
-    'PAST PERFORMANCE. Past performance is not indicative of future results. The PNTHR AI Elite Universe Fund is a forward-looking strategy with no live track record at time of publication.',
+    'PAST PERFORMANCE. Past performance is not indicative of future results. The PNTHR AI Elite 300 Fund is a forward-looking strategy with no live track record at time of publication.',
     '',
     'FORWARD-LOOKING STATEMENTS. This document contains forward-looking statements about AI market trends, capital flows, and individual company prospects. Such statements involve known and unknown risks, uncertainties, and other factors that may cause actual results to differ materially.',
     '',
     'INDEPENDENT VERIFICATION. Investors should independently verify all information contained in this document, including company descriptions, sector classifications, and AI-thesis claims. PNTHR Funds makes no representation as to the accuracy of third-party information.',
     '',
-    `© ${new Date().getFullYear()} PNTHR Funds. All rights reserved. PNTHR FUNDS™, PNTHR AI Elite Universe™, and PNTHR Pulse Score™ are trademarks of PNTHR Funds.`,
+    `© ${new Date().getFullYear()} PNTHR Funds. All rights reserved. PNTHR FUNDS™, PNTHR AI Elite 300™, and PNTHR Pulse Score™ are trademarks of PNTHR Funds.`,
   ];
   for (const para of disclosures) {
     if (para === '') { y += 4; continue; }
@@ -658,7 +658,7 @@ function build() {
      .text(String(pageRefs.disclosures), LM + 8, ty, { width: CW - 16, align: 'right', lineBreak: false });
 
   doc.end();
-  console.log(`✓ Generated white paper:`);
+  console.log(`✓ Generated PNTHR AI Elite 300 Index Members:`);
   console.log(`  -> ${OUTPUT_DOWNLOADS}`);
   console.log(`  -> ${OUTPUT_REPO}`);
   console.log(`  Total pages: ${pageNum}`);

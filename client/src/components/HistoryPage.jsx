@@ -182,15 +182,49 @@ function EquityCurve({ closed }) {
 
 // ── Metric Card ───────────────────────────────────────────────────────────────
 
-function MetricCard({ label, value, sub, color }) {
+function MetricCard({ label, value, sub, color, info }) {
+  const [showInfo, setShowInfo] = useState(false);
   return (
     <div style={{
       background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
-      padding: '14px 18px', minWidth: 110, flex: '1 1 100px',
+      padding: '14px 18px', minWidth: 110, flex: '1 1 100px', position: 'relative',
     }}>
-      <div style={{ fontSize: 11, color: '#888', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+      <div style={{ fontSize: 11, color: '#888', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 5 }}>
+        {label}
+        {info && (
+          <span
+            onClick={(e) => { e.stopPropagation(); setShowInfo(v => !v); }}
+            style={{ cursor: 'pointer', fontSize: 12, color: 'rgba(255,255,255,0.3)', lineHeight: 1, transition: 'color 0.15s' }}
+            onMouseEnter={e => e.target.style.color = YELLOW}
+            onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.3)'}
+          >ⓘ</span>
+        )}
+      </div>
       <div style={{ fontSize: 22, fontWeight: 800, color: color || '#fff', lineHeight: 1.1 }}>{value ?? '—'}</div>
       {sub && <div style={{ fontSize: 11, color: '#666', marginTop: 3 }}>{sub}</div>}
+      {showInfo && (
+        <div
+          onClick={() => setShowInfo(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 10000,
+            background: 'rgba(0,0,0,0.7)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#1a1a1a', border: `1px solid ${YELLOW}`, borderRadius: 10,
+            padding: '20px 24px', maxWidth: 400, width: '90vw', position: 'relative',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+          }}>
+            <button onClick={() => setShowInfo(false)} style={{
+              position: 'absolute', top: 8, right: 12, background: 'none',
+              border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 16, cursor: 'pointer',
+            }}>✕</button>
+            <div style={{ fontSize: 14, fontWeight: 700, color: YELLOW, marginBottom: 8 }}>{label}</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>{info}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -681,42 +715,58 @@ export default function HistoryPage() {
         {(() => {
           const stats = dataSource === 'orders' ? ordersStats : pyramidStats;
           if (stats) return (<>
-            <MetricCard label="Total Trades"   value={stats.totalTrades} sub={stats.activeTrades > 0 ? `${stats.activeTrades} active` : 'all closed'} />
-            <MetricCard label="Win Rate"       value={`${stats.winRate}%`}
+            <MetricCard label="Total Trades" value={stats.totalTrades} sub={stats.activeTrades > 0 ? `${stats.activeTrades} active` : 'all closed'}
+              info="Total number of stocks that have entered the Kill 10 tracking system, including both closed and currently active trades. Each trade simulates the full PNTHR 5-lot pyramid strategy (35/25/20/12/8% allocation) scaled to your selected NAV." />
+            <MetricCard label="Win Rate" value={`${stats.winRate}%`}
               color={stats.winRate >= 60 ? GREEN : stats.winRate >= 40 ? YELLOW : '#fff'}
-              sub={`${stats.closedTrades} closed`} />
+              sub={`${stats.closedTrades} closed`}
+              info="Percentage of closed trades that finished with a profit. In trend-following, win rates of 30–45% are normal and healthy — the strategy profits by making winners much larger than losers, not by winning often. Don't judge this number in isolation; pair it with Win/Loss Ratio and Profit Factor to see the full picture." />
             <MetricCard label="Win/Loss Ratio"
               value={stats.winLossRatio === 999 ? '∞' : stats.winLossRatio > 0 ? `${stats.winLossRatio}x` : '—'}
               sub="avg win ÷ avg loss"
-              color={stats.winLossRatio >= 3 ? GREEN : stats.winLossRatio >= 1.5 ? YELLOW : '#fff'} />
+              color={stats.winLossRatio >= 3 ? GREEN : stats.winLossRatio >= 1.5 ? YELLOW : '#fff'}
+              info="How much bigger the average winning trade is compared to the average losing trade. A 3x ratio means winners are 3 times the size of losers. This is the core advantage of the PNTHR pyramid — losers get stopped early (small loss), while winners keep adding lots and running (large gain). Above 2x is strong; above 3x is excellent for trend-following." />
             <MetricCard label="Expectancy"
               value={stats.expectancy != null ? `${stats.expectancy >= 0 ? '+' : ''}$${Math.abs(stats.expectancy).toLocaleString()}` : '—'}
               sub="avg $/trade"
-              color={stats.expectancy > 0 ? GREEN : stats.expectancy < 0 ? RED : '#fff'} />
-            <MetricCard label="Total P&L"      value={fmtP(stats.totalPnl)}
+              color={stats.expectancy > 0 ? GREEN : stats.expectancy < 0 ? RED : '#fff'}
+              info="The average dollar amount you can expect to make per trade over time. Formula: (win rate × avg win) − (loss rate × avg loss). Positive expectancy means the strategy has a mathematical edge. Even with a low win rate, if your winners are large enough relative to your losers, every trade you take has a positive expected value. This is the single most important number for evaluating any trading system." />
+            <MetricCard label="Total P&L" value={fmtP(stats.totalPnl)}
               sub={dataSource === 'orders' ? '$10K/position pyramid' : `at ${fmtNav(nav)} NAV`}
-              color={stats.totalPnl >= 0 ? GREEN : RED} />
+              color={stats.totalPnl >= 0 ? GREEN : RED}
+              info="Cumulative dollar profit or loss across all closed trades, scaled to your selected NAV using the full 5-lot pyramid sizing. This number changes as you adjust the NAV selector — a $1M NAV will show proportionally larger P&L than $100K because position sizes scale with account size." />
             <MetricCard label="Profit Factor"
               value={stats.profitFactor === 999 ? '∞' : stats.profitFactor > 0 ? `${stats.profitFactor}x` : '—'}
               sub={stats.profitFactor === 999 ? 'No losses yet' : undefined}
-              color={stats.profitFactor >= 2 || stats.profitFactor === 999 ? GREEN : stats.profitFactor >= 1 ? '#ffa500' : RED} />
-            <MetricCard label="Avg Win"        value={fmtP(stats.avgWinDollar)} color={GREEN} />
-            <MetricCard label="Avg Loss"       value={fmtP(stats.avgLossDollar)} color={RED} />
-            {stats.activeTrades > 0 && <MetricCard label="Active Now" value={stats.activeTrades} color={YELLOW} />}
+              color={stats.profitFactor >= 2 || stats.profitFactor === 999 ? GREEN : stats.profitFactor >= 1 ? '#ffa500' : RED}
+              info="Total gross profits divided by total gross losses. A profit factor above 1.0 means the strategy is profitable overall. Above 1.5 is good, above 2.0 is strong, and above 3.0 is exceptional. Unlike win rate, profit factor captures both the frequency AND the magnitude of wins vs losses — it's the complete picture in one number." />
+            <MetricCard label="Avg Win" value={fmtP(stats.avgWinDollar)} color={GREEN}
+              info="Average dollar profit on winning trades. In the PNTHR pyramid strategy, winning trades tend to be large because they accumulate multiple lots (up to 5) as the stock moves in your favor. The pyramid adds size into strength, so a winner that fills all 5 lots generates a much larger gain than a single-lot trade." />
+            <MetricCard label="Avg Loss" value={fmtP(stats.avgLossDollar)} color={RED}
+              info="Average dollar loss on losing trades. Losses should be relatively small and consistent because the stop loss caps downside on every trade. Most losers only fill Lot 1 (35% of max position) before getting stopped out, which limits the damage. Compare this to Avg Win — the bigger the gap, the stronger the strategy's edge." />
+            {stats.activeTrades > 0 && <MetricCard label="Active Now" value={stats.activeTrades} color={YELLOW}
+              info="Number of trades currently open and being tracked by the Kill 10 simulation. These positions entered the top 10 Kill rankings, triggered a pyramid entry, and have not yet hit their stop or exit condition. Active trades have unrealized P&L that is not included in the closed-trade statistics above." />}
           </>);
           // Fallback for Kill 10 when no pyramid sim data
           return (<>
-            <MetricCard label="Total Trades"   value={tr.totalTrades ?? 0} sub={`${tr.activeTrades ?? 0} active`} />
-            <MetricCard label="Win Rate"       value={tr.closedTrades > 0 ? `${tr.winRate}%` : '—'}
-              color={tr.winRate >= 60 ? GREEN : tr.winRate >= 40 ? '#ffa500' : RED} />
-            <MetricCard label="Avg Win"        value={tr.avgWinPct != null ? fmt(tr.avgWinPct) : '—'} color={GREEN} />
-            <MetricCard label="Avg Loss"       value={tr.avgLossPct != null ? fmt(tr.avgLossPct) : '—'} color={RED} />
+            <MetricCard label="Total Trades" value={tr.totalTrades ?? 0} sub={`${tr.activeTrades ?? 0} active`}
+              info="Total number of stocks tracked by the Kill 10 system, including both closed and currently active trades." />
+            <MetricCard label="Win Rate" value={tr.closedTrades > 0 ? `${tr.winRate}%` : '—'}
+              color={tr.winRate >= 60 ? GREEN : tr.winRate >= 40 ? '#ffa500' : RED}
+              info="Percentage of closed trades that finished with a profit. In trend-following, win rates of 30–45% are normal — the strategy profits by making winners much larger than losers." />
+            <MetricCard label="Avg Win" value={tr.avgWinPct != null ? fmt(tr.avgWinPct) : '—'} color={GREEN}
+              info="Average percentage gain on winning trades. Compare this to Avg Loss — the bigger the gap, the stronger the strategy's edge." />
+            <MetricCard label="Avg Loss" value={tr.avgLossPct != null ? fmt(tr.avgLossPct) : '—'} color={RED}
+              info="Average percentage loss on losing trades. Losses should be small and consistent because the stop loss caps downside." />
             <MetricCard label="Profit Factor"
               value={tr.profitFactor === 999 ? '∞' : tr.profitFactor > 0 ? `${tr.profitFactor}x` : '—'}
               sub={tr.profitFactor === 999 ? 'No losses yet' : undefined}
-              color={tr.profitFactor >= 2 || tr.profitFactor === 999 ? GREEN : tr.profitFactor >= 1 ? '#ffa500' : RED} />
-            <MetricCard label="Active Now"     value={tr.activeTrades ?? 0} color={YELLOW} />
-            <MetricCard label="Avg Hold"       value={tr.avgHoldingWeeks > 0 ? `${tr.avgHoldingWeeks}w` : '—'} />
+              color={tr.profitFactor >= 2 || tr.profitFactor === 999 ? GREEN : tr.profitFactor >= 1 ? '#ffa500' : RED}
+              info="Total gross profits divided by total gross losses. Above 1.0 means profitable. Above 2.0 is strong. Above 3.0 is exceptional." />
+            <MetricCard label="Active Now" value={tr.activeTrades ?? 0} color={YELLOW}
+              info="Number of trades currently open. These have unrealized P&L not reflected in the closed-trade statistics." />
+            <MetricCard label="Avg Hold" value={tr.avgHoldingWeeks > 0 ? `${tr.avgHoldingWeeks}w` : '—'}
+              info="Average number of weeks trades were held before closing. Longer holds in a trend-following system generally mean the stock trended well before eventually hitting a stop." />
           </>);
         })()}
       </div>

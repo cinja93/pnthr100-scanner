@@ -211,14 +211,25 @@ function PnlCell({ pct, dollar, isOpen }) {
 }
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, color, dollar, barPct, barCap, barColor }) {
+function StatCard({ label, value, sub, color, dollar, barPct, barCap, barColor, info }) {
+  const [showInfo, setShowInfo] = useState(false);
   const filled = barPct != null && barCap != null ? Math.min(barPct / barCap * 100, 100) : null;
   return (
     <div style={{
       background: BG3, border: `1px solid ${BORDER}`, borderRadius: 8,
-      padding: '14px 18px', flex: '1 1 110px', minWidth: 110,
+      padding: '14px 18px', flex: '1 1 110px', minWidth: 110, position: 'relative',
     }}>
-      <div style={{ fontSize: 10, color: DIM, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</div>
+      <div style={{ fontSize: 10, color: DIM, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.07em', display: 'flex', alignItems: 'center', gap: 5 }}>
+        {label}
+        {info && (
+          <span
+            onClick={(e) => { e.stopPropagation(); setShowInfo(v => !v); }}
+            style={{ cursor: 'pointer', fontSize: 12, color: 'rgba(255,255,255,0.3)', lineHeight: 1, transition: 'color 0.15s' }}
+            onMouseEnter={e => e.target.style.color = Y}
+            onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.3)'}
+          >ⓘ</span>
+        )}
+      </div>
       <div style={{ fontSize: 22, fontWeight: 800, color: color || '#fff', lineHeight: 1.1 }}>{value ?? '—'}</div>
       {dollar != null && <div style={{ fontSize: 12, color: dollar > 0 ? '#4fc870' : dollar < 0 ? '#e06060' : DIM, marginTop: 2, fontWeight: 600 }}>{fmtDollar(dollar)}</div>}
       {filled != null && (
@@ -227,6 +238,29 @@ function StatCard({ label, value, sub, color, dollar, barPct, barCap, barColor }
         </div>
       )}
       {sub && <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>{sub}</div>}
+      {showInfo && (
+        <div
+          onClick={() => setShowInfo(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 10000,
+            background: 'rgba(0,0,0,0.7)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#1a1a1a', border: `1px solid ${Y}`, borderRadius: 10,
+            padding: '20px 24px', maxWidth: 400, width: '90vw', position: 'relative',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+          }}>
+            <button onClick={() => setShowInfo(false)} style={{
+              position: 'absolute', top: 8, right: 12, background: 'none',
+              border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 16, cursor: 'pointer',
+            }}>✕</button>
+            <div style={{ fontSize: 14, fontWeight: 700, color: Y, marginBottom: 8 }}>{label}</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>{info}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1359,21 +1393,28 @@ export default function KillTestPage() {
           value={nav > 0 ? `${stats.netPnl >= 0 ? '+' : ''}${(stats.netPnl / nav * 100).toFixed(2)}%` : '—'}
           color={stats.netPnl > 0 ? GREEN : stats.netPnl < 0 ? RED : '#fff'}
           sub="realized + unrealized"
+          info="Total return on the simulated portfolio as a percentage of NAV. Combines profits and losses from closed (stopped-out) trades with the current estimated value of all open positions. This is the single best measure of how the Kill Test strategy is performing overall."
         />
         <StatCard
           label="Net P&L"
           value={`${stats.netPnl >= 0 ? '+' : ''}$${Math.abs(stats.netPnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
           color={stats.netPnl > 0 ? GREEN : stats.netPnl < 0 ? RED : '#fff'}
           sub={`realized $${Math.abs(stats.totalPnlDollar).toFixed(0)} · open $${Math.abs(stats.activeDollarPnl).toFixed(0)}`}
+          info="Total dollar profit or loss across all trades. Breaks down into 'realized' (locked in from stopped-out trades) and 'open' (estimated from current prices of active positions). In a trend-following strategy, realized P&L is often negative because stopped-out trades are the cost of doing business — the open P&L from winners that are still running is where the profit lives."
         />
         <StatCard
           label="Open Win Rate"
           value={stats.openWinRate != null ? `${stats.openWinRate}%` : '—'}
           color={stats.openWinRate >= 60 ? GREEN : stats.openWinRate >= 40 ? ORANGE : stats.openWinRate != null ? '#fff' : '#aaa'}
           sub={`${active.length} open positions`}
+          info="Percentage of currently open positions that are in profit right now. This is far more meaningful than closed-trade win rate for a trend-following pyramid strategy, because winners stay open and keep running while losers get stopped out quickly. A high open win rate means the strategy is successfully holding onto its winners."
         />
-        <StatCard label="Active"      value={active.length}  sub="open appearances" />
-        <StatCard label="Stopped Out"  value={closed.length}  sub="closed at stop" color={ORANGE} />
+        <StatCard label="Active" value={active.length} sub="open appearances"
+          info="Number of stocks currently being tracked in the Kill Test. These are positions that qualified (Kill > 100, Analyze > 80%, Composite > 75) and have not yet been stopped out. Each active appearance is simulating the full 5-lot pyramid with lot fills checked daily."
+        />
+        <StatCard label="Stopped Out" value={closed.length} sub="closed at stop" color={ORANGE}
+          info="Number of trades that have been closed by hitting their stop loss. In a trend-following system, most individual trades will be stopped out — that is by design. The strategy wins by making more on its winners than it loses on its losers, not by having a high win rate. Think of stopped-out trades as the cost of finding the big winners."
+        />
         <StatCard
           label="Portfolio Heat"
           value={portfolioHeat != null ? `${portfolioHeat.pct}%` : '—'}
@@ -1395,18 +1436,21 @@ export default function KillTestPage() {
             : portfolioHeat.pct >= portfolioHeat.cap * 0.7 ? ORANGE
             : GREEN
           }
+          info="How much of the portfolio is at risk right now if every open position hit its stop simultaneously. Calculated as the sum of actual dollar risk across all active positions (based on filled lots and current stop distances) divided by NAV. The progress bar shows how close heat is to the portfolio risk cap. Green is healthy, orange is elevated, red means near the cap."
         />
         <StatCard
           label="Expectancy"
           value={stats.expectancy != null ? `${stats.expectancy >= 0 ? '+' : ''}$${Math.abs(stats.expectancy)}` : '—'}
           color={stats.expectancy > 0 ? GREEN : stats.expectancy < 0 ? RED : '#fff'}
           sub="avg $/trade (closed)"
+          info="The average dollar amount you can expect to make (or lose) per trade, calculated from closed trades only. Formula: (win rate × average win) − (loss rate × average loss). Positive expectancy means the strategy has an edge — even if most trades lose, the winners more than pay for the losers. This is the defining metric of any trend-following system."
         />
         <StatCard
           label="Avg Risk/Trade"
           value={stats.avgRisk != null ? `${stats.avgRisk}%` : '—'}
           color={ORANGE}
           sub="entry→stop distance"
+          info="Average percentage distance between entry price and initial stop loss across all active positions. This tells you how much room each trade has before it gets stopped out. A tighter stop means less risk per trade but more frequent stop-outs; a wider stop means fewer stop-outs but larger losses when they happen. The 5-lot pyramid spreads risk across multiple entry points."
         />
       </div>
 

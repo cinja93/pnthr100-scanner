@@ -296,7 +296,7 @@ export default function HistoryPage() {
   const [sortClosed,  setSortClosed]  = useState({ col: 'exitDate', dir: -1 });
   const [sortActive,  setSortActive]  = useState({ col: 'entryRank', dir: 1 });
   const [tab,         setTab]         = useState('active');
-  const [fund,        setFund]        = useState('679'); // '679' | 'ai300'
+  const [fund,        setFund]        = useState('ai300'); // '679' | 'ai300'
   const [dataSource,  setDataSource]  = useState('kill10'); // 'kill10' | 'orders'
   const [ordersData,  setOrdersData]  = useState(null);
   const [ordersLoading, setOrdersLoading] = useState(false);

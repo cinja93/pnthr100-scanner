@@ -1012,7 +1012,7 @@ function MonthlyTable({ rows, settings }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function KillTestPage() {
-  const [fund,          setFund]          = useState('679'); // '679' | 'ai300'
+  const [fund,          setFund]          = useState('ai300'); // '679' | 'ai300'
   const [data,          setData]          = useState([]);
   const [settings,      setSettings]      = useState(null);
   const [monthly,       setMonthly]       = useState([]);

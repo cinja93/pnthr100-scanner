@@ -312,11 +312,12 @@ export async function ai300KillHistoryGetTrackRecord(req, res) {
 export async function updateAi300KillAppearances(db, aiKillDoc, aiSignalData, settings) {
   if (!aiKillDoc?.scores?.length) return;
 
-  const threshold = settings?.killThreshold ?? 80;
+  const threshold = settings?.killThreshold ?? 130;
+  const maxRank   = settings?.maxRank ?? 5;
   const today = getToday();
   const col = db.collection('pnthr_ai300_kill_appearances');
 
-  const qualifying = aiKillDoc.scores.filter(s => s.total >= threshold && s.signal);
+  const qualifying = aiKillDoc.scores.filter(s => s.total >= threshold && s.signal && s.killRank <= maxRank);
 
   let created = 0, updated = 0;
   for (const stock of qualifying) {

@@ -13,7 +13,8 @@ export const AI300_KT_DEFAULTS = {
   portfolioRiskCap: 10,
   sweepRate:        4.83,
   riskFreeRate:     4.50,
-  killThreshold:    80,  // AI Kill score minimum for appearances (HUNTING+)
+  killThreshold:    130, // AI Kill score minimum for appearances
+  maxRank:          5,   // Only top N ranked stocks qualify
 };
 
 export async function getAi300KillTestSettings() {
@@ -30,7 +31,7 @@ export async function getAi300KillTestSettings() {
 
 export async function saveAi300KillTestSettings(updates) {
   const db      = await connectToDatabase();
-  const allowed = ['nav', 'riskPctPerTrade', 'portfolioRiskCap', 'sweepRate', 'riskFreeRate', 'killThreshold'];
+  const allowed = ['nav', 'riskPctPerTrade', 'portfolioRiskCap', 'sweepRate', 'riskFreeRate', 'killThreshold', 'maxRank'];
   const patch   = {};
   for (const k of allowed) {
     if (updates[k] != null && !isNaN(+updates[k])) patch[k] = +updates[k];

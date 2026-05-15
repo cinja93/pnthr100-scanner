@@ -776,13 +776,12 @@ export default function IrLivePage() {
             <div>
               {/* Risk metrics cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 24 }}>
-                <MetricCard small label="Max Drawdown (Net)" value={fmtPct(net?.maxDD)} color={RED} />
-                <MetricCard small label="Max Drawdown (Gross)" value={fmtPct(gross?.maxDD)} color={RED} />
-                <MetricCard small label="Ulcer Index" value={fmt(net?.ulcerIndex)} />
-                <MetricCard small label="Time Under Water" value={`${fmt(net?.timeUnderWater, 1)}%`} />
                 <MetricCard small label="Best Month" value={net?.bestMonth ? `${fmtPct(net.bestMonth.ret)}` : '—'} color={GREEN} sub={net?.bestMonth?.m} />
                 <MetricCard small label="Worst Month" value={net?.worstMonth ? `${fmtPct(net.worstMonth.ret)}` : '—'} color={RED} sub={net?.worstMonth?.m} />
-                <MetricCard small label="Avg Monthly Return" value={`${fmt(net?.avgMonthlyReturn)}%`} />
+                <MetricCard small label="Max Drawdown (Net)" value={fmtPct(net?.maxDD)} color={RED} />
+                <MetricCard small label="Max Drawdown (Gross)" value={fmtPct(gross?.maxDD)} color={RED} />
+                <MetricCard small label="Ulcer Index" value={fmt(net?.ulcerIndex)} sub="Moderate volatility" />
+                <MetricCard small label="Avg Monthly Return" value={`${fmt(net?.avgMonthlyReturn)}%`} color={GREEN} />
                 <MetricCard small label="Monthly Std Dev" value={`${fmt(net?.monthlyStdDev)}%`} />
               </div>
 

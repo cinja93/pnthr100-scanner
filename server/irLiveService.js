@@ -59,7 +59,8 @@ function computeMaxDD(equity, dates) {
       }
     }
   }
-  return { maxDD: maxDD * 100, maxDDStart, maxDDTrough, recoveryDate, maxDDDays: recoveryDate ? Math.round(daysBetween(maxDDStart, recoveryDate)) : 0 };
+  const lastDate = dates[dates.length - 1];
+  return { maxDD: maxDD * 100, maxDDStart, maxDDTrough, recoveryDate, maxDDDays: Math.round(daysBetween(maxDDStart, recoveryDate || lastDate)) };
 }
 
 function computeUlcerIndex(equity) {

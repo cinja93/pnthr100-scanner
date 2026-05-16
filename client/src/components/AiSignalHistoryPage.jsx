@@ -513,14 +513,12 @@ function SignalArchiveTab({ weeks, onWeeksChange }) {
                   <tr>
                     <th>Ticker</th><th>Signal</th><th>Signal Date</th><th>EMA</th>
                     <th>Stop Price</th><th>New</th>
-                    <th style={{ color: '#D4A017' }}>Score Δ</th>
+                    <th>Lots</th>
                     <th>Profit $</th><th>Profit %</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRows.map(r => {
-                    const enriched = enrichedMap[r.ticker];
-                    const scoreDelta = enriched?.scoreDelta ?? null;
                     return (
                       <tr key={r.ticker} className={styles.row}>
                         <td>
@@ -531,8 +529,8 @@ function SignalArchiveTab({ weeks, onWeeksChange }) {
                         <td>{r.ema21 != null ? r.ema21.toFixed(2) : '—'}</td>
                         <td>{r.stopPrice != null ? `$${r.stopPrice.toFixed(2)}` : '—'}</td>
                         <td>{r.isNewSignal ? <span className={styles.newDot}>NEW</span> : '—'}</td>
-                        <td style={{ color: scoreDelta == null ? '#4a4a4a' : scoreDelta > 0 ? '#50d080' : scoreDelta < 0 ? '#ff6060' : '#7a7a7a', fontWeight: 600, fontSize: 11 }}>
-                          {scoreDelta != null ? `${scoreDelta > 0 ? '+' : ''}${scoreDelta.toFixed(1)}` : '—'}
+                        <td style={{ fontWeight: 600, fontSize: 11, color: r.lotsFilled != null ? '#D4A017' : '#4a4a4a' }}>
+                          {r.lotsFilled != null ? `${r.lotsFilled}/5` : '—'}
                         </td>
                         <td className={r.profitDollar > 0 ? styles.pos : r.profitDollar < 0 ? styles.neg : ''}>
                           {r.profitDollar != null ? `${r.profitDollar > 0 ? '+' : ''}$${r.profitDollar.toFixed(2)}` : '—'}

@@ -289,10 +289,11 @@ export default function InvestorManagementPage() {
   );
 }
 
-function InlinePageEditor({ allowedPages, allowedDocIds, onSave }) {
+function InlinePageEditor({ investorId, allowedPages, allowedDocIds, onSave }) {
   const [pages, setPages] = useState(allowedPages);
   const [docIds, setDocIds] = useState(allowedDocIds || []);
   const [saving, setSaving] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   function handlePagesChange(newPages) {
@@ -317,18 +318,48 @@ function InlinePageEditor({ allowedPages, allowedDocIds, onSave }) {
     }
   }
 
+  async function handlePreview() {
+    setPreviewing(true);
+    try {
+      if (dirty) {
+        await onSave(pages, docIds);
+        setDirty(false);
+      }
+      const res = await fetch(`${API_BASE}/api/investors/${investorId}/preview-token`, {
+        method: 'POST', headers: authHeaders(),
+      });
+      if (!res.ok) throw new Error('Failed to generate preview token');
+      const { token } = await res.json();
+      const url = `${window.location.origin}/?portal=investor&preview_token=${token}`;
+      window.open(url, '_blank', 'noopener');
+    } catch (err) {
+      alert('Preview failed: ' + err.message);
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
   return (
     <div style={{ borderTop: '1px solid #222', padding: '12px 18px', background: '#0f0f0f' }}>
       <PagePermissionsSelector selected={pages} onChange={handlePagesChange} docIds={docIds} onDocIdsChange={handleDocIdsChange} />
-      {dirty && (
-        <button onClick={handleSave} disabled={saving} style={{
-          marginTop: 8, padding: '6px 16px', background: '#FCF000', color: '#000',
-          fontWeight: 700, fontSize: 11, border: 'none', borderRadius: 4,
-          cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.5 : 1,
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        {dirty && (
+          <button onClick={handleSave} disabled={saving} style={{
+            padding: '6px 16px', background: '#FCF000', color: '#000',
+            fontWeight: 700, fontSize: 11, border: 'none', borderRadius: 4,
+            cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.5 : 1,
+          }}>
+            {saving ? 'Saving...' : 'Save Pages'}
+          </button>
+        )}
+        <button onClick={handlePreview} disabled={previewing || saving} style={{
+          padding: '6px 16px', background: 'none', border: '1px solid #FCF000', color: '#FCF000',
+          fontWeight: 700, fontSize: 11, borderRadius: 4,
+          cursor: (previewing || saving) ? 'default' : 'pointer', opacity: (previewing || saving) ? 0.5 : 1,
         }}>
-          {saving ? 'Saving...' : 'Save Pages'}
+          {previewing ? 'Opening...' : '👀 Preview as Investor'}
         </button>
-      )}
+      </div>
     </div>
   );
 }
@@ -529,6 +560,7 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
       {/* ── Pages section ── */}
       {pagesOpen && (
         <InlinePageEditor
+          investorId={inv._id}
           allowedPages={inv.allowedPages || PORTAL_PAGES.investor}
           allowedDocIds={inv.allowedDocIds || []}
           onSave={async (pages, docIds) => {

@@ -143,6 +143,22 @@ investorAdminRouter.get('/:id/activity', async (req, res) => {
   }
 });
 
+// POST /api/investors/:id/preview-token — generate a short-lived token for admin preview
+investorAdminRouter.post('/:id/preview-token', async (req, res) => {
+  try {
+    const investor = await findInvestorById(req.params.id);
+    if (!investor) return res.status(404).json({ error: 'Investor not found' });
+    const token = jwt.sign(
+      { userId: investor._id.toString(), email: investor.email, role: 'investor', source: 'den_investors' },
+      JWT_SECRET,
+      { expiresIn: '30m' },
+    );
+    res.json({ token });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/investors/:id/reset-logins — reset login count to 0
 investorAdminRouter.post('/:id/reset-logins', async (req, res) => {
   try {

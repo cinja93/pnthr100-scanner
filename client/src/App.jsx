@@ -149,14 +149,24 @@ function AppAuth() {
       setCurrentUser(null);
     });
 
-    const token = getImpersonationToken() || localStorage.getItem('pnthr_token');
+    // Check for admin preview token in URL (from "Preview as Investor" button)
+    const urlParams = new URLSearchParams(window.location.search);
+    const previewToken = urlParams.get('preview_token');
+    if (previewToken) {
+      window.sessionStorage.setItem('pnthr_preview_token', previewToken);
+      urlParams.delete('preview_token');
+      window.history.replaceState({}, '', `${window.location.pathname}?${urlParams.toString()}`);
+    }
+
+    const token = window.sessionStorage.getItem('pnthr_preview_token') || getImpersonationToken() || localStorage.getItem('pnthr_token');
     if (!token) { setAuthLoading(false); return; }
     setAuthToken(token);
 
     // Investor tokens use a different profile endpoint.
     // However, if an admin is previewing via ?portal=investor, their regular
     // JWT should still go through the normal profile endpoint.
-    const profileFetch = isInvestorPortal
+    const isPreviewSession = !!window.sessionStorage.getItem('pnthr_preview_token');
+    const profileFetch = (isInvestorPortal || isPreviewSession)
       ? fetchInvestorProfile().then(p => ({ ...p, role: 'investor' })).catch(() => fetchUserProfile())
       : fetchUserProfile();
 

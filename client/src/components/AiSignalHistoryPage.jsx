@@ -303,6 +303,8 @@ function SignalArchiveTab({ weeks, onWeeksChange }) {
 
   const [filterSignal, setFilterSignal] = useState('all');
   const [search, setSearch]             = useState('');
+  const [sortCol, setSortCol]           = useState(null);
+  const [sortDir, setSortDir]           = useState(1);
 
   const [marketSnapshots, setMarketSnapshots] = useState({});
 
@@ -385,12 +387,26 @@ function SignalArchiveTab({ weeks, onWeeksChange }) {
   }, [weekData]);
 
   const filteredRows = useMemo(() => {
-    return weekData.filter(r => {
+    const rows = weekData.filter(r => {
       if (filterSignal !== 'all' && r.signal !== filterSignal) return false;
       if (search && !r.ticker.includes(search.toUpperCase())) return false;
       return true;
     });
-  }, [weekData, filterSignal, search]);
+    if (!sortCol) return rows;
+    return [...rows].sort((a, b) => {
+      let av = a[sortCol], bv = b[sortCol];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'string') return av.localeCompare(bv) * sortDir;
+      return (av - bv) * sortDir;
+    });
+  }, [weekData, filterSignal, search, sortCol, sortDir]);
+
+  const handleSort = (col) => {
+    if (sortCol === col) setSortDir(d => d * -1);
+    else { setSortCol(col); setSortDir(col === 'ticker' ? 1 : -1); }
+  };
 
   const weekSnapshot = selectedWeek ? marketSnapshots[selectedWeek] : null;
 
@@ -511,10 +527,22 @@ function SignalArchiveTab({ weeks, onWeeksChange }) {
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>Ticker</th><th>Signal</th><th>Signal Date</th><th>EMA</th>
-                    <th>Stop Price</th><th>New</th>
-                    <th>Lots</th>
-                    <th>Profit $</th><th>Profit %</th><th></th>
+                    {[
+                      { key: 'ticker', label: 'Ticker' },
+                      { key: 'signal', label: 'Signal' },
+                      { key: 'signalDate', label: 'Signal Date' },
+                      { key: 'ema21', label: 'EMA' },
+                      { key: 'stopPrice', label: 'Stop Price' },
+                      { key: 'isNewSignal', label: 'New' },
+                      { key: 'lotsFilled', label: 'Lots' },
+                      { key: 'profitDollar', label: 'Profit $' },
+                      { key: 'profitPct', label: 'Profit %' },
+                    ].map(c => (
+                      <th key={c.key} onClick={() => handleSort(c.key)} style={{ cursor: 'pointer', userSelect: 'none', color: sortCol === c.key ? '#D4A017' : undefined }}>
+                        {c.label} {sortCol === c.key ? (sortDir > 0 ? '▲' : '▼') : ''}
+                      </th>
+                    ))}
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>

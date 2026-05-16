@@ -321,7 +321,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         <div className={styles.appName}>
           <span className={styles.appNameYellow}>PNTHR</span>{' '}
           <span className={styles.appNameWhite}>
-            {isDenPortal ? 'Den' : isInvestorPortal ? 'Investor' : "s Den"}
+            {isDenPortal ? "'s Den" : isInvestorPortal ? 'Investor' : "'s Den"}
           </span>
         </div>
         {!isPortalMode && (
@@ -329,6 +329,16 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
             {isDemo ? `Dv${APP_VERSION}` : `v${APP_VERSION}`}
           </div>
         )}
+        <button
+          onClick={onLogout}
+          style={{
+            background: 'none', border: '1px solid #333', color: '#666',
+            borderRadius: 4, padding: '3px 10px', fontSize: 9, cursor: 'pointer',
+            letterSpacing: '0.04em', marginTop: 6,
+          }}
+        >
+          SIGN OUT
+        </button>
       </div>
 
       {/* Navigation groups */}

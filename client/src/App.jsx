@@ -15,6 +15,7 @@ import QueueReviewPanel from './components/QueueReviewPanel';
 import InvestorLoginPage from './components/InvestorLoginPage';
 import InvestmentAmountModal from './components/InvestmentAmountModal';
 import InvestorWelcomeModal from './components/InvestorWelcomeModal';
+import SplashScreen from './components/SplashScreen';
 import StockTable from './components/StockTable';
 import ChartModal from './components/ChartModal';
 import FilterBar from './components/FilterBar';
@@ -134,6 +135,7 @@ function AppAuth() {
   const [currentUser, setCurrentUser] = useState(null); // { email, role, accountSize, defaultPage }
   const [authLoading, setAuthLoading] = useState(true);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [showSplash, setShowSplash] = useState(false);
 
   // On mount: validate stored token + register 401 interceptor for expired sessions
   useEffect(() => {
@@ -192,7 +194,9 @@ function AppAuth() {
     const acctSize = role === 'investor'
       ? (profile?.investmentAmount ?? null)
       : (profile?.accountSize ?? null);
-    setCurrentUser({ email, role, accountSize: acctSize, defaultPage: profile?.defaultPage ?? 'long', name: profile?.name ?? null, company: profile?.company ?? null, investmentAmount: profile?.investmentAmount ?? null, loginCount: profile?.loginCount ?? null, maxLogins: profile?.maxLogins ?? 5, allowedPages: profile?.allowedPages ?? null });
+    localStorage.setItem('pnthr_page', 'apex');
+    setCurrentUser({ email, role, accountSize: acctSize, defaultPage: 'apex', name: profile?.name ?? null, company: profile?.company ?? null, investmentAmount: profile?.investmentAmount ?? null, loginCount: profile?.loginCount ?? null, maxLogins: profile?.maxLogins ?? 5, allowedPages: profile?.allowedPages ?? null });
+    setShowSplash(true);
     if (role === 'investor') setShowWelcome(true);
   }
 
@@ -230,14 +234,17 @@ function AppAuth() {
       <DemoProvider>
         <AnalyzeProvider>
           <QueueProvider>
-            {showWelcome && isInvestor && (
+            {showSplash && (
+              <SplashScreen onComplete={() => setShowSplash(false)} />
+            )}
+            {!showSplash && showWelcome && isInvestor && (
               <InvestorWelcomeModal
                 loginCount={currentUser?.loginCount}
                 maxLogins={currentUser?.maxLogins}
                 onClose={() => setShowWelcome(false)}
               />
             )}
-            {!showWelcome && needsAmountSelection && (
+            {!showSplash && !showWelcome && needsAmountSelection && (
               <InvestmentAmountModal
                 currentAmount={currentUser?.investmentAmount}
                 onSaved={handleAmountSaved}

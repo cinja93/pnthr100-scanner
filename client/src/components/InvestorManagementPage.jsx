@@ -487,7 +487,7 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
   return (
     <div style={{ background: '#141414', border: '1px solid #222', borderRadius: 8, overflow: 'hidden' }}>
       {/* ── Header row ── */}
-      <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{inv.name}</span>

@@ -17,8 +17,8 @@ export default function SplashScreen({ onComplete }) {
 
   useEffect(() => {
     const t0 = setTimeout(() => setPhase(1), 1500);
-    const t1 = setTimeout(() => setPhase(2), 6000);
-    const t2 = setTimeout(() => setPhase(3), 7000);
+    const t1 = setTimeout(() => setPhase(2), 11500);
+    const t2 = setTimeout(() => setPhase(3), 12500);
 
     // Typewriter: reveal one char every 70ms starting at phase 3
     let typeTimer;
@@ -29,10 +29,10 @@ export default function SplashScreen({ onComplete }) {
         setCharCount(i);
         if (i >= WELCOME_TEXT.length) clearInterval(typeTimer);
       }, 70);
-    }, 7000);
+    }, 12500);
 
     // Roar after typewriter finishes (~7s + 26chars × 70ms ≈ 8.8s)
-    const roarTime = 7000 + WELCOME_TEXT.length * 70 + 400;
+    const roarTime = 12500 + WELCOME_TEXT.length * 70 + 400;
     const t4 = setTimeout(() => {
       setPhase(4);
       try {
@@ -78,7 +78,7 @@ export default function SplashScreen({ onComplete }) {
           filter: `brightness(${phase >= 2 ? 1.4 : phase >= 1 ? 0.15 : 0})`,
           transition: phase >= 2
             ? 'width 1.5s ease-out, height 1.5s ease-out, filter 1s ease-in, opacity 0.5s'
-            : 'width 4.5s ease-out, height 4.5s ease-out, filter 4.5s ease-in, opacity 3s ease-in',
+            : 'width 10s ease-out, height 10s ease-out, filter 10s ease-in, opacity 3s ease-in',
         }}
       />
       <div style={{

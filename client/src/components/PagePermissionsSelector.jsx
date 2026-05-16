@@ -1,6 +1,7 @@
 import { ALL_ASSIGNABLE_PAGES } from '../contexts/PortalContext';
+import DocPermissionsSelector from './DocPermissionsSelector';
 
-export default function PagePermissionsSelector({ selected, onChange }) {
+export default function PagePermissionsSelector({ selected, onChange, docIds, onDocIdsChange }) {
   function toggle(key) {
     onChange(
       selected.includes(key)
@@ -16,6 +17,8 @@ export default function PagePermissionsSelector({ selected, onChange }) {
   function deselectAll() {
     onChange([]);
   }
+
+  const dataRoomChecked = selected.includes('data-room');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -39,21 +42,28 @@ export default function PagePermissionsSelector({ selected, onChange }) {
         background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, padding: '10px 12px',
       }}>
         {ALL_ASSIGNABLE_PAGES.map(p => (
-          <label key={p.key} style={{
-            display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-            padding: '3px 0', fontSize: 12, color: selected.includes(p.key) ? '#fff' : '#555',
-          }}>
-            <input
-              type="checkbox"
-              checked={selected.includes(p.key)}
-              onChange={() => toggle(p.key)}
-              style={{ accentColor: '#FCF000', cursor: 'pointer', width: 14, height: 14 }}
-            />
-            <span>{p.label}</span>
-            {p.personalData && (
-              <span title="Contains account-specific data" style={{ fontSize: 9, color: '#f9a825', marginLeft: 2 }}>●</span>
+          <div key={p.key} style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+              padding: '3px 0', fontSize: 12, color: selected.includes(p.key) ? '#fff' : '#555',
+            }}>
+              <input
+                type="checkbox"
+                checked={selected.includes(p.key)}
+                onChange={() => toggle(p.key)}
+                style={{ accentColor: '#FCF000', cursor: 'pointer', width: 14, height: 14 }}
+              />
+              <span>{p.label}</span>
+              {p.personalData && (
+                <span title="Contains account-specific data" style={{ fontSize: 9, color: '#f9a825', marginLeft: 2 }}>●</span>
+              )}
+            </label>
+            {p.key === 'data-room' && dataRoomChecked && onDocIdsChange && (
+              <div style={{ marginLeft: 20, marginTop: 6, marginBottom: 6 }}>
+                <DocPermissionsSelector selected={docIds || []} onChange={onDocIdsChange} />
+              </div>
             )}
-          </label>
+          </div>
         ))}
       </div>
       <div style={{ fontSize: 9, color: '#555' }}>

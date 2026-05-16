@@ -21,6 +21,7 @@ import { getMostRecentRanking }   from './database.js';
 import { connectToDatabase }      from './database.js';
 import { checkCaseStudyEntries }  from './killHistory.js';
 import { saveWeeklySnapshot, getCurrentWeekOf } from './signalHistoryService.js';
+import { saveAiWeeklySnapshot, getCurrentWeekOf as getAiCurrentWeekOf } from './aiSignalHistoryService.js';
 import { getKillTestSettings, serverSizePosition, buildServerLotConfig } from './killTestSettings.js';
 import { updateDemoPortfolio } from './demoEngine.js';
 import { getLastFriday } from './technicalUtils.js';
@@ -656,6 +657,67 @@ export async function runFridayKillPipeline() {
       console.log(`[Signal History] Auto-saved ${count} signal records for week of ${getCurrentWeekOf()}`);
     } catch (err) {
       console.error('[Signal History] Auto-save failed (non-fatal):', err.message);
+    }
+
+    // ── 7b. Auto-save AI 300 signal history snapshot ──────────────────────
+    try {
+      const { getAiUniverseSignals } = await import('./aiUniverseSignalsService.js');
+      const aiResult = await getAiUniverseSignals({ refresh: true });
+      const aiSignals = aiResult.signals || aiResult;
+      const aiCount = await saveAiWeeklySnapshot(aiSignals);
+      console.log(`[AI Signal History] Auto-saved ${aiCount} AI 300 signal records for week of ${getAiCurrentWeekOf()}`);
+
+      // Save AI 300 market snapshot (PAI300 regime + VIX + signal counts)
+      try {
+        const aiWeekOf = getAiCurrentWeekOf();
+        let pai300Price = null, pai300Ema21 = null;
+        try {
+          const indexDoc = await db.collection('pnthr_ai_index_candles_weekly')
+            .findOne({}, { sort: { weekOf: -1 } });
+          if (indexDoc) {
+            pai300Price = indexDoc.close ?? null;
+            const allWeekly = await db.collection('pnthr_ai_index_candles_weekly')
+              .find({}, { projection: { close: 1, weekOf: 1 } })
+              .sort({ weekOf: 1 })
+              .toArray();
+            if (allWeekly.length >= 21) {
+              const last21 = allWeekly.slice(-21);
+              pai300Ema21 = last21.reduce((s, c) => s + (c.close || 0), 0) / 21;
+            }
+          }
+        } catch { /* non-fatal */ }
+
+        let aiBl = 0, aiSs = 0, aiNewBl = 0, aiNewSs = 0;
+        for (const [, sig] of Object.entries(aiSignals)) {
+          if (sig.signal === 'BL') { aiBl++; if (sig.isNewSignal) aiNewBl++; }
+          if (sig.signal === 'SS') { aiSs++; if (sig.isNewSignal) aiNewSs++; }
+        }
+        const aiSsBlRatio = aiBl > 0 ? aiSs / aiBl : aiSs > 0 ? 99 : 0;
+
+        await db.collection('pnthr_ai_weekly_market_snapshot').updateOne(
+          { weekOf: aiWeekOf },
+          {
+            $set: {
+              weekOf: aiWeekOf,
+              pai300Price,
+              pai300Ema21,
+              vix: macroContext.vix,
+              blCount: aiBl,
+              ssCount: aiSs,
+              newBlCount: aiNewBl,
+              newSsCount: aiNewSs,
+              ssBlRatio: aiSsBlRatio,
+              createdAt: new Date(),
+            },
+          },
+          { upsert: true }
+        );
+        console.log('   Saved AI 300 weekly market snapshot');
+      } catch (err) {
+        console.error('[AI Signal History] Market snapshot save failed (non-fatal):', err.message);
+      }
+    } catch (err) {
+      console.error('[AI Signal History] Auto-save failed (non-fatal):', err.message);
     }
 
     // ── 8. Auto-log pipeline run to changelog ─────────────────────────────

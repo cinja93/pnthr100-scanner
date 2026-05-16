@@ -434,19 +434,6 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
               <span>Investor Portal</span>
             </button>
           )}
-          {/* Admin-only: preview the INVESTOR portal shell. This is a plain
-              portal-mode preview (nav filter only) — admin stays logged in
-              as themselves. Useful for "here's what a prospect would see". */}
-          {effectiveAdmin && (
-            <button
-              className={styles.dataRoomBtn}
-              onClick={() => window.open(`${window.location.origin}/?portal=investor`, '_blank', 'noopener')}
-              title="Open the Investor view in a new tab — see exactly what investors see when they log in"
-            >
-              <span style={{ fontSize: 14 }}>👀</span>
-              <span>View as Investor</span>
-            </button>
-          )}
           {/* Admin-only: full impersonation dropdown for the VIP portal. Opens
               a new tab with a read-only, 30-minute token scoped to the
               chosen VIP user — admin sees the VIP's actual data, not their

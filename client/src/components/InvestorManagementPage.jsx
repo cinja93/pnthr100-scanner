@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchInvestors, createInvestor, updateInvestorApi, deleteInvestorApi, fetchInvestorAnalytics, fetchInvestorActivityLog, fetchInvestorNotes, addInvestorNote, editInvestorNote, deleteInvestorNote, resetInvestorLogins, fetchImpersonationTargets, updateVipPages, API_BASE, authHeaders } from '../services/api';
 import PagePermissionsSelector from './PagePermissionsSelector';
+import DocPermissionsSelector from './DocPermissionsSelector';
 import { getDefaultPages, ALL_ASSIGNABLE_PAGES, PORTAL_PAGES } from '../contexts/PortalContext';
 
 const TIER_COLORS = { Ready: '#28a745', Hot: '#dc3545', Warm: '#f9a825', Cold: '#666' };
@@ -327,6 +328,44 @@ function InlinePageEditor({ allowedPages, onSave }) {
   );
 }
 
+function InlineDocEditor({ allowedDocIds, onSave }) {
+  const [docIds, setDocIds] = useState(allowedDocIds);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  function handleChange(newIds) {
+    setDocIds(newIds);
+    setDirty(true);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave(docIds);
+      setDirty(false);
+    } catch (err) {
+      alert('Failed to save docs: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid #222', padding: '12px 18px', background: '#0f0f0f' }}>
+      <DocPermissionsSelector selected={docIds} onChange={handleChange} />
+      {dirty && (
+        <button onClick={handleSave} disabled={saving} style={{
+          marginTop: 8, padding: '6px 16px', background: '#FCF000', color: '#000',
+          fontWeight: 700, fontSize: 11, border: 'none', borderRadius: 4,
+          cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.5 : 1,
+        }}>
+          {saving ? 'Saving...' : 'Save Docs'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function VipCard({ vip, onPagesUpdated }) {
   const [pagesOpen, setPagesOpen] = useState(false);
   const [currentPages, setCurrentPages] = useState(null);
@@ -389,6 +428,7 @@ function VipCard({ vip, onPagesUpdated }) {
 
 function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onActivity, onToggleStatus, onDelete, onPagesUpdated }) {
   const [pagesOpen, setPagesOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [notes, setNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
@@ -502,6 +542,10 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
           style={{ background: pagesOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pagesOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pagesOpen ? 700 : 400 }}>
           PAGES ({(inv.allowedPages || []).length}/{ALL_ASSIGNABLE_PAGES.length})
         </button>
+        <button onClick={() => setDocsOpen(v => !v)}
+          style={{ background: docsOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: docsOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: docsOpen ? 700 : 400 }}>
+          DOCS
+        </button>
         <button onClick={handleToggleNotes}
           style={{ background: notesOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: notesOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: notesOpen ? 700 : 400 }}>
           NOTES {notes.length > 0 ? `(${notes.length})` : ''}
@@ -526,6 +570,17 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
           allowedPages={inv.allowedPages || PORTAL_PAGES.investor}
           onSave={async (pages) => {
             await updateInvestorApi(inv._id, { allowedPages: pages });
+            if (onPagesUpdated) onPagesUpdated();
+          }}
+        />
+      )}
+
+      {/* ── Docs section ── */}
+      {docsOpen && (
+        <InlineDocEditor
+          allowedDocIds={inv.allowedDocIds || []}
+          onSave={async (docIds) => {
+            await updateInvestorApi(inv._id, { allowedDocIds: docIds });
             if (onPagesUpdated) onPagesUpdated();
           }}
         />

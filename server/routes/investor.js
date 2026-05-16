@@ -71,6 +71,7 @@ investorAuthRouter.post('/login', async (req, res) => {
         loginCount: (investor.loginCount || 0) + 1, // already incremented
         maxLogins: investor.maxLogins || 5,
         allowedPages: investor.allowedPages || [],
+        allowedDocIds: investor.allowedDocIds || [],
       },
     });
   } catch (err) {
@@ -97,12 +98,12 @@ investorAdminRouter.get('/', async (req, res) => {
 // POST /api/investors — create investor account
 investorAdminRouter.post('/', async (req, res) => {
   try {
-    const { name, email, company, password, dataroomSections, allowedPages } = req.body;
+    const { name, email, company, password, dataroomSections, allowedPages, allowedDocIds } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required' });
     }
     const investor = await createInvestor({
-      name, email, company, password, dataroomSections, allowedPages,
+      name, email, company, password, dataroomSections, allowedPages, allowedDocIds,
       createdBy: req.user.userId,
     });
     res.json(investor);
@@ -227,6 +228,7 @@ investorSelfRouter.get('/profile', async (req, res) => {
       loginCount: investor.loginCount || 0,
       maxLogins: investor.maxLogins || 5,
       allowedPages: investor.allowedPages || [],
+      allowedDocIds: investor.allowedDocIds || [],
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

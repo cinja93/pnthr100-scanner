@@ -22,7 +22,23 @@ router.get('/', async (req, res) => {
       .sort({ section: 1, sortOrder: 1, uploadedAt: -1 })
       .toArray();
     // Backfill section for legacy docs
-    const filled = docs.map(d => ({ ...d, section: d.section || DEFAULT_SECTION }));
+    let filled = docs.map(d => ({ ...d, section: d.section || DEFAULT_SECTION }));
+
+    // Per-investor document filtering: only return docs in their allowedDocIds
+    const isInvestor = req.user?.source === 'den_investors' || req.user?.role === 'investor';
+    if (isInvestor && req.user?.userId) {
+      const inv = await db.collection('den_investors').findOne(
+        { _id: new ObjectId(req.user.userId) },
+        { projection: { allowedDocIds: 1 } },
+      );
+      const allowed = inv?.allowedDocIds;
+      if (allowed && allowed.length > 0) {
+        const idSet = new Set(allowed.map(id => id.toString()));
+        filled = filled.filter(d => idSet.has(d._id.toString()));
+      }
+      // If allowedDocIds is empty/missing, investor sees all docs (legacy/default)
+    }
+
     res.json(filled);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -141,6 +157,20 @@ router.get('/:id/view', async (req, res) => {
     const db = await connectToDatabase();
     const doc = await db.collection(COLLECTION).findOne({ _id: new ObjectId(req.params.id) });
     if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+    // Per-investor document access check
+    const investorCheck = isInvestor || user?.role === 'investor';
+    if (investorCheck && user?.userId) {
+      const inv = await db.collection('den_investors').findOne(
+        { _id: new ObjectId(user.userId) },
+        { projection: { allowedDocIds: 1 } },
+      );
+      const allowed = inv?.allowedDocIds;
+      if (allowed && allowed.length > 0) {
+        const idSet = new Set(allowed.map(id => id.toString()));
+        if (!idSet.has(req.params.id)) return res.status(403).json({ error: 'Access denied' });
+      }
+    }
 
     // Log view for investors and track in event log (non-blocking)
     const investorDetected = isInvestor || user?.role === 'investor' || user?.isInvestor;

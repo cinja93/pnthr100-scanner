@@ -182,7 +182,7 @@ function AppAuth() {
     const acctSize = role === 'investor'
       ? (profile?.investmentAmount ?? null)
       : (profile?.accountSize ?? null);
-    setCurrentUser({ email, role, accountSize: acctSize, defaultPage: profile?.defaultPage ?? 'long', name: profile?.name ?? null, company: profile?.company ?? null, investmentAmount: profile?.investmentAmount ?? null, loginCount: profile?.loginCount ?? null, maxLogins: profile?.maxLogins ?? 5 });
+    setCurrentUser({ email, role, accountSize: acctSize, defaultPage: profile?.defaultPage ?? 'long', name: profile?.name ?? null, company: profile?.company ?? null, investmentAmount: profile?.investmentAmount ?? null, loginCount: profile?.loginCount ?? null, maxLogins: profile?.maxLogins ?? 5, allowedPages: profile?.allowedPages ?? null });
     if (role === 'investor') setShowWelcome(true);
   }
 
@@ -862,27 +862,31 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   }
 
   const { allowedPages: portalAllowed } = usePortal();
+  // Per-user allowedPages (from DB) takes precedence over hardcoded portal defaults
+  const userPages = currentUser?.allowedPages;
+  const effectiveAllowed = (userPages && userPages.length > 0) ? userPages : portalAllowed;
+
   const [activePage, setActivePageRaw] = useState(() => {
     const saved = localStorage.getItem('pnthr_page');
-    if (portalAllowed && saved && !portalAllowed.includes(saved)) return portalAllowed[0];
+    if (effectiveAllowed && saved && !effectiveAllowed.includes(saved)) return effectiveAllowed[0];
     return saved || currentUser?.defaultPage || 'long';
   });
 
   // Portal guard: redirect to first allowed page if current page isn't permitted
   useEffect(() => {
-    if (portalAllowed && !portalAllowed.includes(activePage)) {
-      setActivePageRaw(portalAllowed[0]);
+    if (effectiveAllowed && !effectiveAllowed.includes(activePage)) {
+      setActivePageRaw(effectiveAllowed[0]);
     }
-  }, [portalAllowed, activePage]);
+  }, [effectiveAllowed, activePage]);
 
   function setActivePage(page) {
-    if (portalAllowed && !portalAllowed.includes(page)) return;
+    if (effectiveAllowed && !effectiveAllowed.includes(page)) return;
     setActivePageRaw(page);
   }
 
   // Synchronous portal override — never render a page the portal doesn't allow
-  const renderPage = (portalAllowed && !portalAllowed.includes(activePage))
-    ? portalAllowed[0]
+  const renderPage = (effectiveAllowed && !effectiveAllowed.includes(activePage))
+    ? effectiveAllowed[0]
     : activePage;
 
   const [journalInitFilter, setJournalInitFilter] = useState(null);

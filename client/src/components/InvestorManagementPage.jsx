@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchInvestors, createInvestor, updateInvestorApi, deleteInvestorApi, fetchInvestorAnalytics, fetchInvestorActivityLog, fetchInvestorNotes, addInvestorNote, editInvestorNote, deleteInvestorNote, resetInvestorLogins } from '../services/api';
+import { fetchInvestors, createInvestor, updateInvestorApi, deleteInvestorApi, fetchInvestorAnalytics, fetchInvestorActivityLog, fetchInvestorNotes, addInvestorNote, editInvestorNote, deleteInvestorNote, resetInvestorLogins, fetchImpersonationTargets, updateVipPages, API_BASE, authHeaders } from '../services/api';
+import PagePermissionsSelector from './PagePermissionsSelector';
+import { getDefaultPages, ALL_ASSIGNABLE_PAGES, PORTAL_PAGES } from '../contexts/PortalContext';
 
 const TIER_COLORS = { Ready: '#28a745', Hot: '#dc3545', Warm: '#f9a825', Cold: '#666' };
 
@@ -14,9 +16,10 @@ function formatDateTime(d) {
 }
 
 export default function InvestorManagementPage() {
-  const [tab, setTab] = useState('investors'); // 'investors' | 'analytics'
+  const [tab, setTab] = useState('investors'); // 'investors' | 'analytics' | 'vip'
   const [investors, setInvestors] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [vipTargets, setVipTargets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [activityId, setActivityId] = useState(null);
@@ -30,12 +33,15 @@ export default function InvestorManagementPage() {
       if (tab === 'investors') {
         const data = await fetchInvestors();
         setInvestors(data);
-      } else {
+      } else if (tab === 'analytics') {
         const data = await fetchInvestorAnalytics();
         setAnalytics(data);
+      } else if (tab === 'vip') {
+        const data = await fetchImpersonationTargets();
+        setVipTargets(data.targets || []);
       }
     } catch (err) {
-      console.error('Failed to load investor data:', err);
+      console.error('Failed to load data:', err);
     } finally {
       setLoading(false);
     }
@@ -87,7 +93,7 @@ export default function InvestorManagementPage() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 2, marginBottom: 20 }}>
-        {['investors', 'analytics'].map(t => (
+        {['investors', 'analytics', 'vip'].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -138,6 +144,7 @@ export default function InvestorManagementPage() {
               onActivity={() => loadActivity(inv._id)}
               onToggleStatus={() => handleToggleStatus(inv._id, inv.status)}
               onDelete={() => handleDelete(inv._id, inv.name)}
+              onPagesUpdated={loadData}
             />
           ))}
         </div>
@@ -218,6 +225,20 @@ export default function InvestorManagementPage() {
         </div>
       )}
 
+      {/* ── VIP Tab ── */}
+      {!loading && tab === 'vip' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {vipTargets.length === 0 && (
+            <div style={{ color: '#666', fontSize: 13, padding: 20, textAlign: 'center' }}>
+              No VIP users found. VIP accounts are created through the access request system.
+            </div>
+          )}
+          {vipTargets.map(vip => (
+            <VipCard key={vip.id} vip={vip} onPagesUpdated={loadData} />
+          ))}
+        </div>
+      )}
+
       {/* ── Activity Log Modal ── */}
       {activityId && (
         <div style={{
@@ -268,7 +289,106 @@ export default function InvestorManagementPage() {
   );
 }
 
-function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onActivity, onToggleStatus, onDelete }) {
+function InlinePageEditor({ allowedPages, onSave }) {
+  const [pages, setPages] = useState(allowedPages);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  function handleChange(newPages) {
+    setPages(newPages);
+    setDirty(true);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave(pages);
+      setDirty(false);
+    } catch (err) {
+      alert('Failed to save pages: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid #222', padding: '12px 18px', background: '#0f0f0f' }}>
+      <PagePermissionsSelector selected={pages} onChange={handleChange} />
+      {dirty && (
+        <button onClick={handleSave} disabled={saving} style={{
+          marginTop: 8, padding: '6px 16px', background: '#FCF000', color: '#000',
+          fontWeight: 700, fontSize: 11, border: 'none', borderRadius: 4,
+          cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.5 : 1,
+        }}>
+          {saving ? 'Saving...' : 'Save Pages'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function VipCard({ vip, onPagesUpdated }) {
+  const [pagesOpen, setPagesOpen] = useState(false);
+  const [currentPages, setCurrentPages] = useState(null);
+  const [loadingPages, setLoadingPages] = useState(false);
+
+  async function loadPages() {
+    if (currentPages !== null) return;
+    setLoadingPages(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${vip.id}/pages`, { headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentPages(data.allowedPages || []);
+      } else {
+        setCurrentPages(PORTAL_PAGES.vip || []);
+      }
+    } catch {
+      setCurrentPages(PORTAL_PAGES.vip || []);
+    } finally {
+      setLoadingPages(false);
+    }
+  }
+
+  function handleTogglePages() {
+    if (!pagesOpen) loadPages();
+    setPagesOpen(v => !v);
+  }
+
+  return (
+    <div style={{ background: '#141414', border: '1px solid #222', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{vip.displayName}</span>
+          <div style={{ fontSize: 11, color: '#888' }}>{vip.email}</div>
+        </div>
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 4, background: 'rgba(40,167,69,0.15)', color: '#28a745', letterSpacing: '0.05em' }}>
+          {(vip.role || 'member').toUpperCase()}
+        </span>
+        <button onClick={handleTogglePages}
+          style={{ background: pagesOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pagesOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pagesOpen ? 700 : 400 }}>
+          PAGES
+        </button>
+      </div>
+      {pagesOpen && !loadingPages && currentPages !== null && (
+        <InlinePageEditor
+          allowedPages={currentPages}
+          onSave={async (pages) => {
+            await updateVipPages(vip.id, pages);
+            setCurrentPages(pages);
+            if (onPagesUpdated) onPagesUpdated();
+          }}
+        />
+      )}
+      {pagesOpen && loadingPages && (
+        <div style={{ borderTop: '1px solid #222', padding: '12px 18px', color: '#666', fontSize: 11 }}>Loading pages...</div>
+      )}
+    </div>
+  );
+}
+
+function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onActivity, onToggleStatus, onDelete, onPagesUpdated }) {
+  const [pagesOpen, setPagesOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [notes, setNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
@@ -378,6 +498,10 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
         }}>
           {inv.status?.toUpperCase()}
         </span>
+        <button onClick={() => setPagesOpen(v => !v)}
+          style={{ background: pagesOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pagesOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pagesOpen ? 700 : 400 }}>
+          PAGES ({(inv.allowedPages || []).length}/{ALL_ASSIGNABLE_PAGES.length})
+        </button>
         <button onClick={handleToggleNotes}
           style={{ background: notesOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: notesOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: notesOpen ? 700 : 400 }}>
           NOTES {notes.length > 0 ? `(${notes.length})` : ''}
@@ -395,6 +519,17 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
           DELETE
         </button>
       </div>
+
+      {/* ── Pages section ── */}
+      {pagesOpen && (
+        <InlinePageEditor
+          allowedPages={inv.allowedPages || PORTAL_PAGES.investor}
+          onSave={async (pages) => {
+            await updateInvestorApi(inv._id, { allowedPages: pages });
+            if (onPagesUpdated) onPagesUpdated();
+          }}
+        />
+      )}
 
       {/* ── Notes section ── */}
       {notesOpen && (
@@ -500,6 +635,7 @@ function CreateInvestorModal({ onClose, onCreated }) {
   const [company, setCompany] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [allowedPages, setAllowedPages] = useState(getDefaultPages);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -509,7 +645,7 @@ function CreateInvestorModal({ onClose, onCreated }) {
     setSaving(true);
     setError(null);
     try {
-      await createInvestor({ name, email, company, password });
+      await createInvestor({ name, email, company, password, allowedPages });
       onCreated();
       onClose();
     } catch (err) {
@@ -526,12 +662,12 @@ function CreateInvestorModal({ onClose, onCreated }) {
     }} onClick={onClose}>
       <div style={{
         background: '#1a1a1a', border: '1px solid #333', borderRadius: 12,
-        padding: 28, width: '100%', maxWidth: 420,
+        padding: 28, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto',
       }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: '0 0 20px' }}>
           Create Investor Account
         </h3>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 520 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: '#888' }}>
             INVESTOR NAME
             <input type="text" value={name} onChange={e => setName(e.target.value)} required autoFocus placeholder="Investor's full name"
@@ -559,6 +695,7 @@ function CreateInvestorModal({ onClose, onCreated }) {
               </button>
             </div>
           </label>
+          <PagePermissionsSelector selected={allowedPages} onChange={setAllowedPages} />
           {error && <p style={{ fontSize: 12, color: '#dc3545', margin: 0, padding: '6px 10px', background: 'rgba(220,53,69,0.1)', borderRadius: 4 }}>{error}</p>}
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <button type="submit" disabled={saving} style={{

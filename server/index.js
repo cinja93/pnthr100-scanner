@@ -877,7 +877,7 @@ app.get('/api/user/profile', async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
     const profile = await getUserProfile(req.user.userId);
-    res.json({ email: req.user.email, role: req.user.role, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long', liveFundNav: profile?.liveFundNav ?? null, liveFundStartDate: profile?.liveFundStartDate ?? null });
+    res.json({ email: req.user.email, role: req.user.role, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long', liveFundNav: profile?.liveFundNav ?? null, liveFundStartDate: profile?.liveFundStartDate ?? null, allowedPages: profile?.allowedPages ?? null });
   } catch (error) {
     console.error('Error fetching user profile:', error);
     res.status(500).json({ error: 'Failed to fetch profile' });
@@ -897,6 +897,30 @@ app.patch('/api/user/profile', authenticateJWT, async (req, res) => {
   } catch (error) {
     console.error('Error updating user profile:', error);
     res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// GET /api/admin/users/:id/pages — admin-only: get a member/VIP's allowed pages
+app.get('/api/admin/users/:id/pages', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const profile = await getUserProfile(req.params.id);
+    res.json({ allowedPages: profile?.allowedPages || [] });
+  } catch (error) {
+    console.error('Error fetching user pages:', error);
+    res.status(500).json({ error: 'Failed to fetch pages' });
+  }
+});
+
+// PATCH /api/admin/users/:id/pages — admin-only: set a member/VIP's allowed pages
+app.patch('/api/admin/users/:id/pages', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { allowedPages } = req.body;
+    if (!Array.isArray(allowedPages)) return res.status(400).json({ error: 'allowedPages must be an array' });
+    await upsertUserProfile(req.params.id, { allowedPages });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating user pages:', error);
+    res.status(500).json({ error: 'Failed to update pages' });
   }
 });
 

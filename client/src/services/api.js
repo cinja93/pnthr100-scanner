@@ -232,6 +232,16 @@ export async function fetchImpersonationTargets() {
   return res.json();
 }
 
+export async function updateVipPages(userId, allowedPages) {
+  const res = await apiFetch(`${API_BASE}/api/admin/users/${userId}/pages`, {
+    method: 'PATCH',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ allowedPages }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 // Starts a read-only impersonation session. Returns a short-lived JWT scoped
 // to the target user. Caller is responsible for opening the new tab with the
 // token in sessionStorage (NOT localStorage — keeps admin's own session

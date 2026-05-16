@@ -272,12 +272,14 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
   let allGroups = [...baseGroups, dataGroup];
 
-  // Portal mode: filter nav to only allowed pages
-  if (allowedPages) {
+  // Per-user allowedPages (from DB) takes precedence over hardcoded portal defaults
+  const userPages = currentUser?.allowedPages;
+  const effectiveAllowed = (userPages && userPages.length > 0) ? userPages : allowedPages;
+  if (effectiveAllowed) {
     allGroups = allGroups
       .map(group => ({
         ...group,
-        items: group.items.filter(item => allowedPages.includes(item.key)),
+        items: group.items.filter(item => effectiveAllowed.includes(item.key)),
       }))
       .filter(group => group.items.length > 0);
   }

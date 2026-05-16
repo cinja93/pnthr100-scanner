@@ -24,7 +24,7 @@ export async function ensureInvestorIndexes() {
 
 // ── Investor CRUD ───────────────────────────────────────────────────────────
 
-export async function createInvestor({ name, email, company, password, dataroomSections, createdBy }) {
+export async function createInvestor({ name, email, company, password, dataroomSections, allowedPages, createdBy }) {
   const db = await connectToDatabase();
   const hashed = await hashPassword(password);
   const doc = {
@@ -42,6 +42,7 @@ export async function createInvestor({ name, email, company, password, dataroomS
     maxLogins: 5,
     investmentAmount: null,
     dataroomSections: dataroomSections || [],
+    allowedPages: allowedPages || [],
   };
   const result = await db.collection(INVESTORS).insertOne(doc);
   return { _id: result.insertedId, ...doc, hashedPassword: undefined };
@@ -77,6 +78,7 @@ export async function updateInvestor(id, updates) {
   if (updates.company !== undefined) allowed.company = updates.company;
   if (updates.dataroomSections !== undefined) allowed.dataroomSections = updates.dataroomSections;
   if (updates.investmentAmount !== undefined) allowed.investmentAmount = updates.investmentAmount;
+  if (updates.allowedPages !== undefined) allowed.allowedPages = updates.allowedPages;
   if (updates.password) allowed.hashedPassword = await hashPassword(updates.password);
 
   await db.collection(INVESTORS).updateOne(

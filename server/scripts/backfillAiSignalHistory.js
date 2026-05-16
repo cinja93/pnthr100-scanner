@@ -16,6 +16,7 @@ import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS } from '../data/pnthrAiSectorsConfig.js';
 
 const AI_GATE_OFFSET = 0.25;
+const LOT_OFFSETS = [0, 0.03, 0.06, 0.10, 0.14];
 
 const TICKER_TO_SECTOR_ID = {};
 for (const sec of SECTORS) {
@@ -116,14 +117,14 @@ async function main() {
         const emaData = calculateEMA(wBars, wPeriod);
         const emaValue = emaData.length > 0 ? emaData[emaData.length - 1].value : null;
 
-        let profitDollar = null, profitPct = null;
+        let profitDollar = null, profitPct = null, lotsFilled = null, entryPrice = null;
         if (activeType && events.length > 0) {
           const entryEvent = [...events].reverse().find(e => e.signal === activeType);
           if (entryEvent) {
             const lastClose = wBars[wBars.length - 1].close;
             const entryIdx = wBars.findIndex(b => b.time === entryEvent.time);
             if (entryIdx >= 0) {
-              const entryPrice = activeType === 'BL'
+              entryPrice = activeType === 'BL'
                 ? parseFloat((Math.max(wBars[Math.max(0, entryIdx - 1)]?.high || 0, wBars[Math.max(0, entryIdx - 2)]?.high || 0) + 0.01).toFixed(2))
                 : parseFloat((Math.min(wBars[Math.max(0, entryIdx - 1)]?.low || Infinity, wBars[Math.max(0, entryIdx - 2)]?.low || Infinity) - 0.01).toFixed(2));
               if (activeType === 'BL') {
@@ -132,12 +133,48 @@ async function main() {
                 profitDollar = parseFloat((entryPrice - lastClose).toFixed(2));
               }
               profitPct = entryPrice !== 0 ? parseFloat(((profitDollar / entryPrice) * 100).toFixed(2)) : null;
+
+              // Simulate lots filled: check if price reached each trigger during the position
+              const positionBars = wBars.slice(entryIdx);
+              lotsFilled = 0;
+              for (const offset of LOT_OFFSETS) {
+                const trigger = activeType === 'BL'
+                  ? entryPrice * (1 + offset)
+                  : entryPrice * (1 - offset);
+                const hit = activeType === 'BL'
+                  ? positionBars.some(b => b.high >= trigger)
+                  : positionBars.some(b => b.low <= trigger);
+                if (hit) lotsFilled++;
+                else break;
+              }
             }
           }
         }
         if (!activeType && lastEvent && (lastEvent.signal === 'BE' || lastEvent.signal === 'SE')) {
           profitDollar = lastEvent.profitDollar ?? null;
           profitPct = lastEvent.profitPct ?? null;
+          // For closed positions, simulate lots from the full trade run
+          const entrySignal = lastEvent.signal === 'BE' ? 'BL' : 'SS';
+          const entryEv = [...events].reverse().find(e => e.signal === entrySignal);
+          if (entryEv) {
+            const eIdx = wBars.findIndex(b => b.time === entryEv.time);
+            const exitIdx = wBars.findIndex(b => b.time === lastEvent.time);
+            if (eIdx >= 0 && exitIdx >= 0) {
+              const ep = entrySignal === 'BL'
+                ? parseFloat((Math.max(wBars[Math.max(0, eIdx - 1)]?.high || 0, wBars[Math.max(0, eIdx - 2)]?.high || 0) + 0.01).toFixed(2))
+                : parseFloat((Math.min(wBars[Math.max(0, eIdx - 1)]?.low || Infinity, wBars[Math.max(0, eIdx - 2)]?.low || Infinity) - 0.01).toFixed(2));
+              const tradeBars = wBars.slice(eIdx, exitIdx + 1);
+              lotsFilled = 0;
+              for (const offset of LOT_OFFSETS) {
+                const trigger = entrySignal === 'BL' ? ep * (1 + offset) : ep * (1 - offset);
+                const hit = entrySignal === 'BL'
+                  ? tradeBars.some(b => b.high >= trigger)
+                  : tradeBars.some(b => b.low <= trigger);
+                if (hit) lotsFilled++;
+                else break;
+              }
+            }
+          }
         }
 
         if (finalSignal) {
@@ -150,6 +187,7 @@ async function main() {
             emaPeriod: wPeriod,
             profitDollar,
             profitPct,
+            lotsFilled,
           };
         }
       } catch {
@@ -175,6 +213,7 @@ async function main() {
               signalDate: s.signalDate,
               profitDollar: s.profitDollar ?? null,
               profitPct: s.profitPct ?? null,
+              lotsFilled: s.lotsFilled ?? null,
               savedAt: new Date(),
             },
           },

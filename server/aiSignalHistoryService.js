@@ -43,6 +43,7 @@ export async function saveAiWeeklySnapshot(signalMap) {
           signalDate:  s.signalDate  ?? null,
           profitDollar: s.profitDollar ?? null,
           profitPct:    s.profitPct    ?? null,
+          lotsFilled:   s.lotsFilled   ?? null,
           savedAt: new Date(),
         },
       },

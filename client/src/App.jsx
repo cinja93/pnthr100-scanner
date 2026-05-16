@@ -880,6 +880,11 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
     setActivePageRaw(page);
   }
 
+  // Synchronous portal override — never render a page the portal doesn't allow
+  const renderPage = (portalAllowed && !portalAllowed.includes(activePage))
+    ? portalAllowed[0]
+    : activePage;
+
   const [journalInitFilter, setJournalInitFilter] = useState(null);
   const [journalFocusId,    setJournalFocusId]    = useState(null);
   const [journalFocusTicker, setJournalFocusTicker] = useState(null);
@@ -897,7 +902,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
     setActivePage(page);
     localStorage.setItem('pnthr_page', page);
   }
-  const scanType = activePage === 'short' ? 'short' : 'long';
+  const scanType = renderPage === 'short' ? 'short' : 'long';
   const [stocks, setStocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -922,7 +927,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [aiChartTickers, setAiChartTickers] = useState([]);
   const [aiChartIndex, setAiChartIndex] = useState(null);
 
-  const isScanner = activePage === 'long' || activePage === 'short';
+  const isScanner = renderPage === 'long' || renderPage === 'short';
   const isAiScanner = isScanner && scannerUniverse === 'ai300';
 
   // Reset filters when tab or date changes
@@ -1474,107 +1479,107 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           )}
 
           {/* Search page */}
-          {activePage === 'search' && <SearchPage />}
+          {renderPage === 'search' && <SearchPage />}
 
           {/* Sectors page */}
-          {activePage === 'sectors' && <SectorPage />}
+          {renderPage === 'sectors' && <SectorPage />}
 
           {/* Watchlist page */}
-          {activePage === 'watchlist' && <WatchlistPage />}
+          {renderPage === 'watchlist' && <WatchlistPage />}
 
           {/* EMA Crossover page */}
-          {activePage === 'ema' && <EmaCrossoverPage />}
+          {renderPage === 'ema' && <EmaCrossoverPage />}
 
           {/* ETF Scan page */}
-          {activePage === 'etf' && <EtfPage />}
+          {renderPage === 'etf' && <EtfPage />}
 
           {/* PNTHR Calendar page */}
-          {activePage === 'earnings' && <CalendarPage />}
+          {renderPage === 'earnings' && <CalendarPage />}
 
           {/* PNTHR APEX page */}
-          {activePage === 'apex' && <ApexPage />}
+          {renderPage === 'apex' && <ApexPage />}
 
           {/* PNTHR Orders — weekly order sheet */}
-          {activePage === 'orders' && <OrdersPage />}
+          {renderPage === 'orders' && <OrdersPage />}
 
           {/* PNTHR PREY page */}
-          {activePage === 'prey' && <PreyPage onNavigate={navigate} />}
+          {renderPage === 'prey' && <PreyPage onNavigate={navigate} />}
 
           {/* PNTHR Assistant — Daily Task Co-Pilot */}
-          {activePage === 'assistant' && <AssistantPage onNavigate={navigate} />}
+          {renderPage === 'assistant' && <AssistantPage onNavigate={navigate} />}
 
           {/* PNTHR's Pulse mission control */}
-          {activePage === 'pulse' && <PulsePage onNavigate={navigate} />}
+          {renderPage === 'pulse' && <PulsePage onNavigate={navigate} />}
 
           {/* PNTHR's Perch newsletter */}
-          {activePage === 'perch' && <NewsPage />}
+          {renderPage === 'perch' && <NewsPage />}
 
           {/* Jungle page */}
-          {activePage === 'jungle' && <JunglePage />}
+          {renderPage === 'jungle' && <JunglePage />}
 
           {/* PNTHR AI Jungle — AI Universe (304 holdings, 16 sectors) */}
-          {activePage === 'aiJungle' && <AiJunglePage />}
+          {renderPage === 'aiJungle' && <AiJunglePage />}
 
           {/* PNTHR AI Sectors — 16 synthetic sector indices */}
-          {activePage === 'aiSectors' && <AiSectorsPage />}
+          {renderPage === 'aiSectors' && <AiSectorsPage />}
 
           {/* PNTHR AI Orders — APEX v6 weekly order sheet */}
-          {activePage === 'aiOrders' && <AiOrdersPage />}
+          {renderPage === 'aiOrders' && <AiOrdersPage />}
 
           {/* PNTHR AI Kill — v1 ranked predatory scoring */}
-          {activePage === 'aiKill' && <AiKillPage />}
+          {renderPage === 'aiKill' && <AiKillPage />}
 
 
           {/* PNTHR Journal */}
-          {activePage === 'journal' && <JournalPage onNavigate={navigate} initialFilter={journalInitFilter} focusPositionId={journalFocusId} focusTicker={journalFocusTicker} />}
+          {renderPage === 'journal' && <JournalPage onNavigate={navigate} initialFilter={journalInitFilter} focusPositionId={journalFocusId} focusTicker={journalFocusTicker} />}
 
           {/* Portfolio page */}
-          {activePage === 'portfolio' && <PortfolioPage currentUser={currentUser} onProfileUpdate={setCurrentUser} />}
+          {renderPage === 'portfolio' && <PortfolioPage currentUser={currentUser} onProfileUpdate={setCurrentUser} />}
 
           {/* PNTHR Kill History — admin only */}
-          {activePage === 'history' && (isAdmin
+          {renderPage === 'history' && (isAdmin
             ? <HistoryPage />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 
           {/* PNTHR Kill Test — admin only */}
-          {activePage === 'kill-test' && (isAdmin
+          {renderPage === 'kill-test' && (isAdmin
             ? <KillTestPage />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 
           {/* AI Intelligence Report Live — admin only */}
-          {activePage === 'ir-live' && (isAdmin
+          {renderPage === 'ir-live' && (isAdmin
             ? <IrLivePage />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 
           {/* TEST page — admin only */}
-          {activePage === 'test' && (isAdmin
+          {renderPage === 'test' && (isAdmin
             ? <TestPage />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 
           {/* Signal History — admin only */}
-          {activePage === 'signal-history' && (isAdmin
+          {renderPage === 'signal-history' && (isAdmin
             ? <SignalHistoryPage />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 
           {/* AI 300 Signal History — admin only */}
-          {activePage === 'ai-signal-history' && (isAdmin
+          {renderPage === 'ai-signal-history' && (isAdmin
             ? <AiSignalHistoryPage />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 
           {/* PNTHR Data Room */}
-          {activePage === 'data-room' && <DataRoomPage />}
+          {renderPage === 'data-room' && <DataRoomPage />}
 
           {/* PNTHR Compliance (admin only) */}
-          {activePage === 'compliance' && isAdmin && <CompliancePage />}
+          {renderPage === 'compliance' && isAdmin && <CompliancePage />}
 
           {/* PNTHR Investor Management (admin only) */}
-          {activePage === 'investor-mgmt' && isAdmin && <InvestorManagementPage />}
+          {renderPage === 'investor-mgmt' && isAdmin && <InvestorManagementPage />}
         </main>
 
         <footer className="footer">

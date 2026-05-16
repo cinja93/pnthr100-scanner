@@ -51,6 +51,8 @@ async function main() {
   const dryRun = args.includes('--dry-run');
   const fromIdx = args.indexOf('--from');
   const fromDate = fromIdx >= 0 && args[fromIdx + 1] ? args[fromIdx + 1] : '2023-01-02';
+  const toIdx = args.indexOf('--to');
+  const toDate = toIdx >= 0 && args[toIdx + 1] ? args[toIdx + 1] : null;
 
   console.log(`AI Signal History Backfill`);
   console.log(`  From:    ${fromDate}`);
@@ -82,7 +84,8 @@ async function main() {
   const todayMonday = getMondayOf(new Date().toISOString().split('T')[0]);
 
   // Filter to our range
-  const targetMondays = sortedMondays.filter(m => m >= fromDate && m <= todayMonday);
+  const endDate = toDate || todayMonday;
+  const targetMondays = sortedMondays.filter(m => m >= fromDate && m <= endDate);
   console.log(`Processing ${targetMondays.length} weeks (${targetMondays[0]} to ${targetMondays[targetMondays.length - 1]})\n`);
 
   let totalSaved = 0;

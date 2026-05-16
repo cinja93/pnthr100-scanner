@@ -532,10 +532,10 @@ function SignalArchiveTab({ weeks, onWeeksChange }) {
                         <td style={{ fontWeight: 600, fontSize: 11, color: r.lotsFilled != null ? '#D4A017' : '#4a4a4a' }}>
                           {r.lotsFilled != null ? `${r.lotsFilled}/5` : '—'}
                         </td>
-                        <td className={r.profitDollar > 0 ? styles.pos : r.profitDollar < 0 ? styles.neg : ''}>
+                        <td style={{ color: r.profitDollar > 0 ? '#50d080' : r.profitDollar < 0 ? '#ff6060' : '#4a4a4a', fontWeight: 600 }}>
                           {r.profitDollar != null ? `${r.profitDollar > 0 ? '+' : ''}$${r.profitDollar.toFixed(2)}` : '—'}
                         </td>
-                        <td className={r.profitPct > 0 ? styles.pos : r.profitPct < 0 ? styles.neg : ''}>
+                        <td style={{ color: r.profitPct > 0 ? '#50d080' : r.profitPct < 0 ? '#ff6060' : '#4a4a4a', fontWeight: 600 }}>
                           {r.profitPct != null ? `${r.profitPct > 0 ? '+' : ''}${r.profitPct.toFixed(2)}%` : '—'}
                         </td>
                         <td>

@@ -661,9 +661,39 @@ export async function runFridayKillPipeline() {
 
     // ── 7b. Auto-save AI 300 signal history snapshot ──────────────────────
     try {
-      const { getAiUniverseSignals } = await import('./aiUniverseSignalsService.js');
+      const { getAiUniverseSignals, getAiUniverseCandles } = await import('./aiUniverseSignalsService.js');
+      const { calculateEMA } = await import('./signalDetection.js');
+      const { SECTORS: AI_SECTORS } = await import('./scripts/aiUniverse/aiUniverseData.js');
+      const { SECTOR_EMA_PERIODS: AI_EMA_PERIODS } = await import('./data/pnthrAiSectorsConfig.js');
       const aiResult = await getAiUniverseSignals({ refresh: true });
       const aiSignals = aiResult.signals || aiResult;
+
+      // Enrich with EMA values from weekly candles
+      try {
+        const aiTickerToSector = {};
+        for (const sec of AI_SECTORS) {
+          for (const h of sec.holdings) aiTickerToSector[h.ticker] = sec.id;
+        }
+        const weeklyDocs = await db.collection('pnthr_ai_bt_candles_weekly')
+          .find({ ticker: { $in: Object.keys(aiSignals) } }, { projection: { ticker: 1, weekly: 1 } })
+          .toArray();
+        for (const doc of weeklyDocs) {
+          const sig = aiSignals[doc.ticker];
+          if (!sig || !doc.weekly?.length) continue;
+          const sorted = doc.weekly.sort((a, b) => a.weekOf.localeCompare(b.weekOf));
+          const bars = sorted.map(b => ({ time: b.weekOf, open: b.open, high: b.high, low: b.low, close: b.close }));
+          const sectorId = aiTickerToSector[doc.ticker];
+          const period = AI_EMA_PERIODS[sectorId] || 30;
+          const emaData = calculateEMA(bars, period);
+          if (emaData.length > 0) {
+            sig.ema21 = emaData[emaData.length - 1].value;
+            sig.emaPeriod = period;
+          }
+        }
+      } catch (enrichErr) {
+        console.error('[AI Signal History] EMA enrichment failed (non-fatal):', enrichErr.message);
+      }
+
       const aiCount = await saveAiWeeklySnapshot(aiSignals);
       console.log(`[AI Signal History] Auto-saved ${aiCount} AI 300 signal records for week of ${getAiCurrentWeekOf()}`);
 

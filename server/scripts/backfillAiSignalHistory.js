@@ -11,7 +11,7 @@
 
 import 'dotenv/config';
 import { connectToDatabase } from '../database.js';
-import { detectAllSignals } from '../signalDetection.js';
+import { detectAllSignals, calculateEMA } from '../signalDetection.js';
 import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS } from '../data/pnthrAiSectorsConfig.js';
 
@@ -113,14 +113,43 @@ async function main() {
         const finalSignal = activeType || currentSignal || (lastEvent ? lastEvent.signal : null);
         const finalDate = lastEvent ? lastEvent.time : null;
 
+        const emaData = calculateEMA(wBars, wPeriod);
+        const emaValue = emaData.length > 0 ? emaData[emaData.length - 1].value : null;
+
+        let profitDollar = null, profitPct = null;
+        if (activeType && events.length > 0) {
+          const entryEvent = [...events].reverse().find(e => e.signal === activeType);
+          if (entryEvent) {
+            const lastClose = wBars[wBars.length - 1].close;
+            const entryIdx = wBars.findIndex(b => b.time === entryEvent.time);
+            if (entryIdx >= 0) {
+              const entryPrice = activeType === 'BL'
+                ? parseFloat((Math.max(wBars[Math.max(0, entryIdx - 1)]?.high || 0, wBars[Math.max(0, entryIdx - 2)]?.high || 0) + 0.01).toFixed(2))
+                : parseFloat((Math.min(wBars[Math.max(0, entryIdx - 1)]?.low || Infinity, wBars[Math.max(0, entryIdx - 2)]?.low || Infinity) - 0.01).toFixed(2));
+              if (activeType === 'BL') {
+                profitDollar = parseFloat((lastClose - entryPrice).toFixed(2));
+              } else {
+                profitDollar = parseFloat((entryPrice - lastClose).toFixed(2));
+              }
+              profitPct = entryPrice !== 0 ? parseFloat(((profitDollar / entryPrice) * 100).toFixed(2)) : null;
+            }
+          }
+        }
+        if (!activeType && lastEvent && (lastEvent.signal === 'BE' || lastEvent.signal === 'SE')) {
+          profitDollar = lastEvent.profitDollar ?? null;
+          profitPct = lastEvent.profitPct ?? null;
+        }
+
         if (finalSignal) {
           signals[ticker] = {
             signal: finalSignal,
             signalDate: finalDate,
             isNewSignal: !!isNewSignal,
             stopPrice: activeType ? pnthrStop : null,
-            ema21: null,
+            ema21: emaValue,
             emaPeriod: wPeriod,
+            profitDollar,
+            profitPct,
           };
         }
       } catch {

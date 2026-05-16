@@ -862,11 +862,24 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   }
 
   const { allowedPages: portalAllowed } = usePortal();
-  const [activePage, setActivePage] = useState(() => {
+  const [activePage, setActivePageRaw] = useState(() => {
     const saved = localStorage.getItem('pnthr_page');
     if (portalAllowed && saved && !portalAllowed.includes(saved)) return portalAllowed[0];
     return saved || currentUser?.defaultPage || 'long';
   });
+
+  // Portal guard: redirect to first allowed page if current page isn't permitted
+  useEffect(() => {
+    if (portalAllowed && !portalAllowed.includes(activePage)) {
+      setActivePageRaw(portalAllowed[0]);
+    }
+  }, [portalAllowed, activePage]);
+
+  function setActivePage(page) {
+    if (portalAllowed && !portalAllowed.includes(page)) return;
+    setActivePageRaw(page);
+  }
+
   const [journalInitFilter, setJournalInitFilter] = useState(null);
   const [journalFocusId,    setJournalFocusId]    = useState(null);
   const [journalFocusTicker, setJournalFocusTicker] = useState(null);

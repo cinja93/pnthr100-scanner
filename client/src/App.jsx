@@ -153,9 +153,11 @@ function AppAuth() {
     if (!token) { setAuthLoading(false); return; }
     setAuthToken(token);
 
-    // Investor tokens use a different profile endpoint
+    // Investor tokens use a different profile endpoint.
+    // However, if an admin is previewing via ?portal=investor, their regular
+    // JWT should still go through the normal profile endpoint.
     const profileFetch = isInvestorPortal
-      ? fetchInvestorProfile().then(p => ({ ...p, role: 'investor' }))
+      ? fetchInvestorProfile().then(p => ({ ...p, role: 'investor' })).catch(() => fetchUserProfile())
       : fetchUserProfile();
 
     profileFetch

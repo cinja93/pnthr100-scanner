@@ -861,9 +861,12 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
     setFridayBannerDismissed(true);
   }
 
-  const [activePage, setActivePage] = useState(
-    () => localStorage.getItem('pnthr_page') || currentUser?.defaultPage || 'long'
-  );
+  const { allowedPages: portalAllowed } = usePortal();
+  const [activePage, setActivePage] = useState(() => {
+    const saved = localStorage.getItem('pnthr_page');
+    if (portalAllowed && saved && !portalAllowed.includes(saved)) return portalAllowed[0];
+    return saved || currentUser?.defaultPage || 'long';
+  });
   const [journalInitFilter, setJournalInitFilter] = useState(null);
   const [journalFocusId,    setJournalFocusId]    = useState(null);
   const [journalFocusTicker, setJournalFocusTicker] = useState(null);

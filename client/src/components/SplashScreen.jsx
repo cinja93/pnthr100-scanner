@@ -4,76 +4,70 @@ import roarSrc from '../assets/panther-roar.wav';
 
 const WELCOME_TEXT = "Welcome to The PNTHR's Den";
 
-function startDrone() {
+function startHeartbeat() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const master = ctx.createGain();
-    master.gain.setValueAtTime(0, ctx.currentTime);
-    master.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 4);
-    master.gain.linearRampToValueAtTime(0.35, ctx.currentTime + 9);
-    master.gain.linearRampToValueAtTime(0.45, ctx.currentTime + 11);
+    master.gain.value = 0.5;
     master.connect(ctx.destination);
 
-    // Deep bass foundation — sub rumble
-    const bass = ctx.createOscillator();
-    bass.type = 'sine';
-    bass.frequency.setValueAtTime(40, ctx.currentTime);
-    bass.frequency.linearRampToValueAtTime(55, ctx.currentTime + 10);
-    const bassGain = ctx.createGain();
-    bassGain.gain.value = 0.7;
-    bass.connect(bassGain).connect(master);
-    bass.start();
+    let stopped = false;
+    let bpm = 35;
+    let volume = 0.15;
+    let timeout;
 
-    // Mid drone — dark tension
-    const mid = ctx.createOscillator();
-    mid.type = 'sawtooth';
-    mid.frequency.setValueAtTime(80, ctx.currentTime);
-    mid.frequency.linearRampToValueAtTime(110, ctx.currentTime + 10);
-    const midGain = ctx.createGain();
-    midGain.gain.setValueAtTime(0, ctx.currentTime);
-    midGain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 5);
-    midGain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 10);
-    const midFilter = ctx.createBiquadFilter();
-    midFilter.type = 'lowpass';
-    midFilter.frequency.setValueAtTime(200, ctx.currentTime);
-    midFilter.frequency.linearRampToValueAtTime(600, ctx.currentTime + 10);
-    mid.connect(midFilter).connect(midGain).connect(master);
-    mid.start();
+    function beat() {
+      if (stopped) return;
 
-    // High overtone — eerie shimmer that creeps in
-    const high = ctx.createOscillator();
-    high.type = 'sine';
-    high.frequency.setValueAtTime(220, ctx.currentTime);
-    high.frequency.linearRampToValueAtTime(330, ctx.currentTime + 10);
-    const highGain = ctx.createGain();
-    highGain.gain.setValueAtTime(0, ctx.currentTime);
-    highGain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 7);
-    highGain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 11);
-    high.connect(highGain).connect(master);
-    high.start();
+      // Each heartbeat is a short filtered thump — like a bass drum in your chest
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(60, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.25);
 
-    // Subtle LFO tremor on master — heartbeat-like pulse
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 1.5;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.08;
-    lfo.connect(lfoGain).connect(master.gain);
-    lfo.start();
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(volume, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+
+      osc.connect(gain).connect(master);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.5);
+
+      // Double-tap for realistic heartbeat (lub-dub)
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(50, ctx.currentTime + 0.12);
+      osc2.frequency.exponentialRampToValueAtTime(25, ctx.currentTime + 0.35);
+
+      const gain2 = ctx.createGain();
+      gain2.gain.setValueAtTime(0, ctx.currentTime);
+      gain2.gain.setValueAtTime(volume * 0.6, ctx.currentTime + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+
+      osc2.connect(gain2).connect(master);
+      osc2.start(ctx.currentTime + 0.12);
+      osc2.stop(ctx.currentTime + 0.5);
+
+      // Accelerate and get louder over time
+      bpm = Math.min(bpm + 3, 120);
+      volume = Math.min(volume + 0.025, 0.7);
+
+      const interval = 60000 / bpm;
+      timeout = setTimeout(beat, interval);
+    }
+
+    // Start first beat
+    beat();
 
     return {
       fadeOut(duration = 1.5) {
         const now = ctx.currentTime;
-        master.gain.cancelScheduledValues(now);
-        master.gain.setValueAtTime(master.gain.value, now);
         master.gain.linearRampToValueAtTime(0, now + duration);
-        setTimeout(() => {
-          bass.stop(); mid.stop(); high.stop(); lfo.stop();
-          ctx.close();
-        }, duration * 1000 + 100);
+        setTimeout(() => { stopped = true; clearTimeout(timeout); ctx.close(); }, duration * 1000 + 100);
       },
       stop() {
-        bass.stop(); mid.stop(); high.stop(); lfo.stop();
+        stopped = true;
+        clearTimeout(timeout);
         ctx.close();
       },
     };
@@ -89,9 +83,9 @@ export default function SplashScreen({ onComplete }) {
   const droneRef = useRef(null);
 
   useEffect(() => {
-    // Start drone when head begins appearing
+    // Start heartbeat when head begins appearing
     const tDrone = setTimeout(() => {
-      droneRef.current = startDrone();
+      droneRef.current = startHeartbeat();
     }, 1500);
 
     const t0 = setTimeout(() => setPhase(1), 1500);
@@ -111,7 +105,6 @@ export default function SplashScreen({ onComplete }) {
     const roarTime = 12500 + WELCOME_TEXT.length * 70 + 400;
     const t4 = setTimeout(() => {
       setPhase(4);
-      // Fade drone out as roar takes over
       if (droneRef.current) droneRef.current.fadeOut(1.5);
       try {
         audioRef.current = new Audio(roarSrc);

@@ -35,7 +35,7 @@ export const ALL_ASSIGNABLE_PAGES = [
   { key: 'etf',        label: "PNTHR ETF's" },
   { key: 'sectors',    label: 'PNTHR Sectors' },
   { key: 'journal',    label: 'PNTHR Journal',    personalData: true },
-  { key: 'watchlist',  label: 'Watchlist',         personalData: true },
+  { key: 'watchlist',  label: 'Watchlist' },
   { key: 'portfolio',  label: 'PNTHR Portfolio',   personalData: true },
   { key: 'data-room',  label: 'PNTHR Data Room' },
 ];

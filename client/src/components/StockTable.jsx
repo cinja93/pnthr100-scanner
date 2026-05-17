@@ -70,7 +70,23 @@ function matchesPinSignal(sigData, pinSignal) {
   return sigData.signal === pinSignal;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, showMode = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null }) {
+function getFcfColor(fcf) {
+  if (fcf == null) return '#666';
+  if (fcf > 50_000_000) return '#00c853';
+  if (fcf > 0) return '#69f0ae';
+  if (fcf > -50_000_000) return '#ffd600';
+  return '#ff5252';
+}
+
+function getFcfLabel(fcf) {
+  if (fcf == null) return 'No FCF data';
+  if (fcf > 50_000_000) return `FCF: +$${(fcf / 1e9).toFixed(1)}B`;
+  if (fcf > 0) return `FCF: +$${(fcf / 1e6).toFixed(0)}M`;
+  if (fcf > -50_000_000) return `FCF: -$${(Math.abs(fcf) / 1e6).toFixed(0)}M (breakeven)`;
+  return `FCF: -$${(Math.abs(fcf) / 1e9).toFixed(1)}B`;
+}
+
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, showMode = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null, fcfMap = null }) {
   const [sortConfig, setSortConfig] = useState({ key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
   const listRef = useRef([]);
@@ -480,6 +496,12 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                       return <span className={list === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort} style={{ marginLeft: 0, marginRight: 4 }}>{list === 'LONG' ? 'L' : 'S'}</span>;
                     })()}
                     <span>{stock.ticker}</span>
+                    {fcfMap && (
+                      <span
+                        style={{ display: 'inline-block', fontSize: 9, fontWeight: 900, padding: '1px 4px', borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 5, backgroundColor: getFcfColor(fcfMap[stock.ticker]) }}
+                        title={getFcfLabel(fcfMap[stock.ticker])}
+                      >$</span>
+                    )}
                     {(() => {
                       const tags = [];
                       if (stock.isSp500) tags.push('500');

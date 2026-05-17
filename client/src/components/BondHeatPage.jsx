@@ -240,19 +240,16 @@ function YieldShockMeter({ history }) {
   return (
     <div className={styles.shockMeterBlock}>
       <div className={styles.metersBlockTitle}>10Y YIELD SHOCK — 10 DAY WINDOW</div>
-      <div className={styles.shockMeterRow}>
-        <div className={styles.shockMeterBoxes}>
-          {boxes.map((b, i) => (
-            <div
-              key={i}
-              className={`${styles.shockMeterBox} ${styles[`shock_${b.status}`]}`}
-              title={`${last10[i]?.date}: ${b.bps > 0 ? '+' : ''}${b.bps} bps cumulative`}
-            />
-          ))}
-        </div>
-        <div className={`${styles.shockMeterBps} ${isShock ? styles.shockMeterDanger : ''}`}>
-          {latestBps > 0 ? '+' : ''}{latestBps} bps
-        </div>
+      <div className={styles.shockMeterBoxes}>
+        {boxes.map((b, i) => (
+          <div
+            key={i}
+            className={`${styles.shockMeterBox} ${styles[`shock_${b.status}`]}`}
+            title={`${last10[i]?.date}: ${b.bps > 0 ? '+' : ''}${b.bps} bps cumulative`}
+          >
+            <div className={styles.shockBoxBps}>{b.bps > 0 ? '+' : ''}{b.bps}</div>
+          </div>
+        ))}
       </div>
       <div className={styles.shockMeterScale}>
         <span className={styles.scaleGreen}>Declining</span>

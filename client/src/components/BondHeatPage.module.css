@@ -148,12 +148,11 @@
 .shockMeterBlock {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 6px 12px;
+  gap: 4px;
+  padding: 8px 12px;
   background: #0a0a0a;
   border: 1px solid #333;
   border-radius: 6px;
-  min-width: 190px;
 }
 
 .metersBlockTitle {
@@ -165,44 +164,41 @@
   margin-bottom: 2px;
 }
 
-.shockMeterRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .shockMeterBoxes {
   display: flex;
-  gap: 2px;
+  gap: 3px;
 }
 
 .shockMeterBox {
-  width: 14px;
-  height: 18px;
-  border-radius: 2px;
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: background 0.3s;
 }
 
-.shock_declining { background: #69f0ae; }
-.shock_building { background: #ffd600; }
-.shock_shock { background: #ef5350; animation: gaugePulse 1.2s infinite; }
-.shock_flat { background: #555; }
-
-.shockMeterBps {
-  font-size: 12px;
+.shockBoxBps {
+  font-size: 10px;
   font-weight: 800;
-  color: #ccc;
-  white-space: nowrap;
+  color: #000;
+  line-height: 1;
 }
 
-.shockMeterDanger {
-  color: #ff5252;
-}
+.shock_declining { background: #69f0ae; }
+.shock_declining .shockBoxBps { color: #1b5e20; }
+.shock_building { background: #ffd600; }
+.shock_building .shockBoxBps { color: #5d4600; }
+.shock_shock { background: #ef5350; animation: gaugePulse 1.2s infinite; }
+.shock_shock .shockBoxBps { color: #fff; }
+.shock_flat { background: #555; }
+.shock_flat .shockBoxBps { color: #999; }
 
 .shockMeterScale {
   display: flex;
-  gap: 8px;
-  font-size: 7px;
+  gap: 10px;
+  font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.3px;
 }

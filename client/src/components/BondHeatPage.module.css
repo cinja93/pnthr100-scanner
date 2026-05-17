@@ -721,6 +721,17 @@
   opacity: 0.9;
 }
 
+.fcfBill {
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+  margin-top: 2px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  color: #000;
+  opacity: 0.9;
+}
+
 /* ── Loading ── */
 .loadingState {
   display: flex;

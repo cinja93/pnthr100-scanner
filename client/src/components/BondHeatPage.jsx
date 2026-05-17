@@ -664,7 +664,23 @@ function useComparisonInterpretation(comparisonData, shockZones) {
 
 // ── Sector grid ─────────────────────────────────────────────────────────────
 
-function SectorGrid({ sector, onTickerClick }) {
+function getFcfColor(fcf) {
+  if (fcf == null) return '#666';
+  if (fcf > 50_000_000) return '#00c853';   // strong positive (>$50M)
+  if (fcf > 0) return '#69f0ae';             // positive
+  if (fcf > -50_000_000) return '#ffd600';   // breakeven range (-$50M to $0)
+  return '#ff5252';                          // negative (<-$50M)
+}
+
+function getFcfLabel(fcf) {
+  if (fcf == null) return 'No FCF data';
+  if (fcf > 50_000_000) return `FCF: +$${(fcf / 1e9).toFixed(1)}B`;
+  if (fcf > 0) return `FCF: +$${(fcf / 1e6).toFixed(0)}M`;
+  if (fcf > -50_000_000) return `FCF: -$${(Math.abs(fcf) / 1e6).toFixed(0)}M (breakeven)`;
+  return `FCF: -$${(Math.abs(fcf) / 1e9).toFixed(1)}B`;
+}
+
+function SectorGrid({ sector, fcfMap, onTickerClick }) {
   const tickers = sector.holdings.map(h => h.ticker);
   return (
     <div className={styles.sectorBlock}>
@@ -678,18 +694,21 @@ function SectorGrid({ sector, onTickerClick }) {
         {sector.holdings.map((h, i) => {
           const bg = getHeatColor(h.changePct);
           const color = getTextColor(h.changePct);
+          const fcf = fcfMap[h.ticker];
+          const fcfColor = getFcfColor(fcf);
           return (
             <div
               key={h.ticker}
               className={styles.tickerCell}
               style={{ backgroundColor: bg, color, cursor: 'pointer' }}
-              title={`${h.name}\n${h.changePct != null ? `${h.changePct > 0 ? '+' : ''}${h.changePct.toFixed(2)}%` : 'No data'}\nClick to view chart`}
+              title={`${h.name}\n${h.changePct != null ? `${h.changePct > 0 ? '+' : ''}${h.changePct.toFixed(2)}%` : 'No data'}\n${getFcfLabel(fcf)}\nClick to view chart`}
               onClick={() => onTickerClick(tickers, i)}
             >
               <div className={styles.tickerSymbol}>{h.ticker}</div>
               <div className={styles.tickerChange}>
                 {h.changePct != null ? `${h.changePct > 0 ? '+' : ''}${h.changePct.toFixed(1)}%` : '—'}
               </div>
+              <div className={styles.fcfBill} style={{ backgroundColor: fcfColor }} title={getFcfLabel(fcf)}>$</div>
             </div>
           );
         })}
@@ -703,6 +722,7 @@ function SectorGrid({ sector, onTickerClick }) {
 export default function BondHeatPage() {
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
+  const [fcfMap, setFcfMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalChart, setModalChart] = useState(null);
@@ -714,9 +734,10 @@ export default function BondHeatPage() {
     setLoading(true);
     setError(null);
     try {
-      const [heatRes, histRes] = await Promise.all([
+      const [heatRes, histRes, fcfRes] = await Promise.all([
         apiFetch(`${API_BASE}/api/bond-heat${refresh ? '?refresh=1' : ''}`, { headers: authHeaders() }),
         apiFetch(`${API_BASE}/api/bond-heat/history`, { headers: authHeaders() }),
+        apiFetch(`${API_BASE}/api/bond-heat/fcf`, { headers: authHeaders() }),
       ]);
       if (!heatRes.ok) throw new Error(`HTTP ${heatRes.status}`);
       const json = await heatRes.json();
@@ -724,6 +745,10 @@ export default function BondHeatPage() {
       if (histRes.ok) {
         const histJson = await histRes.json();
         setHistory(Array.isArray(histJson) ? histJson : []);
+      }
+      if (fcfRes.ok) {
+        const fcfJson = await fcfRes.json();
+        setFcfMap(fcfJson || {});
       }
     } catch (err) {
       setError(err.message);
@@ -958,7 +983,7 @@ export default function BondHeatPage() {
 
           {/* ── Heat Map ── */}
           <div className={styles.sectorsContainer}>
-            {sortedSectors.map(s => <SectorGrid key={s.id} sector={s} onTickerClick={(tickers, idx) => { setChartTickers(tickers); setChartIndex(idx); }} />)}
+            {sortedSectors.map(s => <SectorGrid key={s.id} sector={s} fcfMap={fcfMap} onTickerClick={(tickers, idx) => { setChartTickers(tickers); setChartIndex(idx); }} />)}
           </div>
         </>
       )}

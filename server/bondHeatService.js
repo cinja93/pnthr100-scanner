@@ -17,7 +17,46 @@ let histCache = null;
 let histCacheTime = 0;
 const HIST_CACHE_MS = 10 * 60 * 1000;
 
-export function clearBondHeatCache() { cache = null; cacheTime = 0; histCache = null; histCacheTime = 0; }
+let fcfCache = null;
+let fcfCacheTime = 0;
+const FCF_CACHE_MS = 6 * 60 * 60 * 1000; // 6 hours — FCF only changes quarterly
+
+export function clearBondHeatCache() { cache = null; cacheTime = 0; histCache = null; histCacheTime = 0; fcfCache = null; fcfCacheTime = 0; }
+
+export async function getFcfData() {
+  const now = Date.now();
+  if (fcfCache && (now - fcfCacheTime) < FCF_CACHE_MS) return fcfCache;
+
+  const key = process.env.FMP_API_KEY;
+  if (!key) throw new Error('FMP_API_KEY not set');
+
+  const holdings = getAiUniverseHoldings();
+  const tickers = holdings.map(h => h.ticker);
+
+  const get = (url) =>
+    fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
+      .then(r => r.ok ? r.json() : [])
+      .catch(() => []);
+
+  // FMP batch cash-flow-statement supports comma-separated tickers
+  const BATCH = 50;
+  const results = {};
+  for (let i = 0; i < tickers.length; i += BATCH) {
+    const batch = tickers.slice(i, i + BATCH).join(',');
+    const data = await get(`${FMP_BASE}/cash-flow-statement/${batch}?period=annual&limit=1&apikey=${key}`);
+    if (Array.isArray(data)) {
+      for (const row of data) {
+        if (row.symbol && !results[row.symbol]) {
+          results[row.symbol] = row.freeCashFlow ?? null;
+        }
+      }
+    }
+  }
+
+  fcfCache = results;
+  fcfCacheTime = now;
+  return results;
+}
 
 export async function getBondHeatData() {
   const now = Date.now();

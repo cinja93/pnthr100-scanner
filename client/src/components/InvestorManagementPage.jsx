@@ -289,7 +289,7 @@ export default function InvestorManagementPage() {
   );
 }
 
-function InlinePageEditor({ investorId, allowedPages, allowedDocIds, onSave }) {
+function InlinePageEditor({ investorId, allowedPages, allowedDocIds, onSave, onPreview }) {
   const [pages, setPages] = useState(allowedPages);
   const [docIds, setDocIds] = useState(allowedDocIds || []);
   const [saving, setSaving] = useState(false);
@@ -325,13 +325,17 @@ function InlinePageEditor({ investorId, allowedPages, allowedDocIds, onSave }) {
         await onSave(pages, docIds);
         setDirty(false);
       }
-      const res = await fetch(`${API_BASE}/api/investors/${investorId}/preview-token`, {
-        method: 'POST', headers: authHeaders(),
-      });
-      if (!res.ok) throw new Error('Failed to generate preview token');
-      const { token } = await res.json();
-      const url = `${window.location.origin}/?portal=investor&preview_token=${token}`;
-      window.open(url, '_blank', 'noopener');
+      if (onPreview) {
+        await onPreview();
+      } else {
+        const res = await fetch(`${API_BASE}/api/investors/${investorId}/preview-token`, {
+          method: 'POST', headers: authHeaders(),
+        });
+        if (!res.ok) throw new Error('Failed to generate preview token');
+        const { token } = await res.json();
+        const url = `${window.location.origin}/?portal=investor&preview_token=${token}`;
+        window.open(url, '_blank', 'noopener');
+      }
     } catch (err) {
       alert('Preview failed: ' + err.message);
     } finally {
@@ -357,7 +361,7 @@ function InlinePageEditor({ investorId, allowedPages, allowedDocIds, onSave }) {
           fontWeight: 700, fontSize: 11, borderRadius: 4,
           cursor: (previewing || saving) ? 'default' : 'pointer', opacity: (previewing || saving) ? 0.5 : 1,
         }}>
-          {previewing ? 'Opening...' : '👀 Preview as Investor'}
+          {previewing ? 'Opening...' : onPreview ? '👀 Preview as VIP' : '👀 Preview as Investor'}
         </button>
       </div>
     </div>
@@ -418,6 +422,17 @@ function VipCard({ vip, onPagesUpdated }) {
             setCurrentPages(pages);
             setCurrentDocIds(docIds || []);
             if (onPagesUpdated) onPagesUpdated();
+          }}
+          onPreview={async () => {
+            const res = await fetch(`${API_BASE}/api/admin/impersonate`, {
+              method: 'POST',
+              headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ targetUserId: vip.id }),
+            });
+            if (!res.ok) throw new Error('Failed to start impersonation');
+            const { token } = await res.json();
+            const url = `${window.location.origin}/?impersonate=${encodeURIComponent(token)}`;
+            window.open(url, '_blank', 'noopener,noreferrer');
           }}
         />
       )}

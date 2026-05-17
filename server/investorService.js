@@ -131,15 +131,18 @@ export async function authenticateInvestor(email, password) {
 
 // ── Event Tracking ──────────────────────────────────────────────────────────
 
-export async function logEvent(investorId, type, metadata = {}, req = null) {
+export async function logEvent(userId, type, metadata = {}, req = null) {
   const db = await connectToDatabase();
+  let oid;
+  try { oid = new ObjectId(userId); } catch { oid = userId; }
   const event = {
-    investorId: new ObjectId(investorId),
+    investorId: oid,
     type,
     page: metadata.page || null,
     documentId: metadata.documentId ? new ObjectId(metadata.documentId) : null,
     documentName: metadata.documentName || null,
     metadata: metadata.extra || null,
+    userRole: req?.user?.role || null,
     ip: req?.ip || req?.headers?.['x-forwarded-for'] || null,
     userAgent: req?.headers?.['user-agent'] || null,
     timestamp: new Date(),
@@ -250,4 +253,101 @@ export async function updateNote(noteId, text) {
 export async function deleteNote(noteId) {
   const db = await connectToDatabase();
   await db.collection(NOTES).deleteOne({ _id: new ObjectId(noteId) });
+}
+
+// ── Portal Analytics (combined investor + VIP) ────────────────────────────
+
+export async function getPortalAnalytics() {
+  const db = await connectToDatabase();
+
+  // Get all investors
+  const investors = await db.collection(INVESTORS)
+    .find({}, { projection: { hashedPassword: 0 } })
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  // Get all VIP users (non-admin members from the users collection)
+  const users = await db.collection('users')
+    .find({ $or: [{ role: 'member' }, { role: { $exists: false } }] }, { projection: { _id: 1, email: 1, name: 1, role: 1 } })
+    .toArray();
+
+  // All event data — per-user summary
+  const eventCounts = await db.collection(EVENTS).aggregate([
+    { $group: {
+      _id: '$investorId',
+      totalEvents: { $sum: 1 },
+      pageViews: { $sum: { $cond: [{ $eq: ['$type', 'page_view'] }, 1, 0] } },
+      docViews: { $sum: { $cond: [{ $eq: ['$type', 'document_view'] }, 1, 0] } },
+      sessions: { $sum: { $cond: [{ $eq: ['$type', 'session_start'] }, 1, 0] } },
+      lastActivity: { $max: '$timestamp' },
+    }},
+  ]).toArray();
+  const countsMap = {};
+  for (const ec of eventCounts) countsMap[ec._id.toString()] = ec;
+
+  function enrich(record, id) {
+    const c = countsMap[id] || { totalEvents: 0, pageViews: 0, docViews: 0, sessions: 0, lastActivity: null };
+    const score = (c.pageViews * 1) + (c.docViews * 3) + (c.sessions * 5);
+    let tier = 'Cold';
+    if (score > 80) tier = 'Ready';
+    else if (score > 50) tier = 'Hot';
+    else if (score > 20) tier = 'Warm';
+    return { ...record, ...c, engagementScore: score, engagementTier: tier };
+  }
+
+  const enrichedInvestors = investors.map(inv => ({ ...enrich(inv, inv._id.toString()), userType: 'investor' }));
+  const enrichedVips = users
+    .filter(u => countsMap[u._id.toString()])
+    .map(u => ({
+      _id: u._id, name: u.name || u.email?.split('@')[0], email: u.email, company: null,
+      ...enrich({}, u._id.toString()), userType: 'vip',
+    }));
+
+  // Per-user page breakdown with duration
+  const pageBreakdown = await db.collection(EVENTS).aggregate([
+    { $match: { type: { $in: ['page_view', 'page_exit'] }, page: { $ne: null } } },
+    { $group: {
+      _id: { userId: '$investorId', page: '$page', type: '$type' },
+      count: { $sum: 1 },
+      totalDuration: { $sum: { $cond: [{ $eq: ['$type', 'page_exit'] }, { $ifNull: ['$metadata.duration', 0] }, 0] } },
+    }},
+  ]).toArray();
+
+  const userPages = {};
+  for (const row of pageBreakdown) {
+    const uid = row._id.userId.toString();
+    const page = row._id.page;
+    if (!userPages[uid]) userPages[uid] = {};
+    if (!userPages[uid][page]) userPages[uid][page] = { views: 0, totalSeconds: 0 };
+    if (row._id.type === 'page_view') userPages[uid][page].views = row.count;
+    if (row._id.type === 'page_exit') userPages[uid][page].totalSeconds = row.totalDuration;
+  }
+
+  // Global page views + duration (for pie chart)
+  const globalPages = {};
+  for (const uid of Object.keys(userPages)) {
+    for (const [page, stats] of Object.entries(userPages[uid])) {
+      if (!globalPages[page]) globalPages[page] = { views: 0, totalSeconds: 0 };
+      globalPages[page].views += stats.views;
+      globalPages[page].totalSeconds += stats.totalSeconds;
+    }
+  }
+  const pageStats = Object.entries(globalPages)
+    .map(([page, stats]) => ({ page, ...stats, avgSeconds: stats.views > 0 ? Math.round(stats.totalSeconds / stats.views) : 0 }))
+    .sort((a, b) => b.views - a.views);
+
+  // Top documents
+  const topDocs = await db.collection(EVENTS).aggregate([
+    { $match: { type: 'document_view', documentName: { $ne: null } } },
+    { $group: { _id: '$documentName', views: { $sum: 1 } } },
+    { $sort: { views: -1 } },
+    { $limit: 10 },
+  ]).toArray();
+
+  return {
+    users: [...enrichedInvestors, ...enrichedVips],
+    pageStats,
+    topDocs,
+    userPages,
+  };
 }

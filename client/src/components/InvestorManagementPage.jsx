@@ -5,6 +5,64 @@ import { getDefaultPages, ALL_ASSIGNABLE_PAGES, PORTAL_PAGES } from '../contexts
 
 const TIER_COLORS = { Ready: '#28a745', Hot: '#dc3545', Warm: '#f9a825', Cold: '#666' };
 
+const PIE_COLORS = [
+  '#FCF000', '#28a745', '#dc3545', '#f9a825', '#17a2b8',
+  '#6f42c1', '#fd7e14', '#20c997', '#e83e8c', '#6610f2',
+  '#007bff', '#ffc107', '#e74c3c', '#2ecc71', '#9b59b6',
+];
+
+const PAGE_LABELS = Object.fromEntries(ALL_ASSIGNABLE_PAGES.map(p => [p.key, p.label]));
+
+function formatDuration(seconds) {
+  if (!seconds || seconds < 1) return '-';
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
+function PieChart({ data, size = 200 }) {
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+  if (total === 0) return null;
+  const cx = size / 2, cy = size / 2, r = size / 2 - 4;
+  let cumulative = 0;
+  const slices = data.map((d, i) => {
+    const fraction = d.value / total;
+    const startAngle = cumulative * 2 * Math.PI - Math.PI / 2;
+    cumulative += fraction;
+    const endAngle = cumulative * 2 * Math.PI - Math.PI / 2;
+    if (fraction >= 0.9999) {
+      return { ...d, path: null, circle: true, color: PIE_COLORS[i % PIE_COLORS.length], fraction };
+    }
+    const largeArc = fraction > 0.5 ? 1 : 0;
+    const x1 = cx + r * Math.cos(startAngle);
+    const y1 = cy + r * Math.sin(startAngle);
+    const x2 = cx + r * Math.cos(endAngle);
+    const y2 = cy + r * Math.sin(endAngle);
+    const path = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+    return { ...d, path, circle: false, color: PIE_COLORS[i % PIE_COLORS.length], fraction };
+  });
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {slices.map((s, i) => s.circle
+          ? <circle key={i} cx={cx} cy={cy} r={r} fill={s.color} />
+          : <path key={i} d={s.path} fill={s.color} stroke="#0a0a0a" strokeWidth={1} />
+        )}
+      </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {slices.map((s, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, flexShrink: 0 }} />
+            <span style={{ color: '#ccc' }}>{s.label}</span>
+            <span style={{ color: '#666', marginLeft: 'auto' }}>{Math.round(s.fraction * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function formatDate(d) {
   if (!d) return '-';
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -26,6 +84,7 @@ export default function InvestorManagementPage() {
   const [activityLog, setActivityLog] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [resetTarget, setResetTarget] = useState(null); // { id, name, type: 'email' | 'password' }
+  const [expandedUser, setExpandedUser] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -152,40 +211,118 @@ export default function InvestorManagementPage() {
 
       {/* ── Analytics Tab ── */}
       {!loading && tab === 'analytics' && analytics && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* Engagement table */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Engagement table — investors + VIPs */}
           <div>
             <h3 style={{ fontSize: 13, fontWeight: 700, color: '#FCF000', margin: '0 0 10px', letterSpacing: '0.05em' }}>
-              INVESTOR ENGAGEMENT
+              USER ENGAGEMENT
             </h3>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #333' }}>
-                  {['Name', 'Company', 'Sessions', 'Pages', 'Docs', 'Score', 'Tier', 'Last Active'].map(h => (
-                    <th key={h} style={{ padding: '8px 10px', color: '#666', fontWeight: 600, textAlign: 'left', fontSize: 10, letterSpacing: '0.05em' }}>{h}</th>
+                  {['Name', 'Type', 'Sessions', 'Pages', 'Docs', 'Score', 'Tier', 'Last Active'].map(h => (
+                    <th key={h} style={{ padding: '8px 10px', color: '#666', fontWeight: 600, textAlign: h === 'Name' ? 'left' : 'center', fontSize: 10, letterSpacing: '0.05em' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {analytics.investors.map(inv => (
-                  <tr key={inv._id} style={{ borderBottom: '1px solid #1a1a1a' }}>
-                    <td style={{ padding: '8px 10px', color: '#fff', fontWeight: 600 }}>{inv.name}</td>
-                    <td style={{ padding: '8px 10px', color: '#888' }}>{inv.company || '-'}</td>
-                    <td style={{ padding: '8px 10px', color: '#aaa', textAlign: 'center' }}>{inv.sessions || 0}</td>
-                    <td style={{ padding: '8px 10px', color: '#aaa', textAlign: 'center' }}>{inv.pageViews || 0}</td>
-                    <td style={{ padding: '8px 10px', color: '#aaa', textAlign: 'center' }}>{inv.docViews || 0}</td>
-                    <td style={{ padding: '8px 10px', color: '#FCF000', fontWeight: 700, textAlign: 'center' }}>{inv.engagementScore}</td>
-                    <td style={{ padding: '8px 10px' }}>
-                      <span style={{ color: TIER_COLORS[inv.engagementTier] || '#666', fontWeight: 700, fontSize: 11 }}>
-                        {inv.engagementTier}
+                {(analytics.users || []).map(u => (
+                  <tr key={u._id} style={{ borderBottom: '1px solid #1a1a1a', cursor: 'pointer' }}
+                    onClick={() => setExpandedUser(prev => prev === u._id?.toString() ? null : u._id?.toString())}>
+                    <td style={{ padding: '8px 10px', color: '#fff', fontWeight: 600 }}>
+                      {expandedUser === u._id?.toString() ? '▼ ' : '▶ '}{u.name}
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: u.userType === 'vip' ? 'rgba(40,167,69,0.15)' : 'rgba(252,240,0,0.1)', color: u.userType === 'vip' ? '#28a745' : '#FCF000' }}>
+                        {u.userType === 'vip' ? 'VIP' : 'INVESTOR'}
                       </span>
                     </td>
-                    <td style={{ padding: '8px 10px', color: '#666', fontSize: 11 }}>{formatDateTime(inv.lastActivity)}</td>
+                    <td style={{ padding: '8px 10px', color: '#aaa', textAlign: 'center' }}>{u.sessions || 0}</td>
+                    <td style={{ padding: '8px 10px', color: '#aaa', textAlign: 'center' }}>{u.pageViews || 0}</td>
+                    <td style={{ padding: '8px 10px', color: '#aaa', textAlign: 'center' }}>{u.docViews || 0}</td>
+                    <td style={{ padding: '8px 10px', color: '#FCF000', fontWeight: 700, textAlign: 'center' }}>{u.engagementScore}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                      <span style={{ color: TIER_COLORS[u.engagementTier] || '#666', fontWeight: 700, fontSize: 11 }}>
+                        {u.engagementTier}
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px 10px', color: '#666', fontSize: 11, textAlign: 'center' }}>{formatDateTime(u.lastActivity)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Expanded user — per-page breakdown */}
+          {expandedUser && analytics.userPages?.[expandedUser] && (
+            <div style={{ background: '#141414', border: '1px solid #222', borderRadius: 8, padding: 16 }}>
+              <h3 style={{ fontSize: 12, fontWeight: 700, color: '#FCF000', margin: '0 0 12px', letterSpacing: '0.05em' }}>
+                PAGE BREAKDOWN — {(analytics.users || []).find(u => u._id?.toString() === expandedUser)?.name?.toUpperCase()}
+              </h3>
+              <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 280 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #333' }}>
+                        {['Page', 'Views', 'Avg Time'].map(h => (
+                          <th key={h} style={{ padding: '6px 8px', color: '#666', fontWeight: 600, textAlign: h === 'Page' ? 'left' : 'center', fontSize: 10 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(analytics.userPages[expandedUser])
+                        .sort((a, b) => b[1].views - a[1].views)
+                        .map(([page, stats]) => (
+                          <tr key={page} style={{ borderBottom: '1px solid #1a1a1a' }}>
+                            <td style={{ padding: '6px 8px', color: '#ccc' }}>{PAGE_LABELS[page] || page}</td>
+                            <td style={{ padding: '6px 8px', color: '#aaa', textAlign: 'center' }}>{stats.views}</td>
+                            <td style={{ padding: '6px 8px', color: '#888', textAlign: 'center' }}>{formatDuration(stats.views > 0 ? Math.round(stats.totalSeconds / stats.views) : 0)}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#666', marginBottom: 8, letterSpacing: '0.05em' }}>PAGE VIEWS</div>
+                  <PieChart
+                    data={Object.entries(analytics.userPages[expandedUser])
+                      .sort((a, b) => b[1].views - a[1].views)
+                      .slice(0, 12)
+                      .map(([page, stats]) => ({ label: PAGE_LABELS[page] || page, value: stats.views }))}
+                    size={180}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Global page stats with pie chart */}
+          {analytics.pageStats?.length > 0 && (
+            <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 300 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: '#FCF000', margin: '0 0 10px', letterSpacing: '0.05em' }}>
+                  PAGE VIEWS — ALL USERS
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {analytics.pageStats.map((p, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 10px', background: '#141414', borderRadius: 4 }}>
+                      <span style={{ color: '#666', fontSize: 11, minWidth: 20 }}>#{i + 1}</span>
+                      <span style={{ color: '#fff', fontSize: 12, flex: 1 }}>{PAGE_LABELS[p.page] || p.page}</span>
+                      <span style={{ color: '#aaa', fontSize: 11, minWidth: 50, textAlign: 'right' }}>{formatDuration(p.avgSeconds)} avg</span>
+                      <span style={{ color: '#FCF000', fontWeight: 700, fontSize: 12, minWidth: 60, textAlign: 'right' }}>{p.views} views</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#666', marginBottom: 8, letterSpacing: '0.05em' }}>PAGE DISTRIBUTION</div>
+                <PieChart
+                  data={analytics.pageStats.slice(0, 12).map(p => ({ label: PAGE_LABELS[p.page] || p.page, value: p.views }))}
+                  size={220}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Top Documents */}
           {analytics.topDocs?.length > 0 && (
@@ -199,24 +336,6 @@ export default function InvestorManagementPage() {
                     <span style={{ color: '#666', fontSize: 11, minWidth: 20 }}>#{i + 1}</span>
                     <span style={{ color: '#fff', fontSize: 12, flex: 1 }}>{d._id}</span>
                     <span style={{ color: '#FCF000', fontWeight: 700, fontSize: 12 }}>{d.views} views</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Top Pages */}
-          {analytics.topPages?.length > 0 && (
-            <div>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#FCF000', margin: '0 0 10px', letterSpacing: '0.05em' }}>
-                TOP VIEWED PAGES
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {analytics.topPages.map((p, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 10px', background: '#141414', borderRadius: 4 }}>
-                    <span style={{ color: '#666', fontSize: 11, minWidth: 20 }}>#{i + 1}</span>
-                    <span style={{ color: '#fff', fontSize: 12, flex: 1 }}>{p._id}</span>
-                    <span style={{ color: '#FCF000', fontWeight: 700, fontSize: 12 }}>{p.views} views</span>
                   </div>
                 ))}
               </div>

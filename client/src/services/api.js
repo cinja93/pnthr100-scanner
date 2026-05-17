@@ -1181,7 +1181,7 @@ export async function deleteInvestorApi(id) {
 
 // Admin: investor analytics
 export async function fetchInvestorAnalytics() {
-  const res = await apiFetch(`${API_BASE}/api/investors/analytics`, { headers: authHeaders() });
+  const res = await apiFetch(`${API_BASE}/api/portal/analytics`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }

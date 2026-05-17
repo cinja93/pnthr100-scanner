@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
+import jwt from 'jsonwebtoken';
 import mongoSanitize from 'express-mongo-sanitize';
 import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks, getJungleStocks, getAiTopStocks } from './stockService.js';
 import { getSignals, getCachedSignals } from './signalService.js';
@@ -87,7 +88,7 @@ import newsletterRouter from './routes/newsletter.js';
 import dataroomRouter from './routes/dataroom.js';
 import complianceRouter from './routes/compliance.js';
 import { investorAuthRouter, investorAdminRouter, investorSelfRouter } from './routes/investor.js';
-import { ensureInvestorIndexes } from './investorService.js';
+import { ensureInvestorIndexes, logEvent, getPortalAnalytics } from './investorService.js';
 import {
   ensureAccessRequestIndexes, createAccessRequest, emailAlreadyInUse,
   listAccessRequests, approveAsMember, approveAsInvestor, denyAccessRequest,
@@ -924,6 +925,45 @@ app.patch('/api/admin/users/:id/pages', authenticateJWT, requireAdmin, async (re
   } catch (error) {
     console.error('Error updating user pages:', error);
     res.status(500).json({ error: 'Failed to update pages' });
+  }
+});
+
+// ── Portal Analytics (investor + VIP) ──────────────────────────────────────
+
+// POST /api/portal/events — log events from investor or VIP users
+app.post('/api/portal/events', authenticateJWT, async (req, res) => {
+  try {
+    const role = req.user.role;
+    if (role !== 'investor' && role !== 'member') return res.status(403).json({ error: 'Portal access only' });
+    const { type, page, documentId, documentName, extra } = req.body;
+    if (!type) return res.status(400).json({ error: 'Event type required' });
+    await logEvent(req.user.userId, type, { page, documentId, documentName, extra }, req);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/portal/events-beacon — sendBeacon endpoint (token in body, no auth header)
+app.post('/api/portal/events-beacon', async (req, res) => {
+  try {
+    const { type, page, extra, _token } = req.body || {};
+    if (!_token || !type) return res.status(204).end();
+    const decoded = jwt.verify(_token, process.env.JWT_SECRET);
+    const role = decoded.role;
+    if (role !== 'investor' && role !== 'member') return res.status(204).end();
+    await logEvent(decoded.userId, type, { page, extra }, req);
+  } catch { /* best-effort */ }
+  res.status(204).end();
+});
+
+// GET /api/portal/analytics — admin-only: combined investor + VIP analytics
+app.get('/api/portal/analytics', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const data = await getPortalAnalytics();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -40,6 +40,7 @@ import NewsPage from './components/NewsPage';
 import PulsePage from './components/PulsePage';
 import SignalHistoryPage from './components/SignalHistoryPage';
 import AiSignalHistoryPage from './components/AiSignalHistoryPage';
+import { useEventTracker } from './hooks/useEventTracker';
 import { getSectorEmaPeriod } from './utils/sectorEmaConfig';
 import { getAiAwareEmaPeriod } from './utils/aiUniverseEma';
 import HistoryPage from './components/HistoryPage';
@@ -906,6 +907,10 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const renderPage = (effectiveAllowed && !effectiveAllowed.includes(activePage))
     ? effectiveAllowed[0]
     : activePage;
+
+  // Portal analytics — track page views with duration for investor/VIP users
+  const { trackPageView } = useEventTracker();
+  useEffect(() => { trackPageView(renderPage); }, [renderPage, trackPageView]);
 
   const [journalInitFilter, setJournalInitFilter] = useState(null);
   const [journalFocusId,    setJournalFocusId]    = useState(null);

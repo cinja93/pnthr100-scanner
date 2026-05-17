@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
 import { usePortal } from '../contexts/PortalContext';
 import { authHeaders, API_BASE } from '../services/api';
+import { useEventTracker } from '../hooks/useEventTracker';
 
 const DEFAULT_SECTION          = 'PNTHR Funds, Carnivore Quant LP Fund Documents';
 const VIP_HIDDEN_DOC_LABELS    = new Set(['PNTHR Strategy Change Notice']);
@@ -124,8 +125,10 @@ export default function DataRoomPage() {
     }
   };
 
+  const { trackDocView } = useEventTracker();
+
   const handleView = async (doc) => {
-    // Open document inline in a new browser tab (all users)
+    trackDocView(doc._id, doc.label || doc.filename);
     try {
       const res = await fetch(`${API_BASE}/api/dataroom/${doc._id}/view`, { headers: authHeaders() });
       if (!res.ok) throw new Error('View failed');

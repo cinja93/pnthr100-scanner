@@ -82,7 +82,7 @@ function YieldChart({ data, title, subtitle, lines, refLines, shockZones, danger
             <ReferenceArea key={`dz-${i}`} x1={zone.start} x2={zone.end} yAxisId="left" fill={zone.color} fillOpacity={0.08} />
           ))}
           {shockZones?.map((zone, i) => (
-            <ReferenceArea key={`sz-${i}`} x1={zone.start} x2={zone.end} yAxisId="left" fill="#ff5252" fillOpacity={0.15} />
+            <ReferenceArea key={`sz-${i}`} x1={zone.start} x2={zone.end} yAxisId="left" fill="#ff9800" fillOpacity={0.18} stroke="#ff9800" strokeOpacity={0.3} label={{ value: 'YIELD SHOCK', fill: '#ff9800', fontSize: 9, fontWeight: 700, position: 'insideTop' }} />
           ))}
           {refLines?.map((rl, i) => (
             <ReferenceLine key={i} y={rl.y} yAxisId="left" stroke={rl.color || '#ff5252'} strokeDasharray="5 3" label={{ value: rl.label, fill: rl.color || '#ff5252', fontSize: 10, position: 'insideTopLeft' }} />
@@ -225,6 +225,117 @@ function YieldShockBanner({ history, bonds }) {
           : dangerCount >= 2
           ? 'Rate pressure elevated — tighten stops, reduce exposure to rate-sensitive names'
           : 'Monitor closely — rates approaching danger levels'}
+      </div>
+    </div>
+  );
+}
+
+// ── Market Interpretation ──────────────────────────────────────────────────
+
+function MarketInterpretation({ bonds, breadth, history, comparisonData }) {
+  if (!bonds || !history.length) return null;
+
+  const latest = history[history.length - 1];
+  const isShock = latest?.yieldShock;
+  const y2Above = bonds.y2 >= 4.5;
+  const y10Above = bonds.y10 >= 4.5;
+  const y30Above = bonds.y30 >= 5.0;
+
+  // PAI300 beta
+  let beta = null;
+  if (history.length >= 22) {
+    const recent = history.slice(-21);
+    const returns = [];
+    for (let i = 1; i < recent.length; i++) {
+      const sp = recent[i - 1].spy, sc = recent[i].spy;
+      const pp = recent[i - 1].pai300, pc = recent[i].pai300;
+      if (sp && sc && pp && pc) returns.push({ spy: (sc - sp) / sp, pai: (pc - pp) / pp });
+    }
+    if (returns.length >= 10) {
+      const n = returns.length;
+      const aS = returns.reduce((s, r) => s + r.spy, 0) / n;
+      const aP = returns.reduce((s, r) => s + r.pai, 0) / n;
+      let cov = 0, v = 0;
+      for (const r of returns) { cov += (r.spy - aS) * (r.pai - aP); v += (r.spy - aS) ** 2; }
+      if (v > 0) beta = +(cov / v).toFixed(2);
+    }
+  }
+
+  // PAI300 vs SPY recent divergence
+  const lastComp = comparisonData?.length ? comparisonData[comparisonData.length - 1] : null;
+  const paiLead = lastComp?.pai300Pct != null && lastComp?.spyPct != null
+    ? +(lastComp.pai300Pct - lastComp.spyPct).toFixed(2)
+    : null;
+
+  // Breadth ratio
+  const breadthPct = breadth.total > 0 ? Math.round((breadth.advancers / breadth.total) * 100) : null;
+
+  const signals = [];
+
+  // Yield shock
+  if (isShock) {
+    signals.push({ icon: '🔴', text: 'YIELD SHOCK ACTIVE — 10Y has risen 20+ bps in 10 trading days. This is a rate-driven selloff signal. Avoid adding new long positions until the shock clears.' });
+  }
+
+  // 2Y signal
+  if (y2Above) {
+    signals.push({ icon: '🔵', text: `2Y at ${bonds.y2.toFixed(2)}% (above 4.50%) — the market is pricing out near-term rate cuts. Growth and AI stocks face headwinds from "higher for longer" expectations.` });
+  }
+
+  // 10Y signal
+  if (y10Above) {
+    signals.push({ icon: '🟡', text: `10Y at ${bonds.y10.toFixed(2)}% (above 4.50%) — discount rates are elevated, compressing high-multiple AI stock valuations. The higher this goes, the more growth stocks suffer.` });
+  }
+
+  // 30Y signal
+  if (y30Above) {
+    signals.push({ icon: '🟠', text: `30Y at ${bonds.y30.toFixed(2)}% (above 5.00%) — the bond market is signaling concern about long-term inflation, deficit sustainability, or waning foreign demand for US debt.` });
+  }
+
+  // Beta interpretation
+  if (beta != null) {
+    if (beta > 1.3) {
+      signals.push({ icon: '⚡', text: `PAI 300 Beta is ${beta}x — AI stocks are moving ${beta}x as much as the S&P 500. In a rate shock, expect PAI 300 to sell off significantly harder than the broad market.` });
+    } else if (beta > 1.0) {
+      signals.push({ icon: '📊', text: `PAI 300 Beta is ${beta}x — AI stocks are slightly more sensitive than the broad market to rate moves. Watch for acceleration if yields spike further.` });
+    } else {
+      signals.push({ icon: '✅', text: `PAI 300 Beta is ${beta}x — AI stocks are tracking close to or below the broad market's rate sensitivity. Relatively defensive posture for AI names.` });
+    }
+  }
+
+  // PAI300 outperformance
+  if (paiLead != null) {
+    if (paiLead > 3) {
+      signals.push({ icon: '🟢', text: `PAI 300 is outperforming SPY by +${paiLead.toFixed(1)}% since period start. AI names are leading — risk appetite is strong despite rate levels.` });
+    } else if (paiLead < -3) {
+      signals.push({ icon: '🔻', text: `PAI 300 is underperforming SPY by ${paiLead.toFixed(1)}%. AI stocks are lagging — rate pressure or rotation into value is hurting growth names.` });
+    }
+  }
+
+  // Breadth
+  if (breadthPct != null) {
+    if (breadthPct < 30) {
+      signals.push({ icon: '📉', text: `Only ${breadthPct}% of AI 300 stocks are positive today. Broad-based selling — this is not isolated weakness, it's a sector-wide retreat.` });
+    } else if (breadthPct > 70) {
+      signals.push({ icon: '📈', text: `${breadthPct}% of AI 300 stocks are positive today. Broad-based buying — the sector is moving together with conviction.` });
+    }
+  }
+
+  // All-clear
+  if (signals.length === 0) {
+    signals.push({ icon: '✅', text: 'All yield levels are below danger thresholds. No shock detected. Normal trading conditions — proceed with standard position sizing and entries.' });
+  }
+
+  return (
+    <div className={styles.interpretationBanner}>
+      <div className={styles.interpretationTitle}>BOND HEAT MARKET READ</div>
+      <div className={styles.interpretationBody}>
+        {signals.map((s, i) => (
+          <div key={i} className={styles.interpretationRow}>
+            <span className={styles.interpretationIcon}>{s.icon}</span>
+            <span>{s.text}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -549,6 +660,9 @@ export default function BondHeatPage() {
           {/* ── Yield Shock Warning ── */}
           <YieldShockBanner history={history} bonds={data.bonds} />
 
+          {/* ── Market Interpretation ── */}
+          <MarketInterpretation bonds={data.bonds} breadth={data.breadth} history={history} comparisonData={comparisonData} />
+
           {/* ── Current Yields Banner ── */}
           <YieldsBanner bonds={data.bonds} breadth={data.breadth} history={history} onShowPlaybook={() => setInfoPanel('playbook')} />
 
@@ -581,7 +695,7 @@ export default function BondHeatPage() {
                   <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.y10 }} /> 10Y</span>
                   <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.y30 }} /> 30Y</span>
                   <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.spy }} /> SPY</span>
-                  <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,82,82,0.25)' }} /> Yield Shock</span>
+                  <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,152,0,0.3)', borderColor: 'rgba(255,152,0,0.5)' }} /> Yield Shock</span>
                   <span className={styles.legendItem}><span className={styles.legendDash} style={{ borderColor: '#ffd600' }} /> 2Y/10Y Danger 4.50%</span>
                   <span className={styles.legendItem}><span className={styles.legendDash} style={{ borderColor: '#ff7043' }} /> 30Y Danger 5.00%</span>
                   <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(79,195,247,0.15)', borderColor: 'rgba(79,195,247,0.4)' }} /> 2Y Above 4.50%</span>
@@ -644,7 +758,7 @@ export default function BondHeatPage() {
                   <div className={styles.chartLegend}>
                     <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.pai300 }} /> PAI 300</span>
                     <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.spy }} /> S&P 500</span>
-                    <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,82,82,0.25)' }} /> Yield Shock</span>
+                    <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,152,0,0.3)', borderColor: 'rgba(255,152,0,0.5)' }} /> Yield Shock</span>
                   </div>
                 </YieldChart>
               )}

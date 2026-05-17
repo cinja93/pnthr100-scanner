@@ -122,7 +122,7 @@ function ChartModal({ data, chart, shockZones, dangerZones, onClose }) {
         { key: 'spy', name: 'S&P 500', color: CHART_COLORS.spy, axis: 'right', width: 1.5 },
       ],
       refLines: [
-        { y: 4.5, label: '10Y Alert 4.50%', color: '#ffd600' },
+        { y: 4.5, label: '2Y/10Y Alert 4.50%', color: '#ffd600' },
         { y: 5.0, label: '30Y Alert 5.00%', color: '#ff7043' },
       ],
       dualAxis: true,
@@ -174,9 +174,10 @@ function ChartModal({ data, chart, shockZones, dangerZones, onClose }) {
 function YieldShockBanner({ history, bonds }) {
   const latest = history.length ? history[history.length - 1] : null;
   const isShockActive = latest?.yieldShock;
+  const y2Above = bonds?.y2 >= 4.5;
   const y10Above = bonds?.y10 >= 4.5;
   const y30Above = bonds?.y30 >= 5.0;
-  const dangerCount = [isShockActive, y10Above, y30Above].filter(Boolean).length;
+  const dangerCount = [isShockActive, y2Above, y10Above, y30Above].filter(Boolean).length;
 
   if (dangerCount === 0) return null;
 
@@ -188,7 +189,7 @@ function YieldShockBanner({ history, bonds }) {
     if (cur != null && prev != null) bpsMove = Math.round((cur - prev) * 100);
   }
 
-  const level = dangerCount >= 3 ? 'critical' : dangerCount >= 2 ? 'high' : 'elevated';
+  const level = dangerCount >= 4 ? 'critical' : dangerCount >= 3 ? 'critical' : dangerCount >= 2 ? 'high' : 'elevated';
   const levelLabels = { critical: 'CRITICAL', high: 'HIGH', elevated: 'ELEVATED' };
   const levelClass = { critical: 'shockCritical', high: 'shockHigh', elevated: 'shockElevated' };
 
@@ -202,6 +203,9 @@ function YieldShockBanner({ history, bonds }) {
         {isShockActive && (
           <span className={styles.shockTag}>10Y VELOCITY: +{bpsMove || '20+'}bps / 10 days</span>
         )}
+        {y2Above && (
+          <span className={styles.shockTag}>2Y ABOVE 4.50%: {bonds.y2.toFixed(2)}% — RATE CUTS PRICED OUT</span>
+        )}
         {y10Above && (
           <span className={styles.shockTag}>10Y ABOVE 4.50%: {bonds.y10.toFixed(2)}%</span>
         )}
@@ -210,7 +214,9 @@ function YieldShockBanner({ history, bonds }) {
         )}
       </div>
       <div className={styles.shockAction}>
-        {dangerCount >= 3
+        {dangerCount >= 4
+          ? 'Full alarm — all yield thresholds breached, max defensive posture, tighten all stops'
+          : dangerCount >= 3
           ? 'Triple threat active — tighten all stops, avoid new longs, watch for capitulation'
           : dangerCount >= 2
           ? 'Rate pressure elevated — tighten stops, reduce exposure to rate-sensitive names'
@@ -298,7 +304,7 @@ function YieldsBanner({ bonds, breadth, history, onShowPlaybook }) {
 
   const items = [
     { label: 'Fed Funds Rate', value: bonds.fedFunds, change: null, alertLevel: null },
-    { label: '2-Year', value: bonds.y2, change: bonds.y2Change, alertLevel: null },
+    { label: '2-Year', value: bonds.y2, change: bonds.y2Change, alertLevel: bonds.y2 >= 4.5 ? '4.50%' : null },
     { label: '10-Year', value: bonds.y10, change: bonds.y10Change, alertLevel: bonds.y10 >= 4.5 ? '4.50%' : null },
     { label: '30-Year', value: bonds.y30, change: bonds.y30Change, alertLevel: bonds.y30 >= 5.0 ? '5.00%' : null },
   ];
@@ -326,7 +332,8 @@ function YieldsBanner({ bonds, breadth, history, onShowPlaybook }) {
 
         {/* ── Block 2: Two-Factor Alarm ── */}
         <div className={styles.gaugesBlock}>
-          <div className={styles.metersBlockTitle}>TWO-FACTOR ALARM</div>
+          <div className={styles.metersBlockTitle}>THREE-FACTOR ALARM</div>
+          <AlarmGauge label="2-Year" current={bonds.y2} threshold={4.50} color="#4fc3f7" />
           <AlarmGauge label="10-Year" current={bonds.y10} threshold={4.50} color="#ffd600" />
           <AlarmGauge label="30-Year" current={bonds.y30} threshold={5.00} color="#ff7043" />
         </div>
@@ -454,6 +461,7 @@ export default function BondHeatPage() {
       if (inZone) zones.push({ start, end: history[history.length - 1].date, color });
     };
 
+    buildZones('y2', 4.5, '#4fc3f7');
     buildZones('y10', 4.5, '#ffd600');
     buildZones('y30', 5.0, '#ff7043');
     return zones;
@@ -498,8 +506,8 @@ export default function BondHeatPage() {
                   { key: 'spy', name: 'S&P 500', color: CHART_COLORS.spy, axis: 'right', width: 1.5 },
                 ]}
                 refLines={[
-                  { y: 4.5, label: '4.50%', color: '#ffd600' },
-                  { y: 5.0, label: '5.00%', color: '#ff7043' },
+                  { y: 4.5, label: '2Y/10Y Alert 4.50%', color: '#ffd600' },
+                  { y: 5.0, label: '30Y Alert 5.00%', color: '#ff7043' },
                 ]}
                 shockZones={shockZones}
                 dangerZones={dangerZones}
@@ -513,8 +521,9 @@ export default function BondHeatPage() {
                   <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.y30 }} /> 30Y</span>
                   <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.spy }} /> SPY</span>
                   <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,82,82,0.25)' }} /> Yield Shock</span>
-                  <span className={styles.legendItem}><span className={styles.legendDash} style={{ borderColor: '#ffd600' }} /> 10Y Danger 4.50%</span>
+                  <span className={styles.legendItem}><span className={styles.legendDash} style={{ borderColor: '#ffd600' }} /> 2Y/10Y Danger 4.50%</span>
                   <span className={styles.legendItem}><span className={styles.legendDash} style={{ borderColor: '#ff7043' }} /> 30Y Danger 5.00%</span>
+                  <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(79,195,247,0.15)', borderColor: 'rgba(79,195,247,0.4)' }} /> 2Y Above 4.50%</span>
                   <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,214,0,0.15)', borderColor: 'rgba(255,214,0,0.4)' }} /> 10Y Above 4.50%</span>
                   <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,112,67,0.15)', borderColor: 'rgba(255,112,67,0.4)' }} /> 30Y Above 5.00%</span>
                 </div>

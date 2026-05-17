@@ -1,4 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceLine,
+} from 'recharts';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import styles from './BondHeatPage.module.css';
 
@@ -23,6 +27,89 @@ function getTextColor(pct) {
   if (pct == null) return '#888';
   if (Math.abs(pct) >= 2) return '#fff';
   return '#111';
+}
+
+const CHART_COLORS = { y2: '#4fc3f7', y10: '#ffd600', y30: '#ff7043' };
+
+function formatDateShort(dateStr) {
+  if (!dateStr) return '';
+  const [, m, d] = dateStr.split('-');
+  return `${+m}/${+d}`;
+}
+
+function YieldChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className={styles.chartTooltip}>
+      <div className={styles.tooltipDate}>{label}</div>
+      {payload.map(p => (
+        <div key={p.dataKey} style={{ color: p.color }}>
+          {p.name}: {p.value != null ? `${p.value.toFixed(3)}%` : '—'}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function YieldChart({ data, title, lines, refLines, height = 180, onClick }) {
+  return (
+    <div className={styles.chartCard} onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
+      <div className={styles.chartTitle}>{title}</div>
+      <ResponsiveContainer width="100%" height={height}>
+        <LineChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+          <XAxis dataKey="date" tickFormatter={formatDateShort} tick={{ fill: '#888', fontSize: 10 }} interval="preserveStartEnd" minTickGap={40} />
+          <YAxis tick={{ fill: '#888', fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={v => `${v}%`} />
+          <Tooltip content={<YieldChartTooltip />} />
+          {refLines?.map((rl, i) => (
+            <ReferenceLine key={i} y={rl.y} stroke={rl.color || '#ff5252'} strokeDasharray="5 3" label={{ value: rl.label, fill: rl.color || '#ff5252', fontSize: 10, position: 'right' }} />
+          ))}
+          {lines.map(l => (
+            <Line key={l.key} type="monotone" dataKey={l.key} name={l.name} stroke={l.color} dot={false} strokeWidth={2} />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function ChartModal({ data, chart, onClose }) {
+  if (!chart) return null;
+
+  const configs = {
+    yields: {
+      title: '2Y / 10Y / 30Y Treasury Yields — 2026 YTD',
+      lines: [
+        { key: 'y2', name: '2-Year', color: CHART_COLORS.y2 },
+        { key: 'y10', name: '10-Year', color: CHART_COLORS.y10 },
+        { key: 'y30', name: '30-Year', color: CHART_COLORS.y30 },
+      ],
+      refLines: [
+        { y: 4.5, label: '10Y Alert 4.50%', color: '#ffd600' },
+        { y: 5.0, label: '30Y Alert 5.00%', color: '#ff7043' },
+      ],
+    },
+    spread: {
+      title: '2Y / 10Y Yield Spread — 2026 YTD',
+      lines: [
+        { key: 'spread', name: '10Y - 2Y Spread', color: '#ce93d8' },
+      ],
+      refLines: [
+        { y: 0, label: 'Inversion', color: '#ef5350' },
+      ],
+    },
+  };
+
+  const cfg = configs[chart];
+
+  return (
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+        <button className={styles.modalClose} onClick={onClose}>✕</button>
+        <YieldChart data={data} title={cfg.title} lines={cfg.lines} refLines={cfg.refLines} height={420} />
+      </div>
+    </div>
+  );
 }
 
 function BondBanner({ bonds, breadth }) {
@@ -81,14 +168,11 @@ function BondBanner({ bonds, breadth }) {
 }
 
 function SectorGrid({ sector }) {
-  const avgColor = getHeatColor(sector.avgChange);
-  const avgTextColor = getTextColor(sector.avgChange);
-
   return (
     <div className={styles.sectorBlock}>
-      <div className={styles.sectorHeader} style={{ backgroundColor: avgColor, color: avgTextColor }}>
+      <div className={styles.sectorHeader}>
         <span className={styles.sectorName}>{sector.name}</span>
-        <span className={styles.sectorAvg}>
+        <span className={`${styles.sectorAvg} ${sector.avgChange >= 0 ? styles.sectorAvgUp : styles.sectorAvgDown}`}>
           {sector.avgChange != null ? `${sector.avgChange > 0 ? '+' : ''}${sector.avgChange.toFixed(2)}%` : '—'}
         </span>
       </div>
@@ -112,18 +196,26 @@ function SectorGrid({ sector }) {
 
 export default function BondHeatPage() {
   const [data, setData] = useState(null);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [modalChart, setModalChart] = useState(null);
 
   const load = async (refresh = false) => {
     setLoading(true);
     setError(null);
     try {
-      const url = `${API_BASE}/api/bond-heat${refresh ? '?refresh=1' : ''}`;
-      const res = await apiFetch(url, { headers: authHeaders() });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
+      const [heatRes, histRes] = await Promise.all([
+        apiFetch(`${API_BASE}/api/bond-heat${refresh ? '?refresh=1' : ''}`, { headers: authHeaders() }),
+        apiFetch(`${API_BASE}/api/bond-heat/history`, { headers: authHeaders() }),
+      ]);
+      if (!heatRes.ok) throw new Error(`HTTP ${heatRes.status}`);
+      const json = await heatRes.json();
       setData(json);
+      if (histRes.ok) {
+        const histJson = await histRes.json();
+        setHistory(Array.isArray(histJson) ? histJson : []);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -157,6 +249,37 @@ export default function BondHeatPage() {
       {data && (
         <>
           <BondBanner bonds={data.bonds} breadth={data.breadth} />
+
+          {history.length > 0 && (
+            <div className={styles.chartsRow}>
+              <YieldChart
+                data={history}
+                title="2Y / 10Y / 30Y Yields — 2026 YTD"
+                lines={[
+                  { key: 'y2', name: '2-Year', color: CHART_COLORS.y2 },
+                  { key: 'y10', name: '10-Year', color: CHART_COLORS.y10 },
+                  { key: 'y30', name: '30-Year', color: CHART_COLORS.y30 },
+                ]}
+                refLines={[
+                  { y: 4.5, label: '4.50%', color: '#ffd600' },
+                  { y: 5.0, label: '5.00%', color: '#ff7043' },
+                ]}
+                onClick={() => setModalChart('yields')}
+              />
+              <YieldChart
+                data={history}
+                title="2Y / 10Y Spread — 2026 YTD"
+                lines={[
+                  { key: 'spread', name: '10Y - 2Y Spread', color: '#ce93d8' },
+                ]}
+                refLines={[
+                  { y: 0, label: 'Inversion', color: '#ef5350' },
+                ]}
+                onClick={() => setModalChart('spread')}
+              />
+            </div>
+          )}
+
           <div className={styles.sectorsContainer}>
             {sortedSectors.map(s => <SectorGrid key={s.id} sector={s} />)}
           </div>
@@ -169,6 +292,8 @@ export default function BondHeatPage() {
           <p>Loading AI 300 heat map...</p>
         </div>
       )}
+
+      <ChartModal data={history} chart={modalChart} onClose={() => setModalChart(null)} />
     </div>
   );
 }

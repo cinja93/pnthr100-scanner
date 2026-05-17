@@ -11,7 +11,11 @@ let cache = null;
 let cacheTime = 0;
 const CACHE_MS = 60 * 1000;
 
-export function clearBondHeatCache() { cache = null; cacheTime = 0; }
+let histCache = null;
+let histCacheTime = 0;
+const HIST_CACHE_MS = 10 * 60 * 1000;
+
+export function clearBondHeatCache() { cache = null; cacheTime = 0; histCache = null; histCacheTime = 0; }
 
 export async function getBondHeatData() {
   const now = Date.now();
@@ -110,5 +114,36 @@ export async function getBondHeatData() {
 
   cache = result;
   cacheTime = now;
+  return result;
+}
+
+export async function getTreasuryHistory() {
+  const now = Date.now();
+  if (histCache && (now - histCacheTime) < HIST_CACHE_MS) return histCache;
+
+  const key = process.env.FMP_API_KEY;
+  if (!key) throw new Error('FMP_API_KEY not set');
+
+  const toStr = new Date().toISOString().split('T')[0];
+  const fromStr = '2026-01-01';
+
+  const data = await fetch(
+    `${FMP_BASE4}/treasury?from=${fromStr}&to=${toStr}&apikey=${key}`,
+    { signal: AbortSignal.timeout(TIMEOUT_MS) }
+  ).then(r => r.ok ? r.json() : []).catch(() => []);
+
+  if (!Array.isArray(data)) return [];
+
+  const result = data.map(d => ({
+    date: d.date,
+    y2: d.year2 != null ? +Number(d.year2).toFixed(3) : null,
+    y10: d.year10 != null ? +Number(d.year10).toFixed(3) : null,
+    y30: d.year30 != null ? +Number(d.year30).toFixed(3) : null,
+    spread: d.year10 != null && d.year2 != null
+      ? +((d.year10 - d.year2).toFixed(3)) : null,
+  }));
+
+  histCache = result;
+  histCacheTime = now;
   return result;
 }

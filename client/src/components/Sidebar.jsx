@@ -254,12 +254,14 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   const dataItems = [
     { key: 'journal',  label: 'PNTHR Journal',  iconImg: true },
   ];
+  if (effectiveAdmin || allowedPages) {
+    dataItems.push({ key: 'ir-live', label: 'AI Intelligence Report Live', iconImg: true, aiHighlight: true });
+  }
   if (effectiveAdmin) {
     dataItems.push({ key: 'history',        label: 'PNTHR Kill 10',   iconImg: true, info: 'kill10', splitHighlight: true });
     dataItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test', iconImg: true, info: 'killTest', splitHighlight: true });
     dataItems.push({ key: 'signal-history', label: 'PNTHR History',   iconImg: true });
     dataItems.push({ key: 'ai-signal-history', label: 'PNTHR AI History', iconImg: true, aiHighlight: true });
-    dataItems.push({ key: 'ir-live',        label: 'AI Intelligence Report Live', iconImg: true, aiHighlight: true });
     dataItems.push({ key: 'test',           label: 'TEST',            icon: '🧪' });
   }
   dataItems.push({ key: 'watchlist', label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' });

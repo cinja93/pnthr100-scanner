@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, BarSeries, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
-import { fetchAiStockChartData, fetchNav, fetchFcfData, API_BASE, authHeaders } from '../services/api';
+import { fetchAiStockChartData, fetchNav, fetchFcfData, fetchValuationData, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils';
 import { useQueue } from '../contexts/QueueContext';
 import pantherHead from '../assets/panther head.png';
@@ -516,6 +516,48 @@ function getFcfLabel(fcf) {
   return `FCF: -$${(Math.abs(fcf) / 1e9).toFixed(1)}B`;
 }
 
+function getPeColor(pe) {
+  if (pe == null || pe <= 0) return '#666';
+  if (pe < 15) return '#00c853';
+  if (pe < 25) return '#69f0ae';
+  if (pe < 40) return '#ffd600';
+  if (pe < 60) return '#ff9800';
+  return '#ff5252';
+}
+
+function getPeTooltip(pe) {
+  if (pe == null) return 'Forward P/E: No data';
+  if (pe <= 0) return `Forward P/E: ${pe.toFixed(1)}x (negative earnings — unprofitable on forward basis)`;
+  let reading = '';
+  if (pe < 15) reading = 'Deep value — priced like a mature company. Check if growth has stalled or market is missing something.';
+  else if (pe < 25) reading = 'Fair value — reasonable entry. Compare to sector peers.';
+  else if (pe < 40) reading = 'Growth premium — needs 20%+ annual growth to justify. Vulnerable to earnings misses.';
+  else if (pe < 60) reading = 'Elevated — priced for perfection. Any miss will hit hard.';
+  else reading = 'Extreme — speculative valuation. Position size accordingly.';
+  return `Forward P/E: ${pe.toFixed(1)}x — ${reading}`;
+}
+
+function getPegColor(peg) {
+  if (peg == null || peg <= 0) return '#666';
+  if (peg < 1) return '#00c853';
+  if (peg < 1.5) return '#69f0ae';
+  if (peg < 2) return '#ffd600';
+  if (peg < 3) return '#ff9800';
+  return '#ff5252';
+}
+
+function getPegTooltip(peg) {
+  if (peg == null) return 'PEG Ratio: No data';
+  if (peg <= 0) return `PEG: ${peg.toFixed(2)} (negative — not useful for valuation)`;
+  let reading = '';
+  if (peg < 1) reading = 'Undervalued — paying less than 1x the growth rate. Best risk/reward zone.';
+  else if (peg < 1.5) reading = 'Fair value — growth roughly priced in. Good entry if technicals align.';
+  else if (peg < 2) reading = 'Fully valued — need strong catalysts to justify adding here.';
+  else if (peg < 3) reading = 'Overvalued — high risk of mean reversion. Consider waiting for pullback.';
+  else reading = 'Extremely overvalued — speculative territory. Proceed with caution.';
+  return `PEG: ${peg.toFixed(2)} — ${reading}`;
+}
+
 export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, onClose }) {
   const tickerList = tickers && tickers.length > 0 ? tickers : (ticker ? [ticker] : []);
   const [currentIdx, setCurrentIdx] = useState(Math.min(Math.max(0, initialIndex), Math.max(0, tickerList.length - 1)));
@@ -527,8 +569,12 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
   const [chartType, setChartType] = useState('bars');
   const [washWarning, setWashWarning] = useState(null);
   const [fcfMap, setFcfMap]       = useState({});
+  const [valMap, setValMap]       = useState({});
 
-  useEffect(() => { fetchFcfData().then(d => setFcfMap(d || {})).catch(() => {}); }, []);
+  useEffect(() => {
+    fetchFcfData().then(d => setFcfMap(d || {})).catch(() => {});
+    fetchValuationData().then(d => setValMap(d || {})).catch(() => {});
+  }, []);
 
   const canPrev = currentIdx > 0;
   const canNext = currentIdx < tickerList.length - 1;
@@ -623,6 +669,14 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
                 style={{ display: 'inline-block', fontSize: 10, fontWeight: 900, padding: '1px 5px', borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 8, backgroundColor: getFcfColor(fcfMap[activeTicker]) }}
                 title={getFcfLabel(fcfMap[activeTicker])}
               >$</span>
+              <span
+                style={{ display: 'inline-block', fontSize: 9, fontWeight: 800, padding: '1px 4px', borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 4, backgroundColor: getPeColor(valMap[activeTicker]?.forwardPE), cursor: 'help' }}
+                title={getPeTooltip(valMap[activeTicker]?.forwardPE)}
+              >▸PE{valMap[activeTicker]?.forwardPE > 0 ? ` ${valMap[activeTicker].forwardPE.toFixed(0)}` : ''}</span>
+              <span
+                style={{ display: 'inline-block', fontSize: 9, fontWeight: 800, padding: '1px 4px', borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 4, backgroundColor: getPegColor(valMap[activeTicker]?.peg), cursor: 'help' }}
+                title={getPegTooltip(valMap[activeTicker]?.peg)}
+              >PEG{valMap[activeTicker]?.peg > 0 ? ` ${valMap[activeTicker].peg.toFixed(1)}` : ''}</span>
             </span>
             {data?.name && <span style={{ color: '#888', fontSize: 13 }}>{data.name}</span>}
             {data?.ok && (

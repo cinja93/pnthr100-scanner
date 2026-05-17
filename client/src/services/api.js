@@ -462,6 +462,21 @@ export async function fetchFcfData() {
   return data;
 }
 
+let _valCache = null;
+let _valCacheTime = 0;
+
+export async function fetchValuationData() {
+  const now = Date.now();
+  if (_valCache && (now - _valCacheTime) < FCF_CLIENT_CACHE_MS) return _valCache;
+  const url = `${API_BASE}/api/bond-heat/valuation`;
+  const response = await apiFetch(url, { headers: authHeaders() });
+  if (!response.ok) return {};
+  const data = await response.json();
+  _valCache = data;
+  _valCacheTime = now;
+  return data;
+}
+
 // PNTHR AI 300 OHLC bars + EMA series for the chart modal (timeframe: 'daily' | 'weekly')
 export async function fetchPnthrAi300Bars(timeframe = 'daily', limit = null) {
   const params = new URLSearchParams({ timeframe });

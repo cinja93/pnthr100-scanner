@@ -3,7 +3,7 @@ import StockTable from './StockTable';
 import AiTickerChartModal from './AiTickerChartModal';
 import Pnthr300ChartModal from './Pnthr300ChartModal';
 import Pnthr300WeightsModal from './Pnthr300WeightsModal';
-import { fetchAiUniverse, fetchEarnings, fetchPnthrAi300Latest, fetchAiSectorRotation, fetchFcfData } from '../services/api';
+import { fetchAiUniverse, fetchEarnings, fetchPnthrAi300Latest, fetchAiSectorRotation, fetchFcfData, fetchValuationData } from '../services/api';
 import { getCalendarWeekWindow } from '../utils/dateUtils';
 import styles from './JunglePage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -143,6 +143,7 @@ export default function AiJunglePage() {
   const [showIndexChart, setShowIndexChart] = useState(false);
   const [showWeights, setShowWeights]       = useState(false);
   const [fcfMap, setFcfMap]                 = useState(null);
+  const [valMap, setValMap]                 = useState(null);
 
   function load(forceRefresh = false, { silent = false } = {}) {
     if (!silent) setLoading(true);
@@ -171,6 +172,7 @@ export default function AiJunglePage() {
     load();
     fetchAiSectorRotation().then(setSectorRanks).catch(() => {});
     fetchFcfData().then(setFcfMap).catch(() => {});
+    fetchValuationData().then(setValMap).catch(() => {});
     const id = setInterval(() => load(false, { silent: true }), 30000);
     return () => clearInterval(id);
   }, []);
@@ -404,6 +406,7 @@ export default function AiJunglePage() {
           onTickerClick={handleTickerClick}
           scanType="long"
           fcfMap={fcfMap}
+          valMap={valMap}
         />
       )}
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchPnthrAi300Weights, fetchFcfData } from '../services/api';
+import { fetchPnthrAi300Weights, fetchFcfData, fetchValuationData } from '../services/api';
 import pantherHead from '../assets/panther head.png';
 
 // Pnthr300WeightsModal — popup showing how each of the 304 constituents is
@@ -36,6 +36,29 @@ function getFcfLabel(fcf) {
   return `FCF: -$${(Math.abs(fcf) / 1e9).toFixed(1)}B`;
 }
 
+function getPeColor(pe) {
+  if (pe == null || pe <= 0) return '#666';
+  if (pe < 15) return '#00c853';
+  if (pe < 25) return '#69f0ae';
+  if (pe < 40) return '#ffd600';
+  if (pe < 60) return '#ff9800';
+  return '#ff5252';
+}
+
+function getPegColor(peg) {
+  if (peg == null || peg <= 0) return '#666';
+  if (peg < 1) return '#00c853';
+  if (peg < 1.5) return '#69f0ae';
+  if (peg < 2) return '#ffd600';
+  if (peg < 3) return '#ff9800';
+  return '#ff5252';
+}
+
+const pillStyle = {
+  display: 'inline-block', fontSize: 8, fontWeight: 800, padding: '1px 3px',
+  borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 4,
+};
+
 const fcfBillStyle = {
   display: 'inline-block', fontSize: 9, fontWeight: 900, padding: '1px 4px',
   borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 6,
@@ -44,6 +67,7 @@ const fcfBillStyle = {
 export default function Pnthr300WeightsModal({ onClose }) {
   const [data, setData]       = useState(null);
   const [fcfMap, setFcfMap]   = useState({});
+  const [valMap, setValMap]   = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [search, setSearch]   = useState('');
@@ -53,8 +77,8 @@ export default function Pnthr300WeightsModal({ onClose }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true); setError(null);
-    Promise.all([fetchPnthrAi300Weights(), fetchFcfData()])
-      .then(([d, fcf]) => { if (!cancelled) { setData(d); setFcfMap(fcf || {}); } })
+    Promise.all([fetchPnthrAi300Weights(), fetchFcfData(), fetchValuationData()])
+      .then(([d, fcf, val]) => { if (!cancelled) { setData(d); setFcfMap(fcf || {}); setValMap(val || {}); } })
       .catch(e => { if (!cancelled) setError(e.message || 'Failed to load'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -205,6 +229,8 @@ export default function Pnthr300WeightsModal({ onClose }) {
                       <td style={{ padding: '8px 12px', fontWeight: 700, color: '#fcf000', fontFamily: 'monospace' }}>
                         {c.ticker}
                         <span style={{ ...fcfBillStyle, backgroundColor: getFcfColor(fcfMap[c.ticker]) }} title={getFcfLabel(fcfMap[c.ticker])}>$</span>
+                        <span style={{ ...pillStyle, backgroundColor: getPeColor(valMap[c.ticker]?.forwardPE), cursor: 'help' }} title={valMap[c.ticker]?.forwardPE > 0 ? `Forward P/E: ${valMap[c.ticker].forwardPE.toFixed(1)}x` : 'Forward P/E: N/A'}>▸PE{valMap[c.ticker]?.forwardPE > 0 ? ` ${valMap[c.ticker].forwardPE.toFixed(0)}` : ''}</span>
+                        <span style={{ ...pillStyle, backgroundColor: getPegColor(valMap[c.ticker]?.peg), cursor: 'help' }} title={valMap[c.ticker]?.peg > 0 ? `PEG: ${valMap[c.ticker].peg.toFixed(2)}` : 'PEG: N/A'}>PEG{valMap[c.ticker]?.peg > 0 ? ` ${valMap[c.ticker].peg.toFixed(1)}` : ''}</span>
                       </td>
                       <td style={{ padding: '8px 12px', color: '#d4d4d4' }}>{c.name}</td>
                       <td style={{ padding: '8px 12px', color: '#888', fontSize: 11 }}>{c.sector}</td>

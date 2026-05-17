@@ -38,7 +38,7 @@ import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks,
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './aiOrdersPipeline.js';
 import { autoExecuteAiOrders, autoExecuteWeeklyOrders, stageWeeklyOrders, executeWeeklyOrders } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
-import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData } from './bondHeatService.js';
+import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
 import { runAiWeeklyRatchet, runAiStaleHuntCheck } from './aiPositionManager.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
@@ -5938,16 +5938,25 @@ cron.schedule('45 16 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
+app.get('/api/bond-heat/valuation', async (req, res) => {
+  try {
+    const data = await getValuationData();
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/bond-heat/valuation:', err);
+    res.status(500).json({ error: 'Failed to fetch valuation data' });
+  }
+});
+
 // ── Cron: FCF refresh — quarterly after earnings season (Feb/May/Aug/Nov 15 @ 6pm ET)
 cron.schedule('0 18 15 2,5,8,11 *', async () => {
   try {
-    console.log('[FCF cron] Quarterly FCF refresh starting...');
+    console.log('[Valuation cron] Quarterly refresh starting...');
     clearBondHeatCache();
-    const fcf = await getFcfData();
-    const count = Object.keys(fcf).length;
-    console.log(`[FCF cron] Refreshed FCF for ${count} tickers`);
+    const [fcf, val] = await Promise.all([getFcfData(), getValuationData()]);
+    console.log(`[Valuation cron] Refreshed FCF for ${Object.keys(fcf).length}, valuation for ${Object.keys(val).length} tickers`);
   } catch (err) {
-    console.error('[FCF cron] Failed:', err.message);
+    console.error('[Valuation cron] Failed:', err.message);
   }
 }, { timezone: 'America/New_York' });
 

@@ -21,7 +21,11 @@ let fcfCache = null;
 let fcfCacheTime = 0;
 const FCF_CACHE_MS = 6 * 60 * 60 * 1000; // 6 hours — FCF only changes quarterly
 
-export function clearBondHeatCache() { cache = null; cacheTime = 0; histCache = null; histCacheTime = 0; fcfCache = null; fcfCacheTime = 0; }
+let valCache = null;
+let valCacheTime = 0;
+const VAL_CACHE_MS = 6 * 60 * 60 * 1000;
+
+export function clearBondHeatCache() { cache = null; cacheTime = 0; histCache = null; histCacheTime = 0; fcfCache = null; fcfCacheTime = 0; valCache = null; valCacheTime = 0; }
 
 export async function getFcfData() {
   const now = Date.now();
@@ -53,6 +57,43 @@ export async function getFcfData() {
 
   fcfCache = results;
   fcfCacheTime = now;
+  return results;
+}
+
+export async function getValuationData() {
+  const now = Date.now();
+  if (valCache && (now - valCacheTime) < VAL_CACHE_MS) return valCache;
+
+  const key = process.env.FMP_API_KEY;
+  if (!key) throw new Error('FMP_API_KEY not set');
+
+  const holdings = getAiUniverseHoldings();
+  const tickers = holdings.map(h => h.ticker);
+
+  const get = (url) =>
+    fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
+      .then(r => r.ok ? r.json() : [])
+      .catch(() => []);
+
+  const results = {};
+  const CONCURRENCY = 10;
+  for (let i = 0; i < tickers.length; i += CONCURRENCY) {
+    const batch = tickers.slice(i, i + CONCURRENCY);
+    const fetches = batch.map(async (ticker) => {
+      const data = await get(`${FMP_BASE}/ratios-ttm/${ticker}?apikey=${key}`);
+      if (Array.isArray(data) && data.length > 0) {
+        const r = data[0];
+        results[ticker] = {
+          forwardPE: r.peRatioTTM ?? null,
+          peg: r.pegRatioTTM ?? null,
+        };
+      }
+    });
+    await Promise.all(fetches);
+  }
+
+  valCache = results;
+  valCacheTime = now;
   return results;
 }
 

@@ -86,7 +86,49 @@ function getFcfLabel(fcf) {
   return `FCF: -$${(Math.abs(fcf) / 1e9).toFixed(1)}B`;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, showMode = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null, fcfMap = null }) {
+function getPeColor(pe) {
+  if (pe == null || pe <= 0) return '#666';
+  if (pe < 15) return '#00c853';
+  if (pe < 25) return '#69f0ae';
+  if (pe < 40) return '#ffd600';
+  if (pe < 60) return '#ff9800';
+  return '#ff5252';
+}
+
+function getPeTooltip(pe) {
+  if (pe == null) return 'Forward P/E: No data';
+  if (pe <= 0) return `Forward P/E: ${pe.toFixed(1)}x (negative earnings — company is unprofitable on a forward basis)`;
+  let reading = '';
+  if (pe < 15) reading = 'Deep value — priced like a mature company, unusual for AI. Check if growth has stalled or if the market is missing something.';
+  else if (pe < 25) reading = 'Fair value — reasonable entry point. Earnings growth should support the multiple. Compare to sector peers.';
+  else if (pe < 40) reading = 'Growth premium — market expects strong earnings growth. Needs 20%+ annual growth to justify. Vulnerable to earnings misses.';
+  else if (pe < 60) reading = 'Elevated — priced for perfection. Any earnings miss or guidance cut will hit hard. Only add on pullbacks with strong momentum.';
+  else reading = 'Extreme — speculative valuation. Could be justified by hypergrowth but very fragile. Position size accordingly.';
+  return `Forward P/E: ${pe.toFixed(1)}x — ${reading}`;
+}
+
+function getPegColor(peg) {
+  if (peg == null || peg <= 0) return '#666';
+  if (peg < 1) return '#00c853';
+  if (peg < 1.5) return '#69f0ae';
+  if (peg < 2) return '#ffd600';
+  if (peg < 3) return '#ff9800';
+  return '#ff5252';
+}
+
+function getPegTooltip(peg) {
+  if (peg == null) return 'PEG Ratio: No data';
+  if (peg <= 0) return `PEG: ${peg.toFixed(2)} (negative — either losses or declining earnings expected. Not useful for valuation.)`;
+  let reading = '';
+  if (peg < 1) reading = 'Undervalued — you\'re paying less than 1x the growth rate. Best risk/reward zone. The market is underpricing the growth trajectory.';
+  else if (peg < 1.5) reading = 'Fair value — growth is roughly priced in. Good entry if momentum and technicals align. The sweet spot for quality AI names.';
+  else if (peg < 2) reading = 'Fully valued — you\'re paying a premium for the growth. Need strong catalysts or sector tailwinds to justify adding here.';
+  else if (peg < 3) reading = 'Overvalued — growth doesn\'t justify the multiple. High risk of mean reversion. Consider trimming or waiting for a pullback.';
+  else reading = 'Extremely overvalued — speculative territory. The stock needs to massively accelerate growth to justify this price. Proceed with caution.';
+  return `PEG: ${peg.toFixed(2)} — ${reading}`;
+}
+
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, showMode = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null, fcfMap = null, valMap = null }) {
   const [sortConfig, setSortConfig] = useState({ key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
   const listRef = useRef([]);
@@ -502,6 +544,23 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                         title={getFcfLabel(fcfMap[stock.ticker])}
                       >$</span>
                     )}
+                    {valMap && (() => {
+                      const v = valMap[stock.ticker];
+                      const pe = v?.forwardPE;
+                      const peg = v?.peg;
+                      return (
+                        <>
+                          <span
+                            style={{ display: 'inline-block', fontSize: 8, fontWeight: 800, padding: '1px 3px', borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 3, backgroundColor: getPeColor(pe), cursor: 'help' }}
+                            title={getPeTooltip(pe)}
+                          >▸PE{pe != null && pe > 0 ? ` ${pe.toFixed(0)}` : ''}</span>
+                          <span
+                            style={{ display: 'inline-block', fontSize: 8, fontWeight: 800, padding: '1px 3px', borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 3, backgroundColor: getPegColor(peg), cursor: 'help' }}
+                            title={getPegTooltip(peg)}
+                          >PEG{peg != null && peg > 0 ? ` ${peg.toFixed(1)}` : ''}</span>
+                        </>
+                      );
+                    })()}
                     {(() => {
                       const tags = [];
                       if (stock.isSp500) tags.push('500');

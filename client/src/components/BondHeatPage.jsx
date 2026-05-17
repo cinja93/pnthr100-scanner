@@ -680,7 +680,25 @@ function getFcfLabel(fcf) {
   return `FCF: -$${(Math.abs(fcf) / 1e9).toFixed(1)}B`;
 }
 
-function SectorGrid({ sector, fcfMap, onTickerClick }) {
+function getPeColor(pe) {
+  if (pe == null || pe <= 0) return '#666';
+  if (pe < 15) return '#00c853';
+  if (pe < 25) return '#69f0ae';
+  if (pe < 40) return '#ffd600';
+  if (pe < 60) return '#ff9800';
+  return '#ff5252';
+}
+
+function getPegColor(peg) {
+  if (peg == null || peg <= 0) return '#666';
+  if (peg < 1) return '#00c853';
+  if (peg < 1.5) return '#69f0ae';
+  if (peg < 2) return '#ffd600';
+  if (peg < 3) return '#ff9800';
+  return '#ff5252';
+}
+
+function SectorGrid({ sector, fcfMap, valMap, onTickerClick }) {
   const tickers = sector.holdings.map(h => h.ticker);
   return (
     <div className={styles.sectorBlock}>
@@ -696,6 +714,9 @@ function SectorGrid({ sector, fcfMap, onTickerClick }) {
           const color = getTextColor(h.changePct);
           const fcf = fcfMap[h.ticker];
           const fcfColor = getFcfColor(fcf);
+          const v = valMap?.[h.ticker];
+          const pe = v?.forwardPE;
+          const peg = v?.peg;
           return (
             <div
               key={h.ticker}
@@ -708,7 +729,11 @@ function SectorGrid({ sector, fcfMap, onTickerClick }) {
               <div className={styles.tickerChange}>
                 {h.changePct != null ? `${h.changePct > 0 ? '+' : ''}${h.changePct.toFixed(1)}%` : '—'}
               </div>
-              <div className={styles.fcfBill} style={{ backgroundColor: fcfColor }} title={getFcfLabel(fcf)}>$</div>
+              <div className={styles.valPills}>
+                <span className={styles.fcfBill} style={{ backgroundColor: fcfColor }} title={getFcfLabel(fcf)}>$</span>
+                <span className={styles.valPill} style={{ backgroundColor: getPeColor(pe) }} title={pe != null && pe > 0 ? `Forward P/E: ${pe.toFixed(1)}x` : 'Forward P/E: N/A'}>▸PE{pe != null && pe > 0 ? ` ${pe.toFixed(0)}` : ''}</span>
+                <span className={styles.valPill} style={{ backgroundColor: getPegColor(peg) }} title={peg != null && peg > 0 ? `PEG: ${peg.toFixed(2)}` : 'PEG: N/A'}>PEG{peg != null && peg > 0 ? ` ${peg.toFixed(1)}` : ''}</span>
+              </div>
             </div>
           );
         })}
@@ -723,6 +748,7 @@ export default function BondHeatPage() {
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
   const [fcfMap, setFcfMap] = useState({});
+  const [valMap, setValMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalChart, setModalChart] = useState(null);
@@ -734,10 +760,11 @@ export default function BondHeatPage() {
     setLoading(true);
     setError(null);
     try {
-      const [heatRes, histRes, fcfRes] = await Promise.all([
+      const [heatRes, histRes, fcfRes, valRes] = await Promise.all([
         apiFetch(`${API_BASE}/api/bond-heat${refresh ? '?refresh=1' : ''}`, { headers: authHeaders() }),
         apiFetch(`${API_BASE}/api/bond-heat/history`, { headers: authHeaders() }),
         apiFetch(`${API_BASE}/api/bond-heat/fcf`, { headers: authHeaders() }),
+        apiFetch(`${API_BASE}/api/bond-heat/valuation`, { headers: authHeaders() }),
       ]);
       if (!heatRes.ok) throw new Error(`HTTP ${heatRes.status}`);
       const json = await heatRes.json();
@@ -749,6 +776,10 @@ export default function BondHeatPage() {
       if (fcfRes.ok) {
         const fcfJson = await fcfRes.json();
         setFcfMap(fcfJson || {});
+      }
+      if (valRes.ok) {
+        const valJson = await valRes.json();
+        setValMap(valJson || {});
       }
     } catch (err) {
       setError(err.message);
@@ -983,7 +1014,7 @@ export default function BondHeatPage() {
 
           {/* ── Heat Map ── */}
           <div className={styles.sectorsContainer}>
-            {sortedSectors.map(s => <SectorGrid key={s.id} sector={s} fcfMap={fcfMap} onTickerClick={(tickers, idx) => { setChartTickers(tickers); setChartIndex(idx); }} />)}
+            {sortedSectors.map(s => <SectorGrid key={s.id} sector={s} fcfMap={fcfMap} valMap={valMap} onTickerClick={(tickers, idx) => { setChartTickers(tickers); setChartIndex(idx); }} />)}
           </div>
         </>
       )}

@@ -57,7 +57,7 @@ function YieldChartTooltip({ active, payload, label }) {
   );
 }
 
-function YieldChart({ data, title, subtitle, lines, refLines, shockZones, dangerZones, height = 180, onClick, dualAxis, children }) {
+function YieldChart({ data, title, subtitle, lines, refLines, shockZones, dangerZones, height = 180, onClick, dualAxis, syncId, children }) {
   return (
     <div className={styles.chartCard} onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <div className={styles.chartTitleRow}>
@@ -68,7 +68,7 @@ function YieldChart({ data, title, subtitle, lines, refLines, shockZones, danger
         {children}
       </div>
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={data} margin={{ top: 5, right: dualAxis ? 10 : 10, left: -10, bottom: 5 }}>
+        <LineChart data={data} syncId={syncId} margin={{ top: 5, right: dualAxis ? 10 : 10, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#333" />
           <XAxis dataKey="date" tickFormatter={formatDateShort} tick={{ fill: '#888', fontSize: 10 }} interval="preserveStartEnd" minTickGap={40} />
           <YAxis yAxisId="left" tick={{ fill: '#888', fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={v => `${v}%`} />
@@ -490,6 +490,7 @@ export default function BondHeatPage() {
             <>
               <YieldChart
                 data={history}
+                syncId="bondHeat"
                 title="Treasury Yields + S&P 500 — Past 12 Months"
                 subtitle="Red shaded zones = Yield Shock active (10Y rose 20+ bps in 10 trading days)"
                 lines={[
@@ -524,6 +525,7 @@ export default function BondHeatPage() {
               {/* ── 2Y / 10Y Spread ── */}
               <YieldChart
                 data={history}
+                syncId="bondHeat"
                 title="2Y / 10Y Spread"
                 subtitle="Fed Policy + Recession Risk"
                 lines={[
@@ -541,6 +543,7 @@ export default function BondHeatPage() {
               {/* ── 10Y / 30Y Spread ── */}
               <YieldChart
                 data={history}
+                syncId="bondHeat"
                 title="10Y / 30Y Spread"
                 subtitle="Long-Term Inflation & Fiscal Concerns"
                 lines={[

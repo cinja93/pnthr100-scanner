@@ -83,7 +83,7 @@ function YieldChart({ data, title, subtitle, lines, refLines, shockZones, danger
             <ReferenceArea key={`sz-${i}`} x1={zone.start} x2={zone.end} yAxisId="left" fill="#ff5252" fillOpacity={0.15} />
           ))}
           {refLines?.map((rl, i) => (
-            <ReferenceLine key={i} y={rl.y} yAxisId="left" stroke={rl.color || '#ff5252'} strokeDasharray="5 3" label={{ value: rl.label, fill: rl.color || '#ff5252', fontSize: 10, position: 'right' }} />
+            <ReferenceLine key={i} y={rl.y} yAxisId="left" stroke={rl.color || '#ff5252'} strokeDasharray="5 3" label={{ value: rl.label, fill: rl.color || '#ff5252', fontSize: 10, position: 'insideTopLeft' }} />
           ))}
           {lines.map(l => (
             <Line key={l.key} type="monotone" dataKey={l.key} name={l.name} stroke={l.color} dot={false} strokeWidth={l.width || 2} yAxisId={l.axis || 'left'} />
@@ -521,37 +521,37 @@ export default function BondHeatPage() {
                 </div>
               </YieldChart>
 
-              <div className={styles.chartsRow}>
-                {/* ── 2Y / 10Y Spread ── */}
-                <YieldChart
-                  data={history}
-                  title="2Y / 10Y Spread"
-                  subtitle="Fed Policy + Recession Risk"
-                  lines={[
-                    { key: 'spread2_10', name: '10Y - 2Y Spread', color: CHART_COLORS.spread },
-                  ]}
-                  refLines={[
-                    { y: 0, label: 'Inversion', color: '#ef5350' },
-                  ]}
-                  onClick={() => setModalChart('spread2_10')}
-                >
-                  <button className={styles.infoBtn} onClick={e => { e.stopPropagation(); setInfoPanel('spread2_10'); }} title="What does this mean?">ⓘ</button>
-                </YieldChart>
+              {/* ── 2Y / 10Y Spread ── */}
+              <YieldChart
+                data={history}
+                title="2Y / 10Y Spread"
+                subtitle="Fed Policy + Recession Risk"
+                lines={[
+                  { key: 'spread2_10', name: '10Y - 2Y Spread', color: CHART_COLORS.spread },
+                ]}
+                refLines={[
+                  { y: 0, label: 'Inversion', color: '#ef5350' },
+                ]}
+                height={220}
+                onClick={() => setModalChart('spread2_10')}
+              >
+                <button className={styles.infoBtn} onClick={e => { e.stopPropagation(); setInfoPanel('spread2_10'); }} title="What does this mean?">ⓘ</button>
+              </YieldChart>
 
-                {/* ── 10Y / 30Y Spread ── */}
-                <YieldChart
-                  data={history}
-                  title="10Y / 30Y Spread"
-                  subtitle="Long-Term Inflation & Fiscal Concerns"
-                  lines={[
-                    { key: 'spread10_30', name: '30Y - 10Y Spread', color: CHART_COLORS.spread1030 },
-                  ]}
-                  refLines={[]}
-                  onClick={() => setModalChart('spread10_30')}
-                >
-                  <button className={styles.infoBtn} onClick={e => { e.stopPropagation(); setInfoPanel('spread10_30'); }} title="What does this mean?">ⓘ</button>
-                </YieldChart>
-              </div>
+              {/* ── 10Y / 30Y Spread ── */}
+              <YieldChart
+                data={history}
+                title="10Y / 30Y Spread"
+                subtitle="Long-Term Inflation & Fiscal Concerns"
+                lines={[
+                  { key: 'spread10_30', name: '30Y - 10Y Spread', color: CHART_COLORS.spread1030 },
+                ]}
+                refLines={[]}
+                height={220}
+                onClick={() => setModalChart('spread10_30')}
+              >
+                <button className={styles.infoBtn} onClick={e => { e.stopPropagation(); setInfoPanel('spread10_30'); }} title="What does this mean?">ⓘ</button>
+              </YieldChart>
             </>
           )}
 

@@ -87,7 +87,8 @@ function getFcfLabel(fcf) {
 }
 
 function getPeColor(pe) {
-  if (pe == null || pe <= 0) return '#666';
+  if (pe == null) return '#666';
+  if (pe <= 0) return '#b71c1c';
   if (pe < 15) return '#00c853';
   if (pe < 25) return '#69f0ae';
   if (pe < 40) return '#ffd600';
@@ -95,20 +96,27 @@ function getPeColor(pe) {
   return '#ff5252';
 }
 
+function getPeLabel(pe) {
+  if (pe == null) return '▸PE';
+  if (pe <= 0) return '▸PE N/E';
+  return `▸PE ${pe.toFixed(0)}`;
+}
+
 function getPeTooltip(pe) {
-  if (pe == null) return 'Forward P/E: No data';
-  if (pe <= 0) return `Forward P/E: ${pe.toFixed(1)}x (negative earnings — company is unprofitable on a forward basis)`;
+  if (pe == null) return 'P/E (TTM): No data available from FMP';
+  if (pe <= 0) return `P/E (TTM): ${pe.toFixed(1)}x — No earnings. Company is unprofitable. Revenue growth and path to profitability matter more than valuation here. Higher risk — size positions smaller.`;
   let reading = '';
   if (pe < 15) reading = 'Deep value — priced like a mature company, unusual for AI. Check if growth has stalled or if the market is missing something.';
   else if (pe < 25) reading = 'Fair value — reasonable entry point. Earnings growth should support the multiple. Compare to sector peers.';
   else if (pe < 40) reading = 'Growth premium — market expects strong earnings growth. Needs 20%+ annual growth to justify. Vulnerable to earnings misses.';
   else if (pe < 60) reading = 'Elevated — priced for perfection. Any earnings miss or guidance cut will hit hard. Only add on pullbacks with strong momentum.';
   else reading = 'Extreme — speculative valuation. Could be justified by hypergrowth but very fragile. Position size accordingly.';
-  return `Forward P/E: ${pe.toFixed(1)}x — ${reading}`;
+  return `P/E (TTM): ${pe.toFixed(1)}x — ${reading}`;
 }
 
 function getPegColor(peg) {
-  if (peg == null || peg <= 0) return '#666';
+  if (peg == null) return '#666';
+  if (peg <= 0) return '#b71c1c';
   if (peg < 1) return '#00c853';
   if (peg < 1.5) return '#69f0ae';
   if (peg < 2) return '#ffd600';
@@ -116,9 +124,15 @@ function getPegColor(peg) {
   return '#ff5252';
 }
 
+function getPegLabel(peg) {
+  if (peg == null) return 'PEG';
+  if (peg <= 0) return 'PEG N/E';
+  return `PEG ${peg.toFixed(1)}`;
+}
+
 function getPegTooltip(peg) {
-  if (peg == null) return 'PEG Ratio: No data';
-  if (peg <= 0) return `PEG: ${peg.toFixed(2)} (negative — either losses or declining earnings expected. Not useful for valuation.)`;
+  if (peg == null) return 'PEG Ratio: No data available from FMP';
+  if (peg <= 0) return `PEG: ${peg.toFixed(2)} — Negative PEG means the company has losses or declining earnings. Traditional PEG analysis doesn't apply. Focus on revenue growth rate and cash burn instead.`;
   let reading = '';
   if (peg < 1) reading = 'Undervalued — you\'re paying less than 1x the growth rate. Best risk/reward zone. The market is underpricing the growth trajectory.';
   else if (peg < 1.5) reading = 'Fair value — growth is roughly priced in. Good entry if momentum and technicals align. The sweet spot for quality AI names.';
@@ -551,13 +565,13 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                       return (
                         <>
                           <span
-                            style={{ display: 'inline-block', fontSize: 8, fontWeight: 800, padding: '1px 3px', borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 3, backgroundColor: getPeColor(pe), cursor: 'help' }}
+                            style={{ display: 'inline-block', fontSize: 8, fontWeight: 800, padding: '1px 3px', borderRadius: 2, color: pe != null && pe <= 0 ? '#fff' : '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 3, backgroundColor: getPeColor(pe), cursor: 'help' }}
                             title={getPeTooltip(pe)}
-                          >▸PE{pe != null && pe > 0 ? ` ${pe.toFixed(0)}` : ''}</span>
+                          >{getPeLabel(pe)}</span>
                           <span
-                            style={{ display: 'inline-block', fontSize: 8, fontWeight: 800, padding: '1px 3px', borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 3, backgroundColor: getPegColor(peg), cursor: 'help' }}
+                            style={{ display: 'inline-block', fontSize: 8, fontWeight: 800, padding: '1px 3px', borderRadius: 2, color: peg != null && peg <= 0 ? '#fff' : '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 3, backgroundColor: getPegColor(peg), cursor: 'help' }}
                             title={getPegTooltip(peg)}
-                          >PEG{peg != null && peg > 0 ? ` ${peg.toFixed(1)}` : ''}</span>
+                          >{getPegLabel(peg)}</span>
                         </>
                       );
                     })()}

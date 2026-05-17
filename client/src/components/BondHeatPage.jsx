@@ -681,7 +681,8 @@ function getFcfLabel(fcf) {
 }
 
 function getPeColor(pe) {
-  if (pe == null || pe <= 0) return '#666';
+  if (pe == null) return '#666';
+  if (pe <= 0) return '#b71c1c';
   if (pe < 15) return '#00c853';
   if (pe < 25) return '#69f0ae';
   if (pe < 40) return '#ffd600';
@@ -690,7 +691,8 @@ function getPeColor(pe) {
 }
 
 function getPegColor(peg) {
-  if (peg == null || peg <= 0) return '#666';
+  if (peg == null) return '#666';
+  if (peg <= 0) return '#b71c1c';
   if (peg < 1) return '#00c853';
   if (peg < 1.5) return '#69f0ae';
   if (peg < 2) return '#ffd600';
@@ -731,8 +733,8 @@ function SectorGrid({ sector, fcfMap, valMap, onTickerClick }) {
               </div>
               <div className={styles.valPills}>
                 <span className={styles.fcfBill} style={{ backgroundColor: fcfColor }} title={getFcfLabel(fcf)}>$</span>
-                <span className={styles.valPill} style={{ backgroundColor: getPeColor(pe) }} title={pe != null && pe > 0 ? `Forward P/E: ${pe.toFixed(1)}x` : 'Forward P/E: N/A'}>▸PE{pe != null && pe > 0 ? ` ${pe.toFixed(0)}` : ''}</span>
-                <span className={styles.valPill} style={{ backgroundColor: getPegColor(peg) }} title={peg != null && peg > 0 ? `PEG: ${peg.toFixed(2)}` : 'PEG: N/A'}>PEG{peg != null && peg > 0 ? ` ${peg.toFixed(1)}` : ''}</span>
+                <span className={styles.valPill} style={{ backgroundColor: getPeColor(pe), color: pe != null && pe <= 0 ? '#fff' : '#000' }} title={pe != null ? `P/E: ${pe.toFixed(1)}x` : 'P/E: N/A'}>▸PE{pe == null ? '' : pe <= 0 ? ' N/E' : ` ${pe.toFixed(0)}`}</span>
+                <span className={styles.valPill} style={{ backgroundColor: getPegColor(peg), color: peg != null && peg <= 0 ? '#fff' : '#000' }} title={peg != null ? `PEG: ${peg.toFixed(2)}` : 'PEG: N/A'}>PEG{peg == null ? '' : peg <= 0 ? ' N/E' : ` ${peg.toFixed(1)}`}</span>
               </div>
             </div>
           );

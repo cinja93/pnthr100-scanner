@@ -37,7 +37,8 @@ function getFcfLabel(fcf) {
 }
 
 function getPeColor(pe) {
-  if (pe == null || pe <= 0) return '#666';
+  if (pe == null) return '#666';
+  if (pe <= 0) return '#b71c1c';
   if (pe < 15) return '#00c853';
   if (pe < 25) return '#69f0ae';
   if (pe < 40) return '#ffd600';
@@ -46,7 +47,8 @@ function getPeColor(pe) {
 }
 
 function getPegColor(peg) {
-  if (peg == null || peg <= 0) return '#666';
+  if (peg == null) return '#666';
+  if (peg <= 0) return '#b71c1c';
   if (peg < 1) return '#00c853';
   if (peg < 1.5) return '#69f0ae';
   if (peg < 2) return '#ffd600';
@@ -229,8 +231,8 @@ export default function Pnthr300WeightsModal({ onClose }) {
                       <td style={{ padding: '8px 12px', fontWeight: 700, color: '#fcf000', fontFamily: 'monospace' }}>
                         {c.ticker}
                         <span style={{ ...fcfBillStyle, backgroundColor: getFcfColor(fcfMap[c.ticker]) }} title={getFcfLabel(fcfMap[c.ticker])}>$</span>
-                        <span style={{ ...pillStyle, backgroundColor: getPeColor(valMap[c.ticker]?.forwardPE), cursor: 'help' }} title={valMap[c.ticker]?.forwardPE > 0 ? `Forward P/E: ${valMap[c.ticker].forwardPE.toFixed(1)}x` : 'Forward P/E: N/A'}>▸PE{valMap[c.ticker]?.forwardPE > 0 ? ` ${valMap[c.ticker].forwardPE.toFixed(0)}` : ''}</span>
-                        <span style={{ ...pillStyle, backgroundColor: getPegColor(valMap[c.ticker]?.peg), cursor: 'help' }} title={valMap[c.ticker]?.peg > 0 ? `PEG: ${valMap[c.ticker].peg.toFixed(2)}` : 'PEG: N/A'}>PEG{valMap[c.ticker]?.peg > 0 ? ` ${valMap[c.ticker].peg.toFixed(1)}` : ''}</span>
+                        {(() => { const pe = valMap[c.ticker]?.forwardPE; return <span style={{ ...pillStyle, backgroundColor: getPeColor(pe), color: pe != null && pe <= 0 ? '#fff' : '#000', cursor: 'help' }} title={pe != null ? `P/E: ${pe.toFixed(1)}x` : 'P/E: N/A'}>▸PE{pe == null ? '' : pe <= 0 ? ' N/E' : ` ${pe.toFixed(0)}`}</span>; })()}
+                        {(() => { const peg = valMap[c.ticker]?.peg; return <span style={{ ...pillStyle, backgroundColor: getPegColor(peg), color: peg != null && peg <= 0 ? '#fff' : '#000', cursor: 'help' }} title={peg != null ? `PEG: ${peg.toFixed(2)}` : 'PEG: N/A'}>PEG{peg == null ? '' : peg <= 0 ? ' N/E' : ` ${peg.toFixed(1)}`}</span>; })()}
                       </td>
                       <td style={{ padding: '8px 12px', color: '#d4d4d4' }}>{c.name}</td>
                       <td style={{ padding: '8px 12px', color: '#888', fontSize: 11 }}>{c.sector}</td>

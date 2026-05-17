@@ -1,91 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
 import logo from '../assets/panther head.png';
 import roarSrc from '../assets/panther-roar.wav';
+import cinematicSrc from '../assets/cinematic-trailer.wav';
 
 const WELCOME_TEXT = "Welcome to The PNTHR's Den";
-
-function startHeartbeat() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const master = ctx.createGain();
-    master.gain.value = 0.5;
-    master.connect(ctx.destination);
-
-    let stopped = false;
-    let bpm = 35;
-    let volume = 0.15;
-    let timeout;
-
-    function beat() {
-      if (stopped) return;
-
-      // Each heartbeat is a short filtered thump — like a bass drum in your chest
-      const osc = ctx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(60, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.25);
-
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(volume, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-
-      osc.connect(gain).connect(master);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.5);
-
-      // Double-tap for realistic heartbeat (lub-dub)
-      const osc2 = ctx.createOscillator();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(50, ctx.currentTime + 0.12);
-      osc2.frequency.exponentialRampToValueAtTime(25, ctx.currentTime + 0.35);
-
-      const gain2 = ctx.createGain();
-      gain2.gain.setValueAtTime(0, ctx.currentTime);
-      gain2.gain.setValueAtTime(volume * 0.6, ctx.currentTime + 0.12);
-      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
-
-      osc2.connect(gain2).connect(master);
-      osc2.start(ctx.currentTime + 0.12);
-      osc2.stop(ctx.currentTime + 0.5);
-
-      // Accelerate and get louder over time
-      bpm = Math.min(bpm + 3, 120);
-      volume = Math.min(volume + 0.025, 0.7);
-
-      const interval = 60000 / bpm;
-      timeout = setTimeout(beat, interval);
-    }
-
-    // Start first beat
-    beat();
-
-    return {
-      fadeOut(duration = 1.5) {
-        const now = ctx.currentTime;
-        master.gain.linearRampToValueAtTime(0, now + duration);
-        setTimeout(() => { stopped = true; clearTimeout(timeout); ctx.close(); }, duration * 1000 + 100);
-      },
-      stop() {
-        stopped = true;
-        clearTimeout(timeout);
-        ctx.close();
-      },
-    };
-  } catch (_) {
-    return { fadeOut() {}, stop() {} };
-  }
-}
 
 export default function SplashScreen({ onComplete }) {
   const [phase, setPhase] = useState(0);
   const [charCount, setCharCount] = useState(0);
-  const audioRef = useRef(null);
-  const droneRef = useRef(null);
+  const roarRef = useRef(null);
+  const cinematicRef = useRef(null);
 
   useEffect(() => {
-    // Start heartbeat when head begins appearing
-    const tDrone = setTimeout(() => {
-      droneRef.current = startHeartbeat();
+    // Start cinematic music when head begins appearing
+    const tMusic = setTimeout(() => {
+      try {
+        cinematicRef.current = new Audio(cinematicSrc);
+        cinematicRef.current.volume = 0.7;
+        cinematicRef.current.play();
+      } catch (_) { /* audio not supported */ }
     }, 1500);
 
     const t0 = setTimeout(() => setPhase(1), 1500);
@@ -105,11 +38,22 @@ export default function SplashScreen({ onComplete }) {
     const roarTime = 12500 + WELCOME_TEXT.length * 70 + 400;
     const t4 = setTimeout(() => {
       setPhase(4);
-      if (droneRef.current) droneRef.current.fadeOut(1.5);
+      // Fade out cinematic music as roar takes over
+      if (cinematicRef.current) {
+        const audio = cinematicRef.current;
+        const fadeInterval = setInterval(() => {
+          if (audio.volume > 0.05) {
+            audio.volume = Math.max(0, audio.volume - 0.05);
+          } else {
+            audio.pause();
+            clearInterval(fadeInterval);
+          }
+        }, 100);
+      }
       try {
-        audioRef.current = new Audio(roarSrc);
-        audioRef.current.volume = 0.85;
-        audioRef.current.play();
+        roarRef.current = new Audio(roarSrc);
+        roarRef.current.volume = 0.85;
+        roarRef.current.play();
       } catch (_) { /* audio not supported */ }
     }, roarTime);
 
@@ -117,7 +61,7 @@ export default function SplashScreen({ onComplete }) {
     const t6 = setTimeout(() => onComplete(), roarTime + 3700);
 
     return () => {
-      clearTimeout(tDrone);
+      clearTimeout(tMusic);
       clearTimeout(t0);
       clearTimeout(t1);
       clearTimeout(t2);
@@ -126,8 +70,8 @@ export default function SplashScreen({ onComplete }) {
       clearTimeout(t5);
       clearTimeout(t6);
       if (typeTimer) clearInterval(typeTimer);
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-      if (droneRef.current) { droneRef.current.stop(); droneRef.current = null; }
+      if (roarRef.current) { roarRef.current.pause(); roarRef.current = null; }
+      if (cinematicRef.current) { cinematicRef.current.pause(); cinematicRef.current = null; }
     };
   }, [onComplete]);
 

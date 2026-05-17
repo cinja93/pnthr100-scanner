@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
+import AiTickerChartModal from './AiTickerChartModal';
 import pantherHead from '../assets/panther head.png';
 import styles from './BondHeatPage.module.css';
 
@@ -515,7 +516,8 @@ function YieldsBanner({ bonds, breadth, history, onShowPlaybook }) {
 
 // ── Sector grid ─────────────────────────────────────────────────────────────
 
-function SectorGrid({ sector }) {
+function SectorGrid({ sector, onTickerClick }) {
+  const tickers = sector.holdings.map(h => h.ticker);
   return (
     <div className={styles.sectorBlock}>
       <div className={styles.sectorHeader}>
@@ -525,11 +527,17 @@ function SectorGrid({ sector }) {
         </span>
       </div>
       <div className={styles.tickerGrid}>
-        {sector.holdings.map(h => {
+        {sector.holdings.map((h, i) => {
           const bg = getHeatColor(h.changePct);
           const color = getTextColor(h.changePct);
           return (
-            <div key={h.ticker} className={styles.tickerCell} style={{ backgroundColor: bg, color }} title={`${h.name}\n${h.changePct != null ? `${h.changePct > 0 ? '+' : ''}${h.changePct.toFixed(2)}%` : 'No data'}`}>
+            <div
+              key={h.ticker}
+              className={styles.tickerCell}
+              style={{ backgroundColor: bg, color, cursor: 'pointer' }}
+              title={`${h.name}\n${h.changePct != null ? `${h.changePct > 0 ? '+' : ''}${h.changePct.toFixed(2)}%` : 'No data'}\nClick to view chart`}
+              onClick={() => onTickerClick(tickers, i)}
+            >
               <div className={styles.tickerSymbol}>{h.ticker}</div>
               <div className={styles.tickerChange}>
                 {h.changePct != null ? `${h.changePct > 0 ? '+' : ''}${h.changePct.toFixed(1)}%` : '—'}
@@ -551,6 +559,8 @@ export default function BondHeatPage() {
   const [error, setError] = useState(null);
   const [modalChart, setModalChart] = useState(null);
   const [infoPanel, setInfoPanel] = useState(null);
+  const [chartTickers, setChartTickers] = useState([]);
+  const [chartIndex, setChartIndex] = useState(0);
 
   const load = async (refresh = false) => {
     setLoading(true);
@@ -789,7 +799,7 @@ export default function BondHeatPage() {
 
           {/* ── Heat Map ── */}
           <div className={styles.sectorsContainer}>
-            {sortedSectors.map(s => <SectorGrid key={s.id} sector={s} />)}
+            {sortedSectors.map(s => <SectorGrid key={s.id} sector={s} onTickerClick={(tickers, idx) => { setChartTickers(tickers); setChartIndex(idx); }} />)}
           </div>
         </>
       )}
@@ -802,6 +812,13 @@ export default function BondHeatPage() {
       )}
 
       {/* ── Modals ── */}
+      {chartTickers.length > 0 && (
+        <AiTickerChartModal
+          tickers={chartTickers}
+          initialIndex={chartIndex}
+          onClose={() => setChartTickers([])}
+        />
+      )}
       <ChartModal data={history} chart={modalChart} shockZones={shockZones} dangerZones={dangerZones} onClose={() => setModalChart(null)} />
 
       {infoPanel === 'spread2_10' && (

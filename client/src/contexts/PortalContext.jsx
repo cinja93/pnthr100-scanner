@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo } from 'react';
+import SIDEBAR_PAGES from '../utils/sidebarPages';
 
 /**
  * PortalContext — detects which subdomain the user is on and exposes
@@ -13,33 +14,9 @@ import { createContext, useContext, useMemo } from 'react';
 
 const PortalContext = createContext({ portalMode: 'app' });
 
-// All pages that can be assigned to investors/VIPs.
-// personalData = true means the page exposes admin account info (NAV, positions, etc.)
-// and should default to UNCHECKED when creating a new investor.
-export const ALL_ASSIGNABLE_PAGES = [
-  { key: 'perch',      label: 'PNTHR Perch' },
-  { key: 'earnings',   label: 'PNTHR Calendar' },
-  { key: 'pulse',      label: 'PNTHR Pulse' },
-  { key: 'assistant',  label: 'PNTHR Assistant',  personalData: true },
-  { key: 'orders',     label: 'PNTHR Orders' },
-  { key: 'aiOrders',   label: 'PNTHR AI Orders' },
-  { key: 'search',     label: 'PNTHR Search' },
-  { key: 'prey',       label: 'PNTHR Prey' },
-  { key: 'apex',       label: 'PNTHR Kill' },
-  { key: 'aiKill',     label: 'PNTHR AI Kill' },
-  { key: 'jungle',     label: 'PNTHR 679 Jungle' },
-  { key: 'aiJungle',   label: 'PNTHR AI 300 Index' },
-  { key: 'aiSectors',  label: 'PNTHR AI Sectors' },
-  { key: 'long',       label: 'PNTHR 100 Longs' },
-  { key: 'short',      label: 'PNTHR 100 Shorts' },
-  { key: 'etf',        label: "PNTHR ETF's" },
-  { key: 'sectors',    label: 'PNTHR Sectors' },
-  { key: 'journal',    label: 'PNTHR Journal',    personalData: true },
-  { key: 'watchlist',  label: 'Watchlist' },
-  { key: 'portfolio',  label: 'PNTHR Portfolio',   personalData: true },
-  { key: 'bondHeat',   label: 'PNTHR Bond Heat' },
-  { key: 'data-room',  label: 'PNTHR Data Room' },
-];
+// Auto-derived from SIDEBAR_PAGES — any new sidebar button automatically
+// appears as an assignable checkbox in the Investor Portal (unchecked by default).
+export const ALL_ASSIGNABLE_PAGES = SIDEBAR_PAGES;
 
 export function getDefaultPages() {
   return ALL_ASSIGNABLE_PAGES.filter(p => !p.personalData).map(p => p.key);

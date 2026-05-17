@@ -1578,10 +1578,10 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 
-          {/* AI Intelligence Report Live — admin only */}
-          {renderPage === 'ir-live' && (isAdmin
+          {/* AI Intelligence Report Live — admin or portal-assigned users */}
+          {renderPage === 'ir-live' && (isAdmin || effectiveAllowed?.includes('ir-live')
             ? <IrLivePage />
-            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
+            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>
           )}
 
           {/* TEST page — admin only */}

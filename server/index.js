@@ -5938,6 +5938,19 @@ cron.schedule('45 16 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
+// ── Cron: FCF refresh — quarterly after earnings season (Feb/May/Aug/Nov 15 @ 6pm ET)
+cron.schedule('0 18 15 2,5,8,11 *', async () => {
+  try {
+    console.log('[FCF cron] Quarterly FCF refresh starting...');
+    clearBondHeatCache();
+    const fcf = await getFcfData();
+    const count = Object.keys(fcf).length;
+    console.log(`[FCF cron] Refreshed FCF for ${count} tickers`);
+  } catch (err) {
+    console.error('[FCF cron] Failed:', err.message);
+  }
+}, { timezone: 'America/New_York' });
+
 // POST /api/admin/run-daily-signal-job — manual trigger (per dailySignalJob.js header).
 // Useful for backfilling immediately after deploy without waiting for the 5:05pm cron.
 app.post('/api/admin/run-daily-signal-job', authenticateJWT, requireAdmin, async (req, res) => {

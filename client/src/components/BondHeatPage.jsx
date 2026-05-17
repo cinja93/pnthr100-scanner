@@ -57,7 +57,7 @@ function YieldChartTooltip({ active, payload, label }) {
   );
 }
 
-function YieldChart({ data, title, subtitle, lines, refLines, shockZones, height = 180, onClick, dualAxis, children }) {
+function YieldChart({ data, title, subtitle, lines, refLines, shockZones, dangerZones, height = 180, onClick, dualAxis, children }) {
   return (
     <div className={styles.chartCard} onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <div className={styles.chartTitleRow}>
@@ -76,8 +76,11 @@ function YieldChart({ data, title, subtitle, lines, refLines, shockZones, height
             <YAxis yAxisId="right" orientation="right" tick={{ fill: '#69f0ae', fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={v => `$${v}`} />
           )}
           <Tooltip content={<YieldChartTooltip />} />
+          {dangerZones?.map((zone, i) => (
+            <ReferenceArea key={`dz-${i}`} x1={zone.start} x2={zone.end} yAxisId="left" fill={zone.color} fillOpacity={0.08} />
+          ))}
           {shockZones?.map((zone, i) => (
-            <ReferenceArea key={i} x1={zone.start} x2={zone.end} yAxisId="left" fill="#ff5252" fillOpacity={0.12} />
+            <ReferenceArea key={`sz-${i}`} x1={zone.start} x2={zone.end} yAxisId="left" fill="#ff5252" fillOpacity={0.15} />
           ))}
           {refLines?.map((rl, i) => (
             <ReferenceLine key={i} y={rl.y} yAxisId="left" stroke={rl.color || '#ff5252'} strokeDasharray="5 3" label={{ value: rl.label, fill: rl.color || '#ff5252', fontSize: 10, position: 'right' }} />
@@ -107,7 +110,7 @@ function InfoPopup({ title, children, onClose }) {
 
 // ── Chart modal ─────────────────────────────────────────────────────────────
 
-function ChartModal({ data, chart, shockZones, onClose }) {
+function ChartModal({ data, chart, shockZones, dangerZones, onClose }) {
   if (!chart) return null;
 
   const configs = {
@@ -159,6 +162,7 @@ function ChartModal({ data, chart, shockZones, onClose }) {
           lines={cfg.lines}
           refLines={cfg.refLines}
           shockZones={chart === 'yields' ? shockZones : undefined}
+          dangerZones={chart === 'yields' ? dangerZones : undefined}
           dualAxis={cfg.dualAxis}
           height={420}
         />
@@ -432,6 +436,31 @@ export default function BondHeatPage() {
     return zones;
   }, [history]);
 
+  const dangerZones = useMemo(() => {
+    if (!history.length) return [];
+    const zones = [];
+
+    const buildZones = (key, threshold, color) => {
+      let inZone = false;
+      let start = null;
+      for (const row of history) {
+        const val = row[key];
+        if (val != null && val >= threshold && !inZone) {
+          inZone = true;
+          start = row.date;
+        } else if ((val == null || val < threshold) && inZone) {
+          inZone = false;
+          zones.push({ start, end: row.date, color });
+        }
+      }
+      if (inZone) zones.push({ start, end: history[history.length - 1].date, color });
+    };
+
+    buildZones('y10', 4.5, '#ffd600');
+    buildZones('y30', 5.0, '#ff7043');
+    return zones;
+  }, [history]);
+
   return (
     <div className={styles.container}>
       <div className={styles.headerRow}>
@@ -474,8 +503,9 @@ export default function BondHeatPage() {
                   { y: 5.0, label: '5.00%', color: '#ff7043' },
                 ]}
                 shockZones={shockZones}
+                dangerZones={dangerZones}
                 dualAxis
-                height={240}
+                height={380}
                 onClick={() => setModalChart('yields')}
               >
                 <div className={styles.chartLegend}>
@@ -486,6 +516,8 @@ export default function BondHeatPage() {
                   <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,82,82,0.25)' }} /> Yield Shock</span>
                   <span className={styles.legendItem}><span className={styles.legendDash} style={{ borderColor: '#ffd600' }} /> 10Y Danger 4.50%</span>
                   <span className={styles.legendItem}><span className={styles.legendDash} style={{ borderColor: '#ff7043' }} /> 30Y Danger 5.00%</span>
+                  <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,214,0,0.15)', borderColor: 'rgba(255,214,0,0.4)' }} /> 10Y Above 4.50%</span>
+                  <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,112,67,0.15)', borderColor: 'rgba(255,112,67,0.4)' }} /> 30Y Above 5.00%</span>
                 </div>
               </YieldChart>
 
@@ -538,7 +570,7 @@ export default function BondHeatPage() {
       )}
 
       {/* ── Modals ── */}
-      <ChartModal data={history} chart={modalChart} shockZones={shockZones} onClose={() => setModalChart(null)} />
+      <ChartModal data={history} chart={modalChart} shockZones={shockZones} dangerZones={dangerZones} onClose={() => setModalChart(null)} />
 
       {infoPanel === 'spread2_10' && (
         <InfoPopup title="2-Year / 10-Year Yield Spread" onClose={() => setInfoPanel(null)}>

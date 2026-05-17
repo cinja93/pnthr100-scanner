@@ -310,6 +310,41 @@
   letter-spacing: 0.5px;
 }
 
+/* ── PAI300 Beta Block ── */
+.betaBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 20px;
+  background: #0a0a0a;
+  border: 1px solid #ffd600;
+  border-radius: 6px;
+  min-width: 140px;
+  position: relative;
+}
+
+.betaStatus {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.betaInfoBtn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.betaInfoBtn:hover { color: #ffd600; }
+
 /* ── Playbook Table ── */
 .playbookTable {
   width: 100%;

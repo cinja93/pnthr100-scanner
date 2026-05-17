@@ -416,7 +416,7 @@ function AlarmGauge({ label, current, threshold, color }) {
 
 // ── Current yields banner ───────────────────────────────────────────────────
 
-function YieldsBanner({ bonds, breadth, history, onShowPlaybook }) {
+function YieldsBanner({ bonds, breadth, history, onShowPlaybook, onShowBetaInfo }) {
   if (!bonds) return null;
 
   // Rolling 20-day beta: Cov(PAI300, SPY) / Var(SPY) using daily returns
@@ -487,14 +487,15 @@ function YieldsBanner({ bonds, breadth, history, onShowPlaybook }) {
 
         {/* ── PAI300 Beta ── */}
         {pai300Beta != null && (
-          <div className={styles.yieldItem}>
-            <div className={styles.yieldItemLabel}>PAI 300 Beta</div>
-            <div className={styles.yieldItemValue} style={{ color: pai300Beta > 1.3 ? '#ff5252' : pai300Beta > 1.0 ? '#ffd600' : '#69f0ae', fontSize: 20 }}>
+          <div className={styles.betaBlock}>
+            <div className={styles.metersBlockTitle}>PAI 300 RATE BETA</div>
+            <div className={styles.yieldItemValue} style={{ color: pai300Beta > 1.3 ? '#ff5252' : pai300Beta > 1.0 ? '#ffd600' : '#69f0ae', fontSize: 28, textAlign: 'center' }}>
               {pai300Beta.toFixed(2)}x
             </div>
-            <div className={styles.yieldItemChange} style={{ color: '#888' }}>
+            <div className={styles.betaStatus} style={{ color: pai300Beta > 1.3 ? '#ff5252' : pai300Beta > 1.0 ? '#ffd600' : '#69f0ae' }}>
               {pai300Beta > 1.3 ? 'HIGH SENSITIVITY' : pai300Beta > 1.0 ? 'ELEVATED' : 'NORMAL'}
             </div>
+            <button className={styles.betaInfoBtn} onClick={onShowBetaInfo} title="What does this mean?">ⓘ</button>
           </div>
         )}
 
@@ -846,7 +847,7 @@ export default function BondHeatPage() {
           <MarketInterpretation bonds={data.bonds} breadth={data.breadth} history={history} comparisonData={comparisonData} />
 
           {/* ── Current Yields Banner ── */}
-          <YieldsBanner bonds={data.bonds} breadth={data.breadth} history={history} onShowPlaybook={() => setInfoPanel('playbook')} />
+          <YieldsBanner bonds={data.bonds} breadth={data.breadth} history={history} onShowPlaybook={() => setInfoPanel('playbook')} onShowBetaInfo={() => setInfoPanel('beta')} />
 
           {/* ── Yield Curves + SPY overlay ── */}
           {history.length > 0 && (
@@ -1004,6 +1005,20 @@ export default function BondHeatPage() {
             <li><strong>Confidence in long-term economic stability</strong> — structural doubts about growth, productivity, and institutional strength</li>
           </ul>
           <p><strong>What to watch:</strong> A persistent rise in the 10/30 spread alongside rising absolute yields is bearish for equities — it signals the bond market is losing confidence in long-term fiscal management and inflation control.</p>
+        </InfoPopup>
+      )}
+
+      {infoPanel === 'beta' && (
+        <InfoPopup title="PAI 300 Rate Beta — What It Means" onClose={() => setInfoPanel(null)}>
+          <p><strong>Beta measures how much the PAI 300 moves relative to the S&P 500.</strong> A beta of 1.0x means they move equally. A beta of 2.0x means PAI 300 moves twice as much — in both directions.</p>
+          <p><strong>How it's calculated:</strong> Rolling 20-day correlation of daily returns between PAI 300 and SPY. This captures the current regime, not a long-term average.</p>
+          <p><strong>What the levels mean for your portfolio:</strong></p>
+          <ul>
+            <li><strong style={{color:'#69f0ae'}}>Below 1.0x (NORMAL)</strong> — AI stocks are moving less than the broad market. This is unusual and typically occurs during AI-specific momentum (sector outperformance regardless of rates). Standard position sizing applies.</li>
+            <li><strong style={{color:'#ffd600'}}>1.0x – 1.3x (ELEVATED)</strong> — AI stocks are slightly more volatile than the market. This is the typical range. No special action needed, but be aware that a rate shock will hit your AI positions harder than an SPY-tracking portfolio.</li>
+            <li><strong style={{color:'#ff5252'}}>Above 1.3x (HIGH SENSITIVITY)</strong> — AI stocks are significantly amplifying market moves. In a selloff, your PAI 300 positions will drop 30%+ faster than SPY. Consider: tightening stops, reducing position sizes, avoiding new entries during yield shock periods, and hedging with inverse ETFs if appropriate.</li>
+          </ul>
+          <p><strong>Key insight:</strong> High beta works both ways. When the market recovers, PAI 300 will snap back faster. The risk is getting stopped out at the bottom of an amplified drawdown. Use the Yield Shock Meter to time when to be defensive vs when to hold through volatility.</p>
         </InfoPopup>
       )}
 

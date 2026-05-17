@@ -228,11 +228,14 @@ function spyMetrics(spyDaily, startDate, endDate, seedNav) {
   const years = yearsBetween(dates[0], dates[dates.length - 1]);
   const totalReturn = ((equity[equity.length - 1] - equity[0]) / equity[0]) * 100;
   const cagr = (Math.pow(equity[equity.length - 1] / equity[0], 1 / years) - 1) * 100;
+  const monthly = groupMonthly(equity, dates);
+  const meanM = monthly.length > 0 ? monthly.reduce((s, m) => s + m.ret, 0) / monthly.length : 0;
   return {
     startDate: dates[0], endDate: dates[dates.length - 1],
     totalReturn: +totalReturn.toFixed(2), cagr: +cagr.toFixed(2),
     sharpe: +computeSharpe(ret, dates).toFixed(2), sortino: +computeSortino(ret).toFixed(2),
     maxDD: +computeMaxDD(equity, dates).maxDD.toFixed(2),
+    avgMonthlyReturn: +meanM.toFixed(2),
     endingEquity: +equity[equity.length - 1].toFixed(2),
     equityCurve: dates.map((d, i) => ({ date: d, value: +equity[i].toFixed(0) })),
   };

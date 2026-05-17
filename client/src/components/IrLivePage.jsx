@@ -51,7 +51,7 @@ function MetricCard({ label, value, sub, color, small }) {
     <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: small ? '10px 14px' : '14px 18px', minWidth: small ? 110 : 140 }}>
       <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: small ? 18 : 22, fontWeight: 800, color: color || '#fff', whiteSpace: 'nowrap' }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: '#555', marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -847,7 +847,7 @@ export default function IrLivePage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 24 }}>
                 <MetricCard small label="Best Month" value={net?.bestMonth ? `${fmtPct(net.bestMonth.ret)}` : '—'} color={GREEN} sub={net?.bestMonth?.m} />
                 <MetricCard small label="Worst Month" value={net?.worstMonth ? `${fmtPct(net.worstMonth.ret)}` : '—'} color={RED} sub={net?.worstMonth?.m} />
-                <MetricCard small label="Avg Monthly Return" value={`${fmt(net?.avgMonthlyReturn)}%`} color={GREEN} />
+                <MetricCard small label="Avg Monthly Return" value={`${fmt(net?.avgMonthlyReturn)}%`} color={GREEN} sub={spy?.avgMonthlyReturn != null ? `S&P 500: ${fmt(spy.avgMonthlyReturn)}%` : undefined} />
                 <MetricCard small label="Max Drawdown (Net)" value={fmtPct(net?.maxDD)} color={RED} sub={spy?.maxDD != null ? `S&P 500: ${fmtPct(spy.maxDD)}` : undefined} />
                 <MetricCard small label="Max Drawdown (Gross)" value={fmtPct(gross?.maxDD)} color={RED} sub={spy?.maxDD != null ? `S&P 500: ${fmtPct(spy.maxDD)}` : undefined} />
                 <MetricCard small label="Ulcer Index" value={fmt(net?.ulcerIndex)} sub="Moderate volatility" />

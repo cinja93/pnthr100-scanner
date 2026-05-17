@@ -38,19 +38,17 @@ export async function getFcfData() {
       .then(r => r.ok ? r.json() : [])
       .catch(() => []);
 
-  // FMP batch cash-flow-statement supports comma-separated tickers
-  const BATCH = 50;
   const results = {};
-  for (let i = 0; i < tickers.length; i += BATCH) {
-    const batch = tickers.slice(i, i + BATCH).join(',');
-    const data = await get(`${FMP_BASE}/cash-flow-statement/${batch}?period=annual&limit=1&apikey=${key}`);
-    if (Array.isArray(data)) {
-      for (const row of data) {
-        if (row.symbol && !results[row.symbol]) {
-          results[row.symbol] = row.freeCashFlow ?? null;
-        }
+  const CONCURRENCY = 10;
+  for (let i = 0; i < tickers.length; i += CONCURRENCY) {
+    const batch = tickers.slice(i, i + CONCURRENCY);
+    const fetches = batch.map(async (ticker) => {
+      const data = await get(`${FMP_BASE}/cash-flow-statement/${ticker}?period=annual&limit=1&apikey=${key}`);
+      if (Array.isArray(data) && data.length > 0) {
+        results[ticker] = data[0].freeCashFlow ?? null;
       }
-    }
+    });
+    await Promise.all(fetches);
   }
 
   fcfCache = results;

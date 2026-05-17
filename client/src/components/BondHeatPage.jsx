@@ -33,7 +33,7 @@ function getTextColor(pct) {
 
 // ── Chart helpers ───────────────────────────────────────────────────────────
 
-const CHART_COLORS = { y2: '#4fc3f7', y10: '#ffd600', y30: '#ff7043', spy: '#69f0ae', pai300: '#ffcc00', spread: '#ce93d8', spread1030: '#4dd0e1' };
+const CHART_COLORS = { y2: '#4fc3f7', y10: '#ffd600', y30: '#ff7043', spy: '#69f0ae', pai300: '#ffd600', spread: '#ce93d8', spread1030: '#4dd0e1' };
 
 function formatDateShort(dateStr) {
   if (!dateStr) return '';
@@ -82,7 +82,7 @@ function YieldChart({ data, title, subtitle, lines, refLines, shockZones, danger
             <ReferenceArea key={`dz-${i}`} x1={zone.start} x2={zone.end} yAxisId="left" fill={zone.color} fillOpacity={0.08} />
           ))}
           {shockZones?.map((zone, i) => (
-            <ReferenceArea key={`sz-${i}`} x1={zone.start} x2={zone.end} yAxisId="left" fill="#ff9800" fillOpacity={0.18} stroke="#ff9800" strokeOpacity={0.3} label={{ value: 'YIELD SHOCK', fill: '#ff9800', fontSize: 9, fontWeight: 700, position: 'insideTop' }} />
+            <ReferenceArea key={`sz-${i}`} x1={zone.start} x2={zone.end} yAxisId="left" fill="#ff9800" fillOpacity={0.12} ifOverflow="visible" label={{ value: zone.label || 'YIELD SHOCK', fill: '#ff9800', fontSize: 8, fontWeight: 700, position: 'insideTopLeft' }} />
           ))}
           {refLines?.map((rl, i) => (
             <ReferenceLine key={i} y={rl.y} yAxisId="left" stroke={rl.color || '#ff5252'} strokeDasharray="5 3" label={{ value: rl.label, fill: rl.color || '#ff5252', fontSize: 10, position: 'insideTopLeft' }} />
@@ -596,6 +596,17 @@ export default function BondHeatPage() {
       }
     }
     if (inShock) zones.push({ start, end: history[history.length - 1].date });
+
+    // Label known events by date overlap
+    const events = [
+      { from: '2025-01-01', to: '2025-02-15', label: 'INFLATION FEARS' },
+      { from: '2025-03-01', to: '2025-04-15', label: 'TARIFF SHOCK' },
+      { from: '2025-05-10', to: '2025-06-01', label: 'DEFICIT CONCERNS' },
+    ];
+    for (const zone of zones) {
+      const match = events.find(e => zone.start >= e.from && zone.start <= e.to);
+      zone.label = match ? match.label : 'YIELD SHOCK';
+    }
     return zones;
   }, [history]);
 
@@ -673,7 +684,7 @@ export default function BondHeatPage() {
                 data={history}
                 syncId="bondHeat"
                 title="Treasury Yields + S&P 500 — Past 12 Months"
-                subtitle="Red shaded zones = Yield Shock active (10Y rose 20+ bps in 10 trading days)"
+                subtitle="Amber zones = Yield Shock active (10Y rose 20+ bps in 10 trading days)"
                 lines={[
                   { key: 'y2', name: '2-Year', color: CHART_COLORS.y2 },
                   { key: 'y10', name: '10-Year', color: CHART_COLORS.y10 },
@@ -716,6 +727,7 @@ export default function BondHeatPage() {
                 refLines={[
                   { y: 0, label: 'Inversion', color: '#ef5350' },
                 ]}
+                shockZones={shockZones}
                 height={220}
                 onClick={() => setModalChart('spread2_10')}
               >
@@ -732,6 +744,7 @@ export default function BondHeatPage() {
                   { key: 'spread10_30', name: '30Y - 10Y Spread', color: CHART_COLORS.spread1030 },
                 ]}
                 refLines={[]}
+                shockZones={shockZones}
                 height={220}
                 onClick={() => setModalChart('spread10_30')}
               >

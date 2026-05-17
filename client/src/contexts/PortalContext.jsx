@@ -37,6 +37,7 @@ export const ALL_ASSIGNABLE_PAGES = [
   { key: 'journal',    label: 'PNTHR Journal',    personalData: true },
   { key: 'watchlist',  label: 'Watchlist' },
   { key: 'portfolio',  label: 'PNTHR Portfolio',   personalData: true },
+  { key: 'bondHeat',   label: 'PNTHR Bond Heat' },
   { key: 'data-room',  label: 'PNTHR Data Room' },
 ];
 
@@ -53,7 +54,7 @@ export const PORTAL_PAGES = {
   vip: [
     'perch', 'earnings', 'pulse', 'portfolio', 'assistant',
     'search', 'prey', 'apex', 'jungle', 'long', 'short', 'etf', 'sectors',
-    'journal', 'watchlist', 'orders', 'data-room',
+    'journal', 'watchlist', 'orders', 'bondHeat', 'data-room',
   ],
 };
 

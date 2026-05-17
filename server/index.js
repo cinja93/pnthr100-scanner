@@ -905,19 +905,21 @@ app.patch('/api/user/profile', authenticateJWT, async (req, res) => {
 app.get('/api/admin/users/:id/pages', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const profile = await getUserProfile(req.params.id);
-    res.json({ allowedPages: profile?.allowedPages || [] });
+    res.json({ allowedPages: profile?.allowedPages || [], allowedDocIds: profile?.allowedDocIds || [] });
   } catch (error) {
     console.error('Error fetching user pages:', error);
     res.status(500).json({ error: 'Failed to fetch pages' });
   }
 });
 
-// PATCH /api/admin/users/:id/pages — admin-only: set a member/VIP's allowed pages
+// PATCH /api/admin/users/:id/pages — admin-only: set a member/VIP's allowed pages + doc IDs
 app.patch('/api/admin/users/:id/pages', authenticateJWT, requireAdmin, async (req, res) => {
   try {
-    const { allowedPages } = req.body;
+    const { allowedPages, allowedDocIds } = req.body;
     if (!Array.isArray(allowedPages)) return res.status(400).json({ error: 'allowedPages must be an array' });
-    await upsertUserProfile(req.params.id, { allowedPages });
+    const update = { allowedPages };
+    if (Array.isArray(allowedDocIds)) update.allowedDocIds = allowedDocIds;
+    await upsertUserProfile(req.params.id, update);
     res.json({ success: true });
   } catch (error) {
     console.error('Error updating user pages:', error);

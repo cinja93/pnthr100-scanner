@@ -31,6 +31,18 @@ export default function DocPermissionsSelector({ selected, onChange }) {
     onChange([]);
   }
 
+  const SECTION_AI300 = 'PNTHR AI Elite 300 Fund';
+  const SECTION_679 = 'PNTHR Funds, Carnivore Quant LP Fund Documents';
+  const SECTION_SUPPORTING = 'Supporting PNTHR Documents';
+
+  function selectByFund(fundSections) {
+    const ids = docs
+      .filter(d => fundSections.includes(d.section || 'Uncategorized'))
+      .map(d => d._id);
+    const merged = new Set([...selected, ...ids]);
+    onChange([...merged]);
+  }
+
   // Group docs by section
   const sections = {};
   for (const d of docs) {
@@ -58,6 +70,16 @@ export default function DocPermissionsSelector({ selected, onChange }) {
             NONE
           </button>
         </div>
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button type="button" onClick={() => selectByFund([SECTION_AI300, SECTION_SUPPORTING])}
+          style={{ background: 'none', border: '1px solid #444', color: '#FCF000', borderRadius: 4, padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+          AI 300
+        </button>
+        <button type="button" onClick={() => selectByFund([SECTION_679, SECTION_SUPPORTING])}
+          style={{ background: 'none', border: '1px solid #444', color: '#FCF000', borderRadius: 4, padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+          679
+        </button>
       </div>
       <div style={{
         background: '#0a0a0a', border: '1px solid #333', borderRadius: 6, padding: '10px 12px',

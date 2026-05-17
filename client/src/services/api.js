@@ -232,11 +232,13 @@ export async function fetchImpersonationTargets() {
   return res.json();
 }
 
-export async function updateVipPages(userId, allowedPages) {
+export async function updateVipPages(userId, allowedPages, allowedDocIds) {
+  const body = { allowedPages };
+  if (Array.isArray(allowedDocIds)) body.allowedDocIds = allowedDocIds;
   const res = await apiFetch(`${API_BASE}/api/admin/users/${userId}/pages`, {
     method: 'PATCH',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ allowedPages }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();

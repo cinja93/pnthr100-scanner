@@ -367,6 +367,7 @@ function InlinePageEditor({ investorId, allowedPages, allowedDocIds, onSave }) {
 function VipCard({ vip, onPagesUpdated }) {
   const [pagesOpen, setPagesOpen] = useState(false);
   const [currentPages, setCurrentPages] = useState(null);
+  const [currentDocIds, setCurrentDocIds] = useState([]);
   const [loadingPages, setLoadingPages] = useState(false);
 
   async function loadPages() {
@@ -377,6 +378,7 @@ function VipCard({ vip, onPagesUpdated }) {
       if (res.ok) {
         const data = await res.json();
         setCurrentPages(data.allowedPages || []);
+        setCurrentDocIds(data.allowedDocIds || []);
       } else {
         setCurrentPages(PORTAL_PAGES.vip || []);
       }
@@ -410,9 +412,11 @@ function VipCard({ vip, onPagesUpdated }) {
       {pagesOpen && !loadingPages && currentPages !== null && (
         <InlinePageEditor
           allowedPages={currentPages}
-          onSave={async (pages) => {
-            await updateVipPages(vip.id, pages);
+          allowedDocIds={currentDocIds}
+          onSave={async (pages, docIds) => {
+            await updateVipPages(vip.id, pages, docIds);
             setCurrentPages(pages);
+            setCurrentDocIds(docIds || []);
             if (onPagesUpdated) onPagesUpdated();
           }}
         />

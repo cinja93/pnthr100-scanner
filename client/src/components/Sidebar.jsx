@@ -251,10 +251,11 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
     : null;
 
   // PNTHR Data group — Journal + Watchlist for everyone; Kill 10, Kill Test, History admin-only
+  const userAllowed = currentUser?.allowedPages;
   const dataItems = [
     { key: 'journal',  label: 'PNTHR Journal',  iconImg: true },
   ];
-  if (effectiveAdmin || allowedPages) {
+  if (effectiveAdmin || allowedPages || userAllowed?.includes('ir-live')) {
     dataItems.push({ key: 'ir-live', label: 'AI Intelligence Report Live', iconImg: true, aiHighlight: true });
   }
   if (effectiveAdmin) {

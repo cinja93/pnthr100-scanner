@@ -88,7 +88,7 @@ function YieldChart({ data, title, subtitle, lines, refLines, shockZones, danger
             <ReferenceLine key={i} y={rl.y} yAxisId="left" stroke={rl.color || '#ff5252'} strokeDasharray="5 3" label={{ value: rl.label, fill: rl.color || '#ff5252', fontSize: 10, position: 'insideTopLeft' }} />
           ))}
           {lines.map(l => (
-            <Line key={l.key} type="monotone" dataKey={l.key} name={l.name} stroke={l.color} dot={false} strokeWidth={l.width || 2} yAxisId={l.axis || 'left'} />
+            <Line key={l.key} type="monotone" dataKey={l.key} name={l.name} stroke={l.color} dot={false} strokeWidth={l.width || 2} yAxisId={l.axis || 'left'} connectNulls />
           ))}
         </LineChart>
       </ResponsiveContainer>

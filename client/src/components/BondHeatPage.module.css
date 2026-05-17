@@ -144,16 +144,16 @@
 }
 .playbookBtn:hover { color: #ffd600; border-color: #ffd600; }
 
-/* ── Rate Direction Meters ── */
-.metersBlock {
+/* ── Yield Shock Meter ── */
+.shockMeterBlock {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   padding: 6px 12px;
   background: #0a0a0a;
   border: 1px solid #333;
   border-radius: 6px;
-  min-width: 200px;
+  min-width: 190px;
 }
 
 .metersBlockTitle {
@@ -165,34 +165,51 @@
   margin-bottom: 2px;
 }
 
-.meterRow {
+.shockMeterRow {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
-.meterLabel {
-  font-size: 9px;
-  font-weight: 700;
-  color: #888;
-  width: 24px;
-  text-align: right;
-}
-
-.meterBoxes {
+.shockMeterBoxes {
   display: flex;
-  gap: 1px;
+  gap: 2px;
 }
 
-.meterBox {
-  width: 7px;
-  height: 12px;
-  border-radius: 1px;
+.shockMeterBox {
+  width: 14px;
+  height: 18px;
+  border-radius: 2px;
+  transition: background 0.3s;
 }
 
-.meter_up { background: #ef5350; }
-.meter_down { background: #69f0ae; }
-.meter_flat { background: #555; }
+.shock_declining { background: #69f0ae; }
+.shock_building { background: #ffd600; }
+.shock_shock { background: #ef5350; animation: gaugePulse 1.2s infinite; }
+.shock_flat { background: #555; }
+
+.shockMeterBps {
+  font-size: 12px;
+  font-weight: 800;
+  color: #ccc;
+  white-space: nowrap;
+}
+
+.shockMeterDanger {
+  color: #ff5252;
+}
+
+.shockMeterScale {
+  display: flex;
+  gap: 8px;
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.scaleGreen { color: #69f0ae; }
+.scaleYellow { color: #ffd600; }
+.scaleRed { color: #ef5350; }
 
 /* ── Two-Factor Alarm Gauges ── */
 .gaugesBlock {

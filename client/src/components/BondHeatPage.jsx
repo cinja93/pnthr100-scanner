@@ -218,32 +218,46 @@ function YieldShockBanner({ history, bonds }) {
   );
 }
 
-// ── Rate Direction Meter (20 boxes) ─────────────────────────────────────────
+// ── Yield Shock Meter (10 boxes, 10Y cumulative) ────────────────────────────
 
-function DirectionMeter({ history, yieldKey, label }) {
-  const last20 = history.slice(-20);
-  const boxes = last20.map((row, i) => {
-    if (i === 0) return 'flat';
-    const prev = last20[i - 1]?.[yieldKey];
-    const cur = row[yieldKey];
-    if (prev == null || cur == null) return 'flat';
-    const delta = cur - prev;
-    if (delta > 0.005) return 'up';
-    if (delta < -0.005) return 'down';
-    return 'flat';
+function YieldShockMeter({ history }) {
+  if (history.length < 11) return null;
+
+  const last10 = history.slice(-10);
+  const anchor = history[history.length - 11]?.y10;
+
+  const boxes = last10.map(row => {
+    if (anchor == null || row.y10 == null) return { status: 'flat', bps: 0 };
+    const bps = Math.round((row.y10 - anchor) * 100);
+    if (bps >= 20) return { status: 'shock', bps };
+    if (bps > 0) return { status: 'building', bps };
+    return { status: 'declining', bps };
   });
 
+  const latestBps = boxes[boxes.length - 1]?.bps || 0;
+  const isShock = boxes[boxes.length - 1]?.status === 'shock';
+
   return (
-    <div className={styles.meterRow}>
-      <div className={styles.meterLabel}>{label}</div>
-      <div className={styles.meterBoxes}>
-        {boxes.map((dir, i) => (
-          <div
-            key={i}
-            className={`${styles.meterBox} ${styles[`meter_${dir}`]}`}
-            title={`${last20[i]?.date || ''}: ${dir}`}
-          />
-        ))}
+    <div className={styles.shockMeterBlock}>
+      <div className={styles.metersBlockTitle}>10Y YIELD SHOCK — 10 DAY WINDOW</div>
+      <div className={styles.shockMeterRow}>
+        <div className={styles.shockMeterBoxes}>
+          {boxes.map((b, i) => (
+            <div
+              key={i}
+              className={`${styles.shockMeterBox} ${styles[`shock_${b.status}`]}`}
+              title={`${last10[i]?.date}: ${b.bps > 0 ? '+' : ''}${b.bps} bps cumulative`}
+            />
+          ))}
+        </div>
+        <div className={`${styles.shockMeterBps} ${isShock ? styles.shockMeterDanger : ''}`}>
+          {latestBps > 0 ? '+' : ''}{latestBps} bps
+        </div>
+      </div>
+      <div className={styles.shockMeterScale}>
+        <span className={styles.scaleGreen}>Declining</span>
+        <span className={styles.scaleYellow}>&lt;20 bps</span>
+        <span className={styles.scaleRed}>20+ bps SHOCK</span>
       </div>
     </div>
   );
@@ -308,13 +322,8 @@ function YieldsBanner({ bonds, breadth, history, onShowPlaybook }) {
           </div>
         ))}
 
-        {/* ── Block 1: Direction Meters ── */}
-        <div className={styles.metersBlock}>
-          <div className={styles.metersBlockTitle}>RATE DIRECTION — LAST 20 DAYS</div>
-          <DirectionMeter history={history} yieldKey="y2" label="2Y" />
-          <DirectionMeter history={history} yieldKey="y10" label="10Y" />
-          <DirectionMeter history={history} yieldKey="y30" label="30Y" />
-        </div>
+        {/* ── Block 1: Yield Shock Meter ── */}
+        <YieldShockMeter history={history} />
 
         {/* ── Block 2: Two-Factor Alarm ── */}
         <div className={styles.gaugesBlock}>

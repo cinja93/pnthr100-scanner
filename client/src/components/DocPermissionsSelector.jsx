@@ -31,13 +31,18 @@ export default function DocPermissionsSelector({ selected, onChange }) {
     onChange([]);
   }
 
-  const SECTION_AI300 = 'PNTHR AI Elite 300 Fund';
-  const SECTION_679 = 'PNTHR Funds, Carnivore Quant LP Fund Documents';
-  const SECTION_SUPPORTING = 'Supporting PNTHR Documents';
+  function matchesSection(section, keywords) {
+    const lower = (section || '').toLowerCase();
+    return keywords.some(kw => lower.includes(kw));
+  }
 
-  function selectByFund(fundSections) {
+  function selectByFund(fundKeywords) {
+    const supportingKw = ['supporting'];
     const ids = docs
-      .filter(d => fundSections.includes(d.section || 'Uncategorized'))
+      .filter(d => {
+        const sec = d.section || '';
+        return matchesSection(sec, fundKeywords) || matchesSection(sec, supportingKw);
+      })
       .map(d => d._id);
     const merged = new Set([...selected, ...ids]);
     onChange([...merged]);
@@ -72,11 +77,11 @@ export default function DocPermissionsSelector({ selected, onChange }) {
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
-        <button type="button" onClick={() => selectByFund([SECTION_AI300, SECTION_SUPPORTING])}
+        <button type="button" onClick={() => selectByFund(['ai elite 300', 'ai elite'])}
           style={{ background: 'none', border: '1px solid #444', color: '#FCF000', borderRadius: 4, padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
           AI 300
         </button>
-        <button type="button" onClick={() => selectByFund([SECTION_679, SECTION_SUPPORTING])}
+        <button type="button" onClick={() => selectByFund(['carnivore', '679'])}
           style={{ background: 'none', border: '1px solid #444', color: '#FCF000', borderRadius: 4, padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
           679
         </button>

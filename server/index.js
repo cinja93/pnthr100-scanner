@@ -2553,8 +2553,14 @@ app.get('/api/ai300-kill-history/track-record', authenticateJWT, ai300KillHistor
 app.get('/api/ai300-kill-history/simulation',   authenticateJWT, ai300KillSimulationHandler);
 
 // ── AI Elite Fund — Live Intelligence Report ─────────────────────────────────
-app.get('/api/ir-live/:tier/metrics', authenticateJWT, requireAdmin, irLiveMetricsHandler);
-app.get('/api/ir-live/:tier/trades',  authenticateJWT, requireAdmin, irLiveTradesHandler);
+async function requireIrLiveAccess(req, res, next) {
+  if (req.user?.role === 'admin') return next();
+  const profile = await getUserProfile(req.user.userId);
+  if (profile?.allowedPages?.includes('ir-live')) return next();
+  return res.status(403).json({ error: 'Access denied' });
+}
+app.get('/api/ir-live/:tier/metrics', authenticateJWT, requireIrLiveAccess, irLiveMetricsHandler);
+app.get('/api/ir-live/:tier/trades',  authenticateJWT, requireIrLiveAccess, irLiveTradesHandler);
 
 // ── AI 300 Kill Test — Appearance Tracking ───────────────────────────────────
 app.get('/api/ai300-kill-appearances', authenticateJWT, requireAdmin, async (req, res) => {

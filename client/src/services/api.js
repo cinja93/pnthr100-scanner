@@ -446,6 +446,22 @@ export async function fetchPnthrAi300Weights() {
   return response.json();
 }
 
+let _fcfCache = null;
+let _fcfCacheTime = 0;
+const FCF_CLIENT_CACHE_MS = 5 * 60 * 1000;
+
+export async function fetchFcfData() {
+  const now = Date.now();
+  if (_fcfCache && (now - _fcfCacheTime) < FCF_CLIENT_CACHE_MS) return _fcfCache;
+  const url = `${API_BASE}/api/bond-heat/fcf`;
+  const response = await apiFetch(url, { headers: authHeaders() });
+  if (!response.ok) return {};
+  const data = await response.json();
+  _fcfCache = data;
+  _fcfCacheTime = now;
+  return data;
+}
+
 // PNTHR AI 300 OHLC bars + EMA series for the chart modal (timeframe: 'daily' | 'weekly')
 export async function fetchPnthrAi300Bars(timeframe = 'daily', limit = null) {
   const params = new URLSearchParams({ timeframe });

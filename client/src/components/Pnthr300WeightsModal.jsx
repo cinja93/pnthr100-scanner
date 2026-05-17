@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchPnthrAi300Weights } from '../services/api';
+import { fetchPnthrAi300Weights, fetchFcfData } from '../services/api';
 import pantherHead from '../assets/panther head.png';
 
 // Pnthr300WeightsModal — popup showing how each of the 304 constituents is
@@ -20,8 +20,30 @@ function fmtWeight(w) {
   return w >= 0.1 ? `${w.toFixed(2)}%` : `${w.toFixed(3)}%`;
 }
 
+function getFcfColor(fcf) {
+  if (fcf == null) return '#666';
+  if (fcf > 50_000_000) return '#00c853';
+  if (fcf > 0) return '#69f0ae';
+  if (fcf > -50_000_000) return '#ffd600';
+  return '#ff5252';
+}
+
+function getFcfLabel(fcf) {
+  if (fcf == null) return 'No FCF data';
+  if (fcf > 50_000_000) return `FCF: +$${(fcf / 1e9).toFixed(1)}B`;
+  if (fcf > 0) return `FCF: +$${(fcf / 1e6).toFixed(0)}M`;
+  if (fcf > -50_000_000) return `FCF: -$${(Math.abs(fcf) / 1e6).toFixed(0)}M (breakeven)`;
+  return `FCF: -$${(Math.abs(fcf) / 1e9).toFixed(1)}B`;
+}
+
+const fcfBillStyle = {
+  display: 'inline-block', fontSize: 9, fontWeight: 900, padding: '1px 4px',
+  borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 6,
+};
+
 export default function Pnthr300WeightsModal({ onClose }) {
   const [data, setData]       = useState(null);
+  const [fcfMap, setFcfMap]   = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [search, setSearch]   = useState('');
@@ -31,8 +53,8 @@ export default function Pnthr300WeightsModal({ onClose }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true); setError(null);
-    fetchPnthrAi300Weights()
-      .then(d => { if (!cancelled) setData(d); })
+    Promise.all([fetchPnthrAi300Weights(), fetchFcfData()])
+      .then(([d, fcf]) => { if (!cancelled) { setData(d); setFcfMap(fcf || {}); } })
       .catch(e => { if (!cancelled) setError(e.message || 'Failed to load'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -180,7 +202,10 @@ export default function Pnthr300WeightsModal({ onClose }) {
                   return (
                     <tr key={c.ticker} style={{ borderTop: '1px solid #1a1a1a' }}>
                       <td style={{ padding: '8px 12px', textAlign: 'right', color: '#666', fontFamily: 'monospace' }}>{c.rank}</td>
-                      <td style={{ padding: '8px 12px', fontWeight: 700, color: '#fcf000', fontFamily: 'monospace' }}>{c.ticker}</td>
+                      <td style={{ padding: '8px 12px', fontWeight: 700, color: '#fcf000', fontFamily: 'monospace' }}>
+                        {c.ticker}
+                        <span style={{ ...fcfBillStyle, backgroundColor: getFcfColor(fcfMap[c.ticker]) }} title={getFcfLabel(fcfMap[c.ticker])}>$</span>
+                      </td>
                       <td style={{ padding: '8px 12px', color: '#d4d4d4' }}>{c.name}</td>
                       <td style={{ padding: '8px 12px', color: '#888', fontSize: 11 }}>{c.sector}</td>
                       <td style={{ padding: '8px 12px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#fff' }}>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, BarSeries, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
-import { fetchAiStockChartData, fetchNav, API_BASE, authHeaders } from '../services/api';
+import { fetchAiStockChartData, fetchNav, fetchFcfData, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils';
 import { useQueue } from '../contexts/QueueContext';
 import pantherHead from '../assets/panther head.png';
@@ -500,6 +500,22 @@ function ChartPanel({
 // Accepts EITHER a single `ticker` (back-compat) OR a `tickers` array +
 // `initialIndex` for prev/next navigation. When given a list, ◀ / ▶ buttons
 // (and ← / → keyboard) cycle through them without closing the modal.
+function getFcfColor(fcf) {
+  if (fcf == null) return '#666';
+  if (fcf > 50_000_000) return '#00c853';
+  if (fcf > 0) return '#69f0ae';
+  if (fcf > -50_000_000) return '#ffd600';
+  return '#ff5252';
+}
+
+function getFcfLabel(fcf) {
+  if (fcf == null) return 'No FCF data';
+  if (fcf > 50_000_000) return `FCF: +$${(fcf / 1e9).toFixed(1)}B`;
+  if (fcf > 0) return `FCF: +$${(fcf / 1e6).toFixed(0)}M`;
+  if (fcf > -50_000_000) return `FCF: -$${(Math.abs(fcf) / 1e6).toFixed(0)}M (breakeven)`;
+  return `FCF: -$${(Math.abs(fcf) / 1e9).toFixed(1)}B`;
+}
+
 export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, onClose }) {
   const tickerList = tickers && tickers.length > 0 ? tickers : (ticker ? [ticker] : []);
   const [currentIdx, setCurrentIdx] = useState(Math.min(Math.max(0, initialIndex), Math.max(0, tickerList.length - 1)));
@@ -510,6 +526,9 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
   const [error, setError]         = useState(null);
   const [chartType, setChartType] = useState('bars');
   const [washWarning, setWashWarning] = useState(null);
+  const [fcfMap, setFcfMap]       = useState({});
+
+  useEffect(() => { fetchFcfData().then(d => setFcfMap(d || {})).catch(() => {}); }, []);
 
   const canPrev = currentIdx > 0;
   const canNext = currentIdx < tickerList.length - 1;
@@ -600,6 +619,10 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
             <span style={{ color: '#fcf000', fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', fontFamily: 'monospace' }}>
               {activeTicker}
+              <span
+                style={{ display: 'inline-block', fontSize: 10, fontWeight: 900, padding: '1px 5px', borderRadius: 2, color: '#000', lineHeight: 1, verticalAlign: 'middle', marginLeft: 8, backgroundColor: getFcfColor(fcfMap[activeTicker]) }}
+                title={getFcfLabel(fcfMap[activeTicker])}
+              >$</span>
             </span>
             {data?.name && <span style={{ color: '#888', fontSize: 13 }}>{data.name}</span>}
             {data?.ok && (

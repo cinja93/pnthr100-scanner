@@ -68,13 +68,11 @@ function YieldChart({ data, title, subtitle, lines, refLines, shockZones, danger
         {children}
       </div>
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={data} syncId={syncId} margin={{ top: 5, right: dualAxis ? 10 : 10, left: -10, bottom: 5 }}>
+        <LineChart data={data} syncId={syncId} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#333" />
           <XAxis dataKey="date" tickFormatter={formatDateShort} tick={{ fill: '#888', fontSize: 10 }} interval="preserveStartEnd" minTickGap={40} />
           <YAxis yAxisId="left" tick={{ fill: '#888', fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={v => `${v}%`} />
-          {dualAxis && (
-            <YAxis yAxisId="right" orientation="right" tick={{ fill: '#69f0ae', fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={v => `$${v}`} />
-          )}
+          <YAxis yAxisId="right" orientation="right" width={50} tick={dualAxis ? { fill: '#69f0ae', fontSize: 10 } : false} domain={['auto', 'auto']} tickFormatter={dualAxis ? (v => `$${v}`) : () => ''} />
           <Tooltip content={<YieldChartTooltip />} />
           {dangerZones?.map((zone, i) => (
             <ReferenceArea key={`dz-${i}`} x1={zone.start} x2={zone.end} yAxisId="left" fill={zone.color} fillOpacity={0.08} />

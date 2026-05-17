@@ -28,6 +28,7 @@ import EtfPage from './components/EtfPage';
 import CalendarPage from './components/CalendarPage';
 import JunglePage from './components/JunglePage';
 import AiJunglePage from './components/AiJunglePage';
+import BondHeatPage from './components/BondHeatPage';
 import AiSectorsPage from './components/AiSectorsPage';
 import AiOrdersPage from './components/AiOrdersPage';
 import AiKillPage from './components/AiKillPage';
@@ -1549,6 +1550,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR AI Kill — v1 ranked predatory scoring */}
           {renderPage === 'aiKill' && <AiKillPage />}
+
+          {/* PNTHR Bond Heat — daily heat map + treasury yields */}
+          {renderPage === 'bondHeat' && <BondHeatPage />}
 
 
           {/* PNTHR Journal */}

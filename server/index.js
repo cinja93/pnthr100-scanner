@@ -38,6 +38,7 @@ import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks,
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './aiOrdersPipeline.js';
 import { autoExecuteAiOrders, autoExecuteWeeklyOrders, stageWeeklyOrders, executeWeeklyOrders } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
+import { getBondHeatData, clearBondHeatCache } from './bondHeatService.js';
 import { runAiWeeklyRatchet, runAiStaleHuntCheck } from './aiPositionManager.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
@@ -1910,6 +1911,18 @@ app.get('/api/ai-universe/overlap', async (req, res) => {
   } catch (err) {
     console.error('Error in /api/ai-universe/overlap:', err);
     res.status(500).json({ error: 'Failed to compute overlap' });
+  }
+});
+
+// ── PNTHR Bond Heat — daily heat map + treasury yields ──────────────────────
+app.get('/api/bond-heat', async (req, res) => {
+  try {
+    if (req.query.refresh) clearBondHeatCache();
+    const data = await getBondHeatData();
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/bond-heat:', err);
+    res.status(500).json({ error: 'Failed to fetch bond heat data' });
   }
 });
 

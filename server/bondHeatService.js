@@ -1,5 +1,6 @@
 // server/bondHeatService.js
 // Fetches daily % change for all AI Universe stocks + 10Y/30Y Treasury yields.
+// Also provides historical treasury + SPY data with yield shock detection.
 
 import { getAiUniverseHoldings, getAiUniverseSectorMeta } from './aiUniverseService.js';
 
@@ -82,22 +83,25 @@ export async function getBondHeatData() {
 
   const bonds = tRow ? {
     date: tRow.date,
+    fedFunds: tRow.month1 != null ? +Number(tRow.month1).toFixed(3) : null,
+    y2: tRow.year2 != null ? +Number(tRow.year2).toFixed(3) : null,
     y10: tRow.year10 != null ? +Number(tRow.year10).toFixed(3) : null,
     y30: tRow.year30 != null ? +Number(tRow.year30).toFixed(3) : null,
-    y2: tRow.year2 != null ? +Number(tRow.year2).toFixed(3) : null,
-  } : { date: null, y10: null, y30: null, y2: null };
+  } : { date: null, fedFunds: null, y2: null, y10: null, y30: null };
 
-  // Get previous day for yield change
   const prevRow = Array.isArray(treasuryData) && treasuryData.length > 1
     ? treasuryData[treasuryData.length - 2]
     : null;
   if (prevRow) {
     bonds.y10Prev = prevRow.year10 != null ? +Number(prevRow.year10).toFixed(3) : null;
     bonds.y30Prev = prevRow.year30 != null ? +Number(prevRow.year30).toFixed(3) : null;
+    bonds.y2Prev = prevRow.year2 != null ? +Number(prevRow.year2).toFixed(3) : null;
     bonds.y10Change = bonds.y10 != null && bonds.y10Prev != null
       ? +(bonds.y10 - bonds.y10Prev).toFixed(3) : null;
     bonds.y30Change = bonds.y30 != null && bonds.y30Prev != null
       ? +(bonds.y30 - bonds.y30Prev).toFixed(3) : null;
+    bonds.y2Change = bonds.y2 != null && bonds.y2Prev != null
+      ? +(bonds.y2 - bonds.y2Prev).toFixed(3) : null;
   }
 
   const allWithData = holdings.filter(h => quoteMap[h.ticker]?.changePct != null);
@@ -125,25 +129,60 @@ export async function getTreasuryHistory() {
   if (!key) throw new Error('FMP_API_KEY not set');
 
   const toStr = new Date().toISOString().split('T')[0];
-  const fromStr = '2026-01-01';
+  const fromStr = '2025-05-01';
 
-  const data = await fetch(
-    `${FMP_BASE4}/treasury?from=${fromStr}&to=${toStr}&apikey=${key}`,
-    { signal: AbortSignal.timeout(TIMEOUT_MS) }
-  ).then(r => r.ok ? r.json() : []).catch(() => []);
+  const get = (url) =>
+    fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
+      .then(r => r.ok ? r.json() : [])
+      .catch(() => []);
 
-  if (!Array.isArray(data)) return [];
+  const [treasuryRaw, spyRaw] = await Promise.all([
+    get(`${FMP_BASE4}/treasury?from=${fromStr}&to=${toStr}&apikey=${key}`),
+    get(`${FMP_BASE}/historical-price-full/SPY?from=${fromStr}&to=${toStr}&apikey=${key}`),
+  ]);
 
-  const result = data.map(d => ({
-    date: d.date,
-    y2: d.year2 != null ? +Number(d.year2).toFixed(3) : null,
-    y10: d.year10 != null ? +Number(d.year10).toFixed(3) : null,
-    y30: d.year30 != null ? +Number(d.year30).toFixed(3) : null,
-    spread: d.year10 != null && d.year2 != null
-      ? +((d.year10 - d.year2).toFixed(3)) : null,
-  }));
+  const treasuryData = Array.isArray(treasuryRaw) ? treasuryRaw : [];
+  const spyPrices = spyRaw?.historical || [];
 
-  histCache = result;
+  // Build SPY lookup by date
+  const spyMap = {};
+  for (const bar of spyPrices) {
+    spyMap[bar.date] = { price: bar.close, changePct: bar.changePercent };
+  }
+
+  // Sort treasury ascending by date
+  treasuryData.sort((a, b) => a.date.localeCompare(b.date));
+
+  const rows = treasuryData.map((d, i) => {
+    const y2 = d.year2 != null ? +Number(d.year2).toFixed(3) : null;
+    const y10 = d.year10 != null ? +Number(d.year10).toFixed(3) : null;
+    const y30 = d.year30 != null ? +Number(d.year30).toFixed(3) : null;
+
+    // Yield shock: 10Y rose 20+ bps in past 10 trading days
+    let yieldShock = false;
+    if (y10 != null && i >= 10) {
+      const prev10Y = treasuryData[i - 10]?.year10;
+      if (prev10Y != null) {
+        const delta = y10 - prev10Y;
+        if (delta >= 0.20) yieldShock = true;
+      }
+    }
+
+    return {
+      date: d.date,
+      fedFunds: d.month1 != null ? +Number(d.month1).toFixed(3) : null,
+      y2,
+      y10,
+      y30,
+      spread2_10: y10 != null && y2 != null ? +((y10 - y2).toFixed(3)) : null,
+      spread10_30: y30 != null && y10 != null ? +((y30 - y10).toFixed(3)) : null,
+      spy: spyMap[d.date]?.price ?? null,
+      spyChangePct: spyMap[d.date]?.changePct ?? null,
+      yieldShock,
+    };
+  });
+
+  histCache = rows;
   histCacheTime = now;
-  return result;
+  return rows;
 }

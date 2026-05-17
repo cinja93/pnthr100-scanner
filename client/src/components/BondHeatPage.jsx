@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
+  ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import styles from './BondHeatPage.module.css';
+
+// ── Heat map colors ─────────────────────────────────────────────────────────
 
 function getHeatColor(pct) {
   if (pct == null) return '#333';
@@ -29,7 +31,9 @@ function getTextColor(pct) {
   return '#111';
 }
 
-const CHART_COLORS = { y2: '#4fc3f7', y10: '#ffd600', y30: '#ff7043' };
+// ── Chart helpers ───────────────────────────────────────────────────────────
+
+const CHART_COLORS = { y2: '#4fc3f7', y10: '#ffd600', y30: '#ff7043', spy: '#69f0ae', spread: '#ce93d8', spread1030: '#4dd0e1' };
 
 function formatDateShort(dateStr) {
   if (!dateStr) return '';
@@ -44,28 +48,42 @@ function YieldChartTooltip({ active, payload, label }) {
       <div className={styles.tooltipDate}>{label}</div>
       {payload.map(p => (
         <div key={p.dataKey} style={{ color: p.color }}>
-          {p.name}: {p.value != null ? `${p.value.toFixed(3)}%` : '—'}
+          {p.name}: {p.dataKey === 'spy'
+            ? (p.value != null ? `$${p.value.toFixed(2)}` : '—')
+            : (p.value != null ? `${p.value.toFixed(3)}%` : '—')}
         </div>
       ))}
     </div>
   );
 }
 
-function YieldChart({ data, title, lines, refLines, height = 180, onClick }) {
+function YieldChart({ data, title, subtitle, lines, refLines, shockZones, height = 180, onClick, dualAxis, children }) {
   return (
     <div className={styles.chartCard} onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
-      <div className={styles.chartTitle}>{title}</div>
+      <div className={styles.chartTitleRow}>
+        <div>
+          <div className={styles.chartTitle}>{title}</div>
+          {subtitle && <div className={styles.chartSubtitle}>{subtitle}</div>}
+        </div>
+        {children}
+      </div>
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+        <LineChart data={data} margin={{ top: 5, right: dualAxis ? 10 : 10, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#333" />
           <XAxis dataKey="date" tickFormatter={formatDateShort} tick={{ fill: '#888', fontSize: 10 }} interval="preserveStartEnd" minTickGap={40} />
-          <YAxis tick={{ fill: '#888', fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={v => `${v}%`} />
+          <YAxis yAxisId="left" tick={{ fill: '#888', fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={v => `${v}%`} />
+          {dualAxis && (
+            <YAxis yAxisId="right" orientation="right" tick={{ fill: '#69f0ae', fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={v => `$${v}`} />
+          )}
           <Tooltip content={<YieldChartTooltip />} />
+          {shockZones?.map((zone, i) => (
+            <ReferenceArea key={i} x1={zone.start} x2={zone.end} yAxisId="left" fill="#ff5252" fillOpacity={0.12} />
+          ))}
           {refLines?.map((rl, i) => (
-            <ReferenceLine key={i} y={rl.y} stroke={rl.color || '#ff5252'} strokeDasharray="5 3" label={{ value: rl.label, fill: rl.color || '#ff5252', fontSize: 10, position: 'right' }} />
+            <ReferenceLine key={i} y={rl.y} yAxisId="left" stroke={rl.color || '#ff5252'} strokeDasharray="5 3" label={{ value: rl.label, fill: rl.color || '#ff5252', fontSize: 10, position: 'right' }} />
           ))}
           {lines.map(l => (
-            <Line key={l.key} type="monotone" dataKey={l.key} name={l.name} stroke={l.color} dot={false} strokeWidth={2} />
+            <Line key={l.key} type="monotone" dataKey={l.key} name={l.name} stroke={l.color} dot={false} strokeWidth={l.width || 2} yAxisId={l.axis || 'left'} />
           ))}
         </LineChart>
       </ResponsiveContainer>
@@ -73,30 +91,58 @@ function YieldChart({ data, title, lines, refLines, height = 180, onClick }) {
   );
 }
 
-function ChartModal({ data, chart, onClose }) {
+// ── Info popup ──────────────────────────────────────────────────────────────
+
+function InfoPopup({ title, children, onClose }) {
+  return (
+    <div className={styles.infoOverlay} onClick={onClose}>
+      <div className={styles.infoPanel} onClick={e => e.stopPropagation()}>
+        <button className={styles.modalClose} onClick={onClose}>✕</button>
+        <div className={styles.infoTitle}>{title}</div>
+        <div className={styles.infoBody}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Chart modal ─────────────────────────────────────────────────────────────
+
+function ChartModal({ data, chart, shockZones, onClose }) {
   if (!chart) return null;
 
   const configs = {
     yields: {
-      title: '2Y / 10Y / 30Y Treasury Yields — 2026 YTD',
+      title: '2Y / 10Y / 30Y Treasury Yields + S&P 500',
+      subtitle: 'Red zones = Yield Shock (10Y rose 20+ bps in 10 days)',
       lines: [
         { key: 'y2', name: '2-Year', color: CHART_COLORS.y2 },
         { key: 'y10', name: '10-Year', color: CHART_COLORS.y10 },
         { key: 'y30', name: '30-Year', color: CHART_COLORS.y30 },
+        { key: 'spy', name: 'S&P 500', color: CHART_COLORS.spy, axis: 'right', width: 1.5 },
       ],
       refLines: [
         { y: 4.5, label: '10Y Alert 4.50%', color: '#ffd600' },
         { y: 5.0, label: '30Y Alert 5.00%', color: '#ff7043' },
       ],
+      dualAxis: true,
     },
-    spread: {
-      title: '2Y / 10Y Yield Spread — 2026 YTD',
+    spread2_10: {
+      title: '2Y / 10Y Yield Spread',
+      subtitle: 'Fed Policy + Recession Risk',
       lines: [
-        { key: 'spread', name: '10Y - 2Y Spread', color: '#ce93d8' },
+        { key: 'spread2_10', name: '10Y - 2Y Spread', color: CHART_COLORS.spread },
       ],
       refLines: [
         { y: 0, label: 'Inversion', color: '#ef5350' },
       ],
+    },
+    spread10_30: {
+      title: '10Y / 30Y Yield Spread',
+      subtitle: 'Long-Term Inflation & Fiscal Concerns',
+      lines: [
+        { key: 'spread10_30', name: '30Y - 10Y Spread', color: CHART_COLORS.spread1030 },
+      ],
+      refLines: [],
     },
   };
 
@@ -106,66 +152,62 @@ function ChartModal({ data, chart, onClose }) {
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
         <button className={styles.modalClose} onClick={onClose}>✕</button>
-        <YieldChart data={data} title={cfg.title} lines={cfg.lines} refLines={cfg.refLines} height={420} />
+        <YieldChart
+          data={data}
+          title={cfg.title}
+          subtitle={cfg.subtitle}
+          lines={cfg.lines}
+          refLines={cfg.refLines}
+          shockZones={chart === 'yields' ? shockZones : undefined}
+          dualAxis={cfg.dualAxis}
+          height={420}
+        />
       </div>
     </div>
   );
 }
 
-function BondBanner({ bonds, breadth }) {
+// ── Current yields banner ───────────────────────────────────────────────────
+
+function YieldsBanner({ bonds, breadth }) {
   if (!bonds) return null;
 
-  const y10Alert = bonds.y10 >= 4.5;
-  const y30Alert = bonds.y30 >= 5.0;
+  const items = [
+    { label: 'Fed Funds Rate', value: bonds.fedFunds, change: null, alertLevel: null },
+    { label: '2-Year', value: bonds.y2, change: bonds.y2Change, alertLevel: null },
+    { label: '10-Year', value: bonds.y10, change: bonds.y10Change, alertLevel: bonds.y10 >= 4.5 ? '4.50%' : null },
+    { label: '30-Year', value: bonds.y30, change: bonds.y30Change, alertLevel: bonds.y30 >= 5.0 ? '5.00%' : null },
+  ];
 
   return (
-    <div className={styles.bondBanner}>
-      <div className={styles.bondSection}>
-        <div className={styles.bondLabel}>10-Year Treasury</div>
-        <div className={`${styles.bondYield} ${y10Alert ? styles.alert : ''}`}>
-          {bonds.y10 != null ? `${bonds.y10.toFixed(2)}%` : '—'}
-        </div>
-        {bonds.y10Change != null && (
-          <div className={`${styles.bondChange} ${bonds.y10Change > 0 ? styles.yieldUp : styles.yieldDown}`}>
-            {bonds.y10Change > 0 ? '+' : ''}{(bonds.y10Change * 100).toFixed(1)} bps
+    <div className={styles.yieldsBanner}>
+      {items.map(item => (
+        <div key={item.label} className={styles.yieldItem}>
+          <div className={styles.yieldItemLabel}>{item.label}</div>
+          <div className={`${styles.yieldItemValue} ${item.alertLevel ? styles.alert : ''}`}>
+            {item.value != null ? `${item.value.toFixed(2)}%` : '—'}
           </div>
-        )}
-        {y10Alert && <div className={styles.alertTag}>ABOVE 4.50%</div>}
-      </div>
-
-      <div className={styles.bondSection}>
-        <div className={styles.bondLabel}>30-Year Treasury</div>
-        <div className={`${styles.bondYield} ${y30Alert ? styles.alert : ''}`}>
-          {bonds.y30 != null ? `${bonds.y30.toFixed(2)}%` : '—'}
+          {item.change != null && (
+            <div className={`${styles.yieldItemChange} ${item.change > 0 ? styles.yieldUp : item.change < 0 ? styles.yieldDown : ''}`}>
+              {item.change > 0 ? '+' : ''}{(item.change * 100).toFixed(1)} bps
+            </div>
+          )}
+          {item.alertLevel && <div className={styles.alertTag}>ABOVE {item.alertLevel}</div>}
         </div>
-        {bonds.y30Change != null && (
-          <div className={`${styles.bondChange} ${bonds.y30Change > 0 ? styles.yieldUp : styles.yieldDown}`}>
-            {bonds.y30Change > 0 ? '+' : ''}{(bonds.y30Change * 100).toFixed(1)} bps
-          </div>
-        )}
-        {y30Alert && <div className={styles.alertTag}>ABOVE 5.00%</div>}
-      </div>
+      ))}
 
-      <div className={styles.bondSection}>
-        <div className={styles.bondLabel}>Spread (30Y - 10Y)</div>
-        <div className={styles.bondYield}>
-          {bonds.y30 != null && bonds.y10 != null
-            ? `${(bonds.y30 - bonds.y10).toFixed(2)}%`
-            : '—'}
-        </div>
-      </div>
-
-      <div className={styles.breadthSection}>
-        <div className={styles.bondLabel}>AI 300 Breadth</div>
+      <div className={styles.yieldItem} style={{ marginLeft: 'auto' }}>
+        <div className={styles.yieldItemLabel}>AI 300 Breadth</div>
         <div className={styles.breadthRow}>
           <span className={styles.advancers}>{breadth.advancers} up</span>
           <span className={styles.decliners}>{breadth.decliners} down</span>
-          {breadth.unchanged > 0 && <span className={styles.unchanged}>{breadth.unchanged} flat</span>}
         </div>
       </div>
     </div>
   );
 }
+
+// ── Sector grid ─────────────────────────────────────────────────────────────
 
 function SectorGrid({ sector }) {
   return (
@@ -194,12 +236,15 @@ function SectorGrid({ sector }) {
   );
 }
 
+// ── Main page ───────────────────────────────────────────────────────────────
+
 export default function BondHeatPage() {
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalChart, setModalChart] = useState(null);
+  const [infoPanel, setInfoPanel] = useState(null);
 
   const load = async (refresh = false) => {
     setLoading(true);
@@ -230,6 +275,25 @@ export default function BondHeatPage() {
     return [...data.sectors].sort((a, b) => (b.avgChange || 0) - (a.avgChange || 0));
   }, [data]);
 
+  // Build yield shock zones from history for ReferenceArea overlay
+  const shockZones = useMemo(() => {
+    if (!history.length) return [];
+    const zones = [];
+    let inShock = false;
+    let start = null;
+    for (const row of history) {
+      if (row.yieldShock && !inShock) {
+        inShock = true;
+        start = row.date;
+      } else if (!row.yieldShock && inShock) {
+        inShock = false;
+        zones.push({ start, end: row.date });
+      }
+    }
+    if (inShock) zones.push({ start, end: history[history.length - 1].date });
+    return zones;
+  }, [history]);
+
   return (
     <div className={styles.container}>
       <div className={styles.headerRow}>
@@ -248,38 +312,67 @@ export default function BondHeatPage() {
 
       {data && (
         <>
-          <BondBanner bonds={data.bonds} breadth={data.breadth} />
+          {/* ── Current Yields Banner ── */}
+          <YieldsBanner bonds={data.bonds} breadth={data.breadth} />
 
+          {/* ── Yield Curves + SPY overlay ── */}
           {history.length > 0 && (
-            <div className={styles.chartsRow}>
+            <>
               <YieldChart
                 data={history}
-                title="2Y / 10Y / 30Y Yields — 2026 YTD"
+                title="Treasury Yields + S&P 500 — Past 12 Months"
+                subtitle="Red zones = Yield Shock (10Y rose 20+ bps in 10 trading days)"
                 lines={[
                   { key: 'y2', name: '2-Year', color: CHART_COLORS.y2 },
                   { key: 'y10', name: '10-Year', color: CHART_COLORS.y10 },
                   { key: 'y30', name: '30-Year', color: CHART_COLORS.y30 },
+                  { key: 'spy', name: 'S&P 500', color: CHART_COLORS.spy, axis: 'right', width: 1.5 },
                 ]}
                 refLines={[
                   { y: 4.5, label: '4.50%', color: '#ffd600' },
                   { y: 5.0, label: '5.00%', color: '#ff7043' },
                 ]}
+                shockZones={shockZones}
+                dualAxis
+                height={240}
                 onClick={() => setModalChart('yields')}
               />
-              <YieldChart
-                data={history}
-                title="2Y / 10Y Spread — 2026 YTD"
-                lines={[
-                  { key: 'spread', name: '10Y - 2Y Spread', color: '#ce93d8' },
-                ]}
-                refLines={[
-                  { y: 0, label: 'Inversion', color: '#ef5350' },
-                ]}
-                onClick={() => setModalChart('spread')}
-              />
-            </div>
+
+              <div className={styles.chartsRow}>
+                {/* ── 2Y / 10Y Spread ── */}
+                <YieldChart
+                  data={history}
+                  title="2Y / 10Y Spread"
+                  subtitle="Fed Policy + Recession Risk"
+                  lines={[
+                    { key: 'spread2_10', name: '10Y - 2Y Spread', color: CHART_COLORS.spread },
+                  ]}
+                  refLines={[
+                    { y: 0, label: 'Inversion', color: '#ef5350' },
+                  ]}
+                  onClick={() => setModalChart('spread2_10')}
+                >
+                  <button className={styles.infoBtn} onClick={e => { e.stopPropagation(); setInfoPanel('spread2_10'); }} title="What does this mean?">ⓘ</button>
+                </YieldChart>
+
+                {/* ── 10Y / 30Y Spread ── */}
+                <YieldChart
+                  data={history}
+                  title="10Y / 30Y Spread"
+                  subtitle="Long-Term Inflation & Fiscal Concerns"
+                  lines={[
+                    { key: 'spread10_30', name: '30Y - 10Y Spread', color: CHART_COLORS.spread1030 },
+                  ]}
+                  refLines={[]}
+                  onClick={() => setModalChart('spread10_30')}
+                >
+                  <button className={styles.infoBtn} onClick={e => { e.stopPropagation(); setInfoPanel('spread10_30'); }} title="What does this mean?">ⓘ</button>
+                </YieldChart>
+              </div>
+            </>
           )}
 
+          {/* ── Heat Map ── */}
           <div className={styles.sectorsContainer}>
             {sortedSectors.map(s => <SectorGrid key={s.id} sector={s} />)}
           </div>
@@ -293,7 +386,36 @@ export default function BondHeatPage() {
         </div>
       )}
 
-      <ChartModal data={history} chart={modalChart} onClose={() => setModalChart(null)} />
+      {/* ── Modals ── */}
+      <ChartModal data={history} chart={modalChart} shockZones={shockZones} onClose={() => setModalChart(null)} />
+
+      {infoPanel === 'spread2_10' && (
+        <InfoPopup title="2-Year / 10-Year Yield Spread" onClose={() => setInfoPanel(null)}>
+          <p><strong>What it measures:</strong> The difference between the 10-year and 2-year Treasury yields. This is the most watched recession indicator in bond markets.</p>
+          <p><strong>When the spread is positive (normal):</strong> Investors demand higher yields for locking up money longer. The economy is expected to grow and the Fed is expected to eventually raise rates or hold steady.</p>
+          <p><strong>When the spread inverts (goes negative):</strong> Short-term rates exceed long-term rates. This signals the market expects the Fed will be forced to cut rates due to an economic slowdown. An inverted 2/10 curve has preceded every US recession since 1970.</p>
+          <p><strong>When the spread is widening after inversion:</strong> This is called "bull steepening" and historically it's the most dangerous phase — it means the recession is arriving and the Fed is about to cut aggressively. The damage to equities typically accelerates during the re-steepening, not during the initial inversion.</p>
+          <p><strong>What to watch:</strong> Direction matters more than level. A rapidly widening spread after a period of inversion suggests the recession trade is on. A narrowing spread toward zero suggests rate-cut expectations are building.</p>
+        </InfoPopup>
+      )}
+
+      {infoPanel === 'spread10_30' && (
+        <InfoPopup title="10-Year / 30-Year Yield Spread" onClose={() => setInfoPanel(null)}>
+          <p><strong>What it measures:</strong> The difference between the 30-year and 10-year Treasury yields. This reflects long-term inflation expectations, fiscal sustainability concerns, and the risk premium investors demand for holding very long-duration government debt.</p>
+          <p><strong>When the spread is rising:</strong> The market is becoming uncomfortable with financing long-term government debt at current yield levels. Investors are demanding more compensation for the risks of holding 30-year bonds.</p>
+          <p><strong>Key concerns a rising 10/30 spread reflects:</strong></p>
+          <ul>
+            <li><strong>US deficit sustainability</strong> — growing federal debt relative to GDP raises questions about whether the government can service its obligations</li>
+            <li><strong>Treasury auction demand</strong> — weak demand at long-dated auctions forces yields higher to attract buyers</li>
+            <li><strong>Foreign buyer appetite</strong> — reduced buying from China, Japan, and other major holders puts upward pressure on yields</li>
+            <li><strong>Inflation credibility</strong> — if investors believe inflation will remain elevated, they demand higher yields for locking up money for 30 years</li>
+            <li><strong>Bond vigilante behavior</strong> — large institutional investors selling long bonds to pressure fiscal policy</li>
+            <li><strong>Long-duration risk premium</strong> — the extra compensation required for the uncertainty of holding a 30-year asset</li>
+            <li><strong>Confidence in long-term economic stability</strong> — structural doubts about growth, productivity, and institutional strength</li>
+          </ul>
+          <p><strong>What to watch:</strong> A persistent rise in the 10/30 spread alongside rising absolute yields is bearish for equities — it signals the bond market is losing confidence in long-term fiscal management and inflation control.</p>
+        </InfoPopup>
+      )}
     </div>
   );
 }

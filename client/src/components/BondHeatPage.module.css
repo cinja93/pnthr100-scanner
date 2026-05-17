@@ -121,6 +121,118 @@
 .advancers { color: #69f0ae; }
 .decliners { color: #ef5350; }
 
+/* ── Yield Shock Banner ── */
+.shockBanner {
+  border-radius: 8px;
+  padding: 14px 20px;
+  margin-bottom: 12px;
+  border: 2px solid;
+}
+
+.shockCritical {
+  background: rgba(211, 47, 47, 0.15);
+  border-color: #d32f2f;
+}
+
+.shockHigh {
+  background: rgba(255, 152, 0, 0.12);
+  border-color: #ff9800;
+}
+
+.shockElevated {
+  background: rgba(255, 214, 0, 0.08);
+  border-color: #ffd600;
+}
+
+.shockHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.shockIcon {
+  font-size: 18px;
+  animation: pulse 1s infinite;
+}
+
+.shockCritical .shockIcon { color: #ff5252; }
+.shockHigh .shockIcon { color: #ff9800; }
+.shockElevated .shockIcon { color: #ffd600; }
+
+.shockTitle {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.shockCritical .shockTitle { color: #ff5252; }
+.shockHigh .shockTitle { color: #ff9800; }
+.shockElevated .shockTitle { color: #ffd600; }
+
+.shockDetails {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.shockTag {
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: #f5f5f5;
+}
+
+.shockAction {
+  font-size: 12px;
+  color: #ccc;
+  font-style: italic;
+}
+
+/* ── Chart Legend ── */
+.chartLegend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 0 8px;
+  margin-top: -2px;
+  margin-bottom: 4px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  color: #999;
+  font-weight: 600;
+}
+
+.legendLine {
+  display: inline-block;
+  width: 16px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.legendSwatch {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 82, 82, 0.5);
+}
+
+.legendDash {
+  display: inline-block;
+  width: 16px;
+  height: 0;
+  border-top: 2px dashed;
+}
+
 /* ── Charts ── */
 .chartsRow {
   display: grid;

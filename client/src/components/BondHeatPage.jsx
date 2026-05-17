@@ -167,6 +167,57 @@ function ChartModal({ data, chart, shockZones, onClose }) {
   );
 }
 
+// ── Yield Shock Warning Banner ──────────────────────────────────────────────
+
+function YieldShockBanner({ history, bonds }) {
+  const latest = history.length ? history[history.length - 1] : null;
+  const isShockActive = latest?.yieldShock;
+  const y10Above = bonds?.y10 >= 4.5;
+  const y30Above = bonds?.y30 >= 5.0;
+  const dangerCount = [isShockActive, y10Above, y30Above].filter(Boolean).length;
+
+  if (dangerCount === 0) return null;
+
+  // Find the 10Y move over last 10 data points
+  let bpsMove = null;
+  if (history.length >= 11) {
+    const cur = history[history.length - 1]?.y10;
+    const prev = history[history.length - 11]?.y10;
+    if (cur != null && prev != null) bpsMove = Math.round((cur - prev) * 100);
+  }
+
+  const level = dangerCount >= 3 ? 'critical' : dangerCount >= 2 ? 'high' : 'elevated';
+  const levelLabels = { critical: 'CRITICAL', high: 'HIGH', elevated: 'ELEVATED' };
+  const levelClass = { critical: 'shockCritical', high: 'shockHigh', elevated: 'shockElevated' };
+
+  return (
+    <div className={`${styles.shockBanner} ${styles[levelClass[level]]}`}>
+      <div className={styles.shockHeader}>
+        <span className={styles.shockIcon}>⚠</span>
+        <span className={styles.shockTitle}>YIELD SHOCK — {levelLabels[level]} RISK</span>
+      </div>
+      <div className={styles.shockDetails}>
+        {isShockActive && (
+          <span className={styles.shockTag}>10Y VELOCITY: +{bpsMove || '20+'}bps / 10 days</span>
+        )}
+        {y10Above && (
+          <span className={styles.shockTag}>10Y ABOVE 4.50%: {bonds.y10.toFixed(2)}%</span>
+        )}
+        {y30Above && (
+          <span className={styles.shockTag}>30Y ABOVE 5.00%: {bonds.y30.toFixed(2)}%</span>
+        )}
+      </div>
+      <div className={styles.shockAction}>
+        {dangerCount >= 3
+          ? 'Triple threat active — tighten all stops, avoid new longs, watch for capitulation'
+          : dangerCount >= 2
+          ? 'Rate pressure elevated — tighten stops, reduce exposure to rate-sensitive names'
+          : 'Monitor closely — rates approaching danger levels'}
+      </div>
+    </div>
+  );
+}
+
 // ── Current yields banner ───────────────────────────────────────────────────
 
 function YieldsBanner({ bonds, breadth }) {
@@ -312,6 +363,9 @@ export default function BondHeatPage() {
 
       {data && (
         <>
+          {/* ── Yield Shock Warning ── */}
+          <YieldShockBanner history={history} bonds={data.bonds} />
+
           {/* ── Current Yields Banner ── */}
           <YieldsBanner bonds={data.bonds} breadth={data.breadth} />
 
@@ -321,7 +375,7 @@ export default function BondHeatPage() {
               <YieldChart
                 data={history}
                 title="Treasury Yields + S&P 500 — Past 12 Months"
-                subtitle="Red zones = Yield Shock (10Y rose 20+ bps in 10 trading days)"
+                subtitle="Red shaded zones = Yield Shock active (10Y rose 20+ bps in 10 trading days)"
                 lines={[
                   { key: 'y2', name: '2-Year', color: CHART_COLORS.y2 },
                   { key: 'y10', name: '10-Year', color: CHART_COLORS.y10 },
@@ -336,7 +390,17 @@ export default function BondHeatPage() {
                 dualAxis
                 height={240}
                 onClick={() => setModalChart('yields')}
-              />
+              >
+                <div className={styles.chartLegend}>
+                  <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.y2 }} /> 2Y</span>
+                  <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.y10 }} /> 10Y</span>
+                  <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.y30 }} /> 30Y</span>
+                  <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.spy }} /> SPY</span>
+                  <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,82,82,0.25)' }} /> Yield Shock</span>
+                  <span className={styles.legendItem}><span className={styles.legendDash} style={{ borderColor: '#ffd600' }} /> 10Y Danger 4.50%</span>
+                  <span className={styles.legendItem}><span className={styles.legendDash} style={{ borderColor: '#ff7043' }} /> 30Y Danger 5.00%</span>
+                </div>
+              </YieldChart>
 
               <div className={styles.chartsRow}>
                 {/* ── 2Y / 10Y Spread ── */}

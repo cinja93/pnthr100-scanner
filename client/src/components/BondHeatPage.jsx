@@ -218,9 +218,69 @@ function YieldShockBanner({ history, bonds }) {
   );
 }
 
+// ── Rate Direction Meter (20 boxes) ─────────────────────────────────────────
+
+function DirectionMeter({ history, yieldKey, label }) {
+  const last20 = history.slice(-20);
+  const boxes = last20.map((row, i) => {
+    if (i === 0) return 'flat';
+    const prev = last20[i - 1]?.[yieldKey];
+    const cur = row[yieldKey];
+    if (prev == null || cur == null) return 'flat';
+    const delta = cur - prev;
+    if (delta > 0.005) return 'up';
+    if (delta < -0.005) return 'down';
+    return 'flat';
+  });
+
+  return (
+    <div className={styles.meterRow}>
+      <div className={styles.meterLabel}>{label}</div>
+      <div className={styles.meterBoxes}>
+        {boxes.map((dir, i) => (
+          <div
+            key={i}
+            className={`${styles.meterBox} ${styles[`meter_${dir}`]}`}
+            title={`${last20[i]?.date || ''}: ${dir}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Two-Factor Alarm Gauge ──────────────────────────────────────────────────
+
+function AlarmGauge({ label, current, threshold, color }) {
+  const min = threshold - 0.8;
+  const max = threshold + 0.4;
+  const range = max - min;
+  const pct = current != null ? Math.max(0, Math.min(100, ((current - min) / range) * 100)) : 0;
+  const thresholdPct = ((threshold - min) / range) * 100;
+  const isBreached = current != null && current >= threshold;
+
+  return (
+    <div className={styles.gaugeBlock}>
+      <div className={styles.gaugeLabel}>{label}</div>
+      <div className={styles.gaugeTrack}>
+        <div
+          className={`${styles.gaugeFill} ${isBreached ? styles.gaugeDanger : ''}`}
+          style={{ width: `${pct}%`, background: isBreached ? '#ff5252' : color }}
+        />
+        <div className={styles.gaugeThreshold} style={{ left: `${thresholdPct}%` }} />
+      </div>
+      <div className={styles.gaugeNumbers}>
+        <span>{current != null ? `${current.toFixed(2)}%` : '—'}</span>
+        <span className={styles.gaugeThresholdLabel}>{threshold.toFixed(2)}%</span>
+      </div>
+      {isBreached && <div className={styles.gaugeBreach}>BREACHED</div>}
+    </div>
+  );
+}
+
 // ── Current yields banner ───────────────────────────────────────────────────
 
-function YieldsBanner({ bonds, breadth }) {
+function YieldsBanner({ bonds, breadth, history, onShowPlaybook }) {
   if (!bonds) return null;
 
   const items = [
@@ -231,27 +291,48 @@ function YieldsBanner({ bonds, breadth }) {
   ];
 
   return (
-    <div className={styles.yieldsBanner}>
-      {items.map(item => (
-        <div key={item.label} className={styles.yieldItem}>
-          <div className={styles.yieldItemLabel}>{item.label}</div>
-          <div className={`${styles.yieldItemValue} ${item.alertLevel ? styles.alert : ''}`}>
-            {item.value != null ? `${item.value.toFixed(2)}%` : '—'}
-          </div>
-          {item.change != null && (
-            <div className={`${styles.yieldItemChange} ${item.change > 0 ? styles.yieldUp : item.change < 0 ? styles.yieldDown : ''}`}>
-              {item.change > 0 ? '+' : ''}{(item.change * 100).toFixed(1)} bps
+    <div className={styles.yieldsBannerWrap}>
+      <div className={styles.yieldsBanner}>
+        {items.map(item => (
+          <div key={item.label} className={styles.yieldItem}>
+            <div className={styles.yieldItemLabel}>{item.label}</div>
+            <div className={`${styles.yieldItemValue} ${item.alertLevel ? styles.alert : ''}`}>
+              {item.value != null ? `${item.value.toFixed(2)}%` : '—'}
             </div>
-          )}
-          {item.alertLevel && <div className={styles.alertTag}>ABOVE {item.alertLevel}</div>}
-        </div>
-      ))}
+            {item.change != null && (
+              <div className={`${styles.yieldItemChange} ${item.change > 0 ? styles.yieldUp : item.change < 0 ? styles.yieldDown : ''}`}>
+                {item.change > 0 ? '+' : ''}{(item.change * 100).toFixed(1)} bps
+              </div>
+            )}
+            {item.alertLevel && <div className={styles.alertTag}>ABOVE {item.alertLevel}</div>}
+          </div>
+        ))}
 
-      <div className={styles.yieldItem} style={{ marginLeft: 'auto' }}>
-        <div className={styles.yieldItemLabel}>AI 300 Breadth</div>
-        <div className={styles.breadthRow}>
-          <span className={styles.advancers}>{breadth.advancers} up</span>
-          <span className={styles.decliners}>{breadth.decliners} down</span>
+        {/* ── Block 1: Direction Meters ── */}
+        <div className={styles.metersBlock}>
+          <div className={styles.metersBlockTitle}>RATE DIRECTION — LAST 20 DAYS</div>
+          <DirectionMeter history={history} yieldKey="y2" label="2Y" />
+          <DirectionMeter history={history} yieldKey="y10" label="10Y" />
+          <DirectionMeter history={history} yieldKey="y30" label="30Y" />
+        </div>
+
+        {/* ── Block 2: Two-Factor Alarm ── */}
+        <div className={styles.gaugesBlock}>
+          <div className={styles.metersBlockTitle}>TWO-FACTOR ALARM</div>
+          <AlarmGauge label="10-Year" current={bonds.y10} threshold={4.50} color="#ffd600" />
+          <AlarmGauge label="30-Year" current={bonds.y30} threshold={5.00} color="#ff7043" />
+        </div>
+
+        {/* ── Breadth + Playbook ── */}
+        <div className={styles.bannerRight}>
+          <div className={styles.yieldItem}>
+            <div className={styles.yieldItemLabel}>AI 300 Breadth</div>
+            <div className={styles.breadthRow}>
+              <span className={styles.advancers}>{breadth.advancers} up</span>
+              <span className={styles.decliners}>{breadth.decliners} down</span>
+            </div>
+          </div>
+          <button className={styles.playbookBtn} onClick={onShowPlaybook} title="How to use this information">ⓘ</button>
         </div>
       </div>
     </div>
@@ -367,7 +448,7 @@ export default function BondHeatPage() {
           <YieldShockBanner history={history} bonds={data.bonds} />
 
           {/* ── Current Yields Banner ── */}
-          <YieldsBanner bonds={data.bonds} breadth={data.breadth} />
+          <YieldsBanner bonds={data.bonds} breadth={data.breadth} history={history} onShowPlaybook={() => setInfoPanel('playbook')} />
 
           {/* ── Yield Curves + SPY overlay ── */}
           {history.length > 0 && (
@@ -478,6 +559,51 @@ export default function BondHeatPage() {
             <li><strong>Confidence in long-term economic stability</strong> — structural doubts about growth, productivity, and institutional strength</li>
           </ul>
           <p><strong>What to watch:</strong> A persistent rise in the 10/30 spread alongside rising absolute yields is bearish for equities — it signals the bond market is losing confidence in long-term fiscal management and inflation control.</p>
+        </InfoPopup>
+      )}
+
+      {infoPanel === 'playbook' && (
+        <InfoPopup title="How to Use Bond Heat" onClose={() => setInfoPanel(null)}>
+          <p><strong>This page combines two signals to predict rate-driven stock selloffs:</strong></p>
+          <p><strong>Signal 1 — Yield Velocity (Red Zones):</strong> When the 10-year Treasury yield rises 20+ basis points in 10 trading days, a red zone appears on the chart. This captures the speed of the move, which is what rattles equity markets.</p>
+          <p><strong>Signal 2 — Danger Levels (Dashed Lines):</strong> When the 10Y crosses 4.50% or the 30Y crosses 5.00%, equities face structural pressure from higher borrowing costs and risk-free competition.</p>
+          <p><strong>The Direction Meter</strong> shows the last 20 trading days of rate movement. Green = rates fell that day, yellow = flat, red = rates rose. When all three yields show mostly red boxes, rate pressure is building.</p>
+          <p><strong>The Two-Factor Alarm</strong> shows how close each yield is to its danger threshold. When a gauge fills past the red line, that threshold is breached.</p>
+
+          <table className={styles.playbookTable}>
+            <thead>
+              <tr><th>Signal</th><th>What It Means</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Red zone + SPY falling</td>
+                <td>Rate-driven selloff in progress</td>
+                <td>Defensive — tighten stops, avoid new longs, watch for capitulation</td>
+              </tr>
+              <tr>
+                <td>Red zone + SPY holding</td>
+                <td>Market absorbing the rate shock</td>
+                <td>Watch closely — either rates cool off or equities catch down</td>
+              </tr>
+              <tr>
+                <td>Above dotted lines, no red zone</td>
+                <td>Elevated but stable yields</td>
+                <td>Cautious — be selective, favor cash-flow-positive names</td>
+              </tr>
+              <tr>
+                <td>Below dotted lines, no red zone</td>
+                <td>Rates not threatening</td>
+                <td>Normal — run your strategy without yield headwind</td>
+              </tr>
+              <tr>
+                <td>Red zone + BOTH dotted lines breached</td>
+                <td>Maximum danger</td>
+                <td>Triple threat — 30Y topped 5%, 10Y topped 4.50%. Historically the worst setup for equities. Tighten all stops immediately.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p><strong>Important:</strong> This indicator filters out geopolitical selloffs (tariffs, wars) because during those events, bond yields typically <em>fall</em> as investors flee to safety. The Yield Shock signal only fires when yields are spiking — which is the pure inflation/rate fear trade.</p>
         </InfoPopup>
       )}
     </div>

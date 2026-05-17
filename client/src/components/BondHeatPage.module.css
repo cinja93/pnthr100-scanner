@@ -49,14 +49,17 @@
 }
 
 /* ── Current Yields Banner ── */
+.yieldsBannerWrap {
+  margin-bottom: 16px;
+}
+
 .yieldsBanner {
   display: flex;
-  gap: 28px;
+  gap: 24px;
   padding: 14px 20px;
   background: #111;
   border: 1px solid #444;
   border-radius: 8px;
-  margin-bottom: 16px;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -120,6 +123,184 @@
 
 .advancers { color: #69f0ae; }
 .decliners { color: #ef5350; }
+
+.bannerRight {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.playbookBtn {
+  background: none;
+  border: 1px solid #555;
+  color: #888;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 50%;
+  line-height: 1;
+}
+.playbookBtn:hover { color: #ffd600; border-color: #ffd600; }
+
+/* ── Rate Direction Meters ── */
+.metersBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px;
+  background: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  min-width: 200px;
+}
+
+.metersBlockTitle {
+  font-size: 8px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.meterRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meterLabel {
+  font-size: 9px;
+  font-weight: 700;
+  color: #888;
+  width: 24px;
+  text-align: right;
+}
+
+.meterBoxes {
+  display: flex;
+  gap: 1px;
+}
+
+.meterBox {
+  width: 7px;
+  height: 12px;
+  border-radius: 1px;
+}
+
+.meter_up { background: #ef5350; }
+.meter_down { background: #69f0ae; }
+.meter_flat { background: #555; }
+
+/* ── Two-Factor Alarm Gauges ── */
+.gaugesBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  min-width: 180px;
+}
+
+.gaugeBlock {
+  position: relative;
+}
+
+.gaugeLabel {
+  font-size: 9px;
+  font-weight: 700;
+  color: #888;
+  margin-bottom: 2px;
+}
+
+.gaugeTrack {
+  position: relative;
+  height: 10px;
+  background: #222;
+  border-radius: 3px;
+  overflow: visible;
+}
+
+.gaugeFill {
+  height: 100%;
+  border-radius: 3px 0 0 3px;
+  transition: width 0.5s ease;
+}
+
+.gaugeDanger {
+  animation: gaugePulse 1.2s infinite;
+}
+
+@keyframes gaugePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.gaugeThreshold {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 14px;
+  background: #ff5252;
+  z-index: 1;
+}
+
+.gaugeNumbers {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  color: #888;
+  margin-top: 1px;
+}
+
+.gaugeThresholdLabel {
+  color: #ff5252;
+  font-weight: 700;
+}
+
+.gaugeBreach {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 7px;
+  font-weight: 800;
+  color: #ff5252;
+  letter-spacing: 0.5px;
+}
+
+/* ── Playbook Table ── */
+.playbookTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 12px;
+}
+
+.playbookTable th {
+  text-align: left;
+  padding: 8px 10px;
+  background: #222;
+  color: #ffd600;
+  font-weight: 700;
+  border-bottom: 2px solid #444;
+}
+
+.playbookTable td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #333;
+  color: #ccc;
+  vertical-align: top;
+}
+
+.playbookTable tr:last-child td {
+  border-bottom: none;
+  background: rgba(255, 82, 82, 0.08);
+  color: #ff8a80;
+}
 
 /* ── Yield Shock Banner ── */
 .shockBanner {

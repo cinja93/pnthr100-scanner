@@ -514,6 +514,153 @@ function YieldsBanner({ bonds, breadth, history, onShowPlaybook }) {
   );
 }
 
+// ── Chart Interpretation Box ───────────────────────────────────────────────
+
+function ChartInterpretation({ lines }) {
+  if (!lines.length) return null;
+  return (
+    <div className={styles.chartInterpretation}>
+      {lines.map((line, i) => (
+        <div key={i} className={styles.interpLine}>{line}</div>
+      ))}
+    </div>
+  );
+}
+
+function useYieldsInterpretation(history, bonds) {
+  return useMemo(() => {
+    if (!history.length || !bonds) return [];
+    const lines = [];
+    const latest = history[history.length - 1];
+    const prev5 = history.length >= 6 ? history[history.length - 6] : null;
+    const prev20 = history.length >= 21 ? history[history.length - 21] : null;
+
+    // 5-day yield trend
+    if (prev5?.y10 != null && latest?.y10 != null) {
+      const delta = Math.round((latest.y10 - prev5.y10) * 100);
+      if (delta > 5) lines.push(`10Y yield has risen ${delta} bps in the last 5 trading days — rate pressure is building. Higher discount rates compress AI stock valuations.`);
+      else if (delta < -5) lines.push(`10Y yield has fallen ${Math.abs(delta)} bps in the last 5 trading days — rate pressure is easing. This is supportive for growth/AI stocks.`);
+      else lines.push(`10Y yield is roughly flat over the past 5 trading days (${delta > 0 ? '+' : ''}${delta} bps). No significant rate pressure in either direction.`);
+    }
+
+    // Current levels vs thresholds
+    const aboveCount = [bonds.y2 >= 4.5, bonds.y10 >= 4.5, bonds.y30 >= 5.0].filter(Boolean).length;
+    if (aboveCount === 3) lines.push('All three yield thresholds are breached. This is the most hostile rate environment for AI stocks — expect maximum valuation pressure across the sector.');
+    else if (aboveCount === 2) lines.push('Two yield thresholds are breached. Rate environment is unfavorable for growth names. PAI 300 likely underperforming SPY in this regime.');
+    else if (aboveCount === 1) lines.push('One yield threshold is breached. Rates are elevated but not at crisis levels. Watch for acceleration — a second breach would intensify selling pressure.');
+    else lines.push('All yields are below danger thresholds. Rate environment is not actively hostile to AI stocks. Standard positioning rules apply.');
+
+    // SPY trend context
+    if (prev20?.spy != null && latest?.spy != null) {
+      const spyChange = ((latest.spy / prev20.spy) - 1) * 100;
+      if (spyChange < -3) lines.push(`SPY is down ${Math.abs(spyChange).toFixed(1)}% over 20 days — broad market is under pressure. If yields are rising simultaneously, this is a rate-driven selloff. If yields are falling, it's geopolitical/growth concern.`);
+      else if (spyChange > 3) lines.push(`SPY is up ${spyChange.toFixed(1)}% over 20 days despite current yield levels. The market is absorbing rate pressure — bullish resilience signal.`);
+    }
+
+    return lines;
+  }, [history, bonds]);
+}
+
+function useSpread210Interpretation(history) {
+  return useMemo(() => {
+    if (!history.length) return [];
+    const lines = [];
+    const latest = history[history.length - 1];
+    const prev20 = history.length >= 21 ? history[history.length - 21] : null;
+
+    if (latest?.spread2_10 != null) {
+      const spread = latest.spread2_10;
+      if (spread < 0) {
+        lines.push(`The 2/10 yield curve is INVERTED at ${(spread * 100).toFixed(0)} bps. Historically, sustained inversion precedes recession within 6-18 months. The bond market is signaling the Fed is too tight.`);
+        lines.push('For PAI 300: inverted curves eventually lead to rate cuts, which are bullish for growth stocks. But the recession that triggers the cuts can cause significant drawdowns first.');
+      } else if (spread < 0.25) {
+        lines.push(`The 2/10 spread is very flat at ${(spread * 100).toFixed(0)} bps. The bond market sees limited room between short-term rates and long-term growth expectations.`);
+        lines.push('For PAI 300: a flat curve suggests the market expects the Fed to cut soon. If cuts materialize, AI stocks benefit. If inflation re-accelerates and cuts are delayed, expect a repricing.');
+      } else {
+        lines.push(`The 2/10 spread is positive at ${(spread * 100).toFixed(0)} bps — a normal upward-sloping curve. The market sees the economy on stable footing.`);
+        lines.push('For PAI 300: a normal curve is the healthiest backdrop for growth stocks. Rate risk is manageable as long as the curve stays positive and stable.');
+      }
+
+      if (prev20?.spread2_10 != null) {
+        const delta = Math.round((spread - prev20.spread2_10) * 100);
+        if (Math.abs(delta) > 10) {
+          const direction = delta > 0 ? 'steepening' : 'flattening';
+          lines.push(`The curve has ${direction} by ${Math.abs(delta)} bps over 20 days — ${delta > 0 ? 'the market is pricing in higher long-term growth or the Fed pivoting dovish. Bullish for AI names.' : 'the market is pricing in tighter policy or slowing growth. Defensive posture warranted for high-beta AI names.'}`);
+        }
+      }
+    }
+    return lines;
+  }, [history]);
+}
+
+function useSpread1030Interpretation(history) {
+  return useMemo(() => {
+    if (!history.length) return [];
+    const lines = [];
+    const latest = history[history.length - 1];
+    const prev20 = history.length >= 21 ? history[history.length - 21] : null;
+
+    if (latest?.spread10_30 != null) {
+      const spread = latest.spread10_30;
+      if (spread > 0.30) {
+        lines.push(`The 10/30 spread is wide at ${(spread * 100).toFixed(0)} bps. Investors are demanding a higher premium to hold long-term US debt — this signals concern about deficits, inflation, or foreign buyer appetite.`);
+        lines.push('For SPY: a widening term premium raises long-duration borrowing costs and pressures equity valuations. For PAI 300: AI stocks are disproportionately affected as their value is in distant future earnings.');
+      } else if (spread < 0.05) {
+        lines.push(`The 10/30 spread is nearly flat at ${(spread * 100).toFixed(0)} bps. The market sees limited additional risk in holding 30-year vs 10-year bonds.`);
+        lines.push('For PAI 300: flat long-end spreads suggest the market isn\'t worried about long-term inflation. This removes one headwind for growth stock valuations.');
+      } else {
+        lines.push(`The 10/30 spread is at ${(spread * 100).toFixed(0)} bps — within a normal range. Long-duration risk premium is moderate.`);
+      }
+
+      if (prev20?.spread10_30 != null) {
+        const delta = Math.round((spread - prev20.spread10_30) * 100);
+        if (delta > 8) lines.push(`The 10/30 has steepened ${delta} bps in 20 days — fiscal concerns or inflation expectations are rising. Bond vigilantes may be re-emerging. This is a headwind for all equities, especially long-duration AI names.`);
+        else if (delta < -8) lines.push(`The 10/30 has compressed ${Math.abs(delta)} bps in 20 days — long-term inflation fears are cooling or demand for long bonds is returning. Supportive for growth equity valuations.`);
+      }
+    }
+    return lines;
+  }, [history]);
+}
+
+function useComparisonInterpretation(comparisonData, shockZones) {
+  return useMemo(() => {
+    if (!comparisonData.length) return [];
+    const lines = [];
+    const latest = comparisonData[comparisonData.length - 1];
+    const paiPct = latest?.pai300Pct;
+    const spyPct = latest?.spyPct;
+
+    if (paiPct != null && spyPct != null) {
+      const lead = paiPct - spyPct;
+      if (lead > 5) {
+        lines.push(`PAI 300 is outperforming SPY by ${lead.toFixed(1)} percentage points since the start of the period. AI stocks are leading the market — risk appetite is strong and investors are favoring growth over value.`);
+        lines.push('This outperformance can reverse quickly during yield shocks. The wider the gap, the more vulnerable PAI 300 is to a "catch-down" if rates spike.');
+      } else if (lead < -5) {
+        lines.push(`PAI 300 is underperforming SPY by ${Math.abs(lead).toFixed(1)} percentage points. AI stocks are lagging — either rate pressure is compressing growth valuations, or sector rotation into defensive/value names is underway.`);
+        lines.push('For new positions: underperformance during stable rate environments is a warning sign. Underperformance during rate spikes is expected and may present buying opportunities once yields stabilize.');
+      } else {
+        lines.push(`PAI 300 and SPY are tracking closely (${lead > 0 ? '+' : ''}${lead.toFixed(1)} pt spread). AI stocks are moving in line with the broad market — no significant risk-on or risk-off divergence.`);
+      }
+
+      // Shock zone analysis
+      if (shockZones.length > 0) {
+        const lastShock = shockZones[shockZones.length - 1];
+        const shockStart = comparisonData.find(r => r.date === lastShock.start);
+        const shockEnd = comparisonData.find(r => r.date === lastShock.end);
+        if (shockStart && shockEnd) {
+          const paiDrop = (shockEnd.pai300Pct || 0) - (shockStart.pai300Pct || 0);
+          const spyDrop = (shockEnd.spyPct || 0) - (shockStart.spyPct || 0);
+          if (spyDrop !== 0) {
+            const ratio = Math.abs(paiDrop / spyDrop);
+            lines.push(`During the last yield shock (${lastShock.label || 'YIELD SHOCK'}): PAI 300 moved ${ratio.toFixed(1)}x as much as SPY. ${ratio > 1.3 ? 'AI stocks amplified the selloff — reduce position sizes during active shocks.' : ratio < 0.8 ? 'AI stocks were surprisingly resilient — sector-specific strength overrode rate sensitivity.' : 'Both moved roughly in proportion — no amplification effect.'}`);
+          }
+        }
+      }
+    }
+    return lines;
+  }, [comparisonData, shockZones]);
+}
+
 // ── Sector grid ─────────────────────────────────────────────────────────────
 
 function SectorGrid({ sector, onTickerClick }) {
@@ -661,6 +808,11 @@ export default function BondHeatPage() {
     }));
   }, [history]);
 
+  const yieldsInterp = useYieldsInterpretation(history, data?.bonds);
+  const spread210Interp = useSpread210Interpretation(history);
+  const spread1030Interp = useSpread1030Interpretation(history);
+  const comparisonInterp = useComparisonInterpretation(comparisonData, shockZones);
+
   return (
     <div className={styles.container}>
       <div className={styles.pageHeader}>
@@ -733,6 +885,7 @@ export default function BondHeatPage() {
                   <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,112,67,0.15)', borderColor: 'rgba(255,112,67,0.4)' }} /> 30Y Above 5.00%</span>
                 </div>
               </YieldChart>
+              <ChartInterpretation lines={yieldsInterp} />
 
               {/* ── 2Y / 10Y Spread ── */}
               <YieldChart
@@ -752,6 +905,7 @@ export default function BondHeatPage() {
               >
                 <button className={styles.infoBtn} onClick={e => { e.stopPropagation(); setInfoPanel('spread2_10'); }} title="What does this mean?">ⓘ</button>
               </YieldChart>
+              <ChartInterpretation lines={spread210Interp} />
 
               {/* ── 10Y / 30Y Spread ── */}
               <YieldChart
@@ -769,30 +923,34 @@ export default function BondHeatPage() {
               >
                 <button className={styles.infoBtn} onClick={e => { e.stopPropagation(); setInfoPanel('spread10_30'); }} title="What does this mean?">ⓘ</button>
               </YieldChart>
+              <ChartInterpretation lines={spread1030Interp} />
 
               {/* ── PAI300 vs SPY Comparison ── */}
               {comparisonData.some(r => r.pai300Pct != null) && (
-                <YieldChart
-                  data={comparisonData}
-                  syncId="bondHeat"
-                  title="PAI 300 vs S&P 500 — Normalized % Change"
-                  subtitle="Shows how AI stocks react more violently to yield shocks vs broad market"
-                  lines={[
-                    { key: 'pai300Pct', name: 'PAI 300', color: CHART_COLORS.pai300 },
-                    { key: 'spyPct', name: 'S&P 500', color: CHART_COLORS.spy },
-                  ]}
-                  refLines={[
-                    { y: 0, label: 'Baseline', color: '#555' },
-                  ]}
-                  shockZones={shockZones}
-                  height={260}
-                >
-                  <div className={styles.chartLegend}>
-                    <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.pai300 }} /> PAI 300</span>
-                    <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.spy }} /> S&P 500</span>
-                    <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,152,0,0.3)', borderColor: 'rgba(255,152,0,0.5)' }} /> Yield Shock</span>
-                  </div>
-                </YieldChart>
+                <>
+                  <YieldChart
+                    data={comparisonData}
+                    syncId="bondHeat"
+                    title="PAI 300 vs S&P 500 — Normalized % Change"
+                    subtitle="Shows how AI stocks react more violently to yield shocks vs broad market"
+                    lines={[
+                      { key: 'pai300Pct', name: 'PAI 300', color: CHART_COLORS.pai300 },
+                      { key: 'spyPct', name: 'S&P 500', color: CHART_COLORS.spy },
+                    ]}
+                    refLines={[
+                      { y: 0, label: 'Baseline', color: '#555' },
+                    ]}
+                    shockZones={shockZones}
+                    height={260}
+                  >
+                    <div className={styles.chartLegend}>
+                      <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.pai300 }} /> PAI 300</span>
+                      <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.spy }} /> S&P 500</span>
+                      <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,152,0,0.3)', borderColor: 'rgba(255,152,0,0.5)' }} /> Yield Shock</span>
+                    </div>
+                  </YieldChart>
+                  <ChartInterpretation lines={comparisonInterp} />
+                </>
               )}
             </>
           )}

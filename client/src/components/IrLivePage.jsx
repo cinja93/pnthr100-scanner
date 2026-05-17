@@ -848,8 +848,8 @@ export default function IrLivePage() {
                 <MetricCard small label="Best Month" value={net?.bestMonth ? `${fmtPct(net.bestMonth.ret)}` : '—'} color={GREEN} sub={net?.bestMonth?.m} />
                 <MetricCard small label="Worst Month" value={net?.worstMonth ? `${fmtPct(net.worstMonth.ret)}` : '—'} color={RED} sub={net?.worstMonth?.m} />
                 <MetricCard small label="Avg Monthly Return" value={`${fmt(net?.avgMonthlyReturn)}%`} color={GREEN} />
-                <MetricCard small label="Max Drawdown (Net)" value={fmtPct(net?.maxDD)} color={RED} />
-                <MetricCard small label="Max Drawdown (Gross)" value={fmtPct(gross?.maxDD)} color={RED} />
+                <MetricCard small label="Max Drawdown (Net)" value={fmtPct(net?.maxDD)} color={RED} sub={spy?.maxDD != null ? `S&P 500: ${fmtPct(spy.maxDD)}` : undefined} />
+                <MetricCard small label="Max Drawdown (Gross)" value={fmtPct(gross?.maxDD)} color={RED} sub={spy?.maxDD != null ? `S&P 500: ${fmtPct(spy.maxDD)}` : undefined} />
                 <MetricCard small label="Ulcer Index" value={fmt(net?.ulcerIndex)} sub="Moderate volatility" />
                 <MetricCard small label="Monthly Std Dev" value={`${fmt(net?.monthlyStdDev)}%`} />
               </div>

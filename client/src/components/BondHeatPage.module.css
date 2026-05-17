@@ -5,18 +5,43 @@
   font-family: 'JetBrains Mono', 'SF Mono', monospace;
 }
 
-.headerRow {
+.pageHeader {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 24px 0 16px;
+  background: #111111;
+  border-radius: 8px;
   margin-bottom: 16px;
 }
 
-.title {
-  font-size: 20px;
+.pageTitle {
+  font-size: 22px;
   font-weight: 700;
-  color: #f5f5f5;
+  color: #fcf000;
+  margin: 0 0 4px;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pantherLogo {
+  height: 36px;
+  width: auto;
+}
+
+.pageSubtitle {
+  font-size: 13px;
+  color: #aaaaaa;
   margin: 0;
+}
+
+.headerControls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .refreshBtn {

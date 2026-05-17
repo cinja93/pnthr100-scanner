@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
+import pantherHead from '../assets/panther head.png';
 import styles from './BondHeatPage.module.css';
 
 // ── Heat map colors ─────────────────────────────────────────────────────────
@@ -652,16 +653,24 @@ export default function BondHeatPage() {
 
   return (
     <div className={styles.container}>
-      <div className={styles.headerRow}>
-        <h1 className={styles.title}>PNTHR Bond Heat</h1>
-        <button className={styles.refreshBtn} onClick={() => load(true)} disabled={loading}>
-          {loading ? '⏳ Loading...' : '🔄 Refresh'}
-        </button>
-        {data?.updatedAt && (
-          <span className={styles.timestamp}>
-            Updated: {new Date(data.updatedAt).toLocaleTimeString()}
-          </span>
-        )}
+      <div className={styles.pageHeader}>
+        <div>
+          <h1 className={styles.pageTitle}>
+            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
+            PNTHR BOND HEAT
+          </h1>
+          <p className={styles.pageSubtitle}>Real-time bond yield tracking vs AI 300 equity performance. Yield shock detection, spread analysis, and rate-driven selloff alerts.</p>
+        </div>
+        <div className={styles.headerControls}>
+          <button className={styles.refreshBtn} onClick={() => load(true)} disabled={loading}>
+            {loading ? 'Loading…' : '↻ Refresh'}
+          </button>
+          {data?.updatedAt && (
+            <span className={styles.timestamp}>
+              Updated: {new Date(data.updatedAt).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
       </div>
 
       {error && <div className={styles.error}>{error}</div>}

@@ -33,7 +33,7 @@ function getTextColor(pct) {
 
 // ── Chart helpers ───────────────────────────────────────────────────────────
 
-const CHART_COLORS = { y2: '#4fc3f7', y10: '#ffd600', y30: '#ff7043', spy: '#69f0ae', pai300: '#e040fb', spread: '#ce93d8', spread1030: '#4dd0e1' };
+const CHART_COLORS = { y2: '#4fc3f7', y10: '#ffd600', y30: '#ff7043', spy: '#69f0ae', pai300: '#ffcc00', spread: '#ce93d8', spread1030: '#4dd0e1' };
 
 function formatDateShort(dateStr) {
   if (!dateStr) return '';
@@ -306,6 +306,36 @@ function AlarmGauge({ label, current, threshold, color }) {
 function YieldsBanner({ bonds, breadth, history, onShowPlaybook }) {
   if (!bonds) return null;
 
+  // Rolling 20-day beta: Cov(PAI300, SPY) / Var(SPY) using daily returns
+  const pai300Beta = useMemo(() => {
+    if (!history || history.length < 22) return null;
+    const recent = history.slice(-21);
+    const returns = [];
+    for (let i = 1; i < recent.length; i++) {
+      const spyPrev = recent[i - 1].spy;
+      const spyCur = recent[i].spy;
+      const paiPrev = recent[i - 1].pai300;
+      const paiCur = recent[i].pai300;
+      if (spyPrev && spyCur && paiPrev && paiCur) {
+        returns.push({
+          spy: (spyCur - spyPrev) / spyPrev,
+          pai: (paiCur - paiPrev) / paiPrev,
+        });
+      }
+    }
+    if (returns.length < 10) return null;
+    const n = returns.length;
+    const avgSpy = returns.reduce((s, r) => s + r.spy, 0) / n;
+    const avgPai = returns.reduce((s, r) => s + r.pai, 0) / n;
+    let cov = 0, varSpy = 0;
+    for (const r of returns) {
+      cov += (r.spy - avgSpy) * (r.pai - avgPai);
+      varSpy += (r.spy - avgSpy) ** 2;
+    }
+    if (varSpy === 0) return null;
+    return +(cov / varSpy).toFixed(2);
+  }, [history]);
+
   const items = [
     { label: 'Fed Funds Rate', value: bonds.fedFunds, change: null, alertLevel: null },
     { label: '2-Year', value: bonds.y2, change: bonds.y2Change, alertLevel: bonds.y2 >= 4.5 ? '4.50%' : null },
@@ -341,6 +371,19 @@ function YieldsBanner({ bonds, breadth, history, onShowPlaybook }) {
           <AlarmGauge label="10-Year" current={bonds.y10} threshold={4.50} color="#ffd600" />
           <AlarmGauge label="30-Year" current={bonds.y30} threshold={5.00} color="#ff7043" />
         </div>
+
+        {/* ── PAI300 Beta ── */}
+        {pai300Beta != null && (
+          <div className={styles.yieldItem}>
+            <div className={styles.yieldItemLabel}>PAI 300 Beta</div>
+            <div className={styles.yieldItemValue} style={{ color: pai300Beta > 1.3 ? '#ff5252' : pai300Beta > 1.0 ? '#ffd600' : '#69f0ae', fontSize: 20 }}>
+              {pai300Beta.toFixed(2)}x
+            </div>
+            <div className={styles.yieldItemChange} style={{ color: '#888' }}>
+              {pai300Beta > 1.3 ? 'HIGH SENSITIVITY' : pai300Beta > 1.0 ? 'ELEVATED' : 'NORMAL'}
+            </div>
+          </div>
+        )}
 
         {/* ── Breadth + Playbook ── */}
         <div className={styles.bannerRight}>

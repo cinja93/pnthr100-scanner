@@ -33,7 +33,7 @@ function getTextColor(pct) {
 
 // ── Chart helpers ───────────────────────────────────────────────────────────
 
-const CHART_COLORS = { y2: '#4fc3f7', y10: '#ffd600', y30: '#ff7043', spy: '#69f0ae', spread: '#ce93d8', spread1030: '#4dd0e1' };
+const CHART_COLORS = { y2: '#4fc3f7', y10: '#ffd600', y30: '#ff7043', spy: '#69f0ae', pai300: '#e040fb', spread: '#ce93d8', spread1030: '#4dd0e1' };
 
 function formatDateShort(dateStr) {
   if (!dateStr) return '';
@@ -50,6 +50,10 @@ function YieldChartTooltip({ active, payload, label }) {
         <div key={p.dataKey} style={{ color: p.color }}>
           {p.name}: {p.dataKey === 'spy'
             ? (p.value != null ? `$${p.value.toFixed(2)}` : '—')
+            : p.dataKey === 'pai300'
+            ? (p.value != null ? p.value.toFixed(2) : '—')
+            : (p.dataKey === 'spyPct' || p.dataKey === 'pai300Pct')
+            ? (p.value != null ? `${p.value > 0 ? '+' : ''}${p.value.toFixed(2)}%` : '—')
             : (p.value != null ? `${p.value.toFixed(3)}%` : '—')}
         </div>
       ))}
@@ -467,6 +471,20 @@ export default function BondHeatPage() {
     return zones;
   }, [history]);
 
+  // Normalize SPY + PAI300 to % change from first value for direct comparison
+  const comparisonData = useMemo(() => {
+    if (!history.length) return [];
+    const firstSpy = history.find(r => r.spy != null)?.spy;
+    const firstPai = history.find(r => r.pai300 != null)?.pai300;
+    return history.map(row => ({
+      date: row.date,
+      spyPct: row.spy != null && firstSpy ? +((row.spy / firstSpy - 1) * 100).toFixed(2) : null,
+      pai300Pct: row.pai300 != null && firstPai ? +((row.pai300 / firstPai - 1) * 100).toFixed(2) : null,
+      y10: row.y10,
+      yieldShock: row.yieldShock,
+    }));
+  }, [history]);
+
   return (
     <div className={styles.container}>
       <div className={styles.headerRow}>
@@ -503,7 +521,7 @@ export default function BondHeatPage() {
                   { key: 'y2', name: '2-Year', color: CHART_COLORS.y2 },
                   { key: 'y10', name: '10-Year', color: CHART_COLORS.y10 },
                   { key: 'y30', name: '30-Year', color: CHART_COLORS.y30 },
-                  { key: 'spy', name: 'S&P 500', color: CHART_COLORS.spy, axis: 'right', width: 1.5 },
+                  { key: 'spy', name: 'S&P 500 (SPY)', color: CHART_COLORS.spy, axis: 'right', width: 1.5 },
                 ]}
                 refLines={[
                   { y: 4.5, label: '2Y/10Y Alert 4.50%', color: '#ffd600' },
@@ -562,6 +580,31 @@ export default function BondHeatPage() {
               >
                 <button className={styles.infoBtn} onClick={e => { e.stopPropagation(); setInfoPanel('spread10_30'); }} title="What does this mean?">ⓘ</button>
               </YieldChart>
+
+              {/* ── PAI300 vs SPY Comparison ── */}
+              {comparisonData.some(r => r.pai300Pct != null) && (
+                <YieldChart
+                  data={comparisonData}
+                  syncId="bondHeat"
+                  title="PAI 300 vs S&P 500 — Normalized % Change"
+                  subtitle="Shows how AI stocks react more violently to yield shocks vs broad market"
+                  lines={[
+                    { key: 'pai300Pct', name: 'PAI 300', color: CHART_COLORS.pai300 },
+                    { key: 'spyPct', name: 'S&P 500', color: CHART_COLORS.spy },
+                  ]}
+                  refLines={[
+                    { y: 0, label: 'Baseline', color: '#555' },
+                  ]}
+                  shockZones={shockZones}
+                  height={260}
+                >
+                  <div className={styles.chartLegend}>
+                    <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.pai300 }} /> PAI 300</span>
+                    <span className={styles.legendItem}><span className={styles.legendLine} style={{ background: CHART_COLORS.spy }} /> S&P 500</span>
+                    <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: 'rgba(255,82,82,0.25)' }} /> Yield Shock</span>
+                  </div>
+                </YieldChart>
+              )}
             </>
           )}
 

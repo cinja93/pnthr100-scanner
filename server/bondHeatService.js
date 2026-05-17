@@ -3,6 +3,7 @@
 // Also provides historical treasury + SPY data with yield shock detection.
 
 import { getAiUniverseHoldings, getAiUniverseSectorMeta } from './aiUniverseService.js';
+import { getPnthrAi300Bars } from './pnthrAi300Service.js';
 
 const FMP_BASE  = 'https://financialmodelingprep.com/api/v3';
 const FMP_BASE4 = 'https://financialmodelingprep.com/api/v4';
@@ -136,6 +137,14 @@ export async function getTreasuryHistory() {
       .then(r => r.ok ? r.json() : [])
       .catch(() => []);
 
+  let pai300Bars = [];
+  try {
+    const pai300Result = await getPnthrAi300Bars({ timeframe: 'daily' });
+    if (pai300Result?.ok) pai300Bars = pai300Result.bars || [];
+  } catch (e) {
+    console.warn('[bondHeat] PAI300 bars fetch failed:', e.message);
+  }
+
   const [treasuryRaw, spyRaw] = await Promise.all([
     get(`${FMP_BASE4}/treasury?from=${fromStr}&to=${toStr}&apikey=${key}`),
     get(`${FMP_BASE}/historical-price-full/SPY?from=${fromStr}&to=${toStr}&apikey=${key}`),
@@ -148,6 +157,14 @@ export async function getTreasuryHistory() {
   const spyMap = {};
   for (const bar of spyPrices) {
     spyMap[bar.date] = { price: bar.close, changePct: bar.changePercent };
+  }
+
+  // Build PAI300 lookup by date
+  const pai300Map = {};
+  for (const bar of pai300Bars) {
+    if (bar.date >= fromStr) {
+      pai300Map[bar.date] = { value: bar.close };
+    }
   }
 
   // Sort treasury ascending by date
@@ -178,6 +195,7 @@ export async function getTreasuryHistory() {
       spread10_30: y30 != null && y10 != null ? +((y30 - y10).toFixed(3)) : null,
       spy: spyMap[d.date]?.price ?? null,
       spyChangePct: spyMap[d.date]?.changePct ?? null,
+      pai300: pai300Map[d.date]?.value ?? null,
       yieldShock,
     };
   });

@@ -189,12 +189,15 @@ const ORDER_ACCESSORS = {
   status:     o => o.isNewSignal ? 0 : 1,
 };
 
-function OrderRow({ o, orders, navScale, setChartTickers, setChartIndex, dimmed }) {
+function OrderRow({ o, orders, navScale, setChartTickers, setChartIndex, dimmed, positionInfo }) {
   const actionLabel = getActionLabel(o);
-  const isBuyActive = actionLabel === '★ BUY LONG' || actionLabel === 'LONG';
-  const isSSActive = actionLabel === '★ SELL SHORT' || actionLabel === 'SHORT';
-  const isWait = actionLabel === 'WAIT LONG' || actionLabel === 'WAIT SHORT';
-  const isNoGo = actionLabel === 'NO GO';
+  const isFired = !!positionInfo;
+  const firedLabel = positionInfo?.direction === 'SHORT' ? 'SHORTED' : 'BOUGHT';
+  const firedStatus = positionInfo?.status;
+  const isBuyActive = !isFired && (actionLabel === '★ BUY LONG' || actionLabel === 'LONG');
+  const isSSActive = !isFired && (actionLabel === '★ SELL SHORT' || actionLabel === 'SHORT');
+  const isWait = !isFired && (actionLabel === 'WAIT LONG' || actionLabel === 'WAIT SHORT');
+  const isNoGo = !isFired && actionLabel === 'NO GO';
   const rowBg = dimmed
     ? 'rgba(30,30,30,0.5)'
     : isBuyActive ? 'rgba(22,163,74,0.12)'
@@ -224,7 +227,12 @@ function OrderRow({ o, orders, navScale, setChartTickers, setChartIndex, dimmed 
     onMouseLeave={e => e.currentTarget.style.background = rowBg}
     >
       <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-        {isBuyActive ? (
+        {isFired ? (
+          <span style={{
+            padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+            background: '#7c3aed', color: '#fff', letterSpacing: '0.04em',
+          }}>{firedLabel}{firedStatus === 'STAGED' ? ' (STAGED)' : ''}</span>
+        ) : isBuyActive ? (
           <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#16a34a', color: '#fff' }}>{actionLabel}</span>
         ) : isSSActive ? (
           <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#dc2626', color: '#fff' }}>{actionLabel}</span>
@@ -340,6 +348,14 @@ export default function AiOrdersPage() {
       _heatDollar,
     };
   }, [navScale]);
+
+  const activePositions = useMemo(() => {
+    const map = {};
+    for (const p of (doc?.activePositionTickers || [])) {
+      map[p.ticker] = p;
+    }
+    return map;
+  }, [doc]);
 
   const { nowOrders, onDeckOrders, allOrders } = useMemo(() => {
     if (!doc?.orders) return { nowOrders: [], onDeckOrders: [], allOrders: [] };
@@ -534,7 +550,8 @@ export default function AiOrdersPage() {
                   <tbody>
                     {nowOrders.map(o => (
                       <OrderRow key={`now-${o.ticker}`} o={o} orders={allChartTickers.map(t => ({ ticker: t }))}
-                        navScale={navScale} setChartTickers={setChartTickers} setChartIndex={setChartIndex} dimmed={false} />
+                        navScale={navScale} setChartTickers={setChartTickers} setChartIndex={setChartIndex} dimmed={false}
+                        positionInfo={activePositions[o.ticker]} />
                     ))}
                   </tbody>
                 </table>
@@ -566,7 +583,8 @@ export default function AiOrdersPage() {
                   <tbody>
                     {onDeckOrders.map((o, i) => (
                       <OrderRow key={`deck-${o.ticker}`} o={o} orders={allChartTickers.map(t => ({ ticker: t }))}
-                        navScale={navScale} setChartTickers={setChartTickers} setChartIndex={setChartIndex} dimmed={true} />
+                        navScale={navScale} setChartTickers={setChartTickers} setChartIndex={setChartIndex} dimmed={true}
+                        positionInfo={activePositions[o.ticker]} />
                     ))}
                   </tbody>
                 </table>
@@ -604,7 +622,8 @@ export default function AiOrdersPage() {
               <tbody>
                 {filteredOrders.map(o => (
                   <OrderRow key={`all-${o.signal}-${o.ticker}`} o={o} orders={filteredOrders}
-                    navScale={navScale} setChartTickers={setChartTickers} setChartIndex={setChartIndex} dimmed={false} />
+                    navScale={navScale} setChartTickers={setChartTickers} setChartIndex={setChartIndex} dimmed={false}
+                    positionInfo={activePositions[o.ticker]} />
                 ))}
               </tbody>
             </table>

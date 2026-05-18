@@ -2137,7 +2137,7 @@ app.post('/api/admin/backfill-ai-sector-ranks', authenticateJWT, requireAdmin, a
 });
 
 // ── PNTHR AI Orders (APEX v6 weekly order sheet) ────────────────────────────
-app.get('/api/ai-orders/latest', async (req, res) => {
+app.get('/api/ai-orders/latest', authenticateJWT, async (req, res) => {
   try {
     if (req.query.refresh === 'true') {
       try { await refreshOrderGrades(); } catch (e) {
@@ -2146,7 +2146,19 @@ app.get('/api/ai-orders/latest', async (req, res) => {
     }
     const doc = await getLatestAiOrders();
     if (!doc) return res.json({ weekOf: null, orders: [], stats: {}, sectorSummary: {} });
-    res.json(doc);
+    const result = doc.toObject ? doc.toObject() : { ...doc };
+    try {
+      const db = await connectToDatabase();
+      if (db && req.user?.userId) {
+        const activePos = await db.collection('pnthr_portfolio')
+          .find({ ownerId: req.user.userId, status: { $in: ['ACTIVE', 'PARTIAL', 'STAGED'] } },
+                 { projection: { ticker: 1, direction: 1, status: 1 } }).toArray();
+        result.activePositionTickers = activePos.map(p => ({
+          ticker: p.ticker, direction: p.direction, status: p.status,
+        }));
+      }
+    } catch (e) { /* non-critical — page still works without badges */ }
+    res.json(result);
   } catch (err) {
     console.error('Error in /api/ai-orders/latest:', err);
     res.status(500).json({ error: 'Failed to load AI orders' });

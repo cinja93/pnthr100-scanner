@@ -1258,21 +1258,42 @@ export default function OrdersPage() {
                 leftAfter={capLeftAfter}
               />
 
-              {/* BL Orders */}
-              {blOrders.length > 0 && (
-                <div className={styles.gateSection}>
-                  <h3 className={styles.gateSectionTitle}>BUY LONG ({blOrders.length})</h3>
-                  <OrderTable orders={blOrders} gtdExp={gtdExp} nav={nav} ai300Overlap={ai300Overlap}
-                    onTickerClick={(t) => setChartIndex(orders.findIndex(o => o.ticker === t))} />
-                </div>
-              )}
+              {/* NOW box — all stocks shown have passed every gate */}
+              {(blOrders.length > 0 || ssOrders.length > 0) && (
+                <div style={{
+                  border: '1px solid rgba(22,163,74,0.5)', borderRadius: 8,
+                  overflow: 'hidden', marginBottom: 16,
+                }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 14px', background: 'rgba(22,163,74,0.10)',
+                    borderBottom: '1px solid rgba(22,163,74,0.3)',
+                  }}>
+                    <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>NOW</span>
+                    <span style={{ color: '#16a34a', fontSize: 12 }}>Ready to execute — all gates passed</span>
+                    <span style={{
+                      marginLeft: 'auto', padding: '2px 8px', background: '#16a34a', color: '#000',
+                      borderRadius: 3, fontSize: 11, fontWeight: 700,
+                    }}>{blOrders.length + ssOrders.length}</span>
+                  </div>
 
-              {/* SS Orders */}
-              {ssOrders.length > 0 && (
-                <div className={styles.gateSection}>
-                  <h3 className={styles.gateSectionTitle}>SELL SHORT ({ssOrders.length})</h3>
-                  <OrderTable orders={ssOrders} gtdExp={gtdExp} nav={nav} ai300Overlap={ai300Overlap}
-                    onTickerClick={(t) => setChartIndex(orders.findIndex(o => o.ticker === t))} />
+                  {/* BL Orders */}
+                  {blOrders.length > 0 && (
+                    <div className={styles.gateSection}>
+                      <h3 className={styles.gateSectionTitle}>BUY LONG ({blOrders.length})</h3>
+                      <OrderTable orders={blOrders} gtdExp={gtdExp} nav={nav} ai300Overlap={ai300Overlap}
+                        onTickerClick={(t) => setChartIndex(orders.findIndex(o => o.ticker === t))} />
+                    </div>
+                  )}
+
+                  {/* SS Orders */}
+                  {ssOrders.length > 0 && (
+                    <div className={styles.gateSection}>
+                      <h3 className={styles.gateSectionTitle}>SELL SHORT ({ssOrders.length})</h3>
+                      <OrderTable orders={ssOrders} gtdExp={gtdExp} nav={nav} ai300Overlap={ai300Overlap}
+                        onTickerClick={(t) => setChartIndex(orders.findIndex(o => o.ticker === t))} />
+                    </div>
+                  )}
                 </div>
               )}
             </>

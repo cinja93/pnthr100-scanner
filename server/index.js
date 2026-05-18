@@ -36,7 +36,7 @@ import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
 import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
-import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './aiOrdersPipeline.js';
+import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
@@ -2139,6 +2139,11 @@ app.post('/api/admin/backfill-ai-sector-ranks', authenticateJWT, requireAdmin, a
 // ── PNTHR AI Orders (APEX v6 weekly order sheet) ────────────────────────────
 app.get('/api/ai-orders/latest', async (req, res) => {
   try {
+    if (req.query.refresh === 'true') {
+      try { await refreshOrderGrades(); } catch (e) {
+        console.warn('[AI Orders] grade refresh on poll failed:', e.message);
+      }
+    }
     const doc = await getLatestAiOrders();
     if (!doc) return res.json({ weekOf: null, orders: [], stats: {}, sectorSummary: {} });
     res.json(doc);

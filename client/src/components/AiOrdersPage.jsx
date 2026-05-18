@@ -15,6 +15,8 @@ const TIER_COLORS = {
 const TIER_RANK = { GO: 0, NEUTRAL: 1, NO_GO: 2 };
 const ACTION_RANK = { '★ BUY LONG': 0, 'LONG': 1, 'WAIT LONG': 2, '★ SELL SHORT': 3, 'SHORT': 4, 'WAIT SHORT': 5, 'NO GO': 6 };
 
+const BEST_THRESHOLD = 12;
+
 function TierPill({ tier }) {
   const c = TIER_COLORS[tier] || { bg: '#444', fg: '#fff', label: tier || '—' };
   return (
@@ -136,6 +138,37 @@ function SectorSummaryStrip({ summary }) {
   );
 }
 
+function GapProgressBar({ gapPct, signal }) {
+  const threshold = BEST_THRESHOLD;
+  const absGap = Math.abs(gapPct ?? 0);
+  const pct = Math.min(100, (absGap / threshold) * 100);
+  const isClose = absGap >= threshold * 0.85;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ width: 50, height: 6, background: '#222', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
+        <div style={{
+          height: '100%', borderRadius: 3, transition: 'width 0.5s ease',
+          width: `${pct}%`,
+          background: isClose ? '#fcf000' : '#555',
+        }} />
+      </div>
+      <span style={{ color: isClose ? '#fcf000' : '#aaa', fontSize: 11, minWidth: 44, textAlign: 'right' }}>
+        {gapPct != null ? `${gapPct.toFixed(1)}%` : '—'}
+      </span>
+    </div>
+  );
+}
+
+function isMarketHours() {
+  const now = new Date();
+  const etStr = now.toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false });
+  const [h, m] = etStr.split(':').map(Number);
+  const mins = h * 60 + m;
+  if (mins < 570 || mins > 960) return false;
+  const dow = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' });
+  return dow !== 'Sat' && dow !== 'Sun';
+}
+
 const ORDER_ACCESSORS = {
   action:     o => ACTION_RANK[getActionLabel(o)] ?? 99,
   mode:       o => getStrategyMode(o.ticker),
@@ -156,6 +189,106 @@ const ORDER_ACCESSORS = {
   status:     o => o.isNewSignal ? 0 : 1,
 };
 
+function OrderRow({ o, orders, navScale, setChartTickers, setChartIndex, dimmed }) {
+  const actionLabel = getActionLabel(o);
+  const isBuyActive = actionLabel === '★ BUY LONG' || actionLabel === 'LONG';
+  const isSSActive = actionLabel === '★ SELL SHORT' || actionLabel === 'SHORT';
+  const isWait = actionLabel === 'WAIT LONG' || actionLabel === 'WAIT SHORT';
+  const isNoGo = actionLabel === 'NO GO';
+  const rowBg = dimmed
+    ? 'rgba(30,30,30,0.5)'
+    : isBuyActive ? 'rgba(22,163,74,0.12)'
+    : isSSActive ? 'rgba(220,38,38,0.08)'
+    : isWait ? 'rgba(252,240,0,0.06)'
+    : isNoGo ? 'rgba(100,100,100,0.08)'
+    : 'transparent';
+  const rowBorder = isBuyActive ? '1px solid rgba(22,163,74,0.30)'
+    : isSSActive ? '1px solid rgba(220,38,38,0.20)'
+    : isWait ? '1px solid rgba(252,240,0,0.20)'
+    : isNoGo ? '1px solid rgba(100,100,100,0.20)'
+    : '1px solid #1a1a1a';
+  const leftAccent = isBuyActive ? '3px solid #16a34a' : isSSActive ? '3px solid #dc2626' : isWait ? '3px solid #fcf000' : isNoGo ? '3px solid #666' : 'none';
+  const opacity = dimmed ? 0.7 : 1;
+
+  return (
+    <tr style={{
+      borderBottom: rowBorder, borderLeft: leftAccent,
+      background: rowBg, cursor: 'pointer', opacity,
+    }}
+    onClick={() => {
+      const tickers = orders.map(x => x.ticker);
+      setChartTickers(tickers);
+      setChartIndex(tickers.indexOf(o.ticker));
+    }}
+    onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
+    onMouseLeave={e => e.currentTarget.style.background = rowBg}
+    >
+      <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+        {isBuyActive ? (
+          <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#16a34a', color: '#fff' }}>{actionLabel}</span>
+        ) : isSSActive ? (
+          <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#dc2626', color: '#fff' }}>{actionLabel}</span>
+        ) : isWait ? (
+          <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#fcf000', color: '#000' }}>{actionLabel}</span>
+        ) : (
+          <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#666', color: '#fff' }}>NO GO</span>
+        )}
+      </td>
+      <td style={{ padding: '6px 10px', textAlign: 'center' }}><ModeBadge ticker={o.ticker} /></td>
+      <td style={{ padding: '6px 10px', fontWeight: 700, color: o.signal === 'BL' ? '#16a34a' : '#dc2626' }}>
+        {o.signal}
+        {(() => {
+          const n = computeWeeksAgo(o.signalDate, o.lastBarDate);
+          return n != null ? <span style={{ color: '#aaa', fontWeight: 500 }}>+{n}</span> : null;
+        })()}
+      </td>
+      <td style={{ padding: '6px 10px', fontWeight: 700, color: '#fff' }}>{o.ticker}</td>
+      <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{o.sectorId} {o.sectorName?.split(' ').slice(0, 2).join(' ')}</td>
+      <td style={{ padding: '6px 10px' }}><TierPill tier={o.sectorTier} /></td>
+      <td style={{ padding: '6px 10px', textAlign: 'right' }}>
+        {dimmed
+          ? <GapProgressBar gapPct={o.gapPct} signal={o.signal} />
+          : <span style={{ color: o.gapPct >= 15 ? '#fcf000' : o.gapPct >= 12 ? '#16a34a' : '#aaa' }}>{o.gapPct != null ? `${o.gapPct.toFixed(1)}%` : '—'}</span>
+        }
+      </td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', color: o.wEmaSlope != null && o.wEmaSlope < 20 ? '#16a34a' : '#aaa' }}>{o.wEmaSlope != null ? `${o.wEmaSlope.toFixed(1)}%` : '—'}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(o.currentPrice)}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.stopPrice)}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', color: o.riskPct > 20 ? '#fcf000' : '#aaa' }}>{o.riskPct?.toFixed(1)}%</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right' }}>{o.lot1Shares?.toLocaleString()}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#888' }}>{o.targetShares?.toLocaleString()}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.lot1Dollar, { k: true })}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#f97316', fontWeight: 600 }}>{fmtUsd(o._heatDollar)}</td>
+      <td style={{ padding: '6px 10px', color: '#888' }}>{o.signalDate || '—'}</td>
+    </tr>
+  );
+}
+
+function TableHeader({ sort, onSort }) {
+  return (
+    <thead>
+      <tr style={{ background: '#1a1a1a', color: '#fcf000', textAlign: 'left' }}>
+        <SortHeader label="Action"      sortKey="action"     currentSort={sort} onSort={onSort} />
+        <SortHeader label="Mode"        sortKey="mode"       currentSort={sort} onSort={onSort} />
+        <SortHeader label="Signal"      sortKey="signal"     currentSort={sort} onSort={onSort} />
+        <SortHeader label="Ticker"      sortKey="ticker"     currentSort={sort} onSort={onSort} />
+        <SortHeader label="Sector"      sortKey="sector"     currentSort={sort} onSort={onSort} />
+        <SortHeader label="Sector 💪"   sortKey="tier"       currentSort={sort} onSort={onSort} />
+        <SortHeader label="Gap %"       sortKey="gapPct"     currentSort={sort} onSort={onSort} align="right" />
+        <SortHeader label="Slope %"     sortKey="slope"      currentSort={sort} onSort={onSort} align="right" />
+        <SortHeader label="Price"       sortKey="price"      currentSort={sort} onSort={onSort} align="right" />
+        <SortHeader label="Stop"        sortKey="stop"       currentSort={sort} onSort={onSort} align="right" />
+        <SortHeader label="Risk %"      sortKey="riskPct"    currentSort={sort} onSort={onSort} align="right" />
+        <SortHeader label="L1 sh"      sortKey="entrySh"    currentSort={sort} onSort={onSort} align="right" />
+        <SortHeader label="Full Pos"   sortKey="fullPos"    currentSort={sort} onSort={onSort} align="right" />
+        <SortHeader label="Entry $"     sortKey="entryDol"   currentSort={sort} onSort={onSort} align="right" />
+        <SortHeader label="Heat $"      sortKey="heat"       currentSort={sort} onSort={onSort} align="right" />
+        <SortHeader label="Signal Date" sortKey="signalDate" currentSort={sort} onSort={onSort} />
+      </tr>
+    </thead>
+  );
+}
+
 export default function AiOrdersPage() {
   const { isAdmin } = useAuth();
   const [doc, setDoc] = useState(null);
@@ -172,18 +305,20 @@ export default function AiOrdersPage() {
   const [bridgeOpen, setBridgeOpen] = useState(() => {
     try { return localStorage.getItem('aiOrders.bridgeOpen') !== 'false'; } catch { return true; }
   });
+  const [lastRefresh, setLastRefresh] = useState(null);
 
-  const load = () => {
-    setLoading(true);
-    fetchLatestAiOrders()
-      .then(d => { setDoc(d); setError(null); })
+  const load = useCallback((refresh = false) => {
+    setLoading(prev => !doc ? true : prev);
+    fetchLatestAiOrders({ refresh })
+      .then(d => { setDoc(d); setError(null); setLastRefresh(new Date()); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  };
+  }, [doc]);
+
   useEffect(() => {
-    load();
+    load(false);
     fetchNav().then(d => setUserNav(d?.nav || 100000)).catch(() => {});
-    const id = setInterval(load, 60_000);
+    const id = setInterval(() => load(isMarketHours()), 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -193,27 +328,44 @@ export default function AiOrdersPage() {
     return actual / assumed;
   }, [doc, userNav]);
 
-  const orders = useMemo(() => {
+  const scaleOrder = useCallback((o) => {
+    const fullL1 = Math.max(1, Math.round(o.lot1Shares * navScale));
+    const riskPerShare = o.riskPerShare || 0;
+    const _heatDollar = +(fullL1 * riskPerShare).toFixed(2);
+    return {
+      ...o,
+      lot1Shares: fullL1,
+      lot1Dollar: +(o.lot1Dollar * navScale).toFixed(2),
+      targetShares: Math.max(1, Math.round(o.targetShares * navScale)),
+      _heatDollar,
+    };
+  }, [navScale]);
+
+  const { nowOrders, onDeckOrders, allOrders } = useMemo(() => {
+    if (!doc?.orders) return { nowOrders: [], onDeckOrders: [], allOrders: [] };
+
+    const newSignals = doc.orders.filter(o => o.isNewSignal && (o.signal === 'BL' || o.signal === 'SS'));
+    const now = newSignals.filter(o => o.qualityGrade === 'BEST').map(scaleOrder);
+    const onDeck = newSignals.filter(o => o.qualityGrade !== 'BEST').map(scaleOrder);
+
+    const nowSorted = sortRows(now, { key: 'action', dir: 'asc' }, ORDER_ACCESSORS);
+    const onDeckSorted = [...onDeck].sort((a, b) => Math.abs(b.gapPct ?? 0) - Math.abs(a.gapPct ?? 0));
+
+    const all = doc.orders.map(scaleOrder);
+
+    return { nowOrders: nowSorted, onDeckOrders: onDeckSorted, allOrders: all };
+  }, [doc, scaleOrder]);
+
+  const filteredOrders = useMemo(() => {
+    if (filter === 'new') return null;
     if (!doc?.orders) return [];
     const filtered = doc.orders.filter(o => {
       if (filter === 'bl')  return o.signal === 'BL';
       if (filter === 'ss')  return o.signal === 'SS';
-      if (filter === 'new') return o.isNewSignal;
       return true;
-    }).map(o => {
-      const fullL1 = Math.max(1, Math.round(o.lot1Shares * navScale));
-      const riskPerShare = o.riskPerShare || 0;
-      const _heatDollar = +(fullL1 * riskPerShare).toFixed(2);
-      return {
-        ...o,
-        lot1Shares: fullL1,
-        lot1Dollar: +(o.lot1Dollar * navScale).toFixed(2),
-        targetShares: Math.max(1, Math.round(o.targetShares * navScale)),
-        _heatDollar,
-      };
-    });
+    }).map(scaleOrder);
     return sortRows(filtered, orderSort, ORDER_ACCESSORS);
-  }, [doc, filter, navScale, orderSort]);
+  }, [doc, filter, scaleOrder, orderSort]);
 
   const onRun = async () => {
     setRunning(true);
@@ -221,7 +373,7 @@ export default function AiOrdersPage() {
     try {
       const r = await runAiOrders({ type: 'DAILY' });
       setRunMsg(`Regenerated — ${r.stats?.totalOrders ?? '?'} orders`);
-      load();
+      load(false);
     } catch (e) {
       setRunMsg(`Failed: ${e.message}`);
     } finally {
@@ -229,11 +381,15 @@ export default function AiOrdersPage() {
     }
   };
 
+  const allChartTickers = filter === 'new'
+    ? [...nowOrders, ...onDeckOrders].map(o => o.ticker)
+    : (filteredOrders || []).map(o => o.ticker);
+
   return (
     <div style={{ padding: '20px 24px', color: '#e5e5e5', minHeight: '100vh', background: '#0a0a0a' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ color: '#fcf000', margin: 0, fontSize: 26, letterSpacing: '0.04em' }}>PNTHR AI Orders</h1>
-        <span style={{ color: '#888', fontSize: 13 }}>APEX v6 — 5D sector rotation overlay</span>
+        <span style={{ color: '#888', fontSize: 13 }}>APEX v7 — 5D sector rotation overlay</span>
         <span style={{
           padding: '3px 8px', background: '#fcf000', color: '#000', borderRadius: 3,
           fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
@@ -244,6 +400,9 @@ export default function AiOrdersPage() {
         <div style={{ marginTop: 12, fontSize: 13, color: '#ccc' }}>
           Week of <strong style={{ color: '#fff' }}>{doc.weekOf}</strong>
           {doc.generatedAt && <span style={{ color: '#666' }}> · generated {new Date(doc.generatedAt).toLocaleString()}</span>}
+          {lastRefresh && isMarketHours() && (
+            <span style={{ color: '#444', fontSize: 11 }}> · live refresh {lastRefresh.toLocaleTimeString()}</span>
+          )}
         </div>
       )}
 
@@ -274,7 +433,7 @@ export default function AiOrdersPage() {
 
           <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
             {[
-              { k: 'new', label: 'BL+1 / SS+1' },
+              { k: 'new', label: 'This Week' },
               { k: 'all', label: 'All' },
               { k: 'bl',  label: 'BL only' },
               { k: 'ss',  label: 'SS only' },
@@ -348,127 +507,109 @@ export default function AiOrdersPage() {
         </div>
       )}
 
-      {/* Weekly Signal Orders — sector rotation gated (APEX v7) */}
-      {orders.length > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'baseline', gap: 10, margin: '24px 0 8px',
-          borderBottom: '2px solid #f97316', paddingBottom: 6,
-        }}>
-          <h2 style={{ color: '#f97316', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>PNTHR Weekly Orders</h2>
-          <span style={{ color: '#888', fontSize: 11 }}>Weekly BL/SS signals — sector rotation gated, full position sizing</span>
-        </div>
+      {/* ═══ DEFAULT VIEW: NOW + ON DECK ═══ */}
+      {filter === 'new' && (nowOrders.length > 0 || onDeckOrders.length > 0) && (
+        <>
+          {/* NOW section */}
+          {nowOrders.length > 0 && (
+            <div style={{
+              border: '2px solid #16a34a', borderRadius: 8, overflow: 'hidden',
+              margin: '24px 0 0',
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 14px', background: 'rgba(22,163,74,0.15)',
+                borderBottom: '1px solid rgba(22,163,74,0.3)',
+              }}>
+                <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>NOW</span>
+                <span style={{ color: '#16a34a', fontSize: 12 }}>Ready to execute — all gates passed, ★ quality grade</span>
+                <span style={{
+                  marginLeft: 'auto', padding: '2px 8px', background: '#16a34a', color: '#000',
+                  borderRadius: 3, fontSize: 11, fontWeight: 700,
+                }}>{nowOrders.length}</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
+                  <TableHeader sort={orderSort} onSort={toggleOrderSort} />
+                  <tbody>
+                    {nowOrders.map(o => (
+                      <OrderRow key={`now-${o.ticker}`} o={o} orders={allChartTickers.map(t => ({ ticker: t }))}
+                        navScale={navScale} setChartTickers={setChartTickers} setChartIndex={setChartIndex} dimmed={false} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ON DECK section */}
+          {onDeckOrders.length > 0 && (
+            <div style={{
+              border: '2px solid #f97316', borderRadius: 8, overflow: 'hidden',
+              margin: '20px 0 0',
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 14px', background: 'rgba(249,115,22,0.10)',
+                borderBottom: '1px solid rgba(249,115,22,0.3)',
+              }}>
+                <span style={{ color: '#f97316', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>ON DECK</span>
+                <span style={{ color: '#f97316', fontSize: 12 }}>Batting order — sorted by gap% to trigger ({BEST_THRESHOLD}%)</span>
+                <span style={{
+                  marginLeft: 'auto', padding: '2px 8px', background: '#f97316', color: '#000',
+                  borderRadius: 3, fontSize: 11, fontWeight: 700,
+                }}>{onDeckOrders.length}</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
+                  <TableHeader sort={orderSort} onSort={toggleOrderSort} />
+                  <tbody>
+                    {onDeckOrders.map((o, i) => (
+                      <OrderRow key={`deck-${o.ticker}`} o={o} orders={allChartTickers.map(t => ({ ticker: t }))}
+                        navScale={navScale} setChartTickers={setChartTickers} setChartIndex={setChartIndex} dimmed={true} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {nowOrders.length === 0 && onDeckOrders.length > 0 && (
+            <div style={{
+              margin: '24px 0 0', padding: '14px 18px',
+              background: 'rgba(252,240,0,0.06)', border: '1px solid rgba(252,240,0,0.2)',
+              borderRadius: 6, fontSize: 12, color: '#fcf000',
+            }}>
+              No stocks ready NOW — {onDeckOrders.length} on deck warming up. Gap% updates every 60 seconds during market hours.
+            </div>
+          )}
+        </>
       )}
-      {orders.length > 0 && (
-        <div style={{ overflowX: 'auto', margin: '8px 0' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
-            <thead>
-              <tr style={{ background: '#1a1a1a', color: '#fcf000', textAlign: 'left' }}>
-                <SortHeader label="Action"      sortKey="action"     currentSort={orderSort} onSort={toggleOrderSort} />
-                <SortHeader label="Mode"        sortKey="mode"       currentSort={orderSort} onSort={toggleOrderSort} />
-                <SortHeader label="Signal"      sortKey="signal"     currentSort={orderSort} onSort={toggleOrderSort} />
-                <SortHeader label="Ticker"      sortKey="ticker"     currentSort={orderSort} onSort={toggleOrderSort} />
-                <SortHeader label="Sector"      sortKey="sector"     currentSort={orderSort} onSort={toggleOrderSort} />
-                <SortHeader label="Sector 💪"   sortKey="tier"       currentSort={orderSort} onSort={toggleOrderSort} />
-                <SortHeader label="Gap %"       sortKey="gapPct"     currentSort={orderSort} onSort={toggleOrderSort} align="right" />
-                <SortHeader label="Slope %"     sortKey="slope"      currentSort={orderSort} onSort={toggleOrderSort} align="right" />
-                <SortHeader label="Price"       sortKey="price"      currentSort={orderSort} onSort={toggleOrderSort} align="right" />
-                <SortHeader label="Stop"        sortKey="stop"       currentSort={orderSort} onSort={toggleOrderSort} align="right" />
-                <SortHeader label="Risk %"      sortKey="riskPct"    currentSort={orderSort} onSort={toggleOrderSort} align="right" />
-                <SortHeader label="L1 sh"      sortKey="entrySh"    currentSort={orderSort} onSort={toggleOrderSort} align="right" />
-                <SortHeader label="Full Pos"   sortKey="fullPos"    currentSort={orderSort} onSort={toggleOrderSort} align="right" />
-                <SortHeader label="Entry $"     sortKey="entryDol"   currentSort={orderSort} onSort={toggleOrderSort} align="right" />
-                <SortHeader label="Heat $"      sortKey="heat"       currentSort={orderSort} onSort={toggleOrderSort} align="right" />
-                <SortHeader label="Signal Date" sortKey="signalDate" currentSort={orderSort} onSort={toggleOrderSort} />
-                <SortHeader label="Status"      sortKey="status"     currentSort={orderSort} onSort={toggleOrderSort} />
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map(o => {
-                const actionLabel = getActionLabel(o);
-                const isBuyActive = actionLabel === '★ BUY LONG' || actionLabel === 'LONG';
-                const isSSActive = actionLabel === '★ SELL SHORT' || actionLabel === 'SHORT';
-                const isWait = actionLabel === 'WAIT LONG' || actionLabel === 'WAIT SHORT';
-                const isNoGo = actionLabel === 'NO GO';
-                const rowBg = isBuyActive ? 'rgba(22,163,74,0.12)'
-                  : isSSActive ? 'rgba(220,38,38,0.08)'
-                  : isWait ? 'rgba(252,240,0,0.06)'
-                  : isNoGo ? 'rgba(100,100,100,0.08)'
-                  : 'transparent';
-                const rowBorder = isBuyActive ? '1px solid rgba(22,163,74,0.30)'
-                  : isSSActive ? '1px solid rgba(220,38,38,0.20)'
-                  : isWait ? '1px solid rgba(252,240,0,0.20)'
-                  : isNoGo ? '1px solid rgba(100,100,100,0.20)'
-                  : '1px solid #1a1a1a';
-                const leftAccent = isBuyActive ? '3px solid #16a34a' : isSSActive ? '3px solid #dc2626' : isWait ? '3px solid #fcf000' : isNoGo ? '3px solid #666' : 'none';
-                return (
-                <tr key={`${o.signal}-${o.ticker}`} style={{
-                  borderBottom: rowBorder,
-                  borderLeft: leftAccent,
-                  background: rowBg,
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  const tickers = orders.map(x => x.ticker);
-                  setChartTickers(tickers);
-                  setChartIndex(tickers.indexOf(o.ticker));
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = '#1a1a1a'}
-                onMouseLeave={e => e.currentTarget.style.background = rowBg}
-                >
-                  <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-                    {isBuyActive ? (
-                      <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#16a34a', color: '#fff' }}>
-                        {actionLabel}
-                      </span>
-                    ) : isSSActive ? (
-                      <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#dc2626', color: '#fff' }}>
-                        {actionLabel}
-                      </span>
-                    ) : isWait ? (
-                      <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#fcf000', color: '#000' }}>
-                        {actionLabel}
-                      </span>
-                    ) : (
-                      <span style={{ padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: '#666', color: '#fff' }}>
-                        NO GO
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '6px 10px', textAlign: 'center' }}><ModeBadge ticker={o.ticker} /></td>
-                  <td style={{ padding: '6px 10px', fontWeight: 700, color: o.signal === 'BL' ? '#16a34a' : '#dc2626' }}>
-                    {o.signal}
-                    {(() => {
-                      const n = computeWeeksAgo(o.signalDate, o.lastBarDate);
-                      return n != null ? <span style={{ color: '#aaa', fontWeight: 500 }}>+{n}</span> : null;
-                    })()}
-                  </td>
-                  <td style={{ padding: '6px 10px', fontWeight: 700, color: '#fff' }}>{o.ticker}</td>
-                  <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{o.sectorId} {o.sectorName?.split(' ').slice(0, 2).join(' ')}</td>
-                  <td style={{ padding: '6px 10px' }}><TierPill tier={o.sectorTier} /></td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', color: o.gapPct >= 15 ? '#fcf000' : o.gapPct >= 12 ? '#16a34a' : '#aaa' }}>{o.gapPct != null ? `${o.gapPct.toFixed(1)}%` : '—'}</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', color: o.wEmaSlope != null && o.wEmaSlope < 20 ? '#16a34a' : '#aaa' }}>{o.wEmaSlope != null ? `${o.wEmaSlope.toFixed(1)}%` : '—'}</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(o.currentPrice)}</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.stopPrice)}</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', color: o.riskPct > 20 ? '#fcf000' : '#aaa' }}>{o.riskPct?.toFixed(1)}%</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>
-                    {o.lot1Shares?.toLocaleString()}
-                  </td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', color: '#888' }}>
-                    {o.targetShares?.toLocaleString()}
-                  </td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.lot1Dollar, { k: true })}</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', color: '#f97316', fontWeight: 600 }}>{fmtUsd(o._heatDollar)}</td>
-                  <td style={{ padding: '6px 10px', color: '#888' }}>{o.signalDate || '—'}</td>
-                  <td style={{ padding: '6px 10px' }}>
-                    {o.isNewSignal
-                      ? <span style={{ color: '#fcf000', fontWeight: 700, fontSize: 10 }}>★ NEW</span>
-                      : <span style={{ color: '#666', fontSize: 10 }}>RUNNING</span>}
-                  </td>
-                </tr>
-              ); })}
-            </tbody>
-          </table>
-        </div>
+
+      {/* ═══ FILTERED VIEW (All / BL only / SS only) ═══ */}
+      {filter !== 'new' && filteredOrders && filteredOrders.length > 0 && (
+        <>
+          <div style={{
+            display: 'flex', alignItems: 'baseline', gap: 10, margin: '24px 0 8px',
+            borderBottom: '2px solid #f97316', paddingBottom: 6,
+          }}>
+            <h2 style={{ color: '#f97316', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>PNTHR Weekly Orders</h2>
+            <span style={{ color: '#888', fontSize: 11 }}>
+              {filter === 'all' ? 'All active signals — current + prior weeks' : `${filter.toUpperCase()} signals only`}
+            </span>
+          </div>
+          <div style={{ overflowX: 'auto', margin: '8px 0' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
+              <TableHeader sort={orderSort} onSort={toggleOrderSort} />
+              <tbody>
+                {filteredOrders.map(o => (
+                  <OrderRow key={`all-${o.signal}-${o.ticker}`} o={o} orders={filteredOrders}
+                    navScale={navScale} setChartTickers={setChartTickers} setChartIndex={setChartIndex} dimmed={false} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* Live Positions */}
@@ -525,8 +666,8 @@ export default function AiOrdersPage() {
       <div style={{ marginTop: 16, fontSize: 11, color: '#666', lineHeight: 1.6 }}>
         Sized at 1% NAV vitality × sector multiplier on your ${(userNav || 100000).toLocaleString()} NAV. Lot 1 = 35% of full target.
         BL skipped if sector NO_GO · SS skipped if sector GO · PAI300 36W EMA hard gate blocks all BL in bear regime.
-        Quality grades: BEST (Gap{'>'}15%) · BETTER (Gap{'>'}12%) · GOOD (meets combo minimum).
-        Sector rotation gates all entries (APEX v7). 10% portfolio heat cap enforced.
+        Quality grades: BEST (Gap≥12% + Slope{'<'}50%) · BETTER (Gap≥9%) · GOOD (default).
+        Gap% updates every 60 seconds during market hours. 10% portfolio heat cap enforced.
       </div>
 
       {chartTickers.length > 0 && (

@@ -1188,7 +1188,7 @@ function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, totalStocks = 0, 
       </div>
       <div style={{ color: dirColor, fontSize: 11, fontWeight: 600, marginTop: 2 }}>{dir}</div>
 
-      {/* New signal ratio bar — click left=BL, right=SS */}
+      {/* New signal ratio bar — left=SS (red), right=BL (green) to match gauge */}
       {(() => {
         const total = newBl + newSs;
         if (total === 0) return (
@@ -1200,20 +1200,20 @@ function PNTHRMiniGauge({ label, bl, ss, newBl = 0, newSs = 0, totalStocks = 0, 
         const ssPct = newSs / total * 100;
         return (
           <div style={{ width: '90%', height: 18, marginTop: 5, borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
-            {newBl > 0 && (
-              <div onClick={e => { e.stopPropagation(); onNewBlClick?.(); }}
-                style={{ flex: blPct, background: '#28a745', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 18, cursor: onNewBlClick ? 'pointer' : 'default', transition: 'filter 0.12s' }}
-                onMouseEnter={e => { if (onNewBlClick) e.currentTarget.style.filter = 'brightness(1.3)'; }}
-                onMouseLeave={e => e.currentTarget.style.filter = 'none'}>
-                <span style={{ color: '#fff', fontSize: 10, fontWeight: 800, fontFamily: 'monospace' }}>{newBl}</span>
-              </div>
-            )}
             {newSs > 0 && (
               <div onClick={e => { e.stopPropagation(); onNewSsClick?.(); }}
                 style={{ flex: ssPct, background: '#c0392b', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 18, cursor: onNewSsClick ? 'pointer' : 'default', transition: 'filter 0.12s' }}
                 onMouseEnter={e => { if (onNewSsClick) e.currentTarget.style.filter = 'brightness(1.3)'; }}
                 onMouseLeave={e => e.currentTarget.style.filter = 'none'}>
                 <span style={{ color: '#fff', fontSize: 10, fontWeight: 800, fontFamily: 'monospace' }}>{newSs}</span>
+              </div>
+            )}
+            {newBl > 0 && (
+              <div onClick={e => { e.stopPropagation(); onNewBlClick?.(); }}
+                style={{ flex: blPct, background: '#28a745', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 18, cursor: onNewBlClick ? 'pointer' : 'default', transition: 'filter 0.12s' }}
+                onMouseEnter={e => { if (onNewBlClick) e.currentTarget.style.filter = 'brightness(1.3)'; }}
+                onMouseLeave={e => e.currentTarget.style.filter = 'none'}>
+                <span style={{ color: '#fff', fontSize: 10, fontWeight: 800, fontFamily: 'monospace' }}>{newBl}</span>
               </div>
             )}
           </div>

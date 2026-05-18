@@ -447,6 +447,7 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
   // oldPermId for MODIFY_STOP, lot for PLACE/MODIFY_LOT_TRIGGER), refuse if
   // ANY pending command of the same identity already exists, regardless of age.
   const PENDING_DEDUP_COMMANDS = new Set([
+    'PLACE_STOP',
     'PLACE_LOT_TRIGGER',
     'MODIFY_LOT_TRIGGER',
     'BUY_MARKET_TO_CATCH_UP',
@@ -454,14 +455,19 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
     'MODIFY_STOP',
   ]);
   if (!opts.skipDedup && PENDING_DEDUP_COMMANDS.has(command)) {
+    const extraMatch = dedupExtraMatch(command, request);
     const existing = await db.collection(COLLECTION).findOne({
       ownerId,
       'request.ticker': request.ticker,
       command,
-      status: 'PENDING',
-      ...dedupExtraMatch(command, request),
+      $or: [
+        { status: 'PENDING' },
+        { status: 'EXECUTING' },
+        { status: 'DONE', executedAt: { $gt: new Date(Date.now() - 5 * 60 * 1000) } },
+      ],
+      ...extraMatch,
     });
-    if (existing) return { skipped: 'PENDING_DUPLICATE_EXISTS' };
+    if (existing) return { skipped: existing.status === 'DONE' ? 'RECENTLY_DONE_DUPLICATE' : `${existing.status}_DUPLICATE_EXISTS` };
   }
 
   // Rule 2c — failure backoff. If this exact command identity has FAILED 3+

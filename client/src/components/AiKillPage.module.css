@@ -1,0 +1,335 @@
+/* AiKillPage.module.css — PNTHR AI Kill scoring dashboard
+   Mirrors ApexPage.module.css layout with blue accent instead of green */
+
+.page {
+  padding: 24px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 24px 24px 16px;
+  background: #111111;
+  color: #ffffff;
+  margin-bottom: 20px;
+  gap: 16px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fcf000;
+  margin: 0 0 4px 0;
+}
+
+.pantherLogo {
+  height: 36px;
+  width: auto;
+}
+
+.subtitle {
+  color: #aaaaaa;
+  font-size: 13px;
+  margin: 0;
+}
+
+.headerRight {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.refreshBtn {
+  background: #fcf000;
+  color: #111111;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.refreshBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.refreshBtn:hover:not(:disabled) { opacity: 0.85; }
+
+/* ── Context Banner ──────────────────────────────────────────────────────────── */
+.contextBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #1a1a2e;
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.contextMeta { color: #6b7280; margin-left: auto; }
+
+/* ── Tier Summary Cards ──────────────────────────────────────────────────────── */
+.tierCards {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.tierCard {
+  background: #111827;
+  border: 2px solid #374151;
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 100px;
+  transition: background 0.15s, transform 0.1s;
+}
+.tierCard:hover { background: #1f2937; transform: translateY(-1px); }
+.tierCardActive { background: #1f2937 !important; }
+.tierCardCount {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+.tierCardName {
+  font-size: 9px;
+  font-weight: 700;
+  color: #9ca3af;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* ── Controls Bar ─────────────────────────────────────────────────────────────── */
+.controlsBar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 16px;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 6px 10px;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.controlsLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sideTab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #9ca3af;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.sideTab:hover { background: rgba(255,255,255,0.05); color: #e5e7eb; }
+.sideTabActive {
+  background: rgba(252, 240, 0, 0.12) !important;
+  color: #fcf000 !important;
+  border-color: rgba(252, 240, 0, 0.25);
+  font-weight: 700;
+}
+.controlsMeta {
+  color: #6b7280;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────────── */
+.tableWrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.table {
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: white;
+  font-size: 14px;
+}
+.table thead tr {
+  background: linear-gradient(135deg, #111111 0%, #000000 100%);
+}
+.table th {
+  padding: 12px 16px;
+  min-height: 60px;
+  vertical-align: middle;
+  text-align: left;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: normal;
+  line-height: 1.3;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.table td {
+  padding: 14px 16px;
+  color: #212121;
+  vertical-align: middle;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+/* ── Rows ────────────────────────────────────────────────────────────────────── */
+.row {
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.row:nth-child(even) { background-color: #f7f8fa; }
+.row:hover { background-color: #efefef !important; }
+
+/* Selected row — blue accent */
+.row.selectedRow td          { background: #dbeafe !important; }
+.row.selectedRow:hover td    { background: #bfdbfe !important; }
+.row.selectedRow .killRankCell { border-left: 4px solid #3b82f6 !important; }
+
+/* Top 10 — pale blue instead of green */
+.top10Row td {
+  background: #eff6ff !important;
+}
+.top10Row:hover td {
+  background: #dbeafe !important;
+}
+
+/* ── Kill Rank ───────────────────────────────────────────────────────────────── */
+.killRankCell {
+  font-weight: 700;
+  font-size: 15px;
+  color: #b4b4b4;
+  text-align: center;
+  width: 68px;
+  white-space: nowrap;
+  vertical-align: middle;
+  padding: 6px 8px !important;
+}
+
+/* ── Score Badge — pill shape ──────────────────────────────────────────────── */
+.scoreCell { text-align: center; }
+.scoreBadge {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 900;
+  min-width: 48px;
+  height: 36px;
+  line-height: 36px;
+  padding: 0 8px;
+  text-align: center;
+  border-radius: 18px;
+}
+
+/* ── Tier Badge ──────────────────────────────────────────────────────────────── */
+.tierBadge {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ── Ticker Cell ─────────────────────────────────────────────────────────────── */
+.tickerCell { min-width: 120px; }
+.tickerText { font-weight: 700; font-size: 15px; color: #111111; }
+.sectorText { font-size: 11px; color: #888; margin-top: 2px; }
+.tickerClickable { cursor: pointer !important; }
+.tickerClickable:hover .tickerText { text-decoration: underline; }
+
+/* ── Signal Badge ────────────────────────────────────────────────────────────── */
+.sigBadgeBL {
+  background: #14532d;
+  color: #86efac;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+.sigBadgeSS {
+  background: #7f1d1d;
+  color: #fca5a5;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+/* ── Score columns ───────────────────────────────────────────────────────────── */
+.totalCell {
+  font-weight: 700;
+  font-family: monospace;
+  text-align: right;
+}
+.dimCell {
+  text-align: right;
+  font-family: monospace;
+  color: #666;
+}
+.positive { color: #16a34a !important; font-weight: 600; }
+.negative { color: #dc2626 !important; font-weight: 600; }
+.priceCell {
+  text-align: right;
+  font-family: monospace;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────────── */
+.footer {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #111827;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+/* ── Loading / Error ─────────────────────────────────────────────────────────── */
+.loadingState {
+  text-align: center;
+  padding: 60px 24px;
+  color: #9ca3af;
+}
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid #374151;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.errorState {
+  text-align: center;
+  padding: 40px;
+  color: #f87171;
+}

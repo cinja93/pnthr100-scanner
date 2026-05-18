@@ -203,6 +203,7 @@ export default function AiKillPage() {
                 <th>Ticker</th>
                 <th>Signal</th>
                 <th>Sector</th>
+                <th style={{ textAlign: 'center' }}>Sector<br/>Status</th>
                 <th style={{ textAlign: 'right' }}>L1<br/>Shares</th>
                 <th style={{ textAlign: 'right' }}>Total<br/>Shares</th>
                 <th style={{ textAlign: 'right' }}>D1</th>
@@ -285,6 +286,15 @@ export default function AiKillPage() {
                     {/* Sector */}
                     <td style={{ fontSize: 12, color: '#666' }}>
                       S{s.sectorId} {s.sectorName?.split(' ').slice(0, 2).join(' ')}
+                    </td>
+
+                    {/* Sector Status */}
+                    <td style={{ textAlign: 'center' }}>
+                      {s.sectorTier === 'GO'
+                        ? <span className={styles.sigBadgeBL}>BULLISH</span>
+                        : s.sectorTier === 'NO_GO'
+                          ? <span className={styles.sigBadgeSS}>BEARISH</span>
+                          : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, background: '#854d0e', color: '#fde047', letterSpacing: '0.04em' }}>NEUTRAL</span>}
                     </td>
 
                     {/* L1 Shares */}

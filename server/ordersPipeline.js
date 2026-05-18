@@ -28,11 +28,18 @@ import { getDirectionIndexFromFlags }     from './gateLogic.js';
 import { getEtfEmaPeriod }                 from './sectorEmaConfig.js';
 import { fetchEarningsMap }                from './assistantService.js';
 import { getAiUniverseHoldings }           from './aiUniverseService.js';
+import { CARNIVORE_MODE_TICKERS }          from './data/strategyMode.js';
 
-// AI 300 universe ticker set — overlap tickers are handled exclusively by the
-// AI 300 pipeline (with strategy-mode-aware rules). Filtering them out of the
-// 679 pipeline prevents duplicate orders for the same ticker.
+// AI 300 universe ticker set — used to exclude non-Carnivore AI 300 tickers
+// from the 679 pipeline. Carnivore tickers ARE included in the gate + ranking
+// process (they must compete against the full 679 universe) but are separated
+// from the visual 679 Orders output to prevent duplicate display.
 const AI_UNIVERSE_TICKERS = new Set(getAiUniverseHoldings().map(h => h.ticker));
+
+// In-memory cache of Carnivore tickers that passed all 679 gates + top-N ranking.
+// Updated each time the orders pipeline runs. The AI Orders pipeline reads this
+// instead of using the old Kill-tier shortcut.
+let _lastCarnivoreQualified = [];
 
 // NEW_ASYM_SS selection parameters, as run by the canonical Wagyu backtest
 // (server/backtest/exportPyramidNav.js:391-435). These numbers produced the
@@ -179,15 +186,14 @@ export async function runOrdersPipeline({ type = 'WEEKLY' } = {}) {
 
   console.log(`[Orders] Starting with ${allStocks.length} scored stocks`);
 
-  // Step 2: Filter to stocks with active signals, excluding AI 300 universe
-  // tickers. Overlap tickers are handled exclusively by the AI 300 orders
-  // pipeline (aiOrdersPipeline.js) with strategy-mode-aware rules (679 or AI
-  // depending on per-ticker backtest results). This prevents duplicate orders.
+  // Step 2: Filter to stocks with active signals. Carnivore tickers (26 overlap
+  // names) are INCLUDED — they must compete against the full 679 universe through
+  // all gates + top-N ranking. Non-Carnivore AI 300 tickers are excluded.
   const withSignals = allStocks.filter(s =>
     (s.signal === 'BL' || s.signal === 'SS') && !s.overextended && s.apexScore > 0
-    && !AI_UNIVERSE_TICKERS.has(s.ticker)
+    && (!AI_UNIVERSE_TICKERS.has(s.ticker) || CARNIVORE_MODE_TICKERS.has(s.ticker))
   );
-  console.log(`[Orders] ${withSignals.length} stocks with active BL/SS signals (AI 300 overlap excluded)`);
+  console.log(`[Orders] ${withSignals.length} stocks with active BL/SS signals (${withSignals.filter(s => CARNIVORE_MODE_TICKERS.has(s.ticker)).length} Carnivore included)`);
 
   // Step 3: Apply gates
   const gateLog = [];
@@ -245,15 +251,20 @@ export async function runOrdersPipeline({ type = 'WEEKLY' } = {}) {
   ssPool.forEach((s, i) => { s.filteredRank = i + 1; });
 
   // Step 5: Take top N — matches backtest NEW_ASYM_SS selection exactly.
+  // Carnivore tickers that made the cut are separated — they qualify for
+  // AI Orders but don't appear on the visual 679 Orders page.
   const blOrders = blPool.slice(0, BL_TOP_N);
   const ssOrders = ssPool.slice(0, SS_TOP_N);
   const allOrders = [...blOrders, ...ssOrders];
 
-  console.log(`[Orders] Selected ${blOrders.length} BL + ${ssOrders.length} SS = ${allOrders.length} orders`);
+  const carnivoreQualified = allOrders.filter(s => CARNIVORE_MODE_TICKERS.has(s.ticker));
+  const pureOrders = allOrders.filter(s => !CARNIVORE_MODE_TICKERS.has(s.ticker));
 
-  // Step 6: Build order instructions
+  console.log(`[Orders] Selected ${blOrders.length} BL + ${ssOrders.length} SS = ${allOrders.length} orders (${carnivoreQualified.length} Carnivore qualified, ${pureOrders.length} on 679 page)`);
+
+  // Step 6: Build order instructions (679 page shows only pure 679 tickers)
   const weekOf = getLastFriday();
-  const orders = allOrders.map(stock => ({
+  const orders = pureOrders.map(stock => ({
     ticker:         stock.ticker,
     companyName:    stock.companyName,
     signal:         stock.signal,
@@ -333,6 +344,32 @@ export async function runOrdersPipeline({ type = 'WEEKLY' } = {}) {
     ssSelected:      ssOrders.length,
   };
 
+  // Build Carnivore qualified order entries (same shape as 679 orders)
+  const carnivoreOrderEntries = carnivoreQualified.map(stock => ({
+    ticker:         stock.ticker,
+    companyName:    stock.companyName,
+    signal:         stock.signal,
+    direction:      stock.signal === 'BL' ? 'LONG' : 'SHORT',
+    killScore:      stock.apexScore,
+    killRank:       stock.killRank,
+    filteredRank:   stock.filteredRank,
+    tier:           stock.tier,
+    sector:         stock.sector,
+    exchange:       stock.exchange,
+    entryPrice:     stock.currentPrice,
+    signalPrice:    stock.scoreDetail?.d3?.entryPrice || stock.currentPrice,
+    stopPrice:      stock.stopPrice || null,
+    currentPrice:   stock.currentPrice,
+    d2Score:        stock.scores?.d2 ?? 0,
+    d3Confirmation: stock.confirmation,
+    signalAge:      stock.signalAge,
+    weeklyRsi:      stock.weeklyRsi,
+    gatesPassed:    stock.gatesPassed,
+  }));
+
+  // Cache qualified Carnivore orders for the AI Orders pipeline to consume
+  _lastCarnivoreQualified = carnivoreOrderEntries;
+
   // Step 8: Persist to MongoDB (one doc per week per type)
   const orderDoc = {
     weekOf,
@@ -344,6 +381,7 @@ export async function runOrdersPipeline({ type = 'WEEKLY' } = {}) {
     ssCrashActive,
     sectorSummary,
     orders,
+    carnivoreQualified: carnivoreOrderEntries,
     stats,
     gateLog: gateLog.slice(0, 100), // Keep top 100 gate entries to avoid bloat
   };
@@ -621,4 +659,16 @@ export async function ordersGetHistory(req, res) {
     console.error('[Orders History] Error:', err);
     res.status(500).json({ error: err.message });
   }
+}
+
+// Returns Carnivore tickers that passed all 679 gates AND made the top-N cut.
+// Called by the AI Orders pipeline instead of the old Kill-tier shortcut.
+// Falls back to the persisted doc if the in-memory cache is empty.
+export async function getQualifiedCarnivoreOrders() {
+  if (_lastCarnivoreQualified.length > 0) return _lastCarnivoreQualified;
+
+  const db = await connectToDatabase();
+  if (!db) return [];
+  const doc = await db.collection('pnthr_orders').findOne({}, { sort: { weekOf: -1 }, projection: { carnivoreQualified: 1 } });
+  return doc?.carnivoreQualified || [];
 }

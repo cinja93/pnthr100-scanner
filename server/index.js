@@ -2161,6 +2161,7 @@ app.get('/api/ai-orders/history', async (req, res) => {
 
 app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, res) => {
   try {
+    await runOrdersPipeline({ type: 'CONFIRMED' });
     const doc = await runAiOrdersPipeline(req.body || {});
     let execResult = null;
     if (req.body?.autoExec) {
@@ -5868,6 +5869,12 @@ cron.schedule('15 16 * * 1-5', async () => {
         console.log('[AI300 Kill History] case studies + appearances updated');
       }
     } catch (e) { console.error('[CRON] AI300 Kill History failed:', e.message); }
+    // Run the 679 Orders pipeline to refresh Carnivore qualification (gates + rank).
+    // AI Orders consumes this — Carnivore tickers must pass full 679 gates.
+    try {
+      console.log('[Orders] refreshing 679 pipeline for Carnivore qualification...');
+      await runOrdersPipeline({ type: 'CONFIRMED' });
+    } catch (e) { console.error('[CRON] 679 Orders refresh failed:', e.message); }
     // Regenerate the AI Orders sheet (consumes fresh sector tiers + sector rotation).
     try {
       console.log('[AI Orders] regenerating order sheet...');

@@ -83,6 +83,18 @@ function defineConfigs() {
       bl: { d2Min: 0, macroAligned: true, sectorAligned: true },
       ss: { blocked: true },
     },
+    {
+      name: 'ASYM_A_5D_STRICT_PYR',
+      desc: 'Asymmetric A + BL requires sector 5D > 0%',
+      bl: { d2Min: 0, macroAligned: true, sectorAligned: true, maxKillRank: 10, minAnalyze: 70, sectorMomentumMin: 0 },
+      ss: { d2Min: 0, macroAligned: true, sectorAligned: true, macroSlopeFalling: true, sectorMomentumMax: -1, maxKillRank: 5, minAnalyze: 85 },
+    },
+    {
+      name: 'ASYM_A_5D_LOOSE_PYR',
+      desc: 'Asymmetric A + BL requires sector 5D > -1%',
+      bl: { d2Min: 0, macroAligned: true, sectorAligned: true, maxKillRank: 10, minAnalyze: 70, sectorMomentumMin: -1 },
+      ss: { d2Min: 0, macroAligned: true, sectorAligned: true, macroSlopeFalling: true, sectorMomentumMax: -1, maxKillRank: 5, minAnalyze: 85 },
+    },
   ];
 }
 
@@ -93,6 +105,7 @@ function passesFilter(signal, filter) {
   if (filter.sectorAligned && !signal.sectorAligned) return false;
   if (filter.macroSlopeFalling && !signal.macroSlopeFalling) return false;
   if (filter.sectorMomentumMax != null && (signal.sector5dMomentum == null || signal.sector5dMomentum > filter.sectorMomentumMax)) return false;
+  if (filter.sectorMomentumMin != null && (signal.sector5dMomentum == null || signal.sector5dMomentum < filter.sectorMomentumMin)) return false;
   if (filter.maxKillRank != null && (signal.killRank == null || signal.killRank > filter.maxKillRank)) return false;
   if (filter.minAnalyze != null && (signal.analyzePct == null || signal.analyzePct < filter.minAnalyze)) return false;
   return true;

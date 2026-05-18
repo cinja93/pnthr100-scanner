@@ -24,6 +24,32 @@ function getTierConfig(tierName) {
   return TIERS.find(t => t.name === tierName) || TIERS[9];
 }
 
+const COL_INFO = {
+  killScore: 'The overall Kill Score combines sector alignment, entry quality (gap + slope), signal freshness, and the market regime multiplier into one number. Higher = stronger trade setup. Scoring runs daily at ~5:30pm ET.',
+  tier: 'Tier is determined by Kill Score. ALPHA AI KILL (≥130) is the strongest — the PNTHR has its teeth in. STRIKING (≥100) through DORMANT (<0) rank setups from strongest to weakest. Focus on HUNTING tier and above for the best trade opportunities.',
+  signal: 'BL = Buy Long (price crossed above its sector-optimized EMA with a rising slope). SS = Sell Short (crossed below with a falling slope). The +N shows how many weeks since the signal fired — fresher signals (lower N) score higher.',
+  sector: 'The AI sector this stock belongs to. There are 14 proprietary AI sectors that group the 300 AI Universe stocks by theme (Hyperscalers, Software, Cybersecurity, Robotics, etc.).',
+  sectorStatus: 'Shows whether the sector\'s trend is favorable. BULLISH (GO) = the sector is above its optimized EMA and trending up. BEARISH (NO_GO) = below and trending down. NEUTRAL = mixed. Trading with a BULLISH sector adds +15 to the score; against it costs -15.',
+  sectorD2: 'The sector alignment score (±15 points). +15 = you\'re trading in the same direction as the sector trend (long in a BULLISH sector, short in a BEARISH one). -15 = you\'re fighting the sector. This is one of the biggest score drivers.',
+  gapPct: 'How far the stock price is from its sector-optimized EMA, as a percentage. Green (≥12%) = strong gap, ideal entry. Yellow (9-12%) = moderate gap, acceptable. Grey (<9%) = tight gap, may want to wait for more separation before entering.',
+  slopePct: 'The annualized rate of change of the stock\'s EMA over the last 8 weeks. Green (<50%) = steady, controlled trend. Yellow (50-65%) = accelerating, use caution. Red (>65%) = overheated slope, the move may be extended.',
+  price: 'Current market price of the stock as of the last weekly bar close.',
+  riskPct: 'The distance from entry price to the initial protective stop, as a percentage of entry price. Lower risk % = tighter stop = less capital at risk per share. Under 5% is ideal; 5-10% is acceptable; above 10% means wider risk per trade.',
+  l1Shares: 'The number of shares for your first lot (L1 = "The Scent"), sized to your account NAV. L1 is 35% of the total pyramid position. This is the initial entry — if the stock works, you add L2-L5 at higher prices.',
+  totalShares: 'Total shares across all 5 pyramid lots (L1-L5) if fully filled. This is the maximum position size based on your NAV and the 10% per-ticker concentration cap. Your actual position starts at L1 and builds up only if the trade works.',
+  multiplier: 'The PAI300 regime multiplier (0.70×–1.30×). In a bull regime (PAI300 above its 36W EMA), long signals are amplified up to 1.30× and shorts dampened to 0.70×. Bear regime is the reverse. This multiplies the entire score.',
+  status: 'Shows ★ NEW when the signal just fired this week. New signals get a +10 freshness bonus. After the first week, the score loses -1 point per week of age.',
+};
+
+function InfoIcon({ text, onShow }) {
+  return (
+    <span
+      className={styles.infoIcon}
+      onClick={e => { e.stopPropagation(); onShow(text, e); }}
+    >ⓘ</span>
+  );
+}
+
 function fmtUsd(n) {
   if (n == null || isNaN(n)) return '—';
   return n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
@@ -42,6 +68,12 @@ export default function AiKillPage() {
   const [runMsg, setRunMsg] = useState(null);
   const [selectedTicker, setSelectedTicker] = useState(null);
   const [nav, setNav] = useState(100_000);
+  const [infoPopup, setInfoPopup] = useState(null);
+
+  function showInfo(text, e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setInfoPopup({ text, x: rect.left, y: rect.bottom + 6 });
+  }
 
   useEffect(() => {
     fetchNav()
@@ -198,21 +230,21 @@ export default function AiKillPage() {
             <thead>
               <tr>
                 <th style={{ textAlign: 'center', width: 68 }}>#</th>
-                <th style={{ textAlign: 'center' }}>Kill<br/>Score</th>
-                <th>Tier</th>
+                <th style={{ textAlign: 'center' }}>Kill<br/>Score <InfoIcon text={COL_INFO.killScore} onShow={showInfo} /></th>
+                <th>Tier <InfoIcon text={COL_INFO.tier} onShow={showInfo} /></th>
                 <th>Ticker</th>
-                <th>Signal</th>
-                <th className={styles.sectorGroupLeft}>Sector</th>
-                <th style={{ textAlign: 'center' }}>Sector<br/>Status</th>
-                <th className={styles.sectorGroupRight} style={{ textAlign: 'center' }}>💪</th>
-                <th style={{ textAlign: 'right' }}>Gap %</th>
-                <th style={{ textAlign: 'right' }}>Slope %</th>
-                <th style={{ textAlign: 'right' }}>Price</th>
-                <th style={{ textAlign: 'right' }}>Risk %</th>
-                <th style={{ textAlign: 'right' }}>L1<br/>Shares</th>
-                <th style={{ textAlign: 'right' }}>Total<br/>Shares</th>
-                <th style={{ textAlign: 'right' }}>Multi&shy;plier</th>
-                <th>Status</th>
+                <th>Signal <InfoIcon text={COL_INFO.signal} onShow={showInfo} /></th>
+                <th className={styles.sectorGroupLeft}>Sector <InfoIcon text={COL_INFO.sector} onShow={showInfo} /></th>
+                <th style={{ textAlign: 'center' }}>Sector<br/>Status <InfoIcon text={COL_INFO.sectorStatus} onShow={showInfo} /></th>
+                <th className={styles.sectorGroupRight} style={{ textAlign: 'center' }}>💪 <InfoIcon text={COL_INFO.sectorD2} onShow={showInfo} /></th>
+                <th style={{ textAlign: 'right' }}>Gap % <InfoIcon text={COL_INFO.gapPct} onShow={showInfo} /></th>
+                <th style={{ textAlign: 'right' }}>Slope % <InfoIcon text={COL_INFO.slopePct} onShow={showInfo} /></th>
+                <th style={{ textAlign: 'right' }}>Price <InfoIcon text={COL_INFO.price} onShow={showInfo} /></th>
+                <th style={{ textAlign: 'right' }}>Risk % <InfoIcon text={COL_INFO.riskPct} onShow={showInfo} /></th>
+                <th style={{ textAlign: 'right' }}>L1<br/>Shares <InfoIcon text={COL_INFO.l1Shares} onShow={showInfo} /></th>
+                <th style={{ textAlign: 'right' }}>Total<br/>Shares <InfoIcon text={COL_INFO.totalShares} onShow={showInfo} /></th>
+                <th style={{ textAlign: 'right' }}>Multi&shy;plier <InfoIcon text={COL_INFO.multiplier} onShow={showInfo} /></th>
+                <th>Status <InfoIcon text={COL_INFO.status} onShow={showInfo} /></th>
               </tr>
             </thead>
             <tbody>
@@ -357,6 +389,22 @@ export default function AiKillPage() {
         D5 D6 D7 D8 set to 0 in v1 (rank-history, daily momentum, AI Prey not built yet).
         Cron refreshes daily ~5:30pm ET.
       </div>
+
+      {/* ── Info Popup ────────────────────────────────────────────── */}
+      {infoPopup && (
+        <div
+          className={styles.infoPopupOverlay}
+          onClick={() => setInfoPopup(null)}
+        >
+          <div
+            className={styles.infoPopupBox}
+            style={{ left: Math.min(infoPopup.x, window.innerWidth - 330), top: infoPopup.y }}
+            onClick={e => e.stopPropagation()}
+          >
+            {infoPopup.text}
+          </div>
+        </div>
+      )}
 
       {chartTickers.length > 0 && (
         <AiTickerChartModal

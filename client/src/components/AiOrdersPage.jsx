@@ -108,24 +108,30 @@ function SectorSummaryStrip({ summary }) {
   if (!summary || (!summary.go?.length && !summary.nogo?.length)) return null;
   return (
     <div style={{
-      display: 'flex', flexWrap: 'wrap', gap: 16,
+      display: 'flex', flexDirection: 'column', gap: 6,
       padding: '10px 14px', margin: '12px 0',
       background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 6,
       fontSize: 11, fontFamily: 'monospace', color: '#ccc',
     }}>
       <span style={{ color: '#fcf000', fontWeight: 700 }}>5D Sector Rank · {summary.asOf || '—'}</span>
-      <span style={{ color: '#16a34a', fontWeight: 700 }}>GO ▲</span>
-      {(summary.go || []).map(s => (
-        <span key={`go-${s.sectorId}`} title={s.name}>
-          S{s.sectorId} {((s.fiveDayReturn ?? 0) * 100).toFixed(2)}%
-        </span>
-      ))}
-      <span style={{ color: '#dc2626', fontWeight: 700, marginLeft: 'auto' }}>NO GO ▼</span>
-      {(summary.nogo || []).map(s => (
-        <span key={`nogo-${s.sectorId}`} title={s.name}>
-          S{s.sectorId} {((s.fiveDayReturn ?? 0) * 100).toFixed(2)}%
-        </span>
-      ))}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', alignItems: 'baseline' }}>
+        <span style={{ color: '#16a34a', fontWeight: 700 }}>GO ▲</span>
+        {(summary.go || []).map(s => (
+          <span key={`go-${s.sectorId}`}>
+            <span style={{ color: '#16a34a' }}>{s.name}</span>{' '}
+            <span style={{ color: '#888' }}>{((s.fiveDayReturn ?? 0) * 100).toFixed(2)}%</span>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', alignItems: 'baseline' }}>
+        <span style={{ color: '#dc2626', fontWeight: 700 }}>NO GO ▼</span>
+        {(summary.nogo || []).map(s => (
+          <span key={`nogo-${s.sectorId}`}>
+            <span style={{ color: '#dc2626' }}>{s.name}</span>{' '}
+            <span style={{ color: '#888' }}>{((s.fiveDayReturn ?? 0) * 100).toFixed(2)}%</span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

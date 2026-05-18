@@ -202,8 +202,8 @@ export default function AiKillPage() {
                 <th>Tier</th>
                 <th>Ticker</th>
                 <th>Signal</th>
-                <th>Sector</th>
-                <th className={styles.sectorGroupLeft} style={{ textAlign: 'center' }}>Sector<br/>Status</th>
+                <th className={styles.sectorGroupLeft}>Sector</th>
+                <th style={{ textAlign: 'center' }}>Sector<br/>Status</th>
                 <th className={styles.sectorGroupRight} style={{ textAlign: 'center' }}>💪</th>
                 <th style={{ textAlign: 'right' }}>Gap %</th>
                 <th style={{ textAlign: 'right' }}>Slope %</th>
@@ -284,12 +284,12 @@ export default function AiKillPage() {
                     </td>
 
                     {/* Sector */}
-                    <td style={{ fontSize: 12, color: '#666' }}>
+                    <td className={styles.sectorGroupLeft} style={{ fontSize: 12, color: '#666' }}>
                       S{s.sectorId} {s.sectorName?.split(' ').slice(0, 2).join(' ')}
                     </td>
 
                     {/* Sector Status */}
-                    <td className={styles.sectorGroupLeft} style={{ textAlign: 'center' }}>
+                    <td style={{ textAlign: 'center' }}>
                       {s.sectorTier === 'GO'
                         ? <span className={styles.sigBadgeBL}>BULLISH</span>
                         : s.sectorTier === 'NO_GO'

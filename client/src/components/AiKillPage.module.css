@@ -256,7 +256,7 @@
   white-space: nowrap;
 }
 
-/* ── Sector Group border (Status + 💪) ───────────────────────────────────────── */
+/* ── Sector Group border (Sector + Status + 💪) ─────────────────────────────── */
 .sectorGroupLeft {
   border-left: 2px solid #374151 !important;
 }

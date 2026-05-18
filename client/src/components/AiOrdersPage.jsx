@@ -48,7 +48,33 @@ function getActionLabel(o) {
   return 'NO GO';
 }
 
-function SortHeader({ label, sortKey, currentSort, onSort, align }) {
+function InfoPopup({ text }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span style={{ position: 'relative', display: 'inline-block', marginLeft: 4 }}>
+      <span
+        onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
+        style={{ color: '#888', fontSize: 11, cursor: 'pointer', fontWeight: 400 }}
+      >ⓘ</span>
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setOpen(false)} />
+          <div style={{
+            position: 'absolute', top: 22, right: -10, zIndex: 999,
+            background: '#1a1a1a', border: '1px solid #444', borderRadius: 6,
+            padding: '10px 14px', minWidth: 220, maxWidth: 280,
+            fontSize: 12, lineHeight: 1.5, color: '#ccc', whiteSpace: 'normal',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+          }}>
+            {text}
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+
+function SortHeader({ label, sortKey, currentSort, onSort, align, info }) {
   const active = currentSort.key === sortKey;
   const arrow = active ? (currentSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
   return (
@@ -60,7 +86,7 @@ function SortHeader({ label, sortKey, currentSort, onSort, align }) {
       }}
       title={`Sort by ${label}`}
     >
-      {label}{arrow}
+      {label}{arrow}{info && <InfoPopup text={info} />}
     </th>
   );
 }
@@ -143,9 +169,9 @@ function GapProgressBar({ gapPct, wEmaSlope }) {
   const absGap = Math.abs(gapPct ?? 0);
   const absSlope = Math.abs(wEmaSlope ?? 999);
   const slopeOk = absSlope < 50;
-  const gapOk = absGap >= threshold;
   const pct = Math.min(100, (absGap / threshold) * 100);
-  const isClose = slopeOk && absGap >= threshold * 0.75;
+  const gapColor = absGap >= 12 ? '#16a34a' : absGap >= 9 ? '#fcf000' : '#aaa';
+  const barColor = absGap >= 12 ? '#16a34a' : absGap >= 9 ? '#fcf000' : '#555';
   const blocked = !slopeOk;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -153,10 +179,10 @@ function GapProgressBar({ gapPct, wEmaSlope }) {
         <div style={{
           height: '100%', borderRadius: 3, transition: 'width 0.5s ease',
           width: `${pct}%`,
-          background: blocked ? '#666' : isClose ? '#fcf000' : '#555',
+          background: blocked ? '#666' : barColor,
         }} />
       </div>
-      <span style={{ color: blocked ? '#666' : isClose ? '#fcf000' : '#aaa', fontSize: 11, minWidth: 44, textAlign: 'right' }}>
+      <span style={{ color: blocked ? '#666' : gapColor, fontSize: 11, minWidth: 44, textAlign: 'right' }}>
         {gapPct != null ? `${gapPct.toFixed(1)}%` : '—'}
       </span>
       {blocked && <span style={{ color: '#dc2626', fontSize: 9, fontWeight: 700 }} title={`Slope ${absSlope.toFixed(0)}% — needs to drop below 50%`}>SLOPE</span>}
@@ -261,10 +287,10 @@ function OrderRow({ o, orders, navScale, setChartTickers, setChartIndex, dimmed,
       <td style={{ padding: '6px 10px', textAlign: 'right' }}>
         {dimmed
           ? <GapProgressBar gapPct={o.gapPct} wEmaSlope={o.wEmaSlope} />
-          : <span style={{ color: o.gapPct >= 15 ? '#fcf000' : o.gapPct >= 12 ? '#16a34a' : '#aaa' }}>{o.gapPct != null ? `${o.gapPct.toFixed(1)}%` : '—'}</span>
+          : <span style={{ color: Math.abs(o.gapPct ?? 0) >= 12 ? '#16a34a' : Math.abs(o.gapPct ?? 0) >= 9 ? '#fcf000' : '#aaa' }}>{o.gapPct != null ? `${o.gapPct.toFixed(1)}%` : '—'}</span>
         }
       </td>
-      <td style={{ padding: '6px 10px', textAlign: 'right', color: o.wEmaSlope != null && o.wEmaSlope < 20 ? '#16a34a' : '#aaa' }}>{o.wEmaSlope != null ? `${o.wEmaSlope.toFixed(1)}%` : '—'}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', color: (o.wEmaSlope ?? 999) < 50 ? '#16a34a' : (o.wEmaSlope ?? 999) < 65 ? '#fcf000' : '#dc2626' }}>{o.wEmaSlope != null ? `${o.wEmaSlope.toFixed(1)}%` : '—'}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(o.currentPrice)}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.stopPrice)}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right', color: o.riskPct > 20 ? '#fcf000' : '#aaa' }}>{o.riskPct?.toFixed(1)}%</td>
@@ -287,8 +313,10 @@ function TableHeader({ sort, onSort }) {
         <SortHeader label="Ticker"      sortKey="ticker"     currentSort={sort} onSort={onSort} />
         <SortHeader label="Sector"      sortKey="sector"     currentSort={sort} onSort={onSort} />
         <SortHeader label="Sector 💪"   sortKey="tier"       currentSort={sort} onSort={onSort} />
-        <SortHeader label="Gap %"       sortKey="gapPct"     currentSort={sort} onSort={onSort} align="right" />
-        <SortHeader label="Slope %"     sortKey="slope"      currentSort={sort} onSort={onSort} align="right" />
+        <SortHeader label="Gap %"       sortKey="gapPct"     currentSort={sort} onSort={onSort} align="right"
+          info={<><span style={{ color: '#16a34a', fontWeight: 700 }}>Green</span> = 12%+ (in range, qualifies)<br/><span style={{ color: '#fcf000', fontWeight: 700 }}>Yellow</span> = 9–12% (close, needs price move)<br/><span style={{ color: '#aaa' }}>Grey</span> = under 9% (not close yet)</>} />
+        <SortHeader label="Slope %"     sortKey="slope"      currentSort={sort} onSort={onSort} align="right"
+          info={<><span style={{ color: '#16a34a', fontWeight: 700 }}>Green</span> = under 50% (in range, EMA is flat enough)<br/><span style={{ color: '#fcf000', fontWeight: 700 }}>Yellow</span> = 50–65% (close, EMA is flattening)<br/><span style={{ color: '#dc2626', fontWeight: 700 }}>Red</span> = over 65% (blocked, EMA too steep)</>} />
         <SortHeader label="Price"       sortKey="price"      currentSort={sort} onSort={onSort} align="right" />
         <SortHeader label="Stop"        sortKey="stop"       currentSort={sort} onSort={onSort} align="right" />
         <SortHeader label="Risk %"      sortKey="riskPct"    currentSort={sort} onSort={onSort} align="right" />

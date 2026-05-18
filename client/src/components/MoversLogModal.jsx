@@ -87,20 +87,41 @@ export default function MoversLogModal({ onClose, onTickerClick }) {
         </div>
 
         {/* Stats bar */}
-        {stats && (
-          <div style={{
-            padding: '10px 20px',
-            borderBottom: '1px solid #222',
-            display: 'flex', gap: 24, flexWrap: 'wrap',
-          }}>
-            <StatBox label="Total" value={stats.total || 0} color="#fff" />
-            <StatBox label="Open" value={stats.open || 0} color="#fcf000" />
-            <StatBox label="Closed" value={stats.closed || 0} color="#888" />
-            <StatBox label="Win Rate" value={stats.closed ? `${stats.winRate?.toFixed(0)}%` : '—'} color="#22c55e" />
-            <StatBox label="Avg Return" value={stats.closed ? `${stats.avgReturn >= 0 ? '+' : ''}${stats.avgReturn}%` : '—'} color={returnColor(stats.avgReturn || 0)} />
-            <StatBox label="Avg Days" value={stats.closed ? stats.avgDaysHeld : '—'} color="#aaa" />
-          </div>
-        )}
+        {stats && (() => {
+          const openEntries = entries.filter(e => e.status === 'OPEN');
+          const closedEntries = entries.filter(e => e.status !== 'OPEN');
+          const openAvg = openEntries.length > 0
+            ? openEntries.reduce((s, e) => s + (e.returnPct || 0), 0) / openEntries.length
+            : 0;
+          const openWins = openEntries.filter(e => (e.returnPct || 0) > 0).length;
+          const openAvgDays = openEntries.length > 0
+            ? Math.round(openEntries.reduce((s, e) => s + (e.daysHeld || 0), 0) / openEntries.length)
+            : 0;
+          const closedAvg = closedEntries.length > 0
+            ? closedEntries.reduce((s, e) => s + (e.returnPct || 0), 0) / closedEntries.length
+            : 0;
+          const closedWins = closedEntries.filter(e => (e.returnPct || 0) > 0).length;
+          const closedAvgDays = closedEntries.length > 0
+            ? Math.round(closedEntries.reduce((s, e) => s + (e.daysHeld || 0), 0) / closedEntries.length)
+            : 0;
+          return (
+            <div style={{ padding: '10px 20px', borderBottom: '1px solid #222', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+                <StatBox label="Total" value={stats.total || 0} color="#fff" />
+                <div style={{ width: 1, height: 24, background: '#333' }} />
+                <StatBox label="Open" value={openEntries.length} color="#fcf000" />
+                <StatBox label="Winning" value={openWins} color="#22c55e" />
+                <StatBox label="Avg Return" value={openEntries.length ? `${openAvg >= 0 ? '+' : ''}${openAvg.toFixed(2)}%` : '—'} color={returnColor(openAvg)} />
+                <StatBox label="Avg Days" value={openEntries.length ? openAvgDays : '—'} color="#aaa" />
+                <div style={{ width: 1, height: 24, background: '#333' }} />
+                <StatBox label="Closed" value={closedEntries.length} color="#888" />
+                <StatBox label="Win Rate" value={closedEntries.length ? `${(closedWins / closedEntries.length * 100).toFixed(0)}%` : '—'} color="#22c55e" />
+                <StatBox label="Avg Return" value={closedEntries.length ? `${closedAvg >= 0 ? '+' : ''}${closedAvg.toFixed(2)}%` : '—'} color={returnColor(closedAvg)} />
+                <StatBox label="Avg Days" value={closedEntries.length ? closedAvgDays : '—'} color="#aaa" />
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Filter tabs */}
         <div style={{ padding: '8px 20px 4px', display: 'flex', gap: 6 }}>

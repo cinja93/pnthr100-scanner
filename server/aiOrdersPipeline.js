@@ -406,3 +406,99 @@ export async function getAiOrdersHistory({ limit = 20, type = null } = {}) {
   const filter = type ? { type } : {};
   return db.collection(COLL_AI_ORDERS).find(filter).sort({ weekOf: -1, generatedAt: -1 }).limit(limit).toArray();
 }
+
+/**
+ * Recompute qualityGrade for non-BEST orders using live prices.
+ * Returns { upgraded: [...tickers that became BEST], doc } and persists
+ * the updated grades back to MongoDB so the UI reflects changes immediately.
+ */
+export async function refreshOrderGrades() {
+  const db = await connectToDatabase();
+  if (!db) return { upgraded: [], doc: null };
+
+  const doc = await db.collection(COLL_AI_ORDERS)
+    .find({}).sort({ weekOf: -1, generatedAt: -1 }).limit(1).next();
+  if (!doc || !doc.orders?.length) return { upgraded: [], doc: null };
+
+  const candidates = doc.orders.filter(o =>
+    o.isNewSignal && (o.signal === 'BL' || o.signal === 'SS') && o.qualityGrade !== 'BEST'
+  );
+  if (!candidates.length) return { upgraded: [], doc };
+
+  const tickers = candidates.map(o => o.ticker);
+  let quoteMap = {};
+  try {
+    quoteMap = await fetchAiQuotesBatch(tickers);
+  } catch (err) {
+    console.warn('[AI GradeRefresh] quote fetch failed:', err.message);
+    return { upgraded: [], doc };
+  }
+
+  const allUniverseTickers = Object.keys(TICKER_META);
+  const weeklyDocs = await db.collection('pnthr_ai_bt_candles_weekly')
+    .find({ ticker: { $in: allUniverseTickers } }, { projection: { ticker: 1, weekly: 1 } }).toArray();
+  const weeklyByTicker = Object.fromEntries(weeklyDocs.map(d => [d.ticker, d.weekly || []]));
+
+  function computeGapAndSlope(ticker, livePrice) {
+    const meta = TICKER_META[ticker];
+    if (!meta) return null;
+    const period = getCarnivoreEmaPeriod(ticker) || SECTOR_EMA_PERIODS[meta.sectorId] || 30;
+    const wRaw = weeklyByTicker[ticker] || [];
+    if (wRaw.length < period * 3) return null;
+    const wAsc = [...wRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
+    const wBars = wAsc.map(b => ({ time: b.weekOf, open: b.open, high: b.high, low: b.low, close: b.close }));
+    const wEmaData = calculateEMA(wBars, period);
+    if (!wEmaData.length) return null;
+    const lastEma = wEmaData[wEmaData.length - 1];
+    if (!lastEma?.value) return null;
+    const gapPct = ((livePrice - lastEma.value) / lastEma.value) * 100;
+    let slope = null;
+    const idx = wEmaData.length - 1;
+    if (idx >= 1) {
+      const emaPrev = wEmaData[idx - 1]?.value;
+      if (emaPrev && emaPrev > 0) slope = ((lastEma.value - emaPrev) / emaPrev) * 52 * 100;
+    }
+    return { gapPct: +gapPct.toFixed(2), wEmaSlope: slope != null ? +slope.toFixed(2) : null };
+  }
+
+  const upgraded = [];
+  for (const order of doc.orders) {
+    if (order.qualityGrade === 'BEST') continue;
+    if (!order.isNewSignal) continue;
+    if (order.signal !== 'BL' && order.signal !== 'SS') continue;
+
+    const quote = quoteMap[order.ticker];
+    const livePrice = (quote && typeof quote.price === 'number') ? quote.price : null;
+    if (livePrice == null) continue;
+
+    const gs = computeGapAndSlope(order.ticker, livePrice);
+    if (!gs) continue;
+
+    const absGap = Math.abs(gs.gapPct);
+    const absSlope = Math.abs(gs.wEmaSlope);
+    let newGrade = 'GOOD';
+    if (absGap >= 12 && absSlope < 50) newGrade = 'BEST';
+    else if (absGap >= 9 && absSlope < 50) newGrade = 'BETTER';
+
+    if (newGrade !== order.qualityGrade) {
+      const oldGrade = order.qualityGrade;
+      order.qualityGrade = newGrade;
+      order.gapPct = gs.gapPct;
+      order.wEmaSlope = gs.wEmaSlope;
+      order.currentPrice = livePrice;
+      if (newGrade === 'BEST') {
+        upgraded.push({ ticker: order.ticker, signal: order.signal, from: oldGrade, gapPct: gs.gapPct, slope: gs.wEmaSlope });
+      }
+    }
+  }
+
+  if (upgraded.length > 0) {
+    await db.collection(COLL_AI_ORDERS).updateOne(
+      { _id: doc._id },
+      { $set: { orders: doc.orders, lastGradeRefresh: new Date() } }
+    );
+    console.log(`[AI GradeRefresh] ${upgraded.length} upgraded to BEST: ${upgraded.map(u => u.ticker).join(', ')}`);
+  }
+
+  return { upgraded, doc };
+}

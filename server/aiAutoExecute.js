@@ -28,6 +28,7 @@ import {
   LOT_NAMES,
 } from './lotMath.js';
 import { computeWilderATR, blInitStop, ssInitStop } from './signalDetection.js';
+import { refreshOrderGrades } from './aiOrdersPipeline.js';
 
 const COLL_PORTFOLIO = 'pnthr_portfolio';
 const COLL_AI_ORDERS = 'pnthr_ai_orders';
@@ -195,10 +196,13 @@ export async function stageWeeklyOrders(opts = {}) {
 
   const results = { staged: [], skippedOrders: [], dryRun, weekOf: orderDoc.weekOf };
 
-  // All qualifying new signals — no artificial weekly caps (APEX v7)
+  // Only auto-stage ★ BUY LONG / ★ SELL SHORT (qualityGrade BEST).
+  // WAIT LONG / WAIT SHORT (GOOD) and LONG / SHORT (BETTER) sit on the
+  // order sheet until the 60-second intraday monitor upgrades them.
   const allOrders = (orderDoc.orders || []).filter(o => {
     if (!o.isNewSignal) return false;
     if (o.signal !== 'BL' && o.signal !== 'SS') return false;
+    if (o.qualityGrade !== 'BEST') return false;
     return true;
   });
 
@@ -446,6 +450,149 @@ export async function executeWeeklyOrders(opts = {}) {
   }
 
   console.log(`[AI AutoExec] Execution complete: ${results.executed.length} executed, ${results.outbox.length} outbox, ${results.skippedOrders.length} skipped, remaining BP=$${availableBP.toFixed(0)}`);
+  return results;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MONITOR — 60-second intraday: recompute grades, auto-stage WAIT→BUY upgrades
+// ═══════════════════════════════════════════════════════════════════════════════
+export async function monitorAndStageUpgrades(opts = {}) {
+  if (!isEnabled()) return { skipped: 'DISABLED', upgrades: [] };
+
+  const { upgraded, doc } = await refreshOrderGrades();
+  if (!upgraded.length || !doc) return { skipped: 'NO_UPGRADES', upgrades: [] };
+
+  const db = await connectToDatabase();
+  if (!db) return { skipped: 'NO_DB', upgrades: [] };
+
+  const ctx = await resolveContext(db, opts);
+  if (!ctx) return { skipped: 'NO_CONTEXT', upgrades: [] };
+  const { ownerId, nav } = ctx;
+
+  const dryRun = isDryRun();
+
+  const existingPositions = await db.collection(COLL_PORTFOLIO)
+    .find({ ownerId, status: { $in: ['ACTIVE', 'PARTIAL', 'STAGED'] } }).toArray();
+  const activeTickers = new Set(existingPositions.map(p => p.ticker));
+
+  const currentHeat = computePortfolioHeat(existingPositions, nav);
+  let runningRisk = currentHeat.totalRisk;
+  const deployedCapital = computeDeployedCapital(existingPositions);
+  let availableBP = computeAvailableBuyingPower(nav, deployedCapital);
+
+  const results = { staged: [], skippedOrders: [], dryRun, upgrades: upgraded };
+
+  for (const upg of upgraded) {
+    const order = doc.orders.find(o => o.ticker === upg.ticker && o.signal === upg.signal);
+    if (!order) continue;
+
+    const { ticker } = order;
+    if (activeTickers.has(ticker)) {
+      results.skippedOrders.push({ ticker, reason: 'ALREADY_ACTIVE' });
+      continue;
+    }
+
+    const isLong = order.signal === 'BL';
+    const direction = isLong ? 'LONG' : 'SHORT';
+    const entryPrice = order.currentPrice;
+    const stopPrice = order.stopPrice;
+
+    if (!entryPrice || !stopPrice) {
+      results.skippedOrders.push({ ticker, reason: 'NO_PRICE_OR_STOP' });
+      continue;
+    }
+
+    const riskPerShare = isLong ? (entryPrice - stopPrice) : (stopPrice - entryPrice);
+    if (riskPerShare <= 0) {
+      results.skippedOrders.push({ ticker, reason: 'BAD_RISK' });
+      continue;
+    }
+
+    const sMult = isCarnivoreMode(ticker) ? 1.0 : (+(order.sectorMult) || 1.0);
+
+    const newEntryRisk = estimateL1Risk(entryPrice, stopPrice, nav, false, sMult);
+    if ((runningRisk + newEntryRisk) / nav > HEAT_CAP_PCT) {
+      results.skippedOrders.push({ ticker, reason: `HEAT_CAP_${((runningRisk + newEntryRisk) / nav * 100).toFixed(1)}PCT` });
+      continue;
+    }
+
+    const l1Cost = estimateL1Cost(entryPrice, stopPrice, nav, false, sMult);
+    if (l1Cost > availableBP) {
+      results.skippedOrders.push({ ticker, reason: `BUYING_POWER_$${availableBP.toFixed(0)}_NEED_$${l1Cost.toFixed(0)}` });
+      continue;
+    }
+
+    const posId = makePosId();
+    const now = new Date();
+
+    const fills = buildFillsSkeleton();
+    const partialPos = {
+      entryPrice, stopPrice, originalStop: stopPrice,
+      direction, isETF: false, fills, maxGapPct: order.maxGapPct || 0,
+      sectorMult: sMult,
+    };
+
+    const lotShares = computeLotTargetShares(partialPos, nav);
+    const totalShares = lotShares.reduce((s, v) => s + v, 0);
+    for (let i = 0; i < 5; i++) fills[i + 1].shares = lotShares[i];
+    partialPos.fills = fills;
+
+    const targetAvg = computeTargetAvg({ ...partialPos, fills }, nav);
+
+    const position = {
+      id: posId,
+      ticker,
+      direction,
+      signal: order.signal,
+      entryPrice,
+      currentPrice: entryPrice,
+      stopPrice,
+      originalStop: stopPrice,
+      sector: order.sectorName || null,
+      sectorId: order.sectorId || null,
+      sectorMult: sMult,
+      isETF: false,
+      fills,
+      targetShares: totalShares,
+      targetAvg,
+      maxGapPct: order.maxGapPct || 0,
+      status: 'STAGED',
+      ownerId,
+      strategyMode: getStrategyMode(ticker),
+      autoExecuted: true,
+      autoExecuteSource: 'INTRADAY_UPGRADE',
+      autoExecuteMode: 'INTRADAY',
+      stagedAt: now,
+      stagedWeekOf: doc.weekOf,
+      weekOf: doc.weekOf,
+      killScore: order.killScore || null,
+      qualityGrade: 'BEST',
+      upgradedFrom: upg.from,
+      upgradedAt: now,
+      createdAt: now,
+      updatedAt: now,
+      outcome: { exitPrice: null, profitPct: null, profitDollar: null, holdingDays: null, exitReason: null },
+    };
+
+    console.log(`[AI Monitor] ${dryRun ? 'DRY-RUN' : 'STAGED'} ${ticker} ${direction} — upgraded ${upg.from}→BEST (gap=${upg.gapPct}%, slope=${upg.slope}%), L1=${lotShares[0]}sh @${entryPrice}`);
+
+    if (!dryRun) {
+      await db.collection(COLL_PORTFOLIO).insertOne(position);
+      activeTickers.add(ticker);
+    }
+
+    runningRisk += newEntryRisk;
+    availableBP -= l1Cost;
+    results.staged.push({
+      ticker, direction, lot1Shares: lotShares[0], entryPrice, stopPrice,
+      strategyMode: position.strategyMode, upgradedFrom: upg.from,
+    });
+  }
+
+  if (results.staged.length > 0) {
+    console.log(`[AI Monitor] Intraday upgrade: ${results.staged.length} staged (${results.staged.map(s => s.ticker).join(', ')})`);
+  }
   return results;
 }
 

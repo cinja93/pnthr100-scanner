@@ -37,7 +37,7 @@ import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrA
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './aiOrdersPipeline.js';
-import { autoExecuteAiOrders, autoExecuteWeeklyOrders, stageWeeklyOrders, executeWeeklyOrders } from './aiAutoExecute.js';
+import { autoExecuteAiOrders, autoExecuteWeeklyOrders, stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
 import { runAiWeeklyRatchet, runAiStaleHuntCheck } from './aiPositionManager.js';
@@ -2182,6 +2182,16 @@ app.post('/api/admin/run-ai-auto-execute', authenticateJWT, requireAdmin, async 
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('[AI AutoExec] manual run failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/run-ai-grade-monitor', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await monitorAndStageUpgrades({ ownerId: req.user.userId, ...req.body });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[AI Monitor] manual run failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -5916,6 +5926,35 @@ cron.schedule('35 9 * * 1', async () => {
     }
   } catch (e) { console.error('[CRON] AI Monday execution failed:', e.message); }
 }, { timezone: 'America/New_York' });
+
+// ── Cron: AI 300 intraday grade monitor — every 60s during market hours ──────
+// Recomputes gap% + EMA slope for WAIT LONG / LONG orders using live prices.
+// When an order upgrades to ★ BUY LONG (BEST), it auto-stages for execution.
+let aiGradeMonitorRunning = false;
+setInterval(async () => {
+  if (aiGradeMonitorRunning) return;
+  const now = new Date();
+  const etOpts = { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false };
+  const [hStr, mStr] = now.toLocaleString('en-US', etOpts).split(':');
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  const mins = h * 60 + m;
+  if (mins < 570 || mins > 960) return; // 9:30 AM – 4:00 PM ET only
+  const dow = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' });
+  if (dow === 'Sat' || dow === 'Sun') return;
+
+  aiGradeMonitorRunning = true;
+  try {
+    const result = await monitorAndStageUpgrades();
+    if (result.staged?.length > 0) {
+      console.log(`[AI Monitor] ${result.dryRun ? 'DRY-RUN' : 'LIVE'}: ${result.staged.length} orders upgraded & staged`);
+    }
+  } catch (err) {
+    console.error('[AI Monitor] grade refresh failed:', err.message);
+  } finally {
+    aiGradeMonitorRunning = false;
+  }
+}, 60_000);
 
 // ── Cron: AI 300 weekly stop ratchet + structural exit — Friday 4:35pm ET
 cron.schedule('35 16 * * 5', async () => {

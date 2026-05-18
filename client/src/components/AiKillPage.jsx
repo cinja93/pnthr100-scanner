@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchLatestAiKill, runAiKill } from '../services/api';
+import { fetchLatestAiKill, runAiKill, fetchNav } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import { computeWeeksAgo } from '../utils/dateUtils';
+import { sizePosition, isEtfTicker } from '../utils/sizingUtils';
 import pantherHead from '../assets/panther head.png';
 import styles from './AiKillPage.module.css';
 
@@ -40,6 +41,13 @@ export default function AiKillPage() {
   const [running, setRunning] = useState(false);
   const [runMsg, setRunMsg] = useState(null);
   const [selectedTicker, setSelectedTicker] = useState(null);
+  const [nav, setNav] = useState(100_000);
+
+  useEffect(() => {
+    fetchNav()
+      .then(d => { if (d?.nav) setNav(d.nav); })
+      .catch(() => {});
+  }, []);
 
   const load = () => {
     setLoading(true);
@@ -195,7 +203,8 @@ export default function AiKillPage() {
                 <th>Ticker</th>
                 <th>Signal</th>
                 <th>Sector</th>
-                <th style={{ textAlign: 'right' }}>Total</th>
+                <th style={{ textAlign: 'right' }}>L1<br/>Shares</th>
+                <th style={{ textAlign: 'right' }}>Total<br/>Shares</th>
                 <th style={{ textAlign: 'right' }}>D1</th>
                 <th style={{ textAlign: 'right' }}>D2</th>
                 <th style={{ textAlign: 'right' }}>D3</th>
@@ -209,6 +218,17 @@ export default function AiKillPage() {
               {scores.map((s, idx) => {
                 const tier = getTierConfig(s.tierName);
                 const isTop10 = s.killRank <= 10;
+                const direction = s.signal === 'BL' ? 'LONG' : 'SHORT';
+                const sizing = (s.currentPrice && s.stopPrice && nav)
+                  ? sizePosition({
+                      netLiquidity: nav,
+                      entryPrice: s.currentPrice,
+                      stopPrice: s.stopPrice,
+                      maxGapPct: 0,
+                      direction,
+                      isETF: isEtfTicker(s.ticker),
+                    })
+                  : null;
                 return (
                   <tr
                     key={s.ticker}
@@ -267,9 +287,14 @@ export default function AiKillPage() {
                       S{s.sectorId} {s.sectorName?.split(' ').slice(0, 2).join(' ')}
                     </td>
 
-                    {/* Total */}
-                    <td className={styles.totalCell} style={{ color: '#b45309' }}>
-                      {s.total?.toFixed(1)}
+                    {/* L1 Shares */}
+                    <td className={styles.dimCell} style={{ fontWeight: 700, color: '#333' }}>
+                      {sizing ? sizing.lot1Shares : '—'}
+                    </td>
+
+                    {/* Total Lot Shares (L1-L5) */}
+                    <td className={styles.dimCell} style={{ fontWeight: 700, color: '#333' }}>
+                      {sizing ? sizing.totalShares : '—'}
                     </td>
 
                     {/* D1 */}

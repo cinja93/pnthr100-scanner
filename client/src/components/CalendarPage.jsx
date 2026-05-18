@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import StockTable from './StockTable';
 import ChartModal from './ChartModal';
 import EarningsSeasonTable from './EarningsSeasonTable';
-import { fetchJungleStocks, fetchEarnings, fetchWashRules } from '../services/api';
+import { fetchJungleStocks, fetchEarnings, fetchWashRules, fetchAiUniverse } from '../services/api';
 import { getCalendarWeekWindow } from '../utils/dateUtils';
 import styles from './CalendarPage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -79,12 +79,15 @@ export default function CalendarPage() {
     setLoading(true);
     setError(null);
 
-    const junglePromise = fetchJungleStocks()
-      .then(data => {
+    const junglePromise = Promise.all([fetchJungleStocks(), fetchAiUniverse().catch(() => ({ holdings: [] }))])
+      .then(([data, aiData]) => {
         const stockList = data.stocks || [];
         setStocks(stockList);
         setSignals(data.signals || {});
-        return fetchEarnings(stockList.map(s => s.ticker)).then(e => setEarnings(e));
+        const jungleTickers = stockList.map(s => s.ticker);
+        const aiTickers = (aiData.holdings || []).map(h => h.ticker);
+        const allTickers = [...new Set([...jungleTickers, ...aiTickers])];
+        return fetchEarnings(allTickers).then(e => setEarnings(e));
       });
 
     const washPromise = fetchWashRules()
@@ -145,9 +148,9 @@ export default function CalendarPage() {
   }
 
   function buildSubtitle() {
-    if (loading || error) return `PNTHR 679 Jungle earnings + wash sale expirations ${isNextWeek ? 'next week' : 'this week'}`;
+    if (loading || error) return `PNTHR 679 + AI 300 earnings + wash sale expirations ${isNextWeek ? 'next week' : 'this week'}`;
     const parts = [];
-    if (earningsCount > 0) parts.push(`${earningsCount} Jungle stock${earningsCount !== 1 ? 's' : ''} reporting`);
+    if (earningsCount > 0) parts.push(`${earningsCount} stock${earningsCount !== 1 ? 's' : ''} reporting`);
     if (washCount > 0) parts.push(`${washCount} wash sale expiration${washCount !== 1 ? 's' : ''}`);
     if (parts.length === 0) return `Nothing scheduled ${isNextWeek ? 'next week' : 'this week'}`;
     return parts.join(' · ') + ` ${isNextWeek ? 'next week' : 'this week'}`;

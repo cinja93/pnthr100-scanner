@@ -38,7 +38,7 @@ const AI_UNIVERSE_TICKERS = new Set(getAiUniverseHoldings().map(h => h.ticker));
 
 // In-memory cache of Carnivore tickers that passed all 679 gates + top-N ranking.
 // Updated each time the orders pipeline runs. The AI Orders pipeline reads this
-// instead of using the old Kill-tier shortcut.
+// to determine which Carnivore tickers qualify for the merged order sheet.
 let _lastCarnivoreQualified = [];
 
 // NEW_ASYM_SS selection parameters, as run by the canonical Wagyu backtest
@@ -662,7 +662,7 @@ export async function ordersGetHistory(req, res) {
 }
 
 // Returns Carnivore tickers that passed all 679 gates AND made the top-N cut.
-// Called by the AI Orders pipeline instead of the old Kill-tier shortcut.
+// Called by the AI Orders pipeline to populate the Carnivore section of the order sheet.
 // Falls back to the persisted doc if the in-memory cache is empty.
 export async function getQualifiedCarnivoreOrders() {
   if (_lastCarnivoreQualified.length > 0) return _lastCarnivoreQualified;

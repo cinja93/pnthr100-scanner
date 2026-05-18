@@ -37,7 +37,7 @@ import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrA
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory } from './aiOrdersPipeline.js';
-import { autoExecuteAiOrders, autoExecuteWeeklyOrders, stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades } from './aiAutoExecute.js';
+import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
 import { runAiWeeklyRatchet, runAiStaleHuntCheck } from './aiPositionManager.js';
@@ -2165,7 +2165,7 @@ app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, 
     const doc = await runAiOrdersPipeline(req.body || {});
     let execResult = null;
     if (req.body?.autoExec) {
-      try { execResult = await autoExecuteWeeklyOrders({ ownerId: req.user.userId }); }
+      try { execResult = await stageWeeklyOrders({ ownerId: req.user.userId }); }
       catch (e) { console.error('[AI AutoExec] failed after manual pipeline run:', e.message); }
     }
     res.json({ ok: true, weekOf: doc.weekOf, totalOrders: doc.stats.totalOrders, stats: doc.stats, autoExec: execResult });
@@ -2178,7 +2178,7 @@ app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, 
 // Standalone auto-execute trigger (runs against latest existing orders doc)
 app.post('/api/admin/run-ai-auto-execute', authenticateJWT, requireAdmin, async (req, res) => {
   try {
-    const result = await autoExecuteAiOrders({ ownerId: req.user.userId, ...req.body });
+    const result = await stageWeeklyOrders({ ownerId: req.user.userId, ...req.body });
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('[AI AutoExec] manual run failed:', err.message);

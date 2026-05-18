@@ -94,8 +94,8 @@ export async function runAiOrdersPipeline(opts = {}) {
   console.log(`[AI Orders] starting pipeline (type=${type}, weekOf=${weekOf})…`);
 
   // 0. Regime gate — PAI300 for AI 300-mode tickers only.
-  //    Carnivore tickers are pre-screened by the 679 Kill (Alpha/Striking/Hunting)
-  //    and enter AI 300 Orders pre-qualified — no second gate.
+  //    Carnivore tickers must pass the FULL 679 Orders pipeline (all 4 gates
+  //    + top-N rank) via getQualifiedCarnivoreOrders().
   const pai300Bull = await getPai300Regime();
   console.log(`[AI Orders] PAI300 regime: ${pai300Bull === true ? 'BULL (BL allowed)' : pai300Bull === false ? 'BEAR (BL blocked)' : 'UNKNOWN (BL allowed)'}`);
 

@@ -392,7 +392,7 @@ def build():
         '<b>EMA:</b> GICS sector-optimized (18-26 weeks, the tighter periods from Step 3)<br/>'
         '<b>Entry gate:</b> 1.10x the EMA (stricter)<br/>'
         '<b>Regime gate:</b> Both SPY AND QQQ must be above their 21-week EMAs (dual confirmation)<br/>'
-        '<b>Sector rotation:</b> Skipped; pre-qualified by the 679 Kill scoring engine',
+        '<b>Sector rotation:</b> Must pass full 679 Orders pipeline (macro, sector, D2, SS crash gates + top-N rank)',
         body_style()))
     s.append(Paragraph(
         'Names like TSLA, META, ARM, ETN, ORCL, and IBM run under tighter rules because the data '
@@ -402,9 +402,9 @@ def build():
     s.append(Paragraph('How They Merge', subheading_style()))
     s.append(Paragraph(
         'Every Friday at 4:15 PM Eastern: (1) The AI signal engine scores all 276 AI-mode tickers. '
-        '(2) The 679 Kill engine scores its full universe; we filter for the 26 carnivore tickers that rank '
-        'Alpha (score 130+), Striking (100+), or Hunting (80+). (3) Both sets merge into one order sheet. '
-        '(4) Carnivore tickers enter pre-qualified, with no regime gate and no sector rotation re-check.',
+        '(2) The 679 Orders pipeline runs all 26 carnivore tickers through the full 4-gate qualification '
+        '(macro, sector, D2, SS crash) and top-N ranking against the entire 679 universe. '
+        '(3) Only carnivore tickers that would make the 679 Orders page merge into the AI order sheet.',
         body_style()))
 
     # == STEP 5 ===============================================================

@@ -597,10 +597,3 @@ export async function monitorAndStageUpgrades(opts = {}) {
 }
 
 
-// Legacy wrappers — keeps existing API endpoints working.
-export async function autoExecuteWeeklyOrders(opts = {}) {
-  return stageWeeklyOrders(opts);
-}
-export async function autoExecuteAiOrders(opts = {}) {
-  return stageWeeklyOrders(opts);
-}

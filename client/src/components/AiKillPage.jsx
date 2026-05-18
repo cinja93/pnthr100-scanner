@@ -203,15 +203,15 @@ export default function AiKillPage() {
                 <th>Ticker</th>
                 <th>Signal</th>
                 <th>Sector</th>
-                <th style={{ textAlign: 'center' }}>Sector<br/>Status</th>
+                <th className={styles.sectorGroupLeft} style={{ textAlign: 'center' }}>Sector<br/>Status</th>
+                <th className={styles.sectorGroupRight} style={{ textAlign: 'center' }}>💪</th>
+                <th style={{ textAlign: 'right' }}>Gap %</th>
+                <th style={{ textAlign: 'right' }}>Slope %</th>
+                <th style={{ textAlign: 'right' }}>Price</th>
+                <th style={{ textAlign: 'right' }}>Risk %</th>
                 <th style={{ textAlign: 'right' }}>L1<br/>Shares</th>
                 <th style={{ textAlign: 'right' }}>Total<br/>Shares</th>
-                <th style={{ textAlign: 'right' }}>D1</th>
-                <th style={{ textAlign: 'right' }}>D2</th>
-                <th style={{ textAlign: 'right' }}>D3</th>
-                <th style={{ textAlign: 'right' }}>D4</th>
-                <th style={{ textAlign: 'right' }}>Risk %</th>
-                <th style={{ textAlign: 'right' }}>Price</th>
+                <th style={{ textAlign: 'right' }}>Multi&shy;plier</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -289,12 +289,35 @@ export default function AiKillPage() {
                     </td>
 
                     {/* Sector Status */}
-                    <td style={{ textAlign: 'center' }}>
+                    <td className={styles.sectorGroupLeft} style={{ textAlign: 'center' }}>
                       {s.sectorTier === 'GO'
                         ? <span className={styles.sigBadgeBL}>BULLISH</span>
                         : s.sectorTier === 'NO_GO'
                           ? <span className={styles.sigBadgeSS}>BEARISH</span>
                           : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, background: '#854d0e', color: '#fde047', letterSpacing: '0.04em' }}>NEUTRAL</span>}
+                    </td>
+
+                    {/* Sector D2 score (💪) */}
+                    <td className={`${styles.sectorGroupRight} ${styles.dimCell}`} style={{ textAlign: 'center', fontWeight: 700, color: s.scores?.d2 > 0 ? '#16a34a' : s.scores?.d2 < 0 ? '#dc2626' : '#666' }}>
+                      {s.scores?.d2 > 0 ? `+${s.scores.d2}` : s.scores?.d2}
+                    </td>
+
+                    {/* Gap % */}
+                    <td className={styles.dimCell} style={{ color: Math.abs(s.gapPct ?? 0) >= 12 ? '#16a34a' : Math.abs(s.gapPct ?? 0) >= 9 ? '#ca8a04' : '#999' }}>
+                      {s.gapPct != null ? `${Math.abs(s.gapPct).toFixed(1)}%` : '—'}
+                    </td>
+
+                    {/* Slope % */}
+                    <td className={styles.dimCell} style={{ color: (s.slopePct ?? 999) < 50 ? '#16a34a' : (s.slopePct ?? 999) < 65 ? '#ca8a04' : '#dc2626' }}>
+                      {s.slopePct != null ? `${s.slopePct.toFixed(1)}%` : '—'}
+                    </td>
+
+                    {/* Price */}
+                    <td className={styles.priceCell}>{fmtUsd(s.currentPrice)}</td>
+
+                    {/* Risk % */}
+                    <td className={styles.dimCell}>
+                      {s.riskPct != null ? `${s.riskPct.toFixed(1)}%` : '—'}
                     </td>
 
                     {/* L1 Shares */}
@@ -307,29 +330,8 @@ export default function AiKillPage() {
                       {sizing ? sizing.totalShares : '—'}
                     </td>
 
-                    {/* D1 */}
+                    {/* Multiplier (D1) */}
                     <td className={styles.dimCell}>{s.scores?.d1?.toFixed(2)}×</td>
-
-                    {/* D2 */}
-                    <td className={`${styles.dimCell} ${s.scores?.d2 > 0 ? styles.positive : s.scores?.d2 < 0 ? styles.negative : ''}`}>
-                      {s.scores?.d2}
-                    </td>
-
-                    {/* D3 */}
-                    <td className={styles.dimCell}>{s.scores?.d3?.toFixed(0)}</td>
-
-                    {/* D4 */}
-                    <td className={`${styles.dimCell} ${s.scores?.d4 > 0 ? styles.positive : s.scores?.d4 < 0 ? styles.negative : ''}`}>
-                      {s.scores?.d4}
-                    </td>
-
-                    {/* Risk % */}
-                    <td className={styles.dimCell}>
-                      {s.riskPct != null ? `${s.riskPct.toFixed(1)}%` : '—'}
-                    </td>
-
-                    {/* Price */}
-                    <td className={styles.priceCell}>{fmtUsd(s.currentPrice)}</td>
 
                     {/* Status */}
                     <td>

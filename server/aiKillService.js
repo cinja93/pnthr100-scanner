@@ -222,6 +222,8 @@ export async function runAiKillPipeline() {
       pai300Bull,
       currentPrice: close,
       ema, emaSlopeAnn,
+      gapPct: (close != null && ema != null && ema > 0) ? +( ((close - ema) / ema) * 100 ).toFixed(2) : null,
+      slopePct: emaSlopeAnn != null ? +Math.abs(emaSlopeAnn).toFixed(1) : null,
       stopPrice: sig.stopPrice,
       riskPct: riskPct != null ? +riskPct.toFixed(2) : null,
       signalDate: sig.signalDate,

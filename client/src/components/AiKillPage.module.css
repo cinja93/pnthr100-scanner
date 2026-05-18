@@ -256,6 +256,14 @@
   white-space: nowrap;
 }
 
+/* ── Sector Group border (Status + 💪) ───────────────────────────────────────── */
+.sectorGroupLeft {
+  border-left: 2px solid #374151 !important;
+}
+.sectorGroupRight {
+  border-right: 2px solid #374151 !important;
+}
+
 /* ── Ticker Cell ─────────────────────────────────────────────────────────────── */
 .tickerCell { min-width: 120px; }
 .tickerText { font-weight: 700; font-size: 15px; color: #111111; }

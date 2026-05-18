@@ -138,23 +138,28 @@ function SectorSummaryStrip({ summary }) {
   );
 }
 
-function GapProgressBar({ gapPct, signal }) {
+function GapProgressBar({ gapPct, wEmaSlope }) {
   const threshold = BEST_THRESHOLD;
   const absGap = Math.abs(gapPct ?? 0);
+  const absSlope = Math.abs(wEmaSlope ?? 999);
+  const slopeOk = absSlope < 50;
+  const gapOk = absGap >= threshold;
   const pct = Math.min(100, (absGap / threshold) * 100);
-  const isClose = absGap >= threshold * 0.85;
+  const isClose = slopeOk && absGap >= threshold * 0.75;
+  const blocked = !slopeOk;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <div style={{ width: 50, height: 6, background: '#222', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
         <div style={{
           height: '100%', borderRadius: 3, transition: 'width 0.5s ease',
           width: `${pct}%`,
-          background: isClose ? '#fcf000' : '#555',
+          background: blocked ? '#666' : isClose ? '#fcf000' : '#555',
         }} />
       </div>
-      <span style={{ color: isClose ? '#fcf000' : '#aaa', fontSize: 11, minWidth: 44, textAlign: 'right' }}>
+      <span style={{ color: blocked ? '#666' : isClose ? '#fcf000' : '#aaa', fontSize: 11, minWidth: 44, textAlign: 'right' }}>
         {gapPct != null ? `${gapPct.toFixed(1)}%` : '—'}
       </span>
+      {blocked && <span style={{ color: '#dc2626', fontSize: 9, fontWeight: 700 }} title={`Slope ${absSlope.toFixed(0)}% — needs to drop below 50%`}>SLOPE</span>}
     </div>
   );
 }
@@ -255,7 +260,7 @@ function OrderRow({ o, orders, navScale, setChartTickers, setChartIndex, dimmed,
       <td style={{ padding: '6px 10px' }}><TierPill tier={o.sectorTier} /></td>
       <td style={{ padding: '6px 10px', textAlign: 'right' }}>
         {dimmed
-          ? <GapProgressBar gapPct={o.gapPct} signal={o.signal} />
+          ? <GapProgressBar gapPct={o.gapPct} wEmaSlope={o.wEmaSlope} />
           : <span style={{ color: o.gapPct >= 15 ? '#fcf000' : o.gapPct >= 12 ? '#16a34a' : '#aaa' }}>{o.gapPct != null ? `${o.gapPct.toFixed(1)}%` : '—'}</span>
         }
       </td>
@@ -365,7 +370,26 @@ export default function AiOrdersPage() {
     const onDeck = newSignals.filter(o => o.qualityGrade !== 'BEST').map(scaleOrder);
 
     const nowSorted = sortRows(now, { key: 'action', dir: 'asc' }, ORDER_ACCESSORS);
-    const onDeckSorted = [...onDeck].sort((a, b) => Math.abs(b.gapPct ?? 0) - Math.abs(a.gapPct ?? 0));
+    // Batting order: stocks most likely to trigger next at top.
+    // BETTER grade (slope OK, gap 9-12%) → just need a price move to cross 12%
+    // GOOD grade + slope < 50% → need more gap but slope is ready
+    // GOOD grade + slope ≥ 50% → stuck until weekly EMA flattens, can't trigger intraday
+    const onDeckSorted = [...onDeck].sort((a, b) => {
+      const aSlope = Math.abs(a.wEmaSlope ?? 999);
+      const bSlope = Math.abs(b.wEmaSlope ?? 999);
+      const aGap = Math.abs(a.gapPct ?? 0);
+      const bGap = Math.abs(b.gapPct ?? 0);
+      const aSlopeOk = aSlope < 50;
+      const bSlopeOk = bSlope < 50;
+      // Slope OK sorts above slope blocked
+      if (aSlopeOk !== bSlopeOk) return aSlopeOk ? -1 : 1;
+      if (aSlopeOk && bSlopeOk) {
+        // Both slope OK — sort by gap descending (closest to 12% at top)
+        return bGap - aGap;
+      }
+      // Both slope blocked — sort by slope ascending (closest to 50% at top)
+      return aSlope - bSlope;
+    });
 
     const all = doc.orders.map(scaleOrder);
 
@@ -571,7 +595,7 @@ export default function AiOrdersPage() {
                 borderBottom: '1px solid rgba(249,115,22,0.3)',
               }}>
                 <span style={{ color: '#f97316', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>ON DECK</span>
-                <span style={{ color: '#f97316', fontSize: 12 }}>Batting order — sorted by gap% to trigger ({BEST_THRESHOLD}%)</span>
+                <span style={{ color: '#f97316', fontSize: 12 }}>Batting order — stocks closest to triggering shown first</span>
                 <span style={{
                   marginLeft: 'auto', padding: '2px 8px', background: '#f97316', color: '#000',
                   borderRadius: 3, fontSize: 11, fontWeight: 700,

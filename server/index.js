@@ -878,6 +878,17 @@ app.delete('/api/supplemental-stocks/:ticker', authenticateJWT, requireAdmin, as
 app.get('/api/user/profile', async (req, res) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+    if (req.user.userId === 'vanilla-preview') {
+      return res.json({
+        email: req.user.email, role: 'member', accountSize: null, defaultPage: 'apex',
+        liveFundNav: null, liveFundStartDate: null,
+        allowedPages: [
+          'perch','earnings','pulse','orders','aiOrders','search','prey','apex','aiKill',
+          'jungle','aiJungle','aiSectors','bondHeat','long','short','etf','sectors',
+          'ir-live','watchlist','data-room',
+        ],
+      });
+    }
     const profile = await getUserProfile(req.user.userId);
     res.json({ email: req.user.email, role: req.user.role, accountSize: profile?.accountSize ?? null, defaultPage: profile?.defaultPage ?? 'long', liveFundNav: profile?.liveFundNav ?? null, liveFundStartDate: profile?.liveFundStartDate ?? null, allowedPages: profile?.allowedPages ?? null });
   } catch (error) {

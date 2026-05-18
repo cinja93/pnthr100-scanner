@@ -138,10 +138,10 @@ function VipImpersonateMenu() {
       <button
         className={styles.dataRoomBtn}
         onClick={() => setOpen(o => !o)}
-        title="Preview as a specific VIP member (read-only, 30-min session)"
+        title="Open a clean demo view with no account data (read-only, 30-min session)"
       >
         <span style={{ fontSize: 14 }}>👀</span>
-        <span style={{ flex: 1, textAlign: 'left' }}>View as VIP</span>
+        <span style={{ flex: 1, textAlign: 'left' }}>Demo Mode</span>
         <span style={{ fontSize: 10, opacity: 0.6 }}>{open ? '▾' : '▸'}</span>
       </button>
       {open && (
@@ -162,28 +162,12 @@ function VipImpersonateMenu() {
             <div style={{ padding: '6px 10px', fontSize: 11, color: '#ef5350' }}>{error}</div>
           )}
           {targets && (
-            <>
-              {/* Vanilla first — a synthetic empty user for fresh-login UX
-                  testing. No data, no stocks, no personalization. */}
-              <VipImpersonateOption
-                target={targets.vanilla}
-                subtitle="Fresh user — no data"
-                onLaunch={handleLaunch}
-                launching={launching === targets.vanilla.id}
-              />
-              {targets.targets.length === 0 && (
-                <div style={{ padding: '6px 10px', fontSize: 11, color: '#555' }}>No VIPs found</div>
-              )}
-              {targets.targets.map(t => (
-                <VipImpersonateOption
-                  key={t.id}
-                  target={t}
-                  subtitle={t.email}
-                  onLaunch={handleLaunch}
-                  launching={launching === t.id}
-                />
-              ))}
-            </>
+            <VipImpersonateOption
+              target={targets.vanilla}
+              subtitle="Clean demo — no account data"
+              onLaunch={handleLaunch}
+              launching={launching === targets.vanilla.id}
+            />
           )}
         </div>
       )}

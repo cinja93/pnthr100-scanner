@@ -31,8 +31,16 @@ export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavi
       ]);
 
       if (aiDoc?.orders) {
+        const activeTickers = new Set(
+          (aiDoc.activePositionTickers || []).map(p => p.ticker)
+        );
         for (const o of aiDoc.orders) {
-          if (o.isNewSignal && (o.signal === 'BL' || o.signal === 'SS')) {
+          if (
+            o.isNewSignal &&
+            (o.signal === 'BL' || o.signal === 'SS') &&
+            o.qualityGrade === 'BEST' &&
+            !activeTickers.has(o.ticker)
+          ) {
             items.push({
               key: `ai-${o.ticker}-${o.signal}`,
               ticker: o.ticker,

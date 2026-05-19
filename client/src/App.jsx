@@ -11,6 +11,7 @@ import {
   getImpersonationToken,
 } from './contexts/ImpersonationContext';
 import ImpersonationBanner, { IMPERSONATION_BANNER_HEIGHT } from './components/ImpersonationBanner';
+import NowOrdersBanner, { NOW_BANNER_HEIGHT } from './components/NowOrdersBanner';
 import QueueReviewPanel from './components/QueueReviewPanel';
 import InvestorLoginPage from './components/InvestorLoginPage';
 import InvestmentAmountModal from './components/InvestmentAmountModal';
@@ -659,6 +660,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const isInvestor = currentUser?.role === 'investor';
   const [trendlineBannerVisible, setTrendlineBannerVisible] = useState(false);
   const [moversBannerVisible, setMoversBannerVisible] = useState(false);
+  const [nowOrdersBannerVisible, setNowOrdersBannerVisible] = useState(false);
   const [lotAlerts,         setLotAlerts]         = useState([]);
   const [dismissedLotKeys,  setDismissedLotKeys]  = useState(new Set());
   const [positions,         setPositions]         = useState([]); // full positions for EMA alerts
@@ -1158,7 +1160,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       paddingTop: isImpersonating
         ? IMPERSONATION_BANNER_HEIGHT
         : (trendlineBannerVisible ? TRENDLINE_BANNER_HEIGHT : 0)
-          + (moversBannerVisible ? MOVERS_BANNER_HEIGHT : 0) || undefined,
+          + (moversBannerVisible ? MOVERS_BANNER_HEIGHT : 0)
+          + (nowOrdersBannerVisible ? NOW_BANNER_HEIGHT : 0) || undefined,
     }}>
       {isAuthenticated && !isImpersonating && (
         <TrendlineAlertBanner onNavigateToAssistant={() => navigate('assistant')} onVisibleChange={setTrendlineBannerVisible} />
@@ -1170,6 +1173,12 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           setChartStocks([{ ticker }]);
           setChartIndex(0);
         }}
+      />}
+      {isAuthenticated && !isImpersonating && <NowOrdersBanner
+        topOffset={(trendlineBannerVisible ? TRENDLINE_BANNER_HEIGHT : 0)
+          + (moversBannerVisible ? MOVERS_BANNER_HEIGHT : 0)}
+        onVisibleChange={setNowOrdersBannerVisible}
+        onNavigate={navigate}
       />}
       <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
 

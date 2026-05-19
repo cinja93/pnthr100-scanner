@@ -624,6 +624,8 @@ function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, new
   // we keep both. See feedback_perch_regime_aware_content.md for the rule.
   const isBull  = regime.regimeLabel === 'BULL';
   const isBear  = regime.regimeLabel === 'BEAR';
+  const aiIsBull = pai300Regime?.regimeLabel === 'BULL';
+  const aiIsBear = pai300Regime?.regimeLabel === 'BEAR';
 
   // Format sector table for readability. Regime filter strips the irrelevant
   // side so the LLM can't quote it.
@@ -643,6 +645,32 @@ function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, new
   // Format top setups. Regime filter: in BULL we hide shorts, in BEAR we hide longs.
   const fmtLong  = isBear ? '' : top10Longs.slice(0, 3).map(s => `${s.ticker} (${s.sector ?? 'Unknown'}, $${s.currentPrice ?? 'N/A'})`).join(', ');
   const fmtShort = isBull ? '' : top10Shorts.slice(0, 3).map(s => `${s.ticker} (${s.sector ?? 'Unknown'}, $${s.currentPrice ?? 'N/A'})`).join(', ');
+
+  // "Where the Money is Moving" — top 2 sectors from each universe + top stock per sector
+  // 679: sort by totalBL (bull) or totalSS (bear) to find hottest sectors
+  const sorted679Sectors = [...sectors].filter(s => s.totalBL + s.totalSS > 0);
+  if (isBull || !isBear) sorted679Sectors.sort((a, b) => b.totalBL - a.totalBL);
+  else sorted679Sectors.sort((a, b) => b.totalSS - a.totalSS);
+  const top2_679 = sorted679Sectors.slice(0, 2);
+
+  // For each top 679 sector, find the #1 stock from the kill scores (regime-aware)
+  const allKillStocks = isBull ? top10Longs : isBear ? top10Shorts : [...top10Longs, ...top10Shorts];
+  const moneyMoving679 = top2_679.map(sec => {
+    const topStock = allKillStocks.find(s => s.sector === sec.sector);
+    const count = isBull ? sec.totalBL : isBear ? sec.totalSS : sec.totalBL + sec.totalSS;
+    const label = isBull ? 'long opportunities' : isBear ? 'short opportunities' : 'total opportunities';
+    return `${sec.sector}: ${count} active ${label}${topStock ? ` — top stock: ${topStock.ticker} ($${topStock.currentPrice ?? 'N/A'})` : ''}`;
+  }).join('\n');
+
+  // AI 300: top 2 sectors from AI sector ranks (highest rank = lowest number)
+  const sortedAiSectors = [...(aiSectors || [])].sort((a, b) => a.rank - b.rank);
+  const top2Ai = sortedAiSectors.slice(0, 2);
+  const aiKillAll = aiIsBull ? (aiKillTop?.longs || []) : aiIsBear ? (aiKillTop?.shorts || []) : [...(aiKillTop?.longs || []), ...(aiKillTop?.shorts || [])];
+  const moneyMovingAi = top2Ai.map(sec => {
+    const topStock = aiKillAll.find(s => s.sectorName === sec.name);
+    const tierLabel = sec.tier === 'GO' ? 'bullish' : sec.tier === 'NO_GO' ? 'bearish' : 'neutral';
+    return `${sec.name}: ${tierLabel} (5-day return: ${sec.fiveDayReturn != null ? sec.fiveDayReturn + '%' : 'N/A'})${topStock ? ` — top stock: ${topStock.ticker} / ${topStock.companyName} ($${topStock.currentPrice ?? 'N/A'})` : ''}`;
+  }).join('\n');
 
   // Format new signals by sector. Regime filter strips the off-trend side.
   const newSigLines = Object.entries(newSignals)
@@ -719,10 +747,6 @@ ${trackRecord.isLoss ? 'NOTE: This is a LOSING trade. Frame as: "Not every call 
   const shortSideInstruction = isBull
     ? `## 679 STOCKS TO WATCH: SHORT SIDE — Replace the usual short picks with 1 short paragraph (3-5 sentences). The major indexes are in a clear uptrend right now, so we are not taking short positions this week. Explain in plain English why: when the broad market is trending up, shorting individual names tends to fight the tape; selling strong markets because they feel extended is the wrong instinct in this environment; the disciplined move is to wait until the major indexes turn back down before stepping in on the short side. Do NOT name any specific tickers. Do NOT define what shorting is. Do NOT use technical terms like "EMA", "moving average", "regime", or any signal codes.`
     : `## 679 STOCKS TO WATCH: SHORT SIDE (top 3 short setups from the PNTHR 679 universe, brief plain-English thesis per stock)`;
-
-  // AI 300 regime — independent from 679 SPY/QQQ regime
-  const aiIsBull = pai300Regime?.regimeLabel === 'BULL';
-  const aiIsBear = pai300Regime?.regimeLabel === 'BEAR';
 
   const aiLongInstruction = aiIsBear
     ? `## AI 300 STOCKS TO WATCH — Replace the usual AI stock picks with 1 short paragraph (3-5 sentences). Our proprietary AI index is trending down right now, so we are not adding AI long positions this week. Explain in plain English why: when the AI sector as a whole is pulling back, individual AI stock picks tend to fight the momentum; the disciplined move is to wait for the AI index to turn back up before stepping in. Do NOT name any specific tickers.`
@@ -833,6 +857,12 @@ ${sectorRotation.cyclicalSummary}
 Per-sector detail with week-over-week trend:
 ${sectorRotation.rotationLines}` : 'No rotation data available.'}
 
+WHERE THE MONEY IS MOVING — 679 (top 2 sectors by opportunity count):
+${moneyMoving679 || 'No sector data.'}
+
+WHERE THE MONEY IS MOVING — AI 300 (top 2 AI sectors by 5-day momentum rank):
+${moneyMovingAi || 'No AI sector data.'}
+
 ${isBear ? 'TOP 679 LONG SETUPS: REGIME-OMITTED. Bear regime.' : `TOP 679 LONG SETUPS (highest-conviction):
 ${fmtLong || 'No long setups this week.'}`}
 
@@ -884,7 +914,7 @@ Use ## for each section heading exactly as shown. The thirteen sections below ar
    > **Profit: +$[X.XX] (+[X.XX]%)**
    Use "Long exit" when the trade direction from the data is long, "Short cover" when the direction is short. Use the exact profit dollar and % numbers from the data above, rounded to two decimals. Skip this section entirely ONLY if the TRADE OF THE WEEK data above literally says "No confirmed exits this week. OMIT".
 3. ## SECTOR ROTATION (2-3 paragraphs analyzing how capital is flowing between sectors. Use the rotation data to tell the story: which sectors are getting stronger/weaker, is money rotating into defensive names or cyclical names, what does that say about institutional sentiment and risk appetite? Be specific about which sectors are improving/deteriorating vs last week. This section should feel like institutional-grade market intelligence. CRITICAL: Only reference facts from the data provided above. Do NOT invent or guess at current news events, geopolitical developments, trade policy, or headlines. If the data does not mention it, do not reference it. NOTE: The frontend automatically renders a week-over-week sector-rotation bar chart at the end of this section — do NOT describe it as "above" or "below" or embed any chart yourself.)
-4. ## WHERE THE MONEY IS MOVING (3-4 paragraphs, deeper dive into specific sector opportunities and stock-level themes. Base conclusions ONLY on the rotation data and signal counts provided. Do not invent reasons or reference news events not in the data.)
+4. ## WHERE THE MONEY IS MOVING (2-3 paragraphs. Use the WHERE THE MONEY IS MOVING data above to discuss the top 2 sectors from the 679 universe and the top 2 AI sectors from the AI 300 universe. For each sector, mention the top stock as a point of interest. Keep it conversational and plain-language. Do NOT invent reasons or reference news events not in the data. Frame around "our model sees the most opportunity in..." rather than claiming sectors are surging or crashing.)
 5. ${longSideInstruction}
 6. ${shortSideInstruction}
 7. ## WHAT BOND YIELDS ARE TELLING US (1-2 paragraphs. Use the bond yield data to explain what interest rates mean for stock investors in plain language. If yields are rising, explain the pressure on growth stocks and borrowing costs. If falling, explain what relief that brings. Connect to both the broad market and AI stocks specifically. Frame through the lens of what it means for the reader's portfolio. Never use jargon like "duration risk", "term premium", or "real rates". If bond data is not available, write 1 paragraph noting that yield data was unavailable and pivot to what other macro signals suggest.)

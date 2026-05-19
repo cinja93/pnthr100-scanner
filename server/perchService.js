@@ -368,6 +368,44 @@ async function getFromArchives(db, totwTicker) {
   };
 }
 
+// ── S&P 500 Sector ETF 5-Day Performance ─────────────────────────────────────
+const SP500_SECTOR_ETFS = [
+  { ticker: 'XLE', name: 'Energy' },
+  { ticker: 'XLP', name: 'Consumer Staples' },
+  { ticker: 'XLV', name: 'Health Care' },
+  { ticker: 'XLC', name: 'Communication Services' },
+  { ticker: 'XLF', name: 'Financials' },
+  { ticker: 'XLRE', name: 'Real Estate' },
+  { ticker: 'XLK', name: 'Information Technology' },
+  { ticker: 'XLI', name: 'Industrials' },
+  { ticker: 'XLY', name: 'Consumer Discretionary' },
+  { ticker: 'XLU', name: 'Utilities' },
+  { ticker: 'XLB', name: 'Basic Materials' },
+];
+
+async function getSp500SectorPerformance() {
+  const FMP_API_KEY = process.env.FMP_API_KEY;
+  if (!FMP_API_KEY) return [];
+  try {
+    const tickers = SP500_SECTOR_ETFS.map(e => e.ticker).join(',');
+    const res = await fetch(`https://financialmodelingprep.com/api/v3/stock-price-change/${tickers}?apikey=${FMP_API_KEY}`);
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data.map(d => {
+      const etf = SP500_SECTOR_ETFS.find(e => e.ticker === d.symbol);
+      return {
+        name: etf?.name ?? d.symbol,
+        etfTicker: d.symbol,
+        fiveDayReturn: d['5D'] != null ? +Number(d['5D']).toFixed(2) : null,
+        universe: '679',
+      };
+    }).filter(d => d.fiveDayReturn != null);
+  } catch (err) {
+    console.warn('[Perch v4] S&P sector performance fetch failed:', err.message);
+    return [];
+  }
+}
+
 // ── Market News (FMP General News) ────────────────────────────────────────────
 async function getMarketNews() {
   const FMP_API_KEY = process.env.FMP_API_KEY;
@@ -969,7 +1007,7 @@ export async function generatePerch(db) {
   const regime = await getRegimeData(db);
   console.log(`[Perch v4] 679 Regime: ${regime.regimeLabel}, weekOf: ${regime.weekOf}`);
 
-  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, rotationData, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews] = await Promise.all([
+  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, rotationData, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews, sp500SectorPerf] = await Promise.all([
     getSectorBreakdown(db, regime.weekOf),
     getTop10Longs(db, regime.weekOf),
     getTop10Shorts(db, regime.weekOf),
@@ -982,8 +1020,16 @@ export async function generatePerch(db) {
     getAiKillTop(db),
     getAiUpcomingEarnings(regime.weekOf),
     getMarketNews(),
+    getSp500SectorPerformance(),
   ]);
   console.log(`[Perch v4] AI 300 Regime: ${pai300Regime?.regimeLabel ?? 'N/A'}, Bond 10Y: ${bondYields?.y10 ?? 'N/A'}%, AI sectors: ${aiSectors.length}, News: ${marketNews.length} headlines`);
+
+  // Build combined 27-sector performance ranking (11 S&P 500 + 16 AI 300)
+  const combinedSectorPerf = [
+    ...sp500SectorPerf.map(s => ({ name: s.name, fiveDayReturn: s.fiveDayReturn, universe: '679', etf: s.etfTicker })),
+    ...(aiSectors || []).map(s => ({ name: s.name, fiveDayReturn: s.fiveDayReturn, universe: 'AI 300', tier: s.tier })),
+  ].sort((a, b) => (b.fiveDayReturn ?? -999) - (a.fiveDayReturn ?? -999));
+  console.log(`[Perch v4] Combined sector perf: ${combinedSectorPerf.length} sectors ranked`);
 
   // Fallback: pnthr679_trade_archive is only refreshed by a manual CSV import
   // (scripts/importTradeArchive.js) — it had no ongoing writer and data went
@@ -1141,6 +1187,7 @@ export async function generatePerch(db) {
       // SECTOR ROTATION section with yellow (this week) vs gray (last week)
       // bars.
       sectorRotation: sectorRotationChart,
+      sectorPerformance: combinedSectorPerf,
     },
     // Structured TOTW record the frontend uses to rebuild the callout's
     // direction + profit lines when Claude renders only the ticker row.

@@ -206,6 +206,45 @@ export default function NewsPage() {
     `;
   }, [issue?.charts?.sectorRotation]);
 
+  // Build the combined 27-sector performance chart (11 S&P 500 + 16 AI 300,
+  // ranked by 5-day return). Injected after the WHERE THE MONEY IS MOVING section.
+  const sectorPerformanceChartHtml = useMemo(() => {
+    const rows = issue?.charts?.sectorPerformance || [];
+    if (!rows.length) return '';
+    const maxAbs = Math.max(...rows.map(r => Math.abs(r.fiveDayReturn ?? 0)), 1);
+    const items = rows.map((r, i) => {
+      const pct = r.fiveDayReturn ?? 0;
+      const barWidth = Math.round((Math.abs(pct) / maxAbs) * 100);
+      const isPositive = pct >= 0;
+      const barColor = r.universe === 'AI 300' ? (isPositive ? '#3b82f6' : '#ef4444') : (isPositive ? '#fcf000' : '#ef4444');
+      const universeTag = r.universe === 'AI 300'
+        ? '<span class="pnthr-perf-tag pnthr-perf-tag-ai">AI</span>'
+        : '<span class="pnthr-perf-tag pnthr-perf-tag-679">679</span>';
+      const pctLabel = (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
+      const pctColor = isPositive ? '#28a745' : '#dc3545';
+      return `
+        <div class="pnthr-perf-row">
+          <div class="pnthr-perf-rank">${i + 1}</div>
+          <div class="pnthr-perf-label">${universeTag}${r.name}</div>
+          <div class="pnthr-perf-track">
+            <div class="pnthr-perf-bar" style="width:${barWidth}%;background:${barColor}"></div>
+          </div>
+          <div class="pnthr-perf-val" style="color:${pctColor}">${pctLabel}</div>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="pnthr-perf-panel">
+        <div class="pnthr-perf-title">ALL 27 SECTORS — 5-DAY PERFORMANCE RANKING</div>
+        <div class="pnthr-perf-legend">
+          <span class="pnthr-perf-legend-item"><span class="pnthr-perf-legend-dot" style="background:#fcf000"></span>S&P 500 Sectors</span>
+          <span class="pnthr-perf-legend-item"><span class="pnthr-perf-legend-dot" style="background:#3b82f6"></span>AI 300 Sectors</span>
+        </div>
+        <div class="pnthr-perf-bars">${items}</div>
+      </div>
+    `;
+  }, [issue?.charts?.sectorPerformance]);
+
   // Known tickers set — built once jungle stocks load
   const knownTickers = useMemo(() => new Set(jungleStocks.map(s => s.ticker)), [jungleStocks]);
 
@@ -311,6 +350,14 @@ export default function NewsPage() {
       }
     }
 
+    // Inject the 27-sector performance chart after WHERE THE MONEY IS MOVING
+    if (sectorPerformanceChartHtml) {
+      const moneyRegex = /(<h2[^>]*>[^<]*Where the Money[^<]*<\/h2>)([\s\S]*?)(?=<h2|$)/i;
+      if (moneyRegex.test(html)) {
+        html = html.replace(moneyRegex, (_m, heading, body) => `${heading}${body}${sectorPerformanceChartHtml}`);
+      }
+    }
+
     // Linkify tickers only once jungle stocks are loaded
     if (knownTickers.size > 0) {
       html = html.replace(/(?<=>|^)([^<]+)(?=<|$)/g, textBlock =>
@@ -323,7 +370,7 @@ export default function NewsPage() {
     }
 
     return html;
-  }, [rawHtml, knownTickers, issue?.narrative, issue?.featuredTrade, sectorRotationChartHtml]);
+  }, [rawHtml, knownTickers, issue?.narrative, issue?.featuredTrade, sectorRotationChartHtml, sectorPerformanceChartHtml]);
 
   async function handleArticleClick(e) {
     const ticker = e.target.dataset?.ticker || e.target.dataset?.totwChart;

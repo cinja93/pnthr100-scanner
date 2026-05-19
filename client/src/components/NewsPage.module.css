@@ -715,3 +715,108 @@
   .articleBody :global(.pnthr-chart-label) { font-size: 11px; }
   .articleBody :global(.pnthr-chart-val-thisweek) { font-size: 12px; min-width: 34px; }
 }
+
+/* ── Combined 27-sector performance ranking chart ────────────────────────── */
+.articleBody :global(.pnthr-perf-panel) {
+  margin: 28px 0;
+  padding: 16px 18px 14px;
+  background: rgba(252, 240, 0, 0.03);
+  border: 1px solid rgba(252, 240, 0, 0.22);
+  border-radius: 6px;
+}
+.articleBody :global(.pnthr-perf-title) {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #fcf000;
+  margin-bottom: 6px;
+}
+.articleBody :global(.pnthr-perf-legend) {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 12px;
+}
+.articleBody :global(.pnthr-perf-legend-item) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.articleBody :global(.pnthr-perf-legend-dot) {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.articleBody :global(.pnthr-perf-bars) {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.articleBody :global(.pnthr-perf-row) {
+  display: grid;
+  grid-template-columns: 28px 220px 1fr 65px;
+  gap: 8px;
+  align-items: center;
+}
+.articleBody :global(.pnthr-perf-rank) {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.articleBody :global(.pnthr-perf-label) {
+  font-size: 12px;
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.articleBody :global(.pnthr-perf-tag) {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.articleBody :global(.pnthr-perf-tag-679) {
+  background: rgba(252, 240, 0, 0.2);
+  color: #fcf000;
+}
+.articleBody :global(.pnthr-perf-tag-ai) {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+.articleBody :global(.pnthr-perf-track) {
+  height: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.articleBody :global(.pnthr-perf-bar) {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease-out;
+}
+.articleBody :global(.pnthr-perf-val) {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .articleBody :global(.pnthr-perf-row) {
+    grid-template-columns: 24px 150px 1fr 55px;
+  }
+  .articleBody :global(.pnthr-perf-label) { font-size: 10px; }
+  .articleBody :global(.pnthr-perf-val) { font-size: 10px; }
+}

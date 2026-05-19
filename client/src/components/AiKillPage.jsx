@@ -257,7 +257,7 @@ export default function AiKillPage() {
                       netLiquidity: nav,
                       entryPrice: s.currentPrice,
                       stopPrice: s.stopPrice,
-                      maxGapPct: 0,
+                      maxGapPct: s.maxGapPct || 0,
                       direction,
                       isETF: isEtfTicker(s.ticker),
                     })

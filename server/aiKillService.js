@@ -166,6 +166,10 @@ export async function runAiKillPipeline() {
   const weeklyDocs = await db.collection('pnthr_ai_bt_candles_weekly').find({ ticker: { $in: tickers } }, { projection: { ticker: 1, weekly: 1 } }).toArray();
   const weeklyByTicker = Object.fromEntries(weeklyDocs.map(d => [d.ticker, [...(d.weekly || [])].sort((a, b) => a.weekOf.localeCompare(b.weekOf))]));
 
+  // 3b. Pull gap risk data for sizing
+  const gapDocs = await db.collection('pnthr_gap_risk').find({ ticker: { $in: tickers } }).toArray();
+  const gapMap = new Map(gapDocs.map(g => [g.ticker, g.maxGapPct || 0]));
+
   // 4. Score each signal
   const scored = [];
   for (const ticker of tickers) {
@@ -224,6 +228,7 @@ export async function runAiKillPipeline() {
       ema, emaSlopeAnn,
       gapPct: (close != null && ema != null && ema > 0) ? +( ((close - ema) / ema) * 100 ).toFixed(2) : null,
       slopePct: emaSlopeAnn != null ? +Math.abs(emaSlopeAnn).toFixed(1) : null,
+      maxGapPct: gapMap.get(ticker) ?? 0,
       stopPrice: sig.stopPrice,
       riskPct: riskPct != null ? +riskPct.toFixed(2) : null,
       signalDate: sig.signalDate,

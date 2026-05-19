@@ -123,6 +123,21 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
     return minutes >= 570 && minutes <= 955; // 9:30 - 15:55 ET
   })();
 
+  // ── Weekday gate for PLACE / CANCEL / MODIFY enqueues ──────────────────
+  // TWS is offline on weekends — GTC lot-trigger orders can't be placed or
+  // cancelled. Without this gate the cron detects plan drift every minute,
+  // enqueues commands that always fail (RATE_LIMITED / NO_STATUS), the 3-in-
+  // 30-min backoff expires, and the cycle repeats all weekend. Detection and
+  // alignment math still run (useful for dry-run diagnostics); only the
+  // actual outbox enqueue is suppressed. Mon-Fri any hour is fine — TWS
+  // accepts GTC orders during extended hours when it's running, and the
+  // existing failure-backoff handles the rare case it's down on a weekday.
+  const isWeekday = (() => {
+    const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const day = et.getDay();
+    return day >= 1 && day <= 5;
+  })();
+
   const flagOn = process.env.IBKR_AUTO_SYNC_LOT_TRIGGERS === 'true';
 
   for (const p of positions) {
@@ -216,7 +231,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
           const reason = lot.complete
             ? (candidates.length > 1 ? 'DUPLICATE_AT_COMPLETE_LOT' : 'STALE_LOT_TRIGGER_PAST_CUMULATIVE')
             : 'ZERO_SHARE_LOT_STALE_ORDER';
-          const enqRes = !dryRun && flagOn
+          const enqRes = !dryRun && flagOn && isWeekday
             ? await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
                 ticker,
                 permId:    order.permId,
@@ -225,7 +240,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
                 lot:       lot.lot,
                 reason,
               })
-            : { skipped: dryRun ? 'DRY_RUN' : 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF' };
+            : { skipped: dryRun ? 'DRY_RUN' : (!flagOn ? 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF' : 'WEEKEND') };
           cancellations.push({
             ticker, lot: lot.lot, dir: isLong ? 'LONG' : 'SHORT',
             stalePrice: +order.stopPrice, staleShares: order.shares,
@@ -255,7 +270,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
 
       // Cancel duplicates first.
       for (const dup of duplicates) {
-        const enqRes = !dryRun && flagOn
+        const enqRes = !dryRun && flagOn && isWeekday
           ? await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
               ticker,
               permId:    dup.permId,
@@ -264,7 +279,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
               lot:       lot.lot,
               reason:    'DUPLICATE_AT_INCOMPLETE_LOT',
             })
-          : { skipped: dryRun ? 'DRY_RUN' : 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF' };
+          : { skipped: dryRun ? 'DRY_RUN' : (!flagOn ? 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF' : 'WEEKEND') };
         cancellations.push({
           ticker, lot: lot.lot, dir: isLong ? 'LONG' : 'SHORT',
           stalePrice: +dup.stopPrice, staleShares: dup.shares,
@@ -306,7 +321,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
         direction:         isLong ? 'LONG' : 'SHORT',
         stopExtendedHours: !!p.stopExtendedHours,
       });
-      const enqRes = !dryRun && flagOn
+      const enqRes = !dryRun && flagOn && isWeekday
         ? await enqueueOutbox(db, p.ownerId, 'MODIFY_LOT_TRIGGER', {
             ticker,
             direction:       isLong ? 'LONG' : 'SHORT',
@@ -322,7 +337,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
             positionId:      p.id,
             source:          'LOT_TRIGGER_CRON',
           }, { sanityCheck: sanity })
-        : { skipped: dryRun ? 'DRY_RUN' : (flagOn ? 'UNKNOWN' : 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF') };
+        : { skipped: dryRun ? 'DRY_RUN' : (!flagOn ? 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF' : 'WEEKEND') };
       modifications.push({
         ticker, lot: lot.lot, dir: isLong ? 'LONG' : 'SHORT',
         from: { trigger: twsTrigger, shares: twsShares },
@@ -356,7 +371,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
         direction:         isLong ? 'LONG' : 'SHORT',
         stopExtendedHours: !!p.stopExtendedHours,
       });
-      const enqRes = !dryRun && flagOn
+      const enqRes = !dryRun && flagOn && isWeekday
         ? await enqueueOutbox(db, p.ownerId, 'PLACE_LOT_TRIGGER', {
             ticker,
             direction:    isLong ? 'LONG' : 'SHORT',
@@ -370,7 +385,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
             positionId:   p.id,
             source:       'LOT_TRIGGER_CRON',
           }, { sanityCheck: sanity })
-        : { skipped: dryRun ? 'DRY_RUN' : (flagOn ? 'UNKNOWN' : 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF') };
+        : { skipped: dryRun ? 'DRY_RUN' : (!flagOn ? 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF' : 'WEEKEND') };
       placements.push({
         ticker, lot: lot.lot, dir: isLong ? 'LONG' : 'SHORT',
         trigger: lot.triggerPrice, shares: lot.targetShares,

@@ -211,8 +211,13 @@ export async function getAiStockChartData(ticker) {
     if (barCount >= 21 + 2)           return 21;
     return null;
   }
-  const dailyPeriod  = !dailyStaleData  ? pickPeriod(dailyAsc.length)  : null;
-  const weeklyPeriod = !weeklyStaleData ? pickPeriod(weeklyAsc.length) : null;
+  // EMA is computed on all available bars regardless of staleness so the
+  // historical line always renders. Signals are suppressed on stale data
+  // (BL/SS on a frozen tail are meaningless) via separate sig-period vars.
+  const dailyPeriod  = pickPeriod(dailyAsc.length);
+  const weeklyPeriod = pickPeriod(weeklyAsc.length);
+  const dailySigPeriod  = !dailyStaleData  ? dailyPeriod  : null;
+  const weeklySigPeriod = !weeklyStaleData ? weeklyPeriod : null;
 
   // Compute EMA series aligned to bars (using whichever period was picked).
   // EMA includes today's synthesized bar so the line extends to today's price.
@@ -229,8 +234,8 @@ export async function getAiStockChartData(ticker) {
   // than weekly so the 1% threshold starves daily signals on chop-zone names.
   // Gate offset: carnivore tickers use 1.10× (CARNIVORE_GATE_OFFSET = 0.10),
   // AI tickers use 1.25× (0.25) per locked AI Universe spec.
-  const dailyDetect  = dailyPeriod  ? detectAllSignals(dailySigBars,  dailyPeriod,  false, 0.003, gateOff) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
-  const weeklyDetect = weeklyPeriod ? detectAllSignals(weeklySigBars, weeklyPeriod, false, null,  gateOff) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
+  const dailyDetect  = dailySigPeriod  ? detectAllSignals(dailySigBars,  dailySigPeriod,  false, 0.003, gateOff) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
+  const weeklyDetect = weeklySigPeriod ? detectAllSignals(weeklySigBars, weeklySigPeriod, false, null,  gateOff) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
 
   // Last bar info per timeframe
   const lastDaily  = dailyAsc[dailyAsc.length - 1] || null;
@@ -272,8 +277,8 @@ export async function getAiStockChartData(ticker) {
     emaPeriod:        sectorPeriod,    // canonical sector period
     dailyEmaPeriod:   dailyPeriod,     // period actually used for daily (may be 21W fallback)
     weeklyEmaPeriod:  weeklyPeriod,    // period actually used for weekly (may be 21W fallback)
-    fallbackDaily:    dailyPeriod  != null && dailyPeriod  !== sectorPeriod,
-    fallbackWeekly:   weeklyPeriod != null && weeklyPeriod !== sectorPeriod,
+    fallbackDaily:    dailySigPeriod  != null && dailySigPeriod  !== sectorPeriod,
+    fallbackWeekly:   weeklySigPeriod != null && weeklySigPeriod !== sectorPeriod,
     staleDaily:       dailyStaleData,
     staleWeekly:      weeklyStaleData,
     asOf:         lastDaily?.date || null,

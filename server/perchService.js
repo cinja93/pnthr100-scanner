@@ -1,12 +1,16 @@
 // server/perchService.js
-// PNTHR's Perch v3 — MongoDB-powered newsletter generation
+// PNTHR's Perch v4 — MongoDB-powered newsletter generation
 //
-// Data sources (per diagnostic spec March 28, 2026):
-//   pnthr_kill_regime   — Market regime (SPY/QQQ, signal counts) — Friday weekOf
-//   pnthr_kill_scores   — Ranked Kill scores w/ sector — Friday weekOf
+// Data sources:
+//   pnthr_kill_regime   — 679 Market regime (SPY/QQQ, signal counts) — Friday weekOf
+//   pnthr_kill_scores   — 679 Ranked Kill scores w/ sector — Friday weekOf
 //   signal_history      — Weekly per-stock snapshots — Monday weekOf
-//   pnthr679_trade_archive — 6,797 closed historical trades
+//   pnthr679_trade_archive — closed historical trades
 //   pnthr_perch_track_record_log — Rotation log (avoid repeat archives)
+//   pnthr_ai_kill_scores — AI 300 Kill scores (PAI300 regime, AI sectors)
+//   pnthr_ai_sector_rank_daily — AI sector GO/NEUTRAL/NO_GO rankings
+//   pnthr_ai_index_candles_weekly — PAI300 index level + weekly candles
+//   FMP /api/v4/treasury — 10Y + 2Y bond yields
 
 import Anthropic from '@anthropic-ai/sdk';
 import { fetchPreyData, findBestExits } from './newsletterService.js';
@@ -14,10 +18,12 @@ import { archiveThisWeeksExits } from './tradeArchiveWriter.js';
 import { getAllTickers } from './constituents.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
 import { connectToDatabase } from './database.js';
+import { getLatestAiSectorRanks } from './aiSectorRotationService.js';
+import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-6';
-const MAX_TOKENS = 8000;  // increased from 4000 — newsletters were getting cut off
+const MAX_TOKENS = 10000;  // v4: 13 sections (was 9), needs more room
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -64,6 +70,10 @@ const BLACKLIST = [
   /\bsignal structure\b/i, /\bopen ratio\b/i, /\bnew ratio\b/i,
   /\bBollinger Band compression\b/i, /\bSpring Setup\b/i,
   /\bcase study\b/i, /\benriched signals\b/i,
+  /\bPAI300\b/, /\bPAI_S\d+\b/, /\bOpEMA\b/i,
+  /\bAI Kill\b/i, /\bAI Kill Score\b/i, /\bAI Kill Rank\b/i,
+  /\b36-?week\b/i, /\b36W\b/i,
+  /\bGO\b(?=\s+sector|\s+tier)/, /\bNO_GO\b/, /\bNO GO\b/,
 ];
 
 function checkBlacklist(text) {
@@ -358,6 +368,130 @@ async function getFromArchives(db, totwTicker) {
   };
 }
 
+// ── Bond Yields (FMP Treasury) ────────────────────────────────────────────────
+async function getBondYields() {
+  const FMP_API_KEY = process.env.FMP_API_KEY;
+  if (!FMP_API_KEY) return null;
+  try {
+    const res = await fetch(`https://financialmodelingprep.com/api/v4/treasury?from=${(() => { const d = new Date(); d.setDate(d.getDate() - 14); return d.toISOString().split('T')[0]; })()}&to=${new Date().toISOString().split('T')[0]}&apikey=${FMP_API_KEY}`);
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length < 2) return null;
+    const sorted = data.sort((a, b) => b.date.localeCompare(a.date));
+    const latest = sorted[0];
+    const prev = sorted[1];
+    return {
+      date: latest.date,
+      y10: latest.year10,
+      y2: latest.year2,
+      spread: latest.year10 != null && latest.year2 != null ? +(latest.year10 - latest.year2).toFixed(2) : null,
+      y10Prev: prev.year10,
+      y2Prev: prev.year2,
+      y10Dir: latest.year10 > prev.year10 ? 'rising' : latest.year10 < prev.year10 ? 'falling' : 'flat',
+      y2Dir: latest.year2 > prev.year2 ? 'rising' : latest.year2 < prev.year2 ? 'falling' : 'flat',
+    };
+  } catch (err) {
+    console.warn('[Perch v4] Bond yields fetch failed:', err.message);
+    return null;
+  }
+}
+
+// ── PAI300 Regime (AI 300 index level + bull/bear) ───────────────────────────
+async function getPai300Regime(db) {
+  try {
+    const aiKillDoc = await db.collection('pnthr_ai_kill_scores')
+      .find({}).sort({ weekOf: -1, generatedAt: -1 }).limit(1).next();
+    if (!aiKillDoc) return null;
+
+    const paiDoc = await db.collection('pnthr_ai_index_candles_weekly')
+      .findOne({ ticker: 'PAI300' });
+    const wk = (paiDoc?.weekly || []).slice().sort((a, b) => a.weekOf.localeCompare(b.weekOf));
+    const lastBar = wk.length > 0 ? wk[wk.length - 1] : null;
+    const prevBar = wk.length > 1 ? wk[wk.length - 2] : null;
+    const weeklyChange = lastBar && prevBar && prevBar.close > 0
+      ? +( ((lastBar.close - prevBar.close) / prevBar.close) * 100 ).toFixed(2)
+      : null;
+
+    return {
+      pai300Bull: aiKillDoc.pai300Bull,
+      pai300Level: lastBar?.close ?? null,
+      pai300WeeklyChange: weeklyChange,
+      pai300WeekOf: aiKillDoc.weekOf,
+      scoredCount: aiKillDoc.scoredCount ?? 0,
+      regimeLabel: aiKillDoc.pai300Bull === true ? 'BULL' : aiKillDoc.pai300Bull === false ? 'BEAR' : 'UNKNOWN',
+    };
+  } catch (err) {
+    console.warn('[Perch v4] PAI300 regime fetch failed:', err.message);
+    return null;
+  }
+}
+
+// ── AI Sector Ranks (GO / NEUTRAL / NO_GO) ──────────────────────────────────
+async function getAiSectorBreakdown() {
+  try {
+    const rankDoc = await getLatestAiSectorRanks();
+    if (!rankDoc || !rankDoc.ranks) return [];
+    return rankDoc.ranks.map(r => ({
+      sectorId: r.sectorId,
+      name: r.name,
+      rank: r.rank,
+      tier: r.tier,
+      fiveDayReturn: r.fiveDayReturn != null ? +(r.fiveDayReturn * 100).toFixed(2) : null,
+    }));
+  } catch (err) {
+    console.warn('[Perch v4] AI sector ranks fetch failed:', err.message);
+    return [];
+  }
+}
+
+// ── AI Kill Top Scores (top 3 longs + top 3 shorts) ─────────────────────────
+async function getAiKillTop(db) {
+  try {
+    const doc = await db.collection('pnthr_ai_kill_scores')
+      .find({}).sort({ weekOf: -1, generatedAt: -1 }).limit(1).next();
+    if (!doc || !doc.scores) return { longs: [], shorts: [] };
+    const scored = doc.scores;
+    const longs = scored
+      .filter(s => s.direction === 'LONG')
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 3)
+      .map(s => ({ ticker: s.ticker, companyName: s.companyName, sectorName: s.sectorName, total: s.total, tierName: s.tierName, currentPrice: s.currentPrice }));
+    const shorts = scored
+      .filter(s => s.direction === 'SHORT')
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 3)
+      .map(s => ({ ticker: s.ticker, companyName: s.companyName, sectorName: s.sectorName, total: s.total, tierName: s.tierName, currentPrice: s.currentPrice }));
+    return { longs, shorts };
+  } catch (err) {
+    console.warn('[Perch v4] AI Kill top scores fetch failed:', err.message);
+    return { longs: [], shorts: [] };
+  }
+}
+
+// ── AI Universe Upcoming Earnings ────────────────────────────────────────────
+async function getAiUpcomingEarnings(weekOf) {
+  const FMP_API_KEY = process.env.FMP_API_KEY;
+  if (!FMP_API_KEY) return [];
+  const fri = new Date(weekOf + 'T12:00:00Z');
+  const mon = new Date(fri); mon.setUTCDate(fri.getUTCDate() + 3);
+  const nfr = new Date(fri); nfr.setUTCDate(fri.getUTCDate() + 7);
+  const from = mon.toISOString().split('T')[0];
+  const to   = nfr.toISOString().split('T')[0];
+  try {
+    const aiTickers = new Set();
+    for (const sec of AI_SECTORS) for (const h of sec.holdings) aiTickers.add(h.ticker);
+    const calendar = await fetch(`https://financialmodelingprep.com/api/v3/earning_calendar?from=${from}&to=${to}&apikey=${FMP_API_KEY}`)
+      .then(r => r.json()).catch(() => []);
+    if (!Array.isArray(calendar)) return [];
+    return calendar
+      .filter(e => e.symbol && aiTickers.has(e.symbol))
+      .map(e => ({ date: e.date, ticker: e.symbol, name: e.name || e.symbol, time: e.time || null }))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.ticker.localeCompare(b.ticker));
+  } catch (err) {
+    console.warn('[Perch v4] AI earnings fetch failed:', err.message);
+    return [];
+  }
+}
+
 // ── Upcoming-week earnings (PNTHR Calendar) ───────────────────────────────────
 // Pulls the FMP earning calendar for the Mon–Fri that immediately follows the
 // newsletter's Friday weekOf, then narrows it to the PNTHR 679 universe so
@@ -392,14 +526,14 @@ async function getUpcomingEarnings(weekOf) {
       }))
       .sort((a, b) => a.date.localeCompare(b.date) || a.ticker.localeCompare(b.ticker));
   } catch (err) {
-    console.warn('[Perch v3] Upcoming earnings fetch failed:', err.message);
+    console.warn('[Perch v4] Upcoming earnings fetch failed:', err.message);
     return [];
   }
 }
 
 // ── Prompt Templates ──────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are Scott, the founder of PNTHR Funds, writing your weekly market newsletter called "PNTHR's Perch." You are an opinionated market strategist who runs a proprietary quantitative model that scans nearly 700 large-cap US stocks every week. You use data-driven insights to identify where money is flowing, which sectors are leading or lagging, and which individual stocks have the highest-conviction setups on both the long and short side.
+const SYSTEM_PROMPT = `You are Scott, the founder of PNTHR Funds, writing your weekly market newsletter called "PNTHR's Perch." You are an opinionated market strategist who runs two proprietary quantitative models: one that scans nearly 700 large-cap US stocks (the PNTHR 679) and another that tracks 297 companies at the forefront of artificial intelligence (the PNTHR AI Elite 300). You use data-driven insights to identify where money is flowing, which sectors are leading or lagging, and which individual stocks have the highest-conviction setups.
 
 YOUR VOICE:
 - Confident but never arrogant. You have strong opinions backed by data, but you respect the reader.
@@ -423,9 +557,10 @@ CRITICAL RULES -- NEVER VIOLATE:
    FEAST, HUNT, SPRINT, signal age, regime multiplier, discipline score, analyze score,
    composite score, confirmation status, overextension filter, heat rules, Friday pipeline,
    apex cache, signal structure, open ratio, new ratio, Bollinger Band compression,
-   Spring Setup, case study, enriched signals
+   Spring Setup, case study, enriched signals,
+   PAI300, PAI_S, OpEMA, AI Kill, AI Kill Score, AI Kill Rank, GO tier, NO_GO, 36-week, 36W
 
-2. NEVER explain how the model works mechanically. The reader trusts the conclusions.
+2. NEVER explain how either model works mechanically. The reader trusts the conclusions.
 
 3. NEVER reference internal scoring, tier names, or dimension breakdowns.
 
@@ -433,18 +568,20 @@ CRITICAL RULES -- NEVER VIOLATE:
 
 5. Use market-standard terms: momentum, trend, relative strength, rotation, conviction, setup, opportunity.
 
-6. NUMBERS THAT ARE OKAY: stock prices, percentage returns, sector ETF performance.
+6. NUMBERS THAT ARE OKAY: stock prices, percentage returns, sector ETF performance, bond yields, index levels.
    Frame signal counts as "our model identified X new opportunities" not "X signals fired."
 
 7. Always include the full legal disclaimer exactly as provided in the data payload.
 
-8. Keep total length between 1,200 and 2,000 words (excluding disclaimer).
+8. Keep total length between 1,500 and 2,500 words (excluding disclaimer).
 
 9. No em dashes anywhere in the output.
 
 10. BOTH DIRECTIONS: Always make clear that the model trades long AND short.
     When featuring short setups, include a brief plain-language explanation of short selling
     for readers who may be unfamiliar.
+
+11. TWO SEPARATE TREND GATES: The PNTHR 679 follows the S&P 500 and Nasdaq trend. The AI Elite 300 follows its own proprietary AI index trend. These can disagree. Never conflate them. When discussing 679 stocks, reference the broad market trend. When discussing AI 300 stocks, reference the AI index trend.
 
 TRANSLATION GUIDE:
 - BL / new long signal = "buy candidate" / "new long opportunity" / "fresh upside momentum"
@@ -454,8 +591,11 @@ TRANSLATION GUIDE:
 - Model rank = "ranks highest in our model" / "top-ranked setup"
 - Conviction filter = "fully confirmed setup" / "all conditions met"
 - 679 universe = "nearly 700 large-cap US stocks"
+- AI 300 universe = "297 AI-focused companies" or "our AI Elite universe"
 - Signal counts by sector = "our model sees the most new opportunities in [sector]"
-- Trend reference (OpEMA, sector-optimized EMA, 21W Index EMA, any EMA variant) = always "the trend" (e.g. "above trend," "back above trend," "trending higher")`;
+- Trend reference (OpEMA, sector-optimized EMA, 21W Index EMA, any EMA variant) = always "the trend" (e.g. "above trend," "back above trend," "trending higher")
+- AI sector tier (GO/NEUTRAL/NO_GO) = "bullish" / "neutral" / "bearish"
+- PAI300 index = "our proprietary AI index" or "the PNTHR AI 300 Index"`;
 
 // The leading `---` and `## IMPORTANT DISCLOSURES` heading are emitted by the
 // prompt's section-9 instruction. This template is the disclosure BODY only;
@@ -474,7 +614,7 @@ By reading this newsletter, you acknowledge that you are solely responsible for 
 
 (c) 2026 PNTHR Funds. All rights reserved.`;
 
-function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, sectorRotation, upcomingEarnings, disclaimer }) {
+function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, sectorRotation, upcomingEarnings, disclaimer, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings }) {
   // Regime-driven directional filter. In BULL we hide short data so Claude
   // can't accidentally reference shorts; in BEAR we hide long data; in MIXED
   // we keep both. See feedback_perch_regime_aware_content.md for the rule.
@@ -497,8 +637,8 @@ function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, new
     .join('\n');
 
   // Format top setups. Regime filter: in BULL we hide shorts, in BEAR we hide longs.
-  const fmtLong  = isBear ? '' : top10Longs.slice(0, 5).map(s => `${s.ticker} (${s.sector ?? 'Unknown'}, $${s.currentPrice ?? 'N/A'})`).join(', ');
-  const fmtShort = isBull ? '' : top10Shorts.slice(0, 5).map(s => `${s.ticker} (${s.sector ?? 'Unknown'}, $${s.currentPrice ?? 'N/A'})`).join(', ');
+  const fmtLong  = isBear ? '' : top10Longs.slice(0, 3).map(s => `${s.ticker} (${s.sector ?? 'Unknown'}, $${s.currentPrice ?? 'N/A'})`).join(', ');
+  const fmtShort = isBull ? '' : top10Shorts.slice(0, 3).map(s => `${s.ticker} (${s.sector ?? 'Unknown'}, $${s.currentPrice ?? 'N/A'})`).join(', ');
 
   // Format new signals by sector. Regime filter strips the off-trend side.
   const newSigLines = Object.entries(newSignals)
@@ -567,16 +707,80 @@ ${trackRecord.isLoss ? 'NOTE: This is a LOSING trade. Frame as: "Not every call 
     ? `BEAR market: Both SPY (${regime.spy.position} trend, ${regime.spy.slope}) and QQQ (${regime.qqq.position} trend, ${regime.qqq.slope}) are in downtrends. The dominant trend is DOWN. Trade with the trend.`
     : `MIXED market: SPY is ${regime.spy.position} its trend (${regime.spy.slope}), QQQ is ${regime.qqq.position} its trend (${regime.qqq.slope}). Selectivity is required — the indexes do not agree.`;
 
-  // Regime-aware section instructions for sections 5 and 6 of the locked
-  // 9-section format. In BULL we don't discuss shorts at all; in BEAR we
-  // don't discuss longs. MIXED keeps both. See feedback memory.
+  // 679 regime-aware section instructions
   const longSideInstruction = isBear
-    ? `## STOCKS TO WATCH: LONG SIDE — Replace the usual long picks with 1 short paragraph (3-5 sentences). The major indexes are in a clear downtrend right now, so we are not adding long positions this week. Explain in plain English why: when the broad market is trending down, individual long ideas tend to fight the tape; buying weakness because a stock looks cheap is the wrong instinct in this environment; the disciplined move is to wait until the major indexes turn back up before stepping in on the long side. Do NOT name any specific tickers. Do NOT use technical terms like "EMA", "moving average", "regime", or any signal codes.`
-    : `## STOCKS TO WATCH: LONG SIDE (top 3-5 long setups, brief plain-English thesis per stock)`;
+    ? `## 679 STOCKS TO WATCH: LONG SIDE — Replace the usual long picks with 1 short paragraph (3-5 sentences). The major indexes are in a clear downtrend right now, so we are not adding long positions this week. Explain in plain English why: when the broad market is trending down, individual long ideas tend to fight the tape; buying weakness because a stock looks cheap is the wrong instinct in this environment; the disciplined move is to wait until the major indexes turn back up before stepping in on the long side. Do NOT name any specific tickers. Do NOT use technical terms like "EMA", "moving average", "regime", or any signal codes.`
+    : `## 679 STOCKS TO WATCH: LONG SIDE (top 3 long setups from the PNTHR 679 universe, brief plain-English thesis per stock)`;
 
   const shortSideInstruction = isBull
-    ? `## STOCKS TO WATCH: SHORT SIDE — Replace the usual short picks with 1 short paragraph (3-5 sentences). The major indexes are in a clear uptrend right now, so we are not taking short positions this week. Explain in plain English why: when the broad market is trending up, shorting individual names tends to fight the tape; selling strong markets because they feel extended is the wrong instinct in this environment; the disciplined move is to wait until the major indexes turn back down before stepping in on the short side. Do NOT name any specific tickers. Do NOT define what shorting is. Do NOT use technical terms like "EMA", "moving average", "regime", or any signal codes.`
-    : `## STOCKS TO WATCH: SHORT SIDE (top 3-5 short setups, brief plain-English thesis per stock)`;
+    ? `## 679 STOCKS TO WATCH: SHORT SIDE — Replace the usual short picks with 1 short paragraph (3-5 sentences). The major indexes are in a clear uptrend right now, so we are not taking short positions this week. Explain in plain English why: when the broad market is trending up, shorting individual names tends to fight the tape; selling strong markets because they feel extended is the wrong instinct in this environment; the disciplined move is to wait until the major indexes turn back down before stepping in on the short side. Do NOT name any specific tickers. Do NOT define what shorting is. Do NOT use technical terms like "EMA", "moving average", "regime", or any signal codes.`
+    : `## 679 STOCKS TO WATCH: SHORT SIDE (top 3 short setups from the PNTHR 679 universe, brief plain-English thesis per stock)`;
+
+  // AI 300 regime — independent from 679 SPY/QQQ regime
+  const aiIsBull = pai300Regime?.regimeLabel === 'BULL';
+  const aiIsBear = pai300Regime?.regimeLabel === 'BEAR';
+
+  const aiLongInstruction = aiIsBear
+    ? `## AI 300 STOCKS TO WATCH — Replace the usual AI stock picks with 1 short paragraph (3-5 sentences). Our proprietary AI index is trending down right now, so we are not adding AI long positions this week. Explain in plain English why: when the AI sector as a whole is pulling back, individual AI stock picks tend to fight the momentum; the disciplined move is to wait for the AI index to turn back up before stepping in. Do NOT name any specific tickers.`
+    : `## AI 300 STOCKS TO WATCH (top 3 opportunities from the PNTHR AI Elite 300 universe, brief plain-English thesis per stock — these follow the AI index trend, which is SEPARATE from the broad market trend)`;
+
+  const aiShortInstruction = aiIsBull
+    ? ''  // in AI bull regime, don't mention shorts at all
+    : '';
+
+  // Format AI sector ranks for prompt
+  const aiSectorLines = (aiSectors || []).map(s => {
+    const label = s.tier === 'GO' ? 'BULLISH' : s.tier === 'NO_GO' ? 'BEARISH' : 'NEUTRAL';
+    return `${s.name}: ${label} (rank #${s.rank}, 5-day return: ${s.fiveDayReturn != null ? s.fiveDayReturn + '%' : 'N/A'})`;
+  }).join('\n');
+
+  // Format AI Kill top stocks — regime-filtered
+  const aiTopLongs = (!aiIsBear && aiKillTop?.longs?.length)
+    ? aiKillTop.longs.map(s => `${s.ticker} — ${s.companyName} (${s.sectorName}, $${s.currentPrice ?? 'N/A'})`).join('\n')
+    : '';
+  const aiTopShorts = (!aiIsBull && aiKillTop?.shorts?.length)
+    ? aiKillTop.shorts.map(s => `${s.ticker} — ${s.companyName} (${s.sectorName}, $${s.currentPrice ?? 'N/A'})`).join('\n')
+    : '';
+
+  // Bond yields data block
+  const bondBlock = bondYields
+    ? `BOND YIELDS:
+10-Year Treasury: ${bondYields.y10}% (${bondYields.y10Dir} vs last week's ${bondYields.y10Prev}%)
+2-Year Treasury: ${bondYields.y2}% (${bondYields.y2Dir} vs last week's ${bondYields.y2Prev}%)
+Yield Curve Spread (10Y minus 2Y): ${bondYields.spread != null ? bondYields.spread + '%' : 'N/A'}
+Date: ${bondYields.date}`
+    : 'BOND YIELDS: Data not available this week.';
+
+  // PAI300 regime data block
+  const pai300Block = pai300Regime
+    ? `PNTHR AI 300 INDEX:
+Index Level: ${pai300Regime.pai300Level != null ? pai300Regime.pai300Level.toFixed(2) : 'N/A'}
+Weekly Change: ${pai300Regime.pai300WeeklyChange != null ? (pai300Regime.pai300WeeklyChange > 0 ? '+' : '') + pai300Regime.pai300WeeklyChange + '%' : 'N/A'}
+AI Index Trend: ${pai300Regime.pai300Bull === true ? 'ABOVE its long-term trend (bullish)' : pai300Regime.pai300Bull === false ? 'BELOW its long-term trend (bearish)' : 'Unknown'}
+Active AI signals scored: ${pai300Regime.scoredCount}`
+    : 'PNTHR AI 300 INDEX: Data not available this week.';
+
+  // AI upcoming earnings
+  const aiEarningsSection = (() => {
+    if (!aiUpcomingEarnings || aiUpcomingEarnings.length === 0) {
+      return 'AI 300 CALENDAR EARNINGS (upcoming Mon-Fri): No AI Elite universe companies are scheduled to report this coming week.';
+    }
+    const byDate = new Map();
+    for (const e of aiUpcomingEarnings) {
+      if (!byDate.has(e.date)) byDate.set(e.date, []);
+      byDate.get(e.date).push(e);
+    }
+    const lines = [];
+    for (const [date, items] of [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const label = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+      const names = items.slice(0, 8).map(e => {
+        const when = e.time === 'bmo' ? ' (before open)' : e.time === 'amc' ? ' (after close)' : '';
+        return `${e.ticker} (${e.name})${when}`;
+      }).join(', ');
+      lines.push(`${label}: ${names}`);
+    }
+    return `AI 300 CALENDAR EARNINGS (upcoming Mon-Fri, companies in our AI Elite universe):\n${lines.join('\n')}`;
+  })();
 
   // Regime stats line — strip the off-trend counts so the LLM can't quote them.
   const regimeStatsLine = isBull
@@ -603,13 +807,15 @@ DATA LABEL GUARDRAIL — read carefully before writing:
 - Do NOT call an "active" count "new". Example: "22 active long opportunities" must NEVER be paraphrased as "22 new long opportunities this week".
 - When citing counts, use the exact phrasing from the data so the reader gets the right meaning.
 
-MARKET REGIME:
+=== 679 UNIVERSE DATA (broad market, follows SPY + QQQ trend) ===
+
+MARKET REGIME (679):
 ${regimeDesc}
 ${regimeStatsLine}
 ${regime.vix ? `VIX: ${regime.vix}` : ''}
 ${prevWeekLine}
 
-${isBull ? 'REGIME-DRIVEN CONTENT RULE: This is a BULL regime. Do NOT discuss shorts, short setups, short tickers, or "what to short" anywhere in this issue. The short-side data has been intentionally omitted from the inputs above. Section 6 has been replaced with an educational paragraph about not fighting the trend (see section 6 instructions below).' : ''}${isBear ? 'REGIME-DRIVEN CONTENT RULE: This is a BEAR regime. Do NOT discuss longs, long setups, long tickers, or "what to buy" anywhere in this issue. The long-side data has been intentionally omitted from the inputs above. Section 5 has been replaced with an educational paragraph about not fighting the trend (see section 5 instructions below).' : ''}${!isBull && !isBear ? 'REGIME-DRIVEN CONTENT RULE: This is a MIXED regime. Cover both sides but frame the week as one requiring SELECTIVITY — the indexes do not agree, so the reader should be more discriminating than usual.' : ''}
+${isBull ? '679 REGIME RULE: This is a BULL regime for the 679 universe. Do NOT discuss 679 shorts, short setups, or short tickers in sections 5-6. Section 6 has been replaced with an educational paragraph about not fighting the trend.' : ''}${isBear ? '679 REGIME RULE: This is a BEAR regime for the 679 universe. Do NOT discuss 679 longs, long setups, or long tickers in sections 5-6. Section 5 has been replaced with an educational paragraph about not fighting the trend.' : ''}${!isBull && !isBear ? '679 REGIME RULE: This is a MIXED regime for the 679 universe. Cover both sides but frame the week as one requiring SELECTIVITY.' : ''}
 
 SECTOR BREAKDOWN (active opportunities by sector, plus new this week):
 ${sectorLines || 'No sector data available.'}
@@ -623,13 +829,13 @@ ${sectorRotation.cyclicalSummary}
 Per-sector detail with week-over-week trend:
 ${sectorRotation.rotationLines}` : 'No rotation data available.'}
 
-${isBear ? 'TOP LONG SETUPS: REGIME-OMITTED. Bear regime — long-side setups intentionally suppressed.' : `TOP LONG SETUPS (highest-conviction opportunities on the long side):
+${isBear ? 'TOP 679 LONG SETUPS: REGIME-OMITTED. Bear regime.' : `TOP 679 LONG SETUPS (highest-conviction):
 ${fmtLong || 'No long setups this week.'}`}
 
-${isBull ? 'TOP SHORT SETUPS: REGIME-OMITTED. Bull regime — short-side setups intentionally suppressed.' : `TOP SHORT SETUPS (highest-conviction opportunities on the short side):
+${isBull ? 'TOP 679 SHORT SETUPS: REGIME-OMITTED. Bull regime.' : `TOP 679 SHORT SETUPS (highest-conviction):
 ${fmtShort || 'No short setups this week.'}`}
 
-NEW OPPORTUNITIES THIS WEEK (fresh setups, by sector):
+NEW 679 OPPORTUNITIES THIS WEEK (fresh setups, by sector):
 ${newSigLines || 'No new setups this week.'}
 
 ${totwSection}
@@ -638,11 +844,36 @@ ${archiveSection}
 
 ${earningsSection}
 
+=== AI ELITE 300 UNIVERSE DATA (follows its own AI index trend, SEPARATE from SPY/QQQ) ===
+
+${pai300Block}
+
+${aiIsBull ? 'AI 300 REGIME RULE: The AI index is in a BULL trend. Only discuss AI long opportunities. Do NOT mention AI shorts.' : aiIsBear ? 'AI 300 REGIME RULE: The AI index is in a BEAR trend. Only discuss AI short opportunities. Do NOT mention AI longs.' : 'AI 300 REGIME RULE: AI index trend is unknown or mixed. Cover the AI universe cautiously.'}
+
+AI SECTOR RANKINGS (ranked by 5-day momentum, bullish = top 6, neutral = mid 6, bearish = bottom 4):
+${aiSectorLines || 'No AI sector data available.'}
+
+${aiIsBear ? 'TOP AI LONG SETUPS: REGIME-OMITTED. AI bear regime.' : `TOP AI LONG SETUPS (top 3 from AI Elite 300):
+${aiTopLongs || 'No AI long setups this week.'}`}
+
+${aiIsBull ? 'TOP AI SHORT SETUPS: REGIME-OMITTED. AI bull regime.' : `TOP AI SHORT SETUPS (top 3 from AI Elite 300):
+${aiTopShorts || 'No AI short setups this week.'}`}
+
+${aiEarningsSection}
+
+=== MACRO DATA ===
+
+${bondBlock}
+
+=== END DATA ===
+
 Write the newsletter using the LOCKED section structure below. The section names, their order, and their markdown are a contract with the frontend rendering engine — do not rename, reorder, merge, split, or skip sections (other than explicit OMIT rules). Do NOT include a top-level title (no "# PNTHR's Perch") and do NOT include a date line (no "Week of...") — the frontend header already shows those. Start the output directly with the first ## section heading.
 
-Use ## for each section heading exactly as shown. The nine sections below are the ONLY sections allowed, and they must appear in exactly this order:
+IMPORTANT: The PNTHR 679 and PNTHR AI Elite 300 have SEPARATE trend gates. It is entirely possible for one to be bullish while the other is bearish. Never conflate them. When discussing 679 stocks (sections 5-6), follow the 679 SPY/QQQ regime. When discussing AI 300 stocks (sections 9-10), follow the AI index regime.
 
-1. ## THE OPENING (2-3 paragraphs, set the tone, take a position on what the week means)
+Use ## for each section heading exactly as shown. The thirteen sections below are the ONLY sections allowed, and they must appear in exactly this order:
+
+1. ## THE OPENING (2-3 paragraphs, set the tone, take a position on what the week means. Weave in bond yield context if available: what rising/falling yields mean for stock investors in plain language. Also briefly acknowledge the AI 300 index direction to set up the AI sections later.)
 2. ## PNTHR TRADE OF THE WEEK - [TICKER]   <-- REQUIRED section whenever TRADE OF THE WEEK data was provided above. Replace [TICKER] with the exact ticker symbol from the data (heading MUST be "## PNTHR TRADE OF THE WEEK - AAPL" style; the frontend extracts the ticker from this heading to render a chart button, so the format is not optional). Write 1-2 paragraphs about what the trade captured and what the reader should take away, then END the section with a 3-line blockquote callout formatted EXACTLY like this (one leading ">" per line, no blank lines between, no extra text):
    > **[TICKER] - [Company Name]** | [Sector]
    > [Long exit (trade closed profitably) / Short cover (trade closed profitably)]
@@ -652,9 +883,13 @@ Use ## for each section heading exactly as shown. The nine sections below are th
 4. ## WHERE THE MONEY IS MOVING (3-4 paragraphs, deeper dive into specific sector opportunities and stock-level themes)
 5. ${longSideInstruction}
 6. ${shortSideInstruction}
-7. ## FROM THE ARCHIVES (ONLY if data provided above -- 2 sentences max)
-8. ## THE WEEK AHEAD (1-2 forward-looking paragraphs. If PNTHR Calendar earnings data was provided above, explicitly call out the most notable companies reporting in the upcoming Mon–Fri window and what to watch for — only reference names from the PNTHR Calendar earnings list, NEVER from external sources or memory. If the data above says no companies are scheduled, say so plainly and pivot to what the reader should watch instead. Close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott.)
-9. ## IMPORTANT DISCLOSURES (REQUIRED final section. Emit this EXACT block verbatim — a horizontal rule, then the heading, then the body below. No paraphrasing, no summarizing, no omissions. This section is legally required on every issue.):
+7. ## WHAT BOND YIELDS ARE TELLING US (1-2 paragraphs. Use the bond yield data to explain what interest rates mean for stock investors in plain language. If yields are rising, explain the pressure on growth stocks and borrowing costs. If falling, explain what relief that brings. Connect to both the broad market and AI stocks specifically. Frame through the lens of what it means for the reader's portfolio. Never use jargon like "duration risk", "term premium", or "real rates". If bond data is not available, write 1 paragraph noting that yield data was unavailable and pivot to what other macro signals suggest.)
+8. ## PNTHR AI 300 INDEX UPDATE (1-2 paragraphs. Discuss the PNTHR AI 300 Index, a proprietary index tracking 297 companies at the forefront of artificial intelligence. Mention the current index level, weekly change, and whether the AI trend is up or down. Express genuine enthusiasm about the AI investment thesis while being honest about the current trend direction. If the AI index is trending down, acknowledge it but frame it as normal volatility in a secular growth story. This should make the reader excited about AI investing while respecting the data.)
+9. ## AI SECTOR SPOTLIGHT (1-2 paragraphs. Discuss which AI sectors are showing strength and which are pulling back, using the AI sector ranking data. Translate "bullish" sectors into plain language about where AI money is flowing. Name the specific sector names. Connect sector trends to real-world AI developments when possible. Follow the AI index regime: if AI is bullish, highlight the strong sectors and what is driving them. If bearish, highlight the weak sectors and what is weighing on them.)
+10. ${aiLongInstruction}
+11. ## FROM THE ARCHIVES (ONLY if data provided above -- 2 sentences max)
+12. ## THE WEEK AHEAD (1-2 forward-looking paragraphs. If PNTHR Calendar earnings data was provided above, explicitly call out the most notable 679-universe companies reporting in the upcoming Mon-Fri window and what to watch for. If AI 300 earnings data was provided, also mention the most notable AI companies reporting. Only reference names from the earnings lists, NEVER from external sources or memory. If no companies are scheduled, say so plainly and pivot to what the reader should watch instead. Close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott.)
+13. ## IMPORTANT DISCLOSURES (REQUIRED final section. Emit this EXACT block verbatim — a horizontal rule, then the heading, then the body below. No paraphrasing, no summarizing, no omissions. This section is legally required on every issue.):
 
 ---
 
@@ -669,20 +904,26 @@ Write as Scott. Confident, direct, approachable. No em dashes. No jargon.`;
 // ── Main Export ───────────────────────────────────────────────────────────────
 
 export async function generatePerch(db) {
-  console.log('[Perch v3] Starting generation...');
+  console.log('[Perch v4] Starting generation...');
 
   // 1. Fetch all data sources in parallel
   const regime = await getRegimeData(db);
-  console.log(`[Perch v3] Regime: ${regime.regimeLabel}, weekOf: ${regime.weekOf}`);
+  console.log(`[Perch v4] 679 Regime: ${regime.regimeLabel}, weekOf: ${regime.weekOf}`);
 
-  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, rotationData] = await Promise.all([
+  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, rotationData, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings] = await Promise.all([
     getSectorBreakdown(db, regime.weekOf),
     getTop10Longs(db, regime.weekOf),
     getTop10Shorts(db, regime.weekOf),
     getNewSignalsSummary(db, regime.weekOf),
     getTradeOfWeek(db, regime.weekOf),
     getSectorRotationData(db, regime.weekOf),
+    getBondYields(),
+    getPai300Regime(db),
+    getAiSectorBreakdown(),
+    getAiKillTop(db),
+    getAiUpcomingEarnings(regime.weekOf),
   ]);
+  console.log(`[Perch v4] AI 300 Regime: ${pai300Regime?.regimeLabel ?? 'N/A'}, Bond 10Y: ${bondYields?.y10 ?? 'N/A'}%, AI sectors: ${aiSectors.length}`);
 
   // Fallback: pnthr679_trade_archive is only refreshed by a manual CSV import
   // (scripts/importTradeArchive.js) — it had no ongoing writer and data went
@@ -693,7 +934,7 @@ export async function generatePerch(db) {
   let tradeOfWeek = tradeOfWeekFromArchive;
   if (!tradeOfWeek) {
     try {
-      console.log('[Perch v3] Archive had no TOTW candidate for this week. Falling back to live signals...');
+      console.log('[Perch v4] Archive had no TOTW candidate for this week. Falling back to live signals...');
       const prey = await fetchPreyData();
 
       // Self-heal the archive: upsert this week's BE/SE exits.
@@ -703,9 +944,9 @@ export async function generatePerch(db) {
           signals:   prey.signals   || {},
           stockMeta: prey.stockMeta || {},
         });
-        console.log(`[Perch v3] Archived ${total} weekly exits (${upserted} new, ${modified} updated) into pnthr679_trade_archive`);
+        console.log(`[Perch v4] Archived ${total} weekly exits (${upserted} new, ${modified} updated) into pnthr679_trade_archive`);
       } catch (archErr) {
-        console.warn('[Perch v3] Archive write failed (non-fatal):', archErr.message);
+        console.warn('[Perch v4] Archive write failed (non-fatal):', archErr.message);
       }
 
       const { bestPct } = findBestExits(prey.signals || {}, prey.stockMeta || {}, regime.weekOf);
@@ -722,10 +963,10 @@ export async function generatePerch(db) {
           holdingWeeks: null,
           bigWinner:    bestPct.profitPct >= 20,
         };
-        console.log(`[Perch v3] Live-signal TOTW: ${tradeOfWeek.ticker} +${tradeOfWeek.profitPct}%`);
+        console.log(`[Perch v4] Live-signal TOTW: ${tradeOfWeek.ticker} +${tradeOfWeek.profitPct}%`);
       }
     } catch (err) {
-      console.warn('[Perch v3] Live-signal TOTW fallback failed:', err.message);
+      console.warn('[Perch v4] Live-signal TOTW fallback failed:', err.message);
     }
   }
 
@@ -735,11 +976,11 @@ export async function generatePerch(db) {
   // universe. Surfaced to the prompt so 'The Week Ahead' can call out the
   // specific names reporting next week without inventing them.
   const upcomingEarnings = await getUpcomingEarnings(regime.weekOf);
-  console.log(`[Perch v3] Upcoming-week earnings in PNTHR universe: ${upcomingEarnings.length}`);
+  console.log(`[Perch v4] Upcoming-week earnings in PNTHR universe: ${upcomingEarnings.length}`);
 
   // Build sector rotation analysis
   const sectorRotation = buildSectorRotationAnalysis(sectors, rotationData.prevMap);
-  console.log(`[Perch v3] Sector rotation: ${sectorRotation.rotationType}`);
+  console.log(`[Perch v4] Sector rotation: ${sectorRotation.rotationType}`);
 
   // Chart data for the inline week-over-week sector rotation chart on the
   // rendered newsletter. Reuses the same totals the prompt already saw, so
@@ -759,7 +1000,7 @@ export async function generatePerch(db) {
     })
     .sort((a, b) => b.thisWeek - a.thisWeek);
 
-  console.log(`[Perch v3] Data assembled — longs: ${top10Longs.length}, shorts: ${top10Shorts.length}, TOTW: ${tradeOfWeek?.ticker ?? 'none'}, archive: ${trackRecord?.ticker ?? 'none'}`);
+  console.log(`[Perch v4] Data assembled — longs: ${top10Longs.length}, shorts: ${top10Shorts.length}, TOTW: ${tradeOfWeek?.ticker ?? 'none'}, archive: ${trackRecord?.ticker ?? 'none'}`);
 
   // 2. Build prompts
   const userPrompt = buildUserPrompt({
@@ -768,6 +1009,7 @@ export async function generatePerch(db) {
     newSignals, tradeOfWeek, trackRecord,
     sectorRotation, upcomingEarnings,
     disclaimer: DISCLAIMER,
+    bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings,
   });
 
   // 3. Call Claude API
@@ -782,7 +1024,7 @@ export async function generatePerch(db) {
 
   // ── Truncation check ──────────────────────────────────────────────────────
   if (response.stop_reason === 'max_tokens') {
-    console.error('[Perch v3] ⚠ GENERATION TRUNCATED — hit max_tokens limit! Newsletter is incomplete.');
+    console.error('[Perch v4] ⚠ GENERATION TRUNCATED — hit max_tokens limit! Newsletter is incomplete.');
   }
 
   let narrative = response.content
@@ -868,6 +1110,14 @@ export async function generatePerch(db) {
         archiveTrade:   trackRecord?.ticker    ?? null,
         rotationType:   sectorRotation?.rotationType ?? null,
         upcomingEarningsCount: upcomingEarnings.length,
+        bondYield10Y:   bondYields?.y10 ?? null,
+        bondYield2Y:    bondYields?.y2 ?? null,
+        pai300Bull:     pai300Regime?.pai300Bull ?? null,
+        pai300Level:    pai300Regime?.pai300Level ?? null,
+        aiSectorCount:  aiSectors.length,
+        aiTopLong:      aiKillTop?.longs?.[0]?.ticker ?? null,
+        aiTopShort:     aiKillTop?.shorts?.[0]?.ticker ?? null,
+        aiEarningsCount: aiUpcomingEarnings.length,
       },
     },
   };
@@ -892,7 +1142,7 @@ export async function generateAndSavePerch(weekOfOverride) {
     status: 'draft',
     narrative,
     generatedAt: new Date(),
-    generatorVersion: 'perch-v3',
+    generatorVersion: 'perch-v4',
     metadata,
     ...(charts && { charts }),
     ...(featuredTrade && { featuredTrade }),

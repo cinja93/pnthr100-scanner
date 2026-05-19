@@ -368,6 +368,28 @@ async function getFromArchives(db, totwTicker) {
   };
 }
 
+// ── Market News (FMP General News) ────────────────────────────────────────────
+async function getMarketNews() {
+  const FMP_API_KEY = process.env.FMP_API_KEY;
+  if (!FMP_API_KEY) return [];
+  try {
+    const res = await fetch(`https://financialmodelingprep.com/api/v4/general_news?page=0&apikey=${FMP_API_KEY}`);
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter(a => a.title && a.publishedDate)
+      .slice(0, 5)
+      .map(a => ({
+        title: a.title,
+        source: a.source || 'Unknown',
+        date: a.publishedDate?.split('T')[0] ?? '',
+      }));
+  } catch (err) {
+    console.warn('[Perch v4] Market news fetch failed:', err.message);
+    return [];
+  }
+}
+
 // ── Bond Yields (FMP Treasury) ────────────────────────────────────────────────
 async function getBondYields() {
   const FMP_API_KEY = process.env.FMP_API_KEY;
@@ -583,7 +605,7 @@ CRITICAL RULES -- NEVER VIOLATE:
 
 11. TWO SEPARATE TREND GATES: The PNTHR 679 follows the S&P 500 and Nasdaq trend. The AI Elite 300 follows its own proprietary AI index trend. These can disagree. Never conflate them. When discussing 679 stocks, reference the broad market trend. When discussing AI 300 stocks, reference the AI index trend.
 
-12. NO INVENTED NEWS: You do NOT have access to current news. NEVER reference specific geopolitical events, wars, tariffs, trade deals, elections, Fed decisions, or headlines unless they are explicitly stated in the data provided. If the data does not mention it, you must not mention it. Stick strictly to what the numbers and rotation data show. You may describe market behavior ("investors are moving to defensive sectors") but NOT guess at the cause ("because of tariff fears").
+12. NEWS SOURCING: You are provided with MARKET NEWS HEADLINES in the data. You MAY reference these headlines to provide real-world context. However, you MUST NOT invent, fabricate, or guess at any news events, geopolitical developments, or headlines that are NOT in the provided data. If a topic is not covered by the provided headlines, do not reference it. Use the headlines naturally to connect market data to real-world events.
 
 13. DATA-ONLY SECTOR ASSESSMENTS: When discussing whether a sector is strong or weak, use ONLY the signal counts and rotation data provided. A sector with many long signals does not mean the sector ETF is rising. Do not claim a sector is "thriving" or "surging" based on signal counts alone. Use language like "our model sees the most long opportunities in [sector]" rather than "sector is thriving."
 
@@ -618,7 +640,7 @@ By reading this newsletter, you acknowledge that you are solely responsible for 
 
 (c) 2026 PNTHR Funds. All rights reserved.`;
 
-function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, sectorRotation, upcomingEarnings, disclaimer, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings }) {
+function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, sectorRotation, upcomingEarnings, disclaimer, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews }) {
   // Regime-driven directional filter. In BULL we hide short data so Claude
   // can't accidentally reference shorts; in BEAR we hide long data; in MIXED
   // we keep both. See feedback_perch_regime_aware_content.md for the rule.
@@ -899,6 +921,9 @@ ${aiEarningsSection}
 
 ${bondBlock}
 
+MARKET NEWS HEADLINES (recent, from financial news sources — use these for real-world context):
+${(marketNews || []).length > 0 ? marketNews.map(n => `- ${n.title} (${n.source}, ${n.date})`).join('\n') : 'No market news available.'}
+
 === END DATA ===
 
 Write the newsletter using the LOCKED section structure below. The section names, their order, and their markdown are a contract with the frontend rendering engine — do not rename, reorder, merge, split, or skip sections (other than explicit OMIT rules). Do NOT include a top-level title (no "# PNTHR's Perch") and do NOT include a date line (no "Week of...") — the frontend header already shows those. Start the output directly with the first ## section heading.
@@ -907,13 +932,13 @@ IMPORTANT: The PNTHR 679 and PNTHR AI Elite 300 have SEPARATE trend gates. It is
 
 Use ## for each section heading exactly as shown. The thirteen sections below are the ONLY sections allowed, and they must appear in exactly this order:
 
-1. ## THE OPENING (2-3 paragraphs, set the tone, take a position on what the week means based on the data above. Weave in bond yield context if available: what rising/falling yields mean for stock investors in plain language. Also briefly acknowledge the AI 300 index direction to set up the AI sections later. CRITICAL: Do not reference specific news events, wars, tariffs, trade deals, or headlines. Only discuss what the data shows.)
+1. ## THE OPENING (2-3 paragraphs, set the tone, take a position on what the week means. Reference 1-2 of the MARKET NEWS HEADLINES provided above to ground the opening in real-world context. Weave in bond yield context if available. Also briefly acknowledge the AI 300 index direction to set up the AI sections later. Only reference news from the provided headlines, never invent events.)
 2. ## PNTHR TRADE OF THE WEEK - [TICKER]   <-- REQUIRED section whenever TRADE OF THE WEEK data was provided above. Replace [TICKER] with the exact ticker symbol from the data (heading MUST be "## PNTHR TRADE OF THE WEEK - AAPL" style; the frontend extracts the ticker from this heading to render a chart button, so the format is not optional). Write 1-2 paragraphs about what the trade captured and what the reader should take away, then END the section with a 3-line blockquote callout formatted EXACTLY like this (one leading ">" per line, no blank lines between, no extra text):
    > **[TICKER] - [Company Name]** | [Sector]
    > [Long exit (trade closed profitably) / Short cover (trade closed profitably)]
    > **Profit: +$[X.XX] (+[X.XX]%)**
    Use "Long exit" when the trade direction from the data is long, "Short cover" when the direction is short. Use the exact profit dollar and % numbers from the data above, rounded to two decimals. Skip this section entirely ONLY if the TRADE OF THE WEEK data above literally says "No confirmed exits this week. OMIT".
-3. ## SECTOR ROTATION (2-3 paragraphs analyzing how capital is flowing between sectors. Use the rotation data to tell the story: which sectors are getting stronger/weaker, is money rotating into defensive names or cyclical names, what does that say about institutional sentiment and risk appetite? Be specific about which sectors are improving/deteriorating vs last week. This section should feel like institutional-grade market intelligence. CRITICAL: Only reference facts from the data provided above. Do NOT invent or guess at current news events, geopolitical developments, trade policy, or headlines. If the data does not mention it, do not reference it. NOTE: The frontend automatically renders a week-over-week sector-rotation bar chart at the end of this section — do NOT describe it as "above" or "below" or embed any chart yourself.)
+3. ## SECTOR ROTATION (2-3 paragraphs analyzing how capital is flowing between sectors. Use the rotation data to tell the story: which sectors are getting stronger/weaker, is money rotating into defensive names or cyclical names, what does that say about institutional sentiment and risk appetite? Be specific about which sectors are improving/deteriorating vs last week. You may connect rotation trends to the MARKET NEWS HEADLINES if relevant, but only reference headlines that were provided in the data. This section should feel like institutional-grade market intelligence. NOTE: The frontend automatically renders a week-over-week sector-rotation bar chart at the end of this section — do NOT describe it as "above" or "below" or embed any chart yourself.)
 4. ## WHERE THE MONEY IS MOVING (2-3 paragraphs. Use the WHERE THE MONEY IS MOVING data above to discuss the top 2 sectors from the 679 universe and the top 2 AI sectors from the AI 300 universe. For each sector, mention the top stock as a point of interest. Keep it conversational and plain-language. Do NOT invent reasons or reference news events not in the data. Frame around "our model sees the most opportunity in..." rather than claiming sectors are surging or crashing.)
 5. ${longSideInstruction}
 6. ${shortSideInstruction}
@@ -944,7 +969,7 @@ export async function generatePerch(db) {
   const regime = await getRegimeData(db);
   console.log(`[Perch v4] 679 Regime: ${regime.regimeLabel}, weekOf: ${regime.weekOf}`);
 
-  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, rotationData, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings] = await Promise.all([
+  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, rotationData, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews] = await Promise.all([
     getSectorBreakdown(db, regime.weekOf),
     getTop10Longs(db, regime.weekOf),
     getTop10Shorts(db, regime.weekOf),
@@ -956,8 +981,9 @@ export async function generatePerch(db) {
     getAiSectorBreakdown(),
     getAiKillTop(db),
     getAiUpcomingEarnings(regime.weekOf),
+    getMarketNews(),
   ]);
-  console.log(`[Perch v4] AI 300 Regime: ${pai300Regime?.regimeLabel ?? 'N/A'}, Bond 10Y: ${bondYields?.y10 ?? 'N/A'}%, AI sectors: ${aiSectors.length}`);
+  console.log(`[Perch v4] AI 300 Regime: ${pai300Regime?.regimeLabel ?? 'N/A'}, Bond 10Y: ${bondYields?.y10 ?? 'N/A'}%, AI sectors: ${aiSectors.length}, News: ${marketNews.length} headlines`);
 
   // Fallback: pnthr679_trade_archive is only refreshed by a manual CSV import
   // (scripts/importTradeArchive.js) — it had no ongoing writer and data went
@@ -1043,7 +1069,7 @@ export async function generatePerch(db) {
     newSignals, tradeOfWeek, trackRecord,
     sectorRotation, upcomingEarnings,
     disclaimer: DISCLAIMER,
-    bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings,
+    bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews,
   });
 
   // 3. Call Claude API

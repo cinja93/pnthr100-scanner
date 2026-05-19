@@ -537,6 +537,12 @@ export async function fetchAiSectorRotation() {
   return response.json();
 }
 
+export async function fetchSectorPerformanceCombined() {
+  const response = await apiFetch(`${API_BASE}/api/sector-performance-combined`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // PNTHR AI Orders — APEX v6 weekly order sheet
 export async function fetchLatestAiOrders({ refresh = false } = {}) {
   const qs = refresh ? '?refresh=true' : '';

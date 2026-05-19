@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchPulse, fetchLiveVix, fetchSignalStocks, fetchDevelopingSignals, fetchSectorExposure, fetchMovers, fetchPulseAi300, fetchAi300SignalStocks, fetchAi300Movers, fetchAi300DevelopingSignals } from '../services/api';
+import { fetchPulse, fetchLiveVix, fetchSignalStocks, fetchDevelopingSignals, fetchSectorExposure, fetchMovers, fetchPulseAi300, fetchAi300SignalStocks, fetchAi300Movers, fetchAi300DevelopingSignals, fetchSectorPerformanceCombined } from '../services/api';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { useAuth } from '../AuthContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
@@ -89,8 +89,10 @@ export default function PulsePage({ onNavigate }) {
   const [ai300SignalModal, setAi300SignalModal] = useState(null);
   const [ai300SectorModal, setAi300SectorModal] = useState(null); // sector name string
   const [ai300NewSigModal, setAi300NewSigModal] = useState(null); // { signal: 'BL'|'SS', sector: string|null }
+  const [sectorPerf, setSectorPerf] = useState(null);
   const autoRefreshTimer = React.useRef(null);
   const pollingTimer = React.useRef(null);
+  const sectorPerfTimer = React.useRef(null);
   const showDev = shouldShowDevelopingSignals();
 
   async function loadDevSignals() {
@@ -150,6 +152,7 @@ export default function PulsePage({ onNavigate }) {
     // Re-fetch developing signals on manual refresh
     loadDevSignals();
     fetchMovers().then(setMovers).catch(err => console.warn('Movers refresh failed:', err));
+    fetchSectorPerformanceCombined().then(setSectorPerf).catch(() => {});
     // Also refresh AI 300 if that tab has been loaded
     if (ai300Data) loadAi300();
   }
@@ -169,6 +172,7 @@ export default function PulsePage({ onNavigate }) {
       .finally(() => setLoading(false));
     loadDevSignals();
     fetchMovers().then(setMovers).catch(err => console.warn('Movers load failed:', err));
+    fetchSectorPerformanceCombined().then(setSectorPerf).catch(err => console.warn('Sector perf load failed:', err));
     if (sessionStorage.getItem('pulseTab') === 'ai300') loadAi300();
 
     // 5-minute auto-refresh during extended market hours (7 AM – 8 PM ET, Mon–Fri)
@@ -183,10 +187,15 @@ export default function PulsePage({ onNavigate }) {
     pollingTimer.current = setInterval(() => {
       if (isMarketWindow()) refreshPulse();
     }, 5 * 60 * 1000);
+    // Hourly refresh for sector performance chart
+    sectorPerfTimer.current = setInterval(() => {
+      if (isMarketWindow()) fetchSectorPerformanceCombined().then(setSectorPerf).catch(() => {});
+    }, 60 * 60 * 1000);
 
     return () => {
       if (autoRefreshTimer.current) clearTimeout(autoRefreshTimer.current);
       if (pollingTimer.current) clearInterval(pollingTimer.current);
+      if (sectorPerfTimer.current) clearInterval(sectorPerfTimer.current);
     };
   }, []);
 
@@ -300,6 +309,10 @@ export default function PulsePage({ onNavigate }) {
         <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
           <MoversPanel movers={movers} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} />
         </div>
+        {/* Sector Performance — 27 sectors ranked by 5D return */}
+        <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+          <SectorPerformanceChart data={sectorPerf} />
+        </div>
         {/* Portfolio Status */}
         {!isInvestor && (
           <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
@@ -343,6 +356,10 @@ export default function PulsePage({ onNavigate }) {
           {/* Movers */}
           <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
             <Ai300MoversPanel movers={ai300Movers} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} />
+          </div>
+          {/* Sector Performance — 27 sectors ranked by 5D return */}
+          <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
+            <SectorPerformanceChart data={sectorPerf} />
           </div>
           {/* Portfolio Status */}
           {!isInvestor && (
@@ -2740,6 +2757,72 @@ function PortfolioStatus({ positions, lotsReady, onNavigate, sectorExposure, onS
       {sectorExposure?.exposure && Object.keys(sectorExposure.exposure).length > 0 && (
         <SectorExposureGrid sectorExposure={sectorExposure.exposure} onSectorClick={onSectorClick} />
       )}
+    </div>
+  );
+}
+
+function SectorPerformanceChart({ data }) {
+  if (!data || !data.sectors || data.sectors.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', color: '#666', fontSize: 12, padding: '16px 0', fontFamily: 'monospace' }}>
+        Loading sector performance...
+      </div>
+    );
+  }
+  const sectors = data.sectors;
+  const maxAbs = Math.max(...sectors.map(s => Math.abs(s.fiveDayReturn)), 1);
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ color: '#D4A017', fontSize: 13, letterSpacing: 2, fontWeight: 700 }}>📊 SECTOR PERFORMANCE — 5 DAY</div>
+        <div style={{ display: 'flex', gap: 12, fontSize: 10, color: '#888' }}>
+          <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#D4A017', marginRight: 4, verticalAlign: 'middle' }} />679</span>
+          <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#3b82f6', marginRight: 4, verticalAlign: 'middle' }} />AI 300</span>
+        </div>
+      </div>
+      {data.asOf && (
+        <div style={{ fontSize: 10, color: '#555', marginBottom: 8 }}>
+          as of {new Date(data.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {sectors.map((s, i) => {
+          const pct = s.fiveDayReturn;
+          const barWidth = Math.min(Math.abs(pct) / maxAbs * 100, 100);
+          const isPositive = pct >= 0;
+          const is679 = s.universe === '679';
+          const barColor = isPositive ? (is679 ? '#D4A017' : '#3b82f6') : '#dc3545';
+          const tagBg = is679 ? 'rgba(212,160,23,0.15)' : 'rgba(59,130,246,0.15)';
+          const tagColor = is679 ? '#D4A017' : '#60a5fa';
+          return (
+            <div key={`${s.universe}-${s.name}`} style={{ display: 'grid', gridTemplateColumns: '24px 200px 1fr 58px', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: 11 }}>
+              <span style={{ color: '#555', textAlign: 'right', fontWeight: 600 }}>{i + 1}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+                <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 2, background: tagBg, color: tagColor, flexShrink: 0 }}>
+                  {is679 ? '679' : 'AI'}
+                </span>
+                <span style={{ color: '#ccc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {s.name}
+                </span>
+              </div>
+              <div style={{ height: 10, background: '#1a1a2e', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
+                <div style={{
+                  position: 'absolute',
+                  [isPositive ? 'left' : 'right']: 0,
+                  top: 0, bottom: 0,
+                  width: `${barWidth}%`,
+                  background: barColor,
+                  borderRadius: 3,
+                  transition: 'width 0.3s ease',
+                }} />
+              </div>
+              <span style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace', color: isPositive ? '#22c55e' : '#ef4444' }}>
+                {isPositive ? '+' : ''}{pct.toFixed(2)}%
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

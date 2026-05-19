@@ -687,7 +687,7 @@ By reading this newsletter, you acknowledge that you are solely responsible for 
 
 (c) 2026 PNTHR Funds. All rights reserved.`;
 
-function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, sectorRotation, upcomingEarnings, disclaimer, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews }) {
+function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, upcomingEarnings, disclaimer, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews }) {
   // Regime-driven directional filter. In BULL we hide short data so Claude
   // can't accidentally reference shorts; in BEAR we hide long data; in MIXED
   // we keep both. See feedback_perch_regime_aware_content.md for the rule.
@@ -917,15 +917,6 @@ ${isBull ? '679 REGIME RULE — MANDATORY: This is a BULL regime for the 679 uni
 SECTOR BREAKDOWN (active opportunities by sector, plus new this week):
 ${sectorLines || 'No sector data available.'}
 
-SECTOR ROTATION ANALYSIS (week-over-week changes, defensive vs cyclical flow):
-${sectorRotation ? `${sectorRotation.rotationType}
-
-${sectorRotation.defensiveSummary}
-${sectorRotation.cyclicalSummary}
-
-Per-sector detail with week-over-week trend:
-${sectorRotation.rotationLines}` : 'No rotation data available.'}
-
 WHERE THE MONEY IS MOVING — 679 (top 2 sectors by opportunity count):
 ${moneyMoving679 || 'No sector data.'}
 
@@ -977,7 +968,7 @@ Write the newsletter using the LOCKED section structure below. The section names
 
 IMPORTANT: The PNTHR 679 and PNTHR AI Elite 300 have SEPARATE trend gates. It is entirely possible for one to be bullish while the other is bearish. Never conflate them. When discussing 679 stocks (sections 5-6), follow the 679 SPY/QQQ regime. When discussing AI 300 stocks (sections 9-10), follow the AI index regime.
 
-Use ## for each section heading exactly as shown. The thirteen sections below are the ONLY sections allowed, and they must appear in exactly this order:
+Use ## for each section heading exactly as shown. The twelve sections below are the ONLY sections allowed, and they must appear in exactly this order:
 
 1. ## THE OPENING (2-3 paragraphs, set the tone, take a position on what the week means. Reference 1-2 of the MARKET NEWS HEADLINES provided above to ground the opening in real-world context. Weave in bond yield context if available. Also briefly acknowledge the AI 300 index direction to set up the AI sections later. Only reference news from the provided headlines, never invent events.)
 2. ## PNTHR TRADE OF THE WEEK - [TICKER]   <-- REQUIRED section whenever TRADE OF THE WEEK data was provided above. Replace [TICKER] with the exact ticker symbol from the data (heading MUST be "## PNTHR TRADE OF THE WEEK - AAPL" style; the frontend extracts the ticker from this heading to render a chart button, so the format is not optional). Write 1-2 paragraphs about what the trade captured and what the reader should take away, then END the section with a 3-line blockquote callout formatted EXACTLY like this (one leading ">" per line, no blank lines between, no extra text):
@@ -985,17 +976,16 @@ Use ## for each section heading exactly as shown. The thirteen sections below ar
    > [Long exit (trade closed profitably) / Short cover (trade closed profitably)]
    > **Profit: +$[X.XX] (+[X.XX]%)**
    Use "Long exit" when the trade direction from the data is long, "Short cover" when the direction is short. Use the exact profit dollar and % numbers from the data above, rounded to two decimals. Skip this section entirely ONLY if the TRADE OF THE WEEK data above literally says "No confirmed exits this week. OMIT".
-3. ## SECTOR ROTATION (2-3 paragraphs analyzing how capital is flowing between sectors. Use the rotation data to tell the story: which sectors are getting stronger/weaker, is money rotating into defensive names or cyclical names, what does that say about institutional sentiment and risk appetite? Be specific about which sectors are improving/deteriorating vs last week. You may connect rotation trends to the MARKET NEWS HEADLINES if relevant, but only reference headlines that were provided in the data. This section should feel like institutional-grade market intelligence. NOTE: The frontend automatically renders a week-over-week sector-rotation bar chart at the end of this section — do NOT describe it as "above" or "below" or embed any chart yourself.)
-4. ## WHERE THE MONEY IS MOVING (2-3 paragraphs. Use the WHERE THE MONEY IS MOVING data above to discuss the top 2 sectors from the 679 universe and the top 2 AI sectors from the AI 300 universe. For each sector, mention the top stock as a point of interest. Keep it conversational and plain-language. Do NOT invent reasons or reference news events not in the data. Frame around "our model sees the most opportunity in..." rather than claiming sectors are surging or crashing.)
-5. ${longSideInstruction}
-6. ${shortSideInstruction}
-7. ## WHAT BOND YIELDS ARE TELLING US (1-2 paragraphs. Use the bond yield data to explain what interest rates mean for stock investors in plain language. If yields are rising, explain the pressure on growth stocks and borrowing costs. If falling, explain what relief that brings. Connect to both the broad market and AI stocks specifically. Frame through the lens of what it means for the reader's portfolio. Never use jargon like "duration risk", "term premium", or "real rates". If bond data is not available, write 1 paragraph noting that yield data was unavailable and pivot to what other macro signals suggest.)
-8. ## PNTHR AI 300 INDEX UPDATE (1-2 paragraphs. Discuss the PNTHR AI 300 Index, a proprietary index tracking 297 companies at the forefront of artificial intelligence. Mention the current index level, weekly change, and whether the AI trend is up or down. Express genuine enthusiasm about the AI investment thesis while being honest about the current trend direction. If the AI index is trending down, acknowledge it but frame it as normal volatility in a secular growth story. This should make the reader excited about AI investing while respecting the data.)
-9. ## AI SECTOR SPOTLIGHT (1-2 paragraphs. Discuss which AI sectors are showing strength and which are pulling back, using the AI sector ranking data. Translate "bullish" sectors into plain language about where AI money is flowing. Name the specific sector names. Connect sector trends to real-world AI developments when possible. Follow the AI index regime: if AI is bullish, highlight the strong sectors and what is driving them. If bearish, highlight the weak sectors and what is weighing on them.)
-10. ${aiLongInstruction}
-11. ## FROM THE ARCHIVES (ONLY if data provided above -- 2 sentences max)
-12. ## THE WEEK AHEAD (1-2 forward-looking paragraphs. If PNTHR Calendar earnings data was provided above, explicitly call out the most notable 679-universe companies reporting in the upcoming Mon-Fri window and what to watch for. If AI 300 earnings data was provided, also mention the most notable AI companies reporting. Only reference names from the earnings lists, NEVER from external sources or memory. If no companies are scheduled, say so plainly and pivot to what the reader should watch instead. Close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott.)
-13. ## IMPORTANT DISCLOSURES (REQUIRED final section. Emit this EXACT block verbatim — a horizontal rule, then the heading, then the body below. No paraphrasing, no summarizing, no omissions. This section is legally required on every issue.):
+3. ## WHERE THE MONEY IS MOVING (2-3 paragraphs. Use the WHERE THE MONEY IS MOVING data above to discuss the top 2 sectors from the 679 universe and the top 2 AI sectors from the AI 300 universe. For each sector, mention the top stock as a point of interest. Keep it conversational and plain-language. Do NOT invent reasons or reference news events not in the data. Frame around "our model sees the most opportunity in..." rather than claiming sectors are surging or crashing. NOTE: The frontend automatically renders a combined 27-sector performance chart below this section — do NOT describe it or embed any chart yourself.)
+4. ${longSideInstruction}
+5. ${shortSideInstruction}
+6. ## WHAT BOND YIELDS ARE TELLING US (1-2 paragraphs. Use the bond yield data to explain what interest rates mean for stock investors in plain language. If yields are rising, explain the pressure on growth stocks and borrowing costs. If falling, explain what relief that brings. Connect to both the broad market and AI stocks specifically. Frame through the lens of what it means for the reader's portfolio. Never use jargon like "duration risk", "term premium", or "real rates". If bond data is not available, write 1 paragraph noting that yield data was unavailable and pivot to what other macro signals suggest.)
+7. ## PNTHR AI 300 INDEX UPDATE (1-2 paragraphs. Discuss the PNTHR AI 300 Index, a proprietary index tracking 297 companies at the forefront of artificial intelligence. Mention the current index level, weekly change, and whether the AI trend is up or down. Express genuine enthusiasm about the AI investment thesis while being honest about the current trend direction. If the AI index is trending down, acknowledge it but frame it as normal volatility in a secular growth story. This should make the reader excited about AI investing while respecting the data.)
+8. ## AI SECTOR SPOTLIGHT (1-2 paragraphs. Discuss which AI sectors are showing strength and which are pulling back, using the AI sector ranking data. Translate "bullish" sectors into plain language about where AI money is flowing. Name the specific sector names. Connect sector trends to real-world AI developments when possible. Follow the AI index regime: if AI is bullish, highlight the strong sectors and what is driving them. If bearish, highlight the weak sectors and what is weighing on them.)
+9. ${aiLongInstruction}
+10. ## FROM THE ARCHIVES (ONLY if data provided above -- 2 sentences max)
+11. ## THE WEEK AHEAD (1-2 forward-looking paragraphs. If PNTHR Calendar earnings data was provided above, explicitly call out the most notable 679-universe companies reporting in the upcoming Mon-Fri window and what to watch for. If AI 300 earnings data was provided, also mention the most notable AI companies reporting. Only reference names from the earnings lists, NEVER from external sources or memory. If no companies are scheduled, say so plainly and pivot to what the reader should watch instead. Close with a sign-off on a new line: "Scott" then "PNTHR Funds" -- no comma before Scott.)
+12. ## IMPORTANT DISCLOSURES (REQUIRED final section. Emit this EXACT block verbatim — a horizontal rule, then the heading, then the body below. No paraphrasing, no summarizing, no omissions. This section is legally required on every issue.):
 
 ---
 
@@ -1016,13 +1006,12 @@ export async function generatePerch(db) {
   const regime = await getRegimeData(db);
   console.log(`[Perch v4] 679 Regime: ${regime.regimeLabel}, weekOf: ${regime.weekOf}`);
 
-  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, rotationData, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews, sp500SectorPerf] = await Promise.all([
+  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews, sp500SectorPerf] = await Promise.all([
     getSectorBreakdown(db, regime.weekOf),
     getTop10Longs(db, regime.weekOf),
     getTop10Shorts(db, regime.weekOf),
     getNewSignalsSummary(db, regime.weekOf),
     getTradeOfWeek(db, regime.weekOf),
-    getSectorRotationData(db, regime.weekOf),
     getBondYields(),
     getPai300Regime(db),
     getAiSectorBreakdown(),
@@ -1093,28 +1082,6 @@ export async function generatePerch(db) {
   const upcomingEarnings = await getUpcomingEarnings(regime.weekOf);
   console.log(`[Perch v4] Upcoming-week earnings in PNTHR universe: ${upcomingEarnings.length}`);
 
-  // Build sector rotation analysis
-  const sectorRotation = buildSectorRotationAnalysis(sectors, rotationData.prevMap);
-  console.log(`[Perch v4] Sector rotation: ${sectorRotation.rotationType}`);
-
-  // Chart data for the inline week-over-week sector rotation chart on the
-  // rendered newsletter. Reuses the same totals the prompt already saw, so
-  // the narrative and the chart can't drift apart. Sectors with <3 active
-  // signals are filtered out as noisy. Sorted by thisWeek desc (longest bar
-  // first) so the strongest sectors read from the top.
-  const sectorRotationChart = sectors
-    .filter(s => s.totalBL + s.totalSS >= 3)
-    .map(s => {
-      const thisTotal = s.totalBL + s.totalSS;
-      const thisWeek  = Math.round((s.totalBL / thisTotal) * 100);
-      const prev      = rotationData.prevMap[s.sector];
-      const prevTotal = prev ? prev.totalBL + prev.totalSS : 0;
-      const lastWeek  = prevTotal >= 3 ? Math.round((prev.totalBL / prevTotal) * 100) : null;
-      const delta     = lastWeek == null ? null : thisWeek - lastWeek;
-      return { sector: s.sector, thisWeek, lastWeek, delta };
-    })
-    .sort((a, b) => b.thisWeek - a.thisWeek);
-
   console.log(`[Perch v4] Data assembled — longs: ${top10Longs.length}, shorts: ${top10Shorts.length}, TOTW: ${tradeOfWeek?.ticker ?? 'none'}, archive: ${trackRecord?.ticker ?? 'none'}`);
 
   // 2. Build prompts
@@ -1122,7 +1089,7 @@ export async function generatePerch(db) {
     weekOf: regime.weekOf,
     regime, sectors, top10Longs, top10Shorts,
     newSignals, tradeOfWeek, trackRecord,
-    sectorRotation, upcomingEarnings,
+    upcomingEarnings,
     disclaimer: DISCLAIMER,
     bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews,
   });
@@ -1192,10 +1159,6 @@ export async function generatePerch(db) {
     wasTruncated,
     blacklistViolations: violations,
     charts: {
-      // Week-over-week sector long-lean %. The client renders this below the
-      // SECTOR ROTATION section with yellow (this week) vs gray (last week)
-      // bars.
-      sectorRotation: sectorRotationChart,
       sectorPerformance: combinedSectorPerf,
     },
     // Structured TOTW record the frontend uses to rebuild the callout's
@@ -1224,7 +1187,6 @@ export async function generatePerch(db) {
         topShort:       top10Shorts[0]?.ticker ?? null,
         tradeOfWeek:    tradeOfWeek?.ticker    ?? null,
         archiveTrade:   trackRecord?.ticker    ?? null,
-        rotationType:   sectorRotation?.rotationType ?? null,
         upcomingEarningsCount: upcomingEarnings.length,
         bondYield10Y:   bondYields?.y10 ?? null,
         bondYield2Y:    bondYields?.y2 ?? null,

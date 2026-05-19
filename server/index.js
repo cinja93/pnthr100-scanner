@@ -2137,6 +2137,49 @@ app.get('/api/ai-sector-rotation/on/:date', async (req, res) => {
   }
 });
 
+// GET /api/sector-performance-combined — 27-sector 5D performance (11 S&P + 16 AI)
+let _sectorPerfCache = null;
+let _sectorPerfCacheAt = 0;
+const SECTOR_PERF_TTL = 60 * 60 * 1000; // 1 hour
+const SP500_SECTOR_ETFS = [
+  { ticker: 'XLE', name: 'Energy' }, { ticker: 'XLP', name: 'Consumer Staples' },
+  { ticker: 'XLV', name: 'Health Care' }, { ticker: 'XLC', name: 'Communication Services' },
+  { ticker: 'XLF', name: 'Financials' }, { ticker: 'XLRE', name: 'Real Estate' },
+  { ticker: 'XLK', name: 'Information Technology' }, { ticker: 'XLI', name: 'Industrials' },
+  { ticker: 'XLY', name: 'Consumer Discretionary' }, { ticker: 'XLU', name: 'Utilities' },
+  { ticker: 'XLB', name: 'Basic Materials' },
+];
+app.get('/api/sector-performance-combined', authenticateJWT, async (req, res) => {
+  try {
+    if (_sectorPerfCache && Date.now() - _sectorPerfCacheAt < SECTOR_PERF_TTL) {
+      return res.json(_sectorPerfCache);
+    }
+    const FMP_API_KEY = process.env.FMP_API_KEY;
+    const [sp500Raw, aiRankDoc] = await Promise.all([
+      FMP_API_KEY
+        ? fetch(`https://financialmodelingprep.com/api/v3/stock-price-change/${SP500_SECTOR_ETFS.map(e => e.ticker).join(',')}?apikey=${FMP_API_KEY}`).then(r => r.json()).catch(() => [])
+        : Promise.resolve([]),
+      getLatestAiSectorRanks(),
+    ]);
+    const sp500 = (Array.isArray(sp500Raw) ? sp500Raw : []).map(d => {
+      const etf = SP500_SECTOR_ETFS.find(e => e.ticker === d.symbol);
+      return { name: etf?.name ?? d.symbol, etfTicker: d.symbol, fiveDayReturn: d['5D'] != null ? +Number(d['5D']).toFixed(2) : null, universe: '679' };
+    }).filter(d => d.fiveDayReturn != null);
+    const ai = (aiRankDoc?.ranks || []).map(r => ({
+      name: r.name, sectorId: r.sectorId, tier: r.tier,
+      fiveDayReturn: r.fiveDayReturn != null ? +(r.fiveDayReturn * 100).toFixed(2) : null, universe: 'ai300',
+    })).filter(d => d.fiveDayReturn != null);
+    const combined = [...sp500, ...ai].sort((a, b) => b.fiveDayReturn - a.fiveDayReturn);
+    const result = { sectors: combined, asOf: new Date().toISOString() };
+    _sectorPerfCache = result;
+    _sectorPerfCacheAt = Date.now();
+    res.json(result);
+  } catch (err) {
+    console.error('Error in /api/sector-performance-combined:', err);
+    res.status(500).json({ error: 'Failed to load sector performance' });
+  }
+});
+
 app.post('/api/admin/backfill-ai-sector-ranks', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const result = await backfillAiSectorRanks(req.body || {});

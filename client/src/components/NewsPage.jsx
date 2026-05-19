@@ -15,6 +15,7 @@ import {
   fetchJungleStocks,
   fetchEarnings,
   fetchStockSearch,
+  fetchAiUniverse,
 } from '../services/api';
 
 marked.setOptions({ breaks: true });
@@ -89,12 +90,17 @@ export default function NewsPage() {
 
   useEffect(() => { loadList(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Silently pre-load jungle stocks so tickers in the newsletter are clickable
+  // Silently pre-load jungle stocks + AI universe so tickers in the newsletter are clickable
   useEffect(() => {
-    fetchJungleStocks()
-      .then(data => {
+    Promise.all([fetchJungleStocks(), fetchAiUniverse().catch(() => ({ signals: {} }))])
+      .then(([data, aiData]) => {
         const stockList = data.stocks || [];
-        setJungleStocks(stockList);
+        const aiTickers = Object.keys(aiData.signals || {});
+        const aiStubs = aiTickers
+          .filter(t => !stockList.some(s => s.ticker === t))
+          .map(t => ({ ticker: t, _ai: true }));
+        const merged = [...stockList, ...aiStubs];
+        setJungleStocks(merged);
         fetchEarnings(stockList.map(s => s.ticker)).then(setJungleEarnings);
       })
       .catch(err => console.warn('Chart pre-load skipped:', err));
@@ -161,50 +167,6 @@ export default function NewsPage() {
   }
 
   const rawHtml = issue?.narrative ? marked.parse(issue.narrative) : '';
-
-  // Build the sector-rotation chart HTML (week-over-week long-lean %).
-  // Data comes from issue.charts.sectorRotation (computed server-side at
-  // generation time). Yellow bar = this week, gray bar = last week. If
-  // there's no prior-issue data the gray bar renders with width 0 and the
-  // delta label is suppressed.
-  const sectorRotationChartHtml = useMemo(() => {
-    const rows = issue?.charts?.sectorRotation || [];
-    if (!rows.length) return '';
-    const items = rows.map(r => {
-      const lastWeekWidth = r.lastWeek == null ? 0 : r.lastWeek;
-      const deltaLabel = r.delta == null ? ''
-        : r.delta > 0 ? `▲${r.delta}`
-        : r.delta < 0 ? `▼${Math.abs(r.delta)}`
-        :               '—';
-      const deltaClass = r.delta == null ? ''
-        : r.delta > 0 ? 'pnthr-chart-delta-up'
-        : r.delta < 0 ? 'pnthr-chart-delta-down'
-        :               'pnthr-chart-delta-flat';
-      return `
-        <div class="pnthr-chart-row">
-          <div class="pnthr-chart-label">${r.sector}</div>
-          <div class="pnthr-chart-track">
-            <div class="pnthr-chart-bar pnthr-chart-bar-lastweek" style="width:${lastWeekWidth}%"></div>
-            <div class="pnthr-chart-bar pnthr-chart-bar-thisweek" style="width:${r.thisWeek}%"></div>
-          </div>
-          <div class="pnthr-chart-vals">
-            <span class="pnthr-chart-val-thisweek">${r.thisWeek}%</span>
-            ${deltaLabel ? `<span class="pnthr-chart-val-delta ${deltaClass}">${deltaLabel}</span>` : ''}
-          </div>
-        </div>
-      `;
-    }).join('');
-    return `
-      <div class="pnthr-chart-panel">
-        <div class="pnthr-chart-title">SECTOR LONG-LEAN % — THIS WEEK VS LAST WEEK</div>
-        <div class="pnthr-chart-legend">
-          <span class="pnthr-chart-legend-item"><span class="pnthr-chart-legend-dot pnthr-chart-legend-thisweek"></span>This week</span>
-          <span class="pnthr-chart-legend-item"><span class="pnthr-chart-legend-dot pnthr-chart-legend-lastweek"></span>Last week</span>
-        </div>
-        <div class="pnthr-chart-bars">${items}</div>
-      </div>
-    `;
-  }, [issue?.charts?.sectorRotation]);
 
   // Build the combined 27-sector performance chart (11 S&P 500 + 16 AI 300,
   // ranked by 5-day return). Injected after the WHERE THE MONEY IS MOVING section.
@@ -335,21 +297,6 @@ export default function NewsPage() {
     // Inject the sector-rotation chart at the END of the rotation section
     // (right before the next h2 heading, so it reads as a 'here's what we
     // just described, visualized' summary). perchService.js uses
-    // '## SECTOR ROTATION' as the section heading; the older
-    // newsletterService.js path uses '## Sector Intelligence'. Match either.
-    // Done before ticker linkification so the chart HTML isn't touched by
-    // the ticker-link regex.
-    if (sectorRotationChartHtml) {
-      const sectorRegex = /(<h2[^>]*>[^<]*(?:Sector Rotation|Sector Intelligence)[^<]*<\/h2>)([\s\S]*?)(?=<h2|$)/i;
-      if (sectorRegex.test(html)) {
-        html = html.replace(sectorRegex, (_m, heading, body) => `${heading}${body}${sectorRotationChartHtml}`);
-      } else {
-        // Fallback: if no matching section heading exists, append the chart
-        // at the end so the user still sees it.
-        html = html + sectorRotationChartHtml;
-      }
-    }
-
     // Inject the 27-sector performance chart after WHERE THE MONEY IS MOVING
     if (sectorPerformanceChartHtml) {
       const moneyRegex = /(<h2[^>]*>[^<]*Where the Money[^<]*<\/h2>)([\s\S]*?)(?=<h2|$)/i;
@@ -370,7 +317,7 @@ export default function NewsPage() {
     }
 
     return html;
-  }, [rawHtml, knownTickers, issue?.narrative, issue?.featuredTrade, sectorRotationChartHtml, sectorPerformanceChartHtml]);
+  }, [rawHtml, knownTickers, issue?.narrative, issue?.featuredTrade, sectorPerformanceChartHtml]);
 
   async function handleArticleClick(e) {
     const ticker = e.target.dataset?.ticker || e.target.dataset?.totwChart;

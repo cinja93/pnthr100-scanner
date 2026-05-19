@@ -270,13 +270,7 @@ async function getNewSignalsSummary(db, weekOf) {
   return bySector;
 }
 
-async function getTradeOfWeek(db, weekOf) {
-  // Trade of the Week = most profitable CONFIRMED exit in pnthr679_trade_archive
-  // where exitDate falls within the current week (Monday-Friday).
-  // closeConvictionPct >= 8 ensures we're in the 70%+ win rate universe, not the 42% baseline.
-  const { weekStart, weekEnd } = weekBounds(weekOf);
-
-  // Exclude tickers featured as TOTW in the last 8 weeks (check both sources)
+async function getRecentTotwTickers(db, weekOf) {
   const eightWeeksAgo = weeksBack(weekOf, 8);
   const [logDocs, issueDocs] = await Promise.all([
     db.collection('pnthr_perch_track_record_log')
@@ -286,12 +280,19 @@ async function getTradeOfWeek(db, weekOf) {
       .find({ weekOf: { $gte: eightWeeksAgo }, 'featuredTrade.ticker': { $exists: true } })
       .project({ 'featuredTrade.ticker': 1 }).toArray(),
   ]);
-  const recentTotwTickers = [
+  return [
     ...new Set([
       ...logDocs.map(d => d.ticker),
       ...issueDocs.map(d => d.featuredTrade?.ticker).filter(Boolean),
     ]),
   ];
+}
+
+async function getTradeOfWeek(db, weekOf, excludeTickers = []) {
+  // Trade of the Week = most profitable CONFIRMED exit in pnthr679_trade_archive
+  // where exitDate falls within the current week (Monday-Friday).
+  // closeConvictionPct >= 8 ensures we're in the 70%+ win rate universe, not the 42% baseline.
+  const { weekStart, weekEnd } = weekBounds(weekOf);
 
   const rows = await db.collection('pnthr679_trade_archive')
     .find({
@@ -299,7 +300,7 @@ async function getTradeOfWeek(db, weekOf) {
       exitSignal:         { $in: ['BE', 'SE'] },
       closeConvictionPct: { $gte: 8 },
       profitPct:          { $gt: 0 },
-      ...(recentTotwTickers.length > 0 && { ticker: { $nin: recentTotwTickers } }),
+      ...(excludeTickers.length > 0 && { ticker: { $nin: excludeTickers } }),
     })
     .sort({ profitPct: -1 })
     .limit(1)
@@ -1015,12 +1016,15 @@ export async function generatePerch(db) {
   const regime = await getRegimeData(db);
   console.log(`[Perch v4] 679 Regime: ${regime.regimeLabel}, weekOf: ${regime.weekOf}`);
 
+  const recentTotwTickers = await getRecentTotwTickers(db, regime.weekOf);
+  console.log(`[Perch v4] TOTW dedup — excluding ${recentTotwTickers.length} recent tickers: ${recentTotwTickers.join(', ') || '(none)'}`);
+
   const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews, sp500SectorPerf] = await Promise.all([
     getSectorBreakdown(db, regime.weekOf),
     getTop10Longs(db, regime.weekOf),
     getTop10Shorts(db, regime.weekOf),
     getNewSignalsSummary(db, regime.weekOf),
-    getTradeOfWeek(db, regime.weekOf),
+    getTradeOfWeek(db, regime.weekOf, recentTotwTickers),
     getBondYields(),
     getPai300Regime(db),
     getAiSectorBreakdown(),
@@ -1062,21 +1066,23 @@ export async function generatePerch(db) {
         console.warn('[Perch v4] Archive write failed (non-fatal):', archErr.message);
       }
 
-      const { bestPct } = findBestExits(prey.signals || {}, prey.stockMeta || {}, regime.weekOf);
-      if (bestPct) {
+      const { bestPct, exits } = findBestExits(prey.signals || {}, prey.stockMeta || {}, regime.weekOf);
+      const filteredExits = (exits || []).filter(e => !recentTotwTickers.includes(e.ticker));
+      const bestFiltered = filteredExits.sort((a, b) => b.profitPct - a.profitPct)[0] || null;
+      if (bestFiltered) {
         tradeOfWeek = {
-          ticker:       bestPct.ticker,
-          companyName:  bestPct.companyName || bestPct.ticker,
-          sector:       bestPct.sector || 'Unknown',
-          direction:    bestPct.direction === 'long' ? 'LONG' : 'SHORT',
+          ticker:       bestFiltered.ticker,
+          companyName:  bestFiltered.companyName || bestFiltered.ticker,
+          sector:       bestFiltered.sector || 'Unknown',
+          direction:    bestFiltered.direction === 'long' ? 'LONG' : 'SHORT',
           entryDate:    null,
           exitDate:     regime.weekOf,
-          profitPct:    bestPct.profitPct,
-          profitDollar: bestPct.profitDollar,
+          profitPct:    bestFiltered.profitPct,
+          profitDollar: bestFiltered.profitDollar,
           holdingWeeks: null,
-          bigWinner:    bestPct.profitPct >= 20,
+          bigWinner:    bestFiltered.profitPct >= 20,
         };
-        console.log(`[Perch v4] Live-signal TOTW: ${tradeOfWeek.ticker} +${tradeOfWeek.profitPct}%`);
+        console.log(`[Perch v4] Live-signal TOTW: ${tradeOfWeek.ticker} +${tradeOfWeek.profitPct}% (excluded: ${recentTotwTickers.join(', ')})`);
       }
     } catch (err) {
       console.warn('[Perch v4] Live-signal TOTW fallback failed:', err.message);

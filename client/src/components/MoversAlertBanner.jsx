@@ -45,7 +45,7 @@ function buildAlerts(movers) {
   return out;
 }
 
-export const MOVERS_BANNER_HEIGHT = 44;
+export const MOVERS_BANNER_HEIGHT = 50;
 
 export default function MoversAlertBanner({ onTickerClick, onVisibleChange, topOffset = 0 }) {
   const { currentUser } = useAuth() || {};

@@ -14,7 +14,7 @@ function saveDismissed(keys) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(keys)); } catch {}
 }
 
-export const NOW_BANNER_HEIGHT = 48;
+export const NOW_BANNER_HEIGHT = 58;
 
 export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavigate }) {
   const { isAdmin } = useAuth() || {};

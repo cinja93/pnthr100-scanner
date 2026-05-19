@@ -1046,9 +1046,10 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
           // AND the trader has not dismissed the prompt. The PYRAMID button
           // shows ONLY on eligible rows so its presence is a one-glance
           // "this position has no ratchet plan" indicator.
-          const hasL2L5Plan = pos?.fills && [2,3,4,5].some(i =>
-            pos.fills[i]?.targetShares > 0 || pos.fills[i]?.filled
-          );
+          const hasL2L5Plan = pos?.fills && ['2','3','4','5'].some(k => {
+            const f = pos.fills[k];
+            return f?.targetShares > 0 || f?.filled;
+          });
           const isPyramidEligible = !!(
             pos &&
             row.command?.positionId &&

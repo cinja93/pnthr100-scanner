@@ -2791,7 +2791,7 @@ function SectorPerformanceChart({ data }) {
           const barWidth = Math.min(Math.abs(pct) / maxAbs * 100, 100);
           const isPositive = pct >= 0;
           const is679 = s.universe === '679';
-          const barColor = isPositive ? (is679 ? '#D4A017' : '#3b82f6') : '#dc3545';
+          const barColor = is679 ? '#D4A017' : '#3b82f6';
           const tagBg = is679 ? 'rgba(212,160,23,0.15)' : 'rgba(59,130,246,0.15)';
           const tagColor = is679 ? '#D4A017' : '#60a5fa';
           return (

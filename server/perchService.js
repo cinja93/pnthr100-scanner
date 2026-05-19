@@ -277,15 +277,19 @@ async function getRecentTotwTickers(db, weekOf) {
       .find({ featuredWeekOf: { $gte: eightWeeksAgo }, section: 'TRADE_OF_WEEK' })
       .project({ ticker: 1 }).toArray(),
     db.collection('newsletter_issues')
-      .find({ weekOf: { $gte: eightWeeksAgo }, 'featuredTrade.ticker': { $exists: true } })
-      .project({ 'featuredTrade.ticker': 1 }).toArray(),
+      .find({ weekOf: { $gte: eightWeeksAgo } })
+      .project({ featuredTrade: 1, narrative: 1, weekOf: 1 }).toArray(),
   ]);
-  return [
-    ...new Set([
-      ...logDocs.map(d => d.ticker),
-      ...issueDocs.map(d => d.featuredTrade?.ticker).filter(Boolean),
-    ]),
-  ];
+  const tickers = new Set(logDocs.map(d => d.ticker));
+  for (const doc of issueDocs) {
+    if (doc.featuredTrade?.ticker) tickers.add(doc.featuredTrade.ticker);
+    if (doc.narrative) {
+      const m = doc.narrative.match(/##\s*PNTHR\s+TRADE\s+OF\s+THE\s+WEEK\s*[-–—]\s*([A-Z]{1,5})\b/i);
+      if (m) tickers.add(m[1]);
+    }
+  }
+  console.log(`[Perch TOTW dedup] excluding: ${[...tickers].join(', ') || '(none)'}`);
+  return [...tickers];
 }
 
 async function getTradeOfWeek(db, weekOf, excludeTickers = []) {

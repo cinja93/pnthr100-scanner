@@ -21,6 +21,16 @@ import { SECTORS, FUND_META } from './scripts/aiUniverse/aiUniverseData.js';
 import { fetchFMP, getYearStartPrices } from './stockService.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { getAiUniverseKill } from './aiUniverseKillService.js';
+import { loadDeactivatedTickers } from './aiUniverseHealthJob.js';
+
+// ── Deactivated ticker exclusion set — loaded from Mongo at startup ──────────
+// Refreshed by the weekly health-check cron. Any ticker written to
+// pnthr_ai_deactivated (isActivelyTrading=false + stale data) is excluded
+// from the live universe display and the daily candle update loop.
+let _deactivated = new Set();
+loadDeactivatedTickers().then(s => { _deactivated = s; }).catch(() => {});
+export function getDeactivatedTickers() { return _deactivated; }
+export function refreshDeactivatedTickers(set) { _deactivated = set; }
 
 // ── Flatten holdings once at module load ────────────────────────────────────
 const FLAT_HOLDINGS = [];
@@ -42,7 +52,7 @@ for (const sector of SECTORS) {
   }
 }
 
-export function getAiUniverseHoldings() { return FLAT_HOLDINGS; }
+export function getAiUniverseHoldings() { return FLAT_HOLDINGS.filter(h => !_deactivated.has(h.ticker)); }
 export function getAiUniverseSectorMeta() { return SECTOR_META; }
 export function getAiUniverseFundMeta() { return FUND_META; }
 

@@ -22,7 +22,7 @@ dotenv.config();
 
 import { connectToDatabase } from './database.js';
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
-import { clearAiUniverseCache } from './aiUniverseService.js';
+import { clearAiUniverseCache, getDeactivatedTickers } from './aiUniverseService.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE    = 'https://financialmodelingprep.com/api/v3';
@@ -136,10 +136,14 @@ export async function runAiUniverseDailyUpdate() {
   await dailyCol.createIndex({ ticker: 1 }, { unique: true });
   await weeklyCol.createIndex({ ticker: 1 }, { unique: true });
 
+  const excluded = getDeactivatedTickers();
   const allTickers = [];
-  for (const sec of SECTORS) for (const h of sec.holdings) allTickers.push(h.ticker);
+  for (const sec of SECTORS) for (const h of sec.holdings) {
+    if (!excluded.has(h.ticker)) allTickers.push(h.ticker);
+  }
   const tickers = [...new Set(allTickers)];
   const today   = todayISO();
+  if (excluded.size > 0) console.log(`[AI Universe Daily] skipping ${excluded.size} deactivated: ${[...excluded].join(', ')}`);
 
   console.log(`[AI Universe Daily] starting — ${tickers.length} tickers, target date ${today}`);
   const startTime = Date.now();

@@ -31,8 +31,9 @@ import { runOrdersPipeline, runOrdersDailyUpdate, ordersGetLatest, ordersGetGate
 import { getKillTestSettings, saveKillTestSettings } from './killTestSettings.js';
 import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import { runDailySignalJob } from './dailySignalJob.js';
-import { getAiUniverse, clearAiUniverseCache, getAiUniverseHoldings } from './aiUniverseService.js';
+import { getAiUniverse, clearAiUniverseCache, getAiUniverseHoldings, refreshDeactivatedTickers } from './aiUniverseService.js';
 import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
+import { runAiUniverseHealthCheck, loadDeactivatedTickers } from './aiUniverseHealthJob.js';
 import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
@@ -5980,6 +5981,21 @@ cron.schedule('15 16 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
+// ── Cron: AI Universe health check — every Sunday at 8pm ET ─────────────────
+// Checks every universe ticker against FMP isActivelyTrading + Mongo data age.
+// Tickers that fail both gates (not trading + data stale > 30 days) are written
+// to pnthr_ai_deactivated and excluded from the live universe + daily cron.
+cron.schedule('0 20 * * 0', async () => {
+  try {
+    console.log('[AI Health] starting weekly universe health check...');
+    const result = await runAiUniverseHealthCheck();
+    // Refresh in-memory exclusion set immediately after the check completes
+    const fresh = await loadDeactivatedTickers();
+    refreshDeactivatedTickers(fresh);
+    console.log(`[AI Health] done — ${result.deactivated} deactivated, ${result.dataGap} data-gap, ${result.healthy} healthy`);
+  } catch (e) { console.error('[CRON] AI Universe health check failed:', e.message); }
+}, { timezone: 'America/New_York' });
+
 // ── Cron: AI 300 stale hunt check — daily at 4:32pm ET (after 4:15 pipeline)
 cron.schedule('32 16 * * 1-5', async () => {
   try {
@@ -6059,6 +6075,30 @@ app.post('/api/admin/run-ai-universe-daily', authenticateJWT, requireAdmin, asyn
   try {
     runAiUniverseDailyUpdate().catch(err => console.error('[AI Universe Daily] Manual run failed:', err.message));
     res.json({ ok: true, message: 'AI Universe daily update started — check server logs for completion.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/ai-universe-health — view current deactivated tickers + last check results.
+app.get('/api/admin/ai-universe-health', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const docs = await db.collection('pnthr_ai_deactivated').find({}).sort({ deactivatedAt: -1 }).toArray();
+    res.json({ ok: true, deactivated: docs, count: docs.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/run-ai-universe-health — manual trigger for the weekly health check.
+app.post('/api/admin/run-ai-universe-health', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await runAiUniverseHealthCheck();
+    // Refresh the in-memory exclusion set so changes take effect immediately
+    const fresh = await loadDeactivatedTickers();
+    refreshDeactivatedTickers(fresh);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

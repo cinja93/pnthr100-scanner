@@ -283,7 +283,7 @@ async function getTradeOfWeek(db, weekOf) {
       .find({ featuredWeekOf: { $gte: eightWeeksAgo }, section: 'TRADE_OF_WEEK' })
       .project({ ticker: 1 }).toArray(),
     db.collection('newsletter_issues')
-      .find({ weekOf: { $gte: eightWeeksAgo, $ne: weekOf }, 'featuredTrade.ticker': { $exists: true } })
+      .find({ weekOf: { $gte: eightWeeksAgo }, 'featuredTrade.ticker': { $exists: true } })
       .project({ 'featuredTrade.ticker': 1 }).toArray(),
   ]);
   const recentTotwTickers = [

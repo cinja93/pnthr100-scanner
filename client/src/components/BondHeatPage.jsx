@@ -4,34 +4,8 @@ import {
   ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
-import AiTickerChartModal from './AiTickerChartModal';
 import pantherHead from '../assets/panther head.png';
 import styles from './BondHeatPage.module.css';
-
-// ── Heat map colors ─────────────────────────────────────────────────────────
-
-function getHeatColor(pct) {
-  if (pct == null) return '#333';
-  if (pct >= 4) return '#00c853';
-  if (pct >= 3) return '#00e676';
-  if (pct >= 2) return '#69f0ae';
-  if (pct >= 1) return '#a5d6a7';
-  if (pct >= 0.5) return '#c8e6c9';
-  if (pct > 0) return '#e8f5e9';
-  if (pct === 0) return '#424242';
-  if (pct > -0.5) return '#ffebee';
-  if (pct > -1) return '#ffcdd2';
-  if (pct > -2) return '#ef9a9a';
-  if (pct > -3) return '#e57373';
-  if (pct > -4) return '#ef5350';
-  return '#d32f2f';
-}
-
-function getTextColor(pct) {
-  if (pct == null) return '#888';
-  if (Math.abs(pct) >= 2) return '#fff';
-  return '#111';
-}
 
 // ── Chart helpers ───────────────────────────────────────────────────────────
 
@@ -662,111 +636,23 @@ function useComparisonInterpretation(comparisonData, shockZones) {
   }, [comparisonData, shockZones]);
 }
 
-// ── Sector grid ─────────────────────────────────────────────────────────────
-
-function getFcfColor(fcf) {
-  if (fcf == null) return '#666';
-  if (fcf > 50_000_000) return '#00c853';   // strong positive (>$50M)
-  if (fcf > 0) return '#69f0ae';             // positive
-  if (fcf > -50_000_000) return '#ffd600';   // breakeven range (-$50M to $0)
-  return '#ff5252';                          // negative (<-$50M)
-}
-
-function getFcfLabel(fcf) {
-  if (fcf == null) return 'No FCF data';
-  if (fcf > 50_000_000) return `FCF: +$${(fcf / 1e9).toFixed(1)}B`;
-  if (fcf > 0) return `FCF: +$${(fcf / 1e6).toFixed(0)}M`;
-  if (fcf > -50_000_000) return `FCF: -$${(Math.abs(fcf) / 1e6).toFixed(0)}M (breakeven)`;
-  return `FCF: -$${(Math.abs(fcf) / 1e9).toFixed(1)}B`;
-}
-
-function getPeColor(pe) {
-  if (pe == null) return '#666';
-  if (pe <= 0) return '#b71c1c';
-  if (pe < 15) return '#00c853';
-  if (pe < 25) return '#69f0ae';
-  if (pe < 40) return '#ffd600';
-  if (pe < 60) return '#ff9800';
-  return '#ff5252';
-}
-
-function getPegColor(peg) {
-  if (peg == null) return '#666';
-  if (peg <= 0) return '#b71c1c';
-  if (peg < 1) return '#00c853';
-  if (peg < 1.5) return '#69f0ae';
-  if (peg < 2) return '#ffd600';
-  if (peg < 3) return '#ff9800';
-  return '#ff5252';
-}
-
-function SectorGrid({ sector, fcfMap, valMap, onTickerClick }) {
-  const tickers = sector.holdings.map(h => h.ticker);
-  return (
-    <div className={styles.sectorBlock}>
-      <div className={styles.sectorHeader}>
-        <span className={styles.sectorName}>{sector.name}</span>
-        <span className={`${styles.sectorAvg} ${sector.avgChange >= 0 ? styles.sectorAvgUp : styles.sectorAvgDown}`}>
-          {sector.avgChange != null ? `${sector.avgChange > 0 ? '+' : ''}${sector.avgChange.toFixed(2)}%` : '—'}
-        </span>
-      </div>
-      <div className={styles.tickerGrid}>
-        {sector.holdings.map((h, i) => {
-          const bg = getHeatColor(h.changePct);
-          const color = getTextColor(h.changePct);
-          const fcf = fcfMap[h.ticker];
-          const fcfColor = getFcfColor(fcf);
-          const v = valMap?.[h.ticker];
-          const pe = v?.forwardPE;
-          const peg = v?.peg;
-          return (
-            <div
-              key={h.ticker}
-              className={styles.tickerCell}
-              style={{ backgroundColor: bg, color, cursor: 'pointer' }}
-              title={`${h.name}\n${h.changePct != null ? `${h.changePct > 0 ? '+' : ''}${h.changePct.toFixed(2)}%` : 'No data'}\n${getFcfLabel(fcf)}\nClick to view chart`}
-              onClick={() => onTickerClick(tickers, i)}
-            >
-              <div className={styles.tickerSymbol}>{h.ticker}</div>
-              <div className={styles.tickerChange}>
-                {h.changePct != null ? `${h.changePct > 0 ? '+' : ''}${h.changePct.toFixed(1)}%` : '—'}
-              </div>
-              <div className={styles.valPills}>
-                <span className={styles.fcfBill} style={{ backgroundColor: fcfColor }} title={getFcfLabel(fcf)}>$</span>
-                <span className={styles.valPill} style={{ backgroundColor: getPeColor(pe), color: pe != null && pe <= 0 ? '#fff' : '#000' }} title={pe != null ? `P/E: ${pe.toFixed(1)}x` : 'P/E: N/A'}>▸PE{pe == null ? '' : pe <= 0 ? ' N/E' : ` ${pe.toFixed(0)}`}</span>
-                <span className={styles.valPill} style={{ backgroundColor: getPegColor(peg), color: peg != null && peg <= 0 ? '#fff' : '#000' }} title={peg != null ? `PEG: ${peg.toFixed(2)}` : 'PEG: N/A'}>PEG{peg == null ? '' : peg <= 0 ? ' N/E' : ` ${peg.toFixed(1)}`}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ── Main page ───────────────────────────────────────────────────────────────
 
 export default function BondHeatPage() {
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
-  const [fcfMap, setFcfMap] = useState({});
-  const [valMap, setValMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalChart, setModalChart] = useState(null);
   const [infoPanel, setInfoPanel] = useState(null);
-  const [chartTickers, setChartTickers] = useState([]);
-  const [chartIndex, setChartIndex] = useState(0);
 
   const load = async (refresh = false) => {
     setLoading(true);
     setError(null);
     try {
-      const [heatRes, histRes, fcfRes, valRes] = await Promise.all([
+      const [heatRes, histRes] = await Promise.all([
         apiFetch(`${API_BASE}/api/bond-heat${refresh ? '?refresh=1' : ''}`, { headers: authHeaders() }),
         apiFetch(`${API_BASE}/api/bond-heat/history`, { headers: authHeaders() }),
-        apiFetch(`${API_BASE}/api/bond-heat/fcf`, { headers: authHeaders() }),
-        apiFetch(`${API_BASE}/api/bond-heat/valuation`, { headers: authHeaders() }),
       ]);
       if (!heatRes.ok) throw new Error(`HTTP ${heatRes.status}`);
       const json = await heatRes.json();
@@ -774,14 +660,6 @@ export default function BondHeatPage() {
       if (histRes.ok) {
         const histJson = await histRes.json();
         setHistory(Array.isArray(histJson) ? histJson : []);
-      }
-      if (fcfRes.ok) {
-        const fcfJson = await fcfRes.json();
-        setFcfMap(fcfJson || {});
-      }
-      if (valRes.ok) {
-        const valJson = await valRes.json();
-        setValMap(valJson || {});
       }
     } catch (err) {
       setError(err.message);
@@ -791,11 +669,6 @@ export default function BondHeatPage() {
   };
 
   useEffect(() => { load(); }, []);
-
-  const sortedSectors = useMemo(() => {
-    if (!data?.sectors) return [];
-    return [...data.sectors].sort((a, b) => (b.avgChange || 0) - (a.avgChange || 0));
-  }, [data]);
 
   // Build yield shock zones from history for ReferenceArea overlay
   const shockZones = useMemo(() => {
@@ -878,7 +751,7 @@ export default function BondHeatPage() {
         <div>
           <h1 className={styles.pageTitle}>
             <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            PNTHR BOND HEAT
+            PNTHR BOND YIELDS
           </h1>
           <p className={styles.pageSubtitle}>Real-time bond yield tracking vs AI 300 equity performance. Yield shock detection, spread analysis, and rate-driven selloff alerts.</p>
         </div>
@@ -1014,28 +887,17 @@ export default function BondHeatPage() {
             </>
           )}
 
-          {/* ── Heat Map ── */}
-          <div className={styles.sectorsContainer}>
-            {sortedSectors.map(s => <SectorGrid key={s.id} sector={s} fcfMap={fcfMap} valMap={valMap} onTickerClick={(tickers, idx) => { setChartTickers(tickers); setChartIndex(idx); }} />)}
-          </div>
         </>
       )}
 
       {loading && !data && (
         <div className={styles.loadingState}>
           <div className={styles.spinner} />
-          <p>Loading AI 300 heat map...</p>
+          <p>Loading bond yields...</p>
         </div>
       )}
 
       {/* ── Modals ── */}
-      {chartTickers.length > 0 && (
-        <AiTickerChartModal
-          tickers={chartTickers}
-          initialIndex={chartIndex}
-          onClose={() => setChartTickers([])}
-        />
-      )}
       <ChartModal data={history} chart={modalChart} shockZones={shockZones} dangerZones={dangerZones} onClose={() => setModalChart(null)} />
 
       {infoPanel === 'spread2_10' && (

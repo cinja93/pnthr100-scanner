@@ -82,6 +82,8 @@ function buildMovers(quoteMap, tickers, topN, signalMap) {
   const sorted = [...rows].sort((a, b) => b.changePct - a.changePct);
   const gainers = sorted.slice(0, topN).filter(r => r.changePct > 0);
   const decliners = [...sorted].reverse().slice(0, topN).filter(r => r.changePct < 0);
+  for (const r of gainers)   { if (r.signalLabel && !r.signalLabel.startsWith('BL')) r.signalLabel = null; }
+  for (const r of decliners) { if (r.signalLabel && !r.signalLabel.startsWith('SS')) r.signalLabel = null; }
   return { gainers, decliners };
 }
 

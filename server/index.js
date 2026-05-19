@@ -2206,9 +2206,10 @@ app.get('/api/ai-orders/latest', authenticateJWT, async (req, res) => {
       if (db && req.user?.userId) {
         const activePos = await db.collection('pnthr_portfolio')
           .find({ ownerId: req.user.userId, status: { $in: ['ACTIVE', 'PARTIAL', 'STAGED'] } },
-                 { projection: { ticker: 1, direction: 1, status: 1 } }).toArray();
+                 { projection: { ticker: 1, direction: 1, status: 1, stopPrice: 1, entryPrice: 1 } }).toArray();
         result.activePositionTickers = activePos.map(p => ({
           ticker: p.ticker, direction: p.direction, status: p.status,
+          stopPrice: p.stopPrice, entryPrice: p.entryPrice,
         }));
       }
     } catch (e) { /* non-critical — page still works without badges */ }

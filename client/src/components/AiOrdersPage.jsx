@@ -210,8 +210,8 @@ const ORDER_ACCESSORS = {
   gapPct:     o => o.gapPct,
   slope:      o => o.wEmaSlope,
   price:      o => o.currentPrice,
-  stop:       o => o.stopPrice,
-  riskPct:    o => o.riskPct,
+  stop:       o => o._displayStop ?? o.stopPrice,
+  riskPct:    o => o._displayRiskPct ?? o.riskPct,
   entrySh:    o => o.lot1Shares,
   fullPos:    o => o.targetShares,
   entryDol:   o => o.lot1Dollar,
@@ -292,8 +292,8 @@ function OrderRow({ o, orders, navScale, setChartTickers, setChartIndex, dimmed,
       </td>
       <td style={{ padding: '6px 10px', textAlign: 'right', color: (o.wEmaSlope ?? 999) < 50 ? '#16a34a' : (o.wEmaSlope ?? 999) < 65 ? '#fcf000' : '#dc2626' }}>{o.wEmaSlope != null ? `${o.wEmaSlope.toFixed(1)}%` : '—'}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(o.currentPrice)}</td>
-      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.stopPrice)}</td>
-      <td style={{ padding: '6px 10px', textAlign: 'right', color: o.riskPct > 20 ? '#fcf000' : '#aaa' }}>{o.riskPct?.toFixed(1)}%</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', color: o._liveStop ? '#16a34a' : '#aaa' }}>{fmtUsd(o._displayStop ?? o.stopPrice)}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', color: (o._displayRiskPct ?? o.riskPct ?? 0) > 20 ? '#fcf000' : '#aaa' }}>{(o._displayRiskPct ?? o.riskPct)?.toFixed(1)}%</td>
       <td style={{ padding: '6px 10px', textAlign: 'right' }}>{o.lot1Shares?.toLocaleString()}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right', color: '#888' }}>{o.targetShares?.toLocaleString()}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.lot1Dollar, { k: true })}</td>
@@ -373,14 +373,23 @@ export default function AiOrdersPage() {
     const fullL1 = Math.max(1, Math.round(o.lot1Shares * navScale));
     const riskPerShare = o.riskPerShare || 0;
     const _heatDollar = +(fullL1 * riskPerShare).toFixed(2);
+    const livePos = activePositions[o.ticker];
+    const liveStop = livePos?.stopPrice ? +livePos.stopPrice : null;
+    const displayStop = liveStop || o.stopPrice;
+    const liveRiskPct = liveStop && o.currentPrice
+      ? +(Math.abs(o.currentPrice - liveStop) / o.currentPrice * 100).toFixed(1)
+      : null;
     return {
       ...o,
       lot1Shares: fullL1,
       lot1Dollar: +(o.lot1Dollar * navScale).toFixed(2),
       targetShares: Math.max(1, Math.round(o.targetShares * navScale)),
       _heatDollar,
+      _liveStop: liveStop,
+      _displayStop: displayStop,
+      _displayRiskPct: liveRiskPct ?? o.riskPct,
     };
-  }, [navScale]);
+  }, [navScale, activePositions]);
 
   const activePositions = useMemo(() => {
     const map = {};

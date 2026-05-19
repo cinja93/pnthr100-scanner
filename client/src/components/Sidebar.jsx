@@ -41,9 +41,10 @@ const NAV_GROUPS = [
   {
     groupLabel: 'PNTHR Jungle',
     items: [
-      { key: 'jungle',   label: 'PNTHR 679 Jungle', iconImg: true },
-      { key: 'aiJungle',  label: 'PNTHR AI 300 Index',iconImg: true, aiHighlight: true },
-      { key: 'aiHeat',   label: 'PNTHR AI Heat',     iconImg: true, aiHighlight: true },
+      { key: 'jungle',      label: 'PNTHR 679 Jungle', iconImg: true },
+      { key: 'jungleHeat', label: 'PNTHR Heat',        iconImg: true },
+      { key: 'aiJungle',   label: 'PNTHR AI 300 Index',iconImg: true, aiHighlight: true },
+      { key: 'aiHeat',     label: 'PNTHR AI Heat',     iconImg: true, aiHighlight: true },
       { key: 'bondHeat', label: 'PNTHR Bond Yields', iconImg: true, aiHighlight: true },
       { key: 'long',      label: 'PNTHR 100 Longs',  iconImg: true, splitHighlight: true },
       { key: 'short',   label: 'PNTHR 100 Shorts', iconImg: true, splitHighlight: true },

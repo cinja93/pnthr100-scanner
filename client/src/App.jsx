@@ -30,6 +30,7 @@ import JunglePage from './components/JunglePage';
 import AiJunglePage from './components/AiJunglePage';
 import BondHeatPage from './components/BondHeatPage';
 import AiHeatPage from './components/AiHeatPage';
+import JungleHeatPage from './components/JungleHeatPage';
 import AiSectorsPage from './components/AiSectorsPage';
 import AiOrdersPage from './components/AiOrdersPage';
 import AiKillPage from './components/AiKillPage';
@@ -1565,6 +1566,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR AI Kill — v1 ranked predatory scoring */}
           {renderPage === 'aiKill' && <AiKillPage />}
+
+          {/* PNTHR Heat — 679 Jungle sector heat map */}
+          {renderPage === 'jungleHeat' && <JungleHeatPage />}
 
           {/* PNTHR AI Heat — AI 300 sector heat map */}
           {renderPage === 'aiHeat' && <AiHeatPage />}

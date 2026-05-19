@@ -40,6 +40,7 @@ import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrde
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
+import { getJungleHeatData, getJungleFcfData, getJungleValuationData } from './jungleHeatService.js';
 import { runAiWeeklyRatchet, runAiStaleHuntCheck } from './aiPositionManager.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
@@ -6103,6 +6104,36 @@ cron.schedule('45 16 * * 1-5', async () => {
     console.error('[MoversLog cron] EOD update failed:', err.message);
   }
 }, { timezone: 'America/New_York' });
+
+app.get('/api/jungle-heat', async (req, res) => {
+  try {
+    const data = await getJungleHeatData(req.query.refresh === '1');
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/jungle-heat:', err);
+    res.status(500).json({ error: 'Failed to fetch jungle heat data' });
+  }
+});
+
+app.get('/api/jungle-heat/fcf', async (req, res) => {
+  try {
+    const data = await getJungleFcfData();
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/jungle-heat/fcf:', err);
+    res.status(500).json({ error: 'Failed to fetch jungle FCF data' });
+  }
+});
+
+app.get('/api/jungle-heat/valuation', async (req, res) => {
+  try {
+    const data = await getJungleValuationData();
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/jungle-heat/valuation:', err);
+    res.status(500).json({ error: 'Failed to fetch jungle valuation data' });
+  }
+});
 
 app.get('/api/bond-heat/valuation', async (req, res) => {
   try {

@@ -1042,14 +1042,17 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
           const currentShares = Math.abs(+row.ibkr?.shares || 0);
 
           // Pyramid-eligibility flag: position exists, was opened single-shot
-          // (autoOpenedByIBKR or fills[1].pct=1.0), AND the trader has not
-          // dismissed the prompt for this position. The PYRAMID button shows
-          // ONLY on eligible rows so its presence is a one-glance "this
-          // position has no ratchet plan and you haven't told me to stop
-          // asking" indicator.
+          // (autoOpenedByIBKR or fills[1].pct=1.0), has NO L2-L5 plan yet,
+          // AND the trader has not dismissed the prompt. The PYRAMID button
+          // shows ONLY on eligible rows so its presence is a one-glance
+          // "this position has no ratchet plan" indicator.
+          const hasL2L5Plan = pos?.fills && [2,3,4,5].some(i =>
+            pos.fills[i]?.targetShares > 0 || pos.fills[i]?.filled
+          );
           const isPyramidEligible = !!(
             pos &&
             row.command?.positionId &&
+            !hasL2L5Plan &&
             (pos.autoOpenedByIBKR === true || pos.fills?.[1]?.pct === 1.0) &&
             pos.pyramidDismissed !== true
           );

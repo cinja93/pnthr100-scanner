@@ -11,7 +11,6 @@ import {
   getImpersonationToken,
 } from './contexts/ImpersonationContext';
 import ImpersonationBanner, { IMPERSONATION_BANNER_HEIGHT } from './components/ImpersonationBanner';
-import NowOrdersBanner, { NOW_BANNER_HEIGHT } from './components/NowOrdersBanner';
 import QueueReviewPanel from './components/QueueReviewPanel';
 import InvestorLoginPage from './components/InvestorLoginPage';
 import InvestmentAmountModal from './components/InvestmentAmountModal';
@@ -51,6 +50,7 @@ import IrLivePage from './components/IrLivePage';
 import TestPage from './components/TestPage';
 import TrendlineAlertBanner, { TRENDLINE_BANNER_HEIGHT } from './components/TrendlineAlertBanner';
 import MoversAlertBanner, { MOVERS_BANNER_HEIGHT } from './components/MoversAlertBanner';
+import NowOrdersBanner, { NOW_BANNER_HEIGHT } from './components/NowOrdersBanner';
 import AssistantPage from './components/AssistantPage';
 import OrdersPage from './components/OrdersPage';
 import LoginPage from './components/LoginPage';

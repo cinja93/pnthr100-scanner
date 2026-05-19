@@ -276,13 +276,22 @@ async function getTradeOfWeek(db, weekOf) {
   // closeConvictionPct >= 8 ensures we're in the 70%+ win rate universe, not the 42% baseline.
   const { weekStart, weekEnd } = weekBounds(weekOf);
 
-  // Exclude tickers featured as TOTW in the last 8 weeks
+  // Exclude tickers featured as TOTW in the last 8 weeks (check both sources)
   const eightWeeksAgo = weeksBack(weekOf, 8);
-  const recentDocs = await db.collection('pnthr_perch_track_record_log')
-    .find({ featuredWeekOf: { $gte: eightWeeksAgo }, section: 'TRADE_OF_WEEK' })
-    .project({ ticker: 1 })
-    .toArray();
-  const recentTotwTickers = recentDocs.map(d => d.ticker);
+  const [logDocs, issueDocs] = await Promise.all([
+    db.collection('pnthr_perch_track_record_log')
+      .find({ featuredWeekOf: { $gte: eightWeeksAgo }, section: 'TRADE_OF_WEEK' })
+      .project({ ticker: 1 }).toArray(),
+    db.collection('newsletter_issues')
+      .find({ weekOf: { $gte: eightWeeksAgo, $ne: weekOf }, 'featuredTrade.ticker': { $exists: true } })
+      .project({ 'featuredTrade.ticker': 1 }).toArray(),
+  ]);
+  const recentTotwTickers = [
+    ...new Set([
+      ...logDocs.map(d => d.ticker),
+      ...issueDocs.map(d => d.featuredTrade?.ticker).filter(Boolean),
+    ]),
+  ];
 
   const rows = await db.collection('pnthr679_trade_archive')
     .find({

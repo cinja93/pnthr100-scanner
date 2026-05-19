@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
-import AiTickerChartModal from './AiTickerChartModal';
+import ChartModal from './ChartModal';
 import pantherHead from '../assets/panther head.png';
 import styles from './BondHeatPage.module.css';
 
@@ -116,8 +116,8 @@ export default function JungleHeatPage() {
   const [valMap, setValMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [chartTickers, setChartTickers] = useState([]);
-  const [chartIndex, setChartIndex] = useState(0);
+  const [chartStocks, setChartStocks] = useState([]);
+  const [chartIndex, setChartIndex] = useState(null);
 
   const load = async (refresh = false) => {
     setLoading(true);
@@ -181,7 +181,7 @@ export default function JungleHeatPage() {
 
       {data && (
         <div className={styles.sectorsContainer}>
-          {sortedSectors.map(s => <SectorGrid key={s.id} sector={s} fcfMap={fcfMap} valMap={valMap} onTickerClick={(tickers, idx) => { setChartTickers(tickers); setChartIndex(idx); }} />)}
+          {sortedSectors.map(s => <SectorGrid key={s.id} sector={s} fcfMap={fcfMap} valMap={valMap} onTickerClick={(tickers, idx) => { setChartStocks(tickers.map(t => ({ ticker: t }))); setChartIndex(idx); }} />)}
         </div>
       )}
 
@@ -192,11 +192,11 @@ export default function JungleHeatPage() {
         </div>
       )}
 
-      {chartTickers.length > 0 && (
-        <AiTickerChartModal
-          tickers={chartTickers}
+      {chartIndex != null && (
+        <ChartModal
+          stocks={chartStocks}
           initialIndex={chartIndex}
-          onClose={() => setChartTickers([])}
+          onClose={() => setChartIndex(null)}
         />
       )}
     </div>

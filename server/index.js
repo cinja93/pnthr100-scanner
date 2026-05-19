@@ -8503,10 +8503,10 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         sectorTotalStocks[displayName] = data.total || 0;
         // Use actual ticker names from newBLTickers/newSSTickers arrays
         for (const t of (data.newBLTickers || [])) {
-          newBLStocks.push({ ticker: t.ticker, sector: t.sector || displayName, signal: 'BL', currentPrice: t.currentPrice || null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
+          newBLStocks.push({ ticker: t.ticker, sector: t.sector || displayName, signal: 'BL', currentPrice: t.currentPrice || null, totalScore: null, tier: null, signalAge: 0, killRank: null });
         }
         for (const t of (data.newSSTickers || [])) {
-          newSSStocks.push({ ticker: t.ticker, sector: t.sector || displayName, signal: 'SS', currentPrice: t.currentPrice || null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
+          newSSStocks.push({ ticker: t.ticker, sector: t.sector || displayName, signal: 'SS', currentPrice: t.currentPrice || null, totalScore: null, tier: null, signalAge: 0, killRank: null });
         }
       }
     } else if (regimeDoc?.sectorSignalSummary) {
@@ -8518,10 +8518,10 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
         sectorMap[sector] = { bl: data.bl || 0, ss: data.ss || 0 };
         sectorTotalStocks[sector] = storedCounts[sector] || 0;
         for (let i = 0; i < (data.newBL || 0); i++) {
-          newBLStocks.push({ ticker: `${sector}-new-${i}`, sector, signal: 'BL', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
+          newBLStocks.push({ ticker: `${sector}-new-${i}`, sector, signal: 'BL', currentPrice: null, totalScore: null, tier: null, signalAge: 0, killRank: null });
         }
         for (let i = 0; i < (data.newSS || 0); i++) {
-          newSSStocks.push({ ticker: `${sector}-new-${i}`, sector, signal: 'SS', currentPrice: null, totalScore: 0, tier: null, signalAge: 0, killRank: null });
+          newSSStocks.push({ ticker: `${sector}-new-${i}`, sector, signal: 'SS', currentPrice: null, totalScore: null, tier: null, signalAge: 0, killRank: null });
         }
       }
     }

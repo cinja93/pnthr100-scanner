@@ -369,6 +369,14 @@ export default function AiOrdersPage() {
     return actual / assumed;
   }, [doc, userNav]);
 
+  const activePositions = useMemo(() => {
+    const map = {};
+    for (const p of (doc?.activePositionTickers || [])) {
+      map[p.ticker] = p;
+    }
+    return map;
+  }, [doc]);
+
   const scaleOrder = useCallback((o) => {
     const fullL1 = Math.max(1, Math.round(o.lot1Shares * navScale));
     const riskPerShare = o.riskPerShare || 0;
@@ -390,14 +398,6 @@ export default function AiOrdersPage() {
       _displayRiskPct: liveRiskPct ?? o.riskPct,
     };
   }, [navScale, activePositions]);
-
-  const activePositions = useMemo(() => {
-    const map = {};
-    for (const p of (doc?.activePositionTickers || [])) {
-      map[p.ticker] = p;
-    }
-    return map;
-  }, [doc]);
 
   const { nowOrders, onDeckOrders, allOrders } = useMemo(() => {
     if (!doc?.orders) return { nowOrders: [], onDeckOrders: [], allOrders: [] };

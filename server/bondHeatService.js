@@ -156,9 +156,11 @@ export async function getBondHeatData() {
     };
   });
 
-  const tRow = Array.isArray(treasuryData) && treasuryData.length
-    ? treasuryData[treasuryData.length - 1]
-    : null;
+  const sortedTreasury = (Array.isArray(treasuryData) ? treasuryData : [])
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const tRow = sortedTreasury.length ? sortedTreasury[sortedTreasury.length - 1] : null;
 
   const bonds = tRow ? {
     date: tRow.date,
@@ -168,8 +170,8 @@ export async function getBondHeatData() {
     y30: tRow.year30 != null ? +Number(tRow.year30).toFixed(3) : null,
   } : { date: null, fedFunds: null, y2: null, y10: null, y30: null };
 
-  const prevRow = Array.isArray(treasuryData) && treasuryData.length > 1
-    ? treasuryData[treasuryData.length - 2]
+  const prevRow = sortedTreasury.length > 1
+    ? sortedTreasury[sortedTreasury.length - 2]
     : null;
   if (prevRow) {
     bonds.y10Prev = prevRow.year10 != null ? +Number(prevRow.year10).toFixed(3) : null;

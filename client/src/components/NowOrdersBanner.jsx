@@ -14,9 +14,9 @@ function saveDismissed(keys) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(keys)); } catch {}
 }
 
-export const NOW_BANNER_HEIGHT = 58;
+export const NOW_BANNER_HEIGHT = 62;
 
-export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavigate }) {
+export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavigate, onTickerClick }) {
   const { isAdmin } = useAuth() || {};
   const [nowTickers, setNowTickers] = useState([]);
   const [dismissed, setDismissed] = useState(() => loadDismissed());
@@ -53,7 +53,6 @@ export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavi
 
       if (ordDoc?.orders) {
         for (const o of ordDoc.orders) {
-          // Only fire for fresh signals (age 0 or 1 week) not already in portfolio
           if (!o.inPortfolio && (o.signalAge ?? 99) <= 1) {
             items.push({
               key: `ord-${o.ticker}-${o.signal}`,
@@ -88,9 +87,6 @@ export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavi
 
   if (!visible) return null;
 
-  const blCount = undismissed.filter(t => t.signal === 'BL').length;
-  const ssCount = undismissed.filter(t => t.signal === 'SS').length;
-
   function handleDismiss() {
     const keys = [...dismissed, ...undismissed.map(t => t.key)];
     setDismissed(keys);
@@ -115,17 +111,35 @@ export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavi
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
         animation: 'nowPulse 1.5s ease-in-out infinite',
+        minHeight: NOW_BANNER_HEIGHT,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 18 }}>⚡</span>
-          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <div style={{ fontWeight: 900, fontSize: 14, letterSpacing: '0.06em' }}>
-              {undismissed.length} NEW ORDER{undismissed.length > 1 ? 'S' : ''} — NOW
-            </div>
-            <div style={{ fontSize: 11, opacity: 0.9 }}>
-              {blCount > 0 && `${blCount} BL`}{blCount > 0 && ssCount > 0 && ' + '}{ssCount > 0 && `${ssCount} SS`}
-              {' '} — {undismissed.map(t => t.ticker).join(', ')}
-            </div>
+          <span style={{ fontWeight: 900, fontSize: 14, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
+            {undismissed.length} NEW ORDER{undismissed.length > 1 ? 'S' : ''} — NOW
+          </span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {undismissed.map(t => {
+              const isBL = t.signal === 'BL';
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => onTickerClick?.(t.ticker)}
+                  title={`Open ${t.ticker} chart`}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    background: isBL ? '#16a34a' : '#dc2626',
+                    color: '#fff', fontWeight: 800, fontSize: 12,
+                    padding: '4px 12px 3px', borderRadius: 5,
+                    cursor: 'pointer', border: 'none',
+                    letterSpacing: '0.04em', lineHeight: 1.3,
+                  }}
+                >
+                  <span>{t.ticker} {t.signal}</span>
+                  <span style={{ fontSize: 9, fontWeight: 600, opacity: 0.85 }}>{t.source}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
@@ -136,6 +150,7 @@ export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavi
               background: 'rgba(0,0,0,0.35)', color: '#fff',
               border: '1px solid rgba(255,255,255,0.3)', borderRadius: 4,
               padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              whiteSpace: 'nowrap',
             }}
           >
             AI Orders
@@ -147,6 +162,7 @@ export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavi
               background: 'rgba(0,0,0,0.35)', color: '#fff',
               border: '1px solid rgba(255,255,255,0.3)', borderRadius: 4,
               padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              whiteSpace: 'nowrap',
             }}
           >
             679 Orders

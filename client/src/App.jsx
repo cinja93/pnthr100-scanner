@@ -1180,6 +1180,10 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           + (moversBannerVisible ? MOVERS_BANNER_HEIGHT : 0)}
         onVisibleChange={setNowOrdersBannerVisible}
         onNavigate={navigate}
+        onTickerClick={(ticker) => {
+          setChartStocks([{ ticker }]);
+          setChartIndex(0);
+        }}
       />}
       <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
 

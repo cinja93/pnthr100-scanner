@@ -1,8 +1,8 @@
 // ReentryBanner — fixed top-of-app banner for daily re-entry opportunities.
 // Fires when: weekly BL active + top-100 TTM rank + not held + daily 2-bar high breaks.
-// Same visual pattern as MoversAlertBanner; purple color scheme.
+// Two-zone layout: 679 (amber) | AI 300 (blue), with BL label and dynamic height.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { fetchReentrySignals } from '../services/api';
 
@@ -16,12 +16,56 @@ function saveDismissed(val) {
   try { localStorage.setItem(LS_KEY(), JSON.stringify(val)); } catch {}
 }
 
-export const REENTRY_BANNER_HEIGHT = 50;
+// Exported height — App.jsx reads this for content offset. Dynamic measurement overrides via onVisibleChange.
+export let REENTRY_BANNER_HEIGHT = 0;
+
+function TickerBadge({ s, onTickerClick, scheme }) {
+  return (
+    <button
+      key={s.ticker}
+      onClick={() => onTickerClick?.(s.ticker)}
+      title={`${s.ticker} — Entry $${s.entryTrigger} | Stop $${s.weeklyStop} | RPS $${s.rps}`}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        background: scheme.badgeBg,
+        color: scheme.badgeText,
+        fontWeight: 800, fontSize: 11,
+        padding: '3px 10px 2px', borderRadius: 4,
+        cursor: 'pointer',
+        border: `1px solid ${scheme.badgeBorder}`,
+        letterSpacing: '0.04em', lineHeight: 1.35,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span style={{ fontSize: 12 }}>{s.ticker}</span>
+      <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.9 }}>
+        ${s.entryTrigger} | Stop ${s.weeklyStop}
+      </span>
+    </button>
+  );
+}
+
+const SCHEME_679 = {
+  label:       '#f59e0b',
+  badgeBg:     'rgba(245,158,11,0.13)',
+  badgeBorder: 'rgba(245,158,11,0.45)',
+  badgeText:   '#fbbf24',
+  divider:     'rgba(245,158,11,0.25)',
+};
+const SCHEME_AI = {
+  label:       '#60a5fa',
+  badgeBg:     'rgba(59,130,246,0.13)',
+  badgeBorder: 'rgba(59,130,246,0.45)',
+  badgeText:   '#93c5fd',
+  divider:     'rgba(59,130,246,0.25)',
+};
 
 export default function ReentryBanner({ onTickerClick, onVisibleChange, topOffset = 0 }) {
   const { currentUser } = useAuth() || {};
-  const [signals, setSignals]   = useState([]);
-  const [hidden, setHidden]     = useState(() => loadDismissed());
+  const [signals, setSignals] = useState([]);
+  const [hidden, setHidden]   = useState(() => loadDismissed());
+  const [height, setHeight]   = useState(0);
+  const bannerRef             = useRef(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -35,59 +79,123 @@ export default function ReentryBanner({ onTickerClick, onVisibleChange, topOffse
     return () => { cancelled = true; clearInterval(id); };
   }, [currentUser]);
 
+  // Measure actual banner height so App.jsx can offset content correctly.
+  useEffect(() => {
+    if (!bannerRef.current) return;
+    const ro = new ResizeObserver(entries => {
+      const h = entries[0]?.contentRect?.height ?? 0;
+      setHeight(h);
+      REENTRY_BANNER_HEIGHT = h;
+    });
+    ro.observe(bannerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
   const visible = !!(currentUser && !hidden && signals.length > 0);
-  useEffect(() => { onVisibleChange?.(visible); }, [visible]);
+  useEffect(() => { onVisibleChange?.(visible, height); }, [visible, height]);
 
   if (!visible) return null;
 
+  const signals679 = signals.filter(s => s.fund !== 'AI 300');
+  const signalsAI  = signals.filter(s => s.fund === 'AI 300');
+
   return (
-    <div style={{
-      position: 'fixed', top: topOffset, left: 0, right: 0, zIndex: 9997,
-      background: '#7c3aed', color: '#fff',
-      padding: '10px 16px',
-      borderBottom: '2px solid #5b21b6',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.45)',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
-        <span style={{ fontWeight: 900, fontSize: 13, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+    <div
+      ref={bannerRef}
+      style={{
+        position: 'fixed', top: topOffset, left: 0, right: 0, zIndex: 9997,
+        background: '#0d0d14',
+        borderBottom: '2px solid #1e1e2e',
+        boxShadow: '0 3px 16px rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'stretch',
+        fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
+        minHeight: 58,
+      }}
+    >
+      {/* ── Left label column ── */}
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        padding: '8px 16px',
+        borderRight: '1px solid #2a2a40',
+        background: '#0a0a12',
+        minWidth: 80,
+        gap: 5,
+        flexShrink: 0,
+      }}>
+        <span style={{
+          color: '#a78bfa', fontWeight: 900, fontSize: 11,
+          letterSpacing: '0.12em', whiteSpace: 'nowrap',
+        }}>
           RE-ENTRY
         </span>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {signals.map(s => (
-            <button
-              key={s.ticker}
-              onClick={() => onTickerClick?.(s.ticker)}
-              title={`${s.ticker} — Entry $${s.entryTrigger} | Stop $${s.weeklyStop} | RPS $${s.rps}`}
-              style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                background: '#5b21b6', color: '#fff', fontWeight: 800, fontSize: 12,
-                padding: '4px 12px 3px', borderRadius: 5,
-                cursor: 'pointer', border: '1px solid #7c3aed',
-                letterSpacing: '0.04em', lineHeight: 1.3,
-              }}
-            >
-              <span>{s.ticker} {s.fund === 'AI 300' ? '★' : ''}</span>
-              <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.85 }}>
-                ${s.entryTrigger} | Stop ${s.weeklyStop}
-              </span>
-            </button>
-          ))}
-        </div>
+        <span style={{
+          background: '#15803d', color: '#fff',
+          fontWeight: 800, fontSize: 11,
+          padding: '2px 10px', borderRadius: 3,
+          letterSpacing: '0.1em',
+        }}>
+          BL
+        </span>
       </div>
-      <button
-        onClick={() => { setHidden(true); saveDismissed(true); }}
-        title="Dismiss re-entry banner for today"
-        style={{
-          marginLeft: 8,
-          background: '#5b21b6', color: '#e9d5ff',
-          border: 'none', borderRadius: 4,
-          padding: '4px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-        }}
-      >
-        Dismiss
-      </button>
+
+      {/* ── 679 zone ── */}
+      {signals679.length > 0 && (
+        <div style={{
+          flex: signals679.length, padding: '7px 12px',
+          borderRight: signals679.length && signalsAI.length ? '1px solid #2a2a40' : 'none',
+        }}>
+          <div style={{
+            fontSize: 10, fontWeight: 800, color: SCHEME_679.label,
+            letterSpacing: '0.12em', marginBottom: 5,
+          }}>
+            679 &nbsp;<span style={{ opacity: 0.55, fontWeight: 600 }}>({signals679.length})</span>
+          </div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {signals679.map(s => (
+              <TickerBadge key={s.ticker} s={s} onTickerClick={onTickerClick} scheme={SCHEME_679} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── AI 300 zone ── */}
+      {signalsAI.length > 0 && (
+        <div style={{
+          flex: signalsAI.length, padding: '7px 12px',
+        }}>
+          <div style={{
+            fontSize: 10, fontWeight: 800, color: SCHEME_AI.label,
+            letterSpacing: '0.12em', marginBottom: 5,
+          }}>
+            AI 300 &nbsp;<span style={{ opacity: 0.55, fontWeight: 600 }}>({signalsAI.length})</span>
+          </div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {signalsAI.map(s => (
+              <TickerBadge key={s.ticker} s={s} onTickerClick={onTickerClick} scheme={SCHEME_AI} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Dismiss ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '8px 14px', borderLeft: '1px solid #2a2a40',
+        background: '#0a0a12', flexShrink: 0,
+      }}>
+        <button
+          onClick={() => { setHidden(true); saveDismissed(true); }}
+          title="Dismiss re-entry banner for today"
+          style={{
+            background: '#1e1e35', color: '#a78bfa',
+            border: '1px solid #3b3b5c', borderRadius: 4,
+            padding: '4px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+            letterSpacing: '0.06em',
+          }}
+        >
+          Dismiss
+        </button>
+      </div>
     </div>
   );
 }

@@ -404,7 +404,9 @@ export default function AiOrdersPage() {
   const { nowOrders, onDeckOrders, allOrders } = useMemo(() => {
     if (!doc?.orders) return { nowOrders: [], onDeckOrders: [], allOrders: [] };
 
-    const newSignals = doc.orders.filter(o => o.isNewSignal && (o.signal === 'BL' || o.signal === 'SS'));
+    const newSignals = doc.orders.filter(o =>
+      o.isNewSignal && (o.signal === 'BL' || o.signal === 'SS') && !activePositions[o.ticker]
+    );
     const now = newSignals.filter(o => o.qualityGrade === 'BEST').map(scaleOrder);
     const onDeck = newSignals.filter(o => o.qualityGrade !== 'BEST').map(scaleOrder);
 

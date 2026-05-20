@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchLatestAiOrders, runAiOrders, fetchNav } from '../services/api';
+import { fetchLatestAiOrders, runAiOrders, fetchNav, fetchReentrySignals } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import AssistantLiveTable from './AssistantLiveTable';
 import PendingBridgeOrdersPanel from './PendingBridgeOrdersPanel';
@@ -349,6 +349,7 @@ export default function AiOrdersPage() {
     try { return localStorage.getItem('aiOrders.bridgeOpen') !== 'false'; } catch { return true; }
   });
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [reentrySignals, setReentrySignals] = useState([]);
 
   const load = useCallback((refresh = false) => {
     setLoading(prev => !doc ? true : prev);
@@ -364,6 +365,16 @@ export default function AiOrdersPage() {
     const id = setInterval(() => load(isMarketHours()), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const pollReentry = () =>
+      fetchReentrySignals(userNav || 100000)
+        .then(d => setReentrySignals(d?.signals || []))
+        .catch(() => {});
+    pollReentry();
+    const id = setInterval(pollReentry, 60_000);
+    return () => clearInterval(id);
+  }, [userNav]);
 
   const navScale = useMemo(() => {
     const assumed = doc?.assumedNav || 100000;
@@ -664,6 +675,60 @@ export default function AiOrdersPage() {
               borderRadius: 6, fontSize: 12, color: '#fcf000',
             }}>
               No stocks ready NOW — {onDeckOrders.length} on deck warming up. Gap% updates every 60 seconds during market hours.
+            </div>
+          )}
+
+          {/* RE-ENTRY section */}
+          {reentrySignals.length > 0 && (
+            <div style={{
+              border: '2px solid #7c3aed', borderRadius: 8, overflow: 'hidden',
+              margin: '20px 0 0',
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 14px', background: 'rgba(124,58,237,0.12)',
+                borderBottom: '1px solid rgba(124,58,237,0.3)',
+              }}>
+                <span style={{ color: '#a78bfa', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>RE-ENTRY</span>
+                <span style={{ color: '#a78bfa', fontSize: 12 }}>
+                  Active weekly BL · Top 100 TTM · Daily 2-bar high breakout fired · Not held
+                </span>
+                <span style={{
+                  marginLeft: 'auto', padding: '2px 8px', background: '#7c3aed', color: '#fff',
+                  borderRadius: 3, fontSize: 11, fontWeight: 700,
+                }}>{reentrySignals.length}</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(124,58,237,0.08)', borderBottom: '1px solid rgba(124,58,237,0.2)' }}>
+                      {['Ticker','Fund','L1 Trigger','Weekly Stop','RPS','L1 Sh','L2 Sh','L3 Sh','L4 Sh','L5 Sh','L2 Price','L3 Price','BL Date'].map(h => (
+                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reentrySignals.map(s => (
+                      <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(124,58,237,0.1)', cursor: 'pointer' }}
+                        onClick={() => { setChartTickers([s.ticker]); setChartIndex(0); }}>
+                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#e9d5ff' }}>{s.ticker}</td>
+                        <td style={{ padding: '6px 10px', color: s.fund === 'AI 300' ? '#a78bfa' : '#f97316' }}>{s.fund}</td>
+                        <td style={{ padding: '6px 10px', color: '#16a34a', fontWeight: 700 }}>${s.entryTrigger}</td>
+                        <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>
+                        <td style={{ padding: '6px 10px', color: '#fbbf24' }}>${s.rps}</td>
+                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[0]}</td>
+                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[1]}</td>
+                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[2]}</td>
+                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[3]}</td>
+                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[4]}</td>
+                        <td style={{ padding: '6px 10px', color: '#94a3b8' }}>${s.l2Price}</td>
+                        <td style={{ padding: '6px 10px', color: '#94a3b8' }}>${s.l3Price}</td>
+                        <td style={{ padding: '6px 10px', color: '#64748b', fontSize: 11 }}>{s.signalDate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>

@@ -946,6 +946,13 @@ export async function fetchMoversLog() {
   return res.json();
 }
 
+export async function fetchReentrySignals(nav) {
+  const url = nav ? `${API_BASE}/api/reentry-signals?nav=${nav}` : `${API_BASE}/api/reentry-signals`;
+  const res = await apiFetch(url, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`Reentry API error ${res.status}`);
+  return res.json();
+}
+
 export async function fetchDevelopingSignals() {
   const res = await apiFetch(`${API_BASE}/api/pulse/developing-signals`, { headers: authHeaders() });
   if (!res.ok) return { status: 'ERROR', bl: [], ss: [] };

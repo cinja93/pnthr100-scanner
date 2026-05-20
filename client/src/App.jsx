@@ -52,6 +52,7 @@ import TestPage from './components/TestPage';
 import TrendlineAlertBanner, { TRENDLINE_BANNER_HEIGHT } from './components/TrendlineAlertBanner';
 import MoversAlertBanner, { MOVERS_BANNER_HEIGHT } from './components/MoversAlertBanner';
 import NowOrdersBanner, { NOW_BANNER_HEIGHT } from './components/NowOrdersBanner';
+import ReentryBanner, { REENTRY_BANNER_HEIGHT } from './components/ReentryBanner';
 import AssistantPage from './components/AssistantPage';
 import OrdersPage from './components/OrdersPage';
 import LoginPage from './components/LoginPage';
@@ -662,6 +663,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [trendlineBannerVisible, setTrendlineBannerVisible] = useState(false);
   const [moversBannerVisible, setMoversBannerVisible] = useState(false);
   const [nowOrdersBannerVisible, setNowOrdersBannerVisible] = useState(false);
+  const [reentryBannerVisible, setReentryBannerVisible] = useState(false);
   const [lotAlerts,         setLotAlerts]         = useState([]);
   const [dismissedLotKeys,  setDismissedLotKeys]  = useState(new Set());
   const [positions,         setPositions]         = useState([]); // full positions for EMA alerts
@@ -1162,7 +1164,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         ? IMPERSONATION_BANNER_HEIGHT
         : (trendlineBannerVisible ? TRENDLINE_BANNER_HEIGHT : 0)
           + (moversBannerVisible ? MOVERS_BANNER_HEIGHT : 0)
-          + (nowOrdersBannerVisible ? NOW_BANNER_HEIGHT : 0) || undefined,
+          + (nowOrdersBannerVisible ? NOW_BANNER_HEIGHT : 0)
+          + (reentryBannerVisible ? REENTRY_BANNER_HEIGHT : 0) || undefined,
     }}>
       {isAuthenticated && !isImpersonating && (
         <TrendlineAlertBanner onNavigateToAssistant={() => navigate('assistant')} onVisibleChange={setTrendlineBannerVisible} />
@@ -1180,6 +1183,16 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           + (moversBannerVisible ? MOVERS_BANNER_HEIGHT : 0)}
         onVisibleChange={setNowOrdersBannerVisible}
         onNavigate={navigate}
+        onTickerClick={(ticker) => {
+          setChartStocks([{ ticker }]);
+          setChartIndex(0);
+        }}
+      />}
+      {isAuthenticated && !isImpersonating && <ReentryBanner
+        topOffset={(trendlineBannerVisible ? TRENDLINE_BANNER_HEIGHT : 0)
+          + (moversBannerVisible ? MOVERS_BANNER_HEIGHT : 0)
+          + (nowOrdersBannerVisible ? NOW_BANNER_HEIGHT : 0)}
+        onVisibleChange={setReentryBannerVisible}
         onTickerClick={(ticker) => {
           setChartStocks([{ ticker }]);
           setChartIndex(0);

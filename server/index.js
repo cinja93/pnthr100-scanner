@@ -9168,6 +9168,19 @@ app.get('/api/pulse/signal-stocks', authenticateJWT, async (req, res) => {
   }
 });
 
+// ── Re-Entry Signals — daily 2-bar high breakout on active weekly BL, top-100 TTM ──
+app.get('/api/reentry-signals', authenticateJWT, async (req, res) => {
+  try {
+    const { getReentrySignals } = await import('./reentrySignalService.js');
+    const nav     = parseFloat(req.query.nav) || 100_000;
+    const signals = await getReentrySignals(req.user.userId, nav);
+    res.json({ signals, generatedAt: new Date().toISOString(), topN: 100 });
+  } catch (err) {
+    console.error('[reentry-signals]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── PNTHR Movers — top intraday gainers/decliners (679 stocks + PNTHR ETFs) ───
 app.get('/api/pulse/movers', authenticateJWT, async (req, res) => {
   try {

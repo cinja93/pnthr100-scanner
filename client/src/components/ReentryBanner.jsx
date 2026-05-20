@@ -79,19 +79,21 @@ export default function ReentryBanner({ onTickerClick, onVisibleChange, topOffse
     return () => { cancelled = true; clearInterval(id); };
   }, [currentUser]);
 
-  // Measure actual banner height so App.jsx can offset content correctly.
+  const visible = !!(currentUser && !hidden && signals.length > 0);
+
+  // Attach ResizeObserver after banner becomes visible so bannerRef.current is set.
+  // Dependency on visible ensures we re-attach when the banner first mounts into the DOM.
   useEffect(() => {
-    if (!bannerRef.current) return;
+    if (!visible || !bannerRef.current) return;
     const ro = new ResizeObserver(entries => {
-      const h = entries[0]?.contentRect?.height ?? 0;
+      const h = Math.ceil(entries[0]?.borderBoxSize?.[0]?.blockSize ?? entries[0]?.contentRect?.height ?? 0);
       setHeight(h);
       REENTRY_BANNER_HEIGHT = h;
     });
     ro.observe(bannerRef.current);
     return () => ro.disconnect();
-  }, []);
+  }, [visible]);
 
-  const visible = !!(currentUser && !hidden && signals.length > 0);
   useEffect(() => { onVisibleChange?.(visible, height); }, [visible, height]);
 
   if (!visible) return null;

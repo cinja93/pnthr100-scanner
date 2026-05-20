@@ -2687,6 +2687,7 @@ export default function AssistantPage({ onNavigate }) {
   const [devSignalsAge,      setDevSignalsAge]      = useState(null);
   const [sectorBreakdown,    setSectorBreakdown]    = useState([]);
   const [ordersData,         setOrdersData]         = useState(null);
+  const [reentrySignals,     setReentrySignals]     = useState([]);
   const [accessRequests,     setAccessRequests]     = useState([]);
   const [accessActioning,    setAccessActioning]    = useState(null); // { id, action } while in flight
   const { isAdmin } = useAuth() || {};
@@ -3286,6 +3287,12 @@ export default function AssistantPage({ onNavigate }) {
         .then(r => r.ok ? r.json() : null)
         .then(d => setOrdersData(d || null))
         .catch(() => setOrdersData(null));
+
+      // Re-entry signals — daily 2-bar breakout on active weekly BL
+      fetch(`${API_BASE}/api/reentry-signals`, { headers: authHeaders() })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => setReentrySignals(d?.signals || []))
+        .catch(() => {});
 
       const results = await Promise.allSettled([
         fetch(`${API_BASE}/api/assistant/tasks`,    { headers: authHeaders() }),
@@ -4606,6 +4613,42 @@ export default function AssistantPage({ onNavigate }) {
 
         {isOpen('live-opportunities') && (
         <div style={{ padding: '8px 10px 4px' }}>
+          {/* RE-ENTRY Opportunities */}
+          {reentrySignals.length > 0 && (
+            <div style={{
+              border: '1px solid rgba(124,58,237,0.4)', borderRadius: 6,
+              marginBottom: 12, overflow: 'hidden',
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 12px', background: 'rgba(124,58,237,0.12)',
+                borderBottom: '1px solid rgba(124,58,237,0.25)',
+                cursor: 'pointer',
+              }} onClick={() => onNavigate?.('ai-orders')}>
+                <span style={{ color: '#a78bfa', fontWeight: 800, fontSize: 11, letterSpacing: '0.1em' }}>RE-ENTRY</span>
+                <span style={{ color: '#7c3aed', fontSize: 10 }}>Daily 2-bar breakout on active BL — Top 100 TTM</span>
+                <span style={{
+                  marginLeft: 'auto', background: '#7c3aed', color: '#fff',
+                  borderRadius: 3, padding: '1px 7px', fontSize: 10, fontWeight: 700,
+                }}>{reentrySignals.length}</span>
+                <span style={{ color: '#a78bfa', fontSize: 10 }}>→ AI Orders</span>
+              </div>
+              <div style={{ padding: '6px 12px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {reentrySignals.map(s => (
+                  <div key={s.ticker} style={{
+                    background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)',
+                    borderRadius: 4, padding: '3px 8px', fontSize: 11,
+                  }}>
+                    <span style={{ color: '#e9d5ff', fontWeight: 700 }}>{s.ticker}</span>
+                    <span style={{ color: '#94a3b8', marginLeft: 4 }}>{s.fund}</span>
+                    <span style={{ color: '#16a34a', marginLeft: 4 }}>${s.entryTrigger}</span>
+                    <span style={{ color: '#dc2626', marginLeft: 4 }}>stop ${s.weeklyStop}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Weekly Orders */}
           {ordersData && <WeeklyOrdersSection data={ordersData} onNavigate={onNavigate} />}
 

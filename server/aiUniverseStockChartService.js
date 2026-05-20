@@ -237,6 +237,26 @@ export async function getAiStockChartData(ticker) {
   const dailyDetect  = dailySigPeriod  ? detectAllSignals(dailySigBars,  dailySigPeriod,  false, 0.003, gateOff) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
   const weeklyDetect = weeklySigPeriod ? detectAllSignals(weeklySigBars, weeklySigPeriod, false, null,  gateOff) : { events: [], pnthrStop: null, currentSignal: null, activeType: null };
 
+  // After a BE exit from a long, compute where the next BL would trigger:
+  // max(last-2 closed daily bars' highs) + $0.01. Shows as a dashed green
+  // line on the chart so the trader knows exactly where confirmation fires.
+  // Only shown when: last event is BE, and no SS followed it (trend still long).
+  const dailyNextEntryTrigger = (() => {
+    const evs = dailyDetect.events;
+    if (!evs?.length) return null;
+    const lastEv = evs[evs.length - 1];
+    if (lastEv.signal !== 'BE') return null;
+    // Ensure no SS fired after the last BL (trend still bullish)
+    let lastBlIdx = -1;
+    for (let i = evs.length - 1; i >= 0; i--) { if (evs[i].signal === 'BL') { lastBlIdx = i; break; } }
+    if (lastBlIdx < 0) return null;
+    if (evs.slice(lastBlIdx).some(e => e.signal === 'SS')) return null;
+    if (dailyAscSig.length < 2) return null;
+    const h1 = dailyAscSig[dailyAscSig.length - 1].high;
+    const h2 = dailyAscSig[dailyAscSig.length - 2].high;
+    return parseFloat((Math.max(h1, h2) + 0.01).toFixed(2));
+  })();
+
   // Last bar info per timeframe
   const lastDaily  = dailyAsc[dailyAsc.length - 1] || null;
   const lastWeekly = weeklyAsc[weeklyAsc.length - 1] || null;
@@ -294,9 +314,10 @@ export async function getAiStockChartData(ticker) {
         volume: b.volume || 0,
         ema:    dailyEma[i] != null ? parseFloat(dailyEma[i].toFixed(2)) : null,
       })),
-      signals:       dailyDetect.events,
-      currentSignal: dailyDetect.activeType || dailyDetect.currentSignal || null,
-      pnthrStop:     dailyDetect.activeType ? dailyDetect.pnthrStop : null,
+      signals:          dailyDetect.events,
+      currentSignal:    dailyDetect.activeType || dailyDetect.currentSignal || null,
+      pnthrStop:        dailyDetect.activeType ? dailyDetect.pnthrStop : null,
+      nextEntryTrigger: dailyNextEntryTrigger,
     },
     weekly: {
       bars: weeklyAsc.map((b, i) => ({

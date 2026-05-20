@@ -270,6 +270,15 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
 
       // Cancel duplicates first.
       for (const dup of duplicates) {
+        if (+dup.orderId === 0) {
+          skips.push({
+            ticker, lot: lot.lot,
+            reason: 'UNCANCELLABLE_DUPLICATE_MANUAL_ORDER_ID_ZERO',
+            permId: dup.permId,
+            dupPrice: +dup.stopPrice, dupShares: dup.shares,
+          });
+          continue;
+        }
         const enqRes = !dryRun && flagOn && isWeekday
           ? await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
               ticker,

@@ -176,7 +176,7 @@ function useDrawingTools(chartRef, containerRef, priceSeriesRef) {
 function ChartPanel({
   title, period, fallback, bars, signals, chartType,
   currentSignal, pnthrStop, weeklyStop,
-  ticker, entryPrice,
+  ticker, entryPrice, nextEntryTrigger,
 }) {
   const containerRef    = useRef(null);
   const chartRef        = useRef(null);
@@ -306,6 +306,23 @@ function ChartPanel({
       priceLineRef.current = stopLine;    // ref points to the series so we can update it
     }
 
+    // "Next BL" trigger line — dashed green, shown after a BE exit when the
+    // long trend is still active. Marks max(last-2 bar highs) + $0.01: the
+    // exact price where a new confirmed BL signal would fire on the daily.
+    if (nextEntryTrigger != null && bars.length >= 1) {
+      const trigLine = chart.addSeries(LineSeries, {
+        color: '#16a34a',
+        lineWidth: 1,
+        lineStyle: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: false,
+        title: 'Next BL',
+      });
+      const lastN = Math.min(8, bars.length);
+      trigLine.setData(bars.slice(-lastN).map(b => ({ time: b.date, value: nextEntryTrigger })));
+    }
+
     // (do NOT call fitContent — see comment in earlier commit)
 
     let destroyed = false;
@@ -329,7 +346,7 @@ function ChartPanel({
       priceLineRef.current = null;
       markersRef.current = null;
     };
-  }, [bars, signals, chartType, title, pnthrStop]);
+  }, [bars, signals, chartType, title, pnthrStop, nextEntryTrigger]);
 
   // Update the dashed stop line live when SIZE IT's adjustable stop changes.
   // The line is a LineSeries pinned to the last 5 bars at a constant Y value;
@@ -948,6 +965,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
                 weeklyStop={data.weekly.pnthrStop}
                 ticker={activeTicker}
                 entryPrice={data.currentPrice}
+                nextEntryTrigger={data.daily.nextEntryTrigger ?? null}
               />
               <ChartPanel
                 title="Weekly"

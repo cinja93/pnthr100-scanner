@@ -1091,6 +1091,47 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                 </div>
               )}
 
+              {/* Max stop-out loss badge — bottom-right corner. Purple bg.
+                  Shows dollar loss if stopped out NOW at CMD stop price
+                  with current IBKR share count. Updates every 60s. */}
+              {(() => {
+                const avgCost   = +(row.command?.avgCost ?? row.ibkr?.avgCost ?? 0);
+                const stopPrice = +(row.command?.stopPrice ?? 0);
+                const shares    = Math.abs(+row.ibkr?.shares || 0);
+                const dir       = (row.command?.direction || row.ibkr?.direction || 'LONG').toUpperCase();
+                if (!avgCost || !stopPrice || !shares) return null;
+                const maxLoss = dir === 'SHORT'
+                  ? (stopPrice - avgCost) * shares
+                  : (avgCost  - stopPrice) * shares;
+                const isLoss = maxLoss > 0;
+                return (
+                  <div
+                    title={`Stop-out loss: ${shares} sh × ${dir === 'SHORT'
+                      ? `($${stopPrice.toFixed(2)} stop − $${avgCost.toFixed(2)} avg)`
+                      : `($${avgCost.toFixed(2)} avg − $${stopPrice.toFixed(2)} stop)`
+                    } = ${isLoss ? '-' : '+'}$${Math.abs(maxLoss).toFixed(2)}`}
+                    style={{
+                      position:     'absolute',
+                      bottom:        6,
+                      right:         6,
+                      zIndex:        2,
+                      padding:       '2px 8px',
+                      background:    '#6f42c1',
+                      border:        '1px solid rgba(111,66,193,0.7)',
+                      borderRadius:  4,
+                      fontSize:      11,
+                      fontWeight:    800,
+                      color:         '#fff',
+                      letterSpacing: '0.02em',
+                      fontVariantNumeric: 'tabular-nums',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {isLoss ? '-' : '+'}${Math.abs(maxLoss).toFixed(2)}
+                  </div>
+                );
+              })()}
+
               {/* Live-price badge — top-right corner. Refreshes with the
                   reconcile poll (every 60s). Hidden when price is unknown. */}
               {row.lastPrice != null && (

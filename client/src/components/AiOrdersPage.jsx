@@ -182,7 +182,7 @@ function GapProgressBar({ gapPct, wEmaSlope }) {
           background: blocked ? '#666' : barColor,
         }} />
       </div>
-      <span style={{ color: blocked ? '#666' : gapColor, fontSize: 11, minWidth: 44, textAlign: 'right' }}>
+      <span style={{ color: gapColor, fontSize: 11, minWidth: 44, textAlign: 'right' }}>
         {gapPct != null ? `${gapPct.toFixed(1)}%` : '—'}
       </span>
       {blocked && <span style={{ color: '#dc2626', fontSize: 9, fontWeight: 700 }} title={`Slope ${absSlope.toFixed(0)}% — needs to drop below 50%`}>SLOPE</span>}

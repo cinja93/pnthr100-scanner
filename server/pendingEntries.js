@@ -15,7 +15,7 @@ import { createJournalEntry } from './journalService.js';
 import { fetchMarketSnapshot, getSectorEtf } from './marketSnapshot.js';
 import { fetchTechnicalSnapshot } from './technicalSnapshot.js';
 import { normalizeSector } from './sectorUtils.js';
-import { getDevelopingSignalTickers } from './signalService.js';
+import { getDevelopingSignalTickers, getCachedSignals } from './signalService.js';
 import { calculateSectorExposure } from './sectorExposure.js';
 import { getCachedSignalStocks } from './apexService.js';
 import { computeTargetAvg } from './lotMath.js';
@@ -438,7 +438,17 @@ export async function pendingEntryConfirm(req, res) {
       direction:    resolvedDirection,
       entryPrice:   +fillPrice,
       originalStop: entry.adjustedStop || entry.suggestedStop || null,
-      stopPrice:    (stop && !isNaN(+stop)) ? +stop : (entry.adjustedStop || entry.suggestedStop),
+      stopPrice:    (stop && !isNaN(+stop)) ? +stop
+                  : (entry.adjustedStop || entry.suggestedStop)
+                  || (() => {
+                      // Last resort: pull current PNTHR stop from signal cache.
+                      // Prevents a null stopPrice when the user confirms without
+                      // explicitly providing a stop and the pending entry was
+                      // queued before the stop was computed.
+                      const cached = getCachedSignals()?.[entry.ticker];
+                      const s = cached?.pnthrStop ?? cached?.stopPrice ?? null;
+                      return (s && !isNaN(+s) && +s > 0) ? +s : null;
+                    })(),
       maxGapPct:    entry.gapPct || 0,
       currentPrice: +fillPrice,
       isETF:        entry.isETF || false,

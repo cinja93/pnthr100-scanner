@@ -156,8 +156,22 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
 
     const pnthrStop = +p.stopPrice;
     const ibkrStop  = +protective.stopPrice;
-    if (!Number.isFinite(pnthrStop) || !Number.isFinite(ibkrStop)) {
+    if (!Number.isFinite(ibkrStop)) {
       skips.push({ ticker, reason: 'BAD_STOP_VALUE' }); continue;
+    }
+    if (!Number.isFinite(pnthrStop) || pnthrStop <= 0) {
+      // CMD has no stop price (null) but IBKR already has one — adopt it.
+      // This happens when a position was confirmed without a stop price and
+      // the user manually placed the stop in TWS before PNTHR could compute one.
+      if (!dryRun) {
+        await db.collection('pnthr_portfolio').updateOne(
+          { id: p.id, ownerId: p.ownerId },
+          { $set: { stopPrice: ibkrStop, updatedAt: new Date() },
+            $push: { stopHistory: { date: new Date().toISOString().slice(0,10), stop: ibkrStop, reason: 'NULL_STOP_ADOPTED_FROM_TWS', source: 'STOP_RATCHET_CRON' } } }
+        );
+      }
+      adoptions.push({ ticker, dir: isLong ? 'LONG' : 'SHORT', from: null, to: ibkrStop, permId: protective.permId, reason: 'NULL_ADOPT' });
+      continue;
     }
 
     const ibkrTighter  = isLong ? (ibkrStop  - pnthrStop > TIGHTER_THRESHOLD) : (pnthrStop  - ibkrStop  > TIGHTER_THRESHOLD);

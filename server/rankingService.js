@@ -260,6 +260,24 @@ export async function addAiShortRankingComparison(bottomStocks) {
   }
 }
 
+export async function saveAiRankingManually(longStocks, shortStocks, date) {
+  try {
+    const rankingDate = date || getRankingDate();
+    const existing = await getAiRankingByDate(rankingDate);
+    if (existing) {
+      console.log(`✅ AI ranking already exists for ${rankingDate}, skipping manual save`);
+      return { skipped: true, date: rankingDate };
+    }
+    console.log(`💾 Manual AI save for ${rankingDate}...`);
+    await saveAiRanking(rankingDate, longStocks, shortStocks);
+    await cleanupOldAiRankings(12);
+    return { saved: true, date: rankingDate };
+  } catch (error) {
+    console.error('Error in manual AI save:', error);
+    throw error;
+  }
+}
+
 export async function autoSaveAiRankingIfFriday(longStocks, shortStocks = null) {
   try {
     if (!isFriday()) return;

@@ -7,7 +7,7 @@ import mongoSanitize from 'express-mongo-sanitize';
 import { getTopStocks, calculateStopPrices, getShortStopPrices, getWatchlistStocks, getJungleStocks, getAiTopStocks } from './stockService.js';
 import { getSignals, getCachedSignals } from './signalService.js';
 import { enrichWithSignals, optimizeWithRason } from './portfolioService.js';
-import { getLastFridayDate, saveRankingManually } from './rankingService.js';
+import { getLastFridayDate, saveRankingManually, saveAiRankingManually } from './rankingService.js';
 import { getEmaCrossoverStocks } from './emaCrossoverService.js';
 import { getEtfStocks, getAiEtfStocks, ALL_ETF_TICKER_SET, AI_TICKER_CATEGORY, getCachedEtfResults } from './etfService.js';
 import { getSp400Longs, getSp400Shorts } from './sp400Service.js';
@@ -1121,6 +1121,22 @@ app.post('/api/rankings/save', authenticateJWT, requireAdmin, async (req, res) =
   } catch (error) {
     console.error('Error in manual ranking save:', error);
     res.status(500).json({ error: error.message || 'Failed to save ranking' });
+  }
+});
+
+// POST /api/ai-rankings/save
+// Force a fresh AI scan and save for the most recent Friday (or a supplied date).
+// Body (optional): { date: 'YYYY-MM-DD' }
+app.post('/api/ai-rankings/save', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const date = req.body?.date || getLastFridayDate();
+    const { getAiTopStocks } = await import('./stockService.js');
+    const data = await getAiTopStocks(true); // force fresh scan
+    const result = await saveAiRankingManually(data.long, data.short, date);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in manual AI ranking save:', error);
+    res.status(500).json({ error: error.message || 'Failed to save AI ranking' });
   }
 });
 

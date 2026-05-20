@@ -53,7 +53,8 @@ export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavi
 
       if (ordDoc?.orders) {
         for (const o of ordDoc.orders) {
-          if (!o.inPortfolio) {
+          // Only fire for fresh signals (age 0 or 1 week) not already in portfolio
+          if (!o.inPortfolio && (o.signalAge ?? 99) <= 1) {
             items.push({
               key: `ord-${o.ticker}-${o.signal}`,
               ticker: o.ticker,

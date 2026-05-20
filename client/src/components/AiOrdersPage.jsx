@@ -164,28 +164,28 @@ function SectorSummaryStrip({ summary }) {
   );
 }
 
-function GapProgressBar({ gapPct, wEmaSlope }) {
-  const threshold = BEST_THRESHOLD;
-  const absGap = Math.abs(gapPct ?? 0);
-  const absSlope = Math.abs(wEmaSlope ?? 999);
-  const slopeOk = absSlope < 50;
-  const pct = Math.min(100, (absGap / threshold) * 100);
-  const gapColor = absGap >= 12 ? '#16a34a' : absGap >= 9 ? '#fcf000' : '#aaa';
-  const barColor = absGap >= 12 ? '#16a34a' : absGap >= 9 ? '#fcf000' : '#555';
-  const blocked = !slopeOk;
+function RsiRangeBar({ weeklyRsi, rsi52Low, rsi52High }) {
+  if (weeklyRsi == null || rsi52Low == null || rsi52High == null) {
+    return <span style={{ color: '#555', fontSize: 10 }}>—</span>;
+  }
+  const range = rsi52High - rsi52Low || 1;
+  const pct = Math.min(100, Math.max(0, ((weeklyRsi - rsi52Low) / range) * 100));
+  const rsiColor = weeklyRsi >= 70 ? '#dc2626' : weeklyRsi >= 50 ? '#16a34a' : '#fcf000';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <div style={{ width: 50, height: 6, background: '#222', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
-        <div style={{
-          height: '100%', borderRadius: 3, transition: 'width 0.5s ease',
-          width: `${pct}%`,
-          background: blocked ? '#666' : barColor,
-        }} />
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 72, gap: 2 }}>
+      <div style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
+        <span style={{ color: rsiColor, fontSize: 10, fontWeight: 700, position: 'absolute', left: `${pct}%`, transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>
+          {weeklyRsi.toFixed(0)}
+        </span>
       </div>
-      <span style={{ color: gapColor, fontSize: 11, minWidth: 44, textAlign: 'right' }}>
-        {gapPct != null ? `${gapPct.toFixed(1)}%` : '—'}
-      </span>
-      {blocked && <span style={{ color: '#dc2626', fontSize: 9, fontWeight: 700 }} title={`Slope ${absSlope.toFixed(0)}% — needs to drop below 50%`}>SLOPE</span>}
+      <div style={{ height: 14 }} />
+      <div style={{ position: 'relative', width: '100%', height: 6, background: '#333', borderRadius: 3 }}>
+        <div style={{ position: 'absolute', left: `${pct}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 8, height: 8, borderRadius: '50%', background: rsiColor, border: '1px solid #000' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+        <span style={{ color: '#555', fontSize: 9 }}>{rsi52Low.toFixed(0)}</span>
+        <span style={{ color: '#555', fontSize: 9 }}>{rsi52High.toFixed(0)}</span>
+      </div>
     </div>
   );
 }
@@ -208,6 +208,7 @@ const ORDER_ACCESSORS = {
   sector:     o => o.sectorId,
   tier:       o => TIER_RANK[o.sectorTier] ?? 99,
   gapPct:     o => o.gapPct,
+  weeklyRsi:  o => o.weeklyRsi,
   slope:      o => o.wEmaSlope,
   price:      o => o.currentPrice,
   stop:       o => o._displayStop ?? o.stopPrice,
@@ -284,11 +285,8 @@ function OrderRow({ o, orders, navScale, setChartTickers, setChartIndex, dimmed,
       <td style={{ padding: '6px 10px', fontWeight: 700, color: '#fff' }}>{o.ticker}</td>
       <td style={{ padding: '6px 10px', color: '#aaa', fontSize: 11 }}>S{o.sectorId} {o.sectorName?.split(' ').slice(0, 2).join(' ')}</td>
       <td style={{ padding: '6px 10px' }}><TierPill tier={o.sectorTier} /></td>
-      <td style={{ padding: '6px 10px', textAlign: 'right' }}>
-        {dimmed
-          ? <GapProgressBar gapPct={o.gapPct} wEmaSlope={o.wEmaSlope} />
-          : <span style={{ color: Math.abs(o.gapPct ?? 0) >= 12 ? '#16a34a' : Math.abs(o.gapPct ?? 0) >= 9 ? '#fcf000' : '#aaa' }}>{o.gapPct != null ? `${o.gapPct.toFixed(1)}%` : '—'}</span>
-        }
+      <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+        <RsiRangeBar weeklyRsi={o.weeklyRsi} rsi52Low={o.rsi52Low} rsi52High={o.rsi52High} />
       </td>
       <td style={{ padding: '6px 10px', textAlign: 'right', color: (o.wEmaSlope ?? 999) < 50 ? '#16a34a' : (o.wEmaSlope ?? 999) < 65 ? '#fcf000' : '#dc2626' }}>{o.wEmaSlope != null ? `${o.wEmaSlope.toFixed(1)}%` : '—'}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(o.currentPrice)}</td>
@@ -313,8 +311,8 @@ function TableHeader({ sort, onSort }) {
         <SortHeader label="Ticker"      sortKey="ticker"     currentSort={sort} onSort={onSort} />
         <SortHeader label="Sector"      sortKey="sector"     currentSort={sort} onSort={onSort} />
         <SortHeader label="Sector 💪"   sortKey="tier"       currentSort={sort} onSort={onSort} />
-        <SortHeader label="Gap %"       sortKey="gapPct"     currentSort={sort} onSort={onSort} align="right"
-          info={<><span style={{ color: '#16a34a', fontWeight: 700 }}>Green</span> = 12%+ (in range, qualifies)<br/><span style={{ color: '#fcf000', fontWeight: 700 }}>Yellow</span> = 9–12% (close, needs price move)<br/><span style={{ color: '#aaa' }}>Grey</span> = under 9% (not close yet)</>} />
+        <SortHeader label="RSI"         sortKey="weeklyRsi"  currentSort={sort} onSort={onSort} align="center"
+          info={<>Weekly RSI (14). Dot on 52-week range bar.<br/><span style={{ color: '#dc2626', fontWeight: 700 }}>Red</span> = 70+ (overbought)<br/><span style={{ color: '#16a34a', fontWeight: 700 }}>Green</span> = 50–70 (momentum)<br/><span style={{ color: '#fcf000', fontWeight: 700 }}>Yellow</span> = under 50 (weak)</>} />
         <SortHeader label="Slope %"     sortKey="slope"      currentSort={sort} onSort={onSort} align="right"
           info={<><span style={{ color: '#16a34a', fontWeight: 700 }}>Green</span> = under 50% (in range, EMA is flat enough)<br/><span style={{ color: '#fcf000', fontWeight: 700 }}>Yellow</span> = 50–65% (close, EMA is flattening)<br/><span style={{ color: '#dc2626', fontWeight: 700 }}>Red</span> = over 65% (blocked, EMA too steep)</>} />
         <SortHeader label="Price"       sortKey="price"      currentSort={sort} onSort={onSort} align="right" />

@@ -132,6 +132,35 @@ export async function runAiOrdersPipeline(opts = {}) {
     .find({ ticker: { $in: allUniverseTickers } }, { projection: { ticker: 1, weekly: 1 } }).toArray();
   const weeklyByTicker = Object.fromEntries(weeklyDocs.map(d => [d.ticker, d.weekly || []]));
 
+  function computeWeeklyRsi(ticker) {
+    const wRaw = weeklyByTicker[ticker] || [];
+    if (wRaw.length < 15) return null;
+    const wAsc = [...wRaw].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
+    const closes = wAsc.map(b => b.close);
+    const n = closes.length;
+    const rsiArr = new Array(n).fill(null);
+    let avgGain = 0, avgLoss = 0;
+    for (let i = 1; i <= 14; i++) {
+      const d = closes[i] - closes[i - 1];
+      if (d > 0) avgGain += d; else avgLoss += Math.abs(d);
+    }
+    avgGain /= 14; avgLoss /= 14;
+    rsiArr[14] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    for (let i = 15; i < n; i++) {
+      const d = closes[i] - closes[i - 1];
+      avgGain = (avgGain * 13 + Math.max(d, 0)) / 14;
+      avgLoss = (avgLoss * 13 + Math.max(-d, 0)) / 14;
+      rsiArr[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    }
+    const validRsi = rsiArr.filter(v => v !== null);
+    if (!validRsi.length) return null;
+    const weeklyRsi = +validRsi[validRsi.length - 1].toFixed(1);
+    const last52 = validRsi.slice(-52);
+    const rsi52Low  = +Math.min(...last52).toFixed(1);
+    const rsi52High = +Math.max(...last52).toFixed(1);
+    return { weeklyRsi, rsi52Low, rsi52High };
+  }
+
   function computeGapAndSlope(ticker, livePrice) {
     const meta = TICKER_META[ticker];
     if (!meta) return null;
@@ -250,6 +279,7 @@ export async function runAiOrdersPipeline(opts = {}) {
       qualityGrade,
       heatDollar,
       heatPctNav,
+      ...( computeWeeklyRsi(ticker) || {} ),
     });
   }
 
@@ -327,6 +357,7 @@ export async function runAiOrdersPipeline(opts = {}) {
       killTier679: cOrder.tier,
       killScore679: cOrder.killScore,
       filteredRank679: cOrder.filteredRank,
+      ...( computeWeeklyRsi(ticker) || {} ),
     });
   }
 

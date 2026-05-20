@@ -300,6 +300,22 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
         continue;
       }
 
+      // orderId=0 means the order was placed manually in TWS and the IB API
+      // cannot cancel it (cancelOrder(0) is rejected). MODIFY works via
+      // cancel-then-replace so it will always fail. Skip to avoid burning the
+      // 30-min failure backoff — the user must cancel the manual order in TWS,
+      // after which the next tick will see it NAKED and auto-place the correct
+      // PNTHR-tagged one.
+      if (+best.orderId === 0) {
+        skips.push({
+          ticker, lot: lot.lot,
+          reason: 'UNCANCELLABLE_MANUAL_ORDER_ID_ZERO',
+          permId: best.permId,
+          twsShares, planShares, twsTrigger, planTrigger,
+        });
+        continue;
+      }
+
       // PNTHR plan is law for lot triggers. Drop the silent-adoption path —
       // any drift gets pushed to plan via MODIFY. Lot triggers aren't risk-
       // symmetric like protective stops (tighter trigger = MORE risk, not

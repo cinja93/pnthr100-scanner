@@ -288,12 +288,17 @@ function OrderRow({ o, orders, navScale, setChartTickers, setChartIndex, dimmed,
       <td style={{ padding: '6px 10px', textAlign: 'center' }}>
         <RsiRangeBar weeklyRsi={o.weeklyRsi} rsi52Low={o.rsi52Low} rsi52High={o.rsi52High} />
       </td>
+      <td style={{ padding: '6px 10px', textAlign: 'right' }}>
+        <span style={{ color: Math.abs(o.gapPct ?? 0) >= 12 ? '#16a34a' : Math.abs(o.gapPct ?? 0) >= 9 ? '#fcf000' : '#aaa' }}>
+          {o.gapPct != null ? `${o.gapPct.toFixed(1)}%` : '—'}
+        </span>
+        {Math.abs(o.wEmaSlope ?? 0) >= 50 && <span style={{ color: '#dc2626', fontSize: 9, fontWeight: 700, marginLeft: 4 }} title={`Slope ${Math.abs(o.wEmaSlope).toFixed(0)}% — needs to drop below 50%`}>SLOPE</span>}
+      </td>
       <td style={{ padding: '6px 10px', textAlign: 'right', color: (o.wEmaSlope ?? 999) < 50 ? '#16a34a' : (o.wEmaSlope ?? 999) < 65 ? '#fcf000' : '#dc2626' }}>{o.wEmaSlope != null ? `${o.wEmaSlope.toFixed(1)}%` : '—'}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(o.currentPrice)}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right', color: o._liveStop ? '#16a34a' : '#aaa' }}>{fmtUsd(o._displayStop ?? o.stopPrice)}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right', color: (o._displayRiskPct ?? o.riskPct ?? 0) > 20 ? '#fcf000' : '#aaa' }}>{(o._displayRiskPct ?? o.riskPct)?.toFixed(1)}%</td>
       <td style={{ padding: '6px 10px', textAlign: 'right' }}>{o.lot1Shares?.toLocaleString()}</td>
-      <td style={{ padding: '6px 10px', textAlign: 'right', color: '#888' }}>{o.targetShares?.toLocaleString()}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right', color: '#aaa' }}>{fmtUsd(o.lot1Dollar, { k: true })}</td>
       <td style={{ padding: '6px 10px', textAlign: 'right', color: '#f97316', fontWeight: 600 }}>{fmtUsd(o._heatDollar)}</td>
       <td style={{ padding: '6px 10px', color: '#888' }}>{o.signalDate || '—'}</td>
@@ -319,7 +324,6 @@ function TableHeader({ sort, onSort }) {
         <SortHeader label="Stop"        sortKey="stop"       currentSort={sort} onSort={onSort} align="right" />
         <SortHeader label="Risk %"      sortKey="riskPct"    currentSort={sort} onSort={onSort} align="right" />
         <SortHeader label="L1 sh"      sortKey="entrySh"    currentSort={sort} onSort={onSort} align="right" />
-        <SortHeader label="Full Pos"   sortKey="fullPos"    currentSort={sort} onSort={onSort} align="right" />
         <SortHeader label="Entry $"     sortKey="entryDol"   currentSort={sort} onSort={onSort} align="right" />
         <SortHeader label="Heat $"      sortKey="heat"       currentSort={sort} onSort={onSort} align="right" />
         <SortHeader label="Signal Date" sortKey="signalDate" currentSort={sort} onSort={onSort} />

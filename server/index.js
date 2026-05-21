@@ -11017,6 +11017,7 @@ app.post('/api/test/recompute', authenticateJWT, requireAdmin, async (req, res) 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 API available at http://localhost:${PORT}/api/stocks`);
+  console.log(`[startup] MCE=${process.env.IBKR_MCE_AUTO_EXECUTE === 'true' ? 'LIVE' : 'OFF'} DryRun=${process.env.AI_AUTO_EXECUTE_DRY_RUN !== 'false' ? 'YES' : 'NO'} WeeklyExec=${process.env.AI_AUTO_EXECUTE === 'true' ? 'ON' : 'OFF'} Reconciliation=${process.env.RECONCILIATION_CRON_ENABLED === 'true' ? 'ON' : 'OFF'} SyncStops=${process.env.IBKR_AUTO_SYNC_STOPS === 'true' ? 'ON' : 'OFF'} PlaceStop=${process.env.IBKR_AUTO_PLACE_STOP === 'true' ? 'ON' : 'OFF'}`);
   // Pre-compute signal counts in background (takes ~2 min each)
   computeSectorSignalCounts();
   computeSpeculativeSignalCounts();

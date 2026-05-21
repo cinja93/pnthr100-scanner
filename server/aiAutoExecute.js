@@ -758,6 +758,11 @@ export async function executeMceEntries(opts = {}) {
     console.log(`[MCE AutoExec] ${dryRun ? 'DRY-RUN' : 'LIVE'} ${ticker} LONG — L1=${actualShares[0]}sh @MKT, stop=${stopPrice}${l1Shares < mceShares[0] ? ` [REDUCED from ${mceShares[0]}]` : ''}`);
 
     if (!dryRun) {
+      // Insert as STAGED first — only promote to ACTIVE after the buy
+      // enqueues successfully. Prevents ghost ACTIVE positions with 0
+      // filled shares if the outbox rejects the buy (position cap, heat
+      // cap, concentration cap, etc.).
+      position.status = 'STAGED';
       await db.collection(COLL_PORTFOLIO).insertOne(position);
       activeTickers.add(ticker);
 
@@ -767,6 +772,21 @@ export async function executeMceEntries(opts = {}) {
       };
       const r1 = await enqueueOutbox(db, ownerId, 'BUY_MARKET_TO_CATCH_UP', entryCmd);
       results.outbox.push({ ticker, command: 'ENTRY_MARKET', ...r1 });
+
+      if (r1.skipped) {
+        // Buy rejected — remove the STAGED position to avoid ghosts.
+        await db.collection(COLL_PORTFOLIO).deleteOne({ id: posId, ownerId });
+        activeTickers.delete(ticker);
+        console.warn(`[MCE AutoExec] ${ticker} buy REJECTED: ${r1.skipped} — STAGED position removed`);
+        results.skippedOrders.push({ ticker, reason: `BUY_REJECTED_${r1.skipped}` });
+        continue;
+      }
+
+      // Buy accepted — promote to ACTIVE and stage protective stop + lot triggers.
+      await db.collection(COLL_PORTFOLIO).updateOne(
+        { id: posId, ownerId },
+        { $set: { status: 'ACTIVE', updatedAt: new Date() } }
+      );
 
       const stopShape = buildStopOrderShape({ stopPrice, direction: 'LONG', stopExtendedHours: false });
       const stopCmd = {

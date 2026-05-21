@@ -649,7 +649,7 @@ export default function AiOrdersPage() {
                   <tbody>
                     {reentrySignals.map(s => (
                       <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(124,58,237,0.1)', cursor: 'pointer' }}
-                        onClick={() => { setChartTickers([s.ticker]); setChartIndex(0); }}>
+                        onClick={() => { setChartTickers(reentrySignals.map(r => r.ticker)); setChartIndex(reentrySignals.findIndex(r => r.ticker === s.ticker)); }}>
                         <td style={{ padding: '6px 10px', fontWeight: 800, color: '#e9d5ff' }}>{s.ticker}</td>
                         <td style={{ padding: '6px 10px', color: '#16a34a', fontWeight: 700 }}>${s.entryTrigger}</td>
                         <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>

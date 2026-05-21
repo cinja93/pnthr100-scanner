@@ -1,11 +1,10 @@
 /**
- * PNTHR Re-Entry Signal Service
+ * PNTHR MCE Signal Service (Momentum Continuation Entry) — AI 300 Only
  *
- * Detects daily re-entry opportunities for stocks with an active weekly BL signal.
- * Strategy: No-gate, Top 100 by TTM return, daily 2-bar high breakout trigger.
- * Backtest result: PF 3.97, Sharpe 0.90, Win Rate 48%, Max DD 4.67%, $439K annual profit.
+ * Detects daily MCE opportunities for AI 300 stocks with an active weekly BL signal.
+ * Strategy: Top 100 by TTM return, daily 2-bar high breakout trigger.
  *
- * Signal = weekly BL active + ticker in top 100 TTM rank + not already held +
+ * Signal = AI 300 ticker + weekly BL active + in top 100 TTM rank + not already held +
  *          today's daily HIGH > max(prev2 daily highs) + $0.01
  *
  * Stop  = current weekly PNTHR stop (from signal cache — already ratcheted to today)
@@ -28,21 +27,18 @@ const AI_TICKER_SET = new Set();
 for (const sec of AI_SECTORS) for (const h of sec.holdings) AI_TICKER_SET.add(h.ticker);
 
 // ── TTM rank cache ─────────────────────────────────────────────────────────────
-let ttmCache = { at: 0, top679: null, topAI: null };
+let ttmCache = { at: 0, topAI: null };
 
 async function computeTTMRanks() {
   const db = await connectToDatabase();
-  if (!db) return { top679: new Set(), topAI: new Set() };
+  if (!db) return { topAI: new Set() };
 
-  const all679 = await db.collection('pnthr_bt_candles').distinct('ticker');
   const allAI  = [...AI_TICKER_SET];
-  const allTickers = [...new Set([...all679, ...allAI])];
 
-  // Batch-fetch current prices from FMP quote endpoint
   const CHUNK = 100;
   const priceMap = new Map();
-  for (let i = 0; i < allTickers.length; i += CHUNK) {
-    const chunk = allTickers.slice(i, i + CHUNK).join(',');
+  for (let i = 0; i < allAI.length; i += CHUNK) {
+    const chunk = allAI.slice(i, i + CHUNK).join(',');
     try {
       const res = await fetch(`${FMP_BASE}/quote/${chunk}?apikey=${FMP_API_KEY}`,
         { signal: AbortSignal.timeout(15000) });
@@ -58,36 +54,29 @@ async function computeTTMRanks() {
   yearAgo.setFullYear(today.getFullYear() - 1);
   const yearAgoStr = yearAgo.toISOString().split('T')[0];
 
-  async function rankCollection(collection, tickers) {
-    const docs = await db.collection(collection)
-      .find({ ticker: { $in: tickers } }, { projection: { ticker: 1, daily: 1 } })
-      .toArray();
-    const ranked = [];
-    for (const doc of docs) {
-      const todayPrice = priceMap.get(doc.ticker);
-      if (!todayPrice) continue;
-      const daily = (doc.daily || [])
-        .filter(b => b.date >= yearAgoStr)
-        .sort((a, b) => a.date.localeCompare(b.date));
-      if (!daily.length) continue;
-      const yearAgoClose = daily[0].close;
-      if (!yearAgoClose) continue;
-      ranked.push({ ticker: doc.ticker, ttm: (todayPrice - yearAgoClose) / yearAgoClose });
-    }
-    ranked.sort((a, b) => b.ttm - a.ttm);
-    return new Set(ranked.slice(0, TOP_N).map(x => x.ticker));
+  const docs = await db.collection('pnthr_ai_bt_candles')
+    .find({ ticker: { $in: allAI } }, { projection: { ticker: 1, daily: 1 } })
+    .toArray();
+  const ranked = [];
+  for (const doc of docs) {
+    const todayPrice = priceMap.get(doc.ticker);
+    if (!todayPrice) continue;
+    const daily = (doc.daily || [])
+      .filter(b => b.date >= yearAgoStr)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (!daily.length) continue;
+    const yearAgoClose = daily[0].close;
+    if (!yearAgoClose) continue;
+    ranked.push({ ticker: doc.ticker, ttm: (todayPrice - yearAgoClose) / yearAgoClose });
   }
-
-  const [top679, topAI] = await Promise.all([
-    rankCollection('pnthr_bt_candles',    all679),
-    rankCollection('pnthr_ai_bt_candles', allAI),
-  ]);
-  return { top679, topAI };
+  ranked.sort((a, b) => b.ttm - a.ttm);
+  const topAI = new Set(ranked.slice(0, TOP_N).map(x => x.ticker));
+  return { topAI };
 }
 
 async function getTopN() {
   const now = Date.now();
-  if (ttmCache.at && now - ttmCache.at < TTM_TTL_MS && ttmCache.top679) return ttmCache;
+  if (ttmCache.at && now - ttmCache.at < TTM_TTL_MS && ttmCache.topAI) return ttmCache;
   const ranks = await computeTTMRanks();
   ttmCache = { at: now, ...ranks };
   return ttmCache;
@@ -150,18 +139,18 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
       for (const p of pos) held.add(p.ticker);
     }
 
-    const { top679, topAI } = await getTopN();
+    const { topAI } = await getTopN();
 
-    // Build candidates: active BL + in top-100 + not held
+    // Build candidates: AI 300 only — active BL + in top-100 TTM + not held
     const candidates = [];
     for (const [ticker, sig] of Object.entries(allSignals)) {
       if (sig.signal !== 'BL') continue;
       if (held.has(ticker)) continue;
-      const isAI = AI_TICKER_SET.has(ticker);
-      if (!(isAI ? topAI : top679).has(ticker)) continue;
+      if (!AI_TICKER_SET.has(ticker)) continue;
+      if (!topAI.has(ticker)) continue;
       const weeklyStop = sig.pnthrStop ?? sig.stopPrice;
       if (!weeklyStop) continue;
-      candidates.push({ ticker, weeklyStop, fund: isAI ? 'AI 300' : '679', signalDate: sig.signalDate });
+      candidates.push({ ticker, weeklyStop, fund: 'AI 300', signalDate: sig.signalDate });
     }
 
     // Check daily trigger in parallel batches of 10
@@ -208,5 +197,5 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
 
 export function clearReentryCache() {
   signalCache = { at: 0, signals: [] };
-  ttmCache    = { at: 0, top679: null, topAI: null };
+  ttmCache    = { at: 0, topAI: null };
 }

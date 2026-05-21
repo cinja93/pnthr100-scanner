@@ -689,9 +689,9 @@ export default function AiOrdersPage() {
                 padding: '10px 14px', background: 'rgba(124,58,237,0.12)',
                 borderBottom: '1px solid rgba(124,58,237,0.3)',
               }}>
-                <span style={{ color: '#a78bfa', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>RE-ENTRY</span>
-                <span style={{ color: '#a78bfa', fontSize: 12 }}>
-                  Active weekly BL · Top 100 TTM · Daily 2-bar high breakout fired · Not held
+                <span style={{ color: '#60a5fa', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>PNTHR MCE</span>
+                <span style={{ color: '#60a5fa', fontSize: 12 }}>
+                  AI 300 · Active weekly BL · Top 100 TTM · Daily 2-bar high breakout · Not held
                 </span>
                 <span style={{
                   marginLeft: 'auto', padding: '2px 8px', background: '#7c3aed', color: '#fff',
@@ -702,7 +702,7 @@ export default function AiOrdersPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
                   <thead>
                     <tr style={{ background: 'rgba(124,58,237,0.08)', borderBottom: '1px solid rgba(124,58,237,0.2)' }}>
-                      {['Ticker','Fund','L1 Trigger','Weekly Stop','RPS','L1 Sh','L2 Sh','L3 Sh','L4 Sh','L5 Sh','L2 Price','L3 Price','BL Date'].map(h => (
+                      {['Ticker','L1 Trigger','Weekly Stop','RPS','L1 Sh','L2 Sh','L3 Sh','L4 Sh','L5 Sh','L2 Price','L3 Price','BL Date'].map(h => (
                         <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -712,7 +712,6 @@ export default function AiOrdersPage() {
                       <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(124,58,237,0.1)', cursor: 'pointer' }}
                         onClick={() => { setChartTickers([s.ticker]); setChartIndex(0); }}>
                         <td style={{ padding: '6px 10px', fontWeight: 800, color: '#e9d5ff' }}>{s.ticker}</td>
-                        <td style={{ padding: '6px 10px', color: s.fund === 'AI 300' ? '#a78bfa' : '#f97316' }}>{s.fund}</td>
                         <td style={{ padding: '6px 10px', color: '#16a34a', fontWeight: 700 }}>${s.entryTrigger}</td>
                         <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>
                         <td style={{ padding: '6px 10px', color: '#fbbf24' }}>${s.rps}</td>

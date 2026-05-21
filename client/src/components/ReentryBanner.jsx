@@ -1,6 +1,5 @@
-// ReentryBanner — fixed top-of-app banner for daily re-entry opportunities.
-// Fires when: weekly BL active + top-100 TTM rank + not held + daily 2-bar high breaks.
-// Two-zone layout: 679 (amber) | AI 300 (blue), with BL label and dynamic height.
+// ReentryBanner — fixed top-of-app banner for PNTHR MCE (Momentum Continuation Entry).
+// AI 300 only. Fires when: weekly BL active + top-100 TTM rank + not held + daily 2-bar high breaks.
 
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../AuthContext';
@@ -45,13 +44,6 @@ function TickerBadge({ s, onTickerClick, scheme }) {
   );
 }
 
-const SCHEME_679 = {
-  label:       '#f59e0b',
-  badgeBg:     'rgba(245,158,11,0.13)',
-  badgeBorder: 'rgba(245,158,11,0.45)',
-  badgeText:   '#fbbf24',
-  divider:     'rgba(245,158,11,0.25)',
-};
 const SCHEME_AI = {
   label:       '#60a5fa',
   badgeBg:     'rgba(59,130,246,0.13)',
@@ -98,9 +90,6 @@ export default function ReentryBanner({ onTickerClick, onVisibleChange, topOffse
 
   if (!visible) return null;
 
-  const signals679 = signals.filter(s => s.fund !== 'AI 300');
-  const signalsAI  = signals.filter(s => s.fund === 'AI 300');
-
   return (
     <div
       ref={bannerRef}
@@ -125,10 +114,10 @@ export default function ReentryBanner({ onTickerClick, onVisibleChange, topOffse
         flexShrink: 0,
       }}>
         <span style={{
-          color: '#a78bfa', fontWeight: 900, fontSize: 11,
+          color: '#60a5fa', fontWeight: 900, fontSize: 11,
           letterSpacing: '0.12em', whiteSpace: 'nowrap',
         }}>
-          RE-ENTRY
+          PNTHR MCE
         </span>
         <span style={{
           background: '#15803d', color: '#fff',
@@ -140,44 +129,22 @@ export default function ReentryBanner({ onTickerClick, onVisibleChange, topOffse
         </span>
       </div>
 
-      {/* ── 679 zone ── */}
-      {signals679.length > 0 && (
+      {/* ── AI 300 signals ── */}
+      <div style={{
+        flex: 1, padding: '7px 12px',
+      }}>
         <div style={{
-          flex: signals679.length, padding: '7px 12px',
-          borderRight: signals679.length && signalsAI.length ? '1px solid #2a2a40' : 'none',
+          fontSize: 10, fontWeight: 800, color: SCHEME_AI.label,
+          letterSpacing: '0.12em', marginBottom: 5,
         }}>
-          <div style={{
-            fontSize: 10, fontWeight: 800, color: SCHEME_679.label,
-            letterSpacing: '0.12em', marginBottom: 5,
-          }}>
-            679 &nbsp;<span style={{ opacity: 0.55, fontWeight: 600 }}>({signals679.length})</span>
-          </div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {signals679.map(s => (
-              <TickerBadge key={s.ticker} s={s} onTickerClick={onTickerClick} scheme={SCHEME_679} />
-            ))}
-          </div>
+          AI 300 &nbsp;<span style={{ opacity: 0.55, fontWeight: 600 }}>({signals.length})</span>
         </div>
-      )}
-
-      {/* ── AI 300 zone ── */}
-      {signalsAI.length > 0 && (
-        <div style={{
-          flex: signalsAI.length, padding: '7px 12px',
-        }}>
-          <div style={{
-            fontSize: 10, fontWeight: 800, color: SCHEME_AI.label,
-            letterSpacing: '0.12em', marginBottom: 5,
-          }}>
-            AI 300 &nbsp;<span style={{ opacity: 0.55, fontWeight: 600 }}>({signalsAI.length})</span>
-          </div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {signalsAI.map(s => (
-              <TickerBadge key={s.ticker} s={s} onTickerClick={onTickerClick} scheme={SCHEME_AI} />
-            ))}
-          </div>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          {signals.map(s => (
+            <TickerBadge key={s.ticker} s={s} onTickerClick={onTickerClick} scheme={SCHEME_AI} />
+          ))}
         </div>
-      )}
+      </div>
 
       {/* ── Dismiss ── */}
       <div style={{
@@ -187,7 +154,7 @@ export default function ReentryBanner({ onTickerClick, onVisibleChange, topOffse
       }}>
         <button
           onClick={() => { setHidden(true); saveDismissed(true); }}
-          title="Dismiss re-entry banner for today"
+          title="Dismiss PNTHR MCE banner for today"
           style={{
             background: '#1e1e35', color: '#a78bfa',
             border: '1px solid #3b3b5c', borderRadius: 4,

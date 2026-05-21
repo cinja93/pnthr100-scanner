@@ -4625,8 +4625,8 @@ export default function AssistantPage({ onNavigate }) {
                 borderBottom: '1px solid rgba(124,58,237,0.25)',
                 cursor: 'pointer',
               }} onClick={() => onNavigate?.('ai-orders')}>
-                <span style={{ color: '#a78bfa', fontWeight: 800, fontSize: 11, letterSpacing: '0.1em' }}>RE-ENTRY</span>
-                <span style={{ color: '#7c3aed', fontSize: 10 }}>Daily 2-bar breakout on active BL — Top 100 TTM</span>
+                <span style={{ color: '#60a5fa', fontWeight: 800, fontSize: 11, letterSpacing: '0.1em' }}>PNTHR MCE</span>
+                <span style={{ color: '#3b82f6', fontSize: 10 }}>AI 300 · Daily 2-bar breakout on active BL · Top 100 TTM</span>
                 <span style={{
                   marginLeft: 'auto', background: '#7c3aed', color: '#fff',
                   borderRadius: 3, padding: '1px 7px', fontSize: 10, fontWeight: 700,
@@ -4640,7 +4640,6 @@ export default function AssistantPage({ onNavigate }) {
                     borderRadius: 4, padding: '3px 8px', fontSize: 11,
                   }}>
                     <span style={{ color: '#e9d5ff', fontWeight: 700 }}>{s.ticker}</span>
-                    <span style={{ color: '#94a3b8', marginLeft: 4 }}>{s.fund}</span>
                     <span style={{ color: '#16a34a', marginLeft: 4 }}>${s.entryTrigger}</span>
                     <span style={{ color: '#dc2626', marginLeft: 4 }}>stop ${s.weeklyStop}</span>
                   </div>

@@ -38,7 +38,7 @@ import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrA
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
-import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades } from './aiAutoExecute.js';
+import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
 import { getJungleHeatData, getJungleFcfData, getJungleValuationData } from './jungleHeatService.js';
@@ -2282,6 +2282,16 @@ app.post('/api/admin/run-ai-grade-monitor', authenticateJWT, requireAdmin, async
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('[AI Monitor] manual run failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/run-mce-execute', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await executeMceEntries({ ownerId: req.user.userId, ...req.body });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[MCE AutoExec] manual run failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -6030,6 +6040,17 @@ cron.schedule('35 9 * * 1', async () => {
       console.log(`[AI AutoExec] Monday exec ${result.dryRun ? 'DRY-RUN' : 'LIVE'}: ${result.executed?.length || 0} executed, ${result.skippedPositions?.length || 0} skipped`);
     }
   } catch (e) { console.error('[CRON] AI Monday execution failed:', e.message); }
+}, { timezone: 'America/New_York' });
+
+// ── Cron: PNTHR MCE — daily 10:30 AM ET, Mon-Fri — auto-execute MCE breakout signals
+cron.schedule('30 10 * * 1-5', async () => {
+  try {
+    console.log('[MCE AutoExec] Daily MCE scan — checking for breakout signals...');
+    const result = await executeMceEntries();
+    if (result.skipped !== 'DISABLED') {
+      console.log(`[MCE AutoExec] ${result.dryRun ? 'DRY-RUN' : 'LIVE'}: ${result.executed?.length || 0} executed, ${result.skippedOrders?.length || 0} skipped`);
+    }
+  } catch (e) { console.error('[CRON] MCE execution failed:', e.message); }
 }, { timezone: 'America/New_York' });
 
 // ── Cron: AI 300 intraday grade monitor — every 60s during market hours ──────

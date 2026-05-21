@@ -597,3 +597,154 @@ export async function monitorAndStageUpgrades(opts = {}) {
 }
 
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// PNTHR MCE — Daily: detect MCE signals, stage + immediately execute (AI 300 only)
+// Kill switch: IBKR_MCE_AUTO_EXECUTE (default OFF)
+// ═══════════════════════════════════════════════════════════════════════════════
+function isMceEnabled() {
+  return process.env.IBKR_MCE_AUTO_EXECUTE === 'true';
+}
+
+export async function executeMceEntries(opts = {}) {
+  if (!isMceEnabled()) {
+    console.log('[MCE AutoExec] DISABLED — set IBKR_MCE_AUTO_EXECUTE=true to enable');
+    return { skipped: 'DISABLED', executed: [], outbox: [] };
+  }
+
+  const db = await connectToDatabase();
+  if (!db) return { skipped: 'NO_DB', executed: [], outbox: [] };
+
+  const ctx = await resolveContext(db, opts);
+  if (!ctx) return { skipped: 'NO_CONTEXT', executed: [], outbox: [] };
+  const { ownerId, nav } = ctx;
+
+  const dryRun = isDryRun();
+
+  const { getReentrySignals } = await import('./reentrySignalService.js');
+  const mceSignals = await getReentrySignals(ownerId, nav);
+  if (!mceSignals || mceSignals.length === 0) {
+    return { skipped: 'NO_MCE_SIGNALS', executed: [], outbox: [] };
+  }
+
+  const existingPositions = await db.collection(COLL_PORTFOLIO)
+    .find({ ownerId, status: { $in: ['ACTIVE', 'PARTIAL', 'STAGED'] } }).toArray();
+  const activeTickers = new Set(existingPositions.map(p => p.ticker));
+
+  const currentHeat = computePortfolioHeat(existingPositions, nav);
+  let runningRisk = currentHeat.totalRisk;
+  const deployedCapital = computeDeployedCapital(existingPositions);
+  let availableBP = computeAvailableBuyingPower(nav, deployedCapital);
+
+  console.log(`[MCE AutoExec] ${mceSignals.length} MCE signals, heat=${currentHeat.totalRiskPct}%, BP=$${availableBP.toLocaleString()}, dryRun=${dryRun}`);
+
+  const results = { executed: [], outbox: [], skippedOrders: [], dryRun };
+
+  for (const sig of mceSignals) {
+    const { ticker, entryTrigger: entryPrice, weeklyStop: stopPrice, lotShares: mceShares } = sig;
+
+    if (activeTickers.has(ticker)) {
+      results.skippedOrders.push({ ticker, reason: 'ALREADY_ACTIVE' });
+      continue;
+    }
+    if (!entryPrice || !stopPrice || !mceShares) {
+      results.skippedOrders.push({ ticker, reason: 'NO_PRICE_OR_STOP' });
+      continue;
+    }
+
+    const rps = entryPrice - stopPrice;
+    if (rps <= 0) {
+      results.skippedOrders.push({ ticker, reason: 'BAD_RISK' });
+      continue;
+    }
+
+    const newEntryRisk = mceShares[0] * rps;
+    if ((runningRisk + newEntryRisk) / nav > HEAT_CAP_PCT) {
+      results.skippedOrders.push({ ticker, reason: `HEAT_CAP_${((runningRisk + newEntryRisk) / nav * 100).toFixed(1)}PCT` });
+      continue;
+    }
+
+    const l1Cost = mceShares[0] * entryPrice;
+    if (l1Cost > availableBP) {
+      results.skippedOrders.push({ ticker, reason: `BUYING_POWER_$${availableBP.toFixed(0)}_NEED_$${l1Cost.toFixed(0)}` });
+      continue;
+    }
+
+    const posId = makePosId();
+    const now = new Date();
+    const fills = buildFillsSkeleton();
+    for (let i = 0; i < 5; i++) fills[i + 1].shares = mceShares[i];
+
+    const totalShares = mceShares.reduce((s, v) => s + v, 0);
+
+    const position = {
+      id: posId,
+      ticker,
+      direction: 'LONG',
+      signal: 'BL',
+      entryPrice,
+      currentPrice: entryPrice,
+      stopPrice,
+      originalStop: stopPrice,
+      sector: null,
+      sectorId: null,
+      sectorMult: 1.0,
+      isETF: false,
+      fills,
+      targetShares: totalShares,
+      maxGapPct: 0,
+      status: 'ACTIVE',
+      ownerId,
+      fundId: 'ai300',
+      strategyMode: 'ai300',
+      autoExecuted: true,
+      autoExecuteSource: 'MCE_DAILY',
+      autoExecuteMode: 'MCE',
+      entryContext: 'MCE_SIGNAL',
+      createdAt: now,
+      updatedAt: now,
+      outcome: { exitPrice: null, profitPct: null, profitDollar: null, holdingDays: null, exitReason: null },
+    };
+
+    console.log(`[MCE AutoExec] ${dryRun ? 'DRY-RUN' : 'LIVE'} ${ticker} LONG — L1=${mceShares[0]}sh @MKT, stop=${stopPrice}`);
+
+    if (!dryRun) {
+      await db.collection(COLL_PORTFOLIO).insertOne(position);
+      activeTickers.add(ticker);
+
+      const entryCmd = {
+        ticker, direction: 'LONG', shares: mceShares[0],
+        positionId: posId, lot: 1, source: 'MCE_DAILY', tif: 'DAY', rth: true,
+      };
+      const r1 = await enqueueOutbox(db, ownerId, 'BUY_MARKET_TO_CATCH_UP', entryCmd);
+      results.outbox.push({ ticker, command: 'ENTRY_MARKET', ...r1 });
+
+      const stopShape = buildStopOrderShape({ stopPrice, direction: 'LONG', stopExtendedHours: false });
+      const stopCmd = {
+        ticker, direction: 'LONG', shares: mceShares[0], stopPrice,
+        positionId: posId, ...stopShape,
+      };
+      const r2 = await enqueueOutbox(db, ownerId, 'PLACE_STOP', stopCmd);
+      results.outbox.push({ ticker, command: 'PLACE_STOP', ...r2 });
+
+      const lotPlan = computeLotPlan(position, nav);
+      for (let i = 1; i < lotPlan.length; i++) {
+        const plan = lotPlan[i];
+        if (plan.targetShares <= 0 || !plan.triggerPrice || plan.triggerPrice <= 0) continue;
+        const triggerCmd = {
+          ticker, direction: 'LONG', shares: plan.targetShares,
+          triggerPrice: plan.triggerPrice, positionId: posId,
+          lot: plan.lot, orderType: 'STP', rth: true, tif: 'GTC',
+        };
+        const r = await enqueueOutbox(db, ownerId, 'PLACE_LOT_TRIGGER', triggerCmd);
+        results.outbox.push({ ticker, command: 'PLACE_LOT_TRIGGER', lot: plan.lot, ...r });
+      }
+    }
+
+    runningRisk += newEntryRisk;
+    availableBP -= l1Cost;
+    results.executed.push({ ticker, direction: 'LONG', lot1Shares: mceShares[0], entryPrice, stopPrice });
+  }
+
+  console.log(`[MCE AutoExec] Complete: ${results.executed.length} executed, ${results.skippedOrders.length} skipped`);
+  return results;
+}

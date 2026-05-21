@@ -176,7 +176,7 @@ function useDrawingTools(chartRef, containerRef, priceSeriesRef) {
 function ChartPanel({
   title, period, fallback, bars, signals, chartType,
   currentSignal, pnthrStop, weeklyStop,
-  ticker, entryPrice, nextEntryTrigger,
+  ticker, entryPrice, nextEntryTrigger, mceTrigger,
 }) {
   const containerRef    = useRef(null);
   const chartRef        = useRef(null);
@@ -323,6 +323,22 @@ function ChartPanel({
       trigLine.setData(bars.slice(-lastN).map(b => ({ time: b.date, value: nextEntryTrigger })));
     }
 
+    // "MCE Trigger" line — dashed blue, shown when weekly BL is active.
+    // Marks the daily 2-bar high breakout level for PNTHR MCE entries.
+    if (mceTrigger != null && bars.length >= 1) {
+      const mceLine = chart.addSeries(LineSeries, {
+        color: '#3b82f6',
+        lineWidth: 1,
+        lineStyle: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: false,
+        title: 'MCE',
+      });
+      const lastN = Math.min(8, bars.length);
+      mceLine.setData(bars.slice(-lastN).map(b => ({ time: b.date, value: mceTrigger })));
+    }
+
     // (do NOT call fitContent — see comment in earlier commit)
 
     let destroyed = false;
@@ -346,7 +362,7 @@ function ChartPanel({
       priceLineRef.current = null;
       markersRef.current = null;
     };
-  }, [bars, signals, chartType, title, pnthrStop, nextEntryTrigger]);
+  }, [bars, signals, chartType, title, pnthrStop, nextEntryTrigger, mceTrigger]);
 
   // Update the dashed stop line live when SIZE IT's adjustable stop changes.
   // The line is a LineSeries pinned to the last 5 bars at a constant Y value;
@@ -966,6 +982,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
                 ticker={activeTicker}
                 entryPrice={data.currentPrice}
                 nextEntryTrigger={data.daily.nextEntryTrigger ?? null}
+                mceTrigger={data.daily.mceTrigger ?? null}
               />
               <ChartPanel
                 title="Weekly"

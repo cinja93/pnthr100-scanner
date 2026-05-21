@@ -257,6 +257,17 @@ export async function getAiStockChartData(ticker) {
     return parseFloat((Math.max(h1, h2) + 0.01).toFixed(2));
   })();
 
+  // MCE trigger line — shown when weekly BL is active (not exited).
+  // Marks max(prev 2 daily highs) + $0.01: the exact breakout price for an MCE entry.
+  const dailyMceTrigger = (() => {
+    const weeklyActive = weeklyDetect.activeType;
+    if (weeklyActive !== 'BL') return null;
+    if (dailyAscSig.length < 3) return null;
+    const h1 = dailyAscSig[dailyAscSig.length - 2].high;
+    const h2 = dailyAscSig[dailyAscSig.length - 3].high;
+    return parseFloat((Math.max(h1, h2) + 0.01).toFixed(2));
+  })();
+
   // Last bar info per timeframe
   const lastDaily  = dailyAsc[dailyAsc.length - 1] || null;
   const lastWeekly = weeklyAsc[weeklyAsc.length - 1] || null;
@@ -318,6 +329,7 @@ export async function getAiStockChartData(ticker) {
       currentSignal:    dailyDetect.activeType || dailyDetect.currentSignal || null,
       pnthrStop:        dailyDetect.activeType ? dailyDetect.pnthrStop : null,
       nextEntryTrigger: dailyNextEntryTrigger,
+      mceTrigger:       dailyMceTrigger,
     },
     weekly: {
       bars: weeklyAsc.map((b, i) => ({

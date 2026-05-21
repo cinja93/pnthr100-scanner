@@ -479,7 +479,7 @@ async function checkExits(db, positions, quotes) {
   return closed;
 }
 
-// ── Re-Entry Positions: Open daily 2-bar breakout signals for demo fund ────────
+// ── PNTHR MCE Positions: Open daily 2-bar breakout signals for demo fund (AI 300 only) ──
 async function openDemoReentryPositions(db, nav, getReentrySignals) {
   const signals = await getReentrySignals(DEMO_OWNER_ID, nav);
   if (!signals || signals.length === 0) return;
@@ -517,8 +517,8 @@ async function openDemoReentryPositions(db, nav, getReentrySignals) {
       fills,
       sector:       null,
       signal:       'BL',
-      entryContext: 'REENTRY_SIGNAL',
-      fundId:       sig.fund === 'AI 300' ? 'ai300' : '679',
+      entryContext: 'MCE_SIGNAL',
+      fundId:       'ai300',
       status:       'ACTIVE',
       ownerId:      DEMO_OWNER_ID,
       outcome:      { exitPrice: null, profitPct: null, profitDollar: null, holdingDays: null, exitReason: null },
@@ -529,9 +529,9 @@ async function openDemoReentryPositions(db, nav, getReentrySignals) {
     try {
       await db.collection('pnthr_portfolio').insertOne(position);
       held.add(sig.ticker);
-      console.log(`[DemoEngine] Re-entry opened: ${sig.ticker} @ $${entryPrice} stop $${stopPrice} (${sig.fund})`);
+      console.log(`[DemoEngine] MCE opened: ${sig.ticker} @ $${entryPrice} stop $${stopPrice} (AI 300)`);
     } catch (err) {
-      console.warn(`[DemoEngine] Re-entry insert failed ${sig.ticker}:`, err.message);
+      console.warn(`[DemoEngine] MCE insert failed ${sig.ticker}:`, err.message);
     }
   }
 }
@@ -595,12 +595,12 @@ export async function updateDemoPortfolio() {
   // 9. Open new positions for top 10 tickers we don't hold
   await openDemoPositions(db, killScores, regime, nav);
 
-  // 9b. Open re-entry positions for top-100 TTM daily breakout signals
+  // 9b. Open PNTHR MCE positions for top-100 TTM daily breakout signals (AI 300 only)
   try {
     const { getReentrySignals } = await import('./reentrySignalService.js');
     await openDemoReentryPositions(db, nav, getReentrySignals);
   } catch (err) {
-    console.warn('[DemoEngine] Re-entry positions skipped (non-fatal):', err.message);
+    console.warn('[DemoEngine] MCE positions skipped (non-fatal):', err.message);
   }
 
   // 10. Check lot fills on all active positions

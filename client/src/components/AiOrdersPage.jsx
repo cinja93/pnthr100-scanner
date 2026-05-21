@@ -715,7 +715,7 @@ export default function AiOrdersPage() {
                       <th style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>
                         RPS <span title="RPS = Risk Per Share. Dollar distance between entry trigger and weekly stop. Drives lot sizing — smaller RPS = more shares within your risk budget." style={{ cursor: 'help', fontWeight: 400 }}>&#9432;</span>
                       </th>
-                      {['L1 Sh','L1 Entry $','BL Date'].map(h => (
+                      {['L1 Sh','L1 Entry $','Weekly BL Date'].map(h => (
                         <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>

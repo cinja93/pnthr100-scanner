@@ -637,7 +637,7 @@ def build():
     s.append(Paragraph('STEP 11: THE BACKTEST, HOW WE PROVED IT', heading_style()))
     s.append(hr())
     s.append(Paragraph(
-        'The backtest was not a single run. It was an <b>iterative, multi-month engineering process</b> with '
+        'The backtest was not a single run. It was an <b>iterative, multi-year engineering process</b> with '
         'hundreds of configurations tested and rejected.',
         body_style()))
 
@@ -827,7 +827,7 @@ def build():
         body_style()))
 
     s.append(Paragraph(
-        'The backtest was not a curve-fit exercise. It was a multi-month engineering effort with hundreds of '
+        'The backtest was not a curve-fit exercise. It was a multi-year engineering effort with hundreds of '
         'configurations tested and rejected. Daily stop tightening, hedging triggers, entry freezes, scout signals, '
         'order caps: all built, all backtested with realistic Monday-open execution and gap-through stops, and all '
         'discarded when the data showed they destroyed alpha. What survived is a system that has been stress-tested '

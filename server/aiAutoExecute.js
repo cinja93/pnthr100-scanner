@@ -30,6 +30,7 @@ import {
 import { computeWilderATR, blInitStop, ssInitStop } from './signalDetection.js';
 import { refreshOrderGrades } from './aiOrdersPipeline.js';
 import { getLatestAiSectorRanks } from './aiSectorRotationService.js';
+import { getPnthrAiSectorsLatest } from './pnthrAiSectorsService.js';
 import { SECTORS as AI_UNIVERSE_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 
 const COLL_PORTFOLIO = 'pnthr_portfolio';
@@ -65,9 +66,11 @@ async function resolveContext(db, { ownerId, nav } = {}) {
   if (!ownerId) {
     const adminEmail = (process.env.ADMIN_EMAILS || '').split(',')[0]?.trim();
     if (!adminEmail) return null;
-    const user = await db.collection('user_profiles').findOne({ email: adminEmail });
+    const user = await db.collection('users').findOne({
+      email: { $regex: new RegExp(`^${adminEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    });
     if (!user) return null;
-    ownerId = user.userId;
+    ownerId = user._id.toString();
   }
   if (!nav) {
     const profile = await getUserProfile(ownerId).catch(() => null);
@@ -649,8 +652,30 @@ export async function executeMceEntries(opts = {}) {
     console.warn('[MCE AutoExec] Could not load sector ranks for priority sort:', e.message);
   }
 
+  // Filter out bearish sectors (OpEMA regime) — only buy into bull sectors.
+  const sectorIdToRegime = {};
+  try {
+    const sectorsData = await getPnthrAiSectorsLatest();
+    if (sectorsData?.sectors) {
+      for (const s of sectorsData.sectors) sectorIdToRegime[s.id] = s.regime;
+    }
+  } catch (e) {
+    console.warn('[MCE AutoExec] Could not load sector regimes:', e.message);
+  }
+
+  const bearFiltered = mceSignals.filter(s => {
+    const sid = tickerToSectorId[s.ticker?.toUpperCase()];
+    const regime = sectorIdToRegime[sid];
+    if (regime === 'bear') {
+      console.log(`[MCE AutoExec] SKIP ${s.ticker} — sector ${sid} is BEAR regime`);
+      return false;
+    }
+    return true;
+  });
+  console.log(`[MCE AutoExec] ${mceSignals.length} candidates → ${bearFiltered.length} after bear-sector filter (${mceSignals.length - bearFiltered.length} excluded)`);
+
   // Sort strongest sector first. Tickers not in the AI universe map default to 0.
-  const sortedSignals = [...mceSignals].sort((a, b) => {
+  const sortedSignals = [...bearFiltered].sort((a, b) => {
     const aRet = sectorIdTo5d[tickerToSectorId[a.ticker?.toUpperCase()]] ?? 0;
     const bRet = sectorIdTo5d[tickerToSectorId[b.ticker?.toUpperCase()]] ?? 0;
     return bRet - aRet;

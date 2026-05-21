@@ -9193,9 +9193,43 @@ app.get('/api/pulse/signal-stocks', authenticateJWT, async (req, res) => {
 app.get('/api/reentry-signals', authenticateJWT, async (req, res) => {
   try {
     const { getReentrySignals } = await import('./reentrySignalService.js');
+    const { getPnthrAiSectorsLatest } = await import('./pnthrAiSectorsService.js');
+    const { getLatestAiSectorRanks } = await import('./aiSectorRotationService.js');
+    const { SECTORS: AI_SECTORS } = await import('./scripts/aiUniverse/aiUniverseData.js');
     const nav     = parseFloat(req.query.nav) || 100_000;
     const signals = await getReentrySignals(req.user.userId, nav);
-    res.json({ signals, generatedAt: new Date().toISOString(), topN: 100 });
+
+    const tickerToSectorId = {};
+    for (const sec of AI_SECTORS) {
+      for (const h of (sec.holdings || [])) tickerToSectorId[h.ticker?.toUpperCase()] = sec.id;
+    }
+
+    const [sectorsData, ranksDoc] = await Promise.all([
+      getPnthrAiSectorsLatest().catch(() => null),
+      getLatestAiSectorRanks().catch(() => null),
+    ]);
+    const sectorById = {};
+    if (sectorsData?.sectors) {
+      for (const s of sectorsData.sectors) sectorById[s.id] = s;
+    }
+    const fiveDayById = {};
+    if (ranksDoc?.ranks) {
+      for (const r of ranksDoc.ranks) fiveDayById[r.sectorId] = r.fiveDayReturn;
+    }
+
+    const enriched = signals.map(sig => {
+      const sectorId = tickerToSectorId[sig.ticker?.toUpperCase()];
+      const sec = sectorId != null ? sectorById[sectorId] : null;
+      return {
+        ...sig,
+        sectorId:       sectorId ?? null,
+        sectorName:     sec?.name ?? null,
+        sectorRegime:   sec?.regime ?? null,
+        sectorFiveDay:  fiveDayById[sectorId] ?? null,
+      };
+    });
+
+    res.json({ signals: enriched, generatedAt: new Date().toISOString(), topN: 100 });
   } catch (err) {
     console.error('[reentry-signals]', err);
     res.status(500).json({ error: err.message });

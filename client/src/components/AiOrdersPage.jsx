@@ -607,7 +607,12 @@ export default function AiOrdersPage() {
       {filter === 'new' && (nowOrders.length > 0 || onDeckOrders.length > 0 || reentrySignals.length > 0) && (
         <>
           {/* NOW — PNTHR MCE section */}
-          {reentrySignals.length > 0 && (
+          {reentrySignals.length > 0 && (() => {
+            const bullSignals = reentrySignals
+              .filter(s => s.sectorRegime !== 'bear')
+              .sort((a, b) => (b.sectorFiveDay ?? -999) - (a.sectorFiveDay ?? -999));
+            const bearFiltered = reentrySignals.filter(s => s.sectorRegime === 'bear');
+            return bullSignals.length > 0 && (
             <div style={{
               border: '2px solid #7c3aed', borderRadius: 8, overflow: 'hidden',
               margin: '24px 0 0',
@@ -616,25 +621,32 @@ export default function AiOrdersPage() {
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '10px 14px', background: 'rgba(124,58,237,0.12)',
                 borderBottom: '1px solid rgba(124,58,237,0.3)',
+                flexWrap: 'wrap',
               }}>
                 <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>NOW</span>
                 <span style={{ color: '#555', fontSize: 14 }}>—</span>
                 <span style={{ color: '#60a5fa', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>PNTHR MCE</span>
                 <span
-                  title="MCE = Momentum Continuation Entry. Daily 2-bar high breakout on stocks with an active weekly BL signal, filtered to the top 100 by trailing twelve-month performance."
+                  title="MCE = Momentum Continuation Entry. Daily 2-bar high breakout on stocks with an active weekly BL signal, filtered to the top 100 by trailing twelve-month performance. Bearish sectors excluded."
                   style={{ color: '#60a5fa', cursor: 'help', fontSize: 13, marginLeft: -4 }}>&#9432;</span>
                 <span style={{ color: '#60a5fa', fontSize: 12 }}>
-                  AI 300 · Active weekly BL · Top 100 TTM · Daily 2-bar high breakout · Not held
+                  AI 300 · Active weekly BL · Top 100 TTM · Daily 2-bar high breakout · Not held · Bull sectors only
                 </span>
                 <span style={{
                   marginLeft: 'auto', padding: '2px 8px', background: '#7c3aed', color: '#fff',
                   borderRadius: 3, fontSize: 11, fontWeight: 700,
-                }}>{reentrySignals.length}</span>
+                }}>{bullSignals.length}</span>
               </div>
+              {bearFiltered.length > 0 && (
+                <div style={{ padding: '4px 14px', background: 'rgba(220,38,38,0.08)', fontSize: 11, color: '#888' }}>
+                  {bearFiltered.length} excluded (bearish sector): {bearFiltered.map(s => s.ticker).join(', ')}
+                </div>
+              )}
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
                   <thead>
                     <tr style={{ background: 'rgba(124,58,237,0.08)', borderBottom: '1px solid rgba(124,58,237,0.2)' }}>
+                      <th style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>Sector 💪</th>
                       {['Ticker','L1 Trigger','Weekly Stop'].map(h => (
                         <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
@@ -647,9 +659,20 @@ export default function AiOrdersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {reentrySignals.map(s => (
+                    {bullSignals.map(s => {
+                      const fiveDay = s.sectorFiveDay != null ? (s.sectorFiveDay * 100) : null;
+                      const fiveDayStr = fiveDay != null ? `${fiveDay >= 0 ? '+' : ''}${fiveDay.toFixed(2)}%` : '';
+                      const sectorLabel = s.sectorName
+                        ? `${s.sectorName.replace(/^AI /, '')}`
+                        : '—';
+                      return (
                       <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(124,58,237,0.1)', cursor: 'pointer' }}
-                        onClick={() => { setChartTickers(reentrySignals.map(r => r.ticker)); setChartIndex(reentrySignals.findIndex(r => r.ticker === s.ticker)); }}>
+                        onClick={() => { setChartTickers(bullSignals.map(r => r.ticker)); setChartIndex(bullSignals.findIndex(r => r.ticker === s.ticker)); }}>
+                        <td style={{ padding: '6px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>
+                          <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 10, marginRight: 4 }}>BULL</span>
+                          <span style={{ color: fiveDay >= 0 ? '#16a34a' : '#f59e0b', fontWeight: 600 }}>{fiveDayStr}</span>
+                          <span style={{ color: '#777', marginLeft: 4 }}>{sectorLabel}</span>
+                        </td>
                         <td style={{ padding: '6px 10px', fontWeight: 800, color: '#e9d5ff' }}>{s.ticker}</td>
                         <td style={{ padding: '6px 10px', color: '#16a34a', fontWeight: 700 }}>${s.entryTrigger}</td>
                         <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>
@@ -658,12 +681,14 @@ export default function AiOrdersPage() {
                         <td style={{ padding: '6px 10px', color: '#aaa' }}>${(s.lotShares?.[0] * s.entryTrigger).toFixed(0)}</td>
                         <td style={{ padding: '6px 10px', color: '#64748b', fontSize: 11 }}>{s.signalDate}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* NOW section */}
           {nowOrders.length > 0 && (

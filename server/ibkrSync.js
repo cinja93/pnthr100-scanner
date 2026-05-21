@@ -331,7 +331,24 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
     if (!closingDir) continue; // unknown side — skip
 
     const pnthr = positionByTickerDir[`${symbol}_${closingDir}`];
-    if (!pnthr) continue; // no matching PNTHR position for this direction
+    if (!pnthr) {
+      // No matching active position. For BOT executions on a ticker where no
+      // LONG position exists, this is likely a manual re-entry after a stop-out
+      // (SMCI 2026-05-21: re-bought after stop hit, no active position yet).
+      // Write a processing record so the execution isn't silently re-evaluated
+      // every sync cycle. Phase 3 auto-open handles creating the position.
+      await db.collection('pnthr_ibkr_executions').updateOne(
+        { ownerId: userId, execId: exec.execId },
+        { $set: {
+            ownerId: userId, execId: exec.execId, symbol,
+            side: exec.side, shares: exec.shares, price: exec.price,
+            type: 'SKIPPED_NO_ACTIVE_POSITION',
+            processedAt: syncedAt,
+          } },
+        { upsert: true },
+      );
+      continue;
+    }
 
     // Timestamp guard (mirror of Phase 4h): don't apply an exit exec to a
     // position that didn't exist when the exec happened. This was the bug
@@ -645,9 +662,28 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
         pnthrStop = fallbackPrice;
         stopSourceTwsFallback = true;
       } else {
-        const reason = pnthrStop == null ? 'no signal-cache stop available' : `pnthrStop=$${pnthrStop} on wrong side of price $${lastPrice}`;
-        console.warn(`[IBKR Phase 3] ${ticker} ${direction}: ${reason} (signalCache direction=${signalDir || 'unknown'}) and no user TWS fallback stop. Refusing to auto-open — manual review.`);
-        continue;
+        // Last resort: check if there's a recently-closed position for this
+        // ticker with a valid originalStop on the correct side. Covers the
+        // "re-entry after stop-out" pattern — the weekly stop is still valid
+        // even after the exit, and the user re-bought in TWS without placing
+        // a new protective stop yet (SMCI 2026-05-21).
+        const recentClosed = await db.collection('pnthr_portfolio').findOne(
+          { ownerId: userId, ticker, direction, status: 'CLOSED', originalStop: { $gt: 0 } },
+          { sort: { closedAt: -1 }, projection: { originalStop: 1, stopPrice: 1 } },
+        );
+        const closedStop = +(recentClosed?.originalStop || recentClosed?.stopPrice) || 0;
+        const closedStopRightSide = closedStop > 0 && (direction === 'LONG'
+          ? closedStop < lastPrice
+          : closedStop > lastPrice);
+        if (closedStopRightSide) {
+          console.log(`[IBKR Phase 3] ${ticker} ${direction} — using recent closed position's originalStop $${closedStop} as last-resort fallback.`);
+          pnthrStop = closedStop;
+          stopSourceTwsFallback = true;
+        } else {
+          const reason = pnthrStop == null ? 'no signal-cache stop available' : `pnthrStop=$${pnthrStop} on wrong side of price $${lastPrice}`;
+          console.warn(`[IBKR Phase 3] ${ticker} ${direction}: ${reason} (signalCache direction=${signalDir || 'unknown'}) and no user TWS fallback stop. Refusing to auto-open — manual review.`);
+          continue;
+        }
       }
     }
 

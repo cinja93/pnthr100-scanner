@@ -32,7 +32,7 @@ AI_JSON = Path("/tmp/ai300_tickers.json")
 C679_JSON = Path("/tmp/c679_tickers.json")
 AI_BT_JSON = Path("/tmp/ai300_bt_agg.json")
 C679_BT_JSON = Path("/tmp/c679_bt_agg.json")
-OUTPUT_PDF = Path.home() / "Downloads" / "PNTHR_Overlap_Ticker_Assignment.pdf"
+OUTPUT_PDF = Path.home() / "Downloads" / "PNTHR_Overlap_Ticker_Assignment_v2.0_2026.pdf"
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 PNTHR_YELLOW = colors.HexColor("#fcf000")
@@ -49,11 +49,11 @@ BLACK = colors.black
 # Step 1: Export universe data via Node.js
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _run_node(script: str, label: str, timeout: int = 60):
-    """Run a Node.js one-liner from the repo root."""
+def _run_node(script: str, label: str, timeout: int = 60, cwd=None):
+    """Run a Node.js one-liner from the repo root (or specified dir)."""
     result = subprocess.run(
         ["node", "-e", script],
-        cwd=str(REPO_ROOT),
+        cwd=str(cwd or REPO_ROOT),
         capture_output=True, text=True, timeout=timeout,
     )
     if result.returncode != 0:
@@ -77,7 +77,7 @@ console.log('AI 300 tickers: ' + ai.length);
 """, "AI 300")
 
     _run_node("""
-require('dotenv').config({ path: 'server/.env' });
+require('dotenv').config({ path: '.env' });
 const { MongoClient } = require('mongodb');
 (async () => {
   const c = new MongoClient(process.env.MONGODB_URI);
@@ -92,7 +92,7 @@ const { MongoClient } = require('mongodb');
   console.log('679 tickers: ' + result.length);
   await c.close();
 })();
-""", "679 Carnivore")
+""", "679 Carnivore", cwd=REPO_ROOT / "server")
 
 
 def export_backtest_aggregates():
@@ -112,7 +112,7 @@ def export_backtest_aggregates():
     """
 
     _run_node(f"""
-require('dotenv').config({{ path: 'server/.env' }});
+require('dotenv').config({{ path: '.env' }});
 const {{ MongoClient }} = require('mongodb');
 (async () => {{
   const c = new MongoClient(process.env.MONGODB_URI);
@@ -126,10 +126,10 @@ const {{ MongoClient }} = require('mongodb');
   console.log('AI 300 backtest tickers: ' + Object.keys(result).length);
   await c.close();
 }})();
-""", "AI 300 backtest", timeout=120)
+""", "AI 300 backtest", timeout=120, cwd=REPO_ROOT / "server")
 
     _run_node(f"""
-require('dotenv').config({{ path: 'server/.env' }});
+require('dotenv').config({{ path: '.env' }});
 const {{ MongoClient }} = require('mongodb');
 (async () => {{
   const c = new MongoClient(process.env.MONGODB_URI);
@@ -143,7 +143,7 @@ const {{ MongoClient }} = require('mongodb');
   console.log('679 backtest tickers: ' + Object.keys(result).length);
   await c.close();
 }})();
-""", "679 backtest", timeout=120)
+""", "679 backtest", timeout=120, cwd=REPO_ROOT / "server")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

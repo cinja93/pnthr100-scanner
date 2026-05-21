@@ -150,11 +150,11 @@ function build() {
   doc.fontSize(8).fillColor(LTGRAY).font('Helvetica');
   const fundInfo = [
     ['Fund Name',       'PNTHR AI Elite 300 Fund'],
-    ['Strategy',        'Systematic Long/Short AI-Themed U.S. Equity'],
+    ['Strategy',        'Multi-strategy + MCE Systematic Long/Short AI-Themed U.S. Equity'],
     ['Universe Size',   `${FUND_META.totalHoldings} curated AI-pure-play U.S.-listed equities`],
     ['Sub-Sectors',     `${FUND_META.totalSectors} thematic AI sub-sectors with target allocations`],
-    ['Signal Engine',   'PNTHR Pulse Weighting (Trend × Momentum × Flow)'],
-    ['Rebalance',       'Weekly (Friday close), aligned with PNTHR Friday Pipeline'],
+    ['Signal Engine',   'PNTHR Weekly BL/SS + Daily MCE (Momentum Continuation Entry)'],
+    ['Rebalance',       'Weekly (Friday close) + Daily MCE scan (10:30 AM ET)'],
     ['Benchmark',       'AIQ (Global X AI ETF), BOTZ (Robotics/AI ETF), QQQ'],
     ['Geographic',      'U.S. exchanges only (NYSE / NASDAQ)'],
   ];
@@ -237,7 +237,7 @@ function build() {
     '',
     `This is not an index. It is not equal-weighted. It is not cap-weighted. It is a hand-curated universe of ${FUND_META.totalHoldings} U.S.-listed AI-pure-play and AI-leverage names, organized into 16 sub-sectors that map cleanly to the AI value chain, from sand and silicon, through power and networking, to robots, drugs, and quantum computing.`,
     '',
-    'Every name in this universe earned its spot. Every name has a clear AI thesis. Every name is hunted weekly by PNTHR\'s proprietary signal engine, the same multi-timeframe EMA crossover and conviction-scoring system that has powered our flagship Carnivore Quant Fund.',
+    'Every name in this universe earned its spot. Every name has a clear AI thesis. Every name is hunted by PNTHR\'s proprietary Multi-strategy + MCE signal engine: weekly trend signals identify the highest-conviction entries, and daily Momentum Continuation Entries capture breakout follow-through on the strongest names. Two engines, one universe, zero gaps.',
     '',
     'When AI capital rotates, and it does, week to week, month to month, the PNTHR signals see it first. A surge in AI Power flow before the broader market notices. An optical bandwidth name breaking out three weeks before its quarterly print. A quantum lottery ticket lighting up on volume before the headline.',
     '',
@@ -537,18 +537,18 @@ function build() {
   }
 
   y += 8;
-  y = sectionTitle('DAILY + WEEKLY SIGNAL LAYER', y, WHITE);
+  y = sectionTitle('MULTI-STRATEGY + MCE SIGNAL LAYER', y, WHITE);
   y += 6;
 
   doc.fontSize(8).fillColor(WHITE).font('Helvetica');
   const signalText = [
-    'PNTHR signals operate on two timeframes for maximum trade-list resolution:',
+    'The PNTHR AI Elite 300 Fund operates a Multi-strategy + MCE (Momentum Continuation Entry) framework combining two complementary signal engines:',
     '',
-    'WEEKLY SIGNALS (WBL / WSS), The PNTHR flagship signal: weekly close above/below sector-optimized 18-26W EMA. Slow, confirmed, regime-defining. Used for primary trend regime and Kill scoring.',
+    'WEEKLY BL/SS SIGNALS, The PNTHR flagship signal: weekly close above/below sector-optimized 18-26W EMA. Slow, confirmed, regime-defining. Generated every Friday at 4:15 PM ET via the Kill scoring pipeline. Used for primary trend regime identification and position entry.',
     '',
-    'DAILY SIGNALS (DBL / DSS), Newly added for the AI Universe: daily close crossing 21 EMA, gated by weekly trend regime. Provides early entry triggers, names that fire DBL while WBL is still pending get faster entries at lower size, scaling up on weekly confirmation.',
+    'DAILY MCE (MOMENTUM CONTINUATION ENTRY), Between weekly signals, the Fund runs a daily scan at 10:30 AM ET to capture momentum continuation on stocks already in confirmed weekly uptrends. MCE fires when a stock with an active weekly BL signal, ranked in the TTM top 100 by trailing twelve-month momentum, breaks above the highest high of the prior 2 completed daily bars. MCE entries use the weekly PNTHR Stop, flow through the same 5-lot pyramid and risk gates (10% heat cap, 10% per-ticker cap, 20-position cap), and execute same-day at market price.',
     '',
-    'TRADE HIERARCHY, DBL + WBL aligned = highest conviction long. DBL alone (weekly pending) = early entry, lighter size. DSS while WBL still active = early heads-up before weekly flip. This multi-timeframe stack catches AI rotation 1-3 weeks ahead of the broader market.',
+    'WHY MCE MATTERS, Backtesting proves that adding daily MCE entries to weekly signals increases net CAGR by +10-12% without meaningfully increasing drawdowns. Weekly signals identify the trend; MCE captures the follow-through. Two engines, one disciplined risk framework.',
   ];
   for (const para of signalText) {
     if (para === '') { y += 4; continue; }
@@ -640,7 +640,7 @@ function build() {
     ['PNTHR Pulse Weighting Framework',                String(pageRefs.methodology)],
     ['Portfolio Construction Rules',                   String(pageRefs.methodology)],
     ['Capital Flow Analysis & Sector Rotation',        String(pageRefs.flow)],
-    ['Daily + Weekly Signal Layer (WBL/WSS + DBL/DSS)', String(pageRefs.flow)],
+    ['Multi-strategy + MCE Signal Layer',               String(pageRefs.flow)],
   ];
   for (const [t, p] of realActIII) {
     doc.fontSize(9).fillColor(WHITE).font('Helvetica').text(t, LM + 8, ty, { width: 380, lineBreak: false });

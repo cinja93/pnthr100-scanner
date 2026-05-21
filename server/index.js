@@ -9193,7 +9193,7 @@ app.get('/api/pulse/signal-stocks', authenticateJWT, async (req, res) => {
 app.get('/api/reentry-signals', authenticateJWT, async (req, res) => {
   try {
     const { getReentrySignals } = await import('./reentrySignalService.js');
-    const { getPnthrAiSectorsLatest, getPnthrAiSectorBars } = await import('./pnthrAiSectorsService.js');
+    const { getPnthrAiSectorsLatest } = await import('./pnthrAiSectorsService.js');
     const { SECTORS: AI_SECTORS } = await import('./scripts/aiUniverse/aiUniverseData.js');
     const nav     = parseFloat(req.query.nav) || 100_000;
     const signals = await getReentrySignals(req.user.userId, nav);
@@ -9209,23 +9209,6 @@ app.get('/api/reentry-signals', authenticateJWT, async (req, res) => {
       for (const s of sectorsData.sectors) sectorById[s.id] = s;
     }
 
-    // Compute 5D return matching the Sectors page: live value vs close from
-    // 5 bars ago. getPnthrAiSectorsLatest().value = live (with intraday overlay);
-    // bars[0] from a 5-bar fetch = the starting anchor close.
-    const neededSectorIds = [...new Set(signals.map(s => tickerToSectorId[s.ticker?.toUpperCase()]).filter(Boolean))];
-    const fiveDayById = {};
-    await Promise.all(neededSectorIds.map(async (sid) => {
-      try {
-        const sec = sectorById[sid];
-        if (!sec?.value) return;
-        const d = await getPnthrAiSectorBars({ sectorId: sid, timeframe: 'daily', limit: 5 });
-        if (d?.ok && d.bars?.length >= 2) {
-          const anchorClose = d.bars[0].close;
-          if (anchorClose > 0) fiveDayById[sid] = (sec.value - anchorClose) / anchorClose;
-        }
-      } catch {}
-    }));
-
     const enriched = signals.map(sig => {
       const sectorId = tickerToSectorId[sig.ticker?.toUpperCase()];
       const sec = sectorId != null ? sectorById[sectorId] : null;
@@ -9234,7 +9217,7 @@ app.get('/api/reentry-signals', authenticateJWT, async (req, res) => {
         sectorId:       sectorId ?? null,
         sectorName:     sec?.name ?? null,
         sectorRegime:   sec?.regime ?? null,
-        sectorFiveDay:  fiveDayById[sectorId] ?? null,
+        sectorFiveDay:  sec?.fiveDayPct != null ? sec.fiveDayPct / 100 : null,
       };
     });
 

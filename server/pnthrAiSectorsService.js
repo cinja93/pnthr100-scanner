@@ -175,6 +175,15 @@ export async function getPnthrAiSectorsLatest() {
     const ytdPct  = ytdSeed ? ((liveValue - ytdSeed.close) / ytdSeed.close) * 100 : null;
     const inceptionPct = ((liveValue - SECTOR_BASE_VALUE) / SECTOR_BASE_VALUE) * 100;
 
+    // 5D return: liveValue vs close from 5 stored bars back (matches SectorMiniChart).
+    // With live overlay, this is today's value vs 4 trading days ago.
+    // Without overlay, it's last stored close vs 5 stored bars back.
+    const fiveDayAnchorIdx = Math.max(0, dailyAsc.length - 5);
+    const fiveDayAnchor = dailyAsc[fiveDayAnchorIdx]?.close;
+    const fiveDayPct = fiveDayAnchor > 0
+      ? ((liveValue - fiveDayAnchor) / fiveDayAnchor) * 100
+      : null;
+
     if (!asOf || liveAsOf > asOf) asOf = liveAsOf;
 
     return {
@@ -186,6 +195,7 @@ export async function getPnthrAiSectorsLatest() {
       high:         parseFloat(liveHigh.toFixed(2)),
       low:          parseFloat(liveLow.toFixed(2)),
       dayChangePct: parseFloat(dayChangePct.toFixed(2)),
+      fiveDayPct:   fiveDayPct != null ? parseFloat(fiveDayPct.toFixed(2)) : null,
       ytdPct:       ytdPct != null ? parseFloat(ytdPct.toFixed(2)) : null,
       inceptionPct: parseFloat(inceptionPct.toFixed(2)),
       emaDaily:     lastEmaD != null ? parseFloat(lastEmaD.toFixed(2)) : null,

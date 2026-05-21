@@ -29,7 +29,7 @@ import {
 } from './lotMath.js';
 import { computeWilderATR, blInitStop, ssInitStop } from './signalDetection.js';
 import { refreshOrderGrades } from './aiOrdersPipeline.js';
-import { getPnthrAiSectorsLatest, getPnthrAiSectorBars } from './pnthrAiSectorsService.js';
+import { getPnthrAiSectorsLatest } from './pnthrAiSectorsService.js';
 import { SECTORS as AI_UNIVERSE_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 
 const COLL_PORTFOLIO = 'pnthr_portfolio';
@@ -639,30 +639,22 @@ export async function executeMceEntries(opts = {}) {
     }
   }
 
-  // Load live sector regime (bull/bear) + compute 5D return from same bars source
-  // as the AI Sectors page — avoids stale pnthr_ai_sector_rank_daily data.
+  // Load live sector regime (bull/bear) + 5D return from getPnthrAiSectorsLatest
+  // (same source as the AI Sectors page grid).
   const sectorIdTo5d = {};
   const sectorIdToRegime = {};
+  let sectorsData = null;
   try {
-    const sectorsData = await getPnthrAiSectorsLatest();
+    sectorsData = await getPnthrAiSectorsLatest();
     if (sectorsData?.sectors) {
-      for (const s of sectorsData.sectors) sectorIdToRegime[s.id] = s.regime;
+      for (const s of sectorsData.sectors) {
+        sectorIdToRegime[s.id] = s.regime;
+        if (s.fiveDayPct != null) sectorIdTo5d[s.id] = s.fiveDayPct / 100;
+      }
     }
   } catch (e) {
-    console.warn('[MCE AutoExec] Could not load sector regimes:', e.message);
+    console.warn('[MCE AutoExec] Could not load sector data:', e.message);
   }
-  const neededSectorIds = [...new Set(mceSignals.map(s => tickerToSectorId[s.ticker?.toUpperCase()]).filter(Boolean))];
-  await Promise.all(neededSectorIds.map(async (sid) => {
-    try {
-      const liveSec = sectorsData?.sectors?.find(s => s.id === sid);
-      if (!liveSec?.value) return;
-      const d = await getPnthrAiSectorBars({ sectorId: sid, timeframe: 'daily', limit: 5 });
-      if (d?.ok && d.bars?.length >= 2) {
-        const anchorClose = d.bars[0].close;
-        if (anchorClose > 0) sectorIdTo5d[sid] = (liveSec.value - anchorClose) / anchorClose;
-      }
-    } catch {}
-  }));
 
   const bearFiltered = mceSignals.filter(s => {
     const sid = tickerToSectorId[s.ticker?.toUpperCase()];

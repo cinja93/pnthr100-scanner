@@ -691,12 +691,62 @@ export async function assistantLiveReconcile(req, res) {
       r.lotTriggers.some(lt => !lt.filled && !lt.complete && !lt.staged && !lt.outboxStatus && lt.targetShares > 0)
     );
 
+    // Recycle candidate: when heat >= 10%, find the most profitable
+    // non-recycled position that could move its stop to avg cost to free heat.
+    const heatCapReached = netLiquidity > 0 && (totalRisk / netLiquidity) >= 0.10;
+    let recycleCandidate = null;
+    if (heatCapReached) {
+      const candidates = rows
+        .filter(r => {
+          const shares = r.ibkr.shares ?? r.command.shares;
+          if (!shares || shares <= 0) return false;
+          const avg  = r.ibkr.avgCost ?? r.command.avgCost;
+          const stop = r.command.stopPrice;
+          const price = r.ibkr.marketPrice ?? null;
+          if (!avg || !stop || !price) return false;
+          const dir = r.command.direction || r.ibkr.direction || 'LONG';
+          const isShort = dir === 'SHORT';
+          const isRecycled = isShort ? stop <= avg : stop >= avg;
+          if (isRecycled) return false;
+          const pnl = isShort
+            ? (avg - price) * shares
+            : (price - avg) * shares;
+          return pnl >= 100;
+        })
+        .map(r => {
+          const shares = r.ibkr.shares ?? r.command.shares;
+          const avg  = r.ibkr.avgCost ?? r.command.avgCost;
+          const price = r.ibkr.marketPrice;
+          const dir = r.command.direction || r.ibkr.direction || 'LONG';
+          const isShort = dir === 'SHORT';
+          const pnl = isShort
+            ? (avg - price) * shares
+            : (price - avg) * shares;
+          const currentStop = r.command.stopPrice;
+          const riskFreed = Math.abs(avg - currentStop) * shares;
+          return {
+            ticker: r.ticker,
+            direction: dir,
+            shares,
+            avgCost: +avg.toFixed(2),
+            currentPrice: +(price).toFixed(2),
+            currentStop: +currentStop.toFixed(2),
+            openPnl: +pnl.toFixed(2),
+            riskFreed: +riskFreed.toFixed(2),
+            positionId: r.command.positionId,
+          };
+        })
+        .sort((a, b) => b.openPnl - a.openPnl);
+      recycleCandidate = candidates[0] || null;
+    }
+
     res.json({
       lastSyncedAt: ibkrSyncedAt,
       generatedAt:  new Date().toISOString(),
       summary,
       rows,
       lotSyncTriggered: hasUnstagedWithNoOutbox,
+      recycleCandidate,
       positions: {
         total: totalPositions,
         long: longCount,

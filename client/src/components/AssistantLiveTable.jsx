@@ -816,7 +816,7 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
       if (!reconcileRes.ok) throw new Error(`HTTP ${reconcileRes.status}`);
       const d = await reconcileRes.json();
       setData(d);
-      if (d.positions) onPositionsSummary?.(d.positions);
+      if (d.positions) onPositionsSummary?.({ ...d.positions, recycleCandidate: d.recycleCandidate || null });
       if (positionsRes.ok) {
         const pd = await positionsRes.json();
         const list = Array.isArray(pd?.positions) ? pd.positions : (Array.isArray(pd) ? pd : []);

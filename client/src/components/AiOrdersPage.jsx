@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchLatestAiOrders, runAiOrders, fetchNav, fetchReentrySignals } from '../services/api';
+import { fetchLatestAiOrders, runAiOrders, fetchNav, fetchReentrySignals, API_BASE, authHeaders } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import AssistantLiveTable from './AssistantLiveTable';
 import PendingBridgeOrdersPanel from './PendingBridgeOrdersPanel';
@@ -349,6 +349,9 @@ export default function AiOrdersPage() {
   const [userNav, setUserNav] = useState(null);
   const [orderSort, toggleOrderSort] = useSort('action', 'asc');
   const [heatData, setHeatData] = useState(null);
+  const [recycleCandidate, setRecycleCandidate] = useState(null);
+  const [recycleDismissed, setRecycleDismissed] = useState(null);
+  const [recycleSubmitting, setRecycleSubmitting] = useState(false);
   const [bridgeOpen, setBridgeOpen] = useState(() => {
     try { return localStorage.getItem('aiOrders.bridgeOpen') !== 'false'; } catch { return true; }
   });
@@ -586,12 +589,68 @@ export default function AiOrdersPage() {
             {fmtUsd(heatData.totalRisk)} risk · {fmtUsd(heatData.nav)} NAV
             {heatData.recycled > 0 && <span style={{ color: '#16a34a' }}> · {heatData.recycled} recycled</span>}
           </span>
-          {heatData.totalRiskPct >= 10 && (
+          {heatData.totalRiskPct >= 10 && !recycleCandidate && (
             <span style={{
               padding: '2px 8px', background: '#dc2626', color: '#fff', borderRadius: 3,
               fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
             }}>CAP REACHED — NO NEW ENTRIES</span>
           )}
+          {heatData.totalRiskPct >= 10 && recycleCandidate && (
+            <span style={{
+              padding: '2px 8px', background: '#f97316', color: '#000', borderRadius: 3,
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+            }}>CAP REACHED — RECYCLE AVAILABLE</span>
+          )}
+        </div>
+      )}
+
+      {/* Recycle Candidate Banner */}
+      {recycleCandidate && recycleDismissed !== recycleCandidate.ticker && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', margin: '0 0 12px',
+          background: 'rgba(249,115,22,0.08)', border: '2px solid #f97316', borderRadius: 6,
+          fontSize: 12, fontFamily: 'monospace',
+        }}>
+          <span style={{ color: '#f97316', fontWeight: 900, fontSize: 12, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>♻ RECYCLE</span>
+          <span style={{ color: '#e5e5e5', fontSize: 12 }}>
+            Move <strong style={{ color: '#fcf000', fontSize: 13 }}>{recycleCandidate.ticker}</strong> stop
+            from <span style={{ color: '#dc2626' }}>${recycleCandidate.currentStop}</span> → <span style={{ color: '#16a34a' }}>${recycleCandidate.avgCost}</span> (avg cost)
+            {' '}· Open P&L: <strong style={{ color: '#16a34a' }}>${recycleCandidate.openPnl.toLocaleString()}</strong>
+            {' '}· Frees <span style={{ color: '#fbbf24' }}>${recycleCandidate.riskFreed.toLocaleString()}</span> heat
+          </span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0 }}>
+            <button
+              disabled={recycleSubmitting}
+              onClick={async () => {
+                setRecycleSubmitting(true);
+                try {
+                  const res = await fetch(`${API_BASE}/api/positions/${recycleCandidate.positionId}/stop-price`, {
+                    method: 'PATCH',
+                    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stopPrice: recycleCandidate.avgCost }),
+                  });
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                  setRecycleDismissed(recycleCandidate.ticker);
+                } catch (e) {
+                  alert(`Recycle failed: ${e.message}`);
+                } finally {
+                  setRecycleSubmitting(false);
+                }
+              }}
+              style={{
+                padding: '4px 14px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 4,
+                fontSize: 11, fontWeight: 800, cursor: recycleSubmitting ? 'wait' : 'pointer',
+                letterSpacing: '0.06em', opacity: recycleSubmitting ? 0.6 : 1,
+              }}
+            >{recycleSubmitting ? 'MOVING…' : 'ACCEPT'}</button>
+            <button
+              onClick={() => setRecycleDismissed(recycleCandidate.ticker)}
+              style={{
+                padding: '4px 10px', background: 'transparent', color: '#888', border: '1px solid #444', borderRadius: 4,
+                fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              }}
+            >SKIP</button>
+          </div>
         </div>
       )}
 
@@ -900,6 +959,11 @@ export default function AiOrdersPage() {
                 recycled: pos.recycled || 0,
                 total: pos.total || 0,
               });
+            }
+            const rc = pos?.recycleCandidate || null;
+            setRecycleCandidate(rc);
+            if (rc && recycleDismissed && rc.ticker !== recycleDismissed) {
+              setRecycleDismissed(null);
             }
           }}
         />

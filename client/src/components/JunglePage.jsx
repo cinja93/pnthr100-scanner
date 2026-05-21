@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import StockTable from './StockTable';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import { fetchJungleStocks, fetchEarnings, fetchScannerRanks } from '../services/api';
 import styles from './JunglePage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -134,10 +134,9 @@ export default function JunglePage() {
       )}
 
       {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
-          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}

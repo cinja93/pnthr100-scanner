@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import StockTable from './StockTable';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import { fetchEtfStocks, fetchAiEtfStocks, fetchEarnings } from '../services/api';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeETFAnalyzeScore } from '../utils/analyzeScore';
@@ -229,11 +229,9 @@ export default function EtfPage() {
       )}
 
       {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
-          signals={curSignals}
-          earnings={curEarnings}
           onClose={() => setChartIndex(null)}
         />
       )}

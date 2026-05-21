@@ -1,22 +1,20 @@
 // server/aiUniverseStockChartService.js
-// ── Per-stock chart data for any AI Universe ticker ────────────────────────
+// ── Per-stock chart data for ANY ticker (AI 300 + 679 + ETFs) ──────────────
 //
 // Returns daily + weekly OHLC bars + EMA overlay + BL/SS/BE/SE signal events
-// for a single AI Universe stock. Powers the side-by-side daily/weekly chart
-// modal opened from the AI 300 Index table and AI Sector chart modal.
+// for a single stock. Powers the side-by-side daily/weekly chart modal
+// across the entire Den — AI 300 tickers use AI sector config; 679/ETF
+// tickers use the 679 sector-optimized EMA (sectorEmaConfig.js).
 //
-// Each stock uses its AI sector's tunable EMA period (per pnthrAiSectorsConfig)
-// applied to both timeframes (weekly bars = period as weeks, daily bars =
-// same number as days).
-//
-// Reads from pnthr_ai_bt_candles (daily) + pnthr_ai_bt_candles_weekly (weekly).
-// Cached 5 min keyed by ticker. Zero touch to 679 collections.
+// AI 300:  pnthr_ai_bt_candles (daily) + pnthr_ai_bt_candles_weekly (weekly)
+// 679/ETF: pnthr_bt_candles    (daily) + pnthr_bt_candles_weekly    (weekly)
 // ────────────────────────────────────────────────────────────────────────────
 
 import { connectToDatabase } from './database.js';
 import { detectAllSignals, calculateEMA } from './signalDetection.js';
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
+import { getSectorEmaPeriod, getEtfEmaPeriod, ETF_TO_SECTOR } from './sectorEmaConfig.js';
 import { fetchFMP } from './stockService.js';
 import { isCarnivoreMode, getCarnivoreEmaPeriod, CARNIVORE_GATE_OFFSET } from './data/strategyMode.js';
 
@@ -58,8 +56,7 @@ function emaSeriesAlignedTo(bars, period) {
 
 export async function getAiStockChartData(ticker) {
   ticker = (ticker || '').toUpperCase();
-  const meta = TICKER_META[ticker];
-  if (!meta) return { ok: false, error: `Unknown AI Universe ticker: ${ticker}` };
+  const meta = TICKER_META[ticker]; // null for non-AI tickers
 
   const cached = cache.get(ticker);
   if (cached && (Date.now() - cached.ts) < CACHE_MS) return cached.data;
@@ -67,19 +64,48 @@ export async function getAiStockChartData(ticker) {
   const db = await connectToDatabase();
   if (!db) return { ok: false, error: 'Mongo connect failed' };
 
-  const carnivore    = isCarnivoreMode(ticker);
-  const sectorPeriod = carnivore ? getCarnivoreEmaPeriod(ticker) : (SECTOR_EMA_PERIODS[meta.sectorId] || 30);
-  const gateOff      = carnivore ? CARNIVORE_GATE_OFFSET : 0.25;
+  // Determine which collections + EMA config to use
+  const isAI = !!meta;
+  const dailyCol  = isAI ? 'pnthr_ai_bt_candles'        : 'pnthr_bt_candles';
+  const weeklyCol = isAI ? 'pnthr_ai_bt_candles_weekly'  : 'pnthr_bt_candles_weekly';
 
-  // Pull both bar series + live quote in parallel.
-  // Bars are end-of-day historical (Mongo) — used for chart rendering and
-  // signal state machine. Live quote is FMP — used for the modal header
-  // currentPrice + day-change %. Pulling them together keeps one round trip.
-  const [dailyDoc, weeklyDoc, liveQuoteArr] = await Promise.all([
-    db.collection('pnthr_ai_bt_candles').findOne({ ticker }),
-    db.collection('pnthr_ai_bt_candles_weekly').findOne({ ticker }),
+  // For non-AI tickers, fetch FMP /profile to get sector + name
+  const profilePromise = !isAI
+    ? fetchFMP(`/profile/${ticker}`).catch(() => null)
+    : Promise.resolve(null);
+
+  const [dailyDoc, weeklyDoc, liveQuoteArr, profileArr] = await Promise.all([
+    db.collection(dailyCol).findOne({ ticker }),
+    db.collection(weeklyCol).findOne({ ticker }),
     fetchFMP(`/quote/${ticker}`).catch(() => null),
+    profilePromise,
   ]);
+
+  // If neither AI nor in any Mongo collection, ticker is unknown
+  if (!isAI && !dailyDoc && !weeklyDoc) {
+    return { ok: false, error: `No chart data for ticker: ${ticker}` };
+  }
+
+  const profile = Array.isArray(profileArr) && profileArr.length > 0 ? profileArr[0] : null;
+
+  // Resolve EMA period + gate offset
+  let sectorPeriod, gateOff, resolvedSectorName, resolvedSectorId, resolvedName;
+  if (isAI) {
+    const carnivore = isCarnivoreMode(ticker);
+    sectorPeriod = carnivore ? getCarnivoreEmaPeriod(ticker) : (SECTOR_EMA_PERIODS[meta.sectorId] || 30);
+    gateOff      = carnivore ? CARNIVORE_GATE_OFFSET : 0.25;
+    resolvedSectorId   = meta.sectorId;
+    resolvedSectorName = meta.sectorName;
+    resolvedName       = meta.name;
+  } else {
+    const fmpSector = profile?.sector || null;
+    const isEtf = !!ETF_TO_SECTOR[ticker];
+    sectorPeriod = isEtf ? getEtfEmaPeriod(ticker) : getSectorEmaPeriod(fmpSector);
+    gateOff      = 0.10;
+    resolvedSectorId   = fmpSector || null;
+    resolvedSectorName = fmpSector || null;
+    resolvedName       = profile?.companyName || ticker;
+  }
   const liveQuote = Array.isArray(liveQuoteArr) && liveQuoteArr.length > 0 ? liveQuoteArr[0] : null;
 
   const dailyRaw  = dailyDoc?.daily   || [];
@@ -257,16 +283,16 @@ export async function getAiStockChartData(ticker) {
     return parseFloat((Math.max(h1, h2) + 0.01).toFixed(2));
   })();
 
-  // MCE trigger line — shown when weekly BL is active (not exited).
+  // MCE trigger line — AI 300 only, shown when weekly BL is active (not exited).
   // Marks max(prev 2 daily highs) + $0.01: the exact breakout price for an MCE entry.
-  const dailyMceTrigger = (() => {
+  const dailyMceTrigger = isAI ? (() => {
     const weeklyActive = weeklyDetect.activeType;
     if (weeklyActive !== 'BL') return null;
     if (dailyAscSig.length < 3) return null;
     const h1 = dailyAscSig[dailyAscSig.length - 2].high;
     const h2 = dailyAscSig[dailyAscSig.length - 3].high;
     return parseFloat((Math.max(h1, h2) + 0.01).toFixed(2));
-  })();
+  })() : null;
 
   // Last bar info per timeframe
   const lastDaily  = dailyAsc[dailyAsc.length - 1] || null;
@@ -302,9 +328,10 @@ export async function getAiStockChartData(ticker) {
   const out = {
     ok:           true,
     ticker,
-    name:         meta.name,
-    sectorId:     meta.sectorId,
-    sectorName:   meta.sectorName,
+    name:         resolvedName,
+    sectorId:     resolvedSectorId,
+    sectorName:   resolvedSectorName,
+    isAI,
     emaPeriod:        sectorPeriod,    // canonical sector period
     dailyEmaPeriod:   dailyPeriod,     // period actually used for daily (may be 21W fallback)
     weeklyEmaPeriod:  weeklyPeriod,    // period actually used for weekly (may be 21W fallback)

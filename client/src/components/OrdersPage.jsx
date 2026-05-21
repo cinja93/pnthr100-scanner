@@ -3,7 +3,7 @@ import { useAuth } from '../AuthContext';
 import { fetchLatestOrders, fetchOrdersHistory, fetchOrdersGateLog, runOrdersManual, fetchBacktestTrades, fetchNav, fetchAi300OverlapTickers, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, isEtfTicker, calcHeat, STRIKE_PCT } from '../utils/sizingUtils.js';
 import ThTipShared from './HeaderTooltip';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import PendingBridgeOrdersPanel from './PendingBridgeOrdersPanel';
 import styles from './OrdersPage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -1435,8 +1435,8 @@ export default function OrdersPage() {
 
       {/* Chart modal — opens on ticker click */}
       {chartIndex != null && chartIndex >= 0 && (
-        <ChartModal
-          stocks={orders}
+        <AiTickerChartModal
+          tickers={orders.map(s => s.ticker || s)}
           initialIndex={chartIndex}
           onClose={() => setChartIndex(null)}
         />

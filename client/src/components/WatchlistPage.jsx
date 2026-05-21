@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import StockTable from './StockTable';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import { fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchSignals, fetchLaserSignals, fetchEarnings } from '../services/api';
 import styles from './WatchlistPage.module.css';
 
@@ -153,15 +153,10 @@ export default function WatchlistPage() {
       )}
 
       {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
-          signals={signals}
-          earnings={earnings}
           onClose={() => setChartIndex(null)}
-          onWatchlistChange={(ticker, nowIn) => {
-            if (!nowIn) setStocks(prev => prev.filter(s => s.ticker !== ticker));
-          }}
         />
       )}
     </div>

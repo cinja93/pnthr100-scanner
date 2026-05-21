@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
 import { fetchSectorData, fetchSectorStocks, fetchEarnings, fetchScannerRanks, fetchSectorSignalCounts, fetchSpeculativeSignalCounts, fetchSpeculativeStocks } from '../services/api';
 import StockTable from './StockTable';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import styles from './SectorPage.module.css';
 
 const SECTOR_NAMES = {
@@ -511,11 +511,9 @@ function Sp400StocksModal({ side, onClose }) {
       </div>
 
       {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
-          signals={signals}
-          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}
@@ -612,11 +610,9 @@ function SectorStocksModal({ sectorKey, sectorName, filterSignal, onClose }) {
       </div>
 
       {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
-          signals={signals}
-          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}

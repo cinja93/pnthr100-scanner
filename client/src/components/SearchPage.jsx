@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import StockTable from './StockTable';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import { fetchStockSearch, fetchEarnings, fetchAutocompleteSuggestions } from '../services/api';
 import styles from './SearchPage.module.css';
 import pantherHead from '../assets/panther head.png';
@@ -177,11 +177,9 @@ export default function SearchPage() {
       )}
 
       {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
-          signals={signals}
-          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}

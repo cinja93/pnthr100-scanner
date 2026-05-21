@@ -3,7 +3,6 @@ import { fetchPulse, fetchLiveVix, fetchSignalStocks, fetchDevelopingSignals, fe
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { useAuth } from '../AuthContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
-import ChartModal from './ChartModal';
 import AiTickerChartModal from './AiTickerChartModal';
 import Pnthr300ChartModal from './Pnthr300ChartModal';
 
@@ -415,7 +414,7 @@ export default function PulsePage({ onNavigate }) {
         <Ai300SignalStockModal signal={ai300SignalModal} onClose={() => setAi300SignalModal(null)} onTickerClick={(stocks, idx) => { setAi300SignalModal(null); setAi300ChartList(stocks); setAi300ChartIndex(idx); }} />
       )}
       {chartList.length > 0 && (
-        <ChartModal stocks={chartList} initialIndex={chartIndex} onClose={() => { setChartList([]); setChartIndex(0); }} />
+        <AiTickerChartModal tickers={chartList.map(s => s.ticker || s)} initialIndex={chartIndex} onClose={() => { setChartList([]); setChartIndex(0); }} />
       )}
       {ai300ChartList.length > 0 && (
         <AiTickerChartModal tickers={ai300ChartList.map(s => s.ticker || s)} initialIndex={ai300ChartIndex} onClose={() => { setAi300ChartList([]); setAi300ChartIndex(0); }} />

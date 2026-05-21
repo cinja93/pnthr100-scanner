@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import pantherHead from '../assets/panther head.png';
 import styles from './BondHeatPage.module.css';
 
@@ -193,8 +193,8 @@ export default function JungleHeatPage() {
       )}
 
       {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
           onClose={() => setChartIndex(null)}
         />

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import StockTable from './StockTable';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import EarningsSeasonTable from './EarningsSeasonTable';
 import { fetchJungleStocks, fetchEarnings, fetchWashRules, fetchAiUniverse } from '../services/api';
 import { getCalendarWeekWindow } from '../utils/dateUtils';
@@ -227,11 +227,9 @@ export default function CalendarPage() {
       ))}
 
       {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
-          signals={signals}
-          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}

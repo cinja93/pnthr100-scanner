@@ -17,7 +17,7 @@ import InvestmentAmountModal from './components/InvestmentAmountModal';
 import InvestorWelcomeModal from './components/InvestorWelcomeModal';
 import SplashScreen from './components/SplashScreen';
 import StockTable from './components/StockTable';
-import ChartModal from './components/ChartModal';
+import AiTickerChartModal from './components/AiTickerChartModal';
 import FilterBar from './components/FilterBar';
 import Sidebar from './components/Sidebar';
 import SectorPage from './components/SectorPage';
@@ -59,7 +59,6 @@ import LoginPage from './components/LoginPage';
 import DataRoomPage from './components/DataRoomPage';
 import CompliancePage from './components/CompliancePage';
 import InvestorManagementPage from './components/InvestorManagementPage';
-import AiTickerChartModal from './components/AiTickerChartModal';
 import { fetchTopStocks, fetchShortStocks, fetchAiTopStocks, fetchAiShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchInvestorProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
 import { computeWeeksAgo } from './utils/dateUtils';
@@ -1653,11 +1652,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
       {/* Chart Modal (679 scanner) */}
       {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
-          signals={signals}
-          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}

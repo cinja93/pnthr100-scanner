@@ -30,7 +30,7 @@ import {
 } from '../services/api';
 import { PendingCard, FIVE_DAYS_MS } from './pyramid';
 import { useAuth } from '../AuthContext';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import AssistantLiveTable from './AssistantLiveTable';
 import RiskSummaryBar from './RiskSummaryBar';
 import RiskAdvisorModal from './RiskAdvisorModal';
@@ -5070,8 +5070,8 @@ export default function AssistantPage({ onNavigate }) {
 
       {/* Chart Modal — opened from chip clicks */}
       {chartStocks && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
           onClose={() => setChartStocks(null)}
         />

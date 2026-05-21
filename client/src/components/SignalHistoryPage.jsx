@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import {
   fetchSignalHistoryWeeks,
   fetchSignalHistoryWeek,
@@ -575,7 +575,7 @@ function SignalArchiveTab({ weeks, onWeeksChange }) {
       </main>
 
       {chartIndex != null && (
-        <ChartModal stocks={chartStocks} initialIndex={chartIndex} earnings={jungleEarnings} onClose={() => setChartIndex(null)} />
+        <AiTickerChartModal tickers={chartStocks.map(s => s.ticker || s)} initialIndex={chartIndex} onClose={() => setChartIndex(null)} />
       )}
     </div>
   );

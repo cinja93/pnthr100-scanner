@@ -11,7 +11,7 @@
 import { useState, useEffect } from 'react';
 import { createPendingEntries, API_BASE, authHeaders, fetchNav } from '../services/api';
 import { useQueue } from '../contexts/QueueContext';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 
 // ── Dollar risk for a single existing position ─────────────────────────────────
 // Mirrors the logic inside calcHeat() in sizingUtils.js
@@ -409,8 +409,8 @@ export default function QueueReviewPanel({ onClose }) {
 
     {/* Chart modal — opens when ticker chips are clicked */}
     {chartModal && (
-      <ChartModal
-        stocks={chartModal.stocks.map(s => ({ ticker: s.ticker, symbol: s.ticker, signal: s.signal, currentPrice: s.price }))}
+      <AiTickerChartModal
+        tickers={chartModal.stocks.map(s => s.ticker)}
         initialIndex={chartModal.index}
         onClose={() => setChartModal(null)}
       />

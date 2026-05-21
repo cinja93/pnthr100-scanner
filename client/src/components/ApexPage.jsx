@@ -4,7 +4,7 @@ import { useQueue } from '../contexts/QueueContext';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
 import { computeWeeksAgo } from '../utils/dateUtils';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import KillBadge from './KillBadge';
 import { KillPipelineModal } from './pyramid';
 import { fetchApexStocks, fetchAi300OverlapTickers, API_BASE, authHeaders } from '../services/api';
@@ -943,10 +943,9 @@ export default function ApexPage() {
 
       {/* ── Chart Modal ─────────────────────────────────────────────────────── */}
       {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
-          signals={Object.fromEntries(chartStocks.map(s => [s.ticker, { signal: s.signal, signalDate: s.signalDate, isNewSignal: s.isNewSignal, stopPrice: s.stopPrice }]))}
           onClose={() => setChartIndex(null)}
         />
       )}

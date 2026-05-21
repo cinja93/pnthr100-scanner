@@ -5,7 +5,7 @@ import DOMPurify from 'dompurify';
 import styles from './NewsPage.module.css';
 import pnthrLogo from '../assets/panther head.png';
 const scottAvatar = '/scott-pnthr-transparent.png';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import {
   fetchNewsletterList,
   fetchNewsletterIssue,
@@ -480,10 +480,9 @@ export default function NewsPage() {
       </div>
 
       {chartIndex != null && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
-          earnings={jungleEarnings}
           onClose={() => setChartIndex(null)}
         />
       )}

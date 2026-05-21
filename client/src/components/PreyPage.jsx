@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { fetchPreyStocks, fetchEarnings, fetchEmaCrossoverStocks, fetchScannerRanks, fetchTopStocks, fetchShortStocks, fetchSignals } from '../services/api';
 import { computeWeeksAgo } from '../utils/dateUtils';
-import ChartModal from './ChartModal';
+import AiTickerChartModal from './AiTickerChartModal';
 import styles from './PreyPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -1123,11 +1123,9 @@ export default function PreyPage({ onNavigate }) {
       )}
 
       {chartIndex != null && chartStocks.length > 0 && (
-        <ChartModal
-          stocks={chartStocks}
+        <AiTickerChartModal
+          tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
-          signals={chartSignals}
-          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}

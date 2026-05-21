@@ -71,7 +71,8 @@ export default function ReentryBanner({ onTickerClick, onVisibleChange, topOffse
     return () => { cancelled = true; clearInterval(id); };
   }, [currentUser]);
 
-  const visible = !!(currentUser && !hidden && signals.length > 0);
+  const bullSignals = signals.filter(s => s.sectorRegime !== 'bear');
+  const visible = !!(currentUser && !hidden && bullSignals.length > 0);
 
   // Attach ResizeObserver after banner becomes visible so bannerRef.current is set.
   // Dependency on visible ensures we re-attach when the banner first mounts into the DOM.
@@ -137,10 +138,10 @@ export default function ReentryBanner({ onTickerClick, onVisibleChange, topOffse
           fontSize: 10, fontWeight: 800, color: SCHEME_AI.label,
           letterSpacing: '0.12em', marginBottom: 5,
         }}>
-          AI 300 &nbsp;<span style={{ opacity: 0.55, fontWeight: 600 }}>({signals.length})</span>
+          AI 300 &nbsp;<span style={{ opacity: 0.55, fontWeight: 600 }}>({bullSignals.length})</span>
         </div>
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-          {signals.map(s => (
+          {bullSignals.map(s => (
             <TickerBadge key={s.ticker} s={s} onTickerClick={onTickerClick} scheme={SCHEME_AI} />
           ))}
         </div>

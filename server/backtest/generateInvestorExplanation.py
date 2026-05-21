@@ -158,7 +158,7 @@ def on_page(canvas, doc):
 
 # -- Build document -----------------------------------------------------------
 def build():
-    out_path = os.path.expanduser('~/Downloads/PNTHR_AI_Elite_Investor_Explanation.pdf')
+    out_path = os.path.expanduser('~/Downloads/PNTHR_AI_Elite_Investor_Explanation_v2.0_2026.pdf')
     doc = SimpleDocTemplate(out_path, pagesize=letter,
         leftMargin=MARGIN, rightMargin=MARGIN,
         topMargin=MARGIN, bottomMargin=0.6*inch)
@@ -197,14 +197,14 @@ def build():
     #   Elite HF (top decile): ~15% CAGR, 1.0 Sharpe, 1.30 Sortino, -12% MaxDD
     headline_data = [
         ['', 'PNTHR Wagyu\n(Net, $1M)', 'S&P 500', 'Avg L/S\nHedge Fund', 'Top Rated\nHedge Fund'],
-        ['Total Return', '+544%', '+37%', '~40%', '~80%'],
-        ['Gross CAGR', '67.26%', '7.75%', '~10%', '~18%'],
-        ['Net CAGR', '53.36%', '7.75%', '~8%', '~15%'],
-        ['Sharpe Ratio', '1.39', '0.31', '~0.55', '~1.00'],
-        ['Sortino Ratio', '2.36', '0.42', '~0.80', '~1.30'],
-        ['Max Drawdown', '-23.82%', '-25.36%', '-15%', '-12%'],
+        ['Total Return', '+593%', '+37%', '~40%', '~80%'],
+        ['Gross CAGR', '70.51%', '7.75%', '~10%', '~18%'],
+        ['Net CAGR', '55.65%', '7.75%', '~8%', '~15%'],
+        ['Sharpe Ratio', '1.47', '0.31', '~0.55', '~1.00'],
+        ['Sortino Ratio', '2.49', '0.42', '~0.80', '~1.30'],
+        ['Max Drawdown', '-25.56%', '-25.36%', '-15%', '-12%'],
         ['Recovery Factor', '23x', '1.5x', '~3x', '~7x'],
-        ['Calmar Ratio', '2.24', '0.31', '~0.53', '~1.25'],
+        ['Calmar Ratio', '2.18', '0.31', '~0.53', '~1.25'],
     ]
     n_cols = 5
     col_w = CONTENT_W / n_cols
@@ -240,10 +240,10 @@ def build():
 
     # Summary paragraph accentuating dominance
     s.append(Paragraph(
-        'The numbers speak for themselves. PNTHR AI Elite delivers a Sharpe ratio <b>2.5x higher</b> than the average '
-        'long/short hedge fund and <b>nearly 4.5x</b> the S&amp;P 500. Our Sortino ratio of 2.36 is <b>nearly 3x</b> the '
-        'top rated hedge fund benchmark, demonstrating exceptional downside risk management. At a 53% net CAGR, the fund '
-        'compounds at <b>more than 6x the rate</b> of the top-performing hedge funds in the industry and <b>nearly 7x</b> '
+        'The numbers speak for themselves. PNTHR AI Elite delivers a Sharpe ratio <b>2.7x higher</b> than the average '
+        'long/short hedge fund and <b>nearly 4.7x</b> the S&amp;P 500. Our Sortino ratio of 2.49 is <b>nearly 2x</b> the '
+        'top rated hedge fund benchmark, demonstrating exceptional downside risk management. At a 56% net CAGR, the fund '
+        'compounds at <b>more than 3.7x the rate</b> of the top-performing hedge funds in the industry and <b>over 7x</b> '
         'the S&amp;P 500. The recovery factor of 23x means for every dollar of peak-to-trough drawdown, the fund '
         'generated $23 in total return. This is not incremental improvement over the competition. It is a different category.',
         bold_body_style()))
@@ -251,7 +251,7 @@ def build():
     s.append(Spacer(1, 4))
     s.append(Paragraph('<i>Backtest period: January 3, 2022 through May 13, 2026 (4.36 years). '
         'Net returns include IBKR commissions, 5 bps slippage, sector-tiered borrow costs, and performance fees. '
-        '1,619 closed trades. "Avg L/S Hedge Fund" and "Top Rated Hedge Fund" benchmarks sourced from BarclayHedge, '
+        '1,505 closed trades. "Avg L/S Hedge Fund" and "Top Rated Hedge Fund" benchmarks sourced from BarclayHedge, '
         'HFR, and Preqin industry composites.</i>', note_style()))
 
     # Growth chart at bottom of page 1
@@ -367,11 +367,23 @@ def build():
         body_style()))
 
     # == STEP 4 ===============================================================
-    s.append(Paragraph('STEP 4: TWO STRATEGIES WORKING AS ONE', heading_style()))
+    s.append(Paragraph('STEP 4: MULTI-STRATEGY + MCE', heading_style()))
     s.append(hr())
     s.append(Paragraph(
-        'Our 302-stock AI universe does not run under one set of rules. It runs under <b>two distinct strategy '
-        'engines</b> that merge into a single order sheet every Friday.',
+        'Our 302-stock AI universe does not run under one set of rules. It runs under <b>multiple strategy '
+        'engines</b> working together: weekly signal entries, daily Momentum Continuation Entries (MCE), '
+        'and a dual-rule system for overlap tickers.',
+        body_style()))
+
+    s.append(Paragraph('Momentum Continuation Entry (MCE)', subheading_style()))
+    s.append(Paragraph(
+        'Between weekly Friday signals, the system runs a <b>daily MCE scan</b> on every stock with an active '
+        'weekly BL signal that ranks in the TTM top 100 by trailing momentum. When a stock\'s daily price breaks '
+        'above the highest high of the prior 2 daily bars by at least $0.01, it triggers an MCE entry. This catches '
+        'stocks that are already in confirmed uptrends and showing renewed daily momentum. The MCE entry uses the '
+        'weekly PNTHR Stop as its protective stop, keeping risk management consistent with the primary strategy. '
+        'MCE entries go through the same 5-lot pyramid and all the same risk gates (10% heat, 10% per-ticker cap, '
+        '20% buying power reserve).',
         body_style()))
 
     s.append(Paragraph('Strategy A: AI 300 Rules (276 tickers)', subheading_style()))
@@ -404,7 +416,9 @@ def build():
         'Every Friday at 4:15 PM Eastern: (1) The AI signal engine scores all 276 AI-mode tickers. '
         '(2) The 679 Orders pipeline runs all 26 carnivore tickers through the full 4-gate qualification '
         '(macro, sector, D2, SS crash) and top-N ranking against the entire 679 universe. '
-        '(3) Only carnivore tickers that would make the 679 Orders page merge into the AI order sheet.',
+        '(3) Only carnivore tickers that would make the 679 Orders page merge into the AI order sheet. '
+        'Every trading day at 10:30 AM Eastern: the MCE scanner checks all active weekly BL positions in the '
+        'TTM top 100 for daily 2-bar high breakouts. MCE entries execute same-day at market.',
         body_style()))
 
     # == STEP 5 ===============================================================
@@ -538,11 +552,12 @@ def build():
     s.append(Paragraph('STEP 9: EXECUTION MODEL, FRIDAY SIGNAL, MONDAY FILL', heading_style()))
     s.append(hr())
     s.append(Paragraph(
-        'Signals fire on <b>Friday\'s close</b> (the weekly bar completes). Orders are staged Friday evening. '
-        'Execution happens <b>Monday at the open</b>, not Friday\'s close. This is critical for realism: '
+        '<b>Weekly signals</b> fire on Friday\'s close (the weekly bar completes). Orders are staged Friday evening. '
+        'Execution happens Monday at the open, not Friday\'s close. This is critical for realism: '
         'you cannot trade Friday\'s close based on Friday\'s signal (the signal IS the close). Monday open introduces '
         'real-world slippage (weekend gaps, news). Every backtest fill uses Monday\'s actual open price. '
-        'This is more conservative than most backtests, which assume same-bar execution.',
+        '<b>MCE signals</b> fire intraday when the daily 2-bar high breakout triggers. MCE entries execute same-day '
+        'at market price, capturing momentum while the daily breakout is fresh.',
         body_style()))
 
     # == STEP 10 ==============================================================
@@ -564,7 +579,7 @@ def build():
         body_style()))
     s.append(Paragraph(
         'Typical round-trip friction: 0.10-0.20% for longs, 0.15-0.30% for shorts. Total CAGR impact is '
-        'approximately -14% (67% gross to 53% net), confirming the strategy\'s edge is an order of magnitude '
+        'approximately -15% (71% gross to 56% net), confirming the strategy\'s edge is an order of magnitude '
         'larger than friction costs.',
         body_style()))
 
@@ -629,7 +644,7 @@ def build():
     s.append(Paragraph('What We Built', subheading_style()))
     s.append(Paragraph(
         'A day-by-day simulator that walks through every trading day from January 3, 2022 (EMA warm-up begins) '
-        'to May 13, 2026. First trades do not fire until mid-2022 after the EMAs have enough history. '
+        'to May 20, 2026. First trades do not fire until mid-2022 after the EMAs have enough history. '
         'The simulator tracks: daily mark-to-market NAV for every open position, every lot fill, every stop '
         'ratchet, every exit, full 5-lot pyramid execution, PAI300 and SPY/QQQ regime state on every weekly bar, '
         'sector rotation tier for every sector on every trading day, 20-day average volume for ADV caps, and '
@@ -680,22 +695,22 @@ def build():
 
     s.append(Paragraph('The Drawdown Tradeoff', subheading_style()))
     s.append(Paragraph(
-        'The fund\'s maximum drawdown of -23.82% (Wagyu, net) is virtually identical to the S&amp;P 500\'s '
+        'The fund\'s maximum drawdown of -25.56% (Wagyu, net) is virtually identical to the S&amp;P 500\'s '
         '-25.36% over the same period. Most investors accept that level of drawdown as normal when investing '
         'in the S&amp;P 500. They tolerate a 25% peak-to-trough decline in exchange for the S&amp;P 500\'s '
         '7.75% annualized return.',
         body_style()))
     s.append(Paragraph(
         'PNTHR AI Elite asks the investor to accept <b>the same drawdown</b> they would experience in a '
-        'passive index fund, but in return delivers <b>53% net CAGR instead of 8%.</b> That is nearly 7x the '
+        'passive index fund, but in return delivers <b>56% net CAGR instead of 8%.</b> That is over 7x the '
         'return for effectively the same worst-case pain. The S&amp;P 500 turned $1M into $1.37M over this '
-        'period. PNTHR turned $1M into $6.44M. Same drawdown. Entirely different outcome.',
+        'period. PNTHR turned $1M into $6.93M. Same drawdown. Entirely different outcome.',
         body_style()))
     s.append(Paragraph(
         'This is not a coincidence. It is the result of an optimized tradeoff. Every configuration we tested '
         'that reduced drawdown below 20% also destroyed returns by a far greater margin. The daily stop variants '
         'proved this decisively: tightening risk controls shook out the exact winners that powered the fund\'s '
-        'outsized gains. The -23.82% drawdown is the <b>optimal balance point</b> where the system captures '
+        'outsized gains. The -25.56% drawdown is the <b>optimal balance point</b> where the system captures '
         'maximum return without exposing the investor to drawdowns any deeper than what they would experience '
         'in the most widely held index in the world.',
         bold_body_style()))
@@ -708,22 +723,22 @@ def build():
     s.append(make_table(
         ['Metric', 'Gross', 'Net (Wagyu $1M)', 'Net (Filet $100K)', 'SPY'],
         [
-            ['CAGR', '67.26%', '53.36%', '46.94%', '7.75%'],
-            ['Total Return', '+840%', '+544%', '+435%', '+37%'],
-            ['Sharpe Ratio', '1.67', '1.39', '1.24', '0.31'],
-            ['Sortino Ratio', '2.87', '2.36', '2.07', '0.42'],
-            ['Max Drawdown', '-20.49%', '-23.82%', '-25.87%', '-25.36%'],
-            ['Calmar Ratio', '3.28', '2.24', '1.81', '0.31'],
-            ['Recovery Factor', '41x', '23x', '17x', '1.5x'],
+            ['CAGR', '70.51%', '55.65%', '49.90%', '7.75%'],
+            ['Total Return', '+933%', '+593%', '+488%', '+37%'],
+            ['Sharpe Ratio', '1.79', '1.47', '1.33', '0.31'],
+            ['Sortino Ratio', '3.07', '2.49', '2.19', '0.42'],
+            ['Max Drawdown', '-23.45%', '-25.56%', '-27.57%', '-25.36%'],
+            ['Calmar Ratio', '3.01', '2.18', '1.81', '0.31'],
+            ['Recovery Factor', '40x', '23x', '18x', '1.5x'],
         ],
         col_widths=[1.3*inch, 1.0*inch, 1.2*inch, 1.2*inch, CONTENT_W - 4.7*inch]
     ))
     s.append(Spacer(1, 10))
 
     s.append(Paragraph(
-        '1,619 closed trades across 4.36 years. Win rate: 28.7% gross (20.1% net), but winners average '
-        '2.47x the size of losers (profit factor). SPY beta: 0.96, indicating similar market exposure but multiples of the return. '
-        'CAPM alpha: +55.9% annualized, the return that cannot be explained by market exposure alone.',
+        '1,505 closed trades across 4.36 years. Win rate: 33.6% with a 5.5x payoff ratio '
+        '(profit factor 2.79x). The Multi-strategy + MCE approach captures both weekly trend entries and daily '
+        'momentum continuation, maximizing exposure to confirmed winners.',
         body_style()))
 
     s.append(Spacer(1, 10))
@@ -737,10 +752,10 @@ def build():
     # Final equity comparison
     eq_data = [
         ['Starting Investment', '$1,000,000', '$100,000'],
-        ['Ending Value (Net)', '$6,440,354', '$534,571'],
-        ['Net Gain', '+$5,440,354', '+$434,571'],
+        ['Ending Value (Net)', '$6,929,334', '$587,766'],
+        ['Net Gain', '+$5,929,334', '+$487,766'],
         ['SPY Would Have Returned', '$1,372,900', '$137,290'],
-        ['PNTHR Advantage', '+$5,067,454', '+$397,281'],
+        ['PNTHR Advantage', '+$5,556,434', '+$450,476'],
     ]
     eq_header = [
         Paragraph('', S('eqh0', fontSize=9)),
@@ -787,9 +802,9 @@ def build():
         bold_body_style()))
 
     s.append(Paragraph(
-        'At <b>53.36% net CAGR</b>, the fund compounds at more than 6x the rate of the industry\'s top-performing '
-        'hedge funds and nearly 7x the S&amp;P 500. A <b>Sharpe ratio of 1.39</b> places it in the top fraction of '
-        'a percent of all systematic strategies ever measured, and its <b>Sortino ratio of 2.36</b> is nearly 3x the '
+        'At <b>55.65% net CAGR</b>, the fund compounds at more than 3.7x the rate of the industry\'s top-performing '
+        'hedge funds and over 7x the S&amp;P 500. A <b>Sharpe ratio of 1.47</b> places it in the top fraction of '
+        'a percent of all systematic strategies ever measured, and its <b>Sortino ratio of 2.49</b> is nearly 2x the '
         'elite benchmark, proving that the returns are not being generated by reckless risk-taking but by a system '
         'that systematically controls downside exposure.',
         body_style()))
@@ -798,12 +813,13 @@ def build():
         'The fund\'s <b>23x recovery factor</b> means it has generated 23 dollars of total return for every single '
         'dollar of peak-to-trough drawdown. The top rated hedge fund benchmark is 7x. The S&amp;P 500 sits at 1.5x. '
         'PNTHR is producing more than 3x the return-per-unit-of-risk of the best hedge funds in the world, and it '
-        'is doing so in the most consequential sector rotation of the modern era.',
+        'is doing so with a Multi-strategy + MCE approach purpose-built for the most consequential sector rotation '
+        'of the modern era.',
         body_style()))
 
     s.append(Paragraph(
         'This is not a fund betting on one AI stock or chasing momentum in a handful of popular names. It is a '
-        '<b>302-company, 16-sector, dual-strategy systematic engine</b> built from the ground up for the AI '
+        '<b>302-company, 16-sector, multi-strategy + MCE systematic engine</b> built from the ground up for the AI '
         'economy. Every signal is generated by code, not opinion. Every entry is confirmed by four simultaneous '
         'conditions. Every position is scaled through a 5-lot pyramid that only adds capital as the trade proves '
         'itself right. Every stop is mathematically derived from volatility and ratchets in one direction only: '
@@ -836,8 +852,8 @@ def build():
 
     s.append(Spacer(1, 8))
     s.append(Paragraph(
-        '<b>$1,000,000 invested at inception grew to $6,440,354 net of all fees, commissions, and slippage. '
-        '$100,000 grew to $534,571. The S&amp;P 500 returned $1,372,900 and $137,290 respectively.</b>',
+        '<b>$1,000,000 invested at inception grew to $6,929,334 net of all fees, commissions, and slippage. '
+        '$100,000 grew to $587,766. The S&amp;P 500 returned $1,372,900 and $137,290 respectively.</b>',
         S('finalnum', fontSize=10, fontName='Helvetica-Bold', textColor=GREEN,
           alignment=TA_CENTER, leading=14, spaceAfter=8)))
 

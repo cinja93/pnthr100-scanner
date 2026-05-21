@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-PNTHR AI Elite 300 Fund, LP — Performance Summary v1.0
-Converted from Carnivore Quant Fund Performance Summary v1.4.
-All numbers sourced from AI Elite IR v9.1 (Filet $100K, Porterhouse $500K, Wagyu $1M).
+PNTHR AI Elite 300 Fund, LP — Performance Summary v2.0
+All numbers sourced from AI Elite IR v10.1 Multi-strategy + MCE
+(Filet $100K, Porterhouse $500K, Wagyu $1M).
 
-Output: ~/Downloads/PNTHR_AI_Elite_300_Performance_Summary_v1.0_2026.pdf
+Output: ~/Downloads/PNTHR_AI_Elite_300_Performance_Summary_v2.0_2026.pdf
 """
 
 import os
@@ -30,7 +30,7 @@ from pnthr_design import (
 
 FUND       = "PNTHR AI Elite 300 Fund, LP"
 FUND_UPPER = "PNTHR AI ELITE 300 FUND"
-VERSION    = "v1.0"
+VERSION    = "v2.0"
 DATE_DISP  = "May 2026"
 
 OUT_PATH = os.path.expanduser(
@@ -100,7 +100,7 @@ def metrics_table(rows):
 
 
 def direction_table():
-    """BL / SS / Combined trade activity table (from Wagyu $1M IR v9.1)."""
+    """BL / SS / Combined trade activity table (from Wagyu $1M IR v10.1)."""
     hdr_style = ParagraphStyle(
         name="th2", fontName="Helvetica-Bold", fontSize=10, leading=13,
         alignment=TA_LEFT)
@@ -112,13 +112,13 @@ def direction_table():
         [Paragraph(c, hdr_style) for c in
          ["Metric", "BL (Longs)", "SS (Shorts)", "Combined"]],
         [Paragraph(c, cell_style) for c in
-         ["Profit Factor", "2.60x", "2.60x", "2.60x"]],
+         ["Profit Factor", "2.92x", "0.66x", "2.79x"]],
         [Paragraph(c, cell_style) for c in
-         ["Win Rate", "28.0%", "28.0%", "28.0%"]],
+         ["Win Rate", "34.5%", "24.6%", "33.6%"]],
         [Paragraph(c, cell_style) for c in
-         ["Win/Loss Payoff", "6.7x", "6.7x", "6.7x"]],
+         ["Win/Loss Payoff", "5.5x", "2.0x", "5.5x"]],
         [Paragraph(c, cell_style) for c in
-         ["Total Closed Trades", "", "", "1,619"]],
+         ["Total Closed Trades", "1,371", "134", "1,505"]],
     ]
 
     tbl = Table(data, colWidths=[2.2 * inch, 1.4 * inch, 1.4 * inch, 1.4 * inch])
@@ -138,7 +138,7 @@ def direction_table():
 
 
 def crisis_table():
-    """Crisis alpha table from Wagyu IR v9.1 page 7."""
+    """Crisis alpha table from Wagyu IR v10.1."""
     hdr_style = ParagraphStyle(
         name="th3", fontName="Helvetica-Bold", fontSize=10, leading=13,
         alignment=TA_LEFT)
@@ -151,16 +151,16 @@ def crisis_table():
          ["Market Event", "Period", "S&amp;P 500", "PNTHR Fund", "PNTHR Alpha"]],
         [Paragraph(c, cell_style) for c in
          ["2025 Liberation Day Correction", "2025-02-19 to 2025-04-08",
-          "-19.0%", "-13.0%", "+6.0%"]],
+          "-19.0%", "-17.1%", "+1.9%"]],
         [Paragraph(c, cell_style) for c in
          ["2024 August Correction", "2024-07-16 to 2024-08-05",
-          "-8.4%", "-11.7%", "-3.3%"]],
+          "-8.4%", "-14.3%", "-5.8%"]],
         [Paragraph(c, cell_style) for c in
          ["2023 Regional Bank Crisis", "2023-02-02 to 2023-03-13",
-          "-7.5%", "-10.4%", "-2.9%"]],
+          "-7.5%", "-9.2%", "-1.7%"]],
         [Paragraph(c, cell_style) for c in
          ["2024 April Pullback", "2024-03-28 to 2024-04-19",
-          "-5.3%", "-5.2%", "+0.2%"]],
+          "-5.3%", "-8.2%", "-2.9%"]],
     ]
 
     tbl = Table(data, colWidths=[1.8 * inch, 1.5 * inch, 0.9 * inch, 0.9 * inch, 1.0 * inch])
@@ -180,7 +180,7 @@ def crisis_table():
 
 
 def annual_table():
-    """Annual performance from Wagyu IR v9.1 page 7 (Wagyu Net basis)."""
+    """Annual performance from Wagyu IR v10.1 (Wagyu Net basis)."""
     hdr_style = ParagraphStyle(
         name="th4", fontName="Helvetica-Bold", fontSize=10, leading=13,
         alignment=TA_LEFT)
@@ -193,15 +193,15 @@ def annual_table():
          ["Year", "Start Equity", "End Equity", "S&amp;P 500",
           "PNTHR AI Net", "Alpha"]],
         [Paragraph(c, cell_style) for c in
-         ["2022", "$1.00M", "$907K", "-19.95%", "-9.27%", "+10.68%"]],
+         ["2022", "$1.00M", "$1.01M", "-19.95%", "+0.73%", "+20.68%"]],
         [Paragraph(c, cell_style) for c in
-         ["2023", "$907K", "$1.14M", "+24.81%", "+25.93%", "+1.12%"]],
+         ["2023", "$1.01M", "$1.21M", "+24.81%", "+20.27%", "-4.54%"]],
         [Paragraph(c, cell_style) for c in
-         ["2024", "$1.07M", "$1.63M", "+24.00%", "+52.92%", "+28.92%"]],
+         ["2024", "$1.17M", "$2.36M", "+24.00%", "+101.17%", "+77.17%"]],
         [Paragraph(c, cell_style) for c in
-         ["2025", "$1.66M", "$3.99M", "+16.64%", "+140.94%", "+124.30%"]],
+         ["2025", "$2.47M", "$4.24M", "+16.64%", "+71.72%", "+55.08%"]],
         [Paragraph(c, cell_style) for c in
-         ["2026", "$4.13M", "$6.44M", "-4.00%", "+55.91%", "+59.91%"]],
+         ["2026", "$4.46M", "$6.93M", "-4.00%", "+55.34%", "+59.34%"]],
     ]
 
     tbl = Table(data, colWidths=[0.6 * inch, 1.0 * inch, 1.0 * inch, 1.0 * inch, 1.1 * inch, 1.0 * inch])
@@ -284,53 +284,53 @@ def build():
     ))
 
     # ── FILET ─────────────────────────────────────────────────────────────
-    # From IR Filet $100K v9.1: Gross vs Net page 5
+    # From IR Filet $100K v10.1 (Multi-strategy + MCE)
     story.append(Paragraph(
         "<b>FILET CLASS ($100,000 - $499,999 : 30% / 25% after 36 months)</b>",
         CLASS_HDR))
     story.append(metrics_table([
-        ["Total Return",              "+840.0%",  "+434.6%",  "-405.4 pts"],
-        ["CAGR",                      "+67.26%",  "+46.94%",  "-20.32 pts"],
-        ["Sharpe Ratio",              "1.67",     "1.24",     "-0.43"],
-        ["Sortino Ratio",             "2.87",     "2.07",     "-0.80"],
-        ["Calmar Ratio",              "3.28",     "1.81",     "-1.47"],
-        ["Max Drawdown (daily NAV)",  "-20.49%",  "-25.87%",  "-5.38 pts"],
-        ["Recovery Factor",           "41x",      "17x",      "-24"],
-        ["Ending Equity ($100K start)", "$940K",  "$535K",    "-$405K"],
+        ["Total Return",              "+973.1%",  "+487.8%",  "-485.3 pts"],
+        ["CAGR",                      "+72.01%",  "+49.90%",  "-22.11 pts"],
+        ["Sharpe Ratio",              "1.82",     "1.33",     "-0.49"],
+        ["Sortino Ratio",             "3.09",     "2.19",     "-0.90"],
+        ["Calmar Ratio",              "3.27",     "1.81",     "-1.46"],
+        ["Max Drawdown (daily NAV)",  "-21.99%",  "-27.57%",  "-5.58 pts"],
+        ["Recovery Factor",           "44x",      "18x",      "-26"],
+        ["Ending Equity ($100K start)", "$1.07M", "$588K",    "-$485K"],
     ]))
     story.append(spacer(6))
 
     # ── PORTERHOUSE ───────────────────────────────────────────────────────
-    # From IR Porterhouse $500K v9.1: Gross vs Net page 5
+    # From IR Porterhouse $500K v10.1 (Multi-strategy + MCE)
     story.append(Paragraph(
         "<b>PORTERHOUSE CLASS ($500,000 - $999,999 : 25% / 20% after 36 months)</b>",
         CLASS_HDR))
     story.append(metrics_table([
-        ["Total Return",              "+840.0%",  "+487.1%",  "-352.9 pts"],
-        ["CAGR",                      "+67.26%",  "+50.13%",  "-17.13 pts"],
-        ["Sharpe Ratio",              "1.67",     "1.31",     "-0.36"],
-        ["Sortino Ratio",             "2.87",     "2.22",     "-0.65"],
-        ["Calmar Ratio",              "3.28",     "2.02",     "-1.26"],
-        ["Max Drawdown (daily NAV)",  "-20.49%",  "-24.85%",  "-4.36 pts"],
-        ["Recovery Factor",           "41x",      "20x",      "-21"],
-        ["Ending Equity ($500K start)", "$4.70M", "$2.94M",   "-$1.76M"],
+        ["Total Return",              "+891.1%",  "+506.3%",  "-384.8 pts"],
+        ["CAGR",                      "+68.92%",  "+50.97%",  "-17.95 pts"],
+        ["Sharpe Ratio",              "1.76",     "1.37",     "-0.39"],
+        ["Sortino Ratio",             "3.00",     "2.30",     "-0.70"],
+        ["Calmar Ratio",              "2.91",     "1.94",     "-0.97"],
+        ["Max Drawdown (daily NAV)",  "-23.70%",  "-26.23%",  "-2.53 pts"],
+        ["Recovery Factor",           "38x",      "19x",      "-19"],
+        ["Ending Equity ($500K start)", "$4.96M", "$3.03M",   "-$1.92M"],
     ]))
     story.append(spacer(6))
 
     # ── WAGYU ─────────────────────────────────────────────────────────────
-    # From IR Wagyu $1M v9.1: Gross vs Net page 5
+    # From IR Wagyu $1M v10.1 (Multi-strategy + MCE)
     story.append(Paragraph(
         "<b>WAGYU CLASS ($1,000,000+ : 20% / 15% after 36 months)</b>",
         CLASS_HDR))
     story.append(metrics_table([
-        ["Total Return",              "+840.0%",  "+544.0%",  "-296.0 pts"],
-        ["CAGR",                      "+67.26%",  "+53.36%",  "-13.90 pts"],
-        ["Sharpe Ratio",              "1.67",     "1.39",     "-0.28"],
-        ["Sortino Ratio",             "2.87",     "2.36",     "-0.51"],
-        ["Calmar Ratio",              "3.28",     "2.24",     "-1.04"],
-        ["Max Drawdown (daily NAV)",  "-20.49%",  "-23.82%",  "-3.33 pts"],
-        ["Recovery Factor",           "41x",      "23x",      "-18"],
-        ["Ending Equity ($1M start)", "$9.40M",   "$6.44M",   "-$2.96M"],
+        ["Total Return",              "+932.6%",  "+592.9%",  "-339.7 pts"],
+        ["CAGR",                      "+70.51%",  "+55.65%",  "-14.86 pts"],
+        ["Sharpe Ratio",              "1.79",     "1.47",     "-0.32"],
+        ["Sortino Ratio",             "3.07",     "2.49",     "-0.58"],
+        ["Calmar Ratio",              "3.01",     "2.18",     "-0.83"],
+        ["Max Drawdown (daily NAV)",  "-23.45%",  "-25.56%",  "-2.11 pts"],
+        ["Recovery Factor",           "40x",      "23x",      "-17"],
+        ["Ending Equity ($1M start)", "$10.33M",  "$6.93M",   "-$3.40M"],
     ]))
 
     # ── Strategy Activity by Direction ────────────────────────────────────
@@ -348,7 +348,7 @@ def build():
     story.append(spacer(4))
     story.append(P(
         "Backtest period: January 2022 through May 2026 (53 months). "
-        "1,619 closed trades across the PNTHR AI Universe (~300 names).",
+        "1,505 closed trades across the PNTHR AI Universe (~300 names).",
         SMALL))
 
     # ── Crisis Alpha ──────────────────────────────────────────────────────
@@ -378,13 +378,13 @@ def build():
     story.append(Paragraph("Key Takeaway", H1))
     story.append(spacer(4))
     story.append(P(
-        "Over the 4.4-year backtest the AI Elite Fund delivered a +53.36% net CAGR "
-        "at the Wagyu tier, transforming $1,000,000 into $6.44M while the S&amp;P 500 "
-        "returned +37.3% over the same period. The fund's maximum drawdown of -23.82% "
-        "on a net basis was comparable to the S&amp;P 500's -25.4% drawdown, while "
-        "delivering dramatically higher returns. The 1% vitality cap and 35% initial "
-        "lot sizing ensure that no single adverse trade can materially impair investor "
-        "capital."
+        "Over the 4.4-year backtest the AI Elite Fund's Multi-strategy + MCE approach "
+        "delivered a +55.65% net CAGR at the Wagyu tier, transforming $1,000,000 into "
+        "$6.93M while the S&amp;P 500 returned +37.3% over the same period. The fund's "
+        "maximum drawdown of -25.56% on a net basis was comparable to the S&amp;P 500's "
+        "-25.4% drawdown, while delivering dramatically higher returns. The 1% vitality "
+        "cap and 35% initial lot sizing ensure that no single adverse trade can materially "
+        "impair investor capital."
     ))
 
     # ── Anticipated Investor Questions ────────────────────────────────────
@@ -457,8 +457,8 @@ def build():
         "Complete backtest methodology, monthly return heatmaps, per-class annual "
         "returns, drawdown analysis, and daily NAV logs are consolidated in the "
         "PNTHR AI Elite Fund Intelligence Report. Backtest dataset: per-tier pyramid "
-        "trade logs and mark-to-market daily NAV curves as of May 13, 2026 "
-        "(1,619 closed trades). Gate compliance verified: PAI300 proprietary AI index "
+        "trade logs and mark-to-market daily NAV curves as of May 20, 2026 "
+        "(1,505 closed trades). Gate compliance verified: PAI300 proprietary AI index "
         "regime gate (36W EMA); AI sub-sector rotation ranking; sector-specific "
         "trend-filter periods (specific periods proprietary). Costs modeled at trade "
         "level (IBKR Pro Fixed $0.005/share, 5 basis points slippage per leg, "

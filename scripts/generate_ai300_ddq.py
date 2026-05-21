@@ -1,24 +1,9 @@
 #!/usr/bin/env python3
 """
-PNTHR AI Elite 300 Fund, LP — Due Diligence Questionnaire v1.0
-Converted from Carnivore Quant Fund DDQ v1.3.
+PNTHR AI Elite 300 Fund, LP — Due Diligence Questionnaire v2.0
+All numbers sourced from AI Elite IR v10.1 Multi-strategy + MCE.
 
-Changes from Carnivore v1.3:
-  - Fund name: "Carnivore Quant Fund, LP" -> "PNTHR AI Elite 300 Fund, LP"
-  - All headers/footers/breadcrumbs updated
-  - Cover subtitle: "PNTHR AI Elite 300 Fund, LP" (yellow)
-  - Version: v1.3 -> v1.0
-  - Date: April 2026 -> May 2026
-  - Fund inception: April 17 2026 -> June 1 2026; live trading May 11 2026
-  - Investment universe: 679 -> ~300 AI-focused names
-  - Regime gate: SPY/QQQ/MDY 21W EMA -> PAI300 (proprietary AI index) 21W EMA
-  - Sector rotation: AI sub-sector rotation engine replaces direction-index gate
-  - Track record: Carnivore backtest (Jun 2019-Apr 2026, 82 mo) ->
-    AI 300 backtest (Jan 2022-May 2026, 53 mo) with IR v9.1 numbers
-  - BL/SS trade split updated to AI 300 backtest numbers
-  - Full Detail reference: IR v23 -> AI Elite 300 IR v9.1
-
-Output: ~/Downloads/PNTHR_AI_Elite_300_DDQ_v1.0_2026.pdf
+Output: ~/Downloads/PNTHR_AI_Elite_300_DDQ_v2.0_2026.pdf
 """
 
 import os
@@ -44,7 +29,7 @@ from pnthr_design import (
 
 FUND       = "PNTHR AI Elite 300 Fund, LP"
 FUND_UPPER = "PNTHR AI ELITE 300 FUND"
-VERSION    = "v1.0"
+VERSION    = "v2.0"
 DATE_DISP  = "May 2026"
 
 OUT_PATH = os.path.expanduser(
@@ -229,10 +214,12 @@ def build():
         ["Question", "Answer"],
         [
             ["Strategy Description",
-             "Systematic long/short equity strategy using the proprietary PNTHR Signal System. "
-             "Generates PNTHR Proprietary Buy Long (BL) and Sell Short (SS) signals based on "
-             "sector-specific trend-filter dynamics, then ranks opportunities through a "
-             "multi-dimensional scoring framework (Kill Score). Candidates pass through a "
+             "Multi-strategy + MCE (Momentum Continuation Entry) systematic long/short equity "
+             "strategy using the proprietary PNTHR Signal System. Weekly BL and SS signals are "
+             "generated based on sector-specific trend-filter dynamics, then ranked through a "
+             "multi-dimensional scoring framework (Kill Score). Daily MCE entries add momentum "
+             "continuation positions on active weekly BL signals when the daily 2-bar high breakout "
+             "triggers for TTM top-100 ranked names. Candidates pass through a "
              "PAI300 regime gate (proprietary PNTHR AI 300 Index 21-week EMA), "
              "a sector ETF gate (sector-specific trend-filter periods, empirically optimized per sector; "
              "specific periods proprietary), an AI sub-sector rotation engine, "
@@ -249,8 +236,8 @@ def build():
              "Swing (typically 4-6 weeks; 20-day stale position exit if price fails to progress)"],
             ["Long/Short Allocation",
              "Dynamic based on regime and signal availability; structural long bias (top 10 BL + top 5 "
-             "SS per week maximum). Per backtest: 1,330 BL / 289 SS trades = 82.1% / 17.9% "
-             "by trade count"],
+             "SS per week maximum, plus daily MCE entries). Per backtest: 1,371 BL / 134 SS trades "
+             "= 91.1% / 8.9% by trade count"],
             ["Use of Leverage",
              "The Fund may employ leverage of up to 2:1 gross exposure."],
             ["Use of Derivatives",
@@ -385,40 +372,42 @@ def build():
         [
             ["Track Record Type",
              "Hypothetical Systematic Backtest (January 2022 through May 2026; 53 months; "
-             "1,103 trading days). Fund has not yet traded non-affiliated Limited Partner capital."],
+             "1,103 trading days). Multi-strategy + MCE (Momentum Continuation Entry). "
+             "Fund has not yet traded non-affiliated Limited Partner capital."],
             ["Total Trades (Wagyu tier)",
-             "1,619 closed trades (1,330 BL + 289 SS)"],
+             "1,505 closed trades (1,371 BL + 134 SS)"],
             ["Gross CAGR",
-             "+67.26% (Wagyu tier; post-transaction-costs, pre-fund-fees)"],
+             "+70.51% (Wagyu tier; post-transaction-costs, pre-fund-fees)"],
             ["Gross Sharpe Ratio",
-             "1.67 (daily resolution, excess over US 3-month Treasury)"],
+             "1.79 (daily resolution, excess over US 3-month Treasury)"],
             ["Gross Sortino Ratio",
              "3.07 (daily resolution, MAR = 0)"],
             ["Gross Profit Factor",
-             "2.60x"],
+             "2.79x"],
             ["Gross Max Drawdown (daily NAV)",
-             "-20.49% (Wagyu tier, mark-to-market)"],
+             "-23.45% (Wagyu tier, mark-to-market)"],
             ["Net CAGR (after all fund fees)",
-             "Filet (100K): +46.94%; Porterhouse (500K): +50.13%; Wagyu (1M+): +53.36%"],
+             "Filet (100K): +49.90%; Porterhouse (500K): +50.97%; Wagyu (1M+): +55.65%"],
             ["Net Sharpe Ratio",
-             "Filet: 1.24; Porterhouse: 1.31; Wagyu: 1.39"],
+             "Filet: 1.33; Porterhouse: 1.37; Wagyu: 1.47"],
             ["Net Sortino Ratio",
-             "Filet: 2.18; Porterhouse: 2.35; Wagyu: 2.55"],
+             "Filet: 2.19; Porterhouse: 2.30; Wagyu: 2.49"],
             ["Net Max Drawdown (daily NAV)",
-             "Filet: -25.87%; Porterhouse: -24.85%; Wagyu: -23.82%"],
+             "Filet: -27.57%; Porterhouse: -26.23%; Wagyu: -25.56%"],
             ["Benchmark (S&amp;P 500)",
-             "CAGR: +12.8%; Max Drawdown: -34.1%. Strategy alpha: Filet +34.1 pts; Porterhouse "
-             "+37.3 pts; Wagyu +40.6 pts (annualized, net)."],
+             "CAGR: +7.75%; Sharpe: 0.31; Max Drawdown: -25.36%. Strategy net alpha: "
+             "Filet +42.15 pts; Porterhouse +43.22 pts; Wagyu +47.90 pts (annualized)."],
             ["Data Integrity",
              "Backtest internally validated: PAI300 regime gate via proprietary PNTHR AI 300 Index "
              "(capped market-cap weighted, monthly rebalanced, base 2022-11-30 = 1000); "
              "AI sub-sector rotation engine with sector-specific optimized EMA periods; "
+             "daily MCE entry triggers on TTM top-100 ranked names; "
              "quarterly non-cumulative fee engine per PPM sec. 4.1-4.3; mark-to-market "
              "daily-basis Max Drawdown computation. Not independently audited by a third-party "
              "accounting firm; Fund intends to engage Spicer Jeffries LLP as independent auditor "
              "upon Limited Partner admission."],
             ["Full Detail",
-             "Refer to PNTHR AI Elite 300 Fund Intelligence Report v9.1 for complete per-class "
+             "Refer to PNTHR AI Elite 300 Fund Intelligence Report v10.1 for complete per-class "
              "metrics, annual performance breakdowns, crisis alpha analysis, methodology, and "
              "anticipated due diligence questions."],
         ],

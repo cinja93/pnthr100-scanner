@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
 """
-PNTHR AI Elite 300 Fund, LP — Investment Process Overview v1.0
-Converted from Carnivore Quant Fund Investment Process Overview v1.2.
+PNTHR AI Elite 300 Fund, LP — Investment Process Overview v2.0
+Updated for Multi-strategy + MCE (Momentum Continuation Entry).
 
-Changes from Carnivore v1.2:
-  - Fund name: "Carnivore Quant Fund" -> "PNTHR AI Elite 300 Fund, LP"
-  - All headers/footers/breadcrumbs updated
-  - Version: v1.2 -> v1.0, Date: April 2026 -> May 2026
-  - Universe: PNTHR 679 -> PNTHR AI 300 (~300 AI-focused names)
-  - Regime gate: SPY/QQQ/MDY direction-index -> PAI300 regime gate
-  - Sector gates: traditional sector ETF list -> AI sub-sector rotation engine
-  - Kill scoring: "seven years" -> "four+ years" (AI 300 backtest from Jan 2022)
-  - Kill scoring: "PNTHR 679 universe" -> "PNTHR AI 300 universe"
-
-Output: ~/Downloads/PNTHR_AI_Elite_300_Investment_Process_Overview_v1.0_2026.pdf
+Output: ~/Downloads/PNTHR_AI_Elite_300_Investment_Process_Overview_v2.0_2026.pdf
 """
 
 import os
@@ -39,7 +29,7 @@ from pnthr_design import (
 
 FUND       = "PNTHR AI Elite 300 Fund, LP"
 FUND_UPPER = "PNTHR AI ELITE 300 FUND"
-VERSION    = "v1.0"
+VERSION    = "v2.0"
 DATE_DISP  = "May 2026"
 
 OUT_PATH = os.path.expanduser(
@@ -147,13 +137,15 @@ def build():
     story.append(spacer(4))
 
     story.append(P(
-        f"{FUND} employs a proprietary systematic long/short equity strategy built on the "
-        "PNTHR Signal System. The Fund identifies high-conviction entry points using a "
-        "multi-dimensional scoring framework, enters positions through a disciplined five-lot "
-        "pyramid structure, and manages risk via the PNTHR Proprietary Stop Loss System (PPSLS) "
-        "and portfolio-level controls. The strategy is designed to generate alpha through both "
-        "long (BL) and short (SS) signals, with a structural long bias reflecting the long-term "
-        "upward drift of U.S. equity markets."
+        f"{FUND} employs a proprietary Multi-strategy + MCE (Momentum Continuation Entry) "
+        "systematic long/short equity strategy built on the PNTHR Signal System. The Fund "
+        "identifies high-conviction entry points through two complementary engines: <b>weekly "
+        "BL/SS signals</b> ranked by a multi-dimensional scoring framework, and <b>daily MCE "
+        "entries</b> that capture momentum continuation on active weekly positions. Positions "
+        "are entered through a disciplined five-lot pyramid structure and managed via the PNTHR "
+        "Proprietary Stop Loss System (PPSLS) and portfolio-level controls. The strategy is "
+        "designed to generate alpha through both long (BL) and short (SS) signals, with a "
+        "structural long bias reflecting the long-term upward drift of U.S. equity markets."
     ))
 
     story.append(spacer(10))
@@ -231,6 +223,45 @@ def build():
         "AI sub-sector must show pronounced short-term weakness. This gate is deliberately "
         "restrictive to limit short exposure to market-stress regimes. Exact slope and "
         "sector-weakness thresholds are proprietary."
+    ))
+
+    story.append(spacer(10))
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # PNTHR Momentum Continuation Entry (MCE)
+    # ══════════════════════════════════════════════════════════════════════════
+    story.append(Paragraph("PNTHR Momentum Continuation Entry (MCE)", SECTION_TITLE))
+    story.append(yellow_rule())
+    story.append(spacer(4))
+
+    story.append(P(
+        "Between weekly Friday signals, the Fund runs a daily MCE scan to capture momentum "
+        "continuation opportunities on stocks already in confirmed uptrends. MCE adds a "
+        "second entry dimension that the backtest proved increases net CAGR by +10-12% without "
+        "meaningfully increasing drawdowns."
+    ))
+
+    story.append(spacer(4))
+    story.append(P(
+        "An MCE entry is generated when the following conditions are simultaneously true:"
+    ))
+
+    story.append(Paragraph(
+        "•  The stock has an <b>active weekly BL signal</b> (entered and not yet exited)", BULLET))
+    story.append(Paragraph(
+        "•  The stock ranks in the <b>TTM top 100</b> of the AI 300 universe by trailing "
+        "twelve-month momentum", BULLET))
+    story.append(Paragraph(
+        "•  The stock's daily price breaks above the <b>highest high of the prior 2 completed "
+        "daily bars</b> by at least $0.01 (daily breakout confirmation)", BULLET))
+
+    story.append(spacer(4))
+    story.append(P(
+        "MCE entries use the <b>weekly PNTHR Stop</b> as the protective stop, maintaining "
+        "consistency with the primary strategy's risk management. MCE positions flow through "
+        "the same 5-lot pyramid structure and are subject to all portfolio-level risk gates "
+        "(10% heat cap, 10% per-ticker concentration cap, 20% buying power reserve). MCE "
+        "entries execute same-day at market price, typically at the 10:30 AM ET daily scan."
     ))
 
     story.append(spacer(10))
@@ -485,15 +516,26 @@ def build():
     # ══════════════════════════════════════════════════════════════════════════
     # Friday Pipeline
     # ══════════════════════════════════════════════════════════════════════════
-    story.append(Paragraph("Friday Pipeline", SECTION_TITLE))
+    story.append(Paragraph("Signal Generation Pipeline", SECTION_TITLE))
     story.append(yellow_rule())
     story.append(spacer(4))
 
     story.append(P(
-        "The Fund runs a weekly batch process every Friday at 4:15 PM ET that refreshes all "
-        "Kill scores, updates the signal state machine, recalculates stops, and persists "
-        "results to the database. This ensures all scoring data is current for the following "
-        "week's trading decisions."
+        "<b>Weekly Friday Pipeline (4:15 PM ET):</b> Every Friday after the close, the system "
+        "refreshes all Kill scores, updates the signal state machine, recalculates stops, and "
+        "persists results to the database. This produces the weekly BL/SS signal list and "
+        "ensures all scoring data is current for the following week's trading decisions."
+    ))
+
+    story.append(spacer(6))
+
+    story.append(P(
+        "<b>Daily MCE Scan (10:30 AM ET, Mon–Fri):</b> Each trading morning, the system "
+        "scans the TTM top-100 AI 300 names for Momentum Continuation Entry triggers. "
+        "Stocks with an active weekly BL signal whose current price exceeds the 2-bar daily "
+        "high breakout level are flagged for same-day entry. MCE signals are staged and "
+        "executed through the same STAGE → EXECUTE → BRIDGE pipeline as weekly signals, "
+        "with identical risk gates (10% heat cap, 10% per-ticker cap, 20-position cap)."
     ))
 
     # ── Build PDF ─────────────────────────────────────────────────────────────

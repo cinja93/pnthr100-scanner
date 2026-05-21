@@ -30,13 +30,21 @@ function worst(...statuses) {
 
 // ── Filled-lot math ──────────────────────────────────────────────────────────
 function summarizeFills(fills = {}) {
-  const filledLots = [1, 2, 3, 4, 5]
+  const standardLots = [1, 2, 3, 4, 5]
     .map(n => ({ n, f: fills[n] }))
     .filter(x => x.f?.filled);
-  const totShr  = filledLots.reduce((s, x) => s + (+x.f.shares || 0), 0);
-  const totCost = filledLots.reduce((s, x) => s + (+x.f.shares || 0) * (+x.f.price || 0), 0);
+  // Include ADHOC fills written by positionReconciler when all 5 standard
+  // slots are occupied. Without this, CMD POS shows a permanent mismatch
+  // against IBKR because the reconciler thinks drift=0 (it counts all keys)
+  // while the UI only counted [1-5].
+  const adhocLots = Object.entries(fills)
+    .filter(([k, f]) => String(k).startsWith('ADHOC_') && f?.filled)
+    .map(([k, f]) => ({ n: k, f }));
+  const allFilled = [...standardLots, ...adhocLots];
+  const totShr  = allFilled.reduce((s, x) => s + (+x.f.shares || 0), 0);
+  const totCost = allFilled.reduce((s, x) => s + (+x.f.shares || 0) * (+x.f.price || 0), 0);
   const avgCost = totShr > 0 ? +(totCost / totShr).toFixed(4) : null;
-  return { filledCount: filledLots.length, totShr, avgCost, filledLots };
+  return { filledCount: standardLots.length, totShr, avgCost, filledLots: standardLots };
 }
 
 // Lot-trigger prices for lots 2-5 (BUY STP for long, SELL STP for short).

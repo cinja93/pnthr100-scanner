@@ -538,6 +538,14 @@ function ChartPanel({
             MCE {fmtNum(mceTrigger)}
           </span>
         )}
+        {mceTrigger != null && weeklyStop != null && (
+          <span style={{
+            padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+            background: '#3b82f6', color: '#fff', letterSpacing: '0.06em', fontFamily: 'monospace',
+          }}>
+            MCE Stop {fmtNum(weeklyStop)}
+          </span>
+        )}
 
         {/* SIZE IT (gold) */}
         <button

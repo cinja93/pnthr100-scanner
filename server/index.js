@@ -4357,9 +4357,12 @@ const hourlyEmaCache = {}; // { [ticker]: { ema21h, computedAt } }
 
 async function computeHourlyEma21(ticker) {
   const FMP_API_KEY = process.env.FMP_API_KEY;
-  // Fetch 10 days of hourly bars (≥80 bars — plenty to seed a 21-period EMA)
+  // Fetch 60 days of hourly bars (~390 market-hours bars) so the 21-period EMA
+  // has enough runway to converge before the final value. 10 days was too short —
+  // a sharp recent move left the seed-SMA anchored to stale prices (e.g. SITM
+  // showing $767 EMA when TWS showed $700).
   const from = new Date();
-  from.setDate(from.getDate() - 10);
+  from.setDate(from.getDate() - 60);
   const fromStr = from.toISOString().split('T')[0];
   const url = `https://financialmodelingprep.com/api/v3/historical-chart/1hour/${ticker}?from=${fromStr}&apikey=${FMP_API_KEY}`;
   const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });

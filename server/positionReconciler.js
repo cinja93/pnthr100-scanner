@@ -137,7 +137,9 @@ async function appendSyntheticFill({ db, position, ownerId, shares, ibkrMarketPr
   const projectedRemaining = projectedFilled - projectedExited;
 
   try {
-    const writeRes = await db.collection('pnthr_portfolio').updateOne(
+    // Primary lookup by stable string id; fall back to ticker+ownerId+status
+    // when position.id is missing/stale (old import-position records).
+    let writeRes = await db.collection('pnthr_portfolio').updateOne(
       { id: position.id, ownerId },
       { $set: {
           [`fills.${targetSlot}`]: newFill,
@@ -147,9 +149,31 @@ async function appendSyntheticFill({ db, position, ownerId, shares, ibkrMarketPr
         },
       }
     );
-    log.push({ kind: 'SYNTHETIC_FILL', positionId: position.id, ticker: position.ticker, slot: targetSlot, shares, price: fillPrice, ok: writeRes.matchedCount > 0 });
-    return writeRes.matchedCount > 0;
+    if (writeRes.matchedCount === 0) {
+      // id-based lookup missed — position was likely created without a string id
+      // field or the id field is stale. Fall back to ticker + ownerId + active status.
+      writeRes = await db.collection('pnthr_portfolio').updateOne(
+        { ticker: position.ticker, ownerId, status: { $in: ['ACTIVE', 'PARTIAL'] } },
+        { $set: {
+            [`fills.${targetSlot}`]: newFill,
+            totalFilledShares: projectedFilled,
+            remainingShares:   projectedRemaining,
+            updatedAt:         new Date(),
+          },
+        }
+      );
+      if (writeRes.matchedCount > 0) {
+        console.log(`[positionReconciler] SYNTHETIC_FILL fallback-ticker-match ${position.ticker} slot=${targetSlot} shares=${shares} price=${fillPrice}`);
+      }
+    }
+    const ok = writeRes.matchedCount > 0;
+    if (!ok) {
+      console.warn(`[positionReconciler] SYNTHETIC_FILL WRITE_MISSED ${position.ticker} id=${position.id} ownerId=${ownerId} slot=${targetSlot} — document not found by id or ticker`);
+    }
+    log.push({ kind: 'SYNTHETIC_FILL', positionId: position.id, ticker: position.ticker, slot: targetSlot, shares, price: fillPrice, ok });
+    return ok;
   } catch (e) {
+    console.error(`[positionReconciler] SYNTHETIC_FILL ERROR ${position.ticker}:`, e.message);
     log.push({ kind: 'SYNTHETIC_FILL', positionId: position.id, ticker: position.ticker, slot: targetSlot, shares, price: fillPrice, ok: false, error: e.message });
     return false;
   }
@@ -188,6 +212,7 @@ export async function runPositionReconciler({ db, dryRun = false } = {}) {
     const syncedAt = snap?.syncedAt ? new Date(snap.syncedAt) : null;
     const ageMs  = syncedAt ? (Date.now() - syncedAt.getTime()) : Infinity;
     if (ageMs > SYNC_STALENESS_MS) {
+      console.warn(`[positionReconciler] SKIP ${ticker} BRIDGE_SYNC_STALE ageMs=${ageMs}`);
       skips.push({ ticker, reason: 'BRIDGE_SYNC_STALE', ageMs });
       continue;
     }
@@ -207,6 +232,10 @@ export async function runPositionReconciler({ db, dryRun = false } = {}) {
       aligned.push({ ticker, pnthrNet, ibkrShares });
       continue;
     }
+
+    // Log every drift so Render logs capture it for debugging even if we later skip.
+    console.log(`[positionReconciler] DRIFT ${ticker} pnthrNet=${pnthrNet} ibkr=${ibkrShares} drift=${drift} posId=${p.id || 'MISSING'} fills=${JSON.stringify(Object.keys(p.fills || {}))}`);
+
 
     const isLong = (p.direction || 'LONG').toUpperCase() !== 'SHORT';
 
@@ -262,6 +291,7 @@ export async function runPositionReconciler({ db, dryRun = false } = {}) {
       const want          = Math.abs(drift);
       const execsExplain  = unprocPreview.length > 0 && matchPreview >= want && matchPreview <= want + 1;
       if (!execsExplain) {
+        console.warn(`[positionReconciler] SKIP ${ticker} DRIFT_EXCEEDS_50PCT_MANUAL_REVIEW pnthrNet=${pnthrNet} ibkr=${ibkrShares} drift=${drift} unprocessedExecs=${unprocPreview.length}`);
         skips.push({ ticker, reason: 'DRIFT_EXCEEDS_50PCT_MANUAL_REVIEW', pnthrNet, ibkrShares, drift, unprocessedExecs: unprocPreview.length });
         continue;
       }
@@ -322,6 +352,7 @@ export async function runPositionReconciler({ db, dryRun = false } = {}) {
     } else {
       // CASE B — PNTHR has fewer than IBKR; an add slipped through.
       const want         = -drift;
+      console.log(`[positionReconciler] CASE_B ${ticker} want=${want} sh pnthrNet=${pnthrNet} ibkr=${ibkrShares} dryRun=${dryRun}`);
       const expectedSide = isLong ? 'BOT' : 'SLD';
       const unprocessed  = await findUnprocessedExecs(db, p.ownerId, ticker, expectedSide, snap.latestExecutions);
       const matchedShares = unprocessed.reduce((s, e) => s + (+e.shares || 0), 0);

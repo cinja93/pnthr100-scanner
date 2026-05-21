@@ -611,8 +611,10 @@ export default function AiOrdersPage() {
             const bullSignals = reentrySignals
               .filter(s => s.sectorRegime !== 'bear')
               .sort((a, b) => (b.sectorFiveDay ?? -999) - (a.sectorFiveDay ?? -999));
-            const bearFiltered = reentrySignals.filter(s => s.sectorRegime === 'bear');
-            return bullSignals.length > 0 && (
+            const bearFiltered = reentrySignals
+              .filter(s => s.sectorRegime === 'bear')
+              .sort((a, b) => (b.sectorFiveDay ?? -999) - (a.sectorFiveDay ?? -999));
+            return bullSignals.length > 0 && (<>
             <div style={{
               border: '2px solid #7c3aed', borderRadius: 8, overflow: 'hidden',
               margin: '24px 0 0',
@@ -637,11 +639,6 @@ export default function AiOrdersPage() {
                   borderRadius: 3, fontSize: 11, fontWeight: 700,
                 }}>{bullSignals.length}</span>
               </div>
-              {bearFiltered.length > 0 && (
-                <div style={{ padding: '4px 14px', background: 'rgba(220,38,38,0.08)', fontSize: 11, color: '#888' }}>
-                  {bearFiltered.length} excluded (bearish sector): {bearFiltered.map(s => s.ticker).join(', ')}
-                </div>
-              )}
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
                   <thead>
@@ -687,6 +684,77 @@ export default function AiOrdersPage() {
                 </table>
               </div>
             </div>
+
+            {/* Sector GATED — stocks filtered out by bear sector gate */}
+            {bearFiltered.length > 0 && (
+            <div style={{
+              border: '2px solid #ca8a04', borderRadius: 8, overflow: 'hidden',
+              margin: '16px 0 0', opacity: 0.85,
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 14px', background: 'rgba(202,138,4,0.10)',
+                borderBottom: '1px solid rgba(202,138,4,0.3)',
+                flexWrap: 'wrap',
+              }}>
+                <span style={{ color: '#ca8a04', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>Sector GATED</span>
+                <span style={{ color: '#555', fontSize: 14 }}>—</span>
+                <span style={{ color: '#ca8a04', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>PNTHR MCE</span>
+                <span style={{ color: '#ca8a04', fontSize: 12 }}>
+                  Bearish sector — excluded from auto-execution · monitoring only
+                </span>
+                <span style={{
+                  marginLeft: 'auto', padding: '2px 8px', background: '#ca8a04', color: '#000',
+                  borderRadius: 3, fontSize: 11, fontWeight: 700,
+                }}>{bearFiltered.length}</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(202,138,4,0.06)', borderBottom: '1px solid rgba(202,138,4,0.15)' }}>
+                      <th style={{ padding: '6px 10px', textAlign: 'left', color: '#ca8a04', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>Sector 💪</th>
+                      {['Ticker','L1 Trigger','Weekly Stop'].map(h => (
+                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#ca8a04', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                      <th style={{ padding: '6px 10px', textAlign: 'left', color: '#ca8a04', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>
+                        RPS <span title="RPS = Risk Per Share." style={{ cursor: 'help', fontWeight: 400 }}>&#9432;</span>
+                      </th>
+                      {['L1 Sh','L1 Entry $','Weekly BL Date'].map(h => (
+                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#ca8a04', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bearFiltered.map(s => {
+                      const fiveDay = s.sectorFiveDay != null ? (s.sectorFiveDay * 100) : null;
+                      const fiveDayStr = fiveDay != null ? `${fiveDay >= 0 ? '+' : ''}${fiveDay.toFixed(2)}%` : '';
+                      const sectorLabel = s.sectorName
+                        ? `${s.sectorName.replace(/^AI /, '')}`
+                        : '—';
+                      return (
+                      <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(202,138,4,0.08)', cursor: 'pointer' }}
+                        onClick={() => { setChartTickers(bearFiltered.map(r => r.ticker)); setChartIndex(bearFiltered.findIndex(r => r.ticker === s.ticker)); }}>
+                        <td style={{ padding: '6px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>
+                          <span style={{ color: '#dc2626', fontWeight: 700, fontSize: 10, marginRight: 4 }}>BEAR</span>
+                          <span style={{ color: fiveDay >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{fiveDayStr}</span>
+                          <span style={{ color: '#777', marginLeft: 4 }}>{sectorLabel}</span>
+                        </td>
+                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#fde68a' }}>{s.ticker}</td>
+                        <td style={{ padding: '6px 10px', color: '#16a34a', fontWeight: 700 }}>${s.entryTrigger}</td>
+                        <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>
+                        <td style={{ padding: '6px 10px', color: '#fbbf24' }}>${s.rps}</td>
+                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[0]}</td>
+                        <td style={{ padding: '6px 10px', color: '#aaa' }}>${(s.lotShares?.[0] * s.entryTrigger).toFixed(0)}</td>
+                        <td style={{ padding: '6px 10px', color: '#64748b', fontSize: 11 }}>{s.signalDate}</td>
+                      </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            )}
+            </>
             );
           })()}
 

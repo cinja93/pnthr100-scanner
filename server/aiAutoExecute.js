@@ -29,6 +29,8 @@ import {
 } from './lotMath.js';
 import { computeWilderATR, blInitStop, ssInitStop } from './signalDetection.js';
 import { refreshOrderGrades } from './aiOrdersPipeline.js';
+import { getLatestAiSectorRanks } from './aiSectorRotationService.js';
+import { SECTORS as AI_UNIVERSE_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 
 const COLL_PORTFOLIO = 'pnthr_portfolio';
 const COLL_AI_ORDERS = 'pnthr_ai_orders';
@@ -626,6 +628,40 @@ export async function executeMceEntries(opts = {}) {
     return { skipped: 'NO_MCE_SIGNALS', executed: [], outbox: [] };
   }
 
+  // ── Sector 5D priority sort ───────────────────────────────────────────────
+  // Build ticker → sectorId from the AI universe holdings list.
+  const tickerToSectorId = {};
+  for (const sec of AI_UNIVERSE_SECTORS) {
+    for (const h of (sec.holdings || [])) {
+      if (h.ticker) tickerToSectorId[h.ticker.toUpperCase()] = sec.id;
+    }
+  }
+
+  // Load latest sector ranks (fiveDayReturn per sectorId from pnthr_ai_sector_rank_daily).
+  // Falls back gracefully — if unavailable, all returns default to 0 and order is unchanged.
+  const sectorIdTo5d = {};
+  try {
+    const ranksDoc = await getLatestAiSectorRanks();
+    for (const row of (ranksDoc?.ranks || [])) {
+      sectorIdTo5d[row.sectorId] = row.fiveDayReturn ?? 0;
+    }
+  } catch (e) {
+    console.warn('[MCE AutoExec] Could not load sector ranks for priority sort:', e.message);
+  }
+
+  // Sort strongest sector first. Tickers not in the AI universe map default to 0.
+  const sortedSignals = [...mceSignals].sort((a, b) => {
+    const aRet = sectorIdTo5d[tickerToSectorId[a.ticker?.toUpperCase()]] ?? 0;
+    const bRet = sectorIdTo5d[tickerToSectorId[b.ticker?.toUpperCase()]] ?? 0;
+    return bRet - aRet;
+  });
+
+  console.log(`[MCE AutoExec] Sector-sorted order: ${sortedSignals.map(s => {
+    const sid = tickerToSectorId[s.ticker?.toUpperCase()];
+    const ret = sectorIdTo5d[sid] != null ? (sectorIdTo5d[sid] * 100).toFixed(2) + '%' : 'n/a';
+    return `${s.ticker}(${ret})`;
+  }).join(', ')}`);
+
   const existingPositions = await db.collection(COLL_PORTFOLIO)
     .find({ ownerId, status: { $in: ['ACTIVE', 'PARTIAL', 'STAGED'] } }).toArray();
   const activeTickers = new Set(existingPositions.map(p => p.ticker));
@@ -635,11 +671,11 @@ export async function executeMceEntries(opts = {}) {
   const deployedCapital = computeDeployedCapital(existingPositions);
   let availableBP = computeAvailableBuyingPower(nav, deployedCapital);
 
-  console.log(`[MCE AutoExec] ${mceSignals.length} MCE signals, heat=${currentHeat.totalRiskPct}%, BP=$${availableBP.toLocaleString()}, dryRun=${dryRun}`);
+  console.log(`[MCE AutoExec] ${sortedSignals.length} MCE signals, heat=${currentHeat.totalRiskPct}%, BP=$${availableBP.toLocaleString()}, dryRun=${dryRun}`);
 
   const results = { executed: [], outbox: [], skippedOrders: [], dryRun };
 
-  for (const sig of mceSignals) {
+  for (const sig of sortedSignals) {
     const { ticker, entryTrigger: entryPrice, weeklyStop: stopPrice, lotShares: mceShares } = sig;
 
     if (activeTickers.has(ticker)) {
@@ -657,24 +693,36 @@ export async function executeMceEntries(opts = {}) {
       continue;
     }
 
-    const newEntryRisk = mceShares[0] * rps;
-    if ((runningRisk + newEntryRisk) / nav > HEAT_CAP_PCT) {
-      results.skippedOrders.push({ ticker, reason: `HEAT_CAP_${((runningRisk + newEntryRisk) / nav * 100).toFixed(1)}PCT` });
+    // Compute the maximum L1 shares allowed by heat budget and buying power.
+    // Instead of hard-skipping, reduce shares to fit — minimum 1 share.
+    // Strongest-sector stocks (sorted first) always get full allocation;
+    // reductions fall on weaker-sector stocks later in the list.
+    const maxSharesFromHeat = Math.floor((HEAT_CAP_PCT * nav - runningRisk) / rps);
+    const maxSharesFromBP   = Math.floor(availableBP / entryPrice);
+    const l1Shares = Math.min(mceShares[0], maxSharesFromHeat, maxSharesFromBP);
+
+    if (l1Shares < 1) {
+      results.skippedOrders.push({ ticker, reason: `NO_ROOM_heat=${((runningRisk / nav) * 100).toFixed(1)}%_BP=$${availableBP.toFixed(0)}` });
       continue;
     }
 
-    const l1Cost = mceShares[0] * entryPrice;
-    if (l1Cost > availableBP) {
-      results.skippedOrders.push({ ticker, reason: `BUYING_POWER_$${availableBP.toFixed(0)}_NEED_$${l1Cost.toFixed(0)}` });
-      continue;
+    // If L1 was reduced, scale the full lot plan proportionally from the new total.
+    let actualShares = mceShares;
+    if (l1Shares < mceShares[0]) {
+      const scaledTotal = Math.round(l1Shares / STRIKE_PCT[0]);
+      actualShares = STRIKE_PCT.map(pct => Math.max(1, Math.round(scaledTotal * pct)));
+      actualShares[0] = l1Shares;
+      console.log(`[MCE AutoExec] ${ticker} shares reduced ${mceShares[0]}→${l1Shares} (sector 5D rank constraint)`);
     }
 
     const posId = makePosId();
     const now = new Date();
     const fills = buildFillsSkeleton();
-    for (let i = 0; i < 5; i++) fills[i + 1].shares = mceShares[i];
+    for (let i = 0; i < 5; i++) fills[i + 1].shares = actualShares[i];
 
-    const totalShares = mceShares.reduce((s, v) => s + v, 0);
+    const totalShares = actualShares.reduce((s, v) => s + v, 0);
+    const sectorId    = tickerToSectorId[ticker?.toUpperCase()] ?? null;
+    const sector5dRet = sectorId != null ? (sectorIdTo5d[sectorId] ?? null) : null;
 
     const position = {
       id: posId,
@@ -686,7 +734,7 @@ export async function executeMceEntries(opts = {}) {
       stopPrice,
       originalStop: stopPrice,
       sector: null,
-      sectorId: null,
+      sectorId,
       sectorMult: 1.0,
       isETF: false,
       fills,
@@ -700,19 +748,21 @@ export async function executeMceEntries(opts = {}) {
       autoExecuteSource: 'MCE_DAILY',
       autoExecuteMode: 'MCE',
       entryContext: 'MCE_SIGNAL',
+      mceL1Reduced: l1Shares < mceShares[0],
+      mceSector5dReturn: sector5dRet,
       createdAt: now,
       updatedAt: now,
       outcome: { exitPrice: null, profitPct: null, profitDollar: null, holdingDays: null, exitReason: null },
     };
 
-    console.log(`[MCE AutoExec] ${dryRun ? 'DRY-RUN' : 'LIVE'} ${ticker} LONG — L1=${mceShares[0]}sh @MKT, stop=${stopPrice}`);
+    console.log(`[MCE AutoExec] ${dryRun ? 'DRY-RUN' : 'LIVE'} ${ticker} LONG — L1=${actualShares[0]}sh @MKT, stop=${stopPrice}${l1Shares < mceShares[0] ? ` [REDUCED from ${mceShares[0]}]` : ''}`);
 
     if (!dryRun) {
       await db.collection(COLL_PORTFOLIO).insertOne(position);
       activeTickers.add(ticker);
 
       const entryCmd = {
-        ticker, direction: 'LONG', shares: mceShares[0],
+        ticker, direction: 'LONG', shares: actualShares[0],
         positionId: posId, lot: 1, source: 'MCE_DAILY', tif: 'DAY', rth: true,
       };
       const r1 = await enqueueOutbox(db, ownerId, 'BUY_MARKET_TO_CATCH_UP', entryCmd);
@@ -720,7 +770,7 @@ export async function executeMceEntries(opts = {}) {
 
       const stopShape = buildStopOrderShape({ stopPrice, direction: 'LONG', stopExtendedHours: false });
       const stopCmd = {
-        ticker, direction: 'LONG', shares: mceShares[0], stopPrice,
+        ticker, direction: 'LONG', shares: actualShares[0], stopPrice,
         positionId: posId, ...stopShape,
       };
       const r2 = await enqueueOutbox(db, ownerId, 'PLACE_STOP', stopCmd);
@@ -740,9 +790,9 @@ export async function executeMceEntries(opts = {}) {
       }
     }
 
-    runningRisk += newEntryRisk;
-    availableBP -= l1Cost;
-    results.executed.push({ ticker, direction: 'LONG', lot1Shares: mceShares[0], entryPrice, stopPrice });
+    runningRisk += l1Shares * rps;
+    availableBP -= l1Shares * entryPrice;
+    results.executed.push({ ticker, direction: 'LONG', lot1Shares: actualShares[0], lot1Requested: mceShares[0], entryPrice, stopPrice, sector5dReturn: sector5dRet });
   }
 
   console.log(`[MCE AutoExec] Complete: ${results.executed.length} executed, ${results.skippedOrders.length} skipped`);

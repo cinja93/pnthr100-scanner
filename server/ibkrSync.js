@@ -488,6 +488,36 @@ async function processExecutions(db, userId, executions, pnthrPositions, syncedA
       { $set: { autoClosedByIBKR: true, ibkrExecId: exec.execId } }
     );
 
+    // Heat re-entry: if this position was recycled (stop moved to breakeven
+    // to free heat) and then got stopped out, queue it for MCE re-entry the
+    // next trading day so the thesis isn't lost.
+    if (pnthr.recycledForHeat) {
+      const tomorrow = new Date(syncedAt);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const eligibleDate = tomorrow.toISOString().slice(0, 10);
+      await db.collection('pnthr_mce_heat_reentries').updateOne(
+        { ownerId: userId, ticker: symbol },
+        { $set: {
+            ownerId: userId,
+            ticker: symbol,
+            direction: pnthr.direction || 'LONG',
+            originalEntryPrice: pnthr.entryPrice,
+            originalStop: pnthr.originalStop,
+            exitPrice,
+            exitReason,
+            eligibleDate,
+            closedPositionId: pnthr.id,
+            sector: pnthr.sector || null,
+            sectorId: pnthr.sectorId || null,
+            strategyMode: pnthr.strategyMode || null,
+            status: 'PENDING',
+            createdAt: syncedAt,
+          } },
+        { upsert: true },
+      );
+      console.log(`[Heat Re-entry] ${symbol} recycled position stopped out — queued for MCE re-entry on ${eligibleDate}`);
+    }
+
     // Record this execId so it is never processed again
     await db.collection('pnthr_ibkr_executions').insertOne({
       ownerId:    userId,

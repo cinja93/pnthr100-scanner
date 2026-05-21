@@ -36,7 +36,10 @@ function TickerBadge({ s, onTickerClick, scheme }) {
         whiteSpace: 'nowrap',
       }}
     >
-      <span style={{ fontSize: 12 }}>{s.ticker}</span>
+      <span style={{ fontSize: 12 }}>
+        {s.ticker}
+        {s.heatReentry && <span style={{ marginLeft: 4, padding: '0 4px', background: '#f97316', color: '#000', borderRadius: 2, fontSize: 8, fontWeight: 900, verticalAlign: 'middle' }}>Heat</span>}
+      </span>
       <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.9 }}>
         ${s.entryTrigger} | Stop ${s.weeklyStop}
       </span>

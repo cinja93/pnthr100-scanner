@@ -184,6 +184,46 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
       for (const r of resolved) if (r) results.push(r);
     }
 
+    // ── Heat re-entries: recycled positions that got stopped out ──────────
+    // These are manual-only (not auto-executed). They show in the MCE table
+    // with a "Heat" badge so the user can decide to re-enter.
+    if (db && ownerId) {
+      const today = new Date().toISOString().slice(0, 10);
+      const heatReentries = await db.collection('pnthr_mce_heat_reentries')
+        .find({ ownerId, status: 'PENDING', eligibleDate: { $lte: today } })
+        .toArray();
+      for (const hr of heatReentries) {
+        if (held.has(hr.ticker)) continue;
+        const sig = allSignals[hr.ticker];
+        if (!sig || sig.signal !== 'BL') continue;
+        const weeklyStop = sig.pnthrStop ?? sig.stopPrice;
+        if (!weeklyStop) continue;
+        const bars = await fetchLast5Daily(hr.ticker);
+        if (!bars || bars.length === 0) continue;
+        const currentPrice = bars[bars.length - 1]?.close || hr.originalEntryPrice;
+        if (currentPrice <= weeklyStop) continue;
+        const lotShares = computeLotSizes(currentPrice, weeklyStop, nav);
+        if (!lotShares) continue;
+        results.push({
+          ticker:       hr.ticker,
+          fund:         'AI 300',
+          entryTrigger: currentPrice,
+          weeklyStop,
+          rps:          parseFloat((currentPrice - weeklyStop).toFixed(2)),
+          lotShares,
+          l1Price:      currentPrice,
+          l2Price:      parseFloat((currentPrice * (1 + LOT_OFFSETS[1])).toFixed(2)),
+          l3Price:      parseFloat((currentPrice * (1 + LOT_OFFSETS[2])).toFixed(2)),
+          l4Price:      parseFloat((currentPrice * (1 + LOT_OFFSETS[3])).toFixed(2)),
+          l5Price:      parseFloat((currentPrice * (1 + LOT_OFFSETS[4])).toFixed(2)),
+          signalDate:   sig.signalDate,
+          topN:         TOP_N,
+          heatReentry:  true,
+          heatReentryId: hr._id,
+        });
+      }
+    }
+
     // Highest RPS first (most room between entry and stop = more shares = bigger trade)
     results.sort((a, b) => b.rps - a.rps);
 

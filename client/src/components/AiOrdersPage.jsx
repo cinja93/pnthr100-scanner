@@ -627,7 +627,7 @@ export default function AiOrdersPage() {
                   const res = await fetch(`${API_BASE}/api/positions/${recycleCandidate.positionId}/stop-price`, {
                     method: 'PATCH',
                     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ stopPrice: recycleCandidate.avgCost }),
+                    body: JSON.stringify({ stopPrice: recycleCandidate.avgCost, recycleForHeat: true }),
                   });
                   if (!res.ok) throw new Error(`HTTP ${res.status}`);
                   setRecycleDismissed(recycleCandidate.ticker);
@@ -727,7 +727,10 @@ export default function AiOrdersPage() {
                       return (
                       <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(124,58,237,0.1)', cursor: 'pointer' }}
                         onClick={() => { setChartTickers(bullSignals.map(r => r.ticker)); setChartIndex(bullSignals.findIndex(r => r.ticker === s.ticker)); }}>
-                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#e9d5ff' }}>{s.ticker}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#e9d5ff' }}>
+                          {s.ticker}
+                          {s.heatReentry && <span style={{ marginLeft: 5, padding: '1px 5px', background: '#f97316', color: '#000', borderRadius: 3, fontSize: 9, fontWeight: 800, letterSpacing: '0.05em' }}>Heat</span>}
+                        </td>
                         <td style={{ padding: '6px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>
                           <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 10, marginRight: 4 }}>BULL</span>
                           <span style={{ color: fiveDay >= 0 ? '#16a34a' : '#f59e0b', fontWeight: 600 }}>{fiveDayStr}</span>
@@ -799,7 +802,10 @@ export default function AiOrdersPage() {
                       return (
                       <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(202,138,4,0.08)', cursor: 'pointer' }}
                         onClick={() => { setChartTickers(bearFiltered.map(r => r.ticker)); setChartIndex(bearFiltered.findIndex(r => r.ticker === s.ticker)); }}>
-                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#fde68a' }}>{s.ticker}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#fde68a' }}>
+                          {s.ticker}
+                          {s.heatReentry && <span style={{ marginLeft: 5, padding: '1px 5px', background: '#f97316', color: '#000', borderRadius: 3, fontSize: 9, fontWeight: 800, letterSpacing: '0.05em' }}>Heat</span>}
+                        </td>
                         <td style={{ padding: '6px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>
                           <span style={{ color: '#dc2626', fontWeight: 700, fontSize: 10, marginRight: 4 }}>BEAR</span>
                           <span style={{ color: fiveDay >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{fiveDayStr}</span>

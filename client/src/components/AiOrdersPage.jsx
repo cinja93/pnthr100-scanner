@@ -643,8 +643,11 @@ export default function AiOrdersPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
                   <thead>
                     <tr style={{ background: 'rgba(124,58,237,0.08)', borderBottom: '1px solid rgba(124,58,237,0.2)' }}>
+                      {['Ticker'].map(h => (
+                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
                       <th style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>Sector 💪</th>
-                      {['Ticker','L1 Trigger','Weekly Stop'].map(h => (
+                      {['L1 Trigger','Weekly Stop'].map(h => (
                         <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                       <th style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>
@@ -665,12 +668,12 @@ export default function AiOrdersPage() {
                       return (
                       <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(124,58,237,0.1)', cursor: 'pointer' }}
                         onClick={() => { setChartTickers(bullSignals.map(r => r.ticker)); setChartIndex(bullSignals.findIndex(r => r.ticker === s.ticker)); }}>
+                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#e9d5ff' }}>{s.ticker}</td>
                         <td style={{ padding: '6px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>
                           <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 10, marginRight: 4 }}>BULL</span>
                           <span style={{ color: fiveDay >= 0 ? '#16a34a' : '#f59e0b', fontWeight: 600 }}>{fiveDayStr}</span>
                           <span style={{ color: '#777', marginLeft: 4 }}>{sectorLabel}</span>
                         </td>
-                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#e9d5ff' }}>{s.ticker}</td>
                         <td style={{ padding: '6px 10px', color: '#16a34a', fontWeight: 700 }}>${s.entryTrigger}</td>
                         <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>
                         <td style={{ padding: '6px 10px', color: '#fbbf24' }}>${s.rps}</td>
@@ -712,8 +715,11 @@ export default function AiOrdersPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
                   <thead>
                     <tr style={{ background: 'rgba(202,138,4,0.06)', borderBottom: '1px solid rgba(202,138,4,0.15)' }}>
+                      {['Ticker'].map(h => (
+                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#ca8a04', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
                       <th style={{ padding: '6px 10px', textAlign: 'left', color: '#ca8a04', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>Sector 💪</th>
-                      {['Ticker','L1 Trigger','Weekly Stop'].map(h => (
+                      {['L1 Trigger','Weekly Stop'].map(h => (
                         <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#ca8a04', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                       <th style={{ padding: '6px 10px', textAlign: 'left', color: '#ca8a04', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>
@@ -734,12 +740,12 @@ export default function AiOrdersPage() {
                       return (
                       <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(202,138,4,0.08)', cursor: 'pointer' }}
                         onClick={() => { setChartTickers(bearFiltered.map(r => r.ticker)); setChartIndex(bearFiltered.findIndex(r => r.ticker === s.ticker)); }}>
+                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#fde68a' }}>{s.ticker}</td>
                         <td style={{ padding: '6px 10px', fontSize: 11, whiteSpace: 'nowrap' }}>
                           <span style={{ color: '#dc2626', fontWeight: 700, fontSize: 10, marginRight: 4 }}>BEAR</span>
                           <span style={{ color: fiveDay >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{fiveDayStr}</span>
                           <span style={{ color: '#777', marginLeft: 4 }}>{sectorLabel}</span>
                         </td>
-                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#fde68a' }}>{s.ticker}</td>
                         <td style={{ padding: '6px 10px', color: '#16a34a', fontWeight: 700 }}>${s.entryTrigger}</td>
                         <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>
                         <td style={{ padding: '6px 10px', color: '#fbbf24' }}>${s.rps}</td>

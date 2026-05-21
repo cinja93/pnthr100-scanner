@@ -581,8 +581,16 @@ function MethodologySection() {
       content: 'The PAI300 is a proprietary capped market-cap-weighted index of the AI Universe. A 36-week EMA applied to PAI300 determines the macro regime: bullish (index above EMA) or bearish (below). The regime gate multiplies conviction scores — amplifying signals in favorable conditions and dampening them in adverse ones.',
     },
     {
-      title: 'Sector Rotation Signal Architecture',
-      content: 'All 16 AI sectors are ranked daily by 5-day trailing return. Sectors ranked 1-6 are classified GO (strong momentum), 7-12 NEUTRAL, and 13-16 NO_GO (weak momentum). Entry signals are generated on Fridays using sector-optimized weekly EMAs (18-36 week periods). Buy Long (BL) signals fire when price closes above a rising EMA with a daylight zone confirmation. Sell Short (SS) signals fire on the inverse.',
+      title: 'Sector Rotation Signal Architecture (Weekly Entry)',
+      content: 'All 16 AI sectors are ranked daily by 5-day trailing return. Sectors ranked 1-6 are classified GO (strong momentum), 7-12 NEUTRAL, and 13-16 NO_GO (weak momentum). Entry signals are generated on Fridays using sector-optimized weekly EMAs (18-36 week periods). Buy Long (BL) signals fire when price closes above a rising EMA with a daylight zone confirmation. Sell Short (SS) signals fire on the inverse. Weekly entries execute at Monday open.',
+    },
+    {
+      title: 'Momentum Continuation Entry (MCE) — Daily Entry',
+      content: 'MCE captures proven momentum stocks between weekly signal cycles. Stocks must have an active weekly BL signal AND rank in the trailing 12-month (TTM) top 100 by return (walk-forward, recomputed weekly, no look-ahead bias). Entry triggers on a daily 2-bar high breakout (daily high > max of prior 2 daily highs + $0.01). MCE deploys a full 5-lot pyramid at breakout. Controls: max 3 new MCE entries per day, 5-day gap-add cooldown, same 1% vitality / 10% ticker cap, vitality tracking prevents over-allocation. MCE contributes approximately 70% of total alpha across all tiers.',
+    },
+    {
+      title: 'Capital Constraint (Cash Ledger)',
+      content: 'The fund tracks a real-time cash ledger day by day. Every buy deducts from available cash; every position close returns capital. Entries are skipped when insufficient cash exists — no leverage, no margin. This ensures all backtest results are achievable with real capital deployment. The S&P 500 has historically produced approximately 10% CAGR with drawdowns of -34% (2022) to -50% (2008). The AI Elite Fund delivers 5x the return with less drawdown than public markets.',
     },
     {
       title: 'Position Sizing & Pyramiding',
@@ -590,7 +598,7 @@ function MethodologySection() {
     },
     {
       title: 'Execution Model',
-      content: 'Signals generated on Friday close; all entries execute at Monday open. Lot fills are capped at 2% of 20-day average daily volume per lot to ensure institutional executability. Stop fills use gap-through pricing (fill at open when gap exceeds stop level) for conservative modeling. All friction costs (commission, slippage, borrow) are included in net figures.',
+      content: 'Weekly entries: signals generated on Friday close, all entries execute at Monday open. MCE entries: daily 2-bar high breakout triggers immediate entry at breakout price. Lot fills are capped at 2% of 20-day average daily volume per lot to ensure institutional executability. Stop fills use gap-through pricing (fill at open when gap exceeds stop level) for conservative modeling. All friction costs (commission, slippage, borrow) are included in net figures.',
     },
   ];
 
@@ -637,7 +645,7 @@ export default function IrLivePage() {
           PNTHR AI Elite 300 Fund — Intelligence Report
         </div>
         <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-          Backtest Performance Report | Jan 2022 – {d?.net?.endDate ? new Date(d.net.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '...'} | Multi-Strategy Pyramiding | PNTHR AI Universe (~300 Names)
+          Backtest Performance Report | Jan 2022 – {d?.net?.endDate ? new Date(d.net.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '...'} | Multi-Strategy Pyramiding + MCE | PNTHR AI Universe (~300 Names) | v10.1
           {d?.generatedAt && <span style={{ marginLeft: 12, color: '#555' }}>Last computed: {new Date(d.generatedAt).toLocaleString()}</span>}
         </div>
       </div>

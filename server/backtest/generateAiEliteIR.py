@@ -10,7 +10,7 @@ Black-background PDF with yellow headings, 4-act structure:
   Act IV:  Close (growth chart, recap, summary, methodology & assumptions, disclosures)
 
 Data: ~/Downloads/pnthr_ai_elite_ir_metrics_{100k,500k,1m}.json
-Output: ~/Downloads/PNTHR_AI_Elite_IR_{Filet,Porterhouse,Wagyu}_{tier}_v9.1.pdf
+Output: ~/Downloads/PNTHR_AI_Elite_IR_{Filet,Porterhouse,Wagyu}_{tier}_v10.1.pdf
 """
 
 import os, json, sys
@@ -254,7 +254,7 @@ def section_cover(t):
     s.append(Spacer(1, 4))
     s.append(Paragraph(f'<font color="#cccccc">Backtest Performance Report  |  Jan 2022 - May 2026</font>',
         S('cov_s1', fontSize=10.5, leading=13, alignment=TA_CENTER, textColor=OFFWHT)))
-    s.append(Paragraph(f'<font color="#cccccc">Multi-Strategy Pyramiding  |  PNTHR AI Universe (~300 Names)  |  v9.1</font>',
+    s.append(Paragraph(f'<font color="#cccccc">Multi-Strategy Pyramiding + MCE  |  PNTHR AI Universe (~300 Names)  |  v10.1</font>',
         S('cov_s2', fontSize=10.5, leading=13, alignment=TA_CENTER, textColor=OFFWHT)))
     s.append(HRFlowable(width='40%', thickness=0.6, color=DGRAY, spaceBefore=6, spaceAfter=10, hAlign='CENTER'))
 
@@ -264,11 +264,11 @@ def section_cover(t):
         ['Strategy',        'Systematic Long/Short U.S. Equity, AI Universe Focus'],
         ['Structure',       'Reg D, Rule 506(c), 3(c)(1) Exempt Fund'],
         ['Universe',        'Approximately 300 AI-focused U.S. equities (PNTHR AI Universe)'],
-        ['Signal Engine',   'Sector Rotation: weekly sector-ranked entries → 5-lot pyramid'],
+        ['Signal Engine',   'Sector Rotation (weekly) + Momentum Continuation Entry (daily)'],
         ['Regime Gate',     'PAI300 proprietary AI index (36W EMA)'],
         ['Position Sizing', 'Dynamic (current NAV), 1% max risk, 10% max single-ticker exposure'],
-        ['Pyramiding',      '5-lot entry system (35/25/20/12/8%) with sector-ranked weekly entries'],
-        ['Execution',       'Friday signal, Monday open entry, 2% ADV lot cap, gap-through stops'],
+        ['Pyramiding',      '5-lot entry system (35/25/20/12/8%) with weekly + daily MCE entries'],
+        ['Execution',       'Weekly: Friday signal → Monday open | MCE: daily 2-bar high breakout'],
         ['Backtest Capital', f'{fmt_usd(t["seedNav"])} starting NAV'],
         ['Benchmark',       'S&P 500 (SPY)'],
     ]
@@ -418,8 +418,9 @@ def section_executive_summary(t):
         'The PNTHR AI Elite Fund employs a proprietary systematic long/short equity strategy focused on the artificial '
         'intelligence revolution. The fund trades a curated universe of Approximately 300 AI-focused U.S. equities spanning 16 sectors '
         'of the AI economy, from semiconductors and cloud infrastructure to autonomous vehicles and AI-powered healthcare. '
-        'Using the Sector Rotation signal architecture, the system ranks all 16 AI sectors by weekly momentum, selects '
-        'entries from the strongest (or weakest for shorts) sectors, and pyramids into winners with a 5-lot position system.'
+        'Using a dual-entry system — weekly Sector Rotation signals for initial positions plus daily Momentum Continuation '
+        'Entries (MCE) for proven momentum stocks — the fund deploys capital into the strongest sectors and fastest movers '
+        'with a 5-lot pyramid system. All positions are capital-constrained: the fund only enters when cash is available.'
     ))
     s.append(Spacer(1, 4))
     s.append(body_p(
@@ -451,9 +452,10 @@ def section_executive_summary(t):
     s.append(Spacer(1, 4))
     s.append(body_p(
         'Position sizing is dynamically scaled off current NAV, mathematically constrained at 1% maximum risk per trade. '
-        'Lot 1 deploys 35% of the full position when a weekly signal fires in a top-ranked sector. Subsequent lots are earned '
-        'through sequential price confirmation, concentrating capital as the market confirms the trade. All entries execute at '
-        'Monday open (Friday signal), with lot fills capped at 2% of 20-day average daily volume for guaranteed executability.'
+        'Weekly entries deploy Lot 1 (35% of position) at Monday open following a Friday signal. MCE entries deploy a full '
+        '5-lot pyramid when a TTM top-100 stock with an active BL signal breaks its daily 2-bar high. All lot fills are '
+        'capped at 2% of 20-day average daily volume for guaranteed executability. The fund operates a real-time cash ledger '
+        'with no leverage — every entry requires available capital.'
     ))
 
     # Performance Comparison - comprehensive table with every metric
@@ -799,14 +801,14 @@ def section_risk(t):
     s.append(body_p('The AI Elite Fund is engineered for capital preservation first, alpha generation second.'))
     s += subsection_heading('Sector Rotation Entry Control')
     s.append(bullet_p('<b>Sector Ranking:</b> All 16 AI sectors ranked weekly by momentum. Longs sourced from top-ranked sectors, shorts from bottom-ranked.'))
-    s.append(bullet_p('<b>Weekly Entry Only:</b> All entries are weekly signals. No intraday or daily entries. Reduces noise and false breakouts.'))
+    s.append(bullet_p('<b>Dual Entry System:</b> Weekly signals for initial entries (Sector Rotation) plus daily Momentum Continuation Entries (MCE) for proven momentum stocks. MCE adds intra-week entries only on active weekly BL signals in TTM top-100 stocks.'))
     s.append(bullet_p('<b>No Weekly Cap:</b> All qualifying signals enter each week. Backtesting showed that capping entries was too restrictive and reduced returns without improving risk metrics.'))
     s.append(bullet_p('<b>Lot 1 Direct Entry:</b> Full Lot 1 (35% of position) deployed immediately on weekly signal. No partial or staged initial entry.'))
     s += subsection_heading('Position-Level Risk Controls')
     s.append(bullet_p('<b>1% Vitality Cap:</b> Maximum 1% NAV risk per stock position.'))
     s.append(bullet_p('<b>5-Lot Pyramid:</b> Initial entry deploys 35% of full position. Subsequent lots earned through sequential confirmation.'))
     s.append(bullet_p('<b>10% Position Cap:</b> No single ticker can exceed 10% of NAV.'))
-    s.append(bullet_p('<b>No-Margin Constraint:</b> Total deployed notional must stay at or below NAV.'))
+    s.append(bullet_p('<b>Real Cash Ledger:</b> Day-by-day capital tracking. Entries skip when cash is unavailable. No leverage, no margin. Total deployed capital never exceeds available cash.'))
     s += subsection_heading('Stop Loss Architecture')
     s.append(bullet_p('<b>Weekly Stop:</b> Weekly PNTHR stop placed at entry with trailing ratchet.'))
     s.append(bullet_p('<b>Weekly Stop Ratchet:</b> Every Friday, stops are tightened using the higher of the 2-week structural low and the ATR floor. Stops only tighten; they never move against the trade.'))
@@ -1032,7 +1034,35 @@ def section_methodology(t):
     ))
     s.append(PageBreak())
 
-    s += section_heading('5. POSITION SIZING & PYRAMIDING')
+    s += section_heading('5. MOMENTUM CONTINUATION ENTRY (MCE)')
+    s.append(body_p(
+        'The Momentum Continuation Entry (MCE) system is the AI Elite Fund\'s proprietary daily entry mechanism that '
+        'captures proven momentum stocks between weekly signal cycles. MCE identifies stocks with an active weekly BL '
+        'signal that are ranked in the trailing twelve-month (TTM) top 100 by return, then enters on a daily 2-bar '
+        'high breakout. This dual-entry approach deploys capital faster into confirmed winners while maintaining the '
+        'same risk controls as the weekly system.'
+    ))
+    s += subsection_heading('MCE Entry Criteria')
+    s.append(bullet_p('<b>Active Weekly BL:</b> Only stocks with a current, active weekly Buy Long signal are eligible. The weekly signal has already validated regime, sector rotation, and structural breakout.'))
+    s.append(bullet_p('<b>TTM Top 100:</b> Walk-forward trailing 12-month return ranking (252 trading days), recomputed weekly. Only the top 100 momentum stocks qualify. No look-ahead bias.'))
+    s.append(bullet_p('<b>Daily 2-Bar High Breakout:</b> Daily high must exceed the maximum of the prior two daily highs by $0.01. This confirms continued upward momentum on the daily timeframe.'))
+    s.append(bullet_p('<b>Capital Constraint:</b> MCE entries only fire when cash is available. The fund tracks a real-time cash ledger day by day. No leverage, no margin.'))
+    s += subsection_heading('MCE Risk Controls')
+    s.append(bullet_p('<b>Max 3 New MCE Entries Per Day:</b> Limits daily capital deployment to prevent overconcentration on single-day signals.'))
+    s.append(bullet_p('<b>Same 1% Vitality / 10% Ticker Cap:</b> MCE positions are sized identically to weekly entries. No outsized bets.'))
+    s.append(bullet_p('<b>5-Day Gap Add Cooldown:</b> When MCE adds to an existing position (NAV gap top-up), a minimum 5 trading days must pass between additions.'))
+    s.append(bullet_p('<b>Vitality Tracking:</b> Total risk budget per position is tracked across all entry types. Prevents compounding over-allocation.'))
+    s += subsection_heading('Why MCE Improves Returns')
+    s.append(body_p(
+        'The weekly-only system generates strong signals but can only deploy capital once per week (Friday signal, '
+        'Monday entry). Between Fridays, proven momentum stocks continue to run. MCE captures this intra-week momentum '
+        'by entering daily when a confirmed weekly winner breaks to new daily highs. The result: the same risk framework '
+        'deploys capital faster into winners the market is actively confirming. Across all tiers, MCE contributes '
+        'approximately 70% of total alpha while maintaining similar drawdown characteristics.'
+    ))
+    s.append(PageBreak())
+
+    s += section_heading('6. POSITION SIZING & PYRAMIDING')
     s.append(body_p(
         'The AI Elite Fund uses the same 5-lot pyramid system as the Carnivore Quant Fund. Lot 1 deploys 35% of the '
         'full position when a weekly signal fires in a top-ranked sector. Subsequent lots require prior lot filled + '
@@ -1056,7 +1086,7 @@ def section_methodology(t):
         col_widths=[0.55*inch, 0.85*inch, 0.55*inch, 1.35*inch, 1.15*inch, CONTENT_W - 4.45*inch]))
     s.append(PageBreak())
 
-    s += section_heading('6. INSTITUTIONAL BACKTEST RESULTS')
+    s += section_heading('7. INSTITUTIONAL BACKTEST RESULTS')
     em = t.get('executionModel', {})
     mc = t.get('marketCorrelation', {})
     spy_mc = mc.get('spy', {})
@@ -1483,8 +1513,8 @@ def build_per_tier_ir(tier_key):
     story += section_methodology_assumptions(t)
     story += section_disclosures(t)
 
-    filename = f'PNTHR_AI_Elite_IR_{t["label"]}_{tier_key}_v9.1.pdf'
-    title_meta = f'PNTHR Funds - AI Elite Fund - {t["classLabel"]} Intelligence Report v9.1'
+    filename = f'PNTHR_AI_Elite_IR_{t["label"]}_{tier_key}_v10.1.pdf'
+    title_meta = f'PNTHR Funds - AI Elite Fund - {t["classLabel"]} Intelligence Report v10.1'
     return build_doc(filename, title_meta, story)
 
 

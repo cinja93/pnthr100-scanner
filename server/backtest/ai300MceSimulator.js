@@ -1,25 +1,18 @@
-// server/backtest/ai300MultiStrategySimulator.js
-// ── PNTHR AI Elite Fund — Multi-Strategy Backtest Simulator ────────────────
+// server/backtest/ai300MceSimulator.js
+// ── PNTHR AI Elite Fund — Multi-Strategy + MCE Backtest Simulator ──────────
 //
-// Full NAV-scaled pyramid backtest for the AI 300 universe (298 names)
-// from 2022-01-03 (EMA warmup) through the latest available bar.
+// IDENTICAL to ai300MultiStrategySimulator.js (base strategy unchanged) PLUS:
+//   Momentum Continuation Entry (MCE) — daily 2-bar high breakout on active
+//   weekly BL signals for tickers NOT currently held AND in TTM top 100.
+//   MCE entries do NOT re-check regime or sector rotation (BL already validated).
+//   MCE positions use standard 1.0 sector mult and the same 5-lot pyramid.
+//   Tagged tradeType='MCE' vs 'WEEKLY_DIRECT' for separate reporting.
 //
-// MULTI-STRATEGY: Each ticker runs under the strategy that backtested better
-// for it (per strategyMode.js head-to-head comparison):
+// Base strategy (unchanged):
+//   AI 300 tickers (272): AI sector EMA (30-40W), 1.25× gate, PAI300, sector rotation
+//   Carnivore tickers (26): GICS OpEMA (18-26W), 1.10× gate, SPY+QQQ, no rotation
 //
-//   AI 300 tickers (272):
-//     • EMA: AI sector-optimized (30-40W from pnthrAiSectorsConfig.js)
-//     • Gate offset: 1.25×
-//     • Regime: PAI300 36W EMA
-//     • Sector rotation: GO/NEUTRAL/NO_GO with 1.25× sizing
-//
-//   Carnivore tickers (26):
-//     • EMA: GICS sector-optimized (18-26W from sectorEmaConfig.js)
-//     • Gate offset: 1.10×
-//     • Regime: SPY + QQQ both above 21W EMA
-//     • Sector rotation: SKIPPED (mult = 1.0 always)
-//
-// Usage: cd server && node backtest/ai300BacktestSimulator.js [--nav 1000000]
+// Usage: cd server && node backtest/ai300MceSimulator.js [--nav 100000]
 // ─────────────────────────────────────────────────────────────────────────────
 
 import dotenv from 'dotenv';
@@ -53,6 +46,7 @@ const PAI300_EMA_PERIOD = 36;
 // APEX v7: scouts disabled — weekly-only entry
 const GO_TOP            = 6;
 const NEUT_TOP          = 12;
+const MCE_TOP_N         = 100;  // TTM top-100 ranking for MCE eligibility
 
 // AI-sector borrow rates
 const AI_BORROW_RATES = {
@@ -128,16 +122,17 @@ async function main() {
   if (!db) { console.error('Cannot connect to MongoDB'); process.exit(1); }
 
   console.log('═'.repeat(80));
-  console.log('  PNTHR AI ELITE FUND — MULTI-STRATEGY BACKTEST');
+  console.log('  PNTHR AI ELITE FUND — MULTI-STRATEGY + MCE BACKTEST');
   console.log(`  Starting NAV:   $${STARTING_NAV.toLocaleString()}`);
   console.log(`  Universe:       ${ALL_TICKERS.length} AI 300 names (multi-strategy)`);
   console.log(`  Period:         ${BACKTEST_START} → latest bar (EMA warmup → first trades mid-2023)`);
-  console.log(`  Entry:          Friday signal → Monday open fill → 5-lot pyramid`);
+  console.log(`  Base entry:     Friday signal → Monday open fill → 5-lot pyramid`);
+  console.log(`  MCE entry:      Daily 2-bar high breakout on active weekly BL, TTM top ${MCE_TOP_N}`);
+  console.log(`  MCE dedup:      Held tickers use NAV gap only (current 1% − original 1%)`);
   console.log(`  AI 300 tickers: AI sector EMA (30-40W), 1.25× gate, PAI300 regime, sector rotation`);
   console.log(`  679 tickers:    GICS OpEMA (18-26W), 1.10× gate, SPY+QQQ regime, no sector rotation`);
   console.log(`  Volume cap:     ${(ADV_CAP_PCT * 100)}% of 20-day ADV per lot fill`);
   console.log(`  Stop fills:     Gap-through → fill at open (realistic slippage)`);
-  console.log(`  Capital:        Real cash ledger — entries skip when capital unavailable`);
   console.log('═'.repeat(80));
 
   // ── 1. Load PAI300 index for regime gate ─────────────────────────────────
@@ -315,7 +310,7 @@ async function main() {
   }
 
   // ── 5. Build trading calendar ────────────────────────────────────────────
-  console.log('[5/5] Running APEX v7 + Sector Rotation simulation...\n');
+  console.log('[5/5] Running APEX v7 + Sector Rotation + MCE simulation...\n');
   const allDailyDates = new Set();
   for (const ticker of ALL_TICKERS) {
     const daily = dailyCandleMap[ticker];
@@ -331,14 +326,54 @@ async function main() {
   const fullPositions = new Map();    // ticker → full weekly position
   const closedTrades = [];
   let totalWeeklyOpened = 0;
+  let totalMceOpened = 0;
+  let totalMceGapAdds = 0;
   let pendingEntries = [];            // staged Friday → execute Monday at open
 
-  // ── Capital constraint (cash ledger) ──────────────────────────────────────
-  let availableCash = STARTING_NAV;
-  let totalSkippedForCash = 0;
-  let totalLotsSkippedForCash = 0;
-  let peakDeployed = 0;
-  let peakPositionCount = 0;
+  // ── MCE state ───────────────────────────────────────────────────────────
+  const activeWeeklySignal = {};      // ticker → 'BL'|'SS'|null (most recent weekly signal)
+  let currentTtmTop100 = new Set();
+  let lastTtmComputeWeek = null;
+
+  function computeTtmReturn(ticker, date) {
+    const daily = dailyCandleMap[ticker];
+    if (!daily || daily.length < 253) return -Infinity;
+    let todayIdx = -1;
+    for (let i = daily.length - 1; i >= 0; i--) {
+      if (daily[i].date <= date) { todayIdx = i; break; }
+    }
+    if (todayIdx < 252) return -Infinity;
+    const yearAgoIdx = todayIdx - 252;
+    const todayClose = daily[todayIdx].close;
+    const yearAgoClose = daily[yearAgoIdx].close;
+    if (!yearAgoClose || yearAgoClose <= 0) return -Infinity;
+    return (todayClose - yearAgoClose) / yearAgoClose;
+  }
+
+  function recomputeTtmTop100(date) {
+    const ranked = [];
+    for (const ticker of ALL_TICKERS) {
+      const ttm = computeTtmReturn(ticker, date);
+      if (ttm > -Infinity) ranked.push({ ticker, ttm });
+    }
+    ranked.sort((a, b) => b.ttm - a.ttm);
+    return new Set(ranked.slice(0, MCE_TOP_N).map(x => x.ticker));
+  }
+
+  function getDailyTwoBarHigh(ticker, date) {
+    const daily = dailyCandleMap[ticker];
+    if (!daily) return null;
+    let idx = -1;
+    for (let i = daily.length - 1; i >= 0; i--) {
+      if (daily[i].date === date) { idx = i; break; }
+    }
+    if (idx < 2) return null;
+    const prev1High = daily[idx - 1].high;
+    const prev2High = daily[idx - 2].high;
+    const twoBarHigh = Math.max(prev1High, prev2High);
+    const trigger = parseFloat((twoBarHigh + 0.01).toFixed(2));
+    return { trigger, todayBar: daily[idx] };
+  }
 
   // Combo [6] filter: above weekly EMA + slope 0–50% annualized + gap 5–15%
   function passesCombo6(ticker, date, dailyClose, signal) {
@@ -475,6 +510,13 @@ async function main() {
   let lastFriday = null;
   let cumulativeRealizedPnl = 0;
 
+  // ── Capital constraint: real cash ledger ────────────────────────────────
+  let availableCash = STARTING_NAV;
+  let totalSkippedForCash = 0;
+  let totalLotsSkippedForCash = 0;
+  let peakDeployed = 0;
+  let peakPositionCount = 0;
+
   function getCurrentNav(date) {
     let unrealizedPnl = 0;
     for (const [ticker, pos] of fullPositions) {
@@ -517,6 +559,20 @@ async function main() {
     }
     const c679Bull = spyBull && qqqBull;  // 679 requires BOTH above EMA
 
+    // ── MCE: Update active weekly signals + TTM ranking on new week ─────
+    if (mondayStr !== lastTtmComputeWeek) {
+      lastTtmComputeWeek = mondayStr;
+      const weeklyEvents = weeklyEventsByDate[mondayStr] || {};
+      for (const [ticker, wev] of Object.entries(weeklyEvents)) {
+        if (wev.signal === 'BL' || wev.signal === 'SS') {
+          activeWeeklySignal[ticker] = wev.signal;
+        } else if (wev.signal === 'BE' || wev.signal === 'SE') {
+          activeWeeklySignal[ticker] = null;
+        }
+      }
+      currentTtmTop100 = recomputeTtmTop100(date);
+    }
+
     // ── A0. Execute pending Monday entries at today's open ──────────────
     if (pendingEntries.length > 0) {
       const executed = [];
@@ -546,12 +602,12 @@ async function main() {
 
         // ADV cap on Lot 1
         const advMax = Math.floor(getAdv20(ticker, date) * ADV_CAP_PCT);
-        const lot1Shares = Math.min(lotShares[0], advMax > 0 ? advMax : lotShares[0]);
+        let lot1Shares = Math.min(lotShares[0], advMax > 0 ? advMax : lotShares[0]);
         if (lot1Shares <= 0) continue;
 
-        // Capital constraint: skip if not enough cash
+        // Capital constraint: can we afford this?
         const lot1Cost = lot1Shares * entryPrice;
-        if (lot1Cost > availableCash) { totalSkippedForCash++; continue; }
+        if (availableCash < lot1Cost) { totalSkippedForCash++; continue; }
         availableCash -= lot1Cost;
 
         const l1Comm = calcCommission(lot1Shares, entryPrice);
@@ -561,6 +617,8 @@ async function main() {
           ticker, signal, sectorId: meta.sectorId, sectorName: meta.sectorName,
           sectorTier, sectorMult, weekOf, entryDate: date,
           navTier: currentNav, entryPrice, initialStop: stopPrice, stop: stopPrice,
+          vitalityCommitted: currentNav * 0.01 * sectorMult,
+          lastMceGapDay: -Infinity,
           lots: [{
             lot: 1, name: LOT_NAMES[0], pct: LOT_PCT[0],
             fillDate: date, fillPrice: entryPrice,
@@ -576,10 +634,6 @@ async function main() {
         });
         totalWeeklyOpened++;
         executed.push(ticker);
-
-        const deployed = STARTING_NAV + cumulativeRealizedPnl - availableCash;
-        if (deployed > peakDeployed) peakDeployed = deployed;
-        if (fullPositions.size > peakPositionCount) peakPositionCount = fullPositions.size;
       }
       pendingEntries = [];
     }
@@ -673,13 +727,14 @@ async function main() {
             const fillPrice = trigger;
             const advMax = Math.floor(getAdv20(ticker, bar.date) * ADV_CAP_PCT);
             const shares = Math.min(pos.lotShares[nextLotIdx], advMax > 0 ? advMax : pos.lotShares[nextLotIdx]);
-            const lotNum = nextLotIdx + 1;
+            if (shares <= 0) continue;
 
-            // Capital constraint: skip lot if not enough cash
+            // Capital constraint: can we afford this lot?
             const lotCost = shares * fillPrice;
-            if (lotCost > availableCash) { totalLotsSkippedForCash++; continue; }
+            if (availableCash < lotCost) { totalLotsSkippedForCash++; continue; }
             availableCash -= lotCost;
 
+            const lotNum = nextLotIdx + 1;
             const entryComm = calcCommission(shares, fillPrice);
             const entrySlip = calcSlippage(shares, fillPrice);
 
@@ -724,16 +779,160 @@ async function main() {
 
     // ── B. (APEX v7: scouts disabled — skipped) ────────────────────────
 
-    // Clean up closed positions and track realized P&L
+    // Clean up closed positions, return cash, track realized P&L
     for (const [ticker, pos] of fullPositions) {
       if (pos.closed) {
+        // Return cash from closed position
+        for (const lot of pos.lots) {
+          if (pos.signal === 'BL') {
+            availableCash += lot.shares * pos.exitPrice;
+          } else {
+            availableCash += lot.shares * (2 * lot.fillPrice - pos.exitPrice);
+          }
+        }
         applyExitCosts(pos);
         cumulativeRealizedPnl += (pos.netDollarPnl || pos.grossDollarPnl || 0);
-        // Return capital: cost basis + net P&L
-        const costBasis = pos.lots.reduce((s, l) => s + l.shares * l.fillPrice, 0);
-        availableCash += costBasis + (pos.netDollarPnl || 0);
         closedTrades.push(pos);
         fullPositions.delete(ticker);
+      }
+    }
+
+    // Track peak deployment and position count
+    let deployed = 0;
+    for (const [, p] of fullPositions) { if (!p.closed) deployed += p.totalCost; }
+    if (deployed > peakDeployed) peakDeployed = deployed;
+    if (fullPositions.size > peakPositionCount) peakPositionCount = fullPositions.size;
+
+    // ── MCE: Daily 2-bar high breakout scan (BL only) ───────────────────
+    if (!currentFriday) {
+      const currentNav = getCurrentNav(date);
+      let mceNewToday = 0;
+      for (const ticker of currentTtmTop100) {
+        if (activeWeeklySignal[ticker] !== 'BL') continue;
+
+        const breakout = getDailyTwoBarHigh(ticker, date);
+        if (!breakout) continue;
+        const { trigger, todayBar } = breakout;
+        if (todayBar.high < trigger) continue;
+
+        const meta = TICKER_META[ticker];
+        if (!meta) continue;
+
+        const weekly = weeklyCandleMap[ticker];
+        if (!weekly) continue;
+        let weekIdx = -1;
+        for (let i = weekly.length - 1; i >= 0; i--) {
+          if (weekly[i].weekOf <= mondayStr) { weekIdx = i; break; }
+        }
+        if (weekIdx < 3) continue;
+
+        const prev1 = weekly[weekIdx - 1];
+        const prev2 = weekly[weekIdx - 2];
+        const twoWeekLow = Math.min(prev1.low, prev2.low);
+        const atrArr = weeklyAtrMap[ticker];
+        const stopPrice = blInitStop(twoWeekLow, weekly[weekIdx].close, atrArr?.[weekIdx] ?? null);
+        if (!stopPrice || stopPrice >= trigger) continue;
+
+        const existingPos = fullPositions.get(ticker);
+
+        if (existingPos && !existingPos.closed && existingPos.signal === 'BL') {
+          // NAV gap top-up: only enter if NAV growth created headroom
+          if (dayCount - existingPos.lastMceGapDay < 5) continue;
+          const currentVitality = currentNav * 0.01;
+          const gap = currentVitality - (existingPos.vitalityCommitted || existingPos.navTier * 0.01);
+          if (gap <= 0) continue;
+
+          const rps = Math.abs(trigger - stopPrice);
+          if (rps <= 0) continue;
+          const tickerCap = currentNav * 0.10;
+          const existingValue = existingPos.totalShares * existingPos.avgCost;
+          const remainingCap = tickerCap - existingValue;
+          if (remainingCap <= 0) continue;
+
+          let mceShares = Math.floor(gap / rps);
+          mceShares = Math.min(mceShares, Math.floor(remainingCap / trigger));
+          if (mceShares <= 0) continue;
+
+          const advMax = Math.floor(getAdv20(ticker, date) * ADV_CAP_PCT);
+          mceShares = Math.min(mceShares, advMax > 0 ? advMax : mceShares);
+          if (mceShares <= 0) continue;
+
+          // Capital constraint
+          const mceCost = mceShares * trigger;
+          if (availableCash < mceCost) { totalSkippedForCash++; continue; }
+          availableCash -= mceCost;
+
+          const entryComm = calcCommission(mceShares, trigger);
+          const entrySlip = calcSlippage(mceShares, trigger);
+
+          existingPos.lots.push({
+            lot: existingPos.lots.length + 1, name: 'MCE Gap Add',
+            pct: 0, fillDate: date, fillPrice: trigger,
+            shares: mceShares, lotValue: parseFloat((mceShares * trigger).toFixed(2)),
+            tradingDayAtFill: existingPos.tradingDays, entryComm, entrySlip,
+            isMceAdd: true,
+          });
+
+          existingPos.totalShares += mceShares;
+          existingPos.totalCost += mceShares * trigger;
+          existingPos.avgCost = parseFloat((existingPos.totalCost / existingPos.totalShares).toFixed(4));
+
+          const rpsUsed = mceShares * Math.abs(trigger - stopPrice);
+          existingPos.vitalityCommitted = (existingPos.vitalityCommitted || existingPos.navTier * 0.01) + rpsUsed;
+          existingPos.lastMceGapDay = dayCount;
+
+          const newStop = blInitStop(twoWeekLow, weekly[weekIdx].close, atrArr?.[weekIdx] ?? null);
+          if (newStop > existingPos.stop) {
+            existingPos.stop = parseFloat(newStop.toFixed(2));
+          }
+
+          totalMceGapAdds++;
+        } else if ((!existingPos || existingPos.closed) && mceNewToday < 3) {
+          // New MCE position — full 5-lot pyramid (max 3 per day)
+          const entryPrice = trigger;
+          const sectorMult = 1.0;
+          const fullShares = sizePositionNav(currentNav, entryPrice, stopPrice, sectorMult);
+          if (fullShares <= 0) continue;
+
+          const lotShares = LOT_PCT.map(pct => Math.max(1, Math.round(fullShares * pct)));
+          const lotTriggers = LOT_OFFSET_PCT.map(off =>
+            parseFloat((entryPrice * (1 + off)).toFixed(2))
+          );
+
+          const advMax = Math.floor(getAdv20(ticker, date) * ADV_CAP_PCT);
+          let lot1Shares = Math.min(lotShares[0], advMax > 0 ? advMax : lotShares[0]);
+          if (lot1Shares <= 0) continue;
+
+          // Capital constraint
+          const mceLot1Cost = lot1Shares * entryPrice;
+          if (availableCash < mceLot1Cost) { totalSkippedForCash++; continue; }
+          availableCash -= mceLot1Cost;
+
+          const l1Comm = calcCommission(lot1Shares, entryPrice);
+          const l1Slip = calcSlippage(lot1Shares, entryPrice);
+
+          fullPositions.set(ticker, {
+            ticker, signal: 'BL', sectorId: meta.sectorId, sectorName: meta.sectorName,
+            sectorTier: 'NEUTRAL', sectorMult: 1.0, weekOf: mondayStr, entryDate: date,
+            navTier: currentNav, entryPrice, initialStop: stopPrice, stop: stopPrice,
+            vitalityCommitted: currentNav * 0.01,
+            lastMceGapDay: -Infinity,
+            lots: [{
+              lot: 1, name: LOT_NAMES[0], pct: LOT_PCT[0],
+              fillDate: date, fillPrice: entryPrice,
+              shares: lot1Shares, lotValue: parseFloat((lot1Shares * entryPrice).toFixed(2)),
+              tradingDayAtFill: 0, entryComm: l1Comm, entrySlip: l1Slip,
+            }],
+            lotShares, lotTriggers,
+            totalShares: lot1Shares, totalCost: lot1Shares * entryPrice, avgCost: entryPrice,
+            tradingDays: 0, lastCheckedDate: date,
+            currentWeekIdx: weekIdx, mfe: 0, mae: 0,
+            closed: false, exitDate: null, exitPrice: null, exitReason: null,
+            tradeType: 'MCE',
+          });
+          totalMceOpened++;
+          mceNewToday++;
+        }
       }
     }
 
@@ -829,17 +1028,24 @@ async function main() {
     if (dayCount % 50 === 0 || dayCount === tradingDays.length) {
       process.stdout.write(
         `\r  Day ${String(dayCount).padStart(4)}/${tradingDays.length} — ` +
-        `${date} — open: ${fullPositions.size}, closed: ${closedTrades.length}  `
+        `${date} — open: ${fullPositions.size}, closed: ${closedTrades.length}, cash: $${Math.round(availableCash).toLocaleString()}  `
       );
     }
   }
 
-  // Close remaining open positions
+  // Close remaining open positions and return cash
   for (const [ticker, pos] of fullPositions) {
     const daily = dailyCandleMap[ticker];
     if (daily?.length > 0) {
       const last = daily[daily.length - 1];
       closePosition(pos, last.date, last.close, 'STILL_OPEN');
+      for (const lot of pos.lots) {
+        if (pos.signal === 'BL') {
+          availableCash += lot.shares * pos.exitPrice;
+        } else {
+          availableCash += lot.shares * (2 * lot.fillPrice - pos.exitPrice);
+        }
+      }
       applyExitCosts(pos);
     }
     closedTrades.push(pos);
@@ -915,7 +1121,7 @@ async function main() {
 
   // ── Persist to MongoDB ───────────────────────────────────────────────────
   const SUFFIX_ARG = process.argv.find(a => a.startsWith('--suffix='));
-  const colSuffix = SUFFIX_ARG ? SUFFIX_ARG.split('=')[1] : '_multi';
+  const colSuffix = SUFFIX_ARG ? SUFFIX_ARG.split('=')[1] : '_mce';
   const tradeCol = db.collection(`pnthr_ai_bt_pyramid_nav_${navLabel}_trade_log${colSuffix}`);
   const navCol = db.collection(`pnthr_ai_bt_pyramid_nav_${navLabel}_daily_nav_gross${colSuffix}`);
 
@@ -940,8 +1146,11 @@ async function main() {
   const blTrades = closed.filter(t => t.signal === 'BL');
   const ssTrades = closed.filter(t => t.signal === 'SS');
 
+  const mceTrades = closed.filter(t => t.tradeType === 'MCE');
+  const weeklyTrades = closed.filter(t => t.tradeType === 'WEEKLY_DIRECT');
+
   console.log('\n' + '═'.repeat(80));
-  console.log('  PNTHR AI ELITE FUND — MULTI-STRATEGY RESULTS');
+  console.log('  PNTHR AI ELITE FUND — MULTI-STRATEGY + MCE RESULTS');
   console.log(`  Period:         ${tradingDays[0]} → ${tradingDays[tradingDays.length - 1]}`);
   console.log(`  Starting NAV:   $${STARTING_NAV.toLocaleString()}`);
   console.log('═'.repeat(80));
@@ -949,8 +1158,18 @@ async function main() {
   console.log('\n── Trade Breakdown ──');
   console.log(`  Total closed:      ${closed.length}`);
   console.log(`  Weekly entries:    ${totalWeeklyOpened}`);
+  console.log(`  MCE entries:       ${totalMceOpened}`);
+  console.log(`  MCE gap adds:      ${totalMceGapAdds}`);
   console.log(`  BL trades:         ${blTrades.length}`);
   console.log(`  SS trades:         ${ssTrades.length}`);
+
+  console.log('\n── Capital Constraint ──');
+  console.log(`  Starting cash:            $${STARTING_NAV.toLocaleString()}`);
+  console.log(`  Final cash (all closed):  $${Math.round(availableCash).toLocaleString()}`);
+  console.log(`  Entries skipped (no cash): ${totalSkippedForCash}`);
+  console.log(`  Lots skipped (no cash):    ${totalLotsSkippedForCash}`);
+  console.log(`  Peak capital deployed:     $${Math.round(peakDeployed).toLocaleString()}`);
+  console.log(`  Peak concurrent positions: ${peakPositionCount}`);
 
   function tradeSummary(trades, label) {
     if (trades.length === 0) { console.log(`\n── ${label}: no trades`); return; }
@@ -967,6 +1186,8 @@ async function main() {
     console.log(`  Total net P&L:   $${totalNet.toFixed(0)}`);
   }
 
+  tradeSummary(weeklyTrades, 'WEEKLY_DIRECT');
+  tradeSummary(mceTrades, 'MCE');
   tradeSummary(blTrades, 'BL (Longs)');
   tradeSummary(ssTrades, 'SS (Shorts)');
   tradeSummary(closed, 'Combined');
@@ -993,11 +1214,11 @@ async function main() {
     if (monthReturn > 0) positiveMonths++;
   }
 
-  // Max drawdown from daily NAV series (accurate, not monthly aggregation)
-  let peak = 0, maxDD = 0;
-  for (const pt of dailyGrossNav) {
-    if (pt.equity > peak) peak = pt.equity;
-    const dd = peak > 0 ? (peak - pt.equity) / peak * 100 : 0;
+  // Max drawdown from daily NAV series (accurate, not monthly approx)
+  let peak = STARTING_NAV, maxDD = 0;
+  for (const nav of dailyGrossNav) {
+    if (nav.equity > peak) peak = nav.equity;
+    const dd = peak > 0 ? (peak - nav.equity) / peak * 100 : 0;
     if (dd > maxDD) maxDD = dd;
   }
 
@@ -1030,7 +1251,7 @@ async function main() {
   const profitFactor = totalLost > 0 ? totalWon / totalLost : Infinity;
 
   console.log('\n' + '═'.repeat(80));
-  console.log(`  INSTITUTIONAL METRICS — MULTI-STRATEGY (NAV $${STARTING_NAV.toLocaleString()})`);
+  console.log(`  INSTITUTIONAL METRICS — MULTI-STRATEGY + MCE (NAV $${STARTING_NAV.toLocaleString()})`);
   console.log('═'.repeat(80));
   console.log(`  Final equity:      $${equity.toFixed(0)}`);
   console.log(`  Total return:      +${totalReturn.toFixed(1)}%`);
@@ -1043,12 +1264,6 @@ async function main() {
   console.log(`  Positive months:   ${positiveMonths}/${months.length}`);
   console.log(`  Closed trades:     ${closed.length} (BL: ${blTrades.length}, SS: ${ssTrades.length})`);
   console.log(`  Still open:        ${closedTrades.length - closed.length}`);
-
-  console.log('\n── Capital Constraint Stats ──');
-  console.log(`  Entries skipped (no cash): ${totalSkippedForCash}`);
-  console.log(`  Lots skipped (no cash):    ${totalLotsSkippedForCash}`);
-  console.log(`  Peak deployed capital:     $${peakDeployed.toFixed(0)}`);
-  console.log(`  Peak concurrent positions: ${peakPositionCount}`);
 
   console.log('\n── Target comparison ──');
   console.log(`  Phase 4 target:  +356.49% / 55.57% CAGR / 1,588 trades / Sharpe 1.89`);

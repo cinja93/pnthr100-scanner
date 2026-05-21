@@ -303,7 +303,7 @@ async function getIrData(tierKey) {
   const [grossDocs, netDocs, allTrades, spyDoc, qqqDoc] = await Promise.all([
     db.collection(`pnthr_ai_bt_pyramid_nav_${tier.key}_daily_nav_gross`).find({}).sort({ date: 1 }).toArray(),
     db.collection(`pnthr_ai_bt_pyramid_nav_${tier.key}_daily_nav_net`).find({}).sort({ date: 1 }).toArray(),
-    db.collection('pnthr_ai_bt_pyramid_nav_1m_trade_log').find({}).toArray(),
+    db.collection(`pnthr_ai_bt_pyramid_nav_${tier.key}_trade_log`).find({}).toArray(),
     db.collection('pnthr_bt_candles').findOne({ ticker: 'SPY' }),
     db.collection('pnthr_bt_candles').findOne({ ticker: 'QQQ' }),
   ]);
@@ -315,7 +315,7 @@ async function getIrData(tierKey) {
 
   const gross = computeSide(grossDocs, 'equity');
   const net = computeSide(netDocs, 'netEquity');
-  const scale = tier.seedNav / 1_000_000;
+  const scale = 1;
   const tradeStats = computeTradeStats(allTrades, tier.seedNav, scale);
   const closedTrades = allTrades.filter(t => t.entryDate).sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
   const firstTradeDate = closedTrades.length > 0 ? String(closedTrades[0].entryDate).slice(0, 10) : null;
@@ -381,10 +381,10 @@ async function getTradeLog(tierKey) {
   const db = await connectToDatabase();
   if (!db) throw new Error('DB unavailable');
 
-  const trades = await db.collection('pnthr_ai_bt_pyramid_nav_1m_trade_log')
+  const trades = await db.collection(`pnthr_ai_bt_pyramid_nav_${tier.key}_trade_log`)
     .find({}).sort({ entryDate: 1 }).toArray();
 
-  const scale = tier.seedNav / 1_000_000;
+  const scale = 1;
   return trades.map(t => ({
     ticker: t.ticker,
     signal: t.signal,

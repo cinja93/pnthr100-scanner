@@ -526,10 +526,14 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
   }
 
   // Rule 7 — 10% total heat hard gate. Sum of all position risk (risk per
-  // share × shares held) cannot exceed 10% NAV. Blocks all entry/add commands
-  // that would increase exposure.
+  // share × shares held) cannot exceed 10% NAV. Blocks immediate-fill commands
+  // that increase exposure NOW. PLACE/MODIFY_LOT_TRIGGER are exempt — they
+  // pre-stage GTC orders that only fill when price moves favorably (position
+  // already profitable at trigger). Without this exemption, lot triggers can
+  // never be staged while heat is at cap, leaving the pyramid ladder empty
+  // indefinitely (CGNX/MKSI 2026-05-21 incident).
   const RISK_INCREASING_COMMANDS = new Set([
-    'BUY_MARKET_TO_CATCH_UP', 'PLACE_LOT_TRIGGER', 'MODIFY_LOT_TRIGGER',
+    'BUY_MARKET_TO_CATCH_UP',
   ]);
   if (RISK_INCREASING_COMMANDS.has(command)) {
     const profile = await getUserProfile(ownerId);

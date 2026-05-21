@@ -318,7 +318,7 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
       // stops at protective.stopPrice ± $0.05.
       const protPriceKey = +protective.stopPrice;
       const sameSidePriceStops = stops.filter(s =>
-        Math.abs((+s.stopPrice || 0) - protPriceKey) < 0.005
+        Math.abs((+s.stopPrice || 0) - protPriceKey) < 0.05
       );
       const stopShares = sameSidePriceStops.reduce((sum, s) => sum + Math.abs(+s.shares || 0), 0);
       const posShares  = Math.abs(+ibkrPos.shares || 0);
@@ -365,7 +365,7 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
                 rth:        shape.rth,
                 positionId: p.id,
                 source:     'STOP_RATCHET_GAP_COVERAGE_USER_STOP_UNCANCELLABLE',
-              }, { sanityCheck: sanity, skipDedup: true })
+              }, { sanityCheck: sanity })
             : { skipped: dryRun ? 'DRY_RUN'
                   : (process.env.IBKR_AUTO_SYNC_STOPS !== 'true' ? 'IBKR_AUTO_SYNC_STOPS_OFF'
                   : (!flagOnPlace ? 'IBKR_AUTO_PLACE_STOP_OFF' : 'UNKNOWN')) };
@@ -392,7 +392,7 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
                 rth:          shape.rth,
                 positionId:   p.id,
                 source:       'STOP_RATCHET_SHARE_COVERAGE',
-              }, { sanityCheck: sanity, skipDedup: true })
+              }, { sanityCheck: sanity })
             : { skipped: dryRun ? 'DRY_RUN' : (process.env.IBKR_AUTO_SYNC_STOPS !== 'true' ? 'IBKR_AUTO_SYNC_STOPS_OFF' : 'UNKNOWN') };
         }
         modifications.push({

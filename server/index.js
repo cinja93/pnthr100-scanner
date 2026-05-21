@@ -9209,15 +9209,19 @@ app.get('/api/reentry-signals', authenticateJWT, async (req, res) => {
       for (const s of sectorsData.sectors) sectorById[s.id] = s;
     }
 
+    // Compute 5D return matching the Sectors page: live value vs close from
+    // 5 bars ago. getPnthrAiSectorsLatest().value = live (with intraday overlay);
+    // bars[0] from a 5-bar fetch = the starting anchor close.
     const neededSectorIds = [...new Set(signals.map(s => tickerToSectorId[s.ticker?.toUpperCase()]).filter(Boolean))];
     const fiveDayById = {};
     await Promise.all(neededSectorIds.map(async (sid) => {
       try {
-        const d = await getPnthrAiSectorBars({ sectorId: sid, timeframe: 'daily', limit: 6 });
+        const sec = sectorById[sid];
+        if (!sec?.value) return;
+        const d = await getPnthrAiSectorBars({ sectorId: sid, timeframe: 'daily', limit: 5 });
         if (d?.ok && d.bars?.length >= 2) {
-          const first = d.bars[0];
-          const last  = d.bars[d.bars.length - 1];
-          fiveDayById[sid] = (last.close - first.close) / first.close;
+          const anchorClose = d.bars[0].close;
+          if (anchorClose > 0) fiveDayById[sid] = (sec.value - anchorClose) / anchorClose;
         }
       } catch {}
     }));

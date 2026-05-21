@@ -654,11 +654,12 @@ export async function executeMceEntries(opts = {}) {
   const neededSectorIds = [...new Set(mceSignals.map(s => tickerToSectorId[s.ticker?.toUpperCase()]).filter(Boolean))];
   await Promise.all(neededSectorIds.map(async (sid) => {
     try {
-      const d = await getPnthrAiSectorBars({ sectorId: sid, timeframe: 'daily', limit: 6 });
+      const liveSec = sectorsData?.sectors?.find(s => s.id === sid);
+      if (!liveSec?.value) return;
+      const d = await getPnthrAiSectorBars({ sectorId: sid, timeframe: 'daily', limit: 5 });
       if (d?.ok && d.bars?.length >= 2) {
-        const first = d.bars[0];
-        const last  = d.bars[d.bars.length - 1];
-        sectorIdTo5d[sid] = (last.close - first.close) / first.close;
+        const anchorClose = d.bars[0].close;
+        if (anchorClose > 0) sectorIdTo5d[sid] = (liveSec.value - anchorClose) / anchorClose;
       }
     } catch {}
   }));

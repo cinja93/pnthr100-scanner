@@ -1167,7 +1167,14 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           + reentryBannerHeight || undefined,
     }}>
       {isAuthenticated && !isImpersonating && (
-        <TrendlineAlertBanner onNavigateToAssistant={() => navigate('assistant')} onVisibleChange={setTrendlineBannerVisible} />
+        <TrendlineAlertBanner
+          onNavigateToAssistant={() => navigate('assistant')}
+          onVisibleChange={setTrendlineBannerVisible}
+          onTickerClick={(ticker) => {
+            setChartStocks([{ ticker }]);
+            setChartIndex(0);
+          }}
+        />
       )}
       {isAuthenticated && !isImpersonating && <MoversAlertBanner
         topOffset={trendlineBannerVisible ? TRENDLINE_BANNER_HEIGHT : 0}

@@ -603,9 +603,68 @@ export default function AiOrdersPage() {
         </div>
       )}
 
-      {/* ═══ DEFAULT VIEW: NOW + ON DECK ═══ */}
-      {filter === 'new' && (nowOrders.length > 0 || onDeckOrders.length > 0) && (
+      {/* ═══ DEFAULT VIEW: NOW-MCE + NOW + ON DECK ═══ */}
+      {filter === 'new' && (nowOrders.length > 0 || onDeckOrders.length > 0 || reentrySignals.length > 0) && (
         <>
+          {/* NOW — PNTHR MCE section */}
+          {reentrySignals.length > 0 && (
+            <div style={{
+              border: '2px solid #7c3aed', borderRadius: 8, overflow: 'hidden',
+              margin: '24px 0 0',
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 14px', background: 'rgba(124,58,237,0.12)',
+                borderBottom: '1px solid rgba(124,58,237,0.3)',
+              }}>
+                <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>NOW</span>
+                <span style={{ color: '#555', fontSize: 14 }}>—</span>
+                <span style={{ color: '#60a5fa', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>PNTHR MCE</span>
+                <span
+                  title="MCE = Momentum Continuation Entry. Daily 2-bar high breakout on stocks with an active weekly BL signal, filtered to the top 100 by trailing twelve-month performance."
+                  style={{ color: '#60a5fa', cursor: 'help', fontSize: 13, marginLeft: -4 }}>&#9432;</span>
+                <span style={{ color: '#60a5fa', fontSize: 12 }}>
+                  AI 300 · Active weekly BL · Top 100 TTM · Daily 2-bar high breakout · Not held
+                </span>
+                <span style={{
+                  marginLeft: 'auto', padding: '2px 8px', background: '#7c3aed', color: '#fff',
+                  borderRadius: 3, fontSize: 11, fontWeight: 700,
+                }}>{reentrySignals.length}</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(124,58,237,0.08)', borderBottom: '1px solid rgba(124,58,237,0.2)' }}>
+                      {['Ticker','L1 Trigger','Weekly Stop'].map(h => (
+                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                      <th style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>
+                        RPS <span title="RPS = Risk Per Share. Dollar distance between entry trigger and weekly stop. Drives lot sizing — smaller RPS = more shares within your risk budget." style={{ cursor: 'help', fontWeight: 400 }}>&#9432;</span>
+                      </th>
+                      {['L1 Sh','L1 Entry $','Weekly BL Date'].map(h => (
+                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reentrySignals.map(s => (
+                      <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(124,58,237,0.1)', cursor: 'pointer' }}
+                        onClick={() => { setChartTickers([s.ticker]); setChartIndex(0); }}>
+                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#e9d5ff' }}>{s.ticker}</td>
+                        <td style={{ padding: '6px 10px', color: '#16a34a', fontWeight: 700 }}>${s.entryTrigger}</td>
+                        <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>
+                        <td style={{ padding: '6px 10px', color: '#fbbf24' }}>${s.rps}</td>
+                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[0]}</td>
+                        <td style={{ padding: '6px 10px', color: '#aaa' }}>${(s.lotShares?.[0] * s.entryTrigger).toFixed(0)}</td>
+                        <td style={{ padding: '6px 10px', color: '#64748b', fontSize: 11 }}>{s.signalDate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* NOW section */}
           {nowOrders.length > 0 && (
             <div style={{
@@ -682,62 +741,6 @@ export default function AiOrdersPage() {
             </div>
           )}
 
-          {/* RE-ENTRY section */}
-          {reentrySignals.length > 0 && (
-            <div style={{
-              border: '2px solid #7c3aed', borderRadius: 8, overflow: 'hidden',
-              margin: '20px 0 0',
-            }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 14px', background: 'rgba(124,58,237,0.12)',
-                borderBottom: '1px solid rgba(124,58,237,0.3)',
-              }}>
-                <span style={{ color: '#60a5fa', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>PNTHR MCE</span>
-                <span
-                  title="MCE = Momentum Continuation Entry. Daily 2-bar high breakout on stocks with an active weekly BL signal, filtered to the top 100 by trailing twelve-month performance."
-                  style={{ color: '#60a5fa', cursor: 'help', fontSize: 13, marginLeft: -4 }}>&#9432;</span>
-                <span style={{ color: '#60a5fa', fontSize: 12 }}>
-                  AI 300 · Active weekly BL · Top 100 TTM · Daily 2-bar high breakout · Not held
-                </span>
-                <span style={{
-                  marginLeft: 'auto', padding: '2px 8px', background: '#7c3aed', color: '#fff',
-                  borderRadius: 3, fontSize: 11, fontWeight: 700,
-                }}>{reentrySignals.length}</span>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
-                  <thead>
-                    <tr style={{ background: 'rgba(124,58,237,0.08)', borderBottom: '1px solid rgba(124,58,237,0.2)' }}>
-                      {['Ticker','L1 Trigger','Weekly Stop'].map(h => (
-                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                      <th style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>
-                        RPS <span title="RPS = Risk Per Share. Dollar distance between entry trigger and weekly stop. Drives lot sizing — smaller RPS = more shares within your risk budget." style={{ cursor: 'help', fontWeight: 400 }}>&#9432;</span>
-                      </th>
-                      {['L1 Sh','L1 Entry $','Weekly BL Date'].map(h => (
-                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reentrySignals.map(s => (
-                      <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(124,58,237,0.1)', cursor: 'pointer' }}
-                        onClick={() => { setChartTickers([s.ticker]); setChartIndex(0); }}>
-                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#e9d5ff' }}>{s.ticker}</td>
-                        <td style={{ padding: '6px 10px', color: '#16a34a', fontWeight: 700 }}>${s.entryTrigger}</td>
-                        <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>
-                        <td style={{ padding: '6px 10px', color: '#fbbf24' }}>${s.rps}</td>
-                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[0]}</td>
-                        <td style={{ padding: '6px 10px', color: '#aaa' }}>${(s.lotShares?.[0] * s.entryTrigger).toFixed(0)}</td>
-                        <td style={{ padding: '6px 10px', color: '#64748b', fontSize: 11 }}>{s.signalDate}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </>
       )}
 

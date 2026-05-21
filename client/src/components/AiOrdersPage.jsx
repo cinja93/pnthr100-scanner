@@ -694,6 +694,9 @@ export default function AiOrdersPage() {
                 borderBottom: '1px solid rgba(124,58,237,0.3)',
               }}>
                 <span style={{ color: '#60a5fa', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em' }}>PNTHR MCE</span>
+                <span
+                  title="MCE = Momentum Continuation Entry. Daily 2-bar high breakout on stocks with an active weekly BL signal, filtered to the top 100 by trailing twelve-month performance."
+                  style={{ color: '#60a5fa', cursor: 'help', fontSize: 13, marginLeft: -4 }}>&#9432;</span>
                 <span style={{ color: '#60a5fa', fontSize: 12 }}>
                   AI 300 · Active weekly BL · Top 100 TTM · Daily 2-bar high breakout · Not held
                 </span>
@@ -706,7 +709,13 @@ export default function AiOrdersPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
                   <thead>
                     <tr style={{ background: 'rgba(124,58,237,0.08)', borderBottom: '1px solid rgba(124,58,237,0.2)' }}>
-                      {['Ticker','L1 Trigger','Weekly Stop','RPS','L1 Sh','L2 Sh','L3 Sh','L4 Sh','L5 Sh','L2 Price','L3 Price','BL Date'].map(h => (
+                      {['Ticker','L1 Trigger','Weekly Stop'].map(h => (
+                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                      <th style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>
+                        RPS <span title="RPS = Risk Per Share. Dollar distance between entry trigger and weekly stop. Drives lot sizing — smaller RPS = more shares within your risk budget." style={{ cursor: 'help', fontWeight: 400 }}>&#9432;</span>
+                      </th>
+                      {['L1 Sh','L1 Entry $','BL Date'].map(h => (
                         <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -720,12 +729,7 @@ export default function AiOrdersPage() {
                         <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>
                         <td style={{ padding: '6px 10px', color: '#fbbf24' }}>${s.rps}</td>
                         <td style={{ padding: '6px 10px' }}>{s.lotShares?.[0]}</td>
-                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[1]}</td>
-                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[2]}</td>
-                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[3]}</td>
-                        <td style={{ padding: '6px 10px' }}>{s.lotShares?.[4]}</td>
-                        <td style={{ padding: '6px 10px', color: '#94a3b8' }}>${s.l2Price}</td>
-                        <td style={{ padding: '6px 10px', color: '#94a3b8' }}>${s.l3Price}</td>
+                        <td style={{ padding: '6px 10px', color: '#aaa' }}>${(s.lotShares?.[0] * s.entryTrigger).toFixed(0)}</td>
                         <td style={{ padding: '6px 10px', color: '#64748b', fontSize: 11 }}>{s.signalDate}</td>
                       </tr>
                     ))}

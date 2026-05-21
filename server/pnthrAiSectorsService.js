@@ -175,10 +175,15 @@ export async function getPnthrAiSectorsLatest() {
     const ytdPct  = ytdSeed ? ((liveValue - ytdSeed.close) / ytdSeed.close) * 100 : null;
     const inceptionPct = ((liveValue - SECTOR_BASE_VALUE) / SECTOR_BASE_VALUE) * 100;
 
-    // 5D return: liveValue vs close from 5 stored bars back (matches SectorMiniChart).
-    // With live overlay, this is today's value vs 4 trading days ago.
-    // Without overlay, it's last stored close vs 5 stored bars back.
-    const fiveDayAnchorIdx = Math.max(0, dailyAsc.length - 5);
+    // 5D return matching SectorMiniChart: it fetches 5 bars with limit=5,
+    // where the last bar includes the live overlay. That gives a window of
+    // [anchor, ..., liveValue]. When the overlay is active (today not yet
+    // stored), liveValue is an EXTRA day beyond stored bars, so the anchor
+    // is 4 stored bars back. Without overlay, liveValue = last stored close,
+    // so anchor is 5 stored bars back.
+    const todayStored = dailyAsc[dailyAsc.length - 1]?.date === liveAsOf;
+    const lookback = (live && !todayStored) ? 4 : 5;
+    const fiveDayAnchorIdx = Math.max(0, dailyAsc.length - lookback);
     const fiveDayAnchor = dailyAsc[fiveDayAnchorIdx]?.close;
     const fiveDayPct = fiveDayAnchor > 0
       ? ((liveValue - fiveDayAnchor) / fiveDayAnchor) * 100

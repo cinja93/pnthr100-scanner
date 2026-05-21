@@ -29,8 +29,7 @@ import {
 } from './lotMath.js';
 import { computeWilderATR, blInitStop, ssInitStop } from './signalDetection.js';
 import { refreshOrderGrades } from './aiOrdersPipeline.js';
-import { getLatestAiSectorRanks } from './aiSectorRotationService.js';
-import { getPnthrAiSectorsLatest } from './pnthrAiSectorsService.js';
+import { getPnthrAiSectorsLatest, getPnthrAiSectorBars } from './pnthrAiSectorsService.js';
 import { SECTORS as AI_UNIVERSE_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 
 const COLL_PORTFOLIO = 'pnthr_portfolio';
@@ -640,19 +639,9 @@ export async function executeMceEntries(opts = {}) {
     }
   }
 
-  // Load latest sector ranks (fiveDayReturn per sectorId from pnthr_ai_sector_rank_daily).
-  // Falls back gracefully — if unavailable, all returns default to 0 and order is unchanged.
+  // Load live sector regime (bull/bear) + compute 5D return from same bars source
+  // as the AI Sectors page — avoids stale pnthr_ai_sector_rank_daily data.
   const sectorIdTo5d = {};
-  try {
-    const ranksDoc = await getLatestAiSectorRanks();
-    for (const row of (ranksDoc?.ranks || [])) {
-      sectorIdTo5d[row.sectorId] = row.fiveDayReturn ?? 0;
-    }
-  } catch (e) {
-    console.warn('[MCE AutoExec] Could not load sector ranks for priority sort:', e.message);
-  }
-
-  // Filter out bearish sectors (OpEMA regime) — only buy into bull sectors.
   const sectorIdToRegime = {};
   try {
     const sectorsData = await getPnthrAiSectorsLatest();
@@ -662,6 +651,17 @@ export async function executeMceEntries(opts = {}) {
   } catch (e) {
     console.warn('[MCE AutoExec] Could not load sector regimes:', e.message);
   }
+  const neededSectorIds = [...new Set(mceSignals.map(s => tickerToSectorId[s.ticker?.toUpperCase()]).filter(Boolean))];
+  await Promise.all(neededSectorIds.map(async (sid) => {
+    try {
+      const d = await getPnthrAiSectorBars({ sectorId: sid, timeframe: 'daily', limit: 6 });
+      if (d?.ok && d.bars?.length >= 2) {
+        const first = d.bars[0];
+        const last  = d.bars[d.bars.length - 1];
+        sectorIdTo5d[sid] = (last.close - first.close) / first.close;
+      }
+    } catch {}
+  }));
 
   const bearFiltered = mceSignals.filter(s => {
     const sid = tickerToSectorId[s.ticker?.toUpperCase()];

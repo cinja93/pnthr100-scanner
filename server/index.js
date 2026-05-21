@@ -9193,8 +9193,7 @@ app.get('/api/pulse/signal-stocks', authenticateJWT, async (req, res) => {
 app.get('/api/reentry-signals', authenticateJWT, async (req, res) => {
   try {
     const { getReentrySignals } = await import('./reentrySignalService.js');
-    const { getPnthrAiSectorsLatest } = await import('./pnthrAiSectorsService.js');
-    const { getLatestAiSectorRanks } = await import('./aiSectorRotationService.js');
+    const { getPnthrAiSectorsLatest, getPnthrAiSectorBars } = await import('./pnthrAiSectorsService.js');
     const { SECTORS: AI_SECTORS } = await import('./scripts/aiUniverse/aiUniverseData.js');
     const nav     = parseFloat(req.query.nav) || 100_000;
     const signals = await getReentrySignals(req.user.userId, nav);
@@ -9204,18 +9203,24 @@ app.get('/api/reentry-signals', authenticateJWT, async (req, res) => {
       for (const h of (sec.holdings || [])) tickerToSectorId[h.ticker?.toUpperCase()] = sec.id;
     }
 
-    const [sectorsData, ranksDoc] = await Promise.all([
-      getPnthrAiSectorsLatest().catch(() => null),
-      getLatestAiSectorRanks().catch(() => null),
-    ]);
+    const sectorsData = await getPnthrAiSectorsLatest().catch(() => null);
     const sectorById = {};
     if (sectorsData?.sectors) {
       for (const s of sectorsData.sectors) sectorById[s.id] = s;
     }
+
+    const neededSectorIds = [...new Set(signals.map(s => tickerToSectorId[s.ticker?.toUpperCase()]).filter(Boolean))];
     const fiveDayById = {};
-    if (ranksDoc?.ranks) {
-      for (const r of ranksDoc.ranks) fiveDayById[r.sectorId] = r.fiveDayReturn;
-    }
+    await Promise.all(neededSectorIds.map(async (sid) => {
+      try {
+        const d = await getPnthrAiSectorBars({ sectorId: sid, timeframe: 'daily', limit: 6 });
+        if (d?.ok && d.bars?.length >= 2) {
+          const first = d.bars[0];
+          const last  = d.bars[d.bars.length - 1];
+          fiveDayById[sid] = (last.close - first.close) / first.close;
+        }
+      } catch {}
+    }));
 
     const enriched = signals.map(sig => {
       const sectorId = tickerToSectorId[sig.ticker?.toUpperCase()];

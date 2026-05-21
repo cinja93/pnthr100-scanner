@@ -710,9 +710,70 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
           pnthrStop = closedStop;
           stopSourceTwsFallback = true;
         } else {
-          const reason = pnthrStop == null ? 'no signal-cache stop available' : `pnthrStop=$${pnthrStop} on wrong side of price $${lastPrice}`;
-          console.warn(`[IBKR Phase 3] ${ticker} ${direction}: ${reason} (signalCache direction=${signalDir || 'unknown'}) and no user TWS fallback stop. Refusing to auto-open — manual review.`);
-          continue;
+          // Fallback 4: compute a fresh structural stop from weekly bars.
+          // User bought/shorted in TWS without an active PNTHR signal — still
+          // needs a protective stop. Use the same blInitStop/ssInitStop math
+          // the signal state machine uses for new entries.
+          try {
+            const { blInitStop, ssInitStop, computeWilderATR } = await import('./stopCalculation.js');
+            // Fetch 60 days of daily bars from FMP, aggregate to weekly, compute stop
+            const fromD = new Date();
+            fromD.setDate(fromD.getDate() - 60);
+            const fromStr = fromD.toISOString().split('T')[0];
+            const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?from=${fromStr}&apikey=${process.env.FMP_API_KEY}`;
+            const barRes = await fetch(url, { signal: AbortSignal.timeout(10000) });
+            if (barRes.ok) {
+              const barData = await barRes.json();
+              const dailyBars = (barData?.historical || [])
+                .map(b => ({ date: b.date, high: +b.high, low: +b.low, close: +b.close }))
+                .sort((a, b) => a.date.localeCompare(b.date));
+              // Aggregate daily → weekly (Mon-Fri buckets)
+              const weekMap = new Map();
+              for (const b of dailyBars) {
+                const d = new Date(b.date + 'T12:00:00Z');
+                const day = d.getDay();
+                const mon = new Date(d);
+                mon.setDate(mon.getDate() - ((day + 6) % 7));
+                const wk = mon.toISOString().split('T')[0];
+                if (!weekMap.has(wk)) weekMap.set(wk, { weekStart: wk, high: -Infinity, low: Infinity, close: 0 });
+                const w = weekMap.get(wk);
+                if (b.high > w.high) w.high = b.high;
+                if (b.low < w.low) w.low = b.low;
+                w.close = b.close;
+              }
+              const weeklyBars = [...weekMap.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+              if (weeklyBars.length >= 4) {
+                const atrArr = computeWilderATR(weeklyBars);
+                const lastWk = weeklyBars[weeklyBars.length - 1];
+                const prev1  = weeklyBars[weeklyBars.length - 2];
+                const prev2  = weeklyBars[weeklyBars.length - 3];
+                const atr    = atrArr[atrArr.length - 1];
+                if (direction === 'LONG') {
+                  const twoWeekLow = Math.min(prev1.low, prev2.low);
+                  pnthrStop = blInitStop(twoWeekLow, lastWk.close, atr);
+                } else {
+                  const twoWeekHigh = Math.max(prev1.high, prev2.high);
+                  pnthrStop = ssInitStop(twoWeekHigh, lastWk.close, atr);
+                }
+                const computedRightSide = direction === 'LONG'
+                  ? pnthrStop < lastPrice
+                  : pnthrStop > lastPrice;
+                if (pnthrStop && computedRightSide) {
+                  console.log(`[IBKR Phase 3] ${ticker} ${direction} — computed structural stop $${pnthrStop} from weekly bars (no signal, no TWS stop, no closed position).`);
+                  stopSourceTwsFallback = true;
+                } else {
+                  pnthrStop = null;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn(`[IBKR Phase 3] ${ticker} structural stop computation failed: ${e.message}`);
+          }
+          if (!pnthrStop) {
+            const reason = pnthrStop == null ? 'no signal-cache stop available' : `pnthrStop=$${pnthrStop} on wrong side of price $${lastPrice}`;
+            console.warn(`[IBKR Phase 3] ${ticker} ${direction}: ${reason} (signalCache direction=${signalDir || 'unknown'}) and no fallback stop. Refusing to auto-open — manual review.`);
+            continue;
+          }
         }
       }
     }

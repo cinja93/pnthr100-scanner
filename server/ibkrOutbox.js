@@ -471,13 +471,20 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
   }
 
   // Rule 2c — failure backoff. If this exact command identity has FAILED 3+
-  // times in the last 30 min, refuse to re-enqueue. Without this guard, a
-  // permanently-uncancellable order (e.g., orderId=0 user-placed stop the
+  // times within the backoff window, refuse to re-enqueue. Without this guard,
+  // a permanently-uncancellable order (e.g., orderId=0 user-placed stop the
   // bridge can't reach via the IB API session) gets retried every minute
   // forever — MCK's permId 1375431589 had 25+ failures with status
-  // "PreSubmitted" in a single hour. Caller-side detection (e.g., the dedup
-  // pass) should surface this state to the UI rather than silently retrying.
-  const FAILURE_BACKOFF_WINDOW_MS = 30 * 60 * 1000;
+  // "PreSubmitted" in a single hour.
+  //
+  // Protective stop commands (PLACE_STOP, MODIFY_STOP) use a 5-minute window
+  // instead of 30 — transient bridge disconnects or TWS hiccups shouldn't lock
+  // out position protection for half an hour. CANCEL_ORDER and lot-trigger
+  // commands keep the full 30-minute window (the MCK runaway incident).
+  const PROTECTIVE_STOP_COMMANDS = new Set(['PLACE_STOP', 'MODIFY_STOP']);
+  const FAILURE_BACKOFF_WINDOW_MS = PROTECTIVE_STOP_COMMANDS.has(command)
+    ? 5 * 60 * 1000
+    : 30 * 60 * 1000;
   const FAILURE_THRESHOLD         = 3;
   if (!opts.skipDedup && PENDING_DEDUP_COMMANDS.has(command)) {
     const recentFailCount = await db.collection(COLLECTION).countDocuments({

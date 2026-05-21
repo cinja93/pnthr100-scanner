@@ -365,7 +365,7 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
                 rth:        shape.rth,
                 positionId: p.id,
                 source:     'STOP_RATCHET_GAP_COVERAGE_USER_STOP_UNCANCELLABLE',
-              }, { sanityCheck: sanity })
+              }, { sanityCheck: sanity, skipDedup: true })
             : { skipped: dryRun ? 'DRY_RUN'
                   : (process.env.IBKR_AUTO_SYNC_STOPS !== 'true' ? 'IBKR_AUTO_SYNC_STOPS_OFF'
                   : (!flagOnPlace ? 'IBKR_AUTO_PLACE_STOP_OFF' : 'UNKNOWN')) };
@@ -392,7 +392,7 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
                 rth:          shape.rth,
                 positionId:   p.id,
                 source:       'STOP_RATCHET_SHARE_COVERAGE',
-              }, { sanityCheck: sanity })
+              }, { sanityCheck: sanity, skipDedup: true })
             : { skipped: dryRun ? 'DRY_RUN' : (process.env.IBKR_AUTO_SYNC_STOPS !== 'true' ? 'IBKR_AUTO_SYNC_STOPS_OFF' : 'UNKNOWN') };
         }
         modifications.push({

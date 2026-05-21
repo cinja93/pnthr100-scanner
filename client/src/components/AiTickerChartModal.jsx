@@ -331,11 +331,11 @@ function ChartPanel({
         lineWidth: 1,
         lineStyle: 2,
         priceLineVisible: false,
-        lastValueVisible: true,
+        lastValueVisible: false,
         crosshairMarkerVisible: false,
-        title: 'MCE',
+        title: '',
       });
-      const lastN = Math.min(8, bars.length);
+      const lastN = Math.min(3, bars.length);
       mceLine.setData(bars.slice(-lastN).map(b => ({ time: b.date, value: mceTrigger })));
     }
 
@@ -528,6 +528,14 @@ function ChartPanel({
         {title === 'Daily' && pnthrStop != null && weeklyStop != null && pnthrStop !== weeklyStop && !sizePanel && (
           <span style={{ color: '#888', fontSize: 9, fontFamily: 'monospace' }}>
             Wkly ${fmtNum(weeklyStop)}
+          </span>
+        )}
+        {mceTrigger != null && (
+          <span style={{
+            padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+            background: '#3b82f6', color: '#fff', letterSpacing: '0.06em', fontFamily: 'monospace',
+          }}>
+            MCE {fmtNum(mceTrigger)}
           </span>
         )}
 

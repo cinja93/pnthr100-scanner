@@ -102,12 +102,16 @@ export async function runProtectiveStopDedup({ db, dryRun = false } = {}) {
       let keeper;
       let toCancel;
       if (userUncancellableStops.length > 0 && pnthrTagged.length === 1 && others.length === 0) {
-        // Same-price duplicate: user has an uncancellable stop + PNTHR placed
-        // one at the exact same price. Keep the user's, cancel PNTHR's copy.
-        // (The old "gap coverage intentional" skip only makes sense for
-        // DIFFERENT prices, handled by cross-price dedup pass 2.)
-        keeper = userUncancellableStops[0];
-        toCancel = pnthrTagged;
+        // User has an uncancellable orderId=0 stop + PNTHR placed exactly one
+        // stop at the same price. This is INTENTIONAL gap coverage: PNTHR
+        // can't cancel/modify the user's stop so it places a complementary
+        // stop covering the remaining shares. Both stops together = full
+        // position coverage. Cancelling the PNTHR stop creates a loop:
+        // gap-coverage places it → dedup cancels it → repeat every minute.
+        // Skip dedup entirely for this pattern — the next stopRatchetCron
+        // tick will adjust shares if the combined coverage ever drifts.
+        skips.push({ ticker, priceKey: +priceKey, reason: 'GAP_COVERAGE_USER_PLUS_PNTHR_SAME_PRICE_SKIP' });
+        continue;
       } else if (userUncancellableStops.length > 0 && pnthrTagged.length > 1) {
         // Keep the LARGEST PNTHR-tagged stop, cancel all OTHER PNTHR-tagged
         // stops. NEVER attempt to cancel the user uncancellable stop(s) —

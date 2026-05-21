@@ -18,9 +18,9 @@
 export const FUND_META = {
   fundName: 'PNTHR AI Universe',
   fullName: 'PNTHR AI Elite 300 Fund',
-  version: 'v3.4',
+  version: 'v3.5',
   date: 'May 2026',
-  totalHoldings: 303,
+  totalHoldings: 304,
   totalSectors: 16,
 };
 
@@ -427,6 +427,7 @@ export const SECTORS = [
       { ticker: 'QUBT', name: 'Quantum Computing Inc.', thesis: 'Quantum Computing Inc. develops photonic quantum systems and quantum software. PNTHR holds QUBT as a small-cap quantum lottery ticket.' },
       { ticker: 'ARQQ', name: 'Arqit Quantum', thesis: 'Arqit Quantum builds quantum-secure encryption (QKD) for defense and enterprise. PNTHR holds ARQQ as a focused quantum-cryptography play.' },
       { ticker: 'LAES', name: 'SEALSQ Corp', thesis: 'SEALSQ provides post-quantum cryptography semiconductors. PNTHR holds LAES as a small-cap post-quantum-security pure play.' },
+      { ticker: 'INFQ', name: 'Infinity Quantum Technology', thesis: 'Infinity Quantum Technology develops quantum sensing and computing hardware. PNTHR holds INFQ as a focused quantum-technology pure play.' },
     ],
   },
   {

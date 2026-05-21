@@ -166,9 +166,31 @@ async function appendSyntheticFill({ db, position, ownerId, shares, ibkrMarketPr
         console.log(`[positionReconciler] SYNTHETIC_FILL fallback-ticker-match ${position.ticker} slot=${targetSlot} shares=${shares} price=${fillPrice}`);
       }
     }
+    if (writeRes.matchedCount === 0 && position._id) {
+      // Third fallback: use MongoDB ObjectId directly. Covers edge cases where
+      // the custom `id` field exists but differs from what we queried, AND the
+      // ticker query matched a different document or none.
+      writeRes = await db.collection('pnthr_portfolio').updateOne(
+        { _id: position._id },
+        { $set: {
+            [`fills.${targetSlot}`]: newFill,
+            totalFilledShares: projectedFilled,
+            remainingShares:   projectedRemaining,
+            updatedAt:         new Date(),
+          },
+        }
+      );
+      if (writeRes.matchedCount > 0) {
+        console.log(`[positionReconciler] SYNTHETIC_FILL fallback-_id ${position.ticker} slot=${targetSlot} shares=${shares} price=${fillPrice}`);
+      }
+    }
     const ok = writeRes.matchedCount > 0;
     if (!ok) {
-      console.warn(`[positionReconciler] SYNTHETIC_FILL WRITE_MISSED ${position.ticker} id=${position.id} ownerId=${ownerId} slot=${targetSlot} — document not found by id or ticker`);
+      const byId = position.id ? await db.collection('pnthr_portfolio').countDocuments({ id: position.id }) : 0;
+      const byTicker = await db.collection('pnthr_portfolio').countDocuments({ ticker: position.ticker, ownerId, status: { $in: ['ACTIVE', 'PARTIAL'] } });
+      console.warn(`[positionReconciler] SYNTHETIC_FILL WRITE_MISSED ${position.ticker} id=${position.id} ownerId=${ownerId} slot=${targetSlot} — byId=${byId} byTicker=${byTicker} idType=${typeof position.id} has_id=${!!position._id}`);
+    } else {
+      console.log(`[positionReconciler] SYNTHETIC_FILL OK ${position.ticker} slot=${targetSlot} shares=${shares} price=${fillPrice} matched=${writeRes.matchedCount} modified=${writeRes.modifiedCount}`);
     }
     log.push({ kind: 'SYNTHETIC_FILL', positionId: position.id, ticker: position.ticker, slot: targetSlot, shares, price: fillPrice, ok });
     return ok;
@@ -234,8 +256,8 @@ export async function runPositionReconciler({ db, dryRun = false } = {}) {
     }
 
     // Log every drift so Render logs capture it for debugging even if we later skip.
-    console.log(`[positionReconciler] DRIFT ${ticker} pnthrNet=${pnthrNet} ibkr=${ibkrShares} drift=${drift} posId=${p.id || 'MISSING'} fills=${JSON.stringify(Object.keys(p.fills || {}))}`);
-
+    const fillSummary = Object.entries(p.fills || {}).map(([k, f]) => `${k}:${f?.filled ? f.shares + 'sh' : 'unfilled'}`).join(',');
+    console.log(`[positionReconciler] DRIFT ${ticker} pnthrNet=${pnthrNet} ibkr=${ibkrShares} drift=${drift} posId=${p.id || 'MISSING'} fills={${fillSummary}} sumFilled=${sumFilled} sumExited=${sumExited}`);
 
     const isLong = (p.direction || 'LONG').toUpperCase() !== 'SHORT';
 

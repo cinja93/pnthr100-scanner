@@ -50,7 +50,7 @@ export async function runProtectiveStopDedup({ db, dryRun = false } = {}) {
   const ibkrByOwner = new Map();
   for (const oid of ownerIds) {
     const ibkr = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: oid });
-    ibkrByOwner.set(oid, ibkr || { stopOrders: [] });
+    ibkrByOwner.set(oid, ibkr || { positions: [], stopOrders: [] });
   }
 
   const deduped = []; // { ticker, kept: {permId,price,orderRef}, cancelled: [{permId,...}] }
@@ -103,15 +103,33 @@ export async function runProtectiveStopDedup({ db, dryRun = false } = {}) {
       let toCancel;
       if (userUncancellableStops.length > 0 && pnthrTagged.length === 1 && others.length === 0) {
         // User has an uncancellable orderId=0 stop + PNTHR placed exactly one
-        // stop at the same price. This is INTENTIONAL gap coverage: PNTHR
-        // can't cancel/modify the user's stop so it places a complementary
-        // stop covering the remaining shares. Both stops together = full
-        // position coverage. Cancelling the PNTHR stop creates a loop:
-        // gap-coverage places it → dedup cancels it → repeat every minute.
-        // Skip dedup entirely for this pattern — the next stopRatchetCron
-        // tick will adjust shares if the combined coverage ever drifts.
-        skips.push({ ticker, priceKey: +priceKey, reason: 'GAP_COVERAGE_USER_PLUS_PNTHR_SAME_PRICE_SKIP' });
-        continue;
+        // stop at the same price. TWO sub-cases:
+        //
+        //   A) User stop covers FEWER shares than the position → genuine gap
+        //      coverage. Skip dedup (both stops fire together = full coverage).
+        //
+        //   B) User stop alone covers the FULL position → the PNTHR stop is
+        //      a runaway duplicate (from the skipDedup bug in b2fb82b).
+        //      Cancel the PNTHR stop. The user's orderId=0 stop is untouchable
+        //      but already provides full protection.
+        //
+        // Without sub-case B, ADM (31+31 for 31-sh pos) and PSX (15+15 for
+        // 15-sh pos) stay stuck with permanent duplicates that never clear.
+        const snap = ibkrByOwner.get(p.ownerId);
+        const ibkrPos = (snap.positions || []).find(x => x.symbol?.toUpperCase() === ticker);
+        const posShares = ibkrPos ? Math.abs(+ibkrPos.shares || 0) : 0;
+        const userStopShares = userUncancellableStops.reduce((s, st) => s + Math.abs(+st.shares || 0), 0);
+
+        if (posShares > 0 && userStopShares >= posShares) {
+          // Sub-case B: user stop already covers full position. PNTHR stop is redundant.
+          keeper = userUncancellableStops[0];
+          toCancel = pnthrTagged;
+          // Fall through to cancellation loop below.
+        } else {
+          // Sub-case A: genuine gap coverage — skip dedup.
+          skips.push({ ticker, priceKey: +priceKey, reason: 'GAP_COVERAGE_USER_PLUS_PNTHR_SAME_PRICE_SKIP', userShares: userStopShares, posShares });
+          continue;
+        }
       } else if (userUncancellableStops.length > 0 && pnthrTagged.length > 1) {
         // Keep the LARGEST PNTHR-tagged stop, cancel all OTHER PNTHR-tagged
         // stops. NEVER attempt to cancel the user uncancellable stop(s) —
@@ -128,6 +146,12 @@ export async function runProtectiveStopDedup({ db, dryRun = false } = {}) {
 
       const cancellations = [];
       for (const s of toCancel) {
+        // Never attempt to cancel orderId=0 non-PNTHR stops — the bridge
+        // can't reach them and we'd just thrash the outbox with failures.
+        if (+s.orderId === 0 && (s.orderRef || '').trim().toUpperCase() !== 'PNTHR') {
+          skips.push({ ticker, priceKey: +priceKey, permId: s.permId, reason: 'SAME_PRICE_CANCEL_SKIP_UNCANCELLABLE_USER_STOP' });
+          continue;
+        }
         const enqRes = !dryRun && flagOn
           ? await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
               ticker,

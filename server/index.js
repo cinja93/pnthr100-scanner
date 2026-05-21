@@ -3630,7 +3630,7 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
 
     // Load PNTHR active positions + recently closed tickers (suppress stale IBKR alerts)
     const pnthrPositions = await db.collection('pnthr_portfolio')
-      .find({ ownerId: userId, status: 'ACTIVE' })
+      .find({ ownerId: userId, status: { $in: ['ACTIVE', 'PARTIAL'] } })
       .toArray();
     const recentlyClosedTickers = new Set(
       (await db.collection('pnthr_portfolio')

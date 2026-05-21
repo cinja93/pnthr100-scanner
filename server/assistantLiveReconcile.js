@@ -446,7 +446,10 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
 
   // Multi-stop flag counts only protective stops — multiple BUY STPs on a
   // long are expected (lot triggers), not a multi-stop mistake.
-  const multiStop = protectiveStops.length > 1;
+  // Gap coverage pattern (multiple stops at the same price summing to full
+  // position) is intentional — suppress the warning in that case.
+  const multiStop = protectiveStops.length > 1
+    && !protectiveStops.every(s => +(+s.stopPrice).toFixed(2) === +(+protectiveStops[0].stopPrice).toFixed(2));
 
   // Row status = worst of all checks
   const rowStatus = worst(...Object.values(checks).map(c => c.status));

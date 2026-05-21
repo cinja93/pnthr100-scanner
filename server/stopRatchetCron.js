@@ -230,37 +230,74 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
       }
     } else if (pnthrTighter) {
       // PNTHR has a tighter stop (likely from weekly ATR ratchet) — push to TWS.
-      const sanity = sanityCheckModifyStop({
-        position:     p,
-        ibkrPosition: { shares: ibkrPos.shares, lastPrice: ibkrPos.lastPrice || p.currentPrice, avgCost: ibkrPos.avgCost },
-        oldStopPrice: ibkrStop,
-        newStopPrice: pnthrStop,
-      });
+      // If the existing IBKR stop has orderId=0 (placed in a prior TWS session,
+      // uncancellable via API), MODIFY_STOP will always fail at the cancel phase.
+      // Same strategy as the shares-coverage path: PLACE a new full-coverage stop
+      // at the tighter price instead. The tighter stop fires first; the lower
+      // orderId=0 stop fires into empty shares and gets rejected harmlessly.
+      const isUncancellableUserStop = (+protective.orderId === 0)
+        && ((protective.orderRef || '').trim().toUpperCase() !== 'PNTHR');
+      const posShares = Math.abs(+ibkrPos.shares || 0);
       const shape = buildStopOrderShape({
         stopPrice:         pnthrStop,
         direction:         isLong ? 'LONG' : 'SHORT',
         stopExtendedHours: !!p.stopExtendedHours,
       });
-      const enqueueResult = !dryRun && process.env.IBKR_AUTO_SYNC_STOPS === 'true'
-        ? await enqueueOutbox(db, p.ownerId, 'MODIFY_STOP', {
-            ticker,
-            direction:    isLong ? 'LONG' : 'SHORT',
-            shares:       Math.abs(+ibkrPos.shares || 0),
-            oldPermId:    protective.permId,
-            oldStopPrice: ibkrStop,
-            newStopPrice: pnthrStop,
-            orderType:    shape.orderType,
-            lmtPrice:     shape.lmtPrice,
-            tif:          'GTC',
-            rth:          shape.rth,
-            positionId:   p.id,
-            source:       'STOP_RATCHET_CRON',
-          }, { sanityCheck: sanity })
-        : { skipped: dryRun ? 'DRY_RUN' : (process.env.IBKR_AUTO_SYNC_STOPS !== 'true' ? 'IBKR_AUTO_SYNC_STOPS_OFF' : 'UNKNOWN') };
+
+      let enqueueResult;
+      let cmdName;
+      if (isUncancellableUserStop) {
+        const sanity = sanityCheckPlaceStop({
+          position:     p,
+          ibkrPosition: { shares: posShares, lastPrice: ibkrPos.lastPrice || p.currentPrice, avgCost: ibkrPos.avgCost },
+          stopPrice:    pnthrStop,
+        });
+        cmdName = 'PLACE_STOP';
+        enqueueResult = !dryRun && process.env.IBKR_AUTO_SYNC_STOPS === 'true' && flagOnPlace
+          ? await enqueueOutbox(db, p.ownerId, 'PLACE_STOP', {
+              ticker,
+              direction:  isLong ? 'LONG' : 'SHORT',
+              shares:     posShares,
+              stopPrice:  pnthrStop,
+              orderType:  shape.orderType,
+              lmtPrice:   shape.lmtPrice,
+              tif:        'GTC',
+              rth:        shape.rth,
+              positionId: p.id,
+              source:     'STOP_RATCHET_PNTHR_TIGHTER_UNCANCELLABLE',
+            }, { sanityCheck: sanity })
+          : { skipped: dryRun ? 'DRY_RUN' : (process.env.IBKR_AUTO_SYNC_STOPS !== 'true' ? 'IBKR_AUTO_SYNC_STOPS_OFF' : (!flagOnPlace ? 'IBKR_AUTO_PLACE_STOP_OFF' : 'UNKNOWN')) };
+      } else {
+        const sanity = sanityCheckModifyStop({
+          position:     p,
+          ibkrPosition: { shares: ibkrPos.shares, lastPrice: ibkrPos.lastPrice || p.currentPrice, avgCost: ibkrPos.avgCost },
+          oldStopPrice: ibkrStop,
+          newStopPrice: pnthrStop,
+        });
+        cmdName = 'MODIFY_STOP';
+        enqueueResult = !dryRun && process.env.IBKR_AUTO_SYNC_STOPS === 'true'
+          ? await enqueueOutbox(db, p.ownerId, 'MODIFY_STOP', {
+              ticker,
+              direction:    isLong ? 'LONG' : 'SHORT',
+              shares:       posShares,
+              oldPermId:    protective.permId,
+              oldStopPrice: ibkrStop,
+              newStopPrice: pnthrStop,
+              orderType:    shape.orderType,
+              lmtPrice:     shape.lmtPrice,
+              tif:          'GTC',
+              rth:          shape.rth,
+              positionId:   p.id,
+              source:       'STOP_RATCHET_CRON',
+            }, { sanityCheck: sanity })
+          : { skipped: dryRun ? 'DRY_RUN' : (process.env.IBKR_AUTO_SYNC_STOPS !== 'true' ? 'IBKR_AUTO_SYNC_STOPS_OFF' : 'UNKNOWN') };
+      }
       modifications.push({
         ticker, dir: isLong ? 'LONG' : 'SHORT',
         from: ibkrStop, to: pnthrStop,
         permId: protective.permId,
+        cmd: cmdName,
+        uncancellable: isUncancellableUserStop,
         enqueued: !enqueueResult.skipped,
         outboxId: enqueueResult.id,
         skipReason: enqueueResult.skipped || null,

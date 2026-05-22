@@ -1879,7 +1879,6 @@ export function PortfolioSectorPie({ breakdown, onTickerClick }) {
           <div style={{
             flex: 1, minWidth: 260,
             display: 'flex', flexDirection: 'column', gap: 10,
-            maxHeight: 420, overflowY: 'auto',
           }}>
             {arcs.map(a => (
               <div key={a.sector} style={{

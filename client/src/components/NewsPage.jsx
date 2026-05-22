@@ -6,6 +6,7 @@ import styles from './NewsPage.module.css';
 import pnthrLogo from '../assets/panther head.png';
 const scottAvatar = '/scott-pnthr-transparent.png';
 import AiTickerChartModal from './AiTickerChartModal';
+import PerchChartModal from './PerchChartModal';
 import {
   fetchNewsletterList,
   fetchNewsletterIssue,
@@ -70,6 +71,7 @@ export default function NewsPage() {
   const [jungleEarnings, setJungleEarnings] = useState({});
   const [chartIndex, setChartIndex]       = useState(null);
   const [chartStocks, setChartStocks]     = useState([]);
+  const [perchTicker, setPerchTicker]     = useState(null);
 
   // Load issue list
   const loadList = useCallback(async () => {
@@ -320,15 +322,21 @@ export default function NewsPage() {
   }, [rawHtml, knownTickers, issue?.narrative, issue?.featuredTrade, sectorPerformanceChartHtml]);
 
   async function handleArticleClick(e) {
-    const ticker = e.target.dataset?.ticker || e.target.dataset?.totwChart;
+    const totwTicker = e.target.dataset?.totwChart;
+    const ticker = totwTicker || e.target.dataset?.ticker;
     if (!ticker) return;
+
+    // TOTW "VIEW CHART" button → open Perch showcase chart
+    if (totwTicker && issue?.featuredTrade) {
+      setPerchTicker(totwTicker);
+      return;
+    }
+
     const idx = jungleStocks.findIndex(s => s.ticker === ticker);
     if (idx !== -1) {
-      // Jungle stocks already loaded — use full list for prev/next navigation
       setChartStocks(jungleStocks);
       setChartIndex(idx);
     } else {
-      // Jungle stocks not loaded yet (cold server) — fetch this single ticker
       try {
         const result = await fetchStockSearch(ticker);
         if (result?.stock) {
@@ -484,6 +492,14 @@ export default function NewsPage() {
           tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
           onClose={() => setChartIndex(null)}
+        />
+      )}
+
+      {perchTicker && (
+        <PerchChartModal
+          ticker={perchTicker}
+          featuredTrade={issue?.featuredTrade}
+          onClose={() => setPerchTicker(null)}
         />
       )}
     </div>

@@ -27,6 +27,7 @@
 
 import { connectToDatabase } from './database.js';
 import { enqueue as enqueueOutbox, sanityCheckModifyStop, sanityCheckPlaceStop, buildStopOrderShape, DEMO_OWNER_ID } from './ibkrOutbox.js';
+import { getCachedSignals } from './signalService.js';
 
 const TIGHTER_THRESHOLD = 0.05; // ignore stop diffs below $0.05 (numerical noise)
 
@@ -114,7 +115,54 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
       const pnthrStop = +p.stopPrice;
       const ibkrShares = Math.abs(+ibkrPos.shares || 0);
       if (!Number.isFinite(pnthrStop) || pnthrStop <= 0) {
-        skips.push({ ticker, reason: 'NAKED_NO_PNTHR_STOP_TO_PLACE', ibkrShares });
+        // No stop on record — try to derive one from the weekly signal cache.
+        const signalCache = getCachedSignals();
+        const sig = signalCache?.[ticker];
+        const signalStop = +(sig?.stopPrice || sig?.pnthrStop || 0);
+        if (!Number.isFinite(signalStop) || signalStop <= 0) {
+          skips.push({ ticker, reason: 'NAKED_NO_PNTHR_STOP_TO_PLACE', ibkrShares });
+          continue;
+        }
+        // Write the derived stop to the position so future ticks don't re-derive.
+        if (!dryRun) {
+          await db.collection('pnthr_portfolio').updateOne(
+            { id: p.id },
+            { $set: { stopPrice: signalStop, originalStop: signalStop, updatedAt: new Date() } },
+          );
+          console.log(`[stopRatchet] ${ticker} NAKED — derived stop $${signalStop} from signal cache, saved to position`);
+        }
+        // Fall through to place the stop in TWS using the derived value.
+        const sanityDerived = sanityCheckPlaceStop({
+          position:     { ...p, stopPrice: signalStop },
+          ibkrPosition: { shares: ibkrShares, lastPrice: refPrice, avgCost: ibkrPos.avgCost },
+          stopPrice:    signalStop,
+        });
+        const shapeDerived = buildStopOrderShape({
+          stopPrice:         signalStop,
+          direction:         isLong ? 'LONG' : 'SHORT',
+          stopExtendedHours: !!p.stopExtendedHours,
+        });
+        const enqDerived = sanityDerived.ok && !dryRun && flagOnPlace
+          ? await enqueueOutbox(db, p.ownerId, 'PLACE_STOP', {
+              ticker,
+              direction:  isLong ? 'LONG' : 'SHORT',
+              shares:     ibkrShares,
+              stopPrice:  signalStop,
+              orderType:  shapeDerived.orderType,
+              lmtPrice:   shapeDerived.lmtPrice,
+              tif:        'GTC',
+              rth:        shapeDerived.rth,
+              positionId: p.id,
+              source:     'STOP_RATCHET_NAKED_DERIVED_FROM_SIGNAL',
+            }, { sanityCheck: sanityDerived })
+          : { skipped: !sanityDerived.ok ? sanityDerived.reason : (dryRun ? 'DRY_RUN' : (flagOnPlace ? 'UNKNOWN' : 'IBKR_AUTO_PLACE_STOP_OFF')) };
+        nakedFixes.push({
+          ticker, dir: isLong ? 'LONG' : 'SHORT',
+          stopPrice: signalStop, shares: ibkrShares,
+          derivedFromSignal: true,
+          enqueued: !enqDerived.skipped, outboxId: enqDerived.id,
+          skipReason: enqDerived.skipped || null,
+        });
         continue;
       }
       if (ibkrShares <= 0) {

@@ -1885,7 +1885,15 @@ export function PortfolioSectorPie({ breakdown, onTickerClick }) {
                 borderLeft: `3px solid ${a.color}`,
                 paddingLeft: 10,
               }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  {a.regime && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 800, letterSpacing: '0.06em',
+                      padding: '2px 6px', borderRadius: 3,
+                      background: a.regime === 'bull' ? '#16a34a' : '#dc2626',
+                      color: '#fff',
+                    }}>{a.regime === 'bull' ? 'BULL' : 'BEAR'}</span>
+                  )}
                   <span style={{ fontSize: 12, fontWeight: 700, color: '#e0e0e0' }}>{a.sector}</span>
                   <span style={{ fontSize: 10, color: '#666' }}>
                     {a.count} position{a.count !== 1 ? 's' : ''} · {a.pct}%

@@ -9,6 +9,7 @@ import { computeTargetAvg } from './lotMath.js';
 import { ALL_ETF_TICKER_SET, AI_TICKER_CATEGORY } from './etfService.js';
 import { runLotTriggerSync } from './lotTriggerCron.js';
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
+import { getPnthrAiSectorsLatest } from './pnthrAiSectorsService.js';
 
 // ── Tolerance thresholds ──────────────────────────────────────────────────────
 // Centralized so tuning doesn't require chasing through the file.
@@ -875,11 +876,23 @@ export async function assistantLiveReconcile(req, res) {
       if (p.direction === 'SHORT') sectorMap[sector].shortTickers.push(ticker);
       else sectorMap[sector].longTickers.push(ticker);
     }
+    // Fetch live sector regime (bull/bear) for the breakdown badges
+    let sectorRegimeMap = {};
+    try {
+      const sectorsData = await getPnthrAiSectorsLatest();
+      if (sectorsData?.sectors) {
+        for (const s of sectorsData.sectors) {
+          if (s.name) sectorRegimeMap[s.name] = s.regime || null;
+        }
+      }
+    } catch { /* non-blocking */ }
+
     const sectorBreakdown = Object.values(sectorMap)
       .map(s => ({
         sector: s.sector,
         longTickers: [...new Set(s.longTickers)].sort(),
         shortTickers: [...new Set(s.shortTickers)].sort(),
+        regime: sectorRegimeMap[s.sector] || null,
       }))
       .sort((a, b) => (b.longTickers.length + b.shortTickers.length) - (a.longTickers.length + a.shortTickers.length));
 

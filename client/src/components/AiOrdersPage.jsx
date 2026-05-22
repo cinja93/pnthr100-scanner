@@ -352,6 +352,8 @@ export default function AiOrdersPage() {
   const [recycleCandidate, setRecycleCandidate] = useState(null);
   const [recycleDismissed, setRecycleDismissed] = useState(null);
   const [recycleSubmitting, setRecycleSubmitting] = useState(false);
+  const [recycledPositions, setRecycledPositions] = useState([]);
+  const [showRecycledLog, setShowRecycledLog] = useState(false);
   const [bridgeOpen, setBridgeOpen] = useState(() => {
     try { return localStorage.getItem('aiOrders.bridgeOpen') !== 'false'; } catch { return true; }
   });
@@ -608,7 +610,17 @@ export default function AiOrdersPage() {
           </span>
           <span style={{ color: '#666', fontSize: 11 }}>
             {fmtUsd(heatData.totalRisk)} risk · {fmtUsd(heatData.nav)} NAV
-            {heatData.recycled > 0 && <span style={{ color: '#16a34a' }}> · {heatData.recycled} recycled</span>}
+            {heatData.recycled > 0 && (
+              <button
+                onClick={() => setShowRecycledLog(true)}
+                style={{
+                  background: 'none', border: '1px solid #16a34a', borderRadius: 3,
+                  color: '#16a34a', cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                  padding: '1px 8px', marginLeft: 6, fontFamily: 'monospace',
+                }}
+                title="View recycled positions log"
+              >{heatData.recycled} recycled</button>
+            )}
           </span>
           {heatData.totalRiskPct >= 10 && !recycleCandidate && (
             <span style={{
@@ -671,6 +683,78 @@ export default function AiOrdersPage() {
                 fontSize: 11, fontWeight: 700, cursor: 'pointer',
               }}
             >SKIP</button>
+          </div>
+        </div>
+      )}
+
+      {/* Recycled Positions Log Modal */}
+      {showRecycledLog && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 10000,
+          background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => setShowRecycledLog(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#111118', border: '2px solid #2a2a40', borderRadius: 8,
+              padding: '20px 24px', maxWidth: 900, width: '90vw', maxHeight: '80vh', overflow: 'auto',
+              fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <span style={{ color: '#16a34a', fontWeight: 900, fontSize: 14, letterSpacing: '0.08em' }}>
+                RECYCLED POSITIONS ({recycledPositions.length})
+              </span>
+              <button
+                onClick={() => setShowRecycledLog(false)}
+                style={{
+                  background: '#1e1e35', color: '#a78bfa', border: '1px solid #3b3b5c',
+                  borderRadius: 4, padding: '4px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                }}
+              >CLOSE</button>
+            </div>
+            {recycledPositions.length === 0 ? (
+              <div style={{ color: '#666', fontSize: 12, padding: 20, textAlign: 'center' }}>No recycled positions</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'monospace' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #2a2a40' }}>
+                    {['Ticker', 'Dir', 'Shares', 'Entry Date', 'Avg Cost', 'Stop From', 'Stop To', 'Recycled', 'Price'].map(h => (
+                      <th key={h} style={{ color: '#888', fontWeight: 700, padding: '6px 8px', textAlign: 'left', fontSize: 10, letterSpacing: '0.08em' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {recycledPositions
+                    .sort((a, b) => {
+                      const da = a.recycledAt || a.entryDate || '';
+                      const db = b.recycledAt || b.entryDate || '';
+                      return db.localeCompare(da);
+                    })
+                    .map((rp, i) => (
+                    <tr key={rp.ticker + i} style={{ borderBottom: '1px solid #1a1a2a' }}>
+                      <td style={{ padding: '6px 8px', color: '#fcf000', fontWeight: 800 }}>{rp.ticker}</td>
+                      <td style={{ padding: '6px 8px', color: rp.direction === 'LONG' ? '#16a34a' : '#dc2626' }}>{rp.direction}</td>
+                      <td style={{ padding: '6px 8px', color: '#e5e5e5' }}>{rp.shares}</td>
+                      <td style={{ padding: '6px 8px', color: '#aaa' }}>
+                        {rp.entryDate ? new Date(rp.entryDate).toLocaleDateString() : '—'}
+                      </td>
+                      <td style={{ padding: '6px 8px', color: '#e5e5e5' }}>${rp.avgCost?.toFixed(2)}</td>
+                      <td style={{ padding: '6px 8px', color: '#dc2626' }}>
+                        {rp.stopMovedFrom != null ? `$${(+rp.stopMovedFrom).toFixed(2)}` : '—'}
+                      </td>
+                      <td style={{ padding: '6px 8px', color: '#16a34a' }}>${rp.stopPrice?.toFixed(2)}</td>
+                      <td style={{ padding: '6px 8px', color: '#aaa' }}>
+                        {rp.recycledAt ? new Date(rp.recycledAt).toLocaleString() : '—'}
+                      </td>
+                      <td style={{ padding: '6px 8px', color: '#e5e5e5' }}>
+                        {rp.currentPrice ? `$${rp.currentPrice.toFixed(2)}` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}
@@ -1015,6 +1099,7 @@ export default function AiOrdersPage() {
                 total: pos.total || 0,
               });
             }
+            if (pos?.recycledPositions) setRecycledPositions(pos.recycledPositions);
             const rc = pos?.recycleCandidate || null;
             setRecycleCandidate(rc);
             if (rc && recycleDismissed && rc.ticker !== recycleDismissed) {

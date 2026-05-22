@@ -3449,10 +3449,13 @@ app.patch('/api/positions/:id/stop-price', authenticateJWT, requireAdmin, async 
     }
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
+    const pos = await db.collection('pnthr_portfolio').findOne({ id: req.params.id, ownerId: req.user.userId });
+    if (!pos) return res.status(404).json({ error: 'Position not found' });
     const setOps = { stopPrice: +n.toFixed(2), updatedAt: new Date() };
     if (req.body.recycleForHeat) {
       setOps.recycledForHeat = true;
       setOps.recycledAt = new Date();
+      setOps.recycledFromStop = pos.stopPrice ?? null;
     }
     const result = await db.collection('pnthr_portfolio').updateOne(
       { id: req.params.id, ownerId: req.user.userId },

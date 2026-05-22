@@ -541,6 +541,11 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
       // fallback for positions that pre-date the field. Card displays this in
       // an outlined box under the ticker — never changes once set.
       targetAvg:      cmd ? (cmd.targetAvg ?? computeTargetAvg(cmd, netLiquidity)) : null,
+      entryDate:      cmd?.entryDate ?? null,
+      createdAt:      cmd?.createdAt ?? null,
+      currentPrice:   cmd?.currentPrice ?? null,
+      recycledFromStop: cmd?.recycledFromStop ?? null,
+      recycledAt:     cmd?.recycledAt ?? null,
     },
     lastPrice,
     lotTriggers:  enrichedLotTriggers, // [{lot, triggerPrice, filled, expectedSide, staged}, ...]
@@ -662,6 +667,7 @@ export async function assistantLiveReconcile(req, res) {
     // Compute heat from IBKR actuals so the risk bar works even when
     // pnthr_portfolio is empty (positions only exist in IBKR/bridge).
     let stockRisk = 0, etfRisk = 0, recycledCount = 0, totalPositions = 0;
+    const recycledPositions = [];
     for (const r of rows) {
       const shares = r.ibkr.shares ?? r.command.shares;
       if (!shares || shares <= 0) continue;
@@ -672,7 +678,22 @@ export async function assistantLiveReconcile(req, res) {
       const dir = r.command.direction || r.ibkr.direction || 'LONG';
       const isShort = dir === 'SHORT';
       const isRecycled = isShort ? stop <= avg : stop >= avg;
-      if (isRecycled) { recycledCount++; continue; }
+      if (isRecycled) {
+        recycledCount++;
+        const price = r.ibkr.marketPrice ?? r.command.currentPrice ?? 0;
+        recycledPositions.push({
+          ticker:     r.ticker,
+          direction:  dir,
+          shares,
+          entryDate:  r.command.entryDate || r.command.createdAt || null,
+          avgCost:    +avg.toFixed(2),
+          stopPrice:  +stop.toFixed(2),
+          stopMovedFrom: r.command.recycledFromStop ?? null,
+          recycledAt: r.command.recycledAt || null,
+          currentPrice: price ? +price.toFixed(2) : null,
+        });
+        continue;
+      }
       const rps = Math.abs(avg - stop);
       const risk = shares * rps;
       const isEtf = ALL_ETF_TICKER_SET.has(r.ticker);
@@ -756,6 +777,7 @@ export async function assistantLiveReconcile(req, res) {
       rows,
       lotSyncTriggered: hasUnstagedWithNoOutbox,
       recycleCandidate,
+      recycledPositions,
       positions: {
         total: totalPositions,
         long: longCount,

@@ -3994,7 +3994,65 @@ app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
         originalStop = +twsStop.stopPrice;
         console.log(`[IBKR import] ${ticker} stop derived from TWS protective stop: $${stopPrice}`);
       } else {
-        console.warn(`[IBKR import] ${ticker} has NO stop — signal cache empty and no TWS stop found`);
+        // Fallback 3: compute structural stop from weekly bars (same as ibkrSync Fallback 4).
+        try {
+          const { blInitStop, ssInitStop, computeWilderATR } = await import('./stopCalculation.js');
+          const fromD = new Date();
+          fromD.setDate(fromD.getDate() - 60);
+          const fromStr = fromD.toISOString().split('T')[0];
+          const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?from=${fromStr}&apikey=${process.env.FMP_API_KEY}`;
+          const barRes = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          if (barRes.ok) {
+            const barData = await barRes.json();
+            const dailyBars = (barData?.historical || [])
+              .map(b => ({ date: b.date, high: +b.high, low: +b.low, close: +b.close }))
+              .sort((a, b) => a.date.localeCompare(b.date));
+            const weekMap = new Map();
+            for (const b of dailyBars) {
+              const d = new Date(b.date + 'T12:00:00Z');
+              const day = d.getDay();
+              const mon = new Date(d);
+              mon.setDate(mon.getDate() - ((day + 6) % 7));
+              const wk = mon.toISOString().split('T')[0];
+              if (!weekMap.has(wk)) weekMap.set(wk, { weekStart: wk, high: -Infinity, low: Infinity, close: 0 });
+              const w = weekMap.get(wk);
+              if (b.high > w.high) w.high = b.high;
+              if (b.low < w.low) w.low = b.low;
+              w.close = b.close;
+            }
+            const weeklyBars = [...weekMap.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+            if (weeklyBars.length >= 4) {
+              const atrArr = computeWilderATR(weeklyBars);
+              const lastWk = weeklyBars[weeklyBars.length - 1];
+              const prev1  = weeklyBars[weeklyBars.length - 2];
+              const prev2  = weeklyBars[weeklyBars.length - 3];
+              const atr    = atrArr[atrArr.length - 1];
+              const lastPrice = avgCost;
+              if (direction === 'LONG') {
+                const twoWeekLow = Math.min(prev1.low, prev2.low);
+                const computed = blInitStop(twoWeekLow, lastWk.close, atr);
+                if (computed && computed < lastPrice) {
+                  stopPrice = computed;
+                  originalStop = computed;
+                  console.log(`[IBKR import] ${ticker} ${direction} — computed structural stop $${stopPrice} from weekly bars`);
+                }
+              } else {
+                const twoWeekHigh = Math.max(prev1.high, prev2.high);
+                const computed = ssInitStop(twoWeekHigh, lastWk.close, atr);
+                if (computed && computed > lastPrice) {
+                  stopPrice = computed;
+                  originalStop = computed;
+                  console.log(`[IBKR import] ${ticker} ${direction} — computed structural stop $${stopPrice} from weekly bars`);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`[IBKR import] ${ticker} weekly-bar stop computation failed: ${e.message}`);
+        }
+        if (stopPrice == null) {
+          console.warn(`[IBKR import] ${ticker} has NO stop — signal cache empty, no TWS stop, weekly bars failed`);
+        }
       }
     }
 

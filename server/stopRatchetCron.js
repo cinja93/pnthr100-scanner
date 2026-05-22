@@ -28,6 +28,7 @@
 import { connectToDatabase } from './database.js';
 import { enqueue as enqueueOutbox, sanityCheckModifyStop, sanityCheckPlaceStop, buildStopOrderShape, DEMO_OWNER_ID } from './ibkrOutbox.js';
 import { getCachedSignals } from './signalService.js';
+import { blInitStop, ssInitStop, computeWilderATR } from './stopCalculation.js';
 
 const TIGHTER_THRESHOLD = 0.05; // ignore stop diffs below $0.05 (numerical noise)
 
@@ -120,7 +121,98 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
         const sig = signalCache?.[ticker];
         const signalStop = +(sig?.stopPrice || sig?.pnthrStop || 0);
         if (!Number.isFinite(signalStop) || signalStop <= 0) {
-          skips.push({ ticker, reason: 'NAKED_NO_PNTHR_STOP_TO_PLACE', ibkrShares });
+          // Fallback 2: compute structural stop from weekly bars (same as ibkrSync Fallback 4).
+          // Signal cache may return null when the ticker's signal flipped (e.g. BL→SE) but
+          // the position is still open under the original direction.
+          let computedStop = null;
+          try {
+            const fromD = new Date();
+            fromD.setDate(fromD.getDate() - 60);
+            const fromStr = fromD.toISOString().split('T')[0];
+            const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?from=${fromStr}&apikey=${process.env.FMP_API_KEY}`;
+            const barRes = await fetch(url, { signal: AbortSignal.timeout(10000) });
+            if (barRes.ok) {
+              const barData = await barRes.json();
+              const dailyBars = (barData?.historical || [])
+                .map(b => ({ date: b.date, high: +b.high, low: +b.low, close: +b.close }))
+                .sort((a, b) => a.date.localeCompare(b.date));
+              const weekMap = new Map();
+              for (const b of dailyBars) {
+                const d = new Date(b.date + 'T12:00:00Z');
+                const day = d.getDay();
+                const mon = new Date(d);
+                mon.setDate(mon.getDate() - ((day + 6) % 7));
+                const wk = mon.toISOString().split('T')[0];
+                if (!weekMap.has(wk)) weekMap.set(wk, { weekStart: wk, high: -Infinity, low: Infinity, close: 0 });
+                const w = weekMap.get(wk);
+                if (b.high > w.high) w.high = b.high;
+                if (b.low < w.low) w.low = b.low;
+                w.close = b.close;
+              }
+              const weeklyBars = [...weekMap.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+              if (weeklyBars.length >= 4) {
+                const atrArr = computeWilderATR(weeklyBars);
+                const lastWk = weeklyBars[weeklyBars.length - 1];
+                const prev1  = weeklyBars[weeklyBars.length - 2];
+                const prev2  = weeklyBars[weeklyBars.length - 3];
+                const atr    = atrArr[atrArr.length - 1];
+                if (isLong) {
+                  const twoWeekLow = Math.min(prev1.low, prev2.low);
+                  computedStop = blInitStop(twoWeekLow, lastWk.close, atr);
+                } else {
+                  const twoWeekHigh = Math.max(prev1.high, prev2.high);
+                  computedStop = ssInitStop(twoWeekHigh, lastWk.close, atr);
+                }
+                const rightSide = isLong ? computedStop < refPrice : computedStop > refPrice;
+                if (!computedStop || !rightSide) computedStop = null;
+              }
+            }
+          } catch (e) {
+            console.warn(`[stopRatchet] ${ticker} weekly-bar stop computation failed: ${e.message}`);
+          }
+          if (!computedStop) {
+            skips.push({ ticker, reason: 'NAKED_NO_PNTHR_STOP_TO_PLACE', ibkrShares });
+            continue;
+          }
+          // Use computed stop — write to position and fall through to place
+          if (!dryRun) {
+            await db.collection('pnthr_portfolio').updateOne(
+              { id: p.id },
+              { $set: { stopPrice: computedStop, originalStop: computedStop, updatedAt: new Date() } },
+            );
+            console.log(`[stopRatchet] ${ticker} NAKED — computed stop $${computedStop} from weekly bars, saved to position`);
+          }
+          const sanityComputed = sanityCheckPlaceStop({
+            position:     { ...p, stopPrice: computedStop },
+            ibkrPosition: { shares: ibkrShares, lastPrice: refPrice, avgCost: ibkrPos.avgCost },
+            stopPrice:    computedStop,
+          });
+          const shapeComputed = buildStopOrderShape({
+            stopPrice:         computedStop,
+            direction:         isLong ? 'LONG' : 'SHORT',
+            stopExtendedHours: !!p.stopExtendedHours,
+          });
+          const enqComputed = sanityComputed.ok && !dryRun && flagOnPlace
+            ? await enqueueOutbox(db, p.ownerId, 'PLACE_STOP', {
+                ticker,
+                direction:  isLong ? 'LONG' : 'SHORT',
+                shares:     ibkrShares,
+                stopPrice:  computedStop,
+                orderType:  shapeComputed.orderType,
+                lmtPrice:   shapeComputed.lmtPrice,
+                tif:        'GTC',
+                rth:        shapeComputed.rth,
+                positionId: p.id,
+                source:     'STOP_RATCHET_NAKED_COMPUTED_FROM_WEEKLY_BARS',
+              }, { sanityCheck: sanityComputed })
+            : { skipped: !sanityComputed.ok ? sanityComputed.reason : (dryRun ? 'DRY_RUN' : (flagOnPlace ? 'UNKNOWN' : 'IBKR_AUTO_PLACE_STOP_OFF')) };
+          nakedFixes.push({
+            ticker, dir: isLong ? 'LONG' : 'SHORT',
+            stopPrice: computedStop, shares: ibkrShares,
+            derivedFromWeeklyBars: true,
+            enqueued: !enqComputed.skipped, outboxId: enqComputed.id,
+            skipReason: enqComputed.skipped || null,
+          });
           continue;
         }
         // Write the derived stop to the position so future ticks don't re-derive.

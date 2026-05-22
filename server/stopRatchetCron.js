@@ -455,6 +455,31 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
           outboxId: enqRes.id,
           skipReason: enqRes.skipped || null,
         });
+      } else if (sameSidePriceStops.length > 1 && stopShares > posShares) {
+        // Over-stopped: duplicate protective stops at ~same price. Keep the
+        // tightest (already selected as `protective`), cancel the rest.
+        const dupes = sameSidePriceStops.filter(s => s.permId !== protective.permId);
+        for (const dup of dupes) {
+          if (+dup.orderId === 0) {
+            skips.push({ ticker, reason: 'OVER_STOPPED_UNCANCELLABLE_ID_ZERO', permId: dup.permId });
+            continue;
+          }
+          const cancelRes = !dryRun && flagOnSync
+            ? await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
+                ticker,
+                permId:     dup.permId,
+                stopPrice:  +dup.stopPrice,
+                positionId: p.id,
+                direction:  isLong ? 'LONG' : 'SHORT',
+                source:     'STOP_RATCHET_DEDUP_OVER_STOPPED',
+                reason:     'DUPLICATE_PROTECTIVE_STOP',
+              })
+            : { skipped: dryRun ? 'DRY_RUN' : 'IBKR_AUTO_SYNC_STOPS_OFF' };
+          orphanCancels.push({
+            ticker, permId: dup.permId, stopPrice: +dup.stopPrice,
+            enqueued: !cancelRes.skipped, skipReason: cancelRes.skipped || null,
+          });
+        }
       } else {
         aligned.push({ ticker, stop: pnthrStop });
       }

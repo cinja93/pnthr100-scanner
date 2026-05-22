@@ -1762,7 +1762,7 @@ const SECTOR_COLORS = {
 };
 const sectorColor = (name) => SECTOR_COLORS[name] || '#64748B';
 
-function PortfolioSectorPie({ breakdown, onTickerClick }) {
+export function PortfolioSectorPie({ breakdown, onTickerClick }) {
   const [collapsed, setCollapsed] = useState(false);
 
   const { arcs, total } = useMemo(() => {

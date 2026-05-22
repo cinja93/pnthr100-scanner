@@ -4,6 +4,7 @@ import { fetchLatestAiOrders, runAiOrders, fetchNav, fetchReentrySignals, API_BA
 import AiTickerChartModal from './AiTickerChartModal';
 import AssistantLiveTable from './AssistantLiveTable';
 import PendingBridgeOrdersPanel from './PendingBridgeOrdersPanel';
+import { PortfolioSectorPie } from './AssistantPage';
 import { computeWeeksAgo } from '../utils/dateUtils';
 import { getStrategyMode } from '../utils/strategyMode';
 
@@ -354,6 +355,7 @@ export default function AiOrdersPage() {
   const [recycleSubmitting, setRecycleSubmitting] = useState(false);
   const [recycledPositions, setRecycledPositions] = useState([]);
   const [showRecycledLog, setShowRecycledLog] = useState(false);
+  const [sectorBreakdown, setSectorBreakdown] = useState([]);
   const [bridgeOpen, setBridgeOpen] = useState(() => {
     try { return localStorage.getItem('aiOrders.bridgeOpen') !== 'false'; } catch { return true; }
   });
@@ -1150,6 +1152,7 @@ export default function AiOrdersPage() {
               });
             }
             if (pos?.recycledPositions) setRecycledPositions(pos.recycledPositions);
+            if (pos?.sectorBreakdown) setSectorBreakdown(pos.sectorBreakdown);
             const rc = pos?.recycleCandidate || null;
             setRecycleCandidate(rc);
             if (rc && recycleDismissed && rc.ticker !== recycleDismissed) {
@@ -1158,6 +1161,19 @@ export default function AiOrdersPage() {
           }}
         />
       </div>
+
+      {/* Portfolio Sector Breakdown */}
+      {sectorBreakdown.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <PortfolioSectorPie
+            breakdown={sectorBreakdown}
+            onTickerClick={(ticker) => {
+              setChartTickers([ticker]);
+              setChartIndex(0);
+            }}
+          />
+        </div>
+      )}
 
       {/* Pending Bridge Orders */}
       {isAdmin && (

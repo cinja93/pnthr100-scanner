@@ -6,8 +6,9 @@
 
 import { connectToDatabase, getUserProfile } from './database.js';
 import { computeTargetAvg } from './lotMath.js';
-import { ALL_ETF_TICKER_SET } from './etfService.js';
+import { ALL_ETF_TICKER_SET, AI_TICKER_CATEGORY } from './etfService.js';
 import { runLotTriggerSync } from './lotTriggerCron.js';
+import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 
 // ── Tolerance thresholds ──────────────────────────────────────────────────────
 // Centralized so tuning doesn't require chasing through the file.
@@ -770,6 +771,36 @@ export async function assistantLiveReconcile(req, res) {
       recycleCandidate = candidates[0] || null;
     }
 
+    // Sector breakdown from active positions
+    const aiSectorLookup = {};
+    for (const sec of AI_SECTORS) {
+      for (const h of sec.holdings) aiSectorLookup[h.ticker] = sec.name;
+    }
+    const sectorMap = {};
+    for (const p of cmdPositions) {
+      const ticker = p.ticker?.toUpperCase();
+      if (!ticker) continue;
+      const isEtf = ALL_ETF_TICKER_SET.has(ticker);
+      let sector;
+      if (isEtf) {
+        sector = AI_TICKER_CATEGORY[ticker];
+        if (!sector) continue;
+      } else {
+        sector = aiSectorLookup[ticker] || p.sector;
+      }
+      if (!sector) continue;
+      if (!sectorMap[sector]) sectorMap[sector] = { sector, longTickers: [], shortTickers: [] };
+      if (p.direction === 'SHORT') sectorMap[sector].shortTickers.push(ticker);
+      else sectorMap[sector].longTickers.push(ticker);
+    }
+    const sectorBreakdown = Object.values(sectorMap)
+      .map(s => ({
+        sector: s.sector,
+        longTickers: [...new Set(s.longTickers)].sort(),
+        shortTickers: [...new Set(s.shortTickers)].sort(),
+      }))
+      .sort((a, b) => (b.longTickers.length + b.shortTickers.length) - (a.longTickers.length + a.shortTickers.length));
+
     res.json({
       lastSyncedAt: ibkrSyncedAt,
       generatedAt:  new Date().toISOString(),
@@ -778,6 +809,7 @@ export async function assistantLiveReconcile(req, res) {
       lotSyncTriggered: hasUnstagedWithNoOutbox,
       recycleCandidate,
       recycledPositions,
+      sectorBreakdown,
       positions: {
         total: totalPositions,
         long: longCount,

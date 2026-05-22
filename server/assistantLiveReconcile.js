@@ -876,7 +876,8 @@ export async function assistantLiveReconcile(req, res) {
       if (p.direction === 'SHORT') sectorMap[sector].shortTickers.push(ticker);
       else sectorMap[sector].longTickers.push(ticker);
     }
-    // Fetch live sector regime (bull/bear) for the breakdown badges
+    // Fetch live sector regime (bull/bear) for the breakdown badges.
+    // Two sources: AI sectors (16 synthetic indices) + 679 sectors (S&P ETF vs EMA).
     let sectorRegimeMap = {};
     try {
       const sectorsData = await getPnthrAiSectorsLatest();
@@ -887,12 +888,24 @@ export async function assistantLiveReconcile(req, res) {
       }
     } catch { /* non-blocking */ }
 
+    // ETF category labels don't always match AI sector names exactly.
+    // Build a fuzzy lookup: strip common prefixes like "AI " and compare.
+    const resolveRegime = (sectorName) => {
+      if (sectorRegimeMap[sectorName]) return sectorRegimeMap[sectorName];
+      const stripped = sectorName.replace(/^AI\s+/, '');
+      if (sectorRegimeMap[stripped]) return sectorRegimeMap[stripped];
+      for (const key of Object.keys(sectorRegimeMap)) {
+        if (key.replace(/^AI\s+/, '') === stripped) return sectorRegimeMap[key];
+      }
+      return null;
+    };
+
     const sectorBreakdown = Object.values(sectorMap)
       .map(s => ({
         sector: s.sector,
         longTickers: [...new Set(s.longTickers)].sort(),
         shortTickers: [...new Set(s.shortTickers)].sort(),
-        regime: sectorRegimeMap[s.sector] || null,
+        regime: resolveRegime(s.sector),
       }))
       .sort((a, b) => (b.longTickers.length + b.shortTickers.length) - (a.longTickers.length + a.shortTickers.length));
 

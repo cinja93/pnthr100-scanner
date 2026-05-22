@@ -1,9 +1,23 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
-import { fetchSectorData, fetchSectorStocks, fetchEarnings, fetchScannerRanks, fetchSectorSignalCounts, fetchSpeculativeSignalCounts, fetchSpeculativeStocks } from '../services/api';
+import { fetchSectorData, fetchSectorStocks, fetchEarnings, fetchScannerRanks, fetchSectorSignalCounts, fetchSpeculativeSignalCounts, fetchSpeculativeStocks, API_BASE, authHeaders } from '../services/api';
 import StockTable from './StockTable';
 import AiTickerChartModal from './AiTickerChartModal';
 import styles from './SectorPage.module.css';
+
+const SECTOR_EMA_NAME_MAP = {
+  informationTechnology: 'Technology',
+  healthCare:            'Healthcare',
+  financials:            'Financial Services',
+  industrials:           'Industrials',
+  consumerStaples:       'Consumer Staples',
+  consumerDiscretionary: 'Consumer Discretionary',
+  energy:                'Energy',
+  utilities:             'Utilities',
+  materials:             'Basic Materials',
+  communicationServices: 'Communication Services',
+  realEstate:            'Real Estate',
+};
 
 const SECTOR_NAMES = {
   communicationServices:  'Communication Services',
@@ -107,7 +121,7 @@ function computeCumulative(filteredData, sectorKey) {
   });
 }
 
-function SectorMiniChart({ sectorKey, chartData, emaData = [], signalCounts, onClick, onSignalClick }) {
+function SectorMiniChart({ sectorKey, chartData, emaData = [], signalCounts, onClick, onSignalClick, aboveEma }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const tooltipRef = useRef(null);
@@ -226,7 +240,17 @@ function SectorMiniChart({ sectorKey, chartData, emaData = [], signalCounts, onC
   return (
     <div className={styles.card} onClick={onClick} title={`Click to see all stocks in ${SECTOR_NAMES[sectorKey]}`}>
       <div className={styles.cardHeader}>
-        <span className={styles.sectorName}>{SECTOR_NAMES[sectorKey]}</span>
+        <span className={styles.sectorName}>
+          {aboveEma != null && (
+            <span style={{
+              fontSize: 9, fontWeight: 800, letterSpacing: '0.06em',
+              padding: '2px 6px', borderRadius: 3, marginRight: 8,
+              background: aboveEma ? '#16a34a' : '#dc2626',
+              color: '#fff', verticalAlign: 'middle',
+            }}>{aboveEma ? 'BULL' : 'BEAR'}</span>
+          )}
+          {SECTOR_NAMES[sectorKey]}
+        </span>
         {currentReturn != null && (
           <span className={`${styles.returnBadge} ${isPositive ? styles.positive : styles.negative}`}>
             {SECTOR_ETF[sectorKey] && <span className={styles.etfTicker}>{SECTOR_ETF[sectorKey]}</span>}
@@ -636,6 +660,7 @@ export default function SectorPage() {
   const [signalCounts, setSignalCounts] = useState(null);
   const [specCounts, setSpecCounts] = useState(null);
   const [specModal, setSpecModal] = useState(null); // 'longs' | 'shorts' | null
+  const [sectorEmaData, setSectorEmaData] = useState({});
 
   useEffect(() => {
     setLoading(true);
@@ -671,6 +696,11 @@ export default function SectorPage() {
         .catch(err => console.error('Speculative counts error:', err));
     }
     loadSpecCounts();
+
+    fetch(`${API_BASE}/api/sector-ema`, { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : {})
+      .then(d => setSectorEmaData(d || {}))
+      .catch(() => {});
 
     return () => { clearTimeout(sectorRetry); clearTimeout(specRetry); };
   }, []);
@@ -755,6 +785,7 @@ export default function SectorPage() {
                 chartData={bySector[key]}
                 emaData={emasBySector[key] ?? []}
                 signalCounts={signalCounts?.[key] ?? null}
+                aboveEma={sectorEmaData[SECTOR_EMA_NAME_MAP[key]]?.aboveEma ?? null}
                 onClick={() => { setSelectedSector(key); setSelectedFilter(null); }}
                 onSignalClick={filter => { setSelectedSector(key); setSelectedFilter(filter); }}
               />

@@ -357,6 +357,7 @@ export default function AiOrdersPage() {
   const [recycledPositions, setRecycledPositions] = useState([]);
   const [showRecycledLog, setShowRecycledLog] = useState(false);
   const [sectorBreakdown, setSectorBreakdown] = useState([]);
+  const [sectorEmaRegime, setSectorEmaRegime] = useState({});
   const [heatReductionPlan, setHeatReductionPlan] = useState(null);
   const [heatReduceDismissed, setHeatReduceDismissed] = useState(false);
   const [heatReduceSubmitting, setHeatReduceSubmitting] = useState(false);
@@ -398,6 +399,10 @@ export default function AiOrdersPage() {
   useEffect(() => {
     load(false);
     fetchNav().then(d => setUserNav(d?.nav || 100000)).catch(() => {});
+    fetch(`${API_BASE}/api/sector-ema`, { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : {})
+      .then(d => setSectorEmaRegime(d || {}))
+      .catch(() => {});
     const id = setInterval(() => load(isMarketHours()), 60_000);
     return () => clearInterval(id);
   }, []);
@@ -1261,7 +1266,12 @@ export default function AiOrdersPage() {
       {sectorBreakdown.length > 0 && (
         <div style={{ marginTop: 24 }}>
           <PortfolioSectorPie
-            breakdown={sectorBreakdown}
+            breakdown={sectorBreakdown.map(s => {
+              if (s.regime) return s;
+              const emaEntry = sectorEmaRegime[s.sector];
+              if (emaEntry?.aboveEma != null) return { ...s, regime: emaEntry.aboveEma ? 'bull' : 'bear' };
+              return s;
+            })}
             onTickerClick={(ticker) => {
               setChartTickers([ticker]);
               setChartIndex(0);

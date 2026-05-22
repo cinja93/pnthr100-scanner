@@ -13,58 +13,53 @@ const NAV_GROUPS = [
     groupLabel: "Investor's Den",
     info: 'investorsDen',
     items: [
-      { key: 'ir-live',   label: 'Intelligence Report', iconImg: true, aiHighlight: true, needsAccess: true },
-      { key: 'data-room', label: 'PNTHR Data Room',     icon: '🗄️' },
+      { key: 'ir-live',   label: 'Intelligence Report', badge: 'LIVE', badgeType: 'live', needsAccess: true },
+      { key: 'data-room', label: 'Data Room' },
     ],
   },
   {
     groupLabel: 'This Week',
     info: 'thisWeek',
     items: [
-      { key: 'perch',    label: 'PNTHR Perch',    iconImg: true },
-      { key: 'earnings', label: 'PNTHR Calendar', icon: '📅' },
+      { key: 'perch',    label: 'Perch',    badge: 'NEWSLETTER' },
+      { key: 'earnings', label: 'Calendar', badge: 'EARNINGS' },
     ],
   },
   {
     groupLabel: 'Market Pulse',
     info: 'marketPulse',
     items: [
-      { key: 'pulse',    label: 'PNTHR Pulse',       iconImg: true, splitHighlight: true },
-      { key: 'bondHeat', label: 'PNTHR Bond Yields',  iconImg: true },
+      { key: 'pulse',    label: 'Pulse',       badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'bondHeat', label: 'Bond Yields' },
     ],
   },
   {
     groupLabel: 'PNTHR Live',
     info: 'pnthrLive',
     items: [
-      { key: 'assistant', label: 'PNTHR Assistant', iconImg: true },
-      { key: 'orders',    label: 'PNTHR Orders',    iconImg: true },
-      { key: 'aiOrders',  label: 'PNTHR AI Orders', iconImg: true, aiHighlight: true },
+      { key: 'assistant', label: 'Assistant', badge: 'DASHBOARD' },
+      { key: 'orders',    label: 'Orders',    badge: 'AI | CARN', badgeType: 'split' },
     ],
   },
   {
     groupLabel: 'Strategy',
     info: 'strategy',
     items: [
-      { key: 'prey',   label: 'PNTHR Prey',    iconImg: true },
-      { key: 'apex',   label: 'PNTHR Kill',    iconImg: true },
-      { key: 'aiKill', label: 'PNTHR AI Kill', iconImg: true, aiHighlight: true },
-      { key: 'search', label: 'PNTHR Search',  iconImg: true },
+      { key: 'prey',   label: 'Prey',   badge: 'CARN', badgeType: 'carn' },
+      { key: 'apex',   label: 'Kill',   badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'search', label: 'Search' },
     ],
   },
   {
     groupLabel: 'Universe',
     info: 'universe',
     items: [
-      { key: 'jungle',     label: 'Carnivore Jungle',   iconImg: true },
-      { key: 'aiJungle',   label: 'PNTHR AI 300 Index', iconImg: true, aiHighlight: true },
-      { key: 'sectors',    label: 'PNTHR Sectors',      iconImg: true },
-      { key: 'aiSectors',  label: 'PNTHR AI Sectors',   iconImg: true, aiHighlight: true },
-      { key: 'jungleHeat', label: 'Carnivore Heat',     iconImg: true },
-      { key: 'aiHeat',     label: 'PNTHR AI Heat',      iconImg: true, aiHighlight: true },
-      { key: 'etf',        label: "PNTHR ETF's",        iconImg: true },
-      { key: 'long',       label: 'PNTHR 100 Longs',    iconImg: true, splitHighlight: true },
-      { key: 'short',      label: 'PNTHR 100 Shorts',   iconImg: true, splitHighlight: true },
+      { key: 'jungle',     label: 'Jungle',     badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'sectors',    label: 'Sectors',     badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'jungleHeat', label: 'Heat Map',    badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'etf',        label: "ETF's" },
+      { key: 'long',       label: '100 Longs',   badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'short',      label: '100 Shorts',  badge: 'AI | CARN', badgeType: 'split' },
     ],
   },
 ];
@@ -271,9 +266,9 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         groupLabel: 'PNTHR Live',
         info: 'pnthrLive',
         items: [
-          { key: 'portfolio', label: 'PNTHR Portfolio', iconImg: true },
-          { key: 'assistant', label: 'PNTHR Assistant', iconImg: true },
-          { key: 'orders',    label: 'PNTHR Orders',    iconImg: true },
+          { key: 'portfolio', label: 'Portfolio' },
+          { key: 'assistant', label: 'Assistant', badge: 'DASHBOARD' },
+          { key: 'orders',    label: 'Orders',    badge: 'AI | CARN', badgeType: 'split' },
         ],
       }
     : null;
@@ -282,21 +277,19 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   const internalItems = [];
   if (effectiveAdmin) {
     internalItems.push(
-      { key: 'investor-mgmt',     label: 'Investor Portal',     icon: '👥' },
-      { key: 'journal',           label: 'PNTHR Journal',       iconImg: true },
-      { key: 'signal-history',    label: 'PNTHR History',       iconImg: true },
-      { key: 'ai-signal-history', label: 'PNTHR AI History',    iconImg: true, aiHighlight: true },
-      { key: 'history',           label: 'PNTHR Kill 10',       iconImg: true, info: 'kill10', splitHighlight: true },
-      { key: 'kill-test',         label: 'PNTHR Kill Test',     iconImg: true, info: 'killTest', splitHighlight: true },
-      { key: 'compliance',        label: 'Compliance',          icon: '🛡️' },
-      { key: 'watchlist',         label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' },
-      { key: 'test',              label: 'TEST',                icon: '🧪' },
+      { key: 'investor-mgmt',     label: 'Investor Portal' },
+      { key: 'journal',           label: 'Journal' },
+      { key: 'signal-history',    label: 'Signal History',    badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'history',           label: 'Kill 10',           info: 'kill10', badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'kill-test',         label: 'Kill Test',         info: 'killTest', badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'compliance',        label: 'Compliance' },
+      { key: 'watchlist',         label: firstName ? `${firstName}'s Watchlist` : 'Watchlist' },
+      { key: 'test',              label: 'TEST' },
     );
   } else {
-    // Non-admin users still get Journal and Watchlist
     internalItems.push(
-      { key: 'journal',  label: 'PNTHR Journal', iconImg: true },
-      { key: 'watchlist', label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' },
+      { key: 'journal',   label: 'Journal' },
+      { key: 'watchlist',  label: firstName ? `${firstName}'s Watchlist` : 'Watchlist' },
     );
   }
   const internalGroup = internalItems.length > 0
@@ -411,50 +404,33 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
               <div className={styles.navGroupBox}>
                 {group.items.map((item) => {
                   const isActive = activePage === item.key;
-                  const aiStyle = item.aiHighlight ? {
-                    background: '#fcf000',
-                    color:      '#000',
-                    fontWeight: 700,
-                    border:     '1px solid #fcf000',
-                  } : item.splitHighlight ? {
-                    background: 'transparent',
-                    fontWeight: 700,
-                    border: '1px solid #fcf000',
-                    overflow: 'hidden',
-                    padding: 0,
-                    display: 'flex',
-                  } : undefined;
                   return (
                     <button
                       key={item.key}
                       ref={el => { if (el) btnRefs.current[item.key] = el; }}
-                      className={`${styles.navItem} ${isActive && !item.aiHighlight && !item.splitHighlight ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
-                      style={aiStyle}
+                      className={`${styles.navItem} ${isActive ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
                       onClick={() => !item.soon && handleNav(item.key)}
                       disabled={item.soon}
                       title={item.soon ? 'Coming soon' : item.label}
                       onMouseEnter={() => handleMouseEnter(item.key)}
                       onMouseLeave={() => setTooltipKey(null)}
                     >
-                      {item.splitHighlight ? (
-                        <>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fcf000', color: '#000', padding: '6px 4px 6px 8px', flexShrink: 0 }}>
-                            <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
-                            <span style={{ fontWeight: 700, fontSize: 11 }}>AI</span>
-                          </span>
-                          <span style={{ display: 'flex', alignItems: 'center', background: '#000', color: '#fcf000', padding: '6px 8px 6px 4px', flex: 1, fontWeight: 700, fontSize: 11 }}>
-                            CARN {item.label.replace(/^PNTHR\s*/, '')}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span className={styles.navIcon}>
-                            {item.iconImg
-                              ? <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
-                              : item.icon}
-                          </span>
-                          <span className={styles.navLabel}>{item.label}</span>
-                        </>
+                      <span className={styles.navLabel}>{item.label}</span>
+                      {item.badge && item.badgeType === 'split' && (
+                        <span className={styles.badgeSplit}>
+                          <span className={styles.badgeSplitAi}>AI</span>
+                          <span className={styles.badgeSplitSep}>|</span>
+                          <span className={styles.badgeSplitCarn}>CARN</span>
+                        </span>
+                      )}
+                      {item.badge && item.badgeType === 'carn' && (
+                        <span className={styles.badgeCarn}>{item.badge}</span>
+                      )}
+                      {item.badge && item.badgeType === 'live' && (
+                        <span className={styles.badgeLive}>{item.badge}</span>
+                      )}
+                      {item.badge && !item.badgeType && (
+                        <span className={styles.badgeDefault}>{item.badge}</span>
                       )}
                       {item.soon && <span className={styles.soonBadge}>Soon</span>}
                       {item.info && (
@@ -487,7 +463,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                 </span>
                 <div className={styles.fundTags}>
                   <span className={styles.fundTagAI}>AI ELITE 300</span>
-                  <span className={styles.fundTagCarn}>CARNIVORE</span>
+                  <span className={styles.fundTagCarn}>Carnivore</span>
                 </div>
               </div>
             )}

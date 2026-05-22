@@ -197,6 +197,68 @@
   flex: 1;
 }
 
+/* ── Right-aligned nav badges ───────────────────────────────────────── */
+.badgeSplit {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+.badgeSplitAi {
+  color: #fcf000;
+}
+.badgeSplitSep {
+  color: rgba(255, 255, 255, 0.2);
+  margin: 0 4px;
+}
+.badgeSplitCarn {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.badgeCarn {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #fcf000;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
+.badgeLive {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #000;
+  background: #4ade80;
+  border-radius: 4px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
+.badgeDefault {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
 .soonBadge {
   font-size: 9px;
   font-weight: 700;

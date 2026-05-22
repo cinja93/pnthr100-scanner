@@ -281,7 +281,7 @@ function classifyAvg(ibkrAvg, cmdAvg) {
   if (ibkrAvg == null && cmdAvg == null) return { status: 'gray' };
   if (ibkrAvg == null || cmdAvg == null) return { status: 'yellow', reason: 'only one side' };
   const diff = Math.abs(ibkrAvg - cmdAvg);
-  if (diff < TOL.AVG_EXACT) return { status: 'green' };
+  if (diff <= TOL.AVG_EXACT) return { status: 'green' };
   if (diff < cmdAvg * TOL.AVG_YELLOW_PCT) return { status: 'yellow', reason: `${(diff/cmdAvg*100).toFixed(2)}% drift` };
   return { status: 'red', reason: `$${diff.toFixed(2)} drift` };
 }
@@ -301,7 +301,7 @@ function classifyStopPrice(ibkrStops, cmdStop) {
   if (hasIbkr && cmdStop == null)   return { status: 'red', reason: 'Orphan stop — no Command position' };
   // Compare the "active" IBKR stop (tightest = highest for long stops, lowest for short)
   // Note: without direction ambiguity we compare against ANY match — if plan stop matches any IBKR stop, green.
-  const match = ibkrStops.find(s => Math.abs(+s.stopPrice - cmdStop) < TOL.STOP_EXACT);
+  const match = ibkrStops.find(s => Math.abs(+s.stopPrice - cmdStop) <= TOL.STOP_EXACT);
   if (match) return { status: 'green' };
   const closest = ibkrStops.reduce((a, b) =>
     Math.abs(+a.stopPrice - cmdStop) < Math.abs(+b.stopPrice - cmdStop) ? a : b
@@ -369,7 +369,8 @@ function classifyLotTriggers(enrichedTriggers) {
   }
 
   // All staged at right price/side, but any with share mismatch → yellow.
-  const mismatched = actionable.filter(t => (t.stagedShares || 0) !== t.targetShares);
+  // ±1 share tolerance matches lotTriggerCron's aligned threshold (NAV rounding).
+  const mismatched = actionable.filter(t => Math.abs((t.stagedShares || 0) - t.targetShares) > 1);
   if (mismatched.length > 0) {
     const detail = mismatched.map(t =>
       `L${t.lot} (plan ${t.targetShares} sh, TWS ${t.stagedShares || 0} sh)`

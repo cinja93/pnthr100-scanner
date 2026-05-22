@@ -724,15 +724,24 @@ export async function assistantLiveReconcile(req, res) {
             : (price - avg) * shares;
           const currentStop = r.command.stopPrice;
           const riskFreed = Math.abs(avg - currentStop) * shares;
+          // True breakeven: avg cost (includes entry fees via IBKR) + estimated
+          // exit cost so that a stop-out yields ~$0 net P&L.
+          // IBKR commission ~$0.005/sh, SEC fee ~$0.001/sh → ~$0.006/sh buffer.
+          const exitFeePerShare = 0.006;
+          const breakeven = isShort
+            ? +(avg - exitFeePerShare).toFixed(2)
+            : +(avg + exitFeePerShare).toFixed(2);
+          const riskFreedBe = Math.abs(breakeven - currentStop) * shares;
           return {
             ticker: r.ticker,
             direction: dir,
             shares,
             avgCost: +avg.toFixed(2),
+            breakeven,
             currentPrice: +(price).toFixed(2),
             currentStop: +currentStop.toFixed(2),
             openPnl: +pnl.toFixed(2),
-            riskFreed: +riskFreed.toFixed(2),
+            riskFreed: +riskFreedBe.toFixed(2),
             positionId: r.command.positionId,
           };
         })

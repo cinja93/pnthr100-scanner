@@ -635,7 +635,7 @@ export default function AiOrdersPage() {
           <span style={{ color: '#f97316', fontWeight: 900, fontSize: 12, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>♻ RECYCLE</span>
           <span style={{ color: '#e5e5e5', fontSize: 12 }}>
             Move <strong style={{ color: '#fcf000', fontSize: 13 }}>{recycleCandidate.ticker}</strong> stop
-            from <span style={{ color: '#dc2626' }}>${recycleCandidate.currentStop}</span> → <span style={{ color: '#16a34a' }}>${recycleCandidate.avgCost}</span> (avg cost)
+            from <span style={{ color: '#dc2626' }}>${recycleCandidate.currentStop}</span> → <span style={{ color: '#16a34a' }}>${recycleCandidate.breakeven ?? recycleCandidate.avgCost}</span> (breakeven)
             {' '}· Open P&L: <strong style={{ color: '#16a34a' }}>${recycleCandidate.openPnl.toLocaleString()}</strong>
             {' '}· Frees <span style={{ color: '#fbbf24' }}>${recycleCandidate.riskFreed.toLocaleString()}</span> heat
           </span>
@@ -648,7 +648,7 @@ export default function AiOrdersPage() {
                   const res = await fetch(`${API_BASE}/api/positions/${recycleCandidate.positionId}/stop-price`, {
                     method: 'PATCH',
                     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ stopPrice: recycleCandidate.avgCost, recycleForHeat: true }),
+                    body: JSON.stringify({ stopPrice: recycleCandidate.breakeven ?? recycleCandidate.avgCost, recycleForHeat: true }),
                   });
                   if (!res.ok) throw new Error(`HTTP ${res.status}`);
                   setRecycleDismissed(recycleCandidate.ticker);

@@ -10,6 +10,70 @@
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.4);
   z-index: 100;
   overflow-y: auto;
+  overflow-x: hidden;
+  transition: width 0.25s ease, min-width 0.25s ease;
+}
+
+/* ── Collapsed state (desktop) ──────────────────────────────────────── */
+.sidebarCollapsed {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+/* ── Collapse button — right edge of open sidebar ───────────────────── */
+.collapseBtn {
+  position: absolute;
+  top: 12px;
+  right: 6px;
+  z-index: 101;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.collapseBtn:hover {
+  background: rgba(252, 240, 0, 0.15);
+  color: #fcf000;
+  border-color: rgba(252, 240, 0, 0.4);
+}
+
+/* ── Expand tab — floating when collapsed ───────────────────────────── */
+.expandTab {
+  position: fixed;
+  top: 12px;
+  left: 8px;
+  z-index: 101;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #111;
+  border: 1px solid rgba(252, 240, 0, 0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.expandTab:hover {
+  background: #1a1a1a;
+  border-color: #fcf000;
+}
+.expandTabLogo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 
 /* ── Logo + PNTHR's Den ──────────────────────────────────────────────── */
@@ -521,6 +585,17 @@
 @media (max-width: 1024px) {
   .hamburger {
     display: flex;
+  }
+
+  .collapseBtn,
+  .expandTab {
+    display: none;
+  }
+
+  .sidebarCollapsed {
+    width: 220px;
+    min-width: 220px;
+    overflow-y: auto;
   }
 
   .sidebar {

@@ -254,7 +254,16 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   const [tooltipTop, setTooltipTop] = useState(0);
   const [infoModal, setInfoModal] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true');
   const btnRefs = useRef({});
+
+  function toggleCollapse() {
+    setCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('sidebarCollapsed', String(next));
+      return next;
+    });
+  }
 
   const firstName = getFirstName(currentUser);
   const isPortalMode = isDenPortal || isInvestorPortal || isVipPortal;
@@ -358,7 +367,17 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
       </button>
       {/* Overlay — click to close on tablet */}
       {mobileOpen && <div className={styles.mobileOverlay} onClick={() => setMobileOpen(false)} />}
-    <aside className={`${styles.sidebar} ${mobileOpen ? styles.sidebarOpen : ''}`} style={isDemo ? { borderTop: '2px solid #fcf000' } : undefined}>
+
+      {/* Expand tab — visible only when sidebar is collapsed on desktop */}
+      {collapsed && (
+        <button className={styles.expandTab} onClick={toggleCollapse} aria-label="Expand sidebar">
+          <img src={pnthrLogo} alt="PNTHR" className={styles.expandTabLogo} />
+        </button>
+      )}
+
+    <aside className={`${styles.sidebar} ${mobileOpen ? styles.sidebarOpen : ''} ${collapsed ? styles.sidebarCollapsed : ''}`} style={isDemo ? { borderTop: '2px solid #fcf000' } : undefined}>
+      {/* Collapse toggle — right edge of sidebar */}
+      <button className={styles.collapseBtn} onClick={toggleCollapse} aria-label="Collapse sidebar">‹</button>
       {/* Logo + branding */}
       <div className={styles.logoArea}>
         <img src={pnthrLogo} alt="PNTHR" className={styles.logo} />

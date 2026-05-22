@@ -357,6 +357,27 @@ export default function AiOrdersPage() {
   });
   const [lastRefresh, setLastRefresh] = useState(null);
   const [reentrySignals, setReentrySignals] = useState([]);
+  const [dismissedMce, setDismissedMce] = useState(() => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const raw = localStorage.getItem('pnthr.mce.dismissed');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.date === today) return new Set(parsed.tickers);
+      }
+    } catch {}
+    return new Set();
+  });
+  const dismissMceTicker = useCallback((ticker, e) => {
+    e.stopPropagation();
+    setDismissedMce(prev => {
+      const next = new Set(prev);
+      next.add(ticker);
+      const today = new Date().toISOString().slice(0, 10);
+      localStorage.setItem('pnthr.mce.dismissed', JSON.stringify({ date: today, tickers: [...next] }));
+      return next;
+    });
+  }, []);
 
   const load = useCallback((refresh = false) => {
     setLoading(prev => !doc ? true : prev);
@@ -668,10 +689,10 @@ export default function AiOrdersPage() {
           {/* NOW — PNTHR MCE section */}
           {reentrySignals.length > 0 && (() => {
             const bullSignals = reentrySignals
-              .filter(s => s.sectorRegime !== 'bear')
+              .filter(s => s.sectorRegime !== 'bear' && !dismissedMce.has(s.ticker))
               .sort((a, b) => (b.sectorFiveDay ?? -999) - (a.sectorFiveDay ?? -999));
             const bearFiltered = reentrySignals
-              .filter(s => s.sectorRegime === 'bear')
+              .filter(s => s.sectorRegime === 'bear' && !dismissedMce.has(s.ticker))
               .sort((a, b) => (b.sectorFiveDay ?? -999) - (a.sectorFiveDay ?? -999));
             return bullSignals.length > 0 && (<>
             <div style={{
@@ -715,6 +736,7 @@ export default function AiOrdersPage() {
                       {['L1 Sh','L1 Entry $','Weekly BL Date'].map(h => (
                         <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
+                      <th style={{ padding: '6px 10px', width: 32 }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -742,6 +764,19 @@ export default function AiOrdersPage() {
                         <td style={{ padding: '6px 10px' }}>{s.lotShares?.[0]}</td>
                         <td style={{ padding: '6px 10px', color: '#aaa' }}>${(s.lotShares?.[0] * s.entryTrigger).toFixed(0)}</td>
                         <td style={{ padding: '6px 10px', color: '#64748b', fontSize: 11 }}>{s.signalDate}</td>
+                        <td style={{ padding: '4px 6px', textAlign: 'center' }}>
+                          <button
+                            onClick={(e) => dismissMceTicker(s.ticker, e)}
+                            title={`Skip ${s.ticker} today`}
+                            style={{
+                              background: 'transparent', border: '1px solid rgba(220,38,38,0.3)',
+                              color: '#dc2626', borderRadius: 4, cursor: 'pointer',
+                              fontSize: 13, fontWeight: 700, lineHeight: 1, padding: '3px 6px',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.15)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                          >✕</button>
+                        </td>
                       </tr>
                       );
                     })}
@@ -790,6 +825,7 @@ export default function AiOrdersPage() {
                       {['L1 Sh','L1 Entry $','Weekly BL Date'].map(h => (
                         <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#ca8a04', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
+                      <th style={{ padding: '6px 10px', width: 32 }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -817,6 +853,19 @@ export default function AiOrdersPage() {
                         <td style={{ padding: '6px 10px' }}>{s.lotShares?.[0]}</td>
                         <td style={{ padding: '6px 10px', color: '#aaa' }}>${(s.lotShares?.[0] * s.entryTrigger).toFixed(0)}</td>
                         <td style={{ padding: '6px 10px', color: '#64748b', fontSize: 11 }}>{s.signalDate}</td>
+                        <td style={{ padding: '4px 6px', textAlign: 'center' }}>
+                          <button
+                            onClick={(e) => dismissMceTicker(s.ticker, e)}
+                            title={`Skip ${s.ticker} today`}
+                            style={{
+                              background: 'transparent', border: '1px solid rgba(220,38,38,0.3)',
+                              color: '#dc2626', borderRadius: 4, cursor: 'pointer',
+                              fontSize: 13, fontWeight: 700, lineHeight: 1, padding: '3px 6px',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.15)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                          >✕</button>
+                        </td>
                       </tr>
                       );
                     })}

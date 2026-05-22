@@ -17,6 +17,7 @@ export const ETF_LIST = new Set([
   'ARKK','SOXX','SMH','IBB','XBI','KRE','XHB','ITB',
   'GDX','GDXJ','RSP','MDY','IJR','SCHA','VB',
   'JETS','BUZZ','KWEB','FXI','INDA',
+  'QTUM','TTEQ',
 ]);
 
 export function isEtfTicker(ticker, profileIsEtf = false) {

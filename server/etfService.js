@@ -22,7 +22,7 @@ const ETF_CATEGORIES = [
   },
   {
     label: 'Technology & Innovation',
-    tickers: ['MAGS','IETC','SMH','XSD','SOXX','VGT','IGV','AIQ','ARTY','CHAT','QTUM','HACK','CLOU','DTCR','SOCL','BLOK','BKCH','XTL'],
+    tickers: ['MAGS','IETC','SMH','XSD','SOXX','VGT','IGV','AIQ','ARTY','CHAT','QTUM','HACK','CLOU','DTCR','SOCL','BLOK','BKCH','XTL','TTEQ'],
   },
   {
     label: 'Aerospace & Defense',

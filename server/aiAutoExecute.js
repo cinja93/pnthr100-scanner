@@ -35,7 +35,7 @@ import { SECTORS as AI_UNIVERSE_SECTORS } from './scripts/aiUniverse/aiUniverseD
 const COLL_PORTFOLIO = 'pnthr_portfolio';
 const COLL_AI_ORDERS = 'pnthr_ai_orders';
 
-const HEAT_CAP_PCT      = 0.10;  // 10% NAV max total risk
+const HEAT_CAP_PCT      = 0.15;  // 15% NAV hard gate — soft target is 10%, user manages intraday
 const CAPITAL_RESERVE   = 0.20;  // 20% NAV kept as buying power reserve
 
 function isEnabled() {

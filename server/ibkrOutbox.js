@@ -561,8 +561,8 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
       if (shares > 0) totalRisk += riskPerShare * shares;
     }
     const heatPct = nav > 0 ? totalRisk / nav : 0;
-    if (heatPct >= 0.10) {
-      return { skipped: `HEAT_CAP_${(heatPct * 100).toFixed(1)}PCT_GTE_10PCT` };
+    if (heatPct >= 0.15) {
+      return { skipped: `HEAT_CAP_${(heatPct * 100).toFixed(1)}PCT_GTE_15PCT` };
     }
   }
 

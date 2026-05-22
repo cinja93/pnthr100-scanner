@@ -1117,7 +1117,7 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                       zIndex:        2,
                       padding:       '2px 8px',
                       background:    '#6f42c1',
-                      border:        '1px solid rgba(111,66,193,0.7)',
+                      border:        isLoss ? '1px solid rgba(111,66,193,0.7)' : '2px solid #16a34a',
                       borderRadius:  4,
                       fontSize:      11,
                       fontWeight:    800,

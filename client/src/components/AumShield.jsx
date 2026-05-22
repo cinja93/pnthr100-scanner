@@ -1,13 +1,20 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAumShield } from '../contexts/AumShieldContext';
+import { API_BASE, authHeaders } from '../services/api';
+
+const UNLOCK_MS = 10 * 60 * 1000;
 
 export default function AumShield({ children, style = {} }) {
-  const { locked, hasPin, unlock, setPin } = useAumShield();
+  const { hasPin, setHasPin } = useAumShield();
+  const [locked, setLocked] = useState(true);
   const [showPrompt, setShowPrompt] = useState(false);
   const [pin, setPinVal] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [step, setStep] = useState('enter');
+  const timerRef = useRef(null);
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
   if (hasPin === null) {
     return <span style={{ ...style, color: '#333' }}>••••</span>;
@@ -15,11 +22,29 @@ export default function AumShield({ children, style = {} }) {
 
   if (!locked) return <>{children}</>;
 
+  const startTimer = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setLocked(true), UNLOCK_MS);
+  };
+
   const handleSubmit = async () => {
     if (hasPin) {
-      const ok = await unlock(pin);
-      if (!ok) { setError('Incorrect PIN'); setPinVal(''); }
-      else { setShowPrompt(false); setPinVal(''); setError(''); }
+      const res = await fetch(`${API_BASE}/api/user/aum-pin/verify`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ pin }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        setLocked(false);
+        startTimer();
+        setShowPrompt(false);
+        setPinVal('');
+        setError('');
+      } else {
+        setError('Incorrect PIN');
+        setPinVal('');
+      }
     } else {
       if (step === 'enter') {
         if (!/^\d{4}$/.test(pin)) { setError('Enter 4 digits'); return; }
@@ -28,9 +53,24 @@ export default function AumShield({ children, style = {} }) {
         return;
       }
       if (confirm !== pin) { setError('PINs do not match'); setConfirm(''); return; }
-      const ok = await setPin(pin);
-      if (ok) { setShowPrompt(false); setPinVal(''); setConfirm(''); setError(''); setStep('enter'); }
-      else { setError('Failed to save PIN'); }
+      const res = await fetch(`${API_BASE}/api/user/aum-pin`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ pin }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        setHasPin(true);
+        setLocked(false);
+        startTimer();
+        setShowPrompt(false);
+        setPinVal('');
+        setConfirm('');
+        setError('');
+        setStep('enter');
+      } else {
+        setError('Failed to save PIN');
+      }
     }
   };
 

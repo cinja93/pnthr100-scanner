@@ -1623,7 +1623,7 @@ function OrderTable({ orders, gtdExp, nav, onTickerClick, ai300Overlap }) {
                     <span style={{ fontSize: 8, fontWeight: 800, background: '#fcf000', color: '#000',
                       padding: '1px 4px', borderRadius: 3, letterSpacing: '0.04em' }}>AI 300</span>
                   )}
-                  {o.washBlocked && (
+                  {isAdmin && o.washBlocked && (
                     <span
                       title={`Wash sale window open until ${o.washExpiryDate ? new Date(o.washExpiryDate).toLocaleDateString() : 'unknown'} — trading this will disallow the loss`}
                       style={{

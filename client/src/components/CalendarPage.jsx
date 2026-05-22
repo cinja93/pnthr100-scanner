@@ -4,6 +4,7 @@ import AiTickerChartModal from './AiTickerChartModal';
 import EarningsSeasonTable from './EarningsSeasonTable';
 import { fetchJungleStocks, fetchEarnings, fetchWashRules, fetchAiUniverse } from '../services/api';
 import { getCalendarWeekWindow } from '../utils/dateUtils';
+import { useAuth } from '../AuthContext';
 import styles from './CalendarPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -66,6 +67,7 @@ function WashSaleSection({ rules }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CalendarPage() {
+  const { isAdmin } = useAuth() || {};
   const [stocks, setStocks]           = useState([]);
   const [signals, setSignals]         = useState({});
   const [earnings, setEarnings]       = useState({});
@@ -90,9 +92,9 @@ export default function CalendarPage() {
         return fetchEarnings(allTickers).then(e => setEarnings(e));
       });
 
-    const washPromise = fetchWashRules()
-      .then(rules => setWashRules(Array.isArray(rules) ? rules : []))
-      .catch(() => setWashRules([]));
+    const washPromise = isAdmin
+      ? fetchWashRules().then(rules => setWashRules(Array.isArray(rules) ? rules : [])).catch(() => setWashRules([]))
+      : Promise.resolve();
 
     Promise.all([junglePromise, washPromise])
       .catch(err => {
@@ -118,8 +120,9 @@ export default function CalendarPage() {
     return groups;
   }, [stocks, earnings, from, to]);
 
-  // Wash sales grouped by expiry date
+  // Wash sales grouped by expiry date (admin only)
   const washByDate = useMemo(() => {
+    if (!isAdmin) return {};
     const groups = {};
     for (const rule of washRules) {
       const date = toDateStr(rule.washSale?.expiryDate);
@@ -128,7 +131,7 @@ export default function CalendarPage() {
       groups[date].push(rule);
     }
     return groups;
-  }, [washRules, from, to]);
+  }, [isAdmin, washRules, from, to]);
 
   // All unique dates that appear in either earnings or wash sales
   const allDates = useMemo(() => {
@@ -140,7 +143,7 @@ export default function CalendarPage() {
   }, [earningsByDate, washByDate]);
 
   const earningsCount = allDates.reduce((sum, d) => sum + (earningsByDate[d]?.length || 0), 0);
-  const washCount     = allDates.reduce((sum, d) => sum + (washByDate[d]?.length || 0), 0);
+  const washCount     = isAdmin ? allDates.reduce((sum, d) => sum + (washByDate[d]?.length || 0), 0) : 0;
 
   function handleRowClick(_s, idx, sortedStocks) {
     setChartStocks(sortedStocks);
@@ -148,7 +151,7 @@ export default function CalendarPage() {
   }
 
   function buildSubtitle() {
-    if (loading || error) return `PNTHR 679 + AI 300 earnings + wash sale expirations ${isNextWeek ? 'next week' : 'this week'}`;
+    if (loading || error) return `PNTHR 679 + AI 300 earnings ${isNextWeek ? 'next week' : 'this week'}`;
     const parts = [];
     if (earningsCount > 0) parts.push(`${earningsCount} stock${earningsCount !== 1 ? 's' : ''} reporting`);
     if (washCount > 0) parts.push(`${washCount} wash sale expiration${washCount !== 1 ? 's' : ''}`);
@@ -200,8 +203,8 @@ export default function CalendarPage() {
         <div key={date} className={styles.daySection}>
           <h2 className={styles.dayHeader}>{formatDayHeader(date)}</h2>
 
-          {/* Wash sale expirations for this day */}
-          <WashSaleSection rules={washByDate[date]} />
+          {/* Wash sale expirations for this day (admin only) */}
+          {isAdmin && <WashSaleSection rules={washByDate[date]} />}
 
           {/* Earnings stocks for this day */}
           {earningsByDate[date]?.length > 0 && (

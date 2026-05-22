@@ -66,6 +66,65 @@
   text-transform: uppercase;
   letter-spacing: 1.2px;
   padding: 0 4px 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── Section ⓘ info button ──────────────────────────────────────────── */
+.sectionInfoBtn {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 50%;
+  transition: color 0.15s, background 0.15s;
+}
+.sectionInfoBtn:hover {
+  color: #fcf000;
+  background: rgba(252, 240, 0, 0.12);
+}
+
+/* ── Fund Explainer block ───────────────────────────────────────────── */
+.fundExplainer {
+  padding: 6px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fundExplainerLabel {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.fundTags {
+  display: flex;
+  gap: 4px;
+}
+.fundTagAI {
+  background: #fcf000;
+  color: #000;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+}
+.fundTagCarn {
+  background: #1a1a1a;
+  color: #888;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+  border: 1px solid #333;
 }
 
 .navGroupBox {

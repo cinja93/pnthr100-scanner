@@ -3,6 +3,7 @@ import { createChart, BarSeries, CandlestickSeries, LineSeries, createSeriesMark
 import { fetchAiStockChartData, fetchNav, fetchFcfData, fetchValuationData, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils';
 import { useQueue } from '../contexts/QueueContext';
+import { useAuth } from '../AuthContext';
 import pantherHead from '../assets/panther head.png';
 
 const washPulseCSS = `
@@ -785,6 +786,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const [chartType, setChartType] = useState('bars');
+  const { isAdmin } = useAuth() || {};
   const [washWarning, setWashWarning] = useState(null);
   const [fcfMap, setFcfMap]       = useState({});
   const [valMap, setValMap]       = useState({});
@@ -835,9 +837,9 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
     return () => { cancelled = true; clearInterval(id); };
   }, [activeTicker]);
 
-  // Wash rule check whenever active ticker changes
+  // Wash rule check whenever active ticker changes (admin only)
   useEffect(() => {
-    if (!activeTicker) { setWashWarning(null); return; }
+    if (!isAdmin || !activeTicker) { setWashWarning(null); return; }
     let cancelled = false;
     fetch(`${API_BASE}/api/wash-rules?ticker=${encodeURIComponent(activeTicker)}`, { headers: authHeaders() })
       .then(r => r.ok ? r.json() : [])
@@ -849,7 +851,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
       })
       .catch(() => { if (!cancelled) setWashWarning(null); });
     return () => { cancelled = true; };
-  }, [activeTicker]);
+  }, [isAdmin, activeTicker]);
 
   const dayChangeColor = data?.dayChangePct == null ? '#888' : data.dayChangePct >= 0 ? '#16a34a' : '#dc2626';
 
@@ -922,9 +924,9 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
             )}
           </div>
 
-          {/* Right: wash badge + chart-type toggle + close */}
+          {/* Right: wash badge (admin only) + chart-type toggle + close */}
           <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end', minWidth: 0 }}>
-            {washWarning && (() => {
+            {isAdmin && washWarning && (() => {
               const ws = washWarning.washSale;
               if (ws?.triggered) {
                 return (

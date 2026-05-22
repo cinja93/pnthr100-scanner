@@ -31,7 +31,6 @@ import {
 import { PendingCard, FIVE_DAYS_MS } from './pyramid';
 import { useAuth } from '../AuthContext';
 import AiTickerChartModal from './AiTickerChartModal';
-import AssistantLiveTable from './AssistantLiveTable';
 import RiskSummaryBar from './RiskSummaryBar';
 import RiskAdvisorModal from './RiskAdvisorModal';
 import CalculatorModal from './CalculatorModal';
@@ -2498,7 +2497,7 @@ function HeadlineFeed({ headlines, loading, devSignalsAge, onTickerClick, analyz
 //   - hasEarningsThisWeek → full pill flips to an earnings-yellow background
 //     (same treatment PreyPage uses for ticker rows). Overrides signal color.
 //   - washBlocked         → small red 'WASH' badge appended after the ticker
-function OrderPill({ o, accent }) {
+function OrderPill({ o, accent, isAdmin }) {
   const earningsBg    = o.hasEarningsThisWeek;
   const background    = earningsBg ? '#fef3c7' : `${accent}1a`; // 0x1a ~ 10% alpha
   const border        = earningsBg ? '1px solid #f59e0b' : `1px solid ${accent}4d`;
@@ -2511,7 +2510,7 @@ function OrderPill({ o, accent }) {
       display: 'inline-flex', alignItems: 'center', gap: 5,
     }}>
       {o.ticker}
-      {o.washBlocked && (
+      {isAdmin && o.washBlocked && (
         <span
           title={`Wash sale window open until ${o.washExpiryDate ? new Date(o.washExpiryDate).toLocaleDateString() : 'unknown'}`}
           style={{
@@ -2529,6 +2528,7 @@ function OrderPill({ o, accent }) {
 }
 
 function WeeklyOrdersSection({ data, onNavigate }) {
+  const { isAdmin } = useAuth() || {};
   const [expanded, setExpanded] = useState(true);
 
   if (!data?.orders?.length && !data?.mode) return null;
@@ -2594,7 +2594,7 @@ function WeeklyOrdersSection({ data, onNavigate }) {
               <div style={{ fontSize: 10, color: '#22c55e', fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4 }}>BUY LONG</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {blOrders.map(o => (
-                  <OrderPill key={o.ticker} o={o} accent="#22c55e" />
+                  <OrderPill key={o.ticker} o={o} accent="#22c55e" isAdmin={isAdmin} />
                 ))}
               </div>
             </div>
@@ -2606,7 +2606,7 @@ function WeeklyOrdersSection({ data, onNavigate }) {
               <div style={{ fontSize: 10, color: '#ef5350', fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4 }}>SELL SHORT</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {ssOrders.map(o => (
-                  <OrderPill key={o.ticker} o={o} accent="#ef5350" />
+                  <OrderPill key={o.ticker} o={o} accent="#ef5350" isAdmin={isAdmin} />
                 ))}
               </div>
             </div>
@@ -2658,7 +2658,7 @@ export default function AssistantPage({ onNavigate }) {
   // Fallback: /api/pulse positions block (CMD-only, can be empty when
   // pnthr_portfolio has no records for this user).
   const [pulsePositions, setPulsePositions] = useState(null);
-  const [livePositions, setLivePositions] = useState(null);
+  const livePositions = null;
   const [recentFills,     setRecentFills]     = useState([]);
   // ibkrConnected is still used by TradesTodaySection to gate rendering —
   // its value now comes from the /api/ibkr/discrepancies fetch below (which
@@ -2692,7 +2692,6 @@ export default function AssistantPage({ onNavigate }) {
   // Custom trendline alerts (loaded after isAdmin is declared below)
   const [trendlineAlerts, setTrendlineAlerts] = useState([]);
   const [devSignalsAge,      setDevSignalsAge]      = useState(null);
-  const [sectorBreakdown,    setSectorBreakdown]    = useState([]);
   const [ordersData,         setOrdersData]         = useState(null);
   const [reentrySignals,     setReentrySignals]     = useState([]);
   const [accessRequests,     setAccessRequests]     = useState([]);
@@ -2872,12 +2871,11 @@ export default function AssistantPage({ onNavigate }) {
   // Recent Fills inside Today's Accomplishments) move with their parent.
   // Implementation uses CSS `order` so we don't have to restructure the JSX.
   // Default order — matches Scott's locked layout from 2026-05-01:
-  // PNTHR Assistant Live → Live Opportunities → Live Watch → Data Integrity
+  // Live Opportunities → Live Watch → Data Integrity
   // → Today's Accomplishments → Recent Bridge Commands.
   // User can reorder via ▲▼ buttons; their choice persists in localStorage.
   const TOP_LEVEL_CARDS = useMemo(() => ([
     'pending-entries',
-    'pnthr-assistant-live',
     'live-opportunities',
     'live-watch',
     'data-integrity',
@@ -3457,7 +3455,6 @@ export default function AssistantPage({ onNavigate }) {
         if (mounted) {
           setHeadlines(data.headlines || []);
           setDevSignalsAge(data.devSignalsAge ?? null);
-          setSectorBreakdown(data.sectorBreakdown || []);
           setHeadlinesLoading(false);
         }
       } catch { if (mounted) setHeadlinesLoading(false); }
@@ -4649,30 +4646,6 @@ export default function AssistantPage({ onNavigate }) {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-           PNTHR ASSISTANT LIVE — source-of-truth reconciliation table.
-           Collapse state is owned by this page's central collapse map so it
-           survives reloads. The table renders its own header (with the
-           ALIGNED pills, refresh button, etc.) — we just pass the controlled
-           collapsed prop and a toggle handler.
-         ══════════════════════════════════════════════════════════════════════ */}
-      <div style={orderStyle('pnthr-assistant-live') || undefined}>
-      <AssistantLiveTable
-        onNavigate={onNavigate}
-        netLiquidity={nav}
-        collapsed={!isOpen('pnthr-assistant-live')}
-        onToggleCollapsed={() => toggleSection('pnthr-assistant-live')}
-        headerExtra={reorderControls('pnthr-assistant-live')}
-        onOpenChart={(stocks, idx) => {
-          if (Array.isArray(stocks) && stocks.length > 0) { setChartStocks(stocks); setChartIndex(idx || 0); }
-          else if (stocks && stocks.ticker) { setChartStocks([stocks]); setChartIndex(0); }
-        }}
-        onAddPosition={(prefill) => { setAddPosInitial(prefill || null); setAddPosOpen(true); }}
-        onExitConfirmed={handleExitConfirmed}
-        onPositionsSummary={setLivePositions}
-      />
-      </div>
-
-      {/* ══════════════════════════════════════════════════════════════════════
            SECTION 1 — LIVE OPPORTUNITIES
          ══════════════════════════════════════════════════════════════════════ */}
       <div style={{
@@ -4749,12 +4722,6 @@ export default function AssistantPage({ onNavigate }) {
 
           {/* Weekly Orders */}
           {ordersData && <WeeklyOrdersSection data={ordersData} onNavigate={onNavigate} />}
-
-          {/* Portfolio Sector Breakdown pie chart */}
-          <PortfolioSectorPie
-            breakdown={sectorBreakdown}
-            onTickerClick={(ticker) => handleChipClick({ ticker })}
-          />
 
           {/* Live Headline Feed */}
           <HeadlineFeed
@@ -5201,8 +5168,8 @@ export default function AssistantPage({ onNavigate }) {
       />
 
       {/* Wash sale warning modal — guards pending-entry confirms when the
-          ticker is still inside its IRS 30-day disallowance window. */}
-      {washWarning && (() => {
+          ticker is still inside its IRS 30-day disallowance window. Admin only. */}
+      {isAdmin && washWarning && (() => {
         const { ticker, lossAmount, exitDate, expiryDate, daysRemaining } = washWarning;
         const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '—';
         return (

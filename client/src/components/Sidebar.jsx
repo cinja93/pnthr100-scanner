@@ -10,56 +10,112 @@ const APP_VERSION = '4.4.0';
 
 const NAV_GROUPS = [
   {
-    groupLabel: 'This Week',
+    groupLabel: "Investor's Den",
+    info: 'investorsDen',
     items: [
-      { key: 'perch',    label: 'PNTHR Perch',     iconImg: true },
-      { key: 'earnings', label: 'PNTHR Calendar',   icon: '📅' },
+      { key: 'ir-live',   label: 'Intelligence Report', iconImg: true, aiHighlight: true, needsAccess: true },
+      { key: 'data-room', label: 'PNTHR Data Room',     icon: '🗄️' },
+    ],
+  },
+  {
+    groupLabel: 'This Week',
+    info: 'thisWeek',
+    items: [
+      { key: 'perch',    label: 'PNTHR Perch',    iconImg: true },
+      { key: 'earnings', label: 'PNTHR Calendar', icon: '📅' },
+    ],
+  },
+  {
+    groupLabel: 'Market Pulse',
+    info: 'marketPulse',
+    items: [
+      { key: 'pulse',    label: 'PNTHR Pulse',       iconImg: true, splitHighlight: true },
+      { key: 'bondHeat', label: 'PNTHR Bond Yields',  iconImg: true },
     ],
   },
   {
     groupLabel: 'PNTHR Live',
+    info: 'pnthrLive',
     items: [
-      { key: 'pulse',     label: 'PNTHR Pulse',     iconImg: true, splitHighlight: true },
-      { key: 'assistant', label: 'PNTHR Assistant',  iconImg: true },
+      { key: 'assistant', label: 'PNTHR Assistant', iconImg: true },
       { key: 'orders',    label: 'PNTHR Orders',    iconImg: true },
       { key: 'aiOrders',  label: 'PNTHR AI Orders', iconImg: true, aiHighlight: true },
-      // PNTHR Command intentionally hidden 2026-04-29 (Day 1 UI consolidation).
-      // Page is still mounted at /?page=command for fallback editing — used by
-      // the AssistantRowExpand "OPEN IN COMMAND CENTER" deep link for full lot
-      // / ratchet controls until Day 2 expand-panel polish ships.
     ],
   },
   {
-    groupLabel: 'PNTHR Hunt',
+    groupLabel: 'Strategy',
+    info: 'strategy',
     items: [
-      { key: 'search', label: 'PNTHR Search', iconImg: true },
-      { key: 'prey',   label: 'PNTHR Prey',   iconImg: true },
-      { key: 'apex',   label: 'PNTHR Kill',   iconImg: true },
+      { key: 'prey',   label: 'PNTHR Prey',    iconImg: true },
+      { key: 'apex',   label: 'PNTHR Kill',    iconImg: true },
       { key: 'aiKill', label: 'PNTHR AI Kill', iconImg: true, aiHighlight: true },
+      { key: 'search', label: 'PNTHR Search',  iconImg: true },
     ],
   },
   {
-    groupLabel: 'PNTHR Jungle',
+    groupLabel: 'Universe',
+    info: 'universe',
     items: [
-      { key: 'jungle',      label: 'PNTHR 679 Jungle', iconImg: true },
-      { key: 'jungleHeat', label: 'PNTHR Heat',        iconImg: true },
-      { key: 'aiJungle',   label: 'PNTHR AI 300 Index',iconImg: true, aiHighlight: true },
-      { key: 'aiHeat',     label: 'PNTHR AI Heat',     iconImg: true, aiHighlight: true },
-      { key: 'bondHeat', label: 'PNTHR Bond Yields', iconImg: true, aiHighlight: true },
-      { key: 'long',      label: 'PNTHR 100 Longs',  iconImg: true, splitHighlight: true },
-      { key: 'short',   label: 'PNTHR 100 Shorts', iconImg: true, splitHighlight: true },
-      { key: 'etf',     label: "PNTHR ETF's",      iconImg: true },
-      { key: 'aiSectors', label: 'PNTHR AI Sectors', iconImg: true, aiHighlight: true },
-      { key: 'sectors', label: 'PNTHR Sectors',    iconImg: true },
+      { key: 'jungle',     label: 'Carnivore Jungle',   iconImg: true },
+      { key: 'aiJungle',   label: 'PNTHR AI 300 Index', iconImg: true, aiHighlight: true },
+      { key: 'sectors',    label: 'PNTHR Sectors',      iconImg: true },
+      { key: 'aiSectors',  label: 'PNTHR AI Sectors',   iconImg: true, aiHighlight: true },
+      { key: 'jungleHeat', label: 'Carnivore Heat',     iconImg: true },
+      { key: 'aiHeat',     label: 'PNTHR AI Heat',      iconImg: true, aiHighlight: true },
+      { key: 'etf',        label: "PNTHR ETF's",        iconImg: true },
+      { key: 'long',       label: 'PNTHR 100 Longs',    iconImg: true, splitHighlight: true },
+      { key: 'short',      label: 'PNTHR 100 Shorts',   iconImg: true, splitHighlight: true },
     ],
   },
 ];
+
+const SECTION_INFO = {
+  investorsDen: {
+    title: "Investor's Den",
+    body: "Start here. Everything an investor needs to evaluate PNTHR Funds — our live performance report and full legal document suite.",
+  },
+  thisWeek: {
+    title: 'This Week',
+    body: "Weekly briefing to start your week. The Perch newsletter covers our top trade, market regime, and sector rotation. Calendar shows all upcoming earnings reports.",
+  },
+  marketPulse: {
+    title: 'Market Pulse',
+    body: "Real-time performance tracking and macro context. Pulse shows live equity curves for both funds. Bond Yields tracks the treasury yield curve and credit spreads.",
+  },
+  pnthrLive: {
+    title: 'PNTHR Live',
+    body: "Live operations center. The Assistant is an all-day dashboard with positions, risk metrics, and real-time alerts. Orders shows the active trading pipeline and heat exposure.",
+  },
+  strategy: {
+    title: 'Strategy',
+    body: "Our proprietary stock selection tools. Prey is the Carnivore trade pipeline. Kill scores every stock across 8 dimensions. Search lets you analyze any individual ticker.",
+  },
+  universe: {
+    title: 'Universe',
+    body: "Browse every stock we track. The Jungle is our full universe. Sectors shows ETF-level regime analysis. Heat maps risk by sector. 100 Longs/Shorts ranks the strongest signals.",
+  },
+  internal: {
+    title: 'Internal',
+    body: "Admin-only tools for fund operations, trade journaling, compliance, and backtesting. These pages are not visible to investors or outside users.",
+  },
+  fundExplainer: {
+    title: 'Carnivore vs AI Elite 300',
+    body: "Carnivore — Our flagship equity fund. Concentrated, high-conviction positions across all sectors using proprietary signal detection and 5-lot pyramid scaling.\n\nAI Elite 300 — Our AI-focused equity fund. 300 names in the artificial intelligence ecosystem — semiconductors, cloud, robotics, data infrastructure, and AI applications. Same pyramid discipline, AI-specific universe.",
+  },
+  kill10: {
+    title: 'PNTHR Kill 10',
+    body: null,
+  },
+  killTest: {
+    title: 'PNTHR Kill Test',
+    body: null,
+  },
+};
 
 function getFirstName(user) {
   if (!user) return null;
   if (user.name)      return user.name.split(' ')[0];
   if (user.firstName) return user.firstName;
-  // Derive from email: "scott.tiger@..." → "Scott"
   const local = (user.email || '').split('@')[0];
   const part  = local.split(/[._-]/)[0] || local;
   return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
@@ -94,19 +150,13 @@ function BatchStatsTooltip({ stats, top }) {
 }
 
 // ── VIP impersonation dropdown ──────────────────────────────────────────────
-// Admin-only button: "View as VIP" expands to a list of users the admin can
-// preview as (Vanilla + real VIPs from the DB). Clicking a target calls the
-// impersonation endpoint, stores the 30-minute read-only token in the new
-// tab's sessionStorage (via the URL hand-off), and opens that tab.
 function VipImpersonateMenu() {
   const [open, setOpen]         = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState(null);
-  const [targets, setTargets]   = useState(null); // { vanilla, targets: [...] }
-  const [launching, setLaunching] = useState(null); // target id while awaiting impersonate call
+  const [targets, setTargets]   = useState(null);
+  const [launching, setLaunching] = useState(null);
 
-  // Load the target list the first time the menu opens so the dropdown
-  // reflects the current VIP roster without an up-front fetch.
   useEffect(() => {
     if (!open || targets || loading) return;
     setLoading(true);
@@ -121,10 +171,6 @@ function VipImpersonateMenu() {
     setLaunching(target.id);
     try {
       const { token } = await startImpersonation(target.id);
-      // Hand off the token via URL so the new tab's sessionStorage (per-tab
-      // isolated) picks it up — the admin's OWN tab keeps its localStorage
-      // admin token completely untouched. consumeImpersonationFromUrl strips
-      // the param from the URL bar once captured.
       const url = `${window.location.origin}/?impersonate=${encodeURIComponent(token)}`;
       window.open(url, '_blank', 'noopener,noreferrer');
       setOpen(false);
@@ -138,17 +184,18 @@ function VipImpersonateMenu() {
   return (
     <div style={{ position: 'relative' }}>
       <button
-        className={styles.dataRoomBtn}
+        className={styles.navItem}
         onClick={() => setOpen(o => !o)}
         title="Open a clean demo view with no account data (read-only, 30-min session)"
+        style={{ color: 'rgba(255,255,255,0.65)', borderLeft: '3px solid transparent' }}
       >
-        <span style={{ fontSize: 14 }}>👀</span>
-        <span style={{ flex: 1, textAlign: 'left' }}>Demo Mode</span>
-        <span style={{ fontSize: 10, opacity: 0.6 }}>{open ? '▾' : '▸'}</span>
+        <span className={styles.navIcon}>👀</span>
+        <span className={styles.navLabel}>Demo Mode</span>
+        <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 'auto' }}>{open ? '▾' : '▸'}</span>
       </button>
       {open && (
         <div style={{
-          marginTop:    4,
+          marginTop:    2,
           padding:      6,
           background:   '#0c0c0c',
           border:       '1px solid rgba(252,240,0,0.25)',
@@ -216,53 +263,56 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
   const firstName = getFirstName(currentUser);
   const isPortalMode = isDenPortal || isInvestorPortal || isVipPortal;
-  // Admin UI suppression — when admin visits vip/investor subdomain, we hide
-  // admin-only controls so they see exactly what the family/investor sees.
   const effectiveAdmin = isAdmin && !isVipPortal && !isInvestorPortal;
 
-  // Build nav groups. VIP portal gets an injected "Portfolio" item under
-  // PNTHR Live so Brennan + family can see their own portfolio status.
+  // VIP portal: inject Portfolio item into PNTHR Live
   const liveGroupWithPortfolio = isVipPortal
     ? {
         groupLabel: 'PNTHR Live',
+        info: 'pnthrLive',
         items: [
-          { key: 'pulse',     label: 'PNTHR Pulse',     iconImg: true, splitHighlight: true },
           { key: 'portfolio', label: 'PNTHR Portfolio', iconImg: true },
           { key: 'assistant', label: 'PNTHR Assistant', iconImg: true },
           { key: 'orders',    label: 'PNTHR Orders',    iconImg: true },
-          // PNTHR Command hidden 2026-04-29 (Day 1 UI consolidation); see top
-          // of file for the ongoing fallback deep-link justification.
         ],
       }
     : null;
 
-  // PNTHR Data group — Journal + Watchlist for everyone; Kill 10, Kill Test, History admin-only
-  const userAllowed = currentUser?.allowedPages;
-  const dataItems = [
-    { key: 'journal',  label: 'PNTHR Journal',  iconImg: true },
-  ];
-  if (effectiveAdmin || allowedPages || userAllowed?.includes('ir-live')) {
-    dataItems.push({ key: 'ir-live', label: 'AI Intelligence Report Live', iconImg: true, aiHighlight: true });
-  }
+  // Internal section — admin-only items
+  const internalItems = [];
   if (effectiveAdmin) {
-    dataItems.push({ key: 'history',        label: 'PNTHR Kill 10',   iconImg: true, info: 'kill10', splitHighlight: true });
-    dataItems.push({ key: 'kill-test',      label: 'PNTHR Kill Test', iconImg: true, info: 'killTest', splitHighlight: true });
-    dataItems.push({ key: 'signal-history', label: 'PNTHR History',   iconImg: true });
-    dataItems.push({ key: 'ai-signal-history', label: 'PNTHR AI History', iconImg: true, aiHighlight: true });
-    dataItems.push({ key: 'test',           label: 'TEST',            icon: '🧪' });
+    internalItems.push(
+      { key: 'investor-mgmt',     label: 'Investor Portal',     icon: '👥' },
+      { key: 'journal',           label: 'PNTHR Journal',       iconImg: true },
+      { key: 'signal-history',    label: 'PNTHR History',       iconImg: true },
+      { key: 'ai-signal-history', label: 'PNTHR AI History',    iconImg: true, aiHighlight: true },
+      { key: 'history',           label: 'PNTHR Kill 10',       iconImg: true, info: 'kill10', splitHighlight: true },
+      { key: 'kill-test',         label: 'PNTHR Kill Test',     iconImg: true, info: 'killTest', splitHighlight: true },
+      { key: 'compliance',        label: 'Compliance',          icon: '🛡️' },
+      { key: 'watchlist',         label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' },
+      { key: 'test',              label: 'TEST',                icon: '🧪' },
+    );
+  } else {
+    // Non-admin users still get Journal and Watchlist
+    internalItems.push(
+      { key: 'journal',  label: 'PNTHR Journal', iconImg: true },
+      { key: 'watchlist', label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' },
+    );
   }
-  dataItems.push({ key: 'watchlist', label: firstName ? `${firstName}'s Watchlist` : 'Watchlist', icon: '👁' });
+  const internalGroup = internalItems.length > 0
+    ? { groupLabel: 'Internal', info: 'internal', adminOnly: true, items: internalItems }
+    : null;
 
-  const dataGroup = { groupLabel: 'PNTHR Data', items: dataItems };
-
-  // Swap in the VIP-specific PNTHR Live group when in VIP mode.
+  // Assemble groups
   const baseGroups = liveGroupWithPortfolio
     ? NAV_GROUPS.map(g => g.groupLabel === 'PNTHR Live' ? liveGroupWithPortfolio : g)
     : NAV_GROUPS;
 
-  let allGroups = [...baseGroups, dataGroup];
+  let allGroups = internalGroup
+    ? [...baseGroups, internalGroup]
+    : [...baseGroups];
 
-  // Per-user allowedPages (from DB) takes precedence over hardcoded portal defaults
+  // Per-user or portal page filtering
   const userPages = currentUser?.allowedPages;
   const effectiveAllowed = (userPages && userPages.length > 0) ? userPages : allowedPages;
   if (effectiveAllowed) {
@@ -272,6 +322,18 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         items: group.items.filter(item => effectiveAllowed.includes(item.key)),
       }))
       .filter(group => group.items.length > 0);
+  } else {
+    // No portal/per-user filter — hide items that need explicit access (non-admin)
+    if (!effectiveAdmin) {
+      allGroups = allGroups
+        .map(group => ({
+          ...group,
+          items: group.items.filter(item =>
+            !item.needsAccess || (userPages && userPages.includes(item.key))
+          ),
+        }))
+        .filter(group => group.items.length > 0);
+    }
   }
 
   function handleMouseEnter(key) {
@@ -286,7 +348,6 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
   const activeTooltipStats = tooltipKey === 'long' ? longStats : tooltipKey === 'short' ? shortStats : null;
 
-  // Close sidebar when navigating on tablet/mobile
   function handleNav(page) {
     setMobileOpen(false);
     onNavigate(page);
@@ -334,128 +395,105 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
       {/* Navigation groups */}
       <nav className={styles.nav}>
         {allGroups.map((group) => (
-          <div key={group.groupLabel} className={styles.navGroup}>
-            <span className={styles.navGroupLabel}>{group.groupLabel}</span>
-            <div className={styles.navGroupBox}>
-              {group.items.map((item) => {
-                const isActive = activePage === item.key;
-                // AI Universe sidebar buttons get a distinct yellow-on-black
-                // treatment to visually separate the proprietary PAI300 / AI
-                // Sectors family from the existing 679-stock pages.
-                const aiStyle = item.aiHighlight ? {
-                  background: '#fcf000',
-                  color:      '#000',
-                  fontWeight: 700,
-                  border:     '1px solid #fcf000',
-                } : item.splitHighlight ? {
-                  background: 'transparent',
-                  fontWeight: 700,
-                  border: '1px solid #fcf000',
-                  overflow: 'hidden',
-                  padding: 0,
-                  display: 'flex',
-                } : undefined;
-                return (
-                  <button
-                    key={item.key}
-                    ref={el => { if (el) btnRefs.current[item.key] = el; }}
-                    className={`${styles.navItem} ${isActive && !item.aiHighlight && !item.splitHighlight ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
-                    style={aiStyle}
-                    onClick={() => !item.soon && handleNav(item.key)}
-                    disabled={item.soon}
-                    title={item.soon ? 'Coming soon' : item.label}
-                    onMouseEnter={() => handleMouseEnter(item.key)}
-                    onMouseLeave={() => setTooltipKey(null)}
-                  >
-                    {item.splitHighlight ? (
-                      <>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fcf000', color: '#000', padding: '6px 4px 6px 8px', flexShrink: 0 }}>
-                          <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
-                          <span style={{ fontWeight: 700, fontSize: 11 }}>PNTHR</span>
-                        </span>
-                        <span style={{ display: 'flex', alignItems: 'center', background: '#000', color: '#fcf000', padding: '6px 8px 6px 4px', flex: 1, fontWeight: 700, fontSize: 11 }}>
-                          {item.label.replace('PNTHR ', '')}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className={styles.navIcon}>
-                          {item.iconImg
-                            ? <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
-                            : item.icon}
-                        </span>
-                        <span className={styles.navLabel}>{item.label}</span>
-                      </>
-                    )}
-                    {item.soon && <span className={styles.soonBadge}>Soon</span>}
-                    {item.info && (
-                      <span
-                        className={styles.navInfoBtn}
-                        onClick={(e) => { e.stopPropagation(); setInfoModal(item.info); }}
-                        title="What does this measure?"
-                      >ⓘ</span>
-                    )}
-                  </button>
-                );
-              })}
+          <div key={group.groupLabel}>
+            <div className={styles.navGroup}>
+              <span className={styles.navGroupLabel}>
+                {group.adminOnly && <span style={{ marginRight: 4 }}>🔒</span>}
+                {group.groupLabel}
+                {group.info && (
+                  <span
+                    className={styles.sectionInfoBtn}
+                    onClick={(e) => { e.stopPropagation(); setInfoModal(group.info); }}
+                    title={`About ${group.groupLabel}`}
+                  >ⓘ</span>
+                )}
+              </span>
+              <div className={styles.navGroupBox}>
+                {group.items.map((item) => {
+                  const isActive = activePage === item.key;
+                  const aiStyle = item.aiHighlight ? {
+                    background: '#fcf000',
+                    color:      '#000',
+                    fontWeight: 700,
+                    border:     '1px solid #fcf000',
+                  } : item.splitHighlight ? {
+                    background: 'transparent',
+                    fontWeight: 700,
+                    border: '1px solid #fcf000',
+                    overflow: 'hidden',
+                    padding: 0,
+                    display: 'flex',
+                  } : undefined;
+                  return (
+                    <button
+                      key={item.key}
+                      ref={el => { if (el) btnRefs.current[item.key] = el; }}
+                      className={`${styles.navItem} ${isActive && !item.aiHighlight && !item.splitHighlight ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
+                      style={aiStyle}
+                      onClick={() => !item.soon && handleNav(item.key)}
+                      disabled={item.soon}
+                      title={item.soon ? 'Coming soon' : item.label}
+                      onMouseEnter={() => handleMouseEnter(item.key)}
+                      onMouseLeave={() => setTooltipKey(null)}
+                    >
+                      {item.splitHighlight ? (
+                        <>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fcf000', color: '#000', padding: '6px 4px 6px 8px', flexShrink: 0 }}>
+                            <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
+                            <span style={{ fontWeight: 700, fontSize: 11 }}>AI</span>
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', background: '#000', color: '#fcf000', padding: '6px 8px 6px 4px', flex: 1, fontWeight: 700, fontSize: 11 }}>
+                            CARN {item.label.replace(/^PNTHR\s*/, '')}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className={styles.navIcon}>
+                            {item.iconImg
+                              ? <img src={pnthrLogo} alt="PNTHR" className={styles.navIconImg} />
+                              : item.icon}
+                          </span>
+                          <span className={styles.navLabel}>{item.label}</span>
+                        </>
+                      )}
+                      {item.soon && <span className={styles.soonBadge}>Soon</span>}
+                      {item.info && (
+                        <span
+                          className={styles.navInfoBtn}
+                          onClick={(e) => { e.stopPropagation(); setInfoModal(item.info); }}
+                          title="What does this measure?"
+                        >ⓘ</span>
+                      )}
+                    </button>
+                  );
+                })}
+                {/* Demo Mode inside Internal group */}
+                {group.adminOnly && effectiveAdmin && (
+                  <VipImpersonateMenu />
+                )}
+              </div>
             </div>
+
+            {/* Fund Explainer — rendered after Investor's Den */}
+            {group.groupLabel === "Investor's Den" && (
+              <div className={styles.fundExplainer}>
+                <span className={styles.fundExplainerLabel}>
+                  Our Funds
+                  <span
+                    className={styles.sectionInfoBtn}
+                    onClick={(e) => { e.stopPropagation(); setInfoModal('fundExplainer'); }}
+                    title="About our funds"
+                  >ⓘ</span>
+                </span>
+                <div className={styles.fundTags}>
+                  <span className={styles.fundTagAI}>AI ELITE 300</span>
+                  <span className={styles.fundTagCarn}>CARNIVORE</span>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </nav>
-
-      {/* Data Room button (hidden for investor portal only) */}
-      {!isInvestorPortal && (
-        <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <button
-            className={styles.dataRoomBtn}
-            onClick={() => handleNav('data-room')}
-            title="PNTHR Data Room — Fund Documents"
-          >
-            <span style={{ fontSize: 14 }}>🗄️</span>
-            <span>PNTHR Data Room</span>
-          </button>
-          {effectiveAdmin && (
-            <button
-              className={styles.dataRoomBtn}
-              onClick={() => handleNav('compliance')}
-              title="PNTHR Compliance — Documents, Calendar & Tasks"
-            >
-              <span style={{ fontSize: 14 }}>🛡️</span>
-              <span>Compliance</span>
-            </button>
-          )}
-          {effectiveAdmin && (
-            <button
-              className={styles.dataRoomBtn}
-              onClick={() => handleNav('investor-mgmt')}
-              title="PNTHR Investor Portal — Manage Accounts & Analytics"
-            >
-              <span style={{ fontSize: 14 }}>👥</span>
-              <span>Investor Portal</span>
-            </button>
-          )}
-          {/* Admin-only: full impersonation dropdown for the VIP portal. Opens
-              a new tab with a read-only, 30-minute token scoped to the
-              chosen VIP user — admin sees the VIP's actual data, not their
-              own. See server/impersonationService.js + ImpersonationBanner. */}
-          {effectiveAdmin && (
-            <VipImpersonateMenu />
-          )}
-        </div>
-      )}
-      {/* Investor portal: show Data Room button */}
-      {isInvestorPortal && (
-        <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <button
-            className={styles.dataRoomBtn}
-            onClick={() => handleNav('data-room')}
-            title="PNTHR Data Room — Fund Documents"
-          >
-            <span style={{ fontSize: 14 }}>🗄️</span>
-            <span>PNTHR Data Room</span>
-          </button>
-        </div>
-      )}
 
       {/* Fixed tooltip rendered outside sidebar overflow */}
       {tooltipKey && (
@@ -464,11 +502,23 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           : <div className={styles.statsTooltip} style={{ top: tooltipTop }}><div className={styles.statsTooltipTitle}>No closed trades yet</div></div>
       )}
 
-      {/* Info modal for Kill 10 / Kill Test */}
+      {/* Info modal — section explainers + Kill 10 / Kill Test */}
       {infoModal && (
         <div className={styles.infoModalOverlay} onClick={() => setInfoModal(null)}>
           <div className={styles.infoModalBox} onClick={(e) => e.stopPropagation()}>
             <button className={styles.infoModalClose} onClick={() => setInfoModal(null)}>✕</button>
+
+            {/* Section info modals */}
+            {SECTION_INFO[infoModal]?.body && infoModal !== 'kill10' && infoModal !== 'killTest' && (
+              <>
+                <h3 className={styles.infoModalTitle}>{SECTION_INFO[infoModal].title}</h3>
+                <div className={styles.infoModalSection} style={{ whiteSpace: 'pre-line' }}>
+                  {SECTION_INFO[infoModal].body}
+                </div>
+              </>
+            )}
+
+            {/* Kill 10 info modal — preserved from original */}
             {infoModal === 'kill10' && (
               <>
                 <h3 className={styles.infoModalTitle}>PNTHR Kill 10</h3>

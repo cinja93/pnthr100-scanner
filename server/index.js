@@ -3979,7 +3979,23 @@ app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
       }
     } catch (sigErr) {
       console.warn(`[IBKR import] Could not compute PNTHR stop for ${ticker}:`, sigErr.message);
-      // Non-fatal — position is still created, user sets stop manually
+    }
+    // Fallback: if signal cache didn't yield a stop, check TWS for an existing
+    // protective stop and adopt it. Prevents NAKED positions with no stopPrice.
+    if (stopPrice == null) {
+      const expectedAction = direction === 'LONG' ? 'SELL' : 'BUY';
+      const twsStop = (ibkrDoc?.stopOrders || []).find(s =>
+        s.symbol?.toUpperCase() === ticker
+        && s.action === expectedAction
+        && (s.orderType === 'STP' || s.orderType === 'STP LMT')
+      );
+      if (twsStop?.stopPrice) {
+        stopPrice    = +twsStop.stopPrice;
+        originalStop = +twsStop.stopPrice;
+        console.log(`[IBKR import] ${ticker} stop derived from TWS protective stop: $${stopPrice}`);
+      } else {
+        console.warn(`[IBKR import] ${ticker} has NO stop — signal cache empty and no TWS stop found`);
+      }
     }
 
     const position = {

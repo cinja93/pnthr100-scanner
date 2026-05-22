@@ -164,8 +164,24 @@ export async function runAiWeeklyRatchet() {
         });
 
         const stopShape = buildStopOrderShape({ stopPrice: newStop, direction: pos.direction, stopExtendedHours: false });
+        // Look up the current protective stop's permId from the IBKR snapshot
+        // so the bridge can cancel it before placing the new one. Without this,
+        // MODIFY_STOP leaves the old stop alive → duplicate protective stops.
+        const ibkrSnap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId });
+        const expectedAction = pos.direction === 'SHORT' ? 'BUY' : 'SELL';
+        const protStop = (ibkrSnap?.stopOrders || []).find(s =>
+          s.symbol?.toUpperCase() === pos.ticker?.toUpperCase()
+          && s.action === expectedAction
+          && (s.orderType === 'STP' || s.orderType === 'STP LMT')
+        );
+        const ibkrShares = Math.abs(
+          (ibkrSnap?.positions || []).find(p => p.symbol?.toUpperCase() === pos.ticker?.toUpperCase())?.shares || 0
+        );
         await enqueueOutbox(db, ownerId, 'MODIFY_STOP', {
           ticker: pos.ticker, direction: pos.direction, stopPrice: newStop,
+          shares: ibkrShares || undefined,
+          oldPermId: protStop?.permId,
+          oldStopPrice: protStop ? +protStop.stopPrice : currentStop,
           positionId: pos.id, ...stopShape, source: 'AI_WEEKLY_RATCHET',
         });
       }

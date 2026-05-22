@@ -174,19 +174,18 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
         const lx = entryX - boxW / 2;
         const ly = belowEntry + 70;
 
-        // Thin arrow from box up to the BL bar
+        // Thin arrow from box up toward BL — stop above the marker text
         ctx.strokeStyle = '#22ff66';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(entryX, ly);
-        ctx.lineTo(entryX, belowEntry + 18);
+        ctx.lineTo(entryX, belowEntry + 38);
         ctx.stroke();
-        // Arrowhead
         ctx.fillStyle = '#22ff66';
         ctx.beginPath();
-        ctx.moveTo(entryX, belowEntry + 14);
-        ctx.lineTo(entryX - 4, belowEntry + 22);
-        ctx.lineTo(entryX + 4, belowEntry + 22);
+        ctx.moveTo(entryX, belowEntry + 34);
+        ctx.lineTo(entryX - 4, belowEntry + 42);
+        ctx.lineTo(entryX + 4, belowEntry + 42);
         ctx.closePath();
         ctx.fill();
 
@@ -381,13 +380,13 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
             </div>
           )}
 
-          {/* Watermark — PNTHR head logo, positioned in upper-left blank space */}
+          {/* Watermark — PNTHR head logo, centered but shifted up above price action */}
           <img
             src={pantherHead}
             alt=""
             style={{
               position: 'absolute',
-              top: '18%', left: '28%',
+              top: '38%', left: '50%',
               transform: 'translate(-50%, -50%)',
               width: 380, height: 380,
               opacity: 0.18,

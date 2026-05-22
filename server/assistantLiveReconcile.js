@@ -369,8 +369,7 @@ function classifyLotTriggers(enrichedTriggers) {
   }
 
   // All staged at right price/side, but any with share mismatch → yellow.
-  // ±1 share tolerance matches lotTriggerCron's aligned threshold (NAV rounding).
-  const mismatched = actionable.filter(t => Math.abs((t.stagedShares || 0) - t.targetShares) > 1);
+  const mismatched = actionable.filter(t => (t.stagedShares || 0) !== t.targetShares);
   if (mismatched.length > 0) {
     const detail = mismatched.map(t =>
       `L${t.lot} (plan ${t.targetShares} sh, TWS ${t.stagedShares || 0} sh)`

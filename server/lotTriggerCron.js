@@ -304,10 +304,7 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
       const triggerDiff = Math.abs(twsTrigger - planTrigger);
       const sharesDiff  = Math.abs(twsShares - planShares);
 
-      // ±1 share tolerance prevents NAV-driven rounding oscillation (QTUM
-      // 2026-05-21: L2 11↔12, L3 9↔10, L5 3↔4 every tick as Math.round
-      // flips at the .5 boundary on tiny NAV swings).
-      if (triggerDiff < 0.05 && sharesDiff <= 1) {
+      if (triggerDiff < 0.05 && sharesDiff === 0) {
         aligned.push({ ticker, lot: lot.lot, trigger: twsTrigger, shares: twsShares, planShares });
         continue;
       }

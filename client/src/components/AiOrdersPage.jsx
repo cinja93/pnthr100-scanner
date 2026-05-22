@@ -583,57 +583,101 @@ export default function AiOrdersPage() {
       {/* Heat Budget Bar */}
       {heatData && (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', margin: '12px 0',
+          padding: '10px 14px', margin: '12px 0',
           background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 6,
           fontSize: 12, fontFamily: 'monospace',
         }}>
-          <span style={{ color: '#f97316', fontWeight: 700, fontSize: 11, letterSpacing: '0.06em' }}>PORTFOLIO HEAT</span>
-          <div style={{ flex: 1, height: 14, background: '#0a0a0a', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
-            <div style={{
-              height: '100%', borderRadius: 3, transition: 'width 0.3s',
-              width: `${Math.min(100, heatData.totalRiskPct)}%`,
-              background: heatData.totalRiskPct >= 10 ? '#dc2626'
-                : heatData.totalRiskPct >= 8 ? '#f97316'
-                : heatData.totalRiskPct >= 5 ? '#fcf000'
-                : '#16a34a',
-            }} />
-            <div style={{
-              position: 'absolute', left: '100%', top: 0, bottom: 0, width: 2,
-              background: '#dc2626', marginLeft: -2,
-            }} title="10% cap" />
-          </div>
-          <span style={{
-            color: heatData.totalRiskPct >= 10 ? '#dc2626' : heatData.totalRiskPct >= 8 ? '#f97316' : '#aaa',
-            fontWeight: 700, minWidth: 60, textAlign: 'right',
-          }}>
-            {heatData.totalRiskPct.toFixed(1)}% / 10%
-          </span>
-          <span style={{ color: '#666', fontSize: 11 }}>
-            {fmtUsd(heatData.totalRisk)} risk · {fmtUsd(heatData.nav)} NAV
+          {/* Row 1: Main heat bar + stats */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <span style={{ color: '#f97316', fontWeight: 700, fontSize: 11, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>PORTFOLIO HEAT</span>
+            <div style={{ flex: 1, height: 14, background: '#0a0a0a', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
+              <div style={{
+                height: '100%', borderRadius: 3, transition: 'width 0.3s',
+                width: `${Math.min(100, heatData.totalRiskPct)}%`,
+                background: heatData.totalRiskPct >= 10 ? '#dc2626'
+                  : heatData.totalRiskPct >= 8 ? '#f97316'
+                  : heatData.totalRiskPct >= 5 ? '#fcf000'
+                  : '#16a34a',
+              }} />
+              <div style={{
+                position: 'absolute', left: '100%', top: 0, bottom: 0, width: 2,
+                background: '#dc2626', marginLeft: -2,
+              }} title="15% cap" />
+            </div>
+            <span style={{
+              color: heatData.totalRiskPct >= 10 ? '#dc2626' : heatData.totalRiskPct >= 8 ? '#f97316' : '#aaa',
+              fontWeight: 700, minWidth: 70, textAlign: 'right', whiteSpace: 'nowrap',
+            }}>
+              {heatData.totalRiskPct.toFixed(1)}% / 15%
+            </span>
+            <span style={{ color: '#666', fontSize: 11, whiteSpace: 'nowrap' }}>
+              {fmtUsd(heatData.totalRisk)} risk · {fmtUsd(heatData.nav)} NAV
+            </span>
             {heatData.recycled > 0 && (
               <button
                 onClick={() => setShowRecycledLog(true)}
                 style={{
                   background: 'none', border: '1px solid #16a34a', borderRadius: 3,
                   color: '#16a34a', cursor: 'pointer', fontSize: 11, fontWeight: 700,
-                  padding: '1px 8px', marginLeft: 6, fontFamily: 'monospace',
+                  padding: '1px 8px', fontFamily: 'monospace', whiteSpace: 'nowrap',
                 }}
                 title="View recycled positions log"
               >{heatData.recycled} recycled</button>
             )}
-          </span>
-          {heatData.totalRiskPct >= 10 && !recycleCandidate && (
-            <span style={{
-              padding: '2px 8px', background: '#dc2626', color: '#fff', borderRadius: 3,
-              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
-            }}>CAP REACHED — NO NEW ENTRIES</span>
-          )}
-          {heatData.totalRiskPct >= 10 && recycleCandidate && (
-            <span style={{
-              padding: '2px 8px', background: '#f97316', color: '#000', borderRadius: 3,
-              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
-            }}>CAP REACHED — RECYCLE AVAILABLE</span>
-          )}
+            {heatData.totalRiskPct >= 10 && !recycleCandidate && (
+              <span style={{
+                padding: '2px 8px', background: '#dc2626', color: '#fff', borderRadius: 3,
+                fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', whiteSpace: 'nowrap',
+              }}>CAP REACHED — NO NEW ENTRIES</span>
+            )}
+            {heatData.totalRiskPct >= 10 && recycleCandidate && (
+              <span style={{
+                padding: '2px 8px', background: '#f97316', color: '#000', borderRadius: 3,
+                fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', whiteSpace: 'nowrap',
+              }}>CAP REACHED — RECYCLE AVAILABLE</span>
+            )}
+          </div>
+          {/* Row 2: Active positions + Stock/ETF heat + Capacity */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8, fontSize: 11 }}>
+            <span style={{ color: '#e5e5e5', fontWeight: 700 }}>
+              Active <span style={{ color: '#fcf000' }}>{heatData.total || 0}</span>
+              <span style={{ color: '#666', fontWeight: 600 }}> · {heatData.long} long · {heatData.short} short</span>
+            </span>
+            <span style={{ color: '#333' }}>|</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: '#888' }}>Stock heat:</span>
+              <div style={{ width: 80, height: 6, background: '#0a0a0a', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 3, transition: 'width 0.3s',
+                  width: `${Math.min(100, (heatData.stockRiskPct / 10) * 100)}%`,
+                  background: heatData.stockRiskPct >= 10 ? '#dc2626' : heatData.stockRiskPct >= 7 ? '#f97316' : '#16a34a',
+                }} />
+              </div>
+              <span style={{ color: heatData.stockRiskPct >= 10 ? '#dc2626' : '#888', fontWeight: 600 }}>
+                {heatData.stockRiskPct.toFixed(1)}%/10%
+              </span>
+            </div>
+            <span style={{ color: '#333' }}>|</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: '#888' }}>ETF heat:</span>
+              <div style={{ width: 80, height: 6, background: '#0a0a0a', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 3, transition: 'width 0.3s',
+                  width: `${Math.min(100, (heatData.etfRiskPct / 5) * 100)}%`,
+                  background: heatData.etfRiskPct >= 5 ? '#dc2626' : heatData.etfRiskPct >= 3 ? '#f97316' : '#16a34a',
+                }} />
+              </div>
+              <span style={{ color: heatData.etfRiskPct >= 5 ? '#dc2626' : '#888', fontWeight: 600 }}>
+                {heatData.etfRiskPct.toFixed(1)}%/5%
+              </span>
+            </div>
+            <span style={{ color: '#333' }}>|</span>
+            <span style={{ color: '#888' }}>
+              Capacity: <span style={{ color: '#16a34a', fontWeight: 700 }}>
+                {fmtUsd(Math.max(0, heatData.nav * 0.15 - heatData.totalRisk))}
+              </span>
+            </span>
+          </div>
         </div>
       )}
 
@@ -1094,9 +1138,15 @@ export default function AiOrdersPage() {
               setHeatData({
                 totalRisk: pos.heat.totalRisk || 0,
                 totalRiskPct: pos.heat.totalRiskPct || 0,
+                stockRisk: pos.heat.stockRisk || 0,
+                etfRisk: pos.heat.etfRisk || 0,
+                stockRiskPct: pos.heat.stockRiskPct || 0,
+                etfRiskPct: pos.heat.etfRiskPct || 0,
                 nav: pos.nav || userNav || 100000,
                 recycled: pos.recycled || 0,
                 total: pos.total || 0,
+                long: pos.long || 0,
+                short: pos.short || 0,
               });
             }
             if (pos?.recycledPositions) setRecycledPositions(pos.recycledPositions);

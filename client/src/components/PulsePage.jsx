@@ -312,12 +312,6 @@ export default function PulsePage({ onNavigate }) {
         <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
           <SectorPerformanceChart data={sectorPerf} />
         </div>
-        {/* Portfolio Status */}
-        {!isInvestor && (
-          <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
-            <PortfolioStatus positions={data.positions} lotsReady={data.lotsReady} onNavigate={onNavigate} sectorExposure={sectorExposure} onSectorClick={(sector, sectorData) => setSectorModal({ sector, data: sectorData })} />
-          </div>
-        )}
       </>}
 
       {/* ══════════════════════ PNTHR AI 300 TAB ══════════════════════ */}
@@ -360,12 +354,6 @@ export default function PulsePage({ onNavigate }) {
           <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
             <SectorPerformanceChart data={sectorPerf} />
           </div>
-          {/* Portfolio Status */}
-          {!isInvestor && (
-            <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
-              <PortfolioStatus positions={ai300Data.positions} lotsReady={ai300Data.lotsReady} onNavigate={onNavigate} sectorExposure={null} onSectorClick={() => {}} />
-            </div>
-          )}
         </> : (
           <div style={{ background: '#111', borderRadius: 12, padding: '40px 20px', textAlign: 'center', color: '#ff6b6b', fontSize: 14, fontFamily: 'monospace' }}>
             Failed to load AI 300 data. Click REFRESH to retry.

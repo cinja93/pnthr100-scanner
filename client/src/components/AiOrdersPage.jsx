@@ -356,6 +356,9 @@ export default function AiOrdersPage() {
   const [recycledPositions, setRecycledPositions] = useState([]);
   const [showRecycledLog, setShowRecycledLog] = useState(false);
   const [sectorBreakdown, setSectorBreakdown] = useState([]);
+  const [heatReductionPlan, setHeatReductionPlan] = useState(null);
+  const [heatReduceDismissed, setHeatReduceDismissed] = useState(false);
+  const [heatReduceSubmitting, setHeatReduceSubmitting] = useState(false);
   const [bridgeOpen, setBridgeOpen] = useState(() => {
     try { return localStorage.getItem('aiOrders.bridgeOpen') !== 'false'; } catch { return true; }
   });
@@ -729,6 +732,96 @@ export default function AiOrdersPage() {
                 fontSize: 11, fontWeight: 700, cursor: 'pointer',
               }}
             >SKIP</button>
+          </div>
+        </div>
+      )}
+
+      {/* Power Hour Heat Reduction Plan */}
+      {heatReductionPlan && !heatReduceDismissed && (
+        <div style={{
+          padding: '12px 14px', margin: '0 0 12px',
+          background: 'rgba(220,38,38,0.06)', border: '2px solid #dc2626', borderRadius: 6,
+          fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ color: '#dc2626', fontWeight: 900, fontSize: 12, letterSpacing: '0.06em' }}>POWER HOUR — HEAT REDUCTION</span>
+              <span style={{ color: '#888', fontSize: 11, fontFamily: 'monospace' }}>
+                {heatReductionPlan.currentHeatPct}% → 10.0% · shed {fmtUsd(heatReductionPlan.excessRisk)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                disabled={heatReduceSubmitting}
+                onClick={async () => {
+                  setHeatReduceSubmitting(true);
+                  try {
+                    for (const adj of heatReductionPlan.adjustments) {
+                      const res = await fetch(`${API_BASE}/api/positions/${adj.positionId}/stop-price`, {
+                        method: 'PATCH',
+                        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ stopPrice: adj.newStop }),
+                      });
+                      if (!res.ok) throw new Error(`${adj.ticker}: HTTP ${res.status}`);
+                    }
+                    setHeatReduceDismissed(true);
+                  } catch (e) {
+                    alert(`Heat reduction failed: ${e.message}`);
+                  } finally {
+                    setHeatReduceSubmitting(false);
+                  }
+                }}
+                style={{
+                  padding: '4px 14px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 4,
+                  fontSize: 11, fontWeight: 800, cursor: heatReduceSubmitting ? 'wait' : 'pointer',
+                  letterSpacing: '0.06em', opacity: heatReduceSubmitting ? 0.6 : 1,
+                }}
+              >{heatReduceSubmitting ? 'ADJUSTING…' : `APPROVE ALL (${heatReductionPlan.adjustments.length})`}</button>
+              <button
+                onClick={() => setHeatReduceDismissed(true)}
+                style={{
+                  padding: '4px 10px', background: 'transparent', color: '#888', border: '1px solid #444', borderRadius: 4,
+                  fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                }}
+              >DISMISS</button>
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'monospace' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #2a2a40' }}>
+                  {['Ticker', 'Dir', 'Shares', 'Avg Cost', 'Price', 'Current Stop', 'New Stop', 'Move', 'Risk Reduced'].map(h => (
+                    <th key={h} style={{ color: '#888', fontWeight: 700, padding: '5px 8px', textAlign: 'left', fontSize: 10, letterSpacing: '0.08em' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {heatReductionPlan.adjustments.map((adj, i) => {
+                  const move = Math.abs(adj.newStop - adj.currentStop);
+                  return (
+                    <tr key={adj.ticker + i} style={{ borderBottom: '1px solid #1a1a2a' }}>
+                      <td style={{ padding: '5px 8px', color: '#fcf000', fontWeight: 800 }}>{adj.ticker}</td>
+                      <td style={{ padding: '5px 8px', color: adj.direction === 'LONG' ? '#16a34a' : '#dc2626' }}>{adj.direction}</td>
+                      <td style={{ padding: '5px 8px', color: '#e5e5e5' }}>{adj.shares}</td>
+                      <td style={{ padding: '5px 8px', color: '#e5e5e5' }}>${adj.avgCost.toFixed(2)}</td>
+                      <td style={{ padding: '5px 8px', color: '#e5e5e5' }}>${adj.currentPrice.toFixed(2)}</td>
+                      <td style={{ padding: '5px 8px', color: '#dc2626' }}>${adj.currentStop.toFixed(2)}</td>
+                      <td style={{ padding: '5px 8px', color: '#16a34a', fontWeight: 700 }}>${adj.newStop.toFixed(2)}</td>
+                      <td style={{ padding: '5px 8px', color: '#fbbf24' }}>+${move.toFixed(2)}</td>
+                      <td style={{ padding: '5px 8px', color: '#16a34a' }}>${adj.riskReduced.toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop: '1px solid #2a2a40' }}>
+                  <td colSpan={8} style={{ padding: '5px 8px', color: '#888', fontWeight: 700, textAlign: 'right' }}>Total risk reduced:</td>
+                  <td style={{ padding: '5px 8px', color: '#16a34a', fontWeight: 800 }}>
+                    ${heatReductionPlan.adjustments.reduce((s, a) => s + a.riskReduced, 0).toFixed(2)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </div>
       )}
@@ -1153,6 +1246,7 @@ export default function AiOrdersPage() {
             }
             if (pos?.recycledPositions) setRecycledPositions(pos.recycledPositions);
             if (pos?.sectorBreakdown) setSectorBreakdown(pos.sectorBreakdown);
+            setHeatReductionPlan(pos?.heatReductionPlan || null);
             const rc = pos?.recycleCandidate || null;
             setRecycleCandidate(rc);
             if (rc && recycleDismissed && rc.ticker !== recycleDismissed) {

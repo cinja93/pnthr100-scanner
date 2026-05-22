@@ -771,6 +771,88 @@ export async function assistantLiveReconcile(req, res) {
       recycleCandidate = candidates[0] || null;
     }
 
+    // Power-hour heat reduction plan: 3:00-4:00 PM ET, heat > 10%.
+    // Recommends small stop raises across many positions to bring heat to 10%.
+    let heatReductionPlan = null;
+    const isPowerHour = (() => {
+      const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const day = et.getDay();
+      if (day === 0 || day === 6) return false;
+      const minutes = et.getHours() * 60 + et.getMinutes();
+      return minutes >= 900 && minutes <= 960; // 3:00 PM - 4:00 PM ET
+    })();
+    if (heatCapReached && isPowerHour && netLiquidity > 0) {
+      const targetRisk = netLiquidity * 0.10;
+      const excessRisk = totalRisk - targetRisk;
+      if (excessRisk > 0) {
+        const eligible = rows
+          .filter(r => {
+            const shares = r.ibkr.shares ?? r.command.shares;
+            if (!shares || shares <= 0) return false;
+            const avg  = r.ibkr.avgCost ?? r.command.avgCost ?? 0;
+            const stop = r.command.stopPrice ?? 0;
+            const price = r.ibkr.marketPrice ?? 0;
+            if (!avg || !stop || !price) return false;
+            const dir = (r.command.direction || r.ibkr.direction || 'LONG').toUpperCase();
+            const isShort = dir === 'SHORT';
+            const isRecycled = isShort ? stop <= avg : stop >= avg;
+            if (isRecycled) return false;
+            const rps = Math.abs(avg - stop);
+            const risk = shares * rps;
+            return risk > 0;
+          })
+          .map(r => {
+            const shares = r.ibkr.shares ?? r.command.shares;
+            const avg  = +(r.ibkr.avgCost ?? r.command.avgCost);
+            const stop = +r.command.stopPrice;
+            const price = +(r.ibkr.marketPrice);
+            const dir = (r.command.direction || r.ibkr.direction || 'LONG').toUpperCase();
+            const isShort = dir === 'SHORT';
+            const rps = Math.abs(avg - stop);
+            const risk = shares * rps;
+            return { ticker: r.ticker, direction: dir, shares, avgCost: +avg.toFixed(2), currentStop: +stop.toFixed(2), currentPrice: +price.toFixed(2), risk: +risk.toFixed(2), positionId: r.command.positionId, isShort };
+          })
+          .sort((a, b) => b.risk - a.risk);
+
+        if (eligible.length > 0) {
+          const totalEligibleRisk = eligible.reduce((s, p) => s + p.risk, 0);
+          const adjustments = [];
+          for (const p of eligible) {
+            const proportion = p.risk / totalEligibleRisk;
+            const riskToShed = excessRisk * proportion;
+            const movePerShare = riskToShed / p.shares;
+            const newStop = p.isShort
+              ? +(p.currentStop - movePerShare).toFixed(2)
+              : +(p.currentStop + movePerShare).toFixed(2);
+            const validMove = p.isShort
+              ? newStop > p.currentPrice
+              : newStop < p.currentPrice;
+            if (!validMove) continue;
+            adjustments.push({
+              ticker:       p.ticker,
+              direction:    p.direction,
+              shares:       p.shares,
+              avgCost:      p.avgCost,
+              currentStop:  p.currentStop,
+              newStop,
+              currentPrice: p.currentPrice,
+              riskReduced:  +(riskToShed).toFixed(2),
+              positionId:   p.positionId,
+            });
+          }
+          if (adjustments.length > 0) {
+            heatReductionPlan = {
+              currentHeatPct: +(totalRisk / netLiquidity * 100).toFixed(2),
+              targetHeatPct:  10.0,
+              excessRisk:     +excessRisk.toFixed(2),
+              nav:            netLiquidity,
+              adjustments,
+            };
+          }
+        }
+      }
+    }
+
     // Sector breakdown from active positions
     const aiSectorLookup = {};
     for (const sec of AI_SECTORS) {
@@ -809,6 +891,7 @@ export async function assistantLiveReconcile(req, res) {
       lotSyncTriggered: hasUnstagedWithNoOutbox,
       recycleCandidate,
       recycledPositions,
+      heatReductionPlan,
       sectorBreakdown,
       positions: {
         total: totalPositions,

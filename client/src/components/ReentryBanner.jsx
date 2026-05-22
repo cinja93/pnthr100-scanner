@@ -11,6 +11,17 @@ const LS_KEY  = () => `pnthr.reentryBanner.dismissed.${new Date().toISOString().
 function loadDismissed() {
   try { return JSON.parse(localStorage.getItem(LS_KEY()) || 'false'); } catch { return false; }
 }
+function loadDismissedTickers() {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const raw = localStorage.getItem('pnthr.mce.dismissed');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.date === today) return new Set(parsed.tickers);
+    }
+  } catch {}
+  return new Set();
+}
 function saveDismissed(val) {
   try { localStorage.setItem(LS_KEY(), JSON.stringify(val)); } catch {}
 }
@@ -74,7 +85,16 @@ export default function ReentryBanner({ onTickerClick, onVisibleChange, topOffse
     return () => { cancelled = true; clearInterval(id); };
   }, [currentUser]);
 
-  const bullSignals = signals.filter(s => s.sectorRegime !== 'bear');
+  const [dismissedTickers, setDismissedTickers] = useState(() => loadDismissedTickers());
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === 'pnthr.mce.dismissed') setDismissedTickers(loadDismissedTickers());
+    };
+    window.addEventListener('storage', onStorage);
+    const id = setInterval(() => setDismissedTickers(loadDismissedTickers()), 2000);
+    return () => { window.removeEventListener('storage', onStorage); clearInterval(id); };
+  }, []);
+  const bullSignals = signals.filter(s => s.sectorRegime !== 'bear' && !dismissedTickers.has(s.ticker));
   const visible = !!(currentUser && !hidden && bullSignals.length > 0);
 
   // Attach ResizeObserver after banner becomes visible so bannerRef.current is set.

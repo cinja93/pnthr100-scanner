@@ -20,6 +20,7 @@
 import { useState, useEffect } from 'react';
 import { API_BASE, authHeaders, fetchNav } from '../services/api';
 import { sizePosition, buildLots, enrichLots } from '../utils/sizingUtils.js';
+import AumShield from './AumShield';
 
 function Badge({ children, color = '#888', bg, small }) {
   return (
@@ -171,7 +172,7 @@ export default function CalculatorModal({ open, onClose, onCreated }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <span style={{ fontSize: 14, fontWeight: 600 }}><span style={{ color: '#FFD700' }}>+</span> New position</span>
             <Badge color="#FFD700" bg="rgba(255,215,0,0.08)" small>TIER A · 35-25-20-12-8</Badge>
-            <span style={{ fontSize: 11, color: '#666', marginLeft: 'auto' }}>NAV ${nav?.toLocaleString() || '…'}</span>
+            <span style={{ fontSize: 11, color: '#666', marginLeft: 'auto' }}>NAV <AumShield>${nav?.toLocaleString() || '…'}</AumShield></span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr 0.8fr auto', gap: 10, alignItems: 'end' }}>
             <div>

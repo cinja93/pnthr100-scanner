@@ -5,6 +5,7 @@ import { useAuth } from '../AuthContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
 import AiTickerChartModal from './AiTickerChartModal';
 import Pnthr300ChartModal from './Pnthr300ChartModal';
+import AumShield from './AumShield';
 
 // Returns true if developing signals should be shown (Mon–Thu anytime; Fri before 4:15 PM ET)
 function shouldShowDevelopingSignals() {
@@ -1047,7 +1048,7 @@ function HeatGauge({ positions }) {
       label="PORTFOLIO HEAT"
       displayValue={`${total.toFixed(1)}%`}
       subLabel={`${(heat.stockRiskPct || 0).toFixed(1)}% stocks · ${(heat.etfRiskPct || 0).toFixed(1)}% ETFs`}
-      subValue={`$${Math.round(remaining / 100 * nav).toLocaleString()} capacity left`}
+      subValue={<AumShield>{`$${Math.round(remaining / 100 * nav).toLocaleString()} capacity left`}</AumShield>}
       subValueColor="#28a745"
     />
   );

@@ -26,6 +26,7 @@ class TradeCardBoundary extends Component {
 }
 import { API_BASE, authHeaders } from '../services/api';
 import ClosedTradeChartModal from './ClosedTradeChartModal';
+import AumShield from './AumShield';
 
 // ── Safe string helper — prevents React Error #31 when fields contain objects ──
 function safeStr(v) {
@@ -805,7 +806,7 @@ function TradeCard({ entry: initialEntry, onTickerClick, saveNotes, onConfirmSco
             <DataCell label="CALENDAR DAYS" value={calDays != null ? `${calDays}d` : '—'} />
             <DataCell label="TRADING DAYS"  value={tradDays != null ? `${tradDays}d` : '—'} />
             {captureRatio != null && <DataCell label="CAPTURE RATIO" value={`${captureRatio}%`} tooltip="Exit P&L as % of MFE. 100% = captured the entire move." />}
-            {entry.navAtEntry != null && <DataCell label="NAV AT ENTRY" value={`$${entry.navAtEntry.toLocaleString()}`} />}
+            {entry.navAtEntry != null && <DataCell label="NAV AT ENTRY" value={<AumShield>{`$${entry.navAtEntry.toLocaleString()}`}</AumShield>} />}
           </div>
 
           {/* Forward returns */}

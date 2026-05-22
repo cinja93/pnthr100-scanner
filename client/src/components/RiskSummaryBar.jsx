@@ -75,23 +75,23 @@ export default function RiskSummaryBar({
       {isDemo && portfolioEquity != null && (
         <MC label="Portfolio equity"
           value={<AumShield>{`$${portfolioEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</AumShield>}
-          sub={`${portfolioEquity >= navNum ? '+' : ''}$${(portfolioEquity - navNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} unrealized`}
+          sub={<AumShield>{`${portfolioEquity >= navNum ? '+' : ''}$${(portfolioEquity - navNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} unrealized`}</AumShield>}
           accent={portfolioEquity >= navNum ? '#28a745' : '#dc3545'} />
       )}
       <MC label="Net liquidity" value={<AumShield>{navDisplay}</AumShield>} />
       <MC label="Stock risk"
-        value={`$${heat.stockRisk.toLocaleString()}`}
-        sub={`${heat.stockRiskPct}% of NAV`}
+        value={<AumShield>{`$${heat.stockRisk.toLocaleString()}`}</AumShield>}
+        sub={<AumShield>{`${heat.stockRiskPct}% of NAV`}</AumShield>}
         sub2="Cap: 10%"
         accent={heat.stockRiskPct > 10 ? '#dc3545' : heat.stockRiskPct > 8 ? '#ffc107' : '#28a745'} />
       <MC label="ETF risk"
-        value={`$${heat.etfRisk.toLocaleString()}`}
-        sub={`${heat.etfRiskPct}% of NAV`}
+        value={<AumShield>{`$${heat.etfRisk.toLocaleString()}`}</AumShield>}
+        sub={<AumShield>{`${heat.etfRiskPct}% of NAV`}</AumShield>}
         sub2="Cap: 5%"
         accent={heat.etfRiskPct > 5 ? '#dc3545' : heat.etfRiskPct > 4 ? '#ffc107' : '#28a745'} />
       <MC label="Total risk"
-        value={`$${heat.totalRisk.toLocaleString()}`}
-        sub={`${heat.totalRiskPct}% of NAV`}
+        value={<AumShield>{`$${heat.totalRisk.toLocaleString()}`}</AumShield>}
+        sub={<AumShield>{`${heat.totalRiskPct}% of NAV`}</AumShield>}
         sub2="Cap: 15%"
         accent={heat.totalRiskPct > 15 ? '#dc3545' : heat.totalRiskPct > 12 ? '#ffc107' : '#28a745'} />
       <MC label="Recycled" value={recycledCnt} sub="$0 risk" accent="#28a745" />

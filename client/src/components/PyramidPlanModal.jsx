@@ -22,6 +22,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
+import AumShield from './AumShield';
 
 const LOT_OFFSETS = [0, 0.03, 0.06, 0.10, 0.14];
 const LOT_NAMES   = ['The Scent', 'The Stalk', 'The Strike', 'The Jugular', 'The Kill'];
@@ -268,7 +269,7 @@ export default function PyramidPlanModal({ ticker, positionId, onClose, onApplie
                 <div>
                   <div style={{ color: '#888', fontSize: 9, letterSpacing: '0.06em' }}>NAV</div>
                   <div style={{ color: '#fff', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                    {fmtUsd0(meta.nav)}
+                    <AumShield>{fmtUsd0(meta.nav)}</AumShield>
                   </div>
                 </div>
                 <div>

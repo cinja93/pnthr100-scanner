@@ -617,7 +617,7 @@ export default function AiOrdersPage() {
               {heatData.totalRiskPct.toFixed(1)}% / 15%
             </span>
             <span style={{ color: '#666', fontSize: 11, whiteSpace: 'nowrap' }}>
-              {fmtUsd(heatData.totalRisk)} risk · <AumShield>{fmtUsd(heatData.nav)} NAV</AumShield>
+              <AumShield>{fmtUsd(heatData.totalRisk)} risk</AumShield> · <AumShield>{fmtUsd(heatData.nav)} NAV</AumShield>
             </span>
             {heatData.recycled > 0 && (
               <button
@@ -748,7 +748,7 @@ export default function AiOrdersPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ color: '#dc2626', fontWeight: 900, fontSize: 12, letterSpacing: '0.06em' }}>POWER HOUR — HEAT REDUCTION</span>
               <span style={{ color: '#888', fontSize: 11, fontFamily: 'monospace' }}>
-                {heatReductionPlan.currentHeatPct}% → 10.0% · shed {fmtUsd(heatReductionPlan.excessRisk)}
+                {heatReductionPlan.currentHeatPct}% → 10.0% · shed <AumShield>{fmtUsd(heatReductionPlan.excessRisk)}</AumShield>
               </span>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -818,7 +818,7 @@ export default function AiOrdersPage() {
                 <tr style={{ borderTop: '1px solid #2a2a40' }}>
                   <td colSpan={8} style={{ padding: '5px 8px', color: '#888', fontWeight: 700, textAlign: 'right' }}>Total risk reduced:</td>
                   <td style={{ padding: '5px 8px', color: '#16a34a', fontWeight: 800 }}>
-                    ${heatReductionPlan.adjustments.reduce((s, a) => s + a.riskReduced, 0).toFixed(2)}
+                    <AumShield>${heatReductionPlan.adjustments.reduce((s, a) => s + a.riskReduced, 0).toFixed(2)}</AumShield>
                   </td>
                 </tr>
               </tfoot>

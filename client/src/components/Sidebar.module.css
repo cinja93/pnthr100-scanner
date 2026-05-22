@@ -179,16 +179,34 @@
   padding: 3px 10px;
   border-radius: 4px;
   letter-spacing: 0.06em;
+  border: 1px solid #fcf000;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
 }
 .fundTagCarn {
   background: #1a1a1a;
-  color: #888;
+  color: #ccc;
   font-size: 9px;
   font-weight: 800;
   padding: 3px 10px;
   border-radius: 4px;
   letter-spacing: 0.06em;
-  border: 1px solid #333;
+  border: 1px solid #555;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+}
+.fundTagInactive {
+  opacity: 0.4;
+  cursor: pointer;
+}
+.fundTagAI.fundTagInactive {
+  background: #1a1a1a;
+  color: #888;
+  border-color: #333;
+}
+.fundTagCarn.fundTagInactive {
+  color: #555;
+  border-color: #222;
 }
 
 .navGroupBox {

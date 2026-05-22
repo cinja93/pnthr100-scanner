@@ -4,9 +4,26 @@ import pnthrLogo from '../assets/panther head.png';
 import builtWithLove from '../assets/Built with Love.jpg';
 import { useDemo } from '../contexts/DemoContext';
 import { usePortal } from '../contexts/PortalContext';
+import { useFund } from '../contexts/FundContext';
 import { fetchImpersonationTargets, startImpersonation } from '../services/api';
 
 const APP_VERSION = '4.4.0';
+
+// When fund toggle is set to AI, split-badge items navigate to their AI variant.
+// When set to Carnivore, they navigate to the Carnivore variant (the default key).
+const AI_PAGE_MAP = {
+  pulse:          'pulse',
+  orders:         'aiOrders',
+  apex:           'aiKill',
+  jungle:         'aiJungle',
+  sectors:        'aiSectors',
+  jungleHeat:     'aiHeat',
+  long:           'long',
+  short:          'short',
+  'signal-history': 'ai-signal-history',
+  history:        'history',
+  'kill-test':    'kill-test',
+};
 
 const NAV_GROUPS = [
   {
@@ -250,6 +267,7 @@ function VipImpersonateOption({ target, subtitle, onLaunch, launching }) {
 export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, onLogout, longStats, shortStats }) {
   const { isDemo, toggleDemo } = useDemo();
   const { allowedPages, isDenPortal, isInvestorPortal, isVipPortal } = usePortal();
+  const { activeFund, setActiveFund } = useFund();
   const [tooltipKey, setTooltipKey] = useState(null);
   const [tooltipTop, setTooltipTop] = useState(0);
   const [infoModal, setInfoModal] = useState(null);
@@ -350,9 +368,15 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
   const activeTooltipStats = tooltipKey === 'long' ? longStats : tooltipKey === 'short' ? shortStats : null;
 
-  function handleNav(page) {
+  function resolvePageForFund(key, badgeType) {
+    if (badgeType !== 'split') return key;
+    if (activeFund === 'ai' && AI_PAGE_MAP[key]) return AI_PAGE_MAP[key];
+    return key;
+  }
+
+  function handleNav(page, badgeType) {
     setMobileOpen(false);
-    onNavigate(page);
+    onNavigate(resolvePageForFund(page, badgeType));
   }
 
   return (
@@ -422,13 +446,15 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
               </span>
               <div className={styles.navGroupBox}>
                 {group.items.map((item) => {
-                  const isActive = activePage === item.key;
+                  const resolvedPage = resolvePageForFund(item.key, item.badgeType);
+                  const isActive = activePage === item.key || activePage === resolvedPage
+                    || (item.badgeType === 'split' && activePage === AI_PAGE_MAP[item.key]);
                   return (
                     <button
                       key={item.key}
                       ref={el => { if (el) btnRefs.current[item.key] = el; }}
                       className={`${styles.navItem} ${isActive ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
-                      onClick={() => !item.soon && handleNav(item.key)}
+                      onClick={() => !item.soon && handleNav(item.key, item.badgeType)}
                       disabled={item.soon}
                       title={item.soon ? 'Coming soon' : item.label}
                       onMouseEnter={() => handleMouseEnter(item.key)}
@@ -481,8 +507,14 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                   >ⓘ</span>
                 </span>
                 <div className={styles.fundTags}>
-                  <span className={styles.fundTagAI}>AI ELITE 300</span>
-                  <span className={styles.fundTagCarn}>Carnivore</span>
+                  <button
+                    className={`${styles.fundTagAI} ${activeFund !== 'ai' ? styles.fundTagInactive : ''}`}
+                    onClick={() => setActiveFund('ai')}
+                  >AI ELITE 300</button>
+                  <button
+                    className={`${styles.fundTagCarn} ${activeFund !== 'carn' ? styles.fundTagInactive : ''}`}
+                    onClick={() => setActiveFund('carn')}
+                  >Carnivore</button>
                 </div>
               </div>
             )}

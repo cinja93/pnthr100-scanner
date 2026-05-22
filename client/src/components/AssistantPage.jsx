@@ -3152,6 +3152,36 @@ export default function AssistantPage({ onNavigate }) {
     setPwResetBusy(false);
   }, [pwResetEmail, pwResetPassword, pwResetBusy]);
 
+  // ── AUM PIN management (admin-only) ──────────────────────────────────────
+  const [pinMgmtOpen,  setPinMgmtOpen]  = useState(false);
+  const [pinUsers,     setPinUsers]     = useState([]);
+  const [pinLoading,   setPinLoading]   = useState(false);
+  const [pinResetMsg,  setPinResetMsg]  = useState(null);
+
+  const loadPinUsers = useCallback(async () => {
+    setPinLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/aum-pins`, { headers: authHeaders() });
+      if (res.ok) setPinUsers(await res.json());
+    } catch { /* ignore */ }
+    setPinLoading(false);
+  }, []);
+
+  const handlePinReset = useCallback(async (userId, email) => {
+    setPinResetMsg(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/aum-pins/${userId}`, {
+        method: 'DELETE', headers: authHeaders(),
+      });
+      if (res.ok) {
+        setPinResetMsg({ ok: true, msg: `PIN reset for ${email}` });
+        setPinUsers(prev => prev.map(u => u.userId === userId ? { ...u, hasPin: false } : u));
+      } else {
+        setPinResetMsg({ ok: false, msg: 'Failed to reset PIN' });
+      }
+    } catch { setPinResetMsg({ ok: false, msg: 'Network error' }); }
+  }, []);
+
   // ── Create-account form state (admin-only) ─────────────────────────────
   // Two account types share the same form: VIP (member, lives in `users`)
   // and INVESTOR (lives in `den_investors` with extra fields). The radio
@@ -3849,6 +3879,68 @@ export default function AssistantPage({ onNavigate }) {
                 </div>
               )}
             </form>
+          )}
+        </div>
+      )}
+
+      {/* ── AUM PIN management (admin-only) ────────────────────────────── */}
+      {isAdmin && (
+        <div style={{
+          border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8,
+          marginBottom: 12, background: '#0b0b0b',
+        }}>
+          <button
+            onClick={() => { setPinMgmtOpen(o => !o); if (!pinMgmtOpen) loadPinUsers(); }}
+            style={{
+              width: '100%', background: 'none', border: 'none', color: '#aaa',
+              padding: '8px 14px', fontSize: 12, textAlign: 'left', cursor: 'pointer',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+            <span style={{ letterSpacing: '0.04em' }}>🔒 AUM PIN MANAGEMENT</span>
+            <span style={{ fontSize: 10, color: '#666' }}>{pinMgmtOpen ? '▲' : '▼'}</span>
+          </button>
+          {pinMgmtOpen && (
+            <div style={{ padding: '10px 14px 14px' }}>
+              {pinLoading && <div style={{ fontSize: 11, color: '#666' }}>Loading…</div>}
+              {!pinLoading && pinUsers.length === 0 && <div style={{ fontSize: 11, color: '#666' }}>No users found.</div>}
+              {!pinLoading && pinUsers.length > 0 && (
+                <table style={{ width: '100%', fontSize: 11, fontFamily: 'monospace', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #333' }}>
+                      <th style={{ textAlign: 'left', padding: '4px 8px', color: '#888' }}>User</th>
+                      <th style={{ textAlign: 'center', padding: '4px 8px', color: '#888' }}>PIN Set</th>
+                      <th style={{ textAlign: 'right', padding: '4px 8px', color: '#888' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pinUsers.map(u => (
+                      <tr key={u.userId} style={{ borderBottom: '1px solid #1a1a1a' }}>
+                        <td style={{ padding: '6px 8px', color: '#ccc' }}>{u.email}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center', color: u.hasPin ? '#22c55e' : '#666' }}>
+                          {u.hasPin ? 'YES' : 'NO'}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                          {u.hasPin && (
+                            <button
+                              onClick={() => handlePinReset(u.userId, u.email)}
+                              style={{
+                                background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3,
+                                padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                              }}>RESET PIN</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {pinResetMsg && (
+                <div style={{ fontSize: 11, fontWeight: 600, marginTop: 8,
+                  color: pinResetMsg.ok ? '#22c55e' : '#ef4444' }}>
+                  {pinResetMsg.ok ? '✓' : '✗'} {pinResetMsg.msg}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

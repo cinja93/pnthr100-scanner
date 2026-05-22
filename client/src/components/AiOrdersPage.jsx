@@ -7,6 +7,7 @@ import PendingBridgeOrdersPanel from './PendingBridgeOrdersPanel';
 import { PortfolioSectorPie } from './AssistantPage';
 import { computeWeeksAgo } from '../utils/dateUtils';
 import { getStrategyMode } from '../utils/strategyMode';
+import AumShield from './AumShield';
 
 const TIER_COLORS = {
   GO:      { bg: '#16a34a', fg: '#000', label: 'GO' },
@@ -616,7 +617,7 @@ export default function AiOrdersPage() {
               {heatData.totalRiskPct.toFixed(1)}% / 15%
             </span>
             <span style={{ color: '#666', fontSize: 11, whiteSpace: 'nowrap' }}>
-              {fmtUsd(heatData.totalRisk)} risk · {fmtUsd(heatData.nav)} NAV
+              {fmtUsd(heatData.totalRisk)} risk · <AumShield>{fmtUsd(heatData.nav)} NAV</AumShield>
             </span>
             {heatData.recycled > 0 && (
               <button
@@ -678,9 +679,9 @@ export default function AiOrdersPage() {
             </div>
             <span style={{ color: '#333' }}>|</span>
             <span style={{ color: '#888' }}>
-              Capacity: <span style={{ color: '#16a34a', fontWeight: 700 }}>
+              Capacity: <AumShield><span style={{ color: '#16a34a', fontWeight: 700 }}>
                 {fmtUsd(Math.max(0, heatData.nav * 0.15 - heatData.totalRisk))}
-              </span>
+              </span></AumShield>
             </span>
           </div>
         </div>
@@ -1286,7 +1287,7 @@ export default function AiOrdersPage() {
 
       {/* Footer note */}
       <div style={{ marginTop: 16, fontSize: 11, color: '#666', lineHeight: 1.6 }}>
-        Sized at 1% NAV vitality × sector multiplier on your ${(userNav || 100000).toLocaleString()} NAV. Lot 1 = 35% of full target.
+        Sized at 1% NAV vitality × sector multiplier on your <AumShield>${(userNav || 100000).toLocaleString()}</AumShield> NAV. Lot 1 = 35% of full target.
         BL skipped if sector NO_GO · SS skipped if sector GO · PAI300 36W EMA hard gate blocks all BL in bear regime.
         Quality grades: BEST (Gap≥12% + Slope{'<'}50%) · BETTER (Gap≥9%) · GOOD (default).
         Gap% updates every 60 seconds during market hours. 10% portfolio heat cap enforced.

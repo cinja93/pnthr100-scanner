@@ -4,6 +4,7 @@ import { QueueProvider, useQueue } from './contexts/QueueContext';
 import { AnalyzeProvider } from './contexts/AnalyzeContext';
 import { DemoProvider } from './contexts/DemoContext';
 import { PortalProvider, usePortal } from './contexts/PortalContext';
+import { AumShieldProvider } from './contexts/AumShieldContext';
 import {
   ImpersonationProvider,
   useImpersonation,
@@ -236,6 +237,7 @@ function AppAuth() {
 
   return (
     <AuthContext.Provider value={{ currentUser, isAdmin, isInvestor, portalMode, updateCurrentUser }}>
+      <AumShieldProvider>
       <DemoProvider>
         <AnalyzeProvider>
           <QueueProvider>
@@ -259,6 +261,7 @@ function AppAuth() {
           </QueueProvider>
         </AnalyzeProvider>
       </DemoProvider>
+      </AumShieldProvider>
     </AuthContext.Provider>
   );
 }

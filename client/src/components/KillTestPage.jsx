@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { authHeaders, API_BASE } from '../services/api';
+import AumShield from './AumShield';
 
 // ── Lot sizing constants (mirrors server killTestSettings.js) ─────────────────
 const STRIKE_PCT = [0.35, 0.25, 0.20, 0.12, 0.08]; // cumul: 35, 60, 80, 92, 100%
@@ -788,7 +789,7 @@ function AnalyticsTab({ metrics, monthly, settings, onGenerate, generating, scen
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
           <div>
             <span style={{ color: Y, fontWeight: 800, fontSize: 14, letterSpacing: '0.03em' }}>PORTFOLIO EQUITY CURVE</span>
-            <span style={{ color: DIM, fontSize: 11, marginLeft: 10 }}>{n} months · starting NAV ${(settings?.nav ?? 100000).toLocaleString()}</span>
+            <span style={{ color: DIM, fontSize: 11, marginLeft: 10 }}>{n} months · starting NAV <AumShield>${(settings?.nav ?? 100000).toLocaleString()}</AumShield></span>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: retColor(metrics.totalReturnPct) }}>
@@ -1311,7 +1312,7 @@ export default function KillTestPage() {
           )}
           {settings && (
             <div style={{ fontSize: 11, color: DIM, textAlign: 'right', lineHeight: 1.6 }}>
-              <div>NAV: <span style={{ color: TEXT, fontWeight: 600 }}>${(nav).toLocaleString()}</span></div>
+              <div>NAV: <AumShield><span style={{ color: TEXT, fontWeight: 600 }}>${(nav).toLocaleString()}</span></AumShield></div>
               <div>Risk: <span style={{ color: TEXT, fontWeight: 600 }}>{settings.riskPctPerTrade}% | Cap {settings.portfolioRiskCap}%</span></div>
               <div>Sweep: <span style={{ color: TEXT, fontWeight: 600 }}>{settings.sweepRate}% | Rf {settings.riskFreeRate}%</span></div>
             </div>

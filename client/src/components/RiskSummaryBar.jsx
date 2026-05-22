@@ -14,6 +14,7 @@
 // If both are passed, precomputed wins.
 
 import { calcHeat } from '../utils/sizingUtils.js';
+import AumShield from './AumShield';
 
 function MC({ label, value, sub, sub2, accent }) {
   const valLen = typeof value === 'string' ? value.length : 0;
@@ -73,11 +74,11 @@ export default function RiskSummaryBar({
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10, marginBottom: 16 }}>
       {isDemo && portfolioEquity != null && (
         <MC label="Portfolio equity"
-          value={`$${portfolioEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          value={<AumShield>{`$${portfolioEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</AumShield>}
           sub={`${portfolioEquity >= navNum ? '+' : ''}$${(portfolioEquity - navNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} unrealized`}
           accent={portfolioEquity >= navNum ? '#28a745' : '#dc3545'} />
       )}
-      <MC label="Net liquidity" value={navDisplay} />
+      <MC label="Net liquidity" value={<AumShield>{navDisplay}</AumShield>} />
       <MC label="Stock risk"
         value={`$${heat.stockRisk.toLocaleString()}`}
         sub={`${heat.stockRiskPct}% of NAV`}

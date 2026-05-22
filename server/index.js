@@ -941,6 +941,87 @@ app.patch('/api/admin/users/:id/pages', authenticateJWT, requireAdmin, async (re
   }
 });
 
+// ── AUM PIN Shield ───────────────────────────────────────────────────────────
+
+// POST /api/user/aum-pin — set or update the user's 4-digit AUM PIN
+app.post('/api/user/aum-pin', authenticateJWT, async (req, res) => {
+  try {
+    const { pin } = req.body;
+    if (!/^\d{4}$/.test(String(pin))) return res.status(400).json({ error: 'PIN must be exactly 4 digits' });
+    await upsertUserProfile(req.user.userId, { aumPin: String(pin) });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error setting AUM PIN:', err);
+    res.status(500).json({ error: 'Failed to set PIN' });
+  }
+});
+
+// POST /api/user/aum-pin/verify — verify the user's 4-digit AUM PIN
+app.post('/api/user/aum-pin/verify', authenticateJWT, async (req, res) => {
+  try {
+    const { pin } = req.body;
+    const profile = await getUserProfile(req.user.userId);
+    if (!profile?.aumPin) return res.status(404).json({ error: 'No PIN set' });
+    res.json({ success: profile.aumPin === String(pin) });
+  } catch (err) {
+    console.error('Error verifying AUM PIN:', err);
+    res.status(500).json({ error: 'Failed to verify PIN' });
+  }
+});
+
+// GET /api/user/aum-pin/status — check if the user has a PIN set
+app.get('/api/user/aum-pin/status', authenticateJWT, async (req, res) => {
+  try {
+    const profile = await getUserProfile(req.user.userId);
+    res.json({ hasPin: !!profile?.aumPin });
+  } catch (err) {
+    console.error('Error checking AUM PIN status:', err);
+    res.status(500).json({ error: 'Failed to check PIN' });
+  }
+});
+
+// GET /api/admin/aum-pins — admin: list all users with PIN status
+app.get('/api/admin/aum-pins', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase: getDb } = await import('./database.js');
+    const db = await getDb();
+    const users = await db.collection('users').find(
+      { status: 'approved' },
+      { projection: { email: 1, name: 1 } }
+    ).toArray();
+    const profiles = await db.collection('user_profiles').find(
+      { aumPin: { $exists: true } },
+      { projection: { userId: 1, aumPin: 1 } }
+    ).toArray();
+    const pinMap = new Map(profiles.map(p => [String(p.userId), true]));
+    const result = users.map(u => ({
+      userId: u._id.toString(),
+      email: u.email,
+      name: u.name || u.email,
+      hasPin: pinMap.has(u._id.toString()),
+    }));
+    res.json(result);
+  } catch (err) {
+    console.error('Error listing AUM PINs:', err);
+    res.status(500).json({ error: 'Failed to list PINs' });
+  }
+});
+
+// DELETE /api/admin/aum-pins/:userId — admin: reset a user's AUM PIN
+app.delete('/api/admin/aum-pins/:userId', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { connectToDatabase: getDb } = await import('./database.js');
+    const db = await getDb();
+    const uid = /^[a-f\d]{24}$/i.test(req.params.userId)
+      ? new (await import('mongodb')).ObjectId(req.params.userId) : req.params.userId;
+    await db.collection('user_profiles').updateOne({ userId: uid }, { $unset: { aumPin: '' } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error resetting AUM PIN:', err);
+    res.status(500).json({ error: 'Failed to reset PIN' });
+  }
+});
+
 // ── Portal Analytics (investor + VIP) ──────────────────────────────────────
 
 // POST /api/portal/events — log events from investor or VIP users
@@ -11146,6 +11227,24 @@ app.listen(PORT, () => {
     .then(db => ensureIbkrOutboxIndexes(db))
     .catch(err => console.warn('[ibkrOutbox] ensureIndexes failed:', err.message));
   ensureAccessRequestIndexes().catch(() => {});
+
+  // Seed admin AUM PIN if not already set
+  (async () => {
+    try {
+      const db = await connectToDatabase();
+      const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+      for (const email of adminEmails) {
+        const user = await db.collection('users').findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+        if (!user) continue;
+        const uid = user._id;
+        const profile = await getUserProfile(uid.toString());
+        if (!profile?.aumPin) {
+          await upsertUserProfile(uid.toString(), { aumPin: '0679' });
+          console.log(`[startup] Seeded AUM PIN for ${email}`);
+        }
+      }
+    } catch (err) { console.warn('[startup] AUM PIN seed failed:', err.message); }
+  })();
 });
 
 // Scheduled Friday auto-save: checks every 30 minutes.

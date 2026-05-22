@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react';
 import { createPendingEntries, API_BASE, authHeaders, fetchNav } from '../services/api';
 import { useQueue } from '../contexts/QueueContext';
 import AiTickerChartModal from './AiTickerChartModal';
+import AumShield from './AumShield';
 
 // ── Dollar risk for a single existing position ─────────────────────────────────
 // Mirrors the logic inside calcHeat() in sizingUtils.js
@@ -264,7 +265,7 @@ export default function QueueReviewPanel({ onClose }) {
           background: 'rgba(0,0,0,0.2)', margin: '12px 0 0' }}>
           <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
             <b style={{ color: '#e8e6e3' }}>Portfolio Heat Impact</b>
-            <span style={{ color: '#555', marginLeft: 8, fontSize: 11 }}>NAV: {dol(nav)}</span>
+            <span style={{ color: '#555', marginLeft: 8, fontSize: 11 }}>NAV: <AumShield>{dol(nav)}</AumShield></span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <RiskRow label="Stock Risk"

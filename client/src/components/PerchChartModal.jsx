@@ -172,7 +172,7 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
       const belowEntry = priceSeries.priceToCoordinate(entryBar.low);
       if (belowEntry != null) {
         const lx = entryX - boxW / 2;
-        const ly = belowEntry + 52;
+        const ly = belowEntry + 70;
 
         // Thin arrow from box up to the BL bar
         ctx.strokeStyle = '#22ff66';
@@ -343,7 +343,7 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
                   </span>
                 )}
               </div>
-              <div style={{ color: '#555', fontSize: 12, marginTop: 2 }}>
+              <div style={{ color: '#bbb', fontSize: 15, marginTop: 2, fontWeight: 600 }}>
                 {companyName}{data?.sectorName ? ` · ${data.sectorName}` : ''}
               </div>
             </div>
@@ -381,19 +381,19 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
             </div>
           )}
 
-          {/* Watermark — PNTHR head logo, large and centered */}
+          {/* Watermark — PNTHR head logo, positioned in upper-left blank space */}
           <img
             src={pantherHead}
             alt=""
             style={{
               position: 'absolute',
-              top: '50%', left: '50%',
+              top: '18%', left: '28%',
               transform: 'translate(-50%, -50%)',
-              width: 420, height: 420,
-              opacity: 0.12,
+              width: 380, height: 380,
+              opacity: 0.18,
               pointerEvents: 'none',
               zIndex: 2,
-              filter: 'grayscale(30%) brightness(1.8)',
+              filter: 'brightness(2)',
             }}
           />
 

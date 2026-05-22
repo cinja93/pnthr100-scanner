@@ -286,6 +286,23 @@ function IbkrDiscrepancyBanner({ d, onDismiss, onFixed, onNavigate }) {
   const band = DISC_BAND[d.severity] || DISC_BAND.MEDIUM;
   const { bg, text, muted, tickerBg, tickerText, typeLbl, icon, onDark } = band;
 
+  // ── Auto-fix STOP_MISMATCH: always adopt IBKR stop (tightest-wins) ───────
+  const autoFixedRef = useRef(false);
+  useEffect(() => {
+    if (d.type !== 'STOP_MISMATCH' || !d.positionId || !d.ibkrStop || autoFixedRef.current) return;
+    autoFixedRef.current = true;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/positions`, {
+          method: 'POST',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: d.positionId, stopPrice: +d.ibkrStop }),
+        });
+        if (res.ok) onFixed();
+      } catch {}
+    })();
+  }, [d]);
+
   // ── helper to apply the fix via POST /api/positions (surgical patch) ──────
   async function applyFix(fields) {
     if (!d.positionId) return;

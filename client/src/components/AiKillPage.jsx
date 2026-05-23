@@ -4,7 +4,6 @@ import { fetchLatestAiKill, runAiKill, fetchNav } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import { computeWeeksAgo } from '../utils/dateUtils';
 import { sizePosition, isEtfTicker } from '../utils/sizingUtils';
-import pantherHead from '../assets/panther head.png';
 import PageHeader from './PageHeader';
 import styles from './AiKillPage.module.css';
 
@@ -119,13 +118,9 @@ export default function AiKillPage() {
   return (
     <div className={styles.page}>
       <PageHeader title="AI 300 Kill" description="8-dimension stock scoring engine for the AI Elite 300 universe." />
-      {/* ── Header ──────────────────────────────────────────────────── */}
+      {/* ── Header Controls ──────────────────────────────────────────── */}
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>
-            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            PNTHR AI Kill
-          </h1>
           <p className={styles.subtitle}>
             v1 — (D2 + D3 + D4) × D1
             <span style={{

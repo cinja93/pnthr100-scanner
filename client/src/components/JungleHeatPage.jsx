@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
-import pantherHead from '../assets/panther head.png';
 import PageHeader from './PageHeader';
 import styles from './BondHeatPage.module.css';
 
@@ -152,13 +151,6 @@ export default function JungleHeatPage() {
     <div className={styles.container}>
       <PageHeader title="Carnivore Heat Map" description="Sector-level risk heat map for the Carnivore universe." />
       <div className={styles.pageHeader}>
-        <div>
-          <h1 className={styles.pageTitle}>
-            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            PNTHR HEAT
-          </h1>
-          <p className={styles.pageSubtitle}>679 Jungle stock heat map — daily performance by GICS sector with FCF, P/E, and PEG valuation overlays.</p>
-        </div>
         <div className={styles.headerControls}>
           {data?.breadth && (
             <div style={{ display: 'flex', gap: 12, fontSize: 12, marginRight: 16 }}>

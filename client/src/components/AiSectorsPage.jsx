@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
 import { fetchPnthrAiSectorsLatest, fetchPnthrAiSectorBars } from '../services/api';
 import AiSectorChartModal from './AiSectorChartModal';
-import pantherHead from '../assets/panther head.png';
 import PageHeader from './PageHeader';
 import junglePageStyles from './JunglePage.module.css';
 
@@ -196,10 +195,6 @@ export default function AiSectorsPage() {
       <PageHeader title="AI 300 Sectors" description="AI-specific sector ETF regime analysis with optimized EMAs." />
       <div className={junglePageStyles.header}>
         <div>
-          <h1 className={junglePageStyles.title}>
-            <img src={pantherHead} alt="PNTHR" className={junglePageStyles.pantherLogo} />
-            PNTHR AI Sectors
-          </h1>
           {!loading && !error && data?.ok && (
             <p className={junglePageStyles.subtitle}>
               16 synthetic sector indices · capped market-cap weighted · monthly rebalance · base {data.baseDate} = {fmtNum(data.baseValue)} · as of {data.asOf}

@@ -103,12 +103,6 @@ export default function SearchPage() {
 
         {/* ── Left column: input + dropdown + result table ── */}
         <div className={styles.searchCol}>
-          <h1 className={styles.title}>
-            <img src={pantherHead} alt="PNTHR" className={styles.titleLogo} />
-            PNTHR Search
-          </h1>
-          <p className={styles.subtitle}>NYSE · Nasdaq · ETFs</p>
-
           <form onSubmit={e => { e.preventDefault(); doSearch(); }} className={styles.searchForm}>
             <div className={styles.inputRow} ref={inputRef}>
               <input

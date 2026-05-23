@@ -11,7 +11,6 @@ import { fetchApexStocks, fetchAi300OverlapTickers, API_BASE, authHeaders } from
 import { isCarnivoreMode } from '../utils/strategyMode';
 import PageHeader from './PageHeader';
 import styles from './ApexPage.module.css';
-import pantherHead from '../assets/panther head.png';
 
 // ── Tier config — mirrors server/apexService.js ───────────────────────────────
 // Thresholds recalibrated after D4 removal (2026-03-14):
@@ -429,13 +428,9 @@ export default function ApexPage() {
     <div className={styles.page} onClick={() => setInfoPopup(null)}>
       <PageHeader title="PNTHR Kill" description="8-dimension stock scoring engine for the Carnivore universe." />
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* ── Header Controls ─────────────────────────────────────────────── */}
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>
-            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            PNTHR KILL
-          </h1>
           <p className={styles.subtitle}>
             KILL tells you WHAT to trade. ANALYZE tells you WHEN to trade it. A stock can be Kill #1 RANK for weeks. But there's only a narrow window in the first 1-3 weeks after signal where the Analyze score says NOW. If you miss that window, you wait for the next signal. You don't chase. Minimum gates: Kill rank: Top 20 (HUNTING tier or better, score ≥80), Analyze: ≥75%, Composite: ≥65. That's the floor. That's when the PNTHR Eats!
           </p>

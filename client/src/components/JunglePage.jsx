@@ -4,7 +4,6 @@ import AiTickerChartModal from './AiTickerChartModal';
 import { fetchJungleStocks, fetchEarnings, fetchScannerRanks } from '../services/api';
 import PageHeader from './PageHeader';
 import styles from './JunglePage.module.css';
-import pantherHead from '../assets/panther head.png';
 
 const UNIVERSE_FILTERS = [
   { key: 'all',        label: 'Full 679 Jungle',       countKey: 'all' },
@@ -73,10 +72,6 @@ export default function JunglePage() {
       <PageHeader title="Carnivore Jungle" description="Full Carnivore stock universe with live signals and sector breakdown." />
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>
-            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            Carnivore Jungle
-          </h1>
           {!loading && !error && (
             <p className={styles.subtitle}>
               Carnivore Jungle — {counts.all} stocks including S&amp;P 500, Nasdaq 100, Dow 30 and S&amp;P 400 Leaders

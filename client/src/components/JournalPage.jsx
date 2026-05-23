@@ -13,7 +13,6 @@ import BacktestTradeCard from './BacktestTradeCard';
 import { RulesPopup, BacktestPopup, InstitutionalPopup } from './OrdersPage';
 import ordersStyles from './OrdersPage.module.css';
 import PageHeader from './PageHeader';
-import pantherHead from '../assets/panther head.png';
 
 class TradeDetailBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -1498,16 +1497,9 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
   return (
     <div style={{ padding: '0 0 32px', maxWidth: 1200, color: '#fff', background: '#0a0a0a', minHeight: '100vh' }}>
       <PageHeader title="PNTHR Journal" description="Trade journal with discipline scoring and closed trade analysis." />
-      {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '24px 24px 16px', background: '#111111', gap: 16 }}>
-        <div>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 22, fontWeight: 700, color: '#fcf000', margin: '0 0 4px 0' }}>
-            <img src={pantherHead} alt="PNTHR" style={{ height: 36, width: 'auto' }} />
-            PNTHR JOURNAL
-          </h1>
-          <p style={{ color: '#aaaaaa', fontSize: 13, margin: 0 }}>Trade analysis · Discipline tracking · Pattern recognition</p>
-        </div>
-        {isAdmin && (
+      {/* ── Header Controls ── */}
+      {isAdmin && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', padding: '12px 24px 16px', background: '#111111', gap: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
             {/* ── Fund Period Toggle (demo account only) ── */}
             {isDemo && (
@@ -1531,8 +1523,8 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
               {ibkrRepairing ? '...' : '🔧 repair IBKR'}
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Tab Row: TIER selector | TEST DATA | Year+Chart boxes | CUMULATIVE | RETURN CALCULATOR ── */}
       {isAdmin && (

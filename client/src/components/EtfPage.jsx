@@ -6,7 +6,6 @@ import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeETFAnalyzeScore } from '../utils/analyzeScore';
 import PageHeader from './PageHeader';
 import styles from './EtfPage.module.css';
-import pantherHead from '../assets/panther head.png';
 import { useFund } from '../contexts/FundContext';
 
 // Inclusive weeks since signal date (signal week = week 1). Same logic as StockTable.
@@ -165,10 +164,6 @@ export default function EtfPage() {
 
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>
-            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            {is679 ? 'PNTHR ETFs' : 'PNTHR AI ETFs'}
-          </h1>
           <p className={styles.subtitle}>
             {is679 ? 'Strategic PNTHR ETFs organized by category with PNTHR signals.' : 'AI-themed ETFs across the PNTHR AI 300 universe with PNTHR signals.'}
           </p>

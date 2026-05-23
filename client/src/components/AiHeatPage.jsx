@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
-import pantherHead from '../assets/panther head.png';
 import PageHeader from './PageHeader';
 import styles from './BondHeatPage.module.css';
 
@@ -149,13 +148,6 @@ export default function AiHeatPage() {
     <div className={styles.container}>
       <PageHeader title="AI 300 Heat Map" description="Sector-level risk heat map for the AI Elite 300 universe." />
       <div className={styles.pageHeader}>
-        <div>
-          <h1 className={styles.pageTitle}>
-            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            PNTHR AI HEAT
-          </h1>
-          <p className={styles.pageSubtitle}>AI 300 sector heat map — daily performance by sector with FCF, P/E, and PEG valuation overlays.</p>
-        </div>
         <div className={styles.headerControls}>
           <button className={styles.refreshBtn} onClick={() => load(true)} disabled={loading}>
             {loading ? 'Loading…' : '↻ Refresh'}

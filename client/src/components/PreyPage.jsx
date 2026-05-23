@@ -5,7 +5,6 @@ import { computeWeeksAgo } from '../utils/dateUtils';
 import AiTickerChartModal from './AiTickerChartModal';
 import PageHeader from './PageHeader';
 import styles from './PreyPage.module.css';
-import pantherHead from '../assets/panther head.png';
 
 function pct(v) {
   if (v == null) return '—';
@@ -763,10 +762,6 @@ export default function PreyPage({ onNavigate }) {
       <PageHeader title="PNTHR Prey" description="Carnivore trade pipeline — Feast, Alpha, Spring, Sneak, Hunt, Sprint." />
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>
-            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            PNTHR PREY
-          </h1>
           <p className={styles.subtitle}>679 stocks analyzed. 6 different strategies. All in the kill zone — which ones will you and the PNTHR choose?</p>
         </div>
         <button className={styles.refreshBtn} onClick={() => load(true)} disabled={loading}>

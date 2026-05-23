@@ -7,7 +7,6 @@ import { getCalendarWeekWindow } from '../utils/dateUtils';
 import { useAuth } from '../AuthContext';
 import PageHeader from './PageHeader';
 import styles from './CalendarPage.module.css';
-import pantherHead from '../assets/panther head.png';
 
 function formatDayHeader(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -165,10 +164,6 @@ export default function CalendarPage() {
       <PageHeader title="PNTHR Calendar" description="Upcoming earnings reports for stocks in both fund universes." />
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>
-            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            PNTHR Calendar — {isNextWeek ? 'Next Week' : 'This Week'}
-          </h1>
           <p className={styles.subtitle}>{buildSubtitle()}</p>
         </div>
         <button className={styles.refreshBtn} onClick={load} disabled={loading}>

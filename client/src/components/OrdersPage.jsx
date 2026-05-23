@@ -7,7 +7,6 @@ import AiTickerChartModal from './AiTickerChartModal';
 import PendingBridgeOrdersPanel from './PendingBridgeOrdersPanel';
 import PageHeader from './PageHeader';
 import styles from './OrdersPage.module.css';
-import pantherHead from '../assets/panther head.png';
 
 // Next Friday date string for GTD orders
 function nextFriday() {
@@ -1106,35 +1105,26 @@ export default function OrdersPage() {
   return (
     <div className={styles.page}>
       <PageHeader title="PNTHR Orders" description="Live trading pipeline, lot triggers, and heat exposure for Carnivore." />
-      {/* Header */}
-      <div className={styles.header}>
-        <div>
-          <div className={styles.titleRow}>
-            <img src={pantherHead} alt="" className={styles.panther} />
-            <h1 className={styles.title}>PNTHR Orders</h1>
-          </div>
-          <p className={styles.subtitle}>
-            Filter-then-rank order sheet — {data.weekOf || 'current week'}
-          </p>
-        </div>
-        <div className={styles.headerRight}>
-          {docType && (
-            <span className={`${styles.badge} ${
-              docType === 'CONFIRMED' ? styles.badgeConfirmed :
-              docType === 'DAILY_UPDATE' ? styles.badgeDailyUpdate :
-              styles.badgePreview
-            }`}>
-              {docType}
-            </span>
-          )}
-          <span className={styles.timestamp}>{formatDate(generatedAt)}</span>
-          <div className={styles.rulesButtons}>
-            <button className={styles.rulesBtn} onClick={() => setRulesPopup('BL')}>BL Order Rules</button>
-            <button className={`${styles.rulesBtn} ${styles.rulesBtnBT}`} onClick={() => setBacktestPopup('BL')}>BL Backtest Results</button>
-            <button className={`${styles.rulesBtn} ${styles.rulesBtnSS}`} onClick={() => setRulesPopup('SS')}>SS Order Rules</button>
-            <button className={`${styles.rulesBtn} ${styles.rulesBtnSSBT}`} onClick={() => setBacktestPopup('SS')}>SS Backtest Results</button>
-            <button className={`${styles.rulesBtn} ${styles.rulesBtnInstitutional}`} onClick={() => setInstitutionalPopup(true)}>PNTHR Institutional Metrics</button>
-          </div>
+      <div className={styles.headerRight}>
+        <p className={styles.subtitle}>
+          Filter-then-rank order sheet — {data.weekOf || 'current week'}
+        </p>
+        {docType && (
+          <span className={`${styles.badge} ${
+            docType === 'CONFIRMED' ? styles.badgeConfirmed :
+            docType === 'DAILY_UPDATE' ? styles.badgeDailyUpdate :
+            styles.badgePreview
+          }`}>
+            {docType}
+          </span>
+        )}
+        <span className={styles.timestamp}>{formatDate(generatedAt)}</span>
+        <div className={styles.rulesButtons}>
+          <button className={styles.rulesBtn} onClick={() => setRulesPopup('BL')}>BL Order Rules</button>
+          <button className={`${styles.rulesBtn} ${styles.rulesBtnBT}`} onClick={() => setBacktestPopup('BL')}>BL Backtest Results</button>
+          <button className={`${styles.rulesBtn} ${styles.rulesBtnSS}`} onClick={() => setRulesPopup('SS')}>SS Order Rules</button>
+          <button className={`${styles.rulesBtn} ${styles.rulesBtnSSBT}`} onClick={() => setBacktestPopup('SS')}>SS Backtest Results</button>
+          <button className={`${styles.rulesBtn} ${styles.rulesBtnInstitutional}`} onClick={() => setInstitutionalPopup(true)}>PNTHR Institutional Metrics</button>
         </div>
       </div>
 

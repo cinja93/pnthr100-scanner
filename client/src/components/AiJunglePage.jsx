@@ -7,7 +7,6 @@ import { fetchAiUniverse, fetchEarnings, fetchPnthrAi300Latest, fetchAiSectorRot
 import { getCalendarWeekWindow } from '../utils/dateUtils';
 import PageHeader from './PageHeader';
 import styles from './JunglePage.module.css';
-import pantherHead from '../assets/panther head.png';
 
 // ── PNTHR AI 300 header strip ───────────────────────────────────────────────
 // Live snapshot of the proprietary index. Clickable → opens Pnthr300ChartModal.
@@ -280,10 +279,6 @@ export default function AiJunglePage() {
       <PageHeader title="AI 300 Jungle" description="Full AI Elite 300 universe with live signals and sector breakdown." />
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>
-            <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            PNTHR AI 300 Index
-          </h1>
           {!loading && !error && (
             <p className={styles.subtitle}>
               PNTHR AI 300 Index {versionLabel} — {totalCount} AI-elite holdings across {sectorCount} sectors,

@@ -480,19 +480,23 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                       onMouseLeave={() => setTooltipKey(null)}
                     >
                       <span className={styles.navLabel}>{item.label}</span>
-                      {item.badge && item.badgeType === 'split' && (
-                        <span className={styles.badgeSplit}>
-                          <span
-                            className={`${styles.badgeSplitAi} ${activeFund === 'ai' ? styles.badgeSplitActive : styles.badgeSplitDim}`}
-                            onClick={(e) => { e.stopPropagation(); setActiveFund('ai'); }}
-                          >AI</span>
-                          <span className={styles.badgeSplitSep}>|</span>
-                          <span
-                            className={`${styles.badgeSplitCarn} ${activeFund === 'carn' ? styles.badgeSplitActive : styles.badgeSplitDim}`}
-                            onClick={(e) => { e.stopPropagation(); setActiveFund('carn'); }}
-                          >CARN</span>
-                        </span>
-                      )}
+                      {item.badge && item.badgeType === 'split' && (() => {
+                        const aiKey = AI_PAGE_MAP[item.key];
+                        const isOnAi = aiKey && aiKey !== item.key && activePage === aiKey;
+                        return (
+                          <span className={styles.badgeSplit}>
+                            <span
+                              className={`${styles.badgeSplitAi} ${isOnAi ? styles.badgeSplitActive : styles.badgeSplitDim}`}
+                              onClick={(e) => { e.stopPropagation(); if (aiKey) onNavigate(aiKey); }}
+                            >AI</span>
+                            <span className={styles.badgeSplitSep}>|</span>
+                            <span
+                              className={`${styles.badgeSplitCarn} ${!isOnAi ? styles.badgeSplitActive : styles.badgeSplitDim}`}
+                              onClick={(e) => { e.stopPropagation(); onNavigate(item.key); }}
+                            >CARN</span>
+                          </span>
+                        );
+                      })()}
                       {item.badge && item.badgeType === 'carn' && (
                         <span className={styles.badgeCarn}>{item.badge}</span>
                       )}

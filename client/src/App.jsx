@@ -1659,9 +1659,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 
-          {/* AI Intelligence Report Live — admin or portal-assigned users */}
+          {/* Intelligence Report Live — fund-aware via activeFund toggle */}
           {renderPage === 'ir-live' && (isAdmin || effectiveAllowed?.includes('ir-live')
-            ? <IrLivePage />
+            ? <IrLivePage fund={activeFund === 'carn' ? 'carnivore' : 'ai300'} />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>
           )}
 

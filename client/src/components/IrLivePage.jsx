@@ -77,7 +77,7 @@ function ComparisonTable({ data, spy, alpha, label }) {
         <thead>
           <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
             <th style={{ textAlign: 'left', padding: '8px 12px', color: '#888', fontWeight: 600 }}>METRIC</th>
-            <th style={{ textAlign: 'right', padding: '8px 12px', color: BLUE, fontWeight: 700 }}>AI ELITE (NET)</th>
+            <th style={{ textAlign: 'right', padding: '8px 12px', color: BLUE, fontWeight: 700 }}>{fc.netLabel}</th>
             <th style={{ textAlign: 'right', padding: '8px 12px', color: '#888', fontWeight: 600 }}>S&P 500</th>
             <th style={{ textAlign: 'right', padding: '8px 12px', color: GOLD, fontWeight: 700 }}>ALPHA</th>
           </tr>
@@ -155,7 +155,7 @@ function EquityCurveChart({ data, spyData, spyReturn, label, color }) {
         })}
       </svg>
       <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 10, color: '#666' }}>
-        <span><span style={{ display: 'inline-block', width: 16, height: 2, background: color, marginRight: 4, verticalAlign: 'middle' }} /> AI Elite Fund</span>
+        <span><span style={{ display: 'inline-block', width: 16, height: 2, background: color, marginRight: 4, verticalAlign: 'middle' }} /> {label}</span>
         <span><span style={{ display: 'inline-block', width: 16, height: 2, background: 'rgba(255,255,255,0.55)', marginRight: 4, verticalAlign: 'middle', borderTop: '1px dashed rgba(255,255,255,0.65)' }} /> S&P 500</span>
       </div>
     </div>
@@ -260,13 +260,13 @@ function DrawdownTable({ drawdowns }) {
   );
 }
 
-function CrisisAlphaTable({ crisisNet }) {
+function CrisisAlphaTable({ crisisNet, fundLabel = 'AI Elite' }) {
   if (!crisisNet || crisisNet.length === 0) return null;
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 16 }}>
       <thead>
         <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
-          {['Event','Period','S&P 500','AI Elite','Alpha'].map(h => (
+          {['Event','Period','S&P 500', fundLabel,'Alpha'].map(h => (
             <th key={h} style={{ padding: '8px 10px', color: '#888', textAlign: h === 'Event' ? 'left' : 'right', fontWeight: 600 }}>{h}</th>
           ))}
         </tr>
@@ -350,7 +350,7 @@ function CorrelationCards({ marketCorrelation }) {
   );
 }
 
-function TradeLogSection({ tier }) {
+function TradeLogSection({ tier, apiBase = 'ir-live' }) {
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sortCol, setSortCol] = useState('exitDate');
@@ -360,12 +360,12 @@ function TradeLogSection({ tier }) {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API_BASE}/api/ir-live/${tier}/trades`, { headers: authHeaders() })
+    fetch(`${API_BASE}/api/${apiBase}/${tier}/trades`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => setTrades(d.trades || []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [tier]);
+  }, [tier, apiBase]);
 
   const availableYears = useMemo(() => {
     const yrs = new Set();
@@ -570,37 +570,51 @@ function TradeLogSection({ tier }) {
   );
 }
 
-function MethodologySection() {
-  const sections = [
-    {
-      title: 'The PNTHR AI Universe',
-      content: 'Approximately 300 AI-focused U.S. equities spanning 16 proprietary sectors of the artificial intelligence economy, from semiconductors and cloud infrastructure to autonomous vehicles and AI-powered healthcare. Reconstituted quarterly with a minimum market cap of $500M and average daily volume threshold.',
-    },
-    {
-      title: 'The PAI300 Index & Regime Gate',
-      content: 'The PAI300 is a proprietary capped market-cap-weighted index of the AI Universe. A 36-week EMA applied to PAI300 determines the macro regime: bullish (index above EMA) or bearish (below). The regime gate multiplies conviction scores — amplifying signals in favorable conditions and dampening them in adverse ones.',
-    },
-    {
-      title: 'Sector Rotation Signal Architecture (Weekly Entry)',
-      content: 'All 16 AI sectors are ranked daily by 5-day trailing return. Sectors ranked 1-6 are classified GO (strong momentum), 7-12 NEUTRAL, and 13-16 NO_GO (weak momentum). Entry signals are generated on Fridays using sector-optimized weekly EMAs (18-36 week periods). Buy Long (BL) signals fire when price closes above a rising EMA with a daylight zone confirmation. Sell Short (SS) signals fire on the inverse. Weekly entries execute at Monday open.',
-    },
-    {
-      title: 'Momentum Continuation Entry (MCE) — Daily Entry',
-      content: 'MCE captures proven momentum stocks between weekly signal cycles. Stocks must have an active weekly BL signal AND rank in the trailing 12-month (TTM) top 100 by return (walk-forward, recomputed weekly, no look-ahead bias). Entry triggers on a daily 2-bar high breakout (daily high > max of prior 2 daily highs + $0.01). MCE deploys a full 5-lot pyramid at breakout. Controls: max 3 new MCE entries per day, 5-day gap-add cooldown, same 1% vitality / 10% ticker cap, vitality tracking prevents over-allocation. MCE contributes approximately 70% of total alpha across all tiers.',
-    },
-    {
-      title: 'Capital Constraint (Cash Ledger)',
-      content: 'The fund tracks a real-time cash ledger day by day. Every buy deducts from available cash; every position close returns capital. Entries are skipped when insufficient cash exists — no leverage, no margin. This ensures all backtest results are achievable with real capital deployment. The S&P 500 has historically produced approximately 10% CAGR with drawdowns of -34% (2022) to -50% (2008). The AI Elite Fund delivers 5x the return with less drawdown than public markets.',
-    },
-    {
-      title: 'Position Sizing & Pyramiding',
-      content: 'Each position uses a 5-lot pyramid system with allocations of 35/25/20/12/8% of the maximum position size. Position sizing is dynamic, calculated from current NAV with a 1% maximum risk per trade and 10% maximum single-ticker exposure. Lot triggers are set at 0%, 3%, 6%, 10%, and 14% from entry price. Stops ratchet upward as lots fill: Lot 2 triggers a breakeven stop, Lot 3 moves stop to entry, Lot 4 to Lot 2 fill price, Lot 5 to Lot 3 fill price.',
-    },
-    {
-      title: 'Execution Model',
-      content: 'Weekly entries: signals generated on Friday close, all entries execute at Monday open. MCE entries: daily 2-bar high breakout triggers immediate entry at breakout price. Lot fills are capped at 2% of 20-day average daily volume per lot to ensure institutional executability. Stop fills use gap-through pricing (fill at open when gap exceeds stop level) for conservative modeling. All friction costs (commission, slippage, borrow) are included in net figures.',
-    },
-  ];
+const FUND_CONFIG = {
+  ai300: {
+    name: 'PNTHR AI Elite 300 Fund',
+    netLabel: 'AI ELITE (NET)',
+    compLabel: 'AI ELITE FUND',
+    subtitle: (endDate) => `Backtest Performance Report | Jan 2022 – ${endDate} | Multi-Strategy Pyramiding + MCE | PNTHR AI Universe (~300 Names) | v10.1`,
+    apiBase: 'ir-live',
+    footer: 'AI ELITE FUND',
+    curveLabel: 'AI Elite Fund',
+    crisisHeader: 'AI Elite',
+  },
+  carnivore: {
+    name: 'PNTHR Carnivore Quant Fund',
+    netLabel: 'CARNIVORE (NET)',
+    compLabel: 'CARNIVORE FUND',
+    subtitle: (endDate) => `Backtest Performance Report | Jun 2019 – ${endDate} | Weekly OpEMA Trend-Following | PNTHR 679 Universe (~679 Names) | v5.0`,
+    apiBase: 'carnivore-ir',
+    footer: 'CARNIVORE QUANT FUND',
+    curveLabel: 'Carnivore Quant Fund',
+    crisisHeader: 'Carnivore',
+  },
+};
+
+const AI300_METHODOLOGY = [
+  { title: 'The PNTHR AI Universe', content: 'Approximately 300 AI-focused U.S. equities spanning 16 proprietary sectors of the artificial intelligence economy, from semiconductors and cloud infrastructure to autonomous vehicles and AI-powered healthcare. Reconstituted quarterly with a minimum market cap of $500M and average daily volume threshold.' },
+  { title: 'The PAI300 Index & Regime Gate', content: 'The PAI300 is a proprietary capped market-cap-weighted index of the AI Universe. A 36-week EMA applied to PAI300 determines the macro regime: bullish (index above EMA) or bearish (below). The regime gate multiplies conviction scores — amplifying signals in favorable conditions and dampening them in adverse ones.' },
+  { title: 'Sector Rotation Signal Architecture (Weekly Entry)', content: 'All 16 AI sectors are ranked daily by 5-day trailing return. Sectors ranked 1-6 are classified GO (strong momentum), 7-12 NEUTRAL, and 13-16 NO_GO (weak momentum). Entry signals are generated on Fridays using sector-optimized weekly EMAs (18-36 week periods). Buy Long (BL) signals fire when price closes above a rising EMA with a daylight zone confirmation. Sell Short (SS) signals fire on the inverse. Weekly entries execute at Monday open.' },
+  { title: 'Momentum Continuation Entry (MCE) — Daily Entry', content: 'MCE captures proven momentum stocks between weekly signal cycles. Stocks must have an active weekly BL signal AND rank in the trailing 12-month (TTM) top 100 by return (walk-forward, recomputed weekly, no look-ahead bias). Entry triggers on a daily 2-bar high breakout (daily high > max of prior 2 daily highs + $0.01). MCE deploys a full 5-lot pyramid at breakout. Controls: max 3 new MCE entries per day, 5-day gap-add cooldown, same 1% vitality / 10% ticker cap, vitality tracking prevents over-allocation. MCE contributes approximately 70% of total alpha across all tiers.' },
+  { title: 'Capital Constraint (Cash Ledger)', content: 'The fund tracks a real-time cash ledger day by day. Every buy deducts from available cash; every position close returns capital. Entries are skipped when insufficient cash exists — no leverage, no margin. This ensures all backtest results are achievable with real capital deployment. The S&P 500 has historically produced approximately 10% CAGR with drawdowns of -34% (2022) to -50% (2008). The AI Elite Fund delivers 5x the return with less drawdown than public markets.' },
+  { title: 'Position Sizing & Pyramiding', content: 'Each position uses a 5-lot pyramid system with allocations of 35/25/20/12/8% of the maximum position size. Position sizing is dynamic, calculated from current NAV with a 1% maximum risk per trade and 10% maximum single-ticker exposure. Lot triggers are set at 0%, 3%, 6%, 10%, and 14% from entry price. Stops ratchet upward as lots fill: Lot 2 triggers a breakeven stop, Lot 3 moves stop to entry, Lot 4 to Lot 2 fill price, Lot 5 to Lot 3 fill price.' },
+  { title: 'Execution Model', content: 'Weekly entries: signals generated on Friday close, all entries execute at Monday open. MCE entries: daily 2-bar high breakout triggers immediate entry at breakout price. Lot fills are capped at 2% of 20-day average daily volume per lot to ensure institutional executability. Stop fills use gap-through pricing (fill at open when gap exceeds stop level) for conservative modeling. All friction costs (commission, slippage, borrow) are included in net figures.' },
+];
+
+const CARNIVORE_METHODOLOGY = [
+  { title: 'The PNTHR 679 Universe', content: 'Approximately 679 liquid U.S. equities and ETFs spanning the S&P 500 and S&P 400 Mid Cap indices. The universe captures institutional-grade large and mid cap names with sufficient liquidity for systematic trend-following across all 11 GICS sectors.' },
+  { title: 'Regime Gate (SPY & QQQ)', content: 'SPY and QQQ 21-week exponential moving averages determine the macro regime. When both indices trade above their 21-week EMAs, the system enters bullish mode and generates Buy Long signals. When both trade below, bearish mode activates Sell Short signals. Mixed signals default to a neutral stance with reduced position sizing.' },
+  { title: 'Signal Generation (Sector-Optimized Weekly EMA)', content: 'Each GICS sector uses an optimized weekly EMA period ranging from 18 to 26 weeks, tuned for that sector\'s characteristic momentum profile. Buy Long (BL) signals fire when price closes above a rising sector-optimized EMA with a daylight zone confirmation. Sell Short (SS) signals fire on the inverse. All entries are generated on Friday close and execute at Monday open.' },
+  { title: 'Multi-Factor Scoring (PNTHR Kill)', content: 'An 8-dimensional scoring engine evaluates entry conviction across momentum, trend strength, relative performance, sector positioning, volume confirmation, volatility regime, risk/reward profile, and institutional accumulation signals. Higher Kill scores correspond to higher probability setups.' },
+  { title: 'Capital Constraint (Cash Ledger)', content: 'The fund tracks a real-time cash ledger day by day. Every buy deducts from available cash; every position close returns capital. Entries are skipped when insufficient cash exists — no leverage, no margin. This ensures all backtest results are achievable with real capital deployment.' },
+  { title: 'Position Sizing & Pyramiding', content: 'Each position uses a 5-lot pyramid system with allocations of 35/25/20/12/8% of the maximum position size. Position sizing is dynamic, calculated from current NAV with a 1% maximum risk per trade and 10% maximum single-ticker exposure. Lot triggers are set at 0%, 3%, 6%, 10%, and 14% from entry price. Stops ratchet upward as lots fill: Lot 2 triggers a breakeven stop, Lot 3 moves stop to entry, Lot 4 to Lot 2 fill price, Lot 5 to Lot 3 fill price.' },
+  { title: 'Execution Model', content: 'Signals are generated on Friday close; all entries execute at Monday open. Lot fills are capped at 2% of 20-day average daily volume per lot to ensure institutional executability. Stop fills use gap-through pricing (fill at open when gap exceeds stop level) for conservative modeling. All friction costs (commission, slippage, borrow) are included in net figures.' },
+];
+
+function MethodologySection({ fund }) {
+  const sections = fund === 'carnivore' ? CARNIVORE_METHODOLOGY : AI300_METHODOLOGY;
 
   return (
     <div>
@@ -614,7 +628,8 @@ function MethodologySection() {
   );
 }
 
-export default function IrLivePage() {
+export default function IrLivePage({ fund = 'ai300' }) {
+  const fc = FUND_CONFIG[fund] || FUND_CONFIG.ai300;
   const [tier, setTier] = useState('1m');
   const [section, setSection] = useState('overview');
   const [data, setData] = useState(null);
@@ -624,12 +639,12 @@ export default function IrLivePage() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`${API_BASE}/api/ir-live/${tier}/metrics`, { headers: authHeaders() })
+    fetch(`${API_BASE}/api/${fc.apiBase}/${tier}/metrics`, { headers: authHeaders() })
       .then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
       .then(d => setData(d))
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [tier]);
+  }, [tier, fc.apiBase]);
 
   const d = data;
   const net = d?.net;
@@ -642,10 +657,10 @@ export default function IrLivePage() {
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 26, fontWeight: 900, color: '#fff', letterSpacing: '0.03em' }}>
-          PNTHR AI Elite 300 Fund — Intelligence Report
+          {fc.name} — Intelligence Report
         </div>
         <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-          Backtest Performance Report | Jan 2022 – {d?.net?.endDate ? new Date(d.net.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '...'} | Multi-Strategy Pyramiding + MCE | PNTHR AI Universe (~300 Names) | v10.1
+          {fc.subtitle(d?.net?.endDate ? new Date(d.net.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '...')}
           {d?.generatedAt && <span style={{ marginLeft: 12, color: '#555' }}>Last computed: {new Date(d.generatedAt).toLocaleString()}</span>}
         </div>
       </div>
@@ -706,10 +721,10 @@ export default function IrLivePage() {
               </div>
 
               {/* Equity curve */}
-              <EquityCurveChart data={net} spyData={spy} spyReturn={spy?.totalReturn} label="NET EQUITY CURVE" color={BLUE} />
+              <EquityCurveChart data={net} spyData={spy} spyReturn={spy?.totalReturn} label={`NET EQUITY CURVE — ${fc.curveLabel}`} color={BLUE} />
 
               {/* Performance comparison */}
-              <ComparisonTable data={net} spy={spy} alpha={d.alphaVsSpy} label="PERFORMANCE COMPARISON: AI ELITE FUND vs. S&P 500" />
+              <ComparisonTable data={net} spy={spy} alpha={d.alphaVsSpy} label={`PERFORMANCE COMPARISON: ${fc.compLabel} vs. S&P 500`} />
 
               {/* Gross vs Net */}
               {gross && net && (
@@ -793,7 +808,7 @@ export default function IrLivePage() {
 
               {/* Crisis Alpha */}
               <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>CRISIS ALPHA</div>
-              <CrisisAlphaTable crisisNet={d.crisisAlphaNet} />
+              <CrisisAlphaTable crisisNet={d.crisisAlphaNet} fundLabel={fc.crisisHeader} />
 
               {/* Rolling 12M */}
               {net?.rolling12m?.length > 0 && (
@@ -945,17 +960,17 @@ export default function IrLivePage() {
           )}
 
           {/* ═══ TRADE LOG ═══ */}
-          {section === 'trades' && <TradeLogSection tier={tier} />}
+          {section === 'trades' && <TradeLogSection tier={tier} apiBase={fc.apiBase} />}
 
           {/* ═══ METHODOLOGY ═══ */}
-          {section === 'methodology' && <MethodologySection />}
+          {section === 'methodology' && <MethodologySection fund={fund} />}
         </>
       )}
 
       {/* Footer */}
       <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 40, paddingTop: 16, textAlign: 'center' }}>
         <div style={{ fontSize: 11, color: '#555' }}>
-          PNTHR FUNDS - AI ELITE FUND - CONFIDENTIAL - {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })} - pnthrfunds.com
+          PNTHR FUNDS - {fc.footer} - CONFIDENTIAL - {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })} - pnthrfunds.com
         </div>
         <div style={{ fontSize: 10, color: '#444', marginTop: 6 }}>
           Past performance is not indicative of future results. See full disclaimers in fund documents.

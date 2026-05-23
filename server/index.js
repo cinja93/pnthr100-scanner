@@ -75,6 +75,7 @@ import {
 } from './ai300KillHistory.js';
 import { ai300KillSimulationHandler } from './ai300KillSimulation.js';
 import { irLiveMetricsHandler, irLiveTradesHandler } from './irLiveService.js';
+import { carnivoreIrMetricsHandler, carnivoreIrTradesHandler } from './carnivoreIrService.js';
 import { runAi300KillTestDailyUpdate } from './ai300KillTestDailyUpdate.js';
 import { ai300KillTestMonthlyGet, ai300KillTestMetricsGet, ai300KillTestMonthlyGenerate, generateAi300MonthlySnapshots } from './ai300KillTestMonthly.js';
 import {
@@ -2753,6 +2754,10 @@ async function requireIrLiveAccess(req, res, next) {
 }
 app.get('/api/ir-live/:tier/metrics', authenticateJWT, requireIrLiveAccess, irLiveMetricsHandler);
 app.get('/api/ir-live/:tier/trades',  authenticateJWT, requireIrLiveAccess, irLiveTradesHandler);
+
+// ── Carnivore Quant Fund — Live Intelligence Report ─────────────────────────
+app.get('/api/carnivore-ir/:tier/metrics', authenticateJWT, requireIrLiveAccess, carnivoreIrMetricsHandler);
+app.get('/api/carnivore-ir/:tier/trades',  authenticateJWT, requireIrLiveAccess, carnivoreIrTradesHandler);
 
 // ── AI 300 Kill Test — Appearance Tracking ───────────────────────────────────
 app.get('/api/ai300-kill-appearances', authenticateJWT, requireAdmin, async (req, res) => {

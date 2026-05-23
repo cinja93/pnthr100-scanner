@@ -145,7 +145,7 @@ export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavi
         <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
           <button
             onClick={() => onNavigate?.('aiOrders')}
-            title="View AI Orders"
+            title="View AI 300 Orders"
             style={{
               background: 'rgba(0,0,0,0.35)', color: '#fff',
               border: '1px solid rgba(255,255,255,0.3)', borderRadius: 4,
@@ -153,11 +153,11 @@ export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavi
               whiteSpace: 'nowrap',
             }}
           >
-            AI Orders
+            AI 300
           </button>
           <button
             onClick={() => onNavigate?.('orders')}
-            title="View 679 Orders"
+            title="View Carnivore Orders"
             style={{
               background: 'rgba(0,0,0,0.35)', color: '#fff',
               border: '1px solid rgba(255,255,255,0.3)', borderRadius: 4,
@@ -165,7 +165,7 @@ export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavi
               whiteSpace: 'nowrap',
             }}
           >
-            679 Orders
+            Carnivore
           </button>
           <button
             onClick={handleDismiss}

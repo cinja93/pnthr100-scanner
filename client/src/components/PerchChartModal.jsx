@@ -345,6 +345,13 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
               <div style={{ color: '#bbb', fontSize: 15, marginTop: 2, fontWeight: 600 }}>
                 {companyName}{data?.sectorName ? ` · ${data.sectorName}` : ''}
               </div>
+              <div style={{
+                color: '#fcf000', fontSize: 28, fontWeight: 800,
+                letterSpacing: '0.04em', marginTop: 4,
+                fontFamily: 'monospace', textTransform: 'uppercase',
+              }}>
+                PNTHR Closed Trade of the Week
+              </div>
             </div>
           </div>
 

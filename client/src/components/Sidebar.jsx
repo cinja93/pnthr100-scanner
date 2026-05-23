@@ -25,6 +25,12 @@ const AI_PAGE_MAP = {
   'kill-test':    'kill-test',
 };
 
+// Reverse map: AI page key → Carnivore base key
+const CARN_PAGE_MAP = {};
+for (const [carn, ai] of Object.entries(AI_PAGE_MAP)) {
+  if (ai !== carn) CARN_PAGE_MAP[ai] = carn;
+}
+
 const NAV_GROUPS = [
   {
     groupLabel: "Investor's Den",
@@ -281,6 +287,19 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
       return next;
     });
   }
+
+  // Auto-navigate when fund toggle changes and user is on a dual-fund page
+  useEffect(() => {
+    if (activeFund === 'ai') {
+      // If on a Carnivore page that has an AI variant, switch to it
+      const aiPage = AI_PAGE_MAP[activePage];
+      if (aiPage && aiPage !== activePage) onNavigate(aiPage);
+    } else {
+      // If on an AI page, switch back to Carnivore variant
+      const carnPage = CARN_PAGE_MAP[activePage];
+      if (carnPage) onNavigate(carnPage);
+    }
+  }, [activeFund]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const firstName = getFirstName(currentUser);
   const isPortalMode = isDenPortal || isInvestorPortal || isVipPortal;

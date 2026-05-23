@@ -276,6 +276,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   const { isDemo, toggleDemo } = useDemo();
   const { allowedPages, isDenPortal, isInvestorPortal, isVipPortal } = usePortal();
   const { activeFund, setActiveFund } = useFund();
+  const [pageOverrides, setPageOverrides] = useState({});
   const [tooltipKey, setTooltipKey] = useState(null);
   const [tooltipTop, setTooltipTop] = useState(0);
   const [infoModal, setInfoModal] = useState(null);
@@ -386,7 +387,8 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
   function resolvePageForFund(key, badgeType) {
     if (badgeType !== 'split') return key;
-    if (activeFund === 'ai' && AI_PAGE_MAP[key]) return AI_PAGE_MAP[key];
+    const fund = pageOverrides[key] ?? activeFund;
+    if (fund === 'ai' && AI_PAGE_MAP[key]) return AI_PAGE_MAP[key];
     return key;
   }
 
@@ -416,17 +418,30 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
               <span className={styles.navLabel}>{item.label}</span>
               {item.badge && item.badgeType === 'split' && (() => {
                 const aiKey = AI_PAGE_MAP[item.key];
-                const isOnAi = aiKey && aiKey !== item.key && activePage === aiKey;
+                const hasVariant = aiKey && aiKey !== item.key;
+                const isThisActive = activePage === item.key || (hasVariant && activePage === aiKey);
+                const showAi = isThisActive
+                  ? (hasVariant && activePage === aiKey)
+                  : (pageOverrides[item.key] ?? activeFund) === 'ai';
                 return (
                   <span className={styles.badgeSplit}>
                     <span
-                      className={`${styles.badgeSplitAi} ${isOnAi ? styles.badgeSplitActive : styles.badgeSplitDim}`}
-                      onClick={(e) => { e.stopPropagation(); if (aiKey) onNavigate(aiKey); }}
+                      className={`${styles.badgeSplitAi} ${showAi ? styles.badgeSplitActive : styles.badgeSplitDim}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPageOverrides(prev => ({ ...prev, [item.key]: 'ai' }));
+                        if (hasVariant) onNavigate(aiKey);
+                        else onNavigate(item.key);
+                      }}
                     >AI</span>
                     <span className={styles.badgeSplitSep}>|</span>
                     <span
-                      className={`${styles.badgeSplitCarn} ${!isOnAi ? styles.badgeSplitActive : styles.badgeSplitDim}`}
-                      onClick={(e) => { e.stopPropagation(); onNavigate(item.key); }}
+                      className={`${styles.badgeSplitCarn} ${!showAi ? styles.badgeSplitActive : styles.badgeSplitDim}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPageOverrides(prev => ({ ...prev, [item.key]: 'carn' }));
+                        onNavigate(item.key);
+                      }}
                     >CARN</span>
                   </span>
                 );
@@ -522,11 +537,11 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           <div className={styles.fundTags}>
             <button
               className={`${styles.fundTagAI} ${activeFund !== 'ai' ? styles.fundTagInactive : ''}`}
-              onClick={() => setActiveFund('ai')}
+              onClick={() => { setPageOverrides({}); setActiveFund('ai'); }}
             >AI ELITE 300</button>
             <button
               className={`${styles.fundTagCarn} ${activeFund !== 'carn' ? styles.fundTagInactive : ''}`}
-              onClick={() => setActiveFund('carn')}
+              onClick={() => { setPageOverrides({}); setActiveFund('carn'); }}
             >Carnivore</button>
           </div>
         </div>

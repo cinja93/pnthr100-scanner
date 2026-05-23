@@ -507,6 +507,28 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
       {/* Navigation groups */}
       <nav className={styles.nav}>
+        {/* Master Toggle — switches every dual-fund page at once */}
+        <div className={styles.fundExplainer}>
+          <span className={styles.fundExplainerLabel}>
+            Master Toggle
+            <span
+              className={styles.sectionInfoBtn}
+              onClick={(e) => { e.stopPropagation(); setInfoModal('fundExplainer'); }}
+              title="About our funds"
+            >ⓘ</span>
+          </span>
+          <div className={styles.fundTags}>
+            <button
+              className={`${styles.fundTagAI} ${activeFund !== 'ai' ? styles.fundTagInactive : ''}`}
+              onClick={() => setActiveFund('ai')}
+            >AI ELITE 300</button>
+            <button
+              className={`${styles.fundTagCarn} ${activeFund !== 'carn' ? styles.fundTagInactive : ''}`}
+              onClick={() => setActiveFund('carn')}
+            >Carnivore</button>
+          </div>
+        </div>
+
         {allGroups.map((group) => (
           <div key={group.groupLabel}>
             <div className={styles.navGroup}>
@@ -533,30 +555,6 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                 </div>
               )}
             </div>
-
-            {/* Fund Explainer — rendered after Investor's Den */}
-            {group.groupLabel === "Investor's Den" && (
-              <div className={styles.fundExplainer}>
-                <span className={styles.fundExplainerLabel}>
-                  Our Funds
-                  <span
-                    className={styles.sectionInfoBtn}
-                    onClick={(e) => { e.stopPropagation(); setInfoModal('fundExplainer'); }}
-                    title="About our funds"
-                  >ⓘ</span>
-                </span>
-                <div className={styles.fundTags}>
-                  <button
-                    className={`${styles.fundTagAI} ${activeFund !== 'ai' ? styles.fundTagInactive : ''}`}
-                    onClick={() => setActiveFund('ai')}
-                  >AI ELITE 300</button>
-                  <button
-                    className={`${styles.fundTagCarn} ${activeFund !== 'carn' ? styles.fundTagInactive : ''}`}
-                    onClick={() => setActiveFund('carn')}
-                  >Carnivore</button>
-                </div>
-              </div>
-            )}
           </div>
         ))}
       </nav>

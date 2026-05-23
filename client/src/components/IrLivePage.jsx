@@ -56,7 +56,7 @@ function MetricCard({ label, value, sub, color, small }) {
   );
 }
 
-function ComparisonTable({ data, spy, alpha, label }) {
+function ComparisonTable({ data, spy, alpha, label, netLabel = 'FUND (NET)' }) {
   if (!data || !spy) return null;
   const rows = [
     { metric: 'Total Return',      fund: fmtPct(data.totalReturn),  bench: fmtPct(spy.totalReturn),  alpha: alpha ? fmtPct(alpha.totalReturnPts) : '—' },
@@ -77,7 +77,7 @@ function ComparisonTable({ data, spy, alpha, label }) {
         <thead>
           <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
             <th style={{ textAlign: 'left', padding: '8px 12px', color: '#888', fontWeight: 600 }}>METRIC</th>
-            <th style={{ textAlign: 'right', padding: '8px 12px', color: BLUE, fontWeight: 700 }}>{fc.netLabel}</th>
+            <th style={{ textAlign: 'right', padding: '8px 12px', color: BLUE, fontWeight: 700 }}>{netLabel}</th>
             <th style={{ textAlign: 'right', padding: '8px 12px', color: '#888', fontWeight: 600 }}>S&P 500</th>
             <th style={{ textAlign: 'right', padding: '8px 12px', color: GOLD, fontWeight: 700 }}>ALPHA</th>
           </tr>
@@ -724,7 +724,7 @@ export default function IrLivePage({ fund = 'ai300' }) {
               <EquityCurveChart data={net} spyData={spy} spyReturn={spy?.totalReturn} label={`NET EQUITY CURVE — ${fc.curveLabel}`} color={BLUE} />
 
               {/* Performance comparison */}
-              <ComparisonTable data={net} spy={spy} alpha={d.alphaVsSpy} label={`PERFORMANCE COMPARISON: ${fc.compLabel} vs. S&P 500`} />
+              <ComparisonTable data={net} spy={spy} alpha={d.alphaVsSpy} label={`PERFORMANCE COMPARISON: ${fc.compLabel} vs. S&P 500`} netLabel={fc.netLabel} />
 
               {/* Gross vs Net */}
               {gross && net && (

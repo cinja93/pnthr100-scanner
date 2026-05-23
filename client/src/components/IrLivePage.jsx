@@ -2,7 +2,7 @@
 // AI Elite Fund — Live Intelligence Report
 // Mirrors the per-tier IR PDF with real-time data from backtest collections.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 import pnthrLogo from '../assets/panther head.png';
 
@@ -46,12 +46,44 @@ function fmtNav(v) {
 }
 function retColor(v) { return v == null ? '#888' : v > 0 ? GREEN : v < 0 ? RED : '#fff'; }
 
-function MetricCard({ label, value, sub, color, small }) {
+function MetricCard({ label, value, sub, color, small, info }) {
+  const [showInfo, setShowInfo] = useState(false);
+  const popRef = useRef(null);
+
+  useEffect(() => {
+    if (!showInfo) return;
+    function onClickOutside(e) {
+      if (popRef.current && !popRef.current.contains(e.target)) setShowInfo(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [showInfo]);
+
   return (
-    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: small ? '10px 14px' : '14px 18px', minWidth: small ? 110 : 140 }}>
-      <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: small ? '10px 14px' : '14px 18px', minWidth: small ? 110 : 140, position: 'relative' }}>
+      <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 5 }}>
+        {label}
+        {info && (
+          <span
+            onClick={() => setShowInfo(v => !v)}
+            style={{ cursor: 'pointer', color: '#555', fontSize: 11, lineHeight: 1 }}
+            title={`About ${label}`}
+          >ⓘ</span>
+        )}
+      </div>
       <div style={{ fontSize: small ? 18 : 22, fontWeight: 800, color: color || '#fff', whiteSpace: 'nowrap' }}>{value}</div>
       {sub && <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>{sub}</div>}
+      {showInfo && (
+        <div ref={popRef} style={{
+          position: 'absolute', top: '100%', left: 0, zIndex: 100, marginTop: 6,
+          background: '#1a1a1a', border: '1px solid #444', borderRadius: 8,
+          padding: '14px 16px', width: 300, boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+          <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>{info}</div>
+          <span onClick={() => setShowInfo(false)} style={{ position: 'absolute', top: 8, right: 10, color: '#555', cursor: 'pointer', fontSize: 14 }}>✕</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -706,18 +738,30 @@ export default function IrLivePage({ fund = 'ai300' }) {
             <div>
               {/* Headline numbers */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
-                <MetricCard label="Net Total Return" value={fmtPct(net?.totalReturn)} color={retColor(net?.totalReturn)} sub={`${fmtNav(d.seedNav)} start`} />
-                <MetricCard label="Net CAGR" value={fmtPct(net?.cagr)} color={GREEN} />
-                <MetricCard label="Sharpe Ratio" value={fmt(net?.sharpe)} color={net?.sharpe >= 1 ? GREEN : '#fff'} />
-                <MetricCard label="Sortino Ratio" value={fmt(net?.sortino)} color={net?.sortino >= 2 ? GREEN : '#fff'} />
-                <MetricCard label="Profit Factor" value={`${fmt(trades?.combined?.profitFactor)}x`} color={trades?.combined?.profitFactor >= 2 ? GREEN : '#fff'} sub="net" />
-                <MetricCard label="Calmar Ratio" value={fmt(net?.calmar)} />
-                <MetricCard label="Recovery Factor" value={`${fmt(net?.recoveryFactor, 0)}x`} />
-                <MetricCard label="Positive Months" value={`${net?.positivePct}%`} color={net?.positivePct >= 50 ? GREEN : '#fff'} />
-                <MetricCard label="Win Rate" value={`${trades?.combined?.winRate}%`} sub={`${fmt(trades?.combined?.payoffRatio, 1)}x payoff`} />
-                <MetricCard label="Total Closed" value={trades?.closed?.toLocaleString()} sub={`${trades?.open || 0} active`} />
-                <MetricCard label="Ending Equity" value={fmtNav(net?.endNav)} color={GREEN} />
-                <MetricCard label="Alpha vs S&P" value={d.alphaVsSpy ? fmtDollar(d.alphaVsSpy.endingEquityDelta) : '—'} color={GREEN} />
+                <MetricCard label="Net Total Return" value={fmtPct(net?.totalReturn)} color={retColor(net?.totalReturn)} sub={`${fmtNav(d.seedNav)} start`}
+                  info="The total gain on every dollar invested, after all fees and costs. This is the bottom line: how much your money has grown from day one. The S&P 500 is the standard benchmark for U.S. equity funds." />
+                <MetricCard label="Net CAGR" value={fmtPct(net?.cagr)} color={GREEN}
+                  info="Compound Annual Growth Rate, net of all fees. This is the annualized return, meaning the consistent yearly rate your investment would need to grow at to reach the total return. Anything above 15% is considered exceptional for a hedge fund." />
+                <MetricCard label="Sharpe Ratio" value={fmt(net?.sharpe)} color={net?.sharpe >= 1 ? GREEN : '#fff'}
+                  info="Measures return earned per unit of risk taken. A Sharpe above 1.0 is good, above 1.5 is very strong, and above 2.0 is elite. Most hedge funds target 1.0. This tells you the fund isn't just making money, it's doing so efficiently relative to the volatility." />
+                <MetricCard label="Sortino Ratio" value={fmt(net?.sortino)} color={net?.sortino >= 2 ? GREEN : '#fff'}
+                  info="Like the Sharpe Ratio, but only penalizes downside volatility, not upside. A high Sortino means the fund captures big gains without equally large losses. Above 2.0 is excellent, and above 3.0 is rare among professional managers." />
+                <MetricCard label="Profit Factor" value={`${fmt(trades?.combined?.profitFactor)}x`} color={trades?.combined?.profitFactor >= 2 ? GREEN : '#fff'} sub="net"
+                  info="Total dollars gained on winning trades divided by total dollars lost on losing trades. A profit factor of 2.0x means every dollar lost is offset by two dollars gained. Above 2.0x demonstrates a powerful, repeatable trading edge." />
+                <MetricCard label="Calmar Ratio" value={fmt(net?.calmar)}
+                  info="Annual return divided by the worst peak-to-trough drawdown. It answers: how much return am I getting relative to the worst pain I might experience? Above 1.0 is solid, above 2.0 means strong returns with controlled drawdowns." />
+                <MetricCard label="Recovery Factor" value={`${fmt(net?.recoveryFactor, 0)}x`}
+                  info="Total net profit divided by the maximum drawdown. A higher number means the fund has earned many times over its worst dip. This shows resilience: how quickly and decisively the fund recovers from setbacks and continues compounding." />
+                <MetricCard label="Positive Months" value={`${net?.positivePct}%`} color={net?.positivePct >= 50 ? GREEN : '#fff'}
+                  info="The percentage of calendar months that ended with a positive return. Higher is better. Even top-performing funds have losing months, but consistently finishing above 50% shows the strategy generates steady gains rather than relying on a few big wins." />
+                <MetricCard label="Win Rate" value={`${trades?.combined?.winRate}%`} sub={`${fmt(trades?.combined?.payoffRatio, 1)}x payoff`}
+                  info="The percentage of closed trades that were profitable. The payoff ratio below shows how much bigger the average win is versus the average loss. A fund can have a modest win rate and still be highly profitable if winners are significantly larger than losers." />
+                <MetricCard label="Total Closed" value={trades?.closed?.toLocaleString()} sub={`${trades?.open || 0} active`}
+                  info="The total number of completed round-trip trades in the backtest. A large sample size gives high statistical confidence that the results are not due to luck. The active count shows positions currently open in the portfolio." />
+                <MetricCard label="Ending Equity" value={fmtNav(net?.endNav)} color={GREEN}
+                  info="The final portfolio value at the end of the backtest period, after all fees, commissions, and slippage. This is what your initial investment would have grown to if you had been invested from day one." />
+                <MetricCard label="Alpha vs S&P" value={d.alphaVsSpy ? fmtDollar(d.alphaVsSpy.endingEquityDelta) : '—'} color={GREEN}
+                  info="The dollar amount the fund earned above what you would have made simply buying and holding the S&P 500 index. This is pure added value from active management. Positive alpha is the entire reason investors choose an active fund over a passive index." />
               </div>
 
               {/* Equity curve */}

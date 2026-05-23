@@ -60,10 +60,11 @@ function formatLoadedAt(date) {
   return 'Loaded: ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'America/New_York' }) + ' ET';
 }
 
-export default function PulsePage({ onNavigate }) {
+export default function PulsePage({ onNavigate, fund }) {
   const { analyzeContext } = useAnalyzeContext() || {};
   const { isInvestor } = useAuth() || {};
-  const { activeFund } = useFund();
+  const { activeFund: masterFund } = useFund();
+  const activeFund = fund || masterFund;
   const [data, setData] = useState(null);
   const [vix, setVix] = useState(null);
   const [loading, setLoading] = useState(true);

@@ -13,7 +13,7 @@ const APP_VERSION = '4.4.0';
 // When fund toggle is set to AI, split-badge items navigate to their AI variant.
 // When set to Carnivore, they navigate to the Carnivore variant (the default key).
 const AI_PAGE_MAP = {
-  pulse:          'pulse',
+  pulse:          'aiPulse',
   orders:         'aiOrders',
   apex:           'aiKill',
   jungle:         'aiJungle',

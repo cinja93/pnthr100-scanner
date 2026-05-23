@@ -1613,7 +1613,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {renderPage === 'assistant' && <AssistantPage onNavigate={navigate} />}
 
           {/* PNTHR's Pulse mission control */}
-          {renderPage === 'pulse' && <PulsePage onNavigate={navigate} />}
+          {renderPage === 'pulse' && <PulsePage onNavigate={navigate} fund="carn" />}
+          {renderPage === 'aiPulse' && <PulsePage onNavigate={navigate} fund="ai" />}
 
           {/* PNTHR's Perch newsletter */}
           {renderPage === 'perch' && <NewsPage />}

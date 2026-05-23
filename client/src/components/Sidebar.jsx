@@ -54,7 +54,6 @@ const NAV_GROUPS = [
     groupLabel: 'PNTHR Live',
     info: 'pnthrLive',
     items: [
-      { key: 'assistant', label: 'Assistant', badge: 'DASHBOARD' },
       { key: 'orders',    label: 'Orders',    badge: 'AI | CARN', badgeType: 'split' },
     ],
   },
@@ -304,6 +303,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   const internalItems = [];
   if (effectiveAdmin) {
     internalItems.push(
+      { key: 'assistant',         label: 'Assistant', badge: 'DASHBOARD' },
       { key: 'investor-mgmt',     label: 'Investor Portal' },
       { key: 'journal',           label: 'Journal' },
       { key: 'signal-history',    label: 'Signal History',    badge: 'AI | CARN', badgeType: 'split' },

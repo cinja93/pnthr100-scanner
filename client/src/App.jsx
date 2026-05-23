@@ -5,6 +5,7 @@ import { AnalyzeProvider } from './contexts/AnalyzeContext';
 import { DemoProvider } from './contexts/DemoContext';
 import { PortalProvider, usePortal } from './contexts/PortalContext';
 import { AumShieldProvider } from './contexts/AumShieldContext';
+import AumShield from './components/AumShield';
 import { FundProvider, useFund } from './contexts/FundContext';
 import {
   ImpersonationProvider,
@@ -1602,8 +1603,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR APEX page */}
           {renderPage === 'apex' && <ApexPage />}
 
-          {/* PNTHR Orders — weekly order sheet */}
-          {renderPage === 'orders' && <OrdersPage />}
+          {/* PNTHR Orders — weekly order sheet (PIN protected) */}
+          {renderPage === 'orders' && <AumShield block showDuration><OrdersPage /></AumShield>}
 
           {/* PNTHR PREY page */}
           {renderPage === 'prey' && <PreyPage onNavigate={navigate} />}
@@ -1626,8 +1627,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR AI Sectors — 16 synthetic sector indices */}
           {renderPage === 'aiSectors' && <AiSectorsPage />}
 
-          {/* PNTHR AI Orders — APEX v6 weekly order sheet */}
-          {renderPage === 'aiOrders' && <AiOrdersPage />}
+          {/* PNTHR AI Orders — APEX v6 weekly order sheet (PIN protected) */}
+          {renderPage === 'aiOrders' && <AumShield block showDuration><AiOrdersPage /></AumShield>}
 
           {/* PNTHR AI Kill — v1 ranked predatory scoring */}
           {renderPage === 'aiKill' && <AiKillPage />}

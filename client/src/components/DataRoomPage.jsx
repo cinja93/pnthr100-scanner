@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
 import { usePortal } from '../contexts/PortalContext';
-import { useFund } from '../contexts/FundContext';
 import { authHeaders, API_BASE } from '../services/api';
 import PageHeader from './PageHeader';
 import { useEventTracker } from '../hooks/useEventTracker';
@@ -9,10 +8,9 @@ import { useEventTracker } from '../hooks/useEventTracker';
 const DEFAULT_SECTION          = 'PNTHR Funds, Carnivore Quant LP Fund Documents';
 const VIP_HIDDEN_DOC_LABELS    = new Set(['PNTHR Strategy Change Notice']);
 
-export default function DataRoomPage() {
+export default function DataRoomPage({ fund = 'carn' }) {
   const { isAdmin: rawIsAdmin } = useAuth();
   const { isVipPortal, isInvestorPortal } = usePortal();
-  const { activeFund } = useFund();
   // In VIP / investor portals, suppress admin UI (upload / download / delete /
   // reorder / view log) so admins previewing under those subdomains see
   // exactly what family / investors see.
@@ -76,7 +74,7 @@ export default function DataRoomPage() {
   const allSectionNames = Object.keys(grouped).sort();
   const sectionNames = allSectionNames.filter(sec => {
     const isAiSection = /ai\s*elite|ai\s*300/i.test(sec);
-    return activeFund === 'ai' ? isAiSection : !isAiSection;
+    return fund === 'ai' ? isAiSection : !isAiSection;
   });
 
   const toggleSection = (sec) => {

@@ -24,6 +24,8 @@ const AI_PAGE_MAP = {
   'signal-history': 'ai-signal-history',
   history:        'history',
   'kill-test':    'kill-test',
+  'ir-live':      'ai-ir-live',
+  'data-room':    'ai-data-room',
 };
 
 // Reverse map: AI page key → Carnivore base key
@@ -37,8 +39,8 @@ const NAV_GROUPS = [
     groupLabel: "Investor's Den",
     info: 'investorsDen',
     items: [
-      { key: 'ir-live',   label: 'Intelligence Report', badge: 'LIVE', badgeType: 'live', needsAccess: true },
-      { key: 'data-room', label: 'Data Room' },
+      { key: 'ir-live',   label: 'Intelligence Report', badge: 'AI | CARN', badgeType: 'split', needsAccess: true },
+      { key: 'data-room', label: 'Data Room',            badge: 'AI | CARN', badgeType: 'split' },
     ],
   },
   {

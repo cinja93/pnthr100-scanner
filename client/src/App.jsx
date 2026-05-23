@@ -1659,9 +1659,15 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted to admins.</div>
           )}
 
-          {/* Intelligence Report Live — fund-aware via activeFund toggle */}
+          {/* Intelligence Report Live — Carnivore variant */}
           {renderPage === 'ir-live' && (isAdmin || effectiveAllowed?.includes('ir-live')
-            ? <IrLivePage fund={activeFund === 'carn' ? 'carnivore' : 'ai300'} />
+            ? <IrLivePage fund="carnivore" />
+            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>
+          )}
+
+          {/* Intelligence Report Live — AI Elite 300 variant */}
+          {renderPage === 'ai-ir-live' && (isAdmin || effectiveAllowed?.includes('ir-live')
+            ? <IrLivePage fund="ai300" />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>
           )}
 
@@ -1684,7 +1690,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           )}
 
           {/* PNTHR Data Room */}
-          {renderPage === 'data-room' && <DataRoomPage />}
+          {renderPage === 'data-room' && <DataRoomPage fund="carn" />}
+          {renderPage === 'ai-data-room' && <DataRoomPage fund="ai" />}
 
           {/* PNTHR Compliance (admin only) */}
           {renderPage === 'compliance' && isAdmin && <CompliancePage />}

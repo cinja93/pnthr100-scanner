@@ -242,13 +242,13 @@ function SectorMiniChart({ sectorKey, chartData, emaData = [], signalCounts, onC
     <div className={styles.card} onClick={onClick} title={`Click to see all stocks in ${SECTOR_NAMES[sectorKey]}`}>
       <div className={styles.cardHeader}>
         <span className={styles.sectorName}>
-          {aboveEma != null && (
+          {currentReturn != null && (
             <span style={{
               fontSize: 9, fontWeight: 800, letterSpacing: '0.06em',
               padding: '2px 6px', borderRadius: 3, marginRight: 8,
-              background: aboveEma ? '#16a34a' : '#dc2626',
+              background: currentReturn >= 0 ? '#16a34a' : '#dc2626',
               color: '#fff', verticalAlign: 'middle',
-            }}>{aboveEma ? 'BULL' : 'BEAR'}</span>
+            }}>{currentReturn >= 0 ? 'BULL' : 'BEAR'}</span>
           )}
           {SECTOR_NAMES[sectorKey]}
         </span>

@@ -117,12 +117,14 @@ function SectorCard({ sector, rank, timeRange, onClick }) {
         <span style={{ color: '#fcf000', fontSize: 12, fontWeight: 700, lineHeight: 1.2, flex: 1 }}>
           {sector.name}
         </span>
-        <span style={{
-          padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700,
-          background: regimeColor, color: '#fff', letterSpacing: '0.04em',
-        }}>
-          {sector.regime === 'bull' ? 'BULL' : 'BEAR'}
-        </span>
+        {periodReturn != null && (
+          <span style={{
+            padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700,
+            background: periodReturn >= 0 ? '#16a34a' : '#dc2626', color: '#fff', letterSpacing: '0.04em',
+          }}>
+            {periodReturn >= 0 ? 'BULL' : 'BEAR'}
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontFamily: 'monospace' }}>

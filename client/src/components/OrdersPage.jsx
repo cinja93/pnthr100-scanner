@@ -1283,7 +1283,7 @@ export default function OrdersPage() {
                   {blOrders.length > 0 && (
                     <div className={styles.gateSection}>
                       <h3 className={styles.gateSectionTitle}>BUY LONG ({blOrders.length})</h3>
-                      <OrderTable orders={blOrders} gtdExp={gtdExp} nav={nav} ai300Overlap={ai300Overlap}
+                      <OrderTable orders={blOrders} gtdExp={gtdExp} nav={nav} ai300Overlap={ai300Overlap} isAdmin={isAdmin}
                         onTickerClick={(t) => setChartIndex(orders.findIndex(o => o.ticker === t))} />
                     </div>
                   )}
@@ -1292,7 +1292,7 @@ export default function OrdersPage() {
                   {ssOrders.length > 0 && (
                     <div className={styles.gateSection}>
                       <h3 className={styles.gateSectionTitle}>SELL SHORT ({ssOrders.length})</h3>
-                      <OrderTable orders={ssOrders} gtdExp={gtdExp} nav={nav} ai300Overlap={ai300Overlap}
+                      <OrderTable orders={ssOrders} gtdExp={gtdExp} nav={nav} ai300Overlap={ai300Overlap} isAdmin={isAdmin}
                         onTickerClick={(t) => setChartIndex(orders.findIndex(o => o.ticker === t))} />
                     </div>
                   )}
@@ -1565,7 +1565,7 @@ function ThTip({ children }) {
   return <ThTipShared label={key} tooltip={tip}>{children}</ThTipShared>;
 }
 
-function OrderTable({ orders, gtdExp, nav, onTickerClick, ai300Overlap }) {
+function OrderTable({ orders, gtdExp, nav, onTickerClick, ai300Overlap, isAdmin }) {
   return (
     <table className={styles.ordersTable}>
       <thead>

@@ -6,6 +6,7 @@ import ThTipShared from './HeaderTooltip';
 import AiTickerChartModal from './AiTickerChartModal';
 import PendingBridgeOrdersPanel from './PendingBridgeOrdersPanel';
 import PageHeader from './PageHeader';
+import AumShield from './AumShield';
 import styles from './OrdersPage.module.css';
 
 // Next Friday date string for GTD orders
@@ -1105,46 +1106,48 @@ export default function OrdersPage() {
   return (
     <div className={styles.page}>
       <PageHeader title="PNTHR Orders" description="Live trading pipeline, lot triggers, and heat exposure for Carnivore." />
-      <div className={styles.headerRight}>
-        <p className={styles.subtitle}>
-          Filter-then-rank order sheet — {data.weekOf || 'current week'}
-        </p>
-        {docType && (
-          <span className={`${styles.badge} ${
-            docType === 'CONFIRMED' ? styles.badgeConfirmed :
-            docType === 'DAILY_UPDATE' ? styles.badgeDailyUpdate :
-            styles.badgePreview
-          }`}>
-            {docType}
-          </span>
-        )}
-        <span className={styles.timestamp}>{formatDate(generatedAt)}</span>
-        <div className={styles.rulesButtons}>
-          <button className={styles.rulesBtn} onClick={() => setRulesPopup('BL')}>BL Order Rules</button>
-          <button className={`${styles.rulesBtn} ${styles.rulesBtnBT}`} onClick={() => setBacktestPopup('BL')}>BL Backtest Results</button>
-          <button className={`${styles.rulesBtn} ${styles.rulesBtnSS}`} onClick={() => setRulesPopup('SS')}>SS Order Rules</button>
-          <button className={`${styles.rulesBtn} ${styles.rulesBtnSSBT}`} onClick={() => setBacktestPopup('SS')}>SS Backtest Results</button>
-          <button className={`${styles.rulesBtn} ${styles.rulesBtnInstitutional}`} onClick={() => setInstitutionalPopup(true)}>PNTHR Institutional Metrics</button>
+      <AumShield block>
+        <div className={styles.headerRight}>
+          <p className={styles.subtitle}>
+            Filter-then-rank order sheet — {data.weekOf || 'current week'}
+          </p>
+          {docType && (
+            <span className={`${styles.badge} ${
+              docType === 'CONFIRMED' ? styles.badgeConfirmed :
+              docType === 'DAILY_UPDATE' ? styles.badgeDailyUpdate :
+              styles.badgePreview
+            }`}>
+              {docType}
+            </span>
+          )}
+          <span className={styles.timestamp}>{formatDate(generatedAt)}</span>
+          <div className={styles.rulesButtons}>
+            <button className={styles.rulesBtn} onClick={() => setRulesPopup('BL')}>BL Order Rules</button>
+            <button className={`${styles.rulesBtn} ${styles.rulesBtnBT}`} onClick={() => setBacktestPopup('BL')}>BL Backtest Results</button>
+            <button className={`${styles.rulesBtn} ${styles.rulesBtnSS}`} onClick={() => setRulesPopup('SS')}>SS Order Rules</button>
+            <button className={`${styles.rulesBtn} ${styles.rulesBtnSSBT}`} onClick={() => setBacktestPopup('SS')}>SS Backtest Results</button>
+            <button className={`${styles.rulesBtn} ${styles.rulesBtnInstitutional}`} onClick={() => setInstitutionalPopup(true)}>PNTHR Institutional Metrics</button>
+          </div>
         </div>
-      </div>
+
+        {/* Admin controls */}
+        {isAdmin && (
+          <div className={styles.adminBar}>
+            <button className={styles.adminBtn} disabled={running} onClick={() => handleManualRun('WEEKLY')}>
+              <span>{running ? 'Running...' : 'Run PREVIEW'}</span>
+              <span className={styles.adminBtnSub}>(Run Friday 11am AZ)</span>
+            </button>
+            <button className={styles.adminBtn} disabled={running} onClick={() => handleManualRun('CONFIRMED')}>
+              <span>{running ? 'Running...' : 'Run CONFIRMED'}</span>
+              <span className={styles.adminBtnSub}>(Run after 1:15pm AZ)</span>
+            </button>
+          </div>
+        )}
+      </AumShield>
 
       {rulesPopup && <RulesPopup type={rulesPopup} onClose={() => setRulesPopup(null)} />}
       {backtestPopup && <BacktestPopup type={backtestPopup} onClose={() => setBacktestPopup(null)} />}
       {institutionalPopup && <InstitutionalPopup onClose={() => setInstitutionalPopup(false)} />}
-
-      {/* Admin controls */}
-      {isAdmin && (
-        <div className={styles.adminBar}>
-          <button className={styles.adminBtn} disabled={running} onClick={() => handleManualRun('WEEKLY')}>
-            <span>{running ? 'Running...' : 'Run PREVIEW'}</span>
-            <span className={styles.adminBtnSub}>(Run Friday 11am AZ)</span>
-          </button>
-          <button className={styles.adminBtn} disabled={running} onClick={() => handleManualRun('CONFIRMED')}>
-            <span>{running ? 'Running...' : 'Run CONFIRMED'}</span>
-            <span className={styles.adminBtnSub}>(Run after 1:15pm AZ)</span>
-          </button>
-        </div>
-      )}
 
       {/* Regime / Macro Bar */}
       {regime && (

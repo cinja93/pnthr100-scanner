@@ -4,7 +4,7 @@ import { API_BASE, authHeaders } from '../services/api';
 
 const UNLOCK_MS = 10 * 60 * 1000;
 
-export default function AumShield({ children, style = {} }) {
+export default function AumShield({ children, style = {}, block = false }) {
   const { hasPin, setHasPin } = useAumShield();
   const [locked, setLocked] = useState(true);
   const [showPrompt, setShowPrompt] = useState(false);
@@ -16,8 +16,10 @@ export default function AumShield({ children, style = {} }) {
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
+  const Tag = block ? 'div' : 'span';
+
   if (hasPin === null) {
-    return <span style={{ ...style, color: '#333' }}>••••</span>;
+    return <Tag style={{ ...style, color: '#333' }}>{block ? null : '••••'}</Tag>;
   }
 
   if (!locked) return <>{children}</>;
@@ -79,16 +81,34 @@ export default function AumShield({ children, style = {} }) {
   const close = () => { setShowPrompt(false); setPinVal(''); setConfirm(''); setError(''); setStep('enter'); };
 
   return (
-    <span style={{ position: 'relative', display: 'inline-block', ...style }}>
-      <span
-        onClick={() => setShowPrompt(true)}
-        style={{
-          cursor: 'pointer', color: '#333', fontWeight: 700,
-          background: '#1a1a1a', borderRadius: 4, padding: '0 6px',
-          border: '1px solid #2a2a2a', userSelect: 'none',
-        }}
-        title="Click to unlock AUM"
-      >••••••</span>
+    <Tag style={{ position: 'relative', display: block ? 'block' : 'inline-block', ...style }}>
+      {block ? (
+        <div
+          onClick={() => setShowPrompt(true)}
+          style={{
+            cursor: 'pointer', background: '#0a0a0a', borderRadius: 6,
+            border: '1px solid #2a2a2a', padding: '16px 24px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            userSelect: 'none',
+          }}
+          title="Click to unlock"
+        >
+          <span style={{ fontSize: 16 }}>🔒</span>
+          <span style={{ color: '#555', fontSize: 12, fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.06em' }}>
+            PIN PROTECTED — CLICK TO UNLOCK
+          </span>
+        </div>
+      ) : (
+        <span
+          onClick={() => setShowPrompt(true)}
+          style={{
+            cursor: 'pointer', color: '#333', fontWeight: 700,
+            background: '#1a1a1a', borderRadius: 4, padding: '0 6px',
+            border: '1px solid #2a2a2a', userSelect: 'none',
+          }}
+          title="Click to unlock AUM"
+        >••••••</span>
+      )}
       {showPrompt && (
         <>
           <div onClick={close} style={{
@@ -137,6 +157,6 @@ export default function AumShield({ children, style = {} }) {
           </div>
         </>
       )}
-    </span>
+    </Tag>
   );
 }

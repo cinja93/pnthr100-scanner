@@ -2,9 +2,16 @@ import { useState, useRef, useEffect } from 'react';
 import { useAumShield } from '../contexts/AumShieldContext';
 import { API_BASE, authHeaders } from '../services/api';
 
-const UNLOCK_MS = 10 * 60 * 1000;
+const DEFAULT_UNLOCK_MS = 10 * 60 * 1000;
 
-export default function AumShield({ children, style = {}, block = false }) {
+const DURATION_OPTIONS = [
+  { label: '10 min',  ms: 10 * 60 * 1000 },
+  { label: '1 hour',  ms: 60 * 60 * 1000 },
+  { label: '4 hours', ms: 4 * 60 * 60 * 1000 },
+  { label: '8 hours', ms: 8 * 60 * 60 * 1000 },
+];
+
+export default function AumShield({ children, style = {}, block = false, showDuration = false }) {
   const { hasPin, setHasPin } = useAumShield();
   const [locked, setLocked] = useState(true);
   const [showPrompt, setShowPrompt] = useState(false);
@@ -12,6 +19,7 @@ export default function AumShield({ children, style = {}, block = false }) {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [step, setStep] = useState('enter');
+  const [selectedDuration, setSelectedDuration] = useState(DEFAULT_UNLOCK_MS);
   const timerRef = useRef(null);
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
@@ -24,9 +32,9 @@ export default function AumShield({ children, style = {}, block = false }) {
 
   if (!locked) return <>{children}</>;
 
-  const startTimer = () => {
+  const startTimer = (ms) => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setLocked(true), UNLOCK_MS);
+    timerRef.current = setTimeout(() => setLocked(true), ms || DEFAULT_UNLOCK_MS);
   };
 
   const handleSubmit = async () => {
@@ -39,7 +47,7 @@ export default function AumShield({ children, style = {}, block = false }) {
       const d = await res.json();
       if (d.success) {
         setLocked(false);
-        startTimer();
+        startTimer(showDuration ? selectedDuration : DEFAULT_UNLOCK_MS);
         setShowPrompt(false);
         setPinVal('');
         setError('');
@@ -64,7 +72,7 @@ export default function AumShield({ children, style = {}, block = false }) {
       if (d.success) {
         setHasPin(true);
         setLocked(false);
-        startTimer();
+        startTimer(showDuration ? selectedDuration : DEFAULT_UNLOCK_MS);
         setShowPrompt(false);
         setPinVal('');
         setConfirm('');
@@ -117,7 +125,7 @@ export default function AumShield({ children, style = {}, block = false }) {
           <div style={{
             position: 'absolute', top: '100%', left: 0, zIndex: 9999,
             background: '#1a1a1a', border: '1px solid #444', borderRadius: 6,
-            padding: 12, minWidth: 200, marginTop: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+            padding: 12, minWidth: 220, marginTop: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
           }}>
             <div style={{ fontSize: 11, color: '#888', marginBottom: 8, fontFamily: 'monospace' }}>
               {hasPin
@@ -144,6 +152,23 @@ export default function AumShield({ children, style = {}, block = false }) {
               }}
               placeholder="····"
             />
+            {showDuration && hasPin && (
+              <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                {DURATION_OPTIONS.map(d => (
+                  <button
+                    key={d.ms}
+                    onClick={() => setSelectedDuration(d.ms)}
+                    style={{
+                      flex: 1, padding: '4px 2px', fontSize: 9, fontWeight: 700,
+                      fontFamily: 'monospace', borderRadius: 3, cursor: 'pointer',
+                      border: selectedDuration === d.ms ? '1px solid #fcf000' : '1px solid #333',
+                      background: selectedDuration === d.ms ? 'rgba(252,240,0,0.15)' : '#0a0a0a',
+                      color: selectedDuration === d.ms ? '#fcf000' : '#666',
+                    }}
+                  >{d.label}</button>
+                ))}
+              </div>
+            )}
             {error && <div style={{ color: '#dc3545', fontSize: 11, marginTop: 4 }}>{error}</div>}
             <button
               onClick={handleSubmit}

@@ -6,6 +6,7 @@ import { useDemo } from '../contexts/DemoContext';
 import { usePortal } from '../contexts/PortalContext';
 import { useFund } from '../contexts/FundContext';
 import { fetchImpersonationTargets, startImpersonation } from '../services/api';
+import AumShield from './AumShield';
 
 const APP_VERSION = '4.4.0';
 
@@ -318,28 +319,22 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
       }
     : null;
 
-  // Internal section — admin-only items
-  const internalItems = [];
-  if (effectiveAdmin) {
-    internalItems.push(
-      { key: 'assistant',         label: 'Assistant', badge: 'DASHBOARD' },
-      { key: 'investor-mgmt',     label: 'Investor Portal' },
-      { key: 'journal',           label: 'Journal' },
-      { key: 'signal-history',    label: 'Signal History',    badge: 'AI | CARN', badgeType: 'split' },
-      { key: 'history',           label: 'Kill 10',           info: 'kill10', badge: 'AI | CARN', badgeType: 'split' },
-      { key: 'kill-test',         label: 'Kill Test',         info: 'killTest', badge: 'AI | CARN', badgeType: 'split' },
-      { key: 'compliance',        label: 'Compliance' },
-      { key: 'watchlist',         label: firstName ? `${firstName}'s Watchlist` : 'Watchlist' },
-      { key: 'test',              label: 'TEST' },
-    );
-  } else {
-    internalItems.push(
-      { key: 'journal',   label: 'Journal' },
-      { key: 'watchlist',  label: firstName ? `${firstName}'s Watchlist` : 'Watchlist' },
-    );
-  }
-  const internalGroup = internalItems.length > 0
-    ? { groupLabel: 'Internal', info: 'internal', adminOnly: true, items: internalItems }
+  // Internal section — admin-only, PIN-protected
+  const internalGroup = effectiveAdmin
+    ? {
+        groupLabel: 'Internal', info: 'internal', adminOnly: true, pinProtected: true,
+        items: [
+          { key: 'assistant',         label: 'Assistant', badge: 'DASHBOARD' },
+          { key: 'investor-mgmt',     label: 'Investor Portal' },
+          { key: 'journal',           label: 'Journal' },
+          { key: 'signal-history',    label: 'Signal History',    badge: 'AI | CARN', badgeType: 'split' },
+          { key: 'history',           label: 'Kill 10',           info: 'kill10', badge: 'AI | CARN', badgeType: 'split' },
+          { key: 'kill-test',         label: 'Kill Test',         info: 'killTest', badge: 'AI | CARN', badgeType: 'split' },
+          { key: 'compliance',        label: 'Compliance' },
+          { key: 'watchlist',         label: firstName ? `${firstName}'s Watchlist` : 'Watchlist' },
+          { key: 'test',              label: 'TEST' },
+        ],
+      }
     : null;
 
   // Assemble groups
@@ -396,6 +391,69 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
   function handleNav(page, badgeType) {
     setMobileOpen(false);
     onNavigate(resolvePageForFund(page, badgeType));
+  }
+
+  function renderGroupItems(group) {
+    return (
+      <>
+        {group.items.map((item) => {
+          const resolvedPage = resolvePageForFund(item.key, item.badgeType);
+          const isActive = activePage === item.key || activePage === resolvedPage
+            || (item.badgeType === 'split' && activePage === AI_PAGE_MAP[item.key]);
+          return (
+            <button
+              key={item.key}
+              ref={el => { if (el) btnRefs.current[item.key] = el; }}
+              className={`${styles.navItem} ${isActive ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
+              onClick={() => !item.soon && handleNav(item.key, item.badgeType)}
+              disabled={item.soon}
+              title={item.soon ? 'Coming soon' : item.label}
+              onMouseEnter={() => handleMouseEnter(item.key)}
+              onMouseLeave={() => setTooltipKey(null)}
+            >
+              <span className={styles.navLabel}>{item.label}</span>
+              {item.badge && item.badgeType === 'split' && (() => {
+                const aiKey = AI_PAGE_MAP[item.key];
+                const isOnAi = aiKey && aiKey !== item.key && activePage === aiKey;
+                return (
+                  <span className={styles.badgeSplit}>
+                    <span
+                      className={`${styles.badgeSplitAi} ${isOnAi ? styles.badgeSplitActive : styles.badgeSplitDim}`}
+                      onClick={(e) => { e.stopPropagation(); if (aiKey) onNavigate(aiKey); }}
+                    >AI</span>
+                    <span className={styles.badgeSplitSep}>|</span>
+                    <span
+                      className={`${styles.badgeSplitCarn} ${!isOnAi ? styles.badgeSplitActive : styles.badgeSplitDim}`}
+                      onClick={(e) => { e.stopPropagation(); onNavigate(item.key); }}
+                    >CARN</span>
+                  </span>
+                );
+              })()}
+              {item.badge && item.badgeType === 'carn' && (
+                <span className={styles.badgeCarn}>{item.badge}</span>
+              )}
+              {item.badge && item.badgeType === 'live' && (
+                <span className={styles.badgeLive}>{item.badge}</span>
+              )}
+              {item.badge && !item.badgeType && (
+                <span className={styles.badgeDefault}>{item.badge}</span>
+              )}
+              {item.soon && <span className={styles.soonBadge}>Soon</span>}
+              {item.info && (
+                <span
+                  className={styles.navInfoBtn}
+                  onClick={(e) => { e.stopPropagation(); setInfoModal(item.info); }}
+                  title="What does this measure?"
+                >ⓘ</span>
+              )}
+            </button>
+          );
+        })}
+        {group.adminOnly && effectiveAdmin && (
+          <VipImpersonateMenu />
+        )}
+      </>
+    );
   }
 
   return (
@@ -463,65 +521,17 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                   >ⓘ</span>
                 )}
               </span>
-              <div className={styles.navGroupBox}>
-                {group.items.map((item) => {
-                  const resolvedPage = resolvePageForFund(item.key, item.badgeType);
-                  const isActive = activePage === item.key || activePage === resolvedPage
-                    || (item.badgeType === 'split' && activePage === AI_PAGE_MAP[item.key]);
-                  return (
-                    <button
-                      key={item.key}
-                      ref={el => { if (el) btnRefs.current[item.key] = el; }}
-                      className={`${styles.navItem} ${isActive ? styles.navItemActive : ''} ${item.soon ? styles.navItemDisabled : ''}`}
-                      onClick={() => !item.soon && handleNav(item.key, item.badgeType)}
-                      disabled={item.soon}
-                      title={item.soon ? 'Coming soon' : item.label}
-                      onMouseEnter={() => handleMouseEnter(item.key)}
-                      onMouseLeave={() => setTooltipKey(null)}
-                    >
-                      <span className={styles.navLabel}>{item.label}</span>
-                      {item.badge && item.badgeType === 'split' && (() => {
-                        const aiKey = AI_PAGE_MAP[item.key];
-                        const isOnAi = aiKey && aiKey !== item.key && activePage === aiKey;
-                        return (
-                          <span className={styles.badgeSplit}>
-                            <span
-                              className={`${styles.badgeSplitAi} ${isOnAi ? styles.badgeSplitActive : styles.badgeSplitDim}`}
-                              onClick={(e) => { e.stopPropagation(); if (aiKey) onNavigate(aiKey); }}
-                            >AI</span>
-                            <span className={styles.badgeSplitSep}>|</span>
-                            <span
-                              className={`${styles.badgeSplitCarn} ${!isOnAi ? styles.badgeSplitActive : styles.badgeSplitDim}`}
-                              onClick={(e) => { e.stopPropagation(); onNavigate(item.key); }}
-                            >CARN</span>
-                          </span>
-                        );
-                      })()}
-                      {item.badge && item.badgeType === 'carn' && (
-                        <span className={styles.badgeCarn}>{item.badge}</span>
-                      )}
-                      {item.badge && item.badgeType === 'live' && (
-                        <span className={styles.badgeLive}>{item.badge}</span>
-                      )}
-                      {item.badge && !item.badgeType && (
-                        <span className={styles.badgeDefault}>{item.badge}</span>
-                      )}
-                      {item.soon && <span className={styles.soonBadge}>Soon</span>}
-                      {item.info && (
-                        <span
-                          className={styles.navInfoBtn}
-                          onClick={(e) => { e.stopPropagation(); setInfoModal(item.info); }}
-                          title="What does this measure?"
-                        >ⓘ</span>
-                      )}
-                    </button>
-                  );
-                })}
-                {/* Demo Mode inside Internal group */}
-                {group.adminOnly && effectiveAdmin && (
-                  <VipImpersonateMenu />
-                )}
-              </div>
+              {group.pinProtected ? (
+                <AumShield block showDuration>
+                  <div className={styles.navGroupBox}>
+                    {renderGroupItems(group)}
+                  </div>
+                </AumShield>
+              ) : (
+                <div className={styles.navGroupBox}>
+                  {renderGroupItems(group)}
+                </div>
+              )}
             </div>
 
             {/* Fund Explainer — rendered after Investor's Den */}

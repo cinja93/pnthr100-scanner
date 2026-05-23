@@ -6,6 +6,7 @@ import { computeAnalyzeScore } from '../utils/analyzeScore';
 import AiTickerChartModal from './AiTickerChartModal';
 import Pnthr300ChartModal from './Pnthr300ChartModal';
 import AumShield from './AumShield';
+import PageHeader from './PageHeader';
 
 // Returns true if developing signals should be shown (Mon–Thu anytime; Fri before 4:15 PM ET)
 function shouldShowDevelopingSignals() {
@@ -213,6 +214,7 @@ export default function PulsePage({ onNavigate }) {
 
   return (
     <div style={{ background: '#0a0a0a', minHeight: '100vh', padding: '16px 24px', fontFamily: 'monospace' }}>
+      <PageHeader title="PNTHR Pulse" description="Real-time equity curves, market regime gauges, and sector performance for both funds." />
       {/* STATUS LIGHT */}
       <StatusLight
         status={data.statusLight}

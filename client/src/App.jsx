@@ -198,6 +198,7 @@ function AppAuth() {
     localStorage.setItem('pnthr_token', token);
     setAuthToken(token);
     setAuthTokenState(token);
+    localStorage.setItem('activeFund', 'ai');
     // For investors, use investmentAmount as accountSize
     const acctSize = role === 'investor'
       ? (profile?.investmentAmount ?? null)

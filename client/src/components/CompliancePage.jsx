@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import PageHeader from './PageHeader';
 import { authHeaders, API_BASE } from '../services/api';
 
 const PNTHR_YELLOW = '#fcf000';
@@ -371,6 +372,7 @@ export default function CompliancePage() {
   // ═════════════════════════════════════════════════════════════════════════════
   return (
     <div style={{ padding: 30, background: '#0a0a0a', minHeight: '100vh', color: '#fff' }}>
+      <PageHeader title="PNTHR Compliance" description="Fund compliance monitoring and regulatory reporting." />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <h1 style={{ color: PNTHR_YELLOW, margin: 0 }}>PNTHR Compliance</h1>

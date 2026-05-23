@@ -5,6 +5,7 @@ import Pnthr300ChartModal from './Pnthr300ChartModal';
 import Pnthr300WeightsModal from './Pnthr300WeightsModal';
 import { fetchAiUniverse, fetchEarnings, fetchPnthrAi300Latest, fetchAiSectorRotation, fetchFcfData, fetchValuationData } from '../services/api';
 import { getCalendarWeekWindow } from '../utils/dateUtils';
+import PageHeader from './PageHeader';
 import styles from './JunglePage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -276,6 +277,7 @@ export default function AiJunglePage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="AI 300 Jungle" description="Full AI Elite 300 universe with live signals and sector breakdown." />
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>

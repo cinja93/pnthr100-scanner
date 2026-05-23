@@ -38,6 +38,7 @@ import AddPositionModal from './AddPositionModal';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { useDemo } from '../contexts/DemoContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
+import PageHeader from './PageHeader';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -3635,6 +3636,7 @@ export default function AssistantPage({ onNavigate }) {
 
   return (
     <div style={s.page}>
+      <PageHeader title="PNTHR Assistant" description="All-day dashboard with positions, risk metrics, and real-time alerts." />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={s.header}>

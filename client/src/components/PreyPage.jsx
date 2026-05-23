@@ -3,6 +3,7 @@ import { useAuth } from '../AuthContext';
 import { fetchPreyStocks, fetchEarnings, fetchEmaCrossoverStocks, fetchScannerRanks, fetchTopStocks, fetchShortStocks, fetchSignals } from '../services/api';
 import { computeWeeksAgo } from '../utils/dateUtils';
 import AiTickerChartModal from './AiTickerChartModal';
+import PageHeader from './PageHeader';
 import styles from './PreyPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -759,6 +760,7 @@ export default function PreyPage({ onNavigate }) {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="PNTHR Prey" description="Carnivore trade pipeline — Feast, Alpha, Spring, Sneak, Hunt, Sprint." />
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>

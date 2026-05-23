@@ -13,6 +13,7 @@ import {
   getImpersonationToken,
 } from './contexts/ImpersonationContext';
 import ImpersonationBanner, { IMPERSONATION_BANNER_HEIGHT } from './components/ImpersonationBanner';
+import PageHeader from './components/PageHeader';
 import QueueReviewPanel from './components/QueueReviewPanel';
 import InvestorLoginPage from './components/InvestorLoginPage';
 import InvestmentAmountModal from './components/InvestmentAmountModal';
@@ -1458,6 +1459,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* Scanner pages (Long / Short) */}
           {isScanner && (
             <>
+              <PageHeader title={scanType === 'short' ? 'PNTHR 100 Shorts' : 'PNTHR 100 Longs'} description="Top 100 ranked signals by strength across both fund universes." />
               {/* Universe toggle: Carnivore vs AI 300 */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
                 {[

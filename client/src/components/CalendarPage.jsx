@@ -5,6 +5,7 @@ import EarningsSeasonTable from './EarningsSeasonTable';
 import { fetchJungleStocks, fetchEarnings, fetchWashRules, fetchAiUniverse } from '../services/api';
 import { getCalendarWeekWindow } from '../utils/dateUtils';
 import { useAuth } from '../AuthContext';
+import PageHeader from './PageHeader';
 import styles from './CalendarPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -161,6 +162,7 @@ export default function CalendarPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="PNTHR Calendar" description="Upcoming earnings reports for stocks in both fund universes." />
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import PageHeader from './PageHeader';
 import styles from './NewsPage.module.css';
 import pnthrLogo from '../assets/panther head.png';
 const scottAvatar = '/scott-pnthr-transparent.png';
@@ -351,6 +352,7 @@ export default function NewsPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="PNTHR Perch" description="Weekly intelligence newsletter — trade of the week, regime, and sector rotation." />
 
       {/* ── Header ── */}
       <div className={styles.header}>

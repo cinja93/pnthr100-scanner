@@ -5,6 +5,7 @@ import { sizePosition, isEtfTicker, calcHeat, STRIKE_PCT } from '../utils/sizing
 import ThTipShared from './HeaderTooltip';
 import AiTickerChartModal from './AiTickerChartModal';
 import PendingBridgeOrdersPanel from './PendingBridgeOrdersPanel';
+import PageHeader from './PageHeader';
 import styles from './OrdersPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -1104,6 +1105,7 @@ export default function OrdersPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="PNTHR Orders" description="Live trading pipeline, lot triggers, and heat exposure for Carnivore." />
       {/* Header */}
       <div className={styles.header}>
         <div>

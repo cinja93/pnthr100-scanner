@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import StockTable from './StockTable';
 import AiTickerChartModal from './AiTickerChartModal';
 import { fetchJungleStocks, fetchEarnings, fetchScannerRanks } from '../services/api';
+import PageHeader from './PageHeader';
 import styles from './JunglePage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -69,6 +70,7 @@ export default function JunglePage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="Carnivore Jungle" description="Full Carnivore stock universe with live signals and sector breakdown." />
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>

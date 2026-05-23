@@ -3,6 +3,7 @@ import { createChart, LineSeries } from 'lightweight-charts';
 import { fetchSectorData, fetchSectorStocks, fetchEarnings, fetchScannerRanks, fetchSectorSignalCounts, fetchSpeculativeSignalCounts, fetchSpeculativeStocks, API_BASE, authHeaders } from '../services/api';
 import StockTable from './StockTable';
 import AiTickerChartModal from './AiTickerChartModal';
+import PageHeader from './PageHeader';
 import styles from './SectorPage.module.css';
 
 const SECTOR_EMA_NAME_MAP = {
@@ -744,6 +745,7 @@ export default function SectorPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="PNTHR Sectors" description="Sector ETF regime analysis with optimized EMA signals." />
       <div className={styles.pageHeader}>
         <div>
           <h2 className={styles.pageTitle}>Sector Performance</h2>

@@ -4,6 +4,7 @@ import AiTickerChartModal from './AiTickerChartModal';
 import { fetchEtfStocks, fetchAiEtfStocks, fetchEarnings } from '../services/api';
 import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeETFAnalyzeScore } from '../utils/analyzeScore';
+import PageHeader from './PageHeader';
 import styles from './EtfPage.module.css';
 import pantherHead from '../assets/panther head.png';
 import { useFund } from '../contexts/FundContext';
@@ -139,6 +140,7 @@ export default function EtfPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="PNTHR ETFs" description="Sector and thematic ETF signals across both fund universes." />
       {/* Universe toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
         {[

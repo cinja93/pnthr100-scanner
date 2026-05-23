@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { authHeaders, API_BASE } from '../services/api';
+import PageHeader from './PageHeader';
 import { useFund } from '../contexts/FundContext';
 
 // ── Constants (match sizingUtils.js) ─────────────────────────────────────────
@@ -840,6 +841,7 @@ export default function HistoryPage() {
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1440, margin: '0 auto', fontFamily: 'system-ui, sans-serif', color: '#ddd', background: '#0a0a0a', minHeight: '100vh', boxSizing: 'border-box' }}>
+      <PageHeader title="PNTHR Kill 10" description="Forward-tested track record of Kill top-10 stock picks." />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 12 }}>

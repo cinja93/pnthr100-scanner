@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import pantherHead from '../assets/panther head.png';
+import PageHeader from './PageHeader';
 import styles from './BondHeatPage.module.css';
 
 function getHeatColor(pct) {
@@ -149,6 +150,7 @@ export default function JungleHeatPage() {
 
   return (
     <div className={styles.container}>
+      <PageHeader title="Carnivore Heat Map" description="Sector-level risk heat map for the Carnivore universe." />
       <div className={styles.pageHeader}>
         <div>
           <h1 className={styles.pageTitle}>

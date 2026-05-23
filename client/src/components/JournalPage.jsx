@@ -12,6 +12,7 @@ import InvestorCalculator from './InvestorCalculator';
 import BacktestTradeCard from './BacktestTradeCard';
 import { RulesPopup, BacktestPopup, InstitutionalPopup } from './OrdersPage';
 import ordersStyles from './OrdersPage.module.css';
+import PageHeader from './PageHeader';
 import pantherHead from '../assets/panther head.png';
 
 class TradeDetailBoundary extends Component {
@@ -1496,6 +1497,7 @@ export default function JournalPage({ onNavigate, initialFilter, focusPositionId
 
   return (
     <div style={{ padding: '0 0 32px', maxWidth: 1200, color: '#fff', background: '#0a0a0a', minHeight: '100vh' }}>
+      <PageHeader title="PNTHR Journal" description="Trade journal with discipline scoring and closed trade analysis." />
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '24px 24px 16px', background: '#111111', gap: 16 }}>
         <div>

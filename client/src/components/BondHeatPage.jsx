@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import pantherHead from '../assets/panther head.png';
+import PageHeader from './PageHeader';
 import styles from './BondHeatPage.module.css';
 
 // ── Chart helpers ───────────────────────────────────────────────────────────
@@ -747,6 +748,7 @@ export default function BondHeatPage() {
 
   return (
     <div className={styles.container}>
+      <PageHeader title="PNTHR Bond Yields" description="Treasury yield curve and credit spread tracking." />
       <div className={styles.pageHeader}>
         <div>
           <h1 className={styles.pageTitle}>

@@ -13,6 +13,7 @@ import {
   fetchAiChangelog,
   addAiChangelogEntry,
 } from '../services/api';
+import PageHeader from './PageHeader';
 import styles from './SignalHistoryPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -1089,6 +1090,7 @@ export default function AiSignalHistoryPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="AI 300 Signal History" description="Historical signal log for the AI Elite 300 universe." />
       {/* Header */}
       <div className={styles.header}>
         <div className={styles.headerLeft}>

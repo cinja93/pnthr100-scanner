@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
 import { usePortal } from '../contexts/PortalContext';
 import { authHeaders, API_BASE } from '../services/api';
+import PageHeader from './PageHeader';
 import { useEventTracker } from '../hooks/useEventTracker';
 
 const DEFAULT_SECTION          = 'PNTHR Funds, Carnivore Quant LP Fund Documents';
@@ -268,6 +269,7 @@ export default function DataRoomPage() {
 
   return (
     <div style={{ padding: 30, background: '#0a0a0a', minHeight: '100vh', color: '#fff' }}>
+      <PageHeader title="PNTHR Data Room" description="Legal documents, fund materials, and investor resources." />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <h1 style={{ color: '#fcf000', margin: 0 }}>PNTHR Data Room</h1>

@@ -11,6 +11,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { authHeaders, API_BASE } from '../services/api';
 import AumShield from './AumShield';
+import PageHeader from './PageHeader';
 import { useFund } from '../contexts/FundContext';
 
 // ── Lot sizing constants (mirrors server killTestSettings.js) ─────────────────
@@ -1277,6 +1278,7 @@ export default function KillTestPage() {
 
   return (
     <div style={{ background: BG, minHeight: '100vh', padding: '28px 32px', maxWidth: 1440, margin: '0 auto', fontFamily: 'system-ui, sans-serif', color: TEXT, boxSizing: 'border-box' }}>
+      <PageHeader title="PNTHR Kill Test" description="Broad forward performance tracker for all qualifying Kill signals." />
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>

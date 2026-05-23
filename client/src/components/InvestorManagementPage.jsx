@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchInvestors, createInvestor, updateInvestorApi, deleteInvestorApi, fetchInvestorAnalytics, fetchInvestorActivityLog, fetchInvestorNotes, addInvestorNote, editInvestorNote, deleteInvestorNote, resetInvestorLogins, fetchImpersonationTargets, updateVipPages, API_BASE, authHeaders } from '../services/api';
+import PageHeader from './PageHeader';
 import PagePermissionsSelector from './PagePermissionsSelector';
 import { getDefaultPages, ALL_ASSIGNABLE_PAGES, PORTAL_PAGES } from '../contexts/PortalContext';
 
@@ -143,6 +144,7 @@ export default function InvestorManagementPage() {
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: 1100, minHeight: '100vh', background: '#0a0a0a' }}>
+      <PageHeader title="Investor Portal" description="Manage investor access, permissions, and portal assignments." />
       <h1 style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: '0 0 4px', letterSpacing: '0.04em' }}>
         <span style={{ color: '#FCF000' }}>PNTHR</span> Investor Portal Management
       </h1>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import PageHeader from './PageHeader';
 import styles from './PortfolioPage.module.css';
 import { updateUserProfile, API_BASE, authHeaders, apiFetch } from '../services/api';
 
@@ -224,6 +225,7 @@ export default function PortfolioPage({ currentUser, onProfileUpdate }) {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="PNTHR Portfolio" description="Personal portfolio tracker with pyramid lot management." />
       <div className={styles.pageHeader}>
         <h1 className={styles.title}>Portfolio Optimizer</h1>
         <p className={styles.subtitle}>Top 50 long + short — top 25 of each checked by default, Sortino optimized</p>

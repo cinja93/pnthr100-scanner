@@ -13,6 +13,7 @@ import {
   fetchChangelog,
   addChangelogEntry,
 } from '../services/api';
+import PageHeader from './PageHeader';
 import styles from './SignalHistoryPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -1091,6 +1092,7 @@ export default function SignalHistoryPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="Carnivore Signal History" description="Historical signal log for the Carnivore universe." />
       {/* Header */}
       <div className={styles.header}>
         <div className={styles.headerLeft}>

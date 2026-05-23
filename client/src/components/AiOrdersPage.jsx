@@ -7,6 +7,7 @@ import PendingBridgeOrdersPanel from './PendingBridgeOrdersPanel';
 import { PortfolioSectorPie } from './AssistantPage';
 import { computeWeeksAgo } from '../utils/dateUtils';
 import { getStrategyMode } from '../utils/strategyMode';
+import PageHeader from './PageHeader';
 import AumShield from './AumShield';
 
 const TIER_COLORS = {
@@ -520,6 +521,7 @@ export default function AiOrdersPage() {
 
   return (
     <div style={{ padding: '20px 24px', color: '#e5e5e5', minHeight: '100vh', background: '#0a0a0a' }}>
+      <PageHeader title="AI 300 Orders" description="Live trading pipeline, lot triggers, and heat exposure for AI Elite 300." />
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ color: '#fcf000', margin: 0, fontSize: 26, letterSpacing: '0.04em' }}>PNTHR AI Orders</h1>
         <span style={{ color: '#888', fontSize: 13 }}>APEX v7 — 5D sector rotation overlay</span>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import StockTable from './StockTable';
 import AiTickerChartModal from './AiTickerChartModal';
 import { fetchWatchlist, addWatchlistTicker, removeWatchlistTicker, fetchSignals, fetchLaserSignals, fetchEarnings } from '../services/api';
+import PageHeader from './PageHeader';
 import styles from './WatchlistPage.module.css';
 
 export default function WatchlistPage() {
@@ -84,6 +85,7 @@ export default function WatchlistPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="PNTHR Watchlist" description="Your personal watchlist with live signals and price alerts." />
       <div className={styles.pageHeader}>
         <div>
           <h2 className={styles.pageTitle}>Watchlist</h2>

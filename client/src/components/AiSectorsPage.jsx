@@ -3,6 +3,7 @@ import { createChart, LineSeries } from 'lightweight-charts';
 import { fetchPnthrAiSectorsLatest, fetchPnthrAiSectorBars } from '../services/api';
 import AiSectorChartModal from './AiSectorChartModal';
 import pantherHead from '../assets/panther head.png';
+import PageHeader from './PageHeader';
 import junglePageStyles from './JunglePage.module.css';
 
 function fmtNum(n) {
@@ -192,6 +193,7 @@ export default function AiSectorsPage() {
 
   return (
     <div className={junglePageStyles.page}>
+      <PageHeader title="AI 300 Sectors" description="AI-specific sector ETF regime analysis with optimized EMAs." />
       <div className={junglePageStyles.header}>
         <div>
           <h1 className={junglePageStyles.title}>

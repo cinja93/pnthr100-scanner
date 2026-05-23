@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import pantherHead from '../assets/panther head.png';
+import PageHeader from './PageHeader';
 import styles from './BondHeatPage.module.css';
 
 function getHeatColor(pct) {
@@ -146,6 +147,7 @@ export default function AiHeatPage() {
 
   return (
     <div className={styles.container}>
+      <PageHeader title="AI 300 Heat Map" description="Sector-level risk heat map for the AI Elite 300 universe." />
       <div className={styles.pageHeader}>
         <div>
           <h1 className={styles.pageTitle}>

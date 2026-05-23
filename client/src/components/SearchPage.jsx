@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import StockTable from './StockTable';
 import AiTickerChartModal from './AiTickerChartModal';
 import { fetchStockSearch, fetchEarnings, fetchAutocompleteSuggestions } from '../services/api';
+import PageHeader from './PageHeader';
 import styles from './SearchPage.module.css';
 import pantherHead from '../assets/panther head.png';
 import pantherPaw from '../assets/panther-paw.svg';
@@ -96,6 +97,7 @@ export default function SearchPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="PNTHR Search" description="Analyze any ticker with signal detection, Kill scoring, and chart overlay." />
 
       <div className={styles.searchLayout}>
 

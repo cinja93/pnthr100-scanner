@@ -9,6 +9,7 @@ import KillBadge from './KillBadge';
 import { KillPipelineModal } from './pyramid';
 import { fetchApexStocks, fetchAi300OverlapTickers, API_BASE, authHeaders } from '../services/api';
 import { isCarnivoreMode } from '../utils/strategyMode';
+import PageHeader from './PageHeader';
 import styles from './ApexPage.module.css';
 import pantherHead from '../assets/panther head.png';
 
@@ -426,6 +427,7 @@ export default function ApexPage() {
 
   return (
     <div className={styles.page} onClick={() => setInfoPopup(null)}>
+      <PageHeader title="PNTHR Kill" description="8-dimension stock scoring engine for the Carnivore universe." />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className={styles.header}>

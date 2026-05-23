@@ -5,6 +5,7 @@ import AiTickerChartModal from './AiTickerChartModal';
 import { computeWeeksAgo } from '../utils/dateUtils';
 import { sizePosition, isEtfTicker } from '../utils/sizingUtils';
 import pantherHead from '../assets/panther head.png';
+import PageHeader from './PageHeader';
 import styles from './AiKillPage.module.css';
 
 const TIERS = [
@@ -117,6 +118,7 @@ export default function AiKillPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="AI 300 Kill" description="8-dimension stock scoring engine for the AI Elite 300 universe." />
       {/* ── Header ──────────────────────────────────────────────────── */}
       <div className={styles.header}>
         <div>

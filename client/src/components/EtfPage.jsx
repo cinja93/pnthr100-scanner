@@ -6,6 +6,7 @@ import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { computeETFAnalyzeScore } from '../utils/analyzeScore';
 import styles from './EtfPage.module.css';
 import pantherHead from '../assets/panther head.png';
+import { useFund } from '../contexts/FundContext';
 
 // Inclusive weeks since signal date (signal week = week 1). Same logic as StockTable.
 function weeksAgo(signalDate) {
@@ -22,7 +23,8 @@ function weeksAgo(signalDate) {
 
 export default function EtfPage() {
   const { analyzeContext } = useAnalyzeContext() || {};
-  const [universe, setUniverse] = useState(() => sessionStorage.getItem('etfUniverse') || '679');
+  const { activeFund } = useFund();
+  const [universe, setUniverse] = useState(activeFund === 'ai' ? 'ai300' : '679');
   const [stocks, setStocks]           = useState([]);
   const [signals, setSignals]         = useState({});
   const [categories, setCategories]   = useState([]);
@@ -42,6 +44,10 @@ export default function EtfPage() {
   const [aiEarnings, setAiEarnings]     = useState({});
 
   useEffect(() => { load(false); }, []);
+
+  useEffect(() => {
+    switchUniverse(activeFund === 'ai' ? 'ai300' : '679');
+  }, [activeFund]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function switchUniverse(u) {
     setUniverse(u);
@@ -136,7 +142,7 @@ export default function EtfPage() {
       {/* Universe toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
         {[
-          { key: '679', label: 'PNTHR 679' },
+          { key: '679', label: 'Carnivore' },
           { key: 'ai300', label: 'PNTHR AI 300' },
         ].map(u => {
           const active = universe === u.key;

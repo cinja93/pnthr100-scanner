@@ -7,6 +7,7 @@ import AiTickerChartModal from './AiTickerChartModal';
 import Pnthr300ChartModal from './Pnthr300ChartModal';
 import AumShield from './AumShield';
 import PageHeader from './PageHeader';
+import { useFund } from '../contexts/FundContext';
 
 // Returns true if developing signals should be shown (Mon–Thu anytime; Fri before 4:15 PM ET)
 function shouldShowDevelopingSignals() {
@@ -62,6 +63,7 @@ function formatLoadedAt(date) {
 export default function PulsePage({ onNavigate }) {
   const { analyzeContext } = useAnalyzeContext() || {};
   const { isInvestor } = useAuth() || {};
+  const { activeFund } = useFund();
   const [data, setData] = useState(null);
   const [vix, setVix] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -77,8 +79,8 @@ export default function PulsePage({ onNavigate }) {
   const [movers,          setMovers]          = useState(null);
   const [sectorModal,     setSectorModal]     = useState(null); // { sector, data }
   const [showPai300Chart, setShowPai300Chart] = useState(false);
-  // ── Tab state: PNTHR 679 vs AI 300 ──
-  const [pulseTab, setPulseTab] = useState(() => sessionStorage.getItem('pulseTab') || '679');
+  // ── Tab state: synced from global fund toggle ──
+  const [pulseTab, setPulseTab] = useState(activeFund === 'ai' ? 'ai300' : '679');
   // ── AI 300 data ──
   const [ai300Data,       setAi300Data]       = useState(null);
   const [ai300Loading,    setAi300Loading]    = useState(false);
@@ -95,6 +97,12 @@ export default function PulsePage({ onNavigate }) {
   const pollingTimer = React.useRef(null);
   const sectorPerfTimer = React.useRef(null);
   const showDev = shouldShowDevelopingSignals();
+
+  // Sync in-page tab when master fund toggle changes
+  useEffect(() => {
+    const tab = activeFund === 'ai' ? 'ai300' : '679';
+    switchTab(tab);
+  }, [activeFund]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadDevSignals() {
     if (!shouldShowDevelopingSignals()) return;
@@ -259,10 +267,10 @@ export default function PulsePage({ onNavigate }) {
         </div>
       </div>
 
-      {/* ── TAB BAR: PNTHR 679 | PNTHR AI 300 ── */}
+      {/* ── TAB BAR: Carnivore | PNTHR AI 300 ── */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>
         {[
-          { key: '679',   label: 'PNTHR 679',    count: data?.signals?.blCount != null ? `${data.signals.blCount + data.signals.ssCount} signals` : null },
+          { key: '679',   label: 'Carnivore',    count: data?.signals?.blCount != null ? `${data.signals.blCount + data.signals.ssCount} signals` : null },
           { key: 'ai300', label: 'PNTHR AI 300', count: ai300Data?.signals?.blCount != null ? `${ai300Data.signals.blCount + ai300Data.signals.ssCount} signals` : null },
         ].map(tab => {
           const active = pulseTab === tab.key;
@@ -280,7 +288,7 @@ export default function PulsePage({ onNavigate }) {
         })}
       </div>
 
-      {/* ══════════════════════ PNTHR 679 TAB ══════════════════════ */}
+      {/* ══════════════════════ Carnivore TAB ══════════════════════ */}
       {pulseTab === '679' && <>
         {/* Regime */}
         <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '12px 14px', marginBottom: 14 }}>
@@ -1848,7 +1856,7 @@ function MoversPanel({ movers, onTickerClick }) {
       </div>
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 480 }}>
-          <div style={{ color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 8 }}>PNTHR 679 STOCKS</div>
+          <div style={{ color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 8 }}>Carnivore STOCKS</div>
           <div style={{ color: '#16a34a', fontSize: 10, letterSpacing: 1.5, marginBottom: 4 }}>TOP GAINERS</div>
           <div style={{ marginBottom: 12 }}><Clickable rows={stocks.gainers} kind="gainers" /></div>
           <div style={{ color: '#dc2626', fontSize: 10, letterSpacing: 1.5, marginBottom: 4 }}>TOP DECLINERS</div>

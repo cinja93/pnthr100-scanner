@@ -11,6 +11,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { authHeaders, API_BASE } from '../services/api';
 import AumShield from './AumShield';
+import { useFund } from '../contexts/FundContext';
 
 // ── Lot sizing constants (mirrors server killTestSettings.js) ─────────────────
 const STRIKE_PCT = [0.35, 0.25, 0.20, 0.12, 0.08]; // cumul: 35, 60, 80, 92, 100%
@@ -1013,7 +1014,8 @@ function MonthlyTable({ rows, settings }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function KillTestPage() {
-  const [fund,          setFund]          = useState('ai300'); // '679' | 'ai300'
+  const { activeFund } = useFund();
+  const [fund,          setFund]          = useState(activeFund === 'ai' ? 'ai300' : '679');
   const [data,          setData]          = useState([]);
   const [settings,      setSettings]      = useState(null);
   const [monthly,       setMonthly]       = useState([]);
@@ -1039,6 +1041,10 @@ export default function KillTestPage() {
   const apiMonthly     = isAi300 ? 'ai300-kill-test/monthly' : 'kill-test/monthly';
   const apiMetrics     = isAi300 ? 'ai300-kill-test/metrics' : 'kill-test/metrics';
   const apiGenerate    = isAi300 ? 'ai300-kill-test/monthly/generate' : 'kill-test/monthly/generate';
+
+  useEffect(() => {
+    setFund(activeFund === 'ai' ? 'ai300' : '679');
+  }, [activeFund]);
 
   // Load appearances + settings on mount or fund change
   useEffect(() => {

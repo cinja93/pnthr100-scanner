@@ -73,11 +73,11 @@ export default function JunglePage() {
         <div>
           <h1 className={styles.title}>
             <img src={pantherHead} alt="PNTHR" className={styles.pantherLogo} />
-            PNTHR 679 Jungle
+            Carnivore Jungle
           </h1>
           {!loading && !error && (
             <p className={styles.subtitle}>
-              PNTHR 679 Jungle — {counts.all} stocks including S&amp;P 500, Nasdaq 100, Dow 30 and S&amp;P 400 Leaders
+              Carnivore Jungle — {counts.all} stocks including S&amp;P 500, Nasdaq 100, Dow 30 and S&amp;P 400 Leaders
             </p>
           )}
         </div>

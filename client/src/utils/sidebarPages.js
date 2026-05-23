@@ -27,7 +27,7 @@ const SIDEBAR_PAGES = [
   { key: 'aiKill',     label: 'PNTHR AI Kill' },
 
   // PNTHR Jungle
-  { key: 'jungle',     label: 'PNTHR 679 Jungle' },
+  { key: 'jungle',     label: 'Carnivore Jungle' },
   { key: 'aiJungle',   label: 'PNTHR AI 300 Index' },
   { key: 'aiSectors',  label: 'PNTHR AI Sectors' },
   { key: 'bondHeat',   label: 'PNTHR Bond Heat' },

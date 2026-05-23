@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { authHeaders, API_BASE } from '../services/api';
+import { useFund } from '../contexts/FundContext';
 
 // ── Constants (match sizingUtils.js) ─────────────────────────────────────────
 
@@ -286,6 +287,7 @@ function BreakdownTable({ title, data, defaultOpen = false }) {
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function HistoryPage() {
+  const { activeFund } = useFund();
   const [trackRecord, setTrackRecord] = useState(null);
   const [active,      setActive]      = useState([]);
   const [all,         setAll]         = useState([]);
@@ -296,7 +298,7 @@ export default function HistoryPage() {
   const [sortClosed,  setSortClosed]  = useState({ col: 'exitDate', dir: -1 });
   const [sortActive,  setSortActive]  = useState({ col: 'entryRank', dir: 1 });
   const [tab,         setTab]         = useState('active');
-  const [fund,        setFund]        = useState('ai300'); // '679' | 'ai300'
+  const [fund,        setFund]        = useState(activeFund === 'ai' ? 'ai300' : '679');
   const [dataSource,  setDataSource]  = useState('kill10'); // 'kill10' | 'orders'
   const [ordersData,  setOrdersData]  = useState(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -340,6 +342,10 @@ export default function HistoryPage() {
       setRefreshing(false);
     }
   }
+
+  useEffect(() => {
+    setFund(activeFund === 'ai' ? 'ai300' : '679');
+  }, [activeFund]);
 
   useEffect(() => { load(); }, [fund]); // eslint-disable-line react-hooks/exhaustive-deps
 

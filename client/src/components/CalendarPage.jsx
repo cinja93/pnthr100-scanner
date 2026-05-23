@@ -151,7 +151,7 @@ export default function CalendarPage() {
   }
 
   function buildSubtitle() {
-    if (loading || error) return `PNTHR 679 + AI 300 earnings ${isNextWeek ? 'next week' : 'this week'}`;
+    if (loading || error) return `Carnivore + AI 300 earnings ${isNextWeek ? 'next week' : 'this week'}`;
     const parts = [];
     if (earningsCount > 0) parts.push(`${earningsCount} stock${earningsCount !== 1 ? 's' : ''} reporting`);
     if (washCount > 0) parts.push(`${washCount} wash sale expiration${washCount !== 1 ? 's' : ''}`);

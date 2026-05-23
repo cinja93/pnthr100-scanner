@@ -5,7 +5,7 @@ import { AnalyzeProvider } from './contexts/AnalyzeContext';
 import { DemoProvider } from './contexts/DemoContext';
 import { PortalProvider, usePortal } from './contexts/PortalContext';
 import { AumShieldProvider } from './contexts/AumShieldContext';
-import { FundProvider } from './contexts/FundContext';
+import { FundProvider, useFund } from './contexts/FundContext';
 import {
   ImpersonationProvider,
   useImpersonation,
@@ -691,6 +691,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   // `isImpersonating` must be read here — it's not in scope from AppAuth.
   const { isImpersonating } = useImpersonation();
   const { isAuthenticated, queueSize, showQueuePanel, setShowQueuePanel, sendSuccess } = useQueue();
+  const { activeFund } = useFund();
   const isAdmin = currentUser?.role === 'admin';
   const isInvestor = currentUser?.role === 'investor';
   const [trendlineBannerVisible, setTrendlineBannerVisible] = useState(false);
@@ -983,8 +984,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [filters, setFilters] = useState(defaultFilters);
   const [longBatchStats, setLongBatchStats] = useState(null);
   const [shortBatchStats, setShortBatchStats] = useState(null);
-  // AI 100 universe toggle (persisted in sessionStorage)
-  const [scannerUniverse, setScannerUniverse] = useState(() => sessionStorage.getItem('scannerUniverse') || '679');
+  // AI 100 universe toggle — synced from global fund toggle
+  const [scannerUniverse, setScannerUniverse] = useState(activeFund === 'ai' ? 'ai300' : '679');
   const [aiStocks, setAiStocks] = useState([]);
   const [aiSignals, setAiSignals] = useState({});
   const [aiLoading, setAiLoading] = useState(false);
@@ -1000,6 +1001,10 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   useEffect(() => {
     setFilters(defaultFilters);
   }, [activePage, selectedDate]);
+
+  useEffect(() => {
+    switchScannerUniverse(activeFund === 'ai' ? 'ai300' : '679');
+  }, [activeFund]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function switchScannerUniverse(u) {
     setScannerUniverse(u);
@@ -1453,10 +1458,10 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* Scanner pages (Long / Short) */}
           {isScanner && (
             <>
-              {/* Universe toggle: PNTHR 679 vs AI 300 */}
+              {/* Universe toggle: Carnivore vs AI 300 */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
                 {[
-                  { key: '679', label: 'PNTHR 679' },
+                  { key: '679', label: 'Carnivore' },
                   { key: 'ai300', label: 'PNTHR AI 300' },
                 ].map(u => {
                   const active = scannerUniverse === u.key;

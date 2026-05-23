@@ -274,15 +274,20 @@
   padding: 2px 8px;
   flex-shrink: 0;
 }
-.badgeSplitAi {
+.badgeSplitAi,
+.badgeSplitCarn {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.badgeSplitActive {
   color: #fcf000;
+}
+.badgeSplitDim {
+  color: rgba(255, 255, 255, 0.35);
 }
 .badgeSplitSep {
   color: rgba(255, 255, 255, 0.2);
   margin: 0 4px;
-}
-.badgeSplitCarn {
-  color: rgba(255, 255, 255, 0.5);
 }
 
 .badgeCarn {

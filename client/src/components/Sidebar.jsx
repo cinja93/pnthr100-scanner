@@ -482,9 +482,15 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                       <span className={styles.navLabel}>{item.label}</span>
                       {item.badge && item.badgeType === 'split' && (
                         <span className={styles.badgeSplit}>
-                          <span className={styles.badgeSplitAi}>AI</span>
+                          <span
+                            className={`${styles.badgeSplitAi} ${activeFund === 'ai' ? styles.badgeSplitActive : styles.badgeSplitDim}`}
+                            onClick={(e) => { e.stopPropagation(); setActiveFund('ai'); }}
+                          >AI</span>
                           <span className={styles.badgeSplitSep}>|</span>
-                          <span className={styles.badgeSplitCarn}>CARN</span>
+                          <span
+                            className={`${styles.badgeSplitCarn} ${activeFund === 'carn' ? styles.badgeSplitActive : styles.badgeSplitDim}`}
+                            onClick={(e) => { e.stopPropagation(); setActiveFund('carn'); }}
+                          >CARN</span>
                         </span>
                       )}
                       {item.badge && item.badgeType === 'carn' && (

@@ -22,6 +22,7 @@ import { fetchFMP, getYearStartPrices } from './stockService.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { getAiUniverseKill } from './aiUniverseKillService.js';
 import { loadDeactivatedTickers } from './aiUniverseHealthJob.js';
+import { addAiRankingComparison, autoSaveAiRankingIfFriday } from './rankingService.js';
 
 // ── Deactivated ticker exclusion set — loaded from Mongo at startup ──────────
 // Refreshed by the weekly health-check cron. Any ticker written to
@@ -123,7 +124,11 @@ export async function getAiUniverse({ refresh = false } = {}) {
     if (b.ytdReturn == null) return -1;
     return b.ytdReturn - a.ytdReturn;
   });
-  const ranked = stocks.map((s, i) => ({ ...s, rank: i + 1 }));
+  const rankedRaw = stocks.map((s, i) => ({ ...s, rank: i + 1 }));
+
+  // Compare to previous week's saved ranking (rank change column)
+  const ranked = await addAiRankingComparison(rankedRaw);
+  autoSaveAiRankingIfFriday(ranked).catch(() => {});
 
   // Per-stock BL/SS/BE/SE + PNTHR Stops. Each stock uses its AI sector's
   // tunable EMA period applied to its weekly bars (weekly signal) and the

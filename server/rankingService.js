@@ -1,5 +1,5 @@
 import { getMostRecentRanking, getRankingBeforeDate, saveRanking, getRankingByDate, cleanupOldRankings } from './database.js';
-import { getMostRecentAiRanking, getAiRankingBeforeDate, saveAiRanking, getAiRankingByDate, cleanupOldAiRankings } from './database.js';
+import { getMostRecentAiRanking, getAiRankingBeforeDate, saveAiRanking, getAiRankingByDate, cleanupOldAiRankings, connectToDatabase } from './database.js';
 
 // US Eastern timezone for market close
 const MARKET_TZ = 'America/New_York';
@@ -284,8 +284,14 @@ export async function autoSaveAiRankingIfFriday(longStocks, shortStocks = null) 
     const rankingDate = getRankingDate();
     const existing = await getAiRankingByDate(rankingDate);
     if (existing) {
-      console.log(`✅ AI ranking already saved for ${rankingDate}`);
-      return;
+      if (longStocks.length > (existing.rankings?.length || 0)) {
+        console.log(`📊 Replacing AI ranking for ${rankingDate}: ${existing.rankings?.length} → ${longStocks.length} stocks`);
+        const db = await connectToDatabase();
+        await db.collection('ai_rankings').deleteOne({ date: rankingDate });
+      } else {
+        console.log(`✅ AI ranking already saved for ${rankingDate}`);
+        return;
+      }
     }
     console.log(`💾 Auto-saving AI ranking for Friday ${rankingDate}...`);
     await saveAiRanking(rankingDate, longStocks, shortStocks);

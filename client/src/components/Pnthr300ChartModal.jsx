@@ -39,6 +39,8 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
   const [barSpacing, setBarSpacing] = useState(12);  // px between bars (+4 wider default per Scott)
   const [showAllSignals, setShowAllSignals] = useState(false);
   const [portalReady, setPortalReady] = useState(false);
+  const [overlayDrawMode, setOverlayDrawMode] = useState(null);
+  const [overlayLineCount, setOverlayLineCount] = useState(0);
   useEffect(() => { if (toolbarRef?.current) setPortalReady(true); }, [toolbarRef]);
 
   const containerRef    = useRef(null);
@@ -47,6 +49,7 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
   const rsiChartRef     = useRef(null);
   const priceSeriesRef  = useRef(null);
   const visibleBarsRef  = useRef([]);
+  const drawOverlayRef  = useRef(null);
   const barSpacingRef   = useRef(barSpacing);
   useEffect(() => { barSpacingRef.current = barSpacing; }, [barSpacing]);
 
@@ -394,6 +397,40 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
           >{tf}</button>
         ))}
       </div>
+      {embedded && isAdmin && (
+        <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
+          <button
+            onClick={() => setOverlayDrawMode(prev => prev === 'free' ? null : 'free')}
+            style={{
+              padding: '6px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+              background: overlayDrawMode === 'free' ? '#fcf000' : 'transparent',
+              color: overlayDrawMode === 'free' ? '#000' : '#888',
+              border: 'none', cursor: 'pointer',
+            }}
+            title="Free-form trendline (any direction)"
+          >✏️ Draw</button>
+          <button
+            onClick={() => setOverlayDrawMode(prev => prev === 'horizontal' ? null : 'horizontal')}
+            style={{
+              padding: '6px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+              background: overlayDrawMode === 'horizontal' ? '#fcf000' : 'transparent',
+              color: overlayDrawMode === 'horizontal' ? '#000' : '#888',
+              border: 'none', cursor: 'pointer', borderLeft: '1px solid #2a2a2a',
+            }}
+            title="Horizontal line — locks the second click to the same price level as the first"
+          >─ Horiz</button>
+          {overlayLineCount > 0 && (
+            <button
+              onClick={() => drawOverlayRef.current?.clearAll()}
+              style={{
+                padding: '6px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+                background: 'transparent', color: '#888',
+                border: 'none', cursor: 'pointer', borderLeft: '1px solid #2a2a2a',
+              }}
+            >Clear ({overlayLineCount})</button>
+          )}
+        </div>
+      )}
     </>
   );
 
@@ -561,6 +598,7 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
 
             {!loading && !error && bars.length > 0 && (
               <ChartDrawingOverlay
+                ref={drawOverlayRef}
                 key={`PAI300:${timeframe}:${chartType}:${barsTick}`}
                 chartRef={chartRef}
                 seriesRef={priceSeriesRef}
@@ -569,6 +607,10 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
                 enabled={isAdmin}
                 buttonPosition="top-left"
                 topOffset={224}
+                hideButtons={embedded}
+                externalDrawMode={embedded ? overlayDrawMode : undefined}
+                onDrawModeChange={embedded ? setOverlayDrawMode : undefined}
+                onLineCountChange={embedded ? setOverlayLineCount : undefined}
               />
             )}
           </div>

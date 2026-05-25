@@ -55,8 +55,9 @@ const NAV_GROUPS = [
     groupLabel: 'Market Pulse',
     info: 'marketPulse',
     items: [
-      { key: 'pulse',    label: 'Pulse',       badge: 'AI | CARN', badgeType: 'split' },
-      { key: 'bondHeat', label: 'Bond Yields' },
+      { key: 'pulse',      label: 'Pulse',         badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'ai300Index', label: 'AI 300 Index' },
+      { key: 'bondHeat',   label: 'Bond Yields' },
     ],
   },
   {

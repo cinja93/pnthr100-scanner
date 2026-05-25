@@ -23,7 +23,7 @@ function fmtPct(n) {
   return `${s}${n.toFixed(2)}%`;
 }
 
-export default function Pnthr300ChartModal({ onClose }) {
+export default function Pnthr300ChartModal({ onClose, embedded = false }) {
   const { isAdmin } = useAuth();
 
   const [timeframe, setTimeframe]   = useState('weekly');
@@ -331,19 +331,13 @@ export default function Pnthr300ChartModal({ onClose }) {
     return ((c - o) / o) * 100;
   })();
 
-  return (
-    <div
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 9999, padding: 24,
-      }}
-    >
+  const chartInner = (
       <div style={{
-        background: '#0a0a0a', borderRadius: 8, width: '100%', maxWidth: 1200,
-        height: '85vh', display: 'flex', flexDirection: 'column',
-        border: '1px solid #2a2a2a', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+        background: '#0a0a0a', borderRadius: 8, width: '100%',
+        ...(embedded ? { flex: 1, minHeight: 0 } : { maxWidth: 1200, height: '85vh' }),
+        display: 'flex', flexDirection: 'column',
+        border: '1px solid #2a2a2a',
+        ...(!embedded && { boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }),
       }}>
         {/* Header */}
         <div style={{
@@ -469,16 +463,18 @@ export default function Pnthr300ChartModal({ onClose }) {
                 </button>
               ))}
             </div>
-            <button
-              onClick={onClose}
-              style={{
-                background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
-                color: '#888', padding: '6px 10px', cursor: 'pointer', fontSize: 12, marginLeft: 4,
-              }}
-              title="Close"
-            >
-              ✕
-            </button>
+            {!embedded && (
+              <button
+                onClick={onClose}
+                style={{
+                  background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
+                  color: '#888', padding: '6px 10px', cursor: 'pointer', fontSize: 12, marginLeft: 4,
+                }}
+                title="Close"
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
 
@@ -584,6 +580,20 @@ export default function Pnthr300ChartModal({ onClose }) {
           {latest?.asOf && <span>as of {latest.asOf}</span>}
         </div>
       </div>
+  );
+
+  if (embedded) return chartInner;
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999, padding: 24,
+      }}
+    >
+      {chartInner}
     </div>
   );
 }

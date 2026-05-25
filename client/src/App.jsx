@@ -32,6 +32,7 @@ import EtfPage from './components/EtfPage';
 import CalendarPage from './components/CalendarPage';
 import JunglePage from './components/JunglePage';
 import AiJunglePage from './components/AiJunglePage';
+import Ai300IndexPage from './components/Ai300IndexPage';
 import BondHeatPage from './components/BondHeatPage';
 import AiHeatPage from './components/AiHeatPage';
 import JungleHeatPage from './components/JungleHeatPage';
@@ -1615,6 +1616,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR's Pulse mission control */}
           {renderPage === 'pulse' && <PulsePage onNavigate={navigate} fund="carn" />}
           {renderPage === 'aiPulse' && <PulsePage onNavigate={navigate} fund="ai" />}
+
+          {/* PNTHR AI 300 Index — standalone chart page */}
+          {renderPage === 'ai300Index' && <Ai300IndexPage />}
 
           {/* PNTHR's Perch newsletter */}
           {renderPage === 'perch' && <NewsPage />}

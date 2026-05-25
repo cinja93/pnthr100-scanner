@@ -37,7 +37,7 @@ function daysBetweenIso(a, b) {
 // uptrends (v2>v1, since t2>t1 always), red for downtrends.
 const COLOR_UP = '#26a69a';
 const COLOR_DOWN = '#ef5350';
-const COLOR_HORIZ = '#000000';
+const COLOR_HORIZ = '#4da6ff';
 function lineColor(ln) {
   if (ln.kind === 'horizontal' || Math.abs(ln.v2 - ln.v1) < 0.01) return COLOR_HORIZ;
   return ln.v2 > ln.v1 ? COLOR_UP : COLOR_DOWN;

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { createChart, BarSeries, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
 import { fetchPnthrAi300Latest, fetchPnthrAi300Bars } from '../services/api';
 import { useAuth } from '../AuthContext';
@@ -23,7 +24,7 @@ function fmtPct(n) {
   return `${s}${n.toFixed(2)}%`;
 }
 
-export default function Pnthr300ChartModal({ onClose, embedded = false }) {
+export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarRef }) {
   const { isAdmin } = useAuth();
 
   const [timeframe, setTimeframe]   = useState('weekly');
@@ -37,6 +38,8 @@ export default function Pnthr300ChartModal({ onClose, embedded = false }) {
   const [barsTick, setBarsTick]     = useState(0);
   const [barSpacing, setBarSpacing] = useState(12);  // px between bars (+4 wider default per Scott)
   const [showAllSignals, setShowAllSignals] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
+  useEffect(() => { if (toolbarRef?.current) setPortalReady(true); }, [toolbarRef]);
 
   const containerRef    = useRef(null);
   const rsiContainerRef = useRef(null);
@@ -331,15 +334,79 @@ export default function Pnthr300ChartModal({ onClose, embedded = false }) {
     return ((c - o) / o) * 100;
   })();
 
+  const toolbarControls = (
+    <>
+      <button
+        onClick={() => setShowAllSignals(v => !v)}
+        style={{
+          padding: '6px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+          background: showAllSignals ? '#fcf000' : 'transparent',
+          color: showAllSignals ? '#000' : '#888',
+          border: '1px solid #2a2a2a', borderRadius: 4, cursor: 'pointer',
+          textTransform: 'uppercase',
+        }}
+        title={showAllSignals ? 'Showing all signals — click to show only the most recent' : 'Showing most recent signal — click to show all'}
+      >
+        {showAllSignals ? 'ALL SIGNALS' : 'SIGNALS'}
+      </button>
+      <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
+        <button
+          onClick={() => adjustBarSpacing(-2)}
+          title="Contract — bring bars closer together (more bars on screen)"
+          style={{ padding: '6px 10px', fontSize: 13, fontWeight: 700, background: 'transparent', color: '#888', border: 'none', cursor: 'pointer' }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#fcf000'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#888'; }}
+        >→←</button>
+        <button
+          onClick={() => adjustBarSpacing(2)}
+          title="Expand — push bars further apart (fewer bars on screen, wider candles)"
+          style={{ padding: '6px 10px', fontSize: 13, fontWeight: 700, background: 'transparent', color: '#888', border: 'none', cursor: 'pointer', borderLeft: '1px solid #2a2a2a' }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#fcf000'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#888'; }}
+        >←→</button>
+      </div>
+      <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
+        {[{ key: 'bars', label: 'OHLC Bars' }, { key: 'candles', label: 'Candles' }].map(opt => (
+          <button
+            key={opt.key}
+            onClick={() => setChartType(opt.key)}
+            style={{
+              padding: '6px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+              background: chartType === opt.key ? '#fcf000' : 'transparent',
+              color: chartType === opt.key ? '#000' : '#888',
+              border: 'none', cursor: 'pointer', textTransform: 'uppercase',
+            }}
+            title={opt.key === 'bars' ? 'Traditional OHLC bars (open tick on left, close tick on right)' : 'Japanese candlesticks (filled body shows open→close range)'}
+          >{opt.label}</button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
+        {['daily', 'weekly'].map(tf => (
+          <button
+            key={tf}
+            onClick={() => setTimeframe(tf)}
+            style={{
+              padding: '6px 14px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+              background: timeframe === tf ? '#fcf000' : 'transparent',
+              color: timeframe === tf ? '#000' : '#888',
+              border: 'none', cursor: 'pointer', textTransform: 'uppercase',
+            }}
+          >{tf}</button>
+        ))}
+      </div>
+    </>
+  );
+
   const chartInner = (
       <div style={{
-        background: '#0a0a0a', borderRadius: 8, width: '100%',
+        background: '#0a0a0a', borderRadius: embedded ? 0 : 8, width: '100%',
         ...(embedded ? { flex: 1, minHeight: 0 } : { maxWidth: 1200, height: '85vh' }),
         display: 'flex', flexDirection: 'column',
-        border: '1px solid #2a2a2a',
+        border: embedded ? 'none' : '1px solid #2a2a2a',
         ...(!embedded && { boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }),
       }}>
-        {/* Header */}
+        {/* Header — hidden when embedded (controls portaled to parent) */}
+        {!embedded && (
         <div style={{
           padding: '14px 20px', borderBottom: '1px solid #1f1f1f',
           display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
@@ -379,104 +446,23 @@ export default function Pnthr300ChartModal({ onClose, embedded = false }) {
           )}
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-            {/* Signals toggle */}
+            {toolbarControls}
             <button
-              onClick={() => setShowAllSignals(v => !v)}
+              onClick={onClose}
               style={{
-                padding: '6px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-                background: showAllSignals ? '#fcf000' : 'transparent',
-                color: showAllSignals ? '#000' : '#888',
-                border: '1px solid #2a2a2a', borderRadius: 4, cursor: 'pointer',
-                textTransform: 'uppercase',
+                background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
+                color: '#888', padding: '6px 10px', cursor: 'pointer', fontSize: 12, marginLeft: 4,
               }}
-              title={showAllSignals ? 'Showing all signals — click to show only the most recent' : 'Showing most recent signal — click to show all'}
+              title="Close"
             >
-              {showAllSignals ? 'ALL SIGNALS' : 'SIGNALS'}
+              ✕
             </button>
-
-            {/* Bar spacing: contract ⇨⇦  /  expand ⇦⇨ — adjusts the gap between bars */}
-            <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
-              <button
-                onClick={() => adjustBarSpacing(-2)}
-                title="Contract — bring bars closer together (more bars on screen)"
-                style={{
-                  padding: '6px 10px', fontSize: 13, fontWeight: 700,
-                  background: 'transparent', color: '#888',
-                  border: 'none', cursor: 'pointer',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#fcf000'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#888'; }}
-              >
-                →←
-              </button>
-              <button
-                onClick={() => adjustBarSpacing(2)}
-                title="Expand — push bars further apart (fewer bars on screen, wider candles)"
-                style={{
-                  padding: '6px 10px', fontSize: 13, fontWeight: 700,
-                  background: 'transparent', color: '#888',
-                  border: 'none', cursor: 'pointer', borderLeft: '1px solid #2a2a2a',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#fcf000'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#888'; }}
-              >
-                ←→
-              </button>
-            </div>
-
-            {/* Chart type: OHLC bars (default) vs candlesticks */}
-            <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
-              {[
-                { key: 'bars',    label: 'OHLC Bars' },
-                { key: 'candles', label: 'Candles' },
-              ].map(opt => (
-                <button
-                  key={opt.key}
-                  onClick={() => setChartType(opt.key)}
-                  style={{
-                    padding: '6px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-                    background: chartType === opt.key ? '#fcf000' : 'transparent',
-                    color: chartType === opt.key ? '#000' : '#888',
-                    border: 'none', cursor: 'pointer', textTransform: 'uppercase',
-                  }}
-                  title={opt.key === 'bars' ? 'Traditional OHLC bars (open tick on left, close tick on right)' : 'Japanese candlesticks (filled body shows open→close range)'}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Timeframe: daily vs weekly */}
-            <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
-              {['daily', 'weekly'].map(tf => (
-                <button
-                  key={tf}
-                  onClick={() => setTimeframe(tf)}
-                  style={{
-                    padding: '6px 14px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-                    background: timeframe === tf ? '#fcf000' : 'transparent',
-                    color: timeframe === tf ? '#000' : '#888',
-                    border: 'none', cursor: 'pointer', textTransform: 'uppercase',
-                  }}
-                >
-                  {tf}
-                </button>
-              ))}
-            </div>
-            {!embedded && (
-              <button
-                onClick={onClose}
-                style={{
-                  background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 4,
-                  color: '#888', padding: '6px 10px', cursor: 'pointer', fontSize: 12, marginLeft: 4,
-                }}
-                title="Close"
-              >
-                ✕
-              </button>
-            )}
           </div>
         </div>
+        )}
+
+        {/* Portal toolbar controls to parent when embedded */}
+        {embedded && portalReady && toolbarRef?.current && createPortal(toolbarControls, toolbarRef.current)}
 
         {/* Chart body — price chart (top) + RSI sub-chart (bottom) */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>

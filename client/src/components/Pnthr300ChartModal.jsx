@@ -481,6 +481,38 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
               }}
             />
 
+            {embedded && latest?.ok && (
+              <div style={{
+                position: 'absolute', top: 14, left: 224, zIndex: 3, pointerEvents: 'none',
+                display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                fontSize: 13, fontFamily: 'monospace',
+              }}>
+                <span style={{ color: '#fcf000', fontWeight: 700, letterSpacing: '0.04em' }}>PNTHR AI 300</span>
+                <span style={{ color: '#666', fontSize: 10 }}>PAI300</span>
+                <span style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>
+                  {fmtNum(latest.value)}
+                </span>
+                <span style={{ color: dayChangeColor, fontWeight: 600 }}>
+                  {dayChange >= 0 ? '▲' : '▼'} {fmtPct(dayChange)}
+                </span>
+                <span style={{
+                  padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+                  letterSpacing: '0.06em', background: regimeColor, color: '#fff',
+                }}>
+                  {latest.regime === 'bull' ? '🟢 BULL REGIME' : '🔴 BEAR REGIME'}
+                </span>
+                <span style={{ color: '#888', fontSize: 11 }}>
+                  OpEMA <strong style={{ color: '#fcf000' }}>{latest.ema21W?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</strong>
+                </span>
+                <span style={{ color: '#888', fontSize: 11 }}>
+                  YTD <strong style={{ color: latest.ytdPct >= 0 ? '#16a34a' : '#dc2626' }}>{fmtPct(latest.ytdPct)}</strong>
+                </span>
+                <span style={{ color: '#888', fontSize: 11 }}>
+                  Since launch <strong style={{ color: '#16a34a' }}>{fmtPct(latest.inceptionPct)}</strong>
+                </span>
+              </div>
+            )}
+
             {hoveredBar && (
               <div style={{
                 position: 'absolute', top: 14, left: 224, zIndex: 4,

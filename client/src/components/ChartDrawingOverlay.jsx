@@ -25,7 +25,7 @@
 //     />
 //   </div>
 
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { LineSeries } from 'lightweight-charts';
 import { API_BASE, authHeaders } from '../services/api';
 
@@ -43,7 +43,7 @@ function lineColor(ln) {
   return ln.v2 > ln.v1 ? COLOR_UP : COLOR_DOWN;
 }
 
-export default function ChartDrawingOverlay({
+const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
   chartRef,
   seriesRef,
   weeklyBars,                       // sorted [{weekOf, open, high, low, close}]
@@ -51,14 +51,24 @@ export default function ChartDrawingOverlay({
   enabled = true,
   buttonPosition = 'top-right',     // 'top-right' | 'top-left'
   topOffset = 6,                    // px from chart top to button stack — bump down to clear watermarks
-}) {
+  hideButtons = false,              // hide floating button stack (parent renders its own controls)
+  externalDrawMode,                 // controlled draw mode from parent (null | 'free' | 'horizontal')
+  onDrawModeChange,                 // callback when draw mode changes (for parent sync)
+  onLineCountChange,                // callback with line count (for parent Clear button)
+}, ref) {
   const overlayRef        = useRef(null);
   const drawnSeriesRef    = useRef([]);
   const drawStartRef      = useRef(null);
   const editingRef        = useRef(null);
   const windowHandlersRef = useRef(null);
 
-  const [drawMode, setDrawMode]     = useState(null);   // null | 'free' | 'horizontal'
+  const [drawModeInternal, setDrawModeInternal] = useState(null);
+  const drawMode = externalDrawMode !== undefined ? externalDrawMode : drawModeInternal;
+  const setDrawMode = (v) => {
+    const newVal = typeof v === 'function' ? v(drawMode) : v;
+    if (onDrawModeChange) onDrawModeChange(newVal);
+    else setDrawModeInternal(newVal);
+  };
   const [drawnLines, setDrawnLines] = useState([]);
   const [tempLine, setTempLine]     = useState(null);
   const [hoverSnap, setHoverSnap]   = useState(null);
@@ -66,6 +76,10 @@ export default function ChartDrawingOverlay({
   const [bodyDragLineId, setBodyDragLineId] = useState(null);
   const [selectedLineId, setSelectedLineId] = useState(null);
   const isDrawing = drawMode != null;
+
+  useImperativeHandle(ref, () => ({ clearAll: () => deleteAllForChart() }), [ticker]);
+
+  useEffect(() => { if (onLineCountChange) onLineCountChange(drawnLines.length); }, [drawnLines.length, onLineCountChange]);
 
   // Keep weeklyBars accessible from event handlers without re-binding
   const sliceRef = useRef(weeklyBars);
@@ -508,32 +522,34 @@ export default function ChartDrawingOverlay({
   return (
     <>
       {/* Floating button stack: Draw, Horizontal, Clear (shown when ≥1 line) */}
-      <div style={{
-        position: 'absolute', top: topOffset,
-        [buttonPosition === 'top-right' ? 'right' : 'left']: 6,
-        zIndex: 12,
-        display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start',
-      }}>
-        <button
-          onClick={() => setDrawMode(prev => prev === 'free' ? null : 'free')}
-          style={buttonStyle(drawMode === 'free')}
-          title="Free-form trendline (any direction)"
-        >
-          ✏️ {drawMode === 'free' ? 'Drawing' : 'Draw'}
-        </button>
-        <button
-          onClick={() => setDrawMode(prev => prev === 'horizontal' ? null : 'horizontal')}
-          style={buttonStyle(drawMode === 'horizontal')}
-          title="Horizontal line — locks the second click to the same price level as the first"
-        >
-          ─ {drawMode === 'horizontal' ? 'Horizontal' : 'Horizontal'}
-        </button>
-        {drawnLines.length > 0 && (
-          <button onClick={deleteAllForChart} style={buttonStyle(false)}>
-            Clear ({drawnLines.length})
+      {!hideButtons && (
+        <div style={{
+          position: 'absolute', top: topOffset,
+          [buttonPosition === 'top-right' ? 'right' : 'left']: 6,
+          zIndex: 12,
+          display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start',
+        }}>
+          <button
+            onClick={() => setDrawMode(prev => prev === 'free' ? null : 'free')}
+            style={buttonStyle(drawMode === 'free')}
+            title="Free-form trendline (any direction)"
+          >
+            ✏️ {drawMode === 'free' ? 'Drawing' : 'Draw'}
           </button>
-        )}
-      </div>
+          <button
+            onClick={() => setDrawMode(prev => prev === 'horizontal' ? null : 'horizontal')}
+            style={buttonStyle(drawMode === 'horizontal')}
+            title="Horizontal line — locks the second click to the same price level as the first"
+          >
+            ─ {drawMode === 'horizontal' ? 'Horizontal' : 'Horizontal'}
+          </button>
+          {drawnLines.length > 0 && (
+            <button onClick={deleteAllForChart} style={buttonStyle(false)}>
+              Clear ({drawnLines.length})
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Drawing overlay — captures events only when a draw mode is active */}
       <div
@@ -548,7 +564,7 @@ export default function ChartDrawingOverlay({
         onWheel={(e) => { if (isDrawing) e.preventDefault(); }}
         style={{
           position: 'absolute', inset: 0, width: '100%', height: '100%',
-          pointerEvents: (isDrawing || drawnLines.length > 0) ? 'auto' : 'none',
+          pointerEvents: isDrawing ? 'auto' : 'none',
           cursor: isDrawing ? 'crosshair' : 'default',
           zIndex: 10,
           background: isDrawing ? 'rgba(252,240,0,0.04)' : 'transparent',
@@ -641,7 +657,9 @@ export default function ChartDrawingOverlay({
       )}
     </>
   );
-}
+});
+
+export default ChartDrawingOverlay;
 
 function CtxBtn({ children, onClick, disabled = false }) {
   return (

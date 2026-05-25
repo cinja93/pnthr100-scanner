@@ -484,7 +484,7 @@ export default function Pnthr300ChartModal({ onClose, embedded = false }) {
           {error && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', zIndex: 3 }}>{error}</div>}
 
           {/* Price chart */}
-          <div style={{ flex: 3, position: 'relative', minHeight: 0 }}>
+          <div style={{ flex: embedded ? 1 : 3, position: 'relative', minHeight: 0 }}>
             <img
               src={pantherHead}
               alt="PNTHR"
@@ -565,7 +565,7 @@ export default function Pnthr300ChartModal({ onClose, embedded = false }) {
           </div>
 
           {/* RSI sub-chart */}
-          <div style={{ flex: 1, position: 'relative', minHeight: 80 }}>
+          <div style={{ height: embedded ? 120 : undefined, flex: embedded ? 'none' : 1, position: 'relative', minHeight: 80 }}>
             <div ref={rsiContainerRef} style={{ position: 'absolute', inset: 0 }} />
           </div>
         </div>

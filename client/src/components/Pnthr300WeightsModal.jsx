@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { fetchPnthrAi300Weights, fetchFcfData, fetchValuationData, rebalanceAi300Weights } from '../services/api';
 import { useAuth } from '../AuthContext';
+import AiTickerChartModal from './AiTickerChartModal';
 import pantherHead from '../assets/panther head.png';
 
 // Pnthr300WeightsModal — popup showing how each of the 304 constituents is
@@ -78,6 +79,7 @@ export default function Pnthr300WeightsModal({ onClose }) {
   const [sortKey, setSortKey] = useState('weight');
   const [tab, setTab]         = useState('constituents');
   const [rebalancing, setRebalancing] = useState(false);
+  const [chartIndex, setChartIndex]   = useState(null);
 
   function loadWeights() {
     setLoading(true); setError(null);
@@ -253,9 +255,8 @@ export default function Pnthr300WeightsModal({ onClose }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(c => {
+                {filtered.map((c, idx) => {
                   const barPct = maxWeight > 0 ? (c.weight / maxWeight) * 100 : 0;
-                  // Hyperscaler-capped names (1.5%) vs single-name-capped (4%)
                   const isAtSingleCap = c.weight >= 3.99;
                   const isAtHyperCap  = c.weight >= 1.49 && c.weight <= 1.51;
                   const barColor = isAtSingleCap ? '#dc2626' : isAtHyperCap ? '#f59e0b' : '#16a34a';
@@ -263,7 +264,12 @@ export default function Pnthr300WeightsModal({ onClose }) {
                     <tr key={c.ticker} style={{ borderTop: '1px solid #1a1a1a' }}>
                       <td style={{ padding: '8px 12px', textAlign: 'right', color: '#666', fontFamily: 'monospace' }}>{c.rank}</td>
                       <td style={{ padding: '8px 12px', fontWeight: 700, color: '#fcf000', fontFamily: 'monospace' }}>
-                        {c.ticker}
+                        <span
+                          onClick={() => setChartIndex(idx)}
+                          style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(252,240,0,0.3)', textUnderlineOffset: 2 }}
+                          onMouseEnter={e => { e.currentTarget.style.textDecorationColor = '#fcf000'; }}
+                          onMouseLeave={e => { e.currentTarget.style.textDecorationColor = 'rgba(252,240,0,0.3)'; }}
+                        >{c.ticker}</span>
                         <span style={{ ...fcfBillStyle, backgroundColor: getFcfColor(fcfMap[c.ticker]) }} title={getFcfLabel(fcfMap[c.ticker])}>$</span>
                         {(() => { const pe = valMap[c.ticker]?.forwardPE; return <span style={{ ...pillStyle, backgroundColor: getPeColor(pe), color: pe != null && pe <= 0 ? '#fff' : '#000', cursor: 'help' }} title={pe != null ? `P/E: ${pe.toFixed(1)}x` : 'P/E: N/A'}>▸PE{pe == null ? '' : pe <= 0 ? ' N/E' : ` ${pe.toFixed(0)}`}</span>; })()}
                         {(() => { const peg = valMap[c.ticker]?.peg; return <span style={{ ...pillStyle, backgroundColor: getPegColor(peg), color: peg != null && peg <= 0 ? '#fff' : '#000', cursor: 'help' }} title={peg != null ? `PEG: ${peg.toFixed(2)}` : 'PEG: N/A'}>PEG{peg == null ? '' : peg <= 0 ? ' N/E' : ` ${peg.toFixed(1)}`}</span>; })()}
@@ -344,6 +350,14 @@ export default function Pnthr300WeightsModal({ onClose }) {
           {data?.ok && <span>Total: {fmtWeight(data.totalWeight)}</span>}
         </div>
       </div>
+
+      {chartIndex != null && filtered.length > 0 && (
+        <AiTickerChartModal
+          tickers={filtered.map(c => c.ticker)}
+          initialIndex={chartIndex}
+          onClose={() => setChartIndex(null)}
+        />
+      )}
     </div>
   );
 }

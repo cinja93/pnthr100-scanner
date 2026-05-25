@@ -63,7 +63,8 @@ export default function ChartDrawingOverlay({
   const [tempLine, setTempLine]     = useState(null);
   const [hoverSnap, setHoverSnap]   = useState(null);
   const [ctxMenu, setCtxMenu]       = useState(null);
-  const [bodyDragLineId, setBodyDragLineId] = useState(null); // hide original line series while body-dragging
+  const [bodyDragLineId, setBodyDragLineId] = useState(null);
+  const [selectedLineId, setSelectedLineId] = useState(null);
   const isDrawing = drawMode != null;
 
   // Keep weeklyBars accessible from event handlers without re-binding
@@ -92,8 +93,10 @@ export default function ChartDrawingOverlay({
     for (const ln of drawnLines) {
       // Hide the line being body-dragged — the temp line shows its new position
       if (ln._id === bodyDragLineId) continue;
+      const isSelected = ln._id === selectedLineId;
       const s = chart.addSeries(LineSeries, {
-        color: lineColor(ln), lineWidth: 2,
+        color: isSelected ? '#ffffff' : lineColor(ln),
+        lineWidth: isSelected ? 4 : 2,
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
         autoscaleInfoProvider: () => null,
       });
@@ -105,7 +108,7 @@ export default function ChartDrawingOverlay({
       ]);
       drawnSeriesRef.current.push(s);
     }
-  }, [drawnLines, chartRef, bodyDragLineId]);
+  }, [drawnLines, chartRef, bodyDragLineId, selectedLineId]);
 
   // ── Snap helpers ──
   function snapAt(clientX, clientY) {
@@ -235,20 +238,29 @@ export default function ChartDrawingOverlay({
       attachWindowDragListeners();
       return;
     }
-    // 2) Body hit — slide a horizontal line up/down (or in future, parallel
-    //    translate any line). For now, only horizontal lines support sliding.
+    // 2) Body hit — grab and freely translate any line (horizontal or trendline)
     const body = findBodyHit(e.clientX, e.clientY);
-    if (body && body.isHoriz) {
+    if (body) {
       const rect = overlayRef.current.getBoundingClientRect();
-      const cursorY = e.clientY - rect.top;
-      editingRef.current = { kind: 'body', lineId: body.lineId };
+      const startX = e.clientX - rect.left;
+      const startY = e.clientY - rect.top;
+      const ln = drawnLines.find(l => l._id === body.lineId);
+      editingRef.current = {
+        kind: 'body', lineId: body.lineId, isHoriz: body.isHoriz,
+        startX, startY,
+        origX1: body.x1, origY1: body.y1, origX2: body.x2, origY2: body.y2,
+        origT1: ln?.t1, origT2: ln?.t2, origV1: ln?.v1, origV2: ln?.v2,
+      };
+      setSelectedLineId(body.lineId);
       setBodyDragLineId(body.lineId);
-      setTempLine({ x1: body.x1, y1: cursorY, x2: body.x2, y2: cursorY });
+      setTempLine({ x1: body.x1, y1: body.y1, x2: body.x2, y2: body.y2 });
       setHoverSnap(null);
       attachWindowDragListeners();
       return;
     }
-    // 3) New line draw
+    // 3) Clicked empty space — deselect any highlighted line
+    setSelectedLineId(null);
+    // 4) New line draw
     const snap = snapAt(e.clientX, e.clientY);
     if (!snap) return;
     drawStartRef.current = snap;
@@ -272,8 +284,13 @@ export default function ChartDrawingOverlay({
         y2: isHoriz ? drawStartRef.current.y : cursorY,
       });
     } else if (editingRef.current?.kind === 'body') {
-      // Body-drag (horizontal slide): keep line flat, follow cursor y
-      setTempLine(prev => prev ? { x1: prev.x1, y1: cursorY, x2: prev.x2, y2: cursorY } : null);
+      const edit = editingRef.current;
+      const dx = cursorX - edit.startX;
+      const dy = cursorY - edit.startY;
+      setTempLine({
+        x1: edit.origX1 + dx, y1: edit.origY1 + dy,
+        x2: edit.origX2 + dx, y2: edit.origY2 + dy,
+      });
     } else if (editingRef.current) {
       setTempLine(prev => prev ? { x1: prev.x1, y1: prev.y1, x2: cursorX, y2: cursorY } : null);
     } else {
@@ -284,42 +301,54 @@ export default function ChartDrawingOverlay({
 
   async function onDrawUp(e) {
     if (!isDrawing) return;
-    // Body-drag (horizontal slide) — convert release y to a price, snap to
-    // the nearest visible bar's high/low, persist new v1=v2.
     if (editingRef.current?.kind === 'body') {
       const edit = editingRef.current;
+      const chart = chartRef.current;
       const series = seriesRef.current;
       const rect = overlayRef.current.getBoundingClientRect();
+      const cursorX = e.clientX - rect.left;
       const cursorY = e.clientY - rect.top;
       editingRef.current = null;
       setTempLine(null);
       setBodyDragLineId(null);
-      const releasePrice = series ? series.coordinateToPrice(cursorY) : null;
-      if (releasePrice == null || releasePrice < 0) return;
-      // Snap to nearest visible bar's high or low (typical S/R alignment)
+      if (!chart || !series) return;
+      const dx = cursorX - edit.startX;
+      const dy = cursorY - edit.startY;
+      const finalX1 = edit.origX1 + dx;
+      const finalY1 = edit.origY1 + dy;
+      const finalX2 = edit.origX2 + dx;
+      const finalY2 = edit.origY2 + dy;
+      const newV1 = series.coordinateToPrice(finalY1);
+      const newV2 = edit.isHoriz ? newV1 : series.coordinateToPrice(finalY2);
+      if (newV1 == null || newV1 < 0 || newV2 == null || newV2 < 0) return;
       const slice = sliceRef.current;
-      let bestVal = releasePrice, bestDist = Infinity;
-      for (const b of slice) {
-        for (const candidate of [b.high, b.low]) {
-          const d = Math.abs(candidate - releasePrice);
-          if (d < bestDist) { bestDist = d; bestVal = candidate; }
+      function nearestBarTime(px) {
+        let bestT = null, bestDx = Infinity;
+        for (const b of slice) {
+          const bx = chart.timeScale().timeToCoordinate(b.weekOf);
+          if (bx == null) continue;
+          const d = Math.abs(bx - px);
+          if (d < bestDx) { bestDx = d; bestT = b.weekOf; }
         }
+        return bestT;
       }
-      const newPrice = +bestVal.toFixed(2);
-      const ln = drawnLines.find(l => l._id === edit.lineId);
-      if (!ln) return;
-      const expectSide = computeExpectSide(ln.t1, newPrice, ln.t2, newPrice);
+      const newT1 = nearestBarTime(finalX1) || edit.origT1;
+      const newT2 = nearestBarTime(finalX2) || edit.origT2;
+      if (newT1 === newT2) return;
+      const roundV1 = +newV1.toFixed(2);
+      const roundV2 = +newV2.toFixed(2);
+      const expectSide = computeExpectSide(newT1, roundV1, newT2, roundV2);
       setDrawnLines(prev => prev.map(l => l._id === edit.lineId
-        ? { ...l, v1: newPrice, v2: newPrice, expectSide }
+        ? { ...l, t1: newT1, v1: roundV1, t2: newT2, v2: roundV2, expectSide }
         : l));
       if (!String(edit.lineId).startsWith('pending-')) {
         try {
           await fetch(`${API_BASE}/api/test/trendlines/${edit.lineId}`, {
             method: 'PATCH',
             headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ t1: ln.t1, v1: newPrice, t2: ln.t2, v2: newPrice, expectSide }),
+            body: JSON.stringify({ t1: newT1, v1: roundV1, t2: newT2, v2: roundV2, expectSide }),
           });
-        } catch (err) { console.error('slide trendline failed', err); }
+        } catch (err) { console.error('drag trendline failed', err); }
       }
       return;
     }
@@ -534,15 +563,17 @@ export default function ChartDrawingOverlay({
             const y1 = series.priceToCoordinate(ln.v1);
             const x2 = chart.timeScale().timeToCoordinate(ln.t2);
             const y2 = series.priceToCoordinate((ln.kind === 'horizontal') ? ln.v1 : ln.v2);
-            const handleFill = lineColor(ln);
-            const alertOn = ln.alertEnabled !== false; // legacy lines treated as on
+            const isSel = ln._id === selectedLineId;
+            const handleFill = isSel ? '#ffffff' : lineColor(ln);
+            const handleR = isSel ? 8 : 6;
+            const alertOn = ln.alertEnabled !== false;
             return (
               <g key={ln._id}>
                 {x1 != null && y1 != null && (
-                  <circle cx={x1} cy={y1} r="6" fill={handleFill} stroke="#000" strokeWidth="1.5" />
+                  <circle cx={x1} cy={y1} r={handleR} fill={handleFill} stroke={isSel ? '#fcf000' : '#000'} strokeWidth={isSel ? 2 : 1.5} />
                 )}
                 {x2 != null && y2 != null && (
-                  <circle cx={x2} cy={y2} r="6" fill={handleFill} stroke="#000" strokeWidth="1.5" />
+                  <circle cx={x2} cy={y2} r={handleR} fill={handleFill} stroke={isSel ? '#fcf000' : '#000'} strokeWidth={isSel ? 2 : 1.5} />
                 )}
                 {/* Bell indicator: shows next to start endpoint when alert
                     is enabled on this line. Subtle so it doesn't clutter. */}

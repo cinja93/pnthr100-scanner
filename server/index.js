@@ -34,7 +34,7 @@ import { runDailySignalJob } from './dailySignalJob.js';
 import { getAiUniverse, clearAiUniverseCache, getAiUniverseHoldings, refreshDeactivatedTickers } from './aiUniverseService.js';
 import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
 import { runAiUniverseHealthCheck, loadDeactivatedTickers } from './aiUniverseHealthJob.js';
-import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
+import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, rebalanceWeightsNow, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
@@ -2149,6 +2149,16 @@ app.post('/api/admin/run-pnthr-ai-300', authenticateJWT, requireAdmin, async (re
     res.json({ ok: true, message: 'PNTHR AI 300 rebuild started — check server logs.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/rebalance-ai300-weights', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await rebalanceWeightsNow();
+    res.json(result);
+  } catch (err) {
+    console.error('[rebalanceWeights] Error:', err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

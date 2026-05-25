@@ -448,6 +448,13 @@ export async function fetchPnthrAi300Weights() {
   return response.json();
 }
 
+export async function rebalanceAi300Weights() {
+  const url = `${API_BASE}/api/admin/rebalance-ai300-weights`;
+  const response = await apiFetch(url, { method: 'POST', headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 let _fcfCache = null;
 let _fcfCacheTime = 0;
 const FCF_CLIENT_CACHE_MS = 5 * 60 * 1000;

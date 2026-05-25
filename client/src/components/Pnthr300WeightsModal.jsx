@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchPnthrAi300Weights, fetchFcfData, fetchValuationData } from '../services/api';
+import { fetchPnthrAi300Weights, fetchFcfData, fetchValuationData, rebalanceAi300Weights } from '../services/api';
+import { useAuth } from '../AuthContext';
 import pantherHead from '../assets/panther head.png';
 
 // Pnthr300WeightsModal — popup showing how each of the 304 constituents is
@@ -67,6 +68,7 @@ const fcfBillStyle = {
 };
 
 export default function Pnthr300WeightsModal({ onClose }) {
+  const { isAdmin } = useAuth();
   const [data, setData]       = useState(null);
   const [fcfMap, setFcfMap]   = useState({});
   const [valMap, setValMap]   = useState({});
@@ -74,17 +76,31 @@ export default function Pnthr300WeightsModal({ onClose }) {
   const [error, setError]     = useState(null);
   const [search, setSearch]   = useState('');
   const [sortKey, setSortKey] = useState('weight');
-  const [tab, setTab]         = useState('constituents'); // 'constituents' | 'sectors'
+  const [tab, setTab]         = useState('constituents');
+  const [rebalancing, setRebalancing] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  function loadWeights() {
     setLoading(true); setError(null);
     Promise.all([fetchPnthrAi300Weights(), fetchFcfData(), fetchValuationData()])
-      .then(([d, fcf, val]) => { if (!cancelled) { setData(d); setFcfMap(fcf || {}); setValMap(val || {}); } })
-      .catch(e => { if (!cancelled) setError(e.message || 'Failed to load'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
+      .then(([d, fcf, val]) => { setData(d); setFcfMap(fcf || {}); setValMap(val || {}); })
+      .catch(e => setError(e.message || 'Failed to load'))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => { loadWeights(); }, []);
+
+  async function handleRebalance() {
+    setRebalancing(true);
+    try {
+      const result = await rebalanceAi300Weights();
+      if (result.ok) loadWeights();
+      else setError(result.error || 'Rebalance failed');
+    } catch (e) {
+      setError(e.message || 'Rebalance failed');
+    } finally {
+      setRebalancing(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     if (!data?.constituents) return [];
@@ -139,23 +155,41 @@ export default function Pnthr300WeightsModal({ onClose }) {
                 : <>Loading methodology…</>}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              marginLeft: 'auto', background: 'transparent', border: '1px solid #2a2a2a',
-              borderRadius: 4, color: '#888', padding: '6px 10px', cursor: 'pointer', fontSize: 12,
-            }}
-            title="Close"
-          >
-            ✕
-          </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            {isAdmin && (
+              <button
+                onClick={handleRebalance}
+                disabled={rebalancing}
+                style={{
+                  background: rebalancing ? '#333' : 'transparent',
+                  border: '1px solid #fcf000', borderRadius: 4,
+                  color: rebalancing ? '#888' : '#fcf000',
+                  padding: '6px 14px', cursor: rebalancing ? 'wait' : 'pointer',
+                  fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+                }}
+                title="Recalculate weights from current AI Universe holdings + live FMP market caps"
+              >
+                {rebalancing ? 'Rebalancing...' : 'Rebalance'}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              style={{
+                background: 'transparent', border: '1px solid #2a2a2a',
+                borderRadius: 4, color: '#888', padding: '6px 10px', cursor: 'pointer', fontSize: 12,
+              }}
+              title="Close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Tab switcher */}
         <div style={{ padding: '10px 20px', borderBottom: '1px solid #1f1f1f', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
             {[
-              { key: 'constituents', label: '304 Constituents' },
+              { key: 'constituents', label: `${data?.constituentCount || '—'} Constituents` },
               { key: 'sectors',      label: 'By Sector' },
             ].map(t => (
               <button

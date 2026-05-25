@@ -13,9 +13,11 @@
 import { connectToDatabase } from './database.js';
 import {
   INDEX_NAME, INDEX_TICKER, BASE_DATE, BASE_VALUE,
-  COLL_INDEX_DAILY, COLL_INDEX_WEEKLY,
+  COLL_INDEX_DAILY, COLL_INDEX_WEEKLY, COLL_INDEX_META,
   INDEX_EMA_DAILY_PERIOD, INDEX_EMA_WEEKLY_PERIOD, INDEX_EMA_MONTHLY_PERIOD,
+  SINGLE_NAME_CAP, HYPERSCALER_CAP, HYPERSCALER_TICKERS,
 } from './data/pnthrAiIndexConfig.js';
+import { fetchFMP } from './stockService.js';
 import {
   fetchAiQuotesBatch, computeIntradayBar,
   spliceTodayDaily, spliceTodayWeekly, spliceTodayMonthly,
@@ -296,6 +298,85 @@ export async function getPnthrAi300Weights() {
   };
   cacheWeights = out; cacheWeightsAt = now;
   return out;
+}
+
+// Rebalance weights from the current aiUniverseData.js holdings + live FMP
+// market caps. Applies the same iterative cap algorithm as the full index
+// build script but without rebuilding historical bars. Writes the new
+// current_weights doc to Mongo and clears all caches.
+export async function rebalanceWeightsNow() {
+  const db = await connectToDatabase();
+  if (!db) return { ok: false, error: 'Mongo connect failed' };
+
+  const { SECTORS, FUND_META } = await import('./scripts/aiUniverse/aiUniverseData.js');
+  const allTickers = [];
+  for (const sec of SECTORS) {
+    for (const h of sec.holdings) allTickers.push(h.ticker);
+  }
+  if (allTickers.length === 0) return { ok: false, error: 'No holdings in aiUniverseData.js' };
+
+  const CHUNK = 100;
+  const mktCapMap = {};
+  for (let i = 0; i < allTickers.length; i += CHUNK) {
+    const chunk = allTickers.slice(i, i + CHUNK);
+    try {
+      const arr = await fetchFMP(`/profile/${chunk.join(',')}`);
+      if (Array.isArray(arr)) {
+        for (const p of arr) {
+          const mc = parseFloat(p.mktCap) || 0;
+          if (mc > 0) mktCapMap[p.symbol] = mc;
+        }
+      }
+    } catch (err) {
+      console.error(`[rebalanceWeights] /profile chunk failed:`, err.message);
+    }
+    if (i + CHUNK < allTickers.length) await new Promise(r => setTimeout(r, 300));
+  }
+
+  const covered = allTickers.filter(t => mktCapMap[t]);
+  if (covered.length === 0) return { ok: false, error: 'FMP returned no market caps' };
+
+  const totalMktCap = covered.reduce((s, t) => s + mktCapMap[t], 0);
+  const rawWeights = {};
+  for (const t of covered) rawWeights[t] = mktCapMap[t] / totalMktCap;
+
+  const hyperSet = new Set(HYPERSCALER_TICKERS);
+  function capFn(ticker) {
+    return hyperSet.has(ticker) ? HYPERSCALER_CAP : SINGLE_NAME_CAP;
+  }
+
+  const weights = { ...rawWeights };
+  for (let iter = 0; iter < 50; iter++) {
+    let cappedTotal = 0, uncappedTotal = 0;
+    const cappedSet = new Set();
+    for (const [t, w] of Object.entries(weights)) {
+      const cap = capFn(t);
+      if (w > cap) { weights[t] = cap; cappedTotal += cap; cappedSet.add(t); }
+      else { uncappedTotal += w; }
+    }
+    if (cappedSet.size === 0) break;
+    const slack = 1 - cappedTotal - uncappedTotal;
+    if (Math.abs(slack) < 1e-9) break;
+    const scale = (uncappedTotal + slack) / uncappedTotal;
+    for (const t of Object.keys(weights)) {
+      if (!cappedSet.has(t)) weights[t] *= scale;
+    }
+  }
+  const total = Object.values(weights).reduce((a, b) => a + b, 0);
+  if (Math.abs(total - 1) > 1e-6) {
+    for (const t of Object.keys(weights)) weights[t] /= total;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  await db.collection(COLL_INDEX_META).updateOne(
+    { key: 'current_weights' },
+    { $set: { weights, asOfRebalance: today, updatedAt: new Date() } },
+    { upsert: true },
+  );
+
+  clearPnthrAi300Cache();
+  console.log(`[rebalanceWeights] Done — ${Object.keys(weights).length} constituents, as of ${today}`);
+  return { ok: true, constituentCount: Object.keys(weights).length, asOfRebalance: today };
 }
 
 // Bars + EMA series for the chart modal. timeframe = 'daily' | 'weekly'.

@@ -2131,7 +2131,8 @@ app.get('/api/pnthr-ai-300/weights', async (req, res) => {
 // OHLC bars + EMA series for the chart modal
 app.get('/api/pnthr-ai-300/bars', async (req, res) => {
   try {
-    const timeframe = req.query.timeframe === 'weekly' ? 'weekly' : 'daily';
+    const tf = req.query.timeframe;
+    const timeframe = tf === 'weekly' ? 'weekly' : tf === 'monthly' ? 'monthly' : 'daily';
     const limit = req.query.limit ? parseInt(req.query.limit, 10) : null;
     const data = await getPnthrAi300Bars({ timeframe, limit: limit || null });
     res.json(data);

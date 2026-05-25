@@ -14,11 +14,11 @@ import { connectToDatabase } from './database.js';
 import {
   INDEX_NAME, INDEX_TICKER, BASE_DATE, BASE_VALUE,
   COLL_INDEX_DAILY, COLL_INDEX_WEEKLY,
-  INDEX_EMA_DAILY_PERIOD, INDEX_EMA_WEEKLY_PERIOD,
+  INDEX_EMA_DAILY_PERIOD, INDEX_EMA_WEEKLY_PERIOD, INDEX_EMA_MONTHLY_PERIOD,
 } from './data/pnthrAiIndexConfig.js';
 import {
   fetchAiQuotesBatch, computeIntradayBar,
-  spliceTodayDaily, spliceTodayWeekly,
+  spliceTodayDaily, spliceTodayWeekly, spliceTodayMonthly,
 } from './aiIntradayOverlay.js';
 
 // ── Cached weights loader ───────────────────────────────────────────────────
@@ -66,6 +66,7 @@ function computeEMA(closes, period) {
 // so its cache matches the AI Universe table cadence (30s).
 let cacheDaily   = null; let cacheDailyAt   = 0;
 let cacheWeekly  = null; let cacheWeeklyAt  = 0;
+let cacheMonthly = null; let cacheMonthlyAt = 0;
 let cacheLatest  = null; let cacheLatestAt  = 0;
 const CACHE_MS         = 5 * 60 * 1000;  // bars + weights — change at 5:30pm cron only
 const LATEST_CACHE_MS  = 30 * 1000;      // strip snapshot — live FMP refresh
@@ -73,6 +74,7 @@ const LATEST_CACHE_MS  = 30 * 1000;      // strip snapshot — live FMP refresh
 export function clearPnthrAi300Cache() {
   cacheDaily        = null; cacheDailyAt        = 0;
   cacheWeekly       = null; cacheWeeklyAt       = 0;
+  cacheMonthly      = null; cacheMonthlyAt      = 0;
   cacheLatest       = null; cacheLatestAt       = 0;
   cacheWeights      = null; cacheWeightsAt      = 0;
   cacheIndexWeights = null; cacheIndexWeightsAt = 0;
@@ -101,6 +103,37 @@ async function loadWeeklyBars() {
   const asc = [...doc.weekly].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
   cacheWeekly = asc; cacheWeeklyAt = now;
   return asc;
+}
+
+function aggregateDailyToMonthly(dailyBars) {
+  if (!dailyBars.length) return [];
+  const buckets = new Map();
+  for (const bar of dailyBars) {
+    const month = bar.date.slice(0, 7); // YYYY-MM
+    if (!buckets.has(month)) {
+      buckets.set(month, {
+        monthOf: bar.date,
+        open: bar.open, high: bar.high, low: bar.low, close: bar.close,
+        volume: bar.volume || 0,
+      });
+    } else {
+      const b = buckets.get(month);
+      if (bar.high > b.high) b.high = bar.high;
+      if (bar.low  < b.low)  b.low  = bar.low;
+      b.close   = bar.close;
+      b.volume += bar.volume || 0;
+    }
+  }
+  return [...buckets.values()];
+}
+
+async function loadMonthlyBars() {
+  const now = Date.now();
+  if (cacheMonthly && (now - cacheMonthlyAt) < CACHE_MS) return cacheMonthly;
+  const daily = await loadDailyBars();
+  const monthly = aggregateDailyToMonthly(daily);
+  cacheMonthly = monthly; cacheMonthlyAt = now;
+  return monthly;
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -274,11 +307,17 @@ export async function getPnthrAi300Weights() {
 // math as getPnthrAi300Latest. EMA is recomputed over the augmented series
 // so the OpEMA line extends to today.
 export async function getPnthrAi300Bars({ timeframe = 'daily', limit = null } = {}) {
-  const bars = timeframe === 'weekly' ? await loadWeeklyBars() : await loadDailyBars();
+  const bars = timeframe === 'monthly'
+    ? await loadMonthlyBars()
+    : timeframe === 'weekly' ? await loadWeeklyBars() : await loadDailyBars();
   if (!bars.length) return { ok: false, bars: [], ema: [], emaPeriod: null };
 
-  const period   = timeframe === 'weekly' ? INDEX_EMA_WEEKLY_PERIOD : INDEX_EMA_DAILY_PERIOD;
-  const labelKey = timeframe === 'weekly' ? 'weekOf' : 'date';
+  const period   = timeframe === 'monthly' ? INDEX_EMA_MONTHLY_PERIOD
+                 : timeframe === 'weekly'  ? INDEX_EMA_WEEKLY_PERIOD
+                 : INDEX_EMA_DAILY_PERIOD;
+  const labelKey = timeframe === 'monthly' ? 'monthOf'
+                 : timeframe === 'weekly'  ? 'weekOf'
+                 : 'date';
 
   // Live overlay: synthesize today's intraday bar from constituent quotes,
   // then splice into the stored series. Daily series gets a today's bar
@@ -297,9 +336,13 @@ export async function getPnthrAi300Bars({ timeframe = 'daily', limit = null } = 
         const qmap    = await fetchAiQuotesBatch(tickers, { cacheKey: 'ai-universe-all' });
         const intraday = computeIntradayBar({ weights, lastClose: lastDailyClose, quoteMap: qmap });
         if (intraday.ok) {
-          augmented = timeframe === 'weekly'
-            ? spliceTodayWeekly(bars, intraday)
-            : spliceTodayDaily(bars,  intraday);
+          if (timeframe === 'monthly') {
+            augmented = spliceTodayMonthly(bars, intraday);
+          } else if (timeframe === 'weekly') {
+            augmented = spliceTodayWeekly(bars, intraday);
+          } else {
+            augmented = spliceTodayDaily(bars, intraday);
+          }
         }
       }
     }

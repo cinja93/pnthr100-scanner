@@ -260,3 +260,32 @@ export function spliceTodayWeekly(weeklyAsc, intraday) {
   }
   return out;
 }
+
+export function spliceTodayMonthly(monthlyAsc, intraday) {
+  if (!intraday?.ok || !intraday.todayET) return monthlyAsc.slice();
+  const thisMonth = intraday.todayET.slice(0, 7);
+  const firstOfMonth = thisMonth + '-01';
+
+  const out  = monthlyAsc.slice();
+  const last = out[out.length - 1];
+  const lastMonth = last?.monthOf?.slice(0, 7);
+
+  if (last && lastMonth === thisMonth) {
+    out[out.length - 1] = {
+      ...last,
+      high:  Math.max(last.high, intraday.high),
+      low:   Math.min(last.low,  intraday.low),
+      close: intraday.close,
+    };
+  } else if (!last || firstOfMonth > last.monthOf) {
+    out.push({
+      monthOf: firstOfMonth,
+      open:    intraday.open,
+      high:    intraday.high,
+      low:     intraday.low,
+      close:   intraday.close,
+      volume:  0,
+    });
+  }
+  return out;
+}

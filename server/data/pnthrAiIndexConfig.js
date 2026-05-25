@@ -50,6 +50,7 @@ export const COLL_INDEX_META    = 'pnthr_ai_index_meta';
 // has its own EMA spec.
 export const INDEX_EMA_PERIOD = 36;
 
-// Back-compat aliases — both timeframes resolve to the same number.
-export const INDEX_EMA_DAILY_PERIOD  = INDEX_EMA_PERIOD;
-export const INDEX_EMA_WEEKLY_PERIOD = INDEX_EMA_PERIOD;
+// Back-compat aliases — all timeframes resolve to the same base number.
+export const INDEX_EMA_DAILY_PERIOD   = INDEX_EMA_PERIOD;
+export const INDEX_EMA_WEEKLY_PERIOD  = INDEX_EMA_PERIOD;
+export const INDEX_EMA_MONTHLY_PERIOD = 12;

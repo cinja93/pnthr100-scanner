@@ -381,7 +381,7 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
         ))}
       </div>
       <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
-        {['daily', 'weekly'].map(tf => (
+        {['daily', 'weekly', 'monthly'].map(tf => (
           <button
             key={tf}
             onClick={() => setTimeframe(tf)}

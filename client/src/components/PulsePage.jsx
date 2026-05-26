@@ -1024,9 +1024,9 @@ function RegimeStrip({ regime, signals, positions }) {
             Heat: {heat.totalRiskPct?.toFixed(1)}% / 15%
           </span>
           {capacity && (
-            <span style={{ color: '#28a745', fontSize: 11 }}>
+            <AumShield style={{ color: '#28a745', fontSize: 11 }}>
               ${Number(capacity).toLocaleString()} cap
-            </span>
+            </AumShield>
           )}
         </div>
       )}
@@ -2115,9 +2115,9 @@ function Ai300RegimeStrip({ regime, signals, positions, pai300 }) {
             Heat: {heat.totalRiskPct?.toFixed(1)}% / 15%
           </span>
           {capacity && (
-            <span style={{ color: '#28a745', fontSize: 11 }}>
+            <AumShield style={{ color: '#28a745', fontSize: 11 }}>
               ${Number(capacity).toLocaleString()} cap
-            </span>
+            </AumShield>
           )}
         </div>
       )}

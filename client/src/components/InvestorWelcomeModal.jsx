@@ -1,6 +1,8 @@
 import logo from '../assets/panther head.png';
+import { usePortal } from '../contexts/PortalContext';
 
 export default function InvestorWelcomeModal({ loginCount, maxLogins, onClose }) {
+  const { isVipPortal } = usePortal();
   const remaining = Math.max(0, (maxLogins || 5) - (loginCount || 0));
 
   return (
@@ -14,52 +16,90 @@ export default function InvestorWelcomeModal({ loginCount, maxLogins, onClose })
       }}>
         <img src={logo} alt="PNTHR Funds" style={{ width: 70, height: 70, objectFit: 'contain', marginBottom: 20 }} />
 
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: '0 0 6px', letterSpacing: '0.03em' }}>
-          Welcome to <span style={{ color: '#FCF000' }}>PNTHR Funds</span>
-        </h2>
+        {isVipPortal ? (
+          <>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: '0 0 6px', letterSpacing: '0.03em' }}>
+              Welcome to <span style={{ color: '#FCF000' }}>PNTHR's Den</span>
+            </h2>
 
-        <p style={{
-          fontSize: 13, color: '#aaa', lineHeight: 1.7, margin: '16px 0 0',
-          textAlign: 'left',
-        }}>
-          You've been granted exclusive access to a preview of the <strong style={{ color: '#fff' }}>PNTHR's Den</strong>.
-          This is a version of the proprietary platform powering PNTHR Fund's, Carnivore Quant Fund LP's
-          investment process. What you're seeing is a curated selection of the tools and analytics our team
-          uses daily to identify, score, and size opportunities across the market. The full internal platform
-          includes a significant number of additional dimensions of analysis, risk management systems, and
-          execution infrastructure not available in this preview.
-        </p>
+            <p style={{
+              fontSize: 13, color: '#aaa', lineHeight: 1.7, margin: '16px 0 0',
+              textAlign: 'left',
+            }}>
+              Congratulations. The <strong style={{ color: '#FCF000' }}>PNTHR</strong> has granted you exclusive
+              and unlimited access to the proprietary tools, analytics, and intelligence systems used by the
+              PNTHR team to identify, score, and size opportunities across the market.
+            </p>
 
-        {/* Session counter */}
-        <div style={{
-          margin: '22px 0', padding: '14px 18px',
-          background: '#0a0a0a', border: '1px solid #222', borderRadius: 8,
-          textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 11, color: '#666', letterSpacing: '0.06em', marginBottom: 6, fontWeight: 600 }}>
-            SESSION ACCESS
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            {Array.from({ length: maxLogins || 5 }).map((_, i) => (
-              <div key={i} style={{
-                width: 28, height: 6, borderRadius: 3,
-                background: i < (loginCount || 0) ? '#FCF000' : '#222',
-                transition: 'background 0.3s',
-              }} />
-            ))}
-          </div>
-          <div style={{ fontSize: 12, color: '#888', marginTop: 8 }}>
-            <span style={{ color: '#FCF000', fontWeight: 700 }}>{remaining}</span> of {maxLogins || 5} sessions remaining
-          </div>
-        </div>
+            <div style={{
+              margin: '22px 0', padding: '14px 18px',
+              background: '#0a0a0a', border: '1px solid rgba(252,240,0,0.2)', borderRadius: 8,
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 11, color: '#FCF000', letterSpacing: '0.08em', marginBottom: 4, fontWeight: 700 }}>
+                VIP ACCESS
+              </div>
+              <div style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>
+                Unlimited Sessions
+              </div>
+            </div>
 
-        <p style={{
-          fontSize: 12, color: '#777', lineHeight: 1.6, margin: '0 0 24px',
-          textAlign: 'left',
-        }}>
-          Each login counts as one session — take your time, click through the charts, and see
-          how PNTHR thinks about the market.
-        </p>
+            <p style={{
+              fontSize: 13, color: '#aaa', lineHeight: 1.7, margin: '0 0 24px',
+              textAlign: 'center', fontStyle: 'italic',
+            }}>
+              As a Special VIP of the PNTHR's Den, this platform is yours to explore without limits. Invest wisely.
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: '0 0 6px', letterSpacing: '0.03em' }}>
+              Welcome to <span style={{ color: '#FCF000' }}>PNTHR Funds</span>
+            </h2>
+
+            <p style={{
+              fontSize: 13, color: '#aaa', lineHeight: 1.7, margin: '16px 0 0',
+              textAlign: 'left',
+            }}>
+              You've been granted exclusive access to a preview of the <strong style={{ color: '#fff' }}>PNTHR's Den</strong>.
+              This is a version of the proprietary platform powering PNTHR Fund's, Carnivore Quant Fund LP's
+              investment process. What you're seeing is a curated selection of the tools and analytics our team
+              uses daily to identify, score, and size opportunities across the market. The full internal platform
+              includes a significant number of additional dimensions of analysis, risk management systems, and
+              execution infrastructure not available in this preview.
+            </p>
+
+            <div style={{
+              margin: '22px 0', padding: '14px 18px',
+              background: '#0a0a0a', border: '1px solid #222', borderRadius: 8,
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 11, color: '#666', letterSpacing: '0.06em', marginBottom: 6, fontWeight: 600 }}>
+                SESSION ACCESS
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                {Array.from({ length: maxLogins || 5 }).map((_, i) => (
+                  <div key={i} style={{
+                    width: 28, height: 6, borderRadius: 3,
+                    background: i < (loginCount || 0) ? '#FCF000' : '#222',
+                    transition: 'background 0.3s',
+                  }} />
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: '#888', marginTop: 8 }}>
+                <span style={{ color: '#FCF000', fontWeight: 700 }}>{remaining}</span> of {maxLogins || 5} sessions remaining
+              </div>
+            </div>
+
+            <p style={{
+              fontSize: 12, color: '#777', lineHeight: 1.6, margin: '0 0 24px',
+              textAlign: 'left',
+            }}>
+              Each login counts as one session — take your time, click through the charts, and see
+              how PNTHR thinks about the market.
+            </p>
+          </>
+        )}
 
         <button
           onClick={onClose}
@@ -69,7 +109,7 @@ export default function InvestorWelcomeModal({ loginCount, maxLogins, onClose })
             cursor: 'pointer', letterSpacing: '0.04em', marginBottom: 16,
           }}
         >
-          Explore the Platform
+          {isVipPortal ? "Enter the Den" : "Explore the Platform"}
         </button>
 
         <p style={{ fontSize: 11, color: '#555', margin: 0, lineHeight: 1.6 }}>

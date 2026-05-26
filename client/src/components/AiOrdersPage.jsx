@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
 import { fetchLatestAiOrders, runAiOrders, fetchNav, fetchReentrySignals, API_BASE, authHeaders } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
@@ -340,6 +340,15 @@ function TableHeader({ sort, onSort }) {
 }
 
 export default function AiOrdersPage() {
+  useEffect(() => {
+    const id = 'mce-new-flash-style';
+    if (!document.getElementById(id)) {
+      const el = document.createElement('style');
+      el.id = id;
+      el.textContent = '@keyframes mceNewFlash { 0%,100% { background: transparent; } 50% { background: rgba(251,191,36,0.15); } }';
+      document.head.appendChild(el);
+    }
+  }, []);
   const { isAdmin } = useAuth();
   const [doc, setDoc] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -367,6 +376,22 @@ export default function AiOrdersPage() {
   });
   const [lastRefresh, setLastRefresh] = useState(null);
   const [reentrySignals, setReentrySignals] = useState([]);
+  const mceFirstSeen = useRef({});
+  useEffect(() => {
+    if (!reentrySignals.length) return;
+    const now = Date.now();
+    for (const s of reentrySignals) {
+      if (!mceFirstSeen.current[s.ticker]) mceFirstSeen.current[s.ticker] = now;
+    }
+    const currentTickers = new Set(reentrySignals.map(s => s.ticker));
+    for (const t of Object.keys(mceFirstSeen.current)) {
+      if (!currentTickers.has(t)) delete mceFirstSeen.current[t];
+    }
+  }, [reentrySignals]);
+  const isMceNew = useCallback((ticker) => {
+    const seen = mceFirstSeen.current[ticker];
+    return seen && (Date.now() - seen) < 60 * 60 * 1000;
+  }, []);
   const [dismissedMce, setDismissedMce] = useState(() => {
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -980,7 +1005,11 @@ export default function AiOrdersPage() {
                       return (
                       <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(124,58,237,0.1)', cursor: 'pointer' }}
                         onClick={() => { setChartTickers(bullSignals.map(r => r.ticker)); setChartIndex(bullSignals.findIndex(r => r.ticker === s.ticker)); }}>
-                        <td style={{ padding: '6px 10px', fontWeight: 800, color: '#e9d5ff' }}>
+                        <td style={{
+                          padding: '6px 10px', fontWeight: 800, color: '#e9d5ff',
+                          ...(isMceNew(s.ticker) ? { animation: 'mceNewFlash 2s ease-in-out infinite' } : {}),
+                        }}>
+                          {isMceNew(s.ticker) && <span style={{ color: '#fbbf24', fontSize: 9, fontWeight: 700, marginRight: 4, letterSpacing: '0.05em' }}>NEW</span>}
                           {s.ticker}
                           {s.heatReentry && <span style={{ marginLeft: 5, padding: '1px 5px', background: '#f97316', color: '#000', borderRadius: 3, fontSize: 9, fontWeight: 800, letterSpacing: '0.05em' }}>Heat</span>}
                         </td>

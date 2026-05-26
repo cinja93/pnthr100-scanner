@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { API_BASE, authHeaders } from '../services/api';
 
-export default function DocPermissionsSelector({ selected, onChange }) {
+export default function DocPermissionsSelector({ selected, onChange, defaultFund }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [didAutoSelect, setDidAutoSelect] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -14,6 +15,17 @@ export default function DocPermissionsSelector({ selected, onChange }) {
       finally { setLoading(false); }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!defaultFund || didAutoSelect || docs.length === 0) return;
+    const kw = defaultFund === 'ai' ? ['ai elite 300', 'ai elite'] : ['carnivore', '679', 'supporting'];
+    const ids = docs.filter(d => {
+      const lower = (d.section || '').toLowerCase();
+      return kw.some(k => lower.includes(k));
+    }).map(d => d._id);
+    if (ids.length) onChange(ids);
+    setDidAutoSelect(true);
+  }, [docs, defaultFund, didAutoSelect]);
 
   function toggle(id) {
     onChange(
@@ -37,12 +49,8 @@ export default function DocPermissionsSelector({ selected, onChange }) {
   }
 
   function selectByFund(fundKeywords) {
-    const supportingKw = ['supporting'];
     const ids = docs
-      .filter(d => {
-        const sec = d.section || '';
-        return matchesSection(sec, fundKeywords) || matchesSection(sec, supportingKw);
-      })
+      .filter(d => matchesSection(d.section || '', fundKeywords))
       .map(d => d._id);
     const merged = new Set([...selected, ...ids]);
     onChange([...merged]);
@@ -81,7 +89,7 @@ export default function DocPermissionsSelector({ selected, onChange }) {
           style={{ background: 'none', border: '1px solid #444', color: '#FCF000', borderRadius: 4, padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
           AI 300
         </button>
-        <button type="button" onClick={() => selectByFund(['carnivore', '679'])}
+        <button type="button" onClick={() => selectByFund(['carnivore', '679', 'supporting'])}
           style={{ background: 'none', border: '1px solid #444', color: '#FCF000', borderRadius: 4, padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
           679
         </button>

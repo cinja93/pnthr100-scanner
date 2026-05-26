@@ -26,7 +26,7 @@ const SIDEBAR_PAGES = [
   { key: 'bondHeat',         label: 'Bond Yields' },
 
   // PNTHR Live
-  { key: 'orders',           label: 'Orders' },
+  { key: 'orders',           label: 'Orders',          personalData: true },
 
   // Strategy
   { key: 'prey',             label: 'Prey' },
@@ -44,10 +44,10 @@ const SIDEBAR_PAGES = [
   // Internal
   { key: 'assistant',        label: 'Assistant',       personalData: true },
   { key: 'journal',          label: 'Journal',         personalData: true },
-  { key: 'signal-history',   label: 'Signal History' },
-  { key: 'history',          label: 'Kill 10' },
-  { key: 'kill-test',        label: 'Kill Test' },
-  { key: 'compliance',       label: 'Compliance' },
+  { key: 'signal-history',   label: 'Signal History',  personalData: true },
+  { key: 'history',          label: 'Kill 10',         personalData: true },
+  { key: 'kill-test',        label: 'Kill Test',       personalData: true },
+  { key: 'compliance',       label: 'Compliance',      personalData: true },
   { key: 'watchlist',        label: 'Watchlist' },
   { key: 'portfolio',        label: 'Portfolio',       personalData: true },
 ];

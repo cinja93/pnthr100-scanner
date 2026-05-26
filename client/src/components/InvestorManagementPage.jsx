@@ -875,7 +875,7 @@ function CreateInvestorModal({ onClose, onCreated }) {
               </button>
             </div>
           </label>
-          <PagePermissionsSelector selected={allowedPages} onChange={setAllowedPages} docIds={allowedDocIds} onDocIdsChange={setAllowedDocIds} />
+          <PagePermissionsSelector selected={allowedPages} onChange={setAllowedPages} docIds={allowedDocIds} onDocIdsChange={setAllowedDocIds} defaultDocFund="ai" />
           {error && <p style={{ fontSize: 12, color: '#dc3545', margin: 0, padding: '6px 10px', background: 'rgba(220,53,69,0.1)', borderRadius: 4 }}>{error}</p>}
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <button type="submit" disabled={saving} style={{

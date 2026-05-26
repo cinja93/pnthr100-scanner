@@ -1,7 +1,7 @@
 import { ALL_ASSIGNABLE_PAGES } from '../contexts/PortalContext';
 import DocPermissionsSelector from './DocPermissionsSelector';
 
-export default function PagePermissionsSelector({ selected, onChange, docIds, onDocIdsChange }) {
+export default function PagePermissionsSelector({ selected, onChange, docIds, onDocIdsChange, defaultDocFund }) {
   function toggle(key) {
     onChange(
       selected.includes(key)
@@ -60,7 +60,7 @@ export default function PagePermissionsSelector({ selected, onChange, docIds, on
             </label>
             {p.key === 'data-room' && dataRoomChecked && onDocIdsChange && (
               <div style={{ marginLeft: 20, marginTop: 6, marginBottom: 6 }}>
-                <DocPermissionsSelector selected={docIds || []} onChange={onDocIdsChange} />
+                <DocPermissionsSelector selected={docIds || []} onChange={onDocIdsChange} defaultFund={defaultDocFund} />
               </div>
             )}
           </div>

@@ -1519,16 +1519,16 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
             ))}
           </div>
           <div className={styles.priceInfo}>
-            {currentSignal === 'BL' && (
+            {!isMacroTicker(stock?.ticker) && currentSignal === 'BL' && (
               <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeBL}`}>BL</span>
             )}
-            {currentSignal === 'SS' && (
+            {!isMacroTicker(stock?.ticker) && currentSignal === 'SS' && (
               <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeSS}`}>SS</span>
             )}
-            {currentSignal === 'BE' && (
+            {!isMacroTicker(stock?.ticker) && currentSignal === 'BE' && (
               <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeBE}`}>BE</span>
             )}
-            {currentSignal === 'SE' && (
+            {!isMacroTicker(stock?.ticker) && currentSignal === 'SE' && (
               <span className={`${styles.pnthrBadge} ${styles.pnthrBadgeSE}`}>SE</span>
             )}
             <span className={styles.currentPrice}>${stock.currentPrice?.toLocaleString()}</span>

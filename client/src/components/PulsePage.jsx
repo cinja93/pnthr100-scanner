@@ -4,6 +4,7 @@ import { useAnalyzeContext } from '../contexts/AnalyzeContext';
 import { useAuth } from '../AuthContext';
 import { computeAnalyzeScore } from '../utils/analyzeScore';
 import AiTickerChartModal from './AiTickerChartModal';
+import ChartModal from './ChartModal';
 import Pnthr300ChartModal from './Pnthr300ChartModal';
 import AumShield from './AumShield';
 import PageHeader from './PageHeader';
@@ -413,9 +414,13 @@ export default function PulsePage({ onNavigate, fund }) {
       {ai300SignalModal && (
         <Ai300SignalStockModal signal={ai300SignalModal} onClose={() => setAi300SignalModal(null)} onTickerClick={(stocks, idx) => { setAi300SignalModal(null); setAi300ChartList(stocks); setAi300ChartIndex(idx); }} />
       )}
-      {chartList.length > 0 && (
-        <AiTickerChartModal tickers={chartList.map(s => s.ticker || s)} initialIndex={chartIndex} onClose={() => { setChartList([]); setChartIndex(0); }} />
-      )}
+      {chartList.length > 0 && (() => {
+        const activeTicker = (chartList[chartIndex]?.ticker || chartList[chartIndex] || '');
+        const isMacro = activeTicker.startsWith('^') || activeTicker.startsWith('FRED:');
+        return isMacro
+          ? <ChartModal stocks={chartList.map(s => ({ ticker: s.ticker || s }))} initialIndex={chartIndex} onClose={() => { setChartList([]); setChartIndex(0); }} />
+          : <AiTickerChartModal tickers={chartList.map(s => s.ticker || s)} initialIndex={chartIndex} onClose={() => { setChartList([]); setChartIndex(0); }} />;
+      })()}
       {ai300ChartList.length > 0 && (
         <AiTickerChartModal tickers={ai300ChartList.map(s => s.ticker || s)} initialIndex={ai300ChartIndex} onClose={() => { setAi300ChartList([]); setAi300ChartIndex(0); }} />
       )}

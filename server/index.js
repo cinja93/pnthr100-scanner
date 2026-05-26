@@ -1318,7 +1318,7 @@ app.post('/api/entry-dates', async (req, res) => {
 const INDEX_TO_FRED = {
   '^IXIC':  'NASDAQCOM',     // NASDAQ Composite
   '^DJI':   'DJIA',          // Dow Jones Industrial Average
-  '^NYA':   'BOGZ1FL073164003Q',  // NYSE — fallback to Wilshire if needed
+  // ^NYA (NYSE Composite) — no reliable FRED series; falls through to FMP
   '^VIX':   'VIXCLS',        // CBOE Volatility Index
   '^GSPC':  'SP500',          // S&P 500
 };

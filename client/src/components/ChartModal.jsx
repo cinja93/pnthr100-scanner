@@ -613,6 +613,12 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
       });
     });
 
+    // Skip EMA, signal detection, and stop lines for macro tickers (indices, yields, etc.)
+    const _isMacro = isMacroTicker(stock?.ticker);
+    let resolvedStop = null;
+    let cws = null;
+
+    if (!_isMacro) {
     // Strategy-aware EMA period: AI universe tickers use AI sector EMA (30-40W),
     // carnivore tickers use GICS OpEMA (18-26W), 679-only tickers use GICS OpEMA.
     const aiEmaPeriod2 = getAiAwareEmaPeriod(stock?.ticker);
@@ -620,7 +626,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
     const gateOffset = getAiAwareGateOffset(stock?.ticker) ?? 0.10;
 
     // Compute signals and live stops from full history
-    const { events: allDetected, pnthrStop: ps, currentWeekStop: cws, currentSignal: cs } = detectAllSignals(allWeeklyData, emaPeriod, isEtfTicker(stock?.ticker), gateOffset);
+    const { events: allDetected, pnthrStop: ps, currentWeekStop: detectedCws, currentSignal: cs } = detectAllSignals(allWeeklyData, emaPeriod, isEtfTicker(stock?.ticker), gateOffset);
 
     // Compute signal age (weeks since last BL/SS event) from chart data
     if (cs === 'BL' || cs === 'SS') {
@@ -638,7 +644,8 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
     // Prefer server-computed stop (from Kill pipeline / signalService) — single source of truth.
     // Fall back to client-computed only when server value is unavailable (e.g. Prey page, cold cache).
     const serverStop = stock?.pnthrStop ?? stock?.stopPrice ?? null;
-    const resolvedStop = serverStop != null ? serverStop : ps;
+    resolvedStop = serverStop != null ? serverStop : ps;
+    cws = detectedCws;
     setPnthrStop(resolvedStop);
     setCurrentWeekStop(cws);
     setCurrentSignal(cs);
@@ -756,6 +763,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
       });
       cwsLineSeries.setData(last3.map(b => ({ time: b.time, value: cws })));
     }
+    } // end if (!_isMacro)
 
     chart.timeScale().fitContent();
 
@@ -983,6 +991,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
               )}
               <span className={styles.company}>{stock.companyName}</span>
             </div>
+            {!isMacroTicker(stock.ticker) && (
             <div className={styles.badges}>
               {stock.sector && <span className={styles.badge}>{stock.sector}</span>}
               {stock.exchange && <span className={styles.badge}>{stock.exchange}</span>}
@@ -994,8 +1003,11 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
                 OpEMA {getAiAwareEmaPeriod(stock.ticker) || getSectorEmaPeriod(stock.sector)}W
               </span>
             </div>
+            )}
           </div>
           <div className={styles.headerActions}>
+            {/* ── Stock-specific actions hidden for macro tickers (indices, yields, etc.) ── */}
+            {!isMacroTicker(stock.ticker) && (<>
             {/* ── Wash Rule Warning Badge (hidden for investors) ── */}
             {!isInvestor && washWarning && (() => {
               const ws = washWarning.washSale;
@@ -1125,6 +1137,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
             >
               {inWatchlist ? '★' : '☆'}
             </button>
+            </>)}
             <button className={styles.closeBtn} onClick={onClose} title="Close">×</button>
           </div>
         </div>

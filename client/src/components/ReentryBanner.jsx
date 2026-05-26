@@ -143,6 +143,10 @@ export default function ReentryBanner({ onTickerClick, onVisibleChange, topOffse
         }}>
           PNTHR MCE
         </span>
+        <span
+          title="MCE = Momentum Continuation Entry. Daily 2-bar high breakout on stocks with an active weekly BL signal, filtered by trailing twelve-month performance. Bearish sectors excluded."
+          style={{ color: '#60a5fa', cursor: 'help', fontSize: 12, lineHeight: 1 }}
+        >&#9432;</span>
         <span style={{
           background: '#15803d', color: '#fff',
           fontWeight: 800, fontSize: 11,

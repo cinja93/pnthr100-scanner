@@ -165,7 +165,7 @@ app.use(helmet({ contentSecurityPolicy: false })); // CSP disabled: Vercel handl
 const rawOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
 const allowedOrigins = rawOrigin.split(',').map(o => o.trim()).filter(Boolean);
 // Always allow investor portal subdomains
-['https://den.pnthrfunds.com', 'https://investor.pnthrfunds.com'].forEach(o => {
+['https://den.pnthrfunds.com', 'https://investor.pnthrfunds.com', 'https://vip.pnthrfunds.com'].forEach(o => {
   if (!allowedOrigins.includes(o)) allowedOrigins.push(o);
 });
 app.use(cors({

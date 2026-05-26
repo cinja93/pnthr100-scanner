@@ -4,25 +4,25 @@
 // Walks every ACTIVE/PARTIAL non-demo position with a real pyramid plan and
 // reconciles its computed L2-L5 BUY/SELL STOPs against IBKR's open orders.
 //
-// THREE-PASS DESIGN (per handoff_2026_04_30.md §4G + project_4g_lot_trigger_
-// cleanup_rule.md):
+// SEQUENTIAL LOT PLACEMENT (2026-05-26):
+// Only ONE pyramid lot trigger (the next unfilled) lives in TWS at a time.
+// All subsequent lots stay staged in PNTHR's plan but are NOT placed in TWS
+// until their turn. This frees IBKR buying power that was previously tied
+// up by 3-4 pending BUY STP orders per position across the portfolio.
 //
-//   1. CLEANUP — for every IBKR lot-trigger order matched to a "complete" lot
-//                (cumulative target ≤ IBKR shares, i.e., already filled or
-//                surpassed via manual market-buy), enqueue CANCEL_ORDER.
-//                This is the SWKS-style stale-trigger eliminator.
+// FOUR-PASS DESIGN:
 //
-//   2. MODIFY  — for every IBKR lot-trigger order matched to an "incomplete"
-//                lot where PNTHR's computed trigger is TIGHTER than the TWS
-//                value (rare — anchor is fixed so trigger prices don't drift,
-//                but share-count drift from NAV change still goes here when
-//                PNTHR computes a smaller count we want to push), enqueue
-//                MODIFY_LOT_TRIGGER. Tightest-wins: TWS-tighter cases are
-//                silently adopted (no enqueue).
+//   1. CLEANUP — cancel TWS orders for complete lots (filled/surpassed) AND
+//                cancel TWS orders for lots BEYOND the next unfilled one
+//                (BEYOND_NEXT_LOT — sequential buying-power optimization).
 //
-//   3. PLACE   — for every "incomplete" lot with NO matching TWS order,
-//                enqueue PLACE_LOT_TRIGGER. New positions get their pyramid
-//                ladder pre-staged in TWS.
+//   2. MODIFY  — for the next unfilled lot's TWS order, push share/price
+//                drift to match PNTHR's plan.
+//
+//   3. PLACE   — if the next unfilled lot has NO TWS order, place it.
+//                Only one lot is placed per position.
+//
+//   4+5. CATCH-UP — detect and fire missed-lot market orders (unchanged).
 //
 // Auto-opened positions (Phase 3) are SKIPPED — they enter at full size with
 // fills[1].pct === 1.0 and have no pyramid plan to enforce.
@@ -189,6 +189,13 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
     // total 34, rejected L2=8sh as exceeding 50%).
     const planProjectedTotal = lots.reduce((s, l) => s + (+l.targetShares || 0), 0);
 
+    // Sequential lot placement: only the NEXT unfilled lot gets a TWS order.
+    // All subsequent lots stay staged in PNTHR but NOT in TWS, freeing IBKR
+    // buying power. When the next lot fills, the following cron tick places
+    // the one after it.
+    const nextLot = lots.find(l => l.lot >= 2 && !l.complete && l.targetShares > 0);
+    const nextLotNum = nextLot ? nextLot.lot : null; // null = all complete or no plan
+
     // 3. Filter IBKR stop orders to lot-trigger candidates only — opposite
     //    action from the protective stop (BUY for LONG pyramid, SELL for SHORT).
     const isLong = (p.direction || 'LONG').toUpperCase() !== 'SHORT';
@@ -246,6 +253,40 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
             stalePrice: +order.stopPrice, staleShares: order.shares,
             ibkrShares, cumulativeTarget: lot.cumulativeTargetShares,
             permId: order.permId,
+            enqueued:   !enqRes.skipped, outboxId: enqRes.id,
+            skipReason: enqRes.skipped || null,
+          });
+        }
+        continue;
+      }
+
+      // SEQUENTIAL LOT CLEANUP: if this lot is BEYOND the next unfilled lot,
+      // cancel its TWS order to free buying power. The order will be re-placed
+      // when the prior lot fills and this one becomes "next."
+      if (nextLotNum != null && lot.lot > nextLotNum && candidates.length > 0) {
+        for (const order of candidates) {
+          if (+order.orderId === 0) {
+            skips.push({
+              ticker, lot: lot.lot,
+              reason: 'UNCANCELLABLE_BEYOND_NEXT_LOT_MANUAL_ORDER_ID_ZERO',
+              permId: order.permId,
+            });
+            continue;
+          }
+          const enqRes = !dryRun && flagOn && isWeekday
+            ? await enqueueOutbox(db, p.ownerId, 'CANCEL_ORDER', {
+                ticker,
+                permId:    order.permId,
+                direction: isLong ? 'LONG' : 'SHORT',
+                source:    'LOT_TRIGGER_CRON_SEQUENTIAL',
+                lot:       lot.lot,
+                reason:    'BEYOND_NEXT_LOT',
+              })
+            : { skipped: dryRun ? 'DRY_RUN' : (!flagOn ? 'IBKR_AUTO_SYNC_LOT_TRIGGERS_OFF' : 'WEEKEND') };
+          cancellations.push({
+            ticker, lot: lot.lot, dir: isLong ? 'LONG' : 'SHORT',
+            stalePrice: +order.stopPrice, staleShares: order.shares,
+            permId: order.permId, reason: 'BEYOND_NEXT_LOT',
             enqueued:   !enqRes.skipped, outboxId: enqRes.id,
             skipReason: enqRes.skipped || null,
           });
@@ -373,11 +414,14 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
       });
     }
 
-    // ── PASS 3: PLACE for incomplete lots with NO matching TWS order ─────────
+    // ── PASS 3: PLACE for the NEXT unfilled lot with NO matching TWS order ────
+    // Sequential strategy: only ONE lot trigger lives in TWS at a time. When
+    // it fills, the next cron tick sees the new "next lot" and places it.
     for (const lot of lots) {
       if (lot.lot === 1) continue;          // L1 is the entry, never a trigger
       if (lot.complete) continue;           // Already filled/surpassed — covered by cleanup
       if ((candidatesByLot.get(lot.lot) || []).length > 0) continue; // Already has a TWS order
+      if (lot.lot !== nextLotNum) continue; // Sequential: only place the next unfilled lot
 
       const sanity = sanityCheckPlaceLotTrigger({
         position:        p,

@@ -14,7 +14,7 @@ import { useFund } from '../contexts/FundContext';
 // AiTickerChartModal (MongoDB candles) because they're reference charts, not
 // tradeable universe stocks. Prevents data gaps from MongoDB candle collections.
 const PULSE_GAUGE_TICKERS = new Set([
-  'SPY', 'QQQ', 'IWM', 'GLD', 'BTCUSD',
+  'SPY', 'QQQ', 'IWM', 'GLD', 'BTCUSD', 'DX-Y.NYB',
 ]);
 
 // Returns true if developing signals should be shown (Mon–Thu anytime; Fri before 4:15 PM ET)
@@ -261,7 +261,7 @@ export default function PulsePage({ onNavigate, fund }) {
           <VixThermometer vix={vix} onClick={() => { setChartList([{ ticker: '^VIX' }]); setChartIndex(0); }} />
           <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} onClick={() => { setChartList([{ ticker: 'GLD' }]); setChartIndex(0); }} />
           <MarketGauge label="WTI" subLabel="Crude Oil" data={data.marketGauges?.crude} onClick={() => { setChartList([{ ticker: 'FRED:DCOILWTICO' }]); setChartIndex(0); }} />
-          <MarketGauge label="USD" subLabel="Dollar Index" data={data.marketGauges?.usd} isIndex={true} onClick={() => { setChartList([{ ticker: 'FRED:DTWEXBGS' }]); setChartIndex(0); }} />
+          <MarketGauge label="USD" subLabel="Dollar Index" data={data.marketGauges?.usd} isIndex={true} onClick={() => { setChartList([{ ticker: 'DX-Y.NYB' }]); setChartIndex(0); }} />
           <MarketGauge label="BTC" subLabel="Bitcoin" data={data.marketGauges?.btc} isBtc={true} onClick={() => { setChartList([{ ticker: 'BTCUSD' }]); setChartIndex(0); }} />
         </div>
         {/* ROW 3: Interest rates + macro */}

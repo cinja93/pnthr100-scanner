@@ -27,6 +27,7 @@ const TICKER_DISPLAY_NAMES = {
   'FRED:FEDFUNDS': 'Federal Funds Rate', 'FRED:DGS2': '2-Year Treasury Yield',
   'FRED:DGS10': '10-Year Treasury Yield', 'FRED:DGS30': '30-Year Treasury Yield',
   'FRED:DCOILWTICO': 'WTI Crude Oil', 'FRED:DTWEXBGS': 'US Dollar Index',
+  'DX-Y.NYB': 'US Dollar Index',
   'FRED:UNRATE': 'Unemployment Rate',
   'FRED:WILL5000INDFC': 'Wilshire 5000 Total Market', 'FRED:UMCSENT': 'Consumer Sentiment',
   'BTCUSD': 'Bitcoin / USD',
@@ -35,7 +36,7 @@ function getDisplayTicker(ticker) {
   return TICKER_DISPLAY_NAMES[ticker] || ticker;
 }
 function isMacroTicker(ticker) {
-  return ticker?.startsWith('^') || ticker?.startsWith('FRED:') || ticker === 'BTCUSD';
+  return ticker?.startsWith('^') || ticker?.startsWith('FRED:') || ticker === 'BTCUSD' || ticker === 'DX-Y.NYB';
 }
 // Economic data (FRED series) — no signals/EMA. Index tickers (^) still get signals.
 function isEconomicData(ticker) {
@@ -43,7 +44,7 @@ function isEconomicData(ticker) {
 }
 // Benchmark tickers that should use simple EMA-cross signals (detectIndexSignals)
 // instead of the full PNTHR structural stop system (detectAllSignals).
-const BENCHMARK_TICKERS = new Set(['SPY', 'QQQ', 'IWM', 'GLD', 'BTCUSD']);
+const BENCHMARK_TICKERS = new Set(['SPY', 'QQQ', 'IWM', 'GLD', 'BTCUSD', 'DX-Y.NYB']);
 
 const _killRankCallbacks = [];
 const KILL_RANK_TTL = 30 * 60 * 1000; // 30 minutes

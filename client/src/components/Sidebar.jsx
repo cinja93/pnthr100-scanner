@@ -39,8 +39,8 @@ const NAV_GROUPS = [
     groupLabel: "Investor's Den",
     info: 'investorsDen',
     items: [
-      { key: 'ir-live',   label: 'Intelligence Report', badge: 'AI | CARN', badgeType: 'split', needsAccess: true },
-      { key: 'data-room', label: 'Data Room',            badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'ir-live',   label: 'Intelligence Report', badge: 'AI | Carnivore', badgeType: 'split', needsAccess: true },
+      { key: 'data-room', label: 'Data Room',            badge: 'AI | Carnivore', badgeType: 'split' },
     ],
   },
   {
@@ -55,7 +55,7 @@ const NAV_GROUPS = [
     groupLabel: 'Market Pulse',
     info: 'marketPulse',
     items: [
-      { key: 'pulse',      label: 'Pulse',         badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'pulse',      label: 'Pulse',         badge: 'AI | Carnivore', badgeType: 'split' },
       { key: 'ai300Index', label: 'AI 300 Index' },
       { key: 'bondHeat',   label: 'Bond Yields' },
     ],
@@ -64,15 +64,15 @@ const NAV_GROUPS = [
     groupLabel: 'PNTHR Live',
     info: 'pnthrLive',
     items: [
-      { key: 'orders',    label: 'Orders',    badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'orders',    label: 'Orders',    badge: 'AI | Carnivore', badgeType: 'split' },
     ],
   },
   {
     groupLabel: 'Strategy',
     info: 'strategy',
     items: [
-      { key: 'prey',   label: 'Prey',   badge: 'CARN', badgeType: 'carn' },
-      { key: 'apex',   label: 'Kill',   badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'prey',   label: 'Prey',   badge: 'Carnivore', badgeType: 'carn' },
+      { key: 'apex',   label: 'Kill',   badge: 'AI | Carnivore', badgeType: 'split' },
       { key: 'search', label: 'Search' },
     ],
   },
@@ -80,12 +80,12 @@ const NAV_GROUPS = [
     groupLabel: 'Universe',
     info: 'universe',
     items: [
-      { key: 'jungle',     label: 'Jungle',     badge: 'AI | CARN', badgeType: 'split' },
-      { key: 'sectors',    label: 'Sectors',     badge: 'AI | CARN', badgeType: 'split' },
-      { key: 'jungleHeat', label: 'Heat Map',    badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'jungle',     label: 'Jungle',     badge: 'AI | Carnivore', badgeType: 'split' },
+      { key: 'sectors',    label: 'Sectors',     badge: 'AI | Carnivore', badgeType: 'split' },
+      { key: 'jungleHeat', label: 'Heat Map',    badge: 'AI | Carnivore', badgeType: 'split' },
       { key: 'etf',        label: "ETF's" },
-      { key: 'long',       label: '100 Longs',   badge: 'AI | CARN', badgeType: 'split' },
-      { key: 'short',      label: '100 Shorts',  badge: 'AI | CARN', badgeType: 'split' },
+      { key: 'long',       label: '100 Longs',   badge: 'AI | Carnivore', badgeType: 'split' },
+      { key: 'short',      label: '100 Shorts',  badge: 'AI | Carnivore', badgeType: 'split' },
     ],
   },
 ];
@@ -318,7 +318,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         items: [
           { key: 'portfolio', label: 'Portfolio' },
           { key: 'assistant', label: 'Assistant', badge: 'DASHBOARD' },
-          { key: 'orders',    label: 'Orders',    badge: 'AI | CARN', badgeType: 'split' },
+          { key: 'orders',    label: 'Orders',    badge: 'AI | Carnivore', badgeType: 'split' },
         ],
       }
     : null;
@@ -331,9 +331,9 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           { key: 'assistant',         label: 'Assistant', badge: 'DASHBOARD' },
           { key: 'investor-mgmt',     label: 'Investor Portal' },
           { key: 'journal',           label: 'Journal' },
-          { key: 'signal-history',    label: 'Signal History',    badge: 'AI | CARN', badgeType: 'split' },
-          { key: 'history',           label: 'Kill 10',           info: 'kill10', badge: 'AI | CARN', badgeType: 'split' },
-          { key: 'kill-test',         label: 'Kill Test',         info: 'killTest', badge: 'AI | CARN', badgeType: 'split' },
+          { key: 'signal-history',    label: 'Signal History',    badge: 'AI | Carnivore', badgeType: 'split' },
+          { key: 'history',           label: 'Kill 10',           info: 'kill10', badge: 'AI | Carnivore', badgeType: 'split' },
+          { key: 'kill-test',         label: 'Kill Test',         info: 'killTest', badge: 'AI | Carnivore', badgeType: 'split' },
           { key: 'compliance',        label: 'Compliance' },
           { key: 'watchlist',         label: firstName ? `${firstName}'s Watchlist` : 'Watchlist' },
           { key: 'test',              label: 'TEST' },
@@ -443,7 +443,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
                         setPageOverrides(prev => ({ ...prev, [item.key]: 'carn' }));
                         onNavigate(item.key);
                       }}
-                    >CARN</span>
+                    >Carnivore</span>
                   </span>
                 );
               })()}

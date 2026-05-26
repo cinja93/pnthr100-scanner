@@ -1384,12 +1384,40 @@ app.get('/api/chart/:ticker', async (req, res) => {
     from.setFullYear(from.getFullYear() - 5);
     const fromStr = from.toISOString().split('T')[0];
     const encodedTicker = encodeURIComponent(ticker);
-    const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${encodedTicker}?from=${fromStr}&apikey=${FMP_API_KEY}`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error(`FMP error: ${response.status}`);
-    const data = await response.json();
-    if (data['Error Message']) throw new Error(data['Error Message']);
-    const historical = data.historical || [];
+    let historical = [];
+    try {
+      const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${encodedTicker}?from=${fromStr}&apikey=${FMP_API_KEY}`;
+      const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (response.ok) {
+        const data = await response.json();
+        if (!data['Error Message']) historical = data.historical || [];
+      }
+    } catch (fmpErr) {
+      console.warn(`[chart] FMP failed for ${ticker}, trying MongoDB fallback:`, fmpErr.message);
+    }
+
+    // MongoDB fallback: pull from stored candle collections when FMP returns nothing
+    if (historical.length === 0) {
+      try {
+        const db = await connectToDatabase();
+        if (db) {
+          // Try both AI and 679 candle collections
+          let doc = await db.collection('pnthr_bt_candles').findOne({ ticker });
+          if (!doc) doc = await db.collection('pnthr_ai_bt_candles').findOne({ ticker });
+          if (doc?.daily?.length) {
+            historical = doc.daily
+              .map(b => ({
+                date: b.date, open: b.open, high: b.high, low: b.low,
+                close: b.close, volume: b.volume || 0,
+              }))
+              .sort((a, b) => b.date.localeCompare(a.date)); // descending like FMP
+          }
+        }
+      } catch (dbErr) {
+        console.warn(`[chart] MongoDB fallback failed for ${ticker}:`, dbErr.message);
+      }
+    }
+
     if (historical.length === 0) {
       return res.status(404).json({ error: `No chart data available for ${ticker}` });
     }

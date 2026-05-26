@@ -357,7 +357,14 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
     allGroups = allGroups
       .map(group => ({
         ...group,
-        items: group.items.filter(item => effectiveAllowed.includes(item.key)),
+        items: group.items.filter(item => {
+          // Direct match
+          if (effectiveAllowed.includes(item.key)) return true;
+          // Split-badge items: show if the AI variant is allowed (investor portal AI-only)
+          const aiKey = AI_PAGE_MAP[item.key];
+          if (aiKey && aiKey !== item.key && effectiveAllowed.includes(aiKey)) return true;
+          return false;
+        }),
       }))
       .filter(group => group.items.length > 0);
   } else {
@@ -388,6 +395,8 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
   function resolvePageForFund(key, badgeType) {
     if (badgeType !== 'split') return key;
+    // Investor portal: always navigate to AI variant
+    if (isInvestorPortal && AI_PAGE_MAP[key]) return AI_PAGE_MAP[key];
     const fund = pageOverrides[key] ?? activeFund;
     if (fund === 'ai' && AI_PAGE_MAP[key]) return AI_PAGE_MAP[key];
     return key;
@@ -418,6 +427,10 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
             >
               <span className={styles.navLabel}>{item.label}</span>
               {item.badge && item.badgeType === 'split' && (() => {
+                // Investor portal: show static "AI" badge only — no fund toggle
+                if (isInvestorPortal) {
+                  return <span className={`${styles.badgeSplit}`}><span className={`${styles.badgeSplitAi} ${styles.badgeSplitActive}`}>AI</span></span>;
+                }
                 const aiKey = AI_PAGE_MAP[item.key];
                 const hasVariant = aiKey && aiKey !== item.key;
                 const isThisActive = activePage === item.key || (hasVariant && activePage === aiKey);
@@ -525,7 +538,8 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
 
       {/* Navigation groups */}
       <nav className={styles.nav}>
-        {/* Master Toggle — switches every dual-fund page at once */}
+        {/* Master Toggle — switches every dual-fund page at once (hidden for investors) */}
+        {!isInvestorPortal && (
         <div className={styles.fundExplainer}>
           <span className={styles.fundExplainerLabel}>
             Master Toggle
@@ -546,6 +560,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
             >Carnivore</button>
           </div>
         </div>
+        )}
 
         {allGroups.map((group) => (
           <div key={group.groupLabel}>

@@ -25,7 +25,8 @@ export function getDefaultPages() {
 // Pages allowed per portal mode (fallback when user has no per-user allowedPages)
 export const PORTAL_PAGES = {
   den:      null, // Admin demo mode — full access, no page filtering
-  investor: ['ir-live', 'ai-ir-live', 'data-room', 'ai-data-room', 'perch', 'earnings', 'pulse', 'aiPulse', 'ai300Index', 'bondHeat', 'prey', 'apex', 'aiKill', 'search', 'jungle', 'aiJungle', 'sectors', 'aiSectors', 'jungleHeat', 'aiHeat', 'etf', 'long', 'short'],
+  // Investors see AI 300 fund content only — no carnivore/679 pages
+  investor: ['ai-ir-live', 'ai-data-room', 'perch', 'earnings', 'aiPulse', 'ai300Index', 'bondHeat', 'aiKill', 'search', 'aiJungle', 'aiSectors', 'aiHeat', 'etf'],
   // VIP: member-scoped view. Per-user data isolation (portfolio/journal/
   // assistant/watchlist) is enforced server-side via ownerId filters.
   vip: [

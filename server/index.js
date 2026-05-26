@@ -9096,7 +9096,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
     let marketGauges = { nyse: null, nasdaq: null, iwm: null, gld: null, dji: null, crude: null, usd: null, btc: null };
     try {
       const mgRes = await fetch(
-        `https://financialmodelingprep.com/api/v3/quote/%5ENYA,%5EIXIC,IWM,GLD,%5EDJI,USOIL,DX-Y.NYB,BTCUSD?apikey=${FMP_KEY}`,
+        `https://financialmodelingprep.com/api/v3/quote/%5ENYA,%5EIXIC,IWM,GLD,%5EDJI,DX-Y.NYB,BTCUSD?apikey=${FMP_KEY}`,
         { signal: AbortSignal.timeout(15000) }
       );
       if (mgRes.ok) {
@@ -9117,7 +9117,7 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
           iwm:    extractMg('IWM'),
           gld:    extractMg('GLD'),
           dji:    extractMg('%5EDJI')  || extractMg('^DJI'),
-          crude:  extractMg('USOIL'),
+          crude:  null,  // populated from FRED below
           usd:    extractMg('DX-Y.NYB'),
           btc:    extractMg('BTCUSD'),
         };
@@ -9130,22 +9130,27 @@ app.get('/api/pulse', authenticateJWT, async (req, res) => {
       console.warn('[PULSE] marketGauges fetch failed:', e.message);
     }
 
-    // WTI crude fallback — USOIL may not return in batch; try USOIL then USO ETF as proxy
-    if (!marketGauges.crude) {
-      try {
-        const wtiRes = await fetch(`https://financialmodelingprep.com/api/v3/quote/USOIL,USO?apikey=${FMP_KEY}`, { signal: AbortSignal.timeout(15000) });
+    // WTI crude — always use FRED DCOILWTICO (actual WTI spot price).
+    // FMP's USOIL ticker returns unreliable data ($140+ when real WTI is ~$60).
+    try {
+      const fredKey = process.env.FRED_API_KEY;
+      if (fredKey) {
+        const wtiUrl = `https://api.stlouisfed.org/fred/series/observations?series_id=DCOILWTICO&sort_order=desc&limit=5&api_key=${fredKey}&file_type=json`;
+        const wtiRes = await fetch(wtiUrl, { signal: AbortSignal.timeout(10000) });
         if (wtiRes.ok) {
-          const wtiData = await wtiRes.json();
-          if (Array.isArray(wtiData)) {
-            const q = wtiData.find(x => x.symbol === 'USOIL') || wtiData.find(x => x.symbol === 'USO');
-            if (q?.price) {
-              marketGauges.crude = { price: q.price, change: q.change ?? null, changePct: q.changesPercentage ?? null, symbol: q.symbol };
-              console.log('[PULSE] WTI crude fallback via', q.symbol, ':', q.price);
-            }
+          const wtiJson = await wtiRes.json();
+          const obs = (wtiJson.observations || []).filter(o => o.value !== '.');
+          if (obs.length >= 2) {
+            const latest = parseFloat(obs[0].value);
+            const prev   = parseFloat(obs[1].value);
+            const change  = parseFloat((latest - prev).toFixed(2));
+            const changePct = parseFloat(((change / prev) * 100).toFixed(2));
+            marketGauges.crude = { price: latest, change, changePct, symbol: 'DCOILWTICO' };
+            console.log('[PULSE] WTI crude via FRED:', latest);
           }
         }
-      } catch (e) { console.warn('[PULSE] WTI fallback failed:', e.message); }
-    }
+      }
+    } catch (e) { console.warn('[PULSE] WTI FRED fetch failed:', e.message); }
 
     // Daily RSI(14) for the 6 index gauges (1-hour cache via fetchDailyRSI)
     let indexRsi = { spy: null, qqq: null, nyse: null, nasdaq: null, iwm: null, dji: null };

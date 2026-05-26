@@ -339,19 +339,21 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
 
   const toolbarControls = (
     <>
-      <button
-        onClick={() => setShowAllSignals(v => !v)}
-        style={{
-          padding: '6px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-          background: showAllSignals ? '#fcf000' : 'transparent',
-          color: showAllSignals ? '#000' : '#888',
-          border: '1px solid #2a2a2a', borderRadius: 4, cursor: 'pointer',
-          textTransform: 'uppercase',
-        }}
-        title={showAllSignals ? 'Showing all signals — click to show only the most recent' : 'Showing most recent signal — click to show all'}
-      >
-        {showAllSignals ? 'ALL SIGNALS' : 'SIGNALS'}
-      </button>
+      {isAdmin && (
+        <button
+          onClick={() => setShowAllSignals(v => !v)}
+          style={{
+            padding: '6px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+            background: showAllSignals ? '#fcf000' : 'transparent',
+            color: showAllSignals ? '#000' : '#888',
+            border: '1px solid #2a2a2a', borderRadius: 4, cursor: 'pointer',
+            textTransform: 'uppercase',
+          }}
+          title={showAllSignals ? 'Showing all signals — click to show only the most recent' : 'Showing most recent signal — click to show all'}
+        >
+          {showAllSignals ? 'ALL SIGNALS' : 'SIGNALS'}
+        </button>
+      )}
       <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
         <button
           onClick={() => adjustBarSpacing(-2)}

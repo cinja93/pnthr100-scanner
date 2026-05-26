@@ -957,6 +957,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
     }
   }, [effectiveAllowed, activePage]);
 
+  // ── Page history stack for back navigation ──────────────────────────────────
+  const [pageHistory, setPageHistory] = useState([]);
+
   function setActivePage(page) {
     if (effectiveAllowed && !effectiveAllowed.includes(page)) return;
     setActivePageRaw(page);
@@ -985,9 +988,23 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       setJournalFocusId(null);
       setJournalFocusTicker(null);
     }
+    // Push current page onto history stack before navigating (avoid duplicates)
+    if (activePage && activePage !== page) {
+      setPageHistory(prev => [...prev, activePage]);
+    }
     setActivePage(page);
     localStorage.setItem('pnthr_page', page);
   }
+
+  function navigateBack() {
+    if (pageHistory.length === 0) return;
+    const prev = pageHistory[pageHistory.length - 1];
+    setPageHistory(s => s.slice(0, -1));
+    setActivePageRaw(prev);
+    localStorage.setItem('pnthr_page', prev);
+  }
+
+  const canGoBack = pageHistory.length > 0;
   const scanType = renderPage === 'short' ? 'short' : 'long';
   const [stocks, setStocks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1265,6 +1282,31 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
 
       <div className="content-wrapper">
+        {/* Back navigation button */}
+        {canGoBack && (
+          <button
+            onClick={navigateBack}
+            style={{
+              position: 'sticky', top: 8, zIndex: 50,
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              background: 'rgba(30,30,30,0.95)', border: '1px solid #333',
+              borderRadius: 6, padding: '6px 12px 6px 8px',
+              color: '#aaa', fontSize: 12, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'inherit',
+              marginLeft: 12, marginTop: 8, marginBottom: 4,
+              backdropFilter: 'blur(8px)',
+              transition: 'color 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#FCF000'; e.currentTarget.style.borderColor = '#FCF000'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#aaa'; e.currentTarget.style.borderColor = '#333'; }}
+            title="Go back to previous page"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+        )}
         {/* Lot Ready banner — visible on all pages when a pyramid lot is triggered */}
         {isAuthenticated && !isImpersonating && visibleLotAlerts.length > 0 && (
           <div style={{

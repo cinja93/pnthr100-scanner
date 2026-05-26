@@ -155,7 +155,7 @@ export async function fetchLaserSignals(tickers, options = {}) {
 // Fetch daily OHLCV history for charting
 export async function fetchChartData(ticker) {
   try {
-    const response = await apiFetch(`${API_BASE}/api/chart/${ticker}`, { headers: authHeaders() });
+    const response = await apiFetch(`${API_BASE}/api/chart/${encodeURIComponent(ticker)}`, { headers: authHeaders() });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return response.json();
   } catch (error) {

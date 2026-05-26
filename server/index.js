@@ -1319,7 +1319,8 @@ app.get('/api/chart/:ticker', async (req, res) => {
     const from = new Date();
     from.setFullYear(from.getFullYear() - 5);
     const fromStr = from.toISOString().split('T')[0];
-    const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?from=${fromStr}&apikey=${FMP_API_KEY}`;
+    const encodedTicker = encodeURIComponent(ticker);
+    const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${encodedTicker}?from=${fromStr}&apikey=${FMP_API_KEY}`;
     const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!response.ok) throw new Error(`FMP error: ${response.status}`);
     const data = await response.json();

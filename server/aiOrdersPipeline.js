@@ -132,6 +132,12 @@ export async function runAiOrdersPipeline(opts = {}) {
     .find({ ticker: { $in: allUniverseTickers } }, { projection: { ticker: 1, weekly: 1 } }).toArray();
   const weeklyByTicker = Object.fromEntries(weeklyDocs.map(d => [d.ticker, d.weekly || []]));
 
+  // 3c. Load gap-risk scores (maxGapPct) for sizing gap multiplier — matches chart SIZE IT logic
+  const gapRiskDocs = allUniverseTickers.length
+    ? await db.collection('pnthr_gap_risk').find({ ticker: { $in: allUniverseTickers } }).toArray()
+    : [];
+  const gapRiskMap = new Map(gapRiskDocs.map(g => [g.ticker, g.maxGapPct || 0]));
+
   function computeWeeklyRsi(ticker) {
     const wRaw = weeklyByTicker[ticker] || [];
     if (wRaw.length < 15) return null;
@@ -232,7 +238,13 @@ export async function runAiOrdersPipeline(opts = {}) {
     const tickerCapDollar = ASSUMED_NAV * TICKER_CAP_PCT;
     const sharesByRisk = Math.floor(vitalityDollar / riskPerShare);
     const sharesByCap  = Math.floor(tickerCapDollar / livePrice);
-    const targetShares = Math.max(0, Math.min(sharesByRisk, sharesByCap));
+    const rawTarget    = Math.max(0, Math.min(sharesByRisk, sharesByCap));
+
+    // Gap multiplier — same formula as client sizingUtils.sizePosition()
+    const maxGapPct   = gapRiskMap.get(ticker) || 0;
+    const structRisk  = riskPct;  // already riskPerShare/livePrice × 100
+    const sizeGapMult = maxGapPct > structRisk ? Math.max(0.3, structRisk / maxGapPct) : 1.0;
+    const targetShares = Math.floor(rawTarget * sizeGapMult);
 
     // 5-lot pyramid sizing (same as Phase 4 / v6)
     const STRIKE_PCT = [0.35, 0.25, 0.20, 0.12, 0.08];
@@ -277,6 +289,8 @@ export async function runAiOrdersPipeline(opts = {}) {
       gapPct,
       wEmaSlope,
       qualityGrade,
+      maxGapPct,
+      sizeGapMult: +sizeGapMult.toFixed(2),
       heatDollar,
       heatPctNav,
       ...( computeWeeklyRsi(ticker) || {} ),
@@ -307,7 +321,12 @@ export async function runAiOrdersPipeline(opts = {}) {
     const tickerCapDollar = ASSUMED_NAV * TICKER_CAP_PCT;
     const sharesByRisk = Math.floor(vitalityDollar / riskPerShare);
     const sharesByCap  = Math.floor(tickerCapDollar / livePrice);
-    const targetShares = Math.max(0, Math.min(sharesByRisk, sharesByCap));
+    const rawTarget    = Math.max(0, Math.min(sharesByRisk, sharesByCap));
+
+    const maxGapPct   = gapRiskMap.get(ticker) || 0;
+    const structRisk  = riskPct;
+    const sizeGapMult = maxGapPct > structRisk ? Math.max(0.3, structRisk / maxGapPct) : 1.0;
+    const targetShares = Math.floor(rawTarget * sizeGapMult);
 
     const STRIKE_PCT = [0.35, 0.25, 0.20, 0.12, 0.08];
     const lot1Cap    = riskPerShare > 0 ? Math.floor(vitalityDollar / riskPerShare) : targetShares;
@@ -351,6 +370,8 @@ export async function runAiOrdersPipeline(opts = {}) {
       gapPct,
       wEmaSlope,
       qualityGrade,
+      maxGapPct,
+      sizeGapMult: +sizeGapMult.toFixed(2),
       heatDollar,
       heatPctNav,
       strategyMode: '679',

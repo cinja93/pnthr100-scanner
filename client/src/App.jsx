@@ -137,7 +137,7 @@ function App() {
 }
 
 function AppAuth() {
-  const { portalMode, isInvestorPortal, isDenPortal } = usePortal();
+  const { portalMode, isInvestorPortal, isDenPortal, isVipPortal } = usePortal();
   // Impersonation token (sessionStorage, per-tab) wins over the admin's own
   // token (localStorage) whenever this tab is in a preview session. That
   // keeps the admin's main tab working as admin in parallel.
@@ -178,7 +178,7 @@ function AppAuth() {
     // However, if an admin is previewing via ?portal=investor, their regular
     // JWT should still go through the normal profile endpoint.
     const isPreviewSession = !!window.sessionStorage.getItem('pnthr_preview_token');
-    const profileFetch = (isInvestorPortal || isPreviewSession)
+    const profileFetch = (isInvestorPortal || isVipPortal || isPreviewSession)
       ? fetchInvestorProfile().then(p => ({ ...p, role: 'investor' })).catch(() => fetchUserProfile())
       : fetchUserProfile();
 
@@ -228,7 +228,7 @@ function AppAuth() {
 
   // Show appropriate login page based on portal mode
   if (!authToken) {
-    if (isInvestorPortal) return <InvestorLoginPage onLogin={handleLogin} />;
+    if (isInvestorPortal || isVipPortal) return <InvestorLoginPage onLogin={handleLogin} />;
     return <LoginPage onLogin={handleLogin} />;
   }
 

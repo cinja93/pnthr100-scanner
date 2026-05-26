@@ -334,28 +334,21 @@ function classifyStopShares(ibkrStops, cmdShr) {
 // Classify the overall ratchet-column status. The roll-up drives the row's
 // far-left card dot via buildRow's rowStatus computation.
 //
-// Standard raised 2026-05-05: green now requires the FULL pyramid (every
-// actionable lot through L5) to be staged in IBKR with correct share counts,
-// not just the next-up lot. Old behavior would show green as soon as L2 was
-// staged even if L3-L5 were missing — that hid real drift.
+// SEQUENTIAL LOT PLACEMENT (2026-05-26): only the NEXT unfilled lot lives
+// in TWS at a time. All subsequent lots are staged in PNTHR's plan but NOT
+// placed in TWS (freeing buying power). Green means the next lot is placed
+// and correct — not that every lot is in TWS.
 //
-// Gray   = all lots COMPLETE (cumulative target ≤ position shares). The
-//          position already covers every planned lot. This includes over-
-//          filled positions like QTUM (52 sh on a 19-sh canonical plan).
-//          No action needed.
-// Green  = every actionable lot (incomplete + unfilled + shares > 0) is
-//          staged in IBKR with the correct share count.
-// Yellow = every actionable lot is staged at the right price/side, but
-//          ≥1 has the wrong share count.
-// Red    = ≥1 actionable lot is not staged in IBKR.
+// Gray   = all lots COMPLETE (cumulative target ≤ position shares). No action.
+// Green  = the next unfilled lot is staged in IBKR with correct share count.
+//          Remaining lots are queued in PNTHR — this is expected.
+// Yellow = the next unfilled lot is staged but has a share count mismatch.
+// Red    = the next unfilled lot is NOT staged in IBKR.
 function classifyLotTriggers(enrichedTriggers) {
-  // If every lot is "complete" (position covers cumulative target), the
-  // pyramid is done. No further action.
   if (enrichedTriggers.length > 0 && enrichedTriggers.every(t => t.complete)) {
     return { status: 'gray', reason: 'All lots covered — position is at or above full plan size' };
   }
 
-  // Actionable = unfilled, not yet covered by position, and plan calls for >0 sh.
   const actionable = enrichedTriggers.filter(t =>
     !t.filled && !t.complete && t.targetShares && t.targetShares > 0
   );
@@ -363,25 +356,20 @@ function classifyLotTriggers(enrichedTriggers) {
     return { status: 'gray', reason: 'No more lots to stage — position at plan size or cap' };
   }
 
-  // Any actionable lot missing in TWS → red.
-  const unstaged = actionable.filter(t => !t.staged);
-  if (unstaged.length > 0) {
-    const lots = unstaged.map(t => `L${t.lot}`).join(', ');
-    return { status: 'red', reason: `Lot(s) not staged in IBKR: ${lots}` };
+  // Sequential: only the FIRST actionable lot (lowest lot number) needs to be in TWS.
+  const nextLot = actionable[0];
+  const queued  = actionable.length - 1;
+  const queuedLabel = queued > 0 ? `, ${queued} queued in PNTHR` : '';
+
+  if (!nextLot.staged) {
+    return { status: 'red', reason: `L${nextLot.lot} not staged in IBKR — auto-fix triggered` };
   }
 
-  // All staged at right price/side, but any with share mismatch → yellow.
-  const mismatched = actionable.filter(t => (t.stagedShares || 0) !== t.targetShares);
-  if (mismatched.length > 0) {
-    const detail = mismatched.map(t =>
-      `L${t.lot} (plan ${t.targetShares} sh, TWS ${t.stagedShares || 0} sh)`
-    ).join('; ');
-    return { status: 'yellow', reason: `Share count mismatch on ${mismatched.length} lot(s): ${detail}` };
+  if ((nextLot.stagedShares || 0) !== nextLot.targetShares) {
+    return { status: 'yellow', reason: `L${nextLot.lot} share mismatch — plan ${nextLot.targetShares} sh, TWS ${nextLot.stagedShares || 0} sh` };
   }
 
-  // Every actionable lot staged with correct shares.
-  const lots = actionable.map(t => `L${t.lot}`).join(', ');
-  return { status: 'green', reason: `All actionable lots staged with correct shares (${lots})` };
+  return { status: 'green', reason: `L${nextLot.lot} staged ✓ (${nextLot.targetShares} sh @ $${nextLot.triggerPrice?.toFixed(2)}${queuedLabel})` };
 }
 
 // ── Row builder ──────────────────────────────────────────────────────────────

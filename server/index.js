@@ -1397,6 +1397,11 @@ app.get('/api/chart/:ticker', async (req, res) => {
       console.warn(`[chart] FMP failed for ${ticker}, trying MongoDB fallback:`, fmpErr.message);
     }
 
+    // Scrub bad bars — FMP occasionally returns close=0 or low=0 (e.g. DX-Y.NYB 2026-05-24)
+    if (historical.length > 0) {
+      historical = historical.filter(bar => bar.close > 0 && bar.open > 0);
+    }
+
     // MongoDB fallback: pull from stored candle collections when FMP returns nothing
     if (historical.length === 0) {
       try {

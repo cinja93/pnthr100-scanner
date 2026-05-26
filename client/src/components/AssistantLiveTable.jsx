@@ -734,7 +734,7 @@ function buildSubRows(row) {
   //     so the L2-L5 plan list still has a row to render on.
   //   - The FIRST row below the divider gets showRatchetPlan: true, meaning
   //     the L2-L5 list renders in its NEXT RATCHET cell.
-  const hasRemainingLotPlan = (row.lotTriggers || []).some(t => !t.filled);
+  const hasRemainingLotPlan = (row.lotTriggers || []).some(t => !t.complete);
   const needsRatchetZone = ratchetIbkrStops.length > 0 || hasRemainingLotPlan;
   if (needsRatchetZone) {
     out.push({ kind: 'GAP' });
@@ -1440,7 +1440,7 @@ export default function AssistantLiveTable({ onNavigate, netLiquidity, onOpenCha
                         are staged, a dedicated RATCHET_PLAN row). Below the
                         divider so the protective flow reads cleanly. */}
                     {(() => {
-                      const remaining = (row.lotTriggers || []).filter(t => !t.filled);
+                      const remaining = (row.lotTriggers || []).filter(t => !t.complete);
                       if (!sr.showRatchetPlan || remaining.length === 0) {
                         return <EmptyCell bottomBorder={isLast} />;
                       }

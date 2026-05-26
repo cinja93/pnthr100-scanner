@@ -179,7 +179,7 @@ function enrichLotTriggersWithIbkrStatus(triggers, ibkrStops, ibkrShares = 0) {
   const heldShares = Math.abs(+ibkrShares || 0);
   return triggers.map(t => {
     const complete = heldShares >= (t.cumulativeTargetShares || 0);
-    if (t.filled) return { ...t, staged: null, stagedShares: 0, complete }; // already happened — no dot
+    if (complete) return { ...t, staged: null, stagedShares: 0, complete };
     const matches = ibkrStops.filter(s =>
       s.action === t.expectedSide &&
       Math.abs(+s.stopPrice - t.triggerPrice) < 0.05
@@ -350,7 +350,7 @@ function classifyLotTriggers(enrichedTriggers) {
   }
 
   const actionable = enrichedTriggers.filter(t =>
-    !t.filled && !t.complete && t.targetShares && t.targetShares > 0
+    !t.complete && t.targetShares && t.targetShares > 0
   );
   if (actionable.length === 0) {
     return { status: 'gray', reason: 'No more lots to stage — position at plan size or cap' };
@@ -450,7 +450,7 @@ function buildRow(ticker, cmd, ibkrPos, ibkrTickerStops, lastPrice, netLiquidity
   // exact TWS instruction. Lots with 0 target shares are skipped — the
   // position is already at its size cap and there's nothing more to stage.
   for (const t of enrichedLotTriggers) {
-    if (t.filled || t.staged) continue;
+    if (t.complete || t.staged) continue;
     if (!t.targetShares || t.targetShares <= 0) continue;
     actions.push({
       type: 'ibkr',
@@ -699,7 +699,7 @@ export async function assistantLiveReconcile(req, res) {
     // every page load auto-heals missing lot triggers — no waiting for the
     // once-per-minute cron. Non-blocking: response goes out immediately.
     const hasUnstagedWithNoOutbox = rows.some(r =>
-      r.lotTriggers.some(lt => !lt.filled && !lt.complete && !lt.staged && !lt.outboxStatus && lt.targetShares > 0)
+      r.lotTriggers.some(lt => !lt.complete && !lt.staged && !lt.outboxStatus && lt.targetShares > 0)
     );
 
     // Recycle candidate: when heat >= 10%, find the most profitable

@@ -117,6 +117,38 @@ function computeLotSizes(entryPrice, stopPrice, nav) {
   return STRIKE_PCT.map(pct => Math.max(1, Math.round(total * pct)));
 }
 
+// ── Cooldown gate: tickers with positions closed in the last 24h need a
+//    green 1-hour candle (close > open) after the close before re-entering MCE.
+const greenBarCache = new Map();   // ticker → { checkedAt, cleared, greenBarTime }
+const GREEN_BAR_CACHE_MS = 5 * 60_000;  // re-check FMP every 5 min if not yet cleared
+
+async function fetchHourlyBars(ticker) {
+  try {
+    const url = `${FMP_BASE}/historical-chart/1hour/${ticker}?apikey=${FMP_API_KEY}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch { return []; }
+}
+
+async function hasGreenBarAfter(ticker, closedAt) {
+  const cached = greenBarCache.get(ticker);
+  const now = Date.now();
+  if (cached) {
+    if (cached.cleared) return true;
+    if (now - cached.checkedAt < GREEN_BAR_CACHE_MS) return false;
+  }
+  const bars = await fetchHourlyBars(ticker);
+  const closeTime = new Date(closedAt).getTime();
+  const found = bars.some(b => {
+    const barTime = new Date(b.date).getTime();
+    return barTime > closeTime && b.close > b.open;
+  });
+  greenBarCache.set(ticker, { checkedAt: now, cleared: found, greenBarTime: found ? now : null });
+  return found;
+}
+
 // ── Re-entry signal cache ──────────────────────────────────────────────────────
 let signalCache = { at: 0, signals: [] };
 
@@ -132,11 +164,25 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
 
     // Active positions this user already holds — skip these tickers
     const held = new Set();
+    const closedToday = new Map();  // ticker → closedAt (most recent close in last 24h)
     if (db && ownerId) {
       const pos = await db.collection('pnthr_portfolio')
         .find({ ownerId, status: { $in: ['ACTIVE', 'PARTIAL'] } }, { projection: { ticker: 1 } })
         .toArray();
       for (const p of pos) held.add(p.ticker);
+
+      const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentlyClosed = await db.collection('pnthr_portfolio')
+        .find({ ownerId, status: 'CLOSED', closedAt: { $gte: cutoff24h } },
+               { projection: { ticker: 1, closedAt: 1 } })
+        .toArray();
+      for (const p of recentlyClosed) {
+        if (held.has(p.ticker)) continue;
+        const existing = closedToday.get(p.ticker);
+        if (!existing || new Date(p.closedAt) > new Date(existing)) {
+          closedToday.set(p.ticker, p.closedAt);
+        }
+      }
     }
 
     const { topAI } = await getTopN();
@@ -224,6 +270,21 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
       }
     }
 
+    // ── Cooldown gate: positions closed in last 24h need a green 1H bar ────
+    if (closedToday.size > 0) {
+      const gated = [];
+      for (let i = results.length - 1; i >= 0; i--) {
+        const closedAt = closedToday.get(results[i].ticker);
+        if (!closedAt) continue;
+        const cleared = await hasGreenBarAfter(results[i].ticker, closedAt);
+        if (!cleared) {
+          gated.push(results[i].ticker);
+          results.splice(i, 1);
+        }
+      }
+      if (gated.length) console.log(`[MCE Cooldown] gated (no green 1H bar yet): ${gated.join(', ')}`);
+    }
+
     // Highest RPS first (most room between entry and stop = more shares = bigger trade)
     results.sort((a, b) => b.rps - a.rps);
 
@@ -238,4 +299,5 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
 export function clearReentryCache() {
   signalCache = { at: 0, signals: [] };
   ttmCache    = { at: 0, topAI: null };
+  greenBarCache.clear();
 }

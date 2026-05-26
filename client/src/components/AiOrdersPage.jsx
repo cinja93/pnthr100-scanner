@@ -292,12 +292,13 @@ function OrderRow({ o, orders, navScale, setChartTickers, setChartIndex, dimmed,
         <RsiRangeBar weeklyRsi={o.weeklyRsi} rsi52Low={o.rsi52Low} rsi52High={o.rsi52High} />
       </td>
       <td style={{ padding: '6px 10px', textAlign: 'right' }}>
-        <span style={{ color: Math.abs(o.gapPct ?? 0) >= 12 ? '#16a34a' : Math.abs(o.gapPct ?? 0) >= 9 ? '#fcf000' : '#aaa' }}>
+        <span style={{ color: Math.abs(o.gapPct ?? 0) >= 12 ? '#16a34a' : '#dc2626' }}>
           {o.gapPct != null ? `${o.gapPct.toFixed(1)}%` : '—'}
         </span>
+        {Math.abs(o.gapPct ?? 0) < 12 && o.gapPct != null && <span style={{ color: '#dc2626', fontSize: 9, fontWeight: 700, marginLeft: 4 }}>GAP</span>}
       </td>
       <td style={{ padding: '6px 10px', textAlign: 'right' }}>
-        <span style={{ color: (o.wEmaSlope ?? 999) < 50 ? '#16a34a' : (o.wEmaSlope ?? 999) < 65 ? '#fcf000' : '#dc2626' }}>{o.wEmaSlope != null ? `${o.wEmaSlope.toFixed(1)}%` : '—'}</span>
+        <span style={{ color: Math.abs(o.wEmaSlope ?? 999) < 50 ? '#16a34a' : '#dc2626' }}>{o.wEmaSlope != null ? `${o.wEmaSlope.toFixed(1)}%` : '—'}</span>
         {Math.abs(o.wEmaSlope ?? 0) >= 50 && <span style={{ color: '#dc2626', fontSize: 9, fontWeight: 700, marginLeft: 4 }}>SLOPE</span>}
       </td>
       <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtUsd(o.currentPrice)}</td>
@@ -324,9 +325,9 @@ function TableHeader({ sort, onSort }) {
         <SortHeader label="RSI"         sortKey="weeklyRsi"  currentSort={sort} onSort={onSort} align="center"
           info={<>Weekly RSI (14). Dot on 52-week range bar.<br/><span style={{ color: '#dc2626', fontWeight: 700 }}>Red</span> = 70+ (overbought)<br/><span style={{ color: '#16a34a', fontWeight: 700 }}>Green</span> = 50–70 (momentum)<br/><span style={{ color: '#fcf000', fontWeight: 700 }}>Yellow</span> = under 50 (weak)</>} />
         <SortHeader label="Gap %"       sortKey="gapPct"     currentSort={sort} onSort={onSort} align="right"
-          info={<>Distance from price to OpEMA. Ideal: 12%+ for entry.<br/><span style={{ color: '#16a34a', fontWeight: 700 }}>Green</span> = 12%+ (in range, qualifies)<br/><span style={{ color: '#fcf000', fontWeight: 700 }}>Yellow</span> = 9–12% (close, needs price move)<br/><span style={{ color: '#aaa' }}>Grey</span> = under 9% (not close yet)</>} />
+          info={<>Distance from price to OpEMA. Threshold: 12%+ for NOW.<br/><span style={{ color: '#16a34a', fontWeight: 700 }}>Green</span> = 12%+ (qualifies)<br/><span style={{ color: '#dc2626', fontWeight: 700 }}>Red</span> = under 12% (not enough gap yet)</>} />
         <SortHeader label="Slope %"     sortKey="slope"      currentSort={sort} onSort={onSort} align="right"
-          info={<><span style={{ color: '#16a34a', fontWeight: 700 }}>Green</span> = under 50% (in range, EMA is flat enough)<br/><span style={{ color: '#fcf000', fontWeight: 700 }}>Yellow</span> = 50–65% (close, EMA is flattening)<br/><span style={{ color: '#dc2626', fontWeight: 700 }}>Red</span> = over 65% (blocked, EMA too steep)</>} />
+          info={<>Annualized weekly EMA slope. Threshold: under 50% for NOW.<br/><span style={{ color: '#16a34a', fontWeight: 700 }}>Green</span> = under 50% (EMA flat enough)<br/><span style={{ color: '#dc2626', fontWeight: 700 }}>Red</span> = 50%+ (EMA too steep)</>} />
         <SortHeader label="Price"       sortKey="price"      currentSort={sort} onSort={onSort} align="right" />
         <SortHeader label="Stop"        sortKey="stop"       currentSort={sort} onSort={onSort} align="right" />
         <SortHeader label="Risk %"      sortKey="riskPct"    currentSort={sort} onSort={onSort} align="right" />

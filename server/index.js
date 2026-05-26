@@ -91,7 +91,7 @@ import newsletterRouter from './routes/newsletter.js';
 import dataroomRouter from './routes/dataroom.js';
 import complianceRouter from './routes/compliance.js';
 import { investorAuthRouter, vipAuthRouter, investorAdminRouter, investorSelfRouter } from './routes/investor.js';
-import { ensureInvestorIndexes, logEvent, getPortalAnalytics } from './investorService.js';
+import { ensureInvestorIndexes, logEvent, getPortalAnalytics, findInvestorById } from './investorService.js';
 import {
   ensureAccessRequestIndexes, createAccessRequest, emailAlreadyInUse,
   listAccessRequests, approveAsMember, approveAsInvestor, denyAccessRequest,
@@ -2762,8 +2762,13 @@ app.get('/api/ai300-kill-history/simulation',   authenticateJWT, ai300KillSimula
 // ── AI Elite Fund — Live Intelligence Report ─────────────────────────────────
 async function requireIrLiveAccess(req, res, next) {
   if (req.user?.role === 'admin') return next();
-  const profile = await getUserProfile(req.user.userId);
-  if (profile?.allowedPages?.includes('ir-live')) return next();
+  if (req.user?.source === 'den_investors') {
+    const inv = await findInvestorById(req.user.userId);
+    if (inv?.allowedPages?.includes('ir-live')) return next();
+  } else {
+    const profile = await getUserProfile(req.user.userId);
+    if (profile?.allowedPages?.includes('ir-live')) return next();
+  }
   return res.status(403).json({ error: 'Access denied' });
 }
 app.get('/api/ir-live/:tier/metrics', authenticateJWT, requireIrLiveAccess, irLiveMetricsHandler);

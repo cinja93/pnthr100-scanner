@@ -201,12 +201,13 @@ function AppAuth() {
     setAuthToken(token);
     setAuthTokenState(token);
     localStorage.setItem('activeFund', 'ai');
+    window.dispatchEvent(new Event('pnthr-fund-change'));
     // For investors, use investmentAmount as accountSize
     const acctSize = role === 'investor'
       ? (profile?.investmentAmount ?? null)
       : (profile?.accountSize ?? null);
-    localStorage.setItem('pnthr_page', 'ir-live');
-    setCurrentUser({ email, role, accountSize: acctSize, defaultPage: 'ir-live', name: profile?.name ?? null, company: profile?.company ?? null, investmentAmount: profile?.investmentAmount ?? null, loginCount: profile?.loginCount ?? null, maxLogins: profile?.maxLogins ?? 5, allowedPages: profile?.allowedPages ?? null });
+    localStorage.setItem('pnthr_page', 'ai-ir-live');
+    setCurrentUser({ email, role, accountSize: acctSize, defaultPage: 'ai-ir-live', name: profile?.name ?? null, company: profile?.company ?? null, investmentAmount: profile?.investmentAmount ?? null, loginCount: profile?.loginCount ?? null, maxLogins: profile?.maxLogins ?? 5, allowedPages: profile?.allowedPages ?? null });
     setShowSplash(true);
     if (role === 'investor') setShowWelcome(true);
   }
@@ -927,7 +928,21 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const { allowedPages: portalAllowed } = usePortal();
   // Per-user allowedPages (from DB) takes precedence over hardcoded portal defaults
   const userPages = currentUser?.allowedPages;
-  const effectiveAllowed = (userPages && userPages.length > 0) ? userPages : portalAllowed;
+  const rawAllowed = (userPages && userPages.length > 0) ? userPages : portalAllowed;
+  // AI variant pages (e.g. 'ai-ir-live') should be allowed whenever the base key ('ir-live') is
+  const effectiveAllowed = useMemo(() => {
+    if (!rawAllowed) return null;
+    const map = {
+      'ai-ir-live': 'ir-live', 'ai-data-room': 'data-room', 'aiPulse': 'pulse',
+      'aiOrders': 'orders', 'aiKill': 'apex', 'aiJungle': 'jungle',
+      'aiSectors': 'sectors', 'aiHeat': 'jungleHeat', 'ai-signal-history': 'signal-history',
+    };
+    const expanded = new Set(rawAllowed);
+    for (const [ai, base] of Object.entries(map)) {
+      if (expanded.has(base)) expanded.add(ai);
+    }
+    return [...expanded];
+  }, [rawAllowed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [activePage, setActivePageRaw] = useState(() => {
     const saved = localStorage.getItem('pnthr_page');

@@ -17,13 +17,13 @@ export default function DocPermissionsSelector({ selected, onChange, defaultFund
   }, []);
 
   useEffect(() => {
-    if (!defaultFund || didAutoSelect || docs.length === 0 || selected.length > 0) return;
+    if (!defaultFund || didAutoSelect || docs.length === 0) return;
     const kw = defaultFund === 'ai' ? ['ai elite 300', 'ai elite'] : ['carnivore', '679', 'supporting'];
     const ids = docs.filter(d => {
       const lower = (d.section || '').toLowerCase();
       return kw.some(k => lower.includes(k));
     }).map(d => d._id);
-    if (ids.length) onChange(ids);
+    if (ids.length) onChange([...new Set([...selected, ...ids])]);
     setDidAutoSelect(true);
   }, [docs, defaultFund, didAutoSelect]);
 

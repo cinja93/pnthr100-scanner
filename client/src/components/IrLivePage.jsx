@@ -88,7 +88,20 @@ function MetricCard({ label, value, sub, color, small, info }) {
   );
 }
 
-function TierButton({ tier, active, onClick, fundName }) {
+function fmtNavFull(v) {
+  if (v == null) return '—';
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(2)} million`;
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;
+  return `$${v.toLocaleString()}`;
+}
+
+function fmtMonthYear(dateStr) {
+  if (!dateStr) return '...';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function TierButton({ tier, active, onClick, fundName, summary }) {
   const [showInfo, setShowInfo] = useState(false);
   const popRef = useRef(null);
 
@@ -100,6 +113,10 @@ function TierButton({ tier, active, onClick, fundName }) {
     document.addEventListener('mousedown', onClickOutside);
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, [showInfo]);
+
+  const endNav = summary?.endNav;
+  const firstTrade = summary?.firstTradeDate;
+  const endDate = summary?.endDate;
 
   return (
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -114,17 +131,22 @@ function TierButton({ tier, active, onClick, fundName }) {
       </button>
       <span
         onClick={(e) => { e.stopPropagation(); setShowInfo(v => !v); }}
-        style={{ cursor: 'pointer', color: '#555', fontSize: 13, lineHeight: 1 }}
+        style={{ cursor: 'pointer', color: '#999', fontSize: 13, lineHeight: 1 }}
       >ⓘ</span>
       {showInfo && (
         <div ref={popRef} style={{
           position: 'absolute', top: '100%', left: 0, zIndex: 100, marginTop: 6,
           background: '#1a1a1a', border: '1px solid #444', borderRadius: 8,
-          padding: '14px 16px', width: 300, boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
+          padding: '14px 16px', width: 340, boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
         }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, marginBottom: 6 }}>{tier.label}</div>
-          <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>
-            This tier simulates what your account would have grown to if you had invested {tier.startingCapital} at the inception of the {fundName} strategy, compounded through the full backtested period.
+          <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.7 }}>
+            This tier simulates that if you had invested {tier.startingCapital} at the inception of the {fundName} strategy, it would have grown and compounded to{' '}
+            <strong style={{ color: GREEN }}>{endNav ? fmtNavFull(endNav) : '...'}</strong>{' '}
+            through the full backtested period which was {fmtMonthYear(firstTrade)} through {fmtMonthYear(endDate)}.
+          </div>
+          <div style={{ fontSize: 10, color: '#777', lineHeight: 1.5, marginTop: 10, borderTop: '1px solid #333', paddingTop: 8, fontStyle: 'italic' }}>
+            Please see PPM and LPA for complete legal description of the fund. For informational purposes only.
           </div>
         </div>
       )}
@@ -711,6 +733,7 @@ export default function IrLivePage({ fund = 'ai300' }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [tierSummaries, setTierSummaries] = useState({});
 
   useEffect(() => {
     setLoading(true);
@@ -721,6 +744,17 @@ export default function IrLivePage({ fund = 'ai300' }) {
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [tier, fc.apiBase]);
+
+  useEffect(() => {
+    TIER_CONFIG.forEach(t => {
+      fetch(`${API_BASE}/api/${fc.apiBase}/${t.key}/metrics`, { headers: authHeaders() })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d) setTierSummaries(prev => ({ ...prev, [t.key]: { endNav: d.net?.endNav, firstTradeDate: d.firstTradeDate, endDate: d.net?.endDate } }));
+        })
+        .catch(() => {});
+    });
+  }, [fc.apiBase]);
 
   const d = data;
   const net = d?.net;
@@ -744,7 +778,7 @@ export default function IrLivePage({ fund = 'ai300' }) {
       {/* Tier tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {TIER_CONFIG.map(t => (
-          <TierButton key={t.key} tier={t} active={tier === t.key} onClick={() => setTier(t.key)} fundName={fc.name} />
+          <TierButton key={t.key} tier={t} active={tier === t.key} onClick={() => setTier(t.key)} fundName={fc.name} summary={tierSummaries[t.key]} />
         ))}
       </div>
 

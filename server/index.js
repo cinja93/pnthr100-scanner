@@ -886,10 +886,12 @@ app.get('/api/user/profile', async (req, res) => {
         email: req.user.email, role: 'member', accountSize: null, defaultPage: 'apex',
         liveFundNav: null, liveFundStartDate: null,
         allowedPages: [
-          'perch','earnings','pulse','ai300Index','bondHeat','orders',
+          'ir-live','data-room',
+          'perch','earnings',
+          'pulse','ai300Index','bondHeat',
           'prey','apex','search',
           'jungle','sectors','jungleHeat','etf','long','short',
-          'ir-live','watchlist','data-room',
+          'watchlist',
         ],
       });
     }

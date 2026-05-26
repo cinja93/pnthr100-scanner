@@ -129,6 +129,16 @@ export async function authenticateInvestor(email, password) {
   return investor;
 }
 
+export async function authenticateVip(email, password) {
+  const investor = await findInvestorByEmail(email);
+  if (!investor) return null;
+  if (investor.status !== 'active') return { locked: true, reason: 'Account is disabled. Contact your fund administrator.' };
+  const valid = await verifyPassword(password, investor.hashedPassword);
+  if (!valid) return null;
+  await recordLogin(investor._id);
+  return investor;
+}
+
 // ── Event Tracking ──────────────────────────────────────────────────────────
 
 export async function logEvent(userId, type, metadata = {}, req = null) {

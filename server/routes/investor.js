@@ -16,6 +16,7 @@ import {
   updateInvestor,
   deleteInvestor,
   authenticateInvestor,
+  authenticateVip,
   logEvent,
   getInvestorActivity,
   getAnalyticsSummary,
@@ -70,6 +71,44 @@ investorAuthRouter.post('/login', async (req, res) => {
         investmentAmount: investor.investmentAmount || null,
         loginCount: (investor.loginCount || 0) + 1, // already incremented
         maxLogins: investor.maxLogins || 5,
+        allowedPages: investor.allowedPages || [],
+        allowedDocIds: investor.allowedDocIds || [],
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VIP AUTH (unauthenticated — no login limit)
+// ══════════════════════════════════════════════════════════════════════════════
+
+export const vipAuthRouter = express.Router();
+
+vipAuthRouter.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+
+    const investor = await authenticateVip(email, password);
+    if (!investor) return res.status(401).json({ error: 'Invalid credentials' });
+    if (investor.locked) return res.status(403).json({ error: investor.reason });
+
+    const token = generateInvestorToken(investor._id, investor.email);
+    await logEvent(investor._id, 'session_start', { portal: 'vip' }, req);
+
+    res.json({
+      token,
+      email: investor.email,
+      role: 'investor',
+      profile: {
+        name: investor.name,
+        company: investor.company,
+        email: investor.email,
+        investmentAmount: investor.investmentAmount || null,
+        loginCount: 0,
+        maxLogins: 999999,
         allowedPages: investor.allowedPages || [],
         allowedDocIds: investor.allowedDocIds || [],
       },

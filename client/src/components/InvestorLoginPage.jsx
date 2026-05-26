@@ -15,7 +15,8 @@ export default function InvestorLoginPage({ onLogin, tryBothAuth }) {
     setError(null);
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/auth/investor/login`, {
+      const authPath = tryBothAuth ? '/auth/vip/login' : '/auth/investor/login';
+      const response = await fetch(`${API_BASE}${authPath}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

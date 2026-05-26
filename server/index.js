@@ -90,7 +90,7 @@ import {
 import newsletterRouter from './routes/newsletter.js';
 import dataroomRouter from './routes/dataroom.js';
 import complianceRouter from './routes/compliance.js';
-import { investorAuthRouter, investorAdminRouter, investorSelfRouter } from './routes/investor.js';
+import { investorAuthRouter, vipAuthRouter, investorAdminRouter, investorSelfRouter } from './routes/investor.js';
 import { ensureInvestorIndexes, logEvent, getPortalAnalytics } from './investorService.js';
 import {
   ensureAccessRequestIndexes, createAccessRequest, emailAlreadyInUse,
@@ -5848,6 +5848,7 @@ app.use('/api/compliance', authenticateJWT, complianceRouter);
 
 // Investor portal routes
 app.use('/auth/investor', investorAuthRouter);                          // unauthenticated login
+app.use('/auth/vip', vipAuthRouter);                                   // VIP login (no login limit)
 app.use('/api/investors', authenticateJWT, requireAdmin, investorAdminRouter); // admin management
 app.use('/api/investor', authenticateJWT, investorSelfRouter);          // investor self-service
 

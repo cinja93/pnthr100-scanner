@@ -25,13 +25,14 @@ export function getDefaultPages() {
 // Pages allowed per portal mode (fallback when user has no per-user allowedPages)
 export const PORTAL_PAGES = {
   den:      null, // Admin demo mode — full access, no page filtering
-  investor: ['apex', 'perch', 'sectors', 'etf', 'earnings', 'jungle', 'pulse', 'data-room', 'ir-live'],
+  investor: ['ir-live', 'data-room', 'perch', 'earnings', 'pulse', 'ai300Index', 'bondHeat', 'prey', 'apex', 'search', 'jungle', 'sectors', 'etf', 'long', 'short'],
   // VIP: member-scoped view. Per-user data isolation (portfolio/journal/
   // assistant/watchlist) is enforced server-side via ownerId filters.
   vip: [
-    'perch', 'earnings', 'pulse', 'portfolio', 'assistant',
-    'search', 'prey', 'apex', 'jungle', 'long', 'short', 'etf', 'sectors',
-    'journal', 'watchlist', 'orders', 'bondHeat', 'data-room',
+    'ir-live', 'data-room', 'perch', 'earnings', 'pulse', 'ai300Index', 'bondHeat',
+    'orders', 'prey', 'apex', 'search',
+    'jungle', 'sectors', 'jungleHeat', 'etf', 'long', 'short',
+    'assistant', 'journal', 'watchlist', 'portfolio',
   ],
 };
 

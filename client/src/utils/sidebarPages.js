@@ -8,42 +8,48 @@
  *                        Defaults to UNCHECKED for new investors.
  * adminOnly: true     → page is only shown to admins in the sidebar.
  *                        Still assignable in the portal for VIPs/investors.
+ *
+ * Groups and labels must match Sidebar.jsx NAV_GROUPS exactly.
  */
 const SIDEBAR_PAGES = [
+  // Investor's Den
+  { key: 'ir-live',           label: 'Intelligence Report' },
+  { key: 'data-room',        label: 'Data Room' },
+
   // This Week
-  { key: 'perch',      label: 'PNTHR Perch' },
-  { key: 'earnings',   label: 'PNTHR Calendar' },
+  { key: 'perch',            label: 'Perch' },
+  { key: 'earnings',         label: 'Calendar' },
+
+  // Market Pulse
+  { key: 'pulse',            label: 'Pulse' },
+  { key: 'ai300Index',       label: 'AI 300 Index' },
+  { key: 'bondHeat',         label: 'Bond Yields' },
 
   // PNTHR Live
-  { key: 'pulse',      label: 'PNTHR Pulse' },
-  { key: 'assistant',  label: 'PNTHR Assistant',  personalData: true },
-  { key: 'orders',     label: 'PNTHR Orders' },
-  { key: 'aiOrders',   label: 'PNTHR AI Orders' },
+  { key: 'orders',           label: 'Orders' },
 
-  // PNTHR Hunt
-  { key: 'search',     label: 'PNTHR Search' },
-  { key: 'prey',       label: 'PNTHR Prey' },
-  { key: 'apex',       label: 'PNTHR Kill' },
-  { key: 'aiKill',     label: 'PNTHR AI Kill' },
+  // Strategy
+  { key: 'prey',             label: 'Prey' },
+  { key: 'apex',             label: 'Kill' },
+  { key: 'search',           label: 'Search' },
 
-  // PNTHR Jungle
-  { key: 'jungle',     label: 'Carnivore Jungle' },
-  { key: 'aiJungle',   label: 'PNTHR AI 300 Index' },
-  { key: 'aiSectors',  label: 'PNTHR AI Sectors' },
-  { key: 'bondHeat',   label: 'PNTHR Bond Heat' },
-  { key: 'long',       label: 'PNTHR 100 Longs' },
-  { key: 'short',      label: 'PNTHR 100 Shorts' },
-  { key: 'etf',        label: "PNTHR ETF's" },
-  { key: 'sectors',    label: 'PNTHR Sectors' },
+  // Universe
+  { key: 'jungle',           label: 'Jungle' },
+  { key: 'sectors',          label: 'Sectors' },
+  { key: 'jungleHeat',       label: 'Heat Map' },
+  { key: 'etf',              label: "ETF's" },
+  { key: 'long',             label: '100 Longs' },
+  { key: 'short',            label: '100 Shorts' },
 
-  // PNTHR Data
-  { key: 'journal',    label: 'PNTHR Journal',    personalData: true },
-  { key: 'portfolio',  label: 'PNTHR Portfolio',  personalData: true },
-  { key: 'ir-live',    label: 'AI Intelligence Report Live' },
-  { key: 'watchlist',  label: 'Watchlist' },
-
-  // Always last
-  { key: 'data-room',  label: 'PNTHR Data Room' },
+  // Internal
+  { key: 'assistant',        label: 'Assistant',       personalData: true },
+  { key: 'journal',          label: 'Journal',         personalData: true },
+  { key: 'signal-history',   label: 'Signal History' },
+  { key: 'history',          label: 'Kill 10' },
+  { key: 'kill-test',        label: 'Kill Test' },
+  { key: 'compliance',       label: 'Compliance' },
+  { key: 'watchlist',        label: 'Watchlist' },
+  { key: 'portfolio',        label: 'Portfolio',       personalData: true },
 ];
 
 export default SIDEBAR_PAGES;

@@ -270,9 +270,9 @@ export default function PulsePage({ onNavigate, fund }) {
           <YieldGauge label="2Y" subLabel="2-Year Yield" data={data.treasuryYields?.y2} onClick={() => { setChartList([{ ticker: 'FRED:DGS2' }]); setChartIndex(0); }} />
           <YieldGauge label="10Y" subLabel="10-Year Yield" data={data.treasuryYields?.y10} onClick={() => { setChartList([{ ticker: 'FRED:DGS10' }]); setChartIndex(0); }} />
           <YieldGauge label="30Y" subLabel="30-Year Yield" data={data.treasuryYields?.y30} onClick={() => { setChartList([{ ticker: 'FRED:DGS30' }]); setChartIndex(0); }} />
-          <RecessionGauge data={data.recessionIndicator} onClick={() => { setChartList([{ ticker: 'FRED:UNRATE' }]); setChartIndex(0); }} />
-          <BuffettGauge data={data.buffettIndicator} onClick={() => { setChartList([{ ticker: 'FRED:WILL5000INDFC' }]); setChartIndex(0); }} />
-          <ConsumerSentimentGauge data={data.consumerSentiment} onClick={() => { setChartList([{ ticker: 'FRED:UMCSENT' }]); setChartIndex(0); }} />
+          <RecessionGauge data={data.recessionIndicator} />
+          <BuffettGauge data={data.buffettIndicator} />
+          <ConsumerSentimentGauge data={data.consumerSentiment} />
         </div>
       </div>
 

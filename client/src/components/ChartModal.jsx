@@ -41,6 +41,9 @@ function isMacroTicker(ticker) {
 function isEconomicData(ticker) {
   return ticker?.startsWith('FRED:');
 }
+// Benchmark tickers that should use simple EMA-cross signals (detectIndexSignals)
+// instead of the full PNTHR structural stop system (detectAllSignals).
+const BENCHMARK_TICKERS = new Set(['SPY', 'QQQ', 'IWM', 'GLD', 'BTCUSD']);
 
 const _killRankCallbacks = [];
 const KILL_RANK_TTL = 30 * 60 * 1000; // 30 minutes
@@ -173,6 +176,39 @@ function ssInitStop(twoWeekHigh, entryClose, atr) {
 
 // Scan full weekly history; returns events: BL/SS entries + BE/SE exits.
 //
+// Simple EMA cross signals for index/benchmark charts (^IXIC, ^DJI, ^NYA, etc.)
+// Uses pure close-vs-EMA logic — no structural stops, daylight zones, or gate offsets.
+// BL fires when close crosses above EMA; BE fires when close crosses below.
+function detectIndexSignals(weeklyData, period = 21) {
+  if (weeklyData.length < period + 1) return { events: [], pnthrStop: null, currentWeekStop: null, currentSignal: null, activeType: null };
+  const emaData = calculateEMA(weeklyData, period);
+  const events = [];
+  let state = null; // 'BL' or 'SS'
+
+  for (let wi = period; wi < weeklyData.length; wi++) {
+    const emaIdx = wi - (period - 1);
+    if (emaIdx < 0 || !emaData[emaIdx]) continue;
+    const bar = weeklyData[wi];
+    const ema = emaData[emaIdx].value;
+
+    if (bar.close > ema && state !== 'BL') {
+      if (state === 'SS') {
+        events.push({ time: bar.time, signal: 'SE', barLow: bar.low, barHigh: bar.high });
+      }
+      events.push({ time: bar.time, signal: 'BL', barLow: bar.low, barHigh: bar.high });
+      state = 'BL';
+    } else if (bar.close < ema && state !== 'SS') {
+      if (state === 'BL') {
+        events.push({ time: bar.time, signal: 'BE', barLow: bar.low, barHigh: bar.high });
+      }
+      events.push({ time: bar.time, signal: 'SS', barLow: bar.low, barHigh: bar.high });
+      state = 'SS';
+    }
+  }
+
+  return { events, pnthrStop: null, currentWeekStop: null, currentSignal: state, activeType: state };
+}
+
 // BL (Launch): weekLow is 1–10% above 21-EMA, within first 3 bars of long-daylight streak
 //              (current or previous bar is the 1st or 2nd bar where low > EMA).
 // SS (Failure): weekHigh is 1–10% below 21-EMA, within first 3 bars of short-daylight streak.
@@ -627,12 +663,16 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
     if (!_isEconData) {
     // Strategy-aware EMA period: AI universe tickers use AI sector EMA (30-40W),
     // carnivore tickers use GICS OpEMA (18-26W), 679-only tickers use GICS OpEMA.
-    const aiEmaPeriod2 = getAiAwareEmaPeriod(stock?.ticker);
-    const emaPeriod = aiEmaPeriod2 || getSectorEmaPeriod(stock?.sector);
-    const gateOffset = getAiAwareGateOffset(stock?.ticker) ?? 0.10;
+    // Benchmark tickers (indices + gauge ETFs) use 21W with simple EMA cross (no structural stops).
+    const _isBenchmark = stock?.ticker?.startsWith('^') || BENCHMARK_TICKERS.has(stock?.ticker);
+    const aiEmaPeriod2 = _isBenchmark ? null : getAiAwareEmaPeriod(stock?.ticker);
+    const emaPeriod = _isBenchmark ? 21 : (aiEmaPeriod2 || getSectorEmaPeriod(stock?.sector));
+    const gateOffset = _isBenchmark ? 0.10 : (getAiAwareGateOffset(stock?.ticker) ?? 0.10);
 
-    // Compute signals and live stops from full history
-    const { events: allDetected, pnthrStop: ps, currentWeekStop: detectedCws, currentSignal: cs } = detectAllSignals(allWeeklyData, emaPeriod, isEtfTicker(stock?.ticker), gateOffset);
+    // Compute signals: benchmarks use simple EMA cross, stocks use full PNTHR state machine
+    const { events: allDetected, pnthrStop: ps, currentWeekStop: detectedCws, currentSignal: cs } = _isBenchmark
+      ? detectIndexSignals(allWeeklyData, emaPeriod)
+      : detectAllSignals(allWeeklyData, emaPeriod, isEtfTicker(stock?.ticker), gateOffset);
 
     // Compute signal age (weeks since last BL/SS event) from chart data
     if (cs === 'BL' || cs === 'SS') {

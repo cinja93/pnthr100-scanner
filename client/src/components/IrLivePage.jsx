@@ -673,7 +673,7 @@ const FUND_CONFIG = {
     name: 'PNTHR AI Elite 300 Fund',
     netLabel: 'AI ELITE (NET)',
     compLabel: 'AI ELITE FUND',
-    subtitle: (endDate) => `Backtest Performance Report | Jan 2022 – ${endDate} | Multi-Strategy Pyramiding + MCE | PNTHR AI Universe (~300 Names) | v10.1`,
+    subtitle: (endDate) => `Backtest Performance Report | EMA Warm-Up Jan 2022 (First Trade Jun 2022) – ${endDate} | Multi-Strategy Pyramiding + MCE | PNTHR AI Universe (~300 Names) | v10.1`,
     apiBase: 'ir-live',
     footer: 'AI ELITE FUND',
     curveLabel: 'AI Elite Fund',

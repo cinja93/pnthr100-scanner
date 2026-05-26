@@ -3,7 +3,7 @@ import logo from '../assets/panther head.png';
 
 const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
 
-export default function InvestorLoginPage({ onLogin }) {
+export default function InvestorLoginPage({ onLogin, tryBothAuth }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -21,11 +21,23 @@ export default function InvestorLoginPage({ onLogin }) {
         body: JSON.stringify({ email, password }),
       });
       const data = await response.json();
-      if (!response.ok) {
-        setError(data.error || 'Invalid credentials');
+      if (response.ok) {
+        onLogin(data.token, data.email, data.profile ?? null, 'investor');
         return;
       }
-      onLogin(data.token, data.email, data.profile ?? null, 'investor');
+      if (tryBothAuth) {
+        const res2 = await fetch(`${API_BASE}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const d2 = await res2.json();
+        if (res2.ok) {
+          onLogin(d2.token, email, d2, d2.role || 'member');
+          return;
+        }
+      }
+      setError(data.error || 'Invalid credentials');
     } catch {
       setError('Unable to connect to server. Please try again.');
     } finally {

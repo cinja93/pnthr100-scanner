@@ -228,7 +228,7 @@ function AppAuth() {
 
   // Show appropriate login page based on portal mode
   if (!authToken) {
-    if (isInvestorPortal || isVipPortal) return <InvestorLoginPage onLogin={handleLogin} />;
+    if (isInvestorPortal || isVipPortal) return <InvestorLoginPage onLogin={handleLogin} tryBothAuth={isVipPortal} />;
     return <LoginPage onLogin={handleLogin} />;
   }
 

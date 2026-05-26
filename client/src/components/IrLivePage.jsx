@@ -16,9 +16,9 @@ const BLUE   = '#0096ff';
 const GOLD   = '#ffd700';
 
 const TIER_CONFIG = [
-  { key: '1m',   label: 'Wagyu $1.00M',       short: '$1.00M' },
-  { key: '500k', label: 'Porterhouse $500K',   short: '$500K' },
-  { key: '100k', label: 'Filet $100K',         short: '$100K' },
+  { key: '1m',   label: 'Wagyu $1.00M',       short: '$1.00M', startingCapital: '$1,000,000' },
+  { key: '500k', label: 'Porterhouse $500K',   short: '$500K',  startingCapital: '$500,000' },
+  { key: '100k', label: 'Filet $100K',         short: '$100K',  startingCapital: '$100,000' },
 ];
 
 const SECTIONS = [
@@ -82,6 +82,50 @@ function MetricCard({ label, value, sub, color, small, info }) {
           <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
           <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>{info}</div>
           <span onClick={() => setShowInfo(false)} style={{ position: 'absolute', top: 8, right: 10, color: '#555', cursor: 'pointer', fontSize: 14 }}>✕</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TierButton({ tier, active, onClick, fundName }) {
+  const [showInfo, setShowInfo] = useState(false);
+  const popRef = useRef(null);
+
+  useEffect(() => {
+    if (!showInfo) return;
+    function onClickOutside(e) {
+      if (popRef.current && !popRef.current.contains(e.target)) setShowInfo(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [showInfo]);
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <button onClick={onClick}
+        style={{
+          padding: '8px 20px', border: `1px solid ${active ? GOLD : BORDER}`,
+          background: active ? 'rgba(255,215,0,0.1)' : 'transparent',
+          color: active ? GOLD : '#888', fontWeight: 700, fontSize: 13,
+          borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
+        }}>
+        {tier.label}
+      </button>
+      <span
+        onClick={(e) => { e.stopPropagation(); setShowInfo(v => !v); }}
+        style={{ cursor: 'pointer', color: '#555', fontSize: 13, lineHeight: 1 }}
+      >ⓘ</span>
+      {showInfo && (
+        <div ref={popRef} style={{
+          position: 'absolute', top: '100%', left: 0, zIndex: 100, marginTop: 6,
+          background: '#1a1a1a', border: '1px solid #444', borderRadius: 8,
+          padding: '14px 16px', width: 300, boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, marginBottom: 6 }}>{tier.label}</div>
+          <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>
+            This tier simulates what your account would have grown to if you had invested {tier.startingCapital} at the inception of the {fundName} strategy, compounded through the full backtested period.
+          </div>
         </div>
       )}
     </div>
@@ -700,15 +744,7 @@ export default function IrLivePage({ fund = 'ai300' }) {
       {/* Tier tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {TIER_CONFIG.map(t => (
-          <button key={t.key} onClick={() => setTier(t.key)}
-            style={{
-              padding: '8px 20px', border: `1px solid ${tier === t.key ? GOLD : BORDER}`,
-              background: tier === t.key ? 'rgba(255,215,0,0.1)' : 'transparent',
-              color: tier === t.key ? GOLD : '#888', fontWeight: 700, fontSize: 13,
-              borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
-            }}>
-            {t.label}
-          </button>
+          <TierButton key={t.key} tier={t} active={tier === t.key} onClick={() => setTier(t.key)} fundName={fc.name} />
         ))}
       </div>
 

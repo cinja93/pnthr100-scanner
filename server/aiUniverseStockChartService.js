@@ -81,11 +81,6 @@ export async function getAiStockChartData(ticker) {
     profilePromise,
   ]);
 
-  // If neither AI nor in any Mongo collection, ticker is unknown
-  if (!isAI && !dailyDoc && !weeklyDoc) {
-    return { ok: false, error: `No chart data for ticker: ${ticker}` };
-  }
-
   const profile = Array.isArray(profileArr) && profileArr.length > 0 ? profileArr[0] : null;
 
   // Resolve EMA period + gate offset
@@ -108,8 +103,49 @@ export async function getAiStockChartData(ticker) {
   }
   const liveQuote = Array.isArray(liveQuoteArr) && liveQuoteArr.length > 0 ? liveQuoteArr[0] : null;
 
-  const dailyRaw  = dailyDoc?.daily   || [];
-  const weeklyRaw = weeklyDoc?.weekly || [];
+  let dailyRaw  = dailyDoc?.daily   || [];
+  let weeklyRaw = weeklyDoc?.weekly || [];
+
+  // FMP live fallback: when a non-AI ticker has no stored candles, fetch from
+  // FMP historical-price-full and synthesize weekly bars on the fly.
+  if (!isAI && dailyRaw.length === 0 && weeklyRaw.length === 0) {
+    try {
+      const from = new Date();
+      from.setFullYear(from.getFullYear() - 5);
+      const fromStr = from.toISOString().split('T')[0];
+      const fmpBars = await fetchFMP(`/historical-price-full/${ticker}?from=${fromStr}`);
+      const hist = (fmpBars?.historical || []).filter(b => b.close > 0 && b.open > 0);
+      if (hist.length > 0) {
+        dailyRaw = hist.map(b => ({
+          date: b.date, open: +b.open, high: +b.high, low: +b.low,
+          close: +b.close, volume: b.volume || 0,
+        })).sort((a, b) => a.date.localeCompare(b.date));
+        const weekMap = new Map();
+        for (const b of dailyRaw) {
+          const d = new Date(`${b.date}T12:00:00-05:00`);
+          const dow = d.getUTCDay();
+          const daysToMon = dow === 0 ? -6 : 1 - dow;
+          d.setUTCDate(d.getUTCDate() + daysToMon);
+          const mon = d.toISOString().slice(0, 10);
+          const w = weekMap.get(mon);
+          if (!w) {
+            weekMap.set(mon, { weekOf: mon, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume || 0 });
+          } else {
+            w.high  = Math.max(w.high, b.high);
+            w.low   = Math.min(w.low, b.low);
+            w.close = b.close;
+            w.volume += (b.volume || 0);
+          }
+        }
+        weeklyRaw = [...weekMap.values()].sort((a, b) => a.weekOf.localeCompare(b.weekOf));
+      }
+    } catch (e) {
+      console.warn(`[aiStockChart] FMP fallback failed for ${ticker}:`, e.message);
+    }
+    if (dailyRaw.length === 0) {
+      return { ok: false, error: `No chart data for ticker: ${ticker}` };
+    }
+  }
 
   // Sort ascending for chart consumption.
   // We keep TWO views of the bars:

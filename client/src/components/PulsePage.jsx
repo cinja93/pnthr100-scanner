@@ -10,6 +10,13 @@ import AumShield from './AumShield';
 import PageHeader from './PageHeader';
 import { useFund } from '../contexts/FundContext';
 
+// Market Overview gauge tickers — these use ChartModal (FMP direct) instead of
+// AiTickerChartModal (MongoDB candles) because they're reference charts, not
+// tradeable universe stocks. Prevents data gaps from MongoDB candle collections.
+const PULSE_GAUGE_TICKERS = new Set([
+  'SPY', 'QQQ', 'IWM', 'GLD', 'UUP', 'BTCUSD',
+]);
+
 // Returns true if developing signals should be shown (Mon–Thu anytime; Fri before 4:15 PM ET)
 function shouldShowDevelopingSignals() {
   const now = new Date();
@@ -416,8 +423,9 @@ export default function PulsePage({ onNavigate, fund }) {
       )}
       {chartList.length > 0 && (() => {
         const activeTicker = (chartList[chartIndex]?.ticker || chartList[chartIndex] || '');
-        const isMacro = activeTicker.startsWith('^') || activeTicker.startsWith('FRED:');
-        return isMacro
+        const isGaugeTicker = activeTicker.startsWith('^') || activeTicker.startsWith('FRED:')
+          || PULSE_GAUGE_TICKERS.has(activeTicker);
+        return isGaugeTicker
           ? <ChartModal stocks={chartList.map(s => ({ ticker: s.ticker || s }))} initialIndex={chartIndex} onClose={() => { setChartList([]); setChartIndex(0); }} />
           : <AiTickerChartModal tickers={chartList.map(s => s.ticker || s)} initialIndex={chartIndex} onClose={() => { setChartList([]); setChartIndex(0); }} />;
       })()}

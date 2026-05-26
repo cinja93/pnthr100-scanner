@@ -26,7 +26,8 @@ const TICKER_DISPLAY_NAMES = {
   '^VIX': 'CBOE VIX', '^GSPC': 'S&P 500',
   'FRED:FEDFUNDS': 'Federal Funds Rate', 'FRED:DGS2': '2-Year Treasury Yield',
   'FRED:DGS10': '10-Year Treasury Yield', 'FRED:DGS30': '30-Year Treasury Yield',
-  'FRED:DCOILWTICO': 'WTI Crude Oil', 'FRED:UNRATE': 'Unemployment Rate',
+  'FRED:DCOILWTICO': 'WTI Crude Oil', 'FRED:DTWEXBGS': 'US Dollar Index',
+  'FRED:UNRATE': 'Unemployment Rate',
   'FRED:WILL5000INDFC': 'Wilshire 5000 Total Market', 'FRED:UMCSENT': 'Consumer Sentiment',
   'BTCUSD': 'Bitcoin / USD',
 };
@@ -35,6 +36,10 @@ function getDisplayTicker(ticker) {
 }
 function isMacroTicker(ticker) {
   return ticker?.startsWith('^') || ticker?.startsWith('FRED:') || ticker === 'BTCUSD';
+}
+// Economic data (FRED series) — no signals/EMA. Index tickers (^) still get signals.
+function isEconomicData(ticker) {
+  return ticker?.startsWith('FRED:');
 }
 
 const _killRankCallbacks = [];
@@ -613,12 +618,13 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
       });
     });
 
-    // Skip EMA, signal detection, and stop lines for macro tickers (indices, yields, etc.)
-    const _isMacro = isMacroTicker(stock?.ticker);
+    // Skip EMA, signal detection, and stop lines for FRED economic data (yields, rates, etc.)
+    // Index tickers (^IXIC, ^DJI, etc.) still get EMA + signals with 21W period.
+    const _isEconData = isEconomicData(stock?.ticker);
     let resolvedStop = null;
     let cws = null;
 
-    if (!_isMacro) {
+    if (!_isEconData) {
     // Strategy-aware EMA period: AI universe tickers use AI sector EMA (30-40W),
     // carnivore tickers use GICS OpEMA (18-26W), 679-only tickers use GICS OpEMA.
     const aiEmaPeriod2 = getAiAwareEmaPeriod(stock?.ticker);
@@ -763,7 +769,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
       });
       cwsLineSeries.setData(last3.map(b => ({ time: b.time, value: cws })));
     }
-    } // end if (!_isMacro)
+    } // end if (!_isEconData)
 
     chart.timeScale().fitContent();
 

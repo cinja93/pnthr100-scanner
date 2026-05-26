@@ -1331,6 +1331,7 @@ const FRED_SERIES_LABELS = {
   'UNRATE':         'Unemployment Rate',
   'WILL5000INDFC':  'Wilshire 5000 (Total Market)',
   'UMCSENT':        'Consumer Sentiment Index',
+  'DTWEXBGS':       'US Dollar Index (Trade Weighted)',
   'NASDAQCOM':      'NASDAQ Composite',
   'DJIA':           'Dow Jones Industrial Average',
   'VIXCLS':         'CBOE VIX',

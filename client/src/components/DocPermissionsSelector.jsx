@@ -17,7 +17,7 @@ export default function DocPermissionsSelector({ selected, onChange, defaultFund
   }, []);
 
   useEffect(() => {
-    if (!defaultFund || didAutoSelect || docs.length === 0) return;
+    if (!defaultFund || didAutoSelect || docs.length === 0 || selected.length > 0) return;
     const kw = defaultFund === 'ai' ? ['ai elite 300', 'ai elite'] : ['carnivore', '679', 'supporting'];
     const ids = docs.filter(d => {
       const lower = (d.section || '').toLowerCase();

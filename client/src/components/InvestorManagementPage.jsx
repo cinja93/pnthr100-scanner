@@ -411,7 +411,10 @@ export default function InvestorManagementPage() {
 }
 
 function InlinePageEditor({ investorId, allowedPages, allowedDocIds, onSave, onPreview }) {
-  const [pages, setPages] = useState(allowedPages);
+  const [pages, setPages] = useState(() => {
+    const defaults = getDefaultPages();
+    return [...new Set([...allowedPages, ...defaults])];
+  });
   const [docIds, setDocIds] = useState(allowedDocIds || []);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -466,7 +469,7 @@ function InlinePageEditor({ investorId, allowedPages, allowedDocIds, onSave, onP
 
   return (
     <div style={{ borderTop: '1px solid #222', padding: '12px 18px', background: '#0f0f0f' }}>
-      <PagePermissionsSelector selected={pages} onChange={handlePagesChange} docIds={docIds} onDocIdsChange={handleDocIdsChange} />
+      <PagePermissionsSelector selected={pages} onChange={handlePagesChange} docIds={docIds} onDocIdsChange={handleDocIdsChange} defaultDocFund="ai" />
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         {dirty && (
           <button onClick={handleSave} disabled={saving} style={{

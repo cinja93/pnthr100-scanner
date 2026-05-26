@@ -376,21 +376,48 @@ export default function AiOrdersPage() {
   });
   const [lastRefresh, setLastRefresh] = useState(null);
   const [reentrySignals, setReentrySignals] = useState([]);
-  const mceFirstSeen = useRef({});
+  const MCE_LS_KEY = 'pnthr.mce.firstSeen';
+  const MCE_NEW_MS = 60 * 60 * 1000;
+  const mceFirstSeen = useRef(() => {
+    try {
+      const raw = localStorage.getItem(MCE_LS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const now = Date.now();
+        const cleaned = {};
+        for (const [t, ts] of Object.entries(parsed)) {
+          if (now - ts < MCE_NEW_MS) cleaned[t] = ts;
+        }
+        return cleaned;
+      }
+    } catch {}
+    return {};
+  });
+  if (typeof mceFirstSeen.current === 'function') mceFirstSeen.current = mceFirstSeen.current();
   useEffect(() => {
     if (!reentrySignals.length) return;
     const now = Date.now();
+    let changed = false;
     for (const s of reentrySignals) {
-      if (!mceFirstSeen.current[s.ticker]) mceFirstSeen.current[s.ticker] = now;
+      if (!mceFirstSeen.current[s.ticker]) {
+        mceFirstSeen.current[s.ticker] = now;
+        changed = true;
+      }
     }
     const currentTickers = new Set(reentrySignals.map(s => s.ticker));
     for (const t of Object.keys(mceFirstSeen.current)) {
-      if (!currentTickers.has(t)) delete mceFirstSeen.current[t];
+      if (!currentTickers.has(t) || (now - mceFirstSeen.current[t]) >= MCE_NEW_MS) {
+        delete mceFirstSeen.current[t];
+        changed = true;
+      }
+    }
+    if (changed) {
+      try { localStorage.setItem(MCE_LS_KEY, JSON.stringify(mceFirstSeen.current)); } catch {}
     }
   }, [reentrySignals]);
   const isMceNew = useCallback((ticker) => {
     const seen = mceFirstSeen.current[ticker];
-    return seen && (Date.now() - seen) < 60 * 60 * 1000;
+    return seen && (Date.now() - seen) < MCE_NEW_MS;
   }, []);
   const [dismissedMce, setDismissedMce] = useState(() => {
     try {

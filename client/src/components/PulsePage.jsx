@@ -2149,7 +2149,7 @@ function Ai300SectorPulse({ signals, sectorTiers, killDataLive, newSignals, onNa
           newBl={totalNewBl} newSs={totalNewSs}
           totalStocks={Object.values(totalStocksBySector).reduce((a, b) => a + b, 0)}
           highlight={true}
-          onClick={() => onNavigate?.('jungle')}
+          onClick={() => onNavigate?.('aiJungle')}
           onNewBlClick={() => onNewSignalClick?.('BL', null)}
           onNewSsClick={() => onNewSignalClick?.('SS', null)}
         />

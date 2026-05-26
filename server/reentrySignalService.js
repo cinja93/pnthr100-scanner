@@ -280,6 +280,8 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
         if (!cleared) {
           gated.push(results[i].ticker);
           results.splice(i, 1);
+        } else {
+          results[i].reentry = true;
         }
       }
       if (gated.length) console.log(`[MCE Cooldown] gated (no green 1H bar yet): ${gated.join(', ')}`);

@@ -1010,6 +1010,7 @@ export default function AiOrdersPage() {
                         <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                       <th style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>Sector 💪</th>
+                      <th style={{ padding: '6px 10px', textAlign: 'center', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>Re-entry</th>
                       {['L1 Trigger','Weekly Stop'].map(h => (
                         <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: '#a78bfa', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
@@ -1030,10 +1031,13 @@ export default function AiOrdersPage() {
                         ? `${s.sectorName.replace(/^AI /, '')}`
                         : '—';
                       return (
-                      <tr key={s.ticker} style={{ borderBottom: '1px solid rgba(124,58,237,0.1)', cursor: 'pointer' }}
+                      <tr key={s.ticker} style={{
+                        borderBottom: '1px solid rgba(124,58,237,0.1)', cursor: 'pointer',
+                        ...(s.reentry ? { background: 'rgba(96,165,250,0.10)' } : {}),
+                      }}
                         onClick={() => { setChartTickers(bullSignals.map(r => r.ticker)); setChartIndex(bullSignals.findIndex(r => r.ticker === s.ticker)); }}>
                         <td style={{
-                          padding: '6px 10px', fontWeight: 800, color: '#e9d5ff',
+                          padding: '6px 10px', fontWeight: 800, color: s.reentry ? '#93c5fd' : '#e9d5ff',
                           ...(isMceNew(s.ticker) ? { animation: 'mceNewFlash 2s ease-in-out infinite' } : {}),
                         }}>
                           {isMceNew(s.ticker) && <span style={{ color: '#fbbf24', fontSize: 9, fontWeight: 700, marginRight: 4, letterSpacing: '0.05em' }}>NEW</span>}
@@ -1044,6 +1048,9 @@ export default function AiOrdersPage() {
                           <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 10, marginRight: 4 }}>BULL</span>
                           <span style={{ color: fiveDay >= 0 ? '#16a34a' : '#f59e0b', fontWeight: 600 }}>{fiveDayStr}</span>
                           <span style={{ color: '#777', marginLeft: 4 }}>{sectorLabel}</span>
+                        </td>
+                        <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                          {s.reentry && <span style={{ color: '#fff', fontSize: 13 }}>✓</span>}
                         </td>
                         <td style={{ padding: '6px 10px', color: '#16a34a', fontWeight: 700 }}>${s.entryTrigger}</td>
                         <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>

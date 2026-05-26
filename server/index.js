@@ -1312,9 +1312,73 @@ app.post('/api/entry-dates', async (req, res) => {
 });
 
 // Get OHLCV daily price history for charting (5 years back)
+// ── FRED API for indices, yields, macro data ────────────────────────────────
+// Tickers starting with ^ or FRED: use FRED (Federal Reserve Economic Data).
+// FRED data is daily close only — we format as OHLC with close = open = high = low.
+const INDEX_TO_FRED = {
+  '^IXIC':  'NASDAQCOM',     // NASDAQ Composite
+  '^DJI':   'DJIA',          // Dow Jones Industrial Average
+  '^NYA':   'BOGZ1FL073164003Q',  // NYSE — fallback to Wilshire if needed
+  '^VIX':   'VIXCLS',        // CBOE Volatility Index
+  '^GSPC':  'SP500',          // S&P 500
+};
+const FRED_SERIES_LABELS = {
+  'FEDFUNDS':       'Federal Funds Rate',
+  'DGS2':           '2-Year Treasury Yield',
+  'DGS10':          '10-Year Treasury Yield',
+  'DGS30':          '30-Year Treasury Yield',
+  'DCOILWTICO':     'WTI Crude Oil',
+  'UNRATE':         'Unemployment Rate',
+  'WILL5000INDFC':  'Wilshire 5000 (Total Market)',
+  'UMCSENT':        'Consumer Sentiment Index',
+  'NASDAQCOM':      'NASDAQ Composite',
+  'DJIA':           'Dow Jones Industrial Average',
+  'VIXCLS':         'CBOE VIX',
+  'SP500':          'S&P 500',
+};
+
+async function fetchFredSeries(seriesId, years = 5) {
+  const FRED_KEY = process.env.FRED_API_KEY;
+  if (!FRED_KEY) return null;
+  const from = new Date();
+  from.setFullYear(from.getFullYear() - years);
+  const fromStr = from.toISOString().split('T')[0];
+  const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&observation_start=${fromStr}&api_key=${FRED_KEY}&file_type=json`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  if (!resp.ok) return null;
+  const json = await resp.json();
+  if (!json.observations?.length) return null;
+  // Convert FRED observations to chart-compatible OHLC format (descending date order like FMP)
+  return json.observations
+    .filter(o => o.value !== '.')
+    .map(o => {
+      const v = parseFloat(o.value);
+      return { date: o.date, open: v, high: v, low: v, close: v, volume: 0 };
+    })
+    .reverse();
+}
+
 app.get('/api/chart/:ticker', async (req, res) => {
   try {
     const { ticker } = req.params;
+
+    // Handle FRED: prefix (yields, macro indicators)
+    if (ticker.startsWith('FRED:')) {
+      const seriesId = ticker.slice(5);
+      const data = await fetchFredSeries(seriesId);
+      if (data?.length) return res.json(data);
+      return res.status(404).json({ error: `No FRED data for series: ${seriesId}` });
+    }
+
+    // Handle index symbols — try FRED first
+    const fredId = INDEX_TO_FRED[ticker];
+    if (fredId) {
+      const data = await fetchFredSeries(fredId);
+      if (data?.length) return res.json(data);
+      // If FRED fails, fall through to FMP
+    }
+
+    // Standard FMP fetch for stocks/ETFs
     const FMP_API_KEY = process.env.FMP_API_KEY;
     const from = new Date();
     from.setFullYear(from.getFullYear() - 5);
@@ -1325,7 +1389,11 @@ app.get('/api/chart/:ticker', async (req, res) => {
     if (!response.ok) throw new Error(`FMP error: ${response.status}`);
     const data = await response.json();
     if (data['Error Message']) throw new Error(data['Error Message']);
-    res.json(data.historical || []);
+    const historical = data.historical || [];
+    if (historical.length === 0) {
+      return res.status(404).json({ error: `No chart data available for ${ticker}` });
+    }
+    res.json(historical);
   } catch (error) {
     console.error('Error fetching chart data:', error);
     res.status(500).json({ error: 'Failed to fetch chart data' });

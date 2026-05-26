@@ -20,6 +20,23 @@ import ChartDrawingOverlay from './ChartDrawingOverlay';
 let _killRankMap = null;
 let _killRankMapTime = 0;
 let _killRankFetching = false;
+// Friendly display names for non-stock tickers (indices, FRED series)
+const TICKER_DISPLAY_NAMES = {
+  '^IXIC': 'NASDAQ Composite', '^DJI': 'Dow Jones', '^NYA': 'NYSE Composite',
+  '^VIX': 'CBOE VIX', '^GSPC': 'S&P 500',
+  'FRED:FEDFUNDS': 'Federal Funds Rate', 'FRED:DGS2': '2-Year Treasury Yield',
+  'FRED:DGS10': '10-Year Treasury Yield', 'FRED:DGS30': '30-Year Treasury Yield',
+  'FRED:DCOILWTICO': 'WTI Crude Oil', 'FRED:UNRATE': 'Unemployment Rate',
+  'FRED:WILL5000INDFC': 'Wilshire 5000 Total Market', 'FRED:UMCSENT': 'Consumer Sentiment',
+  'BTCUSD': 'Bitcoin / USD',
+};
+function getDisplayTicker(ticker) {
+  return TICKER_DISPLAY_NAMES[ticker] || ticker;
+}
+function isMacroTicker(ticker) {
+  return ticker?.startsWith('^') || ticker?.startsWith('FRED:') || ticker === 'BTCUSD';
+}
+
 const _killRankCallbacks = [];
 const KILL_RANK_TTL = 30 * 60 * 1000; // 30 minutes
 
@@ -959,7 +976,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
         <div className={styles.header}>
           <div className={styles.stockInfo}>
             <div className={styles.tickerRow}>
-              <span className={styles.ticker}>{stock.ticker}</span>
+              <span className={styles.ticker}>{getDisplayTicker(stock.ticker)}</span>
               {ai300Overlap.has(stock.ticker) && (
                 <span style={{ fontSize: 9, fontWeight: 800, background: '#fcf000', color: '#000',
                   padding: '1px 5px', borderRadius: 3, letterSpacing: '0.04em', marginLeft: 4 }}>AI 300</span>

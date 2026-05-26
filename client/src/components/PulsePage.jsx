@@ -252,19 +252,19 @@ export default function PulsePage({ onNavigate, fund }) {
         <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <VixThermometer vix={vix} onClick={() => { setChartList([{ ticker: '^VIX' }]); setChartIndex(0); }} />
           <MarketGauge label="GLD" subLabel="Gold" data={data.marketGauges?.gld} isGold={true} onClick={() => { setChartList([{ ticker: 'GLD' }]); setChartIndex(0); }} />
-          <MarketGauge label={data.marketGauges?.crude?.symbol === 'USO' ? 'USO' : 'WTI'} subLabel="Crude Oil" data={data.marketGauges?.crude} onClick={() => { setChartList([{ ticker: data.marketGauges?.crude?.symbol || 'USO' }]); setChartIndex(0); }} />
+          <MarketGauge label="WTI" subLabel="Crude Oil" data={data.marketGauges?.crude} onClick={() => { setChartList([{ ticker: 'FRED:DCOILWTICO' }]); setChartIndex(0); }} />
           <MarketGauge label="USD" subLabel="Dollar Index" data={data.marketGauges?.usd} isIndex={true} onClick={() => { setChartList([{ ticker: 'UUP' }]); setChartIndex(0); }} />
           <MarketGauge label="BTC" subLabel="Bitcoin" data={data.marketGauges?.btc} isBtc={true} onClick={() => { setChartList([{ ticker: 'BTCUSD' }]); setChartIndex(0); }} />
         </div>
         {/* ROW 3: Interest rates + macro */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <YieldGauge label="FED" subLabel="Fed Rate (1mo)" data={data.treasuryYields?.fed} />
-          <YieldGauge label="2Y" subLabel="2-Year Yield" data={data.treasuryYields?.y2} />
-          <YieldGauge label="10Y" subLabel="10-Year Yield" data={data.treasuryYields?.y10} />
-          <YieldGauge label="30Y" subLabel="30-Year Yield" data={data.treasuryYields?.y30} />
-          <RecessionGauge data={data.recessionIndicator} />
-          <BuffettGauge data={data.buffettIndicator} />
-          <ConsumerSentimentGauge data={data.consumerSentiment} />
+          <YieldGauge label="FED" subLabel="Fed Rate (1mo)" data={data.treasuryYields?.fed} onClick={() => { setChartList([{ ticker: 'FRED:FEDFUNDS' }]); setChartIndex(0); }} />
+          <YieldGauge label="2Y" subLabel="2-Year Yield" data={data.treasuryYields?.y2} onClick={() => { setChartList([{ ticker: 'FRED:DGS2' }]); setChartIndex(0); }} />
+          <YieldGauge label="10Y" subLabel="10-Year Yield" data={data.treasuryYields?.y10} onClick={() => { setChartList([{ ticker: 'FRED:DGS10' }]); setChartIndex(0); }} />
+          <YieldGauge label="30Y" subLabel="30-Year Yield" data={data.treasuryYields?.y30} onClick={() => { setChartList([{ ticker: 'FRED:DGS30' }]); setChartIndex(0); }} />
+          <RecessionGauge data={data.recessionIndicator} onClick={() => { setChartList([{ ticker: 'FRED:UNRATE' }]); setChartIndex(0); }} />
+          <BuffettGauge data={data.buffettIndicator} onClick={() => { setChartList([{ ticker: 'FRED:WILL5000INDFC' }]); setChartIndex(0); }} />
+          <ConsumerSentimentGauge data={data.consumerSentiment} onClick={() => { setChartList([{ ticker: 'FRED:UMCSENT' }]); setChartIndex(0); }} />
         </div>
       </div>
 
@@ -768,7 +768,7 @@ const YIELD_ZONES = [
   { from: 6, to: 8, color: '#dc3545' },
 ];
 
-function YieldGauge({ label, subLabel, data }) {
+function YieldGauge({ label, subLabel, data, onClick }) {
   const rate = data?.rate ?? null;
   const changeBps = data?.changeBps ?? null;
   const subValue = rate !== null
@@ -785,6 +785,7 @@ function YieldGauge({ label, subLabel, data }) {
       subLabel={subLabel}
       subValue={subValue}
       subValueColor={subValueColor}
+      onClick={onClick}
     />
   );
 }
@@ -804,7 +805,7 @@ const GAUGE_TOOLTIP_STYLE = {
   color: '#ccc', textAlign: 'left', marginBottom: 6, pointerEvents: 'none',
 };
 
-function RecessionGauge({ data }) {
+function RecessionGauge({ data, onClick }) {
   const [hover, setHover] = React.useState(false);
   const gauge = !data ? (
     <SemiGauge
@@ -815,6 +816,7 @@ function RecessionGauge({ data }) {
       subLabel="PNTHR VCI"
       subValue="No data"
       subValueColor="#888"
+      onClick={onClick}
     />
   ) : (
     <SemiGauge
@@ -825,6 +827,7 @@ function RecessionGauge({ data }) {
       subLabel="PNTHR VCI"
       subValue={data.triggered ? '⚠ TRIGGERED' : 'No Signal'}
       subValueColor={data.triggered ? '#ff6b6b' : '#6bcb77'}
+      onClick={onClick}
     />
   );
   return (
@@ -850,7 +853,7 @@ const BUFFETT_ZONES = [
   { from: 140, to: 250, color: '#dc3545' },
 ];
 
-function BuffettGauge({ data }) {
+function BuffettGauge({ data, onClick }) {
   const [hover, setHover] = React.useState(false);
   const shortZone = data ? (data.zone === 'SIGNIFICANTLY OVERVALUED' ? 'VERY OVERVALUED'
     : data.zone === 'SIGNIFICANTLY UNDERVALUED' ? 'VERY UNDERVALUED'
@@ -865,6 +868,7 @@ function BuffettGauge({ data }) {
       subLabel="Mkt Cap / GDP"
       subValue="No data"
       subValueColor="#888"
+      onClick={onClick}
     />
   ) : (
     <SemiGauge
@@ -875,6 +879,7 @@ function BuffettGauge({ data }) {
       subLabel="Mkt Cap / GDP"
       subValue={shortZone}
       subValueColor={color}
+      onClick={onClick}
     />
   );
   return (
@@ -903,7 +908,7 @@ const SENTIMENT_ZONES = [
   { from: 105, to: 111, color: '#6bcb77' },
 ];
 
-function ConsumerSentimentGauge({ data }) {
+function ConsumerSentimentGauge({ data, onClick }) {
   const [hover, setHover] = React.useState(false);
   const color = data ? (data.value >= 100 ? '#6bcb77' : data.value >= 80 ? '#4ecdc4' : data.value >= 65 ? '#fcf000' : data.value >= 50 ? '#ff6b6b' : '#dc3545') : '#888';
   const changeStr = data?.change != null ? `${data.change >= 0 ? '+' : ''}${data.change}` : null;
@@ -917,6 +922,7 @@ function ConsumerSentimentGauge({ data }) {
       subLabel="Consumer Sentiment"
       subValue="No data"
       subValueColor="#888"
+      onClick={onClick}
     />
   ) : (
     <SemiGauge
@@ -927,6 +933,7 @@ function ConsumerSentimentGauge({ data }) {
       subLabel="Consumer Sentiment"
       subValue={data.zone}
       subValueColor={color}
+      onClick={onClick}
     />
   );
   return (

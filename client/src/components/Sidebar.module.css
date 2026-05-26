@@ -258,6 +258,7 @@
 
 .navLabel {
   flex: 1;
+  min-width: 0;
 }
 
 /* ── Right-aligned nav badges ───────────────────────────────────────── */

@@ -205,8 +205,8 @@ function AppAuth() {
     const acctSize = role === 'investor'
       ? (profile?.investmentAmount ?? null)
       : (profile?.accountSize ?? null);
-    localStorage.setItem('pnthr_page', 'apex');
-    setCurrentUser({ email, role, accountSize: acctSize, defaultPage: 'apex', name: profile?.name ?? null, company: profile?.company ?? null, investmentAmount: profile?.investmentAmount ?? null, loginCount: profile?.loginCount ?? null, maxLogins: profile?.maxLogins ?? 5, allowedPages: profile?.allowedPages ?? null });
+    localStorage.setItem('pnthr_page', 'ir-live');
+    setCurrentUser({ email, role, accountSize: acctSize, defaultPage: 'ir-live', name: profile?.name ?? null, company: profile?.company ?? null, investmentAmount: profile?.investmentAmount ?? null, loginCount: profile?.loginCount ?? null, maxLogins: profile?.maxLogins ?? 5, allowedPages: profile?.allowedPages ?? null });
     setShowSplash(true);
     if (role === 'investor') setShowWelcome(true);
   }

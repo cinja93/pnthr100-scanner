@@ -2428,6 +2428,14 @@ app.get('/api/ai-orders/latest', authenticateJWT, async (req, res) => {
           ticker: p.ticker, direction: p.direction, status: p.status,
           stopPrice: p.stopPrice, entryPrice: p.entryPrice,
         }));
+        // Also return tickers for positions closed today — so NOW hides
+        // stocks already traded, even if they were opened and closed same day.
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const closedToday = await db.collection('pnthr_portfolio')
+          .find({ ownerId: req.user.userId, status: 'CLOSED', closedAt: { $gte: todayStart } },
+                 { projection: { ticker: 1 } }).toArray();
+        result.closedTodayTickers = closedToday.map(p => p.ticker);
       }
     } catch (e) { /* non-critical — page still works without badges */ }
     res.json(result);

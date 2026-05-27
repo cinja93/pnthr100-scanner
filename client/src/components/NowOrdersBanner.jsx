@@ -34,12 +34,14 @@ export default function NowOrdersBanner({ topOffset = 0, onVisibleChange, onNavi
         const activeTickers = new Set(
           (aiDoc.activePositionTickers || []).map(p => p.ticker)
         );
+        const closedToday = new Set(aiDoc.closedTodayTickers || []);
         for (const o of aiDoc.orders) {
           if (
             o.isNewSignal &&
             (o.signal === 'BL' || o.signal === 'SS') &&
             o.qualityGrade === 'BEST' &&
-            !activeTickers.has(o.ticker)
+            !activeTickers.has(o.ticker) &&
+            !closedToday.has(o.ticker)
           ) {
             items.push({
               key: `ai-${o.ticker}-${o.signal}`,

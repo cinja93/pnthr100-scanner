@@ -485,6 +485,9 @@ export default function AiOrdersPage() {
     return map;
   }, [doc]);
 
+  // Tickers traded (and closed) today — hide from NOW/ON DECK for the rest of the day
+  const closedTodaySet = useMemo(() => new Set(doc?.closedTodayTickers || []), [doc]);
+
   const scaleOrder = useCallback((o) => {
     const fullL1 = Math.max(1, Math.round(o.lot1Shares * navScale));
     const riskPerShare = o.riskPerShare || 0;
@@ -511,7 +514,8 @@ export default function AiOrdersPage() {
     if (!doc?.orders) return { nowOrders: [], onDeckOrders: [], allOrders: [] };
 
     const newSignals = doc.orders.filter(o =>
-      o.isNewSignal && (o.signal === 'BL' || o.signal === 'SS') && !activePositions[o.ticker]
+      o.isNewSignal && (o.signal === 'BL' || o.signal === 'SS')
+      && !activePositions[o.ticker] && !closedTodaySet.has(o.ticker)
     );
     const now = newSignals.filter(o => o.qualityGrade === 'BEST').map(scaleOrder);
     const onDeck = newSignals.filter(o => o.qualityGrade !== 'BEST').map(scaleOrder);
@@ -541,7 +545,7 @@ export default function AiOrdersPage() {
     const all = doc.orders.map(scaleOrder);
 
     return { nowOrders: nowSorted, onDeckOrders: onDeckSorted, allOrders: all };
-  }, [doc, scaleOrder]);
+  }, [doc, scaleOrder, closedTodaySet]);
 
   const filteredOrders = useMemo(() => {
     if (filter === 'new') return null;

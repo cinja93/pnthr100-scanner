@@ -1030,13 +1030,15 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [aiEarnings, setAiEarnings] = useState({});
   const [aiChartTickers, setAiChartTickers] = useState([]);
   const [aiChartIndex, setAiChartIndex] = useState(null);
+  const [risingMode, setRisingMode] = useState(false);
 
   const isScanner = renderPage === 'long' || renderPage === 'short';
   const isAiScanner = isScanner && scannerUniverse === 'ai300';
 
-  // Reset filters when tab or date changes
+  // Reset filters and rising mode when tab or date changes
   useEffect(() => {
     setFilters(defaultFilters);
+    setRisingMode(false);
   }, [activePage, selectedDate]);
 
   useEffect(() => {
@@ -1045,6 +1047,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
   function switchScannerUniverse(u) {
     setScannerUniverse(u);
+    setRisingMode(false);
     sessionStorage.setItem('scannerUniverse', u);
     if (u === 'ai300') loadAiStocks();
   }
@@ -1108,6 +1111,33 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       return true;
     });
   }, [stocks, signals, filters]);
+
+  // Rising 100: AI 300 only — filter to positive rank movers with active signals, sort by freshness then magnitude
+  const risingStocks = useMemo(() => {
+    const targetSignal = scanType === 'short' ? 'SS' : 'BL';
+    const sourceStocks = aiStocks;
+    const sourceSignals = aiSignals;
+
+    return sourceStocks
+      .filter(stock => {
+        const rc = stock.rankChange;
+        if (rc == null || rc <= 0) return false; // must be a positive rank mover
+        const sig = sourceSignals[stock.ticker];
+        if (!sig || sig.signal !== targetSignal) return false; // must have active BL (longs) or SS (shorts)
+        return true;
+      })
+      .map(stock => {
+        const sig = sourceSignals[stock.ticker];
+        const wks = computeWeeksAgo(sig?.signalDate, sig?.lastBarDate) ?? 999;
+        return { ...stock, _risingWeeks: wks, _risingRankChange: stock.rankChange };
+      })
+      .sort((a, b) => {
+        // Primary: lowest weeks-since (freshest signal first)
+        if (a._risingWeeks !== b._risingWeeks) return a._risingWeeks - b._risingWeeks;
+        // Secondary: highest rank change (biggest mover first)
+        return b._risingRankChange - a._risingRankChange;
+      });
+  }, [scanType, aiStocks, aiSignals]);
 
   useEffect(() => {
     loadAvailableDates();
@@ -1544,6 +1574,23 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                 <span style={{ color: '#333', fontSize: 11, marginLeft: 6, fontFamily: 'monospace' }}>
                   {scanType === 'long' ? '100 LONGS' : '100 SHORTS'}
                 </span>
+                {scannerUniverse === 'ai300' && (
+                  <button
+                    onClick={() => setRisingMode(r => !r)}
+                    style={{
+                      marginLeft: 'auto',
+                      padding: '6px 16px', borderRadius: 6,
+                      border: risingMode ? '1px solid #00c853' : '1px solid #333',
+                      background: risingMode ? 'rgba(0,200,83,0.12)' : '#111',
+                      color: risingMode ? '#00c853' : '#666',
+                      fontWeight: risingMode ? 800 : 600, fontSize: 12,
+                      fontFamily: 'monospace', letterSpacing: 1.5,
+                      cursor: 'pointer', transition: 'all 0.15s',
+                    }}
+                  >
+                    {risingMode ? `Rising ${risingStocks.length}` : `Rising 100`}
+                  </button>
+                )}
               </div>
 
               {/* ── 679 Universe ── */}
@@ -1630,7 +1677,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                 )}
 
                 {!aiLoading && !aiError && aiStocks.length > 0 && (
-                  <StockTable key={`ai-${activePage}`} stocks={aiStocks} signals={aiSignals} laserSignals={{}} signalsLoading={false} earnings={aiEarnings} onTickerClick={handleRowClick} scanType={scanType} hideExchange />
+                  <StockTable key={risingMode ? `ai-rising-${activePage}` : `ai-${activePage}`} stocks={risingMode ? risingStocks : aiStocks} signals={aiSignals} laserSignals={{}} signalsLoading={false} earnings={aiEarnings} onTickerClick={handleRowClick} scanType={scanType} hideExchange />
                 )}
 
                 {!aiLoading && !aiError && aiStocks.length === 0 && (

@@ -12,6 +12,7 @@
  */
 
 import { getCachedSignals } from './signalService.js';
+import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { connectToDatabase } from './database.js';
 import { STRIKE_PCT, LOT_OFFSETS } from './lotMath.js';
@@ -157,8 +158,28 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
   if (signalCache.at && now - signalCache.at < SIGNAL_TTL_MS) return signalCache.signals;
 
   try {
-    const allSignals = getCachedSignals();
-    if (!allSignals) return [];
+    // Merge 679 signal cache + AI Universe signals so AI-only tickers (GEV, etc.)
+    // that aren't in the S&P 500/400 still get picked up for MCE re-entry.
+    const cached679 = getCachedSignals() || {};
+    let aiSignals = {};
+    try {
+      const aiResult = await getAiUniverseSignals();
+      if (aiResult?.signals) {
+        for (const [t, s] of Object.entries(aiResult.signals)) {
+          aiSignals[t] = {
+            signal:     s.signal,
+            stopPrice:  s.pnthrStop ?? s.stopPrice ?? null,
+            pnthrStop:  s.pnthrStop ?? null,
+            signalDate: s.signalDate || null,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('[MCE] AI Universe signals fetch failed, using 679 cache only:', e.message);
+    }
+    // AI signals take precedence (sector-tuned EMA) over 679 for overlapping tickers
+    const allSignals = { ...cached679, ...aiSignals };
+    if (Object.keys(allSignals).length === 0) return [];
 
     const db = await connectToDatabase();
 

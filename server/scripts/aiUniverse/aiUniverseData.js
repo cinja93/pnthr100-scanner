@@ -83,6 +83,10 @@ export const SECTORS = [
       { ticker: 'SITM', name: 'SiTime Corporation', thesis: 'SiTime designs MEMS-based precision timing chips, the silicon clocks that synchronize AI cluster networking, 5G base stations, and aerospace systems. Their displacement of legacy quartz crystals captures content share in every AI data center. PNTHR holds SITM as a uniquely positioned AI-timing pure play.' },
       { ticker: 'PI', name: 'Impinj Inc.', thesis: 'Impinj leads RAIN RFID, the IoT and edge-AI tagging technology. As physical-AI applications (warehouse robots, retail tracking) scale, RAIN RFID becomes infrastructure. PNTHR holds PI as an edge-IoT pure play with AI-physical-world thesis.' },
       { ticker: 'MXL', name: 'MaxLinear Inc.', thesis: 'MaxLinear designs connectivity and broadband chips for AI data centers, fiber optics, and 5G. Their AI infrastructure chip portfolio captures the bandwidth-bottleneck trade. PNTHR holds MXL as a focused small-cap AI connectivity play.' },
+      { ticker: 'GFS', name: 'GlobalFoundries Inc.', thesis: 'GlobalFoundries is the world\'s third-largest contract chipmaker, fabricating essential semiconductors for IoT, automotive, and 5G that power the edge-AI ecosystem. Their specialty-node focus captures demand that leading-edge fabs leave behind. PNTHR holds GFS as a differentiated foundry play on the broadening AI chip supply chain.' },
+      { ticker: 'TSEM', name: 'Tower Semiconductor Ltd.', thesis: 'Tower Semiconductor is a specialty analog foundry fabricating sensors, power management, and RF chips critical to AI edge devices and autonomous systems. Their analog expertise complements digital AI compute. PNTHR holds TSEM as a focused specialty-foundry AI-analog play.' },
+      { ticker: 'UMC', name: 'United Microelectronics Corp.', thesis: 'UMC is a leading mature-node foundry supplying chips for IoT, automotive, and industrial AI applications. As AI extends beyond data centers into edge and embedded systems, UMC\'s capacity becomes strategic. PNTHR holds UMC as a mature-node foundry play on the AI edge buildout.' },
+      { ticker: 'SIMO', name: 'Silicon Motion Technology Corp.', thesis: 'Silicon Motion designs NAND flash controllers for SSDs powering AI data centers and edge storage. As AI training and inference demand faster storage I/O, SIMO\'s controller IP becomes critical infrastructure. PNTHR holds SIMO as a focused AI storage-controller pure play.' },
     ],
   },
   {
@@ -154,6 +158,7 @@ export const SECTORS = [
       { ticker: 'VICR', name: 'Vicor Corporation', thesis: 'Vicor makes power-on-package modules powering NVIDIA Grace Hopper and AI server boards. Highest-density AI power conversion. PNTHR holds VICR as a focused AI power-conversion small cap.' },
       { ticker: 'POET', name: 'POET Technologies', thesis: 'POET Technologies pioneers integrated silicon photonics for AI data center transceivers. Speculative but uniquely positioned in next-gen optical. PNTHR holds POET as a small-cap silicon photonics lottery ticket.' },
       { ticker: 'FFIV', name: 'F5 Inc.', thesis: 'F5 secures and accelerates AI application traffic across enterprise and cloud networks. AI inference workloads need F5. PNTHR holds FFIV as the application-layer AI networking play.' },
+      { ticker: 'NOK', name: 'Nokia Oyj', thesis: 'Nokia builds the 5G and optical networking infrastructure that connects AI data centers and enables edge-AI deployments. Their Bell Labs R&D powers next-gen network AI. PNTHR holds NOK as a global AI networking infrastructure play.' },
     ],
   },
   {
@@ -271,6 +276,7 @@ export const SECTORS = [
       { ticker: 'ALRM', name: 'Alarm.com Holdings', thesis: 'Alarm.com delivers AI-powered home and business security plus IoT platform. Edge AI for residential and SMB. PNTHR holds ALRM as a focused IoT-AI security play.' },
       { ticker: 'SOUN', name: 'SoundHound AI', thesis: 'SoundHound AI is the voice AI pure-play with disclosed NVIDIA stake, automotive voice AI and enterprise conversational AI. PNTHR holds SOUN as a high-beta voice-AI lottery ticket.' },
       { ticker: 'CDW', name: 'CDW Corporation', thesis: 'CDW is the leading IT distribution channel for AI servers and infrastructure to enterprise. AI hardware buildout flows through CDW\'s warehouses. PNTHR holds CDW as the AI IT distribution and channel pure play.' },
+      { ticker: 'PRO', name: 'PROS Holdings Inc.', thesis: 'PROS Holdings delivers AI-powered pricing and revenue management software for airlines, B2B, and hospitality. Their machine learning optimizes billions of pricing decisions daily. PNTHR holds PRO as a focused AI dynamic-pricing pure play.' },
     ],
   },
   {
@@ -398,6 +404,7 @@ export const SECTORS = [
       { ticker: 'TXT', name: 'Textron Inc.', thesis: 'Textron operates Bell helicopters, Cessna, and AI-augmented defense platforms. PNTHR holds TXT as a diversified aerospace-defense AI play.' },
       { ticker: 'BBAI', name: 'BigBear.ai Holdings', thesis: 'BigBear.ai delivers AI-driven decision intelligence for defense and intelligence community. PNTHR holds BBAI as a small-cap defense-AI software lottery ticket.' },
       { ticker: 'HAWK', name: 'BlackHawk Growth Corp', thesis: 'HAWK operates AI-powered satellite intelligence and geospatial analytics for commercial and government customers. As AI-driven Earth observation and satellite data processing become critical for defense, agriculture, and climate monitoring, HAWK captures the intersection of space infrastructure and AI analytics. PNTHR holds HAWK as a focused AI satellite intelligence play.' },
+      { ticker: 'GSAT', name: 'Globalstar Inc.', thesis: 'Globalstar operates a low-earth-orbit satellite constellation providing connectivity for IoT and mobile devices, including Apple\'s satellite SOS. As AI-driven satellite communication and IoT connectivity expand, GSAT captures the space-based AI communications trade. PNTHR holds GSAT as a focused satellite-IoT AI connectivity play.' },
     ],
   },
   {

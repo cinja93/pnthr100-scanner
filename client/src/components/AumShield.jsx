@@ -12,17 +12,13 @@ const DURATION_OPTIONS = [
 ];
 
 export default function AumShield({ children, style = {}, block = false, showDuration = false }) {
-  const { hasPin, setHasPin } = useAumShield();
-  const [locked, setLocked] = useState(true);
+  const { hasPin, setHasPin, unlocked, unlock } = useAumShield();
   const [showPrompt, setShowPrompt] = useState(false);
   const [pin, setPinVal] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [step, setStep] = useState('enter');
   const [selectedDuration, setSelectedDuration] = useState(DEFAULT_UNLOCK_MS);
-  const timerRef = useRef(null);
-
-  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
   const Tag = block ? 'div' : 'span';
 
@@ -30,12 +26,8 @@ export default function AumShield({ children, style = {}, block = false, showDur
     return <Tag style={{ ...style, color: '#333' }}>{block ? null : '••••'}</Tag>;
   }
 
-  if (!locked) return <>{children}</>;
-
-  const startTimer = (ms) => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setLocked(true), ms || DEFAULT_UNLOCK_MS);
-  };
+  // Use context-level unlock state — survives page navigation within the session
+  if (unlocked) return <>{children}</>;
 
   const handleSubmit = async () => {
     if (hasPin) {
@@ -46,8 +38,8 @@ export default function AumShield({ children, style = {}, block = false, showDur
       });
       const d = await res.json();
       if (d.success) {
-        setLocked(false);
-        startTimer(showDuration ? selectedDuration : DEFAULT_UNLOCK_MS);
+        const ms = showDuration ? selectedDuration : DEFAULT_UNLOCK_MS;
+        unlock(ms);
         setShowPrompt(false);
         setPinVal('');
         setError('');
@@ -71,8 +63,8 @@ export default function AumShield({ children, style = {}, block = false, showDur
       const d = await res.json();
       if (d.success) {
         setHasPin(true);
-        setLocked(false);
-        startTimer(showDuration ? selectedDuration : DEFAULT_UNLOCK_MS);
+        const ms = showDuration ? selectedDuration : DEFAULT_UNLOCK_MS;
+        unlock(ms);
         setShowPrompt(false);
         setPinVal('');
         setConfirm('');

@@ -215,6 +215,7 @@ function AppAuth() {
   function handleLogout() {
     localStorage.removeItem('pnthr_token');
     localStorage.removeItem('pnthr_page');
+    try { sessionStorage.removeItem('pnthr.aumShield.unlockedUntil'); } catch {}
     clearAuthToken();
     setAuthTokenState(null);
     setCurrentUser(null);

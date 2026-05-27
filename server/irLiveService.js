@@ -319,7 +319,8 @@ async function getIrData(tierKey) {
   const tradeStats = computeTradeStats(allTrades, tier.seedNav, scale);
   const closedTrades = allTrades.filter(t => t.entryDate).sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
   const firstTradeDate = closedTrades.length > 0 ? String(closedTrades[0].entryDate).slice(0, 10) : null;
-  const spy = spyMetrics(spyDaily, gross.startDate, gross.endDate, tier.seedNav);
+  const spyStartDate = firstTradeDate || gross.startDate;
+  const spy = spyMetrics(spyDaily, spyStartDate, gross.endDate, tier.seedNav);
 
   const crisisGrossEq = grossDocs.map(d => +d.equity);
   const crisisGrossDates = grossDocs.map(d => String(d.date).slice(0, 10));

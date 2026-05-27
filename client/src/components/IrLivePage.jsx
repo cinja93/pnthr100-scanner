@@ -427,8 +427,8 @@ function CorrelationCards({ marketCorrelation }) {
                   <span style={{ fontSize: 12, color: '#aaa', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span
                       onClick={() => setOpenInfo(openInfo === `${bench}-${r.l}` ? null : `${bench}-${r.l}`)}
-                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', color: '#888', fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
-                    >i</span>
+                      style={{ cursor: 'pointer', color: '#aaa', fontSize: 13, lineHeight: 1, flexShrink: 0 }}
+                    >ⓘ</span>
                     {r.l}
                   </span>
                   <span style={{ fontSize: 14, fontWeight: 700, color: r.color || '#ddd' }}>{r.v}</span>

@@ -575,14 +575,6 @@ export default function AiOrdersPage() {
   return (
     <div style={{ padding: '20px 24px', color: '#e5e5e5', minHeight: '100vh', background: '#0a0a0a' }}>
       <PageHeader title="AI 300 Orders" description="Live trading pipeline, lot triggers, and heat exposure for AI Elite 300." />
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <h1 style={{ color: '#fcf000', margin: 0, fontSize: 26, letterSpacing: '0.04em' }}>PNTHR AI Orders</h1>
-        <span style={{ color: '#888', fontSize: 13 }}>APEX v7 — 5D sector rotation overlay</span>
-        <span style={{
-          padding: '3px 8px', background: '#fcf000', color: '#000', borderRadius: 3,
-          fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
-        }}>AI 300</span>
-      </div>
 
       {doc && (
         <div style={{ marginTop: 12, fontSize: 13, color: '#ccc' }}>

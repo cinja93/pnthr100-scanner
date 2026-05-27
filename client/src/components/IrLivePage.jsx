@@ -388,20 +388,20 @@ const MONTH_LABELS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT
 
 const CORR_INFO = {
   Beta: {
-    what: 'Beta measures how much the fund moves relative to the market. A beta of 1.0 means it moves in lockstep; below 1.0 means less volatile than the market.',
-    edge: 'A low beta means you get outsized returns without taking on full market risk. The fund delivers multiples of the market\'s return at a fraction of the volatility.',
+    what: 'Beta measures how much the fund moves relative to the market. A beta of 1.0 means it moves in lockstep with the index. Below 1.0 means the fund is less volatile than the market. Above 1.0 means it amplifies market moves.',
+    edge: 'The PNTHR AI Elite 300 Fund maintains a beta near or below 1.0, meaning it carries similar or less market risk than the S&P 500. The critical advantage: the fund delivers annual returns that are multiples higher than the index while taking on equal or less systematic risk. You are not paying for returns with extra volatility. That combination is rare and valuable.',
   },
   Correlation: {
-    what: 'Correlation measures how closely the fund\'s daily returns track the benchmark. Ranges from -1 (perfectly inverse) to +1 (perfectly in sync).',
-    edge: 'Low correlation means the fund\'s returns come from independent stock selection, not from riding the same wave as the S&P. This is valuable for portfolio diversification.',
+    what: 'Correlation measures how closely the fund\'s daily returns move with the benchmark on a scale from -1.0 (perfectly inverse) to +1.0 (perfectly in sync). A correlation near zero means the fund moves independently of the market.',
+    edge: 'The PNTHR AI Elite 300 Fund has a low correlation to both the S&P 500 and Nasdaq. This means the fund\'s profits come from its own stock selection engine, not from passively riding the same market wave. For investors, this is powerful: it provides genuine diversification. Adding this fund to a portfolio of index funds reduces overall risk while dramatically increasing return potential.',
   },
   'R-Squared': {
-    what: 'R-Squared shows what percentage of the fund\'s returns are explained by market movements. Lower R² means more return comes from the manager\'s skill.',
-    edge: 'A low R² proves the fund isn\'t just a leveraged index. The vast majority of returns are generated through active stock picking and sector rotation — pure alpha.',
+    what: 'R-Squared shows what percentage of the fund\'s returns are explained by broad market movements. An R-Squared of 100% means the fund is just tracking the index. A low R-Squared means returns are driven by the manager\'s skill, not market direction.',
+    edge: 'The PNTHR AI Elite 300 Fund has a very low R-Squared, proving that the vast majority of its returns come from active stock picking and sector rotation, not from broad market exposure. This is the definition of alpha. The fund is not a disguised index fund or a leveraged bet on the market. It generates independent, skill-based returns that you simply cannot replicate with a passive strategy.',
   },
   'CAPM Alpha (ann.)': {
-    what: 'CAPM Alpha is the fund\'s annualized excess return above what the market model predicts, given the fund\'s beta. It isolates skill from market exposure.',
-    edge: 'A large positive CAPM Alpha is the gold standard for proving manager skill. It means the fund earns far more than its risk level would suggest — this is return you can\'t get from an index fund.',
+    what: 'CAPM Alpha is the annualized excess return the fund delivers above what the Capital Asset Pricing Model predicts based on its beta. It isolates pure manager skill from market exposure. Positive alpha means the fund earns more than its risk level would suggest.',
+    edge: 'The PNTHR AI Elite 300 Fund generates an exceptionally large CAPM Alpha, placing it among the highest alpha-producing strategies in the hedge fund industry. This number proves that the fund\'s returns are not borrowed from market risk. They are earned through disciplined momentum selection, systematic pyramiding, and automated risk management. This is return you cannot access through any index fund or passive strategy.',
   },
 };
 

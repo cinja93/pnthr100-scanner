@@ -142,7 +142,7 @@ function getPegTooltip(peg) {
   return `PEG: ${peg.toFixed(2)} — ${reading}`;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, showMode = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null, fcfMap = null, valMap = null }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, showMode = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null, fcfMap = null, valMap = null, heldTickers = null }) {
   const [sortConfig, setSortConfig] = useState({ key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
   const listRef = useRef([]);
@@ -551,6 +551,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                       if (!list) return null;
                       return <span className={list === 'LONG' ? styles.scannerBadgeLong : styles.scannerBadgeShort} style={{ marginLeft: 0, marginRight: 4 }}>{list === 'LONG' ? 'L' : 'S'}</span>;
                     })()}
+                    {heldTickers?.has(stock.ticker) && <span title="You hold this stock" style={{ color: '#16a34a', fontSize: 10, marginRight: 3, lineHeight: 1 }}>●</span>}
                     <span>{stock.ticker}</span>
                     {fcfMap && (
                       <span

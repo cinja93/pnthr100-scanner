@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import StockTable from './StockTable';
 import AiTickerChartModal from './AiTickerChartModal';
 import EarningsSeasonTable from './EarningsSeasonTable';
-import { fetchJungleStocks, fetchEarnings, fetchWashRules, fetchAiUniverse } from '../services/api';
+import { fetchJungleStocks, fetchEarnings, fetchWashRules, fetchAiUniverse, fetchPortfolio } from '../services/api';
 import { getCalendarWeekWindow } from '../utils/dateUtils';
 import { useAuth } from '../AuthContext';
 import PageHeader from './PageHeader';
@@ -65,6 +65,74 @@ function WashSaleSection({ rules }) {
   );
 }
 
+// ── Earnings Alert Banner (last hour of trading, held stocks reporting today) ─
+function EarningsAlertBanner({ heldTickers, earningsByDate }) {
+  const [visible, setVisible] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  // Today's date in YYYY-MM-DD (ET)
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    return et.toISOString().split('T')[0];
+  }, []);
+
+  const heldReportingToday = useMemo(() => {
+    if (!heldTickers?.size || !earningsByDate?.[todayStr]) return [];
+    return earningsByDate[todayStr].filter(s => heldTickers.has(s.ticker)).map(s => s.ticker);
+  }, [heldTickers, earningsByDate, todayStr]);
+
+  useEffect(() => {
+    if (dismissed || heldReportingToday.length === 0) { setVisible(false); return; }
+    const check = () => {
+      const now = new Date();
+      const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const h = et.getHours();
+      const m = et.getMinutes();
+      // 3:00 PM - 4:00 PM ET (15:00 - 16:00)
+      setVisible(h === 15 || (h === 16 && m === 0));
+    };
+    check();
+    const id = setInterval(check, 60_000);
+    return () => clearInterval(id);
+  }, [dismissed, heldReportingToday]);
+
+  if (!visible || heldReportingToday.length === 0) return null;
+
+  return (
+    <div style={{
+      background: 'linear-gradient(90deg, #7c3aed, #a855f7, #7c3aed)',
+      color: '#fff', padding: '10px 16px', borderRadius: 6, marginBottom: 12,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      border: '2px solid #a855f7', boxShadow: '0 2px 16px rgba(168,85,247,0.4)',
+      fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
+      animation: 'nowPulse 2s ease-in-out infinite',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 18 }}>⚠️</span>
+        <span style={{ fontWeight: 900, fontSize: 12, letterSpacing: '0.06em' }}>
+          EARNINGS TODAY — YOU HOLD {heldReportingToday.length === 1 ? 'THIS STOCK' : 'THESE STOCKS'}
+        </span>
+        <div style={{ display: 'flex', gap: 5 }}>
+          {heldReportingToday.map(t => (
+            <span key={t} style={{
+              background: '#16a34a', color: '#fff', fontWeight: 800, fontSize: 11,
+              padding: '3px 10px', borderRadius: 4, letterSpacing: '0.04em',
+            }}>{t}</span>
+          ))}
+        </div>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>
+          Review stops before the close
+        </span>
+      </div>
+      <button onClick={() => setDismissed(true)} style={{
+        background: '#000', color: '#a855f7', border: 'none', borderRadius: 4,
+        padding: '4px 12px', fontSize: 12, fontWeight: 800, cursor: 'pointer',
+      }}>✕</button>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CalendarPage() {
   const { isAdmin } = useAuth() || {};
@@ -76,6 +144,7 @@ export default function CalendarPage() {
   const [error, setError]             = useState(null);
   const [chartIndex, setChartIndex]   = useState(null);
   const [chartStocks, setChartStocks] = useState([]);
+  const [heldTickers, setHeldTickers] = useState(null);
 
   function load() {
     setLoading(true);
@@ -96,7 +165,16 @@ export default function CalendarPage() {
       ? fetchWashRules().then(rules => setWashRules(Array.isArray(rules) ? rules : [])).catch(() => setWashRules([]))
       : Promise.resolve();
 
-    Promise.all([junglePromise, washPromise])
+    const portfolioPromise = isAdmin
+      ? fetchPortfolio()
+          .then(positions => {
+            const active = (positions || []).filter(p => p.status === 'ACTIVE' || p.status === 'PARTIAL');
+            setHeldTickers(new Set(active.map(p => p.ticker)));
+          })
+          .catch(() => setHeldTickers(new Set()))
+      : Promise.resolve();
+
+    Promise.all([junglePromise, washPromise, portfolioPromise])
       .catch(err => {
         console.error(err);
         setError('Failed to load calendar data.');
@@ -176,6 +254,10 @@ export default function CalendarPage() {
           jungle reporters + wash-sale expirations. */}
       <EarningsSeasonTable />
 
+      {isAdmin && !loading && (
+        <EarningsAlertBanner heldTickers={heldTickers} earningsByDate={earningsByDate} />
+      )}
+
       {loading && (
         <div className={styles.loadingState}>
           <div className={styles.spinner} />
@@ -220,6 +302,7 @@ export default function CalendarPage() {
                 scanType="long"
                 compact={true}
                 highlightAllEarnings={true}
+                heldTickers={heldTickers}
               />
             </div>
           )}

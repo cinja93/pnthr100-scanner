@@ -218,8 +218,9 @@ function crisisAlpha(pnthrEquity, pnthrDates, spyDaily, events) {
   });
 }
 
-function spyMetrics(spyDaily, startDate, endDate, seedNav) {
-  const inRange = spyDaily.filter(b => b.date >= startDate && b.date <= endDate).sort((a, b) => a.date.localeCompare(b.date));
+function spyMetrics(spyDaily, metricsStartDate, endDate, seedNav, chartStartDate) {
+  // Metrics computed from metricsStartDate (first trade date)
+  const inRange = spyDaily.filter(b => b.date >= metricsStartDate && b.date <= endDate).sort((a, b) => a.date.localeCompare(b.date));
   if (inRange.length === 0) return null;
   const closes = inRange.map(b => b.close);
   const dates = inRange.map(b => b.date);
@@ -230,6 +231,24 @@ function spyMetrics(spyDaily, startDate, endDate, seedNav) {
   const cagr = (Math.pow(equity[equity.length - 1] / equity[0], 1 / years) - 1) * 100;
   const monthly = groupMonthly(equity, dates);
   const meanM = monthly.length > 0 ? monthly.reduce((s, m) => s + m.ret, 0) / monthly.length : 0;
+
+  // Equity curve for chart: spans full date range from chartStartDate for alignment
+  // with fund curve. Before metricsStartDate, SPY sits at seedNav (fund was in cash).
+  let equityCurve;
+  const effectiveChartStart = chartStartDate && chartStartDate < metricsStartDate ? chartStartDate : metricsStartDate;
+  if (effectiveChartStart < metricsStartDate) {
+    const fullRange = spyDaily.filter(b => b.date >= effectiveChartStart && b.date <= endDate).sort((a, b) => a.date.localeCompare(b.date));
+    const metricsStartPrice = closes[0]; // SPY price on first trade date
+    equityCurve = fullRange.map(b => ({
+      date: b.date,
+      value: b.date < metricsStartDate
+        ? Math.round(seedNav)
+        : Math.round((b.close / metricsStartPrice) * seedNav),
+    }));
+  } else {
+    equityCurve = dates.map((d, i) => ({ date: d, value: +equity[i].toFixed(0) }));
+  }
+
   return {
     startDate: dates[0], endDate: dates[dates.length - 1],
     totalReturn: +totalReturn.toFixed(2), cagr: +cagr.toFixed(2),
@@ -237,7 +256,7 @@ function spyMetrics(spyDaily, startDate, endDate, seedNav) {
     maxDD: +computeMaxDD(equity, dates).maxDD.toFixed(2),
     avgMonthlyReturn: +meanM.toFixed(2),
     endingEquity: +equity[equity.length - 1].toFixed(2),
-    equityCurve: dates.map((d, i) => ({ date: d, value: +equity[i].toFixed(0) })),
+    equityCurve,
   };
 }
 
@@ -320,7 +339,7 @@ async function getIrData(tierKey) {
   const closedTrades = allTrades.filter(t => t.entryDate).sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
   const firstTradeDate = closedTrades.length > 0 ? String(closedTrades[0].entryDate).slice(0, 10) : null;
   const spyStartDate = firstTradeDate || gross.startDate;
-  const spy = spyMetrics(spyDaily, spyStartDate, gross.endDate, tier.seedNav);
+  const spy = spyMetrics(spyDaily, spyStartDate, gross.endDate, tier.seedNav, gross.startDate);
 
   const crisisGrossEq = grossDocs.map(d => +d.equity);
   const crisisGrossDates = grossDocs.map(d => String(d.date).slice(0, 10));
@@ -335,7 +354,7 @@ async function getIrData(tierKey) {
     tier: tier.key, label: tier.label, seedNav: tier.seedNav,
     feeSchedule: { yearsOneToThree: tier.feeYr1to3, yearsFourPlus: tier.feeYr4plus },
     gross, net, trades: tradeStats, spy, firstTradeDate,
-    spyAnnualReturns: buildSpyAnnualReturns(grossDocs, spyDaily, tier.seedNav),
+    spyAnnualReturns: buildSpyAnnualReturns(grossDocs, spyDaily, tier.seedNav, firstTradeDate),
     crisisAlphaGross: crisisAlpha(crisisGrossEq, crisisGrossDates, spyDaily, CRISIS_EVENTS),
     crisisAlphaNet: crisisAlpha(crisisNetEq, crisisNetDates, spyDaily, CRISIS_EVENTS),
     alphaVsSpy: spy ? {
@@ -355,17 +374,18 @@ async function getIrData(tierKey) {
   return result;
 }
 
-function buildSpyAnnualReturns(grossDocs, spyDaily, seedNav) {
+function buildSpyAnnualReturns(grossDocs, spyDaily, seedNav, firstTradeDate) {
   const spySorted = [...spyDaily].sort((a, b) => a.date.localeCompare(b.date));
   const spyByDate = new Map(spySorted.map(b => [b.date, b.close]));
-  const pnthrStart = String(grossDocs[0].date).slice(0, 10);
+  const startFrom = firstTradeDate || String(grossDocs[0].date).slice(0, 10);
   let spyStartClose = null;
-  for (const b of spySorted) { if (b.date >= pnthrStart) { spyStartClose = b.close; break; } }
+  for (const b of spySorted) { if (b.date >= startFrom) { spyStartClose = b.close; break; } }
   if (!spyStartClose) return [];
 
   const years = new Map();
   for (const d of grossDocs) {
     const date = String(d.date).slice(0, 10);
+    if (date < startFrom) continue;
     const y = date.slice(0, 4);
     const spyClose = spyByDate.get(date);
     if (spyClose == null) continue;

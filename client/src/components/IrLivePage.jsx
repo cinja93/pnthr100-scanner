@@ -66,7 +66,7 @@ function MetricCard({ label, value, sub, color, small, info }) {
         {info && (
           <span
             onClick={() => setShowInfo(v => !v)}
-            style={{ cursor: 'pointer', color: '#555', fontSize: 11, lineHeight: 1 }}
+            style={{ cursor: 'pointer', color: '#aaa', fontSize: 11, lineHeight: 1 }}
             title={`About ${label}`}
           >ⓘ</span>
         )}
@@ -131,7 +131,7 @@ function TierButton({ tier, active, onClick, fundName, summary }) {
       </button>
       <span
         onClick={(e) => { e.stopPropagation(); setShowInfo(v => !v); }}
-        style={{ cursor: 'pointer', color: '#999', fontSize: 13, lineHeight: 1 }}
+        style={{ cursor: 'pointer', color: '#ccc', fontSize: 13, lineHeight: 1 }}
       >ⓘ</span>
       {showInfo && (
         <div ref={popRef} style={{

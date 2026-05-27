@@ -951,8 +951,8 @@ export default function IrLivePage({ fund = 'ai300' }) {
                         background: '#1a1a1a', border: '1px solid #444', borderRadius: 8,
                         padding: '14px 16px', width: 340, boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
                       }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>ROLLING 12-MONTH RETURNS</div>
-                        <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, marginBottom: 6, textTransform: 'none', letterSpacing: '0.04em' }}>Rolling 12-Month Returns</div>
+                        <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6, textTransform: 'none' }}>
                           {`Each box shows the total net return over the trailing 12 months ending on that date. This is the most honest way to measure consistency, because it removes calendar-year bias and shows how the fund performed across every possible one-year window. The ${fc.name} shows an accelerating pattern of rolling returns, with recent 12-month windows delivering triple-digit gains. When nearly every rolling period is positive, and the trend is climbing, it signals a compounding engine that rewards investors who stay invested. This level of rolling consistency is exceptionally rare among hedge funds.`}
                         </div>
                         <span onClick={() => setShowRolling12Info(false)} style={{ position: 'absolute', top: 8, right: 10, color: '#555', cursor: 'pointer', fontSize: 14 }}>✕</span>

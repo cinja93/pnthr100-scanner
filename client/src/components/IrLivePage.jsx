@@ -237,7 +237,7 @@ function EquityCurveChart({ data, spyData, spyReturn, label, color }) {
         {yTicks.map((t, i) => (
           <g key={i}>
             <line x1={PAD.l} y1={t.y} x2={W - PAD.r} y2={t.y} stroke="rgba(255,255,255,0.06)" />
-            <text x={PAD.l - 6} y={t.y + 4} textAnchor="end" fill="#555" fontSize={10}>{t.label}</text>
+            <text x={PAD.l - 6} y={t.y + 4} textAnchor="end" fill="#999" fontSize={10}>{t.label}</text>
           </g>
         ))}
         {spyPath && <>
@@ -249,7 +249,7 @@ function EquityCurveChart({ data, spyData, spyReturn, label, color }) {
         <path d={fundPath} fill="none" stroke={color} strokeWidth={2} />
         {xTicks.map((p) => {
           const idx = ec.indexOf(p);
-          return <text key={p.date} x={px(idx, ec.length)} y={H - 6} textAnchor="middle" fill="#555" fontSize={9}>{p.date.slice(0, 7)}</text>;
+          return <text key={p.date} x={px(idx, ec.length)} y={H - 6} textAnchor="middle" fill="#999" fontSize={9}>{p.date.slice(0, 7)}</text>;
         })}
       </svg>
       <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 10, color: '#666' }}>
@@ -734,6 +734,8 @@ export default function IrLivePage({ fund = 'ai300' }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [tierSummaries, setTierSummaries] = useState({});
+  const [showRolling12Info, setShowRolling12Info] = useState(false);
+  const rolling12Ref = useRef(null);
 
   useEffect(() => {
     setLoading(true);
@@ -755,6 +757,15 @@ export default function IrLivePage({ fund = 'ai300' }) {
         .catch(() => {});
     });
   }, [fc.apiBase]);
+
+  useEffect(() => {
+    if (!showRolling12Info) return;
+    function onClickOutside(e) {
+      if (rolling12Ref.current && !rolling12Ref.current.contains(e.target)) setShowRolling12Info(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [showRolling12Info]);
 
   const d = data;
   const net = d?.net;
@@ -810,10 +821,10 @@ export default function IrLivePage({ fund = 'ai300' }) {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
                 <MetricCard label="Net Total Return" value={fmtPct(net?.totalReturn)} color={retColor(net?.totalReturn)} sub={`${fmtNav(d.seedNav)} start`}
                   info="Your money, multiplied. This is the total profit on every dollar invested after all fees and costs are paid. While the S&P 500 historically grows around 10% a year, this fund makes money at a pace that dramatically outperforms passive investing. This number gives you confidence that PNTHR's systematic approach builds real, compounding wealth." />
-                <MetricCard label="Net CAGR" value={fmtPct(net?.cagr)} color={GREEN}
+                <MetricCard label="NET Compound Annual Growth Rate (CAGR)" value={fmtPct(net?.cagr)} color={GREEN}
                   info="The annual rate your money grows, year after year, net of all fees. The average hedge fund earns 8-12% annually. Warren Buffett averages roughly 20%. A CAGR at this level means your capital is growing faster than nearly every professional money manager on the planet. This is highly profitable, consistent compounding that builds generational wealth." />
                 <MetricCard label="Sharpe Ratio" value={fmt(net?.sharpe)} color={net?.sharpe >= 1 ? GREEN : '#fff'}
-                  info="How efficiently your money is working. This measures profit earned per unit of risk taken. The average hedge fund scores around 0.5. Above 1.0 is strong. Above 1.5 is top 10% globally. A high Sharpe gives you confidence that this fund makes money without taking reckless risks. Your capital is protected by institutional-grade discipline while still delivering outsized returns." />
+                  info={`How efficiently your money is working. This measures profit earned per unit of risk taken. The average hedge fund scores around 0.5. Above 1.0 is strong. Being that the ${fc.name} is ${fmt(net?.sharpe)}, it is amongst the top 10% of hedge funds globally, most with significantly less annual return. A high Sharpe gives you confidence that this fund makes money without taking reckless risks. Your capital is protected by institutional-grade discipline while still delivering outsized returns.`} />
                 <MetricCard label="Sortino Ratio" value={fmt(net?.sortino)} color={net?.sortino >= 2 ? GREEN : '#fff'}
                   info={`Measures how much money the fund makes relative to only the bad volatility, the losses. Unlike the Sharpe, big profitable moves are rewarded here, not penalized. The ${fc.name} above 2.0 is excellent. A high Sortino gives investors peace of mind: the fund captures large gains while aggressively protecting capital on the downside. Your money works hard and stays safe.`} />
                 <MetricCard label="Profit Factor" value={`${fmt(trades?.combined?.profitFactor)}x`} color={trades?.combined?.profitFactor >= 2 ? GREEN : '#fff'} sub="net"
@@ -927,7 +938,27 @@ export default function IrLivePage({ fund = 'ai300' }) {
               {/* Rolling 12M */}
               {net?.rolling12m?.length > 0 && (
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>ROLLING 12-MONTH RETURNS (NET)</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
+                    ROLLING 12-MONTH RETURNS (NET)
+                    <span
+                      onClick={() => setShowRolling12Info(v => !v)}
+                      style={{ cursor: 'pointer', color: '#aaa', fontSize: 13, lineHeight: 1 }}
+                      title="About Rolling 12-Month Returns"
+                    >ⓘ</span>
+                    {showRolling12Info && (
+                      <div ref={rolling12Ref} style={{
+                        position: 'absolute', top: '100%', left: 0, zIndex: 100, marginTop: 6,
+                        background: '#1a1a1a', border: '1px solid #444', borderRadius: 8,
+                        padding: '14px 16px', width: 340, boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>ROLLING 12-MONTH RETURNS</div>
+                        <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.6 }}>
+                          {`Each box shows the total net return over the trailing 12 months ending on that date. This is the most honest way to measure consistency, because it removes calendar-year bias and shows how the fund performed across every possible one-year window. The ${fc.name} shows an accelerating pattern of rolling returns, with recent 12-month windows delivering triple-digit gains. When nearly every rolling period is positive, and the trend is climbing, it signals a compounding engine that rewards investors who stay invested. This level of rolling consistency is exceptionally rare among hedge funds.`}
+                        </div>
+                        <span onClick={() => setShowRolling12Info(false)} style={{ position: 'absolute', top: 8, right: 10, color: '#555', cursor: 'pointer', fontSize: 14 }}>✕</span>
+                      </div>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 24 }}>
                     {net.rolling12m.map(r => (
                       <div key={r.endMonth} style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 10px', minWidth: 72, textAlign: 'center' }}>

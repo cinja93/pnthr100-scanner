@@ -1035,9 +1035,11 @@ export default function AiOrdersPage() {
                         onClick={() => { setChartTickers(bullSignals.map(r => r.ticker)); setChartIndex(bullSignals.findIndex(r => r.ticker === s.ticker)); }}>
                         <td style={{
                           padding: '6px 10px', fontWeight: 800, color: s.reentry ? '#93c5fd' : '#e9d5ff',
-                          ...(isMceNew(s.ticker) ? { animation: 'mceNewFlash 2s ease-in-out infinite' } : {}),
+                          ...(!s.reentry && isMceNew(s.ticker) ? { animation: 'mceNewFlash 2s ease-in-out infinite' } : {}),
                         }}>
-                          {isMceNew(s.ticker) && <span style={{ color: '#fbbf24', fontSize: 9, fontWeight: 700, marginRight: 4, letterSpacing: '0.05em' }}>NEW</span>}
+                          {s.reentry
+                            ? <span style={{ color: '#60a5fa', fontSize: 9, fontWeight: 700, marginRight: 4, letterSpacing: '0.05em' }}>RE-ENTRY</span>
+                            : isMceNew(s.ticker) && <span style={{ color: '#fbbf24', fontSize: 9, fontWeight: 700, marginRight: 4, letterSpacing: '0.05em' }}>NEW</span>}
                           {s.ticker}
                           {s.heatReentry && <span style={{ marginLeft: 5, padding: '1px 5px', background: '#f97316', color: '#000', borderRadius: 3, fontSize: 9, fontWeight: 800, letterSpacing: '0.05em' }}>Heat</span>}
                         </td>
@@ -1047,7 +1049,7 @@ export default function AiOrdersPage() {
                           <span style={{ color: '#777', marginLeft: 4 }}>{sectorLabel}</span>
                         </td>
                         <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-                          {s.reentry && <span style={{ color: '#fff', fontSize: 13 }}>✓</span>}
+                          {s.reentry && <span style={{ color: '#60a5fa', fontSize: 13 }}>✓</span>}
                         </td>
                         <td style={{ padding: '6px 10px', color: '#16a34a', fontWeight: 700 }}>${s.entryTrigger}</td>
                         <td style={{ padding: '6px 10px', color: '#dc2626' }}>${s.weeklyStop}</td>

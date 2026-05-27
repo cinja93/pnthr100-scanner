@@ -1571,19 +1571,15 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                     }}>{u.label}</button>
                   );
                 })}
-                <span style={{ color: '#333', fontSize: 11, marginLeft: 6, fontFamily: 'monospace' }}>
-                  {scanType === 'long' ? '100 LONGS' : '100 SHORTS'}
-                </span>
                 {scannerUniverse === 'ai300' && (
                   <button
                     onClick={() => setRisingMode(r => !r)}
                     style={{
-                      marginLeft: 'auto',
                       padding: '6px 16px', borderRadius: 6,
-                      border: risingMode ? '1px solid #00c853' : '1px solid #333',
-                      background: risingMode ? 'rgba(0,200,83,0.12)' : '#111',
-                      color: risingMode ? '#00c853' : '#666',
-                      fontWeight: risingMode ? 800 : 600, fontSize: 12,
+                      border: risingMode ? '2px solid #00e676' : '2px solid #00c853',
+                      background: risingMode ? 'rgba(0,230,118,0.15)' : 'rgba(0,200,83,0.06)',
+                      color: risingMode ? '#00e676' : '#00c853',
+                      fontWeight: 800, fontSize: 12,
                       fontFamily: 'monospace', letterSpacing: 1.5,
                       cursor: 'pointer', transition: 'all 0.15s',
                     }}
@@ -1591,6 +1587,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                     {risingMode ? `Rising ${risingStocks.length}` : `Rising 100`}
                   </button>
                 )}
+                <span style={{ color: '#333', fontSize: 11, marginLeft: 6, fontFamily: 'monospace' }}>
+                  {scanType === 'long' ? '100 LONGS' : '100 SHORTS'}
+                </span>
               </div>
 
               {/* ── 679 Universe ── */}

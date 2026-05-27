@@ -1,7 +1,9 @@
 // PNTHR AI Universe, Master holdings data with PNTHR investment-thesis paragraphs
 // Each paragraph reads as: "Why PNTHR believes this name belongs in the AI Elite Universe"
-// 302 holdings across 16 sectors. Last updated: 2026-05-14.
+// 311 holdings across 16 sectors. Last updated: 2026-05-27.
 //
+// v3.6 (2026-05-27): added GFS, TSEM, UMC, SIMO to S1; NOK to S3; PRO to S7; GSAT to S13. 304 → 311.
+// v3.5 (2026-05-20): sector weight adjustments.
 // v3.4 (2026-05-20): updated Index Members PDF for Multi-strategy + MCE methodology.
 // v3.2 (2026-05-14): added FIX, MOD, MLI to S16 (thermal/copper), IESC to S2 (electrical infra). 298 → 302.
 // v3.1 (2026-05-11): added HAWK (AI satellite intelligence) to S13 Drones, Space & Defense AI. 297 → 298.
@@ -18,9 +20,9 @@
 export const FUND_META = {
   fundName: 'PNTHR AI Universe',
   fullName: 'PNTHR AI Elite 300 Fund',
-  version: 'v3.5',
+  version: 'v3.6',
   date: 'May 2026',
-  totalHoldings: 304,
+  totalHoldings: 311,
   totalSectors: 16,
 };
 

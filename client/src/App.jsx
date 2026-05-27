@@ -1132,10 +1132,10 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         return { ...stock, _risingWeeks: wks, _risingRankChange: stock.rankChange };
       })
       .sort((a, b) => {
-        // Primary: lowest weeks-since (freshest signal first)
-        if (a._risingWeeks !== b._risingWeeks) return a._risingWeeks - b._risingWeeks;
-        // Secondary: highest rank change (biggest mover first)
-        return b._risingRankChange - a._risingRankChange;
+        // Primary: highest rank change (biggest mover first)
+        if (a._risingRankChange !== b._risingRankChange) return b._risingRankChange - a._risingRankChange;
+        // Secondary: lowest weeks-since (freshest signal first)
+        return a._risingWeeks - b._risingWeeks;
       });
   }, [scanType, aiStocks, aiSignals]);
 

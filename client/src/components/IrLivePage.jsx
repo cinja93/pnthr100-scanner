@@ -60,13 +60,13 @@ function MetricCard({ label, value, sub, color, small, info }) {
   }, [showInfo]);
 
   return (
-    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: small ? '10px 14px' : '14px 18px', minWidth: small ? 110 : 140, position: 'relative' }}>
-      <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 5 }}>
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: small ? '10px 14px' : '14px 18px', minWidth: small ? 110 : 140, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'flex', alignItems: 'flex-start', gap: 5, flex: 1 }}>
         {label}
         {info && (
           <span
             onClick={() => setShowInfo(v => !v)}
-            style={{ cursor: 'pointer', color: '#aaa', fontSize: 11, lineHeight: 1 }}
+            style={{ cursor: 'pointer', color: '#aaa', fontSize: 11, lineHeight: 1, flexShrink: 0 }}
             title={`About ${label}`}
           >ⓘ</span>
         )}

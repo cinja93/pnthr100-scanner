@@ -136,7 +136,7 @@ def generate_cover_growth_chart(path):
         if v >= 1e3: return f'${v/1e3:.0f}K'
         return f'${v:.0f}'
     ax.yaxis.set_major_formatter(plt.FuncFormatter(usd_fmt))
-    ax.set_title('Cumulative Growth: PNTHR AI Elite vs S&P 500 (Jan 2022 - May 2026)',
+    ax.set_title('Cumulative Growth: PNTHR AI Elite vs S&P 500 (Jun 2022 - May 2026)',
                  color='#ffffff', fontsize=9, pad=8, loc='left')
     ax.legend(facecolor='#000000', edgecolor='#222222', labelcolor='#cccccc', fontsize=7, loc='upper left')
     fig.tight_layout()
@@ -197,14 +197,14 @@ def build():
     #   Elite HF (top decile): ~15% CAGR, 1.0 Sharpe, 1.30 Sortino, -12% MaxDD
     headline_data = [
         ['', 'PNTHR Wagyu\n(Net, $1M)', 'S&P 500', 'Avg L/S\nHedge Fund', 'Top Rated\nHedge Fund'],
-        ['Total Return', '+593%', '+37%', '~40%', '~80%'],
-        ['Gross CAGR', '70.51%', '7.75%', '~10%', '~18%'],
-        ['Net CAGR', '55.65%', '7.75%', '~8%', '~15%'],
-        ['Sharpe Ratio', '1.47', '0.31', '~0.55', '~1.00'],
-        ['Sortino Ratio', '2.49', '0.42', '~0.80', '~1.30'],
-        ['Max Drawdown', '-25.56%', '-25.36%', '-15%', '-12%'],
-        ['Recovery Factor', '23x', '1.5x', '~3x', '~7x'],
-        ['Calmar Ratio', '2.18', '0.31', '~0.53', '~1.25'],
+        ['Total Return', '+593%', '+75%', '~40%', '~80%'],
+        ['Gross CAGR', '70.51%', '15.83%', '~10%', '~18%'],
+        ['Net CAGR', '55.65%', '15.83%', '~8%', '~15%'],
+        ['Sharpe Ratio', '1.47', '0.73', '~0.55', '~1.00'],
+        ['Sortino Ratio', '2.49', '1.44', '~0.80', '~1.30'],
+        ['Max Drawdown', '-25.56%', '-19.00%', '-15%', '-12%'],
+        ['Recovery Factor', '23x', '3.9x', '~3x', '~7x'],
+        ['Calmar Ratio', '2.18', '0.83', '~0.53', '~1.25'],
     ]
     n_cols = 5
     col_w = CONTENT_W / n_cols
@@ -241,15 +241,15 @@ def build():
     # Summary paragraph accentuating dominance
     s.append(Paragraph(
         'The numbers speak for themselves. PNTHR AI Elite delivers a Sharpe ratio <b>2.7x higher</b> than the average '
-        'long/short hedge fund and <b>nearly 4.7x</b> the S&amp;P 500. Our Sortino ratio of 2.49 is <b>nearly 2x</b> the '
+        'long/short hedge fund and <b>2.0x</b> the S&amp;P 500. Our Sortino ratio of 2.49 is <b>nearly 2x</b> the '
         'top rated hedge fund benchmark, demonstrating exceptional downside risk management. At a 56% net CAGR, the fund '
-        'compounds at <b>more than 3.7x the rate</b> of the top-performing hedge funds in the industry and <b>over 7x</b> '
+        'compounds at <b>more than 3.7x the rate</b> of the top-performing hedge funds in the industry and <b>3.5x</b> '
         'the S&amp;P 500. The recovery factor of 23x means for every dollar of peak-to-trough drawdown, the fund '
         'generated $23 in total return. This is not incremental improvement over the competition. It is a different category.',
         bold_body_style()))
 
     s.append(Spacer(1, 4))
-    s.append(Paragraph('<i>Backtest period: January 3, 2022 through May 13, 2026 (4.36 years). '
+    s.append(Paragraph('<i>Backtest period: January 3, 2022 through May 13, 2026 (4.36 years; first trade June 13, 2022). S&amp;P 500 benchmark measured from the first trade date. '
         'Net returns include IBKR commissions, 5 bps slippage, sector-tiered borrow costs, and performance fees. '
         '1,505 closed trades. "Avg L/S Hedge Fund" and "Top Rated Hedge Fund" benchmarks sourced from BarclayHedge, '
         'HFR, and Preqin industry composites.</i>', note_style()))
@@ -695,24 +695,22 @@ def build():
 
     s.append(Paragraph('The Drawdown Tradeoff', subheading_style()))
     s.append(Paragraph(
-        'The fund\'s maximum drawdown of -25.56% (Wagyu, net) is virtually identical to the S&amp;P 500\'s '
-        '-25.36% over the same period. Most investors accept that level of drawdown as normal when investing '
-        'in the S&amp;P 500. They tolerate a 25% peak-to-trough decline in exchange for the S&amp;P 500\'s '
-        '7.75% annualized return.',
+        'The fund\'s maximum drawdown of -25.56% (Wagyu, net) is modestly deeper than the S&amp;P 500\'s '
+        '-19.00% over the same period. Most investors accept a drawdown in that range as normal when investing '
+        'in equities. The S&amp;P 500 delivered a 15.83% annualized return for that level of risk.',
         body_style()))
     s.append(Paragraph(
-        'PNTHR AI Elite asks the investor to accept <b>the same drawdown</b> they would experience in a '
-        'passive index fund, but in return delivers <b>56% net CAGR instead of 8%.</b> That is over 7x the '
-        'return for effectively the same worst-case pain. The S&amp;P 500 turned $1M into $1.37M over this '
-        'period. PNTHR turned $1M into $6.93M. Same drawdown. Entirely different outcome.',
+        'PNTHR AI Elite asks the investor to accept a <b>moderately deeper drawdown</b> than a '
+        'passive index fund, but in return delivers <b>56% net CAGR instead of 16%.</b> That is 3.5x the '
+        'return for only 1.35x the worst-case pain. The S&amp;P 500 turned $1M into $1.75M over this '
+        'period. PNTHR turned $1M into $6.93M. The fund\'s return-per-unit-of-drawdown is dramatically higher.',
         body_style()))
     s.append(Paragraph(
         'This is not a coincidence. It is the result of an optimized tradeoff. Every configuration we tested '
         'that reduced drawdown below 20% also destroyed returns by a far greater margin. The daily stop variants '
         'proved this decisively: tightening risk controls shook out the exact winners that powered the fund\'s '
         'outsized gains. The -25.56% drawdown is the <b>optimal balance point</b> where the system captures '
-        'maximum return without exposing the investor to drawdowns any deeper than what they would experience '
-        'in the most widely held index in the world.',
+        'maximum return while keeping drawdowns in the same general range as the broad market.',
         bold_body_style()))
 
     # == RESULTS ==============================================================
@@ -723,13 +721,13 @@ def build():
     s.append(make_table(
         ['Metric', 'Gross', 'Net (Wagyu $1M)', 'Net (Filet $100K)', 'SPY'],
         [
-            ['CAGR', '70.51%', '55.65%', '49.90%', '7.75%'],
-            ['Total Return', '+933%', '+593%', '+488%', '+37%'],
-            ['Sharpe Ratio', '1.79', '1.47', '1.33', '0.31'],
-            ['Sortino Ratio', '3.07', '2.49', '2.19', '0.42'],
-            ['Max Drawdown', '-23.45%', '-25.56%', '-27.57%', '-25.36%'],
-            ['Calmar Ratio', '3.01', '2.18', '1.81', '0.31'],
-            ['Recovery Factor', '40x', '23x', '18x', '1.5x'],
+            ['CAGR', '70.51%', '55.65%', '49.90%', '15.83%'],
+            ['Total Return', '+933%', '+593%', '+488%', '+75%'],
+            ['Sharpe Ratio', '1.79', '1.47', '1.33', '0.73'],
+            ['Sortino Ratio', '3.07', '2.49', '2.19', '1.44'],
+            ['Max Drawdown', '-23.45%', '-25.56%', '-27.57%', '-19.00%'],
+            ['Calmar Ratio', '3.01', '2.18', '1.81', '0.83'],
+            ['Recovery Factor', '40x', '23x', '18x', '3.9x'],
         ],
         col_widths=[1.3*inch, 1.0*inch, 1.2*inch, 1.2*inch, CONTENT_W - 4.7*inch]
     ))
@@ -754,8 +752,8 @@ def build():
         ['Starting Investment', '$1,000,000', '$100,000'],
         ['Ending Value (Net)', '$6,929,334', '$587,766'],
         ['Net Gain', '+$5,929,334', '+$487,766'],
-        ['SPY Would Have Returned', '$1,372,900', '$137,290'],
-        ['PNTHR Advantage', '+$5,556,434', '+$450,476'],
+        ['SPY Would Have Returned', '$1,748,880', '$174,888'],
+        ['PNTHR Advantage', '+$5,180,454', '+$412,878'],
     ]
     eq_header = [
         Paragraph('', S('eqh0', fontSize=9)),
@@ -803,7 +801,7 @@ def build():
 
     s.append(Paragraph(
         'At <b>55.65% net CAGR</b>, the fund compounds at more than 3.7x the rate of the industry\'s top-performing '
-        'hedge funds and over 7x the S&amp;P 500. A <b>Sharpe ratio of 1.47</b> places it in the top fraction of '
+        'hedge funds and 3.5x the S&amp;P 500. A <b>Sharpe ratio of 1.47</b> places it in the top fraction of '
         'a percent of all systematic strategies ever measured, and its <b>Sortino ratio of 2.49</b> is nearly 2x the '
         'elite benchmark, proving that the returns are not being generated by reckless risk-taking but by a system '
         'that systematically controls downside exposure.',
@@ -811,7 +809,7 @@ def build():
 
     s.append(Paragraph(
         'The fund\'s <b>23x recovery factor</b> means it has generated 23 dollars of total return for every single '
-        'dollar of peak-to-trough drawdown. The top rated hedge fund benchmark is 7x. The S&amp;P 500 sits at 1.5x. '
+        'dollar of peak-to-trough drawdown. The top rated hedge fund benchmark is 7x. The S&amp;P 500 sits at 3.9x. '
         'PNTHR is producing more than 3x the return-per-unit-of-risk of the best hedge funds in the world, and it '
         'is doing so with a Multi-strategy + MCE approach purpose-built for the most consequential sector rotation '
         'of the modern era.',
@@ -853,7 +851,7 @@ def build():
     s.append(Spacer(1, 8))
     s.append(Paragraph(
         '<b>$1,000,000 invested at inception grew to $6,929,334 net of all fees, commissions, and slippage. '
-        '$100,000 grew to $587,766. The S&amp;P 500 returned $1,372,900 and $137,290 respectively.</b>',
+        '$100,000 grew to $587,766. The S&amp;P 500 returned $1,748,880 and $174,888 respectively.</b>',
         S('finalnum', fontSize=10, fontName='Helvetica-Bold', textColor=GREEN,
           alignment=TA_CENTER, leading=14, spaceAfter=8)))
 

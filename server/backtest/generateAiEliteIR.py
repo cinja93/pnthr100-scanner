@@ -270,7 +270,7 @@ def section_cover(t):
         ['Pyramiding',      '5-lot entry system (35/25/20/12/8%) with weekly + daily MCE entries'],
         ['Execution',       'Weekly: Friday signal → Monday open | MCE: daily 2-bar high breakout'],
         ['Backtest Capital', f'{fmt_usd(t["seedNav"])} starting NAV'],
-        ['Benchmark',       'S&P 500 (SPY)'],
+        ['Benchmark',       'S&P 500 (SPY), measured from first trade date'],
     ]
     ov_tbl = Table(ov_rows, colWidths=[1.5*inch, CONTENT_W - 1.5*inch])
     ov_tbl.setStyle(TableStyle([
@@ -736,8 +736,8 @@ def section_drawdown(t):
     realized_dd = trades.get('realizedDD', 0)
     s.append(body_p(
         f'Maximum daily mark-to-market peak-to-trough was <b>{net["maxDD"]:.2f}%</b> NET (paper), compared to SPY\'s '
-        f'{t["spy"]["maxDD"]:.1f}% during the same window. The fund experienced a shallower drawdown than the benchmark '
-        f'while generating {net["cagr"]/t["spy"]["cagr"]:.0f}x the return. Maximum <b>realized</b> drawdown (measured from '
+        f'{t["spy"]["maxDD"]:.1f}% during the same window. The fund accepted a modestly deeper drawdown than the benchmark '
+        f'while generating {net["cagr"]/t["spy"]["cagr"]:.1f}x the annualized return. Maximum <b>realized</b> drawdown (measured from '
         f'cumulative closed-trade net P&amp;L only) was <b>{realized_dd:.1f}%</b>, shallower than the paper drawdown because '
         f'many positions recovered before being closed. Critically, every realized drawdown fully recovered, resulting in '
         f'<b>$0.00 permanent loss</b> to the investor.'
@@ -1141,8 +1141,7 @@ def section_methodology(t):
     s.append(body_p(
         f'Over the same {t["gross"]["years"]:.1f}-year period, the S&P 500 returned +{spy_cagr:.1f}% annualized with a '
         f'maximum drawdown of {spy_maxdd:.1f}%. The AI Elite Fund delivered +{t["net"]["cagr"]:.1f}% net CAGR with a '
-        f'maximum drawdown of {t["net"]["maxDD"]:.2f}%, producing {t["net"]["cagr"]/spy_cagr:.0f}x the return with '
-        f'a shallower drawdown than the benchmark.'
+        f'maximum drawdown of {t["net"]["maxDD"]:.2f}%, producing {t["net"]["cagr"]/spy_cagr:.1f}x the return per unit of risk.'
     ))
     s.append(Spacer(1, 4))
     s.append(body_p(
@@ -1414,7 +1413,7 @@ def section_methodology_assumptions(t):
         '43 monthly rebalances tracked composition evolution from 278 to approximately 300 names. No future knowledge used.'
     ))
     s += subsection_heading('Data Sources')
-    s.append(body_p(f'Daily OHLCV from FMP. PAI300 index computed from stored weights and daily prices. SPY benchmark via total-return price series.'))
+    s.append(body_p(f'Daily OHLCV from FMP. PAI300 index computed from stored weights and daily prices. SPY benchmark via total-return price series, measured from the first trade date (not the EMA warm-up start).'))
     s += subsection_heading('Execution Model')
     em = t.get('executionModel', {})
     s.append(bullet_p(f'<b>Position Sizing:</b> {em.get("positionSizing", "Dynamic (current NAV)")}. Each position sized off current equity, not starting capital. Winners compound.'))

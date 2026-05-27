@@ -346,6 +346,12 @@ async function main() {
     .find({}).toArray();
   console.log(`Trade log: ${allTrades.length} trades (1M tier)\n`);
 
+  // First trade date for SPY benchmark alignment (matches irLiveService.js fix)
+  const sortedTrades = [...allTrades].sort((a, b) =>
+    String(a.entryDate).localeCompare(String(b.entryDate)));
+  const firstTradeDate = sortedTrades.length > 0
+    ? String(sortedTrades[0].entryDate).slice(0, 10) : null;
+
   for (const tier of TIERS) {
     console.log(`── ${tier.label} (${tier.key}) ──`);
 
@@ -508,9 +514,11 @@ async function main() {
     gross.dailySeries = dailySeries;
     gross.monthlyActivitySummary = monthlyActivitySummary;
 
-    // SPY annual returns (aligned to PNTHR trading dates)
+    // SPY annual returns (aligned to first trade date, not EMA warm-up start)
+    const spyAnnualStart = firstTradeDate || dailySeries[0]?.date;
     const spyAnnualYears = new Map();
     for (const d of dailySeries) {
+      if (d.date < spyAnnualStart) continue;  // skip EMA warm-up period
       const y = d.date.slice(0, 4);
       if (!spyAnnualYears.has(y)) spyAnnualYears.set(y, { first: d.spyEquity, last: d.spyEquity });
       spyAnnualYears.get(y).last = d.spyEquity;
@@ -520,7 +528,8 @@ async function main() {
     }));
 
     const tradeStats = computeTradeStats(allTrades, tier.seedNav, tier.seedNav / 1_000_000);
-    const spy = spyMetrics(spyDaily, gross.startDate, gross.endDate, tier.seedNav);
+    const spyStartDate = firstTradeDate || gross.startDate;
+    const spy = spyMetrics(spyDaily, spyStartDate, gross.endDate, tier.seedNav);
 
     const crisisGrossEq = grossDocs.map(d => +d.equity);
     const crisisGrossDates = grossDocs.map(d => String(d.date).slice(0, 10));
@@ -557,7 +566,7 @@ async function main() {
       tier: tier.key, label: tier.label, classLabel: tier.classLabel,
       seedNav: tier.seedNav, fundName: 'AI Elite Fund',
       feeSchedule: { yearsOneToThree: tier.feeYr1to3, yearsFourPlus: tier.feeYr4plus },
-      gross, net, trades: tradeStats, spy, spyAnnualReturns,
+      gross, net, trades: tradeStats, spy, spyAnnualReturns, firstTradeDate,
       crisisAlphaGross: crisisGross, crisisAlphaNet: crisisNet,
       alphaVsSpy: {
         totalReturnPts: +alphaTR.toFixed(2), cagrPts: +alphaCAGR.toFixed(2),

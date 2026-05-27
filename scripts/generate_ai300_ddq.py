@@ -371,7 +371,7 @@ def build():
         ["Question", "Answer"],
         [
             ["Track Record Type",
-             "Hypothetical Systematic Backtest (January 2022 through May 2026; 53 months; "
+             "Hypothetical Systematic Backtest (January 2022 through May 2026; 53 months; first trade June 13, 2022; "
              "1,103 trading days). Multi-strategy + MCE (Momentum Continuation Entry). "
              "Fund has not yet traded non-affiliated Limited Partner capital."],
             ["Total Trades (Wagyu tier)",
@@ -395,8 +395,9 @@ def build():
             ["Net Max Drawdown (daily NAV)",
              "Filet: -27.57%; Porterhouse: -26.23%; Wagyu: -25.56%"],
             ["Benchmark (S&amp;P 500)",
-             "CAGR: +7.75%; Sharpe: 0.31; Max Drawdown: -25.36%. Strategy net alpha: "
-             "Filet +42.15 pts; Porterhouse +43.22 pts; Wagyu +47.90 pts (annualized)."],
+             "CAGR: +15.83%; Sharpe: 0.73; Max Drawdown: -19.00% (measured from first trade date, "
+             "June 13, 2022). Strategy net alpha: "
+             "Filet +34.07 pts; Porterhouse +35.14 pts; Wagyu +39.82 pts (annualized)."],
             ["Data Integrity",
              "Backtest internally validated: PAI300 regime gate via proprietary PNTHR AI 300 Index "
              "(capped market-cap weighted, monthly rebalanced, base 2022-11-30 = 1000); "

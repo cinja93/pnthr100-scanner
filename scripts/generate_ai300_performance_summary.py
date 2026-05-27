@@ -193,7 +193,7 @@ def annual_table():
          ["Year", "Start Equity", "End Equity", "S&amp;P 500",
           "PNTHR AI Net", "Alpha"]],
         [Paragraph(c, cell_style) for c in
-         ["2022", "$1.00M", "$1.01M", "-19.95%", "+0.73%", "+20.68%"]],
+         ["2022", "$1.00M", "$1.01M", "+1.98%", "+0.73%", "-1.25%"]],
         [Paragraph(c, cell_style) for c in
          ["2023", "$1.01M", "$1.21M", "+24.81%", "+20.27%", "-4.54%"]],
         [Paragraph(c, cell_style) for c in
@@ -277,10 +277,10 @@ def build():
     story.append(Paragraph("Gross vs Net Returns by Investor Class", H1))
     story.append(spacer(4))
     story.append(P(
-        "Backtest period: January 2022 through May 2026 (53 months). The three classes "
-        "below apply their own PPM-specified performance allocation rates. Higher classes "
-        "(larger capital commitments) receive materially lower fee burdens, producing "
-        "meaningfully higher net returns. This is an intentional incentive for capital scale."
+        "Backtest period: January 2022 through May 2026 (53 months; first trade June 13, 2022). "
+        "The three classes below apply their own PPM-specified performance allocation rates. "
+        "Higher classes (larger capital commitments) receive materially lower fee burdens, "
+        "producing meaningfully higher net returns. This is an intentional incentive for capital scale."
     ))
 
     # ── FILET ─────────────────────────────────────────────────────────────
@@ -347,7 +347,7 @@ def build():
     story.append(direction_table())
     story.append(spacer(4))
     story.append(P(
-        "Backtest period: January 2022 through May 2026 (53 months). "
+        "Backtest period: January 2022 through May 2026 (53 months; first trade June 13, 2022). "
         "1,505 closed trades across the PNTHR AI Universe (~300 names).",
         SMALL))
 
@@ -380,11 +380,11 @@ def build():
     story.append(P(
         "Over the 4.4-year backtest the AI Elite Fund's Multi-strategy + MCE approach "
         "delivered a +55.65% net CAGR at the Wagyu tier, transforming $1,000,000 into "
-        "$6.93M while the S&amp;P 500 returned +37.3% over the same period. The fund's "
-        "maximum drawdown of -25.56% on a net basis was comparable to the S&amp;P 500's "
-        "-25.4% drawdown, while delivering dramatically higher returns. The 1% vitality "
-        "cap and 35% initial lot sizing ensure that no single adverse trade can materially "
-        "impair investor capital."
+        "$6.93M while the S&amp;P 500 returned +74.9% (+15.83% CAGR) over the same period. "
+        "The fund's maximum drawdown of -25.56% on a net basis is modestly deeper than "
+        "the S&amp;P 500's -19.00%, while delivering 3.5x higher annualized returns. The "
+        "1% vitality cap and 35% initial lot sizing ensure that no single adverse trade "
+        "can materially impair investor capital."
     ))
 
     # ── Anticipated Investor Questions ────────────────────────────────────
@@ -426,7 +426,7 @@ def build():
         "Was the strategy validated out-of-sample?", FAQ_Q))
     story.append(P(
         "Per-sector trend-filter periods are empirically calibrated across the "
-        "January 2022 through May 2026 backtest window. The calibration is supported "
+        "January 2022 through May 2026 backtest window (first trade June 13, 2022). The calibration is supported "
         "by robustness checks: (i) no sector period was selected that caused regression "
         "versus the baseline trend reference within any individual calendar year; "
         "(ii) no individual sector regressed under its selected period on a full-pipeline "

@@ -282,56 +282,60 @@ export default function DataRoomPage({ fund = 'carn' }) {
   return (
     <div style={{ padding: 30, background: '#0a0a0a', minHeight: '100vh', color: '#fff' }}>
       <PageHeader title="PNTHR Data Room" description="Legal documents, fund materials, and investor resources." />
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <h1 style={{ color: '#fcf000', margin: 0 }}>PNTHR Data Room</h1>
-        <div style={{ display: 'flex', gap: 10 }}>
-          {isAdmin && (
-            <>
-              <button
-                onClick={() => {
-                  setShowViewLog(v => !v);
-                  if (!showViewLog && viewLog.length === 0) {
-                    setViewLogLoading(true);
-                    fetch(`${API_BASE}/api/dataroom/view-log`, { headers: authHeaders() })
-                      .then(r => r.json())
-                      .then(d => setViewLog(Array.isArray(d) ? d : []))
-                      .catch(() => setViewLog([]))
-                      .finally(() => setViewLogLoading(false));
-                  }
-                }}
-                style={{
-                  background: showViewLog ? '#1a1a1a' : '#222',
-                  color: showViewLog ? '#fcf000' : '#888', border: '1px solid #444', borderRadius: 6,
-                  padding: '10px 16px', fontWeight: 600, cursor: 'pointer', fontSize: 13
-                }}
-              >
-                {showViewLog ? 'Hide View Log' : 'Investor View Log'}
-              </button>
-              <button
-                onClick={() => handleDownloadZip(null)}
-                disabled={downloading || totalDocs === 0}
-                style={{
-                  background: downloading === '__all__' ? '#555' : '#222',
-                  color: '#fcf000', border: '1px solid #444', borderRadius: 6,
-                  padding: '10px 16px', fontWeight: 600, cursor: totalDocs > 0 && !downloading ? 'pointer' : 'not-allowed', fontSize: 13
-                }}
-              >
-                {downloading === '__all__' ? 'Zipping...' : `Download All (${totalDocs})`}
-              </button>
-              <button
-                onClick={() => setShowUpload(true)}
-                style={{ background: '#D4A017', color: '#000', border: 'none', borderRadius: 6, padding: '10px 18px', fontWeight: 700, cursor: 'pointer' }}
-              >
-                + Upload Document
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-      <p style={{ color: '#666', fontSize: 13, margin: '0 0 24px 0' }}>
-        {isAdmin ? 'Manage fund documents by section. Upload, download, or delete.' : 'View fund documents. Contact an administrator to request copies or signatures.'}
-      </p>
+      {/* Header — hidden entirely on VIP / investor portals */}
+      {!isVipPortal && !isInvestorPortal && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h1 style={{ color: '#fcf000', margin: 0 }}>PNTHR Data Room</h1>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {isAdmin && (
+                <>
+                  <button
+                    onClick={() => {
+                      setShowViewLog(v => !v);
+                      if (!showViewLog && viewLog.length === 0) {
+                        setViewLogLoading(true);
+                        fetch(`${API_BASE}/api/dataroom/view-log`, { headers: authHeaders() })
+                          .then(r => r.json())
+                          .then(d => setViewLog(Array.isArray(d) ? d : []))
+                          .catch(() => setViewLog([]))
+                          .finally(() => setViewLogLoading(false));
+                      }
+                    }}
+                    style={{
+                      background: showViewLog ? '#1a1a1a' : '#222',
+                      color: showViewLog ? '#fcf000' : '#888', border: '1px solid #444', borderRadius: 6,
+                      padding: '10px 16px', fontWeight: 600, cursor: 'pointer', fontSize: 13
+                    }}
+                  >
+                    {showViewLog ? 'Hide View Log' : 'Investor View Log'}
+                  </button>
+                  <button
+                    onClick={() => handleDownloadZip(null)}
+                    disabled={downloading || totalDocs === 0}
+                    style={{
+                      background: downloading === '__all__' ? '#555' : '#222',
+                      color: '#fcf000', border: '1px solid #444', borderRadius: 6,
+                      padding: '10px 16px', fontWeight: 600, cursor: totalDocs > 0 && !downloading ? 'pointer' : 'not-allowed', fontSize: 13
+                    }}
+                  >
+                    {downloading === '__all__' ? 'Zipping...' : `Download All (${totalDocs})`}
+                  </button>
+                  <button
+                    onClick={() => setShowUpload(true)}
+                    style={{ background: '#D4A017', color: '#000', border: 'none', borderRadius: 6, padding: '10px 18px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    + Upload Document
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+          <p style={{ color: '#666', fontSize: 13, margin: '0 0 24px 0' }}>
+            {isAdmin ? 'Manage fund documents by section. Upload, download, or delete.' : 'View fund documents. Contact an administrator to request copies or signatures.'}
+          </p>
+        </>
+      )}
 
       {/* ── Investor View Log Panel ── */}
       {showViewLog && isAdmin && (

@@ -72,7 +72,7 @@ function MetricCard({ label, value, sub, color, small, info }) {
         )}
       </div>
       <div style={{ fontSize: small ? 18 : 22, fontWeight: 800, color: color || '#fff', whiteSpace: 'nowrap' }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>{sub}</div>}
+      <div style={{ fontSize: 10, color: sub ? '#aaa' : 'transparent', marginTop: 2, minHeight: 14 }}>{sub || ' '}</div>
       {showInfo && (
         <div ref={popRef} style={{
           position: 'absolute', top: '100%', left: 0, zIndex: 100, marginTop: 6,

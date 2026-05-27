@@ -847,7 +847,7 @@ export default function AiOrdersPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'monospace' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #2a2a40' }}>
-                  {['Ticker', 'Dir', 'Shares', 'Avg Cost', 'Price', 'Current Stop', 'New Stop', 'Move', 'Risk Reduced'].map(h => (
+                  {['Ticker', 'Dir', 'Shares', 'Avg Cost', 'Price', 'Current Stop', 'New Stop', 'Move', 'Locked P/L', 'Risk Reduced'].map(h => (
                     <th key={h} style={{ color: '#888', fontWeight: 700, padding: '5px 8px', textAlign: 'left', fontSize: 10, letterSpacing: '0.08em' }}>{h}</th>
                   ))}
                 </tr>
@@ -865,14 +865,42 @@ export default function AiOrdersPage() {
                       <td style={{ padding: '5px 8px', color: '#dc2626' }}>${adj.currentStop.toFixed(2)}</td>
                       <td style={{ padding: '5px 8px', color: '#16a34a', fontWeight: 700 }}>${adj.newStop.toFixed(2)}</td>
                       <td style={{ padding: '5px 8px', color: '#fbbf24' }}>+${move.toFixed(2)}</td>
+                      {(() => {
+                        const lockedPL = adj.direction === 'LONG'
+                          ? (adj.newStop - adj.avgCost) * adj.shares
+                          : (adj.avgCost - adj.newStop) * adj.shares;
+                        const isProfit = lockedPL >= 0;
+                        return (
+                          <td style={{ padding: '5px 8px', color: isProfit ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
+                            {isProfit ? '+' : '-'}${Math.abs(lockedPL).toFixed(2)}
+                          </td>
+                        );
+                      })()}
                       <td style={{ padding: '5px 8px', color: '#16a34a' }}>${adj.riskReduced.toFixed(2)}</td>
                     </tr>
                   );
                 })}
               </tbody>
               <tfoot>
-                <tr style={{ borderTop: '1px solid #2a2a40' }}>
-                  <td colSpan={8} style={{ padding: '5px 8px', color: '#888', fontWeight: 700, textAlign: 'right' }}>Total risk reduced:</td>
+                {(() => {
+                  const totalLockedPL = heatReductionPlan.adjustments.reduce((s, a) => {
+                    return s + (a.direction === 'LONG'
+                      ? (a.newStop - a.avgCost) * a.shares
+                      : (a.avgCost - a.newStop) * a.shares);
+                  }, 0);
+                  const isProfit = totalLockedPL >= 0;
+                  return (
+                    <tr style={{ borderTop: '1px solid #2a2a40' }}>
+                      <td colSpan={8} style={{ padding: '5px 8px', color: '#888', fontWeight: 700, textAlign: 'right' }}>Total locked P/L:</td>
+                      <td style={{ padding: '5px 8px', fontWeight: 800, color: isProfit ? '#16a34a' : '#dc2626' }}>
+                        <AumShield>{isProfit ? '+' : '-'}${Math.abs(totalLockedPL).toFixed(2)}</AumShield>
+                      </td>
+                      <td></td>
+                    </tr>
+                  );
+                })()}
+                <tr>
+                  <td colSpan={9} style={{ padding: '5px 8px', color: '#888', fontWeight: 700, textAlign: 'right' }}>Total risk reduced:</td>
                   <td style={{ padding: '5px 8px', color: '#16a34a', fontWeight: 800 }}>
                     <AumShield>${heatReductionPlan.adjustments.reduce((s, a) => s + a.riskReduced, 0).toFixed(2)}</AumShield>
                   </td>

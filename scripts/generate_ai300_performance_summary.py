@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-PNTHR AI Elite 300 Fund, LP — Performance Summary v2.0
-All numbers sourced from AI Elite IR v10.1 Multi-strategy + MCE
+PNTHR AI Elite 300 Fund, LP — Performance Summary v2.1
+All numbers sourced from AI Elite IR v10.2 Multi-strategy + MCE
 (Filet $100K, Porterhouse $500K, Wagyu $1M).
+v2.1: SPY benchmark corrected to measure from first trade date (Jun 13, 2022).
 
-Output: ~/Downloads/PNTHR_AI_Elite_300_Performance_Summary_v2.0_2026.pdf
+Output: ~/Downloads/PNTHR_AI_Elite_300_Performance_Summary_v2.1_2026.pdf
 """
 
 import os
@@ -30,7 +31,7 @@ from pnthr_design import (
 
 FUND       = "PNTHR AI Elite 300 Fund, LP"
 FUND_UPPER = "PNTHR AI ELITE 300 FUND"
-VERSION    = "v2.0"
+VERSION    = "v2.1"
 DATE_DISP  = "May 2026"
 
 OUT_PATH = os.path.expanduser(
@@ -100,7 +101,7 @@ def metrics_table(rows):
 
 
 def direction_table():
-    """BL / SS / Combined trade activity table (from Wagyu $1M IR v10.1)."""
+    """BL / SS / Combined trade activity table (from Wagyu $1M IR v10.2)."""
     hdr_style = ParagraphStyle(
         name="th2", fontName="Helvetica-Bold", fontSize=10, leading=13,
         alignment=TA_LEFT)
@@ -138,7 +139,7 @@ def direction_table():
 
 
 def crisis_table():
-    """Crisis alpha table from Wagyu IR v10.1."""
+    """Crisis alpha table from Wagyu IR v10.2."""
     hdr_style = ParagraphStyle(
         name="th3", fontName="Helvetica-Bold", fontSize=10, leading=13,
         alignment=TA_LEFT)
@@ -180,7 +181,7 @@ def crisis_table():
 
 
 def annual_table():
-    """Annual performance from Wagyu IR v10.1 (Wagyu Net basis)."""
+    """Annual performance from Wagyu IR v10.2 (Wagyu Net basis)."""
     hdr_style = ParagraphStyle(
         name="th4", fontName="Helvetica-Bold", fontSize=10, leading=13,
         alignment=TA_LEFT)
@@ -284,7 +285,7 @@ def build():
     ))
 
     # ── FILET ─────────────────────────────────────────────────────────────
-    # From IR Filet $100K v10.1 (Multi-strategy + MCE)
+    # From IR Filet $100K v10.2 (Multi-strategy + MCE)
     story.append(Paragraph(
         "<b>FILET CLASS ($100,000 - $499,999 : 30% / 25% after 36 months)</b>",
         CLASS_HDR))
@@ -301,7 +302,7 @@ def build():
     story.append(spacer(6))
 
     # ── PORTERHOUSE ───────────────────────────────────────────────────────
-    # From IR Porterhouse $500K v10.1 (Multi-strategy + MCE)
+    # From IR Porterhouse $500K v10.2 (Multi-strategy + MCE)
     story.append(Paragraph(
         "<b>PORTERHOUSE CLASS ($500,000 - $999,999 : 25% / 20% after 36 months)</b>",
         CLASS_HDR))
@@ -318,7 +319,7 @@ def build():
     story.append(spacer(6))
 
     # ── WAGYU ─────────────────────────────────────────────────────────────
-    # From IR Wagyu $1M v10.1 (Multi-strategy + MCE)
+    # From IR Wagyu $1M v10.2 (Multi-strategy + MCE)
     story.append(Paragraph(
         "<b>WAGYU CLASS ($1,000,000+ : 20% / 15% after 36 months)</b>",
         CLASS_HDR))

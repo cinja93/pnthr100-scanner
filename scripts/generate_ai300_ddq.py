@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-PNTHR AI Elite 300 Fund, LP — Due Diligence Questionnaire v2.0
-All numbers sourced from AI Elite IR v10.1 Multi-strategy + MCE.
+PNTHR AI Elite 300 Fund, LP — Due Diligence Questionnaire v2.1
+All numbers sourced from AI Elite IR v10.2 Multi-strategy + MCE.
+v2.1: SPY benchmark corrected to measure from first trade date (Jun 13, 2022).
 
-Output: ~/Downloads/PNTHR_AI_Elite_300_DDQ_v2.0_2026.pdf
+Output: ~/Downloads/PNTHR_AI_Elite_300_DDQ_v2.1_2026.pdf
 """
 
 import os
@@ -29,7 +30,7 @@ from pnthr_design import (
 
 FUND       = "PNTHR AI Elite 300 Fund, LP"
 FUND_UPPER = "PNTHR AI ELITE 300 FUND"
-VERSION    = "v2.0"
+VERSION    = "v2.1"
 DATE_DISP  = "May 2026"
 
 OUT_PATH = os.path.expanduser(
@@ -408,7 +409,7 @@ def build():
              "accounting firm; Fund intends to engage Spicer Jeffries LLP as independent auditor "
              "upon Limited Partner admission."],
             ["Full Detail",
-             "Refer to PNTHR AI Elite 300 Fund Intelligence Report v10.1 for complete per-class "
+             "Refer to PNTHR AI Elite 300 Fund Intelligence Report v10.2 for complete per-class "
              "metrics, annual performance breakdowns, crisis alpha analysis, methodology, and "
              "anticipated due diligence questions."],
         ],

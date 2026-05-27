@@ -3,7 +3,8 @@
 generateInvestorExplanation.py - PNTHR AI Elite Fund Investor Explanation PDF
 
 Black-background PDF with yellow headings matching IR styling.
-Output: ~/Downloads/PNTHR_AI_Elite_Investor_Explanation.pdf
+Output: ~/Downloads/PNTHR_AI_Elite_Investor_Explanation_v2.1_2026.pdf
+v2.1: SPY benchmark corrected to measure from first trade date (Jun 13, 2022).
 """
 
 import os, json
@@ -158,7 +159,7 @@ def on_page(canvas, doc):
 
 # -- Build document -----------------------------------------------------------
 def build():
-    out_path = os.path.expanduser('~/Downloads/PNTHR_AI_Elite_Investor_Explanation_v2.0_2026.pdf')
+    out_path = os.path.expanduser('~/Downloads/PNTHR_AI_Elite_Investor_Explanation_v2.1_2026.pdf')
     doc = SimpleDocTemplate(out_path, pagesize=letter,
         leftMargin=MARGIN, rightMargin=MARGIN,
         topMargin=MARGIN, bottomMargin=0.6*inch)

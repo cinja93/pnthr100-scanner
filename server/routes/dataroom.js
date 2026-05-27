@@ -45,7 +45,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/dataroom/sections — list distinct section names
+// GET /api/dataroom/sections — list distinct section names (ordered by custom sortOrder then alphabetical)
 router.get('/sections', async (req, res) => {
   try {
     const db = await connectToDatabase();
@@ -53,7 +53,19 @@ router.get('/sections', async (req, res) => {
     // Also check for a dedicated sections collection for pre-created empty sections
     const custom = await db.collection('dataroom_sections').find({}).toArray();
     const customNames = custom.map(s => s.name);
-    const all = [...new Set([...sections.filter(Boolean), ...customNames, ...SEED_SECTIONS])].sort();
+    // Build sortOrder lookup from sections collection
+    const orderMap = {};
+    for (const s of custom) {
+      if (typeof s.sortOrder === 'number') orderMap[s.name] = s.sortOrder;
+    }
+    const all = [...new Set([...sections.filter(Boolean), ...customNames, ...SEED_SECTIONS])];
+    // Sort: custom sortOrder first (lower = earlier), then alphabetical for unranked sections
+    all.sort((a, b) => {
+      const oa = orderMap[a] ?? 9999;
+      const ob = orderMap[b] ?? 9999;
+      if (oa !== ob) return oa - ob;
+      return a.localeCompare(b);
+    });
     res.json(all);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -264,6 +276,26 @@ router.patch('/sections/rename', async (req, res) => {
       { upsert: true }
     );
     res.json({ success: true, oldName, newName: trimmed });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/dataroom/:id/section — move a document to a different section (admin only)
+router.patch('/:id/section', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    const { section, sortOrder } = req.body;
+    if (!section?.trim()) return res.status(400).json({ error: 'section required' });
+    const db = await connectToDatabase();
+    const updates = { section: section.trim() };
+    if (typeof sortOrder === 'number') updates.sortOrder = sortOrder;
+    const result = await db.collection(COLLECTION).updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: updates }
+    );
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Document not found' });
+    res.json({ success: true, section: section.trim() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

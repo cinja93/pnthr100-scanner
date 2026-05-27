@@ -71,7 +71,15 @@ export default function DataRoomPage({ fund = 'carn' }) {
   sections.forEach(sec => {
     if (!grouped[sec]) grouped[sec] = [];
   });
-  const allSectionNames = Object.keys(grouped).sort();
+  // Use backend section order (sorted by custom sortOrder) as primary key,
+  // then append any doc-only sections alphabetically at the end
+  const backendOrder = new Map(sections.map((s, i) => [s, i]));
+  const allSectionNames = Object.keys(grouped).sort((a, b) => {
+    const oa = backendOrder.has(a) ? backendOrder.get(a) : 9999;
+    const ob = backendOrder.has(b) ? backendOrder.get(b) : 9999;
+    if (oa !== ob) return oa - ob;
+    return a.localeCompare(b);
+  });
   const sectionNames = allSectionNames.filter(sec => {
     const isAiSection = /ai\s*elite|ai\s*300/i.test(sec);
     return fund === 'ai' ? isAiSection : !isAiSection;

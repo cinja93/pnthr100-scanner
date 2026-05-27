@@ -251,6 +251,9 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
       for (const r of resolved) if (r) results.push(r);
     }
 
+    // Dedup: one row per ticker — main MCE candidates win over heat re-entries
+    const seenTickers = new Set(results.map(r => r.ticker));
+
     // ── Heat re-entries: recycled positions that got stopped out ──────────
     // These are manual-only (not auto-executed). They show in the MCE table
     // with a "Heat" badge so the user can decide to re-enter.
@@ -261,6 +264,7 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
         .toArray();
       for (const hr of heatReentries) {
         if (held.has(hr.ticker)) continue;
+        if (seenTickers.has(hr.ticker)) continue;
         const sig = allSignals[hr.ticker];
         if (!sig || sig.signal !== 'BL') continue;
         const weeklyStop = sig.pnthrStop ?? sig.stopPrice;
@@ -308,10 +312,19 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
       if (gated.length) console.log(`[MCE Cooldown] gated (no green 1H bar yet): ${gated.join(', ')}`);
     }
 
-    // Highest RPS first (most room between entry and stop = more shares = bigger trade)
-    results.sort((a, b) => b.rps - a.rps);
+    // Final dedup: keep first occurrence of each ticker (MCE trigger > heat re-entry)
+    const finalSeen = new Set();
+    const deduped = [];
+    for (const r of results) {
+      if (finalSeen.has(r.ticker)) continue;
+      finalSeen.add(r.ticker);
+      deduped.push(r);
+    }
 
-    signalCache = { at: now, signals: results };
+    // Highest RPS first (most room between entry and stop = more shares = bigger trade)
+    deduped.sort((a, b) => b.rps - a.rps);
+
+    signalCache = { at: now, signals: deduped };
     return results;
   } catch (err) {
     console.error('[reentrySignalService]', err.message);

@@ -1078,6 +1078,31 @@ app.delete('/api/admin/aum-pins/:userId', authenticateJWT, requireAdmin, async (
   }
 });
 
+// ── Admin NAV control ────────────────────────────────────────────────────────
+
+// GET /api/admin/user-nav/:userId — get a user's NAV
+app.get('/api/admin/user-nav/:userId', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const profile = await getUserProfile(req.params.userId);
+    res.json({ nav: profile?.accountSize ?? null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/user-nav/:userId — set a user's NAV (for demos/VIP onboarding)
+app.post('/api/admin/user-nav/:userId', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { nav } = req.body;
+    if (typeof nav !== 'number' || nav <= 0) return res.status(400).json({ error: 'nav must be a positive number' });
+    await upsertUserProfile(req.params.userId, { accountSize: nav });
+    res.json({ success: true, nav });
+  } catch (err) {
+    console.error('Error setting user NAV:', err);
+    res.status(500).json({ error: 'Failed to set NAV' });
+  }
+});
+
 // ── Portal Analytics (investor + VIP) ──────────────────────────────────────
 
 // POST /api/portal/events — log events from investor or VIP users

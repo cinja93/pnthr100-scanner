@@ -497,6 +497,34 @@ function VipCard({ vip, onPagesUpdated }) {
   const [currentPages, setCurrentPages] = useState(null);
   const [currentDocIds, setCurrentDocIds] = useState([]);
   const [loadingPages, setLoadingPages] = useState(false);
+  // NAV management
+  const [navValue, setNavValue] = useState('');
+  const [navCurrent, setNavCurrent] = useState(null);
+  const [navMsg, setNavMsg] = useState(null);
+
+  async function loadNav() {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/user-nav/${vip.id}`, { headers: authHeaders() });
+      if (res.ok) { const d = await res.json(); setNavCurrent(d.nav); }
+    } catch { /* ignore */ }
+  }
+
+  async function handleNavSave() {
+    const n = Number(navValue);
+    if (!n || n <= 0) { setNavMsg({ ok: false, msg: 'Enter a valid dollar amount' }); return; }
+    setNavMsg(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/user-nav/${vip.id}`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ nav: n }),
+      });
+      const d = await res.json();
+      if (d.success) { setNavMsg({ ok: true, msg: 'NAV saved' }); setNavCurrent(n); setNavValue(''); }
+      else { setNavMsg({ ok: false, msg: d.error || 'Failed' }); }
+    } catch { setNavMsg({ ok: false, msg: 'Network error' }); }
+  }
+
   // PIN management
   const [pinOpen, setPinOpen] = useState(false);
   const [pinValue, setPinValue] = useState('');
@@ -588,56 +616,92 @@ function VipCard({ vip, onPagesUpdated }) {
         <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 4, background: 'rgba(40,167,69,0.15)', color: '#28a745', letterSpacing: '0.05em' }}>
           {(vip.role || 'member').toUpperCase()}
         </span>
-        <button onClick={() => { if (!pinOpen) loadPinStatus(); setPinOpen(v => !v); setPagesOpen(false); setPinMsg(null); }}
+        <button onClick={() => { if (!pinOpen) { loadPinStatus(); loadNav(); } setPinOpen(v => !v); setPagesOpen(false); setPinMsg(null); setNavMsg(null); }}
           style={{ background: pinOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pinOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pinOpen ? 700 : 400 }}>
-          PIN
+          SETTINGS
         </button>
         <button onClick={handleTogglePages}
           style={{ background: pagesOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pagesOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pagesOpen ? 700 : 400 }}>
           PAGES
         </button>
       </div>
-      {/* PIN management panel */}
+      {/* Settings panel (PIN + NAV) */}
       {pinOpen && (
-        <div style={{ borderTop: '1px solid #222', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>
-            AUM PIN:{' '}
-            {pinStatus && typeof pinStatus === 'string'
-              ? <span style={{ color: '#22c55e', fontSize: 14, fontWeight: 700, letterSpacing: 3 }}>{pinStatus}</span>
-              : pinStatus === false
-                ? <span style={{ color: '#666' }}>NOT SET</span>
-                : '...'}
-          </span>
-          <span style={{ color: '#333' }}>|</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={4}
-            value={pinValue}
-            onChange={e => setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            onKeyDown={e => { if (e.key === 'Enter') handlePinSave(); }}
-            placeholder="0000"
-            style={{
-              width: 56, padding: '4px 6px', fontSize: 13, fontFamily: 'monospace',
-              background: '#0a0a0a', border: '1px solid #444', borderRadius: 4,
-              color: '#e8e6e3', textAlign: 'center', letterSpacing: 4, outline: 'none',
-            }}
-          />
-          <button onClick={handlePinSave} disabled={pinLoading}
-            style={{ background: '#22c55e', color: '#000', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
-            {pinStatus && typeof pinStatus === 'string' ? 'CHANGE' : 'SET PIN'}
-          </button>
-          {pinStatus && typeof pinStatus === 'string' && (
-            <button onClick={handlePinReset} disabled={pinLoading}
-              style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
-              REMOVE
-            </button>
-          )}
-          {pinMsg && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: pinMsg.ok ? '#22c55e' : '#ef4444' }}>
-              {pinMsg.ok ? '✓' : '✗'} {pinMsg.msg}
+        <div style={{ borderTop: '1px solid #222' }}>
+          {/* PIN row */}
+          <div style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace', minWidth: 60 }}>
+              PIN:{' '}
+              {pinStatus && typeof pinStatus === 'string'
+                ? <span style={{ color: '#22c55e', fontSize: 14, fontWeight: 700, letterSpacing: 3 }}>{pinStatus}</span>
+                : pinStatus === false
+                  ? <span style={{ color: '#666' }}>NOT SET</span>
+                  : '...'}
             </span>
-          )}
+            <span style={{ color: '#333' }}>|</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              value={pinValue}
+              onChange={e => setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              onKeyDown={e => { if (e.key === 'Enter') handlePinSave(); }}
+              placeholder="0000"
+              style={{
+                width: 56, padding: '4px 6px', fontSize: 13, fontFamily: 'monospace',
+                background: '#0a0a0a', border: '1px solid #444', borderRadius: 4,
+                color: '#e8e6e3', textAlign: 'center', letterSpacing: 4, outline: 'none',
+              }}
+            />
+            <button onClick={handlePinSave} disabled={pinLoading}
+              style={{ background: '#22c55e', color: '#000', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+              {pinStatus && typeof pinStatus === 'string' ? 'CHANGE' : 'SET PIN'}
+            </button>
+            {pinStatus && typeof pinStatus === 'string' && (
+              <button onClick={handlePinReset} disabled={pinLoading}
+                style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                REMOVE
+              </button>
+            )}
+            {pinMsg && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: pinMsg.ok ? '#22c55e' : '#ef4444' }}>
+                {pinMsg.ok ? '✓' : '✗'} {pinMsg.msg}
+              </span>
+            )}
+          </div>
+          {/* NAV row */}
+          <div style={{ padding: '4px 18px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace', minWidth: 60 }}>
+              NAV:{' '}
+              {navCurrent != null
+                ? <span style={{ color: '#fcf000', fontSize: 13, fontWeight: 700 }}>${Number(navCurrent).toLocaleString()}</span>
+                : <span style={{ color: '#666' }}>NOT SET</span>}
+            </span>
+            <span style={{ color: '#333' }}>|</span>
+            <span style={{ color: '#555', fontSize: 10 }}>$</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={navValue}
+              onChange={e => setNavValue(e.target.value.replace(/[^\d]/g, ''))}
+              onKeyDown={e => { if (e.key === 'Enter') handleNavSave(); }}
+              placeholder="50000"
+              style={{
+                width: 80, padding: '4px 6px', fontSize: 13, fontFamily: 'monospace',
+                background: '#0a0a0a', border: '1px solid #444', borderRadius: 4,
+                color: '#e8e6e3', textAlign: 'right', outline: 'none',
+              }}
+            />
+            <button onClick={handleNavSave}
+              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+              SET NAV
+            </button>
+            {navMsg && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: navMsg.ok ? '#22c55e' : '#ef4444' }}>
+                {navMsg.ok ? '✓' : '✗'} {navMsg.msg}
+              </span>
+            )}
+          </div>
         </div>
       )}
       {pagesOpen && !loadingPages && currentPages !== null && (
@@ -679,6 +743,33 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
   const [pinStatus, setPinStatus] = useState(null);
   const [pinMsg, setPinMsg] = useState(null);
   const [pinLoading, setPinLoading] = useState(false);
+  // NAV management
+  const [navValue, setNavValue] = useState('');
+  const [navCurrent, setNavCurrent] = useState(null);
+  const [navMsg, setNavMsg] = useState(null);
+
+  async function loadNav() {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/user-nav/${inv._id}`, { headers: authHeaders() });
+      if (res.ok) { const d = await res.json(); setNavCurrent(d.nav); }
+    } catch { /* ignore */ }
+  }
+
+  async function handleNavSave() {
+    const n = Number(navValue);
+    if (!n || n <= 0) { setNavMsg({ ok: false, msg: 'Enter a valid dollar amount' }); return; }
+    setNavMsg(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/user-nav/${inv._id}`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ nav: n }),
+      });
+      const d = await res.json();
+      if (d.success) { setNavMsg({ ok: true, msg: 'NAV saved' }); setNavCurrent(n); setNavValue(''); }
+      else { setNavMsg({ ok: false, msg: d.error || 'Failed' }); }
+    } catch { setNavMsg({ ok: false, msg: 'Network error' }); }
+  }
 
   async function loadPinStatus() {
     try {
@@ -824,9 +915,9 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
         }}>
           {inv.status?.toUpperCase()}
         </span>
-        <button onClick={() => { if (!pinOpen) loadPinStatus(); setPinOpen(v => !v); setPagesOpen(false); setNotesOpen(false); setPinMsg(null); }}
+        <button onClick={() => { if (!pinOpen) { loadPinStatus(); loadNav(); } setPinOpen(v => !v); setPagesOpen(false); setNotesOpen(false); setPinMsg(null); setNavMsg(null); }}
           style={{ background: pinOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pinOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pinOpen ? 700 : 400 }}>
-          PIN
+          SETTINGS
         </button>
         <button onClick={() => setPagesOpen(v => !v)}
           style={{ background: pagesOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pagesOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pagesOpen ? 700 : 400 }}>
@@ -850,47 +941,83 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
         </button>
       </div>
 
-      {/* ── PIN section ── */}
+      {/* ── Settings panel (PIN + NAV) ── */}
       {pinOpen && (
-        <div style={{ borderTop: '1px solid #222', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>
-            AUM PIN:{' '}
-            {pinStatus && typeof pinStatus === 'string'
-              ? <span style={{ color: '#22c55e', fontSize: 14, fontWeight: 700, letterSpacing: 3 }}>{pinStatus}</span>
-              : pinStatus === false
-                ? <span style={{ color: '#666' }}>NOT SET</span>
-                : '...'}
-          </span>
-          <span style={{ color: '#333' }}>|</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={4}
-            value={pinValue}
-            onChange={e => setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            onKeyDown={e => { if (e.key === 'Enter') handlePinSave(); }}
-            placeholder="0000"
-            style={{
-              width: 56, padding: '4px 6px', fontSize: 13, fontFamily: 'monospace',
-              background: '#0a0a0a', border: '1px solid #444', borderRadius: 4,
-              color: '#e8e6e3', textAlign: 'center', letterSpacing: 4, outline: 'none',
-            }}
-          />
-          <button onClick={handlePinSave} disabled={pinLoading}
-            style={{ background: '#22c55e', color: '#000', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
-            {pinStatus && typeof pinStatus === 'string' ? 'CHANGE' : 'SET PIN'}
-          </button>
-          {pinStatus && typeof pinStatus === 'string' && (
-            <button onClick={handlePinReset} disabled={pinLoading}
-              style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
-              REMOVE
-            </button>
-          )}
-          {pinMsg && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: pinMsg.ok ? '#22c55e' : '#ef4444' }}>
-              {pinMsg.ok ? '✓' : '✗'} {pinMsg.msg}
+        <div style={{ borderTop: '1px solid #222' }}>
+          {/* PIN row */}
+          <div style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace', minWidth: 60 }}>
+              PIN:{' '}
+              {pinStatus && typeof pinStatus === 'string'
+                ? <span style={{ color: '#22c55e', fontSize: 14, fontWeight: 700, letterSpacing: 3 }}>{pinStatus}</span>
+                : pinStatus === false
+                  ? <span style={{ color: '#666' }}>NOT SET</span>
+                  : '...'}
             </span>
-          )}
+            <span style={{ color: '#333' }}>|</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              value={pinValue}
+              onChange={e => setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              onKeyDown={e => { if (e.key === 'Enter') handlePinSave(); }}
+              placeholder="0000"
+              style={{
+                width: 56, padding: '4px 6px', fontSize: 13, fontFamily: 'monospace',
+                background: '#0a0a0a', border: '1px solid #444', borderRadius: 4,
+                color: '#e8e6e3', textAlign: 'center', letterSpacing: 4, outline: 'none',
+              }}
+            />
+            <button onClick={handlePinSave} disabled={pinLoading}
+              style={{ background: '#22c55e', color: '#000', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+              {pinStatus && typeof pinStatus === 'string' ? 'CHANGE' : 'SET PIN'}
+            </button>
+            {pinStatus && typeof pinStatus === 'string' && (
+              <button onClick={handlePinReset} disabled={pinLoading}
+                style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                REMOVE
+              </button>
+            )}
+            {pinMsg && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: pinMsg.ok ? '#22c55e' : '#ef4444' }}>
+                {pinMsg.ok ? '✓' : '✗'} {pinMsg.msg}
+              </span>
+            )}
+          </div>
+          {/* NAV row */}
+          <div style={{ padding: '4px 18px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace', minWidth: 60 }}>
+              NAV:{' '}
+              {navCurrent != null
+                ? <span style={{ color: '#fcf000', fontSize: 13, fontWeight: 700 }}>${Number(navCurrent).toLocaleString()}</span>
+                : <span style={{ color: '#666' }}>NOT SET</span>}
+            </span>
+            <span style={{ color: '#333' }}>|</span>
+            <span style={{ color: '#555', fontSize: 10 }}>$</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={navValue}
+              onChange={e => setNavValue(e.target.value.replace(/[^\d]/g, ''))}
+              onKeyDown={e => { if (e.key === 'Enter') handleNavSave(); }}
+              placeholder="50000"
+              style={{
+                width: 80, padding: '4px 6px', fontSize: 13, fontFamily: 'monospace',
+                background: '#0a0a0a', border: '1px solid #444', borderRadius: 4,
+                color: '#e8e6e3', textAlign: 'right', outline: 'none',
+              }}
+            />
+            <button onClick={handleNavSave}
+              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+              SET NAV
+            </button>
+            {navMsg && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: navMsg.ok ? '#22c55e' : '#ef4444' }}>
+                {navMsg.ok ? '✓' : '✗'} {navMsg.msg}
+              </span>
+            )}
+          </div>
         </div>
       )}
 

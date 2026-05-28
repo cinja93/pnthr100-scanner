@@ -1676,7 +1676,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                 )}
 
                 {!aiLoading && !aiError && aiStocks.length > 0 && (
-                  <StockTable key={risingMode ? `ai-rising-${activePage}` : `ai-${activePage}`} stocks={risingMode ? risingStocks : aiStocks} signals={aiSignals} laserSignals={{}} signalsLoading={false} earnings={aiEarnings} onTickerClick={handleRowClick} scanType={scanType} hideExchange />
+                  <StockTable key={risingMode ? `ai-rising-${activePage}` : `ai-${activePage}`} stocks={risingMode ? risingStocks : aiStocks} signals={aiSignals} laserSignals={{}} signalsLoading={false} earnings={aiEarnings} onTickerClick={handleRowClick} scanType={scanType} hideExchange defaultSort={risingMode ? { key: 'rankChange', direction: 'desc' } : null} />
                 )}
 
                 {!aiLoading && !aiError && aiStocks.length === 0 && (

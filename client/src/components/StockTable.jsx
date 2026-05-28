@@ -142,8 +142,8 @@ function getPegTooltip(peg) {
   return `PEG: ${peg.toFixed(2)} — ${reading}`;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, showMode = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null, fcfMap = null, valMap = null, heldTickers = null }) {
-  const [sortConfig, setSortConfig] = useState({ key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, showMode = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null, fcfMap = null, valMap = null, heldTickers = null, defaultSort = null }) {
+  const [sortConfig, setSortConfig] = useState(defaultSort || { key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
   const listRef = useRef([]);
 

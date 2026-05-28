@@ -87,10 +87,11 @@ export function authenticateJWT(req, res, next) {
     // ADMIN_EMAILS because that would leak admin privileges into the
     // impersonated session. readOnly is enforced here before any handler runs.
     if (payload.impersonatedBy) {
-      // The stop endpoint writes the session's stop-time to the audit log, so
-      // it's the only non-GET allowed from within an impersonation session.
+      // These POST endpoints are read-like (no data mutation) and must work
+      // during impersonation so admin can experience the user's full flow.
       const isStopEndpoint = req.path === '/api/admin/impersonate/stop';
-      if (payload.readOnly && req.method !== 'GET' && !isStopEndpoint) {
+      const isPinVerify = req.path === '/api/user/aum-pin/verify';
+      if (payload.readOnly && req.method !== 'GET' && !isStopEndpoint && !isPinVerify) {
         return res.status(403).json({
           error: 'Impersonation session is read-only. This action cannot be performed.',
           code:  'IMPERSONATION_READ_ONLY',

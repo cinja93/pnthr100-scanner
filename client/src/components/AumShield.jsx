@@ -44,7 +44,7 @@ export default function AumShield({ children, style = {}, block = false, showDur
         setPinVal('');
         setError('');
       } else {
-        setError('Incorrect PIN');
+        setError(d.error || 'Incorrect PIN');
         setPinVal('');
       }
     } else {

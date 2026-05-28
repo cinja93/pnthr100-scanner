@@ -497,6 +497,62 @@ function VipCard({ vip, onPagesUpdated }) {
   const [currentPages, setCurrentPages] = useState(null);
   const [currentDocIds, setCurrentDocIds] = useState([]);
   const [loadingPages, setLoadingPages] = useState(false);
+  // PIN management
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinValue, setPinValue] = useState('');
+  const [pinStatus, setPinStatus] = useState(null); // null = unknown, string = current pin, false = no pin
+  const [pinMsg, setPinMsg] = useState(null);
+  const [pinLoading, setPinLoading] = useState(false);
+
+  async function loadPinStatus() {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/aum-pins`, { headers: authHeaders() });
+      if (res.ok) {
+        const users = await res.json();
+        const match = users.find(u => u.userId === vip.id);
+        setPinStatus(match?.pin || false);
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function handlePinSave() {
+    if (!/^\d{4}$/.test(pinValue)) { setPinMsg({ ok: false, msg: 'Must be 4 digits' }); return; }
+    setPinLoading(true);
+    setPinMsg(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/aum-pins/${vip.id}`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ pin: pinValue }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        setPinMsg({ ok: true, msg: 'PIN saved' });
+        setPinStatus(pinValue);
+        setPinValue('');
+      } else {
+        setPinMsg({ ok: false, msg: d.error || 'Failed' });
+      }
+    } catch { setPinMsg({ ok: false, msg: 'Network error' }); }
+    setPinLoading(false);
+  }
+
+  async function handlePinReset() {
+    setPinLoading(true);
+    setPinMsg(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/aum-pins/${vip.id}`, {
+        method: 'DELETE', headers: authHeaders(),
+      });
+      if (res.ok) {
+        setPinMsg({ ok: true, msg: 'PIN removed' });
+        setPinStatus(false);
+      } else {
+        setPinMsg({ ok: false, msg: 'Failed to reset' });
+      }
+    } catch { setPinMsg({ ok: false, msg: 'Network error' }); }
+    setPinLoading(false);
+  }
 
   async function loadPages() {
     if (currentPages !== null) return;
@@ -532,11 +588,58 @@ function VipCard({ vip, onPagesUpdated }) {
         <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 4, background: 'rgba(40,167,69,0.15)', color: '#28a745', letterSpacing: '0.05em' }}>
           {(vip.role || 'member').toUpperCase()}
         </span>
+        <button onClick={() => { if (!pinOpen) loadPinStatus(); setPinOpen(v => !v); setPagesOpen(false); setPinMsg(null); }}
+          style={{ background: pinOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pinOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pinOpen ? 700 : 400 }}>
+          PIN
+        </button>
         <button onClick={handleTogglePages}
           style={{ background: pagesOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pagesOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pagesOpen ? 700 : 400 }}>
           PAGES
         </button>
       </div>
+      {/* PIN management panel */}
+      {pinOpen && (
+        <div style={{ borderTop: '1px solid #222', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>
+            AUM PIN:{' '}
+            {pinStatus && typeof pinStatus === 'string'
+              ? <span style={{ color: '#22c55e', fontSize: 14, fontWeight: 700, letterSpacing: 3 }}>{pinStatus}</span>
+              : pinStatus === false
+                ? <span style={{ color: '#666' }}>NOT SET</span>
+                : '...'}
+          </span>
+          <span style={{ color: '#333' }}>|</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={4}
+            value={pinValue}
+            onChange={e => setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            onKeyDown={e => { if (e.key === 'Enter') handlePinSave(); }}
+            placeholder="0000"
+            style={{
+              width: 56, padding: '4px 6px', fontSize: 13, fontFamily: 'monospace',
+              background: '#0a0a0a', border: '1px solid #444', borderRadius: 4,
+              color: '#e8e6e3', textAlign: 'center', letterSpacing: 4, outline: 'none',
+            }}
+          />
+          <button onClick={handlePinSave} disabled={pinLoading}
+            style={{ background: '#22c55e', color: '#000', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+            {pinStatus && typeof pinStatus === 'string' ? 'CHANGE' : 'SET PIN'}
+          </button>
+          {pinStatus && typeof pinStatus === 'string' && (
+            <button onClick={handlePinReset} disabled={pinLoading}
+              style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+              REMOVE
+            </button>
+          )}
+          {pinMsg && (
+            <span style={{ fontSize: 11, fontWeight: 600, color: pinMsg.ok ? '#22c55e' : '#ef4444' }}>
+              {pinMsg.ok ? '✓' : '✗'} {pinMsg.msg}
+            </span>
+          )}
+        </div>
+      )}
       {pagesOpen && !loadingPages && currentPages !== null && (
         <InlinePageEditor
           allowedPages={currentPages}
@@ -570,6 +673,49 @@ function VipCard({ vip, onPagesUpdated }) {
 function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onActivity, onToggleStatus, onDelete, onPagesUpdated }) {
   const [pagesOpen, setPagesOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  // PIN management
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinValue, setPinValue] = useState('');
+  const [pinStatus, setPinStatus] = useState(null);
+  const [pinMsg, setPinMsg] = useState(null);
+  const [pinLoading, setPinLoading] = useState(false);
+
+  async function loadPinStatus() {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/aum-pins`, { headers: authHeaders() });
+      if (res.ok) {
+        const users = await res.json();
+        const match = users.find(u => u.userId === inv._id);
+        setPinStatus(match?.pin || false);
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function handlePinSave() {
+    if (!/^\d{4}$/.test(pinValue)) { setPinMsg({ ok: false, msg: 'Must be 4 digits' }); return; }
+    setPinLoading(true); setPinMsg(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/aum-pins/${inv._id}`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ pin: pinValue }),
+      });
+      const d = await res.json();
+      if (d.success) { setPinMsg({ ok: true, msg: 'PIN saved' }); setPinStatus(pinValue); setPinValue(''); }
+      else { setPinMsg({ ok: false, msg: d.error || 'Failed' }); }
+    } catch { setPinMsg({ ok: false, msg: 'Network error' }); }
+    setPinLoading(false);
+  }
+
+  async function handlePinReset() {
+    setPinLoading(true); setPinMsg(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/aum-pins/${inv._id}`, { method: 'DELETE', headers: authHeaders() });
+      if (res.ok) { setPinMsg({ ok: true, msg: 'PIN removed' }); setPinStatus(false); }
+      else { setPinMsg({ ok: false, msg: 'Failed to reset' }); }
+    } catch { setPinMsg({ ok: false, msg: 'Network error' }); }
+    setPinLoading(false);
+  }
   const [notes, setNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [newNote, setNewNote] = useState('');
@@ -678,6 +824,10 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
         }}>
           {inv.status?.toUpperCase()}
         </span>
+        <button onClick={() => { if (!pinOpen) loadPinStatus(); setPinOpen(v => !v); setPagesOpen(false); setNotesOpen(false); setPinMsg(null); }}
+          style={{ background: pinOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pinOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pinOpen ? 700 : 400 }}>
+          PIN
+        </button>
         <button onClick={() => setPagesOpen(v => !v)}
           style={{ background: pagesOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pagesOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pagesOpen ? 700 : 400 }}>
           PAGES ({(inv.allowedPages || []).length}/{ALL_ASSIGNABLE_PAGES.length})
@@ -699,6 +849,50 @@ function InvestorCard({ inv, onResetEmail, onResetPassword, onResetAccess, onAct
           DELETE
         </button>
       </div>
+
+      {/* ── PIN section ── */}
+      {pinOpen && (
+        <div style={{ borderTop: '1px solid #222', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>
+            AUM PIN:{' '}
+            {pinStatus && typeof pinStatus === 'string'
+              ? <span style={{ color: '#22c55e', fontSize: 14, fontWeight: 700, letterSpacing: 3 }}>{pinStatus}</span>
+              : pinStatus === false
+                ? <span style={{ color: '#666' }}>NOT SET</span>
+                : '...'}
+          </span>
+          <span style={{ color: '#333' }}>|</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={4}
+            value={pinValue}
+            onChange={e => setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            onKeyDown={e => { if (e.key === 'Enter') handlePinSave(); }}
+            placeholder="0000"
+            style={{
+              width: 56, padding: '4px 6px', fontSize: 13, fontFamily: 'monospace',
+              background: '#0a0a0a', border: '1px solid #444', borderRadius: 4,
+              color: '#e8e6e3', textAlign: 'center', letterSpacing: 4, outline: 'none',
+            }}
+          />
+          <button onClick={handlePinSave} disabled={pinLoading}
+            style={{ background: '#22c55e', color: '#000', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+            {pinStatus && typeof pinStatus === 'string' ? 'CHANGE' : 'SET PIN'}
+          </button>
+          {pinStatus && typeof pinStatus === 'string' && (
+            <button onClick={handlePinReset} disabled={pinLoading}
+              style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+              REMOVE
+            </button>
+          )}
+          {pinMsg && (
+            <span style={{ fontSize: 11, fontWeight: 600, color: pinMsg.ok ? '#22c55e' : '#ef4444' }}>
+              {pinMsg.ok ? '✓' : '✗'} {pinMsg.msg}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* ── Pages section ── */}
       {pagesOpen && (

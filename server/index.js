@@ -1014,7 +1014,7 @@ app.get('/api/admin/aum-pins', authenticateJWT, requireAdmin, async (req, res) =
       { aumPin: { $exists: true } },
       { projection: { userId: 1, aumPin: 1 } }
     ).toArray();
-    const pinMap = new Map(profiles.map(p => [String(p.userId), true]));
+    const pinMap = new Map(profiles.map(p => [String(p.userId), p.aumPin]));
     const result = [
       ...users.map(u => ({
         userId: u._id.toString(),
@@ -1022,6 +1022,7 @@ app.get('/api/admin/aum-pins', authenticateJWT, requireAdmin, async (req, res) =
         name: u.name || u.email,
         type: 'member',
         hasPin: pinMap.has(u._id.toString()),
+        pin: pinMap.get(u._id.toString()) || null,
       })),
       ...investors.map(inv => ({
         userId: inv._id.toString(),
@@ -1029,6 +1030,7 @@ app.get('/api/admin/aum-pins', authenticateJWT, requireAdmin, async (req, res) =
         name: inv.name || inv.company || inv.email,
         type: inv.isVip ? 'vip' : 'investor',
         hasPin: pinMap.has(inv._id.toString()),
+        pin: pinMap.get(inv._id.toString()) || null,
       })),
     ];
     res.json(result);

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAumShield } from '../contexts/AumShieldContext';
+import { useImpersonation } from '../contexts/ImpersonationContext';
 import { API_BASE, authHeaders } from '../services/api';
 
 const DEFAULT_UNLOCK_MS = 10 * 60 * 1000;
@@ -13,6 +14,7 @@ const DURATION_OPTIONS = [
 
 export default function AumShield({ children, style = {}, block = false, showDuration = false }) {
   const { hasPin, setHasPin, unlocked, unlock } = useAumShield();
+  const { isImpersonating } = useImpersonation();
   const [showPrompt, setShowPrompt] = useState(false);
   const [pin, setPinVal] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -21,6 +23,9 @@ export default function AumShield({ children, style = {}, block = false, showDur
   const [selectedDuration, setSelectedDuration] = useState(DEFAULT_UNLOCK_MS);
 
   const Tag = block ? 'div' : 'span';
+
+  // Admin impersonation: bypass PIN gate so admin sees exactly what the user sees
+  if (isImpersonating) return <>{children}</>;
 
   if (hasPin === null) {
     return <Tag style={{ ...style, color: '#333' }}>{block ? null : '••••'}</Tag>;

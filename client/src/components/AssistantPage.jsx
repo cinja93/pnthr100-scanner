@@ -3163,6 +3163,8 @@ export default function AssistantPage({ onNavigate }) {
   const [pinUsers,     setPinUsers]     = useState([]);
   const [pinLoading,   setPinLoading]   = useState(false);
   const [pinResetMsg,  setPinResetMsg]  = useState(null);
+  const [pinSetUserId, setPinSetUserId] = useState(null);   // userId being edited
+  const [pinSetValue,  setPinSetValue]  = useState('');      // 4-digit input
 
   const loadPinUsers = useCallback(async () => {
     setPinLoading(true);
@@ -3187,6 +3189,30 @@ export default function AssistantPage({ onNavigate }) {
       }
     } catch { setPinResetMsg({ ok: false, msg: 'Network error' }); }
   }, []);
+
+  const handlePinSet = useCallback(async (userId, email) => {
+    setPinResetMsg(null);
+    if (!/^\d{4}$/.test(pinSetValue)) {
+      setPinResetMsg({ ok: false, msg: 'PIN must be exactly 4 digits' });
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/aum-pins/${userId}`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ pin: pinSetValue }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        setPinResetMsg({ ok: true, msg: `PIN set for ${email}` });
+        setPinUsers(prev => prev.map(u => u.userId === userId ? { ...u, hasPin: true } : u));
+        setPinSetUserId(null);
+        setPinSetValue('');
+      } else {
+        setPinResetMsg({ ok: false, msg: d.error || 'Failed to set PIN' });
+      }
+    } catch { setPinResetMsg({ ok: false, msg: 'Network error' }); }
+  }, [pinSetValue]);
 
   // ── Create-account form state (admin-only) ─────────────────────────────
   // Two account types share the same form: VIP (member, lives in `users`)
@@ -3914,25 +3940,69 @@ export default function AssistantPage({ onNavigate }) {
                   <thead>
                     <tr style={{ borderBottom: '1px solid #333' }}>
                       <th style={{ textAlign: 'left', padding: '4px 8px', color: '#888' }}>User</th>
-                      <th style={{ textAlign: 'center', padding: '4px 8px', color: '#888' }}>PIN Set</th>
+                      <th style={{ textAlign: 'center', padding: '4px 8px', color: '#888' }}>Type</th>
+                      <th style={{ textAlign: 'center', padding: '4px 8px', color: '#888' }}>PIN</th>
                       <th style={{ textAlign: 'right', padding: '4px 8px', color: '#888' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pinUsers.map(u => (
                       <tr key={u.userId} style={{ borderBottom: '1px solid #1a1a1a' }}>
-                        <td style={{ padding: '6px 8px', color: '#ccc' }}>{u.email}</td>
+                        <td style={{ padding: '6px 8px', color: '#ccc' }}>{u.name || u.email}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center', color: u.type === 'vip' ? '#fcf000' : u.type === 'investor' ? '#4ade80' : '#888', fontSize: 9, fontWeight: 700 }}>
+                          {(u.type || 'member').toUpperCase()}
+                        </td>
                         <td style={{ padding: '6px 8px', textAlign: 'center', color: u.hasPin ? '#22c55e' : '#666' }}>
                           {u.hasPin ? 'YES' : 'NO'}
                         </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                          {u.hasPin && (
-                            <button
-                              onClick={() => handlePinReset(u.userId, u.email)}
-                              style={{
-                                background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3,
-                                padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                              }}>RESET PIN</button>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          {pinSetUserId === u.userId ? (
+                            <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={4}
+                                autoFocus
+                                value={pinSetValue}
+                                onChange={e => setPinSetValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                onKeyDown={e => { if (e.key === 'Enter') handlePinSet(u.userId, u.email); if (e.key === 'Escape') { setPinSetUserId(null); setPinSetValue(''); } }}
+                                placeholder="0000"
+                                style={{
+                                  width: 48, padding: '2px 4px', fontSize: 11, fontFamily: 'monospace',
+                                  background: '#0a0a0a', border: '1px solid #444', borderRadius: 3,
+                                  color: '#e8e6e3', textAlign: 'center', letterSpacing: 3, outline: 'none',
+                                }}
+                              />
+                              <button
+                                onClick={() => handlePinSet(u.userId, u.email)}
+                                style={{
+                                  background: '#22c55e', color: '#000', border: 'none', borderRadius: 3,
+                                  padding: '3px 8px', fontSize: 9, fontWeight: 700, cursor: 'pointer',
+                                }}>SAVE</button>
+                              <button
+                                onClick={() => { setPinSetUserId(null); setPinSetValue(''); }}
+                                style={{
+                                  background: '#333', color: '#aaa', border: 'none', borderRadius: 3,
+                                  padding: '3px 6px', fontSize: 9, cursor: 'pointer',
+                                }}>X</button>
+                            </span>
+                          ) : (
+                            <span style={{ display: 'inline-flex', gap: 4 }}>
+                              <button
+                                onClick={() => { setPinSetUserId(u.userId); setPinSetValue(''); setPinResetMsg(null); }}
+                                style={{
+                                  background: '#2563eb', color: '#fff', border: 'none', borderRadius: 3,
+                                  padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                                }}>{u.hasPin ? 'CHANGE' : 'SET PIN'}</button>
+                              {u.hasPin && (
+                                <button
+                                  onClick={() => handlePinReset(u.userId, u.email)}
+                                  style={{
+                                    background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3,
+                                    padding: '3px 10px', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                                  }}>RESET</button>
+                              )}
+                            </span>
                           )}
                         </td>
                       </tr>

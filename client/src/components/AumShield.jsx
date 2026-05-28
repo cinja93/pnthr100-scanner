@@ -71,7 +71,10 @@ export default function AumShield({ children, style = {}, block = false, showDur
         setError('');
         setStep('enter');
       } else {
-        setError('Failed to save PIN');
+        setError(d.error || 'Failed to save PIN');
+        setPinVal('');
+        setConfirm('');
+        setStep('enter');
       }
     }
   };

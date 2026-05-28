@@ -947,11 +947,21 @@ app.patch('/api/admin/users/:id/pages', authenticateJWT, requireAdmin, async (re
 
 // ── AUM PIN Shield ───────────────────────────────────────────────────────────
 
-// POST /api/user/aum-pin — set or update the user's 4-digit AUM PIN
+// POST /api/user/aum-pin — set or update the user's 4-digit AUM PIN (unique across all users)
 app.post('/api/user/aum-pin', authenticateJWT, async (req, res) => {
   try {
     const { pin } = req.body;
     if (!/^\d{4}$/.test(String(pin))) return res.status(400).json({ error: 'PIN must be exactly 4 digits' });
+    // Uniqueness check: no other user may have the same PIN
+    const { connectToDatabase: getDb } = await import('./database.js');
+    const db = await getDb();
+    const uid = /^[a-f\d]{24}$/i.test(String(req.user.userId))
+      ? new (await import('mongodb')).ObjectId(req.user.userId) : String(req.user.userId);
+    const existing = await db.collection('user_profiles').findOne({
+      aumPin: String(pin),
+      userId: { $ne: uid },
+    });
+    if (existing) return res.status(409).json({ error: 'PIN already in use — choose a different PIN' });
     await upsertUserProfile(req.user.userId, { aumPin: String(pin) });
     res.json({ success: true });
   } catch (err) {
@@ -984,30 +994,70 @@ app.get('/api/user/aum-pin/status', authenticateJWT, async (req, res) => {
   }
 });
 
-// GET /api/admin/aum-pins — admin: list all users with PIN status
+// GET /api/admin/aum-pins — admin: list all users (members + VIP/investors) with PIN status
 app.get('/api/admin/aum-pins', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { connectToDatabase: getDb } = await import('./database.js');
     const db = await getDb();
+    // Members from `users` collection
     const users = await db.collection('users').find(
       { status: 'approved' },
       { projection: { email: 1, name: 1 } }
     ).toArray();
+    // VIP/investor accounts from `den_investors` collection
+    const investors = await db.collection('den_investors').find(
+      {},
+      { projection: { email: 1, name: 1, company: 1, isVip: 1 } }
+    ).toArray();
+    // All profiles with PINs
     const profiles = await db.collection('user_profiles').find(
       { aumPin: { $exists: true } },
       { projection: { userId: 1, aumPin: 1 } }
     ).toArray();
     const pinMap = new Map(profiles.map(p => [String(p.userId), true]));
-    const result = users.map(u => ({
-      userId: u._id.toString(),
-      email: u.email,
-      name: u.name || u.email,
-      hasPin: pinMap.has(u._id.toString()),
-    }));
+    const result = [
+      ...users.map(u => ({
+        userId: u._id.toString(),
+        email: u.email,
+        name: u.name || u.email,
+        type: 'member',
+        hasPin: pinMap.has(u._id.toString()),
+      })),
+      ...investors.map(inv => ({
+        userId: inv._id.toString(),
+        email: inv.email,
+        name: inv.name || inv.company || inv.email,
+        type: inv.isVip ? 'vip' : 'investor',
+        hasPin: pinMap.has(inv._id.toString()),
+      })),
+    ];
     res.json(result);
   } catch (err) {
     console.error('Error listing AUM PINs:', err);
     res.status(500).json({ error: 'Failed to list PINs' });
+  }
+});
+
+// POST /api/admin/aum-pins/:userId — admin: set a PIN for any user (with uniqueness check)
+app.post('/api/admin/aum-pins/:userId', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { pin } = req.body;
+    if (!/^\d{4}$/.test(String(pin))) return res.status(400).json({ error: 'PIN must be exactly 4 digits' });
+    const { connectToDatabase: getDb } = await import('./database.js');
+    const db = await getDb();
+    const uid = /^[a-f\d]{24}$/i.test(req.params.userId)
+      ? new (await import('mongodb')).ObjectId(req.params.userId) : req.params.userId;
+    // Uniqueness check: no other user may have the same PIN
+    const existing = await db.collection('user_profiles').findOne({
+      aumPin: String(pin),
+      userId: { $ne: uid },
+    });
+    if (existing) return res.status(409).json({ error: 'PIN already in use by another user' });
+    await upsertUserProfile(req.params.userId, { aumPin: String(pin) });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error setting AUM PIN:', err);
+    res.status(500).json({ error: 'Failed to set PIN' });
   }
 });
 

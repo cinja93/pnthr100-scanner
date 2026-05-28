@@ -1325,57 +1325,59 @@ export default function AiOrdersPage() {
         </>
       )}
 
-      {/* Live Positions */}
-      <div style={{ marginTop: 24 }}>
-        <div style={{
-          display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8,
-          borderBottom: '2px solid #fcf000', paddingBottom: 6,
-        }}>
-          <h2 style={{ color: '#fcf000', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>PNTHR Live Positions</h2>
-          <span style={{ color: '#888', fontSize: 11 }}>IBKR ↔ PNTHR source-of-truth reconciliation</span>
+      {/* Live Positions (admin only) */}
+      {isAdmin && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{
+            display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8,
+            borderBottom: '2px solid #fcf000', paddingBottom: 6,
+          }}>
+            <h2 style={{ color: '#fcf000', margin: 0, fontSize: 16, letterSpacing: '0.04em' }}>PNTHR Live Positions</h2>
+            <span style={{ color: '#888', fontSize: 11 }}>IBKR ↔ PNTHR source-of-truth reconciliation</span>
+          </div>
+          <AssistantLiveTable
+            hideHeader
+            netLiquidity={userNav}
+            onOpenChart={(stocks, idx) => {
+              if (Array.isArray(stocks) && stocks.length > 0) {
+                setChartTickers(stocks.map(s => s.ticker || s));
+                setChartIndex(idx || 0);
+              } else if (stocks?.ticker) {
+                setChartTickers([stocks.ticker]);
+                setChartIndex(0);
+              }
+            }}
+            onPositionsSummary={(pos) => {
+              if (pos?.heat) {
+                setHeatData({
+                  totalRisk: pos.heat.totalRisk || 0,
+                  totalRiskPct: pos.heat.totalRiskPct || 0,
+                  stockRisk: pos.heat.stockRisk || 0,
+                  etfRisk: pos.heat.etfRisk || 0,
+                  stockRiskPct: pos.heat.stockRiskPct || 0,
+                  etfRiskPct: pos.heat.etfRiskPct || 0,
+                  nav: pos.nav || userNav || 100000,
+                  recycled: pos.recycled || 0,
+                  total: pos.total || 0,
+                  long: pos.long || 0,
+                  short: pos.short || 0,
+                });
+              }
+              if (pos?.recycledPositions) setRecycledPositions(pos.recycledPositions);
+              if (pos?.sectorBreakdown) setSectorBreakdown(pos.sectorBreakdown);
+              setHeatReductionPlan(pos?.heatReductionPlan || null);
+              const rc = pos?.recycleCandidate || null;
+              setRecycleCandidate(rc);
+              if (rc && recycleDismissed && rc.ticker !== recycleDismissed) {
+                setRecycleDismissed(null);
+              }
+            }}
+          />
         </div>
-        <AssistantLiveTable
-          hideHeader
-          netLiquidity={userNav}
-          onOpenChart={(stocks, idx) => {
-            if (Array.isArray(stocks) && stocks.length > 0) {
-              setChartTickers(stocks.map(s => s.ticker || s));
-              setChartIndex(idx || 0);
-            } else if (stocks?.ticker) {
-              setChartTickers([stocks.ticker]);
-              setChartIndex(0);
-            }
-          }}
-          onPositionsSummary={(pos) => {
-            if (pos?.heat) {
-              setHeatData({
-                totalRisk: pos.heat.totalRisk || 0,
-                totalRiskPct: pos.heat.totalRiskPct || 0,
-                stockRisk: pos.heat.stockRisk || 0,
-                etfRisk: pos.heat.etfRisk || 0,
-                stockRiskPct: pos.heat.stockRiskPct || 0,
-                etfRiskPct: pos.heat.etfRiskPct || 0,
-                nav: pos.nav || userNav || 100000,
-                recycled: pos.recycled || 0,
-                total: pos.total || 0,
-                long: pos.long || 0,
-                short: pos.short || 0,
-              });
-            }
-            if (pos?.recycledPositions) setRecycledPositions(pos.recycledPositions);
-            if (pos?.sectorBreakdown) setSectorBreakdown(pos.sectorBreakdown);
-            setHeatReductionPlan(pos?.heatReductionPlan || null);
-            const rc = pos?.recycleCandidate || null;
-            setRecycleCandidate(rc);
-            if (rc && recycleDismissed && rc.ticker !== recycleDismissed) {
-              setRecycleDismissed(null);
-            }
-          }}
-        />
-      </div>
+      )}
 
-      {/* Portfolio Sector Breakdown */}
-      {sectorBreakdown.length > 0 && (
+      {/* Portfolio Sector Breakdown (admin only) */}
+      {isAdmin && sectorBreakdown.length > 0 && (
         <div style={{ marginTop: 24 }}>
           <PortfolioSectorPie
             breakdown={sectorBreakdown.map(s => {

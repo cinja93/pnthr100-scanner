@@ -686,6 +686,12 @@ export default function AiOrdersPage() {
                 title="View recycled positions log"
               >{heatData.recycled} recycled</button>
             )}
+            <span style={{
+              color: '#888', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+              borderLeft: '1px solid #333', paddingLeft: 10,
+            }}>
+              Total: <span style={{ color: '#e5e5e5', fontWeight: 700 }}>{(heatData.total || 0) + (heatData.recycled || 0)}</span> positions
+            </span>
             {heatData.totalRiskPct >= 10 && !recycleCandidate && (
               <span style={{
                 padding: '2px 8px', background: '#dc2626', color: '#fff', borderRadius: 3,

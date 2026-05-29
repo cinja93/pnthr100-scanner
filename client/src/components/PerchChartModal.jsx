@@ -157,61 +157,67 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
     const exitDate = new Date(exit.time);
     const weeksBetween = Math.round((exitDate - entryDate) / (7 * 24 * 60 * 60 * 1000));
 
-    // ── Entry label: "PNTHR Buy Signal" with arrow pointing up to BL ──
+    // ── Entry label: "PNTHR Buy Signal" — pinned bottom-right, arrow to candle ──
     {
       const line1 = 'PNTHR Buy Signal';
       const line2 = `Buy @ $${entryPrice.toFixed(2)}`;
 
-      ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-      const w1 = ctx.measureText(line1).width;
       ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      const w1 = ctx.measureText(line1).width;
+      ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
       const w2 = ctx.measureText(line2).width;
-      const boxW = Math.max(w1, w2) + 28;
-      const boxH = 44;
+      const boxW = Math.max(w1, w2) + 20;
+      const boxH = 36;
 
       const belowEntry = priceSeries.priceToCoordinate(entryBar.low);
       if (belowEntry != null) {
-        const lx = entryX - boxW / 2;
-        const ly = belowEntry + 70;
+        const canvasW = container.clientWidth;
+        const canvasH = container.clientHeight;
+        const lx = canvasW - boxW - 70;
+        const ly = canvasH - boxH - 30;
 
-        // Thin arrow from box up toward BL — stop above the marker text
+        // Thin arrow from box to the entry candle
         ctx.strokeStyle = '#22ff66';
         ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
         ctx.beginPath();
-        ctx.moveTo(entryX, ly);
-        ctx.lineTo(entryX, belowEntry + 38);
+        ctx.moveTo(lx, ly + boxH / 2);
+        ctx.lineTo(entryX + 6, belowEntry + 8);
         ctx.stroke();
+        ctx.setLineDash([]);
+        // Arrowhead at candle end
+        const angle = Math.atan2(belowEntry + 8 - (ly + boxH / 2), entryX + 6 - lx);
         ctx.fillStyle = '#22ff66';
         ctx.beginPath();
-        ctx.moveTo(entryX, belowEntry + 34);
-        ctx.lineTo(entryX - 4, belowEntry + 42);
-        ctx.lineTo(entryX + 4, belowEntry + 42);
+        ctx.moveTo(entryX + 6, belowEntry + 8);
+        ctx.lineTo(entryX + 6 - 8 * Math.cos(angle - 0.4), belowEntry + 8 - 8 * Math.sin(angle - 0.4));
+        ctx.lineTo(entryX + 6 - 8 * Math.cos(angle + 0.4), belowEntry + 8 - 8 * Math.sin(angle + 0.4));
         ctx.closePath();
         ctx.fill();
 
         // Box background
-        ctx.fillStyle = 'rgba(22, 163, 106, 0.2)';
-        ctx.strokeStyle = '#16a34a';
+        ctx.fillStyle = 'rgba(22, 163, 106, 0.85)';
+        ctx.strokeStyle = '#22ff66';
         ctx.lineWidth = 1.5;
-        roundRect(ctx, lx, ly, boxW, boxH, 5);
+        roundRect(ctx, lx, ly, boxW, boxH, 4);
         ctx.fill();
         ctx.stroke();
 
-        // "PNTHR Buy Signal" — bright green
-        ctx.fillStyle = '#22ff66';
-        ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.fillText(line1, entryX, ly + 6);
-
-        // "Buy @ $XXX.XX" — white
+        // "PNTHR Buy Signal" — white
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-        ctx.fillText(line2, entryX, ly + 25);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(line1, lx + boxW / 2, ly + 4);
+
+        // "Buy @ $XXX.XX"
+        ctx.fillStyle = '#d1fae5';
+        ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        ctx.fillText(line2, lx + boxW / 2, ly + 20);
       }
     }
 
-    // ── Exit label: "PNTHR Sell Signal Results" ──
+    // ── Exit label: "PNTHR Sell Signal Results" — pinned top-right, arrow to candle ──
     {
       const profitDollar = featuredTrade?.profitDollar ?? exit.profitDollar;
       const profitPct = featuredTrade?.profitPct ?? exit.profitPct;
@@ -221,64 +227,66 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
         const pctStr = `${Math.abs(profitPct).toFixed(2)}% Profit in ONLY ${weeksBetween} Week${weeksBetween !== 1 ? 's' : ''}!`;
         const dollarStr = `Profit = +$${Math.abs(profitDollar).toFixed(2)} per share!`;
 
-        ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-        const titleW = ctx.measureText(titleStr).width;
-        ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-        const pctW = ctx.measureText(pctStr).width;
         ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        const titleW = ctx.measureText(titleStr).width;
+        ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        const pctW = ctx.measureText(pctStr).width;
+        ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
         const dollarW = ctx.measureText(dollarStr).width;
-        const boxW = Math.max(titleW, pctW, dollarW) + 32;
-        const boxH = 74;
+        const boxW = Math.max(titleW, pctW, dollarW) + 24;
+        const boxH = 58;
 
         const aboveExit = priceSeries.priceToCoordinate(exitBar.high);
         if (aboveExit != null) {
-          let lx = exitX - boxW / 2;
-          const ly = aboveExit - boxH - 44;
+          const canvasW = container.clientWidth;
+          const lx = canvasW - boxW - 70;
+          const ly = 16;
 
-          // Keep within canvas
-          if (lx + boxW > container.clientWidth - 60) lx = container.clientWidth - boxW - 60;
-          if (lx < 10) lx = 10;
-
-          // Thin arrow from box down to the BE bar
-          const arrowX = Math.min(Math.max(exitX, lx + 20), lx + boxW - 20);
+          // Thin dashed arrow from box to the exit candle
+          const arrowStartX = lx + boxW / 2;
+          const arrowStartY = ly + boxH;
           ctx.strokeStyle = '#f59e0b';
           ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 3]);
           ctx.beginPath();
-          ctx.moveTo(arrowX, ly + boxH);
-          ctx.lineTo(arrowX, aboveExit - 18);
+          ctx.moveTo(arrowStartX, arrowStartY);
+          ctx.lineTo(exitX, aboveExit - 8);
           ctx.stroke();
+          ctx.setLineDash([]);
+          // Arrowhead at candle end
+          const angle = Math.atan2(aboveExit - 8 - arrowStartY, exitX - arrowStartX);
           ctx.fillStyle = '#f59e0b';
           ctx.beginPath();
-          ctx.moveTo(arrowX, aboveExit - 14);
-          ctx.lineTo(arrowX - 4, aboveExit - 22);
-          ctx.lineTo(arrowX + 4, aboveExit - 22);
+          ctx.moveTo(exitX, aboveExit - 8);
+          ctx.lineTo(exitX - 8 * Math.cos(angle - 0.4), aboveExit - 8 - 8 * Math.sin(angle - 0.4));
+          ctx.lineTo(exitX - 8 * Math.cos(angle + 0.4), aboveExit - 8 - 8 * Math.sin(angle + 0.4));
           ctx.closePath();
           ctx.fill();
 
           // Box background
-          ctx.fillStyle = 'rgba(22, 163, 106, 0.15)';
+          ctx.fillStyle = 'rgba(22, 163, 106, 0.85)';
           ctx.strokeStyle = '#16a34a';
           ctx.lineWidth = 1.5;
-          roundRect(ctx, lx, ly, boxW, boxH, 6);
+          roundRect(ctx, lx, ly, boxW, boxH, 5);
           ctx.fill();
           ctx.stroke();
 
           // "PNTHR Sell Signal Results" — bright yellow
           ctx.fillStyle = '#fcf000';
-          ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+          ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
-          ctx.fillText(titleStr, lx + boxW / 2, ly + 8);
+          ctx.fillText(titleStr, lx + boxW / 2, ly + 6);
 
           // "XX% Profit in ONLY X Weeks!" — bright green
           ctx.fillStyle = '#22ff66';
-          ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-          ctx.fillText(pctStr, lx + boxW / 2, ly + 30);
+          ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+          ctx.fillText(pctStr, lx + boxW / 2, ly + 24);
 
-          // "Profit = +$XXX.XX per share!" — bright white
+          // "Profit = +$XXX.XX per share!" — white
           ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-          ctx.fillText(dollarStr, lx + boxW / 2, ly + 52);
+          ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+          ctx.fillText(dollarStr, lx + boxW / 2, ly + 42);
 
           ctx.textAlign = 'start';
           ctx.textBaseline = 'alphabetic';

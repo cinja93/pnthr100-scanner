@@ -76,6 +76,18 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
     if (!ibkrPos) { skips.push({ ticker, reason: 'IBKR_POSITION_MISSING' }); continue; }
 
     const isLong = (p.direction || 'LONG').toUpperCase() !== 'SHORT';
+
+    // Direction-mismatch guard: if PNTHR says LONG but IBKR holds SHORT
+    // (or vice versa), something has gone wrong (likely duplicate stops
+    // flipped the position). Do NOT place or modify protective stops —
+    // that would compound the damage by managing the wrong side.
+    const ibkrShares = +ibkrPos.shares || 0;
+    const ibkrIsLong = ibkrShares > 0;
+    if (ibkrShares !== 0 && isLong !== ibkrIsLong) {
+      skips.push({ ticker, reason: 'DIRECTION_MISMATCH_PNTHR_VS_IBKR', pnthrDir: isLong ? 'LONG' : 'SHORT', ibkrDir: ibkrIsLong ? 'LONG' : 'SHORT' });
+      continue;
+    }
+
     const expectedAction = isLong ? 'SELL' : 'BUY';
     // Reference price for the protective-side filter — discriminates real
     // protective stops from lot-trigger BUY STPs (which are above price for
@@ -113,6 +125,26 @@ export async function runStopRatchet({ db, dryRun = false } = {}) {
       // IWM 2026-05-06: ACTIVE 17 sh, PNTHR stopPrice=$282.65 from earlier
       // USER_TIGHTENED_VIA_TWS, but no SELL STP in IBKR. The screen showed
       // "NAKED" red but no cron acted on it.
+
+      // Ambiguous-failure guard: if a recent PLACE_STOP for this ticker
+      // failed with NO_STATUS_AFTER_15S or similar, the order may already
+      // be live in TWS but not yet visible in the IBKR snapshot. Placing
+      // ANOTHER stop stacks duplicates. META 2026-05-29: 4 duplicate SELL
+      // STPs fired on a 3-share LONG, sold 12 shares, flipped to SHORT.
+      // Wait for the next IBKR snapshot refresh before retrying.
+      const recentAmbiguousPlaceStop = await db.collection('pnthr_ibkr_outbox').findOne({
+        ownerId: p.ownerId,
+        'request.ticker': ticker,
+        command: 'PLACE_STOP',
+        status: 'FAILED',
+        errors: { $regex: /NO_STATUS_AFTER|STALE:|BRIDGE_TIMEOUT/ },
+        createdAt: { $gt: new Date(Date.now() - 10 * 60 * 1000) },
+      });
+      if (recentAmbiguousPlaceStop) {
+        skips.push({ ticker, reason: 'NAKED_AMBIGUOUS_FAILURE_COOLDOWN', lastFailedAt: recentAmbiguousPlaceStop.createdAt });
+        continue;
+      }
+
       const pnthrStop = +p.stopPrice;
       const ibkrShares = Math.abs(+ibkrPos.shares || 0);
       if (!Number.isFinite(pnthrStop) || pnthrStop <= 0) {

@@ -498,6 +498,29 @@ export async function enqueue(db, ownerId, command, request, opts = {}) {
     if (recentFailCount >= FAILURE_THRESHOLD) {
       return { skipped: `RECENT_FAILURES_${recentFailCount}_BACKOFF` };
     }
+
+    // Rule 2d — ambiguous-failure guard for PLACE_STOP. NO_STATUS_AFTER_15S
+    // means the bridge sent the order to TWS but never got a status callback.
+    // The order may be LIVE in IBKR despite being marked FAILED here. Placing
+    // another stop on the next cron cycle stacks duplicate sell/buy stops —
+    // META 2026-05-29: 4 duplicate SELL STPs fired at once, sold 12 shares on
+    // a 3-share position, flipping it short. Threshold = 1 (not 3) because
+    // even a single ambiguous failure may have placed the order.
+    if (PROTECTIVE_STOP_COMMANDS.has(command)) {
+      const AMBIGUOUS_ERRORS = /NO_STATUS_AFTER|STALE:|BRIDGE_TIMEOUT/;
+      const ambiguousFailCount = await db.collection(COLLECTION).countDocuments({
+        ownerId,
+        'request.ticker': request.ticker,
+        command,
+        status: 'FAILED',
+        errors: { $regex: AMBIGUOUS_ERRORS },
+        createdAt: { $gt: new Date(Date.now() - 10 * 60 * 1000) },
+        ...dedupExtraMatch(command, request),
+      });
+      if (ambiguousFailCount >= 1) {
+        return { skipped: `AMBIGUOUS_FAILURE_BACKOFF_${ambiguousFailCount}_IN_10MIN` };
+      }
+    }
   }
 
   // Rule 5 — concentration cap (10% NAV). HARD GATE on adds: when a ticker's

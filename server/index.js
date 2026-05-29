@@ -6561,6 +6561,23 @@ cron.schedule('45 16 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
+// ── Cron: Hourly candle collection Mon-Fri at 5:15pm ET ─────────────────────
+let hourlyCandelRunning = false;
+cron.schedule('15 17 * * 1-5', async () => {
+  if (hourlyCandelRunning) return;
+  hourlyCandelRunning = true;
+  try {
+    console.log('[Hourly Candles] Starting daily hourly bar collection...');
+    const { runHourlyCandleUpdate } = await import('./scripts/hourlyCandleCron.js');
+    const result = await runHourlyCandleUpdate();
+    console.log(`[Hourly Candles] Done: ${result.updated} updated, ${result.errors} errors`);
+  } catch (err) {
+    console.error('[Hourly Candles] Failed:', err.message);
+  } finally {
+    hourlyCandelRunning = false;
+  }
+}, { timezone: 'America/New_York' });
+
 app.get('/api/jungle-heat', async (req, res) => {
   try {
     const data = await getJungleHeatData(req.query.refresh === '1');

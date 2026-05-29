@@ -166,6 +166,16 @@ export async function runLotTriggerSync({ db, dryRun = false } = {}) {
     const ibkrShares = Math.abs(+ibkrPos.shares || 0);
     if (ibkrShares <= 0) { skips.push({ ticker, reason: 'IBKR_SHARES_ZERO' }); continue; }
 
+    // Direction mismatch guard: if PNTHR says LONG but IBKR holds SHORT
+    // (or vice versa), do NOT place/modify lot triggers — that would add
+    // shares in the wrong direction. META 2026-05-29: duplicate SELL STPs
+    // flipped LONG→SHORT, but lot cron still saw LONG and placed BUY STPs.
+    const ibkrDirection = (+ibkrPos.shares || 0) > 0 ? 'LONG' : 'SHORT';
+    if ((p.direction || 'LONG').toUpperCase() !== ibkrDirection) {
+      skips.push({ ticker, reason: 'DIRECTION_MISMATCH_PNTHR_VS_IBKR', pnthrDir: p.direction, ibkrDir: ibkrDirection });
+      continue;
+    }
+
     // Compute the canonical pyramid plan via the L1-aware algorithm shared
     // with the Live table (server/lotMath.js → computeLotPlan). Sizes off
     // ORIGINAL stop and the actual L1 fill so the cron's plan matches what

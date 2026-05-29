@@ -577,6 +577,12 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
     .project({ ticker: 1, direction: 1 })
     .toArray();
   const activeKeys = new Set(activePnthr.map(p => `${p.ticker?.toUpperCase()}_${p.direction?.toUpperCase()}`));
+  // Also track tickers with ANY active position regardless of direction.
+  // Used to block auto-opening the opposite direction when a position already
+  // exists — META 2026-05-29: duplicate SELL STPs flipped a 3-share LONG to
+  // SHORT 9, Phase 3 auto-opened a SHORT record while the LONG was still
+  // ACTIVE, compounding the damage.
+  const activeTickerSet = new Set(activePnthr.map(p => p.ticker?.toUpperCase()));
 
   for (const pos of ibkrPositions) {
     if (!pos.symbol || pos.symbol === 'USD') continue;
@@ -588,6 +594,22 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
     const key       = `${ticker}_${direction}`;
     if (activeKeys.has(key)) continue; // already tracked
 
+    // Opposite-direction guard: if PNTHR has an active position for this
+    // ticker in the OTHER direction, do NOT auto-open. This catches the
+    // case where duplicate protective stops flip a position (LONG→SHORT)
+    // in IBKR while the LONG is still ACTIVE in PNTHR. Auto-opening a
+    // SHORT on top of an existing LONG compounds the damage — the system
+    // starts managing both sides, placing protective stops in both
+    // directions. META 2026-05-29: 4 duplicate SELL STPs fired on a
+    // 3-share LONG, created SHORT 9, Phase 3 opened a SHORT record while
+    // the LONG was still ACTIVE.
+    const oppositeDir = direction === 'LONG' ? 'SHORT' : 'LONG';
+    const oppositeKey = `${ticker}_${oppositeDir}`;
+    if (activeKeys.has(oppositeKey)) {
+      console.warn(`[IBKR Phase 3] ${ticker} ${direction}: BLOCKED — active ${oppositeDir} position exists. Likely duplicate stop fallout. Manual review required.`);
+      continue;
+    }
+
     // Race guard: if Phase 2 just closed a position for this ticker, IBKR
     // snapshot may still show it. Wait for the next sync.
     const recentClose = await db.collection('pnthr_portfolio').findOne({
@@ -598,6 +620,23 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
       closedAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) },
     });
     if (recentClose) continue;
+
+    // Direction-flip cooldown: if a position for this ticker was closed in
+    // the OPPOSITE direction within the last 10 minutes, don't auto-open.
+    // Catches the scenario where duplicate stops close a LONG and the net
+    // position flips to SHORT — the recently-closed LONG should prevent
+    // the system from immediately auto-opening a SHORT.
+    const recentOppositeClose = await db.collection('pnthr_portfolio').findOne({
+      ownerId:  userId,
+      ticker,
+      direction: oppositeDir,
+      status:   'CLOSED',
+      closedAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) },
+    });
+    if (recentOppositeClose) {
+      console.warn(`[IBKR Phase 3] ${ticker} ${direction}: BLOCKED — ${oppositeDir} position closed within last 10 min. Likely direction flip from duplicate stops. Manual review required.`);
+      continue;
+    }
 
     const absShares = Math.abs(shares);
     const entryDate = syncedAt.toISOString().split('T')[0];

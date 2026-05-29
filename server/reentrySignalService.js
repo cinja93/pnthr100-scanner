@@ -118,10 +118,12 @@ function computeLotSizes(entryPrice, stopPrice, nav) {
   return STRIKE_PCT.map(pct => Math.max(1, Math.round(total * pct)));
 }
 
-// ── Cooldown gate: tickers with positions closed in the last 24h need a
-//    green 1-hour candle (close > open) after the close before re-entering MCE.
-const greenBarCache = new Map();   // ticker → { checkedAt, cleared, greenBarTime }
-const GREEN_BAR_CACHE_MS = 5 * 60_000;  // re-check FMP every 5 min if not yet cleared
+// ── Hourly bar momentum filter ────────────────────────────────────────────────
+// Latest 60-min bar must be green (close >= open) before showing in NOW MCE.
+// If the most recent bar is red, the stock is still selling off — wait for
+// a green bar to confirm momentum has resumed before recommending entry.
+const hourlyColorCache = new Map(); // ticker → { checkedAt, isGreen }
+const HOURLY_COLOR_CACHE_MS = 60_000; // re-check every 60s
 
 async function fetchHourlyBars(ticker) {
   try {
@@ -133,21 +135,16 @@ async function fetchHourlyBars(ticker) {
   } catch { return []; }
 }
 
-async function hasGreenBarAfter(ticker, closedAt) {
-  const cached = greenBarCache.get(ticker);
+async function isLatestHourlyGreen(ticker) {
+  const cached = hourlyColorCache.get(ticker);
   const now = Date.now();
-  if (cached) {
-    if (cached.cleared) return true;
-    if (now - cached.checkedAt < GREEN_BAR_CACHE_MS) return false;
-  }
+  if (cached && now - cached.checkedAt < HOURLY_COLOR_CACHE_MS) return cached.isGreen;
   const bars = await fetchHourlyBars(ticker);
-  const closeTime = new Date(closedAt).getTime();
-  const found = bars.some(b => {
-    const barTime = new Date(b.date).getTime();
-    return barTime > closeTime && b.close > b.open;
-  });
-  greenBarCache.set(ticker, { checkedAt: now, cleared: found, greenBarTime: found ? now : null });
-  return found;
+  if (!bars || bars.length === 0) return true;
+  const latest = bars[0];
+  const isGreen = latest.close >= latest.open;
+  hourlyColorCache.set(ticker, { checkedAt: now, isGreen });
+  return isGreen;
 }
 
 // ── Re-entry signal cache ──────────────────────────────────────────────────────
@@ -295,21 +292,23 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
       }
     }
 
-    // ── Cooldown gate: positions closed in last 24h need a green 1H bar ────
-    if (closedToday.size > 0) {
-      const gated = [];
+    // Mark re-entries (ticker closed today, coming back in)
+    for (const r of results) {
+      if (closedToday.has(r.ticker)) r.reentry = true;
+    }
+
+    // ── Hourly bar momentum filter: latest 60-min bar must be green ────────
+    // If the most recent hourly bar is red (close < open), the stock is still
+    // selling off. Wait for a green bar before showing in NOW MCE.
+    const hourlyChecks = await Promise.all(
+      results.map(async r => ({ ticker: r.ticker, green: await isLatestHourlyGreen(r.ticker) }))
+    );
+    const hourlyGatedSet = new Set(hourlyChecks.filter(c => !c.green).map(c => c.ticker));
+    if (hourlyGatedSet.size > 0) {
+      console.log(`[MCE Hourly Filter] waiting for green 60-min bar: ${[...hourlyGatedSet].join(', ')}`);
       for (let i = results.length - 1; i >= 0; i--) {
-        const closedAt = closedToday.get(results[i].ticker);
-        if (!closedAt) continue;
-        const cleared = await hasGreenBarAfter(results[i].ticker, closedAt);
-        if (!cleared) {
-          gated.push(results[i].ticker);
-          results.splice(i, 1);
-        } else {
-          results[i].reentry = true;
-        }
+        if (hourlyGatedSet.has(results[i].ticker)) results.splice(i, 1);
       }
-      if (gated.length) console.log(`[MCE Cooldown] gated (no green 1H bar yet): ${gated.join(', ')}`);
     }
 
     // Final dedup: keep first occurrence of each ticker (MCE trigger > heat re-entry)
@@ -335,5 +334,5 @@ export async function getReentrySignals(ownerId, nav = 100_000) {
 export function clearReentryCache() {
   signalCache = { at: 0, signals: [] };
   ttmCache    = { at: 0, topAI: null };
-  greenBarCache.clear();
+  hourlyColorCache.clear();
 }

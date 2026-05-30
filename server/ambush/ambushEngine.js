@@ -28,7 +28,7 @@ import { CARNIVORE_MODE_TICKERS } from '../data/strategyMode.js';
 import { connectToDatabase } from '../database.js';
 
 // ── Constants (locked to V7 backtest) ───────────────────────────────────────
-export const AMBUSH_VERSION = '7.0.0';
+export const AMBUSH_VERSION = '7.1.0';  // 1H stop + graduated sizing
 
 export const BE_THRESHOLD    = 75;       // dollars unrealized profit to trigger Break Even
 export const VITALITY_PCT    = 0.01;     // 1% NAV per position risk
@@ -41,6 +41,25 @@ export const FIRST_HOUR_END  = '10:30';
 export const PAI300_REGIME_PERIOD = 36;
 export const WITHDRAWAL_THRESHOLD = 2_000_000;
 export const WITHDRAWAL_AMOUNT    = 1_000_000;
+export const COMMISSION_PER_SHARE = 0.005;     // IBKR Pro Fixed
+
+// ── Graduated Sizing Thresholds ────────────────────────────────────────────
+// 50% sizing until $125K NAV, 75% until $166K, then 100%.
+// Keeps risk-per-trade / NAV ratio constant as the fund grows.
+export const GRAD_TIER_1 = 125_000;   // 50% → 75%
+export const GRAD_TIER_2 = 166_000;   // 75% → 100%
+
+export function getSizingMultiplier(currentNav) {
+  if (currentNav >= GRAD_TIER_2) return 1.00;
+  if (currentNav >= GRAD_TIER_1) return 0.75;
+  return 0.50;
+}
+
+export function getSizingTierLabel(currentNav) {
+  if (currentNav >= GRAD_TIER_2) return '100%';
+  if (currentNav >= GRAD_TIER_1) return '75%';
+  return '50%';
+}
 
 // State labels for the UI Kanban board
 export const STATES = {
@@ -80,7 +99,7 @@ for (const sec of SECTORS) {
 }
 
 export function getSectorName(ticker) {
-  if (CARNIVORE_GICS[ticker]) return CARNIVORE_GICS[ticker];
+  // All AI 300 tickers (including 26 Carnivore overlap) use AI sector names.
   return AI_TICKER_META[ticker]?.sector || 'Technology';
 }
 
@@ -137,16 +156,20 @@ export function exitSlip(price, dir) {
   return dir === 'LONG' ? applySlip(price, false) : applySlip(price, true);
 }
 
-// ── Sizing (exact V7 logic) ─────────────────────────────────────────────────
-export function sizeLots(entryPrice, stopPrice, direction, nav) {
+// ── Sizing (V7 logic + graduated multiplier) ────────────────────────────────
+// sizingMultiplier: 0.50 / 0.75 / 1.00 based on NAV tier
+export function sizeLots(entryPrice, stopPrice, direction, nav, sizingMultiplier = 1.0) {
   const rps = direction === 'LONG' ? entryPrice - stopPrice : stopPrice - entryPrice;
   if (rps <= 0.01) return null;
 
-  const totalShares = Math.min(
+  let totalShares = Math.min(
     Math.floor(MAX_LOSS / rps),
     Math.floor((nav * VITALITY_PCT) / rps),
     Math.floor((nav * TICKER_CAP_PCT) / entryPrice)
   );
+
+  // Apply graduated sizing
+  totalShares = Math.max(1, Math.floor(totalShares * sizingMultiplier));
   if (totalShares < 1) return null;
 
   const lotPlan = STRIKE_PCT.map(p => Math.max(1, Math.round(totalShares * p)));
@@ -183,34 +206,9 @@ export async function loadSignalContext(db) {
     if (pai300Ema[i] != null) pai300RegimeByWeek[pai300Weekly[i].weekOf] = pai300Closes[i] > pai300Ema[i];
   }
 
-  // SPY regime (for carnivore tickers)
-  const spyWeeklyDoc = await db.collection('pnthr_bt_candles_weekly').findOne({ ticker: 'SPY' });
-  const spyWeekly = (spyWeeklyDoc?.weekly || []).sort((a, b) => (a.weekOf || a.date).localeCompare(b.weekOf || b.date));
-  const spyCloses = spyWeekly.map(w => w.close);
-  const spyEma21 = computeEMASeed(spyCloses, 21);
-  const spyRegimeByWeek = {};
-  for (let i = 0; i < spyWeekly.length; i++) {
-    if (spyEma21[i] != null) spyRegimeByWeek[spyWeekly[i].weekOf || spyWeekly[i].date] = spyCloses[i] > spyEma21[i];
-  }
-
-  // Sector ETF regime
-  const etfWeeklyDocs = {};
-  for (const etf of Object.keys(ETF_EMA_PERIOD)) {
-    const doc = await db.collection('pnthr_bt_candles_weekly').findOne({ ticker: etf });
-    if (doc) etfWeeklyDocs[etf] = doc;
-  }
-  const etfAboveEmaByWeek = {};
-  for (const [etf, doc] of Object.entries(etfWeeklyDocs)) {
-    const bars = (doc.weekly || []).sort((a, b) => (a.weekOf || a.date).localeCompare(b.weekOf || b.date));
-    const closes = bars.map(w => w.close);
-    const period = ETF_EMA_PERIOD[etf] || 21;
-    const ema = computeEMASeed(closes, period);
-    const map = {};
-    for (let i = 0; i < bars.length; i++) {
-      if (ema[i] != null) map[bars[i].weekOf || bars[i].date] = closes[i] > ema[i];
-    }
-    etfAboveEmaByWeek[etf] = map;
-  }
+  // NOTE: SPY regime + ETF EMA loading REMOVED in v7.1.
+  // Ambush is AI 300 only — ALL tickers use PAI300 regime (getRegime)
+  // and AI sector tier ranking (getSectorOk). No Carnivore ETF gates.
 
   // AI sector tier ranks
   const sectorRankDocs = await db.collection('pnthr_ai_sector_rank_daily')
@@ -256,18 +254,17 @@ export async function loadSignalContext(db) {
   return {
     weeklyBarsByTicker,
     pai300RegimeByWeek,
-    spyRegimeByWeek,
-    etfAboveEmaByWeek,
     aiSectorTierByDate,
     signalsByTicker,
   };
 }
 
-// ── Gate functions (exact V7 backtest logic) ────────────────────────────────
+// ── Gate functions ──────────────────────────────────────────────────────────
+// Ambush is AI 300 only — ALL tickers use PAI300 regime (not SPY).
 
 export function getRegime(ctx, ticker, dateStr) {
   const weekOf = getWeekOf(dateStr);
-  const rm = CARNIVORE_MODE_TICKERS.has(ticker) ? ctx.spyRegimeByWeek : ctx.pai300RegimeByWeek;
+  const rm = ctx.pai300RegimeByWeek;
   if (rm[weekOf] !== undefined) return rm[weekOf];
   const ws = Object.keys(rm).sort();
   let best = null;
@@ -276,27 +273,16 @@ export function getRegime(ctx, ticker, dateStr) {
 }
 
 export function getSectorOk(ctx, ticker, dateStr) {
-  const weekOf = getWeekOf(dateStr);
-  if (!CARNIVORE_MODE_TICKERS.has(ticker)) {
-    const dates = Object.keys(ctx.aiSectorTierByDate).sort();
-    let best = null;
-    for (const d of dates) { if (d <= dateStr) best = d; else break; }
-    if (!best) return true;
-    return ctx.aiSectorTierByDate[best]?.[AI_TICKER_META[ticker]?.sectorId] !== 'AVOID';
-  }
-  const gics = CARNIVORE_GICS[ticker];
-  const etf = CARNIVORE_SECTOR_MAP[gics];
-  if (!etf) return true;
-  const etfMap = ctx.etfAboveEmaByWeek[etf];
-  if (!etfMap) return true;
-  let above = etfMap[weekOf];
-  if (above === undefined) {
-    const ws = Object.keys(etfMap).sort();
-    let best = null;
-    for (const w of ws) { if (w <= weekOf) best = w; else break; }
-    above = best ? etfMap[best] : true;
-  }
-  return above;
+  // Ambush is AI 300 only — ALL tickers (including the 26 Carnivore overlap)
+  // use AI sector tier ranking. Every AI 300 ticker is in AI_TICKER_META.
+  const sectorId = AI_TICKER_META[ticker]?.sectorId;
+  if (!sectorId) return true; // unknown sector → pass through
+
+  const dates = Object.keys(ctx.aiSectorTierByDate).sort();
+  let best = null;
+  for (const d of dates) { if (d <= dateStr) best = d; else break; }
+  if (!best) return true;
+  return ctx.aiSectorTierByDate[best]?.[sectorId] !== 'AVOID';
 }
 
 export function isActiveBL(ctx, ticker, dateStr) {

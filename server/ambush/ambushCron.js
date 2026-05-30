@@ -28,10 +28,12 @@ import { connectToDatabase } from '../database.js';
 import {
   STATES, BE_THRESHOLD, STRIKE_PCT, LOT_OFFSETS, SLIPPAGE_BPS,
   FIRST_HOUR_END, WITHDRAWAL_THRESHOLD, WITHDRAWAL_AMOUNT,
+  COMMISSION_PER_SHARE,
   isConfirmedGreenBreakout, isConfirmedRedBreakdown,
   entrySlip, exitSlip, extractTime, sizeLots,
+  getSizingMultiplier, getSizingTierLabel,
   loadSignalContext, getRegime, getSectorOk, isActiveBL, isActiveSS,
-  getWeeklyStopLong, getWeeklyStopShort, getAiTickers, getSectorName,
+  getAiTickers, getSectorName,
 } from './ambushEngine.js';
 import { calcCommission, calcBorrowCost } from '../backtest/costEngine.js';
 import {
@@ -114,7 +116,9 @@ export async function runAmbushTick() {
   const nav = config.nav || 83000;
   const maxPositions = config.maxPositions || 999;
 
-  console.log(`[Ambush] Tick starting — ${today}, NAV: $${nav.toLocaleString()}`);
+  const sizeMult = getSizingMultiplier(nav);
+  const sizeTier = getSizingTierLabel(nav);
+  console.log(`[Ambush] Tick starting — ${today}, NAV: $${nav.toLocaleString()}, Sizing: ${sizeTier} (${sizeMult}x)`);
 
   // 1. Load signal context (weekly signals, regime, sectors)
   const ctx = await loadSignalContext(db);
@@ -203,6 +207,7 @@ export async function runAmbushTick() {
       // Process each after-first-hour bar
       let exited = false;
       let prevBarLow = pos.prevBarLow;
+      let prevBarHigh = pos.prevBarHigh;   // track bar-by-bar for SHORT trailing (backtest match)
       let consecutiveLowerLows = pos.consecutiveLowerLows || 0;
 
       for (const hBar of afterFirstHour) {
@@ -335,10 +340,9 @@ export async function runAmbushTick() {
 
         // SHORT trailing stop (2-bar consecutive higher highs)
         if (pos.trailingActive && !isLong) {
-          const prevHH = pos.prevBarHigh;
-          if (prevHH !== undefined && prevHH !== null && hBar.high > prevHH && hBar.high >= pos.stop) {
+          if (prevBarHigh !== undefined && prevBarHigh !== null && hBar.high > prevBarHigh && hBar.high >= pos.stop) {
             consecutiveLowerLows++; // reusing counter for shorts (consecutive HH)
-          } else if (prevHH !== undefined && prevHH !== null && hBar.high > prevHH) {
+          } else if (prevBarHigh !== undefined && prevBarHigh !== null && hBar.high > prevBarHigh) {
             consecutiveLowerLows = 1;
           } else {
             consecutiveLowerLows = 0;
@@ -453,6 +457,7 @@ export async function runAmbushTick() {
         }
 
         prevBarLow = hBar.low;
+        prevBarHigh = hBar.high;  // update bar-by-bar (matches backtest pos._prevHH)
       }
 
       // Save position state if not exited
@@ -469,7 +474,7 @@ export async function runAmbushTick() {
           peak: pos.peak,
           consecutiveLowerLows: consecutiveLowerLows,
           prevBarLow: prevBarLow,
-          prevBarHigh: hBars[hBars.length - 1]?.high || pos.prevBarHigh,
+          prevBarHigh: prevBarHigh,
           firstHourLow,
           firstHourHigh,
           lastBarDate: hBars[hBars.length - 1]?.date,
@@ -509,7 +514,7 @@ export async function runAmbushTick() {
       if (isLong && reStop >= rePrice) { await deleteAmbushPosition(db, pend.ticker); continue; }
       if (!isLong && reStop <= rePrice) { await deleteAmbushPosition(db, pend.ticker); continue; }
 
-      const sizing = sizeLots(rePrice, reStop, pend.direction, nav);
+      const sizing = sizeLots(rePrice, reStop, pend.direction, nav, sizeMult);
       if (!sizing) { await deleteAmbushPosition(db, pend.ticker); continue; }
 
       // Transition ATTACK → ACTIVE
@@ -548,7 +553,7 @@ export async function runAmbushTick() {
       actions.push({
         type: 'RE_ENTRY', ticker: pend.ticker, direction: pend.direction,
         shares: sizing.l1Shares, price: rePrice, stop: reStop,
-        cycle: pend.cycleNum,
+        cycle: pend.cycleNum, sizingTier: sizeTier,
       });
     } catch (err) {
       errors.push({ ticker: pend.ticker, error: err.message });
@@ -629,18 +634,47 @@ export async function runAmbushTick() {
       const hBars = todayBars[ticker];
       if (!hBars || hBars.length < 2) continue;
 
+      // ── Funnel: PAI300 regime → sector → signal → 2-day trigger → hourly breakout ──
       const regime = getRegime(ctx, ticker, today);
       if (!getSectorOk(ctx, ticker, today)) continue;
-
-      const afterFirst = hBars.filter(b => extractTime(b.date) >= FIRST_HOUR_END);
-      if (afterFirst.length < 2) continue;
 
       let direction = null;
       if (regime && isActiveBL(ctx, ticker, today)) direction = 'LONG';
       else if (!regime && isActiveSS(ctx, ticker, today)) direction = 'SHORT';
       if (!direction) continue;
 
-      // Check for confirmed breakout in today's after-first-hour bars
+      // 2-day breakout trigger (cheap filter — runs BEFORE hourly bar scan)
+      // V7 backtest: trigger = max(prev1.high, prev2.high) + 0.01 for LONG
+      //              trigger = min(prev1.low, prev2.low) - 0.01 for SHORT
+      // FMP hourly bars include prior days, so we extract last 2 days before today
+      const priorBars = (hourlyBars[ticker] || []).filter(b => !b.date.startsWith(today));
+      if (priorBars.length === 0) continue;
+
+      // Group prior bars by date to get prev1 and prev2 day highs/lows
+      const priorByDate = {};
+      for (const b of priorBars) {
+        const d = b.date.split(' ')[0];
+        if (!priorByDate[d]) priorByDate[d] = [];
+        priorByDate[d].push(b);
+      }
+      const priorDates = Object.keys(priorByDate).sort().slice(-2); // last 2 prior days
+      if (priorDates.length === 0) continue;
+
+      const todayHigh = Math.max(...hBars.map(b => b.high));
+      const todayLow = Math.min(...hBars.map(b => b.low));
+
+      if (direction === 'LONG') {
+        const trigger = Math.max(...priorDates.flatMap(d => priorByDate[d].map(b => b.high))) + 0.01;
+        if (todayHigh < trigger) continue;
+      } else {
+        const trigger = Math.min(...priorDates.flatMap(d => priorByDate[d].map(b => b.low))) - 0.01;
+        if (todayLow > trigger) continue;
+      }
+
+      // Hourly confirmed breakout (runs AFTER 2-day trigger passes)
+      const afterFirst = hBars.filter(b => extractTime(b.date) >= FIRST_HOUR_END);
+      if (afterFirst.length < 2) continue;
+
       let breakoutFound = false;
       for (let i = 1; i < afterFirst.length; i++) {
         const bar = afterFirst[i], prevBar = afterFirst[i - 1];
@@ -656,33 +690,31 @@ export async function runAmbushTick() {
 
       if (!breakoutFound) continue;
 
-      // Check for 2-day breakout trigger (MCE condition from backtest)
-      // Need yesterday's high/low
-      const yesterdayH = yesterdayBars[ticker];
-      if (!yesterdayH || yesterdayH.length === 0) continue;
-
-      const yestHigh = Math.max(...yesterdayH.map(b => b.high));
-      const yestLow = Math.min(...yesterdayH.map(b => b.low));
-      const todayHigh = Math.max(...hBars.map(b => b.high));
-      const todayLow = Math.min(...hBars.map(b => b.low));
-
-      if (direction === 'LONG' && todayHigh <= yestHigh) continue;
-      if (direction === 'SHORT' && todayLow >= yestLow) continue;
-
       // Calculate entry price and stop
+      const triggerPrice = direction === 'LONG'
+        ? Math.max(...priorDates.flatMap(d => priorByDate[d].map(b => b.high))) + 0.01
+        : Math.min(...priorDates.flatMap(d => priorByDate[d].map(b => b.low))) - 0.01;
       const ep = direction === 'LONG'
-        ? entrySlip(Math.max(hBars[0].open, yestHigh + 0.01), 'LONG')
-        : entrySlip(Math.min(hBars[0].open, yestLow - 0.01), 'SHORT');
+        ? entrySlip(Math.max(hBars[0].open, triggerPrice), 'LONG')
+        : entrySlip(Math.min(hBars[0].open, triggerPrice), 'SHORT');
 
-      const stop = direction === 'LONG'
-        ? getWeeklyStopLong(ctx, ticker, today, ep)
-        : getWeeklyStopShort(ctx, ticker, today, ep);
-
-      if (!stop) continue;
+      // ── 1H Stop: firstHourLow - fees (LONG) / firstHourHigh + fees (SHORT) ──
+      // V7.1: tighter initial stop = tighter RPS = more shares per $300 max loss
+      const firstHourBars = hBars.filter(b => extractTime(b.date) < FIRST_HOUR_END);
+      let stop;
+      if (direction === 'LONG') {
+        const firstHourLow = firstHourBars.length ? Math.min(...firstHourBars.map(b => b.low)) : null;
+        if (!firstHourLow || firstHourLow >= ep) continue;  // no 1H data or stop above entry
+        stop = +(firstHourLow - COMMISSION_PER_SHARE).toFixed(2);
+      } else {
+        const firstHourHigh = firstHourBars.length ? Math.max(...firstHourBars.map(b => b.high)) : null;
+        if (!firstHourHigh || firstHourHigh <= ep) continue;  // no 1H data or stop below entry
+        stop = +(firstHourHigh + COMMISSION_PER_SHARE).toFixed(2);
+      }
       if (direction === 'LONG' && stop >= ep) continue;
       if (direction === 'SHORT' && stop <= ep) continue;
 
-      const sizing = sizeLots(ep, stop, direction, nav);
+      const sizing = sizeLots(ep, stop, direction, nav, sizeMult);
       if (!sizing) continue;
 
       // Check position count
@@ -727,6 +759,7 @@ export async function runAmbushTick() {
       actions.push({
         type: 'NEW_ENTRY', ticker, direction,
         shares: sizing.l1Shares, price: ep, stop,
+        sizingTier: sizeTier,
       });
     } catch (err) {
       errors.push({ ticker, error: err.message });
@@ -736,6 +769,9 @@ export async function runAmbushTick() {
   // ═══ Update config with last run info ═══
   const result = {
     date: today,
+    nav,
+    sizingTier: sizeTier,
+    sizingMultiplier: sizeMult,
     tickersFetched: tickersNeeded.size,
     barsReceived: Object.keys(todayBars).length,
     actions,

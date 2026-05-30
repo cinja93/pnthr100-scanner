@@ -100,7 +100,7 @@ async function fetchIbkrPrices(db, ownerId) {
     const doc = await db.collection('pnthr_ibkr_positions').findOne({ ownerId });
     if (doc?.positions && Array.isArray(doc.positions)) {
       for (const pos of doc.positions) {
-        const price = pos.marketPrice ?? pos.lastPrice;
+        const price = pos.marketPrice;
         if (pos.symbol && typeof price === 'number' && price > 0.01 && price < 50000) {
           prices[pos.symbol] = +price.toFixed(4);
         }
@@ -323,7 +323,22 @@ function updateFirstHourTracking(pos, price) {
 
 // ── Main Cron Tick ──────────────────────────────────────────────────────────
 
+let _tickRunning = false;
+
 export async function runAmbushTick() {
+  if (_tickRunning) {
+    console.warn('[Ambush] Tick already in progress — skipping');
+    return { skipped: 'ALREADY_RUNNING' };
+  }
+  _tickRunning = true;
+  try {
+    return await _runAmbushTickInner();
+  } finally {
+    _tickRunning = false;
+  }
+}
+
+async function _runAmbushTickInner() {
   const db = await connectToDatabase();
   if (!db) { console.error('[Ambush] No DB'); return { error: 'NO_DB' }; }
 
@@ -773,9 +788,13 @@ export async function runAmbushTick() {
         const price = livePrices[pend.ticker];
         if (!price) continue;
 
-        const activeCount = (await getAmbushPositions(db)).filter(p =>
+        // Count ACTIVE/PROTECT from already-loaded positions + actions taken this tick
+        const newEntriesThisTick = actions.filter(a => a.type === 'NEW_ENTRY' || a.type === 'RE_ENTRY').length;
+        const exitsThisTick = actions.filter(a => a.type === '1H_EXIT' || a.type === 'TRAILING_EXIT').length;
+        const baseActive = allPositions.filter(p =>
           p.state === STATES.ACTIVE || p.state === STATES.PROTECT
         ).length;
+        const activeCount = baseActive + newEntriesThisTick - exitsThisTick;
         if (activeCount >= maxPositions) {
           actions.push({ type: 'SKIPPED_CAP', ticker: pend.ticker });
           continue;
@@ -898,12 +917,37 @@ export async function runAmbushTick() {
           continue;
         }
 
-        // Check for confirmed breakout using synthetic bars
+        // Check for confirmed breakout using synthetic bars.
+        // IMPORTANT: Only evaluate breakout on the FIRST tick after hour rollover
+        // (when prevSyntheticBar just finalized). Evaluating mid-bar would cause
+        // false positives because the in-progress bar's close changes every 60s.
         const bar = stalk.syntheticBar;      // current in-progress bar
         const prevBar = stalk.prevSyntheticBar; // last completed bar
-        const breakoutDetected = isLong
-          ? isConfirmedGreenBreakout(bar, prevBar)
-          : isConfirmedRedBreakdown(bar, prevBar);
+
+        // Skip breakout check if we already checked this hour (avoid re-firing)
+        if (stalk._lastBreakoutCheckHour === bar.hourKey) {
+          await upsertAmbushPosition(db, stalk.ticker, {
+            runningLow: stalk.runningLow, runningHigh: stalk.runningHigh,
+            syntheticBar: stalk.syntheticBar, prevSyntheticBar: stalk.prevSyntheticBar,
+            todayFirstHourLow: stalk.todayFirstHourLow, todayFirstHourHigh: stalk.todayFirstHourHigh,
+            todayDate: stalk.todayDate, livePrice: price, livePriceAt: now,
+          });
+          continue;
+        }
+
+        // Use the completed prevBar as "current" for breakout pattern check,
+        // and the bar before that (stored as prevBarLow/High) as the reference.
+        // This ensures we're evaluating fully-formed bars, not mid-hour noise.
+        const checkBar = prevBar;  // last completed bar
+        const refBar = (stalk.prevBarLow != null && stalk.prevBarHigh != null)
+          ? { low: stalk.prevBarLow, high: stalk.prevBarHigh, open: stalk.prevBarLow, close: stalk.prevBarHigh }
+          : null;
+
+        const breakoutDetected = refBar
+          ? (isLong
+              ? isConfirmedGreenBreakout(checkBar, refBar)
+              : isConfirmedRedBreakdown(checkBar, refBar))
+          : false;
 
         if (breakoutDetected) {
           // Transition STALKING -> ATTACK (queue entry for next tick)
@@ -919,6 +963,9 @@ export async function runAmbushTick() {
             todayDate: today,
             syntheticBar: null,
             prevSyntheticBar: null,
+            prevBarLow: prevBar.low,
+            prevBarHigh: prevBar.high,
+            _lastBreakoutCheckHour: bar.hourKey,
             livePrice: price,
             livePriceAt: now,
           });
@@ -928,15 +975,18 @@ export async function runAmbushTick() {
             direction: stalk.direction, price,
           });
         } else {
-          // Save updated tracking data
+          // Save updated tracking data + mark this hour as checked
           await upsertAmbushPosition(db, stalk.ticker, {
             runningLow: stalk.runningLow,
             runningHigh: stalk.runningHigh,
             syntheticBar: stalk.syntheticBar,
             prevSyntheticBar: stalk.prevSyntheticBar,
+            prevBarLow: prevBar.low,
+            prevBarHigh: prevBar.high,
             todayFirstHourLow: stalk.todayFirstHourLow,
             todayFirstHourHigh: stalk.todayFirstHourHigh,
             todayDate: stalk.todayDate,
+            _lastBreakoutCheckHour: bar.hourKey,
             livePrice: price,
             livePriceAt: now,
           });
@@ -1016,14 +1066,12 @@ export async function runAmbushTick() {
 
           if (!breakoutFound) continue;
 
-          // Calculate entry price and 1H stop
-          const priorData = priorDayData[ticker];
-          const triggerPrice = direction === 'LONG'
-            ? Math.max(...priorData.highs) + 0.01
-            : Math.min(...priorData.lows) - 0.01;
+          // Calculate entry price using LIVE price (not stale bar open)
+          const currentPrice = livePrices[ticker];
+          if (!currentPrice) continue;
           const ep = direction === 'LONG'
-            ? entrySlip(Math.max(todayOnlyBars[0].open, triggerPrice), 'LONG')
-            : entrySlip(Math.min(todayOnlyBars[0].open, triggerPrice), 'SHORT');
+            ? entrySlip(currentPrice, 'LONG')
+            : entrySlip(currentPrice, 'SHORT');
 
           // 1H Stop: firstHourLow - fees (LONG) / firstHourHigh + fees (SHORT)
           const firstHourBars = todayOnlyBars.filter(b => extractTime(b.date) < FIRST_HOUR_END);
@@ -1043,10 +1091,13 @@ export async function runAmbushTick() {
           const sizing = sizeLots(ep, stop, direction, nav, sizeMult);
           if (!sizing) continue;
 
-          // Check position count
-          const currentActive = (await getAmbushPositions(db)).filter(p =>
+          // Check position count (from already-loaded positions + this tick's actions)
+          const mceNewEntries = actions.filter(a => a.type === 'NEW_ENTRY' || a.type === 'RE_ENTRY').length;
+          const mceExits = actions.filter(a => a.type === '1H_EXIT' || a.type === 'TRAILING_EXIT').length;
+          const mceBaseActive = allPositions.filter(p =>
             p.state === STATES.ACTIVE || p.state === STATES.PROTECT
           ).length;
+          const currentActive = mceBaseActive + mceNewEntries - mceExits;
           if (currentActive >= maxPositions) continue;
 
           // Create new ACTIVE position

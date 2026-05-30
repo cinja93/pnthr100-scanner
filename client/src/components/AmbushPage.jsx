@@ -82,7 +82,9 @@ function getSizingTier(nav) {
 function lotsLabel(pos) {
   if (!pos.lotPlan) return '--';
   // nextLot=1 means L1 filled (L2 next), show as "L1/5"
-  const filled = Math.min(pos.nextLot || 0, 5);
+  // nextLot=0 should never happen on an ACTIVE position, but guard it
+  const filled = Math.max(0, Math.min(pos.nextLot || 0, 5));
+  if (filled === 0) return 'Entry';
   return `L${filled}/5`;
 }
 
@@ -489,7 +491,7 @@ export default function AmbushPage() {
                   const total = totalPlannedShares(pos);
                   const risk = computeRisk(pos);
                   const rps = computeRps(pos);
-                  const exitLevel = pos.direction === 'LONG' ? (pos.todayFirstHourLow || pos.firstHourLow) : (pos.todayFirstHourHigh || pos.firstHourHigh);
+                  const exitLevel = pos.direction === 'LONG' ? pos.todayFirstHourLow : pos.todayFirstHourHigh;
                   const isExpanded = expanded[pos.ticker];
 
                   return (

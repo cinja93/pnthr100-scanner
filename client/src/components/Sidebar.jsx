@@ -61,17 +61,11 @@ const NAV_GROUPS = [
     ],
   },
   {
-    groupLabel: 'AMBUSH',
-    info: 'ambush',
-    items: [
-      { key: 'ambush',    label: 'Ambush V7.1',  badge: 'LIVE' },
-    ],
-  },
-  {
     groupLabel: 'PNTHR Live',
     info: 'pnthrLive',
     items: [
-      { key: 'orders',    label: 'Orders',    badge: 'AI | Carnivore', badgeType: 'split' },
+      { key: 'ambush',   label: 'Ambush V7.1',  badge: 'LIVE' },
+      { key: 'orders',   label: 'Orders',    badge: 'AI | Carnivore', badgeType: 'split' },
     ],
   },
   {
@@ -110,13 +104,9 @@ const SECTION_INFO = {
     title: 'Market Pulse',
     body: "Real-time performance tracking and macro context. Pulse shows live equity curves for both funds. Bond Yields tracks the treasury yield curve and credit spreads.",
   },
-  ambush: {
-    title: 'AMBUSH',
-    body: "PNTHR Ambush V7.1 intraday strategy. 1H-stop + graduated sizing (50/75/100%). Fully automated first-hour-low breakout system with 5-lot pyramid, trailing stops, and hourly bar processing. STALKING, ATTACK, ACTIVE, PROTECT.",
-  },
   pnthrLive: {
     title: 'PNTHR Live',
-    body: "Live operations center. The Assistant is an all-day dashboard with positions, risk metrics, and real-time alerts. Orders shows the active trading pipeline and heat exposure.",
+    body: "Live operations center. Ambush V7.1 is the fully automated intraday system with 1H-stop, graduated sizing (50/75/100%), 5-lot pyramid, and trailing stops. Orders shows the active trading pipeline and heat exposure.",
   },
   strategy: {
     title: 'Strategy',

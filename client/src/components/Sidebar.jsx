@@ -64,7 +64,7 @@ const NAV_GROUPS = [
     groupLabel: 'AMBUSH',
     info: 'ambush',
     items: [
-      { key: 'ambush',    label: 'Ambush V7',  badge: 'LIVE' },
+      { key: 'ambush',    label: 'Ambush V7.1',  badge: 'LIVE' },
     ],
   },
   {
@@ -112,7 +112,7 @@ const SECTION_INFO = {
   },
   ambush: {
     title: 'AMBUSH',
-    body: "PNTHR Ambush V7 intraday strategy. Fully automated first-hour-low breakout system with 5-lot pyramid, trailing stops, and hourly bar processing. STALKING, ATTACK, ACTIVE, PROTECT.",
+    body: "PNTHR Ambush V7.1 intraday strategy. 1H-stop + graduated sizing (50/75/100%). Fully automated first-hour-low breakout system with 5-lot pyramid, trailing stops, and hourly bar processing. STALKING, ATTACK, ACTIVE, PROTECT.",
   },
   pnthrLive: {
     title: 'PNTHR Live',

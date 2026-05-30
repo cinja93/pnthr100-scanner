@@ -24,7 +24,7 @@
 // The bridge polls pnthr_ambush_outbox and executes via IBKR TWS API.
 // ────────────────────────────────────────────────────────────────────────────
 
-import { connectToDatabase } from '../database.js';
+import { connectToDatabase, getUserProfile } from '../database.js';
 import {
   STATES, BE_THRESHOLD, STRIKE_PCT, LOT_OFFSETS, SLIPPAGE_BPS,
   FIRST_HOUR_END, WITHDRAWAL_THRESHOLD, WITHDRAWAL_AMOUNT,
@@ -113,12 +113,29 @@ export async function runAmbushTick() {
   }
 
   const today = getTodayET();
-  const nav = config.nav || 83000;
   const maxPositions = config.maxPositions || 999;
+
+  // ── Live NAV: read IBKR-synced accountSize from user profile ──────────
+  // The IBKR bridge syncs netLiquidation → user_profiles.accountSize every 60s.
+  // Graduated sizing tiers auto-bump as the real account grows.
+  // Fallback chain: IBKR NAV → config.nav → $83K seed.
+  let nav = config.nav || 83000;
+  let navSource = 'config';
+  if (config.ownerId) {
+    try {
+      const profile = await getUserProfile(config.ownerId);
+      if (profile?.accountSize && profile.accountSize > 0) {
+        nav = profile.accountSize;
+        navSource = 'IBKR';
+      }
+    } catch (err) {
+      console.warn(`[Ambush] Could not read user profile for NAV — using config.nav ($${nav}):`, err.message);
+    }
+  }
 
   const sizeMult = getSizingMultiplier(nav);
   const sizeTier = getSizingTierLabel(nav);
-  console.log(`[Ambush] Tick starting — ${today}, NAV: $${nav.toLocaleString()}, Sizing: ${sizeTier} (${sizeMult}x)`);
+  console.log(`[Ambush] Tick starting — ${today}, NAV: $${nav.toLocaleString()} (${navSource}), Sizing: ${sizeTier} (${sizeMult}x)`);
 
   // 1. Load signal context (weekly signals, regime, sectors)
   const ctx = await loadSignalContext(db);
@@ -770,6 +787,7 @@ export async function runAmbushTick() {
   const result = {
     date: today,
     nav,
+    navSource,
     sizingTier: sizeTier,
     sizingMultiplier: sizeMult,
     tickersFetched: tickersNeeded.size,

@@ -1,27 +1,34 @@
 // server/ambush/ambushCron.js
-// ── PNTHR AMBUSH V7 — Hourly Cron Processor ────────────────────────────────
+// ── PNTHR AMBUSH V7.1 — 60-Second Live Tick Processor ─────────────────────
 //
-// Runs at :05 past each hour from 10:35 to 16:05 ET (Mon-Fri).
-//   - 10:35 ET → processes the 9:30-10:30 bar (captures first-hour low)
-//   - 11:05 ET → processes the 10:30-11:30 bar (first after-hours check)
-//   - ...
-//   - 16:05 ET → processes the 15:30-16:00 bar (final bar of day)
+// Ticks every 60 seconds during market hours (9:30-16:05 ET, Mon-Fri).
 //
-// Data source: FMP /historical-chart/1hour/{ticker}
-// Order execution: IBKR bridge via pnthr_ambush_outbox
+// Data sources:
+//   - IBKR bridge (via pnthr_ibkr_positions) → live marketPrice for held tickers
+//   - FMP /quote batch → live price for non-held tickers (STALKING, candidates)
+//   - FMP /historical-chart/1hour → only for narrow MCE breakout confirmation
+//
+// Synthetic bars: each 60-second price tick is accumulated into hourly OHLC
+// bars stored on the position document. When the hour rolls over, the bar
+// finalizes and becomes prevSyntheticBar. Breakout detection and trailing
+// exit use these synthetic bars — identical logic to V7 backtest, just built
+// from live prices instead of FMP historical charts.
+//
+// First-hour tracking (9:30-10:30): todayFirstHourLow/High accumulated from
+// live prices. After 10:30, used for 1H stop and trailing ratchet.
+//
+// Order execution: IBKR bridge via pnthr_ambush_outbox (unchanged).
 //
 // Flow per tick:
-//   1. Fetch today's hourly bars for all tickers in any Ambush state
-//      + all tickers with active weekly BL/SS signals (new entry candidates)
+//   1. Fetch live prices (IBKR for held, FMP /quote for non-held)
 //   2. Load signal context (weekly signals, regime, sector gates)
-//   3. Process existing positions (stops, lots, Break Even, trailing)
-//   4. Process ATTACK positions (execute pending re-entries)
-//   5. Process STALKING positions (check for tripwire break → ATTACK)
-//   6. Scan for new MCE entries (fresh signals → STALKING)
-//   7. Write state changes to MongoDB
-//   8. Enqueue order commands to outbox
-//
-// The bridge polls pnthr_ambush_outbox and executes via IBKR TWS API.
+//   3. Update synthetic bars + first-hour tracking
+//   4. Process ACTIVE/PROTECT (stops, lots, Break Even, trailing)
+//   5. Process ATTACK (execute pending re-entries)
+//   6. Process STALKING (check for breakout via synthetic bars)
+//   7. Scan for new MCE entries (FMP hourly for narrow breakout check)
+//   8. Write state changes to MongoDB
+//   9. Enqueue order commands to outbox
 // ────────────────────────────────────────────────────────────────────────────
 
 import { connectToDatabase, getUserProfile } from '../database.js';
@@ -44,14 +51,192 @@ import {
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 
-// ── FMP Hourly Bar Fetch ────────────────────────────────────────────────────
-// Fetches today's hourly bars for a batch of tickers from FMP.
-// FMP returns bars with dates like "2026-06-02 10:30:00"
+// ── Eastern Time Helpers ───────────────────────────────────────────────────
 
-async function fetchHourlyBars(tickers) {
+function getETComponents(now = new Date()) {
+  const parts = {};
+  for (const { type, value } of new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).formatToParts(now)) {
+    parts[type] = value;
+  }
+  // en-CA formats as YYYY-MM-DD
+  const date = `${parts.year}-${parts.month}-${parts.day}`;
+  const hour = parts.hour === '24' ? '00' : parts.hour; // midnight edge
+  return {
+    date,
+    hour,
+    minute: parts.minute,
+    hourKey: `${date}T${hour}`,
+    timeStr: `${hour}:${parts.minute}`,
+    totalMinutes: parseInt(hour, 10) * 60 + parseInt(parts.minute, 10),
+  };
+}
+
+function getTodayET() {
+  return getETComponents().date;
+}
+
+function isMarketHours() {
+  const { totalMinutes } = getETComponents();
+  const now = new Date();
+  const dow = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' });
+  if (dow === 'Sat' || dow === 'Sun') return false;
+  return totalMinutes >= 570 && totalMinutes <= 965; // 9:30 AM - 4:05 PM ET
+}
+
+// ── Data Source: IBKR Live Prices ──────────────────────────────────────────
+// Reads marketPrice from pnthr_ibkr_positions (synced by bridge every 60s).
+// Returns { ticker: price } for all positions the bridge reports.
+
+async function fetchIbkrPrices(db, ownerId) {
+  const prices = {};
+  if (!ownerId) return prices;
+
+  try {
+    const doc = await db.collection('pnthr_ibkr_positions').findOne({ ownerId });
+    if (doc?.positions && Array.isArray(doc.positions)) {
+      for (const pos of doc.positions) {
+        const price = pos.marketPrice ?? pos.lastPrice;
+        if (pos.symbol && typeof price === 'number' && price > 0.01 && price < 50000) {
+          prices[pos.symbol] = +price.toFixed(4);
+        }
+      }
+    }
+    // Staleness warning
+    if (doc?.syncedAt) {
+      const age = Date.now() - new Date(doc.syncedAt).getTime();
+      if (age > 300_000) {
+        console.warn(`[Ambush] IBKR data is ${Math.round(age / 1000)}s stale — bridge may be down`);
+      }
+    }
+  } catch (err) {
+    console.warn('[Ambush] Failed to read IBKR positions:', err.message);
+  }
+
+  return prices;
+}
+
+// ── Data Source: FMP Batch Quotes ──────────────────────────────────────────
+// Lightweight: one API call per 50 tickers. Returns { ticker: price }.
+// Used for non-held tickers (STALKING, ATTACK, MCE candidates).
+
+async function fetchFmpBatchQuotes(tickers) {
+  const prices = {};
+  if (!tickers.length || !FMP_API_KEY) return prices;
+
+  const batchSize = 50;
+  for (let i = 0; i < tickers.length; i += batchSize) {
+    const batch = tickers.slice(i, i + batchSize);
+    try {
+      const symbols = batch.join(',');
+      const url = `https://financialmodelingprep.com/api/v3/quote/${symbols}?apikey=${FMP_API_KEY}`;
+      const resp = await fetch(url);
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      if (Array.isArray(data)) {
+        for (const q of data) {
+          if (q.symbol && typeof q.price === 'number' && q.price > 0) {
+            prices[q.symbol] = +q.price.toFixed(4);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[Ambush] FMP batch quote failed:`, err.message);
+    }
+  }
+
+  return prices;
+}
+
+// ── Data Source: Combined Live Prices ──────────────────────────────────────
+// Merges IBKR (held tickers) + FMP quotes (non-held). IBKR takes priority.
+
+async function fetchLivePrices(db, positions, candidateTickers, ownerId) {
+  // 1. IBKR prices for held tickers
+  const ibkrPrices = await fetchIbkrPrices(db, ownerId);
+
+  // 2. Determine which tickers still need prices
+  const needFmp = new Set();
+  for (const pos of positions) {
+    if (!ibkrPrices[pos.ticker]) needFmp.add(pos.ticker);
+  }
+  for (const t of candidateTickers) {
+    if (!ibkrPrices[t]) needFmp.add(t);
+  }
+
+  // 3. FMP batch quote for non-IBKR tickers
+  const fmpPrices = needFmp.size > 0 ? await fetchFmpBatchQuotes([...needFmp]) : {};
+
+  // 4. Merge: IBKR takes priority
+  const merged = { ...fmpPrices, ...ibkrPrices };
+  return merged;
+}
+
+// ── Data Source: Prior-Day Data (cached per day, for MCE 2-day trigger) ────
+// Fetches last 5 daily bars per ticker from FMP. Cached in memory — only
+// re-fetched when the date changes. Returns { ticker: { highs, lows } }.
+
+let _priorDayCache = { date: null, data: {} };
+
+async function fetchPriorDayData(tickers, today) {
+  if (_priorDayCache.date === today && Object.keys(_priorDayCache.data).length > 0) {
+    return _priorDayCache.data;
+  }
+
+  console.log(`[Ambush] Fetching prior-day data for ${tickers.length} MCE candidates...`);
+  const data = {};
+  const batchSize = 5;
+
+  for (let i = 0; i < tickers.length; i += batchSize) {
+    const batch = tickers.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map(async (ticker) => {
+        try {
+          const url = `https://financialmodelingprep.com/api/v3/historical-chart/1day/${ticker}?apikey=${FMP_API_KEY}`;
+          const resp = await fetch(url);
+          if (!resp.ok) return { ticker, bars: [] };
+          const raw = await resp.json();
+          const bars = (Array.isArray(raw) ? raw : []).slice(0, 5).reverse();
+          return { ticker, bars };
+        } catch {
+          return { ticker, bars: [] };
+        }
+      })
+    );
+
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value) {
+        const { ticker, bars } = r.value;
+        const priorBars = bars.filter(b => !b.date?.startsWith(today));
+        const lastTwo = priorBars.slice(-2);
+        if (lastTwo.length > 0) {
+          data[ticker] = {
+            highs: lastTwo.map(b => +b.high),
+            lows: lastTwo.map(b => +b.low),
+          };
+        }
+      }
+    }
+  }
+
+  _priorDayCache = { date: today, data };
+  console.log(`[Ambush] Cached prior-day data for ${Object.keys(data).length} tickers`);
+  return data;
+}
+
+// ── Data Source: FMP Hourly Bars (MCE breakout confirmation only) ──────────
+// Used ONLY for the narrow set of MCE candidates that pass all pre-filters.
+// Typically 5-20 tickers per tick. Fetches today's hourly bars for pattern check.
+
+async function fetchFmpHourlyBars(tickers) {
   const barMap = {};
-  const batchSize = 5; // parallel requests to avoid FMP rate limits
+  if (!tickers.length || !FMP_API_KEY) return barMap;
 
+  const batchSize = 5;
   for (let i = 0; i < tickers.length; i += batchSize) {
     const batch = tickers.slice(i, i + batchSize);
     const results = await Promise.allSettled(
@@ -61,7 +246,6 @@ async function fetchHourlyBars(tickers) {
           const resp = await fetch(url);
           if (!resp.ok) return { ticker, bars: [] };
           const data = await resp.json();
-          // FMP returns newest first, reverse to chronological
           const bars = (Array.isArray(data) ? data : []).reverse().map(b => ({
             date: b.date,
             open: +b.open,
@@ -72,7 +256,7 @@ async function fetchHourlyBars(tickers) {
           }));
           return { ticker, bars };
         } catch (err) {
-          console.error(`[Ambush] FMP fetch failed for ${ticker}:`, err.message);
+          console.error(`[Ambush] FMP hourly fetch failed for ${ticker}:`, err.message);
           return { ticker, bars: [] };
         }
       })
@@ -86,19 +270,55 @@ async function fetchHourlyBars(tickers) {
   return barMap;
 }
 
-// ── Today's date in ET ──────────────────────────────────────────────────────
-function getTodayET() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+// ── Synthetic Bar Functions ────────────────────────────────────────────────
+// Builds hourly OHLC bars from 60-second price ticks.
+// Stored on the position document: syntheticBar (current), prevSyntheticBar.
+
+function updateSyntheticBarOnPosition(pos, price, hourKey, today) {
+  if (typeof price !== 'number' || price <= 0) return;
+
+  // Day rollover: reset daily tracking
+  if (pos.todayDate !== today) {
+    pos.todayDate = today;
+    pos.todayFirstHourLow = null;
+    pos.todayFirstHourHigh = null;
+    // Keep prevSyntheticBar from yesterday for trailing LL check continuity.
+    // The consecutiveLowerLows counter + prevBarLow persist across days
+    // (same as the hourly model where the engine only processes today's bars
+    // but the counter carries over).
+    pos.syntheticBar = null;
+  }
+
+  // Hour rollover: finalize current bar, promote to prev
+  if (pos.syntheticBar && pos.syntheticBar.hourKey !== hourKey) {
+    pos.prevSyntheticBar = { ...pos.syntheticBar };
+    pos.syntheticBar = null;
+  }
+
+  // Update or create current bar
+  if (!pos.syntheticBar) {
+    pos.syntheticBar = {
+      hourKey,
+      open: price,
+      high: price,
+      low: price,
+      close: price,
+    };
+  } else {
+    pos.syntheticBar.high = Math.max(pos.syntheticBar.high, price);
+    pos.syntheticBar.low = Math.min(pos.syntheticBar.low, price);
+    pos.syntheticBar.close = price;
+  }
 }
 
-function isMarketHours() {
-  const now = new Date();
-  const etOpts = { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false };
-  const [hStr, mStr] = now.toLocaleString('en-US', etOpts).split(':');
-  const mins = parseInt(hStr, 10) * 60 + parseInt(mStr, 10);
-  const dow = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' });
-  if (dow === 'Sat' || dow === 'Sun') return false;
-  return mins >= 570 && mins <= 965; // 9:30 AM – 4:05 PM ET
+function updateFirstHourTracking(pos, price) {
+  if (typeof price !== 'number' || price <= 0) return;
+  if (pos.todayFirstHourLow === null || pos.todayFirstHourLow === undefined || price < pos.todayFirstHourLow) {
+    pos.todayFirstHourLow = +price.toFixed(4);
+  }
+  if (pos.todayFirstHourHigh === null || pos.todayFirstHourHigh === undefined || price > pos.todayFirstHourHigh) {
+    pos.todayFirstHourHigh = +price.toFixed(4);
+  }
 }
 
 // ── Main Cron Tick ──────────────────────────────────────────────────────────
@@ -112,13 +332,18 @@ export async function runAmbushTick() {
     return { skipped: 'DISABLED' };
   }
 
-  const today = getTodayET();
+  if (!isMarketHours()) {
+    return { skipped: 'OUTSIDE_HOURS' };
+  }
+
+  const now = new Date();
+  const et = getETComponents(now);
+  const today = et.date;
+  const hourKey = et.hourKey;
+  const isFirstHour = et.totalMinutes < 630; // before 10:30 ET
   const maxPositions = config.maxPositions || 999;
 
   // ── Live NAV: read IBKR-synced accountSize from user profile ──────────
-  // The IBKR bridge syncs netLiquidation → user_profiles.accountSize every 60s.
-  // Graduated sizing tiers auto-bump as the real account grows.
-  // Fallback chain: IBKR NAV → config.nav → $83K seed.
   let nav = config.nav || 83000;
   let navSource = 'config';
   if (config.ownerId) {
@@ -129,13 +354,13 @@ export async function runAmbushTick() {
         navSource = 'IBKR';
       }
     } catch (err) {
-      console.warn(`[Ambush] Could not read user profile for NAV — using config.nav ($${nav}):`, err.message);
+      console.warn(`[Ambush] Could not read user profile for NAV - using config.nav ($${nav}):`, err.message);
     }
   }
 
   const sizeMult = getSizingMultiplier(nav);
   const sizeTier = getSizingTierLabel(nav);
-  console.log(`[Ambush] Tick starting — ${today}, NAV: $${nav.toLocaleString()} (${navSource}), Sizing: ${sizeTier} (${sizeMult}x)`);
+  console.log(`[Ambush] Tick ${et.timeStr} ET - NAV: $${nav.toLocaleString()} (${navSource}), Sizing: ${sizeTier}${isFirstHour ? ' [FIRST HOUR]' : ''}`);
 
   // 1. Load signal context (weekly signals, regime, sectors)
   const ctx = await loadSignalContext(db);
@@ -143,40 +368,33 @@ export async function runAmbushTick() {
   // 2. Get all current Ambush positions
   const allPositions = await getAmbushPositions(db);
 
-  // 3. Determine which tickers need hourly bars
-  const tickersNeeded = new Set();
-
-  // All tickers currently in any state
-  for (const pos of allPositions) tickersNeeded.add(pos.ticker);
-
-  // All tickers with active BL or SS signals (potential new entries)
-  for (const ticker of getAiTickers()) {
-    if (isActiveBL(ctx, ticker, today) || isActiveSS(ctx, ticker, today)) {
-      tickersNeeded.add(ticker);
+  // 3. Determine MCE candidate tickers (not already tracked)
+  const existingTickers = new Set(allPositions.map(p => p.ticker));
+  const mceCandidates = [];
+  if (!isFirstHour) {
+    for (const ticker of getAiTickers()) {
+      if (existingTickers.has(ticker)) continue;
+      if (isActiveBL(ctx, ticker, today) || isActiveSS(ctx, ticker, today)) {
+        mceCandidates.push(ticker);
+      }
     }
   }
 
-  console.log(`[Ambush] Fetching hourly bars for ${tickersNeeded.size} tickers...`);
-  const hourlyBars = await fetchHourlyBars([...tickersNeeded]);
+  // 4. Fetch live prices: IBKR for held, FMP quotes for non-held + candidates
+  const livePrices = await fetchLivePrices(db, allPositions, mceCandidates, config.ownerId);
+  const priceCount = Object.keys(livePrices).length;
+  console.log(`[Ambush] Live prices: ${priceCount} tickers (${allPositions.length} positions + ${mceCandidates.length} candidates)`);
 
-  // Filter to today's bars only
-  const todayBars = {};
-  for (const [ticker, bars] of Object.entries(hourlyBars)) {
-    const todayOnly = bars.filter(b => b.date.startsWith(today));
-    if (todayOnly.length > 0) todayBars[ticker] = todayOnly;
+  // 5. Update synthetic bars for all tracked positions
+  for (const pos of allPositions) {
+    const price = livePrices[pos.ticker];
+    if (price) {
+      updateSyntheticBarOnPosition(pos, price, hourKey, today);
+      if (isFirstHour) updateFirstHourTracking(pos, price);
+    }
   }
 
-  console.log(`[Ambush] Got bars for ${Object.keys(todayBars).length} tickers today`);
-
-  // Also need yesterday's daily bars for MCE 2-day breakout trigger
-  // We'll use the hourly bars from yesterday if available, or skip MCE if not
-  const yesterdayBars = {};
-  for (const [ticker, bars] of Object.entries(hourlyBars)) {
-    const yest = bars.filter(b => !b.date.startsWith(today));
-    if (yest.length > 0) yesterdayBars[ticker] = yest;
-  }
-
-  const actions = [];   // { type, ticker, details }
+  const actions = [];
   const errors = [];
 
   // ═══ PHASE A: Process existing ACTIVE + PROTECT positions ═══
@@ -186,33 +404,39 @@ export async function runAmbushTick() {
 
   for (const pos of activePositions) {
     try {
-      const hBars = todayBars[pos.ticker];
-      if (!hBars || hBars.length === 0) continue;
+      const price = livePrices[pos.ticker];
+      if (!price) continue;
 
       const isLong = pos.direction === 'LONG';
 
-      // Get first-hour bars and after-first-hour bars
-      const firstHourBars = hBars.filter(b => extractTime(b.date) < FIRST_HOUR_END);
-      const afterFirstHour = hBars.filter(b => extractTime(b.date) >= FIRST_HOUR_END);
+      // ── During first hour: only collect data, skip price checks ──
+      if (isFirstHour) {
+        await upsertAmbushPosition(db, pos.ticker, {
+          syntheticBar: pos.syntheticBar,
+          prevSyntheticBar: pos.prevSyntheticBar,
+          todayFirstHourLow: pos.todayFirstHourLow,
+          todayFirstHourHigh: pos.todayFirstHourHigh,
+          todayDate: pos.todayDate,
+          livePrice: price,
+          livePriceAt: now,
+        });
+        continue;
+      }
 
-      // Capture today's first-hour low/high
-      const firstHourLow = firstHourBars.length ? Math.min(...firstHourBars.map(b => b.low)) : null;
-      const firstHourHigh = firstHourBars.length ? Math.max(...firstHourBars.map(b => b.high)) : null;
-
-      // Trailing stop ratchet: use today's first-hour low/high
+      // ── Trailing stop ratchet: apply today's first-hour low/high ──
       if (pos.atBE && pos.trailingActive) {
-        if (isLong && firstHourLow != null && firstHourLow > pos.stop) {
+        if (isLong && pos.todayFirstHourLow != null && pos.todayFirstHourLow > pos.stop) {
           const oldStop = pos.stop;
-          pos.stop = +firstHourLow.toFixed(2);
+          pos.stop = +pos.todayFirstHourLow.toFixed(2);
           actions.push({ type: 'TRAILING_RATCHET', ticker: pos.ticker, from: oldStop, to: pos.stop });
           await enqueueAmbushOrder(db, 'MODIFY_STOP', {
             ticker: pos.ticker, direction: pos.direction,
             newStopPrice: pos.stop, shares: pos.totalShares,
           });
         }
-        if (!isLong && firstHourHigh != null && firstHourHigh < pos.stop) {
+        if (!isLong && pos.todayFirstHourHigh != null && pos.todayFirstHourHigh < pos.stop) {
           const oldStop = pos.stop;
-          pos.stop = +firstHourHigh.toFixed(2);
+          pos.stop = +pos.todayFirstHourHigh.toFixed(2);
           actions.push({ type: 'TRAILING_RATCHET', ticker: pos.ticker, from: oldStop, to: pos.stop });
           await enqueueAmbushOrder(db, 'MODIFY_STOP', {
             ticker: pos.ticker, direction: pos.direction,
@@ -221,58 +445,181 @@ export async function runAmbushTick() {
         }
       }
 
-      // Process each after-first-hour bar
       let exited = false;
-      let prevBarLow = pos.prevBarLow;
-      let prevBarHigh = pos.prevBarHigh;   // track bar-by-bar for SHORT trailing (backtest match)
-      let consecutiveLowerLows = pos.consecutiveLowerLows || 0;
 
-      for (const hBar of afterFirstHour) {
-        if (exited) break;
+      // ── Check 1: Stop exit (1H low/high break, pre-trailing) ──
+      if (isLong && !pos.trailingActive && pos.todayFirstHourLow != null && price < pos.todayFirstHourLow) {
+        const exitPrice = exitSlip(pos.todayFirstHourLow, 'LONG');
+        const comm = calcCommission(pos.totalShares, exitPrice);
+        const pnl = +(pos.totalShares * exitPrice - comm - pos.totalShares * pos.avgCost).toFixed(2);
 
-        // ── Check 1H low/high break (pre-trailing exit) ──
-        if (isLong && !pos.trailingActive && firstHourLow != null && hBar.low < firstHourLow) {
-          const exitPrice = exitSlip(firstHourLow, 'LONG');
+        await logAmbushTrade(db, {
+          ticker: pos.ticker, direction: 'LONG', entryPrice: pos.avgCost,
+          exitPrice, shares: pos.totalShares, pnl, entryDate: pos.entryDate,
+          exitDate: today, exitType: '1H_LOW_BREAK', cycleNum: pos.cycleNum,
+          commission: comm, peakProfit: pos.peak,
+        });
+
+        await upsertAmbushPosition(db, pos.ticker, {
+          state: STATES.STALKING,
+          direction: 'LONG',
+          originalEntry: pos.originalEntry,
+          runningLow: price,
+          runningHigh: pos.runningHigh || pos.syntheticBar?.high || price,
+          cycleNum: (pos.cycleNum || 0) + 1,
+          entryPrice: null, avgCost: null, totalShares: 0,
+          lotPlan: null, nextLot: 0, stop: null,
+          atBE: false, trailingActive: false, beDate: null, peak: 0,
+          firstHourLow: null, firstHourHigh: null,
+          consecutiveLowerLows: 0, prevBarLow: null, prevBarHigh: null,
+          syntheticBar: null, prevSyntheticBar: null,
+          todayFirstHourLow: pos.todayFirstHourLow,
+          todayFirstHourHigh: pos.todayFirstHourHigh,
+          todayDate: today, livePrice: price, livePriceAt: now,
+        });
+
+        await enqueueAmbushOrder(db, 'SELL_EXIT', {
+          ticker: pos.ticker, shares: pos.totalShares, direction: 'LONG',
+          reason: '1H_LOW_BREAK',
+        });
+
+        actions.push({ type: '1H_EXIT', ticker: pos.ticker, pnl });
+        exited = true;
+      }
+
+      if (!exited && !isLong && !pos.trailingActive && pos.todayFirstHourHigh != null && price > pos.todayFirstHourHigh) {
+        const exitPrice = exitSlip(pos.todayFirstHourHigh, 'SHORT');
+        const comm = calcCommission(pos.totalShares, exitPrice);
+        const entryD = pos.entryDate ? new Date(pos.entryDate) : new Date();
+        const exitD = new Date(today);
+        const tradingDays = Math.max(1, Math.round((exitD - entryD) / 86400000 * 5 / 7));
+        const borrow = calcBorrowCost(pos.totalShares, pos.avgCost, tradingDays, getSectorName(pos.ticker));
+        const pnl = +(pos.totalShares * (pos.avgCost - exitPrice) - comm - borrow).toFixed(2);
+
+        await logAmbushTrade(db, {
+          ticker: pos.ticker, direction: 'SHORT', entryPrice: pos.avgCost,
+          exitPrice, shares: pos.totalShares, pnl, entryDate: pos.entryDate,
+          exitDate: today, exitType: '1H_HIGH_BREAK', cycleNum: pos.cycleNum,
+          commission: comm, borrow, peakProfit: pos.peak,
+        });
+
+        await upsertAmbushPosition(db, pos.ticker, {
+          state: STATES.STALKING,
+          direction: 'SHORT',
+          originalEntry: pos.originalEntry,
+          runningLow: pos.runningLow || pos.syntheticBar?.low || price,
+          runningHigh: price,
+          cycleNum: (pos.cycleNum || 0) + 1,
+          entryPrice: null, avgCost: null, totalShares: 0,
+          lotPlan: null, nextLot: 0, stop: null,
+          atBE: false, trailingActive: false, beDate: null, peak: 0,
+          firstHourLow: null, firstHourHigh: null,
+          consecutiveLowerLows: 0, prevBarLow: null, prevBarHigh: null,
+          syntheticBar: null, prevSyntheticBar: null,
+          todayFirstHourLow: pos.todayFirstHourLow,
+          todayFirstHourHigh: pos.todayFirstHourHigh,
+          todayDate: today, livePrice: price, livePriceAt: now,
+        });
+
+        await enqueueAmbushOrder(db, 'COVER_EXIT', {
+          ticker: pos.ticker, shares: pos.totalShares, direction: 'SHORT',
+          reason: '1H_HIGH_BREAK',
+        });
+
+        actions.push({ type: '1H_EXIT', ticker: pos.ticker, pnl });
+        exited = true;
+      }
+
+      // ── Check 2: Trailing stop exit (2-bar consecutive LL/HH into stop) ──
+      if (!exited && pos.trailingActive && isLong && pos.prevSyntheticBar && pos.syntheticBar) {
+        const curLow = pos.syntheticBar.low;
+        const prevLow = pos.prevSyntheticBar.low;
+        const prevPrevLow = pos.prevBarLow; // bar before prevSyntheticBar
+
+        // Evaluate completed-bar LL status on hour rollover
+        let consLL = pos.consecutiveLowerLows || 0;
+        if (pos.syntheticBar.hourKey !== pos._lastLLCheckHour && prevPrevLow != null) {
+          // prevSyntheticBar just completed — evaluate it
+          if (prevLow < prevPrevLow && prevLow <= pos.stop) {
+            consLL = consLL + 1;
+          } else if (prevLow < prevPrevLow) {
+            consLL = 1;
+          } else {
+            consLL = 0;
+          }
+          pos.consecutiveLowerLows = consLL;
+          pos.prevBarLow = prevLow;
+          pos.prevBarHigh = pos.prevSyntheticBar.high;
+          pos._lastLLCheckHour = pos.syntheticBar.hourKey;
+        }
+
+        // Intra-bar check: if previous bar was already LL, current bar confirming
+        const curBarLL = curLow < prevLow && curLow <= pos.stop;
+        if (curBarLL && consLL >= 1) {
+          // 2 consecutive lower-low bars into stop -> EXIT
+          const exitPrice = exitSlip(pos.stop, 'LONG');
           const comm = calcCommission(pos.totalShares, exitPrice);
           const pnl = +(pos.totalShares * exitPrice - comm - pos.totalShares * pos.avgCost).toFixed(2);
 
           await logAmbushTrade(db, {
             ticker: pos.ticker, direction: 'LONG', entryPrice: pos.avgCost,
             exitPrice, shares: pos.totalShares, pnl, entryDate: pos.entryDate,
-            exitDate: today, exitType: '1H_LOW_BREAK', cycleNum: pos.cycleNum,
+            exitDate: today, exitType: 'TRAILING_STOP', cycleNum: pos.cycleNum,
             commission: comm, peakProfit: pos.peak,
           });
 
-          // Transition to STALKING (waiting for re-entry breakout)
           await upsertAmbushPosition(db, pos.ticker, {
             state: STATES.STALKING,
             direction: 'LONG',
             originalEntry: pos.originalEntry,
-            runningLow: hBar.low,
-            runningHigh: pos.runningHigh || hBar.high,
+            runningLow: curLow, runningHigh: pos.runningHigh || pos.syntheticBar?.high || price,
             cycleNum: (pos.cycleNum || 0) + 1,
-            // Clear position fields
             entryPrice: null, avgCost: null, totalShares: 0,
             lotPlan: null, nextLot: 0, stop: null,
             atBE: false, trailingActive: false, beDate: null, peak: 0,
             firstHourLow: null, firstHourHigh: null,
             consecutiveLowerLows: 0, prevBarLow: null, prevBarHigh: null,
+            syntheticBar: null, prevSyntheticBar: null,
+            todayFirstHourLow: pos.todayFirstHourLow,
+            todayFirstHourHigh: pos.todayFirstHourHigh,
+            todayDate: today, livePrice: price, livePriceAt: now,
           });
 
           await enqueueAmbushOrder(db, 'SELL_EXIT', {
             ticker: pos.ticker, shares: pos.totalShares, direction: 'LONG',
-            reason: '1H_LOW_BREAK',
+            reason: 'TRAILING_STOP',
           });
 
-          actions.push({ type: '1H_EXIT', ticker: pos.ticker, pnl });
+          actions.push({ type: 'TRAILING_EXIT', ticker: pos.ticker, pnl });
           exited = true;
-          break;
+        }
+      }
+
+      // SHORT trailing: consecutive higher highs into stop
+      if (!exited && pos.trailingActive && !isLong && pos.prevSyntheticBar && pos.syntheticBar) {
+        const curHigh = pos.syntheticBar.high;
+        const prevHigh = pos.prevSyntheticBar.high;
+        const prevPrevHigh = pos.prevBarHigh;
+
+        let consHH = pos.consecutiveLowerLows || 0; // reusing counter name for shorts
+        if (pos.syntheticBar.hourKey !== pos._lastLLCheckHour && prevPrevHigh != null) {
+          if (prevHigh > prevPrevHigh && prevHigh >= pos.stop) {
+            consHH = consHH + 1;
+          } else if (prevHigh > prevPrevHigh) {
+            consHH = 1;
+          } else {
+            consHH = 0;
+          }
+          pos.consecutiveLowerLows = consHH;
+          pos.prevBarLow = pos.prevSyntheticBar.low;
+          pos.prevBarHigh = prevHigh;
+          pos._lastLLCheckHour = pos.syntheticBar.hourKey;
         }
 
-        if (!isLong && !pos.trailingActive && firstHourHigh != null && hBar.high > firstHourHigh) {
-          const exitPrice = exitSlip(firstHourHigh, 'SHORT');
+        const curBarHH = curHigh > prevHigh && curHigh >= pos.stop;
+        if (curBarHH && consHH >= 1) {
+          const exitPrice = exitSlip(pos.stop, 'SHORT');
           const comm = calcCommission(pos.totalShares, exitPrice);
-          // Calculate trading days held for borrow cost
           const entryD = pos.entryDate ? new Date(pos.entryDate) : new Date();
           const exitD = new Date(today);
           const tradingDays = Math.max(1, Math.round((exitD - entryD) / 86400000 * 5 / 7));
@@ -282,7 +629,7 @@ export async function runAmbushTick() {
           await logAmbushTrade(db, {
             ticker: pos.ticker, direction: 'SHORT', entryPrice: pos.avgCost,
             exitPrice, shares: pos.totalShares, pnl, entryDate: pos.entryDate,
-            exitDate: today, exitType: '1H_HIGH_BREAK', cycleNum: pos.cycleNum,
+            exitDate: today, exitType: 'TRAILING_STOP', cycleNum: pos.cycleNum,
             commission: comm, borrow, peakProfit: pos.peak,
           });
 
@@ -290,162 +637,71 @@ export async function runAmbushTick() {
             state: STATES.STALKING,
             direction: 'SHORT',
             originalEntry: pos.originalEntry,
-            runningLow: pos.runningLow || hBar.low,
-            runningHigh: hBar.high,
+            runningLow: pos.runningLow || pos.syntheticBar?.low || price, runningHigh: curHigh,
             cycleNum: (pos.cycleNum || 0) + 1,
             entryPrice: null, avgCost: null, totalShares: 0,
             lotPlan: null, nextLot: 0, stop: null,
             atBE: false, trailingActive: false, beDate: null, peak: 0,
             firstHourLow: null, firstHourHigh: null,
             consecutiveLowerLows: 0, prevBarLow: null, prevBarHigh: null,
+            syntheticBar: null, prevSyntheticBar: null,
+            todayFirstHourLow: pos.todayFirstHourLow,
+            todayFirstHourHigh: pos.todayFirstHourHigh,
+            todayDate: today, livePrice: price, livePriceAt: now,
           });
 
           await enqueueAmbushOrder(db, 'COVER_EXIT', {
             ticker: pos.ticker, shares: pos.totalShares, direction: 'SHORT',
-            reason: '1H_HIGH_BREAK',
+            reason: 'TRAILING_STOP',
           });
 
-          actions.push({ type: '1H_EXIT', ticker: pos.ticker, pnl });
+          actions.push({ type: 'TRAILING_EXIT', ticker: pos.ticker, pnl });
           exited = true;
-          break;
         }
+      }
 
-        // ── Trailing stop check (2-bar consecutive lower lows) ──
-        if (pos.trailingActive && isLong) {
-          if (prevBarLow !== null && hBar.low < prevBarLow && hBar.low <= pos.stop) {
-            consecutiveLowerLows++;
-          } else if (prevBarLow !== null && hBar.low < prevBarLow) {
-            consecutiveLowerLows = 1;
-          } else {
-            consecutiveLowerLows = 0;
+      // ── Check 3: Lot trigger ──
+      if (!exited && pos.nextLot <= 4) {
+        const offset = LOT_OFFSETS[pos.nextLot];
+        const lotTrigger = isLong
+          ? +(pos.originalEntry * (1 + offset)).toFixed(2)
+          : +(pos.originalEntry * (1 - offset)).toFixed(2);
+        const triggered = isLong ? price >= lotTrigger : price <= lotTrigger;
+
+        if (triggered && pos.lotPlan) {
+          const lotShares = pos.lotPlan[pos.nextLot];
+          const fillPrice = isLong ? entrySlip(lotTrigger, 'LONG') : entrySlip(lotTrigger, 'SHORT');
+
+          const oldCost = pos.avgCost * pos.totalShares;
+          pos.totalShares += lotShares;
+          pos.avgCost = +((oldCost + fillPrice * lotShares) / pos.totalShares).toFixed(4);
+          pos.nextLot++;
+
+          // If at Break Even, recalculate stop with new avg cost
+          if (pos.atBE) {
+            const feePer = calcCommission(pos.totalShares, pos.avgCost) / pos.totalShares;
+            pos.stop = isLong
+              ? +(pos.avgCost + feePer).toFixed(2)
+              : +(pos.avgCost - feePer).toFixed(2);
           }
-          if (consecutiveLowerLows >= 2) {
-            const exitPrice = exitSlip(pos.stop, 'LONG');
-            const comm = calcCommission(pos.totalShares, exitPrice);
-            const pnl = +(pos.totalShares * exitPrice - comm - pos.totalShares * pos.avgCost).toFixed(2);
 
-            await logAmbushTrade(db, {
-              ticker: pos.ticker, direction: 'LONG', entryPrice: pos.avgCost,
-              exitPrice, shares: pos.totalShares, pnl, entryDate: pos.entryDate,
-              exitDate: today, exitType: 'TRAILING_STOP', cycleNum: pos.cycleNum,
-              commission: comm, peakProfit: pos.peak,
-            });
+          actions.push({
+            type: 'LOT_FILL', ticker: pos.ticker,
+            lot: pos.nextLot - 1, shares: lotShares, price: fillPrice,
+          });
 
-            await upsertAmbushPosition(db, pos.ticker, {
-              state: STATES.STALKING,
-              direction: 'LONG',
-              originalEntry: pos.originalEntry,
-              runningLow: hBar.low, runningHigh: pos.runningHigh || hBar.high,
-              cycleNum: (pos.cycleNum || 0) + 1,
-              entryPrice: null, avgCost: null, totalShares: 0,
-              lotPlan: null, nextLot: 0, stop: null,
-              atBE: false, trailingActive: false, beDate: null, peak: 0,
-              firstHourLow: null, firstHourHigh: null,
-              consecutiveLowerLows: 0, prevBarLow: null, prevBarHigh: null,
-            });
-
-            await enqueueAmbushOrder(db, 'SELL_EXIT', {
-              ticker: pos.ticker, shares: pos.totalShares, direction: 'LONG',
-              reason: 'TRAILING_STOP',
-            });
-
-            actions.push({ type: 'TRAILING_EXIT', ticker: pos.ticker, pnl });
-            exited = true;
-            break;
-          }
+          await enqueueAmbushOrder(db, 'PLACE_LOT_TRIGGER', {
+            ticker: pos.ticker, direction: pos.direction,
+            lot: pos.nextLot - 1, shares: lotShares, triggerPrice: lotTrigger,
+          });
         }
+      }
 
-        // SHORT trailing stop (2-bar consecutive higher highs)
-        if (pos.trailingActive && !isLong) {
-          if (prevBarHigh !== undefined && prevBarHigh !== null && hBar.high > prevBarHigh && hBar.high >= pos.stop) {
-            consecutiveLowerLows++; // reusing counter for shorts (consecutive HH)
-          } else if (prevBarHigh !== undefined && prevBarHigh !== null && hBar.high > prevBarHigh) {
-            consecutiveLowerLows = 1;
-          } else {
-            consecutiveLowerLows = 0;
-          }
-          if (consecutiveLowerLows >= 2) {
-            const exitPrice = exitSlip(pos.stop, 'SHORT');
-            const comm = calcCommission(pos.totalShares, exitPrice);
-            // Calculate trading days held for borrow cost
-            const entryD = pos.entryDate ? new Date(pos.entryDate) : new Date();
-            const exitD = new Date(today);
-            const tradingDays = Math.max(1, Math.round((exitD - entryD) / 86400000 * 5 / 7));
-            const borrow = calcBorrowCost(pos.totalShares, pos.avgCost, tradingDays, getSectorName(pos.ticker));
-            const pnl = +(pos.totalShares * (pos.avgCost - exitPrice) - comm - borrow).toFixed(2);
-
-            await logAmbushTrade(db, {
-              ticker: pos.ticker, direction: 'SHORT', entryPrice: pos.avgCost,
-              exitPrice, shares: pos.totalShares, pnl, entryDate: pos.entryDate,
-              exitDate: today, exitType: 'TRAILING_STOP', cycleNum: pos.cycleNum,
-              commission: comm, borrow, peakProfit: pos.peak,
-            });
-
-            await upsertAmbushPosition(db, pos.ticker, {
-              state: STATES.STALKING,
-              direction: 'SHORT',
-              originalEntry: pos.originalEntry,
-              runningLow: pos.runningLow || hBar.low, runningHigh: hBar.high,
-              cycleNum: (pos.cycleNum || 0) + 1,
-              entryPrice: null, avgCost: null, totalShares: 0,
-              lotPlan: null, nextLot: 0, stop: null,
-              atBE: false, trailingActive: false, beDate: null, peak: 0,
-              firstHourLow: null, firstHourHigh: null,
-              consecutiveLowerLows: 0, prevBarLow: null, prevBarHigh: null,
-            });
-
-            await enqueueAmbushOrder(db, 'COVER_EXIT', {
-              ticker: pos.ticker, shares: pos.totalShares, direction: 'SHORT',
-              reason: 'TRAILING_STOP',
-            });
-
-            actions.push({ type: 'TRAILING_EXIT', ticker: pos.ticker, pnl });
-            exited = true;
-            break;
-          }
-        }
-
-        // ── Lot trigger check ──
-        if (pos.nextLot <= 4) {
-          const offset = LOT_OFFSETS[pos.nextLot];
-          const lotTrigger = isLong
-            ? +(pos.originalEntry * (1 + offset)).toFixed(2)
-            : +(pos.originalEntry * (1 - offset)).toFixed(2);
-          const triggered = isLong ? hBar.high >= lotTrigger : hBar.low <= lotTrigger;
-
-          if (triggered && pos.lotPlan) {
-            const lotShares = pos.lotPlan[pos.nextLot];
-            const fillPrice = isLong ? entrySlip(lotTrigger, 'LONG') : entrySlip(lotTrigger, 'SHORT');
-
-            const oldCost = pos.avgCost * pos.totalShares;
-            pos.totalShares += lotShares;
-            pos.avgCost = +((oldCost + fillPrice * lotShares) / pos.totalShares).toFixed(4);
-            pos.nextLot++;
-
-            // If at Break Even, recalculate stop with new avg cost
-            if (pos.atBE) {
-              const feePer = calcCommission(pos.totalShares, pos.avgCost) / pos.totalShares;
-              pos.stop = isLong
-                ? +(pos.avgCost + feePer).toFixed(2)
-                : +(pos.avgCost - feePer).toFixed(2);
-            }
-
-            actions.push({
-              type: 'LOT_FILL', ticker: pos.ticker,
-              lot: pos.nextLot - 1, shares: lotShares, price: fillPrice,
-            });
-
-            await enqueueAmbushOrder(db, 'PLACE_LOT_TRIGGER', {
-              ticker: pos.ticker, direction: pos.direction,
-              lot: pos.nextLot - 1, shares: lotShares, triggerPrice: lotTrigger,
-            });
-          }
-        }
-
-        // ── Break Even check ──
+      // ── Check 4: Break Even ──
+      if (!exited) {
         const unr = isLong
-          ? (hBar.high - pos.avgCost) * pos.totalShares
-          : (pos.avgCost - hBar.low) * pos.totalShares;
+          ? (price - pos.avgCost) * pos.totalShares
+          : (pos.avgCost - price) * pos.totalShares;
         if (unr > (pos.peak || 0)) pos.peak = +unr.toFixed(2);
 
         if (!pos.atBE && unr >= BE_THRESHOLD) {
@@ -472,12 +728,9 @@ export async function runAmbushTick() {
           pos.trailingActive = true;
           actions.push({ type: 'TRAILING_ACTIVATED', ticker: pos.ticker });
         }
-
-        prevBarLow = hBar.low;
-        prevBarHigh = hBar.high;  // update bar-by-bar (matches backtest pos._prevHH)
       }
 
-      // Save position state if not exited
+      // ── Save position state if not exited ──
       if (!exited) {
         await upsertAmbushPosition(db, pos.ticker, {
           state: pos.atBE ? STATES.PROTECT : STATES.ACTIVE,
@@ -489,14 +742,21 @@ export async function runAmbushTick() {
           trailingActive: pos.trailingActive,
           beDate: pos.beDate,
           peak: pos.peak,
-          consecutiveLowerLows: consecutiveLowerLows,
-          prevBarLow: prevBarLow,
-          prevBarHigh: prevBarHigh,
-          firstHourLow,
-          firstHourHigh,
-          lastBarDate: hBars[hBars.length - 1]?.date,
+          consecutiveLowerLows: pos.consecutiveLowerLows || 0,
+          prevBarLow: pos.prevBarLow,
+          prevBarHigh: pos.prevBarHigh,
+          todayFirstHourLow: pos.todayFirstHourLow,
+          todayFirstHourHigh: pos.todayFirstHourHigh,
+          todayDate: pos.todayDate,
+          syntheticBar: pos.syntheticBar,
+          prevSyntheticBar: pos.prevSyntheticBar,
+          lastBarDate: pos.syntheticBar?.hourKey || pos.lastBarDate,
+          livePrice: price,
+          livePriceAt: now,
+          _lastLLCheckHour: pos._lastLLCheckHour,
         });
       }
+
     } catch (err) {
       errors.push({ ticker: pos.ticker, error: err.message });
       console.error(`[Ambush] Error processing ${pos.ticker}:`, err.message);
@@ -504,117 +764,149 @@ export async function runAmbushTick() {
   }
 
   // ═══ PHASE B: Process ATTACK positions (execute pending re-entries) ═══
-  const attackPositions = allPositions.filter(p => p.state === STATES.ATTACK);
+  // During first hour, skip re-entries (need first-hour data first).
+  if (!isFirstHour) {
+    const attackPositions = allPositions.filter(p => p.state === STATES.ATTACK);
 
-  for (const pend of attackPositions) {
-    try {
-      const hBars = todayBars[pend.ticker];
-      if (!hBars || hBars.length === 0) continue;
+    for (const pend of attackPositions) {
+      try {
+        const price = livePrices[pend.ticker];
+        if (!price) continue;
 
-      const activeCount = (await getAmbushPositions(db)).filter(p =>
-        p.state === STATES.ACTIVE || p.state === STATES.PROTECT
-      ).length;
-      if (activeCount >= maxPositions) {
-        actions.push({ type: 'SKIPPED_CAP', ticker: pend.ticker });
-        continue;
+        const activeCount = (await getAmbushPositions(db)).filter(p =>
+          p.state === STATES.ACTIVE || p.state === STATES.PROTECT
+        ).length;
+        if (activeCount >= maxPositions) {
+          actions.push({ type: 'SKIPPED_CAP', ticker: pend.ticker });
+          continue;
+        }
+
+        const isLong = pend.direction === 'LONG';
+
+        // Enter at current live price (with slippage)
+        const rePrice = isLong
+          ? entrySlip(price, 'LONG')
+          : entrySlip(price, 'SHORT');
+        const reStop = isLong
+          ? +((pend.runningLow || price * 0.97) - 0.01).toFixed(2)
+          : +((pend.runningHigh || price * 1.03) + 0.01).toFixed(2);
+
+        if (isLong && reStop >= rePrice) { await deleteAmbushPosition(db, pend.ticker); continue; }
+        if (!isLong && reStop <= rePrice) { await deleteAmbushPosition(db, pend.ticker); continue; }
+
+        const sizing = sizeLots(rePrice, reStop, pend.direction, nav, sizeMult);
+        if (!sizing) { await deleteAmbushPosition(db, pend.ticker); continue; }
+
+        // Transition ATTACK -> ACTIVE
+        await upsertAmbushPosition(db, pend.ticker, {
+          state: STATES.ACTIVE,
+          direction: pend.direction,
+          entryPrice: rePrice,
+          avgCost: rePrice,
+          totalShares: sizing.l1Shares,
+          lotPlan: sizing.lotPlan,
+          nextLot: 1,
+          originalEntry: pend.originalEntry || rePrice,
+          stop: reStop,
+          atBE: false,
+          trailingActive: false,
+          beDate: null,
+          peak: 0,
+          cycleNum: pend.cycleNum || 0,
+          entryDate: today,
+          runningLow: pend.runningLow,
+          runningHigh: pend.runningHigh,
+          consecutiveLowerLows: 0,
+          prevBarLow: null,
+          prevBarHigh: null,
+          todayFirstHourLow: pend.todayFirstHourLow,
+          todayFirstHourHigh: pend.todayFirstHourHigh,
+          todayDate: today,
+          syntheticBar: null,
+          prevSyntheticBar: null,
+          lastBarDate: hourKey,
+          livePrice: price,
+          livePriceAt: now,
+        });
+
+        await enqueueAmbushOrder(db, isLong ? 'BUY_ENTRY' : 'SHORT_ENTRY', {
+          ticker: pend.ticker, shares: sizing.l1Shares, price: rePrice,
+          direction: pend.direction, stopPrice: reStop,
+          lotPlan: sizing.lotPlan, rps: sizing.rps,
+        });
+
+        actions.push({
+          type: 'RE_ENTRY', ticker: pend.ticker, direction: pend.direction,
+          shares: sizing.l1Shares, price: rePrice, stop: reStop,
+          cycle: pend.cycleNum, sizingTier: sizeTier,
+        });
+      } catch (err) {
+        errors.push({ ticker: pend.ticker, error: err.message });
       }
-
-      const isLong = pend.direction === 'LONG';
-      const firstAfterOpen = hBars.find(b => extractTime(b.date) >= FIRST_HOUR_END) || hBars[0];
-      const rePrice = isLong
-        ? entrySlip(firstAfterOpen.open, 'LONG')
-        : entrySlip(firstAfterOpen.open, 'SHORT');
-      const reStop = isLong
-        ? +((pend.runningLow || firstAfterOpen.low) - 0.01).toFixed(2)
-        : +((pend.runningHigh || firstAfterOpen.high) + 0.01).toFixed(2);
-
-      if (isLong && reStop >= rePrice) { await deleteAmbushPosition(db, pend.ticker); continue; }
-      if (!isLong && reStop <= rePrice) { await deleteAmbushPosition(db, pend.ticker); continue; }
-
-      const sizing = sizeLots(rePrice, reStop, pend.direction, nav, sizeMult);
-      if (!sizing) { await deleteAmbushPosition(db, pend.ticker); continue; }
-
-      // Transition ATTACK → ACTIVE
-      await upsertAmbushPosition(db, pend.ticker, {
-        state: STATES.ACTIVE,
-        direction: pend.direction,
-        entryPrice: rePrice,
-        avgCost: rePrice,
-        totalShares: sizing.l1Shares,
-        lotPlan: sizing.lotPlan,
-        nextLot: 1,
-        originalEntry: pend.originalEntry || rePrice,
-        stop: reStop,
-        atBE: false,
-        trailingActive: false,
-        beDate: null,
-        peak: 0,
-        cycleNum: pend.cycleNum || 0,
-        entryDate: today,
-        runningLow: pend.runningLow,
-        runningHigh: pend.runningHigh,
-        consecutiveLowerLows: 0,
-        prevBarLow: null,
-        prevBarHigh: null,
-        firstHourLow: null,
-        firstHourHigh: null,
-        lastBarDate: firstAfterOpen.date,
-      });
-
-      await enqueueAmbushOrder(db, isLong ? 'BUY_ENTRY' : 'SHORT_ENTRY', {
-        ticker: pend.ticker, shares: sizing.l1Shares, price: rePrice,
-        direction: pend.direction, stopPrice: reStop,
-        lotPlan: sizing.lotPlan, rps: sizing.rps,
-      });
-
-      actions.push({
-        type: 'RE_ENTRY', ticker: pend.ticker, direction: pend.direction,
-        shares: sizing.l1Shares, price: rePrice, stop: reStop,
-        cycle: pend.cycleNum, sizingTier: sizeTier,
-      });
-    } catch (err) {
-      errors.push({ ticker: pend.ticker, error: err.message });
     }
   }
 
-  // ═══ PHASE C: Process STALKING positions (check for breakout → ATTACK) ═══
-  const stalkingPositions = allPositions.filter(p => p.state === STATES.STALKING);
+  // ═══ PHASE C: Process STALKING positions (breakout detection) ═══
+  // Uses synthetic bars built from live prices.
+  // During first hour, skip breakout detection.
+  if (!isFirstHour) {
+    const stalkingPositions = allPositions.filter(p => p.state === STATES.STALKING);
 
-  for (const stalk of stalkingPositions) {
-    try {
-      const hBars = todayBars[stalk.ticker];
-      if (!hBars || hBars.length < 2) continue;
+    for (const stalk of stalkingPositions) {
+      try {
+        const price = livePrices[stalk.ticker];
+        if (!price) continue;
 
-      const isLong = stalk.direction === 'LONG';
+        const isLong = stalk.direction === 'LONG';
 
-      // Check if weekly signal is still active
-      if (isLong && !isActiveBL(ctx, stalk.ticker, today)) {
-        await deleteAmbushPosition(db, stalk.ticker);
-        actions.push({ type: 'SIGNAL_EXPIRED', ticker: stalk.ticker });
-        continue;
-      }
-      if (!isLong && !isActiveSS(ctx, stalk.ticker, today)) {
-        await deleteAmbushPosition(db, stalk.ticker);
-        actions.push({ type: 'SIGNAL_EXPIRED', ticker: stalk.ticker });
-        continue;
-      }
+        // Check if weekly signal is still active
+        if (isLong && !isActiveBL(ctx, stalk.ticker, today)) {
+          await deleteAmbushPosition(db, stalk.ticker);
+          actions.push({ type: 'SIGNAL_EXPIRED', ticker: stalk.ticker });
+          continue;
+        }
+        if (!isLong && !isActiveSS(ctx, stalk.ticker, today)) {
+          await deleteAmbushPosition(db, stalk.ticker);
+          actions.push({ type: 'SIGNAL_EXPIRED', ticker: stalk.ticker });
+          continue;
+        }
 
-      // Check regime
-      const regime = getRegime(ctx, stalk.ticker, today);
-      if (isLong && !regime) continue;
-      if (!isLong && regime) continue;
+        // Check regime + sector
+        const regime = getRegime(ctx, stalk.ticker, today);
+        if (isLong && !regime) continue;
+        if (!isLong && regime) continue;
+        if (!getSectorOk(ctx, stalk.ticker, today)) continue;
 
-      // Check sector
-      if (!getSectorOk(ctx, stalk.ticker, today)) continue;
+        // Update running low/high from live price
+        if (price < (stalk.runningLow || Infinity)) stalk.runningLow = price;
+        if (price > (stalk.runningHigh || -Infinity)) stalk.runningHigh = price;
 
-      const afterFirst = hBars.filter(b => extractTime(b.date) >= FIRST_HOUR_END);
-      if (afterFirst.length < 2) continue;
+        // Need at least prevSyntheticBar + current syntheticBar for breakout check
+        if (!stalk.prevSyntheticBar || !stalk.syntheticBar) {
+          // Save updated tracking data
+          await upsertAmbushPosition(db, stalk.ticker, {
+            runningLow: stalk.runningLow,
+            runningHigh: stalk.runningHigh,
+            syntheticBar: stalk.syntheticBar,
+            prevSyntheticBar: stalk.prevSyntheticBar,
+            todayFirstHourLow: stalk.todayFirstHourLow,
+            todayFirstHourHigh: stalk.todayFirstHourHigh,
+            todayDate: stalk.todayDate,
+            livePrice: price,
+            livePriceAt: now,
+          });
+          continue;
+        }
 
-      // Look for confirmed breakout/breakdown
-      for (let i = 1; i < afterFirst.length; i++) {
-        const bar = afterFirst[i], prevBar = afterFirst[i - 1];
-        if (isLong ? isConfirmedGreenBreakout(bar, prevBar) : isConfirmedRedBreakdown(bar, prevBar)) {
-          // Transition STALKING → ATTACK (queue entry for next bar open)
+        // Check for confirmed breakout using synthetic bars
+        const bar = stalk.syntheticBar;      // current in-progress bar
+        const prevBar = stalk.prevSyntheticBar; // last completed bar
+        const breakoutDetected = isLong
+          ? isConfirmedGreenBreakout(bar, prevBar)
+          : isConfirmedRedBreakdown(bar, prevBar);
+
+        if (breakoutDetected) {
+          // Transition STALKING -> ATTACK (queue entry for next tick)
           await upsertAmbushPosition(db, stalk.ticker, {
             state: STATES.ATTACK,
             direction: stalk.direction,
@@ -622,36 +914,52 @@ export async function runAmbushTick() {
             runningLow: stalk.runningLow || bar.low,
             runningHigh: stalk.runningHigh || bar.high,
             cycleNum: stalk.cycleNum || 0,
+            todayFirstHourLow: stalk.todayFirstHourLow,
+            todayFirstHourHigh: stalk.todayFirstHourHigh,
+            todayDate: today,
+            syntheticBar: null,
+            prevSyntheticBar: null,
+            livePrice: price,
+            livePriceAt: now,
           });
 
           actions.push({
             type: 'BREAKOUT_DETECTED', ticker: stalk.ticker,
-            direction: stalk.direction, bar: bar.date,
+            direction: stalk.direction, price,
           });
-          break;
+        } else {
+          // Save updated tracking data
+          await upsertAmbushPosition(db, stalk.ticker, {
+            runningLow: stalk.runningLow,
+            runningHigh: stalk.runningHigh,
+            syntheticBar: stalk.syntheticBar,
+            prevSyntheticBar: stalk.prevSyntheticBar,
+            todayFirstHourLow: stalk.todayFirstHourLow,
+            todayFirstHourHigh: stalk.todayFirstHourHigh,
+            todayDate: stalk.todayDate,
+            livePrice: price,
+            livePriceAt: now,
+          });
         }
-
-        // Update running low/high
-        if (bar.low < (stalk.runningLow || Infinity)) stalk.runningLow = bar.low;
-        if (bar.high > (stalk.runningHigh || -Infinity)) stalk.runningHigh = bar.high;
+      } catch (err) {
+        errors.push({ ticker: stalk.ticker, error: err.message });
       }
-    } catch (err) {
-      errors.push({ ticker: stalk.ticker, error: err.message });
     }
   }
 
-  // ═══ PHASE D: New MCE entries (fresh signals entering STALKING) ═══
-  // Only scan tickers not already in any Ambush state
-  const existingTickers = new Set(allPositions.map(p => p.ticker));
+  // ═══ PHASE D: New MCE entries (fresh signals entering the pipeline) ═══
+  // Pre-filters use live prices + cached daily bars (fast, no FMP hourly).
+  // Final breakout confirmation uses FMP hourly bars for the narrow candidate set.
+  // During first hour, skip MCE scanning entirely.
+  if (!isFirstHour && mceCandidates.length > 0) {
+    // Step 1: Pre-filter — regime + sector + signal + 2-day trigger
+    const priorDayData = await fetchPriorDayData(mceCandidates, today);
+    const breakoutCandidates = [];
 
-  for (const ticker of getAiTickers()) {
-    if (existingTickers.has(ticker)) continue;
+    for (const ticker of mceCandidates) {
+      const price = livePrices[ticker];
+      if (!price) continue;
 
-    try {
-      const hBars = todayBars[ticker];
-      if (!hBars || hBars.length < 2) continue;
-
-      // ── Funnel: PAI300 regime → sector → signal → 2-day trigger → hourly breakout ──
       const regime = getRegime(ctx, ticker, today);
       if (!getSectorOk(ctx, ticker, today)) continue;
 
@@ -660,152 +968,167 @@ export async function runAmbushTick() {
       else if (!regime && isActiveSS(ctx, ticker, today)) direction = 'SHORT';
       if (!direction) continue;
 
-      // 2-day breakout trigger (cheap filter — runs BEFORE hourly bar scan)
-      // V7 backtest: trigger = max(prev1.high, prev2.high) + 0.01 for LONG
-      //              trigger = min(prev1.low, prev2.low) - 0.01 for SHORT
-      // FMP hourly bars include prior days, so we extract last 2 days before today
-      const priorBars = (hourlyBars[ticker] || []).filter(b => !b.date.startsWith(today));
-      if (priorBars.length === 0) continue;
-
-      // Group prior bars by date to get prev1 and prev2 day highs/lows
-      const priorByDate = {};
-      for (const b of priorBars) {
-        const d = b.date.split(' ')[0];
-        if (!priorByDate[d]) priorByDate[d] = [];
-        priorByDate[d].push(b);
-      }
-      const priorDates = Object.keys(priorByDate).sort().slice(-2); // last 2 prior days
-      if (priorDates.length === 0) continue;
-
-      const todayHigh = Math.max(...hBars.map(b => b.high));
-      const todayLow = Math.min(...hBars.map(b => b.low));
+      // 2-day trigger check using cached daily bars
+      const priorData = priorDayData[ticker];
+      if (!priorData || priorData.highs.length === 0) continue;
 
       if (direction === 'LONG') {
-        const trigger = Math.max(...priorDates.flatMap(d => priorByDate[d].map(b => b.high))) + 0.01;
-        if (todayHigh < trigger) continue;
+        const trigger = Math.max(...priorData.highs) + 0.01;
+        if (price < trigger) continue; // today's price hasn't broken above trigger
       } else {
-        const trigger = Math.min(...priorDates.flatMap(d => priorByDate[d].map(b => b.low))) - 0.01;
-        if (todayLow > trigger) continue;
+        const trigger = Math.min(...priorData.lows) - 0.01;
+        if (price > trigger) continue; // today's price hasn't broken below trigger
       }
 
-      // Hourly confirmed breakout (runs AFTER 2-day trigger passes)
-      const afterFirst = hBars.filter(b => extractTime(b.date) >= FIRST_HOUR_END);
-      if (afterFirst.length < 2) continue;
+      breakoutCandidates.push({ ticker, direction });
+    }
 
-      let breakoutFound = false;
-      for (let i = 1; i < afterFirst.length; i++) {
-        const bar = afterFirst[i], prevBar = afterFirst[i - 1];
-        if (direction === 'LONG' && isConfirmedGreenBreakout(bar, prevBar)) {
-          breakoutFound = true;
-          break;
+    // Step 2: For the narrow candidate set, fetch FMP hourly bars for breakout check
+    if (breakoutCandidates.length > 0) {
+      console.log(`[Ambush] MCE: ${breakoutCandidates.length} tickers passed pre-filter, checking hourly breakout...`);
+      const candidateTickers = breakoutCandidates.map(c => c.ticker);
+      const hourlyBars = await fetchFmpHourlyBars(candidateTickers);
+
+      for (const { ticker, direction } of breakoutCandidates) {
+        try {
+          const hBars = hourlyBars[ticker];
+          if (!hBars || hBars.length < 2) continue;
+
+          const todayOnlyBars = hBars.filter(b => b.date.startsWith(today));
+          if (todayOnlyBars.length < 2) continue;
+
+          // Hourly confirmed breakout
+          const afterFirst = todayOnlyBars.filter(b => extractTime(b.date) >= FIRST_HOUR_END);
+          if (afterFirst.length < 2) continue;
+
+          let breakoutFound = false;
+          for (let i = 1; i < afterFirst.length; i++) {
+            const bar = afterFirst[i], prevBar = afterFirst[i - 1];
+            if (direction === 'LONG' && isConfirmedGreenBreakout(bar, prevBar)) {
+              breakoutFound = true;
+              break;
+            }
+            if (direction === 'SHORT' && isConfirmedRedBreakdown(bar, prevBar)) {
+              breakoutFound = true;
+              break;
+            }
+          }
+
+          if (!breakoutFound) continue;
+
+          // Calculate entry price and 1H stop
+          const priorData = priorDayData[ticker];
+          const triggerPrice = direction === 'LONG'
+            ? Math.max(...priorData.highs) + 0.01
+            : Math.min(...priorData.lows) - 0.01;
+          const ep = direction === 'LONG'
+            ? entrySlip(Math.max(todayOnlyBars[0].open, triggerPrice), 'LONG')
+            : entrySlip(Math.min(todayOnlyBars[0].open, triggerPrice), 'SHORT');
+
+          // 1H Stop: firstHourLow - fees (LONG) / firstHourHigh + fees (SHORT)
+          const firstHourBars = todayOnlyBars.filter(b => extractTime(b.date) < FIRST_HOUR_END);
+          let stop;
+          if (direction === 'LONG') {
+            const firstHourLow = firstHourBars.length ? Math.min(...firstHourBars.map(b => b.low)) : null;
+            if (!firstHourLow || firstHourLow >= ep) continue;
+            stop = +(firstHourLow - COMMISSION_PER_SHARE).toFixed(2);
+          } else {
+            const firstHourHigh = firstHourBars.length ? Math.max(...firstHourBars.map(b => b.high)) : null;
+            if (!firstHourHigh || firstHourHigh <= ep) continue;
+            stop = +(firstHourHigh + COMMISSION_PER_SHARE).toFixed(2);
+          }
+          if (direction === 'LONG' && stop >= ep) continue;
+          if (direction === 'SHORT' && stop <= ep) continue;
+
+          const sizing = sizeLots(ep, stop, direction, nav, sizeMult);
+          if (!sizing) continue;
+
+          // Check position count
+          const currentActive = (await getAmbushPositions(db)).filter(p =>
+            p.state === STATES.ACTIVE || p.state === STATES.PROTECT
+          ).length;
+          if (currentActive >= maxPositions) continue;
+
+          // Create new ACTIVE position
+          const todayHigh = Math.max(...todayOnlyBars.map(b => b.high));
+          const todayLow = Math.min(...todayOnlyBars.map(b => b.low));
+
+          await upsertAmbushPosition(db, ticker, {
+            state: STATES.ACTIVE,
+            direction,
+            entryPrice: ep,
+            avgCost: ep,
+            totalShares: sizing.l1Shares,
+            lotPlan: sizing.lotPlan,
+            nextLot: 1,
+            originalEntry: ep,
+            stop,
+            atBE: false,
+            trailingActive: false,
+            beDate: null,
+            peak: 0,
+            cycleNum: 0,
+            entryDate: today,
+            runningLow: todayLow,
+            runningHigh: todayHigh,
+            consecutiveLowerLows: 0,
+            prevBarLow: null,
+            prevBarHigh: null,
+            todayFirstHourLow: firstHourBars.length ? Math.min(...firstHourBars.map(b => b.low)) : null,
+            todayFirstHourHigh: firstHourBars.length ? Math.max(...firstHourBars.map(b => b.high)) : null,
+            todayDate: today,
+            syntheticBar: null,
+            prevSyntheticBar: null,
+            lastBarDate: todayOnlyBars[todayOnlyBars.length - 1].date,
+            livePrice: livePrices[ticker] || ep,
+            livePriceAt: now,
+          });
+
+          await enqueueAmbushOrder(db, direction === 'LONG' ? 'BUY_ENTRY' : 'SHORT_ENTRY', {
+            ticker, shares: sizing.l1Shares, price: ep,
+            direction, stopPrice: stop,
+            lotPlan: sizing.lotPlan, rps: sizing.rps,
+          });
+
+          actions.push({
+            type: 'NEW_ENTRY', ticker, direction,
+            shares: sizing.l1Shares, price: ep, stop,
+            sizingTier: sizeTier,
+          });
+        } catch (err) {
+          errors.push({ ticker, error: err.message });
         }
-        if (direction === 'SHORT' && isConfirmedRedBreakdown(bar, prevBar)) {
-          breakoutFound = true;
-          break;
-        }
       }
-
-      if (!breakoutFound) continue;
-
-      // Calculate entry price and stop
-      const triggerPrice = direction === 'LONG'
-        ? Math.max(...priorDates.flatMap(d => priorByDate[d].map(b => b.high))) + 0.01
-        : Math.min(...priorDates.flatMap(d => priorByDate[d].map(b => b.low))) - 0.01;
-      const ep = direction === 'LONG'
-        ? entrySlip(Math.max(hBars[0].open, triggerPrice), 'LONG')
-        : entrySlip(Math.min(hBars[0].open, triggerPrice), 'SHORT');
-
-      // ── 1H Stop: firstHourLow - fees (LONG) / firstHourHigh + fees (SHORT) ──
-      // V7.1: tighter initial stop = tighter RPS = more shares per $300 max loss
-      const firstHourBars = hBars.filter(b => extractTime(b.date) < FIRST_HOUR_END);
-      let stop;
-      if (direction === 'LONG') {
-        const firstHourLow = firstHourBars.length ? Math.min(...firstHourBars.map(b => b.low)) : null;
-        if (!firstHourLow || firstHourLow >= ep) continue;  // no 1H data or stop above entry
-        stop = +(firstHourLow - COMMISSION_PER_SHARE).toFixed(2);
-      } else {
-        const firstHourHigh = firstHourBars.length ? Math.max(...firstHourBars.map(b => b.high)) : null;
-        if (!firstHourHigh || firstHourHigh <= ep) continue;  // no 1H data or stop below entry
-        stop = +(firstHourHigh + COMMISSION_PER_SHARE).toFixed(2);
-      }
-      if (direction === 'LONG' && stop >= ep) continue;
-      if (direction === 'SHORT' && stop <= ep) continue;
-
-      const sizing = sizeLots(ep, stop, direction, nav, sizeMult);
-      if (!sizing) continue;
-
-      // Check position count
-      const currentActive = (await getAmbushPositions(db)).filter(p =>
-        p.state === STATES.ACTIVE || p.state === STATES.PROTECT
-      ).length;
-      if (currentActive >= maxPositions) continue;
-
-      // Create new ACTIVE position
-      await upsertAmbushPosition(db, ticker, {
-        state: STATES.ACTIVE,
-        direction,
-        entryPrice: ep,
-        avgCost: ep,
-        totalShares: sizing.l1Shares,
-        lotPlan: sizing.lotPlan,
-        nextLot: 1,
-        originalEntry: ep,
-        stop,
-        atBE: false,
-        trailingActive: false,
-        beDate: null,
-        peak: 0,
-        cycleNum: 0,
-        entryDate: today,
-        runningLow: todayLow,
-        runningHigh: todayHigh,
-        consecutiveLowerLows: 0,
-        prevBarLow: null,
-        prevBarHigh: null,
-        firstHourLow: null,
-        firstHourHigh: null,
-        lastBarDate: hBars[hBars.length - 1].date,
-      });
-
-      await enqueueAmbushOrder(db, direction === 'LONG' ? 'BUY_ENTRY' : 'SHORT_ENTRY', {
-        ticker, shares: sizing.l1Shares, price: ep,
-        direction, stopPrice: stop,
-        lotPlan: sizing.lotPlan, rps: sizing.rps,
-      });
-
-      actions.push({
-        type: 'NEW_ENTRY', ticker, direction,
-        shares: sizing.l1Shares, price: ep, stop,
-        sizingTier: sizeTier,
-      });
-    } catch (err) {
-      errors.push({ ticker, error: err.message });
     }
   }
 
   // ═══ Update config with last run info ═══
   const result = {
     date: today,
+    time: et.timeStr,
     nav,
     navSource,
     sizingTier: sizeTier,
     sizingMultiplier: sizeMult,
-    tickersFetched: tickersNeeded.size,
-    barsReceived: Object.keys(todayBars).length,
+    priceSource: 'IBKR+FMP',
+    tickersPriced: Object.keys(livePrices).length,
     actions,
     errors,
     positions: {
       active: activePositions.length,
-      attack: attackPositions.length,
-      stalking: stalkingPositions.length,
+      attack: allPositions.filter(p => p.state === STATES.ATTACK).length,
+      stalking: allPositions.filter(p => p.state === STATES.STALKING).length,
     },
+    isFirstHour,
   };
 
   await updateAmbushConfig(db, {
-    lastCronRun: new Date(),
+    lastCronRun: now,
     lastCronResult: result,
   });
 
-  console.log(`[Ambush] Tick complete — ${actions.length} actions, ${errors.length} errors`);
+  if (actions.length > 0) {
+    console.log(`[Ambush] Tick complete - ${actions.length} actions: ${actions.map(a => `${a.type}:${a.ticker}`).join(', ')}`);
+  }
   return result;
 }

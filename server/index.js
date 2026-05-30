@@ -6622,18 +6622,20 @@ cron.schedule('15 17 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
-// ── Cron: PNTHR AMBUSH — hourly tick during market hours ───────────────────
-// Runs at :05 past each hour from 10:35 to 16:05 ET (Mon-Fri).
-// 10:35 captures first-hour bar (9:30-10:30), then hourly through close.
+// ── Cron: PNTHR AMBUSH V7.1 — 60-second live tick ─────────────────────────
+// Ticks every 60 seconds during market hours (9:30-16:05 ET, Mon-Fri).
+// Data source: IBKR live prices (held tickers) + FMP batch quotes (non-held).
+// The engine's own isMarketHours() gate prevents processing outside 9:30-16:05.
 // Gated by AMBUSH_ENABLED in the pnthr_ambush_config MongoDB collection.
 let ambushCronRunning = false;
-cron.schedule('5 10-16 * * 1-5', async () => {
+cron.schedule('* 9-16 * * 1-5', async () => {
   if (ambushCronRunning) return;
   ambushCronRunning = true;
   try {
     const result = await runAmbushTick();
-    if (result.skipped !== 'DISABLED') {
-      console.log(`[Ambush Cron] ${result.actions?.length || 0} actions, ${result.errors?.length || 0} errors`);
+    if (result.skipped) return; // DISABLED or OUTSIDE_HOURS — silent
+    if (result.actions?.length > 0) {
+      console.log(`[Ambush Cron] ${result.actions.length} actions, ${result.errors?.length || 0} errors`);
     }
   } catch (err) {
     console.error('[Ambush Cron] tick failed:', err.message);

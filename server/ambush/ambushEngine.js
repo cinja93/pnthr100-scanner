@@ -1,14 +1,13 @@
 // server/ambush/ambushEngine.js
-// ── PNTHR AMBUSH V7 — Live State Machine ────────────────────────────────────
+// ── PNTHR AMBUSH V7.1 — Live State Machine ─────────────────────────────────
 //
 // Replicates the V7 stress-test backtest logic for live intraday trading.
 // States: STALKING → ATTACK → ACTIVE → PROTECT
 //
-// Called once per hourly bar close by ambushCron.js. Each call processes:
-//   1. Existing positions (stop checks, lot triggers, Break Even, trailing)
-//   2. Pending re-entries (queued from prior bar's confirmed breakout)
-//   3. Re-entry signal scans (waiting positions check for breakout)
-//   4. New MCE entries (fresh signals entering the pipeline)
+// Called every 60 seconds by ambushCron.js during market hours.
+// Data source: IBKR live prices (held tickers) + FMP quotes (non-held).
+// Synthetic hourly OHLC bars built from 60-second price ticks for
+// breakout detection and trailing exit pattern matching.
 //
 // All order actions are written to pnthr_ambush_outbox for the IBKR bridge.
 //

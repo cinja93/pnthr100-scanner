@@ -394,7 +394,9 @@ export default function AmbushPage() {
 
           {config.lastCronRun && (
             <span className={styles.lastTick}>
-              Last tick: {new Date(config.lastCronRun).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              Last tick: {new Date(config.lastCronRun).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {lastResult.priceSource && <span style={{ color: '#444', marginLeft: 6 }}>({lastResult.priceSource})</span>}
+              {lastResult.isFirstHour && <span style={{ color: '#f59e0b', marginLeft: 6, fontWeight: 700 }}>1H CAPTURE</span>}
             </span>
           )}
         </div>
@@ -403,9 +405,9 @@ export default function AmbushPage() {
           <span className={styles.stat}>Trades: <strong>{stats.totalTrades || 0}</strong></span>
           <span className={styles.stat}>Win Rate: <strong>{stats.winRate || 0}%</strong></span>
           <span className={styles.stat}>P&L: {fmtPnl(stats.totalPnl)}</span>
-          {lastResult.tickersFetched > 0 && (
+          {lastResult.tickersPriced > 0 && (
             <span className={styles.stat} style={{ color: '#555' }}>
-              Scanned: {lastResult.barsReceived || 0}/{lastResult.tickersFetched || 0} tickers
+              Live prices: {lastResult.tickersPriced} tickers
             </span>
           )}
           <button className={styles.tickBtn} onClick={handleManualTick} disabled={tickRunning}>
@@ -433,7 +435,7 @@ export default function AmbushPage() {
           <div className={styles.sectionHeader} onClick={() => setShowActions(!showActions)} style={{ cursor: 'pointer' }}>
             <span className={styles.sectionTitle}>
               LAST TICK ACTIONS
-              <InfoPopup text="Events from the most recent hourly cron tick. Updates every hour during market hours (10:35 AM - 4:05 PM ET)." />
+              <InfoPopup text="Events from the most recent 60-second tick. The engine ticks every 60 seconds during market hours (9:30 AM - 4:05 PM ET) using IBKR live prices." />
             </span>
             <span className={styles.badge}>{actions.length}</span>
             <span className={styles.expandIcon}>{showActions ? '▼' : '▶'}</span>
@@ -487,7 +489,7 @@ export default function AmbushPage() {
                   const total = totalPlannedShares(pos);
                   const risk = computeRisk(pos);
                   const rps = computeRps(pos);
-                  const exitLevel = pos.direction === 'LONG' ? pos.firstHourLow : pos.firstHourHigh;
+                  const exitLevel = pos.direction === 'LONG' ? (pos.todayFirstHourLow || pos.firstHourLow) : (pos.todayFirstHourHigh || pos.firstHourHigh);
                   const isExpanded = expanded[pos.ticker];
 
                   return (
@@ -611,7 +613,7 @@ export default function AmbushPage() {
           <div className={styles.sectionHeader}>
             <span className={styles.sectionTitle}>
               ATTACK
-              <InfoPopup text="Breakout confirmed, entry executes on next bar's open with 5bps slippage. This state typically lasts only one hourly bar." />
+              <InfoPopup text="Breakout confirmed, entry executes on the next 60-second tick with 5bps slippage. This state typically lasts only one tick." />
             </span>
             <span className={styles.badge} style={{ background: STATE_COLORS.ATTACK }}>{byState.ATTACK.length}</span>
           </div>

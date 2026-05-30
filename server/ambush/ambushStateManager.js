@@ -3,7 +3,7 @@
 //
 // Manages the pnthr_ambush_positions collection. Each document represents a
 // ticker's current Ambush state (STALKING/ATTACK/ACTIVE/PROTECT) with all
-// the data needed to process the next hourly bar.
+// the data needed to process the next 60-second tick.
 //
 // Also manages pnthr_ambush_outbox for order commands sent to the IBKR bridge.
 //

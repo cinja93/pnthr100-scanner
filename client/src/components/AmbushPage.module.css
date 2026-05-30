@@ -1,4 +1,4 @@
-/* AmbushPage.module.css — PNTHR Ambush Kanban dashboard */
+/* AmbushPage.module.css — PNTHR Ambush V7.1 Dashboard */
 
 .page {
   padding: 24px;
@@ -17,76 +17,95 @@
 }
 .error { color: #ef4444; }
 
-/* ── Control Bar ─────────────────────────────────────────────────────────── */
+/* ── Status Bar ──────────────────────────────────────────────────────────── */
 
-.controlBar {
+.statusBar {
   background: #111;
   border: 1px solid #222;
   border-radius: 8px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
+  padding: 14px 20px;
+  margin-bottom: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.statusRow {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.toggleBtn {
-  padding: 6px 16px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  border: none;
-  cursor: pointer;
-}
-
-.toggleOn {
-  background: #22c55e;
-  color: #000;
-}
-
-.toggleOff {
-  background: #333;
-  color: #888;
-}
-
-.navLabel {
-  font-size: 14px;
-  color: #fcf000;
-  font-weight: 600;
-}
-
-.lastRun {
-  font-size: 11px;
-  color: #666;
-  margin-left: auto;
-}
-
-.statsRow {
+.statusTop {
   display: flex;
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
 }
 
-.stat {
-  font-size: 13px;
-  color: #aaa;
+.statusBottom {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
+.toggleBtn {
+  padding: 5px 14px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.statusGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.statusLabel {
+  color: #666;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.navValue {
+  color: #fcf000;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.navSource {
+  color: #555;
+  font-size: 11px;
+}
+
+.sizingBadge {
+  background: #1a1a2e;
+  color: #a78bfa;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lastTick {
+  margin-left: auto;
+  color: #555;
+  font-size: 11px;
+}
+
+.stat {
+  font-size: 12px;
+  color: #aaa;
+}
 .stat strong {
   color: #e8e6e3;
 }
 
 .tickBtn {
   margin-left: auto;
-  padding: 6px 14px;
+  padding: 5px 12px;
   background: #1a1a2e;
   color: #a78bfa;
   border: 1px solid #333;
@@ -94,9 +113,10 @@
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
+  letter-spacing: 0.02em;
 }
 .tickBtn:hover { background: #252545; }
-.tickBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.tickBtn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Flow Indicator ──────────────────────────────────────────────────────── */
 
@@ -105,194 +125,94 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 0;
-  margin-bottom: 16px;
+  padding: 10px 0;
+  margin-bottom: 12px;
 }
 
 .flowItem {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
 }
 
 .flowArrow {
-  color: #444;
+  color: #333;
   font-size: 16px;
   margin: 0 4px;
 }
 
 .flowCount {
-  background: #222;
-  color: #888;
   font-size: 11px;
   font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-/* ── Kanban Board ────────────────────────────────────────────────────────── */
-
-.kanban {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-@media (max-width: 1200px) {
-  .kanban {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 700px) {
-  .kanban {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ── State Box ───────────────────────────────────────────────────────────── */
-
-.stateBox {
-  border: 1px solid #222;
-  border-radius: 8px;
-  min-height: 200px;
-  display: flex;
-  flex-direction: column;
-}
-
-.stateHeader {
-  padding: 12px 14px 10px;
-  border-bottom: 1px solid #222;
-}
-
-.stateTitle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.stateIcon {
-  font-size: 16px;
-}
-
-.stateCount {
-  font-size: 11px;
-  font-weight: 700;
-  color: #000;
   padding: 1px 7px;
   border-radius: 10px;
-  margin-left: 4px;
 }
 
-.stateDesc {
-  font-size: 11px;
-  color: #666;
-  margin-top: 4px;
-}
+/* ── Sections ────────────────────────────────────────────────────────────── */
 
-.stateCards {
-  padding: 8px;
-  flex: 1;
-  overflow-y: auto;
-  max-height: 500px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.emptyState {
-  color: #444;
-  font-size: 12px;
-  text-align: center;
-  padding: 30px 10px;
-}
-
-/* ── Position Card ───────────────────────────────────────────────────────── */
-
-.card {
-  background: #161618;
-  border: 1px solid #2a2a2e;
+.section {
+  background: #0d0d0f;
+  border: 1px solid #1e1e22;
+  border-left: 3px solid #333;
   border-radius: 6px;
-  padding: 10px 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
 }
 
-.card:hover {
-  border-color: #444;
-}
-
-.cardHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.cardTicker {
+.sectionHeader {
   display: flex;
   align-items: center;
-}
-
-.tickerName {
-  font-size: 14px;
-  font-weight: 700;
-  color: #fcf000;
-}
-
-.removeBtn {
-  background: none;
-  border: none;
-  color: #555;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-.removeBtn:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
-
-.cardBody {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.cardRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-}
-
-.cardLabel {
-  color: #666;
-}
-
-.cardDate {
-  font-size: 10px;
-  color: #444;
-  margin-top: 4px;
-  text-align: right;
-}
-
-/* ── Trades Table ────────────────────────────────────────────────────────── */
-
-.tradesSection {
-  background: #111;
-  border: 1px solid #222;
-  border-radius: 8px;
-  padding: 16px;
-  margin-top: 16px;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #1a1a1e;
+  background: #111114;
 }
 
 .sectionTitle {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
-  color: #fcf000;
-  margin: 0 0 12px 0;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #aaa;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sectionBadges {
+  display: flex;
+  gap: 14px;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badge {
+  background: #333;
+  color: #aaa;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+.expandIcon {
+  color: #555;
+  font-size: 10px;
+  margin-left: auto;
+}
+
+.emptyState {
+  color: #333;
+  font-size: 12px;
+  text-align: center;
+  padding: 28px 16px;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────────── */
+
+.tableWrap {
+  overflow-x: auto;
 }
 
 .table {
@@ -303,21 +223,292 @@
 
 .table th {
   text-align: left;
-  color: #888;
-  padding: 6px 10px;
-  border-bottom: 1px solid #222;
+  color: #666;
+  padding: 7px 10px;
+  border-bottom: 1px solid #1a1a1e;
   font-weight: 600;
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .table td {
-  padding: 6px 10px;
-  border-bottom: 1px solid #1a1a1a;
+  padding: 8px 10px;
+  border-bottom: 1px solid #141416;
   color: #ccc;
+  white-space: nowrap;
 }
 
 .table tr:hover td {
+  background: rgba(252, 240, 0, 0.015);
+}
+
+/* ── Position Row ─────────────────────────────────────────────────────────── */
+
+.positionGroup {
+  /* tbody wrapping each position + detail row */
+}
+
+.positionRow {
+  border-left: 3px solid transparent;
+}
+
+.positionRow:hover {
   background: rgba(252, 240, 0, 0.02);
+}
+
+.detailRow td {
+  background: #0a0a0c;
+  border-bottom: 2px solid #222;
+}
+
+.tickerCell {
+  font-weight: 700;
+  color: #fcf000;
+  font-size: 13px;
+}
+
+.stateBadge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border: 1px solid;
+}
+
+.lotsBadge {
+  background: #1a1a2e;
+  color: #a78bfa;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.removeBtn {
+  background: none;
+  border: none;
+  color: #444;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+.removeBtn:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+
+/* ── Lot Detail ───────────────────────────────────────────────────────────── */
+
+.lotDetail {
+  display: flex;
+  gap: 32px;
+  padding: 12px 16px 16px;
+  flex-wrap: wrap;
+}
+
+.lotSection {
+  min-width: 260px;
+}
+
+.lotSectionTitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #555;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.lotRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+
+.lotLabel {
+  font-weight: 700;
+  color: #888;
+  width: 24px;
+}
+
+.lotPrice {
+  font-family: monospace;
+  color: #ccc;
+  width: 70px;
+  text-align: right;
+}
+
+.lotShares {
+  color: #aaa;
+  width: 50px;
+  text-align: right;
+}
+
+.lotStatus {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  width: 60px;
+}
+
+.lotPct {
+  color: #444;
+  font-size: 10px;
+}
+
+.lotTotal {
+  font-size: 11px;
+  color: #666;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #222;
+}
+
+.trailingLabel {
+  color: #666;
+  width: 100px;
+  font-size: 11px;
+}
+
+.trailingValue {
+  font-size: 12px;
+  color: #ccc;
+}
+
+/* ── Break Even Progress Bar ──────────────────────────────────────────────── */
+
+.beProgressRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.beBar {
+  width: 120px;
+  height: 6px;
+  background: #222;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.beFill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #3b82f6);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.beText {
+  font-size: 11px;
+  color: #888;
+}
+
+/* ── Action Feed ──────────────────────────────────────────────────────────── */
+
+.actionsFeed {
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.actionItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-left: 3px solid #333;
+  border-radius: 0 3px 3px 0;
+  font-size: 12px;
+}
+
+.actionLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.actionDesc {
+  color: #aaa;
+  font-size: 12px;
+}
+
+/* ── Info Popup ───────────────────────────────────────────────────────────── */
+
+.infoCircle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid #444;
+  font-size: 9px;
+  font-weight: 700;
+  font-style: italic;
+  color: #666;
+  cursor: pointer;
+  margin-left: 2px;
+  font-family: Georgia, serif;
+  user-select: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+.infoCircle:hover {
+  border-color: #888;
+  color: #aaa;
+}
+
+.infoPopup {
+  position: absolute;
+  top: 22px;
+  left: -8px;
+  z-index: 1000;
+  background: #1a1a1e;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 10px 14px;
+  width: 280px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #bbb;
+  font-weight: 400;
+  font-style: normal;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  white-space: normal;
+}
+
+/* ── Exit / Command Badges ────────────────────────────────────────────────── */
+
+.exitBadge {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cmdBadge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #888;
+  font-family: monospace;
+  letter-spacing: 0.02em;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .page { padding: 12px; }
+  .statusTop { gap: 10px; }
+  .lotDetail { flex-direction: column; gap: 16px; }
 }

@@ -62,6 +62,17 @@ export async function runOrphanCleanup({ db, dryRun = false } = {}) {
       activePositions.map(p => (p.ticker || '').toUpperCase()).filter(Boolean)
     );
 
+    // Also include tickers with active Ambush V7 positions. Ambush places
+    // stops via the bridge with orderRef='PNTHR', but positions live in
+    // pnthr_ambush_positions (not pnthr_portfolio). Without this check,
+    // all Ambush stops would be classified as orphans and cancelled.
+    const ambushPositions = await db.collection('pnthr_ambush_positions').find({
+      state: { $in: ['ACTIVE', 'PROTECT', 'STALKING', 'ATTACK'] },
+    }).project({ ticker: 1 }).toArray();
+    for (const ap of ambushPositions) {
+      if (ap.ticker) activeTickers.add(ap.ticker.toUpperCase());
+    }
+
     // Build the PNTHR-fingerprint whitelist for THIS owner. Two sources OR'd
     // together (defense in depth):
     //   1. orderRef='PNTHR' on the live TWS order (forward-going clean tag —

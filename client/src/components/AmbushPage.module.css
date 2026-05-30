@@ -1,0 +1,323 @@
+/* AmbushPage.module.css — PNTHR Ambush Kanban dashboard */
+
+.page {
+  padding: 24px;
+  max-width: 1600px;
+  margin: 0 auto;
+  background: #09090b;
+  color: #e8e6e3;
+  min-height: 100vh;
+}
+
+.loading, .error {
+  text-align: center;
+  padding: 60px 20px;
+  color: #888;
+  font-size: 14px;
+}
+.error { color: #ef4444; }
+
+/* ── Control Bar ─────────────────────────────────────────────────────────── */
+
+.controlBar {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.toggleBtn {
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border: none;
+  cursor: pointer;
+}
+
+.toggleOn {
+  background: #22c55e;
+  color: #000;
+}
+
+.toggleOff {
+  background: #333;
+  color: #888;
+}
+
+.navLabel {
+  font-size: 14px;
+  color: #fcf000;
+  font-weight: 600;
+}
+
+.lastRun {
+  font-size: 11px;
+  color: #666;
+  margin-left: auto;
+}
+
+.statsRow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.stat {
+  font-size: 13px;
+  color: #aaa;
+}
+
+.stat strong {
+  color: #e8e6e3;
+}
+
+.tickBtn {
+  margin-left: auto;
+  padding: 6px 14px;
+  background: #1a1a2e;
+  color: #a78bfa;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tickBtn:hover { background: #252545; }
+.tickBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Flow Indicator ──────────────────────────────────────────────────────── */
+
+.flowRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 0;
+  margin-bottom: 16px;
+}
+
+.flowItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.flowArrow {
+  color: #444;
+  font-size: 16px;
+  margin: 0 4px;
+}
+
+.flowCount {
+  background: #222;
+  color: #888;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* ── Kanban Board ────────────────────────────────────────────────────────── */
+
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1200px) {
+  .kanban {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .kanban {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── State Box ───────────────────────────────────────────────────────────── */
+
+.stateBox {
+  border: 1px solid #222;
+  border-radius: 8px;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.stateHeader {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid #222;
+}
+
+.stateTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.stateIcon {
+  font-size: 16px;
+}
+
+.stateCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: #000;
+  padding: 1px 7px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+.stateDesc {
+  font-size: 11px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.stateCards {
+  padding: 8px;
+  flex: 1;
+  overflow-y: auto;
+  max-height: 500px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.emptyState {
+  color: #444;
+  font-size: 12px;
+  text-align: center;
+  padding: 30px 10px;
+}
+
+/* ── Position Card ───────────────────────────────────────────────────────── */
+
+.card {
+  background: #161618;
+  border: 1px solid #2a2a2e;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.card:hover {
+  border-color: #444;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.cardTicker {
+  display: flex;
+  align-items: center;
+}
+
+.tickerName {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fcf000;
+}
+
+.removeBtn {
+  background: none;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.removeBtn:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cardRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.cardLabel {
+  color: #666;
+}
+
+.cardDate {
+  font-size: 10px;
+  color: #444;
+  margin-top: 4px;
+  text-align: right;
+}
+
+/* ── Trades Table ────────────────────────────────────────────────────────── */
+
+.tradesSection {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fcf000;
+  margin: 0 0 12px 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th {
+  text-align: left;
+  color: #888;
+  padding: 6px 10px;
+  border-bottom: 1px solid #222;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #1a1a1a;
+  color: #ccc;
+}
+
+.table tr:hover td {
+  background: rgba(252, 240, 0, 0.02);
+}

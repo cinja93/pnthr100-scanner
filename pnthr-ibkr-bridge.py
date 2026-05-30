@@ -966,6 +966,244 @@ def outbox_poller_loop(app, rate_limiter, stop_event):
     print("[OUTBOX] Poller stopped.")
 
 
+# ── PNTHR AMBUSH outbox poller ──────────────────────────────────────────────
+# Separate outbox for the Ambush V7 strategy. Polls /api/admin/ambush-outbox/
+# and executes compound commands (entry = market order + stop, exit = cancel +
+# sell, modify_stop = find existing stop + cancel + replace).
+
+AMBUSH_ENABLED = os.getenv('AMBUSH_ENABLED', 'true').lower() == 'true'
+AMBUSH_POLL_SEC = int(os.getenv('AMBUSH_POLL_SEC', '15'))  # poll faster than main outbox
+
+def _ambush_get_pending():
+    try:
+        r = requests.get(
+            f"{PNTHR_API_URL}/api/admin/ambush-outbox/pending",
+            headers={'Authorization': f'Bearer {PNTHR_TOKEN}'},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            return r.json().get('commands', [])
+        return []
+    except Exception as e:
+        print(f"[AMBUSH] ✗ pending fetch failed: {e}")
+        return []
+
+
+def _ambush_post(path, body=None):
+    try:
+        r = requests.post(
+            f"{PNTHR_API_URL}{path}",
+            json=body or {},
+            headers={
+                'Content-Type':  'application/json',
+                'Authorization': f'Bearer {PNTHR_TOKEN}',
+            },
+            timeout=10,
+        )
+        return r.status_code == 200
+    except Exception as e:
+        print(f"[AMBUSH] ✗ POST {path} failed: {e}")
+        return False
+
+
+def _find_protective_stop(app, ticker, stop_action):
+    """Find the permId of the protective stop order for a ticker.
+    For LONG positions: protective stop = SELL STP (stop_action='SELL').
+    For SHORT positions: protective stop = BUY STP (stop_action='BUY').
+    Lot triggers have the OPPOSITE action so they won't match."""
+    for key, order in app.open_orders.items():
+        if (order.get('symbol', '').upper() == ticker.upper() and
+            order.get('action', '').upper() == stop_action.upper() and
+            order.get('orderType', '').upper() in ('STP', 'STP LMT')):
+            return order.get('permId')
+    return None
+
+
+def _execute_ambush_command(app, rate_limiter, cmd):
+    """Execute a single Ambush outbox command. Returns (ok, response, error)."""
+    request = cmd.get('request') or {}
+    command = cmd['command']
+    ticker  = (request.get('ticker') or '').upper()
+
+    # Rate limit
+    can_send, rate_reason = rate_limiter.can_send(ticker)
+    if not can_send:
+        return False, None, f'RATE_LIMITED:{rate_reason}'
+
+    # Blackout windows
+    blackout = is_in_blackout_window()
+    if blackout:
+        return False, None, f'BLACKOUT:{blackout}'
+
+    if IBKR_WRITES_DRY_RUN:
+        print(f"[AMBUSH] DRY-RUN {command} {ticker} {request}")
+        rate_limiter.record(ticker)
+        return True, {'dryRun': True, 'command': command, 'request': request}, None
+
+    rate_limiter.record(ticker)
+    is_long = (request.get('direction') or 'LONG').upper() != 'SHORT'
+
+    # ── ENTRY (BUY_ENTRY / SHORT_ENTRY) ──────────────────────────────────
+    # Compound: 1) Market order to open position  2) Place protective stop
+    if command in ('BUY_ENTRY', 'SHORT_ENTRY'):
+        entry_action = 'BUY' if is_long else 'SELL'
+        stop_action  = 'SELL' if is_long else 'BUY'
+        shares = request.get('shares')
+
+        # 1. Market entry order
+        entry_result = app.sell_position(
+            ticker=ticker, action=entry_action, shares=shares,
+            order_type='MKT', limit_price=None, tif='DAY', rth=True,
+        )
+        if not entry_result.get('ok'):
+            return False, entry_result, entry_result.get('error') or 'ENTRY_FAILED'
+
+        # 2. Protective stop
+        stop_price = request.get('stopPrice')
+        stop_result = None
+        if stop_price:
+            time.sleep(1)  # brief pause for TWS to register the position
+            stop_result = app.place_protective_stop(
+                ticker=ticker, action=stop_action, shares=shares,
+                stop_price=stop_price, tif='GTC', rth=True,
+            )
+            if not stop_result.get('ok'):
+                print(f"[AMBUSH] ⚠ {ticker} entry OK but protective stop FAILED — position NAKED")
+
+        return True, {
+            'entry': entry_result,
+            'stop': stop_result,
+            'command': command,
+        }, None
+
+    # ── EXIT (SELL_EXIT / COVER_EXIT) ────────────────────────────────────
+    # Compound: 1) Cancel all related orders  2) Market order to close
+    if command in ('SELL_EXIT', 'COVER_EXIT'):
+        exit_action = 'SELL' if is_long else 'BUY'
+        shares = request.get('shares')
+
+        # 1. Cancel all related orders (stops + lot triggers)
+        cancel_result = app.cancel_related_orders(ticker)
+
+        # 2. Market exit
+        time.sleep(0.5)
+        exit_result = app.sell_position(
+            ticker=ticker, action=exit_action, shares=shares,
+            order_type='MKT', limit_price=None, tif='DAY', rth=True,
+        )
+        return exit_result.get('ok', False), {
+            'cancel': cancel_result,
+            'exit': exit_result,
+            'command': command,
+        }, (None if exit_result.get('ok') else exit_result.get('error') or 'EXIT_FAILED')
+
+    # ── MODIFY_STOP ──────────────────────────────────────────────────────
+    # Find existing protective stop by ticker + action, cancel + replace
+    if command == 'MODIFY_STOP':
+        stop_action = 'SELL' if is_long else 'BUY'
+        new_stop = request.get('newStopPrice')
+        shares = request.get('shares')
+
+        perm_id = _find_protective_stop(app, ticker, stop_action)
+        if perm_id:
+            result = app.modify_stop(
+                ticker=ticker, old_perm_id=perm_id, new_stop_price=new_stop,
+                action=stop_action, shares=shares, tif='GTC', rth=True,
+            )
+            return result.get('ok', False), result, (
+                None if result.get('ok') else f'MODIFY_FAILED_PHASE_{result.get("phase")}')
+        else:
+            # No existing stop found — place a new one
+            result = app.place_protective_stop(
+                ticker=ticker, action=stop_action, shares=shares,
+                stop_price=new_stop, tif='GTC', rth=True,
+            )
+            return result.get('ok', False), {
+                'placed_new': True, **result
+            }, (None if result.get('ok') else result.get('error') or 'PLACE_NEW_STOP_FAILED')
+
+    # ── PLACE_LOT_TRIGGER ────────────────────────────────────────────────
+    # Same as main outbox PLACE_LOT_TRIGGER
+    if command == 'PLACE_LOT_TRIGGER':
+        lot_action = 'BUY' if is_long else 'SELL'
+        result = app.place_protective_stop(
+            ticker=ticker, action=lot_action, shares=request.get('shares'),
+            stop_price=request.get('triggerPrice'), tif='GTC', rth=True,
+        )
+        if isinstance(result, dict):
+            result['lot'] = request.get('lot')
+        return result.get('ok', False), result, (
+            None if result.get('ok') else result.get('error') or result.get('status'))
+
+    return False, None, f'UNKNOWN_AMBUSH_COMMAND:{command}'
+
+
+def ambush_outbox_poller_loop(app, rate_limiter, stop_event):
+    """Background thread: polls Ambush outbox and dispatches commands."""
+    print(f"[AMBUSH] Poller starting — every {AMBUSH_POLL_SEC}s | "
+          f"writes={'ENABLED' if IBKR_WRITES_ENABLED else 'DISABLED'} | "
+          f"dryRun={'ON' if IBKR_WRITES_DRY_RUN else 'OFF'}")
+    while not stop_event.is_set():
+        try:
+            if not IBKR_WRITES_ENABLED or not AMBUSH_ENABLED:
+                stop_event.wait(AMBUSH_POLL_SEC)
+                continue
+
+            if not app.connected:
+                stop_event.wait(AMBUSH_POLL_SEC)
+                continue
+
+            pending = _ambush_get_pending()
+            if not pending:
+                stop_event.wait(AMBUSH_POLL_SEC)
+                continue
+
+            print(f"[AMBUSH] Found {len(pending)} pending command(s)")
+            for cmd in pending:
+                cmd_id = cmd.get('id')
+                if not cmd_id:
+                    continue
+
+                # Staleness guard — 5 min for Ambush (faster cycle)
+                created_at = cmd.get('createdAt')
+                if created_at and OUTBOX_STALE_SEC > 0:
+                    try:
+                        if isinstance(created_at, str):
+                            created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                        else:
+                            created_dt = created_at
+                        age_sec = (datetime.now(timezone.utc) - created_dt).total_seconds()
+                        if age_sec > 300:  # 5 min stale guard for Ambush
+                            _ambush_post(f"/api/admin/ambush-outbox/{cmd_id}/failed",
+                                         body={'error': f'STALE:{int(age_sec)}s'})
+                            print(f"[AMBUSH] ⏰ STALE {cmd['command']} {cmd.get('request', {}).get('ticker', '?')} — {int(age_sec)}s old")
+                            continue
+                    except Exception as e:
+                        print(f"[AMBUSH] ⚠ staleness check failed for {cmd_id}: {e}")
+
+                # Lock before executing
+                if not _ambush_post(f"/api/admin/ambush-outbox/{cmd_id}/executing"):
+                    print(f"[AMBUSH] ✗ failed to mark EXECUTING for {cmd_id}")
+                    continue
+
+                try:
+                    ok, response, err = _execute_ambush_command(app, rate_limiter, cmd)
+                except Exception as e:
+                    ok, response, err = False, None, f'EXEC_THREW:{e}'
+
+                if ok:
+                    _ambush_post(f"/api/admin/ambush-outbox/{cmd_id}/done", body=response)
+                    print(f"[AMBUSH] ✓ {cmd['command']} {cmd.get('request', {}).get('ticker')} → DONE")
+                else:
+                    _ambush_post(f"/api/admin/ambush-outbox/{cmd_id}/failed",
+                                 body={'error': err, 'response': response})
+                    print(f"[AMBUSH] ✗ {cmd['command']} {cmd.get('request', {}).get('ticker')} → FAILED: {err}")
+        except Exception as e:
+            print(f"[AMBUSH] ✗ poller loop error: {e}")
+        stop_event.wait(AMBUSH_POLL_SEC)
+    print("[AMBUSH] Poller stopped.")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
@@ -975,6 +1213,8 @@ def main():
     print(f"  Sync:   every {SYNC_INTERVAL}s  |  Outbox poll: every {OUTBOX_POLL_SEC}s")
     print(f"  Phase 4 writes: {'ENABLED' if IBKR_WRITES_ENABLED else 'DISABLED'}"
           f"{'  (DRY-RUN)' if IBKR_WRITES_ENABLED and IBKR_WRITES_DRY_RUN else ''}")
+    print(f"  Ambush V7: {'ENABLED' if AMBUSH_ENABLED else 'DISABLED'}"
+          f" (poll: {AMBUSH_POLL_SEC}s)")
     print(f"  Staleness guard: {OUTBOX_STALE_SEC}s (commands older than {OUTBOX_STALE_SEC // 60}min auto-rejected)")
     print("=" * 60)
 
@@ -1024,6 +1264,20 @@ def main():
         name='outbox-poller',
     )
     outbox_thread.start()
+
+    # Ambush V7 outbox poller — separate thread, faster poll cycle.
+    # Polls /api/admin/ambush-outbox/pending for Ambush-specific commands.
+    ambush_stop_event = threading.Event()
+    if AMBUSH_ENABLED:
+        ambush_thread = threading.Thread(
+            target=ambush_outbox_poller_loop,
+            args=(app, rate_limiter, ambush_stop_event),
+            daemon=True,
+            name='ambush-poller',
+        )
+        ambush_thread.start()
+    else:
+        print("[AMBUSH] Poller disabled (AMBUSH_ENABLED=false)")
 
     print(f"[BRIDGE] Syncing every {SYNC_INTERVAL}s. Press Ctrl+C to stop.\n")
 
@@ -1080,6 +1334,7 @@ def main():
     except KeyboardInterrupt:
         print("\n[BRIDGE] Shutting down...")
         outbox_stop_event.set()
+        ambush_stop_event.set()
         try:
             app.reqAccountUpdates(False, "")
             app.cancelPositions()

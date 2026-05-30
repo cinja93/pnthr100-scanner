@@ -61,6 +61,13 @@ const NAV_GROUPS = [
     ],
   },
   {
+    groupLabel: 'AMBUSH',
+    info: 'ambush',
+    items: [
+      { key: 'ambush',    label: 'Ambush V7',  badge: 'LIVE' },
+    ],
+  },
+  {
     groupLabel: 'PNTHR Live',
     info: 'pnthrLive',
     items: [
@@ -102,6 +109,10 @@ const SECTION_INFO = {
   marketPulse: {
     title: 'Market Pulse',
     body: "Real-time performance tracking and macro context. Pulse shows live equity curves for both funds. Bond Yields tracks the treasury yield curve and credit spreads.",
+  },
+  ambush: {
+    title: 'AMBUSH',
+    body: "PNTHR Ambush V7 intraday strategy. Fully automated first-hour-low breakout system with 5-lot pyramid, trailing stops, and hourly bar processing. STALKING, ATTACK, ACTIVE, PROTECT.",
   },
   pnthrLive: {
     title: 'PNTHR Live',

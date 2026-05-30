@@ -1303,6 +1303,58 @@ export async function dismissTrendlineAlert(id) {
   return res.json();
 }
 
+// ── PNTHR Ambush API ──
+export async function fetchAmbushSummary() {
+  const res = await apiFetch(`${API_BASE}/api/ambush/summary`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAmbushConfig() {
+  const res = await apiFetch(`${API_BASE}/api/ambush/config`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function updateAmbushConfig(updates) {
+  const res = await apiFetch(`${API_BASE}/api/ambush/config`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function triggerAmbushTick() {
+  const res = await apiFetch(`${API_BASE}/api/ambush/tick`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function deleteAmbushPosition(ticker) {
+  const res = await apiFetch(`${API_BASE}/api/ambush/position/${ticker}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function resetAmbush() {
+  const res = await apiFetch(`${API_BASE}/api/ambush/reset`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ confirm: 'RESET_ALL_AMBUSH' }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 let _overlapCache = null;
 export async function fetchAi300OverlapTickers() {
   if (_overlapCache) return _overlapCache;

@@ -1,0 +1,352 @@
+// server/ambush/ambushEngine.js
+// ── PNTHR AMBUSH V7 — Live State Machine ────────────────────────────────────
+//
+// Replicates the V7 stress-test backtest logic for live intraday trading.
+// States: STALKING → ATTACK → ACTIVE → PROTECT
+//
+// Called once per hourly bar close by ambushCron.js. Each call processes:
+//   1. Existing positions (stop checks, lot triggers, Break Even, trailing)
+//   2. Pending re-entries (queued from prior bar's confirmed breakout)
+//   3. Re-entry signal scans (waiting positions check for breakout)
+//   4. New MCE entries (fresh signals entering the pipeline)
+//
+// All order actions are written to pnthr_ambush_outbox for the IBKR bridge.
+//
+// Constants match V7 backtest exactly:
+//   - $75 Break Even threshold
+//   - 2-bar trailing stop exit
+//   - 5-lot pyramid (35/25/20/12/8%)
+//   - $300 max risk, 1% NAV, 10% ticker cap
+//   - 5bps slippage, IBKR Pro Fixed commissions
+// ────────────────────────────────────────────────────────────────────────────
+
+import { calcCommission } from '../backtest/costEngine.js';
+import { detectAllSignals, blInitStop, ssInitStop, computeWilderATR } from '../signalDetection.js';
+import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
+import { SECTOR_EMA_PERIODS } from '../data/pnthrAiSectorsConfig.js';
+import { CARNIVORE_MODE_TICKERS } from '../data/strategyMode.js';
+import { connectToDatabase } from '../database.js';
+
+// ── Constants (locked to V7 backtest) ───────────────────────────────────────
+export const AMBUSH_VERSION = '7.0.0';
+
+export const BE_THRESHOLD    = 75;       // dollars unrealized profit to trigger Break Even
+export const VITALITY_PCT    = 0.01;     // 1% NAV per position risk
+export const TICKER_CAP_PCT  = 0.10;     // 10% NAV max per ticker
+export const MAX_LOSS        = 300;      // $300 max risk per position
+export const STRIKE_PCT      = [0.35, 0.25, 0.20, 0.12, 0.08];
+export const LOT_OFFSETS     = [0, 0.03, 0.06, 0.10, 0.14];
+export const SLIPPAGE_BPS    = 5;
+export const FIRST_HOUR_END  = '10:30';
+export const PAI300_REGIME_PERIOD = 36;
+export const WITHDRAWAL_THRESHOLD = 2_000_000;
+export const WITHDRAWAL_AMOUNT    = 1_000_000;
+
+// State labels for the UI Kanban board
+export const STATES = {
+  STALKING: 'STALKING',   // First-hour low captured, watching for break
+  ATTACK:   'ATTACK',     // Tripwire broken, confirmed breakout queued for next bar
+  ACTIVE:   'ACTIVE',     // Position open, lots loading, pre-Break Even
+  PROTECT:  'PROTECT',    // Break Even hit, trailing stop ratcheting
+};
+
+// ── Carnivore sector maps (from V7 backtest) ────────────────────────────────
+const CARNIVORE_SECTOR_MAP = {
+  'Technology':'XLK','Energy':'XLE','Healthcare':'XLV','Health Care':'XLV',
+  'Financial Services':'XLF','Financials':'XLF','Consumer Discretionary':'XLY',
+  'Consumer Cyclical':'XLY','Communication Services':'XLC','Industrials':'XLI',
+  'Basic Materials':'XLB','Materials':'XLB','Real Estate':'XLRE','Utilities':'XLU',
+  'Consumer Staples':'XLP','Consumer Defensive':'XLP',
+};
+const ETF_EMA_PERIOD = {
+  XLK: 21, XLV: 24, XLF: 25, XLI: 24, XLE: 26, XLC: 21,
+  XLRE: 26, XLU: 21, XLB: 19, XLY: 19, XLP: 18,
+};
+const CARNIVORE_GICS = {
+  AKAM:'Technology',ANET:'Technology',CDW:'Technology',COHR:'Technology',
+  INTC:'Technology',KLAC:'Technology',SNDK:'Technology',
+  META:'Communication Services',TSLA:'Consumer Discretionary',CSGP:'Real Estate',
+  CEG:'Utilities',EQT:'Energy',TRGP:'Energy',
+  APH:'Industrials',ARM:'Industrials',EMR:'Industrials',ETN:'Industrials',
+  GEV:'Industrials',HUBB:'Industrials',LDOS:'Industrials',TDG:'Industrials',
+  TRMB:'Industrials',CMI:'Industrials',
+  IBM:'Technology',ORCL:'Technology',TTD:'Technology',VST:'Utilities',LITE:'Technology',
+};
+
+// ── AI Ticker Metadata ──────────────────────────────────────────────────────
+const AI_TICKER_META = {};
+for (const sec of SECTORS) {
+  for (const h of sec.holdings) AI_TICKER_META[h.ticker] = { sectorId: sec.id, sector: sec.name };
+}
+
+export function getSectorName(ticker) {
+  if (CARNIVORE_GICS[ticker]) return CARNIVORE_GICS[ticker];
+  return AI_TICKER_META[ticker]?.sector || 'Technology';
+}
+
+export function getAiTickers() {
+  return Object.keys(AI_TICKER_META);
+}
+
+// ── Helper functions (exact copies from V7 backtest) ────────────────────────
+export function getWeekOf(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  const dow = d.getDay();
+  const daysToMon = dow === 0 ? -6 : 1 - dow;
+  const m = new Date(d);
+  m.setDate(d.getDate() + daysToMon);
+  return m.toISOString().split('T')[0];
+}
+
+function computeEMASeed(closes, period) {
+  if (closes.length < period) return [];
+  const k = 2 / (period + 1);
+  let ema = closes.slice(0, period).reduce((s, v) => s + v, 0) / period;
+  const result = new Array(period - 1).fill(null);
+  result.push(ema);
+  for (let i = period; i < closes.length; i++) {
+    ema = closes[i] * k + ema * (1 - k);
+    result.push(ema);
+  }
+  return result;
+}
+
+export function extractTime(dateStr) {
+  const p = dateStr.split(' ');
+  return p.length > 1 ? p[1].slice(0, 5) : '00:00';
+}
+
+export function isConfirmedGreenBreakout(bar, prevBar) {
+  return prevBar && bar.close > bar.open && bar.high > prevBar.high && bar.close > prevBar.high;
+}
+
+export function isConfirmedRedBreakdown(bar, prevBar) {
+  return prevBar && bar.close < bar.open && bar.low < prevBar.low && bar.close < prevBar.low;
+}
+
+export function applySlip(price, adverse) {
+  const s = price * (SLIPPAGE_BPS / 10000);
+  return adverse ? +(price + s).toFixed(4) : +(price - s).toFixed(4);
+}
+
+export function entrySlip(price, dir) {
+  return dir === 'LONG' ? applySlip(price, true) : applySlip(price, false);
+}
+
+export function exitSlip(price, dir) {
+  return dir === 'LONG' ? applySlip(price, false) : applySlip(price, true);
+}
+
+// ── Sizing (exact V7 logic) ─────────────────────────────────────────────────
+export function sizeLots(entryPrice, stopPrice, direction, nav) {
+  const rps = direction === 'LONG' ? entryPrice - stopPrice : stopPrice - entryPrice;
+  if (rps <= 0.01) return null;
+
+  const totalShares = Math.min(
+    Math.floor(MAX_LOSS / rps),
+    Math.floor((nav * VITALITY_PCT) / rps),
+    Math.floor((nav * TICKER_CAP_PCT) / entryPrice)
+  );
+  if (totalShares < 1) return null;
+
+  const lotPlan = STRIKE_PCT.map(p => Math.max(1, Math.round(totalShares * p)));
+  const l1Shares = lotPlan[0];
+
+  return { totalShares, lotPlan, l1Shares, rps };
+}
+
+// ── Weekly signal + regime functions ────────────────────────────────────────
+// These load from MongoDB and cache for the duration of each cron tick.
+// The cron tick calls loadSignalContext() once, then passes the context
+// to all processing functions.
+
+export async function loadSignalContext(db) {
+  // Weekly bars for signal detection
+  const weeklyDocs = await db.collection('pnthr_ai_bt_candles_weekly')
+    .find({}, { projection: { ticker: 1, weekly: 1 } }).toArray();
+
+  const weeklyBarsByTicker = {};
+  for (const doc of weeklyDocs) {
+    const sorted = (doc.weekly || []).sort((a, b) => (a.weekOf || a.date).localeCompare(b.weekOf || b.date));
+    weeklyBarsByTicker[doc.ticker] = sorted.map(w => ({
+      time: w.weekOf || w.date, open: w.open, high: w.high, low: w.low, close: w.close,
+    }));
+  }
+
+  // PAI300 regime
+  const pai300Doc = await db.collection('pnthr_ai_index_candles_weekly').findOne({ ticker: 'PAI300' });
+  const pai300Weekly = (pai300Doc?.weekly || []).sort((a, b) => a.weekOf.localeCompare(b.weekOf));
+  const pai300Closes = pai300Weekly.map(w => w.close);
+  const pai300Ema = computeEMASeed(pai300Closes, PAI300_REGIME_PERIOD);
+  const pai300RegimeByWeek = {};
+  for (let i = 0; i < pai300Weekly.length; i++) {
+    if (pai300Ema[i] != null) pai300RegimeByWeek[pai300Weekly[i].weekOf] = pai300Closes[i] > pai300Ema[i];
+  }
+
+  // SPY regime (for carnivore tickers)
+  const spyWeeklyDoc = await db.collection('pnthr_bt_candles_weekly').findOne({ ticker: 'SPY' });
+  const spyWeekly = (spyWeeklyDoc?.weekly || []).sort((a, b) => (a.weekOf || a.date).localeCompare(b.weekOf || b.date));
+  const spyCloses = spyWeekly.map(w => w.close);
+  const spyEma21 = computeEMASeed(spyCloses, 21);
+  const spyRegimeByWeek = {};
+  for (let i = 0; i < spyWeekly.length; i++) {
+    if (spyEma21[i] != null) spyRegimeByWeek[spyWeekly[i].weekOf || spyWeekly[i].date] = spyCloses[i] > spyEma21[i];
+  }
+
+  // Sector ETF regime
+  const etfWeeklyDocs = {};
+  for (const etf of Object.keys(ETF_EMA_PERIOD)) {
+    const doc = await db.collection('pnthr_bt_candles_weekly').findOne({ ticker: etf });
+    if (doc) etfWeeklyDocs[etf] = doc;
+  }
+  const etfAboveEmaByWeek = {};
+  for (const [etf, doc] of Object.entries(etfWeeklyDocs)) {
+    const bars = (doc.weekly || []).sort((a, b) => (a.weekOf || a.date).localeCompare(b.weekOf || b.date));
+    const closes = bars.map(w => w.close);
+    const period = ETF_EMA_PERIOD[etf] || 21;
+    const ema = computeEMASeed(closes, period);
+    const map = {};
+    for (let i = 0; i < bars.length; i++) {
+      if (ema[i] != null) map[bars[i].weekOf || bars[i].date] = closes[i] > ema[i];
+    }
+    etfAboveEmaByWeek[etf] = map;
+  }
+
+  // AI sector tier ranks
+  const sectorRankDocs = await db.collection('pnthr_ai_sector_rank_daily')
+    .find({}).sort({ date: 1 }).toArray();
+  const aiSectorTierByDate = {};
+  for (const doc of sectorRankDocs) {
+    const tiers = {};
+    for (const r of (doc.ranks || [])) tiers[r.sectorId] = r.tier;
+    aiSectorTierByDate[doc.date] = tiers;
+  }
+
+  // Compute weekly signals for all AI tickers
+  const allTickers = Object.keys(weeklyBarsByTicker).filter(t => AI_TICKER_META[t] || CARNIVORE_MODE_TICKERS.has(t));
+  const signalsByTicker = {};
+  for (const ticker of allTickers) {
+    const bars = weeklyBarsByTicker[ticker];
+    if (!bars || bars.length < 35) continue;
+    const isCarnivore = CARNIVORE_MODE_TICKERS.has(ticker);
+    const sectorId = AI_TICKER_META[ticker]?.sectorId;
+    const period = isCarnivore ? 21 : (SECTOR_EMA_PERIODS[sectorId] ?? SECTOR_EMA_PERIODS[String(sectorId)] ?? 30);
+    const gateOffset = isCarnivore ? 0.10 : 0.25;
+    const result = detectAllSignals(bars, period, false, null, gateOffset);
+
+    const activeBLPeriods = [], activeSSPeriods = [];
+    let blStart = null, ssStart = null;
+    for (const evt of result.events) {
+      if (evt.signal === 'BL') blStart = evt.time;
+      if ((evt.signal === 'BE' || evt.signal === 'SS') && blStart) {
+        activeBLPeriods.push({ from: blStart, to: evt.time });
+        blStart = null;
+      }
+      if (evt.signal === 'SS') ssStart = evt.time;
+      if ((evt.signal === 'SE' || evt.signal === 'BL') && ssStart) {
+        activeSSPeriods.push({ from: ssStart, to: evt.time });
+        ssStart = null;
+      }
+    }
+    if (blStart) activeBLPeriods.push({ from: blStart, to: '9999-12-31' });
+    if (ssStart) activeSSPeriods.push({ from: ssStart, to: '9999-12-31' });
+    signalsByTicker[ticker] = { activeBLPeriods, activeSSPeriods, isCarnivore };
+  }
+
+  return {
+    weeklyBarsByTicker,
+    pai300RegimeByWeek,
+    spyRegimeByWeek,
+    etfAboveEmaByWeek,
+    aiSectorTierByDate,
+    signalsByTicker,
+  };
+}
+
+// ── Gate functions (exact V7 backtest logic) ────────────────────────────────
+
+export function getRegime(ctx, ticker, dateStr) {
+  const weekOf = getWeekOf(dateStr);
+  const rm = CARNIVORE_MODE_TICKERS.has(ticker) ? ctx.spyRegimeByWeek : ctx.pai300RegimeByWeek;
+  if (rm[weekOf] !== undefined) return rm[weekOf];
+  const ws = Object.keys(rm).sort();
+  let best = null;
+  for (const w of ws) { if (w <= weekOf) best = w; else break; }
+  return best !== null ? rm[best] : true;
+}
+
+export function getSectorOk(ctx, ticker, dateStr) {
+  const weekOf = getWeekOf(dateStr);
+  if (!CARNIVORE_MODE_TICKERS.has(ticker)) {
+    const dates = Object.keys(ctx.aiSectorTierByDate).sort();
+    let best = null;
+    for (const d of dates) { if (d <= dateStr) best = d; else break; }
+    if (!best) return true;
+    return ctx.aiSectorTierByDate[best]?.[AI_TICKER_META[ticker]?.sectorId] !== 'AVOID';
+  }
+  const gics = CARNIVORE_GICS[ticker];
+  const etf = CARNIVORE_SECTOR_MAP[gics];
+  if (!etf) return true;
+  const etfMap = ctx.etfAboveEmaByWeek[etf];
+  if (!etfMap) return true;
+  let above = etfMap[weekOf];
+  if (above === undefined) {
+    const ws = Object.keys(etfMap).sort();
+    let best = null;
+    for (const w of ws) { if (w <= weekOf) best = w; else break; }
+    above = best ? etfMap[best] : true;
+  }
+  return above;
+}
+
+export function isActiveBL(ctx, ticker, dateStr) {
+  const sig = ctx.signalsByTicker[ticker];
+  if (!sig) return false;
+  const weekOf = getWeekOf(dateStr);
+  for (const p of sig.activeBLPeriods) {
+    if (weekOf >= p.from && weekOf <= p.to) return true;
+  }
+  return false;
+}
+
+export function isActiveSS(ctx, ticker, dateStr) {
+  const sig = ctx.signalsByTicker[ticker];
+  if (!sig) return false;
+  const weekOf = getWeekOf(dateStr);
+  for (const p of sig.activeSSPeriods) {
+    if (weekOf >= p.from && weekOf <= p.to) return true;
+  }
+  return false;
+}
+
+export function getWeeklyStopLong(ctx, ticker, dateStr, ep) {
+  const bars = ctx.weeklyBarsByTicker[ticker];
+  if (!bars) return null;
+  const weekOf = getWeekOf(dateStr);
+  let barIdx = -1;
+  for (let i = bars.length - 1; i >= 0; i--) {
+    if (bars[i].time <= weekOf) { barIdx = i; break; }
+  }
+  if (barIdx < 2) return null;
+  return blInitStop(
+    Math.min(bars[barIdx - 1].low, bars[barIdx - 2].low),
+    ep,
+    computeWilderATR(bars.slice(0, barIdx + 1))[barIdx]
+  );
+}
+
+export function getWeeklyStopShort(ctx, ticker, dateStr, ep) {
+  const bars = ctx.weeklyBarsByTicker[ticker];
+  if (!bars) return null;
+  const weekOf = getWeekOf(dateStr);
+  let barIdx = -1;
+  for (let i = bars.length - 1; i >= 0; i--) {
+    if (bars[i].time <= weekOf) { barIdx = i; break; }
+  }
+  if (barIdx < 2) return null;
+  return ssInitStop(
+    Math.max(bars[barIdx - 1].high, bars[barIdx - 2].high),
+    ep,
+    computeWilderATR(bars.slice(0, barIdx + 1))[barIdx]
+  );
+}

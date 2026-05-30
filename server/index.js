@@ -106,6 +106,9 @@ import { normalizeSector, warnUnknownSector } from './sectorUtils.js';
 import { calculateSectorExposure, generateSectorRecommendations, buildSectorCandidates } from './sectorExposure.js';
 import { sendApprovalRequestEmail, sendWelcomeEmail, sendDenialEmail } from './emailService.js';
 import { ibkrSync, getOvernightFills } from './ibkrSync.js';
+import { createAmbushRouter } from './ambush/ambushRoutes.js';
+import { runAmbushTick } from './ambush/ambushCron.js';
+import { ensureAmbushIndexes, getAmbushPendingOrders, markAmbushOrderDone, markAmbushOrderFailed, getAmbushConfig as getAmbushConfigForGate } from './ambush/ambushStateManager.js';
 import { assistantLiveReconcile } from './assistantLiveReconcile.js';
 import { DEMO_OWNER_ID, startDemoPriceRefresh, stopDemoPriceRefresh } from './demoEngine.js';
 import {
@@ -6036,6 +6039,7 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
 
 // ── Newsletter (PNTHR's Perch) ────────────────────────────────────────────────
 app.use('/api/newsletter', newsletterRouter);
+app.use('/api/ambush', createAmbushRouter(authenticateJWT, requireAdmin));
 app.use('/api/dataroom', authenticateJWT, dataroomRouter);
 app.use('/api/compliance', authenticateJWT, complianceRouter);
 
@@ -6188,11 +6192,25 @@ cron.schedule('15 16 * * 5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
+// ── AMBUSH MODE GATE ─────────────────────────────────────────────────────────
+// When Ambush V7 is enabled, competing AI 300 automation crons are suppressed.
+// This prevents conflicting order placement from two strategies in the same
+// IBKR account. Ambush is the sole strategy when enabled.
+async function isAmbushModeActive() {
+  try {
+    const db = await connectToDatabase();
+    const config = await getAmbushConfigForGate(db);
+    return !!config?.enabled;
+  } catch { return false; }
+}
+
 // ── Cron: PNTHR Orders — Friday 2:00 PM ET (PREVIEW) ─────────────────────────
 // Generates weekly order sheet 2 hours before close so user can set up GTD limit orders.
+// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
 let fridayPreviewRunning = false;
 cron.schedule('0 14 * * 5', async () => {
   if (fridayPreviewRunning) return;
+  if (await isAmbushModeActive()) { console.log('[Orders] Friday PREVIEW skipped — AMBUSH MODE active'); return; }
   fridayPreviewRunning = true;
   try {
     console.log('[Orders] Running Friday PREVIEW pipeline...');
@@ -6207,9 +6225,11 @@ cron.schedule('0 14 * * 5', async () => {
 
 // ── Cron: PNTHR Orders — Daily 4:40 PM ET Mon–Fri (DAILY_UPDATE) ─────────────
 // Checks lot additions (time gate + +1% trigger), stale hunts, and exit signals.
+// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
 let dailyOrdersRunning = false;
 cron.schedule('40 16 * * 1-5', async () => {
   if (dailyOrdersRunning) return;
+  if (await isAmbushModeActive()) { console.log('[Orders] Daily update skipped — AMBUSH MODE active'); return; }
   dailyOrdersRunning = true;
   try {
     console.log('[Orders] Running daily update...');
@@ -6358,28 +6378,36 @@ cron.schedule('15 16 * * 1-5', async () => {
         console.log('[AI300 Kill History] case studies + appearances updated');
       }
     } catch (e) { console.error('[CRON] AI300 Kill History failed:', e.message); }
-    // Run the 679 Orders pipeline to refresh Carnivore qualification (gates + rank).
-    // AI Orders consumes this — Carnivore tickers must pass full 679 gates.
-    try {
-      console.log('[Orders] refreshing 679 pipeline for Carnivore qualification...');
-      await runOrdersPipeline({ type: 'CONFIRMED' });
-    } catch (e) { console.error('[CRON] 679 Orders refresh failed:', e.message); }
-    // Regenerate the AI Orders sheet (consumes fresh sector tiers + sector rotation).
-    try {
-      console.log('[AI Orders] regenerating order sheet...');
-      const ordersDoc = await runAiOrdersPipeline({ type: 'DAILY' });
-      console.log(`[AI Orders] done: ${ordersDoc.stats.totalOrders} orders this week`);
-    } catch (e) { console.error('[CRON] AI Orders pipeline failed:', e.message); }
-    // Stage weekly orders on FRIDAY ONLY — creates STAGED positions from order sheet.
-    // Execution happens Monday 9:35 AM via separate cron (executeWeeklyOrders).
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
-    if (today === 'Friday') {
+    // ⚡ The following order-generation crons are GATED by Ambush mode.
+    // Data pipeline (bars, sectors, kill scoring) above is NOT gated — it powers analytics.
+    // Only the ORDER PLACEMENT / STAGING sections are suppressed when Ambush is active.
+    const ambushActive = await isAmbushModeActive();
+    if (ambushActive) {
+      console.log('[AI Universe Daily] Order pipelines skipped — AMBUSH MODE active (data pipeline ran normally)');
+    } else {
+      // Run the 679 Orders pipeline to refresh Carnivore qualification (gates + rank).
+      // AI Orders consumes this — Carnivore tickers must pass full 679 gates.
       try {
-        const stageResult = await stageWeeklyOrders();
-        if (stageResult.skipped !== 'DISABLED') {
-          console.log(`[AI AutoExec] STAGED ${stageResult.dryRun ? '(DRY-RUN)' : ''}: ${stageResult.staged.length} positions staged for Monday, ${stageResult.skippedOrders.length} skipped`);
-        }
-      } catch (e) { console.error('[CRON] AI AutoExec staging failed:', e.message); }
+        console.log('[Orders] refreshing 679 pipeline for Carnivore qualification...');
+        await runOrdersPipeline({ type: 'CONFIRMED' });
+      } catch (e) { console.error('[CRON] 679 Orders refresh failed:', e.message); }
+      // Regenerate the AI Orders sheet (consumes fresh sector tiers + sector rotation).
+      try {
+        console.log('[AI Orders] regenerating order sheet...');
+        const ordersDoc = await runAiOrdersPipeline({ type: 'DAILY' });
+        console.log(`[AI Orders] done: ${ordersDoc.stats.totalOrders} orders this week`);
+      } catch (e) { console.error('[CRON] AI Orders pipeline failed:', e.message); }
+      // Stage weekly orders on FRIDAY ONLY — creates STAGED positions from order sheet.
+      // Execution happens Monday 9:35 AM via separate cron (executeWeeklyOrders).
+      const today = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
+      if (today === 'Friday') {
+        try {
+          const stageResult = await stageWeeklyOrders();
+          if (stageResult.skipped !== 'DISABLED') {
+            console.log(`[AI AutoExec] STAGED ${stageResult.dryRun ? '(DRY-RUN)' : ''}: ${stageResult.staged.length} positions staged for Monday, ${stageResult.skippedOrders.length} skipped`);
+          }
+        } catch (e) { console.error('[CRON] AI AutoExec staging failed:', e.message); }
+      }
     }
   } finally {
     aiUniverseDailyRunning = false;
@@ -6402,7 +6430,9 @@ cron.schedule('0 20 * * 0', async () => {
 }, { timezone: 'America/New_York' });
 
 // ── Cron: AI 300 stale hunt check — daily at 4:32pm ET (after 4:15 pipeline)
+// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
 cron.schedule('32 16 * * 1-5', async () => {
+  if (await isAmbushModeActive()) { console.log('[AI PosManager] stale hunt skipped — AMBUSH MODE active'); return; }
   try {
     console.log('[AI PosManager] running daily stale hunt check...');
     const result = await runAiStaleHuntCheck();
@@ -6411,7 +6441,9 @@ cron.schedule('32 16 * * 1-5', async () => {
 }, { timezone: 'America/New_York' });
 
 // ── Cron: AI 300 Monday execution — promotes STAGED → ACTIVE, enqueues orders
+// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
 cron.schedule('35 9 * * 1', async () => {
+  if (await isAmbushModeActive()) { console.log('[AI AutoExec] Monday exec skipped — AMBUSH MODE active'); return; }
   try {
     console.log('[AI AutoExec] Monday execution — promoting STAGED positions...');
     const result = await executeWeeklyOrders();
@@ -6422,7 +6454,9 @@ cron.schedule('35 9 * * 1', async () => {
 }, { timezone: 'America/New_York' });
 
 // ── Cron: PNTHR MCE — daily 10:30 AM ET, Mon-Fri — auto-execute MCE breakout signals
+// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
 cron.schedule('30 10 * * 1-5', async () => {
+  if (await isAmbushModeActive()) { console.log('[MCE AutoExec] MCE scan skipped — AMBUSH MODE active'); return; }
   try {
     console.log('[MCE AutoExec] Daily MCE scan — checking for breakout signals...');
     const result = await executeMceEntries();
@@ -6435,9 +6469,17 @@ cron.schedule('30 10 * * 1-5', async () => {
 // ── Cron: AI 300 intraday grade monitor — every 60s during market hours ──────
 // Recomputes gap% + EMA slope for WAIT LONG / LONG orders using live prices.
 // When an order upgrades to ★ BUY LONG (BEST), it auto-stages for execution.
+// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
 let aiGradeMonitorRunning = false;
+let _ambushModeCache = { value: false, checkedAt: 0 };
 setInterval(async () => {
   if (aiGradeMonitorRunning) return;
+  // Cache Ambush mode check for 5 min to avoid DB hit every 60s
+  if (Date.now() - _ambushModeCache.checkedAt > 300_000) {
+    _ambushModeCache.value = await isAmbushModeActive();
+    _ambushModeCache.checkedAt = Date.now();
+  }
+  if (_ambushModeCache.value) return;
   const now = new Date();
   const etOpts = { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false };
   const [hStr, mStr] = now.toLocaleString('en-US', etOpts).split(':');
@@ -6462,7 +6504,9 @@ setInterval(async () => {
 }, 60_000);
 
 // ── Cron: AI 300 weekly stop ratchet + structural exit — Friday 4:35pm ET
+// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
 cron.schedule('35 16 * * 5', async () => {
+  if (await isAmbushModeActive()) { console.log('[AI PosManager] weekly ratchet skipped — AMBUSH MODE active'); return; }
   try {
     console.log('[AI PosManager] running weekly stop ratchet + structural exit...');
     const result = await runAiWeeklyRatchet();
@@ -6575,6 +6619,26 @@ cron.schedule('15 17 * * 1-5', async () => {
     console.error('[Hourly Candles] Failed:', err.message);
   } finally {
     hourlyCandelRunning = false;
+  }
+}, { timezone: 'America/New_York' });
+
+// ── Cron: PNTHR AMBUSH — hourly tick during market hours ───────────────────
+// Runs at :05 past each hour from 10:35 to 16:05 ET (Mon-Fri).
+// 10:35 captures first-hour bar (9:30-10:30), then hourly through close.
+// Gated by AMBUSH_ENABLED in the pnthr_ambush_config MongoDB collection.
+let ambushCronRunning = false;
+cron.schedule('5 10-16 * * 1-5', async () => {
+  if (ambushCronRunning) return;
+  ambushCronRunning = true;
+  try {
+    const result = await runAmbushTick();
+    if (result.skipped !== 'DISABLED') {
+      console.log(`[Ambush Cron] ${result.actions?.length || 0} actions, ${result.errors?.length || 0} errors`);
+    }
+  } catch (err) {
+    console.error('[Ambush Cron] tick failed:', err.message);
+  } finally {
+    ambushCronRunning = false;
   }
 }, { timezone: 'America/New_York' });
 
@@ -8310,6 +8374,55 @@ app.post('/api/admin/ibkr-outbox/:id/failed', authenticateJWT, requireAdmin, asy
   try {
     const db = await connectToDatabase();
     await ibkrOutboxMarkFailed(db, req.params.id, req.body?.error || req.body || 'Unknown failure');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PNTHR AMBUSH outbox endpoints ─────────────────────────────────────────
+// Separate outbox for Ambush strategy. The bridge polls these endpoints
+// alongside the main ibkr-outbox. Commands: BUY_ENTRY, SHORT_ENTRY,
+// SELL_EXIT, COVER_EXIT, MODIFY_STOP, PLACE_LOT_TRIGGER.
+
+app.get('/api/admin/ambush-outbox/pending', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const limit = Math.min(50, parseInt(req.query.limit, 10) || 25);
+    const pending = await getAmbushPendingOrders(db, limit);
+    res.json({ commands: pending });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/ambush-outbox/:id/executing', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const result = await db.collection('pnthr_ambush_outbox').updateOne(
+      { id: req.params.id, status: 'PENDING' },
+      { $set: { status: 'EXECUTING', executingAt: new Date() } }
+    );
+    res.json({ ok: result.modifiedCount === 1 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/ambush-outbox/:id/done', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    await markAmbushOrderDone(db, req.params.id, req.body || null);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/ambush-outbox/:id/failed', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    await markAmbushOrderFailed(db, req.params.id, req.body?.error || req.body || 'Unknown failure');
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -11459,8 +11572,11 @@ app.listen(PORT, () => {
   // Phase 4 outbox indexes (idempotent — safe to run on every boot).
   // Errors are logged but never block startup.
   connectToDatabase()
-    .then(db => ensureIbkrOutboxIndexes(db))
-    .catch(err => console.warn('[ibkrOutbox] ensureIndexes failed:', err.message));
+    .then(db => {
+      ensureIbkrOutboxIndexes(db).catch(err => console.warn('[ibkrOutbox] ensureIndexes failed:', err.message));
+      ensureAmbushIndexes(db).catch(err => console.warn('[Ambush] ensureIndexes failed:', err.message));
+    })
+    .catch(err => console.warn('[startup] DB connect for indexes failed:', err.message));
   ensureAccessRequestIndexes().catch(() => {});
 
   // Seed admin AUM PIN if not already set

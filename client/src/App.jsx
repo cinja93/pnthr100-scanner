@@ -38,6 +38,7 @@ import AiHeatPage from './components/AiHeatPage';
 import JungleHeatPage from './components/JungleHeatPage';
 import AiSectorsPage from './components/AiSectorsPage';
 import AiOrdersPage from './components/AiOrdersPage';
+import AmbushPage from './components/AmbushPage';
 import AiKillPage from './components/AiKillPage';
 import SearchPage from './components/SearchPage';
 import PreyPage from './components/PreyPage';
@@ -1739,6 +1740,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR AI Orders — APEX v6 weekly order sheet (PIN protected) */}
           {renderPage === 'aiOrders' && <AumShield block showDuration><AiOrdersPage /></AumShield>}
+
+          {/* PNTHR AMBUSH — V7 intraday Kanban dashboard */}
+          {renderPage === 'ambush' && <AumShield block showDuration><AmbushPage /></AumShield>}
 
           {/* PNTHR AI Kill — v1 ranked predatory scoring */}
           {renderPage === 'aiKill' && <AiKillPage />}

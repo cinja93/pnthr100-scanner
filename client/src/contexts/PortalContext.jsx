@@ -29,10 +29,13 @@ export const PORTAL_PAGES = {
   investor: ['ai-ir-live', 'ai-data-room', 'perch', 'earnings', 'aiPulse', 'ai300Index', 'bondHeat', 'aiKill', 'search', 'aiJungle', 'aiSectors', 'aiHeat', 'etf'],
   // VIP: member-scoped view. Per-user data isolation (portfolio/journal/
   // assistant/watchlist) is enforced server-side via ownerId filters.
+  // NOTE: 'orders' and 'aiOrders' REMOVED — those pages expose the fund's
+  // live order pipeline (ticker names, lot sizes, stops, entry prices) which
+  // is admin-only trade execution data, not member-facing content.
   vip: [
     'ir-live', 'ai-ir-live', 'data-room', 'ai-data-room', 'perch', 'earnings',
     'pulse', 'aiPulse', 'ai300Index', 'bondHeat',
-    'orders', 'aiOrders', 'prey', 'apex', 'aiKill', 'search',
+    'prey', 'apex', 'aiKill', 'search',
     'jungle', 'aiJungle', 'sectors', 'aiSectors',
     'jungleHeat', 'aiHeat', 'etf', 'long', 'short',
     'assistant', 'journal', 'watchlist', 'portfolio',

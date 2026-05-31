@@ -157,10 +157,10 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
     const exitDate = new Date(exit.time);
     const weeksBetween = Math.round((exitDate - entryDate) / (7 * 24 * 60 * 60 * 1000));
 
-    // ── Entry label: "PNTHR Buy Signal" — below the bars, arrow up to entry candle ──
+    // ── Entry label — below the bars, arrow up to entry candle ──
     {
-      const line1 = 'PNTHR Buy Signal';
-      const line2 = `Buy @ $${entryPrice.toFixed(2)}`;
+      const line1 = isLong ? 'PNTHR Buy Signal' : 'PNTHR Short Signal';
+      const line2 = isLong ? `Buy @ $${entryPrice.toFixed(2)}` : `Short @ $${entryPrice.toFixed(2)}`;
 
       ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
       const w1 = ctx.measureText(line1).width;
@@ -179,13 +179,14 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
         if (lx < 10) lx = 10;
 
         // Arrow from box up to the entry candle
-        ctx.strokeStyle = '#22ff66';
+        const entryColor = isLong ? '#22ff66' : '#ef4444';
+        ctx.strokeStyle = entryColor;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(entryX, ly);
         ctx.lineTo(entryX, belowEntry + 10);
         ctx.stroke();
-        ctx.fillStyle = '#22ff66';
+        ctx.fillStyle = entryColor;
         ctx.beginPath();
         ctx.moveTo(entryX, belowEntry + 6);
         ctx.lineTo(entryX - 5, belowEntry + 14);
@@ -194,34 +195,34 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
         ctx.fill();
 
         // Box background
-        ctx.fillStyle = 'rgba(22, 163, 106, 0.85)';
-        ctx.strokeStyle = '#22ff66';
+        ctx.fillStyle = isLong ? 'rgba(22, 163, 106, 0.85)' : 'rgba(220, 38, 38, 0.85)';
+        ctx.strokeStyle = entryColor;
         ctx.lineWidth = 1.5;
         roundRect(ctx, lx, ly, boxW, boxH, 4);
         ctx.fill();
         ctx.stroke();
 
-        // "PNTHR Buy Signal" — white
+        // Entry signal label — white
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText(line1, lx + boxW / 2, ly + 4);
 
-        // "Buy @ $XXX.XX"
-        ctx.fillStyle = '#d1fae5';
+        // "Buy/Short @ $XXX.XX"
+        ctx.fillStyle = isLong ? '#d1fae5' : '#fecaca';
         ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
         ctx.fillText(line2, lx + boxW / 2, ly + 20);
       }
     }
 
-    // ── Exit label: "PNTHR Sell Signal Results" — above the bars, arrow down to exit candle ──
+    // ── Exit label: profit results — above the bars, arrow down to exit candle ──
     {
       const profitDollar = featuredTrade?.profitDollar ?? exit.profitDollar;
       const profitPct = featuredTrade?.profitPct ?? exit.profitPct;
 
       if (profitDollar != null && profitPct != null) {
-        const titleStr = 'PNTHR Sell Signal Results';
+        const titleStr = isLong ? 'PNTHR Sell Signal Results' : 'PNTHR Cover Signal Results';
         const pctStr = `${Math.abs(profitPct).toFixed(2)}% Profit in ONLY ${weeksBetween} Week${weeksBetween !== 1 ? 's' : ''}!`;
         const dollarStr = `Profit = +$${Math.abs(profitDollar).toFixed(2)} per share!`;
 
@@ -265,7 +266,7 @@ function PerchChartModal({ ticker, featuredTrade, onClose }) {
           ctx.fill();
           ctx.stroke();
 
-          // "PNTHR Sell Signal Results" — bright yellow
+          // Profit title — bright yellow
           ctx.fillStyle = '#fcf000';
           ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
           ctx.textAlign = 'center';

@@ -12,7 +12,7 @@ const TIERS = {
   '100k': { key: '100k', label: 'Filet',        seedNav: 100000,  feeYr1to3: 30, feeYr4plus: 25 },
 };
 
-const CRISIS_EVENTS = [
+export const CRISIS_EVENTS = [
   { label: '2025 Liberation Day Correction', start: '2025-02-19', end: '2025-04-08' },
   { label: '2024 August Correction',         start: '2024-07-16', end: '2024-08-05' },
   { label: '2023 Regional Bank Crisis',      start: '2023-02-02', end: '2023-03-13' },
@@ -137,7 +137,7 @@ function topNDailyReturns(equity, dates, n, worst = false) {
   return items.slice(0, n);
 }
 
-function computeTradeStats(trades, seedNav, pnlScale) {
+export function computeTradeStats(trades, seedNav, pnlScale) {
   const closed = trades.filter(t => t.exitDate && t.exitReason && t.exitReason !== 'STILL_OPEN');
   function statsOf(arr, pnlField) {
     let wins = 0, losses = 0, grossWin = 0, grossLoss = 0;
@@ -178,7 +178,7 @@ function computeTradeStats(trades, seedNav, pnlScale) {
   };
 }
 
-function computeMarketCorrelation(grossDocs, benchDaily, fromDate) {
+export function computeMarketCorrelation(grossDocs, benchDaily, fromDate) {
   const benchByDate = new Map();
   for (const b of benchDaily) benchByDate.set(b.date, b.close);
   const grossSorted = grossDocs.map(d => ({ date: String(d.date).slice(0, 10), equity: +d.equity })).filter(d => d.date >= fromDate).sort((a, b) => a.date.localeCompare(b.date));
@@ -202,7 +202,7 @@ function computeMarketCorrelation(grossDocs, benchDaily, fromDate) {
   return { beta: +beta.toFixed(4), correlation: +correlation.toFixed(4), rSquared: +(correlation * correlation).toFixed(4), capmAlpha: +((pMean - beta * bMean) * 252 * 100).toFixed(2), observations: n };
 }
 
-function crisisAlpha(pnthrEquity, pnthrDates, spyDaily, events) {
+export function crisisAlpha(pnthrEquity, pnthrDates, spyDaily, events) {
   const spySorted = [...spyDaily].sort((a, b) => a.date.localeCompare(b.date));
   function findClose(series, dates, target) { for (let i = 0; i < dates.length; i++) if (dates[i] >= target) return { val: series[i] }; return null; }
   function findSpyClose(target) { for (const b of spySorted) if (b.date >= target) return { val: b.close }; return null; }
@@ -218,7 +218,7 @@ function crisisAlpha(pnthrEquity, pnthrDates, spyDaily, events) {
   });
 }
 
-function spyMetrics(spyDaily, metricsStartDate, endDate, seedNav, chartStartDate) {
+export function spyMetrics(spyDaily, metricsStartDate, endDate, seedNav, chartStartDate) {
   // Metrics computed from metricsStartDate (first trade date)
   const inRange = spyDaily.filter(b => b.date >= metricsStartDate && b.date <= endDate).sort((a, b) => a.date.localeCompare(b.date));
   if (inRange.length === 0) return null;
@@ -260,7 +260,7 @@ function spyMetrics(spyDaily, metricsStartDate, endDate, seedNav, chartStartDate
   };
 }
 
-function computeSide(docs, field) {
+export function computeSide(docs, field) {
   const dates = docs.map(d => String(d.date).slice(0, 10));
   const equity = docs.map(d => +d[field]);
   const ret = dailyReturns(equity);
@@ -374,7 +374,7 @@ async function getIrData(tierKey) {
   return result;
 }
 
-function buildSpyAnnualReturns(grossDocs, spyDaily, seedNav, firstTradeDate) {
+export function buildSpyAnnualReturns(grossDocs, spyDaily, seedNav, firstTradeDate) {
   const spySorted = [...spyDaily].sort((a, b) => a.date.localeCompare(b.date));
   const spyByDate = new Map(spySorted.map(b => [b.date, b.close]));
   const startFrom = firstTradeDate || String(grossDocs[0].date).slice(0, 10);

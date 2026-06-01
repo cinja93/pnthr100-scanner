@@ -76,6 +76,7 @@ import {
 import { ai300KillSimulationHandler } from './ai300KillSimulation.js';
 import { irLiveMetricsHandler, irLiveTradesHandler } from './irLiveService.js';
 import { carnivoreIrMetricsHandler, carnivoreIrTradesHandler } from './carnivoreIrService.js';
+import { ambushIrMetricsHandler, ambushIrTradesHandler } from './ambushIrService.js';
 import { runAi300KillTestDailyUpdate } from './ai300KillTestDailyUpdate.js';
 import { ai300KillTestMonthlyGet, ai300KillTestMetricsGet, ai300KillTestMonthlyGenerate, generateAi300MonthlySnapshots } from './ai300KillTestMonthly.js';
 import {
@@ -2968,6 +2969,10 @@ app.get('/api/ir-live/:tier/trades',  authenticateJWT, requireIrLiveAccess, irLi
 // ── Carnivore Quant Fund — Live Intelligence Report ─────────────────────────
 app.get('/api/carnivore-ir/:tier/metrics', authenticateJWT, requireIrLiveAccess, carnivoreIrMetricsHandler);
 app.get('/api/carnivore-ir/:tier/trades',  authenticateJWT, requireIrLiveAccess, carnivoreIrTradesHandler);
+
+// ── PNTHR Ambush V7.4 — Intelligence Report (no-gate + 2-bar; 3 tiers) ───────
+app.get('/api/ambush-ir/:tier/metrics', authenticateJWT, requireIrLiveAccess, ambushIrMetricsHandler);
+app.get('/api/ambush-ir/:tier/trades',  authenticateJWT, requireIrLiveAccess, ambushIrTradesHandler);
 
 // ── AI 300 Kill Test — Appearance Tracking ───────────────────────────────────
 app.get('/api/ai300-kill-appearances', authenticateJWT, requireAdmin, async (req, res) => {

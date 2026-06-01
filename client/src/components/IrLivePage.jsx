@@ -689,6 +689,16 @@ const FUND_CONFIG = {
     curveLabel: 'Carnivore Quant Fund',
     crisisHeader: 'Carnivore',
   },
+  ambush: {
+    name: 'PNTHR Ambush V7.4',
+    netLabel: 'AMBUSH (NET)',
+    compLabel: 'AMBUSH V7.4',
+    subtitle: (endDate) => `Backtest Performance Report | Nov 2022 – ${endDate} | Automated Intraday Pyramid (Long + Short, Any Regime) + 2-Bar Trailing Exit | PNTHR AI 300 Universe (~300 Names) | v7.4.0`,
+    apiBase: 'ambush-ir',
+    footer: 'AMBUSH V7.4',
+    curveLabel: 'Ambush V7.4',
+    crisisHeader: 'Ambush',
+  },
 };
 
 const AI300_METHODOLOGY = [
@@ -711,8 +721,20 @@ const CARNIVORE_METHODOLOGY = [
   { title: 'Execution Model', content: 'Signals are generated on Friday close; all entries execute at Monday open. Lot fills are capped at 2% of 20-day average daily volume per lot to ensure institutional executability. Stop fills use gap-through pricing (fill at open when gap exceeds stop level) for conservative modeling. All friction costs (commission, slippage, borrow) are included in net figures.' },
 ];
 
+const AMBUSH_METHODOLOGY = [
+  { title: 'The PNTHR AI 300 Universe', content: 'Approximately 300 AI-economy U.S. equities across 16 proprietary sectors of the artificial intelligence economy. Ambush trades this universe intraday on hourly bars, hunting opening-range breakouts in both directions.' },
+  { title: 'No Regime Gate (V7.4)', content: 'V7.4 removes the index regime gate entirely. Buy Long (BL+1) and Sell Short (SS+1) setups are taken in ANY PNTHR AI 300 regime — long breakouts and short breakdowns trade on their own merit. A per-sector AVOID gate still blocks names in structurally weak sectors. Removing the short gate is the single largest source of V7.4 performance: the short book contributes positive P&L in every calendar year, including bull runs, by capturing rotations and selloffs the prior version sat out.' },
+  { title: 'Opening-Range Breakout Entry', content: 'After the first hour of trading (09:30–10:30 ET) establishes the opening range, the engine enters on a confirmed break of the prior two-day high (long) or low (short) with intrabar confirmation. The first-hour low (long) / high (short) becomes the initial disaster stop — because the stop is tight, share count is maximized for a fixed dollar risk.' },
+  { title: 'Position Sizing & Five-Lot Pyramid', content: 'Fixed dollar risk per position: approximately $150 at the 50% launch tier (NAV below $125K), scaling to ~$300 at full size, capped by a 10% single-name limit and a 1% vitality limit. Graduated sizing runs 50% of full size below $125K NAV, 75% to $166K, then 100%. Each position pyramids across five lots (35/25/20/12/8% of planned shares) that add at +0/+3/+6/+10/+14% from the original entry. As lots fill, the stop ratchets up to the prior lot trigger, never worse than breakeven.' },
+  { title: 'Two-Bar Trailing Exit (V7.4)', content: 'V7.4 removes the fixed +$75 breakeven checkpoint. From the moment of entry, the two-bar broken-low trail governs the exit: the position exits when price breaks one cent below the lower of the two most recent completed hourly bars. The first-hour low remains the disaster floor beneath the trail. This keeps winners running and reduced portfolio drawdown versus the prior breakeven-snap logic.' },
+  { title: 'Re-Entry', content: 'After a stop-out, the engine re-arms and re-enters on a break of the two-bar high, sized for the same fixed dollar risk with a tighter stop. This recycles capital back into names that resume their move.' },
+  { title: 'Capital Discipline & Withdrawal Rule', content: 'A real-time cash ledger funds every entry — no leverage; peak gross deployed stays at or below 100% of NAV (a standard margin account permits roughly 2x). At every $2,000,000 of account value, $1,000,000 is banked and the engine trades only the remainder, bounding money-at-risk while compounding realized gains off the table.' },
+  { title: 'Execution Model & Costs', content: 'Sixty-second intraday tick engine. Entries and lot adds fill at the trigger price with adverse slippage; exits fill at the stop/trail with adverse slippage. All friction costs (real IBKR commissions, 5 bps slippage, modeled short borrow) are included in net figures. No look-ahead — signals and regime use only data available at each bar. Validated under stress: borrow ×10, gap/squeeze slippage, pessimistic fills, and year-by-year persistence.' },
+];
+
 function MethodologySection({ fund }) {
-  const sections = fund === 'carnivore' ? CARNIVORE_METHODOLOGY : AI300_METHODOLOGY;
+  const sections = fund === 'ambush' ? AMBUSH_METHODOLOGY
+    : fund === 'carnivore' ? CARNIVORE_METHODOLOGY : AI300_METHODOLOGY;
 
   return (
     <div>

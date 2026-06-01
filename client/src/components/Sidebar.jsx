@@ -40,6 +40,7 @@ const NAV_GROUPS = [
     info: 'investorsDen',
     items: [
       { key: 'ir-live',   label: 'Intelligence Report', badge: 'AI | Carnivore', badgeType: 'split', needsAccess: true },
+      { key: 'ambush-ir-live', label: '  Ambush V7.4', badge: 'AMBUSH', badgeType: 'live', needsAccess: true, accessKey: 'ir-live', irChild: true },
       { key: 'data-room', label: 'Data Room',            badge: 'AI | Carnivore', badgeType: 'split' },
     ],
   },
@@ -375,7 +376,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         .map(group => ({
           ...group,
           items: group.items.filter(item =>
-            !item.needsAccess || (userPages && userPages.includes(item.key))
+            !item.needsAccess || (userPages && userPages.includes(item.accessKey || item.key))
           ),
         }))
         .filter(group => group.items.length > 0);

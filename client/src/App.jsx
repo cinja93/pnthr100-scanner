@@ -935,7 +935,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const effectiveAllowed = useMemo(() => {
     if (!rawAllowed) return null;
     const map = {
-      'ai-ir-live': 'ir-live', 'ai-data-room': 'data-room', 'aiPulse': 'pulse',
+      'ai-ir-live': 'ir-live', 'ambush-ir-live': 'ir-live', 'ai-data-room': 'data-room', 'aiPulse': 'pulse',
       'aiOrders': 'orders', 'aiKill': 'apex', 'aiJungle': 'jungle',
       'aiSectors': 'sectors', 'aiHeat': 'jungleHeat', 'ai-signal-history': 'signal-history',
     };
@@ -1784,6 +1784,12 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* Intelligence Report Live — AI Elite 300 variant */}
           {renderPage === 'ai-ir-live' && (isAdmin || effectiveAllowed?.includes('ir-live')
             ? <IrLivePage fund="ai300" />
+            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>
+          )}
+
+          {/* Intelligence Report Live — Ambush V7.4 variant */}
+          {renderPage === 'ambush-ir-live' && (isAdmin || effectiveAllowed?.includes('ir-live')
+            ? <IrLivePage fund="ambush" />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>
           )}
 

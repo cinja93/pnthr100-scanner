@@ -46,7 +46,7 @@ import { calcCommission, calcBorrowCost } from '../backtest/costEngine.js';
 import {
   getAmbushPositions, getAmbushPosition, upsertAmbushPosition,
   deleteAmbushPosition, logAmbushTrade, enqueueAmbushOrder,
-  getAmbushConfig, updateAmbushConfig,
+  getAmbushConfig, updateAmbushConfig, recordAmbushAum,
 } from './ambushStateManager.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
@@ -1061,6 +1061,9 @@ async function _runAmbushTickInner() {
     },
     isFirstHour,
   };
+
+  // Daily actual-AUM snapshot for the Projected vs Actual tracker (end-of-day = last tick).
+  await recordAmbushAum(db, today, nav);
 
   await updateAmbushConfig(db, {
     lastCronRun: now,

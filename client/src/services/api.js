@@ -1316,6 +1316,12 @@ export async function fetchAmbushConfig() {
   return res.json();
 }
 
+export async function fetchAmbushProjection() {
+  const res = await apiFetch(`${API_BASE}/api/ambush/projection`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function updateAmbushConfig(updates) {
   const res = await apiFetch(`${API_BASE}/api/ambush/config`, {
     method: 'POST',

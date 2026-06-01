@@ -222,3 +222,20 @@ export async function getAmbushSummary(db) {
     },
   };
 }
+
+// ── Daily actual-AUM snapshots (for the Projected vs Actual tracker) ─────────
+const AUM_DAILY_COLLECTION = 'pnthr_ambush_aum_daily';
+
+export async function recordAmbushAum(db, date, actualAum) {
+  if (!date || typeof actualAum !== 'number' || actualAum <= 0) return;
+  return db.collection(AUM_DAILY_COLLECTION).updateOne(
+    { date },
+    { $set: { date, actualAum: +actualAum.toFixed(2), updatedAt: new Date() } },
+    { upsert: true }
+  );
+}
+
+export async function getAmbushAumSeries(db) {
+  return db.collection(AUM_DAILY_COLLECTION).find({}, { projection: { _id: 0, date: 1, actualAum: 1 } })
+    .sort({ date: 1 }).toArray();
+}

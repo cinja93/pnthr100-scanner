@@ -14,13 +14,46 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { Router } from 'express';
-import { connectToDatabase } from '../database.js';
+import fs from 'fs';
+import { connectToDatabase, getUserProfile } from '../database.js';
 import {
   getAmbushSummary, getAmbushPositions, getAmbushTrades,
   getRecentAmbushOrders, getAmbushConfig, updateAmbushConfig,
   deleteAmbushPosition, ensureAmbushIndexes,
+  recordAmbushAum, getAmbushAumSeries,
 } from './ambushStateManager.js';
 import { runAmbushTick } from './ambushCron.js';
+
+// ── Projection helpers (Projected vs Actual AUM tracker) ────────────────────
+const _projPath = new URL('../data/ambushProjectionBaseline.json', import.meta.url).pathname;
+let _projData = null;
+function loadProjection() {
+  if (!_projData) {
+    try { _projData = JSON.parse(fs.readFileSync(_projPath, 'utf8')); }
+    catch { _projData = { factors: [], backtestStartNav: 83000, backtestEndNav: 0 }; }
+  }
+  return _projData;
+}
+function etDateStr(d = new Date()) {
+  const p = {};
+  for (const { type, value } of new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d)) p[type] = value;
+  return `${p.year}-${p.month}-${p.day}`;
+}
+function addWeekdays(startISO, n) {
+  const d = new Date(startISO + 'T12:00:00');
+  let added = 0;
+  while (added < n) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w !== 0 && w !== 6) added++; }
+  return d.toISOString().split('T')[0];
+}
+function weekdaysBetween(startISO, endISO) {
+  if (!endISO || endISO <= startISO) return 0;
+  const e = new Date(endISO + 'T12:00:00'); const d = new Date(startISO + 'T12:00:00');
+  let n = 0;
+  while (d < e) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w !== 0 && w !== 6) n++; }
+  return n;
+}
 
 export function createAmbushRouter(authenticateJWT, requireAdmin) {
   const router = Router();
@@ -136,6 +169,57 @@ export function createAmbushRouter(authenticateJWT, requireAdmin) {
       res.json({ ok: true, deleted: result.deletedCount });
     } catch (err) {
       console.error('[Ambush API] reset error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/ambush/projection — Projected (backtest, pure compounding) vs Actual AUM
+  router.get('/projection', async (req, res) => {
+    try {
+      const db = await connectToDatabase();
+      const config = await getAmbushConfig(db);
+      const proj = loadProjection();
+      const factors = proj.factors || [];
+
+      // Current actual NAV (IBKR-synced accountSize -> config.nav -> $83k)
+      let actualNav = config.nav || 83000;
+      if (config.ownerId) {
+        try { const p = await getUserProfile(config.ownerId); if (p?.accountSize > 0) actualNav = p.accountSize; } catch {}
+      }
+      const todayISO = etDateStr();
+
+      // Anchor: lock the projection start (date + AUM) on first call.
+      let projectionStartDate = config.projectionStartDate;
+      let projectionStartAum = config.projectionStartAum;
+      if (!projectionStartDate || !projectionStartAum) {
+        projectionStartDate = todayISO;
+        projectionStartAum = actualNav;
+        await updateAmbushConfig(db, { projectionStartDate, projectionStartAum });
+      }
+
+      // Record today's actual snapshot, then read the actual series.
+      await recordAmbushAum(db, todayISO, actualNav);
+      const actualSeries = await getAmbushAumSeries(db);
+
+      // Projected forward curve: backtest growth factor x anchor AUM, mapped to weekday dates.
+      const projected = factors.map(f => ({
+        date: f.i === 0 ? projectionStartDate : addWeekdays(projectionStartDate, f.i),
+        value: +(projectionStartAum * f.factor).toFixed(0),
+      }));
+
+      const elapsed = Math.min(weekdaysBetween(projectionStartDate, todayISO), Math.max(0, factors.length - 1));
+      const projectedToday = +(projectionStartAum * (factors[elapsed]?.factor || 1)).toFixed(0);
+      const onTrackPct = projectedToday > 0 ? +(((actualNav / projectedToday) - 1) * 100).toFixed(1) : 0;
+
+      res.json({
+        anchor: { startDate: projectionStartDate, startAum: +projectionStartAum.toFixed(0) },
+        current: { date: todayISO, projectedAum: projectedToday, actualAum: +(+actualNav).toFixed(0), onTrackPct },
+        projected,
+        actual: actualSeries.map(s => ({ date: s.date, value: s.actualAum })),
+        meta: { backtestEndNav: proj.backtestEndNav, tradingDays: factors.length, basis: 'pure compounding (no withdrawals)' },
+      });
+    } catch (err) {
+      console.error('[Ambush API] projection error:', err.message);
       res.status(500).json({ error: err.message });
     }
   });

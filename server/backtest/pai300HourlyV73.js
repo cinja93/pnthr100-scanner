@@ -729,7 +729,25 @@ async function main() {
       [s.date, s.positions, s.cash, s.deployed, s.nav, s.withdrawn].join(','));
     fs.writeFileSync(path.join(dl, 'PNTHR_Ambush_V7.3_CashLedger.csv'), [cHead.join(','), ...cRows].join('\n'));
     console.log(`\n  Exported to ~/Downloads: PNTHR_Ambush_V7.3_ClosedTrades.csv (${tRows.length} trades), PNTHR_Ambush_V7.3_CashLedger.csv (${cRows.length} days)`);
-  } catch (e) { console.error('  CSV export failed:', e.message); }
+
+    // ── Projection curve for the live dashboard (GRAD BASELINE = pure compounding) ──
+    // Stores daily growth factors (NAV / startNAV) so the app can rebase to any AUM.
+    const base = gradResults[0]; // GRAD BASELINE
+    const startNav = NAV_INITIAL;
+    const factors = (base.dailyLedger || []).map((s, i) => ({
+      i, date: s.date, factor: +(s.nav / startNav).toFixed(6),
+    }));
+    const projOut = {
+      generatedFrom: 'pai300HourlyV73.js GRAD BASELINE (pure compounding, no withdrawals)',
+      backtestStartNav: startNav,
+      backtestEndNav: Math.round(base.equity),
+      tradingDays: factors.length,
+      factors,
+    };
+    const projPath = new URL('../data/ambushProjectionBaseline.json', import.meta.url).pathname;
+    fs.writeFileSync(projPath, JSON.stringify(projOut));
+    console.log(`  Wrote projection curve: server/data/ambushProjectionBaseline.json (${factors.length} days, end factor ${factors[factors.length-1]?.factor})`);
+  } catch (e) { console.error('  CSV/projection export failed:', e.message); }
 
   // ── WORST-TRADE DIAGNOSTIC ──────────────────────────────────────────────────
   for (const [tag, res] of [['FULL BASELINE', fullResults[0]], ['GRAD BASELINE', gradResults[0]]]) {

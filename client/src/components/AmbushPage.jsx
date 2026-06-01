@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchAmbushSummary, updateAmbushConfig, triggerAmbushTick, deleteAmbushPosition } from '../services/api';
+import { fetchAmbushSummary, updateAmbushConfig, triggerAmbushTick, deleteAmbushPosition, fetchAmbushProjection } from '../services/api';
 import PageHeader from './PageHeader';
 import styles from './AmbushPage.module.css';
 
@@ -269,6 +269,103 @@ function DirBadge({ direction }) {
   );
 }
 
+// ── AUM tracker: Projected (backtest, pure compounding) vs Actual ───────────
+function fmtAum(n) {
+  if (n == null || isNaN(n)) return '--';
+  const v = Number(n);
+  if (Math.abs(v) >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
+  if (Math.abs(v) >= 1e3) return '$' + (v / 1e3).toFixed(1) + 'K';
+  return '$' + v.toFixed(0);
+}
+
+function AumChart({ projected, actual }) {
+  if (!projected?.length) return null;
+  const W = 1000, H = 230, padL = 6, padR = 6, padT = 12, padB = 24;
+  const proj = projected, act = actual || [];
+  const maxV = Math.max(...proj.map(p => p.value), ...act.map(a => a.value));
+  const minV = Math.min(proj[0].value, ...act.map(a => a.value));
+  const anchor = new Date(proj[0].date + 'T12:00:00');
+  const last = new Date(proj[proj.length - 1].date + 'T12:00:00');
+  const span = (last - anchor) || 1;
+  const xd = ds => padL + ((new Date(ds + 'T12:00:00') - anchor) / span) * (W - padL - padR);
+  const y = v => padT + (1 - (v - minV) / ((maxV - minV) || 1)) * (H - padT - padB);
+  // downsample projected to ~250 pts for a light polyline
+  const step = Math.max(1, Math.floor(proj.length / 250));
+  const projPts = proj.filter((_, i) => i % step === 0 || i === proj.length - 1)
+    .map(p => `${xd(p.date).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+  const actPts = act.map(a => `${xd(a.date).toFixed(1)},${y(a.value).toFixed(1)}`).join(' ');
+  const yearTicks = [];
+  for (let yr = anchor.getFullYear(); yr <= last.getFullYear(); yr++) yearTicks.push(yr);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 230, display: 'block' }}>
+      {/* y gridlines */}
+      {[0, 0.5, 1].map((f, i) => {
+        const v = minV + f * (maxV - minV);
+        return (
+          <g key={i}>
+            <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#222" strokeWidth="1" />
+            <text x={padL + 2} y={y(v) - 3} fill="#555" fontSize="11">{fmtAum(v)}</text>
+          </g>
+        );
+      })}
+      {/* x year labels */}
+      {yearTicks.map((yr, i) => {
+        const xp = xd(`${yr}-01-02`);
+        if (xp < padL || xp > W - padR) return null;
+        return <text key={i} x={xp} y={H - 6} fill="#555" fontSize="11" textAnchor="middle">{yr}</text>;
+      })}
+      <polyline points={projPts} fill="none" stroke="#3b82f6" strokeWidth="2" />
+      {actPts && <polyline points={actPts} fill="none" stroke="#22c55e" strokeWidth="2.5" />}
+    </svg>
+  );
+}
+
+function AumTracker({ projection }) {
+  if (!projection?.current) return null;
+  const { current, projected, actual, anchor } = projection;
+  const onTrack = (current.onTrackPct ?? 0) >= 0;
+  const box = (label, value, color) => (
+    <div style={{ background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8, padding: '8px 14px', minWidth: 150 }}>
+      <div style={{ color: '#888', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ color, fontSize: 22, fontWeight: 700, fontFamily: 'monospace' }}>{fmtAum(value)}</div>
+    </div>
+  );
+  return (
+    <div style={{ position: 'relative', background: '#0d0d0d', border: '1px solid #222', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div>
+          <div style={{ color: '#3b82f6', fontWeight: 700, fontSize: 13, letterSpacing: '0.04em' }}>
+            PROJECTED vs ACTUAL AUM <span style={{ color: '#555', fontWeight: 400 }}>· backtest, pure compounding</span>
+          </div>
+          <div style={{ color: '#555', fontSize: 11, marginTop: 2 }}>
+            Anchored {anchor?.startDate} at {fmtAum(anchor?.startAum)} · projects to {fmtAum(projection.meta?.backtestEndNav)}
+          </div>
+        </div>
+        {/* the 2 boxes — upper right */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+          {box('Projected AUM', current.projectedAum, '#3b82f6')}
+          {box('Actual AUM', current.actualAum, '#22c55e')}
+          <span style={{
+            fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 6,
+            color: onTrack ? '#22c55e' : '#ef4444',
+            background: (onTrack ? '#22c55e' : '#ef4444') + '1a',
+            border: `1px solid ${(onTrack ? '#22c55e' : '#ef4444')}44`,
+          }}>
+            {onTrack ? 'ON TRACK' : 'BEHIND'} {current.onTrackPct >= 0 ? '+' : ''}{current.onTrackPct}% vs backtest
+          </span>
+        </div>
+      </div>
+      <div style={{ marginTop: 6 }}>
+        <AumChart projected={projected} actual={actual} />
+      </div>
+      <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#888', marginTop: 2 }}>
+        <span><span style={{ color: '#3b82f6' }}>━</span> Projected (backtest)</span>
+        <span><span style={{ color: '#22c55e' }}>━</span> Actual (your account)</span>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 //  MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
@@ -282,6 +379,7 @@ export default function AmbushPage() {
   const [expanded, setExpanded] = useState({});
   const [showOutbox, setShowOutbox] = useState(false);
   const [showActions, setShowActions] = useState(true);
+  const [projection, setProjection] = useState(null);
   const refreshRef = useRef(null);
 
   const loadData = useCallback(async () => {
@@ -294,6 +392,7 @@ export default function AmbushPage() {
     } finally {
       setLoading(false);
     }
+    fetchAmbushProjection().then(setProjection).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -411,6 +510,9 @@ export default function AmbushPage() {
           </button>
         </div>
       </div>
+
+      {/* ═══ PROJECTED vs ACTUAL AUM ═══ */}
+      <AumTracker projection={projection} />
 
       {/* ═══ WITHDRAWAL ALERT ($2M rule) ═══ */}
       {lastResult.withdrawalAlert?.due && (

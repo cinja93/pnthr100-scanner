@@ -331,13 +331,39 @@ function updateFirstHourTracking(pos, price) {
 
 let _tickRunning = false;
 
+// Cross-instance lock: only ONE engine (across ALL server instances) can process a
+// given tick, so a rolling deploy / autoscale / stray server can never double-process
+// the same positions and double real orders. Classic MongoDB lock on a fixed _id.
+async function _acquireTickLock(db) {
+  try {
+    await db.collection('pnthr_ambush_lock').findOneAndUpdate(
+      { _id: 'tick', lockedUntil: { $lt: new Date() } },
+      { $set: { lockedUntil: new Date(Date.now() + 55000), at: new Date() } },
+      { upsert: true }
+    );
+    return true; // acquired (inserted or refreshed an expired lock)
+  } catch (e) {
+    if (e && e.code === 11000) return false; // another instance holds the lock
+    throw e;
+  }
+}
+// No explicit release: the 55s lease (< the 60s cron interval) holds the lock for the
+// rest of the minute so no second instance can sneak a same-minute run, then expires
+// on its own before the next tick. Self-healing if a holder dies mid-tick.
+
 export async function runAmbushTick() {
   if (_tickRunning) {
     console.warn('[Ambush] Tick already in progress — skipping');
     return { skipped: 'ALREADY_RUNNING' };
   }
   _tickRunning = true;
+  let lockDb = null;
   try {
+    lockDb = await connectToDatabase();
+    if (lockDb) {
+      const got = await _acquireTickLock(lockDb);
+      if (!got) { return { skipped: 'LOCKED_BY_OTHER_INSTANCE' }; }
+    }
     return await _runAmbushTickInner();
   } finally {
     _tickRunning = false;

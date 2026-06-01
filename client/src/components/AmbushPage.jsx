@@ -94,20 +94,35 @@ function totalPlannedShares(pos) {
   return pos.lotPlan ? pos.lotPlan.reduce((s, v) => s + v, 0) : 0;
 }
 
-// ── Info Popup Component ───────────────────────────────────────────────────
+// ── Info Popup Component (fixed-positioned so it never clips inside a section) ─
 function InfoPopup({ text, wide }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const iconRef = useRef(null);
+  const W = wide ? 340 : 280;
+  const toggle = (e) => {
+    e.stopPropagation();
+    if (!open && iconRef.current) {
+      const r = iconRef.current.getBoundingClientRect();
+      let left = r.left - 8;
+      if (left + W > window.innerWidth - 8) left = window.innerWidth - W - 8;
+      if (left < 8) left = 8;
+      const openUp = (window.innerHeight - r.bottom) < 240; // flip up near the bottom
+      setPos(openUp
+        ? { left, bottom: window.innerHeight - r.top + 6 }
+        : { left, top: r.bottom + 6 });
+    }
+    setOpen(o => !o);
+  };
   return (
-    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-      <span
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
-        className={styles.infoCircle}
-        title="Click for info"
-      >i</span>
-      {open && (
+    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+      <span ref={iconRef} onClick={toggle} className={styles.infoCircle} title="Click for info">i</span>
+      {open && pos && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 999 }} />
-          <div className={styles.infoPopup} style={wide ? { width: 340 } : undefined}>
+          <div className={styles.infoPopup} style={{
+            position: 'fixed', left: pos.left, top: pos.top ?? 'auto', bottom: pos.bottom ?? 'auto', width: W, zIndex: 1000,
+          }}>
             {text}
           </div>
         </>

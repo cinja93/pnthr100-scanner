@@ -1,7 +1,7 @@
 /* AmbushPage.module.css — PNTHR Ambush V7.3 Dashboard */
 
 .page {
-  padding: 24px;
+  padding: 24px 24px 260px;
   max-width: 1600px;
   margin: 0 auto;
   background: #09090b;
@@ -508,7 +508,7 @@
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 900px) {
-  .page { padding: 12px; }
+  .page { padding: 12px 12px 260px; }
   .statusTop { gap: 10px; }
   .lotDetail { flex-direction: column; gap: 16px; }
 }

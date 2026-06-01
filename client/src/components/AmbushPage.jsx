@@ -580,6 +580,15 @@ export default function AmbushPage() {
   };
   const livePositions = [...byState.PROTECT, ...byState.ACTIVE]; // PROTECT first (more important)
 
+  // Live total: current unrealized P&L across all open positions (refreshes each 60s poll).
+  const totalOpenPnl = livePositions.reduce((s, p) => {
+    if (!p.avgCost || !p.livePrice || !p.totalShares) return s;
+    const u = p.direction === 'LONG'
+      ? (p.livePrice - p.avgCost) * p.totalShares
+      : (p.avgCost - p.livePrice) * p.totalShares;
+    return s + u;
+  }, 0);
+
   const nav = lastResult.nav || config.nav || 83000;
   const navSource = lastResult.navSource || 'config';
   const sizingTier = lastResult.sizingTier || getSizingTier(nav);
@@ -744,7 +753,13 @@ export default function AmbushPage() {
                   <th style={{ textAlign: 'right' }}>Risk $ <InfoPopup text="Maximum loss if stopped out now: (avg cost - stop) x shares for LONG." /></th>
                   <th style={{ textAlign: 'right' }}>RPS <InfoPopup text="Risk Per Share = avg cost minus stop. Used for position sizing." /></th>
                   <th>Lots <InfoPopup text="5-lot pyramid: L1 at entry (35%), L2 +3% (25%), L3 +6% (20%), L4 +10% (12%), L5 +14% (8%)." /></th>
-                  <th style={{ textAlign: 'right' }}>Peak P&L <InfoPopup text="Highest unrealized P&L reached. Break Even triggers at $75." /></th>
+                  <th style={{ textAlign: 'right' }}>
+                    Peak P&L <InfoPopup text="Per row: highest unrealized P&L each position reached (Break Even triggers at $75). The bold number here is the LIVE total — current unrealized P&L across all open positions, refreshed every 60s with the cron." wide />
+                    <div style={{ fontSize: 13, fontWeight: 700, color: totalOpenPnl >= 0 ? '#22c55e' : '#ef4444', marginTop: 2 }}>
+                      {totalOpenPnl >= 0 ? '+' : ''}{fmtUsd(totalOpenPnl)}
+                    </div>
+                    <div style={{ fontSize: 9, color: '#666', fontWeight: 400 }}>open total</div>
+                  </th>
                   <th>Cycle</th>
                   <th>Date</th>
                   <th></th>

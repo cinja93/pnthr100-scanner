@@ -201,13 +201,23 @@ export function createAmbushRouter(authenticateJWT, requireAdmin) {
       await recordAmbushAum(db, todayISO, actualNav);
       const actualSeries = await getAmbushAumSeries(db);
 
-      // Projected forward curve: backtest growth factor x anchor AUM, mapped to weekday dates.
-      const projected = factors.map(f => ({
-        date: f.i === 0 ? projectionStartDate : addWeekdays(projectionStartDate, f.i),
+      // Projected forward curve: backtest growth factor x anchor AUM, mapped to weekday
+      // dates. Uses the full backtest (~3.5 years); no extrapolation beyond the data.
+      const N = factors.length;
+      const dates = N ? [projectionStartDate] : [];
+      {
+        const d = new Date(projectionStartDate + 'T12:00:00');
+        for (let i = 1; i < N; i++) {
+          do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+          dates.push(d.toISOString().split('T')[0]);
+        }
+      }
+      const projected = factors.map((f, i) => ({
+        date: dates[i],
         value: +(projectionStartAum * f.factor).toFixed(0),
       }));
 
-      const elapsed = Math.min(weekdaysBetween(projectionStartDate, todayISO), Math.max(0, factors.length - 1));
+      const elapsed = Math.min(weekdaysBetween(projectionStartDate, todayISO), Math.max(0, N - 1));
       const projectedToday = +(projectionStartAum * (factors[elapsed]?.factor || 1)).toFixed(0);
       const onTrackPct = projectedToday > 0 ? +(((actualNav / projectedToday) - 1) * 100).toFixed(1) : 0;
 
@@ -216,6 +226,7 @@ export function createAmbushRouter(authenticateJWT, requireAdmin) {
         current: { date: todayISO, projectedAum: projectedToday, actualAum: +(+actualNav).toFixed(0), onTrackPct },
         projected,
         actual: actualSeries.map(s => ({ date: s.date, value: s.actualAum })),
+        metrics: proj.metrics || null,
         meta: { backtestEndNav: proj.backtestEndNav, tradingDays: factors.length, basis: 'pure compounding (no withdrawals)' },
       });
     } catch (err) {

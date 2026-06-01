@@ -320,13 +320,62 @@ function AumChart({ projected, actual }) {
   );
 }
 
+function AumTableModal({ view, projection, onClose }) {
+  const isProj = view === 'projected';
+  const series = isProj ? (projection.projected || []) : (projection.actual || []);
+  // Projected: one row per month (first weekday of each month). Actual: every snapshot.
+  let rows = series;
+  if (isProj) {
+    const seen = new Set(); rows = [];
+    for (const p of series) { const ym = p.date.slice(0, 7); if (!seen.has(ym)) { seen.add(ym); rows.push(p); } }
+  }
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#0d0d0d', border: '1px solid #2a2a2a', borderRadius: 10, width: 440, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid #222' }}>
+          <div style={{ color: isProj ? '#3b82f6' : '#22c55e', fontWeight: 700, fontSize: 14 }}>
+            {isProj ? 'Projected AUM — month by month' : 'Actual AUM — daily history'}
+          </div>
+          <span onClick={onClose} style={{ cursor: 'pointer', color: '#888', fontSize: 20, lineHeight: 1 }}>×</span>
+        </div>
+        <div style={{ overflowY: 'auto', padding: '0 16px 12px' }}>
+          {rows.length === 0 ? (
+            <div style={{ color: '#666', padding: '18px 0' }}>No data yet{isProj ? '.' : ' — fills in as the engine records daily NAV.'}</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ color: '#777', textAlign: 'left' }}>
+                  <th style={{ padding: '8px 0', position: 'sticky', top: 0, background: '#0d0d0d' }}>{isProj ? 'Month' : 'Date'}</th>
+                  <th style={{ padding: '8px 0', textAlign: 'right', position: 'sticky', top: 0, background: '#0d0d0d' }}>{isProj ? 'Projected' : 'Actual'} AUM</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i} style={{ borderTop: '1px solid #1a1a1a' }}>
+                    <td style={{ padding: '6px 0', color: '#ccc' }}>{isProj ? r.date.slice(0, 7) : r.date}</td>
+                    <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'monospace', color: isProj ? '#3b82f6' : '#22c55e' }}>{fmtAum(r.value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AumTracker({ projection }) {
+  const [showChart, setShowChart] = useState(false);
+  const [tableView, setTableView] = useState(null);
   if (!projection?.current) return null;
   const { current, projected, actual, anchor } = projection;
   const onTrack = (current.onTrackPct ?? 0) >= 0;
-  const box = (label, value, color) => (
-    <div style={{ background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8, padding: '8px 14px', minWidth: 150 }}>
-      <div style={{ color: '#888', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
+  const box = (label, value, color, onClick) => (
+    <div onClick={onClick} title="Click for the full table" style={{ cursor: 'pointer', background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8, padding: '8px 14px', minWidth: 175 }}>
+      <div style={{ color: '#888', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+        <span>{label}</span><span style={{ color: '#555' }}>▸ table</span>
+      </div>
       <div style={{ color, fontSize: 22, fontWeight: 700, fontFamily: 'monospace' }}>{fmtAum(value)}</div>
     </div>
   );
@@ -338,13 +387,16 @@ function AumTracker({ projection }) {
             PROJECTED vs ACTUAL AUM <span style={{ color: '#555', fontWeight: 400 }}>· backtest, pure compounding</span>
           </div>
           <div style={{ color: '#555', fontSize: 11, marginTop: 2 }}>
-            Anchored {anchor?.startDate} at {fmtAum(anchor?.startAum)} · projects to {fmtAum(projection.meta?.backtestEndNav)}
+            Anchored {anchor?.startDate} at {fmtAum(anchor?.startAum)} · projects to {fmtAum(projection.meta?.backtestEndNav)} over ~3.5 yrs
           </div>
+          <button onClick={() => setShowChart(s => !s)} style={{ marginTop: 8, background: '#161616', border: '1px solid #2a2a2a', color: '#aaa', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>
+            {showChart ? '▲ Hide chart' : '▼ Show chart'}
+          </button>
         </div>
-        {/* the 2 boxes — upper right */}
+        {/* the 2 boxes — upper right, click for table */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-          {box('Projected AUM', current.projectedAum, '#3b82f6')}
-          {box('Actual AUM', current.actualAum, '#22c55e')}
+          {box('Projected AUM', current.projectedAum, '#3b82f6', () => setTableView('projected'))}
+          {box('Actual AUM', current.actualAum, '#22c55e', () => setTableView('actual'))}
           <span style={{
             fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 6,
             color: onTrack ? '#22c55e' : '#ef4444',
@@ -355,13 +407,45 @@ function AumTracker({ projection }) {
           </span>
         </div>
       </div>
-      <div style={{ marginTop: 6 }}>
-        <AumChart projected={projected} actual={actual} />
-      </div>
-      <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#888', marginTop: 2 }}>
-        <span><span style={{ color: '#3b82f6' }}>━</span> Projected (backtest)</span>
-        <span><span style={{ color: '#22c55e' }}>━</span> Actual (your account)</span>
-      </div>
+
+      {/* Hedge-fund metric cards from the backtest (GRAD BASELINE) */}
+      {projection.metrics && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          {[
+            ['Net Total Return', (projection.metrics.netReturnPct >= 0 ? '+' : '') + Math.round(projection.metrics.netReturnPct).toLocaleString() + '%', '#22c55e', '$83K start'],
+            ['Net CAGR', (projection.metrics.cagrPct >= 0 ? '+' : '') + projection.metrics.cagrPct + '%', '#22c55e'],
+            ['Sharpe', projection.metrics.sharpe, '#e6e6e6'],
+            ['Sortino', projection.metrics.sortino, '#22c55e'],
+            ['Profit Factor', projection.metrics.profitFactor + 'x', '#22c55e'],
+            ['Calmar', projection.metrics.calmar, '#e6e6e6'],
+            ['Recovery Factor', projection.metrics.recoveryFactor + 'x', '#e6e6e6'],
+            ['Positive Months', projection.metrics.positiveMonthsPct + '%', '#22c55e'],
+            ['Win Rate', projection.metrics.winRatePct + '%', '#e6e6e6', projection.metrics.payoff + 'x payoff'],
+            ['Total Closed', Math.round(projection.metrics.totalClosed).toLocaleString(), '#e6e6e6'],
+            ['Ending Equity', fmtAum(projection.metrics.endingEquity), '#22c55e'],
+            ['Alpha vs S&P', (projection.metrics.alphaDollar >= 0 ? '+' : '') + fmtAum(projection.metrics.alphaDollar), '#22c55e'],
+          ].map(([label, value, color, sub], i) => (
+            <div key={i} style={{ background: '#121212', border: '1px solid #222', borderRadius: 8, padding: '8px 12px', minWidth: 96, flex: '1 1 auto' }}>
+              <div style={{ color: '#888', fontSize: 9, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.25 }}>{label}</div>
+              <div style={{ color, fontSize: 17, fontWeight: 700 }}>{value}</div>
+              {sub && <div style={{ color: '#555', fontSize: 9 }}>{sub}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showChart && (
+        <>
+          <div style={{ marginTop: 10 }}>
+            <AumChart projected={projected} actual={actual} />
+          </div>
+          <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#888', marginTop: 2 }}>
+            <span><span style={{ color: '#3b82f6' }}>━</span> Projected (backtest)</span>
+            <span><span style={{ color: '#22c55e' }}>━</span> Actual (your account)</span>
+          </div>
+        </>
+      )}
+      {tableView && <AumTableModal view={tableView} projection={projection} onClose={() => setTableView(null)} />}
     </div>
   );
 }

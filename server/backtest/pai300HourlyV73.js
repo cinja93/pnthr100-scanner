@@ -647,10 +647,11 @@ async function main() {
     const wr = exits.length ? wins.length / exits.length : 0;
     const avgWin = wins.length ? grossWin / wins.length : 0;
     const avgLoss = losses.length ? Math.abs(grossLoss / losses.length) : 1;
-    let equity = NAV_INITIAL, peak = NAV_INITIAL, maxDD = 0;
+    let equity = NAV_INITIAL, peak = NAV_INITIAL, maxDD = 0, maxDDDollar = 0;
     for (const e of exits.sort((a, b) => (a.date + a.hour).localeCompare(b.date + b.hour))) {
       equity += e.pnl; if (equity > peak) peak = equity;
       const dd = (peak - equity) / peak; if (dd > maxDD) maxDD = dd;
+      const dd$ = peak - equity; if (dd$ > maxDDDollar) maxDDDollar = dd$;
     }
     const dailyReturns = []; let dailyEquity = NAV_INITIAL;
     let posMonths = 0, totalMonths = 0, monthPnl = 0, currentMonth = '';
@@ -687,6 +688,8 @@ async function main() {
       worstTrades: exits.slice().sort((a, b) => a.pnl - b.pnl).slice(0, 5),
       lotStopExits: totalLotStopExits,
       dailyLedger, closedTrades: exits,
+      positiveMonthsPct: +(totalMonths ? (posMonths / totalMonths) * 100 : 0).toFixed(1),
+      maxDDDollar: +maxDDDollar.toFixed(0),
     };
   }
 
@@ -737,11 +740,39 @@ async function main() {
     const factors = (base.dailyLedger || []).map((s, i) => ({
       i, date: s.date, factor: +(s.nav / startNav).toFixed(6),
     }));
+    // Hedge-fund metric cards (GRAD BASELINE) for the dashboard subheader.
+    const btStart = hourlyTradingDates[0], btEnd = hourlyTradingDates[hourlyTradingDates.length - 1];
+    const spyStartC = (spyWeekly.find(w => (w.weekOf || w.date) >= btStart) || spyWeekly[0])?.close || 0;
+    let spyEndC = spyWeekly[spyWeekly.length - 1]?.close || spyStartC;
+    for (let i = spyWeekly.length - 1; i >= 0; i--) { if ((spyWeekly[i].weekOf || spyWeekly[i].date) <= btEnd) { spyEndC = spyWeekly[i].close; break; } }
+    const spyRet = spyStartC ? (spyEndC / spyStartC - 1) : 0;
+    const calmar = base.maxDD > 0 ? +(base.cagr / base.maxDD).toFixed(2) : null;
+    const recovery = base.maxDDDollar > 0 ? +((base.equity - startNav) / base.maxDDDollar).toFixed(1) : null;
+    const metrics = {
+      netReturnPct: +base.netReturn.toFixed(1),
+      cagrPct: +base.cagr.toFixed(1),
+      sharpe: +base.sharpe.toFixed(2),
+      sortino: +base.sortino.toFixed(1),
+      profitFactor: +base.pf.toFixed(1),
+      calmar,
+      recoveryFactor: recovery,
+      positiveMonthsPct: base.positiveMonthsPct,
+      winRatePct: +base.wr.toFixed(0),
+      payoff: +base.payoff.toFixed(1),
+      maxDDPct: +base.maxDD.toFixed(2),
+      totalClosed: base.trades,
+      endingEquity: Math.round(base.equity),
+      alphaDollar: Math.round(base.equity - startNav * (1 + spyRet)),
+      alphaPct: +(base.netReturn - spyRet * 100).toFixed(1),
+      spyReturnPct: +(spyRet * 100).toFixed(1),
+      startNav,
+    };
     const projOut = {
       generatedFrom: 'pai300HourlyV73.js GRAD BASELINE (pure compounding, no withdrawals)',
       backtestStartNav: startNav,
       backtestEndNav: Math.round(base.equity),
       tradingDays: factors.length,
+      metrics,
       factors,
     };
     const projPath = new URL('../data/ambushProjectionBaseline.json', import.meta.url).pathname;

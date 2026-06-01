@@ -1,5 +1,5 @@
 // server/ambush/ambushCron.js
-// ── PNTHR AMBUSH V7.3 — 60-Second Live Tick Processor ─────────────────────
+// ── PNTHR AMBUSH V7.4 — 60-Second Live Tick Processor ─────────────────────
 //
 // Ticks every 60 seconds during market hours (9:30-16:05 ET, Mon-Fri).
 //
@@ -50,6 +50,19 @@ import {
 } from './ambushStateManager.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
+
+// ── PNTHR AMBUSH V7.4 RULE FLAGS (locked 2026-06-01) ─────────────────────────
+// Two changes from V7.3, both validated by the full backtest
+// (server/backtest/pai300HourlyV74.js — "no-gate + 2-bar" = +54.8% total value,
+//  DD 2.17%->1.28%, shorts +$4.0M, deployed <=1x gross, edge persists every year).
+//   1. REGIME GATE REMOVED: take BL+1 longs AND SS+1 shorts in ANY PAI300 regime
+//      (V7.3 took longs only in a bull index, shorts only in a bear index).
+//   2. $75 BREAK-EVEN SNAP REMOVED: the 2-bar broken-low governs the exit from
+//      entry; the first-hour low stays the disaster floor; the lot-trail ratchets
+//      from entry. (V7.3 parked the stop at breakeven once +$75 unrealized.)
+// Flip both back to true to restore exact V7.3 behavior.
+const AMBUSH_REGIME_GATE = false;
+const AMBUSH_BE75_SNAP   = false;
 
 // ── Eastern Time Helpers ───────────────────────────────────────────────────
 
@@ -418,7 +431,7 @@ async function _runAmbushTickInner() {
       amount: WITHDRAWAL_AMOUNT,
       nav,
       tradingNav,
-      message: `Account hit $${nav.toLocaleString()} — withdraw $${WITHDRAWAL_AMOUNT.toLocaleString()} and trade off $${tradingNav.toLocaleString()} (V7.3 rule).`,
+      message: `Account hit $${nav.toLocaleString()} — withdraw $${WITHDRAWAL_AMOUNT.toLocaleString()} and trade off $${tradingNav.toLocaleString()} (V7.4 rule).`,
     };
     console.warn(`[Ambush] WITHDRAWAL ALERT: ${withdrawalAlert.message}`);
   }
@@ -468,8 +481,11 @@ async function _runAmbushTickInner() {
     const sectorOk = getSectorOk(ctx, ticker, today);
     const tracked = existingTickers.has(ticker);
     const sector = getSectorName(ticker);
-    if (bl) watchLongs.push({ ticker, sector, regimeOk: !!regime, sectorOk, tracked, ready: !!regime && sectorOk && !tracked });
-    if (ss) watchShorts.push({ ticker, sector, regimeOk: !regime, sectorOk, tracked, ready: !regime && sectorOk && !tracked });
+    // V7.4: regime no longer gates readiness (longs & shorts taken in any regime).
+    const longRegimeOk  = AMBUSH_REGIME_GATE ? !!regime : true;
+    const shortRegimeOk = AMBUSH_REGIME_GATE ? !regime  : true;
+    if (bl) watchLongs.push({ ticker, sector, regimeOk: longRegimeOk, sectorOk, tracked, ready: longRegimeOk && sectorOk && !tracked });
+    if (ss) watchShorts.push({ ticker, sector, regimeOk: shortRegimeOk, sectorOk, tracked, ready: shortRegimeOk && sectorOk && !tracked });
   }
   watchLongs.sort((a, b) => (b.ready - a.ready) || a.ticker.localeCompare(b.ticker));
   watchShorts.sort((a, b) => (b.ready - a.ready) || a.ticker.localeCompare(b.ticker));
@@ -619,14 +635,15 @@ async function _runAmbushTickInner() {
       // Two completed bars made a lower low (long) / higher high (short); this bar takes
       // out that low/high by $0.01. Exit there IF it is better than the hard stop.
       if (!exited && pos.atBE && pos.prevSyntheticBar) {
+        // V7.4: 2-bar low governs (no "$75 first / only if above stop" guard).
         if (isLong && pos.prevBarLow != null && pos.prevSyntheticBar.low < pos.prevBarLow) {
           const breakLevel = +(pos.prevSyntheticBar.low - 0.01).toFixed(2);
-          if (breakLevel > pos.stop && price <= breakLevel) {
+          if ((!AMBUSH_BE75_SNAP || breakLevel > pos.stop) && price <= breakLevel) {
             await doLiveExit(breakLevel, 'TRAILING_STOP', 'TRAILING_EXIT');
           }
         } else if (!isLong && pos.prevBarHigh != null && pos.prevSyntheticBar.high > pos.prevBarHigh) {
           const breakLevel = +(pos.prevSyntheticBar.high + 0.01).toFixed(2);
-          if (breakLevel < pos.stop && price >= breakLevel) {
+          if ((!AMBUSH_BE75_SNAP || breakLevel < pos.stop) && price >= breakLevel) {
             await doLiveExit(breakLevel, 'TRAILING_STOP', 'TRAILING_EXIT');
           }
         }
@@ -642,13 +659,15 @@ async function _runAmbushTickInner() {
       }
 
       // Check D: Break Even ($75 unrealized -> stop to breakeven, PROTECT).
+      // V7.4: disabled (AMBUSH_BE75_SNAP=false). Peak is still tracked for display;
+      // positions enter with atBE=true so the 2-bar exit + lot-trail run from entry.
       if (!exited) {
         const unr = isLong
           ? (price - pos.avgCost) * pos.totalShares
           : (pos.avgCost - price) * pos.totalShares;
         if (unr > (pos.peak || 0)) pos.peak = +unr.toFixed(2);
 
-        if (!pos.atBE && unr >= BE_THRESHOLD) {
+        if (AMBUSH_BE75_SNAP && !pos.atBE && unr >= BE_THRESHOLD) {
           pos.atBE = true;
           pos.beDate = today;
           const feePer = calcCommission(pos.totalShares, pos.avgCost) / pos.totalShares;
@@ -667,8 +686,12 @@ async function _runAmbushTickInner() {
 
       // Save position state if still open.
       if (!exited) {
+        // V7.4: PROTECT = stop now guarantees no loss (lot-trail/2-bar lifted it to
+        // breakeven-or-better). Equivalent to V7.3's atBE for the locked rules.
+        const protectedNow = pos.stop != null &&
+          (isLong ? pos.stop >= pos.avgCost : pos.stop <= pos.avgCost);
         await upsertAmbushPosition(db, pos.ticker, {
-          state: pos.atBE ? STATES.PROTECT : STATES.ACTIVE,
+          state: protectedNow ? STATES.PROTECT : STATES.ACTIVE,
           stop: pos.stop,
           avgCost: pos.avgCost,
           totalShares: pos.totalShares,
@@ -755,7 +778,7 @@ async function _runAmbushTickInner() {
           lotFills: [{ lot: 0, at: now, price: rePrice }],
           originalEntry: pend.originalEntry || rePrice,
           stop: reStop,
-          atBE: false,
+          atBE: !AMBUSH_BE75_SNAP, // V7.4: 2-bar exit + lot-trail active from entry
           trailingActive: false,
           beDate: null,
           peak: 0,
@@ -818,10 +841,12 @@ async function _runAmbushTickInner() {
           continue;
         }
 
-        // Check regime + sector
-        const regime = getRegime(ctx, stalk.ticker, today);
-        if (isLong && !regime) continue;
-        if (!isLong && regime) continue;
+        // Check regime + sector. V7.4: regime gate removed — re-enter in any regime.
+        if (AMBUSH_REGIME_GATE) {
+          const regime = getRegime(ctx, stalk.ticker, today);
+          if (isLong && !regime) continue;
+          if (!isLong && regime) continue;
+        }
         if (!getSectorOk(ctx, stalk.ticker, today)) continue;
 
         // Update running low/high from live price
@@ -938,12 +963,19 @@ async function _runAmbushTickInner() {
       const price = livePrices[ticker];
       if (!price) continue;
 
-      const regime = getRegime(ctx, ticker, today);
       if (!getSectorOk(ctx, ticker, today)) continue;
 
+      // V7.4: regime gate removed — take BL+1 longs AND SS+1 shorts in any regime.
+      // (BL and SS are mutually exclusive per ticker; long takes precedence if ever both.)
       let direction = null;
-      if (regime && isActiveBL(ctx, ticker, today)) direction = 'LONG';
-      else if (!regime && isActiveSS(ctx, ticker, today)) direction = 'SHORT';
+      if (AMBUSH_REGIME_GATE) {
+        const regime = getRegime(ctx, ticker, today);
+        if (regime && isActiveBL(ctx, ticker, today)) direction = 'LONG';
+        else if (!regime && isActiveSS(ctx, ticker, today)) direction = 'SHORT';
+      } else {
+        if (isActiveBL(ctx, ticker, today)) direction = 'LONG';
+        else if (isActiveSS(ctx, ticker, today)) direction = 'SHORT';
+      }
       if (!direction) continue;
 
       // 2-day trigger check using cached daily bars
@@ -1051,7 +1083,7 @@ async function _runAmbushTickInner() {
             lotFills: [{ lot: 0, at: now, price: ep }],
             originalEntry: ep,
             stop,
-            atBE: false,
+            atBE: !AMBUSH_BE75_SNAP, // V7.4: 2-bar exit + lot-trail active from entry
             trailingActive: false,
             beDate: null,
             peak: 0,

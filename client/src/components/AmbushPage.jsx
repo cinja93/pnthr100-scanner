@@ -365,21 +365,28 @@ function AumChart({ projected, actual }) {
   );
 }
 
+function mondayOf(dateStr) {
+  // ISO Monday of the week containing dateStr (YYYY-MM-DD) — stable week key.
+  const d = new Date(dateStr + 'T12:00:00');
+  const back = (d.getDay() + 6) % 7; // Mon=0 .. Sun=6
+  d.setDate(d.getDate() - back);
+  return d.toISOString().slice(0, 10);
+}
 function AumTableModal({ view, projection, onClose }) {
   const isProj = view === 'projected';
   const series = isProj ? (projection.projected || []) : (projection.actual || []);
-  // Projected: one row per month (first weekday of each month). Actual: every snapshot.
+  // Projected: one row per WEEK (first trading day of each week). Actual: every snapshot.
   let rows = series;
   if (isProj) {
     const seen = new Set(); rows = [];
-    for (const p of series) { const ym = p.date.slice(0, 7); if (!seen.has(ym)) { seen.add(ym); rows.push(p); } }
+    for (const p of series) { const wk = mondayOf(p.date); if (!seen.has(wk)) { seen.add(wk); rows.push(p); } }
   }
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={e => e.stopPropagation()} style={{ background: '#0d0d0d', border: '1px solid #2a2a2a', borderRadius: 10, width: 440, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid #222' }}>
           <div style={{ color: isProj ? '#3b82f6' : '#22c55e', fontWeight: 700, fontSize: 14 }}>
-            {isProj ? 'Projected AUM — month by month' : 'Actual AUM — daily history'}
+            {isProj ? 'Projected AUM — week by week' : 'Actual AUM — daily history'}
           </div>
           <span onClick={onClose} style={{ cursor: 'pointer', color: '#888', fontSize: 20, lineHeight: 1 }}>×</span>
         </div>
@@ -390,14 +397,14 @@ function AumTableModal({ view, projection, onClose }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ color: '#777', textAlign: 'left' }}>
-                  <th style={{ padding: '8px 0', position: 'sticky', top: 0, background: '#0d0d0d' }}>{isProj ? 'Month' : 'Date'}</th>
+                  <th style={{ padding: '8px 0', position: 'sticky', top: 0, background: '#0d0d0d' }}>{isProj ? 'Week of' : 'Date'}</th>
                   <th style={{ padding: '8px 0', textAlign: 'right', position: 'sticky', top: 0, background: '#0d0d0d' }}>{isProj ? 'Projected' : 'Actual'} AUM</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => (
                   <tr key={i} style={{ borderTop: '1px solid #1a1a1a' }}>
-                    <td style={{ padding: '6px 0', color: '#ccc' }}>{isProj ? r.date.slice(0, 7) : r.date}</td>
+                    <td style={{ padding: '6px 0', color: '#ccc' }}>{r.date}</td>
                     <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'monospace', color: isProj ? '#3b82f6' : '#22c55e' }}>{fmtAum(r.value)}</td>
                   </tr>
                 ))}
@@ -702,7 +709,7 @@ export default function AmbushPage() {
         <div className={styles.sectionHeader} onClick={() => setShowWatching(!showWatching)} style={{ cursor: 'pointer' }}>
           <span className={styles.sectionTitle}>
             WATCHING — today's candidates
-            <InfoPopup text="Every name with an active weekly BL+1 (long) or SS+1 (short) signal. A bright chip passes the regime + sector gates and is ready to enter the moment its breakout confirms after 10:30. A dimmed chip has the signal but a gate isn't met yet (regime / sector AVOID), or it's already in a position (•). The engine recomputes this every 60s." wide />
+            <InfoPopup text="Every name with an active weekly BL+1 (long) or SS+1 (short) signal. V7.4 takes longs AND shorts in any market regime, so a bright chip just needs to pass the sector gate and is ready to enter the moment its breakout confirms after 10:30. A dimmed chip has the signal but its sector is on AVOID, or it's already in a position (•). The engine recomputes this every 60s." wide />
           </span>
           <div className={styles.sectionBadges}>
             <span style={{ color: '#22c55e' }}>BL+1 {watching.longs.length}</span>

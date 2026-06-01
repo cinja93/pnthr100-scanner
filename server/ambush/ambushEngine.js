@@ -27,7 +27,7 @@ import { CARNIVORE_MODE_TICKERS } from '../data/strategyMode.js';
 import { connectToDatabase } from '../database.js';
 
 // ── Constants (locked to V7 backtest) ───────────────────────────────────────
-export const AMBUSH_VERSION = '7.3.0';  // 1H stop + graduated sizing (weekly stop fully removed)
+export const AMBUSH_VERSION = '7.4.0';  // no regime gate (longs+shorts any regime) + 2-bar exit governs (no $75 BE snap)
 
 export const BE_THRESHOLD    = 75;       // dollars unrealized profit to trigger Break Even
 export const VITALITY_PCT    = 0.01;     // 1% NAV per position risk

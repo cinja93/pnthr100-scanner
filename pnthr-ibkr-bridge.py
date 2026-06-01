@@ -64,6 +64,9 @@ IBKR_WRITES_ENABLED = os.getenv('IBKR_WRITES_ENABLED', 'false').lower() == 'true
 # Dry-run logs commands and reports DONE without actually calling IB API.
 # Useful to verify the wire format before flipping IBKR_WRITES_ENABLED.
 IBKR_WRITES_DRY_RUN = os.getenv('IBKR_WRITES_DRY_RUN', 'true').lower() == 'true'
+# Ambush-ONLY dry-run: logs Ambush commands as DONE without calling IB, while the
+# main 679/Carnivore outbox keeps trading for real. Lets Ambush dry-run in isolation.
+AMBUSH_DRY_RUN      = os.getenv('AMBUSH_DRY_RUN', 'false').lower() == 'true'
 OUTBOX_POLL_SEC     = int(os.getenv('OUTBOX_POLL_SEC', '30'))
 OUTBOX_STALE_SEC    = int(os.getenv('OUTBOX_STALE_SEC', '600'))  # 10 min
 
@@ -1035,7 +1038,7 @@ def _execute_ambush_command(app, rate_limiter, cmd):
     if blackout:
         return False, None, f'BLACKOUT:{blackout}'
 
-    if IBKR_WRITES_DRY_RUN:
+    if IBKR_WRITES_DRY_RUN or AMBUSH_DRY_RUN:
         print(f"[AMBUSH] DRY-RUN {command} {ticker} {request}")
         rate_limiter.record(ticker)
         return True, {'dryRun': True, 'command': command, 'request': request}, None
@@ -1213,7 +1216,8 @@ def main():
     print(f"  Sync:   every {SYNC_INTERVAL}s  |  Outbox poll: every {OUTBOX_POLL_SEC}s")
     print(f"  Phase 4 writes: {'ENABLED' if IBKR_WRITES_ENABLED else 'DISABLED'}"
           f"{'  (DRY-RUN)' if IBKR_WRITES_ENABLED and IBKR_WRITES_DRY_RUN else ''}")
-    print(f"  Ambush V7: {'ENABLED' if AMBUSH_ENABLED else 'DISABLED'}"
+    print(f"  Ambush V7.3: {'ENABLED' if AMBUSH_ENABLED else 'DISABLED'}"
+          f"{'  (DRY-RUN — no real Ambush trades)' if (AMBUSH_DRY_RUN or IBKR_WRITES_DRY_RUN) else '  (LIVE WRITES)'}"
           f" (poll: {AMBUSH_POLL_SEC}s)")
     print(f"  Staleness guard: {OUTBOX_STALE_SEC}s (commands older than {OUTBOX_STALE_SEC // 60}min auto-rejected)")
     print("=" * 60)

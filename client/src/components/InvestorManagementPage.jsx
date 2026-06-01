@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchInvestors, createInvestor, updateInvestorApi, deleteInvestorApi, fetchInvestorAnalytics, fetchInvestorActivityLog, fetchInvestorNotes, addInvestorNote, editInvestorNote, deleteInvestorNote, resetInvestorLogins, fetchImpersonationTargets, updateVipPages, API_BASE, authHeaders } from '../services/api';
+import { fetchInvestors, createInvestor, updateInvestorApi, deleteInvestorApi, fetchInvestorAnalytics, fetchInvestorActivityLog, fetchInvestorNotes, addInvestorNote, editInvestorNote, deleteInvestorNote, resetInvestorLogins, fetchImpersonationTargets, updateVipPages, resetMemberPassword, API_BASE, authHeaders } from '../services/api';
 import PageHeader from './PageHeader';
 import PagePermissionsSelector from './PagePermissionsSelector';
 import { getDefaultPages, ALL_ASSIGNABLE_PAGES, PORTAL_PAGES } from '../contexts/PortalContext';
@@ -501,6 +501,11 @@ function VipCard({ vip, onPagesUpdated }) {
   const [navValue, setNavValue] = useState('');
   const [navCurrent, setNavCurrent] = useState(null);
   const [navMsg, setNavMsg] = useState(null);
+  // Password management
+  const [pwValue, setPwValue] = useState('');
+  const [pwMsg, setPwMsg] = useState(null);
+  const [pwLoading, setPwLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   async function loadNav() {
     try {
@@ -523,6 +528,21 @@ function VipCard({ vip, onPagesUpdated }) {
       if (d.success) { setNavMsg({ ok: true, msg: 'NAV saved' }); setNavCurrent(n); setNavValue(''); }
       else { setNavMsg({ ok: false, msg: d.error || 'Failed' }); }
     } catch { setNavMsg({ ok: false, msg: 'Network error' }); }
+  }
+
+  async function handlePasswordSave() {
+    if (!pwValue || pwValue.length < 8) { setPwMsg({ ok: false, msg: 'Min 8 characters' }); return; }
+    setPwLoading(true);
+    setPwMsg(null);
+    try {
+      await resetMemberPassword(vip.email, pwValue);
+      setPwMsg({ ok: true, msg: 'Password updated' });
+      setPwValue('');
+      setShowPw(false);
+    } catch (err) {
+      setPwMsg({ ok: false, msg: err.message || 'Failed' });
+    }
+    setPwLoading(false);
   }
 
   // PIN management
@@ -616,7 +636,7 @@ function VipCard({ vip, onPagesUpdated }) {
         <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 4, background: 'rgba(40,167,69,0.15)', color: '#28a745', letterSpacing: '0.05em' }}>
           {(vip.role || 'member').toUpperCase()}
         </span>
-        <button onClick={() => { if (!pinOpen) { loadPinStatus(); loadNav(); } setPinOpen(v => !v); setPagesOpen(false); setPinMsg(null); setNavMsg(null); }}
+        <button onClick={() => { if (!pinOpen) { loadPinStatus(); loadNav(); } setPinOpen(v => !v); setPagesOpen(false); setPinMsg(null); setNavMsg(null); setPwMsg(null); setPwValue(''); }}
           style={{ background: pinOpen ? '#1a1a1a' : 'none', border: '1px solid #333', color: pinOpen ? '#FCF000' : '#888', borderRadius: 4, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: pinOpen ? 700 : 400 }}>
           SETTINGS
         </button>
@@ -699,6 +719,40 @@ function VipCard({ vip, onPagesUpdated }) {
             {navMsg && (
               <span style={{ fontSize: 11, fontWeight: 600, color: navMsg.ok ? '#22c55e' : '#ef4444' }}>
                 {navMsg.ok ? '✓' : '✗'} {navMsg.msg}
+              </span>
+            )}
+          </div>
+          {/* PASSWORD row */}
+          <div style={{ padding: '4px 18px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace', minWidth: 60 }}>
+              PASSWORD:
+            </span>
+            <span style={{ color: '#333' }}>|</span>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPw ? 'text' : 'password'}
+                value={pwValue}
+                onChange={e => setPwValue(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handlePasswordSave(); }}
+                placeholder="New password"
+                style={{
+                  width: 160, padding: '4px 30px 4px 6px', fontSize: 13, fontFamily: 'monospace',
+                  background: '#0a0a0a', border: '1px solid #444', borderRadius: 4,
+                  color: '#e8e6e3', outline: 'none',
+                }}
+              />
+              <button type="button" onClick={() => setShowPw(v => !v)}
+                style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 12, padding: '0 2px' }}>
+                {showPw ? '🙈' : '👁'}
+              </button>
+            </div>
+            <button onClick={handlePasswordSave} disabled={pwLoading}
+              style={{ background: '#f97316', color: '#000', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer', opacity: pwLoading ? 0.5 : 1 }}>
+              {pwLoading ? 'SAVING...' : 'SET PASSWORD'}
+            </button>
+            {pwMsg && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: pwMsg.ok ? '#22c55e' : '#ef4444' }}>
+                {pwMsg.ok ? '✓' : '✗'} {pwMsg.msg}
               </span>
             )}
           </div>

@@ -6640,13 +6640,24 @@ cron.schedule('15 17 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
-// ── Cron: PNTHR AMBUSH V7.1 — 60-second live tick ─────────────────────────
+// ── Cron: PNTHR AMBUSH V7.3 — 60-second live tick ─────────────────────────
 // Ticks every 60 seconds during market hours (9:30-16:05 ET, Mon-Fri).
 // Data source: IBKR live prices (held tickers) + FMP batch quotes (non-held).
 // The engine's own isMarketHours() gate prevents processing outside 9:30-16:05.
 // Gated by AMBUSH_ENABLED in the pnthr_ambush_config MongoDB collection.
+//
+// WRITER GATE: only the designated writer instance ticks, so a stray local/dev
+// server can NEVER double-process against the same Atlas DB (which would double
+// orders). Render carries RECONCILIATION_CRON_ENABLED=true; set AMBUSH_CRON_ENABLED=true
+// to force a specific instance on. Any instance with neither stays silent.
+const AMBUSH_CRON_IS_WRITER =
+  process.env.RECONCILIATION_CRON_ENABLED === 'true' || process.env.AMBUSH_CRON_ENABLED === 'true';
+if (!AMBUSH_CRON_IS_WRITER) {
+  console.log('[Ambush Cron] writer gate OFF on this instance — not ticking (set AMBUSH_CRON_ENABLED=true to enable)');
+}
 let ambushCronRunning = false;
 cron.schedule('* 9-16 * * 1-5', async () => {
+  if (!AMBUSH_CRON_IS_WRITER) return;
   if (ambushCronRunning) return;
   ambushCronRunning = true;
   try {

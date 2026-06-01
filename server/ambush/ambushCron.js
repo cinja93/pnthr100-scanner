@@ -548,7 +548,7 @@ async function _runAmbushTickInner() {
           runningLow: isLong ? price : (pos.runningLow || pos.syntheticBar?.low || price),
           runningHigh: isLong ? (pos.runningHigh || pos.syntheticBar?.high || price) : price,
           cycleNum: (pos.cycleNum || 0) + 1,
-          entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null,
+          entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null, lotFills: null,
           atBE: false, trailingActive: false, beDate: null, peak: 0,
           prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
           todayFirstHourLow: pos.todayFirstHourLow, todayFirstHourHigh: pos.todayFirstHourHigh,
@@ -575,6 +575,8 @@ async function _runAmbushTickInner() {
           pos.totalShares += lotShares;
           pos.avgCost = +((oldCost + fillPrice * lotShares) / pos.totalShares).toFixed(4);
           pos.nextLot++;
+          // Timestamp this lot fill for the Lot Plan panel (lot index = pos.nextLot - 1).
+          pos.lotFills = [...(pos.lotFills || []), { lot: pos.nextLot - 1, at: now, price: fillPrice }];
 
           // V7.3: post-BE, stop moves to the PREVIOUS lot's trigger price,
           // but NEVER worse than the recomputed breakeven (guardrail).
@@ -671,6 +673,7 @@ async function _runAmbushTickInner() {
           avgCost: pos.avgCost,
           totalShares: pos.totalShares,
           nextLot: pos.nextLot,
+          lotFills: pos.lotFills,
           atBE: pos.atBE,
           trailingActive: false,
           beDate: pos.beDate,
@@ -749,6 +752,7 @@ async function _runAmbushTickInner() {
           totalShares: sizing.l1Shares,
           lotPlan: sizing.lotPlan,
           nextLot: 1,
+          lotFills: [{ lot: 0, at: now, price: rePrice }],
           originalEntry: pend.originalEntry || rePrice,
           stop: reStop,
           atBE: false,
@@ -1044,6 +1048,7 @@ async function _runAmbushTickInner() {
             totalShares: sizing.l1Shares,
             lotPlan: sizing.lotPlan,
             nextLot: 1,
+            lotFills: [{ lot: 0, at: now, price: ep }],
             originalEntry: ep,
             stop,
             atBE: false,

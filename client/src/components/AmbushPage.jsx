@@ -146,6 +146,8 @@ function LotDetail({ pos }) {
           const status = getLotStatus(i, pos.nextLot);
           const trigger = getLotTrigger(pos.originalEntry, i, pos.direction);
           const pctLabel = i === 0 ? 'entry' : `+${(LOT_OFFSETS[i] * 100).toFixed(0)}%`;
+          const fill = pos.lotFills?.find(f => f.lot === i);
+          const fillTime = fill?.at ? new Date(fill.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : null;
           return (
             <div key={i} className={styles.lotRow}>
               <span style={{ color: statusColors[status], fontSize: 10, width: 12 }}>{status === 'LOCKED' ? '○' : '●'}</span>
@@ -154,6 +156,9 @@ function LotDetail({ pos }) {
               <span className={styles.lotShares}>{shares} sh</span>
               <span className={styles.lotStatus} style={{ color: statusColors[status] }}>{status}</span>
               <span className={styles.lotPct}>{pctLabel}</span>
+              <span style={{ marginLeft: 'auto', color: '#666', fontSize: 10, fontFamily: 'monospace' }}>
+                {status === 'FILLED' ? (fillTime || '--') : ''}
+              </span>
             </div>
           );
         })}

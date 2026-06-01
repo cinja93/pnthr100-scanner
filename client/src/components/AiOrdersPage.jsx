@@ -1417,7 +1417,7 @@ export default function AiOrdersPage() {
 
       {/* Footer note */}
       <div style={{ marginTop: 16, fontSize: 11, color: '#666', lineHeight: 1.6 }}>
-        Sized at 1% NAV vitality × sector multiplier on your <AumShield>${(userNav || 100000).toLocaleString()}</AumShield> NAV. Lot 1 = 35% of full target.
+        Sized at 1% NAV vitality × sector multiplier{isAdmin && <> on your <AumShield>${(userNav || 100000).toLocaleString()}</AumShield> NAV</>}. Lot 1 = 35% of full target.
         BL skipped if sector NO_GO · SS skipped if sector GO · PAI300 36W EMA hard gate blocks all BL in bear regime.
         Quality grades: BEST (Gap≥12% + Slope{'<'}50%) · BETTER (Gap≥9%) · GOOD (default).
         Gap% updates every 60 seconds during market hours. 10% portfolio heat cap enforced.

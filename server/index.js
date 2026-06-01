@@ -3124,9 +3124,9 @@ app.get('/api/ai300-kill-test/metrics',           authenticateJWT, requireAdmin,
 app.post('/api/ai300-kill-test/monthly/generate', authenticateJWT, requireAdmin, ai300KillTestMonthlyGenerate);
 
 // ── PNTHR Orders Pipeline ─────────────────────────────────────────────────────
-app.get('/api/orders/latest',    authenticateJWT, ordersGetLatest);
-app.get('/api/orders/gate-log',  authenticateJWT, ordersGetGateLog);
-app.get('/api/orders/history',   authenticateJWT, ordersGetHistory);
+app.get('/api/orders/latest',    authenticateJWT, requireAdmin, ordersGetLatest);
+app.get('/api/orders/gate-log',  authenticateJWT, requireAdmin, ordersGetGateLog);
+app.get('/api/orders/history',   authenticateJWT, requireAdmin, ordersGetHistory);
 app.get('/api/backtest/trades',  authenticateJWT, async (req, res) => {
   try {
     const signal = req.query.signal; // 'BL' or 'SS'
@@ -4954,6 +4954,24 @@ app.post('/api/admin/create-member', authenticateJWT, requireAdmin, async (req, 
     const status = /already exists/i.test(msg) ? 409 : 500;
     if (status === 500) console.error('[Admin] create-member error:', err);
     res.status(status).json({ error: msg });
+  }
+});
+
+// ── Admin: set a member's NAV ────────────────────────────────────────────────
+app.post('/api/admin/set-member-nav', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { email, nav } = req.body || {};
+    if (!email || typeof nav !== 'number' || nav <= 0) {
+      return res.status(400).json({ error: 'email (string) and nav (positive number) required' });
+    }
+    const user = await findUserByEmail(email);
+    if (!user) return res.status(404).json({ error: `No user found with email: ${email}` });
+    await upsertUserProfile(user._id.toString(), { accountSize: nav });
+    console.log(`[Admin] Set NAV for ${email} to $${nav.toLocaleString()}`);
+    res.json({ ok: true, email, nav });
+  } catch (err) {
+    console.error('[Admin] set-member-nav error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

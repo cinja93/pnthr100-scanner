@@ -4757,8 +4757,8 @@ export default function AssistantPage({ onNavigate }) {
 
         {isOpen('live-opportunities') && (
         <div style={{ padding: '8px 10px 4px' }}>
-          {/* RE-ENTRY Opportunities */}
-          {reentrySignals.length > 0 && (
+          {/* RE-ENTRY Opportunities (admin only — shows fund trade pipeline) */}
+          {isAdmin && reentrySignals.length > 0 && (
             <div style={{
               border: '1px solid rgba(124,58,237,0.4)', borderRadius: 6,
               marginBottom: 12, overflow: 'hidden',
@@ -4792,8 +4792,8 @@ export default function AssistantPage({ onNavigate }) {
             </div>
           )}
 
-          {/* Weekly Orders */}
-          {ordersData && <WeeklyOrdersSection data={ordersData} onNavigate={onNavigate} />}
+          {/* Weekly Orders (admin only — shows fund trade pipeline) */}
+          {isAdmin && ordersData && <WeeklyOrdersSection data={ordersData} onNavigate={onNavigate} />}
 
           {/* Live Headline Feed */}
           <HeadlineFeed

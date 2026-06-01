@@ -70,7 +70,7 @@ function formatLoadedAt(date) {
 
 export default function PulsePage({ onNavigate, fund }) {
   const { analyzeContext } = useAnalyzeContext() || {};
-  const { isInvestor } = useAuth() || {};
+  const { isInvestor, isAdmin } = useAuth() || {};
   const { activeFund: masterFund } = useFund();
   const activeFund = fund || masterFund;
   const [data, setData] = useState(null);
@@ -176,7 +176,7 @@ export default function PulsePage({ onNavigate, fund }) {
   }
 
   useEffect(() => {
-    Promise.all([fetchPulse(), fetchLiveVix(), isInvestor ? Promise.resolve(null) : fetchSectorExposure().catch(() => null)])
+    Promise.all([fetchPulse(), fetchLiveVix(), isAdmin ? fetchSectorExposure().catch(() => null) : Promise.resolve(null)])
       .then(([pulse, vixData, secExp]) => {
         setData(pulse);
         setVix(vixData);
@@ -236,7 +236,7 @@ export default function PulsePage({ onNavigate, fund }) {
       <StatusLight
         status={data.statusLight}
         message={data.statusMessage}
-        positions={isInvestor ? null : data.positions}
+        positions={isAdmin ? data.positions : null}
         pulseData={data}
         lastRefresh={lastRefresh}
         isRefreshing={isRefreshing}
@@ -301,7 +301,7 @@ export default function PulsePage({ onNavigate, fund }) {
       {pulseTab === '679' && <>
         {/* Regime */}
         <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '12px 14px', marginBottom: 14 }}>
-          <RegimeStrip regime={data.regime} signals={data.signals} positions={isInvestor ? null : data.positions} />
+          <RegimeStrip regime={data.regime} signals={data.signals} positions={isAdmin ? data.positions : null} />
         </div>
         {/* Kill Top 10 + Sector Pulse */}
         <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
@@ -343,7 +343,7 @@ export default function PulsePage({ onNavigate, fund }) {
         ) : ai300Data ? <>
           {/* Regime */}
           <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '12px 14px', marginBottom: 14 }}>
-            <Ai300RegimeStrip regime={ai300Data.regime} signals={ai300Data.signals} positions={isInvestor ? null : ai300Data.positions} pai300={ai300Data.pai300} />
+            <Ai300RegimeStrip regime={ai300Data.regime} signals={ai300Data.signals} positions={isAdmin ? ai300Data.positions : null} pai300={ai300Data.pai300} />
           </div>
           {/* Kill Top 10 + Sector Pulse */}
           <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>

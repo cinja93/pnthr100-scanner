@@ -523,8 +523,9 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
     return () => { cancelled = true; };
   }, [currentIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Check wash rule whenever ticker changes (including Prev/Next navigation) ──
+  // ── Check wash rule whenever ticker changes (admin only) ──
   useEffect(() => {
+    if (!isAdmin) { setWashWarning(null); return; }
     const ticker = stocks[currentIndex]?.ticker;
     if (!ticker) { setWashWarning(null); return; }
     fetch(`${API_BASE}/api/wash-rules?ticker=${encodeURIComponent(ticker)}`, { headers: authHeaders() })
@@ -535,7 +536,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
         setWashWarning(active || triggered || null);
       })
       .catch(() => setWashWarning(null));
-  }, [currentIndex]);
+  }, [currentIndex, isAdmin]);
 
   // Fetch data when stock changes
   useEffect(() => {
@@ -1056,7 +1057,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
             {/* ── Stock-specific actions hidden for macro tickers (indices, yields, etc.) ── */}
             {!isMacroTicker(stock.ticker) && (<>
             {/* ── Wash Rule Warning Badge (hidden for investors) ── */}
-            {!isInvestor && washWarning && (() => {
+            {isAdmin && washWarning && (() => {
               const ws = washWarning.washSale;
               if (ws?.triggered) {
                 return (
@@ -1161,7 +1162,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
                 >
                   {sizeLoading ? '⟳' : 'SIZE IT'}
                 </button>
-                {sizePanel && !isInvestor && (
+                {sizePanel && isAdmin && (
                   <button
                     onClick={handleQueueToggle}
                     style={{ background: queuedTickers?.has(stock.ticker) ? '#28a745' : 'rgba(40,167,69,0.15)',
@@ -1267,7 +1268,7 @@ export default function ChartModal({ stocks, initialIndex, earnings = EMPTY_EARN
                       </div>
                       <ScoreLine label="Slope Strength"      comp={ar.components.slopeStrength}      max={5} />
                       <ScoreLine label="Sector Concentration" comp={ar.components.sectorConcentration} max={5} />
-                      {!isInvestor && <ScoreLine label="Wash Compliance"     comp={ar.components.washCompliance}     max={5} />}
+                      {isAdmin && <ScoreLine label="Wash Compliance"     comp={ar.components.washCompliance}     max={5} />}
                       <ScoreLine label="Volatility Context"  comp={ar.components.volatilityContext}  max={5} />
                       <ScoreLine label="Portfolio Fit"       comp={ar.components.portfolioFit}       max={5} />
                     </>

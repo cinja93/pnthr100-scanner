@@ -430,6 +430,25 @@ async function _runAmbushTickInner() {
     }
   }
 
+  // ── V7.3 "Watching": every active BL+1 (long) / SS+1 (short) name this week, with
+  // regime + sector gate status. Computed every tick (incl. first hour) so the dashboard
+  // shows the candidate pool the engine is hunting before any entry fires.
+  const watchLongs = [], watchShorts = [];
+  for (const ticker of getAiTickers()) {
+    const bl = isActiveBL(ctx, ticker, today);
+    const ss = isActiveSS(ctx, ticker, today);
+    if (!bl && !ss) continue;
+    const regime = getRegime(ctx, ticker, today);
+    const sectorOk = getSectorOk(ctx, ticker, today);
+    const tracked = existingTickers.has(ticker);
+    const sector = getSectorName(ticker);
+    if (bl) watchLongs.push({ ticker, sector, regimeOk: !!regime, sectorOk, tracked, ready: !!regime && sectorOk && !tracked });
+    if (ss) watchShorts.push({ ticker, sector, regimeOk: !regime, sectorOk, tracked, ready: !regime && sectorOk && !tracked });
+  }
+  watchLongs.sort((a, b) => (b.ready - a.ready) || a.ticker.localeCompare(b.ticker));
+  watchShorts.sort((a, b) => (b.ready - a.ready) || a.ticker.localeCompare(b.ticker));
+  const watching = { longs: watchLongs, shorts: watchShorts };
+
   // 4. Fetch live prices: IBKR for held, FMP quotes for non-held + candidates
   const livePrices = await fetchLivePrices(db, allPositions, mceCandidates, config.ownerId);
   const priceCount = Object.keys(livePrices).length;
@@ -1054,6 +1073,7 @@ async function _runAmbushTickInner() {
     tickersPriced: Object.keys(livePrices).length,
     actions,
     errors,
+    watching,
     positions: {
       active: activePositions.length,
       attack: allPositions.filter(p => p.state === STATES.ATTACK).length,

@@ -269,6 +269,31 @@ function DirBadge({ direction }) {
   );
 }
 
+// ── Watching: today's BL+1 / SS+1 candidate pool ────────────────────────────
+function WatchCol({ title, color, items }) {
+  const readyCount = items.filter(i => i.ready).length;
+  return (
+    <div style={{ flex: 1, minWidth: 220 }}>
+      <div style={{ color, fontSize: 11, fontWeight: 700, marginBottom: 6 }}>
+        {title} <span style={{ color: '#555' }}>· {readyCount} ready / {items.length} total</span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {items.length === 0 ? <span style={{ color: '#555', fontSize: 12 }}>none today</span> : items.map(it => {
+          const reason = it.tracked ? 'already in a position' : !it.regimeOk ? 'waiting on regime' : !it.sectorOk ? 'sector AVOID' : 'ready';
+          return (
+            <span key={it.ticker} title={`${it.sector} — ${reason}`} style={{
+              fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 5, fontFamily: 'monospace',
+              color: it.ready ? '#000' : '#888',
+              background: it.ready ? color : '#161616',
+              border: `1px solid ${it.ready ? color : '#2a2a2a'}`,
+            }}>{it.ticker}{it.tracked ? ' •' : ''}</span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── AUM tracker: Projected (backtest, pure compounding) vs Actual ───────────
 function fmtAum(n) {
   if (n == null || isNaN(n)) return '--';
@@ -463,6 +488,7 @@ export default function AmbushPage() {
   const [expanded, setExpanded] = useState({});
   const [showOutbox, setShowOutbox] = useState(false);
   const [showActions, setShowActions] = useState(true);
+  const [showWatching, setShowWatching] = useState(true);
   const [projection, setProjection] = useState(null);
   const refreshRef = useRef(null);
 
@@ -524,6 +550,7 @@ export default function AmbushPage() {
   const recentOrders = data?.recentOrders || [];
   const lastResult = config.lastCronResult || {};
   const actions = lastResult.actions || [];
+  const watching = lastResult.watching || { longs: [], shorts: [] };
 
   const byState = {
     STALKING: positions.filter(p => p.state === 'STALKING'),
@@ -640,6 +667,31 @@ export default function AmbushPage() {
           )}
         </div>
       )}
+
+      {/* ═══ WATCHING — today's BL+1 / SS+1 candidates ═══ */}
+      <div className={styles.section}>
+        <div className={styles.sectionHeader} onClick={() => setShowWatching(!showWatching)} style={{ cursor: 'pointer' }}>
+          <span className={styles.sectionTitle}>
+            WATCHING — today's candidates
+            <InfoPopup text="Every name with an active weekly BL+1 (long) or SS+1 (short) signal. A bright chip passes the regime + sector gates and is ready to enter the moment its breakout confirms after 10:30. A dimmed chip has the signal but a gate isn't met yet (regime / sector AVOID), or it's already in a position (•). The engine recomputes this every 60s." wide />
+          </span>
+          <div className={styles.sectionBadges}>
+            <span style={{ color: '#22c55e' }}>BL+1 {watching.longs.length}</span>
+            <span style={{ color: '#ef4444' }}>SS+1 {watching.shorts.length}</span>
+          </div>
+          <span className={styles.expandIcon}>{showWatching ? '▼' : '▶'}</span>
+        </div>
+        {showWatching && (
+          (watching.longs.length === 0 && watching.shorts.length === 0) ? (
+            <div className={styles.emptyState}>No active signals loaded yet — appears once the engine ticks.</div>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, padding: '6px 2px' }}>
+              <WatchCol title="BL+1 LONGS" color="#22c55e" items={watching.longs} />
+              <WatchCol title="SS+1 SHORTS" color="#ef4444" items={watching.shorts} />
+            </div>
+          )
+        )}
+      </div>
 
       {/* ═══ LIVE POSITIONS (ACTIVE + PROTECT) ═══ */}
       <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.ACTIVE }}>

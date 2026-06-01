@@ -1,5 +1,5 @@
 // server/ambush/ambushEngine.js
-// ── PNTHR AMBUSH V7.1 — Live State Machine ─────────────────────────────────
+// ── PNTHR AMBUSH V7.3 — Live State Machine ─────────────────────────────────
 //
 // Replicates the V7 stress-test backtest logic for live intraday trading.
 // States: STALKING → ATTACK → ACTIVE → PROTECT
@@ -20,14 +20,14 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { calcCommission } from '../backtest/costEngine.js';
-import { detectAllSignals, blInitStop, ssInitStop, computeWilderATR } from '../signalDetection.js';
+import { detectAllSignals } from '../signalDetection.js';
 import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS } from '../data/pnthrAiSectorsConfig.js';
 import { CARNIVORE_MODE_TICKERS } from '../data/strategyMode.js';
 import { connectToDatabase } from '../database.js';
 
 // ── Constants (locked to V7 backtest) ───────────────────────────────────────
-export const AMBUSH_VERSION = '7.1.0';  // 1H stop + graduated sizing
+export const AMBUSH_VERSION = '7.3.0';  // 1H stop + graduated sizing (weekly stop fully removed)
 
 export const BE_THRESHOLD    = 75;       // dollars unrealized profit to trigger Break Even
 export const VITALITY_PCT    = 0.01;     // 1% NAV per position risk
@@ -304,34 +304,7 @@ export function isActiveSS(ctx, ticker, dateStr) {
   return false;
 }
 
-export function getWeeklyStopLong(ctx, ticker, dateStr, ep) {
-  const bars = ctx.weeklyBarsByTicker[ticker];
-  if (!bars) return null;
-  const weekOf = getWeekOf(dateStr);
-  let barIdx = -1;
-  for (let i = bars.length - 1; i >= 0; i--) {
-    if (bars[i].time <= weekOf) { barIdx = i; break; }
-  }
-  if (barIdx < 2) return null;
-  return blInitStop(
-    Math.min(bars[barIdx - 1].low, bars[barIdx - 2].low),
-    ep,
-    computeWilderATR(bars.slice(0, barIdx + 1))[barIdx]
-  );
-}
-
-export function getWeeklyStopShort(ctx, ticker, dateStr, ep) {
-  const bars = ctx.weeklyBarsByTicker[ticker];
-  if (!bars) return null;
-  const weekOf = getWeekOf(dateStr);
-  let barIdx = -1;
-  for (let i = bars.length - 1; i >= 0; i--) {
-    if (bars[i].time <= weekOf) { barIdx = i; break; }
-  }
-  if (barIdx < 2) return null;
-  return ssInitStop(
-    Math.max(bars[barIdx - 1].high, bars[barIdx - 2].high),
-    ep,
-    computeWilderATR(bars.slice(0, barIdx + 1))[barIdx]
-  );
-}
+// NOTE: getWeeklyStopLong / getWeeklyStopShort were removed in V7.3.
+// Ambush uses the first-hour low (minus fee) as the ONLY initial stop.
+// Carnivore and the weekly AI 300 strategy still use weekly stops via
+// signalDetection.js (blInitStop/ssInitStop) — those are separate systems.

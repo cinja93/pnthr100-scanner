@@ -1741,7 +1741,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR AI Orders — APEX v6 weekly order sheet (PIN protected) */}
           {renderPage === 'aiOrders' && <AumShield block showDuration><AiOrdersPage /></AumShield>}
 
-          {/* PNTHR AMBUSH — V7.1 intraday Kanban dashboard (1H stop + graduated sizing) */}
+          {/* PNTHR AMBUSH — V7.3 intraday Kanban dashboard (1H stop + graduated sizing) */}
           {renderPage === 'ambush' && <AumShield block showDuration><AmbushPage /></AumShield>}
 
           {/* PNTHR AI Kill — v1 ranked predatory scoring */}

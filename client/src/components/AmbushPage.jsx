@@ -1,4 +1,4 @@
-// AmbushPage.jsx — PNTHR Ambush V7.1 Dashboard
+// AmbushPage.jsx — PNTHR Ambush V7.3 Dashboard
 // Full phase visibility: STALKING → ATTACK → ACTIVE → PROTECT
 // Every metric the engine uses is surfaced so you can verify the machine.
 
@@ -26,10 +26,12 @@ const ACTION_CONFIG = {
   LOT_FILL:           { icon: '●', color: '#f59e0b', label: 'LOT FILLED' },
   TRAILING_RATCHET:   { icon: '↑', color: '#3b82f6', label: 'RATCHET' },
   '1H_EXIT':          { icon: '●', color: '#ef4444', label: '1H EXIT' },
+  LOT_EXIT:           { icon: '●', color: '#ef4444', label: 'LOT STOP' },
   TRAILING_EXIT:      { icon: '●', color: '#ef4444', label: 'TRAIL EXIT' },
   BREAKOUT_DETECTED:  { icon: '●', color: '#a78bfa', label: 'BREAKOUT' },
   SIGNAL_EXPIRED:     { icon: '○', color: '#666',    label: 'EXPIRED' },
   SKIPPED_CAP:        { icon: '⚠', color: '#f59e0b', label: 'CAP SKIP' },
+  SKIPPED_CASH:       { icon: '⚠', color: '#f59e0b', label: 'CASH SKIP' },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -145,10 +147,10 @@ function LotDetail({ pos }) {
         </div>
       </div>
 
-      {/* Trailing status for PROTECT */}
+      {/* Lot-trail status for PROTECT (V7.3) */}
       {pos.state === 'PROTECT' && (
         <div className={styles.lotSection}>
-          <div className={styles.lotSectionTitle}>TRAILING STATUS</div>
+          <div className={styles.lotSectionTitle}>LOT-TRAIL STATUS</div>
           <div className={styles.lotRow}>
             <span style={{ color: '#666', width: 12 }}/>
             <span className={styles.trailingLabel}>Break Even</span>
@@ -156,27 +158,16 @@ function LotDetail({ pos }) {
           </div>
           <div className={styles.lotRow}>
             <span style={{ color: '#666', width: 12 }}/>
-            <span className={styles.trailingLabel}>Trailing</span>
-            <span className={styles.trailingValue} style={{ color: pos.trailingActive ? '#22c55e' : '#f59e0b' }}>
-              {pos.trailingActive ? 'ACTIVE' : 'PENDING (day after BE)'}
+            <span className={styles.trailingLabel}>Stop basis</span>
+            <span className={styles.trailingValue} style={{ color: '#22c55e' }}>
+              {pos.nextLot >= 3 ? `Lot ${pos.nextLot - 1} price` : 'Breakeven'}
             </span>
           </div>
-          {pos.trailingActive && (
-            <>
-              <div className={styles.lotRow}>
-                <span style={{ color: '#666', width: 12 }}/>
-                <span className={styles.trailingLabel}>Consecutive LL</span>
-                <span className={styles.trailingValue} style={{ color: (pos.consecutiveLowerLows || 0) >= 1 ? '#f59e0b' : '#888' }}>
-                  {pos.consecutiveLowerLows || 0} / 2
-                </span>
-              </div>
-              <div className={styles.lotRow}>
-                <span style={{ color: '#666', width: 12 }}/>
-                <span className={styles.trailingLabel}>Prev Bar Low</span>
-                <span className={styles.trailingValue}>{fmtUsd(pos.prevBarLow)}</span>
-              </div>
-            </>
-          )}
+          <div className={styles.lotRow}>
+            <span style={{ color: '#666', width: 12 }}/>
+            <span className={styles.trailingLabel}>2-bar exit watch (prev low)</span>
+            <span className={styles.trailingValue}>{fmtUsd(pos.prevBarLow)}</span>
+          </div>
           {pos.stop && pos.avgCost && pos.totalShares > 0 && (
             <div className={styles.lotRow}>
               <span style={{ color: '#666', width: 12 }}/>
@@ -229,6 +220,9 @@ function ActionItem({ action }) {
       break;
     case '1H_EXIT':
       desc = `${action.ticker} -- 1H Break / P&L: ${action.pnl >= 0 ? '+' : ''}${fmtUsd(action.pnl)}`;
+      break;
+    case 'LOT_EXIT':
+      desc = `${action.ticker} -- Lot/Breakeven Stop / P&L: ${action.pnl >= 0 ? '+' : ''}${fmtUsd(action.pnl)}`;
       break;
     case 'TRAILING_EXIT':
       desc = `${action.ticker} -- Trailing Stop / P&L: ${action.pnl >= 0 ? '+' : ''}${fmtUsd(action.pnl)}`;
@@ -336,8 +330,8 @@ export default function AmbushPage() {
   const toggleExpand = (ticker) => setExpanded(prev => ({ ...prev, [ticker]: !prev[ticker] }));
 
   // ── Loading / Error ──
-  if (loading) return <div className={styles.page}><PageHeader title="PNTHR AMBUSH V7.1" /><div className={styles.loading}>Loading Ambush data...</div></div>;
-  if (error) return <div className={styles.page}><PageHeader title="PNTHR AMBUSH V7.1" /><div className={styles.error}>Error: {error}</div></div>;
+  if (loading) return <div className={styles.page}><PageHeader title="PNTHR AMBUSH V7.3" /><div className={styles.loading}>Loading Ambush data...</div></div>;
+  if (error) return <div className={styles.page}><PageHeader title="PNTHR AMBUSH V7.3" /><div className={styles.error}>Error: {error}</div></div>;
 
   // ── Data prep ──
   const positions = data?.positions || [];
@@ -364,7 +358,7 @@ export default function AmbushPage() {
   // ── Render ──
   return (
     <div className={styles.page}>
-      <PageHeader title="PNTHR AMBUSH V7.1" />
+      <PageHeader title="PNTHR AMBUSH V7.3" />
 
       {/* ═══ STATUS BAR ═══ */}
       <div className={styles.statusBar}>
@@ -417,6 +411,17 @@ export default function AmbushPage() {
           </button>
         </div>
       </div>
+
+      {/* ═══ WITHDRAWAL ALERT ($2M rule) ═══ */}
+      {lastResult.withdrawalAlert?.due && (
+        <div style={{
+          margin: '10px 0', padding: '12px 16px', borderRadius: 8,
+          background: '#f59e0b22', border: '1px solid #f59e0b66', color: '#f59e0b', fontWeight: 600,
+        }}>
+          ⚠ WITHDRAW ${Number(lastResult.withdrawalAlert.amount).toLocaleString()} NOW — account hit ${Number(lastResult.withdrawalAlert.nav).toLocaleString()}.
+          The engine is already sizing off ${Number(lastResult.withdrawalAlert.tradingNav).toLocaleString()} (V7.3 rule). Wire the $1M out to stay on the model.
+        </div>
+      )}
 
       {/* ═══ FLOW INDICATOR ═══ */}
       <div className={styles.flowRow}>
@@ -699,7 +704,7 @@ export default function AmbushPage() {
                         color: t.exitType === 'TRAILING_STOP' ? '#3b82f6' : '#f59e0b',
                         borderColor: t.exitType === 'TRAILING_STOP' ? '#3b82f644' : '#f59e0b44',
                       }}>
-                        {t.exitType === 'TRAILING_STOP' ? 'TRAIL' : t.exitType === '1H_LOW_BREAK' ? '1H LOW' : t.exitType === '1H_HIGH_BREAK' ? '1H HIGH' : t.exitType || '--'}
+                        {t.exitType === 'TRAILING_STOP' ? 'TRAIL' : t.exitType === '1H_LOW_BREAK' ? '1H LOW' : t.exitType === '1H_HIGH_BREAK' ? '1H HIGH' : t.exitType === 'LOT_STOP' ? 'LOT' : t.exitType || '--'}
                       </span>
                     </td>
                     <td style={{ color: '#888', fontSize: 11 }}>{t.cycleNum > 0 ? `#${t.cycleNum + 1}` : '--'}</td>

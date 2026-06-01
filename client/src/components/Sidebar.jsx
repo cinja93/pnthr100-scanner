@@ -64,7 +64,7 @@ const NAV_GROUPS = [
     groupLabel: 'PNTHR Live',
     info: 'pnthrLive',
     items: [
-      { key: 'ambush',   label: 'Ambush V7.1',  badge: 'LIVE' },
+      { key: 'ambush',   label: 'Ambush V7.3',  badge: 'LIVE' },
       { key: 'orders',   label: 'Orders',    badge: 'AI | Carnivore', badgeType: 'split' },
     ],
   },
@@ -106,7 +106,7 @@ const SECTION_INFO = {
   },
   pnthrLive: {
     title: 'PNTHR Live',
-    body: "Live operations center. Ambush V7.1 is the fully automated intraday system with 1H-stop, graduated sizing (50/75/100%), 5-lot pyramid, and trailing stops. Orders shows the active trading pipeline and heat exposure.",
+    body: "Live operations center. Ambush V7.3 is the fully automated intraday system with 1H-stop, graduated sizing (50/75/100%), 5-lot pyramid, and trailing stops. Orders shows the active trading pipeline and heat exposure.",
   },
   strategy: {
     title: 'Strategy',

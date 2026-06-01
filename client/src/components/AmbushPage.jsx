@@ -156,8 +156,8 @@ function LotDetail({ pos }) {
               <span className={styles.lotShares}>{shares} sh</span>
               <span className={styles.lotStatus} style={{ color: statusColors[status] }}>{status}</span>
               <span className={styles.lotPct}>{pctLabel}</span>
-              <span style={{ marginLeft: 'auto', color: '#666', fontSize: 10, fontFamily: 'monospace' }}>
-                {status === 'FILLED' ? (fillTime || '--') : ''}
+              <span style={{ marginLeft: 'auto', color: status === 'FILLED' ? '#22c55e' : '#555', fontSize: 11, fontFamily: 'monospace', fontWeight: 600 }}>
+                {status === 'FILLED' ? `⏱ ${fillTime || '--'}` : ''}
               </span>
             </div>
           );

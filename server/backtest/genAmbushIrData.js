@@ -22,6 +22,16 @@ import { SECTOR_EMA_PERIODS } from '../data/pnthrAiSectorsConfig.js';
 import { CARNIVORE_MODE_TICKERS } from '../data/strategyMode.js';
 import { detectAllSignals, calculateEMA, blInitStop, ssInitStop, computeWilderATR } from '../signalDetection.js';
 import { calcCommission, calcBorrowCost } from './costEngine.js';
+import { applyFeeEngine } from './ai300FeeOverlay.js';
+
+// Canonical PPM fee schedule per tier (performance fee + 2% mgmt + US-2Y hurdle +
+// high-water mark + loyalty clawback live inside applyFeeEngine). Base rate applies
+// Years 1-3 (monthIdx < 36), loyalty rate Years 4+.
+const FEE_RATES = {
+  '100k': { baseRate: 0.30, loyaltyRate: 0.25 },
+  '500k': { baseRate: 0.25, loyaltyRate: 0.20 },
+  '1m':   { baseRate: 0.20, loyaltyRate: 0.15 },
+};
 
 let NAV_INITIAL     = 83_000;
 const VITALITY_PCT    = 0.01;
@@ -250,7 +260,8 @@ async function main() {
 
   // ── SIMULATION ENGINE ──────────────────────────────────────────────────────
   function runSim({ maxPositions = 999, pessimistic = false, withdrawals = false, label = '', useGraduated = false, exitMode = 'be75', gateMode = 'regime', entryMode = 'lookahead', lookbackBars = 1, greenFilter = false }) {
-    const twoBarGoverns = exitMode === '2bar';
+    const twoBarTrail   = exitMode === '2bartrail'; // single ratcheting stop = 2-bar low
+    const twoBarGoverns = exitMode === '2bar' || twoBarTrail;
     const useBE75 = exitMode === 'be75';
     let cash = NAV_INITIAL;
     const exits = [];
@@ -406,7 +417,7 @@ async function main() {
             if (isLong) {
               // V7.2 exit #1 (post-BE only): two prior after-hour bars formed a lower low,
               // and this bar takes out (prev bar low - $0.01). Exit there IF above the stop.
-              if (pos.atBE && pos._prevLow != null && pos._prevPrevLow != null && pos._prevLow < pos._prevPrevLow) {
+              if (!twoBarTrail && pos.atBE && pos._prevLow != null && pos._prevPrevLow != null && pos._prevLow < pos._prevPrevLow) {
                 const breakLevel = +(pos._prevLow - 0.01).toFixed(2);
                 if ((twoBarGoverns || breakLevel > pos.stop) && hBar.low <= breakLevel) {
                   doExit(ticker, 'TRAILING_STOP', pos.totalShares, exitSlip(breakLevel, 'LONG'), pos.avgCost, date, hBar.date, pos.cycleNum, pos.peak, 'LONG', pos.entryDate);
@@ -423,7 +434,7 @@ async function main() {
                 delete positions[ticker]; return;
               }
             } else {
-              if (pos.atBE && pos._prevHigh != null && pos._prevPrevHigh != null && pos._prevHigh > pos._prevPrevHigh) {
+              if (!twoBarTrail && pos.atBE && pos._prevHigh != null && pos._prevPrevHigh != null && pos._prevHigh > pos._prevPrevHigh) {
                 const breakLevel = +(pos._prevHigh + 0.01).toFixed(2);
                 if ((twoBarGoverns || breakLevel < pos.stop) && hBar.high >= breakLevel) {
                   doExit(ticker, 'TRAILING_STOP', pos.totalShares, exitSlip(breakLevel, 'SHORT'), pos.avgCost, date, hBar.date, pos.cycleNum, pos.peak, 'SHORT', pos.entryDate);
@@ -496,6 +507,17 @@ async function main() {
 
           pos._prevPrevLow = pos._prevLow; pos._prevLow = hBar.low;
           pos._prevPrevHigh = pos._prevHigh; pos._prevHigh = hBar.high;
+
+          // ── 2-BAR TRAIL (single ratcheting stop = most conservative, up only) ──
+          if (twoBarTrail && pos.atBE && pos._prevLow != null && pos._prevPrevLow != null) {
+            if (isLong) {
+              const trail = +(Math.min(pos._prevLow, pos._prevPrevLow) - 0.01).toFixed(2);
+              if (trail > pos.stop) pos.stop = trail;
+            } else {
+              const trail = +(Math.max(pos._prevHigh, pos._prevPrevHigh) + 0.01).toFixed(2);
+              if (trail < pos.stop) pos.stop = trail;
+            }
+          }
         }
       }
 
@@ -751,7 +773,7 @@ async function main() {
     { key: '500k', seedNav: 500_000 },
     { key: '100k', seedNav: 100_000 },
   ];
-  const V74 = { gateMode: 'none', exitMode: '2bar', entryMode: 'realtime', lookbackBars: 1 };
+  const V74 = { gateMode: 'none', exitMode: '2bartrail', entryMode: 'realtime', lookbackBars: 1 };
   const outDir = new URL('../data/ambushIr/', import.meta.url).pathname;
   try { fsMod.mkdirSync(outDir, { recursive: true }); } catch {}
   function wdays(entry, exit) {
@@ -765,7 +787,15 @@ async function main() {
     process.stdout.write(`  ${t.key} ($${(t.seedNav/1000).toFixed(0)}K)...`);
     const r = runSim({ ...V74, useGraduated: true, withdrawals: false, label: `IR ${t.key}` });
     const grossDaily = (r.dailyLedger || []).map(s => ({ date: s.date, equity: +(+s.nav).toFixed(2) }));
-    const netDaily   = (r.dailyLedger || []).map(s => ({ date: s.date, netEquity: +(+s.nav).toFixed(2) }));
+    // NET = gross minus the full PPM fee schedule (2% annual mgmt + per-tier
+    // performance fee w/ US-2Y hurdle, high-water mark, loyalty clawback, quarterly).
+    const feeTier = { startingCapital: t.seedNav, ...FEE_RATES[t.key] };
+    // Quarterly crystallization = the real fee economics (correct net ending equity).
+    // Smoothing was rejected: pulling fees earlier than crystallization corrupts the
+    // ending value on a high-growth curve. Risk metrics are presented on the GROSS
+    // strategy stream (see IR page), so the net curve is only used for return figures.
+    const { netCurve, totalMgmtFees, totalPerfFees } = applyFeeEngine(grossDaily, feeTier);
+    const netDaily = netCurve.map(s => ({ date: s.date, netEquity: +(+s.netEquity).toFixed(2) }));
     const trades = (r.closedTrades || []).map(e => {
       const open = e.type === 'OPEN_AT_END';
       const basis = (e.avgCost || 0) * (e.shares || 0);
@@ -789,7 +819,10 @@ async function main() {
       tier: t.key, seedNav: t.seedNav, version: '7.4.0', firstTradeDate,
       grossDaily, netDaily, tradeStats, tradeLog, totalTrades: trades.length,
     }));
-    console.log(` days ${grossDaily.length}  trades ${trades.length} (log ${tradeLog.length})  endNav $${Math.round(r.equity).toLocaleString()}`);
+    const grossEnd = grossDaily[grossDaily.length - 1].equity;
+    const netEnd = netDaily[netDaily.length - 1].netEquity;
+    console.log(` days ${grossDaily.length}  trades ${trades.length} (log ${tradeLog.length})`);
+    console.log(`      GROSS end $${Math.round(grossEnd).toLocaleString()}  ->  NET end $${Math.round(netEnd).toLocaleString()}  (mgmt $${Math.round(totalMgmtFees).toLocaleString()} + perf $${Math.round(totalPerfFees).toLocaleString()} = drag ${(((grossEnd - netEnd) / grossEnd) * 100).toFixed(1)}%)`);
   }
   console.log('\n  Wrote slim per-tier Ambush IR data to server/data/ambushIr/');
   process.exit(0);

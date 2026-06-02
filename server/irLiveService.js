@@ -28,7 +28,7 @@ function dailyReturns(equity) {
   return r;
 }
 
-function computeSharpe(dailyRet, dates) {
+export function computeSharpe(dailyRet, dates) {
   const mean_excess = dailyRet.reduce((s, r, i) => {
     const year = new Date(dates[i+1]).getUTCFullYear();
     const rf_daily = ((US3MT_PCT[year] ?? 4.0) / 100) / 252;
@@ -39,7 +39,7 @@ function computeSharpe(dailyRet, dates) {
   return std > 0 ? (mean_excess / std) * Math.sqrt(252) : 0;
 }
 
-function computeSortino(dailyRet) {
+export function computeSortino(dailyRet) {
   const mean = dailyRet.reduce((s, r) => s + r, 0) / dailyRet.length;
   const downSumSq = dailyRet.reduce((s, r) => s + (r < 0 ? r * r : 0), 0);
   const downDev = Math.sqrt(downSumSq / dailyRet.length);

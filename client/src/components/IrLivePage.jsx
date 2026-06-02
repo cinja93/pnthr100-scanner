@@ -868,7 +868,7 @@ export default function IrLivePage({ fund = 'ai300' }) {
               </div>
 
               {/* Equity curve */}
-              <EquityCurveChart data={net} spyData={spy} spyReturn={spy?.totalReturn} label={`NET EQUITY CURVE — ${fc.curveLabel}`} color={BLUE} />
+              <EquityCurveChart data={net} spyData={spy} spyReturn={spy?.totalReturn} label={`STRATEGY EQUITY CURVE (GROSS) — ${fc.curveLabel}`} color={BLUE} />
 
               {/* Performance comparison */}
               <ComparisonTable data={net} spy={spy} alpha={d.alphaVsSpy} label={`PERFORMANCE COMPARISON: ${fc.compLabel} vs. S&P 500`} netLabel={fc.netLabel} />
@@ -893,13 +893,10 @@ export default function IrLivePage({ fund = 'ai300' }) {
                     </thead>
                     <tbody>
                       {[
+                        // Fees reduce RETURNS, not the strategy's risk profile, so only
+                        // return metrics appear here (risk/drawdown are strategy-level).
                         { m: 'Total Return', g: fmtPct(gross.totalReturn), n: fmtPct(net.totalReturn), d: `${(gross.totalReturn - net.totalReturn).toFixed(0)} pts` },
                         { m: 'CAGR', g: fmtPct(gross.cagr), n: fmtPct(net.cagr), d: `${(gross.cagr - net.cagr).toFixed(2)} pts` },
-                        { m: 'Sharpe', g: fmt(gross.sharpe), n: fmt(net.sharpe), d: fmt(gross.sharpe - net.sharpe) },
-                        { m: 'Sortino', g: fmt(gross.sortino), n: fmt(net.sortino), d: fmt(gross.sortino - net.sortino) },
-                        { m: 'Calmar', g: fmt(gross.calmar), n: fmt(net.calmar), d: fmt(gross.calmar - net.calmar) },
-                        { m: 'Max DD', g: fmtPct(gross.maxDD), n: fmtPct(net.maxDD), d: `${(net.maxDD - gross.maxDD).toFixed(2)} pts` },
-                        { m: 'Recovery Factor', g: `${fmt(gross.recoveryFactor, 0)}x`, n: `${fmt(net.recoveryFactor, 0)}x`, d: `${(gross.recoveryFactor - net.recoveryFactor).toFixed(0)}` },
                         { m: 'Ending Equity', g: fmtNav(gross.endNav), n: fmtNav(net.endNav), d: fmtDollar(net.endNav - gross.endNav) },
                       ].map(r => (
                         <tr key={r.m} style={{ borderBottom: `1px solid rgba(255,255,255,0.05)` }}>
@@ -950,7 +947,7 @@ export default function IrLivePage({ fund = 'ai300' }) {
               </table>
 
               {/* Monthly returns heatmap */}
-              <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MONTHLY RETURNS HEATMAP (NET)</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MONTHLY RETURNS HEATMAP (STRATEGY)</div>
               <MonthlyHeatmap monthlyReturns={net?.monthlyReturns} firstTradeDate={data?.firstTradeDate} />
 
               {/* Crisis Alpha */}
@@ -961,7 +958,7 @@ export default function IrLivePage({ fund = 'ai300' }) {
               {net?.rolling12m?.length > 0 && (
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
-                    ROLLING 12-MONTH RETURNS (NET)
+                    ROLLING 12-MONTH RETURNS (STRATEGY)
                     <span
                       onClick={() => setShowRolling12Info(v => !v)}
                       style={{ cursor: 'pointer', color: '#aaa', fontSize: 13, lineHeight: 1 }}
@@ -1041,7 +1038,7 @@ export default function IrLivePage({ fund = 'ai300' }) {
                   info={`The single deepest monthly loss, net of all fees. This is the most pain an investor would have experienced in any single month. The ${fc.name} uses disciplined stop-loss execution and systematic position sizing to cut losses quickly and preserve capital for the next opportunity. While the fund's worst month is deeper than the S&P 500's, the average monthly return is over 3x higher, meaning the fund earns back losses far faster. That asymmetry between gains and losses is the mathematical edge that drives long-term wealth creation.`} />
                 <MetricCard small label="Avg Monthly Return" value={`${fmt(net?.avgMonthlyReturn)}%`} color={GREEN} sub={spy?.avgMonthlyReturn != null ? `S&P 500: ${fmt(spy.avgMonthlyReturn)}%` : undefined}
                   info={`The average gain across all months since the first trade. Over this period, the S&P 500 averaged approximately 1.2% per month. The ${fc.name} delivers over 3x that monthly return through concentrated momentum positions and a pyramid scaling system. This means your capital compounds dramatically faster month after month. The fund's higher volatility is the price of admission for returns that far exceed what any passive strategy can deliver.`} />
-                <MetricCard small label="Max Drawdown (Net)" value={fmtPct(net?.maxDD)} color={RED} sub={spy?.maxDD != null ? `S&P 500: ${fmtPct(spy.maxDD)}` : undefined}
+                <MetricCard small label="Max Drawdown (Strategy)" value={fmtPct(net?.maxDD)} color={RED} sub={spy?.maxDD != null ? `S&P 500: ${fmtPct(spy.maxDD)}` : undefined}
                   info={`The largest peak-to-trough decline in portfolio value after all fees. This is the deepest hole an investor would have sat through. While the ${fc.name} has a slightly deeper max drawdown than the S&P 500, the fund recovers dramatically faster due to its momentum-driven entries and systematic stop-loss discipline. The fund's recovery factor proves that drawdowns are quickly overcome. You accept modestly more downside in exchange for annual returns that are multiples higher than the index.`} />
                 <MetricCard small label="Max Drawdown (Gross)" value={fmtPct(gross?.maxDD)} color={RED} sub={spy?.maxDD != null ? `S&P 500: ${fmtPct(spy.maxDD)}` : undefined}
                   info={`The largest peak-to-trough decline before fees are deducted. Showing this alongside the net figure lets you see how much of the drawdown comes from market moves versus fee drag. When gross and net max drawdowns are close together, it confirms that fees are not amplifying your risk. The ${fc.name} gross drawdown is only modestly deeper than the S&P 500's, while delivering annual returns that are multiples higher. The return-to-drawdown ratio is what matters, and this fund's ratio is exceptional.`} />

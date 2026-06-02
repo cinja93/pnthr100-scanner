@@ -48,6 +48,23 @@ async function getAmbushIrData(tierKey) {
 
   const gross = computeSide(grossDocs, 'equity');
   const net = computeSide(netDocs, 'netEquity');
+
+  // ── IR presentation policy (locked 2026-06-02): returns NET of all fees, but risk /
+  // drawdown / volatility metrics on the STRATEGY (gross) stream. Performance fees
+  // crystallize quarterly, which injects artificial "cliffs" into the net curve (a
+  // quarter-end fee deduction looks like a 14% drawdown). Reporting risk off those
+  // cliffs would understate the strategy's true risk-adjusted quality. So: Total Return,
+  // CAGR, Ending Equity, and annual returns stay NET; everything risk/shape comes from
+  // gross. (The Gross-vs-Net table still shows the full fee impact on returns.)
+  const STRATEGY_RISK_FIELDS = [
+    'sharpe', 'sortino', 'maxDD', 'maxDDStart', 'maxDDTrough', 'maxDDRecovery', 'maxDDDays',
+    'calmar', 'ulcerIndex', 'recoveryFactor', 'timeUnderWater',
+    'positiveMonths', 'totalMonths', 'positivePct',
+    'bestMonth', 'worstMonth', 'avgMonthlyReturn', 'monthlyStdDev',
+    'monthlyReturns', 'top5Drawdowns', 'rolling12m', 'top10WorstDays', 'top10BestDays',
+    'equityCurve',
+  ];
+  for (const f of STRATEGY_RISK_FIELDS) if (gross[f] !== undefined) net[f] = gross[f];
   const tradeStats = file.tradeStats || { total: 0, closed: 0, open: 0, bl: {}, ss: {}, combined: {}, combinedNet: {}, realizedDD: 0 };
 
   const firstTradeDate = file.firstTradeDate || gross.startDate;

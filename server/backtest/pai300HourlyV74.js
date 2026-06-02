@@ -22,8 +22,9 @@ import { SECTOR_EMA_PERIODS } from '../data/pnthrAiSectorsConfig.js';
 import { CARNIVORE_MODE_TICKERS } from '../data/strategyMode.js';
 import { detectAllSignals, calculateEMA, blInitStop, ssInitStop, computeWilderATR } from '../signalDetection.js';
 import { calcCommission, calcBorrowCost } from './costEngine.js';
+import { computeSharpe, computeSortino } from '../irLiveService.js';
 
-const NAV_INITIAL     = 83_000;
+let NAV_INITIAL       = 83_000;
 const VITALITY_PCT    = 0.01;
 const TICKER_CAP_PCT  = 0.10;
 const STRIKE_PCT      = [0.35, 0.25, 0.20, 0.12, 0.08];
@@ -249,8 +250,9 @@ async function main() {
   }
 
   // ── SIMULATION ENGINE ──────────────────────────────────────────────────────
-  function runSim({ maxPositions = 999, pessimistic = false, withdrawals = false, label = '', useGraduated = false, exitMode = 'be75', gateMode = 'regime', entryMode = 'lookahead', lookbackBars = 1, greenFilter = false }) {
-    const twoBarGoverns = exitMode === '2bar';
+  function runSim({ maxPositions = 999, pessimistic = false, withdrawals = false, label = '', useGraduated = false, exitMode = 'be75', gateMode = 'regime', entryMode = 'lookahead', lookbackBars = 1, greenFilter = false, wdMode = 'fixed', wdCap = null }) {
+    const twoBarTrail   = exitMode === '2bartrail'; // single ratcheting stop = 2-bar low
+    const twoBarGoverns = exitMode === '2bar' || twoBarTrail;
     const useBE75 = exitMode === 'be75';
     let cash = NAV_INITIAL;
     const exits = [];
@@ -311,6 +313,14 @@ async function main() {
       if (withdrawals && nav() >= WITHDRAWAL_THRESHOLD) {
         cash -= WITHDRAWAL_AMOUNT;
         totalWithdrawn += WITHDRAWAL_AMOUNT;
+      } else if (wdMode === 'cap' && wdCap != null) {
+        // Capacity sweep: pin working capital at wdCap, harvest the excess (up to
+        // available cash so we never drive cash negative).
+        const excess = nav() - wdCap;
+        if (excess > 0) {
+          const w = Math.min(cash, excess);
+          if (w > 0) { cash -= w; totalWithdrawn += w; }
+        }
       }
 
       const dayHourly = {};
@@ -406,7 +416,7 @@ async function main() {
             if (isLong) {
               // V7.2 exit #1 (post-BE only): two prior after-hour bars formed a lower low,
               // and this bar takes out (prev bar low - $0.01). Exit there IF above the stop.
-              if (pos.atBE && pos._prevLow != null && pos._prevPrevLow != null && pos._prevLow < pos._prevPrevLow) {
+              if (!twoBarTrail && pos.atBE && pos._prevLow != null && pos._prevPrevLow != null && pos._prevLow < pos._prevPrevLow) {
                 const breakLevel = +(pos._prevLow - 0.01).toFixed(2);
                 if ((twoBarGoverns || breakLevel > pos.stop) && hBar.low <= breakLevel) {
                   doExit(ticker, 'TRAILING_STOP', pos.totalShares, exitSlip(breakLevel, 'LONG'), pos.avgCost, date, hBar.date, pos.cycleNum, pos.peak, 'LONG', pos.entryDate);
@@ -423,7 +433,7 @@ async function main() {
                 delete positions[ticker]; return;
               }
             } else {
-              if (pos.atBE && pos._prevHigh != null && pos._prevPrevHigh != null && pos._prevHigh > pos._prevPrevHigh) {
+              if (!twoBarTrail && pos.atBE && pos._prevHigh != null && pos._prevPrevHigh != null && pos._prevHigh > pos._prevPrevHigh) {
                 const breakLevel = +(pos._prevHigh + 0.01).toFixed(2);
                 if ((twoBarGoverns || breakLevel < pos.stop) && hBar.high >= breakLevel) {
                   doExit(ticker, 'TRAILING_STOP', pos.totalShares, exitSlip(breakLevel, 'SHORT'), pos.avgCost, date, hBar.date, pos.cycleNum, pos.peak, 'SHORT', pos.entryDate);
@@ -496,6 +506,22 @@ async function main() {
 
           pos._prevPrevLow = pos._prevLow; pos._prevLow = hBar.low;
           pos._prevPrevHigh = pos._prevHigh; pos._prevHigh = hBar.high;
+
+          // ── 2-BAR TRAIL (single ratcheting stop) ─────────────────────────────
+          // Scott's model: one stop in the market = the most conservative of the
+          // disaster/lot stop and the lowest low of the last 2 completed bars,
+          // moving UP only. In live, this is the value pushed to IBKR via MODIFY_STOP
+          // (cancel + replace the prior stop). No lower-low-pattern condition — the
+          // resting stop simply fires whenever price touches the trailed level.
+          if (twoBarTrail && pos.atBE && pos._prevLow != null && pos._prevPrevLow != null) {
+            if (isLong) {
+              const trail = +(Math.min(pos._prevLow, pos._prevPrevLow) - 0.01).toFixed(2);
+              if (trail > pos.stop) pos.stop = trail;
+            } else {
+              const trail = +(Math.max(pos._prevHigh, pos._prevPrevHigh) + 0.01).toFixed(2);
+              if (trail < pos.stop) pos.stop = trail;
+            }
+          }
         }
       }
 
@@ -747,12 +773,65 @@ async function main() {
   //  (validated vs V7.3: +54.8% total value, DD 2.17%->1.28%, edge every year)
   //  Regenerates the live projection baseline + V7.4 CSVs.
   // ══════════════════════════════════════════════════════════════════════════
-  const V74 = { gateMode: 'none', exitMode: '2bar', entryMode: 'realtime', lookbackBars: 1 };  // N=1 executable entry
+  const V74 = { gateMode: 'none', exitMode: '2bartrail', entryMode: 'realtime', lookbackBars: 1 };  // N=1 entry + single ratcheting 2-bar-low stop
+  // ── CAPACITY SWEEP (analysis only: node pai300HourlyV74.js --sweep) ──────────
+  // Pins working capital at each W, harvests the excess, and reports how much
+  // absolute profit W can throw off. The knee (where Annual$Profit stops rising)
+  // is the ideal working AUM; everything above it just adds idle cash.
+  if (process.argv.includes('--sweep')) {
+    const V74s = { gateMode: 'none', exitMode: '2bartrail', entryMode: 'realtime', lookbackBars: 1 };
+    const CAPS = [250_000, 500_000, 1_000_000, 2_000_000, 3_000_000, 5_000_000, 8_000_000, 12_000_000];
+    const YEARS = (new Date(hourlyTradingDates[hourlyTradingDates.length - 1] + 'T12:00:00') - new Date(hourlyTradingDates[0] + 'T12:00:00')) / (365.25 * 86400000);
+    console.log(`\n[SWEEP] Capacity — working capital pinned at W, harvest excess (period ${YEARS.toFixed(2)}y)\n`);
+    console.log('  W            TotalHarvested    Annual$Profit    Yield%/yr   AvgDeploy%   Trades');
+    console.log('  ' + '-'.repeat(86));
+    for (const W of CAPS) {
+      NAV_INITIAL = W;
+      const r = runSim({ ...V74s, useGraduated: false, withdrawals: false, wdMode: 'cap', wdCap: W, label: `CAP ${W}` });
+      const harvested = r.totalWithdrawn || 0;
+      const annual = harvested / YEARS;
+      const yld = (annual / W) * 100;
+      const led = r.dailyLedger || [];
+      const avgDep = led.length ? (led.reduce((s, d) => s + (d.nav > 0 ? (d.deployed || 0) / d.nav : 0), 0) / led.length) * 100 : 0;
+      const pad = (s, n) => String(s).padStart(n);
+      console.log(`  ${pad('$' + (W / 1e6).toFixed(2) + 'M', 9)}   ${pad('$' + Math.round(harvested).toLocaleString(), 14)}   ${pad('$' + Math.round(annual).toLocaleString(), 13)}   ${pad(yld.toFixed(1) + '%', 8)}   ${pad(avgDep.toFixed(1) + '%', 9)}   ${pad((r.trades || 0).toLocaleString(), 7)}`);
+    }
+    console.log('\n[SWEEP] Done. Knee = highest W where Annual$Profit is still climbing.\n');
+    process.exit(0);
+  }
+
+  // ── TRAIL COMPARE (analysis only: node pai300HourlyV74.js --trailcompare) ────
+  // Head-to-head: current V7.4 exit (engine lower-low-breakdown) vs Scott's single
+  // ratcheting 2-bar-low resting stop. Same entry (N=1), same everything else.
+  if (process.argv.includes('--trailcompare')) {
+    console.log('\n[TRAIL COMPARE] current 2-bar (lower-low-breakdown) vs single ratcheting 2-bar-low stop\n');
+    console.log('  mode         equity          CAGR     maxDD    PF     WR     trades   trailExits  1H-exits');
+    console.log('  ' + '-'.repeat(92));
+    for (const mode of ['2bar', '2bartrail']) {
+      const r = runSim({ gateMode: 'none', exitMode: mode, entryMode: 'realtime', lookbackBars: 1, useGraduated: true, withdrawals: false, label: `V7.4 ${mode}` });
+      const p = (s, n) => String(s).padStart(n);
+      console.log(`  ${mode.padEnd(11)} ${p('$' + Math.round(r.equity).toLocaleString(), 13)}   ${p(r.cagr.toFixed(1) + '%', 7)}  ${p(r.maxDD.toFixed(2) + '%', 7)}  ${p(r.pf.toFixed(2), 5)}  ${p(r.wr.toFixed(0) + '%', 5)}  ${p(r.trades.toLocaleString(), 7)}  ${p((r.totalTrailingExits || 0).toLocaleString(), 9)}  ${p((r.totalExits1H || 0).toLocaleString(), 8)}`);
+    }
+    console.log('');
+    process.exit(0);
+  }
+
   console.log('\n[3] V7.4 CANONICAL — GRAD BASELINE (projection) + GRAD WITHDRAW (CSVs)\n');
 
   process.stdout.write('  GRAD BASELINE (pure compounding)...');
   const base = runSim({ ...V74, useGraduated: true, withdrawals: false, label: 'V7.4 GRAD BASELINE' });
-  console.log(` equity $${Math.round(base.equity).toLocaleString()}  CAGR ${base.cagr.toFixed(1)}%  DD ${base.maxDD.toFixed(2)}%`);
+  // Standardize Sharpe/Sortino to the IR convention (excess-return Sharpe + full-sample
+  // downside-deviation Sortino) computed on the daily NAV curve — same functions the IR
+  // page uses (irLiveService), so the dashboard and the IR always agree on method.
+  {
+    const eq = (base.dailyLedger || []).map(s => +s.nav);
+    const dts = (base.dailyLedger || []).map(s => String(s.date).slice(0, 10));
+    const dret = [];
+    for (let i = 1; i < eq.length; i++) { if (eq[i - 1] > 0) dret.push((eq[i] - eq[i - 1]) / eq[i - 1]); }
+    base.sharpe = computeSharpe(dret, dts);
+    base.sortino = computeSortino(dret);
+  }
+  console.log(` equity $${Math.round(base.equity).toLocaleString()}  CAGR ${base.cagr.toFixed(1)}%  DD ${base.maxDD.toFixed(2)}%  Sharpe ${base.sharpe.toFixed(2)}  Sortino ${base.sortino.toFixed(1)}`);
 
   process.stdout.write('  GRAD WITHDRAW (live config)...');
   const wd = runSim({ ...V74, useGraduated: true, withdrawals: true, label: 'V7.4 GRAD WITHDRAW' });

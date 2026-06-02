@@ -55,8 +55,9 @@ function getYearMonth(dateStr) {
   return dateStr.slice(0, 7);
 }
 
-function applyFeeEngine(grossCurve, tier) {
+export function applyFeeEngine(grossCurve, tier, opts = {}) {
   const { startingCapital, baseRate, loyaltyRate } = tier;
+  const smooth = !!opts.smooth; // spread each quarter's fee across its days (no crystallization cliffs)
 
   let netNav = startingCapital;
   let hwm = startingCapital;
@@ -134,7 +135,39 @@ function applyFeeEngine(grossCurve, tier) {
     netCurve.push({ date: day.date, netEquity: +netNav.toFixed(2) });
   }
 
-  return { netCurve, totalMgmtFees: +totalMgmtFees.toFixed(2), totalPerfFees: +totalPerfFees.toFixed(2), finalHwm: +hwm.toFixed(2), finalLra: +lra.toFixed(2), quarterlyLog };
+  if (!smooth) {
+    return { netCurve, totalMgmtFees: +totalMgmtFees.toFixed(2), totalPerfFees: +totalPerfFees.toFixed(2), finalHwm: +hwm.toFixed(2), finalLra: +lra.toFixed(2), quarterlyLog };
+  }
+
+  // ── Smooth pass ─────────────────────────────────────────────────────────────
+  // Same fee SCHEDULE/amounts as above (HWM + hurdle + LRA + loyalty all already
+  // resolved in quarterlyLog), but spread each quarter's performance fee evenly
+  // across that quarter's trading days, and accrue the 2% mgmt fee daily. This
+  // removes the quarter-end "cliffs" so risk metrics (Sharpe/Sortino/MaxDD) and the
+  // equity curve / heatmap reflect the strategy, not fee-payment timing. Returns
+  // net of all fees; total fee dollars are essentially unchanged.
+  const perfByQuarter = new Map(quarterlyLog.map(q => [getQuarterKey(q.quarterEnd), q.pa]));
+  const daysInQuarter = new Map();
+  for (const d of grossCurve) {
+    const qk = getQuarterKey(d.date);
+    daysInQuarter.set(qk, (daysInQuarter.get(qk) || 0) + 1);
+  }
+  const smoothCurve = [];
+  let nav = startingCapital;
+  let prevG = grossCurve[0].equity;
+  let smMgmt = 0, smPerf = 0;
+  for (let i = 0; i < grossCurve.length; i++) {
+    const day = grossCurve[i];
+    if (i > 0 && prevG > 0) nav *= (1 + (day.equity - prevG) / prevG);
+    prevG = day.equity;
+    const mgmt = nav * (MGMT_FEE_ANNUAL / 252);
+    nav -= mgmt; smMgmt += mgmt;
+    const qk = getQuarterKey(day.date);
+    const dPerf = (perfByQuarter.get(qk) || 0) / (daysInQuarter.get(qk) || 1);
+    nav -= dPerf; smPerf += dPerf;
+    smoothCurve.push({ date: day.date, netEquity: +nav.toFixed(2) });
+  }
+  return { netCurve: smoothCurve, totalMgmtFees: +smMgmt.toFixed(2), totalPerfFees: +smPerf.toFixed(2), finalHwm: +hwm.toFixed(2), finalLra: +lra.toFixed(2), quarterlyLog, smoothed: true };
 }
 
 function computeDailyMetrics(curve, equityField) {
@@ -267,4 +300,8 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(e => { console.error(e.stack || e.message); process.exit(99); });
+// Only auto-run when invoked directly (node ai300FeeOverlay.js), NOT when imported
+// as a module (e.g. genAmbushIrData.js reuses applyFeeEngine).
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch(e => { console.error(e.stack || e.message); process.exit(99); });
+}

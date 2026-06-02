@@ -634,25 +634,32 @@ async function _runAmbushTickInner() {
         }
       }
 
-      // Check B: 2-bar broken-low / broken-high exit (post-Break-Even only).
-      // Two completed bars made a lower low (long) / higher high (short); this bar takes
-      // out that low/high by $0.01. Exit there IF it is better than the hard stop.
-      if (!exited && pos.atBE && pos.prevSyntheticBar) {
-        // V7.4: 2-bar low governs (no "$75 first / only if above stop" guard).
-        if (isLong && pos.prevBarLow != null && pos.prevSyntheticBar.low < pos.prevBarLow) {
-          const breakLevel = +(pos.prevSyntheticBar.low - 0.01).toFixed(2);
-          if ((!AMBUSH_BE75_SNAP || breakLevel > pos.stop) && price <= breakLevel) {
-            await doLiveExit(breakLevel, 'TRAILING_STOP', 'TRAILING_EXIT');
-          }
-        } else if (!isLong && pos.prevBarHigh != null && pos.prevSyntheticBar.high > pos.prevBarHigh) {
-          const breakLevel = +(pos.prevSyntheticBar.high + 0.01).toFixed(2);
-          if ((!AMBUSH_BE75_SNAP || breakLevel < pos.stop) && price >= breakLevel) {
-            await doLiveExit(breakLevel, 'TRAILING_STOP', 'TRAILING_EXIT');
-          }
+      // Check B: 2-BAR TRAIL (V7.5) — ratchet the SINGLE protective stop UP to the most
+      // conservative level = (lowest low of the last 2 completed bars − $0.01), up only.
+      // Pushed to IBKR via MODIFY_STOP (cancel + replace), so there is always exactly ONE
+      // resting protective stop, it is always the most conservative, and it survives an
+      // engine/computer outage. Check C below is the engine fast-path that exits at
+      // pos.stop; the resting IBKR stop at the same level is the backstop. Matches the
+      // backtest '2bartrail' exit byte-for-byte (min of last 2 completed bar lows).
+      if (!exited && pos.atBE && pos.prevSyntheticBar && pos.prevBarLow != null && pos.prevBarHigh != null) {
+        let moved = false;
+        if (isLong) {
+          const trail = +(Math.min(pos.prevSyntheticBar.low, pos.prevBarLow) - 0.01).toFixed(2);
+          if (trail > pos.stop) { pos.stop = trail; moved = true; }
+        } else {
+          const trail = +(Math.max(pos.prevSyntheticBar.high, pos.prevBarHigh) + 0.01).toFixed(2);
+          if (trail < pos.stop) { pos.stop = trail; moved = true; }
+        }
+        if (moved) {
+          await enqueueAmbushOrder(db, 'MODIFY_STOP', {
+            ticker: pos.ticker, direction: pos.direction,
+            newStopPrice: pos.stop, shares: pos.totalShares, reason: '2BAR_TRAIL',
+          });
+          actions.push({ type: 'TRAIL_STOP', ticker: pos.ticker, stop: pos.stop });
         }
       }
 
-      // Check C: Hard stop (pre-BE = first-hour stop; post-BE = lot/breakeven stop).
+      // Check C: Hard stop (pre-BE = first-hour stop; post-BE = trailed/lot/breakeven stop).
       if (!exited && pos.stop != null) {
         if (isLong && price <= pos.stop) {
           await doLiveExit(pos.stop, pos.atBE ? 'LOT_STOP' : '1H_LOW_BREAK', pos.atBE ? 'LOT_EXIT' : '1H_EXIT');

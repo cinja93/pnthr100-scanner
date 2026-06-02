@@ -609,12 +609,16 @@ export default function AmbushPage() {
   const livePositions = [...byState.PROTECT, ...byState.ACTIVE]; // PROTECT first (more important)
 
   // Live total: current unrealized P&L across all open positions (refreshes each 60s poll).
+  // Net of estimated entry commission so it tracks IBKR's "Unrealized" (which bakes the
+  // entry commission into avg cost). Prices are the FMP 60s feed, so this follows IBKR
+  // closely but not to the penny — an exact tie needs the live IBKR per-position sync.
   const totalOpenPnl = livePositions.reduce((s, p) => {
     if (!p.avgCost || !p.livePrice || !p.totalShares) return s;
-    const u = p.direction === 'LONG'
+    const gross = p.direction === 'LONG'
       ? (p.livePrice - p.avgCost) * p.totalShares
       : (p.avgCost - p.livePrice) * p.totalShares;
-    return s + u;
+    const entryComm = Math.max(1, p.totalShares * 0.005); // ~IBKR commission baked into avg cost
+    return s + gross - entryComm;
   }, 0);
 
   const nav = lastResult.nav || config.nav || 83000;
@@ -897,7 +901,7 @@ export default function AmbushPage() {
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           {pos.atBE
-                            ? <span style={{ color: '#3b82f6', fontWeight: 600, fontSize: 11 }}>BE {'✓'}</span>
+                            ? <span style={{ color: '#3b82f6', fontWeight: 600, fontSize: 11 }} title="2-bar trailing exit active from entry (stop still at the first-hour low, below entry — NOT breakeven)">TRAIL {'✓'}</span>
                             : fmtPnl(pos.peak)
                           }
                         </td>

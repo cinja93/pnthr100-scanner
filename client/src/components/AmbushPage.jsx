@@ -588,6 +588,7 @@ export default function AmbushPage() {
   const lastResult = config.lastCronResult || {};
   const actions = lastResult.actions || [];
   const watching = lastResult.watching || { longs: [], shorts: [] };
+  const hunting = lastResult.hunting || []; // daily-cleared candidates (HUNTING stage)
 
   const byState = {
     STALKING: positions.filter(p => p.state === 'STALKING'),
@@ -765,6 +766,41 @@ export default function AmbushPage() {
           )
         )}
       </div>
+
+      {/* ═══ HUNTING — cleared the daily trigger, watching the hourly ═══ */}
+      {(() => {
+        const hLongs = hunting.filter(h => h.direction === 'LONG');
+        const hShorts = hunting.filter(h => h.direction === 'SHORT');
+        const chip = (t) => <span key={t} style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid #f59e0b', color: '#fbbf24', borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 700 }}>{t}</span>;
+        return (
+          <div className={styles.section} style={{ borderLeftColor: '#f59e0b' }}>
+            <div className={styles.sectionHeader}>
+              <span className={styles.sectionTitle}>
+                HUNTING — cleared the daily, watching the hourly
+                <InfoPopup text="Candidates that have broken their prior 2-day high TODAY (the daily qualification). The engine is now watching these for a confirmed green hourly breakout after 10:30 — when one fires it pounces (ATTACK) and enters. Middle of the funnel: STALKING (signal pool) → HUNTING (daily cleared) → entry. Names that ran yesterday and sit below their 2-day high won't appear here — only fresh breakouts qualify." wide />
+              </span>
+              <div className={styles.sectionBadges}>
+                <span style={{ color: '#22c55e' }}>LONG {hLongs.length}</span>
+                <span style={{ color: '#ef4444' }}>SHORT {hShorts.length}</span>
+              </div>
+            </div>
+            {hunting.length === 0 ? (
+              <div className={styles.emptyState}>No candidates have cleared their 2-day-high trigger yet today. (Only fresh daily breakouts qualify — names that ran yesterday won't re-fire. Populates after 10:30 ET.)</div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, padding: '10px 14px' }}>
+                <div style={{ minWidth: 220 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', marginBottom: 8 }}>LONG · {hLongs.length} cleared daily</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{hLongs.length ? hLongs.map(h => chip(h.ticker)) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
+                </div>
+                <div style={{ minWidth: 220 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', marginBottom: 8 }}>SHORT · {hShorts.length} cleared daily</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{hShorts.length ? hShorts.map(h => chip(h.ticker)) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ═══ LIVE POSITIONS (ACTIVE + PROTECT) ═══ */}
       <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.ACTIVE }}>

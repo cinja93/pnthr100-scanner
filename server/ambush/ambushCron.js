@@ -490,6 +490,9 @@ async function _runAmbushTickInner() {
   watchLongs.sort((a, b) => (b.ready - a.ready) || a.ticker.localeCompare(b.ticker));
   watchShorts.sort((a, b) => (b.ready - a.ready) || a.ticker.localeCompare(b.ticker));
   const watching = { longs: watchLongs, shorts: watchShorts };
+  // HUNTING = candidates that have cleared their prior 2-day-high trigger today
+  // (populated in Phase C). Read-only display field; does not affect any trade logic.
+  let huntingList = [];
 
   // 4. Fetch live prices: IBKR for held, FMP quotes for non-held + candidates
   const livePrices = await fetchLivePrices(db, allPositions, mceCandidates, config.ownerId);
@@ -992,6 +995,8 @@ async function _runAmbushTickInner() {
 
       breakoutCandidates.push({ ticker, direction });
     }
+    // HUNTING (read-only): surface the daily-cleared candidates to the dashboard.
+    huntingList = breakoutCandidates.map(c => ({ ticker: c.ticker, direction: c.direction }));
 
     // Step 2: For the narrow candidate set, fetch FMP hourly bars for breakout check
     if (breakoutCandidates.length > 0) {
@@ -1137,6 +1142,7 @@ async function _runAmbushTickInner() {
     actions,
     errors,
     watching,
+    hunting: huntingList,
     positions: {
       active: activePositions.length,
       attack: allPositions.filter(p => p.state === STATES.ATTACK).length,
